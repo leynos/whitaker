@@ -70,9 +70,7 @@ mod tests {
     }
 
     #[test]
-    fn round_trip_empty_log() {
-        assert_json_round_trip(&SarifLog::default());
-    }
+    fn round_trip_empty_log() { assert_json_round_trip(&SarifLog::default()); }
 
     #[test]
     fn schema_field_serializes_as_dollar_schema() {

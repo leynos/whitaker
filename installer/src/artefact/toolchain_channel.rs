@@ -5,9 +5,11 @@
 //! characters permitted in Rust toolchain channel specifiers, including
 //! host-qualified names such as `nightly-2026-05-28-x86_64-unknown-linux-gnu`.
 
-use super::error::{ArtefactError, Result};
-use serde::Serialize;
 use std::fmt;
+
+use serde::Serialize;
+
+use super::error::{ArtefactError, Result};
 
 /// A validated Rust toolchain channel string (e.g. `nightly-2026-05-28`).
 ///
@@ -40,15 +42,11 @@ impl ToolchainChannel {
     /// ```
     /// use whitaker_installer::artefact::toolchain_channel::ToolchainChannel;
     ///
-    /// let channel: ToolchainChannel = "stable"
-    ///     .try_into()
-    ///     .expect("valid toolchain channel");
+    /// let channel: ToolchainChannel = "stable".try_into().expect("valid toolchain channel");
     /// assert_eq!(channel.as_str(), "stable");
     /// ```
     #[must_use]
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
+    pub fn as_str(&self) -> &str { &self.0 }
 
     /// Consume the wrapper and return the inner string.
     ///
@@ -64,9 +62,7 @@ impl ToolchainChannel {
     /// assert_eq!(inner, "nightly-2026-05-28");
     /// ```
     #[must_use]
-    pub fn into_inner(self) -> String {
-        self.0
-    }
+    pub fn into_inner(self) -> String { self.0 }
 }
 
 impl TryFrom<&str> for ToolchainChannel {
@@ -98,9 +94,7 @@ impl TryFrom<String> for ToolchainChannel {
 }
 
 impl AsRef<str> for ToolchainChannel {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
+    fn as_ref(&self) -> &str { &self.0 }
 }
 
 impl<'de> serde::Deserialize<'de> for ToolchainChannel {
@@ -114,17 +108,16 @@ impl<'de> serde::Deserialize<'de> for ToolchainChannel {
 }
 
 impl fmt::Display for ToolchainChannel {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.0) }
 }
 
 #[cfg(test)]
 mod tests {
     //! Tests for toolchain channel parsing and validation.
 
-    use super::*;
     use rstest::rstest;
+
+    use super::*;
 
     #[rstest]
     #[case::nightly_with_date("nightly-2026-05-28")]

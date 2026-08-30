@@ -2,9 +2,11 @@
 
 use std::collections::BTreeMap;
 
-use super::community::detect_communities;
-use super::profile::{DecompositionContext, MethodProfile, SubjectKind};
-use super::vector::{FeatureCategory, MethodFeatureVector, build_feature_vector};
+use super::{
+    community::detect_communities,
+    profile::{DecompositionContext, MethodProfile, SubjectKind},
+    vector::{FeatureCategory, MethodFeatureVector, build_feature_vector},
+};
 
 /// The extraction shape suggested for a method community.
 ///
@@ -57,7 +59,10 @@ impl std::fmt::Display for SuggestedExtractionKind {
 ///
 /// ```
 /// use whitaker_common::decomposition_advice::{
-///     DecompositionContext, MethodProfileBuilder, SubjectKind, SuggestedExtractionKind,
+///     DecompositionContext,
+///     MethodProfileBuilder,
+///     SubjectKind,
+///     SuggestedExtractionKind,
 ///     suggest_decomposition,
 /// };
 ///
@@ -81,7 +86,10 @@ impl std::fmt::Display for SuggestedExtractionKind {
 /// );
 ///
 /// assert_eq!(suggestions.len(), 2);
-/// assert_eq!(suggestions[0].extraction_kind(), SuggestedExtractionKind::Module);
+/// assert_eq!(
+///     suggestions[0].extraction_kind(),
+///     SuggestedExtractionKind::Module
+/// );
 /// ```
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DecompositionSuggestion {
@@ -94,27 +102,19 @@ pub struct DecompositionSuggestion {
 impl DecompositionSuggestion {
     /// Returns the community label.
     #[must_use]
-    pub fn label(&self) -> &str {
-        &self.label
-    }
+    pub fn label(&self) -> &str { &self.label }
 
     /// Returns the suggested extraction kind.
     #[must_use]
-    pub const fn extraction_kind(&self) -> SuggestedExtractionKind {
-        self.extraction_kind
-    }
+    pub const fn extraction_kind(&self) -> SuggestedExtractionKind { self.extraction_kind }
 
     /// Returns method names in the community.
     #[must_use]
-    pub fn methods(&self) -> &[String] {
-        &self.methods
-    }
+    pub fn methods(&self) -> &[String] { &self.methods }
 
     /// Returns the dominant features that motivated the suggestion.
     #[must_use]
-    pub fn rationale(&self) -> &[String] {
-        &self.rationale
-    }
+    pub fn rationale(&self) -> &[String] { &self.rationale }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -133,7 +133,10 @@ struct AggregatedFeature {
 ///
 /// ```
 /// use whitaker_common::decomposition_advice::{
-///     DecompositionContext, MethodProfileBuilder, SubjectKind, suggest_decomposition,
+///     DecompositionContext,
+///     MethodProfileBuilder,
+///     SubjectKind,
+///     suggest_decomposition,
 /// };
 ///
 /// let context = DecompositionContext::new("Parser", SubjectKind::Type);

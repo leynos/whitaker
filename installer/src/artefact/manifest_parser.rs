@@ -50,8 +50,9 @@ pub fn parse_manifest(json: &str) -> Result<Manifest, ManifestParseError> {
 mod tests {
     //! Tests for artefact manifest parsing.
 
-    use super::*;
     use rstest::rstest;
+
+    use super::*;
 
     fn valid_manifest_json() -> String {
         concat!(

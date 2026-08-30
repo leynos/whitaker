@@ -87,9 +87,7 @@ impl Attribute {
     /// assert!(attribute.path().is_doc());
     /// ```
     #[must_use]
-    pub const fn path(&self) -> &AttributePath {
-        &self.path
-    }
+    pub const fn path(&self) -> &AttributePath { &self.path }
 
     /// Returns the attachment kind (inner or outer).
     ///
@@ -102,9 +100,7 @@ impl Attribute {
     /// assert!(attribute.kind().is_inner());
     /// ```
     #[must_use]
-    pub const fn kind(&self) -> AttributeKind {
-        self.kind
-    }
+    pub const fn kind(&self) -> AttributeKind { self.kind }
 
     /// Returns the attribute arguments.
     ///
@@ -121,9 +117,7 @@ impl Attribute {
     /// assert_eq!(attribute.arguments(), &["dead_code"]);
     /// ```
     #[must_use]
-    pub fn arguments(&self) -> &[String] {
-        &self.arguments
-    }
+    pub fn arguments(&self) -> &[String] { &self.arguments }
 
     /// Indicates whether the attribute is a doc comment (`#[doc = ...]`).
     ///
@@ -136,9 +130,7 @@ impl Attribute {
     /// assert!(attribute.is_doc());
     /// ```
     #[must_use]
-    pub fn is_doc(&self) -> bool {
-        self.path.is_doc()
-    }
+    pub fn is_doc(&self) -> bool { self.path.is_doc() }
 
     /// Indicates whether the attribute marks a test-like context.
     ///
@@ -157,9 +149,7 @@ impl Attribute {
     /// assert!(rstest.is_test_like());
     /// ```
     #[must_use]
-    pub fn is_test_like(&self) -> bool {
-        self.is_test_like_with(&[])
-    }
+    pub fn is_test_like(&self) -> bool { self.is_test_like_with(&[]) }
 
     /// Indicates whether the attribute marks a test-like context when supplied
     /// with additional recognized paths.
@@ -205,9 +195,7 @@ impl Attribute {
     /// assert!(attribute.is_inner());
     /// ```
     #[must_use]
-    pub const fn is_inner(&self) -> bool {
-        self.kind.is_inner()
-    }
+    pub const fn is_inner(&self) -> bool { self.kind.is_inner() }
 
     /// Returns `true` when the attribute is an outer attribute.
     ///
@@ -220,9 +208,7 @@ impl Attribute {
     /// assert!(attribute.is_outer());
     /// ```
     #[must_use]
-    pub const fn is_outer(&self) -> bool {
-        self.kind.is_outer()
-    }
+    pub const fn is_outer(&self) -> bool { self.kind.is_outer() }
 }
 
 fn matches_builtin_test_like_path(path: &AttributePath) -> bool {
@@ -246,8 +232,9 @@ fn is_prelude_test_attribute(path: &AttributePath) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use rstest::rstest;
+
+    use super::*;
 
     #[rstest]
     #[case::core_v1("core::prelude::v1::test", true)]

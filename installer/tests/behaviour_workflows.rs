@@ -28,9 +28,7 @@ struct WorkflowWorld {
 
 #[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
-fn world() -> WorkflowWorld {
-    WorkflowWorld::default()
-}
+fn world() -> WorkflowWorld { WorkflowWorld::default() }
 
 fn workspace_root() -> Result<PathBuf, String> {
     PathBuf::from(std::env!("CARGO_MANIFEST_DIR"))
@@ -270,21 +268,13 @@ fn then_output_includes_library_path_instructions(world: &WorkflowWorld) -> Resu
 // ---------------------------------------------------------------------------
 
 #[scenario(path = "tests/features/installer.feature", index = 15)]
-fn scenario_dry_run_skip_deps(world: WorkflowWorld) {
-    let _ = world;
-}
+fn scenario_dry_run_skip_deps(world: WorkflowWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/installer.feature", index = 16)]
-fn scenario_dry_run_no_update(world: WorkflowWorld) {
-    let _ = world;
-}
+fn scenario_dry_run_no_update(world: WorkflowWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/installer.feature", index = 17)]
-fn scenario_dry_run_skip_wrapper(world: WorkflowWorld) {
-    let _ = world;
-}
+fn scenario_dry_run_skip_wrapper(world: WorkflowWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/installer.feature", index = 18)]
-fn scenario_skip_wrapper_outputs_shell_snippet(world: WorkflowWorld) {
-    let _ = world;
-}
+fn scenario_skip_wrapper_outputs_shell_snippet(world: WorkflowWorld) { let _ = world; }

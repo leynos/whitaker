@@ -28,8 +28,14 @@ use std::{
 
 pub use fixtures::{copy_directory, copy_fixture};
 pub use ui::{
-    FixtureEnvironment, discover_fixtures, prepare_fixture, read_directory_config,
-    read_fixture_config, resolve_fixture_config, run_fixtures_with, run_test_runner,
+    FixtureEnvironment,
+    discover_fixtures,
+    prepare_fixture,
+    read_directory_config,
+    read_fixture_config,
+    resolve_fixture_config,
+    run_fixtures_with,
+    run_test_runner,
 };
 
 /// Serializes tests that mutate process-wide environment variables.

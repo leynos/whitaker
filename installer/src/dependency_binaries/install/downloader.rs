@@ -1,17 +1,27 @@
 //! Download support for repository-hosted dependency-binary archives.
 
-use crate::artefact::download::HttpDownloader;
-
-use super::checksum::{
-    CATEGORY_CHECKSUM, fetch_expected_checksum, map_ureq_error, verify_archive_checksum,
+use std::{
+    io::{self, Read, Write},
+    path::Path,
 };
-use super::installer::DependencyBinaryInstallError;
+
 use camino::{Utf8Path, Utf8PathBuf};
-use cap_std::ambient_authority;
-use cap_std::fs_utf8::{Dir, File};
-use std::io::{self, Read, Write};
-use std::path::Path;
+use cap_std::{
+    ambient_authority,
+    fs_utf8::{Dir, File},
+};
 use tracing::{debug, instrument, warn};
+
+use super::{
+    checksum::{
+        CATEGORY_CHECKSUM,
+        fetch_expected_checksum,
+        map_ureq_error,
+        verify_archive_checksum,
+    },
+    installer::DependencyBinaryInstallError,
+};
+use crate::artefact::download::HttpDownloader;
 
 const DOWNLOAD_TIMEOUT_SECS: u64 = 30;
 
@@ -194,9 +204,7 @@ impl DownloadDestination {
     }
 
     /// Reopen the written archive through the capability for verification.
-    fn open_archive(&self) -> io::Result<File> {
-        self.dir.open(&self.archive_name)
-    }
+    fn open_archive(&self) -> io::Result<File> { self.dir.open(&self.archive_name) }
 
     /// Remove a partial or unverified archive; a cleanup failure is only logged.
     fn remove_partial_archive(&self) {

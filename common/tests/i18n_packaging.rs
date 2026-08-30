@@ -14,7 +14,8 @@ mod unix {
 
     use std::{
         error::Error,
-        fs, io,
+        fs,
+        io,
         path::{Path, PathBuf},
         process::Command,
     };

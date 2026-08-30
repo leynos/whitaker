@@ -26,9 +26,7 @@ struct StagingWorld {
 
 #[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
-fn staging_world() -> StagingWorld {
-    StagingWorld::default()
-}
+fn staging_world() -> StagingWorld { StagingWorld::default() }
 
 #[given("a built library")]
 fn given_built_library(staging_world: &StagingWorld) {
@@ -111,9 +109,7 @@ mod staging_failure {
 
     #[whitaker_test_macros::allow_fixture_expansion_lints]
     #[fixture]
-    pub fn staging_failure_world() -> StagingFailureWorld {
-        StagingFailureWorld::default()
-    }
+    pub fn staging_failure_world() -> StagingFailureWorld { StagingFailureWorld::default() }
 
     #[given("a non-writable staging directory")]
     pub fn given_non_writable_dir(
@@ -212,9 +208,7 @@ mod staging_failure {
 // ---------------------------------------------------------------------------
 
 #[scenario(path = "tests/features/installer.feature", index = 10)]
-fn scenario_stage_with_toolchain_suffix(staging_world: StagingWorld) {
-    let _ = staging_world;
-}
+fn scenario_stage_with_toolchain_suffix(staging_world: StagingWorld) { let _ = staging_world; }
 
 #[cfg(unix)]
 #[scenario(path = "tests/features/installer.feature", index = 11)]

@@ -5,17 +5,19 @@
 //! more separated bumps above a configurable threshold. The warning highlights
 //! the two largest bump intervals with labelled spans.
 
-use crate::analysis::{Settings, detect_bumps, normalize_settings};
 use rustc_hir as hir;
 use rustc_hir::ExprKind;
 use rustc_lint::{LateContext, LateLintPass};
-use rustc_span::Ident;
-use rustc_span::Span;
-use rustc_span::symbol::Symbol;
+use rustc_span::{Ident, Span, symbol::Symbol};
 use whitaker::SharedConfig;
-use whitaker_common::complexity_signal::{rasterize_signal, smooth_moving_average};
-use whitaker_common::i18n::MessageKey;
-use whitaker_common::{Localizer, get_localizer_for_lint};
+use whitaker_common::{
+    Localizer,
+    complexity_signal::{rasterize_signal, smooth_moving_average},
+    get_localizer_for_lint,
+    i18n::MessageKey,
+};
+
+use crate::analysis::{Settings, detect_bumps, normalize_settings};
 
 const LINT_NAME: &str = "bumpy_road_function";
 const MESSAGE_KEY: MessageKey<'static> = MessageKey::new(LINT_NAME);
@@ -24,9 +26,11 @@ mod config;
 mod diagnostic;
 mod segment_builder;
 
-use self::config::load_configuration;
-use self::diagnostic::{DiagnosticInput, emit_diagnostic};
-use self::segment_builder::{SegmentBuilder, span_line_range};
+use self::{
+    config::load_configuration,
+    diagnostic::{DiagnosticInput, emit_diagnostic},
+    segment_builder::{SegmentBuilder, span_line_range},
+};
 
 /// Dylint lint declaration and registration glue.
 ///

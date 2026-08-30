@@ -1,12 +1,15 @@
 //! Shared fixture builders for decomposition-advice unit tests.
 
 use super::super::{
-    DecompositionSuggestion, SuggestedExtractionKind,
+    DecompositionSuggestion,
+    SuggestedExtractionKind,
     profile::{DecompositionContext, MethodProfile, SubjectKind},
     suggest_decomposition,
 };
 pub(super) use crate::test_support::decomposition::{
-    MethodInput, parser_serde_fs_fixture, profile,
+    MethodInput,
+    parser_serde_fs_fixture,
+    profile,
 };
 
 // `Copy` keeps the expectation cheap to pass by value; it only holds

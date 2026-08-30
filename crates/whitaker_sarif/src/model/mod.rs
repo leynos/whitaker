@@ -4,13 +4,11 @@
 //! specification subset used by Whitaker. Types are organized by concept:
 //!
 //! - [`log`] — top-level [`SarifLog`] container.
-//! - [`run`] — [`Run`], [`Tool`], [`ToolComponent`], [`Invocation`], and
-//!   [`Artefact`].
+//! - [`run`] — [`Run`], [`Tool`], [`ToolComponent`], [`Invocation`], and [`Artefact`].
 //! - [`result`] — [`SarifResult`], [`Level`], and [`Message`].
-//! - [`location`] — [`Location`], [`PhysicalLocation`],
-//!   [`ArtefactLocation`], [`Region`], and [`RelatedLocation`].
-//! - [`descriptor`] — [`ReportingDescriptor`] and
-//!   [`MultiformatMessageString`].
+//! - [`location`] — [`Location`], [`PhysicalLocation`], [`ArtefactLocation`], [`Region`], and
+//!   [`RelatedLocation`].
+//! - [`descriptor`] — [`ReportingDescriptor`] and [`MultiformatMessageString`].
 //!
 //! All types implement `Serialize` and `Deserialize` with `camelCase` field
 //! naming to match the SARIF JSON schema.

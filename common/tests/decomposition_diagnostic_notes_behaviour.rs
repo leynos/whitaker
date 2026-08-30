@@ -6,7 +6,10 @@ use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use whitaker_common::{
     decomposition_advice::{
-        DecompositionContext, MethodProfileBuilder, SubjectKind, format_diagnostic_note,
+        DecompositionContext,
+        MethodProfileBuilder,
+        SubjectKind,
+        format_diagnostic_note,
         suggest_decomposition,
     },
     test_support::decomposition::{parser_serde_fs_fixture, transport_trait_fixture},
@@ -17,18 +20,14 @@ use whitaker_test_macros::allow_fixture_expansion_lints;
 struct CsvList(Vec<String>);
 
 impl CsvList {
-    fn into_vec(self) -> Vec<String> {
-        self.0
-    }
+    fn into_vec(self) -> Vec<String> { self.0 }
 }
 
 #[derive(Debug, Clone)]
 struct QuotedString(String);
 
 impl QuotedString {
-    fn into_inner(self) -> String {
-        self.0
-    }
+    fn into_inner(self) -> String { self.0 }
 }
 
 impl std::str::FromStr for CsvList {
@@ -48,9 +47,7 @@ impl std::str::FromStr for CsvList {
 impl std::str::FromStr for QuotedString {
     type Err = std::convert::Infallible;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Self(s.trim_matches('"').to_owned()))
-    }
+    fn from_str(s: &str) -> Result<Self, Self::Err> { Ok(Self(s.trim_matches('"').to_owned())) }
 }
 
 #[derive(Debug, Default)]
@@ -65,9 +62,7 @@ struct DiagnosticNoteWorld {
 
 #[allow_fixture_expansion_lints]
 #[fixture]
-fn world() -> DiagnosticNoteWorld {
-    DiagnosticNoteWorld::default()
-}
+fn world() -> DiagnosticNoteWorld { DiagnosticNoteWorld::default() }
 
 fn create_method_builder(world: &DiagnosticNoteWorld, method_name: &str) -> usize {
     let mut next_method_id = world.next_method_id.borrow_mut();
@@ -164,9 +159,7 @@ fn given_context(world: &DiagnosticNoteWorld, kind: SubjectKind, name: String) {
 }
 
 #[given("a method named {name}")]
-fn given_method(world: &DiagnosticNoteWorld, name: String) {
-    create_method_builder(world, &name);
-}
+fn given_method(world: &DiagnosticNoteWorld, name: String) { create_method_builder(world, &name); }
 
 #[given("the parser, serde, and filesystem methods are tracked")]
 fn given_parser_serde_fs_fixture(world: &DiagnosticNoteWorld) {
@@ -280,38 +273,28 @@ fn then_note_does_not_contain(
     path = "tests/features/decomposition_diagnostic_notes.feature",
     index = 0
 )]
-fn scenario_type_note_renders_three_areas(world: DiagnosticNoteWorld) {
-    let _ = world;
-}
+fn scenario_type_note_renders_three_areas(world: DiagnosticNoteWorld) { let _ = world; }
 
 #[scenario(
     path = "tests/features/decomposition_diagnostic_notes.feature",
     index = 1
 )]
-fn scenario_trait_note_renders_sub_traits(world: DiagnosticNoteWorld) {
-    let _ = world;
-}
+fn scenario_trait_note_renders_sub_traits(world: DiagnosticNoteWorld) { let _ = world; }
 
 #[scenario(
     path = "tests/features/decomposition_diagnostic_notes.feature",
     index = 2
 )]
-fn scenario_no_suggestions_yield_no_note(world: DiagnosticNoteWorld) {
-    let _ = world;
-}
+fn scenario_no_suggestions_yield_no_note(world: DiagnosticNoteWorld) { let _ = world; }
 
 #[scenario(
     path = "tests/features/decomposition_diagnostic_notes.feature",
     index = 3
 )]
-fn scenario_large_subjects_cap_rendered_areas(world: DiagnosticNoteWorld) {
-    let _ = world;
-}
+fn scenario_large_subjects_cap_rendered_areas(world: DiagnosticNoteWorld) { let _ = world; }
 
 #[scenario(
     path = "tests/features/decomposition_diagnostic_notes.feature",
     index = 4
 )]
-fn scenario_large_communities_cap_method_names(world: DiagnosticNoteWorld) {
-    let _ = world;
-}
+fn scenario_large_communities_cap_method_names(world: DiagnosticNoteWorld) { let _ = world; }

@@ -5,7 +5,8 @@
 //! `dylint_testing` while capturing panics into deterministic error messages.
 
 use std::{
-    fs, io,
+    fs,
+    io,
     path::{Path, PathBuf},
 };
 
@@ -25,14 +26,10 @@ pub struct FixtureEnvironment {
 impl FixtureEnvironment {
     /// Returns the root directory containing the cloned fixture files.
     #[must_use]
-    pub fn workdir(&self) -> &Path {
-        &self.workdir
-    }
+    pub fn workdir(&self) -> &Path { &self.workdir }
 
     /// Moves the optional `dylint.toml` contents out of the environment.
-    pub const fn take_config(&mut self) -> Option<String> {
-        self.config.take()
-    }
+    pub const fn take_config(&mut self) -> Option<String> { self.config.take() }
 }
 
 /// Discovers `.rs` fixtures inside `directory`, returning the paths unsorted.

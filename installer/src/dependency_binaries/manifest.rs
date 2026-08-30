@@ -3,8 +3,9 @@
 //! The committed `installer/dependency-binaries.toml` file is the single source
 //! of truth for required dependency-tool versions, licences, and provenance.
 
-use serde::Deserialize;
 use std::sync::OnceLock;
+
+use serde::Deserialize;
 use thiserror::Error;
 
 /// One repository-owned dependency binary requirement.
@@ -13,12 +14,13 @@ use thiserror::Error;
 ///
 /// ```
 /// use whitaker_installer::dependency_binaries::{
-///     parse_manifest, required_dependency_binaries, DependencyBinary
+///     DependencyBinary,
+///     parse_manifest,
+///     required_dependency_binaries,
 /// };
 ///
 /// // Parse the embedded manifest to obtain dependency binaries
-/// let dependencies = required_dependency_binaries()
-///     .expect("embedded manifest should be valid");
+/// let dependencies = required_dependency_binaries().expect("embedded manifest should be valid");
 ///
 /// // Access fields on a dependency binary
 /// if let Some(tool) = dependencies.iter().find(|d| d.package() == "cargo-dylint") {
@@ -45,9 +47,7 @@ impl DependencyBinary {
     ///
     /// See the [`DependencyBinary`] type documentation for a complete example.
     #[must_use]
-    pub fn package(&self) -> &str {
-        &self.package
-    }
+    pub fn package(&self) -> &str { &self.package }
 
     /// Return the executable basename without any platform suffix.
     ///
@@ -55,9 +55,7 @@ impl DependencyBinary {
     ///
     /// See the [`DependencyBinary`] type documentation for a complete example.
     #[must_use]
-    pub fn binary(&self) -> &str {
-        &self.binary
-    }
+    pub fn binary(&self) -> &str { &self.binary }
 
     /// Return the required upstream version.
     ///
@@ -65,9 +63,7 @@ impl DependencyBinary {
     ///
     /// See the [`DependencyBinary`] type documentation for a complete example.
     #[must_use]
-    pub fn version(&self) -> &str {
-        &self.version
-    }
+    pub fn version(&self) -> &str { &self.version }
 
     /// Return the upstream licence string recorded in the manifest.
     ///
@@ -75,9 +71,7 @@ impl DependencyBinary {
     ///
     /// See the [`DependencyBinary`] type documentation for a complete example.
     #[must_use]
-    pub fn license(&self) -> &str {
-        &self.license
-    }
+    pub fn license(&self) -> &str { &self.license }
 
     /// Return the upstream repository URL.
     ///
@@ -85,9 +79,7 @@ impl DependencyBinary {
     ///
     /// See the [`DependencyBinary`] type documentation for a complete example.
     #[must_use]
-    pub fn repository(&self) -> &str {
-        &self.repository
-    }
+    pub fn repository(&self) -> &str { &self.repository }
 }
 
 #[derive(Debug, Deserialize)]
@@ -107,9 +99,7 @@ pub enum ManifestError {
 }
 
 impl From<toml::de::Error> for ManifestError {
-    fn from(error: toml::de::Error) -> Self {
-        Self::ParseError(error.to_string())
-    }
+    fn from(error: toml::de::Error) -> Self { Self::ParseError(error.to_string()) }
 }
 
 /// Return the embedded manifest contents.
@@ -123,9 +113,7 @@ impl From<toml::de::Error> for ManifestError {
 /// assert!(contents.contains("dependency_binaries"));
 /// ```
 #[must_use]
-pub const fn manifest_contents() -> &'static str {
-    include_str!("../../dependency-binaries.toml")
-}
+pub const fn manifest_contents() -> &'static str { include_str!("../../dependency-binaries.toml") }
 
 /// Parse manifest TOML into typed dependency entries.
 ///
@@ -140,12 +128,10 @@ pub const fn manifest_contents() -> &'static str {
 /// Parse the embedded manifest:
 ///
 /// ```
-/// use whitaker_installer::dependency_binaries::{
-///     manifest_contents, parse_manifest
-/// };
+/// use whitaker_installer::dependency_binaries::{manifest_contents, parse_manifest};
 ///
-/// let dependencies = parse_manifest(manifest_contents())
-///     .expect("embedded manifest should be valid");
+/// let dependencies =
+///     parse_manifest(manifest_contents()).expect("embedded manifest should be valid");
 ///
 /// assert!(!dependencies.is_empty());
 /// ```
@@ -190,8 +176,8 @@ pub const fn manifest_contents() -> &'static str {
 ///     repository = "https://github.com/trailofbits/dylint"
 /// "#;
 ///
-/// let error = parse_manifest(manifest_with_duplicates)
-///     .expect_err("should reject duplicate packages");
+/// let error =
+///     parse_manifest(manifest_with_duplicates).expect_err("should reject duplicate packages");
 /// assert!(error.to_string().contains("cargo-dylint"));
 /// ```
 pub fn parse_manifest(contents: &str) -> Result<Vec<DependencyBinary>, ManifestError> {
@@ -221,8 +207,7 @@ pub fn parse_manifest(contents: &str) -> Result<Vec<DependencyBinary>, ManifestE
 /// ```
 /// use whitaker_installer::dependency_binaries::required_dependency_binaries;
 ///
-/// let dependencies = required_dependency_binaries()
-///     .expect("embedded manifest should be valid");
+/// let dependencies = required_dependency_binaries().expect("embedded manifest should be valid");
 ///
 /// // Iterate over all required dependency binaries
 /// for tool in dependencies {
@@ -264,8 +249,7 @@ pub fn required_dependency_binaries() -> Result<&'static [DependencyBinary], Man
 /// ```
 /// use whitaker_installer::dependency_binaries::find_dependency_binary;
 ///
-/// let result = find_dependency_binary("non-existent-package")
-///     .expect("manifest should parse");
+/// let result = find_dependency_binary("non-existent-package").expect("manifest should parse");
 ///
 /// assert!(result.is_none());
 /// ```
@@ -295,8 +279,9 @@ pub fn find_dependency_binary(
 mod tests {
     //! Tests for the embedded dependency-binary manifest.
 
-    use super::*;
     use rstest::{fixture, rstest};
+
+    use super::*;
 
     #[fixture]
     fn missing_field_manifest() -> &'static str {

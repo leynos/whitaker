@@ -3,21 +3,36 @@
 //! This module keeps rustc HIR mechanics separate from the lint-pass bootstrap
 //! so the driver remains focused on configuration and crate-level lifecycle.
 
-use crate::collector::{
-    CallSiteCollector, CallSiteLocation, CallSiteRecord, lower_arg_atom, resolve_local_callee,
-};
+use std::collections::HashSet;
+
 use log::debug;
 use rustc_ast::AttrStyle;
 use rustc_hir as hir;
-use rustc_hir::def_id::DefId;
-use rustc_hir::intravisit::{self, Visitor};
+use rustc_hir::{
+    def_id::DefId,
+    intravisit::{self, Visitor},
+};
 use rustc_lint::LateContext;
 use rustc_span::Span;
-use std::collections::HashSet;
-use whitaker_common::attributes::{Attribute, AttributeKind, AttributePath};
-use whitaker_common::rstest::{
-    ArgAtom, ArgFingerprint, ParameterBinding, RstestDetectionOptions, RstestParameter,
-    RstestParameterKind, classify_rstest_parameter,
+use whitaker_common::{
+    attributes::{Attribute, AttributeKind, AttributePath},
+    rstest::{
+        ArgAtom,
+        ArgFingerprint,
+        ParameterBinding,
+        RstestDetectionOptions,
+        RstestParameter,
+        RstestParameterKind,
+        classify_rstest_parameter,
+    },
+};
+
+use crate::collector::{
+    CallSiteCollector,
+    CallSiteLocation,
+    CallSiteRecord,
+    lower_arg_atom,
+    resolve_local_callee,
 };
 
 const LINT_NAME: &str = "rstest_helper_should_be_fixture";

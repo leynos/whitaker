@@ -2,7 +2,8 @@
 
 use super::adjacency::{AdjacencyError, EdgeInput, validate_edges};
 use crate::decomposition_advice::{
-    MethodProfileBuilder, build_feature_vector,
+    MethodProfileBuilder,
+    build_feature_vector,
     community::{
         LabelPropagationReport as RuntimeLabelPropagationReport,
         propagate_labels_report as runtime_propagate_labels_report,
@@ -38,28 +39,20 @@ pub struct LabelPropagationReport {
 impl LabelPropagationReport {
     /// Returns the final label vector.
     #[must_use]
-    pub fn labels(&self) -> &[usize] {
-        &self.runtime.labels
-    }
+    pub fn labels(&self) -> &[usize] { &self.runtime.labels }
 
     /// Returns the propagated label for `node`, or `None` if it is out of
     /// range.
     #[must_use]
-    pub fn label_of(&self, node: usize) -> Option<usize> {
-        self.labels().get(node).copied()
-    }
+    pub fn label_of(&self, node: usize) -> Option<usize> { self.labels().get(node).copied() }
 
     /// Returns the number of propagation passes performed.
     #[must_use]
-    pub const fn iteration_count(&self) -> usize {
-        self.runtime.iteration_count
-    }
+    pub const fn iteration_count(&self) -> usize { self.runtime.iteration_count }
 
     /// Returns `true` when the graph contains at least one active node.
     #[must_use]
-    pub const fn has_active_nodes(&self) -> bool {
-        self.has_active_nodes
-    }
+    pub const fn has_active_nodes(&self) -> bool { self.has_active_nodes }
 
     /// Returns `true` when every label is a valid node index.
     #[must_use]

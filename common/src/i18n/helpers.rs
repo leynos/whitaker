@@ -9,7 +9,12 @@ use std::env;
 use log::debug;
 
 use super::{
-    Arguments, DiagnosticMessageSet, Localizer, MessageKey, resolve_localizer, resolve_message_set,
+    Arguments,
+    DiagnosticMessageSet,
+    Localizer,
+    MessageKey,
+    resolve_localizer,
+    resolve_message_set,
 };
 
 /// Construct a [`Localizer`] for `lint_name` using workspace configuration.
@@ -95,8 +100,13 @@ fn welsh_branch_phrase(branches: usize) -> String {
 ///
 /// ```
 /// use whitaker_common::i18n::{
-///     Arguments, DiagnosticMessageSet, Localizer, MessageKey, MessageResolution,
-///     noop_reporter, safe_resolve_message_set,
+///     Arguments,
+///     DiagnosticMessageSet,
+///     Localizer,
+///     MessageKey,
+///     MessageResolution,
+///     noop_reporter,
+///     safe_resolve_message_set,
 /// };
 ///
 /// let localizer = Localizer::new(Some("en-GB"));
@@ -126,13 +136,18 @@ pub fn noop_reporter(_message: String) {}
 /// # Examples
 ///
 /// ```
-/// use whitaker_common::i18n::testing::RecordingEmitter;
-/// use whitaker_common::i18n::{
-///     Arguments, DiagnosticMessageSet, Localizer, MessageKey, MessageResolution,
-///     safe_resolve_message_set,
-/// };
-/// use fluent_templates::fluent_bundle::FluentValue;
 /// use std::borrow::Cow;
+///
+/// use fluent_templates::fluent_bundle::FluentValue;
+/// use whitaker_common::i18n::{
+///     Arguments,
+///     DiagnosticMessageSet,
+///     Localizer,
+///     MessageKey,
+///     MessageResolution,
+///     safe_resolve_message_set,
+///     testing::RecordingEmitter,
+/// };
 ///
 /// let mut args: Arguments<'static> = Arguments::default();
 /// args.insert(Cow::Borrowed("subject"), FluentValue::from("demo"));

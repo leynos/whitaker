@@ -7,7 +7,12 @@ use std::{cell::RefCell, collections::BTreeMap};
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use whitaker_clones_core::{
-    CandidatePair, FragmentId, Run0Error, TokenFragment, TokenPassConfig, accept_candidate_pairs,
+    CandidatePair,
+    FragmentId,
+    Run0Error,
+    TokenFragment,
+    TokenPassConfig,
+    accept_candidate_pairs,
     emit_run0,
 };
 use whitaker_sarif::{Run, SarifResult, WhitakerProperties};
@@ -36,9 +41,7 @@ impl Default for Run0World {
 
 #[allow_fixture_expansion_lints]
 #[fixture]
-fn world() -> Run0World {
-    Run0World::default()
-}
+fn world() -> Run0World { Run0World::default() }
 
 fn with_results(world: &Run0World, assert_fn: impl FnOnce(&[SarifResult])) {
     let borrowed_run = world.run.borrow();
@@ -321,31 +324,19 @@ fn then_primary_file_is(world: &Run0World, file_uri: String) {
 }
 
 #[scenario(path = "tests/features/run0_sarif.feature", index = 0)]
-fn scenario_type1_pair(world: Run0World) {
-    let _ = world;
-}
+fn scenario_type1_pair(world: Run0World) { let _ = world; }
 
 #[scenario(path = "tests/features/run0_sarif.feature", index = 1)]
-fn scenario_type2_pair(world: Run0World) {
-    let _ = world;
-}
+fn scenario_type2_pair(world: Run0World) { let _ = world; }
 
 #[scenario(path = "tests/features/run0_sarif.feature", index = 2)]
-fn scenario_below_threshold(world: Run0World) {
-    let _ = world;
-}
+fn scenario_below_threshold(world: Run0World) { let _ = world; }
 
 #[scenario(path = "tests/features/run0_sarif.feature", index = 3)]
-fn scenario_empty_fingerprints(world: Run0World) {
-    let _ = world;
-}
+fn scenario_empty_fingerprints(world: Run0World) { let _ = world; }
 
 #[scenario(path = "tests/features/run0_sarif.feature", index = 4)]
-fn scenario_multiline_region(world: Run0World) {
-    let _ = world;
-}
+fn scenario_multiline_region(world: Run0World) { let _ = world; }
 
 #[scenario(path = "tests/features/run0_sarif.feature", index = 5)]
-fn scenario_reversed_pair(world: Run0World) {
-    let _ = world;
-}
+fn scenario_reversed_pair(world: Run0World) { let _ = world; }

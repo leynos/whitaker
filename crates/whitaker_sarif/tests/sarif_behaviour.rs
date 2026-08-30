@@ -8,8 +8,18 @@ use camino::Utf8PathBuf;
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use whitaker_sarif::{
-    Level, LocationBuilder, RegionBuilder, ResultBuilder, RunBuilder, SarifLog, SarifLogBuilder,
-    SarifResult, WhitakerProperties, WhitakerPropertiesBuilder, all_rules, merge_runs,
+    Level,
+    LocationBuilder,
+    RegionBuilder,
+    ResultBuilder,
+    RunBuilder,
+    SarifLog,
+    SarifLogBuilder,
+    SarifResult,
+    WhitakerProperties,
+    WhitakerPropertiesBuilder,
+    all_rules,
+    merge_runs,
     model::{descriptor::ReportingDescriptor, run::Run},
     token_pass_path,
 };
@@ -34,9 +44,7 @@ struct SarifWorld {
 
 #[allow_fixture_expansion_lints]
 #[fixture]
-fn world() -> SarifWorld {
-    SarifWorld::default()
-}
+fn world() -> SarifWorld { SarifWorld::default() }
 
 // -- Helper functions (match-based to avoid expect/unwrap) --
 
@@ -243,9 +251,7 @@ fn when_json_deserialized(world: &SarifWorld) {
 }
 
 #[when("all Whitaker rules are retrieved")]
-fn when_rules_retrieved(world: &SarifWorld) {
-    *world.rules.borrow_mut() = all_rules();
-}
+fn when_rules_retrieved(world: &SarifWorld) { *world.rules.borrow_mut() = all_rules(); }
 
 #[when("the token pass path is requested")]
 fn when_token_path_requested(world: &SarifWorld) {
@@ -378,41 +384,25 @@ fn then_path_ends_with(world: &SarifWorld, suffix: String) {
 // -- Scenario bindings (indices match feature file order) --
 
 #[scenario(path = "tests/features/sarif.feature", index = 0)]
-fn scenario_minimal_log(world: SarifWorld) {
-    let _ = world;
-}
+fn scenario_minimal_log(world: SarifWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/sarif.feature", index = 1)]
-fn scenario_result_with_rule(world: SarifWorld) {
-    let _ = world;
-}
+fn scenario_result_with_rule(world: SarifWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/sarif.feature", index = 2)]
-fn scenario_whitaker_properties(world: SarifWorld) {
-    let _ = world;
-}
+fn scenario_whitaker_properties(world: SarifWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/sarif.feature", index = 3)]
-fn scenario_merge_deduplicates(world: SarifWorld) {
-    let _ = world;
-}
+fn scenario_merge_deduplicates(world: SarifWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/sarif.feature", index = 4)]
-fn scenario_round_trip(world: SarifWorld) {
-    let _ = world;
-}
+fn scenario_round_trip(world: SarifWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/sarif.feature", index = 5)]
-fn scenario_empty_log(world: SarifWorld) {
-    let _ = world;
-}
+fn scenario_empty_log(world: SarifWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/sarif.feature", index = 6)]
-fn scenario_all_rules(world: SarifWorld) {
-    let _ = world;
-}
+fn scenario_all_rules(world: SarifWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/sarif.feature", index = 7)]
-fn scenario_path_helpers(world: SarifWorld) {
-    let _ = world;
-}
+fn scenario_path_helpers(world: SarifWorld) { let _ = world; }

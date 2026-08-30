@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 /// # Examples
 ///
 /// ```
-/// use whitaker_sarif::{Location, PhysicalLocation, ArtefactLocation, Region};
+/// use whitaker_sarif::{ArtefactLocation, Location, PhysicalLocation, Region};
 ///
 /// let loc = Location {
 ///     physical_location: PhysicalLocation {

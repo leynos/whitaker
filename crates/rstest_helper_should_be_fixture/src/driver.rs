@@ -4,26 +4,30 @@
 //! configuration normalization stays in small helper methods so it can be
 //! tested without constructing rustc contexts.
 
-use crate::collector::CallSiteCollector;
-use crate::visitor::{
-    CallSiteVisitor, attribute_from_hir, fixture_local_ids, redacted_fingerprint_shape,
-};
+use std::{collections::HashSet, io::Write};
+
 use camino::{Utf8Path, Utf8PathBuf};
-use cap_std::ambient_authority;
-use cap_std::fs_utf8::{Dir, OpenOptions};
+use cap_std::{
+    ambient_authority,
+    fs_utf8::{Dir, OpenOptions},
+};
 use log::debug;
 use rustc_hir as hir;
-use rustc_hir::def_id::LocalDefId;
-use rustc_hir::intravisit::Visitor;
+use rustc_hir::{def_id::LocalDefId, intravisit::Visitor};
 use rustc_lint::{LateContext, LateLintPass};
 use rustc_span::Span;
 use serde::Deserialize;
-use std::collections::HashSet;
-use std::io::Write;
 use whitaker::SharedConfig;
-use whitaker_common::attributes::AttributePath;
-use whitaker_common::i18n::{Localizer, get_localizer_for_lint};
-use whitaker_common::rstest::{RstestDetectionOptions, is_rstest_test_with};
+use whitaker_common::{
+    attributes::AttributePath,
+    i18n::{Localizer, get_localizer_for_lint},
+    rstest::{RstestDetectionOptions, is_rstest_test_with},
+};
+
+use crate::{
+    collector::CallSiteCollector,
+    visitor::{CallSiteVisitor, attribute_from_hir, fixture_local_ids, redacted_fingerprint_shape},
+};
 
 const LINT_NAME: &str = "rstest_helper_should_be_fixture";
 /// Internal test-only hook used by the UI harness to assert passive collection.

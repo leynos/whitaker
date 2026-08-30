@@ -7,10 +7,12 @@
 //! See `docs/brain-trust-lints-design.md` §Diagnostic output for the
 //! full format specification.
 
-use super::evaluation::BrainTypeDisposition;
-use super::{MethodMetrics, TypeMetrics};
+use super::{MethodMetrics, TypeMetrics, evaluation::BrainTypeDisposition};
 use crate::decomposition_advice::{
-    DecompositionContext, DecompositionSuggestion, SubjectKind, format_diagnostic_note,
+    DecompositionContext,
+    DecompositionSuggestion,
+    SubjectKind,
+    format_diagnostic_note,
 };
 
 #[cfg(test)]
@@ -29,10 +31,10 @@ mod tests;
 /// # Examples
 ///
 /// ```
-/// use whitaker_common::brain_type_metrics::evaluation::{
-///     BrainTypeDiagnostic, BrainTypeDisposition,
+/// use whitaker_common::brain_type_metrics::{
+///     TypeMetricsBuilder,
+///     evaluation::{BrainTypeDiagnostic, BrainTypeDisposition},
 /// };
-/// use whitaker_common::brain_type_metrics::TypeMetricsBuilder;
 ///
 /// let metrics = TypeMetricsBuilder::new("Foo", 25, 80).build();
 /// let diag = BrainTypeDiagnostic::new(&metrics, BrainTypeDisposition::Pass);
@@ -64,39 +66,27 @@ impl BrainTypeDiagnostic {
 
     /// Returns the type name.
     #[must_use]
-    pub fn type_name(&self) -> &str {
-        &self.type_name
-    }
+    pub fn type_name(&self) -> &str { &self.type_name }
 
     /// Returns the evaluation disposition.
     #[must_use]
-    pub const fn disposition(&self) -> BrainTypeDisposition {
-        self.disposition
-    }
+    pub const fn disposition(&self) -> BrainTypeDisposition { self.disposition }
 
     /// Returns the Weighted Methods Count.
     #[must_use]
-    pub const fn wmc(&self) -> usize {
-        self.wmc
-    }
+    pub const fn wmc(&self) -> usize { self.wmc }
 
     /// Returns the LCOM4 connected component count.
     #[must_use]
-    pub const fn lcom4(&self) -> usize {
-        self.lcom4
-    }
+    pub const fn lcom4(&self) -> usize { self.lcom4 }
 
     /// Returns the foreign reach count.
     #[must_use]
-    pub const fn foreign_reach(&self) -> usize {
-        self.foreign_reach
-    }
+    pub const fn foreign_reach(&self) -> usize { self.foreign_reach }
 
     /// Returns brain methods with their full metric details.
     #[must_use]
-    pub fn brain_methods(&self) -> &[MethodMetrics] {
-        &self.brain_methods
-    }
+    pub fn brain_methods(&self) -> &[MethodMetrics] { &self.brain_methods }
 }
 
 // ---------------------------------------------------------------------------
@@ -114,10 +104,10 @@ impl BrainTypeDiagnostic {
 /// # Examples
 ///
 /// ```
-/// use whitaker_common::brain_type_metrics::evaluation::{
-///     BrainTypeDiagnostic, BrainTypeDisposition, format_primary_message,
+/// use whitaker_common::brain_type_metrics::{
+///     TypeMetricsBuilder,
+///     evaluation::{BrainTypeDiagnostic, BrainTypeDisposition, format_primary_message},
 /// };
-/// use whitaker_common::brain_type_metrics::TypeMetricsBuilder;
 ///
 /// let mut builder = TypeMetricsBuilder::new("Foo", 25, 80);
 /// builder.add_method("parse", 31, 140);
@@ -157,8 +147,8 @@ fn format_primary_with_one_brain_method(
     let lcom4 = diagnostic.lcom4();
     let fr_suffix = foreign_reach_suffix(diagnostic);
     format!(
-        "`{name}` has WMC={wmc}, LCOM4={lcom4}{fr_suffix}, \
-         and a brain method `{}` (CC={}, LOC={}).",
+        "`{name}` has WMC={wmc}, LCOM4={lcom4}{fr_suffix}, and a brain method `{}` (CC={}, \
+         LOC={}).",
         bm.name(),
         bm.cognitive_complexity(),
         bm.lines_of_code(),
@@ -188,8 +178,7 @@ fn format_primary_with_many_brain_methods(
         .collect::<Vec<_>>()
         .join(", ");
     format!(
-        "`{name}` has WMC={wmc}, LCOM4={lcom4}{fr_suffix}, \
-         and {n} brain methods: {method_list}.",
+        "`{name}` has WMC={wmc}, LCOM4={lcom4}{fr_suffix}, and {n} brain methods: {method_list}.",
     )
 }
 
@@ -212,10 +201,10 @@ fn foreign_reach_suffix(diagnostic: &BrainTypeDiagnostic) -> String {
 /// # Examples
 ///
 /// ```
-/// use whitaker_common::brain_type_metrics::evaluation::{
-///     BrainTypeDiagnostic, BrainTypeDisposition, format_note,
+/// use whitaker_common::brain_type_metrics::{
+///     TypeMetricsBuilder,
+///     evaluation::{BrainTypeDiagnostic, BrainTypeDisposition, format_note},
 /// };
-/// use whitaker_common::brain_type_metrics::TypeMetricsBuilder;
 ///
 /// let metrics = TypeMetricsBuilder::new("Foo", 25, 80).build();
 /// let diag = BrainTypeDiagnostic::new(&metrics, BrainTypeDisposition::Pass);
@@ -253,10 +242,10 @@ pub fn format_note(diagnostic: &BrainTypeDiagnostic) -> String {
 /// # Examples
 ///
 /// ```
-/// use whitaker_common::brain_type_metrics::evaluation::{
-///     BrainTypeDiagnostic, BrainTypeDisposition, format_decomposition_note,
+/// use whitaker_common::brain_type_metrics::{
+///     TypeMetricsBuilder,
+///     evaluation::{BrainTypeDiagnostic, BrainTypeDisposition, format_decomposition_note},
 /// };
-/// use whitaker_common::brain_type_metrics::TypeMetricsBuilder;
 ///
 /// let metrics = TypeMetricsBuilder::new("Foo", 25, 80).build();
 /// let diagnostic = BrainTypeDiagnostic::new(&metrics, BrainTypeDisposition::Pass);
@@ -283,10 +272,10 @@ pub fn format_decomposition_note(
 /// # Examples
 ///
 /// ```
-/// use whitaker_common::brain_type_metrics::evaluation::{
-///     BrainTypeDiagnostic, BrainTypeDisposition, format_help,
+/// use whitaker_common::brain_type_metrics::{
+///     TypeMetricsBuilder,
+///     evaluation::{BrainTypeDiagnostic, BrainTypeDisposition, format_help},
 /// };
-/// use whitaker_common::brain_type_metrics::TypeMetricsBuilder;
 ///
 /// let metrics = TypeMetricsBuilder::new("Foo", 25, 80).build();
 /// let diag = BrainTypeDiagnostic::new(&metrics, BrainTypeDisposition::Pass);
@@ -309,8 +298,8 @@ pub fn format_help(diagnostic: &BrainTypeDiagnostic) -> String {
 
     if parts.is_empty() {
         return String::from(
-            "Consider extracting related methods into separate types or \
-             modules to reduce complexity and improve cohesion.",
+            "Consider extracting related methods into separate types or modules to reduce \
+             complexity and improve cohesion.",
         );
     }
 

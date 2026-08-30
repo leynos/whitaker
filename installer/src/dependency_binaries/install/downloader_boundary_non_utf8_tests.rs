@@ -2,8 +2,10 @@
 
 use std::io;
 
-use super::super::downloader::{DependencyArchiveDownloader, RepositoryArchiveDownloader};
-use super::*;
+use super::{
+    super::downloader::{DependencyArchiveDownloader, RepositoryArchiveDownloader},
+    *,
+};
 
 #[test]
 fn download_from_urls_rejects_a_non_utf8_destination_before_any_request() {

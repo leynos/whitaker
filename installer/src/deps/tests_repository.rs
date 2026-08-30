@@ -3,20 +3,29 @@
 use std::path::PathBuf;
 
 use super::{
-    DependencyBinaryInstaller, DependencyTool, DylintToolStatus, OPTIONS_MSG,
+    DependencyBinaryInstaller,
+    DependencyTool,
+    DylintToolStatus,
+    OPTIONS_MSG,
     install::{InstallContext, InstallMode, install_tool, repository_install_context},
-    install_dylint_tools_with_options, install_options,
+    install_dylint_tools_with_options,
+    install_options,
 };
-use crate::dependency_binaries::{DependencyBinaryInstallError, MockDependencyBinaryInstaller};
-use crate::error::InstallerError;
-use crate::installer_packaging::TargetTriple;
-use crate::test_utils::{
-    StubDirs, StubExecutor,
-    dependency_binary_helpers::{
-        binstall_install, binstall_version_check_with_result, dylint_link_install_list_check,
-        with_fake_binary_on_path,
+use crate::{
+    dependency_binaries::{DependencyBinaryInstallError, MockDependencyBinaryInstaller},
+    error::InstallerError,
+    installer_packaging::TargetTriple,
+    test_utils::{
+        StubDirs,
+        StubExecutor,
+        dependency_binary_helpers::{
+            binstall_install,
+            binstall_version_check_with_result,
+            dylint_link_install_list_check,
+            with_fake_binary_on_path,
+        },
+        success_output,
     },
-    success_output,
 };
 
 /// Writes a fake `dylint-link` into a temporary directory and returns the

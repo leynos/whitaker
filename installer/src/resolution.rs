@@ -3,9 +3,12 @@
 //! This module determines which lint crates to build based on CLI options and
 //! validates that requested crate names are known.
 
-use crate::crate_name::CrateName;
-use crate::error::{InstallerError, Result};
 use log::debug;
+
+use crate::{
+    crate_name::CrateName,
+    error::{InstallerError, Result},
+};
 
 /// Static list of lint crates available for building.
 ///
@@ -48,13 +51,12 @@ pub struct CrateResolutionOptions {
 /// cherry-pick particular lints.
 ///
 /// The `experimental` flag has different effects depending on the mode:
-/// - In `individual_lints` mode, experimental lint crates from
-///   `EXPERIMENTAL_LINT_CRATES` are included in the returned crate list.
-/// - In suite mode (default), the `experimental` flag is used by `BuildConfig`
-///   to enable experimental features when building the suite crate.
-/// - When `specific_lints` are provided, the returned list is exactly the
-///   requested crate list after validation. Experimental crates still require
-///   the `experimental` flag during validation.
+/// - In `individual_lints` mode, experimental lint crates from `EXPERIMENTAL_LINT_CRATES` are
+///   included in the returned crate list.
+/// - In suite mode (default), the `experimental` flag is used by `BuildConfig` to enable
+///   experimental features when building the suite crate.
+/// - When `specific_lints` are provided, the returned list is exactly the requested crate list
+///   after validation. Experimental crates still require the `experimental` flag during validation.
 ///
 /// Note: This function assumes that `specific_lints` have been validated via
 /// `validate_crate_names()` prior to calling. Callers must validate inputs
@@ -148,8 +150,9 @@ pub fn validate_crate_names(names: &[CrateName], options: &CrateResolutionOption
 mod tests {
     //! Tests for release resolution.
 
-    use super::*;
     use rstest::rstest;
+
+    use super::*;
 
     /// Test configuration for `resolve_crates` variants.
     struct ResolveCratesCase {

@@ -25,13 +25,12 @@
 
 use std::array;
 
+use super::{IndexError, IndexResult, MINHASH_SIZE, MinHashSignature};
 use crate::token::Fingerprint;
 
-use super::{IndexError, IndexResult, MINHASH_SIZE, MinHashSignature};
-
-const SEED_STREAM_START: u64 = 0x243F_6A88_85A3_08D3;
-const SEED_STREAM_STEP: u64 = 0x9E37_79B9_7F4A_7C15;
-const HASH_MIX: u64 = 0x94D0_49BB_1331_11EB;
+const SEED_STREAM_START: u64 = 0x243f_6a88_85a3_08d3;
+const SEED_STREAM_STEP: u64 = 0x9e37_79b9_7f4a_7c15;
+const HASH_MIX: u64 = 0x94d0_49bb_1331_11eb;
 
 /// A typed `MinHash` seed value.
 ///
@@ -47,9 +46,7 @@ pub struct MinHasher {
 }
 
 impl Default for MinHasher {
-    fn default() -> Self {
-        Self::new()
-    }
+    fn default() -> Self { Self::new() }
 }
 
 impl MinHasher {
@@ -312,9 +309,7 @@ fn minimum_mixed_hash(seed: Seed, hashes: &[u64]) -> u64 {
     })
 }
 
-const fn mix_hash(seed: u64, hash: u64) -> u64 {
-    splitmix64(seed ^ hash.wrapping_mul(HASH_MIX))
-}
+const fn mix_hash(seed: u64, hash: u64) -> u64 { splitmix64(seed ^ hash.wrapping_mul(HASH_MIX)) }
 
 /// Generates the next seed in the deterministic stream.
 ///
@@ -332,7 +327,7 @@ const fn next_seed(state: &mut u64) -> Seed {
 /// `next_seed` to ensure deterministic, non-overlapping seed values.
 const fn splitmix64(value: u64) -> u64 {
     let mut mixed = value.wrapping_add(SEED_STREAM_STEP);
-    mixed = (mixed ^ (mixed >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
-    mixed = (mixed ^ (mixed >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    mixed = (mixed ^ (mixed >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    mixed = (mixed ^ (mixed >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
     mixed ^ (mixed >> 31)
 }

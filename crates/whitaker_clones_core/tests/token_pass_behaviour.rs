@@ -8,7 +8,13 @@ use std::cell::RefCell;
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use whitaker_clones_core::{
-    Fingerprint, NormProfile, ShingleSize, TokenPassError, WinnowWindow, hash_shingles, normalize,
+    Fingerprint,
+    NormProfile,
+    ShingleSize,
+    TokenPassError,
+    WinnowWindow,
+    hash_shingles,
+    normalize,
     winnow,
 };
 use whitaker_test_macros::allow_fixture_expansion_lints;
@@ -31,9 +37,7 @@ struct TokenPassWorld {
 
 #[allow_fixture_expansion_lints]
 #[fixture]
-fn world() -> TokenPassWorld {
-    TokenPassWorld::default()
-}
+fn world() -> TokenPassWorld { TokenPassWorld::default() }
 
 fn with_fingerprints(world: &TokenPassWorld, assert_fn: impl FnOnce(&[Fingerprint])) {
     let fingerprints = world.fingerprints.borrow();
@@ -287,31 +291,19 @@ fn then_error_is(world: &TokenPassWorld, message: String) {
 }
 
 #[scenario(path = "tests/features/token_pass.feature", index = 0)]
-fn scenario_t1_trivia_removal(world: TokenPassWorld) {
-    let _ = world;
-}
+fn scenario_t1_trivia_removal(world: TokenPassWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/token_pass.feature", index = 1)]
-fn scenario_t2_renamed_functions_match(world: TokenPassWorld) {
-    let _ = world;
-}
+fn scenario_t2_renamed_functions_match(world: TokenPassWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/token_pass.feature", index = 2)]
-fn scenario_exact_k_fingerprint(world: TokenPassWorld) {
-    let _ = world;
-}
+fn scenario_exact_k_fingerprint(world: TokenPassWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/token_pass.feature", index = 3)]
-fn scenario_winnowing_rightmost_minimum(world: TokenPassWorld) {
-    let _ = world;
-}
+fn scenario_winnowing_rightmost_minimum(world: TokenPassWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/token_pass.feature", index = 4)]
-fn scenario_invalid_size(world: TokenPassWorld) {
-    let _ = world;
-}
+fn scenario_invalid_size(world: TokenPassWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/token_pass.feature", index = 5)]
-fn scenario_unterminated_literal(world: TokenPassWorld) {
-    let _ = world;
-}
+fn scenario_unterminated_literal(world: TokenPassWorld) { let _ = world; }

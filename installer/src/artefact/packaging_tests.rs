@@ -8,15 +8,11 @@ use crate::artefact::error::ArtefactError;
 
 #[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
-fn temp_dir() -> std::io::Result<TempDir> {
-    TempDir::new()
-}
+fn temp_dir() -> std::io::Result<TempDir> { TempDir::new() }
 
 #[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
-fn sample_git_sha() -> Result<GitSha, ArtefactError> {
-    GitSha::try_from("abc1234")
-}
+fn sample_git_sha() -> Result<GitSha, ArtefactError> { GitSha::try_from("abc1234") }
 
 #[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
