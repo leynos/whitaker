@@ -8,13 +8,13 @@
 
 use rstest::rstest;
 
-#[expect(dead_code)]
+#[allow(dead_code)]
 fn parse() {
     let parsed = std::iter::once("value").next();
     let _ = parsed.expect("ordinary code must not inherit rstest harness status");
 }
 
-#[expect(dead_code)]
+#[allow(dead_code)]
 mod parse {
     pub const VERSION: &str = "1";
 }
