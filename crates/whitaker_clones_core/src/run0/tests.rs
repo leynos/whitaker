@@ -16,11 +16,11 @@ use super::{
 use crate::NormProfile;
 
 fn build_pair_and_accept(
-    left: FragmentInput<'_>,
-    right: FragmentInput<'_>,
+    left: &FragmentInput<'_>,
+    right: &FragmentInput<'_>,
     cfg: &TokenPassConfig,
 ) -> Result<Vec<AcceptedPair>, Run0Error> {
-    let fragments = vec![fragment(&left), fragment(&right)];
+    let fragments = vec![fragment(left), fragment(right)];
     accept_candidate_pairs(&fragments, &[pair("alpha", "beta")], cfg)
 }
 
@@ -48,14 +48,14 @@ fn resolved_region(id: &str, source: &str, range: std::ops::Range<usize>) -> Reg
 #[test]
 fn boundary_threshold_accepts_type1_pair() {
     let accepted = build_pair_and_accept(
-        FragmentInput {
+        &FragmentInput {
             id: "alpha",
             profile: NormProfile::T1,
             file_uri: "src/a.rs",
             source_text: "fn a() {}\n",
             hashes: &[(1, 0..8), (2, 0..8)],
         },
-        FragmentInput {
+        &FragmentInput {
             id: "beta",
             profile: NormProfile::T1,
             file_uri: "src/b.rs",
@@ -76,14 +76,14 @@ fn boundary_threshold_accepts_type2_pair() {
             .unwrap_or_else(|error| panic!("unexpected threshold error: {error}")),
     );
     let accepted = build_pair_and_accept(
-        FragmentInput {
+        &FragmentInput {
             id: "alpha",
             profile: NormProfile::T2,
             file_uri: "src/a.rs",
             source_text: "fn a(x: i32) {}\n",
             hashes: &[(1, 0..15), (2, 0..15)],
         },
-        FragmentInput {
+        &FragmentInput {
             id: "beta",
             profile: NormProfile::T2,
             file_uri: "src/b.rs",
@@ -100,14 +100,14 @@ fn boundary_threshold_accepts_type2_pair() {
 #[test]
 fn just_below_threshold_is_rejected() {
     let accepted = build_pair_and_accept(
-        FragmentInput {
+        &FragmentInput {
             id: "alpha",
             profile: NormProfile::T2,
             file_uri: "src/a.rs",
             source_text: "fn a(x: i32) {}\n",
             hashes: &[(1, 0..15), (2, 0..15)],
         },
-        FragmentInput {
+        &FragmentInput {
             id: "beta",
             profile: NormProfile::T2,
             file_uri: "src/b.rs",
@@ -186,17 +186,16 @@ fn emit_run0_uses_primary_and_related_locations() {
     assert_eq!(result.rule_id, WHK001_ID);
     assert_eq!(result.locations.len(), 1);
     assert_eq!(result.related_locations.len(), 1);
-    assert_eq!(
-        result.locations[0].physical_location.artefact_location.uri,
-        "src/a.rs"
-    );
-    assert_eq!(
-        result.related_locations[0]
-            .physical_location
-            .artefact_location
-            .uri,
-        "src/b.rs"
-    );
+    let location = result
+        .locations
+        .first()
+        .expect("primary location should be present");
+    assert_eq!(location.physical_location.artefact_location.uri, "src/a.rs");
+    let related = result
+        .related_locations
+        .first()
+        .expect("related location should be present");
+    assert_eq!(related.physical_location.artefact_location.uri, "src/b.rs");
 }
 
 #[test]

@@ -47,3 +47,6 @@ rstest-bdd = { workspace = true }
 rstest-bdd-macros = { workspace = true }
 dylint_testing = { workspace = true }
 serial_test = "4.0.1"
+
+[lints]
+workspace = true

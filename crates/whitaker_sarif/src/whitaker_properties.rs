@@ -287,7 +287,7 @@ mod tests {
             .with_cosine(0.90)
             .build();
         match props {
-            Ok(props) => crate::test_support::assert_json_round_trip(&props),
+            Ok(built) => crate::test_support::assert_json_round_trip(&built),
             Err(e) => panic!("unexpected build error: {e}"),
         }
     }

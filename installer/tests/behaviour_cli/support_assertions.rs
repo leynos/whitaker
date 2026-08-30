@@ -15,6 +15,18 @@ const DRY_RUN_BANNER: &str = "Dry run - no files will be modified";
 /// Header preceding the crate list in dry-run output.
 const CRATE_LIST_MARKER: &str = "Crates to build:";
 
+/// Unwraps a fallible lookup, panicking with its diagnostic message.
+///
+/// Keeps the assertion wrappers flat: matching on every lookup inline inflates
+/// their cognitive complexity without adding clarity.
+#[track_caller]
+fn require<T>(result: Result<T, String>) -> T {
+    match result {
+        Ok(value) => value,
+        Err(message) => panic!("{message}"),
+    }
+}
+
 /// Owned snapshot of the captured CLI process output.
 struct CapturedOutput {
     success: bool,
@@ -70,10 +82,7 @@ fn assert_exit_status(cli_world: &CliWorld, expected_success: bool) {
         return;
     }
 
-    let output = match captured_output(cli_world) {
-        Ok(output) => output,
-        Err(message) => panic!("{message}"),
-    };
+    let output = require(captured_output(cli_world));
     assert_eq!(
         output.success, expected_success,
         "expected success={expected_success}, stdout={}, stderr={}",
@@ -86,10 +95,7 @@ fn assert_error_output_is_shown(cli_world: &CliWorld, error_kind: &str, expected
         return;
     }
 
-    let output = match captured_output(cli_world) {
-        Ok(output) => output,
-        Err(message) => panic!("{message}"),
-    };
+    let output = require(captured_output(cli_world));
     let stderr = output.stderr;
 
     assert!(
@@ -112,14 +118,8 @@ pub(crate) fn assert_dry_run_output_is_shown(cli_world: &CliWorld) {
         return;
     }
 
-    let toolchain = match configured_toolchain(cli_world) {
-        Ok(toolchain) => toolchain,
-        Err(message) => panic!("{message}"),
-    };
-    let output = match captured_output(cli_world) {
-        Ok(output) => output,
-        Err(message) => panic!("{message}"),
-    };
+    let toolchain = require(configured_toolchain(cli_world));
+    let output = require(captured_output(cli_world));
     let stderr = output.stderr;
 
     assert!(
@@ -143,10 +143,7 @@ pub(crate) fn assert_dry_run_output_is_shown(cli_world: &CliWorld) {
         "individual lint crate should not appear in suite-only mode, stderr: {stderr}"
     );
 
-    let target_dir = match temp_target_path(cli_world) {
-        Ok(path) => path,
-        Err(message) => panic!("{message}"),
-    };
+    let target_dir = require(temp_target_path(cli_world));
     let expected_target_dir = expected_dry_run_target_dir(&toolchain, &target_dir);
     assert!(
         stderr.contains(&format!("Target directory: {expected_target_dir}")),
@@ -179,10 +176,7 @@ pub(crate) fn assert_experimental_lint_dry_run_output_is_shown(cli_world: &CliWo
         return;
     }
 
-    let output = match captured_output(cli_world) {
-        Ok(output) => output,
-        Err(message) => panic!("{message}"),
-    };
+    let output = require(captured_output(cli_world));
     let stderr = output.stderr;
 
     assert!(
@@ -211,10 +205,7 @@ pub(crate) fn assert_installation_succeeds_or_is_skipped(cli_world: &CliWorld) {
         return;
     }
 
-    let output = match captured_output(cli_world) {
-        Ok(output) => output,
-        Err(message) => panic!("{message}"),
-    };
+    let output = require(captured_output(cli_world));
     assert!(output.success, "installation failed: {}", output.stderr);
 }
 
@@ -248,14 +239,8 @@ pub(crate) fn assert_suite_library_is_staged(cli_world: &CliWorld) {
         return;
     }
 
-    let channel = match configured_toolchain(cli_world) {
-        Ok(channel) => channel,
-        Err(message) => panic!("{message}"),
-    };
-    let output = match captured_output(cli_world) {
-        Ok(output) => output,
-        Err(message) => panic!("{message}"),
-    };
+    let channel = require(configured_toolchain(cli_world));
+    let output = require(captured_output(cli_world));
     let needle = format!("whitaker_suite@{channel}");
 
     if output.stderr.contains(PREBUILT_INSTALL_MARKER)
@@ -265,10 +250,7 @@ pub(crate) fn assert_suite_library_is_staged(cli_world: &CliWorld) {
         return;
     }
 
-    let target_dir = match temp_target_path(cli_world) {
-        Ok(path) => path,
-        Err(message) => panic!("{message}"),
-    };
+    let target_dir = require(temp_target_path(cli_world));
     let staging_dir = target_dir.join(&channel).join("release");
     assert_staged_library_unique(&staging_dir, &needle, &output);
 }
