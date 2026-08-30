@@ -4,14 +4,17 @@
 //! helper exists only so debug-built test binaries can stage a cheap synthetic
 //! artefact instead of recursively rebuilding the workspace inside nextest.
 
-use camino::{Utf8Path, Utf8PathBuf};
 use std::fs;
-use whitaker_installer::crate_name::CrateName;
-use whitaker_installer::error::{InstallerError, Result};
-use whitaker_installer::resolution::SUITE_CRATE;
-use whitaker_installer::stager::Stager;
-use whitaker_installer::test_support::TEST_STAGE_SUITE_ENV;
-use whitaker_installer::toolchain::Toolchain;
+
+use camino::{Utf8Path, Utf8PathBuf};
+use whitaker_installer::{
+    crate_name::CrateName,
+    error::{InstallerError, Result},
+    resolution::SUITE_CRATE,
+    stager::Stager,
+    test_support::TEST_STAGE_SUITE_ENV,
+    toolchain::Toolchain,
+};
 
 pub(crate) fn try_test_staged_suite_installation(
     requested_crates: &[CrateName],
@@ -58,11 +61,12 @@ mod tests {
     //! temporary environment-variable helpers to exercise the debug-only staged
     //! suite shortcuts without leaking process-wide state between cases.
 
-    use super::*;
     use rstest::{fixture, rstest};
     use temp_env::{with_var, with_var_unset};
     use tempfile::TempDir;
     use whitaker_installer::test_support::env_test_guard;
+
+    use super::*;
 
     struct StagedSuiteSetup {
         _guard: std::sync::MutexGuard<'static, ()>,
@@ -72,9 +76,7 @@ mod tests {
     }
 
     impl StagedSuiteSetup {
-        fn requested_suite_crates() -> Vec<CrateName> {
-            vec![CrateName::from(SUITE_CRATE)]
-        }
+        fn requested_suite_crates() -> Vec<CrateName> { vec![CrateName::from(SUITE_CRATE)] }
 
         fn stager(&self) -> Stager {
             Stager::new(self.target_dir.clone(), self.toolchain.channel())

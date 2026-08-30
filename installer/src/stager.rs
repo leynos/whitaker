@@ -3,11 +3,15 @@
 //! This module handles copying built libraries to the target directory with
 //! the toolchain-specific naming convention required by Dylint.
 
-use crate::builder::{BuildResult, library_extension, library_prefix};
-use crate::crate_name::CrateName;
-use crate::error::{InstallerError, Result};
-use camino::{Utf8Path, Utf8PathBuf};
 use std::fs;
+
+use camino::{Utf8Path, Utf8PathBuf};
+
+use crate::{
+    builder::{BuildResult, library_extension, library_prefix},
+    crate_name::CrateName,
+    error::{InstallerError, Result},
+};
 
 /// Handles staging of built libraries to the target directory.
 pub struct Stager {
@@ -92,9 +96,7 @@ impl Stager {
 
     /// Return the target directory root.
     #[must_use]
-    pub fn target_dir(&self) -> &Utf8Path {
-        &self.target_dir
-    }
+    pub fn target_dir(&self) -> &Utf8Path { &self.target_dir }
 
     /// Compute the staged filename with toolchain suffix.
     ///

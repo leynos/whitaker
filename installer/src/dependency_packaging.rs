@@ -4,12 +4,16 @@
 //! `cargo-dylint` and `dylint-link` with deterministic names and inner
 //! directories for each supported target.
 
+use std::{
+    fs,
+    io,
+    path::{Path, PathBuf},
+};
+
+use thiserror::Error;
+
 use crate::dependency_binaries::{DependencyBinary, binary_filename, provenance_filename};
 pub use crate::installer_packaging::{ArchiveFormat, TargetTriple};
-use std::fs;
-use std::io;
-use std::path::{Path, PathBuf};
-use thiserror::Error;
 
 /// Parameters for packaging a dependency binary archive.
 #[derive(Debug)]
@@ -115,9 +119,8 @@ pub fn package_dependency_binary(
 pub fn render_provenance_markdown(dependencies: &[DependencyBinary]) -> String {
     let sections: String = dependencies.iter().map(render_dependency_section).collect();
     format!(
-        "# Dependency binary licences and provenance\n\n\
-         Whitaker publishes the following third-party dependency binaries \
-         from repository releases.\n\n{sections}"
+        "# Dependency binary licences and provenance\n\nWhitaker publishes the following \
+         third-party dependency binaries from repository releases.\n\n{sections}"
     )
 }
 

@@ -70,9 +70,7 @@ impl MethodVectorAlgebraReport {
     /// assert_eq!(report.left_dot_right(), 40);
     /// ```
     #[must_use]
-    pub const fn left_dot_right(self) -> u64 {
-        self.left_dot_right
-    }
+    pub const fn left_dot_right(self) -> u64 { self.left_dot_right }
 
     /// Returns the result of [`MethodVectorAlgebraReport::right_dot_left`].
     ///
@@ -104,9 +102,7 @@ impl MethodVectorAlgebraReport {
     /// assert_eq!(report.right_dot_left(), 40);
     /// ```
     #[must_use]
-    pub const fn right_dot_left(self) -> u64 {
-        self.right_dot_left
-    }
+    pub const fn right_dot_left(self) -> u64 { self.right_dot_left }
 
     /// Returns the result of [`MethodVectorAlgebraReport::left_norm_squared`].
     ///
@@ -138,9 +134,7 @@ impl MethodVectorAlgebraReport {
     /// assert_eq!(report.left_norm_squared(), 44);
     /// ```
     #[must_use]
-    pub const fn left_norm_squared(self) -> u64 {
-        self.left_norm_squared
-    }
+    pub const fn left_norm_squared(self) -> u64 { self.left_norm_squared }
 
     /// Returns the result of [`MethodVectorAlgebraReport::right_norm_squared`].
     ///
@@ -172,9 +166,7 @@ impl MethodVectorAlgebraReport {
     /// assert_eq!(report.right_norm_squared(), 44);
     /// ```
     #[must_use]
-    pub const fn right_norm_squared(self) -> u64 {
-        self.right_norm_squared
-    }
+    pub const fn right_norm_squared(self) -> u64 { self.right_norm_squared }
 }
 
 /// Computes the shipped vector-algebra helper values for two methods.

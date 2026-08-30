@@ -3,17 +3,20 @@
 //! This module provides the `run_list` command handler and supporting functions
 //! for querying and displaying installed lint libraries.
 
-use camino::{Utf8Path, Utf8PathBuf};
-use log::trace;
 use std::io::Write;
 
-use crate::cli::ListArgs;
-use crate::dirs::{BaseDirs, SystemBaseDirs};
-use crate::error::{InstallerError, Result};
-use crate::list_output::{format_human, format_json};
-use crate::scanner::{InstalledLints, scan_installed};
-use crate::stager::default_target_dir;
-use crate::toolchain::Toolchain;
+use camino::{Utf8Path, Utf8PathBuf};
+use log::trace;
+
+use crate::{
+    cli::ListArgs,
+    dirs::{BaseDirs, SystemBaseDirs},
+    error::{InstallerError, Result},
+    list_output::{format_human, format_json},
+    scanner::{InstalledLints, scan_installed},
+    stager::default_target_dir,
+    toolchain::Toolchain,
+};
 
 /// Lists installed lint libraries and their associated lints.
 ///

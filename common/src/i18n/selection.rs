@@ -1,8 +1,7 @@
 //! Locale resolver wiring explicit overrides, environment variables, and
 //! configuration before falling back to the bundled localizer.
 
-use std::borrow::Cow;
-use std::fmt;
+use std::{borrow::Cow, fmt};
 
 use log::{debug, warn};
 
@@ -51,39 +50,27 @@ impl LocaleSelection {
 
     /// Returns the effective locale source.
     #[must_use]
-    pub const fn source(&self) -> LocaleSource {
-        self.source
-    }
+    pub const fn source(&self) -> LocaleSource { self.source }
 
     /// Returns the locale requested by the resolved source, if any.
     #[must_use]
-    pub fn requested(&self) -> Option<&str> {
-        self.requested.as_deref()
-    }
+    pub fn requested(&self) -> Option<&str> { self.requested.as_deref() }
 
     /// Returns the resolved locale tag.
     #[must_use]
-    pub fn locale(&self) -> &str {
-        self.localizer.locale()
-    }
+    pub fn locale(&self) -> &str { self.localizer.locale() }
 
     /// Whether the fallback locale was used.
     #[must_use]
-    pub const fn used_fallback(&self) -> bool {
-        self.localizer.used_fallback()
-    }
+    pub const fn used_fallback(&self) -> bool { self.localizer.used_fallback() }
 
     /// Returns the resolved [`Localizer`].
     #[must_use]
-    pub const fn localizer(&self) -> &Localizer {
-        &self.localizer
-    }
+    pub const fn localizer(&self) -> &Localizer { &self.localizer }
 
     /// Consumes the selection, yielding the [`Localizer`].
     #[must_use]
-    pub fn into_localizer(self) -> Localizer {
-        self.localizer
-    }
+    pub fn into_localizer(self) -> Localizer { self.localizer }
 
     /// Emit a debug log summarizing the resolved locale.
     pub fn log_outcome(&self, target: &str) {
@@ -156,8 +143,9 @@ pub fn normalize_locale(input: Option<&str>) -> Option<&str> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use rstest::rstest;
+
+    use super::*;
 
     #[derive(Clone, Copy, Debug)]
     struct ResolutionCase {
@@ -170,9 +158,7 @@ mod tests {
     }
 
     impl ResolutionCase {
-        fn environment(&self) -> Option<String> {
-            self.environment.map(String::from)
-        }
+        fn environment(&self) -> Option<String> { self.environment.map(String::from) }
     }
 
     #[rstest]

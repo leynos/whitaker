@@ -2,11 +2,13 @@
 
 //! Tests for downloader error mapping and archive checksum verification.
 
+use std::io::Write;
+
+use sha2::{Digest, Sha256};
+use tempfile::TempDir;
+
 use super::*;
 use crate::hex::to_lower_hex;
-use sha2::{Digest, Sha256};
-use std::io::Write;
-use tempfile::TempDir;
 
 // The under-cap success path is covered end to end by the local-server
 // boundary tests; this exercises the over-cap rejection they cannot.

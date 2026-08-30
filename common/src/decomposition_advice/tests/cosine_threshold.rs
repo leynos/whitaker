@@ -7,8 +7,10 @@
 //! and `MIN_COSINE_THRESHOLD_DENOMINATOR_SQUARED` constants.
 
 use crate::decomposition_advice::vector::{
-    MIN_COSINE_THRESHOLD_DENOMINATOR_SQUARED, MIN_COSINE_THRESHOLD_NUMERATOR_SQUARED,
-    cosine_threshold_met, test_feature_vector,
+    MIN_COSINE_THRESHOLD_DENOMINATOR_SQUARED,
+    MIN_COSINE_THRESHOLD_NUMERATOR_SQUARED,
+    cosine_threshold_met,
+    test_feature_vector,
 };
 
 fn check_cosine_threshold(left_weights: &[(&str, u64)], right_weights: &[(&str, u64)]) -> bool {

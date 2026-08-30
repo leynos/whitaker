@@ -2,15 +2,18 @@
 
 use whitaker_sarif::{Region, WHK001_ID, WHK002_ID};
 
-use crate::NormProfile;
-
 use super::{
-    AcceptedPair, Run0Error, SimilarityThreshold, TokenPassConfig, accept_candidate_pairs,
+    AcceptedPair,
+    Run0Error,
+    SimilarityThreshold,
+    TokenPassConfig,
+    accept_candidate_pairs,
     emit_run0,
     score::SimilarityRatio,
     span::region_for_range,
     test_helpers::{FragmentInput, config, fragment, pair},
 };
+use crate::NormProfile;
 
 fn build_pair_and_accept(
     left: FragmentInput<'_>,

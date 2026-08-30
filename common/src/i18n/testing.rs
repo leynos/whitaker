@@ -4,8 +4,7 @@
 //! [`RecordingEmitter`] for exercising error paths and verifying diagnostic
 //! output during localization tests.
 
-use std::borrow::Cow;
-use std::cell::RefCell;
+use std::{borrow::Cow, cell::RefCell};
 
 pub use super::helpers::{MessageResolution, safe_resolve_message_set};
 use super::{Arguments, AttrKey, BundleLookup, I18nError, MessageKey};
@@ -70,12 +69,8 @@ pub struct RecordingEmitter {
 impl RecordingEmitter {
     /// Access the recorded messages emitted during localization failures.
     #[must_use]
-    pub fn recorded_messages(&self) -> Vec<String> {
-        self.messages.borrow().clone()
-    }
+    pub fn recorded_messages(&self) -> Vec<String> { self.messages.borrow().clone() }
 
     /// Record a delayed bug message for later assertions.
-    pub fn record(&self, message: String) {
-        self.messages.borrow_mut().push(message);
-    }
+    pub fn record(&self, message: String) { self.messages.borrow_mut().push(message); }
 }

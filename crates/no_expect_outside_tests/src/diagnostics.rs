@@ -2,47 +2,45 @@
 //! diagnostics; the driver detects violations and context supplies
 //! test-context evidence.
 
-use crate::NO_EXPECT_OUTSIDE_TESTS;
-use crate::context::ContextSummary;
+use std::{borrow::Cow, fmt};
+
 use rustc_hir as hir;
 use rustc_lint::{DiagDecorator, LateContext, LintContext};
 use rustc_middle::ty;
 use rustc_span::sym;
-use std::borrow::Cow;
-use std::fmt;
 use whitaker_common::i18n::{
-    Arguments, DiagnosticMessageSet, FluentValue, Localizer, MessageKey, MessageResolution,
-    noop_reporter, safe_resolve_message_set,
+    Arguments,
+    DiagnosticMessageSet,
+    FluentValue,
+    Localizer,
+    MessageKey,
+    MessageResolution,
+    noop_reporter,
+    safe_resolve_message_set,
 };
 #[cfg(test)]
 use whitaker_common::i18n::{BundleLookup, I18nError, resolve_message_set};
+
+use crate::{NO_EXPECT_OUTSIDE_TESTS, context::ContextSummary};
 
 /// A formatted label for the receiver type (e.g., "`Result<T, E>`").
 #[derive(Debug, Clone)]
 pub(crate) struct ReceiverLabel(String);
 
 impl ReceiverLabel {
-    pub(crate) fn new(label: impl Into<String>) -> Self {
-        Self(label.into())
-    }
+    pub(crate) fn new(label: impl Into<String>) -> Self { Self(label.into()) }
 }
 
 impl Default for ReceiverLabel {
-    fn default() -> Self {
-        Self::new(String::new())
-    }
+    fn default() -> Self { Self::new(String::new()) }
 }
 
 impl AsRef<str> for ReceiverLabel {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
+    fn as_ref(&self) -> &str { &self.0 }
 }
 
 impl fmt::Display for ReceiverLabel {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.0) }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -109,21 +107,15 @@ impl ReceiverCategory {
 pub(crate) struct ContextLabel(String);
 
 impl ContextLabel {
-    pub(crate) fn new(label: impl Into<String>) -> Self {
-        Self(label.into())
-    }
+    pub(crate) fn new(label: impl Into<String>) -> Self { Self(label.into()) }
 }
 
 impl AsRef<str> for ContextLabel {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
+    fn as_ref(&self) -> &str { &self.0 }
 }
 
 impl fmt::Display for ContextLabel {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.0) }
 }
 
 pub(crate) struct DiagnosticContext<'a> {

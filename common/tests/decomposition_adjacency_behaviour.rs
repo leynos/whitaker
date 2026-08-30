@@ -5,7 +5,10 @@ use std::cell::RefCell;
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use whitaker_common::test_support::decomposition::{
-    AdjacencyError, AdjacencyReport, EdgeInput, adjacency_report,
+    AdjacencyError,
+    AdjacencyReport,
+    EdgeInput,
+    adjacency_report,
 };
 use whitaker_test_macros::allow_fixture_expansion_lints;
 
@@ -18,9 +21,7 @@ struct AdjacencyWorld {
 
 #[allow_fixture_expansion_lints]
 #[fixture]
-fn world() -> AdjacencyWorld {
-    AdjacencyWorld::default()
-}
+fn world() -> AdjacencyWorld { AdjacencyWorld::default() }
 
 #[given("a graph with {count} nodes")]
 fn given_graph_with_nodes(world: &AdjacencyWorld, count: usize) {
@@ -134,21 +135,13 @@ fn then_neighbours_of_node_are_sorted(world: &AdjacencyWorld, node: usize) -> Re
 // `tests/features/decomposition_adjacency.feature`.
 
 #[scenario(path = "tests/features/decomposition_adjacency.feature", index = 0)]
-fn scenario_valid_edges_produce_symmetric_neighbour_lists(world: AdjacencyWorld) {
-    let _ = world;
-}
+fn scenario_valid_edges_produce_symmetric_neighbour_lists(world: AdjacencyWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/decomposition_adjacency.feature", index = 1)]
-fn scenario_malformed_edge_input_rejected_canonical_order(world: AdjacencyWorld) {
-    let _ = world;
-}
+fn scenario_malformed_edge_input_rejected_canonical_order(world: AdjacencyWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/decomposition_adjacency.feature", index = 2)]
-fn scenario_isolated_nodes_have_empty_neighbour_lists(world: AdjacencyWorld) {
-    let _ = world;
-}
+fn scenario_isolated_nodes_have_empty_neighbour_lists(world: AdjacencyWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/decomposition_adjacency.feature", index = 3)]
-fn scenario_multiple_neighbours_appear_in_sorted_order(world: AdjacencyWorld) {
-    let _ = world;
-}
+fn scenario_multiple_neighbours_appear_in_sorted_order(world: AdjacencyWorld) { let _ = world; }

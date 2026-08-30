@@ -1,8 +1,7 @@
 //! Target and filename helpers for dependency-binary installation.
 
-use crate::artefact::target::TargetTriple;
-
 use super::super::manifest::DependencyBinary;
+use crate::artefact::target::TargetTriple;
 
 const PROVENANCE_FILENAME: &str = "dependency-binaries-licences.md";
 
@@ -37,9 +36,7 @@ pub fn host_target() -> Option<TargetTriple> {
 
 /// Return the release-side provenance asset filename.
 #[must_use]
-pub const fn provenance_filename() -> &'static str {
-    PROVENANCE_FILENAME
-}
+pub const fn provenance_filename() -> &'static str { PROVENANCE_FILENAME }
 
 /// Compute the platform-specific executable name for a dependency binary.
 #[must_use]

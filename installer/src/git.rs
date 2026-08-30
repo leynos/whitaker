@@ -4,14 +4,20 @@
 //! including initial cloning and subsequent updates. Operations have a
 //! configurable timeout to prevent hangs on network issues.
 
-use crate::error::{InstallerError, Result};
-use crate::workspace::WHITAKER_REPO_URL;
+use std::{
+    io::Read,
+    process::{Child, Command, Output, Stdio},
+    thread::JoinHandle,
+    time::Duration,
+};
+
 use camino::Utf8Path;
-use std::io::Read;
-use std::process::{Child, Command, Output, Stdio};
-use std::thread::JoinHandle;
-use std::time::Duration;
 use wait_timeout::ChildExt;
+
+use crate::{
+    error::{InstallerError, Result},
+    workspace::WHITAKER_REPO_URL,
+};
 
 /// Default timeout for git operations (5 minutes).
 const GIT_TIMEOUT: Duration = Duration::from_mins(5);

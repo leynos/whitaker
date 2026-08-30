@@ -1,18 +1,23 @@
 //! Package dependency binaries and shared provenance assets for release uploads.
 
+use std::{
+    io::Write,
+    path::{Path, PathBuf},
+};
+
 use clap::{Parser, Subcommand};
-use std::io::Write;
-use std::path::{Path, PathBuf};
 use thiserror::Error;
-use whitaker_installer::dependency_binaries::{
-    find_dependency_binary, required_dependency_binaries,
+use whitaker_installer::{
+    dependency_binaries::{find_dependency_binary, required_dependency_binaries},
+    dependency_packaging::{
+        DependencyPackageParams,
+        DependencyPackagingError,
+        package_dependency_binary,
+        write_provenance_markdown,
+    },
+    installer_packaging::TargetTriple,
+    output::write_stderr_line,
 };
-use whitaker_installer::dependency_packaging::{
-    DependencyPackageParams, DependencyPackagingError, package_dependency_binary,
-    write_provenance_markdown,
-};
-use whitaker_installer::installer_packaging::TargetTriple;
-use whitaker_installer::output::write_stderr_line;
 
 /// Package repository-hosted dependency binaries for release publication.
 #[derive(Parser, Debug)]
@@ -134,9 +139,10 @@ fn run_provenance(output_dir: &Path) -> Result<(), CliError> {
 mod tests {
     //! Tests for the dependency-binary packaging command.
 
-    use super::*;
     use tempfile::tempdir;
     use whitaker_installer::dependency_binaries::provenance_filename;
+
+    use super::*;
 
     #[test]
     fn run_package_command_rejects_invalid_target() {

@@ -7,9 +7,15 @@ use rstest_bdd_macros::{given, scenario, then, when};
 use whitaker_common::{
     attributes::{Attribute, AttributeKind, AttributePath},
     rstest::{
-        ExpansionTrace, ParameterBinding, RstestDetectionOptions, RstestParameter,
-        RstestParameterKind, classify_rstest_parameter, fixture_local_names,
-        is_rstest_fixture_with, is_rstest_test_with,
+        ExpansionTrace,
+        ParameterBinding,
+        RstestDetectionOptions,
+        RstestParameter,
+        RstestParameterKind,
+        classify_rstest_parameter,
+        fixture_local_names,
+        is_rstest_fixture_with,
+        is_rstest_test_with,
     },
 };
 use whitaker_test_macros::allow_fixture_expansion_lints;
@@ -106,19 +112,13 @@ impl DetectionWorld {
 
 #[allow_fixture_expansion_lints]
 #[fixture]
-fn world() -> DetectionWorld {
-    DetectionWorld::default()
-}
+fn world() -> DetectionWorld { DetectionWorld::default() }
 
 #[given("a function annotated with rstest")]
-fn given_rstest_function(world: &DetectionWorld) {
-    world.push_attribute("rstest");
-}
+fn given_rstest_function(world: &DetectionWorld) { world.push_attribute("rstest"); }
 
 #[given("a function annotated with rstest::fixture")]
-fn given_rstest_fixture(world: &DetectionWorld) {
-    world.push_attribute("rstest::fixture");
-}
+fn given_rstest_fixture(world: &DetectionWorld) { world.push_attribute("rstest::fixture"); }
 
 #[given("a parameter named db")]
 fn given_fixture_local_parameter(world: &DetectionWorld) {
@@ -142,14 +142,10 @@ fn given_unsupported_parameter(world: &DetectionWorld) {
 }
 
 #[given("the expansion trace contains rstest")]
-fn given_trace(world: &DetectionWorld) {
-    world.set_trace("rstest");
-}
+fn given_trace(world: &DetectionWorld) { world.set_trace("rstest"); }
 
 #[given("expansion fallback is enabled")]
-fn given_fallback_enabled(world: &DetectionWorld) {
-    world.enable_trace_fallback();
-}
+fn given_fallback_enabled(world: &DetectionWorld) { world.enable_trace_fallback(); }
 
 #[given("a function annotated with rstest and allow")]
 fn given_rstest_and_allow(world: &DetectionWorld) {
@@ -179,14 +175,10 @@ fn given_multi_frame_trace(world: &DetectionWorld) {
 }
 
 #[when("I check whether the function is an rstest test")]
-fn when_check_test(world: &DetectionWorld) {
-    world.evaluate_test();
-}
+fn when_check_test(world: &DetectionWorld) { world.evaluate_test(); }
 
 #[when("I check whether the function is an rstest fixture")]
-fn when_check_fixture(world: &DetectionWorld) {
-    world.evaluate_fixture();
-}
+fn when_check_fixture(world: &DetectionWorld) { world.evaluate_fixture(); }
 
 #[when("I classify the parameter")]
 fn when_classify_parameter(world: &DetectionWorld) -> Result<(), String> {
@@ -194,9 +186,7 @@ fn when_classify_parameter(world: &DetectionWorld) -> Result<(), String> {
 }
 
 #[when("I evaluate fixture-local names")]
-fn when_fixture_names_evaluated(world: &DetectionWorld) {
-    world.evaluate_fixture_names();
-}
+fn when_fixture_names_evaluated(world: &DetectionWorld) { world.evaluate_fixture_names(); }
 
 #[then("the function is recognized as an rstest test")]
 fn then_test_positive(world: &DetectionWorld) {

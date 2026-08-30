@@ -1,10 +1,14 @@
 //! Unit tests validating context summarization outcomes across default and
 //! configured test attributes.
 
-use crate::context::summarize_context;
 use rstest::rstest;
-use whitaker_common::attributes::{Attribute, AttributeKind, AttributePath};
-use whitaker_common::{ContextEntry, ContextKind};
+use whitaker_common::{
+    ContextEntry,
+    ContextKind,
+    attributes::{Attribute, AttributeKind, AttributePath},
+};
+
+use crate::context::summarize_context;
 
 fn function_entry(name: &str, attrs: Vec<Attribute>) -> ContextEntry {
     ContextEntry::new(name, ContextKind::Function, attrs)

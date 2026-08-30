@@ -1,10 +1,14 @@
 //! Unit tests for install-flow prebuilt staging and fallback behaviour.
 
-use super::*;
+use std::{
+    path::PathBuf,
+    sync::atomic::{AtomicBool, Ordering},
+};
+
 use camino::Utf8PathBuf;
 use rstest::{fixture, rstest};
-use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
+
+use super::*;
 
 struct StagingFixture {
     _temp_dir: tempfile::TempDir,
@@ -17,15 +21,9 @@ struct TestBaseDirs {
 }
 
 impl BaseDirs for TestBaseDirs {
-    fn home(&self) -> Option<PathBuf> {
-        None
-    }
-    fn executables(&self) -> Option<PathBuf> {
-        None
-    }
-    fn whitaker_data(&self) -> Option<PathBuf> {
-        self.data_dir.clone()
-    }
+    fn home(&self) -> Option<PathBuf> { None }
+    fn executables(&self) -> Option<PathBuf> { None }
+    fn whitaker_data(&self) -> Option<PathBuf> { self.data_dir.clone() }
 }
 
 static PRUNE_HOOK_CALLED: AtomicBool = AtomicBool::new(false);

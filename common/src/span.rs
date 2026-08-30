@@ -28,21 +28,15 @@ impl SourceLocation {
     /// assert_eq!(location.line(), 3);
     /// ```
     #[must_use]
-    pub const fn new(line: usize, column: usize) -> Self {
-        Self { line, column }
-    }
+    pub const fn new(line: usize, column: usize) -> Self { Self { line, column } }
 
     /// Returns the one-based line number.
     #[must_use]
-    pub const fn line(self) -> usize {
-        self.line
-    }
+    pub const fn line(self) -> usize { self.line }
 
     /// Returns the one-based column number.
     #[must_use]
-    pub const fn column(self) -> usize {
-        self.column
-    }
+    pub const fn column(self) -> usize { self.column }
 
     /// Returns true when this location is positioned after other.
     #[must_use]
@@ -70,7 +64,8 @@ impl SourceSpan {
     /// ```
     /// use whitaker_common::span::{SourceLocation, SourceSpan};
     ///
-    /// let span = SourceSpan::new(SourceLocation::new(1, 0), SourceLocation::new(3, 2)).expect("valid span for example");
+    /// let span = SourceSpan::new(SourceLocation::new(1, 0), SourceLocation::new(3, 2))
+    ///     .expect("valid span for example");
     /// assert_eq!(span.start().line(), 1);
     /// ```
     #[must_use = "Inspect the span creation result to handle invalid ranges"]
@@ -84,15 +79,11 @@ impl SourceSpan {
 
     /// Returns the start location.
     #[must_use]
-    pub const fn start(self) -> SourceLocation {
-        self.start
-    }
+    pub const fn start(self) -> SourceLocation { self.start }
 
     /// Returns the end location.
     #[must_use]
-    pub const fn end(self) -> SourceLocation {
-        self.end
-    }
+    pub const fn end(self) -> SourceLocation { self.end }
 }
 
 /// Converts a span into the inclusive range of line numbers it covers.
@@ -102,7 +93,8 @@ impl SourceSpan {
 /// ```
 /// use whitaker_common::span::{SourceLocation, SourceSpan, span_to_lines};
 ///
-/// let span = SourceSpan::new(SourceLocation::new(4, 0), SourceLocation::new(6, 5)).expect("valid span for example");
+/// let span = SourceSpan::new(SourceLocation::new(4, 0), SourceLocation::new(6, 5))
+///     .expect("valid span for example");
 /// assert_eq!(span_to_lines(span), 4..=6);
 /// ```
 #[must_use]
@@ -117,18 +109,18 @@ pub const fn span_to_lines(span: SourceSpan) -> RangeInclusive<usize> {
 /// ```
 /// use whitaker_common::span::{SourceLocation, SourceSpan, span_line_count};
 ///
-/// let span = SourceSpan::new(SourceLocation::new(2, 0), SourceLocation::new(5, 1)).expect("valid span for example");
+/// let span = SourceSpan::new(SourceLocation::new(2, 0), SourceLocation::new(5, 1))
+///     .expect("valid span for example");
 /// assert_eq!(span_line_count(span), 4);
 /// ```
 #[must_use]
-pub const fn span_line_count(span: SourceSpan) -> usize {
-    span.end.line() - span.start.line() + 1
-}
+pub const fn span_line_count(span: SourceSpan) -> usize { span.end.line() - span.start.line() + 1 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use rstest::rstest;
+
+    use super::*;
 
     #[rstest]
     fn span_construction_validates_order() {

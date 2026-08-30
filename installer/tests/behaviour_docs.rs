@@ -27,9 +27,7 @@ struct TomlWorld {
 
 #[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
-fn toml_world() -> TomlWorld {
-    TomlWorld::default()
-}
+fn toml_world() -> TomlWorld { TomlWorld::default() }
 
 /// Helper function to set TOML content in the world fixture.
 fn set_toml_content(toml_world: &TomlWorld, content: &str) {
@@ -314,46 +312,34 @@ fn then_locale_configuration_present(toml_world: &TomlWorld) -> Result<(), Strin
     path = "tests/features/consumer_guidance.feature",
     name = "Suite-only workspace metadata is valid TOML"
 )]
-fn scenario_suite_only_metadata(toml_world: TomlWorld) {
-    let _ = toml_world;
-}
+fn scenario_suite_only_metadata(toml_world: TomlWorld) { let _ = toml_world; }
 
 #[scenario(
     path = "tests/features/consumer_guidance.feature",
     name = "Individual crates workspace metadata is valid TOML"
 )]
-fn scenario_individual_crates_metadata(toml_world: TomlWorld) {
-    let _ = toml_world;
-}
+fn scenario_individual_crates_metadata(toml_world: TomlWorld) { let _ = toml_world; }
 
 #[scenario(
     path = "tests/features/consumer_guidance.feature",
     name = "Version-pinned workspace metadata with tag is valid TOML"
 )]
-fn scenario_tag_pinning_metadata(toml_world: TomlWorld) {
-    let _ = toml_world;
-}
+fn scenario_tag_pinning_metadata(toml_world: TomlWorld) { let _ = toml_world; }
 
 #[scenario(
     path = "tests/features/consumer_guidance.feature",
     name = "Version-pinned workspace metadata with revision is valid TOML"
 )]
-fn scenario_revision_pinning_metadata(toml_world: TomlWorld) {
-    let _ = toml_world;
-}
+fn scenario_revision_pinning_metadata(toml_world: TomlWorld) { let _ = toml_world; }
 
 #[scenario(
     path = "tests/features/consumer_guidance.feature",
     name = "Pre-built library path workspace metadata is valid TOML"
 )]
-fn scenario_prebuilt_path_metadata(toml_world: TomlWorld) {
-    let _ = toml_world;
-}
+fn scenario_prebuilt_path_metadata(toml_world: TomlWorld) { let _ = toml_world; }
 
 #[scenario(
     path = "tests/features/consumer_guidance.feature",
     name = "dylint.toml lint configuration is valid TOML"
 )]
-fn scenario_dylint_toml_config(toml_world: TomlWorld) {
-    let _ = toml_world;
-}
+fn scenario_dylint_toml_config(toml_world: TomlWorld) { let _ = toml_world; }

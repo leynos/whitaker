@@ -12,7 +12,9 @@ use std::{
 use tempfile::TempDir;
 
 use crate::support::{
-    is_toolchain_installed, is_toolchain_installed_in_env, pinned_toolchain_channel,
+    is_toolchain_installed,
+    is_toolchain_installed_in_env,
+    pinned_toolchain_channel,
     setup_isolated_rustup,
 };
 

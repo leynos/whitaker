@@ -5,7 +5,10 @@ use std::{io::ErrorKind, path::PathBuf, time::Duration};
 use rstest::{fixture, rstest};
 
 use crate::install_metrics::{
-    InstallMetrics, InstallMetricsError, InstallMode, record_install_at_path,
+    InstallMetrics,
+    InstallMetricsError,
+    InstallMode,
+    record_install_at_path,
 };
 
 struct MetricsPathFixture {

@@ -88,15 +88,11 @@ impl SimplePath {
 }
 
 impl From<&str> for SimplePath {
-    fn from(path: &str) -> Self {
-        Self::parse(path)
-    }
+    fn from(path: &str) -> Self { Self::parse(path) }
 }
 
 impl From<String> for SimplePath {
-    fn from(path: String) -> Self {
-        Self::parse(&path)
-    }
+    fn from(path: String) -> Self { Self::parse(&path) }
 }
 
 impl fmt::Display for SimplePath {
@@ -107,9 +103,11 @@ impl fmt::Display for SimplePath {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use rstest::rstest;
     use std::collections::VecDeque;
+
+    use rstest::rstest;
+
+    use super::*;
 
     #[rstest]
     fn filters_empty_segments() {

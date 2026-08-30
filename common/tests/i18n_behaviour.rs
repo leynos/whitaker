@@ -23,9 +23,7 @@ struct I18nFixture {
 }
 
 impl I18nFixture {
-    fn set_locale(&self, locale: Option<String>) {
-        *self.locale.borrow_mut() = locale;
-    }
+    fn set_locale(&self, locale: Option<String>) { *self.locale.borrow_mut() = locale; }
 
     fn ensure_localizer(&self) -> Localizer {
         let locale = self.locale.borrow().clone();
@@ -63,19 +61,13 @@ fn branch_count_from_key(key: &str) -> Option<(String, u32)> {
 
 #[allow_fixture_expansion_lints]
 #[fixture]
-fn fixture() -> I18nFixture {
-    I18nFixture::default()
-}
+fn fixture() -> I18nFixture { I18nFixture::default() }
 
 #[given("no locale preference")]
-fn given_no_locale(fixture: &I18nFixture) {
-    fixture.set_locale(None);
-}
+fn given_no_locale(fixture: &I18nFixture) { fixture.set_locale(None); }
 
 #[given("the locale preference {locale}")]
-fn given_locale(fixture: &I18nFixture, locale: String) {
-    fixture.set_locale(Some(locale));
-}
+fn given_locale(fixture: &I18nFixture, locale: String) { fixture.set_locale(Some(locale)); }
 
 #[when("I request the message for {key}")]
 fn when_message(fixture: &I18nFixture, key: String) {
@@ -166,69 +158,43 @@ fn then_missing(fixture: &I18nFixture) {
 }
 
 #[scenario(path = "tests/features/i18n_loader.feature", index = 0)]
-fn scenario_falls_back(fixture: I18nFixture) {
-    let _ = fixture;
-}
+fn scenario_falls_back(fixture: I18nFixture) { let _ = fixture; }
 
 #[scenario(path = "tests/features/i18n_loader.feature", index = 1)]
-fn scenario_secondary_locale(fixture: I18nFixture) {
-    let _ = fixture;
-}
+fn scenario_secondary_locale(fixture: I18nFixture) { let _ = fixture; }
 
 #[scenario(path = "tests/features/i18n_loader.feature", index = 2)]
-fn scenario_gaelic_plural(fixture: I18nFixture) {
-    let _ = fixture;
-}
+fn scenario_gaelic_plural(fixture: I18nFixture) { let _ = fixture; }
 
 #[scenario(path = "tests/features/i18n_loader.feature", index = 3)]
-fn scenario_welsh_lint_count_zero(fixture: I18nFixture) {
-    let _ = fixture;
-}
+fn scenario_welsh_lint_count_zero(fixture: I18nFixture) { let _ = fixture; }
 
 #[scenario(path = "tests/features/i18n_loader.feature", index = 4)]
-fn scenario_welsh_lint_count_large(fixture: I18nFixture) {
-    let _ = fixture;
-}
+fn scenario_welsh_lint_count_large(fixture: I18nFixture) { let _ = fixture; }
 
 #[scenario(path = "tests/features/i18n_loader.feature", index = 5)]
-fn scenario_welsh_lint_count_one(fixture: I18nFixture) {
-    let _ = fixture;
-}
+fn scenario_welsh_lint_count_one(fixture: I18nFixture) { let _ = fixture; }
 
 #[scenario(path = "tests/features/i18n_loader.feature", index = 6)]
-fn scenario_welsh_lint_count_two(fixture: I18nFixture) {
-    let _ = fixture;
-}
+fn scenario_welsh_lint_count_two(fixture: I18nFixture) { let _ = fixture; }
 
 #[scenario(path = "tests/features/i18n_loader.feature", index = 7)]
-fn scenario_welsh_lint_count_three(fixture: I18nFixture) {
-    let _ = fixture;
-}
+fn scenario_welsh_lint_count_three(fixture: I18nFixture) { let _ = fixture; }
 
 #[scenario(path = "tests/features/i18n_loader.feature", index = 8)]
-fn scenario_welsh_lint_count_six(fixture: I18nFixture) {
-    let _ = fixture;
-}
+fn scenario_welsh_lint_count_six(fixture: I18nFixture) { let _ = fixture; }
 
 #[scenario(path = "tests/features/i18n_loader.feature", index = 9)]
-fn scenario_welsh_lint_count_eleven(fixture: I18nFixture) {
-    let _ = fixture;
-}
+fn scenario_welsh_lint_count_eleven(fixture: I18nFixture) { let _ = fixture; }
 
 #[scenario(path = "tests/features/i18n_loader.feature", index = 10)]
-fn scenario_attribute_falls_back(fixture: I18nFixture) {
-    let _ = fixture;
-}
+fn scenario_attribute_falls_back(fixture: I18nFixture) { let _ = fixture; }
 
 #[scenario(path = "tests/features/i18n_loader.feature", index = 11)]
-fn scenario_missing_message(fixture: I18nFixture) {
-    let _ = fixture;
-}
+fn scenario_missing_message(fixture: I18nFixture) { let _ = fixture; }
 
 #[scenario(path = "tests/features/i18n_loader.feature", index = 12)]
-fn scenario_welsh_conditional_note_lenition(fixture: I18nFixture) {
-    let _ = fixture;
-}
+fn scenario_welsh_conditional_note_lenition(fixture: I18nFixture) { let _ = fixture; }
 
 #[cfg(test)]
 mod tests {

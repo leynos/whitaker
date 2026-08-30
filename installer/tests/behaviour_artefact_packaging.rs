@@ -14,7 +14,11 @@ use whitaker_installer::artefact::{
     manifest::GeneratedAt,
     naming::ArtefactName,
     packaging::{
-        PackageOutput, PackageParams, compute_sha256, generate_manifest_json, package_artefact,
+        PackageOutput,
+        PackageParams,
+        compute_sha256,
+        generate_manifest_json,
+        package_artefact,
     },
     packaging_error::PackagingError,
     target::TargetTriple,
@@ -40,9 +44,7 @@ struct PackagingWorld {
 
 #[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
-fn world() -> PackagingWorld {
-    PackagingWorld::default()
-}
+fn world() -> PackagingWorld { PackagingWorld::default() }
 
 /// Return the temp directory path, creating the directory if needed.
 fn temp_path(world: &mut PackagingWorld) -> Result<PathBuf, String> {
@@ -146,9 +148,7 @@ fn given_target(world: &mut PackagingWorld, triple: String) -> Result<(), String
 }
 
 #[when("the artefact is packaged")]
-fn when_packaged(world: &mut PackagingWorld) -> Result<(), String> {
-    run_packaging(world)
-}
+fn when_packaged(world: &mut PackagingWorld) -> Result<(), String> { run_packaging(world) }
 
 #[then("the archive exists with the expected ADR-001 filename")]
 fn then_archive_exists(world: &mut PackagingWorld) -> Result<(), String> {
@@ -404,62 +404,46 @@ fn list_archive_entries(world: &PackagingWorld) -> Result<Vec<String>, String> {
     path = "tests/features/artefact_packaging.feature",
     name = "Package a single library file into a tar.zst archive"
 )]
-fn scenario_package_single_library(world: PackagingWorld) {
-    let _ = world;
-}
+fn scenario_package_single_library(world: PackagingWorld) { let _ = world; }
 
 #[scenario(
     path = "tests/features/artefact_packaging.feature",
     name = "Manifest JSON contains all required fields"
 )]
-fn scenario_manifest_fields(world: PackagingWorld) {
-    let _ = world;
-}
+fn scenario_manifest_fields(world: PackagingWorld) { let _ = world; }
 
 #[scenario(
     path = "tests/features/artefact_packaging.feature",
     name = "Manifest sha256 matches the archive digest"
 )]
-fn scenario_manifest_digest_self_consistency(world: PackagingWorld) {
-    let _ = world;
-}
+fn scenario_manifest_digest_self_consistency(world: PackagingWorld) { let _ = world; }
 
 #[scenario(
     path = "tests/features/artefact_packaging.feature",
     name = "Archive SHA-256 is a valid digest"
 )]
-fn scenario_archive_sha256(world: PackagingWorld) {
-    let _ = world;
-}
+fn scenario_archive_sha256(world: PackagingWorld) { let _ = world; }
 
 #[scenario(
     path = "tests/features/artefact_packaging.feature",
     name = "Packaging rejects an empty file list"
 )]
-fn scenario_reject_empty_files(world: PackagingWorld) {
-    let _ = world;
-}
+fn scenario_reject_empty_files(world: PackagingWorld) { let _ = world; }
 
 #[scenario(
     path = "tests/features/artefact_packaging.feature",
     name = "Archive filename matches ArtefactName convention"
 )]
-fn scenario_filename_matches(world: PackagingWorld) {
-    let _ = world;
-}
+fn scenario_filename_matches(world: PackagingWorld) { let _ = world; }
 
 #[scenario(
     path = "tests/features/artefact_packaging.feature",
     name = "Archive contains multiple library files"
 )]
-fn scenario_multi_library(world: PackagingWorld) {
-    let _ = world;
-}
+fn scenario_multi_library(world: PackagingWorld) { let _ = world; }
 
 #[scenario(
     path = "tests/features/artefact_packaging.feature",
     name = "Manifest files field lists all library basenames"
 )]
-fn scenario_manifest_files_field(world: PackagingWorld) {
-    let _ = world;
-}
+fn scenario_manifest_files_field(world: PackagingWorld) { let _ = world; }

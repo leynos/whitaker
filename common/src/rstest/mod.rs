@@ -18,14 +18,26 @@ mod span;
 
 pub use argument_fingerprint::{ArgAtom, ArgFingerprint};
 pub use detection::{
-    ExpansionTrace, RstestDetectionOptions, is_rstest_fixture, is_rstest_fixture_with,
-    is_rstest_test, is_rstest_test_with,
+    ExpansionTrace,
+    RstestDetectionOptions,
+    is_rstest_fixture,
+    is_rstest_fixture_with,
+    is_rstest_test,
+    is_rstest_test_with,
 };
 pub use paragraph_fingerprint::{
-    CalleeShape, ExprShape, LocalSlot, ParagraphFingerprint, ParagraphNormalizer, StmtShape,
+    CalleeShape,
+    ExprShape,
+    LocalSlot,
+    ParagraphFingerprint,
+    ParagraphNormalizer,
+    StmtShape,
 };
 pub use parameter::{
-    ParameterBinding, RstestParameter, RstestParameterKind, classify_rstest_parameter,
+    ParameterBinding,
+    RstestParameter,
+    RstestParameterKind,
+    classify_rstest_parameter,
     fixture_local_names,
 };
 pub use span::{SpanRecoveryFrame, UserEditableSpan, recover_user_editable_span};

@@ -5,7 +5,8 @@ use std::{cell::RefCell, collections::BTreeMap, str::FromStr};
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use whitaker_common::{
-    MethodProfileBuilder, test_support::decomposition::methods_meet_cosine_threshold,
+    MethodProfileBuilder,
+    test_support::decomposition::methods_meet_cosine_threshold,
 };
 use whitaker_test_macros::allow_fixture_expansion_lints;
 
@@ -40,9 +41,7 @@ impl FromStr for MethodSide {
 struct CsvList(Vec<String>);
 
 impl CsvList {
-    fn into_vec(self) -> Vec<String> {
-        self.0
-    }
+    fn into_vec(self) -> Vec<String> { self.0 }
 }
 
 impl FromStr for CsvList {
@@ -67,9 +66,7 @@ struct CosineThresholdWorld {
 
 #[allow_fixture_expansion_lints]
 #[fixture]
-fn world() -> CosineThresholdWorld {
-    CosineThresholdWorld::default()
-}
+fn world() -> CosineThresholdWorld { CosineThresholdWorld::default() }
 
 fn ensure_method_builder(world: &CosineThresholdWorld, side: MethodSide, method_name: &str) {
     world.methods.borrow_mut().insert(
@@ -191,16 +188,10 @@ fn then_methods_are_not_similar(world: &CosineThresholdWorld) -> Result<(), Stri
 // `tests/features/cosine_threshold.feature`.
 
 #[scenario(path = "tests/features/cosine_threshold.feature", index = 0)]
-fn scenario_strong_overlap(world: CosineThresholdWorld) {
-    let _ = world;
-}
+fn scenario_strong_overlap(world: CosineThresholdWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/cosine_threshold.feature", index = 1)]
-fn scenario_below_threshold(world: CosineThresholdWorld) {
-    let _ = world;
-}
+fn scenario_below_threshold(world: CosineThresholdWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/cosine_threshold.feature", index = 2)]
-fn scenario_zero_vector(world: CosineThresholdWorld) {
-    let _ = world;
-}
+fn scenario_zero_vector(world: CosineThresholdWorld) { let _ = world; }
