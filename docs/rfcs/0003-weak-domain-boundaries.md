@@ -6,6 +6,7 @@
 - **Status:** Proposed
 - **Repository:** `leynos/whitaker`
 - **Created:** 2026-08-07
+- **Updated:** 2026-08-30
 - **Lint family:** Validate not, only parse
 - **Family selector:** `DOMAIN`
 - **Initial rules:** `discarded_parsed_value`,
@@ -45,8 +46,8 @@ teaching slogan; diagnostics describe concrete evidence rather than accusing
 code of violating a maxim.
 
 RFC 0004 extends the same family from boundary flow into type state spaces,
-including manual tagged unions, correlated optional fields, and bypassable
-invariants.
+semantic partitions, sentinel encodings, primitive-to-domain projections,
+invariant surfaces, and local protocol obligations.
 
 ## Problem
 
@@ -214,8 +215,9 @@ revocation, or the current time.
 ### Display name and selector
 
 The documentation name is **Validate not, only parse**. The machine-facing
-family selector is `DOMAIN` because the family covers both parsing boundaries
-and domain state-space modelling.
+family selector is `DOMAIN` because the family covers parsing boundaries,
+domain state-space modelling, and local protocol surfaces that stronger APIs
+can internalize.
 
 The selector should follow the selection algebra proposed for `whitaker check`:
 
@@ -231,7 +233,9 @@ include it only when experimental rules are enabled.
 | Range | Purpose | Initial allocation |
 | --- | --- | --- |
 | `DOMAIN001` to `DOMAIN099` | Boundary refinement and proof retention | RFC 0003 |
-| `DOMAIN101` to `DOMAIN199` | Type state spaces and invariant surfaces | RFC 0004 |
+| `DOMAIN101` to `DOMAIN149` | Type state spaces, semantic partitions, and invariant surfaces | RFC 0004 |
+| `DOMAIN150` to `DOMAIN179` | Local protocol and lifecycle surfaces | RFC 0004 |
+| `DOMAIN180` to `DOMAIN199` | Future local domain-modelling rules | Reserved |
 | `DOMAIN900` to `DOMAIN999` | Workspace reports that are not ordinary Dylint diagnostics | Reserved |
 
 _Table 1: Proposed `DOMAIN` rule-code allocation._
@@ -1010,10 +1014,12 @@ without duplicating Dylint diagnostics.
 
 This sequencing catches the clearest form of proof evaporation first, leaves
 room for lexical-source domains, and avoids turning a useful design principle
-into a sermonizing regex with a compiler badge.
+into a doctrinaire regex with a compiler badge.
 
 ## References
 
-[^clippy-unnecessary-unwrap]: [Clippy `unnecessary_unwrap` documentation](https://rust-lang.github.io/rust-clippy/master/index.html#unnecessary_unwrap)
+[^clippy-unnecessary-unwrap]:
+    [Clippy `unnecessary_unwrap` documentation](https://rust-lang.github.io/rust-clippy/master/index.html#unnecessary_unwrap)
 
-[^clippy-needless-pass-by-value]: [Clippy `needless_pass_by_value` documentation](https://rust-lang.github.io/rust-clippy/master/index.html#needless_pass_by_value)
+[^clippy-needless-pass-by-value]:
+    [Clippy `needless_pass_by_value` documentation](https://rust-lang.github.io/rust-clippy/master/index.html#needless_pass_by_value)
