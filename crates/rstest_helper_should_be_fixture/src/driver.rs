@@ -40,12 +40,30 @@ const DEFAULT_PROVIDER_PARAM_ATTRIBUTES: &[&str] =
 
 type ConfigLoadResult = Result<Config, String>;
 
-dylint_linting::impl_late_lint! {
-    pub RSTEST_HELPER_SHOULD_BE_FIXTURE,
-    Warn,
-    "repeated rstest helper calls should be extracted into fixtures",
-    RstestHelperShouldBeFixture::default()
+/// Dylint lint declaration and registration glue.
+///
+/// `impl_late_lint!` expands to the Dylint ABI entry point and the
+/// `impl_lint_pass!` accessor, neither of which has a source location that
+/// could carry documentation. Isolating the invocation keeps the expectation
+/// scoped to exactly those generated items.
+mod declaration {
+    #![expect(
+        missing_docs,
+        reason = "dylint_linting macro expansion emits items with no documentable source location"
+    )]
+
+    use super::RstestHelperShouldBeFixture;
+
+    dylint_linting::impl_late_lint! {
+        /// Warns when repeated rstest helper calls should become fixtures.
+        pub RSTEST_HELPER_SHOULD_BE_FIXTURE,
+        Warn,
+        "repeated rstest helper calls should be extracted into fixtures",
+        RstestHelperShouldBeFixture::default()
+    }
 }
+
+pub use declaration::RSTEST_HELPER_SHOULD_BE_FIXTURE;
 
 /// Configuration for the `rstest_helper_should_be_fixture` lint.
 ///
@@ -131,10 +149,10 @@ impl RstestHelperShouldBeFixture {
     fn apply_loaded_crate_configuration(
         &mut self,
         config: ConfigLoadResult,
-        shared_config: SharedConfig,
+        shared_config: &SharedConfig,
     ) {
-        let config = match config {
-            Ok(config) => config,
+        let resolved = match config {
+            Ok(loaded) => loaded,
             Err(error) => {
                 debug!(
                     target: LINT_NAME,
@@ -144,10 +162,10 @@ impl RstestHelperShouldBeFixture {
             }
         };
 
-        self.apply_crate_configuration(config, shared_config);
+        self.apply_crate_configuration(resolved, shared_config);
     }
 
-    fn apply_crate_configuration(&mut self, config: Config, shared_config: SharedConfig) {
+    fn apply_crate_configuration(&mut self, config: Config, shared_config: &SharedConfig) {
         debug!(
             target: LINT_NAME,
             "applying `{LINT_NAME}` configuration: min_calls={}, min_distinct_tests={}, \
@@ -203,7 +221,7 @@ impl RstestHelperShouldBeFixture {
 
 impl<'tcx> LateLintPass<'tcx> for RstestHelperShouldBeFixture {
     fn check_crate(&mut self, cx: &LateContext<'tcx>) {
-        self.apply_loaded_crate_configuration(load_configuration(), load_shared_config());
+        self.apply_loaded_crate_configuration(load_configuration(), &load_shared_config());
         self.rstest_collection_roots = whitaker::hir::collect_rstest_companion_test_functions(cx);
     }
 
@@ -260,12 +278,15 @@ impl RstestHelperShouldBeFixture {
             self.collector.record_count(),
         );
         for (callee, records) in self.collector.iter() {
-            summary.push_str(&format!("callee={callee};records={}\n", records.len()));
+            summary.push_str("callee=");
+            summary.push_str(callee);
+            summary.push_str(";records=");
+            summary.push_str(&records.len().to_string());
+            summary.push('\n');
             for record in records {
-                summary.push_str(&format!(
-                    "fingerprint={}\n",
-                    redacted_fingerprint_shape(&record.fingerprint)
-                ));
+                summary.push_str("fingerprint=");
+                summary.push_str(&redacted_fingerprint_shape(&record.fingerprint));
+                summary.push('\n');
             }
         }
         summary

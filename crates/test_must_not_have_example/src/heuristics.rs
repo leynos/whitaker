@@ -62,7 +62,10 @@ fn is_examples_heading(line: &str) -> bool {
         return false;
     }
 
-    let remainder = trimmed[heading_level..].trim_start();
+    let Some(after_hashes) = trimmed.get(heading_level..) else {
+        return false;
+    };
+    let remainder = after_hashes.trim_start();
     matches!(
         remainder
             .trim_end_matches(|ch: char| ch.is_ascii_whitespace())

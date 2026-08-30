@@ -38,7 +38,8 @@ fn has_case_incorrect_doc_in_meta_list(list: &str) -> bool {
         }
     }
 
-    segment_has_case_incorrect_doc(&list[state.start..])
+    list.get(state.start..)
+        .is_some_and(segment_has_case_incorrect_doc)
 }
 
 // Extracted to reduce nested complexity in `has_case_incorrect_doc_in_meta_list`.
@@ -47,7 +48,10 @@ fn handle_character(ch: char, state: &mut ParserState, list: &str, idx: usize) -
         '(' => state.depth += 1,
         ')' => state.depth = state.depth.saturating_sub(1),
         ',' if state.depth == 0 => {
-            if segment_has_case_incorrect_doc(&list[state.start..idx]) {
+            if list
+                .get(state.start..idx)
+                .is_some_and(segment_has_case_incorrect_doc)
+            {
                 return true;
             }
             state.start = idx + 1;
@@ -89,8 +93,12 @@ fn cfg_attr_has_case_incorrect_doc(rest: ParseInput<'_>) -> bool {
         return false;
     };
 
-    let args = &content[..close_idx];
-    let attr_section = &args[attr_section_start + 1..];
+    let Some(args) = content.get(..close_idx) else {
+        return false;
+    };
+    let Some(attr_section) = args.get(attr_section_start + 1..) else {
+        return false;
+    };
     has_case_incorrect_doc_in_meta_list(attr_section)
 }
 
@@ -103,7 +111,7 @@ fn inner_attribute_body(rest: ParseInput<'_>) -> Option<AttributeBody<'_>> {
     // Missing `]` is tolerated here: downstream identifier parsing will
     // gracefully reject malformed content by failing to match expected patterns.
     let attr_end = body.find(']').unwrap_or(body.len());
-    Some(AttributeBody::from(&body[..attr_end]))
+    body.get(..attr_end).map(AttributeBody::from)
 }
 
 /// Detects inner attributes like `#![DOC = ...]` or `#![cfg_attr(..., Doc = ...)]`

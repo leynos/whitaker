@@ -115,10 +115,10 @@ fn convert_attribute(attr: &hir::Attribute) -> Attribute {
             return Attribute::new(AttributePath::from(PARSED_ATTRIBUTE_PLACEHOLDER), kind);
         };
         let mut names = attr.path().into_iter().map(|symbol| symbol.to_string());
-        match names.next() {
-            Some(first) => AttributePath::new(std::iter::once(first).chain(names)),
-            None => AttributePath::from("unknown"),
-        }
+        names.next().map_or_else(
+            || AttributePath::from("unknown"),
+            |first| AttributePath::new(std::iter::once(first).chain(names)),
+        )
     };
 
     Attribute::new(path, kind)
@@ -129,7 +129,7 @@ fn attribute_style(attr: &hir::Attribute) -> AttrStyle {
     match attr {
         hir::Attribute::Unparsed(item) => item.style,
         hir::Attribute::Parsed(HirAttributeKind::DocComment { style, .. }) => *style,
-        _ => AttrStyle::Outer,
+        hir::Attribute::Parsed(_) => AttrStyle::Outer,
     }
 }
 
@@ -149,17 +149,17 @@ fn is_cfg_test_attribute(attr: &hir::Attribute) -> bool {
     };
 
     let path = attr.path();
-    if path.len() != 1 {
+    let [name] = path.as_slice() else {
         return false;
-    }
+    };
 
-    if path[0] == sym::cfg {
+    if *name == sym::cfg {
         return attr
             .meta_item_list()
             .is_some_and(|items| items.iter().cloned().any(meta_item_inner_contains_test));
     }
 
-    if path[0] != sym::cfg_attr {
+    if *name != sym::cfg_attr {
         return false;
     }
 
@@ -226,7 +226,7 @@ fn meta_contains_test_cfg(meta: &MetaItem) -> bool {
 
 #[cfg(feature = "dylint-driver")]
 fn path_is_ident(path: &AstPath, ident: rustc_span::Symbol) -> bool {
-    path.segments.len() == 1 && path.segments[0].ident.name == ident
+    matches!(&*path.segments, [segment] if segment.ident.name == ident)
 }
 
 #[cfg(test)]

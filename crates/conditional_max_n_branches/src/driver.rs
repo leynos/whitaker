@@ -64,12 +64,17 @@ impl Default for ConditionalMaxNBranches {
     }
 }
 
-mod registration {
-    //! Provides the public Dylint registration for this lint.
-    //!
-    //! The `dylint_linting::impl_late_lint!` macro generates undocumented
-    //! public registration items, so its expansion is scoped to this private
-    //! module and only the documented lint static is re-exported.
+/// Dylint lint declaration and registration glue.
+///
+/// `impl_late_lint!` expands to the Dylint ABI entry point and the
+/// `impl_lint_pass!` accessor, neither of which has a source location that
+/// could carry documentation. Isolating the invocation keeps the expectation
+/// scoped to exactly those generated items.
+mod declaration {
+    #![expect(
+        missing_docs,
+        reason = "dylint_linting macro expansion emits items with no documentable source location"
+    )]
 
     use super::ConditionalMaxNBranches;
 
@@ -83,7 +88,7 @@ mod registration {
     }
 }
 
-pub use registration::CONDITIONAL_MAX_N_BRANCHES;
+pub use declaration::CONDITIONAL_MAX_N_BRANCHES;
 
 impl<'tcx> LateLintPass<'tcx> for ConditionalMaxNBranches {
     fn check_crate(&mut self, _cx: &LateContext<'tcx>) {
