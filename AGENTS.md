@@ -156,7 +156,11 @@ project:
     the wiring), and then executes:
 
     ```sh
-    cargo clippy --workspace --all-targets --all-features -- -D warnings
+    RUSTDOCFLAGS="--cfg docsrs -D warnings" cargo doc --workspace --no-deps
+    cargo clippy --workspace --lib --bins --tests --benches --all-features \
+        -- -D warnings
+    whitaker --all -- -p whitaker-common -p whitaker-installer \
+        -p whitaker_clones_core -p whitaker_sarif --all-targets --all-features
     ```
 
     linting every target with all features enabled and denying all Clippy
@@ -165,14 +169,18 @@ project:
     dev-dependencies, which standalone `ui/` fixtures cannot carry. Each
     fixture scopes the diagnostics its own anti-pattern raises with a
     narrowly targeted `#[expect(..., reason = "...")]`, so the workspace
-    policy still applies to every other line.
-  - `make test` executes:
+    policy still applies to every other line. `make lint-clippy` runs the
+    rustdoc and Clippy subset; `make lint-whitaker` additionally runs the
+    Whitaker Dylint suite over the support crates (install via
+    `cargo install whitaker-installer && whitaker-installer`).
+  - `make test` executes `cargo nextest run` over the CI crate subset and
+    then the workspace doctests:
 
     ```sh
-    cargo test --workspace
+    RUSTFLAGS="-D warnings" cargo test --workspace --doc --all-features
     ```
 
-    running the full workspace test suite. Use `make fmt`
+    running the full workspace test suite including doctests. Use `make fmt`
     (`cargo fmt --workspace`) to apply formatting fixes reported by the
     formatter check.
 - Clippy warnings MUST be disallowed.

@@ -1,4 +1,4 @@
-.PHONY: help all clean test trybuild-contracts test-doc coverage build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke installer-msrv-check release-installer-dry-run package-lints workflow-test workflow-test-deps test-workflow-contracts test-markdown-format test-glibc-baseline test-sccache-health verus kani verus-clone-detector kani-clone-detector verus-string-literals kani-string-literals spelling skill-frontmatter-lint skill-manifest-validate skill-metadata-check skill-manifest-check test-skill-metadata-check clippy-snapshot clippy-snapshot-bundle dylint-env dylint-smoke dylint-tools interrogate
+.PHONY: help all clean test trybuild-contracts test-doc coverage build release lint lint-clippy lint-whitaker fmt check-fmt markdownlint nixie publish-check typecheck install-smoke installer-msrv-check release-installer-dry-run package-lints workflow-test workflow-test-deps test-workflow-contracts test-markdown-format test-glibc-baseline test-sccache-health verus kani verus-clone-detector kani-clone-detector verus-string-literals kani-string-literals spelling skill-frontmatter-lint skill-manifest-validate skill-metadata-check skill-manifest-check test-skill-metadata-check clippy-snapshot clippy-snapshot-bundle dylint-env dylint-smoke dylint-tools interrogate
 
 # Make chooses the recipe shell itself, so the `shell: bash` default in the
 # workflows does not reach recipes; the `/bin/sh` it would otherwise use
@@ -221,6 +221,13 @@ MD_FILES_FIND = find . \
 	-name .uv-cache -o -name .uv-tools -o -name .pytest_cache -o \
 	-name .vtcode -o -name memories -o -name .memories -o -name node_modules \) -prune \) -o \
 	\( -type f -name '*.md' -print0 \)
+WHITAKER ?= whitaker
+# Crates linted by the Whitaker suite. The rustc_* proxy shims, the lint
+# crates, the aggregated suite, and the whitaker root crate all require
+# rustc_private plumbing (dylint-driver feature, prefer-dynamic RUSTFLAGS)
+# that `cargo dylint`'s plain check build cannot provide, so the suite runs
+# over the support crates that build as ordinary libraries.
+WHITAKER_PACKAGES ?= -p whitaker-common -p whitaker-installer -p whitaker_clones_core -p whitaker_sarif
 
 build: target/debug/$(APP) ## Build debug binary
 release: target/release/$(APP) ## Build release binary
@@ -424,9 +431,15 @@ interrogate: ## Enforce complete Python docstring coverage
 	    exit 1; \
 	  fi
 
-lint: interrogate skill-manifest-check ## Run Clippy with warnings denied
+lint: interrogate skill-manifest-check lint-clippy lint-whitaker ## Run rustdoc, Clippy, and the Whitaker Dylint suite
+
+lint-clippy: ## Run rustdoc and Clippy with warnings denied
 	RUSTDOCFLAGS="$(RUSTDOC_FLAGS)" $(CARGO) doc $(CARGO_LOCKED) --workspace --no-deps
 	$(CARGO) clippy $(CARGO_LOCKED) $(CARGO_FLAGS) -- $(RUST_FLAGS)
+
+lint-whitaker: ## Run the Whitaker Dylint suite with warnings denied
+	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; \
+	RUSTFLAGS="$(RUST_FLAGS)" $(WHITAKER) --all -- $(WHITAKER_PACKAGES) --all-targets --all-features
 
 fmt: ## Format Rust and Markdown sources
 	$(CARGO) fmt --all
