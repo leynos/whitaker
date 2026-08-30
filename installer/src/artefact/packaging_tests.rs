@@ -1,5 +1,6 @@
 //! Unit tests for the artefact packaging module.
 
+use cap_std::{ambient_authority, fs::Dir};
 use rstest::{fixture, rstest};
 use tempfile::TempDir;
 
@@ -36,7 +37,7 @@ fn compute_sha256_of_known_content(#[from(temp_dir)] temp_dir_res: std::io::Resu
 
     let path = temp_dir.path().join("test.bin");
     // SHA-256 of empty file is the well-known constant.
-    fs::write(&path, b"").expect("write");
+    write_file(&path, b"").expect("write");
     let digest = compute_sha256(&path).expect("sha256 succeeds");
     assert_eq!(
         digest.as_str(),
@@ -53,8 +54,8 @@ fn create_archive_contains_files(#[from(temp_dir)] temp_dir_res: std::io::Result
 
     let file_a = temp_dir.path().join("a.txt");
     let file_b = temp_dir.path().join("b.txt");
-    fs::write(&file_a, b"alpha").expect("write a");
-    fs::write(&file_b, b"bravo").expect("write b");
+    write_file(&file_a, b"alpha").expect("write a");
+    write_file(&file_b, b"bravo").expect("write b");
 
     let archive_path = temp_dir.path().join("test.tar.zst");
     create_archive(
@@ -120,10 +121,10 @@ fn package_artefact_produces_valid_archive(
     let sample_target = sample_target_res.expect("sample target should validate");
 
     let lib_path = temp_dir.path().join("libwhitaker_suite.so");
-    fs::write(&lib_path, b"fake library").expect("write lib");
+    write_file(&lib_path, b"fake library").expect("write lib");
 
     let output_dir = temp_dir.path().join("dist");
-    fs::create_dir_all(&output_dir).expect("mkdir");
+    create_directory(&output_dir).expect("mkdir");
 
     let params = PackageParams {
         git_sha: sample_git_sha.clone(),
@@ -161,7 +162,7 @@ fn package_artefact_rejects_empty_files(#[from(temp_dir)] temp_dir_res: std::io:
     let temp_dir = temp_dir_res.expect("temporary directory should be created");
 
     let output_dir = temp_dir.path().join("dist");
-    fs::create_dir_all(&output_dir).expect("mkdir");
+    create_directory(&output_dir).expect("mkdir");
 
     let params = PackageParams {
         git_sha: GitSha::try_from("abc1234").expect("valid"),
@@ -187,7 +188,7 @@ fn package_artefact_fails_when_library_file_missing(
 
     let missing = temp_dir.path().join("nonexistent_lib.so");
     let output_dir = temp_dir.path().join("dist");
-    fs::create_dir_all(&output_dir).expect("mkdir");
+    create_directory(&output_dir).expect("mkdir");
 
     let params = PackageParams {
         git_sha: GitSha::try_from("abc1234").expect("valid"),
@@ -219,10 +220,10 @@ fn archive_name_follows_adr_convention(
     let temp_dir = temp_dir_res.expect("temporary directory should be created");
 
     let lib_path = temp_dir.path().join("libtest.so");
-    fs::write(&lib_path, b"content").expect("write");
+    write_file(&lib_path, b"content").expect("write");
 
     let output_dir = temp_dir.path().join("out");
-    fs::create_dir_all(&output_dir).expect("mkdir");
+    create_directory(&output_dir).expect("mkdir");
 
     let params = PackageParams {
         git_sha: sample_git_sha.clone(),
@@ -249,10 +250,10 @@ fn archive_name_follows_adr_convention(
 /// only need a valid package without caring about specific file content.
 fn create_test_package(temp_dir: &TempDir) -> Result<PackageOutput, PackagingError> {
     let lib_path = temp_dir.path().join("libtest.so");
-    fs::write(&lib_path, b"test content for hash")?;
+    write_file(&lib_path, b"test content for hash")?;
 
     let output_dir = temp_dir.path().join("dist");
-    fs::create_dir_all(&output_dir)?;
+    create_directory(&output_dir)?;
 
     let params = PackageParams {
         git_sha: GitSha::try_from("deadbeef")?,
@@ -304,13 +305,13 @@ fn packaging_produces_deterministic_digest(
     let temp_dir = temp_dir_res.expect("temporary directory should be created");
 
     let lib_path = temp_dir.path().join("libtest.so");
-    fs::write(&lib_path, b"content for hash check").expect("write");
+    write_file(&lib_path, b"content for hash check").expect("write");
 
     // Run packaging twice with identical inputs; digests must match.
     let mut digests = Vec::new();
     for i in 0..2 {
         let output_dir = temp_dir.path().join(format!("dist{i}"));
-        fs::create_dir_all(&output_dir).expect("mkdir");
+        create_directory(&output_dir).expect("mkdir");
         let params = PackageParams {
             git_sha: GitSha::try_from("abc1234").expect("valid"),
             toolchain: ToolchainChannel::try_from("nightly-2026-05-28").expect("valid"),
@@ -346,7 +347,7 @@ fn collect_file_names_rejects_path_without_filename() {
 
 /// Extract entry names from a `.tar.zst` archive for test assertions.
 fn list_archive_entries(archive_path: &Path) -> std::io::Result<Vec<String>> {
-    let file = fs::File::open(archive_path)?;
+    let file = open_file(archive_path)?;
     let decoder = zstd::Decoder::new(file)?;
     let mut archive = tar::Archive::new(decoder);
     archive
@@ -357,4 +358,37 @@ fn list_archive_entries(archive_path: &Path) -> std::io::Result<Vec<String>> {
             Ok(path.to_string_lossy().into_owned())
         })
         .collect()
+}
+
+/// Writes a fixture through a capability scoped to its parent directory.
+fn write_file(path: &Path, contents: &[u8]) -> std::io::Result<()> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| std::io::Error::other("fixture path must have a parent"))?;
+    let name = path
+        .file_name()
+        .ok_or_else(|| std::io::Error::other("fixture path must have a file name"))?;
+    Dir::open_ambient_dir(parent, ambient_authority())?.write(name, contents)
+}
+
+/// Creates a fixture directory through a capability scoped to its parent.
+fn create_directory(path: &Path) -> std::io::Result<()> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| std::io::Error::other("fixture directory must have a parent"))?;
+    let name = path
+        .file_name()
+        .ok_or_else(|| std::io::Error::other("fixture directory must have a name"))?;
+    Dir::open_ambient_dir(parent, ambient_authority())?.create_dir_all(name)
+}
+
+/// Opens a fixture file through a capability scoped to its parent directory.
+fn open_file(path: &Path) -> std::io::Result<cap_std::fs::File> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| std::io::Error::other("fixture path must have a parent"))?;
+    let name = path
+        .file_name()
+        .ok_or_else(|| std::io::Error::other("fixture path must have a file name"))?;
+    Dir::open_ambient_dir(parent, ambient_authority())?.open(name)
 }

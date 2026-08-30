@@ -176,7 +176,7 @@ fn given_manifest_loaded(world: &mut DependencyBinaryWorld) -> Result<(), String
     Ok(())
 }
 
-fn build_stub_executor(world: &DependencyBinaryWorld, tool: &str) -> StubExecutor {
+fn build_stub_executor(world: &DependencyBinaryWorld, tool: &str) -> Result<StubExecutor, String> {
     let is_repository_asset_missing = matches!(
         world.repository_behaviour,
         Some(RepositoryInstallerBehaviour::NotFound)
@@ -195,7 +195,7 @@ fn build_stub_executor(world: &DependencyBinaryWorld, tool: &str) -> StubExecuto
         (true, true) => RepositoryVerification::Fails,
         (true, false) => RepositoryVerification::Succeeds,
     };
-    StubExecutor::new(expected_calls(
+    Ok(StubExecutor::new(expected_calls(
         tool,
         &ExpectedCallConfig {
             is_binstall_available: world.is_binstall_available,
@@ -205,7 +205,7 @@ fn build_stub_executor(world: &DependencyBinaryWorld, tool: &str) -> StubExecuto
             cargo_binstall_failure: world.cargo_binstall_failure.as_deref(),
             cargo_install_failure: world.cargo_install_failure.as_deref(),
         },
-    ))
+    )?))
 }
 
 /// Stages a runnable `dylint-link` fake in the executables directory so PATH
@@ -233,7 +233,7 @@ fn when_dependency_installation_runs(world: &mut DependencyBinaryWorld) -> Resul
         .missing_tool
         .clone()
         .ok_or_else(|| String::from("missing tool should be configured"))?;
-    let executor = build_stub_executor(world, &tool);
+    let executor = build_stub_executor(world, &tool)?;
     let repository_installer = StubRepositoryInstaller {
         behaviour: world.repository_behaviour.take().unwrap_or_else(|| {
             RepositoryInstallerBehaviour::Failure("missing repository".to_owned())

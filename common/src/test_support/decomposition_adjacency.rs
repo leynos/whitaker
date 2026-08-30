@@ -215,8 +215,10 @@ fn has_mirror(
 ) -> bool {
     debug_assert!(
         neighbour < neighbours.len(),
-        "has_mirror: neighbour index out of bounds - callers (e.g. adjacency_report) must \
-         guarantee valid indices"
+        concat!(
+            "has_mirror: neighbour index out of bounds - callers (e.g. adjacency_report) must ",
+            "guarantee valid indices"
+        )
     );
     neighbours.get(neighbour).map_or(false, |list| {
         list.iter()

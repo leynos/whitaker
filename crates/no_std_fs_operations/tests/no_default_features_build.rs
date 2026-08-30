@@ -15,9 +15,11 @@
 //! the Makefile gate applies) but uses an isolated target directory so it never
 //! contends with the outer build.
 
-use std::{path::PathBuf, process::Command};
+use std::process::Command;
 
 use anyhow::Context as _;
+use camino::Utf8PathBuf;
+use cap_std::{ambient_authority, fs_utf8::Dir};
 use serde_json::Value;
 use tempfile::TempDir;
 
@@ -72,16 +74,15 @@ fn crate_builds_without_dylint_driver_feature() -> anyhow::Result<()> {
 }
 
 /// Returns the workspace root containing this crate's manifest.
-fn workspace_root() -> anyhow::Result<PathBuf> {
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+fn workspace_root() -> anyhow::Result<Utf8PathBuf> {
+    let manifest_dir = Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let mut candidate = manifest_dir.as_path();
     loop {
-        if candidate.join("Cargo.toml").is_file() {
-            let workspace = std::fs::read_to_string(candidate.join("Cargo.toml"))
-                .context("failed to read candidate workspace Cargo.toml")?;
-            if workspace.contains("[workspace]") {
-                return Ok(candidate.to_path_buf());
-            }
+        if let Ok(directory) = Dir::open_ambient_dir(candidate, ambient_authority())
+            && let Ok(workspace) = directory.read_to_string("Cargo.toml")
+            && workspace.contains("[workspace]")
+        {
+            return Ok(candidate.to_path_buf());
         }
         candidate = candidate
             .parent()
