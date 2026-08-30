@@ -4,8 +4,9 @@
 //! `artefact::packaging` module against ADR-001 rules. Tests use the
 //! rstest-bdd v0.5.0 mutable world pattern with fallible steps.
 
-use std::{fs, path::PathBuf};
+use std::path::PathBuf;
 
+use cap_std::{ambient_authority, fs::Dir};
 use rstest::fixture;
 use rstest_bdd_macros::{given, then, when};
 
@@ -73,8 +74,11 @@ fn output_ref(world: &PackagingWorld) -> Result<&PackageOutput, String> {
 
 /// Run the packaging pipeline and store the result in the world.
 fn run_packaging(world: &mut PackagingWorld) -> Result<(), String> {
-    let output_dir = temp_path(world)?.join("dist");
-    fs::create_dir_all(&output_dir).map_err(|e| format!("mkdir dist: {e}"))?;
+    let temp_dir = temp_path(world)?;
+    let output_dir = temp_dir.join("dist");
+    Dir::open_ambient_dir(&temp_dir, ambient_authority())
+        .and_then(|directory| directory.create_dir_all("dist"))
+        .map_err(|error| format!("mkdir dist: {error}"))?;
 
     let params = PackageParams {
         git_sha: world
@@ -103,8 +107,11 @@ fn run_packaging(world: &mut PackagingWorld) -> Result<(), String> {
 
 /// Write a fixture library file into the temp directory and register it.
 fn add_library_file(world: &mut PackagingWorld, name: &str, content: &[u8]) -> Result<(), String> {
-    let path = temp_path(world)?.join(name);
-    fs::write(&path, content).map_err(|e| format!("write {name}: {e}"))?;
+    let temp_dir = temp_path(world)?;
+    let path = temp_dir.join(name);
+    Dir::open_ambient_dir(&temp_dir, ambient_authority())
+        .and_then(|directory| directory.write(name, content))
+        .map_err(|error| format!("write {name}: {error}"))?;
     world.library_files.push(path);
     Ok(())
 }

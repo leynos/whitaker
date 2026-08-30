@@ -166,6 +166,13 @@ fn assert_vec_approx_eq(actual: &[f64], expected: &[f64]) {
     );
 
     for (idx, (actual_value, expected_value)) in actual.iter().zip(expected.iter()).enumerate() {
+        if actual_value.is_infinite() || expected_value.is_infinite() {
+            assert_eq!(
+                actual_value, expected_value,
+                "expected element {idx} to be {expected_value}, got {actual_value}"
+            );
+            continue;
+        }
         let distance = ulp_distance(*actual_value, *expected_value);
         assert!(
             distance.is_some_and(|ulps| ulps <= MAX_ULP_DISTANCE),
@@ -173,6 +180,18 @@ fn assert_vec_approx_eq(actual: &[f64], expected: &[f64]) {
              {distance:?})",
         );
     }
+}
+
+#[test]
+#[should_panic(expected = "expected element 0 to be inf, got")]
+fn approx_vector_rejects_finite_value_for_infinite_expectation() {
+    assert_vec_approx_eq(&[f64::MAX], &[f64::INFINITY]);
+}
+
+#[test]
+#[should_panic(expected = "expected element 0 to be")]
+fn approx_vector_rejects_infinite_value_for_finite_expectation() {
+    assert_vec_approx_eq(&[f64::INFINITY], &[f64::MAX]);
 }
 
 #[given("a function spanning lines {start} to {end}")]

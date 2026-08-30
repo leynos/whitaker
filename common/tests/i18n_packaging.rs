@@ -12,13 +12,10 @@ mod unix {
     //! tarball, and list its contents so the test can assert that the
     //! fallback Fluent bundle ships with the crate.
 
-    use std::{
-        error::Error,
-        fs, io,
-        path::{Path, PathBuf},
-        process::Command,
-    };
+    use std::{error::Error, io, process::Command};
 
+    use camino::Utf8Path;
+    use cap_std::{ambient_authority, fs_utf8::Dir};
     use tempfile::{Builder, TempDir};
     use whitaker_common::i18n::packaged_fallback_locale_path;
 
@@ -27,7 +24,9 @@ mod unix {
     #[test]
     fn fluent_bundles_are_included_in_the_package_tarball() -> TestResult {
         let target_dir = package_target_dir()?;
-        let crate_path = package_crate_path(target_dir.path())?;
+        let target_dir = Utf8Path::from_path(target_dir.path())
+            .ok_or("temporary package target directory must be UTF-8")?;
+        let crate_path = package_crate_path(target_dir)?;
         let tar_listing = package_tar_listing(&crate_path)?;
         let expected_entry = packaged_fallback_locale_path()
             .to_string_lossy()
@@ -45,16 +44,17 @@ mod unix {
     }
 
     fn package_target_dir() -> io::Result<TempDir> {
-        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let manifest_dir = Utf8Path::new(env!("CARGO_MANIFEST_DIR"));
         let target_root = manifest_dir.join("target");
-        fs::create_dir_all(&target_root)?;
+        let crate_root = Dir::open_ambient_dir(manifest_dir, ambient_authority())?;
+        crate_root.create_dir_all("target")?;
 
         Builder::new()
             .prefix("whitaker-common-package-")
             .tempdir_in(&target_root)
     }
 
-    fn package_crate_path(target_dir: &Path) -> TestResult<PathBuf> {
+    fn package_crate_path(target_dir: &Utf8Path) -> TestResult<camino::Utf8PathBuf> {
         let status = Command::new("cargo")
             .current_dir(env!("CARGO_MANIFEST_DIR"))
             .env("CARGO_TARGET_DIR", target_dir)
@@ -76,21 +76,18 @@ mod unix {
             env!("CARGO_PKG_NAME"),
             env!("CARGO_PKG_VERSION")
         );
-        let package_dir = target_dir.join("package");
-        for entry_result in fs::read_dir(&package_dir)? {
-            let path = entry_result?.path();
-            if path
-                .file_name()
-                .is_some_and(|name| name == expected_name.as_str())
-            {
-                return Ok(path);
+        let package_root = Dir::open_ambient_dir(target_dir, ambient_authority())?;
+        for entry_result in package_root.read_dir("package")? {
+            let entry = entry_result?;
+            if entry.file_name()? == expected_name {
+                return Ok(target_dir.join("package").join(expected_name));
             }
         }
 
         Err(format!("cargo package should produce {expected_name}").into())
     }
 
-    fn package_tar_listing(crate_path: &Path) -> TestResult<String> {
+    fn package_tar_listing(crate_path: &Utf8Path) -> TestResult<String> {
         let output = Command::new("tar").arg("-tf").arg(crate_path).output()?;
 
         if !output.status.success() {

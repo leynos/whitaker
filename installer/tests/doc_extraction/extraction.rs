@@ -6,20 +6,23 @@
 
 use std::sync::LazyLock;
 
+use camino::Utf8Path;
+use cap_std::{ambient_authority, fs_utf8::Dir};
 /// Paths to documentation files relative to the workspace root.
 const DOC_PATHS: &[&str] = &["docs/users-guide.md", "docs/developers-guide.md"];
 
 /// Extracted TOML code blocks from documentation, loaded once at test startup.
 pub static DOC_TOML_BLOCKS: LazyLock<Vec<String>> = LazyLock::new(|| {
-    let manifest_dir = env!("CARGO_MANIFEST_DIR");
-    let Some(workspace_root) = std::path::Path::new(manifest_dir).parent() else {
+    let manifest_dir = Utf8Path::new(env!("CARGO_MANIFEST_DIR"));
+    let Some(workspace_root) = manifest_dir.parent() else {
         panic!("installer crate should be in workspace");
     };
+    let workspace_root = Dir::open_ambient_dir(workspace_root, ambient_authority())
+        .expect("workspace root should be accessible");
 
     let mut all_blocks = Vec::new();
     for path in DOC_PATHS {
-        let guide_path = workspace_root.join(path);
-        let Ok(content) = std::fs::read_to_string(&guide_path) else {
+        let Ok(content) = workspace_root.read_to_string(path) else {
             panic!("documentation file {path} should be readable");
         };
         all_blocks.extend(extract_toml_blocks(&content));
@@ -44,19 +47,19 @@ fn accumulate_toml_line(line: &str, current_block: &mut String) {
 ///
 /// # Examples
 ///
-/// ```ignore
+/// ````rust,ignore
 /// use doc_extraction::extraction::extract_toml_blocks;
 ///
-/// let markdown = r#"
+/// let markdown = r###"
 /// ```toml
 /// # A comment
 /// key = "value"
 /// ```
-/// "#;
-/// let blocks = `extract_toml_blocks(markdown)`;
-/// `assert_eq!(blocks.len()`, 1);
+/// "###;
+/// let blocks = extract_toml_blocks(markdown);
+/// assert_eq!(blocks.len(), 1);
 /// assert!(!blocks[0].contains("# A comment"));
-/// ```
+/// ````
 pub fn extract_toml_blocks(markdown: &str) -> Vec<String> {
     let mut blocks = Vec::new();
     let mut in_toml_block = false;

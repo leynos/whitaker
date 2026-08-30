@@ -11,7 +11,15 @@ use syn::{Item, parse_macro_input};
 /// code triggers the `unused_braces` lint. This attribute suppresses that lint
 /// specifically for fixture expansions.
 #[proc_macro_attribute]
-pub fn allow_fixture_expansion_lints(_attr: TokenStream, item: TokenStream) -> TokenStream {
+pub fn allow_fixture_expansion_lints(attr: TokenStream, item: TokenStream) -> TokenStream {
+    if !attr.is_empty() {
+        return syn::Error::new_spanned(
+            proc_macro2::TokenStream::from(attr),
+            "allow_fixture_expansion_lints does not accept arguments",
+        )
+        .into_compile_error()
+        .into();
+    }
     let parsed_item = parse_macro_input!(item as Item);
 
     quote! {

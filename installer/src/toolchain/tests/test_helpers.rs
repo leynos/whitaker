@@ -133,6 +133,12 @@ pub fn expect_rustc_version(
         .returning(move |_, _| Ok(output_with_status(exit_code)));
 }
 
+/// Registers one ordered `rustup toolchain install` expectation.
+///
+/// The expectation must provide the exact toolchain `channel`, the expected
+/// process `exit_code`, and optional standard-error output. The expectation is
+/// added to `seq`, so the install command must occur at its declared position
+/// in the runner's ordered command sequence.
 pub fn expect_toolchain_install(
     runner: &mut MockCommandRunner,
     seq: &mut mockall::Sequence,

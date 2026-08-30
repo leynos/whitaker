@@ -177,8 +177,8 @@ fn format_diagnostic_note_caps_methods_per_suggestion() {
 
     let rendered = render_note("Reporter", SubjectKind::Type, &methods);
 
-    assert!(rendered.contains(
-        "- [report] helper struct for `report_alpha`, `report_beta`, `report_delta`, +2 more \
-         methods"
-    ));
+    assert!(rendered.contains(concat!(
+        "- [report] helper struct for `report_alpha`, `report_beta`, `report_delta`, +2 more ",
+        "methods"
+    )));
 }

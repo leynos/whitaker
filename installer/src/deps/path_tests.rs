@@ -19,8 +19,11 @@ use crate::{
 #[test]
 fn check_dylint_tools_reports_installed_tools() {
     with_fake_binary_on_path("dylint-link", || {
-        let executor =
-            StubExecutor::new(vec![cargo_dylint_check(), dylint_link_install_list_check()]);
+        let executor = StubExecutor::new(vec![
+            cargo_dylint_check().expect("cargo-dylint dependency version should resolve"),
+            dylint_link_install_list_check()
+                .expect("dylint-link dependency version should resolve"),
+        ]);
 
         let status = check_dylint_tools(&executor);
 
@@ -70,7 +73,10 @@ fn check_dylint_tools_rejects_unusable_cargo_dylint_output(#[case] version_stdou
 })]
 fn check_dylint_tools_rejects_unpinned_dylint_link(#[case] install_list_check: ExpectedCall) {
     with_fake_binary_on_path("dylint-link", || {
-        let executor = StubExecutor::new(vec![cargo_dylint_check(), install_list_check]);
+        let executor = StubExecutor::new(vec![
+            cargo_dylint_check().expect("cargo-dylint dependency version should resolve"),
+            install_list_check,
+        ]);
 
         let status = check_dylint_tools(&executor);
 
@@ -98,7 +104,9 @@ fn check_dylint_tools_rejects_non_invocable_dylint_link_on_path() {
             write_fake_binary_with_status(&binary_path, true, 1)
         },
         || {
-            let executor = StubExecutor::new(vec![cargo_dylint_check()]);
+            let executor = StubExecutor::new(vec![
+                cargo_dylint_check().expect("cargo-dylint dependency version should resolve"),
+            ]);
 
             let status = check_dylint_tools(&executor);
 
