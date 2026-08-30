@@ -51,16 +51,7 @@ impl<'a> ExampleHarnessRun<'a> {
 
 #[test]
 fn ui() {
-    let crate_name = env!("CARGO_PKG_NAME");
-    let directory = "ui";
-    whitaker::testing::ui::run_with_runner(crate_name, directory, run_fixtures).unwrap_or_else(
-        |error| {
-            panic!(
-                "UI tests should execute without diffs: RunnerFailure {{ crate_name: \
-                 \"{crate_name}\", directory: \"{directory}\", message: {error} }}"
-            )
-        },
-    );
+    whitaker::testing::ui::run_ui_test(env!("CARGO_PKG_NAME"), "ui", run_fixtures);
 }
 
 /// Runs an example-based regression under the dylint UI test harness.

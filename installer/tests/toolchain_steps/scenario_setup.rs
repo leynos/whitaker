@@ -5,7 +5,6 @@
 
 use std::{
     cell::{Cell, RefCell},
-    io::Write as _,
     process::Output,
 };
 
@@ -19,6 +18,16 @@ use crate::support::{
 /// Non-existent toolchain channel used to exercise auto-install failure paths.
 pub const FAKE_TOOLCHAIN: &str = "nonexistent-nightly-2024-01-01";
 
+/// Shared state populated by the toolchain scenario setup steps.
+///
+/// The `given` setup steps populate `args` and `temp_dir`; the dry-run and
+/// install setup steps also populate `pinned_channel`. Install and failure
+/// setup steps populate `rustup_home` and `cargo_home`. The CLI `when` step
+/// populates `output`, while skip checks may set `should_skip_assertions`.
+/// Step authors must run the applicable `given` step before the `when` step,
+/// and the `then` steps must read the resulting state afterwards. This ordering
+/// is required because each phase consumes the state established by the prior
+/// phase.
 #[derive(Default)]
 pub struct ToolchainWorld {
     pub args: RefCell<Vec<String>>,
@@ -51,10 +60,10 @@ pub(super) fn get_stderr_string(world: &ToolchainWorld) -> Result<String, String
     Ok(String::from_utf8_lossy(&output.stderr).to_string())
 }
 
-/// Reports a skipped scenario on stderr without tripping `print_stderr`.
+/// Reports a skipped scenario through the test tracing stream.
 fn report_skip(reason: &str) -> Result<(), String> {
-    writeln!(std::io::stderr(), "{reason}")
-        .map_err(|error| format!("failed to report skipped scenario: {error}"))
+    tracing::info!(%reason, "skipping toolchain scenario");
+    Ok(())
 }
 
 fn skip_scenario_when_toolchain_missing(

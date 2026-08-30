@@ -123,8 +123,11 @@ fn resolve_requested_crates_rejects_unknown_lints() {
 #[rstest]
 fn ensure_dylint_tools_skips_install_when_installed(test_base_dirs: TestBaseDirs) {
     with_fake_binary_on_path("dylint-link", || {
-        let executor =
-            StubExecutor::new(vec![cargo_dylint_check(), dylint_link_install_list_check()]);
+        let executor = StubExecutor::new(vec![
+            cargo_dylint_check().expect("cargo-dylint dependency version should resolve"),
+            dylint_link_install_list_check()
+                .expect("dylint-link dependency version should resolve"),
+        ]);
         let repository_installer = AlwaysNotFoundRepositoryInstaller;
 
         let mut stderr = Vec::new();
@@ -158,7 +161,8 @@ fn ensure_dylint_tools_installs_missing_tools(
                 args: vec!["dylint", "--version"],
                 result: Ok(failure_output("missing cargo-dylint")),
             },
-            dylint_link_install_list_check(),
+            dylint_link_install_list_check()
+                .expect("dylint-link dependency version should resolve"),
             ExpectedCall {
                 cmd: "cargo",
                 args: vec!["binstall", "--version"],
@@ -169,7 +173,7 @@ fn ensure_dylint_tools_installs_missing_tools(
                 args: vec!["install", "--locked", "--version", "6.0.1", "cargo-dylint"],
                 result: Ok(success_output()),
             },
-            cargo_dylint_check(),
+            cargo_dylint_check().expect("cargo-dylint dependency version should resolve"),
         ]);
         let repository_installer = AlwaysNotFoundRepositoryInstaller;
 
@@ -208,7 +212,8 @@ fn ensure_dylint_tools_propagates_install_failures(test_base_dirs: TestBaseDirs)
                 args: vec!["dylint", "--version"],
                 result: Ok(failure_output("missing cargo-dylint")),
             },
-            dylint_link_install_list_check(),
+            dylint_link_install_list_check()
+                .expect("dylint-link dependency version should resolve"),
             ExpectedCall {
                 cmd: "cargo",
                 args: vec!["binstall", "--version"],

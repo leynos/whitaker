@@ -81,6 +81,10 @@ The workspace-owned `whitaker_test_macros` crate provides
 must not be used on test functions, production code, or as a general mechanism
 for suppressing unrelated lints.
 
+The crate is a non-publishable, path-only workspace dependency. It is available
+to workspace test-support code, but is not a public distribution or runtime
+dependency.
+
 Reuse the shared macro rather than adding crate-local equivalents. Compose it
 with `#[fixture]` by placing it immediately before that attribute:
 
@@ -200,6 +204,12 @@ the artefact from the dependency directory next to the current test binary.
 `dependency_rlib` scans `target/.../deps` for `lib<crate>-*.rlib`, prefers the
 most recently modified artefact from the current build, and falls back to a
 stable path ordering when timestamps tie before emitting the `--extern` flag.
+
+Standard UI-test entry points should use
+`whitaker::testing::ui::run_ui_test(crate_name, directory, runner)`. This
+helper owns the common runner error handling and panics with the standard
+`RunnerFailure` formatting. Entry points that need custom result handling
+should continue to use `run_with_runner` instead.
 
 This split keeps ordinary UI fixtures simple while still letting regression
 tests cover `rustc --test`, file-backed modules, per-case configuration, and

@@ -1,6 +1,7 @@
 //! Staging-focused tests for pipeline orchestration.
 
 use camino::{Utf8Path, Utf8PathBuf};
+use cap_std::{ambient_authority, fs_utf8::Dir};
 use rstest::{fixture, rstest};
 use tempfile::TempDir;
 
@@ -26,13 +27,12 @@ struct StagingTestContext {
 
 impl StagingTestContext {
     fn new() -> std::io::Result<Self> {
-        use std::fs;
-
         let temp_dir = TempDir::new()?;
         let target_dir = Utf8PathBuf::try_from(temp_dir.path().to_owned())
             .map_err(|_| std::io::Error::other("temporary directory path must be UTF-8"))?;
         let workspace_root = target_dir.join("workspace");
-        fs::create_dir_all(&workspace_root)?;
+        let target_root = Dir::open_ambient_dir(&target_dir, ambient_authority())?;
+        target_root.create_dir_all("workspace")?;
         Ok(Self {
             _temp_dir: temp_dir,
             target_dir,
@@ -73,15 +73,17 @@ impl StagingTestContext {
 }
 
 fn create_mock_library(target_dir: &Utf8Path, crate_name: &str) -> std::io::Result<BuildResult> {
-    use std::fs;
-
     use crate::builder::{library_extension, library_prefix};
 
     let source_dir = target_dir.join("source");
-    fs::create_dir_all(&source_dir)?;
+    let target_root = Dir::open_ambient_dir(target_dir, ambient_authority())?;
+    target_root.create_dir_all("source")?;
     let filename = format!("{}{}{}", library_prefix(), crate_name, library_extension());
     let library_path = source_dir.join(&filename);
-    fs::write(&library_path, b"mock library content")?;
+    target_root.write(
+        Utf8Path::new("source").join(&filename),
+        b"mock library content",
+    )?;
 
     Ok(BuildResult {
         crate_name: CrateName::from(crate_name),

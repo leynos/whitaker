@@ -1655,6 +1655,8 @@ name = "no_std_fs_operations"
 version = "0.2.8"
 dependencies = [
  "anyhow",
+ "camino",
+ "cap-std 4.0.3",
  "cargo_metadata",
  "dylint_linting",
  "dylint_testing",
@@ -3240,6 +3242,7 @@ name = "whitaker-common"
 version = "0.2.8"
 dependencies = [
  "camino",
+ "cap-std 4.0.3",
  "fluent-templates",
  "glob",
  "log",
@@ -3251,7 +3254,6 @@ dependencies = [
  "rstest",
  "rstest-bdd",
  "rstest-bdd-macros",
- "temp-env",
  "tempfile",
  "thiserror 2.0.20",
  "unic-langid",
@@ -3363,6 +3365,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
+ "trybuild",
 ]
 
 [[package]]

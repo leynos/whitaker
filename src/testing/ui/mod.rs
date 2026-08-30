@@ -174,6 +174,41 @@ pub fn run_with_runner(
     }
 }
 
+/// Runs a UI test and reports runner failures using the standard panic format.
+///
+/// Use this at a UI-test entry point that only needs the usual failure
+/// behaviour. Call [`run_with_runner`] instead when the caller must handle a
+/// [`HarnessError`] itself.
+///
+/// # Panics
+///
+/// Panics when [`run_with_runner`] returns a harness or runner error. The
+/// panic preserves the standard `RunnerFailure` format, including the crate
+/// name, UI directory, and runner failure details.
+///
+/// # Examples
+///
+/// ```no_run
+/// use whitaker::testing::ui::run_ui_test;
+///
+/// run_ui_test("example_lint", "ui", |_, _| Ok(()));
+/// ```
+pub fn run_ui_test(
+    crate_name: &str,
+    ui_directory: impl Into<Utf8PathBuf>,
+    runner: impl Fn(&str, &Utf8Path) -> Result<(), String>,
+) {
+    let directory = ui_directory.into();
+    run_with_runner(crate_name, directory.clone(), runner).unwrap_or_else(|error| {
+        panic!(
+            concat!(
+                "UI tests should execute without diffs: RunnerFailure {{ crate_name: \"{}\", ",
+                "directory: \"{}\", message: {} }}"
+            ),
+            crate_name, directory, error
+        )
+    });
+}
 /// Serializes environment mutations required by `run_with_runner`.
 ///
 /// `RUSTC_WRAPPER` must be cleared on every platform when set (for example to

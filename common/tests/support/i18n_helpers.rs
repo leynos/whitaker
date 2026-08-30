@@ -106,11 +106,15 @@ mod tests {
 
     use super::*;
 
+    const SKIPS_SPACE_PREFIX: bool = should_skip_line(" value");
+    const SKIPS_TAB_PREFIX: bool = should_skip_line("\tvalue");
+    const KEEPS_IDENTIFIER: bool = should_skip_line("value");
+    const _: () = assert!(SKIPS_SPACE_PREFIX);
+    const _: () = assert!(SKIPS_TAB_PREFIX);
+    const _: () = assert!(!KEEPS_IDENTIFIER);
+
     #[test]
     fn should_skip_line_detects_leading_whitespace() {
-        assert!(should_skip_line(" value"));
-        assert!(should_skip_line("\tvalue"));
-        assert!(!should_skip_line("value"));
         assert!(!should_skip_line(""));
     }
 
