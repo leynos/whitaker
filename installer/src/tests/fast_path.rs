@@ -4,6 +4,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use rstest::{fixture, rstest};
 use temp_env::with_var_unset;
 use whitaker_installer::{
+    cli::ExecutionFlags,
     crate_name::CrateName,
     test_support::{TEST_STAGE_SUITE_ENV, env_test_guard},
     toolchain::Toolchain,
@@ -51,7 +52,10 @@ fn fast_path_fixture() -> FastPathFixture {
 #[case::with_cranelift(true, &["rustc-codegen-cranelift"])]
 fn resolve_additional_components_parametrized(#[case] cranelift: bool, #[case] expected: &[&str]) {
     let args = InstallArgs {
-        cranelift,
+        execution: ExecutionFlags {
+            cranelift,
+            ..ExecutionFlags::default()
+        },
         ..InstallArgs::default()
     };
 
@@ -63,7 +67,7 @@ fn fast_path_context_holds_supplied_values(fast_path_fixture: FastPathFixture) {
     let ctx = fast_path_fixture.context();
 
     assert!(std::ptr::eq(ctx.args, &raw const fast_path_fixture.args));
-    assert_eq!(ctx.dirs.home_dir(), Some(PathBuf::from("/tmp")));
+    assert_eq!(ctx.dirs.home(), Some(PathBuf::from("/tmp")));
     assert_eq!(ctx.toolchain.channel(), "nightly-2026-05-28");
     assert_eq!(ctx.target_dir, &Utf8PathBuf::from("/tmp/target"));
     assert!(ctx.requested_crates.is_empty());

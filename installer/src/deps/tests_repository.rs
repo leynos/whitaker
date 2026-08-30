@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 
 use super::{
-    DependencyBinaryInstaller, DependencyTool, DylintToolStatus,
+    DependencyBinaryInstaller, DependencyTool, DylintToolStatus, OPTIONS_MSG,
     install::{InstallContext, InstallMode, install_tool, repository_install_context},
     install_dylint_tools_with_options, install_options,
 };
@@ -31,7 +31,7 @@ fn staged_unrunnable_dylint_link() -> std::io::Result<(tempfile::TempDir, PathBu
         dir.path(),
         "dylint-link",
     );
-    crate::test_utils::dependency_binary_helpers::write_fake_binary_with_status(&path, true, 1);
+    crate::test_utils::dependency_binary_helpers::write_fake_binary_with_status(&path, true, 1)?;
     Ok((dir, path))
 }
 
@@ -61,7 +61,7 @@ fn install_dylint_tools_accepts_repository_dylint_link_without_executing_it() {
             dylint_link: false,
         },
         &mut stderr,
-        install_options(&repository_installer, false),
+        &install_options(&repository_installer, false).expect(OPTIONS_MSG),
     )
     .expect("repository install should satisfy dylint-link");
 
@@ -103,10 +103,11 @@ fn install_dylint_tools_falls_back_when_repository_dylint_link_install_fails() {
                 dylint_link: false,
             },
             &mut stderr,
-            install_options(&repository_installer, false),
+            &install_options(&repository_installer, false).expect(OPTIONS_MSG),
         )
         .expect("binstall fallback should succeed");
-    });
+    })
+    .expect("prepare fake PATH");
 
     let output = String::from_utf8(stderr).expect("stderr should be UTF-8");
     assert!(output.contains("Repository install for dylint-link unavailable"));

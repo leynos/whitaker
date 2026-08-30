@@ -37,7 +37,7 @@ pub fn host_target() -> Option<TargetTriple> {
 
 /// Return the release-side provenance asset filename.
 #[must_use]
-pub fn provenance_filename() -> &'static str {
+pub const fn provenance_filename() -> &'static str {
     PROVENANCE_FILENAME
 }
 

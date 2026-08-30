@@ -72,8 +72,8 @@ pub struct PackageOutput {
 
 /// Compute the SHA-256 digest of a file.
 ///
-/// Reads the file at `path` in chunks and returns the lowercase hex
-/// digest as a validated [`Sha256Digest`].
+/// Streams the file at `path` through the hasher and returns the
+/// lowercase hex digest as a validated [`Sha256Digest`].
 ///
 /// # Errors
 ///
@@ -84,11 +84,14 @@ pub fn compute_sha256(path: &Path) -> Result<Sha256Digest, PackagingError> {
     let mut hasher = Sha256::new();
     let mut buffer = [0u8; 8192];
     loop {
-        let bytes_read = file.read(&mut buffer)?;
-        if bytes_read == 0 {
+        let read_count = file.read(&mut buffer)?;
+        if read_count == 0 {
             break;
         }
-        hasher.update(&buffer[..bytes_read]);
+        let Some(chunk) = buffer.get(..read_count) else {
+            break;
+        };
+        hasher.update(chunk);
     }
     let hex = to_lower_hex(&hasher.finalize());
     Ok(Sha256Digest::try_from(hex)?)
@@ -160,7 +163,7 @@ pub fn generate_manifest_json(manifest: &Manifest) -> Result<String, PackagingEr
 /// is empty, [`PackagingError::InvalidLibraryPath`] if any path lacks
 /// a filename, or [`PackagingError::Io`] /
 /// [`PackagingError::Serialization`] on I/O or serialization failures.
-pub fn package_artefact(params: PackageParams) -> Result<PackageOutput, PackagingError> {
+pub fn package_artefact(params: &PackageParams) -> Result<PackageOutput, PackagingError> {
     if params.library_files.is_empty() {
         return Err(PackagingError::EmptyFileList);
     }
@@ -182,7 +185,7 @@ pub fn package_artefact(params: PackageParams) -> Result<PackageOutput, Packagin
 
     create_archive(&archive_path, &lib_entries)?;
     let digest = compute_sha256(&archive_path)?;
-    let manifest = build_manifest(&params, &file_names, &digest);
+    let manifest = build_manifest(params, &file_names, &digest);
 
     Ok(PackageOutput {
         archive_path,

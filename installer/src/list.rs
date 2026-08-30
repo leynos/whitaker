@@ -74,7 +74,7 @@ fn sort_installed_libraries(installed: &mut InstalledLints) {
 
 fn default_prebuilt_target_dir() -> Option<Utf8PathBuf> {
     SystemBaseDirs::new()
-        .and_then(|dirs| dirs.whitaker_data_dir())
+        .and_then(|dirs| dirs.whitaker_data())
         .and_then(|path| Utf8PathBuf::from_path_buf(path).ok())
         .map(|path| path.join("lints"))
 }
@@ -109,6 +109,7 @@ fn determine_scan_roots(cli_target: Option<&Utf8Path>) -> Result<Vec<Utf8PathBuf
 /// - The path is not valid UTF-8
 /// - No `rust-toolchain.toml` file exists
 /// - The toolchain file cannot be parsed
+#[must_use]
 pub fn detect_active_toolchain() -> Option<String> {
     let cwd = match std::env::current_dir() {
         Ok(path) => path,

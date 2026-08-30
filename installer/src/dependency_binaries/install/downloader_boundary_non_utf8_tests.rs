@@ -11,7 +11,7 @@ fn download_from_urls_rejects_a_non_utf8_destination_before_any_request() {
 
     // No route is registered; the server exists only to prove it is never
     // contacted for an invalid destination.
-    let server = LocalServer::start(HashMap::new());
+    let server = LocalServer::start(HashMap::new()).expect("local server should start");
 
     // 0x80 is a lone UTF-8 continuation byte, so this path is never valid UTF-8
     // and must be rejected during validation, before any HTTP request.

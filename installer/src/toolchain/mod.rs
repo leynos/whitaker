@@ -30,7 +30,7 @@ pub struct ToolchainInstallStatus {
 impl ToolchainInstallStatus {
     /// Returns true if the toolchain was installed during this run.
     #[must_use]
-    pub fn installed_toolchain(&self) -> bool {
+    pub const fn installed_toolchain(&self) -> bool {
         self.installed_toolchain
     }
 }

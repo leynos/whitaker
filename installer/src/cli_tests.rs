@@ -26,16 +26,19 @@ fn assert_default_lint_selection(cli: &Cli) {
     assert_default_conditions(&[
         ("target_dir", cli.install.target_dir.is_none()),
         ("lint", cli.install.lint.is_empty()),
-        ("individual_lints", !cli.install.individual_lints),
-        ("experimental", !cli.install.experimental),
+        (
+            "individual_lints",
+            !cli.install.lint_selection.individual_lints,
+        ),
+        ("experimental", !cli.install.lint_selection.experimental),
     ]);
 }
 
 /// Assert that execution options default to a full, non-quiet build.
 fn assert_default_execution_options(cli: &Cli) {
     assert_default_conditions(&[
-        ("cranelift", !cli.install.cranelift),
-        ("dry_run", !cli.install.dry_run),
+        ("cranelift", !cli.install.execution.cranelift),
+        ("dry_run", !cli.install.execution.dry_run),
         ("verbosity", cli.install.verbosity == 0),
         ("quiet", !cli.install.quiet),
     ]);
@@ -44,9 +47,9 @@ fn assert_default_execution_options(cli: &Cli) {
 /// Assert that no pipeline steps are skipped by default.
 fn assert_default_skip_flags(cli: &Cli) {
     assert_default_conditions(&[
-        ("skip_deps", !cli.install.skip_deps),
-        ("skip_wrapper", !cli.install.skip_wrapper),
-        ("no_update", !cli.install.no_update),
+        ("skip_deps", !cli.install.skip.skip_deps),
+        ("skip_wrapper", !cli.install.skip.skip_wrapper),
+        ("no_update", !cli.install.skip.no_update),
         ("is_build_only", !cli.install.is_build_only),
     ]);
 }
@@ -115,7 +118,7 @@ fn cli_parses_install_with_args() {
     ]);
     match cli.command {
         Some(Command::Install(args)) => {
-            assert!(args.experimental);
+            assert!(args.lint_selection.experimental);
             assert_eq!(args.lint, vec!["module_max_lines"]);
         }
         _ => panic!("expected Install command"),
@@ -142,7 +145,10 @@ fn should_attempt_prebuilt_false_when_build_only() {
 #[test]
 fn should_attempt_prebuilt_false_when_experimental_flag_enabled() {
     let args = InstallArgs {
-        experimental: true,
+        lint_selection: LintSelectionFlags {
+            experimental: true,
+            ..LintSelectionFlags::default()
+        },
         ..InstallArgs::default()
     };
     let requested = vec![CrateName::from("whitaker_suite")];
@@ -158,15 +164,15 @@ fn should_attempt_prebuilt_true_for_stable_bumpy_road_requests() {
 
 /// Parameterized tests for boolean CLI flags (backwards compatibility).
 #[rstest]
-#[case::individual_lints(&["whitaker-installer", "--individual-lints"], |cli: &Cli| cli.install.individual_lints)]
-#[case::experimental(&["whitaker-installer", "--experimental"], |cli: &Cli| cli.install.experimental)]
-#[case::cranelift(&["whitaker-installer", "--cranelift"], |cli: &Cli| cli.install.cranelift)]
-#[case::dry_run(&["whitaker-installer", "--dry-run"], |cli: &Cli| cli.install.dry_run)]
+#[case::individual_lints(&["whitaker-installer", "--individual-lints"], |cli: &Cli| cli.install.lint_selection.individual_lints)]
+#[case::experimental(&["whitaker-installer", "--experimental"], |cli: &Cli| cli.install.lint_selection.experimental)]
+#[case::cranelift(&["whitaker-installer", "--cranelift"], |cli: &Cli| cli.install.execution.cranelift)]
+#[case::dry_run(&["whitaker-installer", "--dry-run"], |cli: &Cli| cli.install.execution.dry_run)]
 #[case::verbose(&["whitaker-installer", "-v"], |cli: &Cli| cli.install.verbosity > 0)]
 #[case::quiet(&["whitaker-installer", "-q"], |cli: &Cli| cli.install.quiet)]
-#[case::skip_deps(&["whitaker-installer", "--skip-deps"], |cli: &Cli| cli.install.skip_deps)]
-#[case::skip_wrapper(&["whitaker-installer", "--skip-wrapper"], |cli: &Cli| cli.install.skip_wrapper)]
-#[case::no_update(&["whitaker-installer", "--no-update"], |cli: &Cli| cli.install.no_update)]
+#[case::skip_deps(&["whitaker-installer", "--skip-deps"], |cli: &Cli| cli.install.skip.skip_deps)]
+#[case::skip_wrapper(&["whitaker-installer", "--skip-wrapper"], |cli: &Cli| cli.install.skip.skip_wrapper)]
+#[case::no_update(&["whitaker-installer", "--no-update"], |cli: &Cli| cli.install.skip.no_update)]
 #[case::build_only(&["whitaker-installer", "--build-only"], |cli: &Cli| cli.install.is_build_only)]
 fn cli_parses_boolean_flags(#[case] args: &[&str], #[case] check: fn(&Cli) -> bool) {
     let cli = Cli::parse_from(args);
@@ -196,10 +202,10 @@ fn cli_rejects_conflicting_flags(#[case] args: &[&str]) {
 fn install_args_default_is_valid() {
     let args = InstallArgs::default();
     assert_default_conditions(&[
-        ("individual_lints", !args.individual_lints),
-        ("experimental", !args.experimental),
-        ("cranelift", !args.cranelift),
-        ("skip_deps", !args.skip_deps),
+        ("individual_lints", !args.lint_selection.individual_lints),
+        ("experimental", !args.lint_selection.experimental),
+        ("cranelift", !args.execution.cranelift),
+        ("skip_deps", !args.skip.skip_deps),
     ]);
 }
 
@@ -214,12 +220,12 @@ fn list_args_default_is_valid() {
 fn install_args_returns_flattened_when_no_subcommand() {
     let cli = Cli::parse_from(["whitaker-installer", "--experimental"]);
     let args = cli.install_args();
-    assert!(args.experimental);
+    assert!(args.lint_selection.experimental);
 }
 
 #[test]
 fn install_args_returns_subcommand_args_when_present() {
     let cli = Cli::parse_from(["whitaker-installer", "install", "--dry-run"]);
     let args = cli.install_args();
-    assert!(args.dry_run);
+    assert!(args.execution.dry_run);
 }

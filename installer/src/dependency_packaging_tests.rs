@@ -85,7 +85,7 @@ fn package_dependency_binary_handles_binary_presence(
         fs::write(&binary_path, b"binary").expect("write fake binary");
     }
 
-    let result = package_dependency_binary(DependencyPackageParams {
+    let result = package_dependency_binary(&DependencyPackageParams {
         dependency: dependency.clone(),
         target: linux_target.clone(),
         binary_path: binary_path.clone(),

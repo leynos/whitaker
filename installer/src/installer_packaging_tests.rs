@@ -201,7 +201,7 @@ fn package_installer_creates_archive(
     let fixture = packaging_fixture(target, content).expect("packaging fixture should be staged");
     let params =
         params_from_fixture(&fixture, "0.2.1", target).expect("packaging params should build");
-    let output = package_installer(params).expect("packaging should succeed");
+    let output = package_installer(&params).expect("packaging should succeed");
     assert!(output.archive_path.exists(), "archive should exist");
     assert_eq!(output.archive_name, expected_name);
 
@@ -227,7 +227,7 @@ fn package_installer_rejects_missing_binary() {
         output_dir: temp.path().to_path_buf(),
     };
 
-    let err = package_installer(params).expect_err("should fail");
+    let err = package_installer(&params).expect_err("should fail");
     assert!(
         matches!(err, InstallerPackagingError::BinaryNotFound(ref p) if *p == missing),
         "expected BinaryNotFound, got {err:?}"
@@ -252,7 +252,7 @@ fn package_installer_returns_io_error_for_unwritable_output() {
         output_dir: unwritable,
     };
 
-    let err = package_installer(params).expect_err("should fail on unwritable output dir");
+    let err = package_installer(&params).expect_err("should fail on unwritable output dir");
     assert!(
         matches!(err, InstallerPackagingError::Io(_)),
         "expected Io error, got {err:?}"
@@ -290,7 +290,7 @@ fn tgz_archive_preserves_binary_content() {
     let params = params_from_fixture(&fixture, "0.2.1", "aarch64-unknown-linux-gnu")
         .expect("packaging params should build");
 
-    let output = package_installer(params).expect("packaging");
+    let output = package_installer(&params).expect("packaging");
     let file = fs::File::open(&output.archive_path).expect("open");
     let gz = flate2::read::GzDecoder::new(file);
     let mut tar_archive = tar::Archive::new(gz);

@@ -29,6 +29,7 @@ const WHITAKER_PACKAGE_NAME: &str = "whitaker";
 ///     println!("This is a Whitaker workspace");
 /// }
 /// ```
+#[must_use]
 pub fn is_whitaker_workspace(dir: &Utf8Path) -> bool {
     let cargo_toml = dir.join("Cargo.toml");
     if !cargo_toml.exists() {
@@ -57,7 +58,7 @@ pub fn is_whitaker_workspace(dir: &Utf8Path) -> bool {
 ///
 /// Returns `None` if the platform's data directory cannot be determined.
 pub fn clone_directory(dirs: &dyn BaseDirs) -> Option<Utf8PathBuf> {
-    dirs.whitaker_data_dir()
+    dirs.whitaker_data()
         .and_then(|p| Utf8PathBuf::try_from(p).ok())
 }
 
@@ -80,6 +81,7 @@ pub enum WorkspaceAction {
 /// operation (if any) is needed. Returns `UseCurrentDir` if `cwd` is a
 /// Whitaker workspace, `CloneTo` if `clone_dir` doesn't exist, `UpdateAt`
 /// if `update` is true and the clone exists, or `UseExisting` otherwise.
+#[must_use]
 pub fn decide_workspace_action(
     cwd: &Utf8Path,
     clone_dir: &Utf8Path,
@@ -132,6 +134,11 @@ pub fn ensure_workspace(dirs: &dyn BaseDirs, update: bool) -> Result<Utf8PathBuf
 /// If the current directory is a Whitaker workspace, returns it. Otherwise
 /// returns the platform-specific clone directory (which may not exist yet).
 /// Useful for dry-run mode to show what would happen without cloning.
+///
+/// # Errors
+///
+/// Returns an error when the current directory cannot be determined or is
+/// not valid UTF-8, or when no data directory is available for cloning.
 pub fn resolve_workspace_path(dirs: &dyn BaseDirs) -> Result<Utf8PathBuf> {
     let cwd = current_dir_utf8()?;
 

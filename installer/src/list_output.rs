@@ -5,7 +5,7 @@
 
 use serde::Serialize;
 
-use crate::scanner::{InstalledLints, lints_for_library};
+use crate::scanner::{InstalledLibrary, InstalledLints, lints_for_library};
 
 /// Format installed lints for human-readable output.
 ///
@@ -31,25 +31,43 @@ pub fn format_human(lints: &InstalledLints, active_toolchain: Option<&str>) -> S
 
     for (toolchain, libraries) in &lints.by_toolchain {
         output.push('\n');
-
-        let active_marker = active_toolchain
-            .filter(|active| *active == toolchain)
-            .map_or(String::new(), |_| " (active)".to_owned());
-
-        output.push_str(&format!("Toolchain: {toolchain}{active_marker}\n"));
-        output.push_str("  Libraries:\n");
-
-        for library in libraries {
-            output.push_str(&format!("    {}\n", library.crate_name));
-
-            let lint_names = lints_for_library(&library.crate_name);
-            for lint in lint_names {
-                output.push_str(&format!("      - {lint}\n"));
-            }
-        }
+        output.push_str(&format_toolchain_section(
+            toolchain,
+            libraries,
+            active_toolchain,
+        ));
     }
 
     output
+}
+
+/// Render one toolchain section of the human-readable listing.
+fn format_toolchain_section(
+    toolchain: &str,
+    libraries: &[InstalledLibrary],
+    active_toolchain: Option<&str>,
+) -> String {
+    let active_marker = if active_toolchain == Some(toolchain) {
+        " (active)"
+    } else {
+        ""
+    };
+    let library_lines: String = libraries.iter().map(format_library_lines).collect();
+    format!("Toolchain: {toolchain}{active_marker}\n  Libraries:\n{library_lines}")
+}
+
+/// Render the listing lines for one installed library and its lints.
+fn format_library_lines(library: &InstalledLibrary) -> String {
+    let lint_lines: String =
+        lints_for_library(&library.crate_name)
+            .iter()
+            .fold(String::new(), |mut output, lint| {
+                output.push_str("      - ");
+                output.push_str(lint);
+                output.push('\n');
+                output
+            });
+    format!("    {}\n{lint_lines}", library.crate_name)
 }
 
 /// Format installed lints as JSON.
@@ -133,6 +151,8 @@ pub struct LibraryEntry {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for human-readable and JSON list formatting.
+
     use super::*;
     use crate::builder::CrateName;
     use crate::scanner::InstalledLibrary;

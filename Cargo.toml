@@ -20,7 +20,6 @@ clap = "4.5.38"
 directories-next = "2.0.0"
 dylint_linting = "6"
 dylint_testing = "6"
-libc = "0.2"
 fluent-templates = "^0.15.0"
 insta = { version = "1", features = ["json"] }
 once_cell = "^1.21.3"

@@ -38,24 +38,37 @@ impl DependencyBinaryInstaller for AlwaysNotFoundRepositoryInstaller {
 }
 
 /// Writes a fake binary at `path` that exits successfully.
-pub fn write_fake_binary(path: &Path, is_executable: bool) {
-    write_fake_binary_with_status(path, is_executable, 0);
+///
+/// # Errors
+///
+/// Returns any I/O error raised while writing the binary or setting its
+/// permissions.
+pub fn write_fake_binary(path: &Path, is_executable: bool) -> std::io::Result<()> {
+    write_fake_binary_with_status(path, is_executable, 0)
 }
 
 /// Writes a fake binary at `path` that exits with the supplied status code.
-pub fn write_fake_binary_with_status(path: &Path, is_executable: bool, exit_code: i32) {
-    fs::write(path, fake_binary_contents(exit_code)).expect("write fake binary");
+///
+/// # Errors
+///
+/// Returns any I/O error raised while writing the binary or setting its
+/// permissions.
+pub fn write_fake_binary_with_status(
+    path: &Path,
+    is_executable: bool,
+    exit_code: i32,
+) -> std::io::Result<()> {
+    fs::write(path, fake_binary_contents(exit_code))?;
     #[cfg(unix)]
     {
         let mode = if is_executable { 0o755 } else { 0o644 };
-        let mut permissions = fs::metadata(path)
-            .expect("read fake binary metadata")
-            .permissions();
+        let mut permissions = fs::metadata(path)?.permissions();
         permissions.set_mode(mode);
-        fs::set_permissions(path, permissions).expect("set fake binary permissions");
+        fs::set_permissions(path, permissions)?;
     }
     #[cfg(not(unix))]
     let _ = is_executable;
+    Ok(())
 }
 
 fn fake_binary_contents(exit_code: i32) -> Vec<u8> {
@@ -70,32 +83,51 @@ fn fake_binary_contents(exit_code: i32) -> Vec<u8> {
 }
 
 /// Runs a closure with `PATH` pointing at one or more fake directories.
-pub fn with_fake_path<T>(setup: impl FnOnce(&[PathBuf]), run: impl FnOnce() -> T) -> T {
+///
+/// # Errors
+///
+/// Returns an I/O error when the fake directories cannot be created, the
+/// `setup` closure fails, or the fake `PATH` cannot be joined.
+pub fn with_fake_path<T>(
+    setup: impl FnOnce(&[PathBuf]) -> std::io::Result<()>,
+    run: impl FnOnce() -> T,
+) -> std::io::Result<T> {
     let _guard = env_test_guard();
-    let temp_dirs = [
-        tempfile::tempdir().expect("create temp dir"),
-        tempfile::tempdir().expect("create temp dir"),
-    ];
+    let temp_dirs = [tempfile::tempdir()?, tempfile::tempdir()?];
     let path_dirs = temp_dirs
         .iter()
         .map(|dir| dir.path().to_path_buf())
         .collect::<Vec<_>>();
-    setup(&path_dirs);
+    setup(&path_dirs)?;
     let path = std::env::join_paths(path_dirs.iter().map(PathBuf::as_path))
-        .expect("join fake PATH directories");
-    temp_env::with_var("PATH", Some(path), run)
+        .map_err(std::io::Error::other)?;
+    Ok(temp_env::with_var("PATH", Some(path), run))
 }
 
 /// Runs a closure with `PATH` containing a fake executable in the first entry.
-pub fn with_fake_binary_on_path<T>(binary_name: &str, run: impl FnOnce() -> T) -> T {
+///
+/// # Errors
+///
+/// Returns an I/O error when the fake `PATH` cannot be prepared or the fake
+/// binary cannot be written.
+pub fn with_fake_binary_on_path<T>(
+    binary_name: &str,
+    run: impl FnOnce() -> T,
+) -> std::io::Result<T> {
     with_fake_path(
-        |directories| write_fake_binary(&path_binary_location(&directories[0], binary_name), true),
+        |directories| {
+            let first_dir = directories.first().ok_or_else(|| {
+                std::io::Error::other("fake PATH should contain at least one directory")
+            })?;
+            write_fake_binary(&path_binary_location(first_dir, binary_name), true)
+        },
         run,
     )
 }
 
 /// Joins `binary_name` onto `directory` with the platform executable suffix,
 /// so directly probed fakes are runnable on Windows as well as Unix.
+#[must_use]
 pub fn path_binary_location(directory: &Path, binary_name: &str) -> PathBuf {
     #[cfg(windows)]
     {

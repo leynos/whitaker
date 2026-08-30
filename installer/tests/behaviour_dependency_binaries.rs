@@ -57,7 +57,7 @@ impl DependencyBinaryInstaller for StubRepositoryInstaller {
         match &self.behaviour {
             RepositoryInstallerBehaviour::Success
             | RepositoryInstallerBehaviour::SuccessWithFailedVerification => {
-                dirs.bin_dir().map_or_else(
+                dirs.executables().map_or_else(
                     || Err(DependencyBinaryInstallError::MissingBinDir),
                     |bin_dir| {
                         // Stage a runnable fake at the returned path: dylint-link
@@ -67,7 +67,7 @@ impl DependencyBinaryInstaller for StubRepositoryInstaller {
                             &bin_dir,
                             &format!("{}-{}", dependency.package(), target),
                         );
-                        write_fake_binary(&installed_path, true);
+                        write_fake_binary(&installed_path, true)?;
                         Ok(installed_path)
                     },
                 )
@@ -212,8 +212,8 @@ fn stage_dylint_link_on_path(bin_dir: &Path) -> Result<(), String> {
     let dylint_link_path = bin_dir.join("dylint-link.cmd");
     #[cfg(not(windows))]
     let dylint_link_path = bin_dir.join("dylint-link");
-    write_fake_binary(&dylint_link_path, true);
-    Ok(())
+    write_fake_binary(&dylint_link_path, true)
+        .map_err(|error| format!("write fake dylint-link: {error}"))
 }
 
 fn run_install_with_dylint_link_on_path(
@@ -264,7 +264,7 @@ fn when_dependency_installation_runs(world: &mut DependencyBinaryWorld) -> Resul
             &executor,
             &status,
             &mut world.stderr,
-            DependencyInstallOptions {
+            &DependencyInstallOptions {
                 dirs: &dirs,
                 repository_installer: &repository_installer,
                 target,

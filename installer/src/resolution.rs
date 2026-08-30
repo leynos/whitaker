@@ -68,8 +68,7 @@ pub fn resolve_crates(
         // Assumes names have been validated via validate_crate_names().
         debug!(
             target: "whitaker_installer::resolution",
-            "using explicit lint crate selection: {:?}",
-            specific_lints
+            "using explicit lint crate selection: {specific_lints:?}"
         );
         return specific_lints.to_vec();
     }
@@ -147,52 +146,70 @@ pub fn validate_crate_names(names: &[CrateName], options: &CrateResolutionOption
 
 #[cfg(test)]
 mod tests {
+    //! Tests for release resolution.
+
     use super::*;
     use rstest::rstest;
 
-    /// Test configuration for resolve_crates variants.
+    /// Test configuration for `resolve_crates` variants.
     struct ResolveCratesCase {
-        individual_lints: bool,
-        experimental: bool,
-        expect_lint: bool,
-        expect_suite: bool,
-        expect_bumpy_road: bool,
-        expect_experimental_lint: bool,
+        /// Resolution flags under test.
+        options: CrateResolutionOptions,
+        /// Crate names that must appear in the resolved set.
+        expected_present: &'static [&'static str],
+        /// Crate names that must be absent from the resolved set.
+        expected_absent: &'static [&'static str],
     }
 
-    /// Parameterized tests for resolve_crates variants.
+    /// Parameterized tests for `resolve_crates` variants.
     #[rstest]
-    #[case::default_suite_only(ResolveCratesCase { individual_lints: false, experimental: false, expect_lint: false, expect_suite: true, expect_bumpy_road: false, expect_experimental_lint: false })]
-    #[case::individual_lints(ResolveCratesCase { individual_lints: true, experimental: false, expect_lint: true, expect_suite: false, expect_bumpy_road: true, expect_experimental_lint: false })]
-    #[case::individual_with_experimental(ResolveCratesCase { individual_lints: true, experimental: true, expect_lint: true, expect_suite: false, expect_bumpy_road: true, expect_experimental_lint: true })]
-    #[case::suite_with_experimental(ResolveCratesCase { individual_lints: false, experimental: true, expect_lint: false, expect_suite: true, expect_bumpy_road: false, expect_experimental_lint: false })]
+    #[case::default_suite_only(ResolveCratesCase {
+        options: CrateResolutionOptions { individual_lints: false, experimental: false },
+        expected_present: &[SUITE_CRATE],
+        expected_absent: &[
+            "module_max_lines",
+            "bumpy_road_function",
+            "rstest_helper_should_be_fixture",
+        ],
+    })]
+    #[case::individual_lints(ResolveCratesCase {
+        options: CrateResolutionOptions { individual_lints: true, experimental: false },
+        expected_present: &["module_max_lines", "bumpy_road_function"],
+        expected_absent: &[SUITE_CRATE, "rstest_helper_should_be_fixture"],
+    })]
+    #[case::individual_with_experimental(ResolveCratesCase {
+        options: CrateResolutionOptions { individual_lints: true, experimental: true },
+        expected_present: &[
+            "module_max_lines",
+            "bumpy_road_function",
+            "rstest_helper_should_be_fixture",
+        ],
+        expected_absent: &[SUITE_CRATE],
+    })]
+    #[case::suite_with_experimental(ResolveCratesCase {
+        options: CrateResolutionOptions { individual_lints: false, experimental: true },
+        expected_present: &[SUITE_CRATE],
+        expected_absent: &[
+            "module_max_lines",
+            "bumpy_road_function",
+            "rstest_helper_should_be_fixture",
+        ],
+    })]
     fn resolve_crates_variants(#[case] case: ResolveCratesCase) {
-        let options = CrateResolutionOptions {
-            individual_lints: case.individual_lints,
-            experimental: case.experimental,
-        };
-        let crates = resolve_crates(&[], &options);
+        let crates = resolve_crates(&[], &case.options);
 
-        assert_eq!(
-            crates.contains(&CrateName::from("module_max_lines")),
-            case.expect_lint,
-            "lint crate inclusion mismatch"
-        );
-        assert_eq!(
-            crates.contains(&CrateName::from(SUITE_CRATE)),
-            case.expect_suite,
-            "suite crate inclusion mismatch"
-        );
-        assert_eq!(
-            crates.contains(&CrateName::from("bumpy_road_function")),
-            case.expect_bumpy_road,
-            "bumpy_road_function inclusion mismatch"
-        );
-        assert_eq!(
-            crates.contains(&CrateName::from("rstest_helper_should_be_fixture")),
-            case.expect_experimental_lint,
-            "rstest_helper_should_be_fixture inclusion mismatch"
-        );
+        for name in case.expected_present {
+            assert!(
+                crates.contains(&CrateName::from(*name)),
+                "{name} should be resolved, got {crates:?}"
+            );
+        }
+        for name in case.expected_absent {
+            assert!(
+                !crates.contains(&CrateName::from(*name)),
+                "{name} should not be resolved, got {crates:?}"
+            );
+        }
     }
 
     #[test]
@@ -223,12 +240,15 @@ mod tests {
             assert!(res.is_ok());
         } else {
             let err = res.expect_err("expected validation failure");
+            let expected_name = crate_names
+                .first()
+                .expect("case should supply at least one crate name");
             assert!(
                 matches!(
                     &err,
                     InstallerError::LintCrateNotFound { name }
                         | InstallerError::ExperimentalLintRequiresFlag { name }
-                        if *name == crate_names[0]
+                        if name == expected_name
                 ),
                 "unexpected error: {err:?}"
             );

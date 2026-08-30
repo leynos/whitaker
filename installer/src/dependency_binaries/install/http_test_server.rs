@@ -10,7 +10,7 @@ use std::io;
 use std::io::{BufRead, BufReader, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, PoisonError};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
@@ -52,12 +52,10 @@ pub(super) struct LocalServer {
 }
 
 impl LocalServer {
-    pub(super) fn start(routes: HashMap<String, CannedResponse>) -> Self {
-        let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback listener");
-        let port = listener.local_addr().expect("resolve local addr").port();
-        listener
-            .set_nonblocking(true)
-            .expect("set listener non-blocking");
+    pub(super) fn start(routes: HashMap<String, CannedResponse>) -> io::Result<Self> {
+        let listener = TcpListener::bind("127.0.0.1:0")?;
+        let port = listener.local_addr()?.port();
+        listener.set_nonblocking(true)?;
         let requested = Arc::new(Mutex::new(Vec::new()));
         let stop = Arc::new(AtomicBool::new(false));
         let handle = {
@@ -67,12 +65,12 @@ impl LocalServer {
                 run_server(&listener, &routes, &requested_for_thread, &stop_for_thread);
             })
         };
-        Self {
+        Ok(Self {
             base_url: format!("http://127.0.0.1:{port}"),
             requested,
             stop,
             handle: Some(handle),
-        }
+        })
     }
 
     pub(super) fn url(&self, path: &str) -> String {
@@ -80,7 +78,12 @@ impl LocalServer {
     }
 
     pub(super) fn requested_paths(&self) -> Vec<String> {
-        self.requested.lock().expect("lock requested paths").clone()
+        // A poisoned lock only means a test thread panicked while logging a
+        // request; the recorded paths remain a valid `Vec`.
+        self.requested
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
     }
 }
 
@@ -117,6 +120,14 @@ fn run_server(
 
 /// Read one request, record its path, and write the matching canned response
 /// (or a 404). `Connection: close` lets the client frame the response end.
+/// Restores blocking mode and bounds reads and writes on an accepted socket.
+fn configure_connection(stream: &TcpStream) -> io::Result<()> {
+    stream.set_nonblocking(false)?;
+    stream.set_read_timeout(Some(Duration::from_secs(5)))?;
+    stream.set_write_timeout(Some(Duration::from_secs(5)))?;
+    Ok(())
+}
+
 fn serve_connection(
     mut stream: TcpStream,
     routes: &HashMap<String, CannedResponse>,
@@ -126,14 +137,7 @@ fn serve_connection(
     // (the listener is non-blocking only so the accept loop can poll for
     // shutdown). `try_clone` shares the socket, so `peer` inherits these.
     // Drop the connection if the socket cannot be configured.
-    if stream.set_nonblocking(false).is_err()
-        || stream
-            .set_read_timeout(Some(Duration::from_secs(5)))
-            .is_err()
-        || stream
-            .set_write_timeout(Some(Duration::from_secs(5)))
-            .is_err()
-    {
+    if configure_connection(&stream).is_err() {
         return;
     }
     let Ok(peer) = stream.try_clone() else {
@@ -153,7 +157,8 @@ fn serve_connection(
     loop {
         let mut line = String::new();
         let bytes_read = reader.read_line(&mut line).unwrap_or(0);
-        if bytes_read == 0 || line == "\r\n" || line == "\n" {
+        let is_blank_line = matches!(line.as_str(), "\r\n" | "\n");
+        if bytes_read == 0 || is_blank_line {
             break;
         }
     }
@@ -170,7 +175,11 @@ fn serve_connection(
             )
         },
     );
-    requested.lock().expect("lock requested paths").push(path);
+    // See `LocalServer::requested_paths` for why poisoning is recovered here.
+    requested
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .push(path);
     let header = format!(
         concat!(
             "HTTP/1.1 {}\r\n",
