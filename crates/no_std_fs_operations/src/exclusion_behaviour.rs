@@ -26,9 +26,11 @@ impl ExclusionWorld {
         self.suppressed = Some(exclusions.excludes(&SimplePath::parse(item_path)));
     }
 
-    const fn suppressed(&self) -> bool {
-        self.suppressed
-            .expect("a usage should have been evaluated before asserting")
+    fn suppressed(&self) -> bool {
+        let Some(suppressed) = self.suppressed else {
+            panic!("a usage should have been evaluated before asserting")
+        };
+        suppressed
     }
 }
 

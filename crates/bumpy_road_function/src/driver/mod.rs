@@ -28,12 +28,31 @@ use self::config::load_configuration;
 use self::diagnostic::{DiagnosticInput, emit_diagnostic};
 use self::segment_builder::{SegmentBuilder, span_line_range};
 
-dylint_linting::impl_late_lint! {
-    pub BUMPY_ROAD_FUNCTION,
-    Warn,
-    "functions should avoid multiple separated clusters of complex conditional logic",
-    BumpyRoadFunction::default()
+/// Dylint lint declaration and registration glue.
+///
+/// `impl_late_lint!` expands to the Dylint ABI entry point and the
+/// `impl_lint_pass!` accessor, neither of which has a source location that
+/// could carry documentation. Isolating the invocation keeps the expectation
+/// scoped to exactly those generated items.
+mod declaration {
+    #![expect(
+        missing_docs,
+        reason = "dylint_linting macro expansion emits items with no documentable source location"
+    )]
+
+    use super::BumpyRoadFunction;
+
+    dylint_linting::impl_late_lint! {
+        /// Lint flagging functions with multiple separated clusters of complex
+        /// conditional logic ("bumpy road" complexity profiles).
+        pub BUMPY_ROAD_FUNCTION,
+        Warn,
+        "functions should avoid multiple separated clusters of complex conditional logic",
+        BumpyRoadFunction::default()
+    }
 }
+
+pub use declaration::BUMPY_ROAD_FUNCTION;
 
 /// Lint pass that caches configuration and localization for a crate.
 pub struct BumpyRoadFunction {
@@ -62,7 +81,7 @@ impl<'tcx> LateLintPass<'tcx> for BumpyRoadFunction {
             return;
         };
 
-        self.analyse_if_not_expanded(cx, item.span, target);
+        self.analyse_if_not_expanded(cx, item.span, &target);
     }
 
     fn check_impl_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx hir::ImplItem<'tcx>) {
@@ -70,7 +89,7 @@ impl<'tcx> LateLintPass<'tcx> for BumpyRoadFunction {
             return;
         };
 
-        self.analyse_if_not_expanded(cx, item.span, target);
+        self.analyse_if_not_expanded(cx, item.span, &target);
     }
 
     fn check_trait_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx hir::TraitItem<'tcx>) {
@@ -78,7 +97,7 @@ impl<'tcx> LateLintPass<'tcx> for BumpyRoadFunction {
             return;
         };
 
-        self.analyse_if_not_expanded(cx, item.span, target);
+        self.analyse_if_not_expanded(cx, item.span, &target);
     }
 
     fn check_expr(&mut self, cx: &LateContext<'tcx>, expr: &'tcx hir::Expr<'tcx>) {
@@ -90,12 +109,12 @@ impl<'tcx> LateLintPass<'tcx> for BumpyRoadFunction {
             return;
         };
 
-        self.analyse_if_not_expanded(cx, expr.span, target);
+        self.analyse_if_not_expanded(cx, expr.span, &target);
     }
 }
 
 impl BumpyRoadFunction {
-    fn analyse_if_not_expanded(&self, cx: &LateContext<'_>, span: Span, target: AnalysisTarget) {
+    fn analyse_if_not_expanded(&self, cx: &LateContext<'_>, span: Span, target: &AnalysisTarget) {
         if span.from_expansion() {
             return;
         }
@@ -176,7 +195,7 @@ struct AnalysisTarget {
 
 fn analyse_body(
     cx: &LateContext<'_>,
-    target: AnalysisTarget,
+    target: &AnalysisTarget,
     settings: &Settings,
     localizer: &Localizer,
 ) {
@@ -207,7 +226,7 @@ fn analyse_body(
     };
 
     let smoothed = match smooth_moving_average(&signal, settings.window) {
-        Ok(signal) => signal,
+        Ok(smoothed) => smoothed,
         Err(error) => {
             cx.tcx.sess.dcx().span_delayed_bug(
                 body_span,

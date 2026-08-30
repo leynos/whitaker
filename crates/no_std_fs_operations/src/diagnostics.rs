@@ -16,7 +16,7 @@ use whitaker_common::i18n::{BundleLookup, I18nError, resolve_message_set};
 pub(crate) fn emit_diagnostic(
     cx: &LateContext<'_>,
     span: Span,
-    usage: StdFsUsage,
+    usage: &StdFsUsage,
     localizer: &Localizer,
 ) {
     let mut args: Arguments<'static> = Arguments::default();
@@ -40,9 +40,9 @@ pub(crate) fn emit_diagnostic(
         NO_STD_FS_OPERATIONS,
         span,
         rustc_lint::errors::DiagDecorator(move |lint| {
-            lint.primary_message(sanitize_message(messages.primary().to_owned()));
-            lint.note(sanitize_message(messages.note().to_owned()));
-            lint.help(sanitize_message(messages.help().to_owned()));
+            lint.primary_message(sanitize_message(messages.primary()));
+            lint.note(sanitize_message(messages.note()));
+            lint.help(sanitize_message(messages.help()));
         }),
     );
 }
@@ -67,7 +67,7 @@ fn fallback_messages(operation: &str) -> StdFsMessages {
     DiagnosticMessageSet::new(primary, note, help)
 }
 
-fn sanitize_message(text: String) -> String {
+fn sanitize_message(text: &str) -> String {
     text.chars()
         .filter(|ch| !matches!(ch, '\u{2068}' | '\u{2069}'))
         .collect()
@@ -94,13 +94,13 @@ mod tests {
 
     #[test]
     fn removes_isolation_marks() {
-        let raw = String::from("\u{2068}std::fs::read\u{2069}");
+        let raw = "\u{2068}std::fs::read\u{2069}";
         assert_eq!(sanitize_message(raw), "std::fs::read");
     }
 
     #[test]
     fn preserves_clean_text() {
-        let raw = String::from("std::fs::File::open");
-        assert_eq!(sanitize_message(raw.clone()), raw);
+        let raw = "std::fs::File::open";
+        assert_eq!(sanitize_message(raw), raw);
     }
 }

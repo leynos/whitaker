@@ -121,7 +121,10 @@ fn load_config(
     let maybe_source = config_source.borrow().clone();
     let outcome = catch_unwind(AssertUnwindSafe(|| {
         SharedConfig::load_with("module_max_lines", |crate_name| {
-            assert_eq!(crate_name, "module_max_lines");
+            assert_eq!(
+                crate_name, "module_max_lines",
+                "the loader should request configuration for the requested lint",
+            );
             maybe_source
                 .as_ref()
                 .map_or_else(SharedConfig::default, |input| {

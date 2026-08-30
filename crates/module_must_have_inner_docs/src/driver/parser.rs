@@ -78,8 +78,9 @@ pub(super) fn is_doc_comment(rest: ParseInput<'_>) -> bool {
         let (_, tail) = skip_leading_whitespace(ParseInput::from(after_bang));
         if let Some(body) = tail.strip_prefix('[') {
             let attr_end = body.find(']').unwrap_or(body.len());
-            let attr_body = AttributeBody::from(&body[..attr_end]);
-            return is_doc_attr(attr_body);
+            return body
+                .get(..attr_end)
+                .is_some_and(|attr_body| is_doc_attr(AttributeBody::from(attr_body)));
         }
     }
     false
@@ -114,12 +115,12 @@ pub(super) fn take_ident(input: ParseInput<'_>) -> Option<(ParseInput<'_>, Parse
     let (_, trimmed) = skip_leading_whitespace(input);
     let trimmed_str = trimmed.as_str();
     let mut iter = trimmed_str.char_indices();
-    let (start, ch) = iter.next()?;
-    if !is_ident_start(ch) {
+    let (start, first_ch) = iter.next()?;
+    if !is_ident_start(first_ch) {
         return None;
     }
 
-    let mut end = start + ch.len_utf8();
+    let mut end = start + first_ch.len_utf8();
     for (idx, ch) in iter {
         if is_ident_continue(ch) {
             end = idx + ch.len_utf8();
@@ -128,8 +129,8 @@ pub(super) fn take_ident(input: ParseInput<'_>) -> Option<(ParseInput<'_>, Parse
         }
     }
 
-    let ident = ParseInput::from(&trimmed_str[..end]);
-    Some((ident, ParseInput::from(&trimmed_str[end..])))
+    let (ident, remainder) = trimmed_str.split_at_checked(end)?;
+    Some((ParseInput::from(ident), ParseInput::from(remainder)))
 }
 
 // Detects documentation by matching a `doc` ident directly or inside `cfg_attr`.
@@ -160,14 +161,16 @@ const fn is_ident_continue(ch: char) -> bool {
 }
 
 pub(super) fn cfg_attr_has_doc(tail: ParseInput<'_>) -> bool {
-    let (_, tail) = skip_leading_whitespace(tail);
-    let Some(args) = tail.strip_prefix('(') else {
+    let (_, trimmed) = skip_leading_whitespace(tail);
+    let Some(args) = trimmed.strip_prefix('(') else {
         return false;
     };
     let Some(close_idx) = args.rfind(')') else {
         return false;
     };
-    let meta_list = &args[..close_idx];
+    let Some(meta_list) = args.get(..close_idx) else {
+        return false;
+    };
 
     has_doc_in_meta_list_after_first(MetaList::from(meta_list))
 }
@@ -198,7 +201,7 @@ fn has_doc_in_meta_list_after_first(list: MetaList<'_>) -> bool {
         }
     }
 
-    state.seen_comma && segment_is_doc(&list_str[state.start..])
+    state.seen_comma && list_str.get(state.start..).is_some_and(segment_is_doc)
 }
 
 fn process_char_for_doc_after_first(
@@ -217,7 +220,7 @@ fn process_char_for_doc_after_first(
             false
         }
         ',' if state.depth == 0 => {
-            if state.seen_comma && segment_is_doc(&list_str[state.start..idx]) {
+            if state.seen_comma && list_str.get(state.start..idx).is_some_and(segment_is_doc) {
                 return true;
             }
             state.seen_comma = true;

@@ -9,7 +9,6 @@
 use std::borrow::Cow;
 
 use log::debug;
-use newt_hype::base_newtype;
 use rustc_hir as hir;
 use rustc_lint::{LateContext, LateLintPass, LintContext};
 #[cfg(test)]
@@ -26,7 +25,24 @@ use whitaker_common::i18n::{
 mod inner_attr;
 mod parser;
 
-base_newtype!(StrWrapper);
+/// Shared string newtype backing the parser's snippet aliases.
+///
+/// `newt_hype::base_newtype!` emits both `Copy` and an explicit `Clone` impl.
+/// The impl is generated inside the external macro, so it has no source
+/// location that could be changed to a derive; isolating the invocation keeps
+/// the expectation scoped to exactly that generated impl.
+mod str_wrapper {
+    #![expect(
+        clippy::expl_impl_clone_on_copy,
+        reason = "newt_hype::base_newtype! emits an explicit Clone impl on a Copy type"
+    )]
+
+    use newt_hype::base_newtype;
+
+    base_newtype!(StrWrapper);
+}
+
+pub use str_wrapper::StrWrapper;
 
 pub type SourceSnippet<'a> = StrWrapper<&'a str>;
 pub type AttributeBody<'a> = StrWrapper<&'a str>;
@@ -52,12 +68,30 @@ impl<'a> ParseInput<'a> {
 const LINT_NAME: &str = "module_must_have_inner_docs";
 const MESSAGE_KEY: MessageKey<'static> = MessageKey::new(LINT_NAME);
 
-dylint_linting::impl_late_lint! {
-    pub MODULE_MUST_HAVE_INNER_DOCS,
-    Warn,
-    "modules must begin with an inner doc comment",
-    ModuleMustHaveInnerDocs::default()
+/// Dylint lint declaration and registration glue.
+///
+/// `impl_late_lint!` expands to the Dylint ABI entry point and the
+/// `impl_lint_pass!` accessor, neither of which has a source location that
+/// could carry documentation. Isolating the invocation keeps the expectation
+/// scoped to exactly those generated items.
+mod declaration {
+    #![expect(
+        missing_docs,
+        reason = "dylint_linting macro expansion emits items with no documentable source location"
+    )]
+
+    use super::ModuleMustHaveInnerDocs;
+
+    dylint_linting::impl_late_lint! {
+        /// Warns when a module body does not open with an inner doc comment.
+        pub MODULE_MUST_HAVE_INNER_DOCS,
+        Warn,
+        "modules must begin with an inner doc comment",
+        ModuleMustHaveInnerDocs::default()
+    }
 }
+
+pub use declaration::MODULE_MUST_HAVE_INNER_DOCS;
 
 /// Lint pass enforcing leading inner doc comments on modules.
 pub struct ModuleMustHaveInnerDocs {
@@ -79,9 +113,8 @@ impl<'tcx> LateLintPass<'tcx> for ModuleMustHaveInnerDocs {
     }
 
     fn check_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx hir::Item<'tcx>) {
-        let (ident, module) = match item.kind {
-            hir::ItemKind::Mod(ident, module) => (ident, module),
-            _ => return,
+        let hir::ItemKind::Mod(ident, module) = item.kind else {
+            return;
         };
 
         if item.span.from_expansion() {
@@ -192,16 +225,17 @@ fn has_inner_doc(rest: ParseInput<'_>) -> bool {
     let snippet = rest.as_str();
     let mut line_start = 0;
 
-    while line_start < snippet.len() {
-        let line_end = snippet[line_start..]
-            .find('\n')
-            .map_or(snippet.len(), |idx| line_start + idx);
-        let line = &snippet[line_start..line_end];
+    // `split_inclusive` keeps each terminator attached, so accumulating the
+    // yielded lengths reproduces the byte offset of every line start.
+    for line_with_terminator in snippet.split_inclusive('\n') {
+        let line = line_with_terminator
+            .strip_suffix('\n')
+            .unwrap_or(line_with_terminator);
         if check_line_for_inner_doc(snippet, line, line_start) {
             return true;
         }
 
-        line_start = line_end.saturating_add(1);
+        line_start = line_start.saturating_add(line_with_terminator.len());
     }
 
     false
@@ -223,10 +257,13 @@ fn check_line_for_inner_doc(snippet: &str, line: &str, line_start: usize) -> boo
         search_start = offset.saturating_add(2);
     }
 
-    while let Some(local_idx) = line[search_start..].find("#!") {
+    while let Some(local_idx) = line.get(search_start..).and_then(|tail| tail.find("#!")) {
         let absolute_idx = search_start + local_idx;
-        let offset = line_start + absolute_idx;
-        if parser::is_doc_comment(ParseInput::from(&snippet[offset..])) {
+        let snippet_offset = line_start + absolute_idx;
+        let Some(tail) = snippet.get(snippet_offset..) else {
+            break;
+        };
+        if parser::is_doc_comment(ParseInput::from(tail)) {
             return true;
         }
         search_start = absolute_idx + 2;
@@ -282,8 +319,13 @@ fn primary_span_for_disposition(
 
 fn first_token_span(module_body: Span, offset: usize, len: usize) -> Span {
     let base = module_body.shrink_to_lo();
-    let start = base.lo() + BytePos(offset as u32);
-    let hi = start + BytePos(len.max(1) as u32);
+    // Source files never exceed `u32::MAX` bytes, so a failed conversion means
+    // the caller supplied a nonsensical offset; fall back to the module start.
+    let (Ok(byte_offset), Ok(byte_len)) = (u32::try_from(offset), u32::try_from(len.max(1))) else {
+        return base;
+    };
+    let start = base.lo() + BytePos(byte_offset);
+    let hi = start + BytePos(byte_len);
     base.with_lo(start).with_hi(hi)
 }
 

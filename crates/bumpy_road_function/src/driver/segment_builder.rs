@@ -134,6 +134,10 @@ impl<'a, 'tcx> SegmentBuilder<'a, 'tcx> {
         self.push_segment(span, self.settings.weights.flow);
     }
 
+    #[expect(
+        clippy::float_arithmetic,
+        reason = "predicate weights are floating-point tuning parameters scaled by branch counts"
+    )]
     fn push_predicate_segment(&mut self, expr: &'tcx hir::Expr<'tcx>) {
         if matches!(expr.kind, ExprKind::Let(..)) {
             return;

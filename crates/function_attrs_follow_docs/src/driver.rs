@@ -32,12 +32,30 @@ impl Default for FunctionAttrsFollowDocs {
     }
 }
 
-dylint_linting::impl_late_lint! {
-    pub FUNCTION_ATTRS_FOLLOW_DOCS,
-    Warn,
-    "doc comments on functions must precede other outer attributes",
-    FunctionAttrsFollowDocs::default()
+/// Dylint lint declaration and registration glue.
+///
+/// `impl_late_lint!` expands to the Dylint ABI entry point and the
+/// `impl_lint_pass!` accessor, neither of which has a source location that
+/// could carry documentation. Isolating the invocation keeps the expectation
+/// scoped to exactly those generated items.
+mod declaration {
+    #![expect(
+        missing_docs,
+        reason = "dylint_linting macro expansion emits items with no documentable source location"
+    )]
+
+    use super::FunctionAttrsFollowDocs;
+
+    dylint_linting::impl_late_lint! {
+        /// Warns when outer attributes on a function precede its doc comments.
+        pub FUNCTION_ATTRS_FOLLOW_DOCS,
+        Warn,
+        "doc comments on functions must precede other outer attributes",
+        FunctionAttrsFollowDocs::default()
+    }
 }
+
+pub use declaration::FUNCTION_ATTRS_FOLLOW_DOCS;
 
 impl<'tcx> LateLintPass<'tcx> for FunctionAttrsFollowDocs {
     fn check_crate(&mut self, _cx: &LateContext<'tcx>) {
@@ -50,7 +68,7 @@ impl<'tcx> LateLintPass<'tcx> for FunctionAttrsFollowDocs {
         if let hir::ItemKind::Fn { .. } = item.kind {
             self.check_item_attributes(
                 cx,
-                ItemInfo::new(item.hir_id(), item.span, FunctionKind::Function),
+                &ItemInfo::new(item.hir_id(), item.span, FunctionKind::Function),
             );
         }
     }
@@ -59,7 +77,7 @@ impl<'tcx> LateLintPass<'tcx> for FunctionAttrsFollowDocs {
         if let hir::ImplItemKind::Fn(..) = item.kind {
             self.check_item_attributes(
                 cx,
-                ItemInfo::new(item.hir_id(), item.span, FunctionKind::Method),
+                &ItemInfo::new(item.hir_id(), item.span, FunctionKind::Method),
             );
         }
     }
@@ -68,7 +86,7 @@ impl<'tcx> LateLintPass<'tcx> for FunctionAttrsFollowDocs {
         if let hir::TraitItemKind::Fn(..) = item.kind {
             self.check_item_attributes(
                 cx,
-                ItemInfo::new(item.hir_id(), item.span, FunctionKind::TraitMethod),
+                &ItemInfo::new(item.hir_id(), item.span, FunctionKind::TraitMethod),
             );
         }
     }
@@ -88,9 +106,9 @@ impl ItemInfo {
 }
 
 impl<'tcx> FunctionAttrsFollowDocs {
-    fn check_item_attributes(&self, cx: &LateContext<'tcx>, item: ItemInfo) {
+    fn check_item_attributes(&self, cx: &LateContext<'tcx>, item: &ItemInfo) {
         let attrs = cx.tcx.hir_attrs(item.hir_id);
-        check_function_attributes(FunctionAttributeCheck {
+        check_function_attributes(&FunctionAttributeCheck {
             cx,
             attrs,
             item_span: item.span,
@@ -223,7 +241,7 @@ struct FunctionAttributeCheck<'tcx, 'a> {
     localizer: &'a Localizer,
 }
 
-fn check_function_attributes(check: FunctionAttributeCheck<'_, '_>) {
+fn check_function_attributes(check: &FunctionAttributeCheck<'_, '_>) {
     let item_user_editable_span = recover_user_editable_hir_span(check.item_span);
     let mut infos: Vec<AttrInfo> = check
         .attrs
@@ -244,8 +262,9 @@ fn check_function_attributes(check: FunctionAttributeCheck<'_, '_>) {
         return;
     };
 
-    let doc = &infos[doc_index];
-    let offending = &infos[offending_index];
+    let (Some(doc), Some(offending)) = (infos.get(doc_index), infos.get(offending_index)) else {
+        return;
+    };
     let diagnostic_context = DiagnosticContext {
         doc_span: doc.span(),
         offending_span: offending.span(),
@@ -265,7 +284,7 @@ fn attribute_within_item(
     item_span: Option<Span>,
     raw_item_span: Span,
 ) -> bool {
-    let Some(attribute_span) = attribute_span else {
+    let Some(editable_attribute_span) = attribute_span else {
         return false;
     };
 
@@ -273,14 +292,15 @@ fn attribute_within_item(
         return true;
     }
 
-    let item_span = item_span.unwrap_or(raw_item_span);
+    let bounding_item_span = item_span.unwrap_or(raw_item_span);
 
     // Modern nightlies exclude attributes from the item span, so outer
     // attributes sit immediately before it. Accept spans contained in the
     // item (older behaviour and inner attributes) or preceding it (outer
     // attributes on current nightlies).
-    let contained = attribute_span.lo() >= item_span.lo() && attribute_span.hi() <= item_span.hi();
-    let precedes = attribute_span.hi() <= item_span.lo();
+    let contained = editable_attribute_span.lo() >= bounding_item_span.lo()
+        && editable_attribute_span.hi() <= bounding_item_span.hi();
+    let precedes = editable_attribute_span.hi() <= bounding_item_span.lo();
     contained || precedes
 }
 
@@ -359,10 +379,10 @@ fn fallback_messages(kind: FunctionKind, attribute: &str) -> FunctionAttrsMessag
 }
 
 fn attribute_label(cx: &LateContext<'_>, span: Span, localizer: &Localizer) -> String {
-    match cx.sess().source_map().span_to_snippet(span) {
-        Ok(snippet) => snippet.trim().to_owned(),
-        Err(_) => attribute_fallback(localizer),
-    }
+    cx.sess().source_map().span_to_snippet(span).map_or_else(
+        |_| attribute_fallback(localizer),
+        |snippet| snippet.trim().to_owned(),
+    )
 }
 
 fn attribute_fallback(lookup: &impl BundleLookup) -> String {

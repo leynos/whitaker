@@ -14,12 +14,30 @@ use std::collections::HashSet;
 use whitaker::SharedConfig;
 use whitaker_common::i18n::{Localizer, get_localizer_for_lint};
 
-dylint_linting::impl_late_lint! {
-    pub NO_UNWRAP_OR_ELSE_PANIC,
-    Deny,
-    "forbid `unwrap_or_else` whose closure panics (directly or via unwrap/expect)",
-    NoUnwrapOrElsePanic::default()
+/// Dylint lint declaration and registration glue.
+///
+/// `impl_late_lint!` expands to the Dylint ABI entry point and the
+/// `impl_lint_pass!` accessor, neither of which has a source location that
+/// could carry documentation. Isolating the invocation keeps the expectation
+/// scoped to exactly those generated items.
+mod declaration {
+    #![expect(
+        missing_docs,
+        reason = "dylint_linting macro expansion emits items with no documentable source location"
+    )]
+
+    use super::NoUnwrapOrElsePanic;
+
+    dylint_linting::impl_late_lint! {
+        /// Denies `unwrap_or_else` fallbacks whose closure panics.
+        pub NO_UNWRAP_OR_ELSE_PANIC,
+        Deny,
+        "forbid `unwrap_or_else` whose closure panics (directly or via unwrap/expect)",
+        NoUnwrapOrElsePanic::default()
+    }
 }
+
+pub use declaration::NO_UNWRAP_OR_ELSE_PANIC;
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -106,7 +124,7 @@ impl<'tcx> LateLintPass<'tcx> for NoUnwrapOrElsePanic {
         );
 
         let panic_info = closure_panics(cx, body_id);
-        if !should_flag(&self.policy, &summary, &panic_info, self.is_doctest) {
+        if !should_flag(self.policy, summary, panic_info, self.is_doctest) {
             return;
         }
 

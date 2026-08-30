@@ -26,12 +26,30 @@ use whitaker_common::{AttributePath, Localizer, get_localizer_for_lint};
 use crate::context::{collect_context, is_cfg_test_attribute, summarize_context};
 use crate::diagnostics::{DiagnosticContext, emit_diagnostic};
 
-dylint_linting::impl_late_lint! {
-    pub NO_EXPECT_OUTSIDE_TESTS,
-    Deny,
-    "`.expect(..)` must not be used outside of test or doctest contexts",
-    NoExpectOutsideTests::default()
+/// Dylint lint declaration and registration glue.
+///
+/// `impl_late_lint!` expands to the Dylint ABI entry point and the
+/// `impl_lint_pass!` accessor, neither of which has a source location that
+/// could carry documentation. Isolating the invocation keeps the expectation
+/// scoped to exactly those generated items.
+mod declaration {
+    #![expect(
+        missing_docs,
+        reason = "dylint_linting macro expansion emits items with no documentable source location"
+    )]
+
+    use super::NoExpectOutsideTests;
+
+    dylint_linting::impl_late_lint! {
+        /// Denies `.expect(..)` calls outside test and doctest contexts.
+        pub NO_EXPECT_OUTSIDE_TESTS,
+        Deny,
+        "`.expect(..)` must not be used outside of test or doctest contexts",
+        NoExpectOutsideTests::default()
+    }
 }
+
+pub use declaration::NO_EXPECT_OUTSIDE_TESTS;
 
 #[derive(Default, Deserialize)]
 struct Config {
@@ -153,12 +171,12 @@ fn receiver_is_option_or_result<'tcx>(
 }
 
 fn ty_is_option_or_result<'tcx>(cx: &LateContext<'tcx>, ty: Ty<'tcx>) -> bool {
-    let ty = cx
+    let normalized = cx
         .tcx
         .normalize_erasing_regions(cx.typing_env(), ty::Unnormalized::new_wip(ty))
         .peel_refs();
 
-    let Some(adt) = ty.ty_adt_def() else {
+    let Some(adt) = normalized.ty_adt_def() else {
         return false;
     };
 

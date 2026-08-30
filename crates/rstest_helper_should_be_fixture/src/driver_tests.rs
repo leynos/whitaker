@@ -154,7 +154,7 @@ fn applying_crate_configuration_initializes_pass_state() {
         ..Config::default()
     };
 
-    pass.apply_crate_configuration(config.clone(), SharedConfig::default());
+    pass.apply_crate_configuration(config.clone(), &SharedConfig::default());
 
     assert_eq!(pass.config, config.normalized());
     assert!(pass.detection_options.use_expansion_trace_fallback());
@@ -174,7 +174,7 @@ fn check_crate_configuration_loads_and_normalizes_config() {
 
     pass.apply_loaded_crate_configuration(
         loaded_configuration::<String>(Ok(Some(config))),
-        SharedConfig::default(),
+        &SharedConfig::default(),
     );
 
     assert_eq!(pass.config.min_calls, 2);
