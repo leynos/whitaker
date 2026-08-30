@@ -10,3 +10,6 @@ publish = false
 rustc_hir = { workspace = true }
 rustc_lint = { workspace = true }
 rustc_span = { workspace = true }
+
+[lints]
+workspace = true
