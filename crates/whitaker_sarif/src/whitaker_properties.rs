@@ -219,6 +219,8 @@ impl WhitakerPropertiesBuilder {
 
 #[cfg(test)]
 mod tests {
+    //! Behavioural tests for Whitaker SARIF property bags.
+
     use super::*;
 
     #[test]

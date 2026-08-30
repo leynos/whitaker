@@ -4,6 +4,7 @@ use whitaker_sarif::{WHITAKER_FRAGMENT_KEY, WHK002_ID, WhitakerProperties};
 
 use super::{
     AcceptedPair,
+    Run0Error,
     SimilarityRatio,
     emit_run0,
     score::jaccard_similarity,
@@ -20,8 +21,8 @@ fn duplicate_hashes_do_not_inflate_jaccard_score() {
     ];
     let right = [fingerprint(1, 0..3), fingerprint(2, 3..6)];
 
-    let score = jaccard_similarity(&left, &right)
-        .unwrap_or_else(|| panic!("score should be present for non-empty fragments"));
+    let score =
+        jaccard_similarity(&left, &right).expect("score should be present for non-empty fragments");
 
     assert_eq!(score, SimilarityRatio::new(2, 2));
 }
@@ -35,7 +36,7 @@ fn jaccard_returns_none_for_empty_fragments() {
     assert!(jaccard_similarity(&non_empty, &empty).is_none());
 }
 
-fn make_t2_emission_run() -> whitaker_sarif::Run {
+fn make_t2_emission_run() -> Result<whitaker_sarif::Run, Run0Error> {
     let fragments = vec![
         fragment(&FragmentInput {
             id: "alpha",
@@ -52,19 +53,17 @@ fn make_t2_emission_run() -> whitaker_sarif::Run {
             hashes: &[(1, 0..15), (2, 0..15)],
         }),
     ];
-    let accepted = vec![AcceptedPair::new(
-        pair("alpha", "beta"),
-        NormProfile::T2,
-        SimilarityRatio::new(2, 2),
-    )];
+    let accepted: Vec<AcceptedPair> = pair("alpha", "beta")
+        .map(|candidate| AcceptedPair::new(candidate, NormProfile::T2, SimilarityRatio::new(2, 2)))
+        .into_iter()
+        .collect();
 
     emit_run0(&fragments, &accepted, &config())
-        .unwrap_or_else(|error| panic!("unexpected emit error: {error}"))
 }
 
 #[test]
 fn emitted_t2_result_has_correct_rule_id() {
-    let run = make_t2_emission_run();
+    let run = make_t2_emission_run().expect("Run 0 emission should succeed");
     let [result] = run.results.as_slice() else {
         panic!("expected one result");
     };
@@ -74,7 +73,7 @@ fn emitted_t2_result_has_correct_rule_id() {
 
 #[test]
 fn emitted_t2_result_contains_required_fingerprint_keys() {
-    let run = make_t2_emission_run();
+    let run = make_t2_emission_run().expect("Run 0 emission should succeed");
     let [result] = run.results.as_slice() else {
         panic!("expected one result");
     };
@@ -89,16 +88,16 @@ fn emitted_t2_result_contains_required_fingerprint_keys() {
 
 #[test]
 fn emitted_t2_result_properties_match_config() {
-    let run = make_t2_emission_run();
+    let run = make_t2_emission_run().expect("Run 0 emission should succeed");
     let [result] = run.results.as_slice() else {
         panic!("expected one result");
     };
     let properties = result
         .properties
         .as_ref()
-        .unwrap_or_else(|| panic!("Whitaker properties must be present"));
-    let extracted = WhitakerProperties::try_from(properties)
-        .unwrap_or_else(|error| panic!("unexpected property extraction error: {error}"));
+        .expect("Whitaker properties must be present");
+    let extracted =
+        WhitakerProperties::try_from(properties).expect("Whitaker properties should extract");
 
     assert_eq!(
         (
