@@ -93,6 +93,22 @@
 - [RFC 0002: `string_continuation_style`](rfcs/0002-string-continuation-style.md)
   proposes a context-sensitive lint that prefers `concat!()` only when it can
   preserve a cooked string literal's semantics and surrounding grammar.
+- [RFC 0003: weak representations at domain
+  boundaries](rfcs/0003-weak-domain-boundaries.md) proposes the `DOMAIN` lint
+  family and rules for discarded parser witnesses, validation without
+  refinement, and repeated boundary parsing.
+- [RFC 0004: fragile types and invalid-state
+  encodings](rfcs/0004-fragile-types.md) proposes rules for manual sum types,
+  mixed presence constraints, finite Boolean and sentinel state, redundant
+  dimensions, primitive-to-domain projections, invariant surfaces, and local
+  terminal protocols.
+- [RFC 0004 amendment: state-machine ADT and protocol
+  coverage](rfcs/0004-state-machine-adt-amendment.md) normatively broadens the
+  RFC 0004 rule contracts and establishes mdtablefix issues 443–449 as the
+  acceptance corpus.
+- [Phase 14 DOMAIN roadmap amendment](roadmap-phase-14-domain-amendment.md)
+  supersedes conflicting Phase 14 state-space tasks with the expanded RFC 0004
+  rule catalogue and the mdtablefix 443–449 acceptance corpus.
 
 ## Planning material
 

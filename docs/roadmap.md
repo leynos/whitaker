@@ -212,8 +212,8 @@
   recording. Requires 3.6.2, 3.7.3, and 3.8.3.
 - [ ] 3.8.5. Add behaviour coverage for locale overrides, plain-progress
   output, and JSON parity between text and machine-readable status commands. See
-  [Whitaker CLI design](whitaker-cli-design.md) §Accessibility and
-  localization requirements. Requires 3.6.4 and 3.8.2.
+  [Whitaker CLI design](whitaker-cli-design.md) §Accessibility and localization
+  requirements. Requires 3.6.4 and 3.8.2.
 
 ### 3.9. Compatibility release and documentation migration
 
@@ -986,3 +986,126 @@
   established clone fingerprints. See
   [RFC 0001](rfcs/0001-coderabbit-derived-lint-candidates.md) §Tier 3: recorded
   but deferred. Requires 7.5.1 and 8.5.4.
+
+## 14. Validate not, only parse domain-modelling lints
+
+### 14.1. Family registration and shared evidence model
+
+- [ ] 14.1.1. Reserve the `DOMAIN` rule family, allocate `DOMAIN001` to
+  `DOMAIN099` for boundary refinement and `DOMAIN101` to `DOMAIN199` for type
+  state-space rules, and integrate the family with experimental selector
+  semantics. See [RFC 0003](rfcs/0003-weak-domain-boundaries.md) §Family
+  contract. Requires 3.6.1.
+- [ ] 14.1.2. Add `common::domain_model` with compiler-independent boundary,
+  witness-disposition, source-use, field-role, constraint, evidence-strength,
+  and construction-surface models. See
+  [RFC 0003](rfcs/0003-weak-domain-boundaries.md) §Shared analysis architecture
+  and [RFC 0004](rfcs/0004-fragile-types.md) §Shared state-space analysis.
+  Requires 1.1.1.
+- [ ] 14.1.3. Add resolved definition-path classifiers for `FromStr`,
+  `str::parse`, `TryFrom`, `TryInto`, `NonZero*::new`, and configured custom
+  refiners, including strict path validation and bounded warnings for malformed
+  exclusions. See [RFC 0003](rfcs/0003-weak-domain-boundaries.md) §Initial
+  refiner vocabulary and §Configuration. Requires 14.1.2.
+- [ ] 14.1.4. Add local HIR use summaries and narrow MIR confirmation for
+  success-edge reachability, source mutation, alias escape, and retained
+  witnesses. Reuse the ownership-shape MIR contracts where they provide the
+  required place-equivalence facts. See
+  [RFC 0003](rfcs/0003-weak-domain-boundaries.md) §HIR prefilter and §MIR
+  confirmation. Requires 9.1.4 and 14.1.2.
+- [ ] 14.1.5. Define a deterministic finding-record schema for crate-post and
+  workspace aggregation, including rule code, item identity, source and witness
+  types, normalized constraint or refinement fingerprint, evidence strength,
+  and source spans. See
+  [RFC 0003](rfcs/0003-weak-domain-boundaries.md) §Crate-post aggregation and
+  [RFC 0004](rfcs/0004-fragile-types.md) §Diagnostic precedence and
+  deduplication. Requires 14.1.2.
+
+### 14.2. Weak-representation boundary rules
+
+- [ ] 14.2.1. Create the `discarded_parsed_value` lint crate and implement the
+  direct discarded-witness forms for `?` and explicit matches, including
+  resolved source and witness types plus inward-use labels. See
+  [RFC 0003](rfcs/0003-weak-domain-boundaries.md) §Proposed rule:
+  `discarded_parsed_value`. Requires 2.1.1, 14.1.2, and 14.1.3.
+- [ ] 14.2.2. Add mutation, alias, parser-probe, source-retention, raw-boundary,
+  test, and generated-code controls to `discarded_parsed_value`. Emit
+  machine-applicable suggestions only for proven local binding rewrites. See
+  [RFC 0003](rfcs/0003-weak-domain-boundaries.md) §Use classification,
+  §Suggestions, and §Exemptions and false-positive controls. Requires 14.1.4
+  and 14.2.1.
+- [ ] 14.2.3. Add pure, property, behaviour-driven, UI, and localized smoke
+  coverage for `discarded_parsed_value`, including raw and parsed values carried
+  together. See [RFC 0003](rfcs/0003-weak-domain-boundaries.md) §Testing
+  requirements. Requires 1.2.1, 2.3.4, and 14.2.2.
+- [ ] 14.2.4. Create `validation_without_refinement` at `allow`, summarize only
+  private same-crate intrinsic validators with no unknown effects, and require
+  success-path use of the unchanged weak value. See
+  [RFC 0003](rfcs/0003-weak-domain-boundaries.md) §Proposed rule:
+  `validation_without_refinement`. Requires 14.1.4 and 14.2.3.
+- [ ] 14.2.5. Implement `repeated_boundary_refinement` as a grouped
+  `whitaker check` advisory report using normalized parser and predicate
+  fingerprints. See [RFC 0003](rfcs/0003-weak-domain-boundaries.md) §Deferred
+  report: `repeated_boundary_refinement`. Requires 3.5.2, 14.1.5, and 14.2.4.
+
+### 14.3. Fragile-type and state-space rules
+
+- [ ] 14.3.1. Implement type-level field-role, truth-table, constraint,
+  construction-surface, and evidence-strength collection in
+  `common::domain_model::state_space`. Add bounded exhaustive tests for
+  presence and boolean constraints up to four fields. See
+  [RFC 0004](rfcs/0004-fragile-types.md) §Shared state-space analysis and
+  §Testing requirements. Requires 14.1.2.
+- [ ] 14.3.2. Create the `manual_tagged_union` lint crate and detect exhaustive
+  discriminator-to-payload mappings with rejected mismatches, including common
+  metadata outside the candidate payload group. See
+  [RFC 0004](rfcs/0004-fragile-types.md) §Proposed rule:
+  `manual_tagged_union`. Requires 2.1.1 and 14.3.1.
+- [ ] 14.3.3. Create `correlated_optional_fields` at `allow`, recognize
+  exactly-one, at-most-one, all-or-none, and implication relationships, and
+  require one exhaustive truth table or two independent evidence sites. See
+  [RFC 0004](rfcs/0004-fragile-types.md) §Proposed rule:
+  `correlated_optional_fields`. Requires 14.3.1 and 14.3.2.
+- [ ] 14.3.4. Trial Clippy's `struct_excessive_bools` against the target corpus
+  and implement `mutually_exclusive_bool_fields` only for residual cases where
+  explicit correlation evidence identifies a state subset that field counts do
+  not. See [RFC 0004](rfcs/0004-fragile-types.md) §Proposed rule:
+  `mutually_exclusive_bool_fields`. Requires 14.3.1.
+- [ ] 14.3.5. Create `bypassable_type_invariant` at `allow`, combining
+  intrinsic invariant summaries with effectively visible public fields,
+  unchecked constructors, independent setters, mutable inner access, and
+  deserialization paths. Add builder, raw-model, FFI, runtime-resource, and
+  external-contract suppressions. See
+  [RFC 0004](rfcs/0004-fragile-types.md) §Proposed rule:
+  `bypassable_type_invariant`. Requires 14.1.4 and 14.3.1.
+- [ ] 14.3.6. Implement `invalid_default` as a report-only symbolic evaluator
+  for direct constants and known standard defaults against supported intrinsic
+  constraints. Unknown facts must suppress rather than approximate. See
+  [RFC 0004](rfcs/0004-fragile-types.md) §Proposed report:
+  `invalid_default`. Requires 14.3.1 and 14.3.5.
+
+### 14.4. Integration, documentation, and promotion
+
+- [ ] 14.4.1. Add implemented `DOMAIN` rules to the experimental suite with
+  independent feature gates, stable rule metadata, and diagnostic precedence
+  that emits one primary finding per correlated field group. See
+  [RFC 0003](rfcs/0003-weak-domain-boundaries.md) §Category, not monolith and
+  [RFC 0004](rfcs/0004-fragile-types.md) §Diagnostic precedence and
+  deduplication. Requires 14.2.3, 14.3.2, and 14.3.3.
+- [ ] 14.4.2. Add English, Welsh, and Gaelic Fluent entries and structured
+  diagnostic arguments for every implemented rule. See
+  [RFC 0003](rfcs/0003-weak-domain-boundaries.md) §Diagnostics and localization
+  and [RFC 0004](rfcs/0004-fragile-types.md) §Diagnostics and localization.
+  Requires 2.3.4 and 14.4.1.
+- [ ] 14.4.3. Update the users' and developers' guides with family selection,
+  intrinsic-versus-extrinsic validity, source-preserving parsed values,
+  builder/raw-type exemptions, suppression guidance, and staged migration
+  examples. Requires 14.4.1.
+- [ ] 14.4.4. Run the family over representative df12 and third-party corpora,
+  classify findings by the RFC exception models, publish the false-positive
+  budget, and promote each rule independently. `DOMAIN001` and `DOMAIN101`
+  should receive the first promotion decisions; `DOMAIN104` and `DOMAIN105`
+  remain experimental or report-only until their proof boundaries are stable.
+  See [RFC 0003](rfcs/0003-weak-domain-boundaries.md) §Downstream corpus and
+  [RFC 0004](rfcs/0004-fragile-types.md) §Downstream corpus. Requires 14.4.2
+  and 14.4.3.
