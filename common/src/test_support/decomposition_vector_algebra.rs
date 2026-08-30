@@ -221,3 +221,29 @@ pub fn method_vector_algebra(
         right_norm_squared: right_vector.norm_squared(),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    //! Compile-time coverage for vector-algebra report accessors.
+
+    use super::MethodVectorAlgebraReport;
+
+    const REPORT: MethodVectorAlgebraReport = MethodVectorAlgebraReport {
+        left_dot_right: 3,
+        right_dot_left: 3,
+        left_norm_squared: 5,
+        right_norm_squared: 7,
+    };
+    const LEFT_DOT_RIGHT: u64 = REPORT.left_dot_right();
+    const RIGHT_DOT_LEFT: u64 = REPORT.right_dot_left();
+    const LEFT_NORM_SQUARED: u64 = REPORT.left_norm_squared();
+    const RIGHT_NORM_SQUARED: u64 = REPORT.right_norm_squared();
+
+    #[test]
+    fn report_accessors_are_usable_in_const_contexts() {
+        assert_eq!(LEFT_DOT_RIGHT, 3);
+        assert_eq!(RIGHT_DOT_LEFT, 3);
+        assert_eq!(LEFT_NORM_SQUARED, 5);
+        assert_eq!(RIGHT_NORM_SQUARED, 7);
+    }
+}

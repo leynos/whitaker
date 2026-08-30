@@ -16,7 +16,10 @@ fn update_status_after_install_refreshes_link_for_local_cargo_dylint_installs(
     with_fake_binary_on_path("dylint-link", || {
         // The companion refresh confirms the dylint-link version against
         // Cargo's installed-binary registry after the PATH probe passes.
-        let executor = crate::test_utils::StubExecutor::new(vec![dylint_link_install_list_check()]);
+        let executor = crate::test_utils::StubExecutor::new(vec![
+            dylint_link_install_list_check()
+                .expect("dylint-link dependency version should resolve"),
+        ]);
         let mut status = DylintToolStatus {
             cargo_dylint: false,
             dylint_link: false,

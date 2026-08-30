@@ -39,8 +39,9 @@ pub fn pinned_toolchain_channel() -> Result<String, String> {
 
 /// Checks if a toolchain is installed on the host system.
 ///
-/// Sanitizes rustup environment by always setting `RUSTUP_AUTO_INSTALL=0` and
-/// `RUSTUP_TOOLCHAIN` to prevent host settings from leaking into tests.
+/// Sanitizes the rustup environment by setting `RUSTUP_AUTO_INSTALL=0` and
+/// removing `RUSTUP_TOOLCHAIN`, preventing host settings from leaking into
+/// tests.
 pub fn is_toolchain_installed(channel: &str) -> bool {
     Command::new("rustup")
         .args(["run", channel, "rustc", "--version"])
