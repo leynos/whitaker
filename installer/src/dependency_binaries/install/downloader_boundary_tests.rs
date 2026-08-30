@@ -39,17 +39,11 @@ struct DownloadHarness {
 }
 
 impl DownloadHarness {
-    fn archive_url(&self) -> String {
-        self.server.url("/archive.tgz")
-    }
+    fn archive_url(&self) -> String { self.server.url("/archive.tgz") }
 
-    fn checksum_url(&self) -> String {
-        self.server.url("/archive.tgz.sha256")
-    }
+    fn checksum_url(&self) -> String { self.server.url("/archive.tgz.sha256") }
 
-    fn requested_paths(&self) -> Vec<String> {
-        self.server.requested_paths()
-    }
+    fn requested_paths(&self) -> Vec<String> { self.server.requested_paths() }
 
     /// Open the destination's parent directory as a capability, for asserting on
     /// the written archive.

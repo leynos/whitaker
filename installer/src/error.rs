@@ -4,9 +4,10 @@
 //! to users when installation fails. Each error includes recovery hints where
 //! applicable.
 
-use crate::crate_name::CrateName;
 use camino::Utf8PathBuf;
 use thiserror::Error;
+
+use crate::crate_name::CrateName;
 
 /// Errors that can occur during the installation process.
 #[derive(Debug, Error)]

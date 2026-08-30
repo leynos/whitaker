@@ -4,9 +4,7 @@
 //! and manifests from the GitHub rolling release, enabling dependency
 //! injection for testing.
 
-use std::path::Path;
-use std::sync::OnceLock;
-use std::time::Duration;
+use std::{path::Path, sync::OnceLock, time::Duration};
 
 /// The GitHub repository owner/name for URL construction.
 const GITHUB_REPO: &str = "leynos/whitaker";
@@ -157,8 +155,9 @@ fn map_ureq_error(url: &str, err: &ureq::Error) -> DownloadError {
 mod tests {
     //! Tests for artefact download URL and error mapping behaviour.
 
-    use super::*;
     use rstest::rstest;
+
+    use super::*;
 
     #[test]
     fn asset_url_contains_repo_and_tag() {

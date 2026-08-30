@@ -4,20 +4,31 @@
 //! available, then installs any missing tools by preferring repository-hosted
 //! release archives before falling back to `cargo binstall` or `cargo install`.
 
-use crate::dependency_binaries::{
-    DependencyBinary, DependencyBinaryInstaller, RepositoryDependencyBinaryInstaller,
-    find_dependency_binary, host_target,
+use std::{
+    io,
+    io::Write,
+    path::Path,
+    process::{Command, Output},
 };
-use crate::dirs::{BaseDirs, SystemBaseDirs};
-use crate::error::{InstallerError, Result};
-use std::io;
-use std::io::Write;
-use std::path::Path;
-use std::process::{Command, Output};
+
+use crate::{
+    dependency_binaries::{
+        DependencyBinary,
+        DependencyBinaryInstaller,
+        RepositoryDependencyBinaryInstaller,
+        find_dependency_binary,
+        host_target,
+    },
+    dirs::{BaseDirs, SystemBaseDirs},
+    error::{InstallerError, Result},
+};
 
 mod install;
 use install::{
-    InstallContext, cargo_fallback_mode, command_succeeds, install_missing_tools,
+    InstallContext,
+    cargo_fallback_mode,
+    command_succeeds,
+    install_missing_tools,
     repository_install_context,
 };
 
@@ -77,9 +88,7 @@ pub struct DylintToolStatus {
 impl DylintToolStatus {
     /// Returns `true` when both tools are installed.
     #[must_use]
-    pub const fn all_installed(&self) -> bool {
-        self.cargo_dylint && self.dylint_link
-    }
+    pub const fn all_installed(&self) -> bool { self.cargo_dylint && self.dylint_link }
 }
 
 /// Additional install options used by test-support hooks.
@@ -274,9 +283,7 @@ fn is_binstall_available(executor: &dyn CommandExecutor) -> bool {
 }
 
 #[cfg(test)]
-fn is_binary_on_path(binary_name: &str) -> bool {
-    find_binary_on_path(binary_name).is_some()
-}
+fn is_binary_on_path(binary_name: &str) -> bool { find_binary_on_path(binary_name).is_some() }
 
 fn find_binary_on_path(binary_name: &str) -> Option<std::path::PathBuf> {
     let path_var = std::env::var_os("PATH")?;
@@ -344,9 +351,7 @@ fn is_executable_file(path: &Path) -> bool {
 }
 
 #[cfg(not(unix))]
-fn is_executable_file(path: &Path) -> bool {
-    path.is_file()
-}
+fn is_executable_file(path: &Path) -> bool { path.is_file() }
 
 #[cfg(test)]
 mod path_tests;

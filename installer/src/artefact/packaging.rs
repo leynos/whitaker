@@ -5,8 +5,8 @@
 //!
 //! # Preconditions
 //!
-//! - All library file paths in [`PackageParams::library_files`] must
-//!   exist on disk and have a filename component.
+//! - All library file paths in [`PackageParams::library_files`] must exist on disk and have a
+//!   filename component.
 //! - The `output_dir` must exist and be writable.
 //!
 //! # Outputs and side effects
@@ -27,19 +27,25 @@
 //! `SHA-256(downloaded_archive)` and comparing against the `sha256`
 //! field from the manifest obtained via the release API.
 
-use super::git_sha::GitSha;
-use super::manifest::{GeneratedAt, Manifest, ManifestContent, ManifestProvenance};
-use super::naming::ArtefactName;
-use super::packaging_error::PackagingError;
-use super::schema_version::SchemaVersion;
-use super::sha256_digest::Sha256Digest;
-use super::target::TargetTriple;
-use super::toolchain_channel::ToolchainChannel;
-use crate::hex::to_lower_hex;
+use std::{
+    fs,
+    io::Read,
+    path::{Path, PathBuf},
+};
+
 use sha2::{Digest, Sha256};
-use std::fs;
-use std::io::Read;
-use std::path::{Path, PathBuf};
+
+use super::{
+    git_sha::GitSha,
+    manifest::{GeneratedAt, Manifest, ManifestContent, ManifestProvenance},
+    naming::ArtefactName,
+    packaging_error::PackagingError,
+    schema_version::SchemaVersion,
+    sha256_digest::Sha256Digest,
+    target::TargetTriple,
+    toolchain_channel::ToolchainChannel,
+};
+use crate::hex::to_lower_hex;
 
 /// Input parameters for the [`package_artefact`] function.
 ///
@@ -139,8 +145,7 @@ pub fn create_archive(
 /// use whitaker_installer::artefact::packaging::generate_manifest_json;
 ///
 /// let json = generate_manifest_json(&manifest).expect("serialization");
-/// let parsed: serde_json::Value =
-///     serde_json::from_str(&json).expect("valid JSON");
+/// let parsed: serde_json::Value = serde_json::from_str(&json).expect("valid JSON");
 /// let obj = parsed.as_object().expect("top-level object");
 /// assert!(obj.contains_key("git_sha"));
 /// assert!(obj.contains_key("sha256"));

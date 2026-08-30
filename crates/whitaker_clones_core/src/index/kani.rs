@@ -17,36 +17,39 @@
 //! coverage:
 //!
 //! - `verify_lsh_config_new_smoke` checks one accepted concrete path.
-//! - `verify_lsh_config_new_symbolic` exhausts the constructor across the
-//!   bounded `[0, 128]²` input space.
-//! - `verify_lsh_config_new_overflow_product` drives the `checked_mul(None)`
-//!   branch with non-zero overflowing inputs.
-//! - `verify_min_hasher_sketch_rejects_empty_input` checks the empty
-//!   retained-fingerprint boundary.
-//! - `verify_min_hasher_sketch_is_deterministic` checks first, middle, and last
-//!   signature lanes for wide boundary-hash inputs.
-//! - `verify_min_hasher_sketch_ignores_duplicate_hashes` compares a wide
-//!   boundary-hash set against the same set with repeated hashes.
-//! - `verify_lsh_index_rejects_self_pairs` checks that repeated insertion of
-//!   one fragment cannot produce a self-pair.
-//! - `verify_lsh_index_canonicalizes_pair_order` checks that reverse lexical
-//!   insertion still emits one canonical pair.
-//! - `verify_lsh_index_deduplicates_repeated_band_collisions` checks that two
-//!   fragments colliding in two bands still emit one candidate pair.
-//! - `verify_lsh_index_is_insertion_order_independent` checks that a bounded
-//!   three-fragment index produces the same candidates in forward and reverse
-//!   insertion order.
-
-use crate::token::Fingerprint;
+//! - `verify_lsh_config_new_symbolic` exhausts the constructor across the bounded `[0, 128]²` input
+//!   space.
+//! - `verify_lsh_config_new_overflow_product` drives the `checked_mul(None)` branch with non-zero
+//!   overflowing inputs.
+//! - `verify_min_hasher_sketch_rejects_empty_input` checks the empty retained-fingerprint boundary.
+//! - `verify_min_hasher_sketch_is_deterministic` checks first, middle, and last signature lanes for
+//!   wide boundary-hash inputs.
+//! - `verify_min_hasher_sketch_ignores_duplicate_hashes` compares a wide boundary-hash set against
+//!   the same set with repeated hashes.
+//! - `verify_lsh_index_rejects_self_pairs` checks that repeated insertion of one fragment cannot
+//!   produce a self-pair.
+//! - `verify_lsh_index_canonicalizes_pair_order` checks that reverse lexical insertion still emits
+//!   one canonical pair.
+//! - `verify_lsh_index_deduplicates_repeated_band_collisions` checks that two fragments colliding
+//!   in two bands still emit one candidate pair.
+//! - `verify_lsh_index_is_insertion_order_independent` checks that a bounded three-fragment index
+//!   produces the same candidates in forward and reverse insertion order.
 
 use super::{
-    CandidatePair, FragmentId, IndexError, LshConfig, LshIndex, MINHASH_SIZE, MinHashSignature,
+    CandidatePair,
+    FragmentId,
+    IndexError,
+    LshConfig,
+    LshIndex,
+    MINHASH_SIZE,
+    MinHashSignature,
     MinHasher,
 };
+use crate::token::Fingerprint;
 
-const KANI_MINHASH_SEED: u64 = 0xA076_1D64_78BD_642F;
-const KANI_MINHASH_MIDDLE_SEED: u64 = 0xE703_7ED1_A0B4_28DB;
-const KANI_MINHASH_LAST_SEED: u64 = 0x8EBC_6AF0_9C88_C6E3;
+const KANI_MINHASH_SEED: u64 = 0xa076_1d64_78bd_642f;
+const KANI_MINHASH_MIDDLE_SEED: u64 = 0xe703_7ed1_a0b4_28db;
+const KANI_MINHASH_LAST_SEED: u64 = 0x8ebc_6af0_9c88_c6e3;
 const KANI_LSH_UNWIND: usize = 7;
 const _: () = assert!(KANI_LSH_UNWIND == super::lsh::KANI_MAX_RECORDED_PAIRS + 1);
 
@@ -62,9 +65,7 @@ fn checked_lane_hasher() -> MinHasher {
     )
 }
 
-fn fragment(id: &str) -> FragmentId {
-    FragmentId::from(id)
-}
+fn fragment(id: &str) -> FragmentId { FragmentId::from(id) }
 
 fn repeated_signature(value: u64) -> MinHashSignature {
     MinHashSignature::new(&[value; MINHASH_SIZE])

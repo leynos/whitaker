@@ -28,6 +28,7 @@ use std::collections::{BTreeSet, HashMap};
 ///
 /// ```
 /// use std::collections::BTreeSet;
+///
 /// use whitaker_common::lcom4::MethodInfo;
 ///
 /// let method = MethodInfo::new(
@@ -55,6 +56,7 @@ impl MethodInfo {
     ///
     /// ```
     /// use std::collections::BTreeSet;
+    ///
     /// use whitaker_common::lcom4::MethodInfo;
     ///
     /// let m = MethodInfo::new(
@@ -83,15 +85,14 @@ impl MethodInfo {
     ///
     /// ```
     /// use std::collections::BTreeSet;
+    ///
     /// use whitaker_common::lcom4::MethodInfo;
     ///
     /// let m = MethodInfo::new("read", BTreeSet::new(), BTreeSet::new());
     /// assert_eq!(m.name(), "read");
     /// ```
     #[must_use]
-    pub fn name(&self) -> &str {
-        &self.name
-    }
+    pub fn name(&self) -> &str { &self.name }
 
     /// Returns the set of field names accessed by this method.
     ///
@@ -99,19 +100,14 @@ impl MethodInfo {
     ///
     /// ```
     /// use std::collections::BTreeSet;
+    ///
     /// use whitaker_common::lcom4::MethodInfo;
     ///
-    /// let m = MethodInfo::new(
-    ///     "read",
-    ///     BTreeSet::from(["buf".into()]),
-    ///     BTreeSet::new(),
-    /// );
+    /// let m = MethodInfo::new("read", BTreeSet::from(["buf".into()]), BTreeSet::new());
     /// assert!(m.accessed_fields().contains("buf"));
     /// ```
     #[must_use]
-    pub const fn accessed_fields(&self) -> &BTreeSet<String> {
-        &self.accessed_fields
-    }
+    pub const fn accessed_fields(&self) -> &BTreeSet<String> { &self.accessed_fields }
 
     /// Returns the set of method names called directly by this method.
     ///
@@ -119,6 +115,7 @@ impl MethodInfo {
     ///
     /// ```
     /// use std::collections::BTreeSet;
+    ///
     /// use whitaker_common::lcom4::MethodInfo;
     ///
     /// let m = MethodInfo::new(
@@ -129,9 +126,7 @@ impl MethodInfo {
     /// assert!(m.called_methods().contains("validate"));
     /// ```
     #[must_use]
-    pub const fn called_methods(&self) -> &BTreeSet<String> {
-        &self.called_methods
-    }
+    pub const fn called_methods(&self) -> &BTreeSet<String> { &self.called_methods }
 }
 
 /// Disjoint-set forest for connected component counting.
@@ -285,6 +280,7 @@ fn union_by_method_calls(methods: &[MethodInfo], uf: &mut UnionFind) {
 ///
 /// ```
 /// use std::collections::BTreeSet;
+///
 /// use whitaker_common::lcom4::{MethodInfo, cohesion_components};
 ///
 /// let methods = vec![
@@ -297,6 +293,7 @@ fn union_by_method_calls(methods: &[MethodInfo], uf: &mut UnionFind) {
 ///
 /// ```
 /// use std::collections::BTreeSet;
+///
 /// use whitaker_common::lcom4::{MethodInfo, cohesion_components};
 ///
 /// let methods = vec![

@@ -70,13 +70,9 @@ struct FeatureIdentity {
 }
 
 impl FeatureMetadata {
-    pub(crate) const fn category(&self) -> FeatureCategory {
-        self.category
-    }
+    pub(crate) const fn category(&self) -> FeatureCategory { self.category }
 
-    pub(crate) fn display(&self) -> &str {
-        &self.display
-    }
+    pub(crate) fn display(&self) -> &str { &self.display }
 }
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -87,17 +83,11 @@ pub(crate) struct MethodFeatureVector {
 }
 
 impl MethodFeatureVector {
-    pub(crate) fn method_name(&self) -> &str {
-        &self.method_name
-    }
+    pub(crate) fn method_name(&self) -> &str { &self.method_name }
 
-    pub(crate) const fn weights(&self) -> &BTreeMap<String, u64> {
-        &self.weights
-    }
+    pub(crate) const fn weights(&self) -> &BTreeMap<String, u64> { &self.weights }
 
-    pub(crate) const fn metadata(&self) -> &BTreeMap<String, FeatureMetadata> {
-        &self.metadata
-    }
+    pub(crate) const fn metadata(&self) -> &BTreeMap<String, FeatureMetadata> { &self.metadata }
 
     pub(crate) fn norm_squared(&self) -> u64 {
         self.weights.values().map(|weight| weight * weight).sum()
@@ -199,8 +189,10 @@ pub(crate) fn build_feature_vector(profile: &MethodProfile) -> MethodFeatureVect
 /// For testing and integration purposes, use the public test support wrapper:
 ///
 /// ```
-/// use whitaker_common::MethodProfileBuilder;
-/// use whitaker_common::test_support::decomposition::methods_meet_cosine_threshold;
+/// use whitaker_common::{
+///     MethodProfileBuilder,
+///     test_support::decomposition::methods_meet_cosine_threshold,
+/// };
 ///
 /// let mut left_builder = MethodProfileBuilder::new("parse_tokens");
 /// left_builder.record_accessed_field("grammar");
@@ -322,9 +314,7 @@ fn add_feature(
     });
 }
 
-fn canonical_feature_value(value: &str) -> String {
-    value.trim().to_lowercase()
-}
+fn canonical_feature_value(value: &str) -> String { value.trim().to_lowercase() }
 
 fn feature_identity(value: &str) -> FeatureIdentity {
     let canonical = canonical_feature_value(value);

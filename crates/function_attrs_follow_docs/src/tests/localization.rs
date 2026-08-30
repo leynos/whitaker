@@ -10,7 +10,11 @@ use rstest_bdd_macros::{given, scenario, then, when};
 use whitaker_common::i18n::{I18nError, testing::FailingLookup};
 
 use super::{
-    FunctionAttrsMessages, FunctionKind, Localizer, MESSAGE_KEY, attribute_fallback,
+    FunctionAttrsMessages,
+    FunctionKind,
+    Localizer,
+    MESSAGE_KEY,
+    attribute_fallback,
     localized_messages,
 };
 
@@ -56,14 +60,10 @@ impl LocalizationWorld {
 
 #[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
-fn world() -> LocalizationWorld {
-    LocalizationWorld::default()
-}
+fn world() -> LocalizationWorld { LocalizationWorld::default() }
 
 #[given("the locale {locale} is selected")]
-fn given_locale(world: &LocalizationWorld, locale: String) {
-    world.use_localizer(&locale);
-}
+fn given_locale(world: &LocalizationWorld, locale: String) { world.use_localizer(&locale); }
 
 #[given("the subject kind is {kind}")]
 fn given_subject(world: &LocalizationWorld, kind: String) {
@@ -81,14 +81,10 @@ fn given_attribute(world: &LocalizationWorld, label: String) {
 }
 
 #[given("the attribute snippet cannot be retrieved")]
-fn given_attribute_fallback(world: &LocalizationWorld) {
-    world.use_attribute_fallback.set(true);
-}
+fn given_attribute_fallback(world: &LocalizationWorld) { world.use_attribute_fallback.set(true); }
 
 #[given("localization fails")]
-fn given_failure(world: &LocalizationWorld) {
-    world.failing.set(true);
-}
+fn given_failure(world: &LocalizationWorld) { world.failing.set(true); }
 
 #[when("I localize the diagnostic")]
 fn when_localize(world: &LocalizationWorld) {
@@ -149,30 +145,18 @@ fn then_failure(world: &LocalizationWorld, key: String) {
 }
 
 #[scenario(path = "tests/features/function_attrs_localization.feature", index = 0)]
-fn scenario_fallback(world: LocalizationWorld) {
-    let _ = world;
-}
+fn scenario_fallback(world: LocalizationWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/function_attrs_localization.feature", index = 1)]
-fn scenario_welsh(world: LocalizationWorld) {
-    let _ = world;
-}
+fn scenario_welsh(world: LocalizationWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/function_attrs_localization.feature", index = 2)]
-fn scenario_attribute_fallback(world: LocalizationWorld) {
-    let _ = world;
-}
+fn scenario_attribute_fallback(world: LocalizationWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/function_attrs_localization.feature", index = 3)]
-fn scenario_unknown_locale(world: LocalizationWorld) {
-    let _ = world;
-}
+fn scenario_unknown_locale(world: LocalizationWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/function_attrs_localization.feature", index = 4)]
-fn scenario_failure(world: LocalizationWorld) {
-    let _ = world;
-}
+fn scenario_failure(world: LocalizationWorld) { let _ = world; }
 
-fn failing_lookup() -> FailingLookup {
-    FailingLookup::new(MESSAGE_KEY.as_ref())
-}
+fn failing_lookup() -> FailingLookup { FailingLookup::new(MESSAGE_KEY.as_ref()) }

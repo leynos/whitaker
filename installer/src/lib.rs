@@ -7,8 +7,7 @@
 //! # Modules
 //!
 //! - [`artefact`] - Artefact naming, manifest schema, and verification policy
-//! - [`binstall_metadata`] - Cargo-binstall metadata constants and template
-//!   expansion
+//! - [`binstall_metadata`] - Cargo-binstall metadata constants and template expansion
 //! - [`builder`] - Cargo build orchestration for lint crates
 //! - [`cli`] - Command-line argument definitions
 //! - [`crate_name`] - Semantic wrapper for lint crate names
@@ -17,8 +16,7 @@
 //! - [`error`] - Semantic error types with recovery hints
 //! - [`git`] - Repository cloning and updating
 //! - [`install_metrics`] - Local installer metrics persistence and summaries
-//! - [`installer_packaging`] - Installer binary archive packaging for release
-//!   distribution
+//! - [`installer_packaging`] - Installer binary archive packaging for release distribution
 //! - [`list`] - List command implementation
 //! - [`list_output`] - Output formatting for lint listing
 //! - [`output`] - Shell snippet generation for environment configuration
@@ -28,8 +26,8 @@
 //! - [`resolution`] - Crate resolution and validation
 //! - [`scanner`] - Lint scanner for discovering installed libraries
 //! - [`stager`] - File staging with platform-specific naming conventions
-//! - [`test_support`] - Hidden test-only hooks shared by installer behavioural
-//!   and integration tests
+//! - [`test_support`] - Hidden test-only hooks shared by installer behavioural and integration
+//!   tests
 //! - [`toolchain`] - Rust toolchain detection and validation
 //! - [`version`] - Semantic crate version wrapper
 //! - [`workspace`] - Workspace detection and path resolution

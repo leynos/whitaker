@@ -6,7 +6,10 @@ use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use tempfile::TempDir;
 use whitaker_installer::install_metrics::{
-    InstallMetrics, InstallMode, RecordOutcome, record_install_at_path,
+    InstallMetrics,
+    InstallMode,
+    RecordOutcome,
+    record_install_at_path,
 };
 
 #[derive(Default)]
@@ -22,9 +25,7 @@ struct InstallMetricsWorld {
 
 #[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
-fn world() -> InstallMetricsWorld {
-    InstallMetricsWorld::default()
-}
+fn world() -> InstallMetricsWorld { InstallMetricsWorld::default() }
 
 /// Compare two values for equality, reporting a mismatch as an error.
 fn ensure_eq<T, U>(actual: &T, expected: &U, context: &str) -> Result<(), String>
@@ -131,9 +132,7 @@ fn when_build_recorded(world: &mut InstallMetricsWorld, millis: u64) -> Result<(
 }
 
 #[when("download and build rates are calculated")]
-fn when_rates_calculated(world: &mut InstallMetricsWorld) {
-    let _ = world;
-}
+fn when_rates_calculated(world: &mut InstallMetricsWorld) { let _ = world; }
 
 #[then("total installs is {expected:u64}")]
 fn then_total_installs(world: &mut InstallMetricsWorld, expected: u64) -> Result<(), String> {
@@ -259,46 +258,34 @@ fn then_warning_text_contains(
     path = "tests/features/install_metrics.feature",
     name = "Record a successful prebuilt-download install"
 )]
-fn scenario_download_install(world: InstallMetricsWorld) {
-    let _ = world;
-}
+fn scenario_download_install(world: InstallMetricsWorld) { let _ = world; }
 
 #[scenario(
     path = "tests/features/install_metrics.feature",
     name = "Record a successful build-only install"
 )]
-fn scenario_build_only_install(world: InstallMetricsWorld) {
-    let _ = world;
-}
+fn scenario_build_only_install(world: InstallMetricsWorld) { let _ = world; }
 
 #[scenario(
     path = "tests/features/install_metrics.feature",
     name = "Record download and build installs"
 )]
-fn scenario_download_and_build_installs(world: InstallMetricsWorld) {
-    let _ = world;
-}
+fn scenario_download_and_build_installs(world: InstallMetricsWorld) { let _ = world; }
 
 #[scenario(
     path = "tests/features/install_metrics.feature",
     name = "Recover from a corrupt metrics file"
 )]
-fn scenario_recover_from_corrupt_file(world: InstallMetricsWorld) {
-    let _ = world;
-}
+fn scenario_recover_from_corrupt_file(world: InstallMetricsWorld) { let _ = world; }
 
 #[scenario(
     path = "tests/features/install_metrics.feature",
     name = "Report write failures as warning text"
 )]
-fn scenario_report_write_failures(world: InstallMetricsWorld) {
-    let _ = world;
-}
+fn scenario_report_write_failures(world: InstallMetricsWorld) { let _ = world; }
 
 #[scenario(
     path = "tests/features/install_metrics.feature",
     name = "Zero-state rates are zero"
 )]
-fn scenario_zero_state_rates(world: InstallMetricsWorld) {
-    let _ = world;
-}
+fn scenario_zero_state_rates(world: InstallMetricsWorld) { let _ = world; }

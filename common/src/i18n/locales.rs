@@ -19,9 +19,7 @@ static ALL_LOCALES: std::sync::LazyLock<Vec<String>> = std::sync::LazyLock::new(
 
 /// Return a sorted slice of the available locales.
 #[must_use]
-pub fn available_locales() -> &'static [String] {
-    ALL_LOCALES.as_slice()
-}
+pub fn available_locales() -> &'static [String] { ALL_LOCALES.as_slice() }
 
 /// Check whether a locale tag is supported by the embedded bundles.
 #[must_use]

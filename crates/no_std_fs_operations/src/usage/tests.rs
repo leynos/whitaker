@@ -1,6 +1,7 @@
 //! Tests for classifying `std::fs` usage and its reporting metadata.
-use super::{StdFsUsage, UsageCategory, label_is_std_fs};
 use rstest::rstest;
+
+use super::{StdFsUsage, UsageCategory, label_is_std_fs};
 
 #[rstest]
 #[case("std::fs", true)]

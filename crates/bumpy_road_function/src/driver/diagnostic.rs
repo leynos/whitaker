@@ -3,19 +3,22 @@
 //! The lint warns when it detects two or more separated bump intervals in the
 //! smoothed signal and highlights the two most severe bumps.
 
-use std::borrow::Cow;
-use std::ops::RangeInclusive;
+use std::{borrow::Cow, ops::RangeInclusive};
 
-use crate::analysis::{BumpInterval, Settings, top_two_bumps};
 use fluent_templates::fluent_bundle::FluentValue;
 use rustc_lint::{LateContext, LintContext};
 use rustc_span::{BytePos, Span};
-use whitaker_common::i18n::DiagnosticMessageSet;
 use whitaker_common::{
-    Arguments, Localizer, MessageResolution, noop_reporter, safe_resolve_message_set,
+    Arguments,
+    Localizer,
+    MessageResolution,
+    i18n::DiagnosticMessageSet,
+    noop_reporter,
+    safe_resolve_message_set,
 };
 
 use super::{BUMPY_ROAD_FUNCTION, LINT_NAME, MESSAGE_KEY};
+use crate::analysis::{BumpInterval, Settings, top_two_bumps};
 
 /// Payload describing a lint diagnostic to emit.
 pub(super) struct DiagnosticInput<'a> {

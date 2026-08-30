@@ -6,13 +6,23 @@ use rstest::rstest;
 use serde_json::json;
 
 use super::{
-    LoweringLimits, MAX_AST_DEPTH, MAX_AST_NODES, kind_id, leaf_class,
+    LoweringLimits,
+    MAX_AST_DEPTH,
+    MAX_AST_NODES,
+    kind_id,
+    leaf_class,
     validate_covering_node_budget,
 };
 use crate::{
-    AstError, AstResult, ByteSpan, Production,
+    AstError,
+    AstResult,
+    ByteSpan,
+    Production,
     ast::{KindId, LeafClass, NormalizedNode, NormalizedTree, PARSER_SCHEMA_VERSION},
-    canonical_hash, kind_counts, lower_span, production_multiset,
+    canonical_hash,
+    kind_counts,
+    lower_span,
+    production_multiset,
 };
 
 fn kind_name(kind: KindId) -> String {

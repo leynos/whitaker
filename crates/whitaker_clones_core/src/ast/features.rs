@@ -9,7 +9,10 @@ use super::{Depth, KindId, NormalizedNode, NormalizedTree};
 /// # Examples
 ///
 /// ```
-/// use whitaker_clones_core::{KindCounts, ast::{Depth, KindId}};
+/// use whitaker_clones_core::{
+///     KindCounts,
+///     ast::{Depth, KindId},
+/// };
 ///
 /// let counts = KindCounts::default();
 /// assert_eq!(counts.count(KindId::new(1), Depth::root()), 0);
@@ -57,19 +60,13 @@ impl KindWeight {
 
     /// Returns a zero weight.
     #[must_use]
-    pub const fn zero() -> Self {
-        Self(0)
-    }
+    pub const fn zero() -> Self { Self(0) }
 
     /// Returns the fixed-point value.
     #[must_use]
-    pub const fn get(self) -> u128 {
-        self.0
-    }
+    pub const fn get(self) -> u128 { self.0 }
 
-    const fn from_raw(value: u128) -> Self {
-        Self(value)
-    }
+    const fn from_raw(value: u128) -> Self { Self(value) }
 }
 
 /// Depth-weighted histogram keyed by syntax kind.
@@ -87,9 +84,7 @@ pub struct KindHistogram(BTreeMap<KindId, KindWeight>);
 impl KindHistogram {
     /// Returns the weight for `kind`, if present.
     #[must_use]
-    pub fn get(&self, kind: KindId) -> Option<KindWeight> {
-        self.0.get(&kind).copied()
-    }
+    pub fn get(&self, kind: KindId) -> Option<KindWeight> { self.0.get(&kind).copied() }
 
     /// Iterates over kind weights in deterministic key order.
     pub fn iter(&self) -> impl Iterator<Item = (KindId, KindWeight)> + '_ {
@@ -163,7 +158,6 @@ impl ProductionMultiset {
 }
 
 /// Extracts exact kind counts from `tree`.
-///
 #[must_use]
 pub fn kind_counts(tree: &NormalizedTree) -> KindCounts {
     let mut counts = KindCounts::default();
@@ -216,9 +210,7 @@ fn count_node_kinds(node: &NormalizedNode, depth: Depth, counts: &mut KindCounts
     }
 }
 
-const fn next_depth(depth: Depth) -> Depth {
-    Depth::new(depth.get().saturating_add(1))
-}
+const fn next_depth(depth: Depth) -> Depth { Depth::new(depth.get().saturating_add(1)) }
 
 // Weights halve with depth (`2^-depth` in fixed point). Below the fixed-point
 // resolution the weight intentionally collapses to zero: depths 64..=127 shift

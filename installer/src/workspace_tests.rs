@@ -1,11 +1,12 @@
 //! Tests for workspace discovery and layout.
 
+use std::{fs, path::PathBuf};
+
+use rstest::{fixture, rstest};
+use tempfile::TempDir;
+
 use super::*;
 use crate::dirs::{MockBaseDirs, SystemBaseDirs};
-use rstest::{fixture, rstest};
-use std::fs;
-use std::path::PathBuf;
-use tempfile::TempDir;
 
 /// A temporary directory converted to a UTF-8 path for workspace tests.
 struct TempWorkspace {

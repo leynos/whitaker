@@ -3,9 +3,11 @@
 //! Validates that the value is a 64-character lowercase hexadecimal string
 //! representing a 256-bit hash digest.
 
-use super::error::{ArtefactError, Result};
-use serde::Serialize;
 use std::fmt;
+
+use serde::Serialize;
+
+use super::error::{ArtefactError, Result};
 
 /// Expected length of a hex-encoded SHA-256 digest.
 const DIGEST_HEX_LEN: usize = 64;
@@ -38,9 +40,7 @@ impl Sha256Digest {
     /// assert_eq!(digest.as_str(), hex);
     /// ```
     #[must_use]
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
+    pub fn as_str(&self) -> &str { &self.0 }
 
     /// Consume the wrapper and return the inner string.
     ///
@@ -54,9 +54,7 @@ impl Sha256Digest {
     /// assert_eq!(digest.into_inner(), hex);
     /// ```
     #[must_use]
-    pub fn into_inner(self) -> String {
-        self.0
-    }
+    pub fn into_inner(self) -> String { self.0 }
 }
 
 impl<'de> serde::Deserialize<'de> for Sha256Digest {
@@ -89,15 +87,11 @@ impl TryFrom<String> for Sha256Digest {
 }
 
 impl AsRef<str> for Sha256Digest {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
+    fn as_ref(&self) -> &str { &self.0 }
 }
 
 impl fmt::Display for Sha256Digest {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.0) }
 }
 
 /// Validate that `value` is a well-formed hex-encoded SHA-256 digest.
@@ -128,14 +122,13 @@ fn validate_sha256(value: &str) -> Result<()> {
 mod tests {
     //! Tests for SHA-256 digest parsing and formatting.
 
-    use super::*;
     use rstest::{fixture, rstest};
+
+    use super::*;
 
     #[whitaker_test_macros::allow_fixture_expansion_lints]
     #[fixture]
-    fn valid_digest() -> String {
-        "a".repeat(64)
-    }
+    fn valid_digest() -> String { "a".repeat(64) }
 
     #[rstest]
     fn accepts_valid_sixty_four_char_hex(valid_digest: String) {

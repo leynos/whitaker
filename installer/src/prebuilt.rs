@@ -7,20 +7,24 @@
 //! directory.  On any failure the caller receives [`PrebuiltResult::Fallback`]
 //! and should proceed with local compilation.
 
-use camino::{Utf8Path, Utf8PathBuf};
-use std::io::Write;
-use std::path::Path;
+use std::{io::Write, path::Path};
 
-use crate::artefact::download::{ArtefactDownloader, DownloadError, HttpDownloader};
-use crate::artefact::extraction::{ArtefactExtractor, ZstdExtractor};
-use crate::artefact::manifest::Manifest;
-use crate::artefact::manifest_parser::{ManifestParseError, parse_manifest};
-use crate::artefact::naming::ArtefactName;
-use crate::artefact::packaging::compute_sha256;
-use crate::artefact::packaging_error::PackagingError;
-use crate::artefact::verification::VerificationPolicy;
-use crate::builder::{library_extension, library_prefix};
-use crate::output::write_stderr_line;
+use camino::{Utf8Path, Utf8PathBuf};
+
+use crate::{
+    artefact::{
+        download::{ArtefactDownloader, DownloadError, HttpDownloader},
+        extraction::{ArtefactExtractor, ZstdExtractor},
+        manifest::Manifest,
+        manifest_parser::{ManifestParseError, parse_manifest},
+        naming::ArtefactName,
+        packaging::compute_sha256,
+        packaging_error::PackagingError,
+        verification::VerificationPolicy,
+    },
+    builder::{library_extension, library_prefix},
+    output::write_stderr_line,
+};
 
 /// The outcome of a prebuilt download attempt.
 ///

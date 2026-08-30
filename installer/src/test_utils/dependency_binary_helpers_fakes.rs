@@ -4,17 +4,23 @@
 //! at them so dependency-install probes can be exercised without touching a
 //! real toolchain.
 
-use std::fs;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
-use std::path::{Path, PathBuf};
-
-use crate::dependency_binaries::{
-    DependencyBinary, DependencyBinaryInstallError, DependencyBinaryInstaller,
+use std::{
+    fs,
+    path::{Path, PathBuf},
 };
-use crate::dirs::BaseDirs;
-use crate::installer_packaging::TargetTriple;
-use crate::test_support::env_test_guard;
+
+use crate::{
+    dependency_binaries::{
+        DependencyBinary,
+        DependencyBinaryInstallError,
+        DependencyBinaryInstaller,
+    },
+    dirs::BaseDirs,
+    installer_packaging::TargetTriple,
+    test_support::env_test_guard,
+};
 
 /// Repository installer test double that always reports a missing archive.
 pub struct AlwaysNotFoundRepositoryInstaller;

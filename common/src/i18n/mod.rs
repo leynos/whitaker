@@ -12,15 +12,15 @@
 //!
 //! See [`resolve_message_set`] for fetching a lint’s primary/note/help trio.
 
-use fluent_templates::static_loader;
 use std::path::PathBuf;
-use unic_langid::langid;
 
 /// Re-export the Fluent value type for constructing diagnostic arguments.
 /// See [`resolve_message_set`] for loading messages that consume these
 /// arguments.
 pub use fluent_templates::fluent_bundle::FluentValue;
 pub(crate) use fluent_templates::loader::LanguageIdentifier;
+use fluent_templates::static_loader;
+use unic_langid::langid;
 
 const FALLBACK_LITERAL: &str = "en-GB";
 /// Directory name used for Fluent locale resources.
@@ -74,10 +74,17 @@ pub mod testing;
 /// Diagnostic localization helpers.
 /// See [`resolve_message_set`] for fetching primary, note, and help strings.
 pub use diagnostics::{
-    AttrKey, BundleLookup, DiagnosticMessageSet, MessageKey, resolve_message_set,
+    AttrKey,
+    BundleLookup,
+    DiagnosticMessageSet,
+    MessageKey,
+    resolve_message_set,
 };
 pub use helpers::{
-    MessageResolution, branch_phrase, get_localizer_for_lint, noop_reporter,
+    MessageResolution,
+    branch_phrase,
+    get_localizer_for_lint,
+    noop_reporter,
     safe_resolve_message_set,
 };
 pub use loader::{Arguments, I18nError, Localizer};

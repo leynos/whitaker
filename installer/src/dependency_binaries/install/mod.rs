@@ -22,6 +22,8 @@ pub use extractor::DependencyArchiveExtractor;
 #[cfg(test)]
 pub use installer::MockDependencyBinaryInstaller;
 pub use installer::{
-    DependencyBinaryInstallError, DependencyBinaryInstaller, RepositoryDependencyBinaryInstaller,
+    DependencyBinaryInstallError,
+    DependencyBinaryInstaller,
+    RepositoryDependencyBinaryInstaller,
 };
 pub use metadata::{archive_filename, binary_filename, host_target, provenance_filename};

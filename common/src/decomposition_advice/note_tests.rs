@@ -4,7 +4,10 @@ use super::format_diagnostic_note;
 use crate::{
     decomposition_advice::{DecompositionContext, MethodProfile, SubjectKind},
     test_support::decomposition::{
-        MethodInput, decomposition_suggestions, parser_serde_fs_fixture, profile,
+        MethodInput,
+        decomposition_suggestions,
+        parser_serde_fs_fixture,
+        profile,
         transport_trait_fixture,
     },
 };

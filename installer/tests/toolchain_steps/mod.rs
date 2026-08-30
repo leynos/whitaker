@@ -11,8 +11,13 @@ use rstest::fixture;
 use rstest_bdd_macros::{given, then, when};
 pub use scenario_setup::{FAKE_TOOLCHAIN, ToolchainWorld, setup_install_scenario};
 use scenario_setup::{
-    ensure_toolchain_installed_in_isolated_env, get_combined_output_string, get_output,
-    get_stderr_string, setup_auto_install_scenario, setup_dry_run_scenario, setup_failure_scenario,
+    ensure_toolchain_installed_in_isolated_env,
+    get_combined_output_string,
+    get_output,
+    get_stderr_string,
+    setup_auto_install_scenario,
+    setup_dry_run_scenario,
+    setup_failure_scenario,
 };
 
 use super::{prebuilt_markers::PREBUILT_INSTALL_MARKER, support::workspace_root};
@@ -86,9 +91,7 @@ fn assert_stderr_contains(
 
 #[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
-pub fn world() -> ToolchainWorld {
-    ToolchainWorld::default()
-}
+pub fn world() -> ToolchainWorld { ToolchainWorld::default() }
 
 // ---------------------------------------------------------------------------
 // Given steps

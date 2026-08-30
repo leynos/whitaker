@@ -1,17 +1,20 @@
 //! Installer orchestration for repository-hosted dependency binaries.
 
-use std::fs;
-use std::io;
-use std::path::{Path, PathBuf};
+use std::{
+    fs,
+    io,
+    path::{Path, PathBuf},
+};
+
 use thiserror::Error;
 
-use crate::artefact::target::TargetTriple;
-use crate::dirs::BaseDirs;
-
-use super::super::manifest::DependencyBinary;
-use super::downloader::{DependencyArchiveDownloader, RepositoryArchiveDownloader};
-use super::extractor::{DependencyArchiveExtractor, RepositoryArchiveExtractor};
-use super::metadata::{archive_filename, expected_member_path};
+use super::{
+    super::manifest::DependencyBinary,
+    downloader::{DependencyArchiveDownloader, RepositoryArchiveDownloader},
+    extractor::{DependencyArchiveExtractor, RepositoryArchiveExtractor},
+    metadata::{archive_filename, expected_member_path},
+};
+use crate::{artefact::target::TargetTriple, dirs::BaseDirs};
 
 /// Errors returned while installing repository-hosted dependency binaries.
 #[derive(Debug, Error)]
@@ -80,9 +83,7 @@ pub enum DependencyBinaryInstallError {
 impl DependencyBinaryInstallError {
     /// Returns `true` when the failure is caused by a missing repository asset.
     #[must_use]
-    pub(crate) const fn is_not_found(&self) -> bool {
-        matches!(self, Self::NotFound { .. })
-    }
+    pub(crate) const fn is_not_found(&self) -> bool { matches!(self, Self::NotFound { .. }) }
 }
 
 /// Installs dependency binaries from repository-hosted release assets.

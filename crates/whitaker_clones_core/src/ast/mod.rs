@@ -37,8 +37,15 @@ mod tree;
 pub use cover::select_smallest_covering;
 pub use error::{AstError, AstResult};
 pub use features::{
-    KindCounts, KindHistogram, KindWeight, Production, ProductionMultiset, kind_counts,
-    kind_histogram, production_multiset, weighted_histogram,
+    KindCounts,
+    KindHistogram,
+    KindWeight,
+    Production,
+    ProductionMultiset,
+    kind_counts,
+    kind_histogram,
+    production_multiset,
+    weighted_histogram,
 };
 pub use hash::{AstHash, canonical_hash};
 pub use lowering::{PARSER_SCHEMA_VERSION, lower_span};

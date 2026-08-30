@@ -34,9 +34,7 @@ impl DecisionWorld {
 
 #[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
-fn world() -> DecisionWorld {
-    DecisionWorld::default()
-}
+fn world() -> DecisionWorld { DecisionWorld::default() }
 
 #[given("a panicking unwrap_or_else fallback outside tests")]
 fn given_panicking(world: &DecisionWorld) {
@@ -51,9 +49,7 @@ fn given_panicking(world: &DecisionWorld) {
 }
 
 #[given("a panicking unwrap_or_else fallback")]
-fn given_panicking_alias(world: &DecisionWorld) {
-    given_panicking(world);
-}
+fn given_panicking_alias(world: &DecisionWorld) { given_panicking(world); }
 
 #[given("the panic message interpolates a value")]
 fn given_interpolating(world: &DecisionWorld) {
@@ -85,24 +81,16 @@ fn given_main(world: &DecisionWorld) {
 }
 
 #[given("allow in main is enabled")]
-fn given_allow_main(world: &DecisionWorld) {
-    world.allow_in_main.set(true);
-}
+fn given_allow_main(world: &DecisionWorld) { world.allow_in_main.set(true); }
 
 #[given("the fallback is safe")]
-fn given_safe_fallback(world: &DecisionWorld) {
-    world.panic_info.set(PanicInfo::default());
-}
+fn given_safe_fallback(world: &DecisionWorld) { world.panic_info.set(PanicInfo::default()); }
 
 #[given("a doctest harness is active")]
-fn given_doctest(world: &DecisionWorld) {
-    world.is_doctest.set(true);
-}
+fn given_doctest(world: &DecisionWorld) { world.is_doctest.set(true); }
 
 #[when("the lint policy is evaluated")]
-fn when_policy_evaluated(world: &DecisionWorld) {
-    world.should_flag.set(Some(world.evaluate()));
-}
+fn when_policy_evaluated(world: &DecisionWorld) { world.should_flag.set(Some(world.evaluate())); }
 
 #[then("the lint triggers")]
 fn then_triggers(world: &DecisionWorld) {
@@ -115,31 +103,19 @@ fn then_skipped(world: &DecisionWorld) {
 }
 
 #[scenario(path = "tests/features/policy.feature", index = 0)]
-fn scenario_panicking_outside_tests(world: DecisionWorld) {
-    let _ = world;
-}
+fn scenario_panicking_outside_tests(world: DecisionWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/policy.feature", index = 1)]
-fn scenario_panicking_inside_test(world: DecisionWorld) {
-    let _ = world;
-}
+fn scenario_panicking_inside_test(world: DecisionWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/policy.feature", index = 2)]
-fn scenario_panicking_in_main_with_allow(world: DecisionWorld) {
-    let _ = world;
-}
+fn scenario_panicking_in_main_with_allow(world: DecisionWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/policy.feature", index = 3)]
-fn scenario_safe_fallback(world: DecisionWorld) {
-    let _ = world;
-}
+fn scenario_safe_fallback(world: DecisionWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/policy.feature", index = 4)]
-fn scenario_doctest(world: DecisionWorld) {
-    let _ = world;
-}
+fn scenario_doctest(world: DecisionWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/policy.feature", index = 5)]
-fn scenario_interpolated_panic_in_test(world: DecisionWorld) {
-    let _ = world;
-}
+fn scenario_interpolated_panic_in_test(world: DecisionWorld) { let _ = world; }

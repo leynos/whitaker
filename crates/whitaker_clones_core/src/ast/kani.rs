@@ -6,7 +6,13 @@
 use std::ops::Range;
 
 use super::{
-    ByteSpan, Depth, KindId, LeafClass, NormalizedNode, NormalizedTree, kind_counts,
+    ByteSpan,
+    Depth,
+    KindId,
+    LeafClass,
+    NormalizedNode,
+    NormalizedTree,
+    kind_counts,
     select_smallest_covering,
 };
 
@@ -16,9 +22,7 @@ const KANI_AST_UNWIND: usize = 5;
 const _: () = assert!(KANI_AST_MAX_CHILDREN == 2);
 const _: () = assert!(KANI_AST_UNWIND == KANI_AST_MAX_DEPTH + 2);
 
-fn symbolic_kind() -> KindId {
-    KindId::new(kani::any())
-}
+fn symbolic_kind() -> KindId { KindId::new(kani::any()) }
 
 fn ast_span() -> ByteSpan {
     match ByteSpan::new("abcd", 0, 1) {

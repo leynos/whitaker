@@ -5,7 +5,10 @@ use rstest::{fixture, rstest};
 use tempfile::TempDir;
 
 use crate::{
-    builder::BuildResult, crate_name::CrateName, pipeline::stage_libraries, toolchain::Toolchain,
+    builder::BuildResult,
+    crate_name::CrateName,
+    pipeline::stage_libraries,
+    toolchain::Toolchain,
 };
 
 /// Fixture providing a temporary directory for staging tests.
@@ -45,9 +48,7 @@ impl StagingTestContext {
         })
     }
 
-    fn target_dir(&self) -> &Utf8Path {
-        &self.target_dir
-    }
+    fn target_dir(&self) -> &Utf8Path { &self.target_dir }
 
     fn with_quiet(mut self, quiet: bool) -> Self {
         self.quiet = quiet;
@@ -91,9 +92,7 @@ fn create_mock_library(target_dir: &Utf8Path, crate_name: &str) -> std::io::Resu
 
 #[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
-fn staging_ctx() -> std::io::Result<StagingTestContext> {
-    StagingTestContext::new()
-}
+fn staging_ctx() -> std::io::Result<StagingTestContext> { StagingTestContext::new() }
 
 /// Asserts that staging output lists the stable `bumpy_road_function` lint.
 ///

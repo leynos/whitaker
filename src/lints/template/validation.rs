@@ -142,9 +142,9 @@ pub(crate) fn normalize_ui_directory(input: &str) -> Result<String, TemplateErro
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     use rstest::rstest;
+
+    use super::*;
 
     #[rstest]
     #[case("module_max_lines", "MODULE_MAX_LINES")]

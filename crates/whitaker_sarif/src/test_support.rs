@@ -6,12 +6,13 @@
 
 use core::fmt::Debug;
 
-use serde::Serialize;
-use serde::de::DeserializeOwned;
+use serde::{Serialize, de::DeserializeOwned};
 
-use crate::builders::{LocationBuilder, RegionBuilder, ResultBuilder};
-use crate::merge::WHITAKER_FRAGMENT_KEY;
-use crate::model::result::{Level, SarifResult};
+use crate::{
+    builders::{LocationBuilder, RegionBuilder, ResultBuilder},
+    merge::WHITAKER_FRAGMENT_KEY,
+    model::result::{Level, SarifResult},
+};
 
 /// Asserts that `value` survives a JSON serialize/deserialize round trip
 /// unchanged.

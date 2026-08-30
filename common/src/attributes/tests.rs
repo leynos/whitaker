@@ -1,7 +1,8 @@
 //! Tests for attribute helpers.
 
-use super::*;
 use rstest::rstest;
+
+use super::*;
 
 #[rstest]
 #[case::empty(Vec::<String>::new())]

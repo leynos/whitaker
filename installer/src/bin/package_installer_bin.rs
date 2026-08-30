@@ -4,15 +4,15 @@
 //! [`whitaker_installer::installer_packaging::package_installer`] invoked
 //! by the release CI workflow to create binstall-compatible archives.
 
+use std::{io::Write, path::PathBuf};
+
 use clap::Parser;
-use std::io::Write;
-use std::path::PathBuf;
 use thiserror::Error;
-use whitaker_installer::artefact::error::ArtefactError;
-use whitaker_installer::installer_packaging::{
-    InstallerPackagingError, TargetTriple, Version, package_installer,
+use whitaker_installer::{
+    artefact::error::ArtefactError,
+    installer_packaging::{InstallerPackagingError, TargetTriple, Version, package_installer},
+    output::write_stderr_line,
 };
-use whitaker_installer::output::write_stderr_line;
 
 /// Package the `whitaker-installer` binary into a release archive.
 ///
@@ -85,9 +85,10 @@ fn run(cli: Cli) -> Result<(), CliError> {
 mod tests {
     //! Tests for the installer packaging command.
 
-    use super::*;
     use clap::Parser;
     use rstest::rstest;
+
+    use super::*;
 
     const BASE_ARGS: [&str; 9] = [
         "whitaker-package-installer",

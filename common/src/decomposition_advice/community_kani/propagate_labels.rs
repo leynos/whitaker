@@ -1,9 +1,7 @@
 //! Bounded model-checking harnesses for `propagate_labels`.
 
+use super::{super::propagate_labels_report, shared::bounded_iteration_count};
 use crate::decomposition_advice::minimal_feature_vector;
-
-use super::super::propagate_labels_report;
-use super::shared::bounded_iteration_count;
 
 const NODE_COUNT: usize = 3;
 

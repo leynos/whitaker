@@ -16,7 +16,10 @@ use rustc_span::{BytePos, DUMMY_SP, FileName, Span};
 use whitaker_common::rstest::{ArgAtom, ArgFingerprint};
 
 use super::{
-    CallSiteCollector, CallSiteLocation, CallSiteRecord, literal_text_atom,
+    CallSiteCollector,
+    CallSiteLocation,
+    CallSiteRecord,
+    literal_text_atom,
     should_skip_arg_for_unrecoverable_span,
 };
 
@@ -140,17 +143,13 @@ fn collect_two_calls(lo2: u32, hi2: u32) -> (CallSiteCollector, [bool; 2]) {
     (collector, inserted)
 }
 
-fn record(callee_def_id: DefId) -> CallSiteRecord {
-    record_at(callee_def_id, DUMMY_SP)
-}
+fn record(callee_def_id: DefId) -> CallSiteRecord { record_at(callee_def_id, DUMMY_SP) }
 
 fn record_at(callee_def_id: DefId, span: Span) -> CallSiteRecord {
     CallSiteRecord::new(callee_def_id, ArgFingerprint::default(), def_id(99), span)
 }
 
-fn def_id(index: u32) -> DefId {
-    DefId::local(DefIndex::from_u32(index))
-}
+fn def_id(index: u32) -> DefId { DefId::local(DefIndex::from_u32(index)) }
 
 fn location(callee: &str, lo: BytePos, hi: BytePos) -> CallSiteLocation {
     location_with_hir_id(callee, lo, hi, 0)
@@ -170,9 +169,7 @@ fn location_with_hir_id(
     )
 }
 
-fn source_file() -> FileName {
-    FileName::Custom("src/lib.rs".to_owned())
-}
+fn source_file() -> FileName { FileName::Custom("src/lib.rs".to_owned()) }
 
 proptest! {
     #[test]

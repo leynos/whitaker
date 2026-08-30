@@ -1,7 +1,6 @@
 //! Helpers for working with HIR constructs shared across Whitaker lints.
 
-use std::collections::HashSet;
-use std::sync::LazyLock;
+use std::{collections::HashSet, sync::LazyLock};
 
 use rustc_ast::AttrStyle;
 use rustc_hir as hir;
@@ -188,7 +187,7 @@ pub fn collect_harness_test_functions(cx: &LateContext<'_>) -> HashSet<hir::HirI
                 desc_id != fn_id && *desc_name == *name && desc_span.source_equal(*span)
             })
         })
-        .map(|(hir_id, _, _)| hir_id)
+        .map(|(hir_id, ..)| hir_id)
         .collect()
 }
 
@@ -276,16 +275,15 @@ fn has_companion_test_module<'tcx>(
 ///
 /// Two independent kinds of evidence qualify a module:
 ///
-/// 1. An explicit `RSTEST_HARNESS_DESCRIPTOR` const. This marker is unambiguous
-///    rstest-synthesis evidence — no hand-authored test module emits it — so it
-///    qualifies regardless of the module's expansion provenance. Manual
-///    regression fixtures that cannot run the real proc-macro rely on it.
-/// 2. The inner `fn`/`const` harness-descriptor pair that `rustc --test`
-///    synthesizes for a `#[test]` function. This pair, on its own, is *not*
-///    rstest-specific: the `--test` harness emits the same-named, same-span
-///    `const` descriptor for **any** `#[test]` function, so a hand-authored
-///    `mod foo { #[test] fn bar() {} }` sitting next to an ordinary `fn foo`
-///    has an identical HIR shape and would otherwise wrongly exempt `fn foo`.
+/// 1. An explicit `RSTEST_HARNESS_DESCRIPTOR` const. This marker is unambiguous rstest-synthesis
+///    evidence — no hand-authored test module emits it — so it qualifies regardless of the module's
+///    expansion provenance. Manual regression fixtures that cannot run the real proc-macro rely on
+///    it.
+/// 2. The inner `fn`/`const` harness-descriptor pair that `rustc --test` synthesizes for a
+///    `#[test]` function. This pair, on its own, is *not* rstest-specific: the `--test` harness
+///    emits the same-named, same-span `const` descriptor for **any** `#[test]` function, so a
+///    hand-authored `mod foo { #[test] fn bar() {} }` sitting next to an ordinary `fn foo` has an
+///    identical HIR shape and would otherwise wrongly exempt `fn foo`.
 ///
 /// The distinguishing invariant is expansion provenance: rstest generates the
 /// companion module through its attribute proc-macro, so `module_item.span`

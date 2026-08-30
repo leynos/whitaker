@@ -1,11 +1,12 @@
 //! Behaviour-driven localization tests for the `no_std_fs_operations` lint.
 
-use crate::diagnostics::{StdFsMessages, localized_messages};
+use std::cell::RefCell;
+
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
-use std::cell::RefCell;
-use whitaker_common::i18n::testing::FailingLookup;
-use whitaker_common::i18n::{I18nError, Localizer};
+use whitaker_common::i18n::{I18nError, Localizer, testing::FailingLookup};
+
+use crate::diagnostics::{StdFsMessages, localized_messages};
 
 #[derive(Default)]
 struct LocalizationWorld {
@@ -20,13 +21,9 @@ impl LocalizationWorld {
         self.localizer = Some(Localizer::new(Some(locale)));
     }
 
-    fn set_operation(&mut self, operation: &str) {
-        operation.clone_into(&mut self.operation);
-    }
+    fn set_operation(&mut self, operation: &str) { operation.clone_into(&mut self.operation); }
 
-    const fn mark_failure(&mut self) {
-        self.failing = true;
-    }
+    const fn mark_failure(&mut self) { self.failing = true; }
 
     fn resolve(&mut self) {
         let op = self.operation.clone();
@@ -79,14 +76,10 @@ fn given_operation(world: &WorldCell, operation: String) {
 }
 
 #[given("localization fails")]
-fn given_failure(world: &WorldCell) {
-    world.borrow_mut().mark_failure();
-}
+fn given_failure(world: &WorldCell) { world.borrow_mut().mark_failure(); }
 
 #[when("I localize the std::fs diagnostic")]
-fn when_localize(world: &WorldCell) {
-    world.borrow_mut().resolve();
-}
+fn when_localize(world: &WorldCell) { world.borrow_mut().resolve(); }
 
 #[then("the primary mentions {snippet}")]
 fn then_primary(world: &WorldCell, snippet: String) {
@@ -133,26 +126,16 @@ fn then_failure(world: &WorldCell, key: String) {
 }
 
 #[scenario(path = "tests/features/localization.feature", index = 0)]
-fn scenario_english(world: WorldCell) {
-    let _ = world;
-}
+fn scenario_english(world: WorldCell) { let _ = world; }
 
 #[scenario(path = "tests/features/localization.feature", index = 1)]
-fn scenario_welsh(world: WorldCell) {
-    let _ = world;
-}
+fn scenario_welsh(world: WorldCell) { let _ = world; }
 
 #[scenario(path = "tests/features/localization.feature", index = 2)]
-fn scenario_gaelic(world: WorldCell) {
-    let _ = world;
-}
+fn scenario_gaelic(world: WorldCell) { let _ = world; }
 
 #[scenario(path = "tests/features/localization.feature", index = 3)]
-fn scenario_fallback(world: WorldCell) {
-    let _ = world;
-}
+fn scenario_fallback(world: WorldCell) { let _ = world; }
 
 #[scenario(path = "tests/features/localization.feature", index = 4)]
-fn scenario_failure(world: WorldCell) {
-    let _ = world;
-}
+fn scenario_failure(world: WorldCell) { let _ = world; }

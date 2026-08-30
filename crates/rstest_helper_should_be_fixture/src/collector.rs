@@ -8,8 +8,10 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 use log::debug;
 use rustc_hir as hir;
-use rustc_hir::def::{DefKind, Res};
-use rustc_hir::def_id::{DefId, LOCAL_CRATE};
+use rustc_hir::{
+    def::{DefKind, Res},
+    def_id::{DefId, LOCAL_CRATE},
+};
 use rustc_lint::LateContext;
 use rustc_span::{BytePos, FileName, Span};
 use whitaker_common::rstest::{ArgAtom, ArgFingerprint};
@@ -190,14 +192,10 @@ impl CallSiteCollector {
     }
 
     /// Returns the number of distinct callees with collected evidence.
-    pub(crate) fn callee_count(&self) -> usize {
-        self.by_callee.len()
-    }
+    pub(crate) fn callee_count(&self) -> usize { self.by_callee.len() }
 
     /// Returns the number of deduplicated call-site records.
-    pub(crate) fn record_count(&self) -> usize {
-        self.by_callee.values().map(Vec::len).sum()
-    }
+    pub(crate) fn record_count(&self) -> usize { self.by_callee.values().map(Vec::len).sum() }
 
     /// Removes all stored evidence from the collector.
     pub(crate) fn clear(&mut self) {
@@ -304,9 +302,7 @@ fn literal_atom(cx: &LateContext<'_>, span: Span, lit: &hir::Lit) -> ArgAtom {
     literal_text_atom(text)
 }
 
-fn literal_text_atom(text: String) -> ArgAtom {
-    ArgAtom::const_lit(text)
-}
+fn literal_text_atom(text: String) -> ArgAtom { ArgAtom::const_lit(text) }
 
 /// Resolves a helper call expression to a local function definition.
 #[must_use]

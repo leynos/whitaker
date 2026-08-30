@@ -4,13 +4,17 @@
 //! Metrics are stored in Whitaker's data directory at:
 //! `<data_dir>/metrics/install_metrics.json`.
 
-use crate::dirs::BaseDirs;
+use std::{
+    fs::{File, OpenOptions},
+    io::{Read, Seek, SeekFrom, Write},
+    path::{Path, PathBuf},
+    time::Duration,
+};
+
 use fs2::FileExt;
 use serde::{Deserialize, Serialize};
-use std::fs::{File, OpenOptions};
-use std::io::{Read, Seek, SeekFrom, Write};
-use std::path::{Path, PathBuf};
-use std::time::Duration;
+
+use crate::dirs::BaseDirs;
 
 const METRICS_DIRNAME: &str = "metrics";
 const METRICS_FILENAME: &str = "install_metrics.json";
@@ -42,6 +46,7 @@ impl InstallMetrics {
     ///
     /// ```
     /// use std::time::Duration;
+    ///
     /// use whitaker_installer::install_metrics::{InstallMetrics, InstallMode};
     ///
     /// let mut metrics = InstallMetrics::default();
@@ -49,9 +54,7 @@ impl InstallMetrics {
     /// assert_eq!(metrics.total_installs(), 1);
     /// ```
     #[must_use]
-    pub const fn total_installs(&self) -> u64 {
-        self.total_installs
-    }
+    pub const fn total_installs(&self) -> u64 { self.total_installs }
 
     /// Returns the number of successful prebuilt-download installs.
     ///
@@ -59,6 +62,7 @@ impl InstallMetrics {
     ///
     /// ```
     /// use std::time::Duration;
+    ///
     /// use whitaker_installer::install_metrics::{InstallMetrics, InstallMode};
     ///
     /// let mut metrics = InstallMetrics::default();
@@ -66,9 +70,7 @@ impl InstallMetrics {
     /// assert_eq!(metrics.download_installs(), 1);
     /// ```
     #[must_use]
-    pub const fn download_installs(&self) -> u64 {
-        self.download_installs
-    }
+    pub const fn download_installs(&self) -> u64 { self.download_installs }
 
     /// Returns the number of successful local-build installs.
     ///
@@ -76,6 +78,7 @@ impl InstallMetrics {
     ///
     /// ```
     /// use std::time::Duration;
+    ///
     /// use whitaker_installer::install_metrics::{InstallMetrics, InstallMode};
     ///
     /// let mut metrics = InstallMetrics::default();
@@ -83,9 +86,7 @@ impl InstallMetrics {
     /// assert_eq!(metrics.build_installs(), 1);
     /// ```
     #[must_use]
-    pub const fn build_installs(&self) -> u64 {
-        self.build_installs
-    }
+    pub const fn build_installs(&self) -> u64 { self.build_installs }
 
     /// Returns total cumulative install duration.
     ///
@@ -93,6 +94,7 @@ impl InstallMetrics {
     ///
     /// ```
     /// use std::time::Duration;
+    ///
     /// use whitaker_installer::install_metrics::InstallMetrics;
     ///
     /// assert_eq!(
@@ -139,6 +141,7 @@ impl InstallMetrics {
     ///
     /// ```
     /// use std::time::Duration;
+    ///
     /// use whitaker_installer::install_metrics::{InstallMetrics, InstallMode};
     ///
     /// let mut metrics = InstallMetrics::default();
@@ -169,6 +172,7 @@ impl InstallMetrics {
     ///
     /// ```
     /// use std::time::Duration;
+    ///
     /// use whitaker_installer::install_metrics::{InstallMetrics, InstallMode};
     ///
     /// let mut metrics = InstallMetrics::default();
@@ -206,15 +210,11 @@ pub struct RecordOutcome {
 impl RecordOutcome {
     /// Returns the updated aggregate metrics.
     #[must_use]
-    pub const fn metrics(&self) -> &InstallMetrics {
-        &self.metrics
-    }
+    pub const fn metrics(&self) -> &InstallMetrics { &self.metrics }
 
     /// Returns true when a malformed metrics file was reset to defaults.
     #[must_use]
-    pub const fn recovered_from_corrupt_file(&self) -> bool {
-        self.recovered_from_corrupt_file
-    }
+    pub const fn recovered_from_corrupt_file(&self) -> bool { self.recovered_from_corrupt_file }
 }
 
 /// Records one successful install in Whitaker's metrics store.
@@ -380,10 +380,6 @@ fn format_duration(duration: Duration) -> String {
     format!("{seconds}.{millis:03}s")
 }
 
-const fn should_format_with_hours(hours: u64) -> bool {
-    hours > 0
-}
+const fn should_format_with_hours(hours: u64) -> bool { hours > 0 }
 
-const fn should_format_with_minutes(minutes: u64) -> bool {
-    minutes > 0
-}
+const fn should_format_with_minutes(minutes: u64) -> bool { minutes > 0 }

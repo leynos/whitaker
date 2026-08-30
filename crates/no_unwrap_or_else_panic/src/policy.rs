@@ -1,7 +1,6 @@
 //! Pure lint policy evaluation logic shared by driver and behaviour tests.
 
-use crate::context::ContextSummary;
-use crate::panic_detector::PanicInfo;
+use crate::{context::ContextSummary, panic_detector::PanicInfo};
 
 /// Configuration flags controlling when the lint should emit diagnostics.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -12,9 +11,7 @@ pub(crate) struct LintPolicy {
 impl LintPolicy {
     /// Create a policy with the given `allow_in_main` flag.
     #[must_use]
-    pub(crate) const fn new(allow_in_main: bool) -> Self {
-        Self { allow_in_main }
-    }
+    pub(crate) const fn new(allow_in_main: bool) -> Self { Self { allow_in_main } }
 }
 
 /// Decide whether the lint should emit based on context and closure behaviour.
@@ -69,8 +66,9 @@ pub(crate) const fn should_flag(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use rstest::rstest;
+
+    use super::*;
 
     #[derive(Clone, Copy, Debug)]
     struct PolicyCase {

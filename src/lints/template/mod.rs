@@ -34,9 +34,7 @@ impl TemplateFiles {
     /// assert!(files.manifest().contains("name = \"demo_lint\""));
     /// ```
     #[must_use]
-    pub fn manifest(&self) -> &str {
-        &self.manifest
-    }
+    pub fn manifest(&self) -> &str { &self.manifest }
 
     /// Returns the generated `src/lib.rs` source.
     ///
@@ -52,9 +50,7 @@ impl TemplateFiles {
     /// assert!(files.lib_rs().contains("pub struct DemoLint"));
     /// ```
     #[must_use]
-    pub fn lib_rs(&self) -> &str {
-        &self.lib_rs
-    }
+    pub fn lib_rs(&self) -> &str { &self.lib_rs }
 
     /// Parses the manifest into a TOML [`toml::Value`] for inspection.
     ///
@@ -74,10 +70,7 @@ impl TemplateFiles {
     ///     .manifest_document()
     ///     .expect("generated manifest parses");
     ///
-    /// assert_eq!(
-    ///     manifest["package"]["name"].as_str(),
-    ///     Some("demo_lint")
-    /// );
+    /// assert_eq!(manifest["package"]["name"].as_str(), Some("demo_lint"));
     /// ```
     pub fn manifest_document(&self) -> Result<toml::Value, toml::de::Error> {
         toml::from_str(self.manifest())
@@ -98,7 +91,8 @@ pub enum TemplateError {
     },
     /// Crate names may contain only ASCII lowercase letters, digits, `-`, or `_`.
     #[error(
-        "crate name may only contain lowercase ASCII letters, digits, '-' or '_' (invalid `{character}`)"
+        "crate name may only contain lowercase ASCII letters, digits, '-' or '_' (invalid \
+         `{character}`)"
     )]
     InvalidCrateNameCharacter {
         /// Character that violated the allowed set.
@@ -171,27 +165,19 @@ impl LintCrateTemplate {
 
     /// Returns the crate name used by the template.
     #[must_use]
-    pub fn crate_name(&self) -> &str {
-        &self.crate_name
-    }
+    pub fn crate_name(&self) -> &str { &self.crate_name }
 
     /// Returns the lint constant derived from the crate name.
     #[must_use]
-    pub fn lint_constant(&self) -> &str {
-        &self.lint_constant
-    }
+    pub fn lint_constant(&self) -> &str { &self.lint_constant }
 
     /// Returns the name of the lint pass struct.
     #[must_use]
-    pub fn pass_struct(&self) -> &str {
-        &self.pass_struct
-    }
+    pub fn pass_struct(&self) -> &str { &self.pass_struct }
 
     /// Returns the UI tests directory used by the template.
     #[must_use]
-    pub fn ui_tests_directory(&self) -> &str {
-        &self.ui_tests_directory
-    }
+    pub fn ui_tests_directory(&self) -> &str { &self.ui_tests_directory }
 
     /// Render the template into manifest and source files.
     #[must_use]
@@ -210,8 +196,9 @@ impl LintCrateTemplate {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use toml::Value;
+
+    use super::*;
 
     #[test]
     fn template_rejects_invalid_crate_name() {

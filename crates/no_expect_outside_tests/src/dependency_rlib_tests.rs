@@ -55,9 +55,7 @@ const TIED_ARTEFACTS: [ArtefactSpec<'static>; 2] = [
 /// selection test.
 #[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
-fn selection_directory() -> TemporaryDirectory {
-    TemporaryDirectory::new("selection")
-}
+fn selection_directory() -> TemporaryDirectory { TemporaryDirectory::new("selection") }
 
 /// Creates `artefacts` inside `directory`, sets their modification times, then
 /// invokes `dependency_rlib` and returns both the expected and selected paths
@@ -126,9 +124,7 @@ impl TemporaryDirectory {
     }
 
     /// Returns the path to the temporary directory.
-    fn path(&self) -> &Path {
-        &self.0
-    }
+    fn path(&self) -> &Path { &self.0 }
 }
 
 impl Drop for TemporaryDirectory {

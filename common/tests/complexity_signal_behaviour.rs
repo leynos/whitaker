@@ -5,7 +5,11 @@ use std::cell::{Cell, RefCell};
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use whitaker_common::complexity_signal::{
-    LineSegment, SignalBuildError, SmoothingError, rasterize_signal, smooth_moving_average,
+    LineSegment,
+    SignalBuildError,
+    SmoothingError,
+    rasterize_signal,
+    smooth_moving_average,
 };
 use whitaker_test_macros::allow_fixture_expansion_lints;
 
@@ -26,17 +30,11 @@ impl SignalWorld {
         self.function_end.set(Some(end));
     }
 
-    fn push_segment(&self, segment: LineSegment) {
-        self.segments.borrow_mut().push(segment);
-    }
+    fn push_segment(&self, segment: LineSegment) { self.segments.borrow_mut().push(segment); }
 
-    fn set_raw_signal(&self, signal: Vec<f64>) {
-        self.raw_signal.replace(Some(signal));
-    }
+    fn set_raw_signal(&self, signal: Vec<f64>) { self.raw_signal.replace(Some(signal)); }
 
-    fn set_smoothing_window(&self, window: usize) {
-        self.smoothing_window.set(Some(window));
-    }
+    fn set_smoothing_window(&self, window: usize) { self.smoothing_window.set(Some(window)); }
 
     #[expect(
         clippy::expect_used,
@@ -101,9 +99,7 @@ impl SignalWorld {
 
 #[allow_fixture_expansion_lints]
 #[fixture]
-fn world() -> SignalWorld {
-    SignalWorld::default()
-}
+fn world() -> SignalWorld { SignalWorld::default() }
 
 /// Parses a comma-separated list of floating-point values.
 ///
@@ -195,19 +191,13 @@ fn given_raw_signal(world: &SignalWorld, values: String) -> Result<(), String> {
 }
 
 #[given("the smoothing window is {window}")]
-fn given_window(world: &SignalWorld, window: usize) {
-    world.set_smoothing_window(window);
-}
+fn given_window(world: &SignalWorld, window: usize) { world.set_smoothing_window(window); }
 
 #[when("I build the per-line signal")]
-fn when_build(world: &SignalWorld) {
-    world.build_signal();
-}
+fn when_build(world: &SignalWorld) { world.build_signal(); }
 
 #[when("I smooth the signal")]
-fn when_smooth(world: &SignalWorld) {
-    world.smooth();
-}
+fn when_smooth(world: &SignalWorld) { world.smooth(); }
 
 #[then("the built signal equals {expected}")]
 fn then_built_signal(world: &SignalWorld, expected: String) -> Result<(), String> {
@@ -246,26 +236,16 @@ fn then_smoothing_fails(world: &SignalWorld) {
 }
 
 #[scenario(path = "tests/features/complexity_signal.feature", index = 0)]
-fn scenario_overlapping_segments(world: SignalWorld) {
-    let _ = world;
-}
+fn scenario_overlapping_segments(world: SignalWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/complexity_signal.feature", index = 1)]
-fn scenario_out_of_range_segments(world: SignalWorld) {
-    let _ = world;
-}
+fn scenario_out_of_range_segments(world: SignalWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/complexity_signal.feature", index = 2)]
-fn scenario_smoothing_happy_path(world: SignalWorld) {
-    let _ = world;
-}
+fn scenario_smoothing_happy_path(world: SignalWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/complexity_signal.feature", index = 3)]
-fn scenario_smoothing_even_window(world: SignalWorld) {
-    let _ = world;
-}
+fn scenario_smoothing_even_window(world: SignalWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/complexity_signal.feature", index = 4)]
-fn scenario_smoothing_zero_window(world: SignalWorld) {
-    let _ = world;
-}
+fn scenario_smoothing_zero_window(world: SignalWorld) { let _ = world; }

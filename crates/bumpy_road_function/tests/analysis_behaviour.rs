@@ -10,7 +10,12 @@ extern crate rustc_driver;
 use std::cell::RefCell;
 
 use bumpy_road_function::analysis::{
-    DEFAULT_THRESHOLD, Settings, Weights, detect_bumps, normalize_settings, top_two_bumps,
+    DEFAULT_THRESHOLD,
+    Settings,
+    Weights,
+    detect_bumps,
+    normalize_settings,
+    top_two_bumps,
 };
 use rstest::{fixture, rstest};
 use rstest_bdd_macros::{given, scenario, then, when};
@@ -111,9 +116,7 @@ struct World {
 
 #[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
-fn world() -> World {
-    World::default()
-}
+fn world() -> World { World::default() }
 
 #[given("a smoothed signal with two bumps")]
 fn given_signal_two_bumps(world: &World) {
@@ -123,19 +126,13 @@ fn given_signal_two_bumps(world: &World) {
 }
 
 #[given("a smoothed signal with one bump")]
-fn given_signal_one_bump(world: &World) {
-    world.signal.replace(vec![0.0, 3.0, 3.0, 0.0]);
-}
+fn given_signal_one_bump(world: &World) { world.signal.replace(vec![0.0, 3.0, 3.0, 0.0]); }
 
 #[given("a smoothed signal with a short spike")]
-fn given_signal_short_spike(world: &World) {
-    world.signal.replace(vec![0.0, 4.0, 0.0]);
-}
+fn given_signal_short_spike(world: &World) { world.signal.replace(vec![0.0, 4.0, 0.0]); }
 
 #[given("the threshold is {threshold:f64}")]
-fn given_threshold(world: &World, threshold: f64) {
-    world.threshold.replace(threshold);
-}
+fn given_threshold(world: &World, threshold: f64) { world.threshold.replace(threshold); }
 
 #[given("the minimum bump length is {min_lines}")]
 fn given_min_bump_lines(world: &World, min_lines: usize) {
@@ -157,14 +154,10 @@ fn then_bump_count(world: &World, count: usize) {
 }
 
 #[given("default settings")]
-fn given_default_settings(world: &World) {
-    world.settings.replace(Settings::default());
-}
+fn given_default_settings(world: &World) { world.settings.replace(Settings::default()); }
 
 #[when("the smoothing window is set to {window}")]
-fn when_set_window(world: &World, window: usize) {
-    world.settings.borrow_mut().window = window;
-}
+fn when_set_window(world: &World, window: usize) { world.settings.borrow_mut().window = window; }
 
 #[when("the threshold is set to {threshold:f64}")]
 fn when_set_threshold(world: &World, threshold: f64) {

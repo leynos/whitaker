@@ -1,12 +1,6 @@
 //! Lint crate enforcing capability-based filesystem access by forbidding
 //! `std::fs` operations.
 
-use crate::config::{LINT_NAME, load_configuration};
-use crate::diagnostics::emit_diagnostic;
-use crate::exclusion::PathExclusions;
-use crate::usage::{
-    StdFsUsage, UsageCategory, classify_def_id, classify_qpath, classify_res, label_is_std_fs,
-};
 use log::{debug, info};
 use rustc_hir as hir;
 use rustc_hir::AmbigArg;
@@ -14,9 +8,24 @@ use rustc_lint::{LateContext, LateLintPass};
 use rustc_middle::ty;
 use rustc_span::{Span, sym};
 use whitaker::SharedConfig;
-use whitaker_common::SimplePath;
-use whitaker_common::i18n::Localizer;
-use whitaker_common::i18n::get_localizer_for_lint;
+use whitaker_common::{
+    SimplePath,
+    i18n::{Localizer, get_localizer_for_lint},
+};
+
+use crate::{
+    config::{LINT_NAME, load_configuration},
+    diagnostics::emit_diagnostic,
+    exclusion::PathExclusions,
+    usage::{
+        StdFsUsage,
+        UsageCategory,
+        classify_def_id,
+        classify_qpath,
+        classify_res,
+        label_is_std_fs,
+    },
+};
 
 /// Lint pass that tracks localization and exclusion state while checking
 /// `std::fs` usage.
@@ -167,9 +176,7 @@ struct LintSite {
 impl NoStdFsOperations {
     /// Centralizes exclusion logic for all lint pass methods.
     #[inline]
-    const fn should_skip(&self) -> bool {
-        self.excluded
-    }
+    const fn should_skip(&self) -> bool { self.excluded }
 
     fn emit_optional(&self, cx: &LateContext<'_>, site: LintSite, usage: Option<StdFsUsage>) {
         if self.should_skip() {

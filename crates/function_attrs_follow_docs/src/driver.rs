@@ -4,17 +4,25 @@
 //! free functions, inherent methods, and trait methods. Keeping doc comments at
 //! the front mirrors idiomatic Rust style and prevents them from being obscured
 //! by implementation details such as `#[inline]` or `#[allow]` attributes.
-use rustc_ast::AttrStyle;
-use rustc_ast::attr::AttributeExt;
+use std::borrow::Cow;
+
+use rustc_ast::{AttrStyle, attr::AttributeExt};
 use rustc_hir as hir;
 use rustc_hir::attrs::AttributeKind;
 use rustc_lint::{DiagDecorator, LateContext, LateLintPass, LintContext};
 use rustc_span::Span;
-use std::borrow::Cow;
 use whitaker::{SharedConfig, recover_user_editable_hir_span};
 use whitaker_common::i18n::{
-    Arguments, BundleLookup, DiagnosticMessageSet, FluentValue, Localizer, MessageKey,
-    MessageResolution, get_localizer_for_lint, noop_reporter, safe_resolve_message_set,
+    Arguments,
+    BundleLookup,
+    DiagnosticMessageSet,
+    FluentValue,
+    Localizer,
+    MessageKey,
+    MessageResolution,
+    get_localizer_for_lint,
+    noop_reporter,
+    safe_resolve_message_set,
 };
 #[cfg(test)]
 use whitaker_common::i18n::{I18nError, resolve_message_set};
@@ -213,23 +221,15 @@ impl AttrInfo {
         (span.lo(), span.hi())
     }
 
-    const fn user_editable_span(&self) -> Option<Span> {
-        self.user_editable_span
-    }
+    const fn user_editable_span(&self) -> Option<Span> { self.user_editable_span }
 }
 
 impl OrderedAttribute for AttrInfo {
-    fn is_outer(&self) -> bool {
-        self.is_outer
-    }
+    fn is_outer(&self) -> bool { self.is_outer }
 
-    fn is_doc(&self) -> bool {
-        self.is_doc
-    }
+    fn is_doc(&self) -> bool { self.is_doc }
 
-    fn span(&self) -> Span {
-        self.span
-    }
+    fn span(&self) -> Span { self.span }
 }
 
 /// Context for checking function attributes.

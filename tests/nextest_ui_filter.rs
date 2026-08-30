@@ -12,8 +12,7 @@
 //! `ui`, **not** `ui::ui`) and asserts that the nextest filter contains the
 //! clause needed to capture that pattern.
 
-use std::fs;
-use std::path::Path;
+use std::{fs, path::Path};
 
 use rstest::{fixture, rstest};
 use toml::Value;
@@ -112,9 +111,9 @@ fn serial_dylint_ui_filter_captures_integration_ui_binaries(serial_dylint_ui_ove
     // `test(ui::ui)` missed it because the test name is plain `ui`.
     assert!(
         filter.contains("(binary(ui) & test(=ui))"),
-        "the serial-dylint-ui filter must contain `(binary(ui) & test(=ui))` \
-         to capture integration test binaries named `ui` with a top-level \
-         `fn ui()` (e.g. {crates:?}); found filter: {filter}"
+        "the serial-dylint-ui filter must contain `(binary(ui) & test(=ui))` to capture \
+         integration test binaries named `ui` with a top-level `fn ui()` (e.g. {crates:?}); found \
+         filter: {filter}"
     );
 }
 

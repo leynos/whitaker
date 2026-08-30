@@ -4,11 +4,15 @@
 //! that set the `DYLINT_LIBRARY_PATH` environment variable and invoke
 //! `cargo dylint`.
 
-use crate::dirs::BaseDirs;
-use crate::error::{InstallerError, Result};
-use crate::resolution::SUITE_CRATE;
-use camino::Utf8Path;
 use std::path::Path;
+
+use camino::Utf8Path;
+
+use crate::{
+    dirs::BaseDirs,
+    error::{InstallerError, Result},
+    resolution::SUITE_CRATE,
+};
 
 /// Result of wrapper script generation.
 #[derive(Debug)]
@@ -44,8 +48,10 @@ pub struct WrapperResult {
 ///
 /// ```no_run
 /// use camino::Utf8Path;
-/// use whitaker_installer::dirs::{BaseDirs, SystemBaseDirs};
-/// use whitaker_installer::wrapper::generate_wrapper_scripts;
+/// use whitaker_installer::{
+///     dirs::{BaseDirs, SystemBaseDirs},
+///     wrapper::generate_wrapper_scripts,
+/// };
 ///
 /// let dirs = SystemBaseDirs::new().expect("failed to initialize directories");
 /// let library_path = Utf8Path::new("/home/user/.local/share/dylint/lib");
@@ -212,8 +218,9 @@ pub fn path_instructions(bin_dir: &Path) -> String {
 mod tests {
     //! Tests for the generated cargo-whitaker wrapper script.
 
-    use super::*;
     use tempfile::TempDir;
+
+    use super::*;
 
     #[test]
     fn is_directory_in_path_returns_false_for_random_dir() {

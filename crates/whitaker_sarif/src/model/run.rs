@@ -7,8 +7,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::descriptor::ReportingDescriptor;
-use super::result::SarifResult;
+use super::{descriptor::ReportingDescriptor, result::SarifResult};
 
 /// A single analysis tool execution.
 ///
@@ -150,8 +149,10 @@ pub struct Artefact {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::location::ArtefactLocation;
-    use crate::test_support::{assert_json_round_trip, assert_serialized_json};
+    use crate::{
+        model::location::ArtefactLocation,
+        test_support::{assert_json_round_trip, assert_serialized_json},
+    };
 
     #[test]
     fn run_round_trip() {

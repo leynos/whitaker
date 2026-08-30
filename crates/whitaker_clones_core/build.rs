@@ -12,7 +12,10 @@ use camino::Utf8PathBuf;
 mod build_support;
 
 use build_support::{
-    exact_version, find_workspace_manifest, parser_dependency_requirement, read_workspace_manifest,
+    exact_version,
+    find_workspace_manifest,
+    parser_dependency_requirement,
+    read_workspace_manifest,
 };
 
 const PARSER_VERSION_ENV: &str = "WHITAKER_RA_AP_SYNTAX_VERSION";

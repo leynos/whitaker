@@ -9,7 +9,9 @@ use std::{
 use rstest::fixture;
 use tempfile::TempDir;
 use whitaker_installer::{
-    dirs::SystemBaseDirs, prebuilt_path::prebuilt_library_dir, test_support::TEST_STAGE_SUITE_ENV,
+    dirs::SystemBaseDirs,
+    prebuilt_path::prebuilt_library_dir,
+    test_support::TEST_STAGE_SUITE_ENV,
     toolchain::parse_toolchain_channel,
 };
 
@@ -27,9 +29,7 @@ pub(super) struct CliWorld {
 
 #[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
-pub(super) fn cli_world() -> CliWorld {
-    CliWorld::default()
-}
+pub(super) fn cli_world() -> CliWorld { CliWorld::default() }
 
 pub(super) fn workspace_root() -> PathBuf {
     let manifest_dir = PathBuf::from(std::env!("CARGO_MANIFEST_DIR"));
@@ -220,8 +220,12 @@ pub(super) fn run_installer_cli(cli_world: &CliWorld) {
 mod assertions;
 
 pub(super) use assertions::{
-    assert_cli_exits_successfully, assert_cli_exits_with_error, assert_dry_run_output_is_shown,
+    assert_cli_exits_successfully,
+    assert_cli_exits_with_error,
+    assert_dry_run_output_is_shown,
     assert_experimental_lint_dry_run_output_is_shown,
-    assert_experimental_lint_opt_in_message_is_shown, assert_installation_succeeds_or_is_skipped,
-    assert_suite_library_is_staged, assert_unknown_lint_message_is_shown,
+    assert_experimental_lint_opt_in_message_is_shown,
+    assert_installation_succeeds_or_is_skipped,
+    assert_suite_library_is_staged,
+    assert_unknown_lint_message_is_shown,
 };

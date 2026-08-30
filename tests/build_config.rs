@@ -1,7 +1,6 @@
 //! Build configuration guards for dynamic linking expectations.
 
-use std::fs;
-use std::path::Path;
+use std::{fs, path::Path};
 
 use toml::Value;
 

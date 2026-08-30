@@ -115,9 +115,11 @@ fn validate_entry_path(path: &Path) -> Result<(), ExtractionError> {
 mod tests {
     //! Tests for artefact archive extraction.
 
-    use super::*;
-    use rstest::rstest;
     use std::path::PathBuf;
+
+    use rstest::rstest;
+
+    use super::*;
 
     #[test]
     fn extract_real_archive() {

@@ -6,10 +6,12 @@
 //! ordinary unit and behavioural tests; the driver supplies the enclosing item
 //! path resolved from the HIR.
 
-use crate::config::LINT_NAME;
-use log::warn;
 use std::collections::HashSet;
+
+use log::warn;
 use whitaker_common::SimplePath;
+
+use crate::config::LINT_NAME;
 
 /// Maximum length of a malformed entry echoed into a warning, so a pathological
 /// configuration value cannot produce an unbounded log line.
@@ -67,9 +69,7 @@ impl PathExclusions {
     ///
     /// The driver consults this before resolving an item's path so the common
     /// case pays no lookup cost.
-    pub(crate) const fn is_empty(&self) -> bool {
-        self.prefixes.is_empty()
-    }
+    pub(crate) const fn is_empty(&self) -> bool { self.prefixes.is_empty() }
 
     /// Returns `true` when `item_path` falls within a configured exclusion.
     ///
@@ -114,11 +114,13 @@ mod tests {
     //! prefix matching (example-based and property-based), and the bounded
     //! rendering used when warning about rejected entries.
 
-    use super::PathExclusions;
+    use std::collections::HashSet;
+
     use proptest::prelude::*;
     use rstest::rstest;
-    use std::collections::HashSet;
     use whitaker_common::SimplePath;
+
+    use super::PathExclusions;
 
     fn exclusions(paths: &[&str]) -> PathExclusions {
         PathExclusions::new(
@@ -222,9 +224,7 @@ mod tests {
     // item paths that share segment *text* with a prefix but differ at a segment
     // boundary — exactly the `a::b` vs `a::bc` hazard segment-wise matching must
     // reject.
-    fn segment() -> impl Strategy<Value = String> {
-        "[a-c]{1,3}"
-    }
+    fn segment() -> impl Strategy<Value = String> { "[a-c]{1,3}" }
 
     proptest! {
         #[test]

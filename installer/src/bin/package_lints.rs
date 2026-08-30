@@ -4,22 +4,27 @@
 //! invoked by both the Makefile `package-lints` target and the
 //! rolling-release CI workflow.
 
-use clap::Parser;
-use std::io::Write;
-use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
-use thiserror::Error;
-use whitaker_installer::artefact::error::ArtefactError;
-use whitaker_installer::artefact::git_sha::GitSha;
-use whitaker_installer::artefact::manifest::GeneratedAt;
-use whitaker_installer::artefact::packaging::{
-    PackageParams, generate_manifest_json, package_artefact,
+use std::{
+    io::Write,
+    path::{Path, PathBuf},
+    time::{SystemTime, UNIX_EPOCH},
 };
-use whitaker_installer::artefact::packaging_error::PackagingError;
-use whitaker_installer::artefact::target::TargetTriple;
-use whitaker_installer::artefact::toolchain_channel::ToolchainChannel;
-use whitaker_installer::output::write_stderr_line;
-use whitaker_installer::resolution::{LINT_CRATES, SUITE_CRATE};
+
+use clap::Parser;
+use thiserror::Error;
+use whitaker_installer::{
+    artefact::{
+        error::ArtefactError,
+        git_sha::GitSha,
+        manifest::GeneratedAt,
+        packaging::{PackageParams, generate_manifest_json, package_artefact},
+        packaging_error::PackagingError,
+        target::TargetTriple,
+        toolchain_channel::ToolchainChannel,
+    },
+    output::write_stderr_line,
+    resolution::{LINT_CRATES, SUITE_CRATE},
+};
 
 /// Package prebuilt lint libraries into `.tar.zst` archives following
 /// the ADR-001 naming convention and write a sidecar
@@ -255,10 +260,12 @@ const fn civil_from_epoch(epoch_secs: u64) -> (i64, u64, u64) {
 mod tests {
     //! Tests for the lint-library packaging command.
 
-    use super::*;
+    use std::fs;
+
     use clap::Parser;
     use rstest::{fixture, rstest};
-    use std::fs;
+
+    use super::*;
 
     /// Common CLI base arguments shared across parsing tests.
     const BASE_ARGS: [&str; 9] = [

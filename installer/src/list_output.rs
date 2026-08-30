@@ -12,8 +12,7 @@ use crate::scanner::{InstalledLibrary, InstalledLints, lints_for_library};
 /// # Examples
 ///
 /// ```
-/// use whitaker_installer::list_output::format_human;
-/// use whitaker_installer::scanner::InstalledLints;
+/// use whitaker_installer::{list_output::format_human, scanner::InstalledLints};
 ///
 /// let lints = InstalledLints::default();
 /// let output = format_human(&lints, None);
@@ -75,8 +74,7 @@ fn format_library_lines(library: &InstalledLibrary) -> String {
 /// # Examples
 ///
 /// ```
-/// use whitaker_installer::list_output::format_json;
-/// use whitaker_installer::scanner::InstalledLints;
+/// use whitaker_installer::{list_output::format_json, scanner::InstalledLints};
 ///
 /// let lints = InstalledLints::default();
 /// let json = format_json(&lints, None);
@@ -153,11 +151,12 @@ pub struct LibraryEntry {
 mod tests {
     //! Tests for human-readable and JSON list formatting.
 
-    use super::*;
-    use crate::builder::CrateName;
-    use crate::scanner::InstalledLibrary;
-    use camino::Utf8PathBuf;
     use std::collections::BTreeMap;
+
+    use camino::Utf8PathBuf;
+
+    use super::*;
+    use crate::{builder::CrateName, scanner::InstalledLibrary};
 
     fn sample_lints() -> InstalledLints {
         let mut by_toolchain = BTreeMap::new();

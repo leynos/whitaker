@@ -1,12 +1,25 @@
 //! Tests for parser-independent AST feature extraction.
 
-use super::{
-    AstResult, ByteSpan, Depth, KindId, KindWeight, LeafClass, NormalizedNode, NormalizedTree,
-    Production, canonical_hash, kind_counts, kind_histogram, production_multiset,
-    select_smallest_covering, weighted_histogram,
-};
 use proptest::prelude::*;
 use rstest::rstest;
+
+use super::{
+    AstResult,
+    ByteSpan,
+    Depth,
+    KindId,
+    KindWeight,
+    LeafClass,
+    NormalizedNode,
+    NormalizedTree,
+    Production,
+    canonical_hash,
+    kind_counts,
+    kind_histogram,
+    production_multiset,
+    select_smallest_covering,
+    weighted_histogram,
+};
 
 #[cfg(not(feature = "parser"))]
 #[rstest]

@@ -8,8 +8,16 @@
 use std::io::Write;
 
 use super::{
-    CommandExecutor, DYLINT_LINK_TOOL, DependencyTool, InstallContext, InstallerError,
-    RepositoryInstallContext, Result, find_dependency_binary, is_tool_installed, write_message,
+    CommandExecutor,
+    DYLINT_LINK_TOOL,
+    DependencyTool,
+    InstallContext,
+    InstallerError,
+    RepositoryInstallContext,
+    Result,
+    find_dependency_binary,
+    is_tool_installed,
+    write_message,
 };
 use crate::dependency_binaries::DependencyBinary;
 

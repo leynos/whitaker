@@ -1,16 +1,23 @@
 //! Localized diagnostics for the `no_std_fs_operations` lint.
 
-use crate::NO_STD_FS_OPERATIONS;
-use crate::usage::StdFsUsage;
+use std::borrow::Cow;
+
 use rustc_lint::{LateContext, LintContext};
 use rustc_span::Span;
-use std::borrow::Cow;
 use whitaker_common::i18n::{
-    Arguments, DiagnosticMessageSet, FluentValue, Localizer, MessageKey, MessageResolution,
-    noop_reporter, safe_resolve_message_set,
+    Arguments,
+    DiagnosticMessageSet,
+    FluentValue,
+    Localizer,
+    MessageKey,
+    MessageResolution,
+    noop_reporter,
+    safe_resolve_message_set,
 };
 #[cfg(test)]
 use whitaker_common::i18n::{BundleLookup, I18nError, resolve_message_set};
+
+use crate::{NO_STD_FS_OPERATIONS, usage::StdFsUsage};
 
 /// Emit a diagnostic for a detected `std::fs` usage.
 pub(crate) fn emit_diagnostic(
@@ -61,9 +68,11 @@ fn fallback_messages(operation: &str) -> StdFsMessages {
     )
     .to_owned();
     let help = concat!(
-        "Pass `cap_std::fs::Dir` handles and camino::Utf8Path/Utf8PathBuf arguments down to the call ",
+        "Pass `cap_std::fs::Dir` handles and camino::Utf8Path/Utf8PathBuf arguments down to the \
+         call ",
         "so only explicit capabilities touch the filesystem."
-    ).to_owned();
+    )
+    .to_owned();
     DiagnosticMessageSet::new(primary, note, help)
 }
 

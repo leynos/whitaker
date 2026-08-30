@@ -2,9 +2,8 @@
 
 use std::collections::BTreeSet;
 
-use crate::{Fingerprint, NormProfile};
-
 use super::error::{Run0Error, Run0Result};
+use crate::{Fingerprint, NormProfile};
 
 /// Integer-backed Jaccard similarity ratio.
 ///
@@ -38,15 +37,11 @@ impl SimilarityRatio {
 
     /// Returns the numerator of the ratio.
     #[must_use]
-    pub const fn intersection(self) -> usize {
-        self.intersection
-    }
+    pub const fn intersection(self) -> usize { self.intersection }
 
     /// Returns the denominator of the ratio.
     #[must_use]
-    pub const fn union(self) -> usize {
-        self.union
-    }
+    pub const fn union(self) -> usize { self.union }
 
     /// Formats the ratio as a six-decimal string without floating-point arithmetic.
     #[must_use]
@@ -77,8 +72,7 @@ impl SimilarityRatio {
 /// ```
 /// use whitaker_clones_core::run0::SimilarityThreshold;
 ///
-/// let threshold = SimilarityThreshold::new("custom", 4, 5)
-///     .expect("valid threshold");
+/// let threshold = SimilarityThreshold::new("custom", 4, 5).expect("valid threshold");
 /// assert_eq!(threshold.numerator(), 4);
 /// assert_eq!(threshold.denominator(), 5);
 /// ```
@@ -117,15 +111,11 @@ impl SimilarityThreshold {
 
     /// Returns the threshold numerator.
     #[must_use]
-    pub const fn numerator(self) -> usize {
-        self.numerator
-    }
+    pub const fn numerator(self) -> usize { self.numerator }
 
     /// Returns the threshold denominator.
     #[must_use]
-    pub const fn denominator(self) -> usize {
-        self.denominator
-    }
+    pub const fn denominator(self) -> usize { self.denominator }
 
     /// Returns `true` if the threshold represents a ratio within `(0, 1]`.
     const fn is_valid(self) -> bool {

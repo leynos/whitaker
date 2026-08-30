@@ -1,8 +1,7 @@
 //! Classifies `std::fs` usages encountered by the lint into diagnostic inputs.
 
 use rustc_hir as hir;
-use rustc_hir::def::Res;
-use rustc_hir::def_id::DefId;
+use rustc_hir::{def::Res, def_id::DefId};
 use rustc_lint::LateContext;
 use rustc_span::sym;
 use whitaker_common::SimplePath;
@@ -66,16 +65,12 @@ impl StdFsUsage {
     /// let usage = StdFsUsage::new(String::from("std::fs::remove_file"), UsageCategory::Call);
     /// assert_eq!(usage.operation(), "std::fs::remove_file");
     /// ```
-    pub fn operation(&self) -> &str {
-        &self.operation
-    }
+    pub fn operation(&self) -> &str { &self.operation }
 
     /// Returns the usage category.
     #[cfg(test)]
     #[must_use]
-    pub const fn category(&self) -> UsageCategory {
-        self.category
-    }
+    pub const fn category(&self) -> UsageCategory { self.category }
 }
 
 /// Classify a resolved path (expression, type, import) into a usage record.
@@ -151,9 +146,7 @@ fn is_std_fs_path(path: &SimplePath) -> bool {
 }
 
 /// Returns true if the character should be rejected in a valid `std::fs` label.
-const fn is_invalid_label_char(ch: char) -> bool {
-    ch.is_whitespace() || matches!(ch, '(' | ')')
-}
+const fn is_invalid_label_char(ch: char) -> bool { ch.is_whitespace() || matches!(ch, '(' | ')') }
 
 pub(crate) fn label_is_std_fs(label: &str) -> bool {
     if label != label.trim() {

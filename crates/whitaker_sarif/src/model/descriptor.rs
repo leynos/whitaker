@@ -48,7 +48,9 @@ pub struct ReportingDescriptor {
 /// ```
 /// use whitaker_sarif::MultiformatMessageString;
 ///
-/// let msg = MultiformatMessageString { text: "hello".into() };
+/// let msg = MultiformatMessageString {
+///     text: "hello".into(),
+/// };
 /// assert_eq!(msg.text, "hello");
 /// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
