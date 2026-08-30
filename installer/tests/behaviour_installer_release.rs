@@ -100,7 +100,7 @@ fn attempt_packaging(world: &mut InstallerReleaseWorld) -> Result<(), String> {
         output_dir: temp_dir.path().to_path_buf(),
     };
 
-    match installer_packaging::package_installer(params) {
+    match installer_packaging::package_installer(&params) {
         Ok(output) => world.package_output = Some(output),
         Err(e) => world.packaging_error = Some(e),
     }

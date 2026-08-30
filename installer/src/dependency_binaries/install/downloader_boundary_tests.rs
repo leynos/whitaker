@@ -73,7 +73,7 @@ impl DownloadHarness {
 fn download_harness(
     #[default(HashMap::new())] routes: HashMap<String, CannedResponse>,
 ) -> std::io::Result<DownloadHarness> {
-    let server = LocalServer::start(routes);
+    let server = LocalServer::start(routes)?;
     let temp = TempDir::new()?;
     let destination = temp.path().join("archive.tgz");
     Ok(DownloadHarness {

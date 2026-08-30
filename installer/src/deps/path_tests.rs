@@ -32,7 +32,8 @@ fn check_dylint_tools_reports_installed_tools() {
             }
         );
         executor.assert_finished();
-    });
+    })
+    .expect("prepare fake PATH");
 }
 
 #[rstest::rstest]
@@ -41,7 +42,7 @@ fn check_dylint_tools_reports_installed_tools() {
 fn check_dylint_tools_rejects_unusable_cargo_dylint_output(#[case] version_stdout: &str) {
     // The fake PATH keeps dylint-link absent so only cargo-dylint is probed.
     with_fake_path(
-        |_| (),
+        |_| Ok(()),
         || {
             let executor = StubExecutor::new(vec![cargo_dylint_check_with_result(Ok(
                 stdout_output(version_stdout),
@@ -58,7 +59,8 @@ fn check_dylint_tools_rejects_unusable_cargo_dylint_output(#[case] version_stdou
             );
             executor.assert_finished();
         },
-    );
+    )
+    .expect("prepare fake PATH");
 }
 
 #[rstest::rstest]
@@ -82,14 +84,17 @@ fn check_dylint_tools_rejects_unpinned_dylint_link(#[case] install_list_check: E
             }
         );
         executor.assert_finished();
-    });
+    })
+    .expect("prepare fake PATH");
 }
 
 #[test]
 fn check_dylint_tools_rejects_non_invocable_dylint_link_on_path() {
     with_fake_path(
         |directories| {
-            let first_dir = &directories[0];
+            let first_dir = directories.first().ok_or_else(|| {
+                std::io::Error::other("fake PATH should contain at least one directory")
+            })?;
             #[cfg(windows)]
             let binary_path = first_dir.join("dylint-link.cmd");
             #[cfg(not(windows))]
@@ -111,7 +116,8 @@ fn check_dylint_tools_rejects_non_invocable_dylint_link_on_path() {
             );
             executor.assert_finished();
         },
-    );
+    )
+    .expect("prepare fake PATH");
 }
 
 #[test]
@@ -133,18 +139,21 @@ fn is_binary_on_path_returns_false_when_path_is_empty() {
 #[test]
 fn is_binary_on_path_returns_false_when_binary_is_missing_from_all_directories() {
     with_fake_path(
-        |_| (),
+        |_| Ok(()),
         || {
             assert!(!is_binary_on_path("dylint-link"));
         },
-    );
+    )
+    .expect("prepare fake PATH");
 }
 
 #[test]
 fn is_binary_on_path_checks_multiple_directories() {
     with_fake_path(
         |directories| {
-            let second_dir = &directories[1];
+            let second_dir = directories.get(1).ok_or_else(|| {
+                std::io::Error::other("fake PATH should contain at least two directories")
+            })?;
             #[cfg(windows)]
             let binary_path = second_dir.join("dylint-link.exe");
             #[cfg(not(windows))]
@@ -155,7 +164,8 @@ fn is_binary_on_path_checks_multiple_directories() {
         || {
             assert!(is_binary_on_path("dylint-link"));
         },
-    );
+    )
+    .expect("prepare fake PATH");
 }
 
 #[cfg(unix)]
@@ -163,7 +173,7 @@ fn is_binary_on_path_checks_multiple_directories() {
 fn is_executable_file_rejects_non_executable_files() {
     let temp_dir = tempfile::tempdir().expect("create temp dir");
     let binary_path = temp_dir.path().join("dylint-link");
-    write_fake_binary(&binary_path, false);
+    write_fake_binary(&binary_path, false).expect("write fake binary");
 
     assert!(!is_executable_file(&binary_path));
 }
@@ -173,7 +183,7 @@ fn is_executable_file_rejects_non_executable_files() {
 fn is_executable_file_accepts_executable_files() {
     let temp_dir = tempfile::tempdir().expect("create temp dir");
     let binary_path = temp_dir.path().join("dylint-link");
-    write_fake_binary(&binary_path, true);
+    write_fake_binary(&binary_path, true).expect("write fake binary");
 
     assert!(is_executable_file(&binary_path));
 }
@@ -192,7 +202,8 @@ fn is_binary_on_path_handles_windows_executable_suffixes(
         || {
             assert_eq!(is_binary_on_path(binary_name), expected);
         },
-    );
+    )
+    .expect("prepare fake PATH");
 }
 
 #[cfg(windows)]
@@ -219,5 +230,6 @@ fn check_dylint_tools_detects_dylint_link_via_pathext_suffix() {
                 executor.assert_finished();
             });
         },
-    );
+    )
+    .expect("prepare fake PATH");
 }

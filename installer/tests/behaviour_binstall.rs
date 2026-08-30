@@ -81,8 +81,8 @@ fn assert_binstall_value_equals(
 
 #[given("the installer Cargo.toml is loaded")]
 fn given_cargo_toml_loaded(world: &mut BinstallWorld) -> Result<(), String> {
-    let table = load_cargo_toml();
-    world.binstall_table = Some(extract_binstall_table(&table));
+    let table = load_cargo_toml()?;
+    world.binstall_table = Some(extract_binstall_table(&table)?);
     Ok(())
 }
 

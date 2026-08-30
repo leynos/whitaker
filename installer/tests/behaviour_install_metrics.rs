@@ -9,9 +9,6 @@ use whitaker_installer::install_metrics::{
     InstallMetrics, InstallMode, RecordOutcome, record_install_at_path,
 };
 
-/// Tolerance for comparing floating-point install rates.
-const FLOAT_RATE_TOLERANCE: f64 = 1e-6;
-
 #[derive(Default)]
 struct InstallMetricsWorld {
     /// Owns the scenario's temporary metrics directory so it outlives the run.
@@ -165,23 +162,22 @@ fn then_build_installs(world: &mut InstallMetricsWorld, expected: u64) -> Result
     )
 }
 
-/// Compares a floating-point rate against its expected value with tolerance.
-fn ensure_rate(actual: f64, expected: f64, context: &str) -> Result<(), String> {
-    if (actual - expected).abs() < FLOAT_RATE_TOLERANCE {
-        Ok(())
-    } else {
-        Err(format!("{context}: expected {expected}, got {actual}"))
-    }
+#[then("download rate is {expected:u64} permille")]
+fn then_download_rate(world: &mut InstallMetricsWorld, expected: u64) -> Result<(), String> {
+    ensure_eq(
+        &metrics(world)?.download_rate_permille(),
+        &expected,
+        "download rate permille",
+    )
 }
 
-#[then("download rate is {expected:f64}")]
-fn then_download_rate(world: &mut InstallMetricsWorld, expected: f64) -> Result<(), String> {
-    ensure_rate(metrics(world)?.download_rate(), expected, "download rate")
-}
-
-#[then("build rate is {expected:f64}")]
-fn then_build_rate(world: &mut InstallMetricsWorld, expected: f64) -> Result<(), String> {
-    ensure_rate(metrics(world)?.build_rate(), expected, "build rate")
+#[then("build rate is {expected:u64} permille")]
+fn then_build_rate(world: &mut InstallMetricsWorld, expected: u64) -> Result<(), String> {
+    ensure_eq(
+        &metrics(world)?.build_rate_permille(),
+        &expected,
+        "build rate permille",
+    )
 }
 
 #[then("total installation time is {expected:u64} milliseconds")]
