@@ -16,10 +16,11 @@ struct TempTarget {
 }
 
 #[fixture]
-fn temp_target() -> TempTarget {
-    let temp = TempDir::new().expect("failed to create temp dir");
-    let path = Utf8PathBuf::try_from(temp.path().to_owned()).expect("non-UTF8 temp path");
-    TempTarget { _temp: temp, path }
+fn temp_target() -> std::io::Result<TempTarget> {
+    let temp = TempDir::new()?;
+    let path = Utf8PathBuf::try_from(temp.path().to_owned())
+        .map_err(|_| std::io::Error::other("temporary directory path must be UTF-8"))?;
+    Ok(TempTarget { _temp: temp, path })
 }
 
 /// A Write implementation that always fails, for testing error paths.
@@ -61,11 +62,15 @@ impl MockLibraryKind {
     }
 }
 
-fn create_mock_library_internal(target_dir: &Utf8Path, toolchain: &str, kind: MockLibraryKind) {
+fn create_mock_library_internal(
+    target_dir: &Utf8Path,
+    toolchain: &str,
+    kind: MockLibraryKind,
+) -> std::io::Result<()> {
     use crate::builder::{library_extension, library_prefix};
 
     let lib_dir = kind.library_dir(target_dir, toolchain);
-    fs::create_dir_all(&lib_dir).expect("failed to create target library directory");
+    fs::create_dir_all(&lib_dir)?;
 
     let filename = format!(
         "{}whitaker_suite@{toolchain}{}",
@@ -73,20 +78,20 @@ fn create_mock_library_internal(target_dir: &Utf8Path, toolchain: &str, kind: Mo
         library_extension()
     );
 
-    let error_msg = match kind {
-        MockLibraryKind::Local => "failed to create mock library",
-        MockLibraryKind::Prebuilt { .. } => "failed to create prebuilt mock library",
-    };
-    fs::write(lib_dir.join(filename), kind.content()).expect(error_msg);
+    fs::write(lib_dir.join(filename), kind.content())
 }
 
 /// Helper to create a mock installed library in the target directory for tests.
-fn create_mock_library(target_dir: &Utf8Path, toolchain: &str) {
-    create_mock_library_internal(target_dir, toolchain, MockLibraryKind::Local);
+fn create_mock_library(target_dir: &Utf8Path, toolchain: &str) -> std::io::Result<()> {
+    create_mock_library_internal(target_dir, toolchain, MockLibraryKind::Local)
 }
 
-fn create_mock_prebuilt_library(target_dir: &Utf8Path, toolchain: &str, target: &'static str) {
-    create_mock_library_internal(target_dir, toolchain, MockLibraryKind::Prebuilt { target });
+fn create_mock_prebuilt_library(
+    target_dir: &Utf8Path,
+    toolchain: &str,
+    target: &'static str,
+) -> std::io::Result<()> {
+    create_mock_library_internal(target_dir, toolchain, MockLibraryKind::Prebuilt { target })
 }
 
 // -------------------------------------------------------------------------
@@ -94,7 +99,11 @@ fn create_mock_prebuilt_library(target_dir: &Utf8Path, toolchain: &str, target: 
 // -------------------------------------------------------------------------
 
 #[rstest]
-fn run_list_outputs_human_readable_format(temp_target: TempTarget) {
+fn run_list_outputs_human_readable_format(
+    #[from(temp_target)] temp_target_res: std::io::Result<TempTarget>,
+) {
+    let temp_target = temp_target_res.expect("temporary target directory should be created");
+
     let args = ListArgs {
         json: false,
         target_dir: Some(temp_target.path.clone()),
@@ -112,11 +121,14 @@ fn run_list_outputs_human_readable_format(temp_target: TempTarget) {
 #[case::json_format(true, &["toolchains", "\"active\""])]
 #[case::human_format(false, &["nightly-2026-05-28", "whitaker_suite"])]
 fn run_list_with_installed_library_includes_expected_output(
-    temp_target: TempTarget,
+    #[from(temp_target)] temp_target_res: std::io::Result<TempTarget>,
     #[case] json: bool,
     #[case] expected: &[&str],
 ) {
-    create_mock_library(&temp_target.path, "nightly-2026-05-28");
+    let temp_target = temp_target_res.expect("temporary target directory should be created");
+
+    create_mock_library(&temp_target.path, "nightly-2026-05-28")
+        .expect("mock library should be staged");
     let args = ListArgs {
         json,
         target_dir: Some(temp_target.path.clone()),
@@ -136,12 +148,17 @@ fn run_list_with_installed_library_includes_expected_output(
 }
 
 #[rstest]
-fn run_list_finds_prebuilt_layout_libraries(temp_target: TempTarget) {
+fn run_list_finds_prebuilt_layout_libraries(
+    #[from(temp_target)] temp_target_res: std::io::Result<TempTarget>,
+) {
+    let temp_target = temp_target_res.expect("temporary target directory should be created");
+
     create_mock_prebuilt_library(
         &temp_target.path,
         "nightly-2026-05-28",
         "x86_64-unknown-linux-gnu",
-    );
+    )
+    .expect("mock prebuilt library should be staged");
     let args = ListArgs {
         json: false,
         target_dir: Some(temp_target.path.clone()),
@@ -157,7 +174,11 @@ fn run_list_finds_prebuilt_layout_libraries(temp_target: TempTarget) {
 }
 
 #[rstest]
-fn run_list_returns_write_failed_on_stdout_error(temp_target: TempTarget) {
+fn run_list_returns_write_failed_on_stdout_error(
+    #[from(temp_target)] temp_target_res: std::io::Result<TempTarget>,
+) {
+    let temp_target = temp_target_res.expect("temporary target directory should be created");
+
     let args = ListArgs {
         json: false,
         target_dir: Some(temp_target.path.clone()),
@@ -178,7 +199,11 @@ fn run_list_returns_write_failed_on_stdout_error(temp_target: TempTarget) {
 // -------------------------------------------------------------------------
 
 #[rstest]
-fn detect_active_toolchain_in_returns_none_when_no_toolchain_file(temp_target: TempTarget) {
+fn detect_active_toolchain_in_returns_none_when_no_toolchain_file(
+    #[from(temp_target)] temp_target_res: std::io::Result<TempTarget>,
+) {
+    let temp_target = temp_target_res.expect("temporary target directory should be created");
+
     let result = detect_active_toolchain_in(&temp_target.path);
     assert!(
         result.is_none(),
@@ -187,7 +212,11 @@ fn detect_active_toolchain_in_returns_none_when_no_toolchain_file(temp_target: T
 }
 
 #[rstest]
-fn detect_active_toolchain_in_returns_channel_when_toolchain_file_exists(temp_target: TempTarget) {
+fn detect_active_toolchain_in_returns_channel_when_toolchain_file_exists(
+    #[from(temp_target)] temp_target_res: std::io::Result<TempTarget>,
+) {
+    let temp_target = temp_target_res.expect("temporary target directory should be created");
+
     // Create a rust-toolchain.toml file
     let toolchain_content = r#"[toolchain]
 channel = "nightly-2026-05-28"
@@ -208,7 +237,11 @@ channel = "nightly-2026-05-28"
 // -------------------------------------------------------------------------
 
 #[rstest]
-fn determine_target_dir_returns_cli_value_when_provided(temp_target: TempTarget) {
+fn determine_target_dir_returns_cli_value_when_provided(
+    #[from(temp_target)] temp_target_res: std::io::Result<TempTarget>,
+) {
+    let temp_target = temp_target_res.expect("temporary target directory should be created");
+
     let result = determine_target_dir_with(Some(&temp_target.path), || None);
 
     assert!(result.is_ok(), "expected success, got: {result:?}");
@@ -216,7 +249,11 @@ fn determine_target_dir_returns_cli_value_when_provided(temp_target: TempTarget)
 }
 
 #[rstest]
-fn determine_target_dir_falls_back_to_default_when_cli_is_none(temp_target: TempTarget) {
+fn determine_target_dir_falls_back_to_default_when_cli_is_none(
+    #[from(temp_target)] temp_target_res: std::io::Result<TempTarget>,
+) {
+    let temp_target = temp_target_res.expect("temporary target directory should be created");
+
     let default_path = temp_target.path.clone();
 
     let result = determine_target_dir_with(None, || Some(default_path.clone()));
@@ -237,7 +274,11 @@ fn determine_target_dir_returns_error_when_no_default_available() {
 }
 
 #[rstest]
-fn determine_target_dir_prefers_cli_over_default(temp_target: TempTarget) {
+fn determine_target_dir_prefers_cli_over_default(
+    #[from(temp_target)] temp_target_res: std::io::Result<TempTarget>,
+) {
+    let temp_target = temp_target_res.expect("temporary target directory should be created");
+
     let cli_path = temp_target.path.clone();
     let default_path = temp_target.path.join("should_not_be_used");
 

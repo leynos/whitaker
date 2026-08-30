@@ -63,7 +63,7 @@ pub fn generate_wrapper_scripts(
     dirs: &dyn BaseDirs,
     library_path: &Utf8Path,
 ) -> Result<WrapperResult> {
-    let bin_dir = dirs.bin_dir().ok_or_else(|| {
+    let bin_dir = dirs.executables().ok_or_else(|| {
         InstallerError::WrapperGeneration("could not determine bin directory".to_owned())
     })?;
 
@@ -111,9 +111,8 @@ exec cargo dylint "$@"
         r#"#!/usr/bin/env bash
 set -euo pipefail
 export DYLINT_LIBRARY_PATH="{library_path}"
-cargo dylint list --color never | awk -v suite="{suite_crate}" '$0 ~ "^" suite "([[:space:]]|$)" {{ print }}'
-"#,
-        suite_crate = SUITE_CRATE,
+cargo dylint list --color never | awk -v suite="{SUITE_CRATE}" '$0 ~ "^" suite "([[:space:]]|$)" {{ print }}'
+"#
     );
     write_unix_script(&whitaker_ls_path, &whitaker_ls_content)?;
 
@@ -158,12 +157,11 @@ cargo dylint @args
     let whitaker_ls_path = bin_dir.join("whitaker-ls.ps1");
     let whitaker_ls_content = format!(
         r#"$env:DYLINT_LIBRARY_PATH = "{library_path}"
-$suite = "{suite_crate}"
+$suite = "{SUITE_CRATE}"
 cargo dylint list --color never | Where-Object {{
     $_ -match ("^\\s*" + [regex]::Escape($suite) + "(\\s|$)")
 }}
-"#,
-        suite_crate = SUITE_CRATE,
+"#
     );
 
     std::fs::write(&whitaker_ls_path, whitaker_ls_content)
@@ -174,12 +172,11 @@ cargo dylint list --color never | Where-Object {{
 
 /// Checks if a directory is in the PATH environment variable.
 fn is_directory_in_path(dir: &Path) -> bool {
-    std::env::var_os("PATH")
-        .map(|path| std::env::split_paths(&path).any(|p| p == dir))
-        .unwrap_or(false)
+    std::env::var_os("PATH").is_some_and(|path| std::env::split_paths(&path).any(|p| p == dir))
 }
 
 /// Returns instructions for adding a directory to PATH.
+#[must_use]
 pub fn path_instructions(bin_dir: &Path) -> String {
     #[cfg(unix)]
     {
@@ -213,6 +210,8 @@ pub fn path_instructions(bin_dir: &Path) -> String {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for the generated cargo-whitaker wrapper script.
+
     use super::*;
     use tempfile::TempDir;
 
@@ -222,11 +221,44 @@ mod tests {
         assert!(!is_directory_in_path(temp.path()));
     }
 
+    /// Asserts that every user, group, and other execute bit is set on `$path`.
+    ///
+    /// Expressed as a macro so failures point at the calling test, and so the
+    /// fallible metadata read stays inside the test body.
+    #[cfg(unix)]
+    macro_rules! assert_script_is_executable {
+        ($path:expr) => {{
+            use std::os::unix::fs::PermissionsExt as _;
+
+            let metadata = std::fs::metadata($path).expect("script metadata should be readable");
+            assert_eq!(
+                metadata.permissions().mode() & 0o111,
+                0o111,
+                "script should be executable"
+            );
+        }};
+    }
+
+    /// Asserts that the script at `$path` contains every fragment in `$fragments`.
+    #[cfg(unix)]
+    macro_rules! assert_script_contains {
+        ($path:expr, $fragments:expr) => {{
+            let path: &Path = $path;
+            let content = std::fs::read_to_string(path).expect("script should be readable");
+            for fragment in $fragments {
+                assert!(
+                    content.contains(fragment),
+                    "script {} should contain {fragment}",
+                    path.display()
+                );
+            }
+        }};
+    }
+
     #[cfg(unix)]
     #[test]
     fn generate_unix_scripts_create_executables() {
         use camino::Utf8PathBuf;
-        use std::os::unix::fs::PermissionsExt;
 
         let temp = TempDir::new().expect("failed to create temp dir");
         let library_path = Utf8PathBuf::from("/tmp/dylint/lib");
@@ -236,23 +268,15 @@ mod tests {
 
         assert!(whitaker_path.exists());
         assert!(whitaker_ls_path.exists());
-
-        let perms = std::fs::metadata(&whitaker_path)
-            .expect("failed to read metadata")
-            .permissions();
-        assert_eq!(perms.mode() & 0o111, 0o111, "script should be executable");
-
-        let whitaker_content =
-            std::fs::read_to_string(&whitaker_path).expect("failed to read script");
-        assert!(whitaker_content.contains("DYLINT_LIBRARY_PATH"));
-        assert!(whitaker_content.contains("cargo dylint"));
-        assert!(whitaker_content.contains("$@"));
-
-        let whitaker_ls_content =
-            std::fs::read_to_string(&whitaker_ls_path).expect("failed to read script");
-        assert!(whitaker_ls_content.contains("DYLINT_LIBRARY_PATH"));
-        assert!(whitaker_ls_content.contains("cargo dylint list"));
-        assert!(whitaker_ls_content.contains("whitaker_suite"));
+        assert_script_is_executable!(&whitaker_path);
+        assert_script_contains!(
+            &whitaker_path,
+            &["DYLINT_LIBRARY_PATH", "cargo dylint", "$@"]
+        );
+        assert_script_contains!(
+            &whitaker_ls_path,
+            &["DYLINT_LIBRARY_PATH", "cargo dylint list", "whitaker_suite"]
+        );
     }
 
     #[test]
