@@ -83,6 +83,13 @@
   literal-context exemptions, localized diagnostics, and suite integration. See
   [RFC 0002](rfcs/0002-string-continuation-style.md).
   Requires 2.1.1 and 2.3.4.
+- [ ] 2.2.11. Implement `missing_docs_in_test_functions` as a pre-expansion
+  AST lint for source-authored functions in configured Rust test-source paths,
+  including typed include/exclude configuration, localized diagnostics, suite
+  registration, and UI coverage for documentation forms, procedural attributes,
+  exclusions, test-harness gating, and generated-code immunity. See
+  [RFC 0003](rfcs/0003-missing-docs-in-test-functions.md) §§Proposed design-
+  Test plan. Requires 1.1.2, 2.1.1, and 2.3.4.
 
 ### 2.3. Localization enablement
 
