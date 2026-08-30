@@ -19,12 +19,12 @@ glob = "0.3.3"
 log = { workspace = true }
 once_cell = { workspace = true }
 parking_lot = { workspace = true }
-temp-env = { workspace = true }
 tempfile = "3.14.0"
 thiserror = { workspace = true }
 unic-langid = { workspace = true }
 
 [dev-dependencies]
+cap-std = { workspace = true }
 whitaker_test_macros = { workspace = true }
 # Testing: Behavioural specs use rstest-bdd 0.5.x (workspace pin). Capture any
 # regressions with `make test` and coordinate with the maintainers per

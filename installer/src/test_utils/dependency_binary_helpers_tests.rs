@@ -6,8 +6,8 @@ use crate::test_utils::dependency_binary_helpers::{
 };
 
 #[test]
-fn repository_verification_call_returns_probe_for_cargo_dylint() {
-    let call = repository_verification_call("cargo-dylint", false)
+fn repository_verification_call_returns_probe_for_cargo_dylint() -> Result<(), String> {
+    let call = repository_verification_call("cargo-dylint", false)?
         .expect("cargo-dylint should use a verification probe");
 
     assert_eq!(call.cmd, "cargo");
@@ -15,22 +15,26 @@ fn repository_verification_call_returns_probe_for_cargo_dylint() {
     let output = call.result.expect("verification probe should succeed");
     let stdout = String::from_utf8(output.stdout).expect("stdout should be UTF-8");
     assert!(
-        stdout.contains(dependency_version("cargo-dylint")),
+        stdout.contains(dependency_version("cargo-dylint")?),
         "expected stdout to report the manifest version, got {stdout:?}"
     );
+    Ok(())
 }
 
 #[rstest::rstest]
 #[case::successful_verification(false)]
 #[case::failed_verification(true)]
-fn repository_verification_call_skips_executor_for_dylint_link(#[case] verification_fails: bool) {
+fn repository_verification_call_skips_executor_for_dylint_link(
+    #[case] verification_fails: bool,
+) -> Result<(), String> {
     // Repository installs of dylint-link are verified by probing the
     // extracted binary directly, so no executor call is expected either way.
-    assert!(repository_verification_call("dylint-link", verification_fails).is_none());
+    assert!(repository_verification_call("dylint-link", verification_fails)?.is_none());
+    Ok(())
 }
 
 #[test]
-fn expected_calls_include_repository_probe_for_cargo_dylint() {
+fn expected_calls_include_repository_probe_for_cargo_dylint() -> Result<(), String> {
     let calls = expected_calls(
         "cargo-dylint",
         &ExpectedCallConfig {
@@ -41,16 +45,17 @@ fn expected_calls_include_repository_probe_for_cargo_dylint() {
             cargo_binstall_failure: None,
             cargo_install_failure: None,
         },
-    );
+    )?;
 
     assert_eq!(calls.len(), 2);
     let verification = calls.get(1).expect("verification probe should be recorded");
     assert_eq!(verification.cmd, "cargo");
     assert_eq!(verification.args, vec!["dylint", "--version"]);
+    Ok(())
 }
 
 #[test]
-fn expected_calls_omit_executor_verification_for_dylint_link() {
+fn expected_calls_omit_executor_verification_for_dylint_link() -> Result<(), String> {
     let calls = expected_calls(
         "dylint-link",
         &ExpectedCallConfig {
@@ -61,10 +66,11 @@ fn expected_calls_omit_executor_verification_for_dylint_link() {
             cargo_binstall_failure: None,
             cargo_install_failure: None,
         },
-    );
+    )?;
 
     assert_eq!(calls.len(), 1);
     let probe = calls.first().expect("binstall probe should be recorded");
     assert_eq!(probe.cmd, "cargo");
     assert_eq!(probe.args, vec!["binstall", "--version"]);
+    Ok(())
 }
