@@ -43,5 +43,5 @@ dylint_testing = { workspace = true }
 tempfile = "3.14.0"
 glob = "0.3"
 
-[lints.rust]
-missing_docs = "deny"
+[lints]
+workspace = true

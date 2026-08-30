@@ -16,6 +16,15 @@ CARGO ?= $(or $(shell command -v cargo 2>/dev/null),$(shell [ -x "$(HOME)/.cargo
 CARGO_LOCKED ?=
 BUILD_JOBS ?=
 CARGO_FLAGS ?= --workspace --all-targets --all-features
+# Dylint UI fixtures live under `examples/` because `dylint_testing::Test::example`
+# builds them with each lint crate's dev-dependencies (tokio, rstest); `ui/`
+# fixtures are standalone and cannot carry those. Every file there is a
+# `fail_*`/`pass_*` fixture that deliberately contains the anti-patterns the
+# suite detects, so the workspace lint policy cannot meaningfully apply to them
+# -- a fixture proving `expect_used` fires cannot itself forbid `expect_used`.
+# Lint every other target rather than `--all-targets`; `typecheck` still builds
+# the fixtures, and the suite still lints them through the UI harness.
+CLIPPY_FLAGS ?= --workspace --lib --bins --tests --benches --all-features
 # The patched UI helper has a `deny_warnings` feature that changes fixture
 # diagnostics, so exercise its parser tests separately without all features.
 TEST_EXCLUDES ?= --exclude rustc_ast --exclude rustc_attr_data_structures \
@@ -384,7 +393,7 @@ skill-manifest-check: skill-frontmatter-lint skill-manifest-validate skill-metad
 
 lint: skill-manifest-check ## Run Clippy with warnings denied
 	RUSTDOCFLAGS="$(RUSTDOC_FLAGS)" $(CARGO) doc $(CARGO_LOCKED) --workspace --no-deps
-	$(CARGO) clippy $(CARGO_LOCKED) $(CARGO_FLAGS) -- $(RUST_FLAGS)
+	$(CARGO) clippy $(CARGO_LOCKED) $(CLIPPY_FLAGS) -- $(RUST_FLAGS)
 
 fmt: ## Format Rust and Markdown sources
 	$(CARGO) fmt --all

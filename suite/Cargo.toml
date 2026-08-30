@@ -57,5 +57,5 @@ rstest = { workspace = true }
 rstest-bdd = { workspace = true }
 rstest-bdd-macros = { workspace = true }
 
-[lints.rust]
-missing_docs = "deny"
+[lints]
+workspace = true
