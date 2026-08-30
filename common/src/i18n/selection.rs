@@ -143,6 +143,8 @@ pub fn normalize_locale(input: Option<&str>) -> Option<&str> {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for locale negotiation and fallback selection.
+
     use rstest::rstest;
 
     use super::*;

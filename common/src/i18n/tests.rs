@@ -1,3 +1,6 @@
+//! Tests for the i18n localizer: message lookup, argument substitution,
+//! and locale fallback behaviour.
+
 use std::borrow::Cow;
 
 use rstest::rstest;

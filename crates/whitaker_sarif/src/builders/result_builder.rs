@@ -137,6 +137,8 @@ impl ResultBuilder {
 
 #[cfg(test)]
 mod tests {
+    //! Behavioural tests for the SARIF result builder.
+
     use rstest::rstest;
 
     use super::*;

@@ -103,6 +103,8 @@ impl fmt::Display for SimplePath {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for path normalization and module-path utilities.
+
     use std::collections::VecDeque;
 
     use rstest::rstest;

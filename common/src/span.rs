@@ -118,6 +118,8 @@ pub const fn span_line_count(span: SourceSpan) -> usize { span.end.line() - span
 
 #[cfg(test)]
 mod tests {
+    //! Tests for source-span construction and location arithmetic.
+
     use rstest::rstest;
 
     use super::*;

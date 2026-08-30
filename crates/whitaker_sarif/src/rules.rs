@@ -121,6 +121,8 @@ pub fn all_rules() -> Vec<ReportingDescriptor> { vec![whk001_rule(), whk002_rule
 
 #[cfg(test)]
 mod tests {
+    //! Behavioural tests for SARIF rule registration and lookup.
+
     use super::*;
 
     #[test]

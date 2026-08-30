@@ -221,6 +221,8 @@ impl LocationBuilder {
 
 #[cfg(test)]
 mod tests {
+    //! Behavioural tests for the SARIF location builder.
+
     use rstest::rstest;
 
     use super::*;

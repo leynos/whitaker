@@ -83,6 +83,8 @@ pub fn recv_is_option_or_result(path: &SimplePath) -> bool {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for expression-inspection helpers used by the lint drivers.
+
     use rstest::rstest;
 
     use super::*;
