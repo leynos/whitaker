@@ -325,13 +325,13 @@ fn scenario_interpolation_failure(world: HelperWorld) {
 }
 
 #[test]
-fn invalid_locale_warns_and_falls_back() {
+fn invalid_locale_warns_and_falls_back() -> Result<(), String> {
     let mut logger = Logger::start();
     let world = HelperWorld::new();
     world.set_environment(Some(String::from("xx-XX")));
     world.set_configuration(None);
     world.request_localizer("function_attrs_follow_docs");
-    world.assert_locale("en-GB").expect("locale should resolve");
+    world.assert_locale("en-GB")?;
 
     let mut warned = false;
     while let Some(record) = logger.pop() {
@@ -346,10 +346,11 @@ fn invalid_locale_warns_and_falls_back() {
     }
 
     assert!(warned, "expected unsupported locale warning to be logged");
+    Ok(())
 }
 
 #[test]
-fn repeated_failures_record_all_bugs() {
+fn repeated_failures_record_all_bugs() -> Result<(), String> {
     let world = HelperWorld::new();
     world.set_environment(None);
     world.set_configuration(None);
@@ -357,8 +358,8 @@ fn repeated_failures_record_all_bugs() {
     world.set_fallback_messages();
     world.set_message_key(String::from("missing-key"));
 
-    world.resolve_messages().expect("messages should resolve");
-    world.resolve_messages().expect("messages should resolve");
+    world.resolve_messages()?;
+    world.resolve_messages()?;
 
     let recorded = world.recorded_messages();
     assert_eq!(recorded.len(), 2);
@@ -367,18 +368,17 @@ fn repeated_failures_record_all_bugs() {
             .into_iter()
             .all(|message| message.contains("missing-key"))
     );
+    Ok(())
 }
 
 #[rstest]
-fn missing_key_with_noop_reporter_uses_fallback(world: HelperWorld) {
+fn missing_key_with_noop_reporter_uses_fallback(world: HelperWorld) -> Result<(), String> {
     world.set_environment(None);
     world.set_configuration(None);
     world.request_localizer("no_expect_outside_tests");
     world.set_fallback_messages();
 
-    let localizer = world
-        .ensure_localizer()
-        .expect("localizer should initialize");
+    let localizer = world.ensure_localizer()?;
     let args = world.ensure_arguments();
     let fallback = world.ensure_fallback();
     let resolution = MessageResolution {
@@ -393,4 +393,5 @@ fn missing_key_with_noop_reporter_uses_fallback(world: HelperWorld) {
     assert_eq!(messages.primary(), fallback.primary());
     assert_eq!(messages.note(), fallback.note());
     assert_eq!(messages.help(), fallback.help());
+    Ok(())
 }

@@ -44,9 +44,8 @@ pub type EnvTestGuard = ReentrantMutexGuard<'static, ()>;
 
 /// Serializes tests that mutate process-wide environment variables.
 ///
-/// Use this guard around helpers such as `temp_env::with_var` or
-/// `temp_env::with_vars_unset` when the test would otherwise race with other
-/// cases changing the same global process state.
+/// Use this guard around environment mutations when the test would otherwise
+/// race with other cases changing the same global process state.
 ///
 /// The lock is reentrant so a callback that already holds the shared
 /// serialization token can safely call another shared environment helper.
@@ -68,7 +67,7 @@ pub fn env_test_guard() -> EnvTestGuard {
 /// global environment changes with `env_test_guard`-serialized setup and
 /// teardown semantics.
 pub struct EnvVarGuard {
-    key: &'static str,
+    key: String,
     previous: Option<OsString>,
 }
 
@@ -89,13 +88,20 @@ impl EnvVarGuard {
     /// ```
     #[must_use]
     pub fn set(key: &'static str, value: impl AsRef<OsStr>) -> Self {
+        Self::set_scoped(key, value)
+    }
+
+    fn set_scoped(key: &str, value: impl AsRef<OsStr>) -> Self {
         let _env_guard = env_test_guard();
         let previous = std::env::var_os(key);
         // SAFETY: `env_test_guard` serializes this environment mutation.
         unsafe {
             std::env::set_var(key, value);
         }
-        Self { key, previous }
+        Self {
+            key: key.to_owned(),
+            previous,
+        }
     }
 
     /// Removes `key`, returning a guard that restores the previous value when
@@ -111,13 +117,20 @@ impl EnvVarGuard {
     /// ```
     #[must_use]
     pub fn remove(key: &'static str) -> Self {
+        Self::remove_scoped(key)
+    }
+
+    fn remove_scoped(key: &str) -> Self {
         let _env_guard = env_test_guard();
         let previous = std::env::var_os(key);
         // SAFETY: `env_test_guard` serializes this environment mutation.
         unsafe {
             std::env::remove_var(key);
         }
-        Self { key, previous }
+        Self {
+            key: key.to_owned(),
+            previous,
+        }
     }
 }
 
@@ -128,13 +141,13 @@ impl Drop for EnvVarGuard {
             Some(previous) => {
                 // SAFETY: `env_test_guard` serializes this environment mutation.
                 unsafe {
-                    std::env::set_var(self.key, previous);
+                    std::env::set_var(&self.key, previous);
                 }
             }
             None => {
                 // SAFETY: `env_test_guard` serializes this environment mutation.
                 unsafe {
-                    std::env::remove_var(self.key);
+                    std::env::remove_var(&self.key);
                 }
             }
         }
@@ -144,9 +157,9 @@ impl Drop for EnvVarGuard {
 /// Runs `callback` with one environment variable temporarily set.
 ///
 /// The mutation is scoped to the callback and the prior value is restored
-/// afterwards, even on panic. The callback holds [`env_test_guard`] as well as
-/// `temp_env`'s re-entrant global lock, so it cannot interleave with
-/// [`EnvVarGuard`] or manually guarded environment mutations.
+/// afterwards, even on panic. The callback holds [`env_test_guard`], so its
+/// mutation and restoration cannot interleave with [`EnvVarGuard`] or manually
+/// guarded environment mutations.
 ///
 /// # Examples
 ///
@@ -162,7 +175,8 @@ impl Drop for EnvVarGuard {
 /// ```
 pub fn with_env_var<R>(key: &str, value: impl AsRef<OsStr>, callback: impl FnOnce() -> R) -> R {
     let _env_guard = env_test_guard();
-    temp_env::with_var(key, Some(value.as_ref()), callback)
+    let _variable_guard = EnvVarGuard::set_scoped(key, value);
+    callback()
 }
 
 /// Runs `callback` with one environment variable temporarily removed.
@@ -182,7 +196,8 @@ pub fn with_env_var<R>(key: &str, value: impl AsRef<OsStr>, callback: impl FnOnc
 /// ```
 pub fn with_env_var_removed<R>(key: &str, callback: impl FnOnce() -> R) -> R {
     let _env_guard = env_test_guard();
-    temp_env::with_var_unset(key, callback)
+    let _variable_guard = EnvVarGuard::remove_scoped(key);
+    callback()
 }
 
 /// Runs `callback` with `DYLINT_LOCALE` overridden.
@@ -214,9 +229,9 @@ pub fn with_locale<R>(locale: Option<&str>, callback: impl FnOnce() -> R) -> R {
 mod tests {
     //! Regression tests for process-wide environment synchronization.
 
-    use std::{sync::mpsc, thread, time::Duration};
+    use std::{ffi::OsStr, sync::mpsc, thread, time::Duration};
 
-    use super::{EnvVarGuard, env_test_guard, with_env_var};
+    use super::{EnvVarGuard, env_test_guard, with_env_var, with_env_var_removed, with_locale};
 
     const ENVIRONMENT_KEY: &str = "WHITAKER_TEST_SUPPORT_SHARED_GUARD_TEST";
 
@@ -284,5 +299,77 @@ mod tests {
                 "scoped"
             );
         });
+    }
+
+    #[test]
+    fn scoped_mutations_restore_values_after_parallel_guard_use() {
+        let baseline = EnvVarGuard::set(ENVIRONMENT_KEY, "before");
+        let (scoped_entered_sender, scoped_entered_receiver) = mpsc::channel();
+        let (release_scoped_sender, release_scoped_receiver) = mpsc::channel();
+        let scoped_thread = thread::spawn(move || {
+            with_env_var(ENVIRONMENT_KEY, "scoped", || {
+                scoped_entered_sender
+                    .send(())
+                    .expect("scoped callback entry must be reported");
+                release_scoped_receiver
+                    .recv()
+                    .expect("scoped callback release must be received");
+            });
+        });
+        scoped_entered_receiver
+            .recv()
+            .expect("scoped callback must enter before competing guard");
+
+        let guard_thread = thread::spawn(|| {
+            let _guard = EnvVarGuard::remove(ENVIRONMENT_KEY);
+            assert!(std::env::var_os(ENVIRONMENT_KEY).is_none());
+        });
+        release_scoped_sender
+            .send(())
+            .expect("scoped callback must be released");
+        scoped_thread
+            .join()
+            .expect("scoped callback thread must complete");
+        guard_thread
+            .join()
+            .expect("competing guard thread must complete");
+
+        assert_eq!(
+            std::env::var_os(ENVIRONMENT_KEY).as_deref(),
+            Some(OsStr::new("before"))
+        );
+        with_env_var_removed(ENVIRONMENT_KEY, || {
+            assert!(std::env::var_os(ENVIRONMENT_KEY).is_none());
+        });
+        assert_eq!(
+            std::env::var_os(ENVIRONMENT_KEY).as_deref(),
+            Some(OsStr::new("before"))
+        );
+        drop(baseline);
+        assert!(std::env::var_os(ENVIRONMENT_KEY).is_none());
+    }
+
+    #[test]
+    fn locale_scopes_restore_set_and_removed_values() {
+        let baseline = EnvVarGuard::set("DYLINT_LOCALE", "en-GB");
+
+        with_locale(Some("cy"), || {
+            assert_eq!(
+                std::env::var_os("DYLINT_LOCALE").as_deref(),
+                Some(OsStr::new("cy"))
+            );
+        });
+        assert_eq!(
+            std::env::var_os("DYLINT_LOCALE").as_deref(),
+            Some(OsStr::new("en-GB"))
+        );
+        drop(baseline);
+
+        let cleared = EnvVarGuard::remove("DYLINT_LOCALE");
+        with_locale(None, || {
+            assert!(std::env::var_os("DYLINT_LOCALE").is_none());
+        });
+        assert!(std::env::var_os("DYLINT_LOCALE").is_none());
+        drop(cleared);
     }
 }

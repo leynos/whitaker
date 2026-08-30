@@ -50,14 +50,8 @@ fn add_distributed_defaults(builder: &mut TraitMetricsBuilder, count: usize, cc_
     if count == 0 {
         return;
     }
-    // Derive the per-method base and remainder by repeated subtraction so
-    // the test avoids the disallowed `/` and `%` operators.
-    let mut base_cc = 0;
-    let mut remainder = cc_sum;
-    while remainder >= count {
-        base_cc += 1;
-        remainder -= count;
-    }
+    let base_cc = cc_sum.div_euclid(count);
+    let remainder = cc_sum.rem_euclid(count);
     for i in 0..count {
         let cc = base_cc + if i == count - 1 { remainder } else { 0 };
         builder.add_default_method(format!("default_{i}"), cc, false);

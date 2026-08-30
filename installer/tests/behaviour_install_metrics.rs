@@ -2,6 +2,7 @@
 
 use std::{path::PathBuf, time::Duration};
 
+use cap_std::{ambient_authority, fs::Dir};
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use tempfile::TempDir;
@@ -48,6 +49,16 @@ fn metrics_path(world: &InstallMetricsWorld) -> Result<&std::path::Path, String>
         .metrics_path
         .as_deref()
         .ok_or_else(|| String::from("metrics path set"))
+}
+
+/// Opens the temporary fixture root through a capability-scoped handle.
+fn metrics_directory(world: &InstallMetricsWorld) -> Result<Dir, String> {
+    let temp_dir = world
+        .temp_dir
+        .as_ref()
+        .ok_or_else(|| String::from("metrics temp dir set"))?;
+    Dir::open_ambient_dir(temp_dir.path(), ambient_authority())
+        .map_err(|error| format!("open metrics fixture directory: {error}"))
 }
 
 /// Borrow the aggregated metrics, failing when nothing has been recorded.
@@ -98,19 +109,21 @@ fn given_empty_store(world: &mut InstallMetricsWorld) -> Result<(), String> {
 #[given("a corrupt install metrics store")]
 fn given_corrupt_store(world: &mut InstallMetricsWorld) -> Result<(), String> {
     given_empty_store(world)?;
-    let path = metrics_path(world)?;
-    let parent = path
-        .parent()
-        .ok_or_else(|| String::from("metrics parent exists"))?;
-    std::fs::create_dir_all(parent).map_err(|error| format!("create parent: {error}"))?;
-    std::fs::write(path, "{not valid json").map_err(|error| format!("write corrupt file: {error}"))
+    let directory = metrics_directory(world)?;
+    directory
+        .create_dir_all("metrics")
+        .map_err(|error| format!("create parent: {error}"))?;
+    directory
+        .write("metrics/install_metrics.json", "{not valid json")
+        .map_err(|error| format!("write corrupt file: {error}"))
 }
 
 #[given("a blocked install metrics path")]
 fn given_blocked_path(world: &mut InstallMetricsWorld) -> Result<(), String> {
     given_empty_store(world)?;
-    let path = metrics_path(world)?;
-    std::fs::create_dir_all(path).map_err(|error| format!("create blocking directory: {error}"))
+    metrics_directory(world)?
+        .create_dir_all("metrics/install_metrics.json")
+        .map_err(|error| format!("create blocking directory: {error}"))
 }
 
 #[given("a download install of {millis:u64} milliseconds is recorded")]
