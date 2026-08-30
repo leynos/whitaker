@@ -176,6 +176,10 @@ impl<'a, 'tcx> SegmentBuilder<'a, 'tcx> {
     ///
     /// Branch counts above `u32::MAX` are saturated before conversion to the
     /// floating-point weight; spans rejected by `push_segment` are omitted.
+    #[expect(
+        clippy::float_arithmetic,
+        reason = "predicate weights are floating-point tuning parameters scaled by branch counts"
+    )]
     fn push_predicate_segment(&mut self, expr: &'tcx hir::Expr<'tcx>) {
         if matches!(expr.kind, ExprKind::Let(..)) {
             return;

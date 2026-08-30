@@ -24,9 +24,9 @@ impl DecisionWorld {
     const fn evaluate(&self) -> bool {
         let policy = LintPolicy::new(self.allow_in_main.get());
         should_flag(
-            &policy,
-            &self.summary.get(),
-            &self.panic_info.get(),
+            policy,
+            self.summary.get(),
+            self.panic_info.get(),
             self.is_doctest.get(),
         )
     }

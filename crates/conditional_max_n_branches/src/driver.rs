@@ -69,6 +69,10 @@ mod registration {
     //! The `dylint_linting::impl_late_lint!` macro generates undocumented
     //! public registration items, so its expansion is scoped to this private
     //! module and only the documented lint static is re-exported.
+    #![expect(
+        missing_docs,
+        reason = "dylint_linting macro expansion emits items with no documentable source location"
+    )]
 
     use super::ConditionalMaxNBranches;
 
