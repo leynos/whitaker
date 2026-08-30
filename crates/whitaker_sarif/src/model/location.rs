@@ -132,6 +132,8 @@ pub struct RelatedLocation {
 
 #[cfg(test)]
 mod tests {
+    //! Behavioural tests for the SARIF location model.
+
     use super::*;
     use crate::test_support::{assert_json_round_trip, assert_serialized_json};
 

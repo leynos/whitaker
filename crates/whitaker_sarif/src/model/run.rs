@@ -148,6 +148,8 @@ pub struct Artefact {
 
 #[cfg(test)]
 mod tests {
+    //! Behavioural tests for the SARIF run model.
+
     use super::*;
     use crate::{
         model::location::ArtefactLocation,

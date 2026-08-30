@@ -1747,7 +1747,6 @@ the regression suite: `temp-env` provides scoped environment overrides,
 `tempfile` provides isolated target directories, and `rstest` powers the
 fixture-based test setup used by the staged-suite coverage.
 
-
 #### Shared UI harness environment overrides
 
 Workspace-level UI harness tests that mutate process-wide environment
@@ -2088,7 +2087,6 @@ It can be promoted to standard by:
 2. Adding the lint dependency to the suite `dylint-driver` feature in
    `suite/Cargo.toml`
 3. Updating documentation to reflect the change
-
 
 ### Suite entry point
 
