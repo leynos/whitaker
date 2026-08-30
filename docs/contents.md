@@ -83,6 +83,10 @@
   contract](adr-004-pin-only-mutation-testing-contract.md) records why the
   shared mutation workflow tests its declared configuration without claiming
   parity with the continuous integration test baseline.
+- [Architectural decision record (ADR) 005: Rust source rewrite
+  substrate](adr-005-rust-rewrite-materialization-substrate.md) defines a
+  bounded comparative spike between ast-grep and `ra_ap_syntax::SyntaxEditor`,
+  with source-fidelity gates and an evidence-based backend selection rule.
 
 ## Requests for comments
 
@@ -93,6 +97,18 @@
 - [RFC 0002: `string_continuation_style`](rfcs/0002-string-continuation-style.md)
   proposes a context-sensitive lint that prefers `concat!()` only when it can
   preserve a cooked string literal's semantics and surrounding grammar.
+- [RFC 0003: compiler-validated rewrite
+  checking](rfcs/0003-compiler-validated-rewrite-checking.md) proposes isolated
+  overlay compilation that classifies materialized rewrites under equivalent
+  NLL and Polonius configurations.
+- [RFC 0004: borrow-workaround lint
+  family](rfcs/0004-borrow-workaround-lint-family.md) proposes rewrite-backed
+  rules for repeated lookups, remove-and-reinsert cycles, staged identifiers,
+  snapshots, lexical fences, and other indirect borrowing shapes.
+- [RFC 0005: validated ownership and borrow
+  rewriter](rfcs/0005-validated-ownership-and-borrow-rewriter.md) proposes
+  recipe materialization, alternative ranking, deterministic previews,
+  transactional application, and byte-exact rollback.
 
 ## Planning material
 

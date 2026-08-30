@@ -986,3 +986,112 @@
   established clone fingerprints. See
   [RFC 0001](rfcs/0001-coderabbit-derived-lint-candidates.md) §Tier 3: recorded
   but deferred. Requires 7.5.1 and 8.5.4.
+
+## 14. Compiler-validated ownership rewrite pipeline
+
+### 14.1. Rewrite substrate spike
+
+- [ ] 14.1.1. Implement the backend-neutral spike contract and shared fixtures
+  for borrow-only clone removal, private owned-parameter conversion,
+  Polonius-only conditional borrowing, and remove/mutate/reinsert collapse. See
+  [ADR 005](adr-005-rust-rewrite-materialization-substrate.md) §Comparative
+  spike.
+- [ ] 14.1.2. Implement the spike once with `ast-grep-core` and
+  `ast-grep-language`, and once with `ra_ap_syntax::SyntaxEditor`, including
+  stale-anchor, trivia-preservation, overlapping-edit, CRLF, Unicode,
+  macro-span, and Rust 2024 adversarial fixtures. See
+  [ADR 005](adr-005-rust-rewrite-materialization-substrate.md) §Primary rewrite
+  fixtures and §Adversarial fixtures. Requires 14.1.1.
+- [ ] 14.1.3. Record source-fidelity, recipe-complexity, build-cost,
+  dependency-churn, and runtime evidence; select one production backend and pin
+  its version. See
+  [ADR 005](adr-005-rust-rewrite-materialization-substrate.md) §Decision rule
+  and §Spike exit artefacts. Requires 14.1.2.
+
+### 14.2. Compiler-validated rewrite checker
+
+- [ ] 14.2.1. Add versioned `RewriteIntent`, `TextEditPlan`,
+  `RewriteCheckRequest`, and `RewriteCheckReport` models with deterministic
+  serialization and stable diagnostic keys. See
+  [RFC 0003](rfcs/0003-compiler-validated-rewrite-checking.md) §Proposed
+  architecture. Requires 14.1.3.
+- [ ] 14.2.2. Generalize the Phase 11 overlay builder for copy-isolated
+  candidate workspaces and equivalent baseline and candidate Cargo
+  invocations. See
+  [RFC 0003](rfcs/0003-compiler-validated-rewrite-checking.md) §Overlay
+  construction. Requires 11.2.1 and 14.2.1.
+- [ ] 14.2.3. Implement same-nightly NLL and `-Zpolonius=next` replay,
+  capability probing, normalized diagnostic deltas, and classifications for
+  NLL-valid, Polonius-only, rejected, stale, divergent, and inconclusive
+  candidates. See
+  [RFC 0003](rfcs/0003-compiler-validated-rewrite-checking.md) §Classification
+  algorithm. Requires 11.2.2 and 14.2.2.
+- [ ] 14.2.4. Add content-addressed validation caching, retained-overlay
+  reproduction bundles, human-readable output, and stable JSON output. See
+  [RFC 0003](rfcs/0003-compiler-validated-rewrite-checking.md) §Caching and
+  §CLI surface. Requires 14.2.3.
+
+### 14.3. Borrow-workaround lint family
+
+- [ ] 14.3.1. Add shared BOR-family models and detectors for
+  `lookup_then_relookup`, `remove_then_reinsert`, and `take_then_restore`. See
+  [RFC 0004](rfcs/0004-borrow-workaround-lint-family.md) §Rule contracts.
+  Requires 9.1.4 and 14.2.1.
+- [ ] 14.3.2. Add detectors for `index_round_trip_for_mutation`,
+  `staged_keys_before_mutation`, and `split_search_and_mutate_pass`. See
+  [RFC 0004](rfcs/0004-borrow-workaround-lint-family.md) §Rule contracts.
+  Requires 14.3.1.
+- [ ] 14.3.3. Add detectors for `snapshot_around_mutation`,
+  `borrow_scope_fence`, and `single_use_borrow_split_helper`. See
+  [RFC 0004](rfcs/0004-borrow-workaround-lint-family.md) §Rule contracts.
+  Requires 14.3.1.
+- [ ] 14.3.4. Add UI and corpus fixtures that cover true workarounds,
+  reallocation hazards, rollback and undo semantics, callback and async
+  boundaries, external API constraints, and cases rejected by both checkers.
+  See [RFC 0004](rfcs/0004-borrow-workaround-lint-family.md) §Testing strategy.
+  Requires 14.3.2 and 14.3.3.
+- [ ] 14.3.5. Keep BOR findings review-only unless a direct candidate can be
+  materialized and compiler-validated; expose confidence and checker
+  requirement in diagnostics. See
+  [RFC 0004](rfcs/0004-borrow-workaround-lint-family.md) §Diagnostics and
+  reporting. Requires 14.2.4 and 14.3.4.
+
+### 14.4. Validated ownership and borrow rewriter
+
+- [ ] 14.4.1. Implement materializers for Phase 9
+  `clone_only_used_by_borrow`, `owned_param_causes_clone`, and
+  `local_shared_ownership` intents. See
+  [RFC 0005](rfcs/0005-validated-ownership-and-borrow-rewriter.md) §Existing
+  ownership-lint materializers. Requires 9.2.3, 9.3.4, 9.4.4, and 14.1.3.
+- [ ] 14.4.2. Implement ranked stable-compatible and Polonius-only
+  materializers for `BOR001` through `BOR009`. See
+  [RFC 0005](rfcs/0005-validated-ownership-and-borrow-rewriter.md)
+  §Borrow-workaround materializers. Requires 14.3.5 and 14.4.1.
+- [ ] 14.4.3. Add semantic-anchor revalidation, alternative ranking,
+  dependency and conflict graphs, deterministic diffs, and rejection of stale,
+  ambiguous, or overlapping plans. See
+  [RFC 0005](rfcs/0005-validated-ownership-and-borrow-rewriter.md) §Semantic
+  anchors and staleness and §Planning, dependencies, and conflicts. Requires
+  14.4.2.
+- [ ] 14.4.4. Implement preview, transactional apply, formatting and test
+  gates, application journals, byte-exact rollback, and explicit opt-in for
+  Polonius-only edits. See
+  [RFC 0005](rfcs/0005-validated-ownership-and-borrow-rewriter.md)
+  §Transactional application. Requires 14.2.4 and 14.4.3.
+
+### 14.5. CLI integration and rollout
+
+- [ ] 14.5.1. Integrate candidate discovery, validation, preview, and apply
+  flows into `whitaker check` and the unified configuration model, with project
+  policy for `nll` versus `polonius-next`. Requires 3.5.2, 3.6.3, 14.2.4, and
+  14.4.4.
+- [ ] 14.5.2. Add localized diagnostics and stable JSON and SARIF fields for
+  rule, recipe, validation profile, portability requirement, confidence, and
+  application status. Requires 2.3.4 and 14.5.1.
+- [ ] 14.5.3. Dogfood the pipeline across representative parser, graph,
+  editor, game-state, and async-service repositories; record validated
+  findings, rejected candidates, compile cost, and suppression churn. Requires
+  14.5.2.
+- [ ] 14.5.4. Define promotion criteria for standard diagnostics and automated
+  application based on false-positive rate, semantic review outcomes, compiler
+  stability, and measured agent-development throughput. Requires 14.5.3.
