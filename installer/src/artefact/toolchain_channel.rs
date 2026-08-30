@@ -28,7 +28,7 @@ pub struct ToolchainChannel(String);
 /// Check that every byte is ASCII alphanumeric, a hyphen, a dot, or an
 /// underscore.  Underscores appear in host-qualified toolchain names
 /// (e.g. `nightly-2026-05-28-x86_64-unknown-linux-gnu`).
-fn is_valid_channel_char(c: char) -> bool {
+const fn is_valid_channel_char(c: char) -> bool {
     c.is_ascii_alphanumeric() || c == '-' || c == '.' || c == '_'
 }
 
@@ -121,6 +121,8 @@ impl fmt::Display for ToolchainChannel {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for toolchain channel parsing and validation.
+
     use super::*;
     use rstest::rstest;
 

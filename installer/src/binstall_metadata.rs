@@ -93,15 +93,19 @@ pub fn expand_bin_dir(version: &str, target: &str) -> String {
 /// Returns the full TOML table for `installer/Cargo.toml`, located via
 /// `CARGO_MANIFEST_DIR`. This helper is shared by unit tests and
 /// behaviour-driven scenarios to avoid duplicating manifest-loading logic.
+///
+/// # Errors
+///
+/// Returns a description of the failure if the manifest cannot be read
+/// or does not parse as TOML.
 #[cfg(any(test, feature = "test-support"))]
-#[must_use]
-pub fn load_cargo_toml() -> toml::Table {
+pub fn load_cargo_toml() -> Result<toml::Table, String> {
     let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let cargo_toml_path = manifest_dir.join("Cargo.toml");
     let content = std::fs::read_to_string(&cargo_toml_path)
-        .unwrap_or_else(|err| panic!("failed to read {}: {err}", cargo_toml_path.display()));
-    content.parse::<toml::Table>().unwrap_or_else(|err| {
-        panic!(
+        .map_err(|err| format!("failed to read {}: {err}", cargo_toml_path.display()))?;
+    content.parse::<toml::Table>().map_err(|err| {
+        format!(
             "failed to parse {} as TOML: {err}",
             cargo_toml_path.display()
         )
@@ -111,17 +115,19 @@ pub fn load_cargo_toml() -> toml::Table {
 /// Extract the `[package.metadata.binstall]` sub-table from a parsed
 /// `Cargo.toml`.
 ///
-/// Panics if the expected table path is missing.
+/// # Errors
+///
+/// Returns a description of the failure if the expected table path is
+/// missing.
 #[cfg(any(test, feature = "test-support"))]
-#[must_use]
-pub fn extract_binstall_table(table: &toml::Table) -> toml::Table {
+pub fn extract_binstall_table(table: &toml::Table) -> Result<toml::Table, String> {
     table
         .get("package")
         .and_then(|p| p.get("metadata"))
         .and_then(|m| m.get("binstall"))
         .and_then(|b| b.as_table())
-        .expect("[package.metadata.binstall] table not found")
-        .clone()
+        .cloned()
+        .ok_or_else(|| "[package.metadata.binstall] table not found".to_owned())
 }
 
 #[cfg(test)]

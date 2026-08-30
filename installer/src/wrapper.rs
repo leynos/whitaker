@@ -53,7 +53,7 @@ pub struct WrapperResult {
 /// # Ok::<(), whitaker_installer::error::InstallerError>(())
 /// ```
 pub fn generate_wrapper_scripts(dirs: &dyn BaseDirs) -> Result<WrapperResult> {
-    let bin_dir = dirs.bin_dir().ok_or_else(|| {
+    let bin_dir = dirs.executables().ok_or_else(|| {
         InstallerError::WrapperGeneration("could not determine bin directory".to_owned())
     })?;
 
