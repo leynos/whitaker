@@ -40,3 +40,6 @@ rstest-bdd = { workspace = true }
 rstest-bdd-macros = { workspace = true }
 dylint_testing = { workspace = true }
 camino = { workspace = true }
+
+[lints]
+workspace = true

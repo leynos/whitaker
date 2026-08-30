@@ -52,3 +52,6 @@ whitaker = { workspace = true }
 whitaker-common = { workspace = true }
 camino = { workspace = true }
 tempfile = { workspace = true }
+
+[lints]
+workspace = true

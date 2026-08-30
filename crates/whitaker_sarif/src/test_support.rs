@@ -17,8 +17,12 @@ use crate::{
 /// Asserts that `value` survives a JSON serialize/deserialize round trip
 /// unchanged.
 ///
-/// Panics with the type name and underlying serde error on failure; intended
-/// only for test code.
+/// Intended only for test code.
+///
+/// # Panics
+///
+/// Panics with the type name and the underlying serde error if serialization
+/// or deserialization fails, or if the round trip changes the value.
 pub fn assert_json_round_trip<T>(value: &T)
 where
     T: Serialize + DeserializeOwned + PartialEq + Debug,
@@ -39,8 +43,11 @@ where
 
 /// Serializes `value` to JSON and passes the resulting string to `check`.
 ///
-/// Panics with the underlying serde error if serialization fails; intended
-/// only for test code.
+/// Intended only for test code.
+///
+/// # Panics
+///
+/// Panics with the underlying serde error if serialization fails.
 pub fn assert_serialized_json(value: &impl Serialize, check: impl FnOnce(&str)) {
     match serde_json::to_string(value) {
         Ok(json) => check(&json),
