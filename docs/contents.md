@@ -93,6 +93,14 @@
 - [RFC 0002: `string_continuation_style`](rfcs/0002-string-continuation-style.md)
   proposes a context-sensitive lint that prefers `concat!()` only when it can
   preserve a cooked string literal's semantics and surrounding grammar.
+- [RFC 0003: weak representations at domain
+  boundaries](rfcs/0003-weak-domain-boundaries.md) proposes the `DOMAIN` lint
+  family and rules for discarded parser witnesses, validation without
+  refinement, and repeated boundary parsing.
+- [RFC 0004: fragile types and invalid-state
+  encodings](rfcs/0004-fragile-types.md) proposes correlation-aware rules for
+  manual tagged unions, constrained optional and boolean fields, bypassable
+  invariants, and invalid defaults.
 
 ## Planning material
 
