@@ -107,7 +107,7 @@ published-GPUI workspace invocation.
 - [ ] 2.2.13. Register `missing_docs_in_test_functions` in the normal Whitaker
   suite and expose it through the standard suite distribution. See
   [RFC 0003](rfcs/0003-missing-docs-in-test-functions.md) §§6-7. Requires
-  2.1.1 and 2.2.11.
+  2.1.1, 2.2.11, and 2.2.12.
   - Success: one suite invocation discovers the lint and applies its configured
     path policy without a bespoke runner.
 - [ ] 2.2.14. Localize the lint's diagnostic, help text, and UI messages through
@@ -117,18 +117,19 @@ published-GPUI workspace invocation.
   - Success: the default locale and at least one non-English locale render the
     same rule outcome with translated human-facing text.
 - [ ] 2.2.15. Add UI fixtures using a deterministic pre-baked SARIF diagnostic-
-  input contract for undocumented included functions, `///` and `#[doc =
-  "..."]` documentation, procedural attributes, excluded paths, normal
-  library sources compiled under a harness, generated-code immunity, and the
-  two-attribute suppression workaround for
+  input contract for undocumented included functions and compiler-supported
+  associated functions, `///` and `#[doc = "..."]` documentation, procedural
+  attributes, excluded paths, normal library sources compiled under a harness,
+  generated-code immunity, and the two-attribute suppression workaround for
   `missing_docs_in_test_functions`. See
   [RFC 0003](rfcs/0003-missing-docs-in-test-functions.md) §§7 and 9. Requires
-  1.1.2, 2.1.1, and 2.3.4.
-  - Success: at least eight pass/fail cases cover each listed behaviour; the
-    suppression fixture includes an unsuppressed control function and proves
-    that `#[allow(unknown_lints)]` plus
-    `#[allow(missing_docs_in_test_functions)]` suppresses only the annotated
-    item.
+  1.1.2, 2.1.1, 2.2.11, 2.2.12, and 2.3.4.
+  - Success: at least nine pass/fail cases cover each listed behaviour,
+    including an undocumented compiler-supported associated function whose
+    diagnostic targets its identifier; the suppression fixture includes an
+    unsuppressed control function and proves that `#[allow(unknown_lints)]`
+    plus `#[allow(missing_docs_in_test_functions)]` suppresses only the
+    annotated item.
 - [ ] 2.2.16. Add substantive Rust `proptest` coverage for the pure
   candidate-selection and path-configuration logic. See
   [RFC 0003](rfcs/0003-missing-docs-in-test-functions.md) §9. Requires 1.1.2,

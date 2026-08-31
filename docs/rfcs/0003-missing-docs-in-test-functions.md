@@ -265,6 +265,8 @@ The lint crate's UI fixtures should exercise the full decision boundary:
 - UI fixtures consume pre-baked SARIF results as their diagnostic-input
   contract. An undocumented function in an included test file fails at its
   identifier.
+- Under that same contract, an undocumented compiler-supported associated
+  function in an included test file fails at its function identifier.
 - A `///`-documented function and a `#[doc = "..."]`-documented function pass.
 - An undocumented function with a representative procedural attribute macro
   fails before expansion, while its generated wrapper is never diagnosed.
