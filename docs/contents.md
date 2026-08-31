@@ -94,8 +94,9 @@
   proposes a context-sensitive lint that prefers `concat!()` only when it can
   preserve a cooked string literal's semantics and surrounding grammar.
 - [RFC 0003: `missing_docs_in_test_functions`](rfcs/0003-missing-docs-in-test-functions.md)
-  proposes a pre-expansion lint that documents source-authored functions in
-  configured Rust test-source paths without inspecting generated test code.
+  proposes a pre-expansion lint that requires documentation for
+  source-authored functions in configured Rust test-source paths without
+  inspecting generated test code.
 
 ## Planning material
 

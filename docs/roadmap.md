@@ -55,6 +55,13 @@
 
 ### 2.2. Core lint implementations
 
+RFC 0003 work is in scope for source-authored free functions and supported
+associated functions in configured Rust test-source paths during test-harness
+compilation. It is out of scope for normal-target functions, generated
+expansion items, closures, trait declarations without bodies, rustdoc JSON,
+external source scanners, downstream `rstest-bdd` rollout, and the isolated
+published-GPUI workspace invocation.
+
 - [x] 2.2.1. Implement `function_attrs_follow_docs` with targeted UI scenarios.
   Requires 2.1.1.
 - [x] 2.2.2. Implement `no_expect_outside_tests` with context-aware
@@ -83,13 +90,53 @@
   literal-context exemptions, localized diagnostics, and suite integration. See
   [RFC 0002](rfcs/0002-string-continuation-style.md).
   Requires 2.1.1 and 2.3.4.
-- [ ] 2.2.11. Implement `missing_docs_in_test_functions` as a pre-expansion
-  AST lint for source-authored functions in configured Rust test-source paths,
-  including typed include/exclude configuration, localized diagnostics, suite
-  registration, and UI coverage for documentation forms, procedural attributes,
-  exclusions, test-harness gating, and generated-code immunity. See
-  [RFC 0003](rfcs/0003-missing-docs-in-test-functions.md) §§Proposed design-
-  Test plan. Requires 1.1.2, 2.1.1, and 2.3.4.
+- [ ] 2.2.11. Deliver the `missing_docs_in_test_functions` pre-expansion AST
+  pass and candidate-selection predicate for test-harness compilations. See
+  [RFC 0003](rfcs/0003-missing-docs-in-test-functions.md) §§6-7. Requires
+  2.1.1.
+  - Success: diagnostics occur only for source-authored, undocumented
+    functions in test harnesses, with an identifier span when available; both
+    `///` and `#[doc = "..."]` are recognized as documentation.
+- [ ] 2.2.12. Add typed include/exclude configuration with workspace-relative,
+  slash-normalized path matching and safe invalid-pattern handling. See [RFC
+  0003](rfcs/0003-missing-docs-in-test-functions.md) §6. Requires 1.1.2 and
+  2.2.11.
+  - Success: exclusions take precedence, separators behave equivalently,
+    non-relative or invalid patterns produce actionable diagnostics, and no
+    pattern can widen enforcement beyond the workspace.
+- [ ] 2.2.13. Register `missing_docs_in_test_functions` in the normal Whitaker
+  suite and expose it through the standard suite distribution. See
+  [RFC 0003](rfcs/0003-missing-docs-in-test-functions.md) §§6-7. Requires
+  2.1.1 and 2.2.11.
+  - Success: one suite invocation discovers the lint and applies its configured
+    path policy without a bespoke runner.
+- [ ] 2.2.14. Localize the lint's diagnostic, help text, and UI messages through
+  Whitaker's existing localization infrastructure. See
+  [RFC 0003](rfcs/0003-missing-docs-in-test-functions.md) §§6-7. Requires 2.3.4
+  and 2.2.13.
+  - Success: the default locale and at least one non-English locale render the
+    same rule outcome with translated human-facing text.
+- [ ] 2.2.15. Add UI fixtures using a deterministic pre-baked SARIF diagnostic-
+  input contract for undocumented included functions, `///` and `#[doc =
+  "..."]` documentation, procedural attributes, excluded paths, normal
+  library sources compiled under a harness, generated-code immunity, and the
+  two-attribute suppression workaround for
+  `missing_docs_in_test_functions`. See
+  [RFC 0003](rfcs/0003-missing-docs-in-test-functions.md) §§7 and 9. Requires
+  1.1.2, 2.1.1, and 2.3.4.
+  - Success: at least eight pass/fail cases cover each listed behaviour; the
+    suppression fixture includes an unsuppressed control function and proves
+    that `#[allow(unknown_lints)]` plus
+    `#[allow(missing_docs_in_test_functions)]` suppresses only the annotated
+    item.
+- [ ] 2.2.16. Add substantive Rust `proptest` coverage for the pure
+  candidate-selection and path-configuration logic. See
+  [RFC 0003](rfcs/0003-missing-docs-in-test-functions.md) §9. Requires 1.1.2,
+  2.1.1, and 2.2.12.
+  - Success: generated combinations cover harness status, expansion provenance,
+    documentation presence, include/exclude matches, slash and backslash
+    separators, and valid/invalid patterns, asserting the diagnostic predicate,
+    exclusion precedence, normalization, and safe rejection.
 
 ### 2.3. Localization enablement
 

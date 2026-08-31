@@ -1,12 +1,12 @@
 # RFC 0003: `missing_docs_in_test_functions`
 
-## Preamble
+## 1. Preamble
 
 - **RFC number:** 0003
 - **Status:** Proposed
 - **Created:** 2026-08-30
 
-## Summary
+## 2. Summary
 
 This RFC proposes `missing_docs_in_test_functions`, a Whitaker pre-expansion
 lint that requires documentation on source-authored functions in configured
@@ -19,7 +19,7 @@ targets. Whitaker governs the narrower repository-policy invariant that test
 functions written in selected source files are documented, including functions
 whose procedural attribute macros later generate test machinery.
 
-## Problem
+## 3. Problem
 
 Procedural attribute macros used by test frameworks can transform one
 source-written function into a function plus generated wrappers or scenario
@@ -43,7 +43,7 @@ The desired result is a diagnostic on `runtime_alias_counter_init`, before the
 role visible without requiring readers to infer it solely from an executable
 step expression.
 
-## Current state
+## 4. Current state
 
 Whitaker already uses Dylint 6 and Rust compiler-private crates for its lint
 suite. `function_attrs_follow_docs` is an adjacent precedent: it examines
@@ -63,7 +63,7 @@ documentation for unrelated helpers such as a private function inside a
 `#[cfg(test)]` module. The source-path boundary is consequently part of the
 policy, not merely an implementation detail.
 
-## Goals and non-goals
+## 5. Goals and non-goals
 
 - Goals:
   - Enforce documentation for source-authored functions in explicitly selected
@@ -84,7 +84,7 @@ policy, not merely an implementation detail.
   - Change the level of `clippy::missing_docs_in_private_items` for ordinary
     targets.
 
-## Proposed design
+## 6. Proposed design
 
 ### Pass boundary
 
@@ -95,12 +95,18 @@ consume or re-emit the authored item.
 
 The following pipeline has a single owner for each responsibility:
 
+For screen readers: Whitaker checks source-authored test functions before
+procedural macro expansion, and Clippy checks ordinary high-level intermediate
+representation items afterwards.
+
 ```plaintext
 Source Rust
   -> Whitaker: selected, source-authored test functions have documentation
   -> Procedural attribute-macro expansion: step attributes and wrappers
-  -> HIR: Clippy's ordinary private-item documentation policy
+  -> high-level intermediate representation (HIR): Clippy's ordinary private-item documentation policy
 ```
+
+_Figure 1: Documentation-check ownership across test compilation._
 
 The diagram shows that Whitaker operates on authored test functions before
 macro expansion, while Clippy retains responsibility for ordinary HIR items.
@@ -178,6 +184,7 @@ above the function. It MUST use Whitaker's localized diagnostic conventions.
 
 Pre-expansion lints have a Dylint-specific suppression limitation:
 `cfg_attr(dylint_lib = ..., allow(...))` is not available before expansion.
+The Dylint 6.0.1 documentation records this limitation and its workaround.
 When an individually justified exception is unavoidable, consumers can use the
 documented two-attribute workaround:[^2]
 
@@ -193,7 +200,7 @@ The lint's path configuration should make these local exceptions uncommon.
 Consumers MUST keep any exception attached to the smallest relevant item and
 document why the function is exempt.
 
-## Requirements
+## 7. Requirements
 
 ### Functional requirements
 
@@ -219,13 +226,15 @@ document why the function is exempt.
   and must not match outside the workspace by accident.
 - Diagnostics, help text, and UI snapshots MUST use Whitaker's localization
   infrastructure.
-- The implementation MUST add UI coverage for undocumented and documented
-  functions, `#[doc = "..."]`, attribute-macro functions, excluded paths,
-  test-harness gating, and generated-code immunity.
+- The implementation MUST add UI coverage whose fixtures consume pre-baked
+  SARIF results as their diagnostic-input contract. The matrix MUST include an
+  undocumented function in an included test file that fails at its identifier,
+  documented functions, `#[doc = "..."]`, attribute-macro functions, excluded
+  paths, test-harness gating, and generated-code immunity.
 - The test matrix MUST include the pre-expansion suppression workaround so its
   compiler behaviour remains understood and intentional.
 
-## Compatibility and migration
+## 8. Compatibility and migration
 
 The lint is opt-in through `dylint.toml`; adding it does not change existing
 Whitaker users until they select source paths. Projects should begin with their
@@ -249,11 +258,13 @@ This staged adoption is intentionally separate from the generic lint's first
 implementation. It prevents a downstream workspace layout from becoming part of
 Whitaker's reusable configuration contract.
 
-## Test plan
+## 9. Test plan
 
 The lint crate's UI fixtures should exercise the full decision boundary:
 
-- An undocumented function in an included test file fails at its identifier.
+- UI fixtures consume pre-baked SARIF results as their diagnostic-input
+  contract. An undocumented function in an included test file fails at its
+  identifier.
 - A `///`-documented function and a `#[doc = "..."]`-documented function pass.
 - An undocumented function with a representative procedural attribute macro
   fails before expansion, while its generated wrapper is never diagnosed.
@@ -262,15 +273,27 @@ The lint crate's UI fixtures should exercise the full decision boundary:
 - A function in a normal library source file passes even when that library is
   compiled for a test harness.
 - An item emitted by a macro passes, proving the expansion-span guard.
-- The two-attribute pre-expansion suppression passes only for the narrowly
-  annotated source item.
+- A dedicated suppression fixture contains an undocumented function annotated
+  with both `#[allow(unknown_lints)]` and
+  `#[allow(missing_docs_in_test_functions)]`, plus an unsuppressed undocumented
+  control function. The expected UI output shows that the two-attribute
+  workaround suppresses `missing_docs_in_test_functions` only for the annotated
+  item.
+
+The implementation MUST include a substantive Rust `proptest` suite for the
+pure candidate-selection and path-configuration logic. Generated combinations
+MUST cover test-harness status, expansion provenance, documentation presence,
+include and exclude matches, slash and backslash separators, and valid and
+invalid patterns. Properties MUST assert the diagnostic predicate, exclusion
+precedence, separator normalization, and rejection of invalid patterns without
+widening the configured workspace scope.
 
 The implementation PR must run the repository's formatting, lint, test,
 Markdown, and Mermaid validation gates. Downstream adoption must separately
 prove the root integration-test invocation and the isolated published-GPUI
 workspace invocation.
 
-## Alternatives considered
+## 10. Alternatives considered
 
 | Option                                   | Advantages                                                                          | Rejected because                                                                             |
 | ---------------------------------------- | ----------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
@@ -288,7 +311,7 @@ feature, however, and would require a second toolchain workflow to generate,
 parse, filter, and report results.[^4] That is disproportionate when Whitaker
 already provides the compiler-semantic policy layer.
 
-## Open questions
+## 11. Open questions
 
 - Which glob library and exact pattern grammar should Whitaker standardize for
   reusable workspace-relative source-path policies?
@@ -299,7 +322,7 @@ already provides the compiler-semantic policy layer.
 - Which release channel should make the lint available to downstream projects,
   and what minimum Whitaker version should `rstest-bdd` pin?
 
-## Recommendation
+## 12. Recommendation
 
 Accept `missing_docs_in_test_functions` as a pre-expansion Whitaker lint with
 test-harness and configured-path gates. It preserves Clippy's ordinary-target
@@ -309,8 +332,8 @@ JSON pipeline for a policy Whitaker is designed to enforce.
 
 [^1]: [Dylint linting README](https://docs.rs/crate/dylint_linting/latest/source/README.md)
   documents Dylint's pre-expansion lint support.
-[^2]: [Dylint documentation](https://docs.rs/crate/dylint/latest) documents the
-  pre-expansion lint suppression workaround.
+[^2]: [Dylint 6.0.1 documentation](https://docs.rs/crate/dylint/6.0.1) documents
+  the pre-expansion lint suppression workaround.
 [^3]: [Rust's `rustdoc_json_types::Item`](https://doc.rust-lang.org/nightly/nightly-rustc/rustdoc_json_types/struct.Item.html)
   documents the JSON item's documentation and optional span fields.
 [^4]: [Rustdoc unstable features](https://doc.rust-lang.org/rustdoc/unstable-features.html)
