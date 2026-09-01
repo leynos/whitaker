@@ -227,7 +227,7 @@ Add a timestamp to each entry as it completes.
   Impact: file emission is out of scope here, exactly as it was for 7.2.3.
 - Observation: `SarifResult::partial_fingerprints` is a `HashMap`, so the crate
   cannot currently produce stable bytes.
-  Evidence: `crates/whitaker_sarif/src/model/result.rs:107`.
+  Evidence: `crates/whitaker_sarif/src/model/result.rs:108`.
   Impact: `EP-M1`.
 - Observation: `pair_fingerprint` and `token_hash` concatenate components with a
   single zero byte.
@@ -329,7 +329,7 @@ Add a timestamp to each entry as it completes.
   and add `brain_trust_rules()`.
   Rationale: `all_rules()` returns only clone rules and its test asserts an
   arity of three. Keeping the name once a second family exists would be
-  actively misleading. One consumer (`emit.rs:112`) needs updating.
+  actively misleading. One consumer (`emit.rs:114`) needs updating.
   Date/Author: 2026-08-21, Pandalump (review panel).
 - Decision: generalize `WhitakerProperties` into an internally tagged family
   under the existing `properties.whitaker` key rather than adding a
@@ -532,6 +532,10 @@ dependency and no input or output of its own:
 - `rules.rs` — `WHK001`–`WHK003` descriptors and `all_rules()`.
 - `whitaker_properties.rs` — the `properties.whitaker` extension point.
 - `paths.rs` — the `target/whitaker/` layout constants.
+- `error.rs` — `SarifError` and the crate's `Result` alias.
+- `test_support.rs`, behind the `test-support` feature —
+  `assert_json_round_trip`, `assert_serialized_json`, and `make_keyed_result`.
+  Reuse these rather than writing new equivalents.
 
 ### The existing producer, and the pattern to copy
 
@@ -554,8 +558,8 @@ in the clone detector; this item promotes them.
 There is no Terms of Reference document. The upstream artefacts are:
 
 - `docs/roadmap.md` §6.5, item 6.5.1, at the tree of branch
-  `harden-lint-config` (`origin/main` at `02e6c1c`), as amended by this branch
-  to require 6.1.3.
+  `harden-lint-whitaker-gate` (`origin/main` at `02e6c1c`), as amended by
+  this branch to require 6.1.3.
 - `docs/roadmap.md` item 6.1.3 and the ADR it produces — the authoritative
   statement of the lint driver interfaces this plan consumes. This item cannot
   start until that ADR is accepted.
@@ -684,7 +688,11 @@ keys on a fingerprint — silently drops one of them.
   and ties actually occur; subject names from a five-element alphabet; lines in
   `1..=6`; both subject kinds; `Warn` and `Deny`.
 - Artefact: `common/tests/brain_trust_sarif_properties.rs`, with regression
-  seeds committed under `common/proptest-regressions/`.
+  seeds committed under `common/proptest-regressions/`. Reuse
+  `whitaker_sarif::test_support::assert_json_round_trip` for the round-trip
+  half rather than hand-rolling it; it already exists behind the crate's
+  `test-support` feature, alongside `assert_serialized_json` and
+  `make_keyed_result`.
 - Non-vacuity: counters accumulated across the run assert that at least one
   generated case contained two findings sharing a file URI and at least one
   contained two sharing a line; a generator producing only distinct findings
@@ -906,7 +914,7 @@ coherent state where the clone detector still works.
 - Requirements: `BTS-REQ-04`, `BTS-REQ-06`.
 - Changes: in `crates/whitaker_sarif/src/rules.rs`, rename `all_rules()` to
   `clone_detection_rules()`, update its arity test and the one consumer at
-  `emit.rs:112`, and add `WHK101_ID`/`WHK102_ID`, `whk101_rule()`,
+  `emit.rs:114`, and add `WHK101_ID`/`WHK102_ID`, `whk101_rule()`,
   `whk102_rule()`, and `brain_trust_rules()`. Add
   `help: Option<MultiformatMessageString>` to `ReportingDescriptor` with
   `#[serde(default, skip_serializing_if = "Option::is_none")]`. In
