@@ -1,7 +1,6 @@
 # Restore portable Whitaker installation and pilot Namespace runners
 
-Status: IN PROGRESS — EP-M1 complete and reviewed; EP-M2 committed and awaiting
-review.
+Status: IN PROGRESS — EP-M1 and EP-M2 complete and reviewed; EP-M3 is next.
 
 This ExecPlan delivers three reviewable changes as one GitHub stacked pull
 request chain. The bottom layer restores a cold `whitaker-installer` source
@@ -298,7 +297,8 @@ layer's diff from its immediate base before committing.
 - [x] 2026-09-01: Committed EP-M2 as `3456839` and passed the committed-HEAD
   publication check: 1,665 CI-profile tests, all ten lint libraries, and both
   selected packages verified.
-- [ ] Complete the EP-M2 CodeRabbit milestone review.
+- [x] 2026-09-01: Ran `coderabbit review --agent` through the scrutineer for
+  EP-M2; it completed with zero findings and no rate-limit event.
 - [ ] Complete EP-M3, submit the draft stack, and monitor Namespace jobs.
 
 ## Surprises & discoveries
