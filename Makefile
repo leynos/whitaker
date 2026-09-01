@@ -57,12 +57,11 @@ WHITAKER_SCRIPT ?= $(HOME)/.local/bin/whitaker
 
 # Markdown sources checked by `check-fmt`. Keep generated output and local tool
 # caches out of this list; the checker itself never writes to these sources.
-MD_FILES_FIND = find . -type f -name '*.md' \
-	-not -path './.git/*' -not -path './target/*' \
-	-not -path './.venv/*' -not -path './.uv-cache/*' \
-	-not -path './.uv-tools/*' -not -path './.pytest_cache/*' \
-	-not -path './.vtcode/*' -not -path './memories/*' \
-	-not -path './node_modules/*' -print0
+MD_FILES_FIND = find . \
+	\( -type d \( -name .git -o -name target -o -name .venv -o \
+	-name .uv-cache -o -name .uv-tools -o -name .pytest_cache -o \
+	-name .vtcode -o -name memories -o -name node_modules \) -prune \) -o \
+	\( -type f -name '*.md' -print0 \)
 
 build: target/debug/$(APP) ## Build debug binary
 release: target/release/$(APP) ## Build release binary

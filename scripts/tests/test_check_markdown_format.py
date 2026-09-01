@@ -294,9 +294,8 @@ def test_accepts_only_uniform_canonical_line_endings(lines: list[str]) -> None:
 
 def test_check_fmt_make_target_invokes_the_markdown_checker() -> None:
     """Keep the checked-in formatting gate connected to the checker."""
-    makefile_lines = (
-        (REPOSITORY_ROOT / "Makefile").read_text(encoding="utf-8").splitlines()
-    )
+    makefile = (REPOSITORY_ROOT / "Makefile").read_text(encoding="utf-8")
+    makefile_lines = makefile.splitlines()
     target_index = makefile_lines.index("check-fmt: ## Verify formatting")
     recipe_lines: list[str] = []
     for line in makefile_lines[target_index + 1 :]:
@@ -319,4 +318,20 @@ def test_check_fmt_make_target_invokes_the_markdown_checker() -> None:
     ]
     assert not missing_requirements, "check-fmt does not " + ", ".join(
         missing_requirements
+    )
+
+    required_scan_fragments = {
+        "-type d": "identify cache directories",
+        "-prune": "avoid traversing cache directories",
+        "-name target": "exclude nested build directories",
+        "-name node_modules": "exclude nested dependency directories",
+        "-type f -name '*.md' -print0": "emit only Markdown source files",
+    }
+    missing_scan_requirements = [
+        description
+        for fragment, description in required_scan_fragments.items()
+        if fragment not in makefile
+    ]
+    assert not missing_scan_requirements, "Markdown discovery does not " + ", ".join(
+        missing_scan_requirements
     )

@@ -140,9 +140,14 @@ project:
 
     ```sh
     cargo fmt --workspace -- --check
+    $(MD_FILES_FIND) | xargs -0 -r scripts/check-markdown-format.sh
     ```
 
-    validating formatting across the entire workspace without modifying files.
+    validating Rust and Markdown formatting without modifying files. The
+    Markdown checker skips repository and tool-cache directories at every
+    depth, then checks the remaining sources in batches with `mdtablefix` and
+    `markdownlint-cli2` staged copies. It requires `mdtablefix` and
+    `markdownlint-cli2` on `PATH`.
   - `make lint` executes:
 
     ```sh
