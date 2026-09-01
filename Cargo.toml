@@ -99,6 +99,7 @@ dylint_linting = { workspace = true, optional = true }
 
 [dev-dependencies]
 whitaker-common = { workspace = true }
+cap-std = { workspace = true }
 rstest = { workspace = true }
 rstest-bdd = { workspace = true }
 rstest-bdd-macros = { workspace = true }

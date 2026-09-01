@@ -13,9 +13,7 @@
 //! clause needed to capture that pattern. It also protects the named nested
 //! Cargo UI harnesses that share compiler resources on constrained runners.
 
-use std::fs;
-use std::path::Path;
-
+use cap_std::{ambient_authority, fs_utf8::Dir};
 use rstest::{fixture, rstest};
 use toml::Value;
 
@@ -29,9 +27,11 @@ const NESTED_CARGO_UI_FILTER_CLAUSES: [&str; 5] = [
 
 /// Parses `.config/nextest.toml` into a [`Value`].
 fn load_nextest_config() -> Value {
-    let config_path = Path::new(env!("CARGO_MANIFEST_DIR")).join(".config/nextest.toml");
-    let contents = fs::read_to_string(&config_path)
-        .unwrap_or_else(|err| panic!("failed to read {}: {err}", config_path.display()));
+    let repository_root = Dir::open_ambient_dir(env!("CARGO_MANIFEST_DIR"), ambient_authority())
+        .unwrap_or_else(|err| panic!("failed to open repository root: {err}"));
+    let contents = repository_root
+        .read_to_string(".config/nextest.toml")
+        .unwrap_or_else(|err| panic!("failed to read .config/nextest.toml: {err}"));
     toml::from_str(&contents)
         .unwrap_or_else(|err| panic!(".config/nextest.toml should parse as TOML: {err}"))
 }
@@ -72,23 +72,25 @@ fn extract_filter(ui_override: &Value) -> &str {
 /// name of `ui`.  The substring match `test(ui::ui)` does **not** capture
 /// them because the reported test name is plain `ui`, not `ui::ui`.
 fn crates_with_integration_ui_test() -> Vec<String> {
-    let crates_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("crates");
+    let repository_root = Dir::open_ambient_dir(env!("CARGO_MANIFEST_DIR"), ambient_authority())
+        .unwrap_or_else(|err| panic!("failed to open repository root: {err}"));
+    let crates_dir = repository_root
+        .open_dir("crates")
+        .unwrap_or_else(|err| panic!("failed to open crates directory: {err}"));
 
-    let entries = fs::read_dir(&crates_dir)
-        .unwrap_or_else(|err| panic!("failed to read {}: {err}", crates_dir.display()));
+    let entries = crates_dir
+        .entries()
+        .unwrap_or_else(|err| panic!("failed to read crates directory: {err}"));
 
     let mut crate_names: Vec<String> = entries
         .filter_map(|dir_entry| {
-            let path = dir_entry
-                .unwrap_or_else(|err| panic!("directory entry should be readable: {err}"))
-                .path();
-            if path.is_dir() && path.join("tests/ui.rs").is_file() {
-                Some(
-                    path.file_name()
-                        .and_then(|n| n.to_str())
-                        .unwrap_or_else(|| panic!("crate directory should have a UTF-8 name"))
-                        .to_owned(),
-                )
+            let entry =
+                dir_entry.unwrap_or_else(|err| panic!("directory entry should be readable: {err}"));
+            let crate_directory = entry.open_dir().ok()?;
+            if crate_directory.is_file("tests/ui.rs") {
+                Some(entry.file_name().unwrap_or_else(|err| {
+                    panic!("crate directory should have a UTF-8 name: {err}")
+                }))
             } else {
                 None
             }

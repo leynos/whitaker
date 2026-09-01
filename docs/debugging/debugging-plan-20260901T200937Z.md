@@ -1,4 +1,4 @@
-# Debugging Plan: Coverage UI example loses the `rstest` dependency
+# Debugging plan: coverage UI example loses the `rstest` dependency
 
 - **Generated:** 2026-09-01T20:09:37Z
 - **Issue ID:** Whitaker PR #381, run 33552532676, job 100005211069
@@ -8,7 +8,7 @@
 Falsification must be executed by the named sub-agent, not by the planning
 agent.
 
-## Problem Statement
+## Problem statement
 
 The Namespace `coverage-check` job reaches the instrumented Nextest suite but
 fails while `rstest_helper_should_be_fixture` UI cases compile examples. A
@@ -18,7 +18,7 @@ without coverage instrumentation, and the prior Namespace `linux-full` job
 completed successfully. The coverage job should execute all 1,652 selected
 tests without dependency artefacts disappearing or becoming unusable.
 
-## Context Summary
+## Context summary
 
 | Aspect              | Details                                                             |
 | ------------------- | ------------------------------------------------------------------- |
@@ -27,7 +27,9 @@ tests without dependency artefacts disappearing or becoming unusable.
 | Affected components | `cargo llvm-cov nextest`, Dylint UI example harness, Nextest groups |
 | Recent changes      | `coverage-check` moved from UbiCloud to `namespace-profile-default` |
 
-### Error Artefacts
+_Table 1: Context for the recorded coverage failure._
+
+### Error artefacts
 
 ```plaintext
 error[E0463]: can't find crate for `rstest`
@@ -47,7 +49,7 @@ configuration serializes several Dylint UI test names but does not explicitly
 match
 `rstest_helper_should_be_fixture::ui::example_compiles_without_diagnostics`.
 
-### Information Gaps
+### Information gaps
 
 The current log does not reveal whether the referenced `librstest` file was
 absent, partially replaced, or incompatible when rustc opened it. The Code
@@ -58,7 +60,7 @@ ______________________________________________________________________
 
 ## Hypotheses
 
-### H1: The failing UI cases bypass the serial Dylint group
+### H1: the failing UI cases bypass the serial Dylint group
 
 **Claim**: The Nextest override omits the
 `example_compiles_without_diagnostics` and
@@ -73,13 +75,15 @@ documents this exact shared-target risk for other UI names.
 cases no `serial-dylint-ui` group, and the focused coverage run succeeds after
 the filter includes them.
 
-#### H1 Falsification Plan
+#### H1 falsification plan
 
 | Step | Action                                                                      | Expected Negative Result                           |
 | ---- | --------------------------------------------------------------------------- | -------------------------------------------------- |
 | 1    | Inspect `cargo nextest list` metadata for the two exact test names          | Either case already belongs to `serial-dylint-ui`  |
 | 2    | Run the focused coverage cases after adding only the missing filter clauses | `E0463` still occurs while the cases run serially  |
 | 3    | Repeat the focused serial coverage run several times                        | Any serial repetition reproduces the missing crate |
+
+_Table 2: H1 falsification steps and expected negative results._
 
 **Tooling**: `cargo nextest list`, `cargo llvm-cov nextest`, temporary Nextest
 configuration or a minimal filter patch, and the pinned repository toolchain.
@@ -115,7 +119,7 @@ single-threaded nested UI execution rules out inter-test target contention.
 
 ______________________________________________________________________
 
-### H2: Coverage instrumentation alone makes the nested dependency unusable
+### H2: coverage instrumentation alone makes the nested dependency unusable
 
 **Claim**: `cargo llvm-cov nextest` produces an `rstest` artefact that the
 Dylint example's nested Cargo invocation cannot load, independently of test
@@ -127,12 +131,14 @@ log's build-lock contention provides a more specific explanation.
 **Prediction**: If this hypothesis holds, one isolated failing case still
 reports `E0463` in a fresh coverage target directory.
 
-#### H2 Falsification Plan
+#### H2 falsification plan
 
 | Step | Action                                                                      | Expected Negative Result                |
 | ---- | --------------------------------------------------------------------------- | --------------------------------------- |
 | 1    | Run one failing case under `cargo llvm-cov nextest` with no competing tests | The isolated instrumented case succeeds |
 | 2    | Compare with the same exact case under ordinary `cargo nextest`             | Both isolated variants succeed          |
+
+_Table 3: H2 falsification steps and expected negative results._
 
 **Tooling**: a fresh task-specific target directory, the exact Nextest test
 expression, and `cargo llvm-cov` 0.6.24.
@@ -154,7 +160,7 @@ instrumentation is insufficient to trigger the defect.
 
 ______________________________________________________________________
 
-### H3: The GitHub Actions sccache backend corrupts the dependency artefact
+### H3: the GitHub Actions sccache backend corrupts the dependency artefact
 
 **Claim**: The 515 sccache write failures leave the referenced `rstest` rlib in
 an unusable state for the nested Cargo build.
@@ -166,12 +172,14 @@ build.
 **Prediction**: If this hypothesis holds, disabling `RUSTC_WRAPPER` makes the
 isolated or concurrent coverage case reliable without changing Nextest grouping.
 
-#### H3 Falsification Plan
+#### H3 falsification plan
 
 | Step | Action                                                            | Expected Negative Result                                 |
 | ---- | ----------------------------------------------------------------- | -------------------------------------------------------- |
 | 1    | Run the concurrent focused coverage cases with sccache disabled   | The same `E0463` failure recurs                          |
 | 2    | Inspect whether the nested Cargo command inherits `RUSTC_WRAPPER` | It does not use sccache for the failing rustc invocation |
+
+_Table 4: H3 falsification steps and expected negative results._
 
 **Tooling**: the focused coverage expression, `RUSTC_WRAPPER=`, and captured
 verbose Cargo output.
@@ -242,7 +250,7 @@ retries. It prevents concurrent nested Cargo/compiler work against shared
 target resources on the constrained Namespace runners. The checked-in
 `tests/nextest_ui_filter.rs` contract must keep the three clauses present.
 
-#### H6: Unmapped sibling example harnesses race the mapped case
+#### H6: unmapped sibling example harnesses race the mapped case
 
 **Claim**: The fresh Namespace run's
 `no_unwrap_or_else_panic::ui::example_compiles_under_test_harness::case_1`
@@ -279,7 +287,7 @@ supported.
   and passed. The resolved group contained all seven concrete executions: three
   parameterized example cases and four single negative cases.
 
-#### H7: Sequential Dylint example builds mutate a non-coverage target
+#### H7: sequential Dylint example builds mutate a non-coverage target
 
 **Claim**: `cargo llvm-cov` passes its instrumented target directory to Nextest
 as `--target-dir`, but does not export it as `CARGO_TARGET_DIR` to the test
@@ -322,7 +330,7 @@ processes, so the UI helper could not derive that target.
 - The helper mapping is removed rather than retaining a source of driver
   assumptions or its resulting `option_option` and `shadow_reuse` lints.
 
-#### H8: The coverage driver needs an explicit shared Cargo target
+#### H8: the coverage driver needs an explicit shared Cargo target
 
 **Claim**: `cargo-llvm-cov` 0.6.24 passes its coverage directory to Nextest
 only with `--target-dir`. Its `show-env` subcommand prints
@@ -369,7 +377,7 @@ remain equal.
 
 ______________________________________________________________________
 
-## Follow-up: Build-script fixture cross-contamination
+## Follow-up: build-script fixture cross-contamination
 
 The fresh coverage rerun in GitHub Actions run `33567979265` exposed a distinct
 failure after H8: `build_script_rejects_a_loose_workspace_parser_pin` observed
@@ -379,7 +387,7 @@ same time. The rejection assertion is at line 51 of
 `e858760` had passed full coverage; a documentation-only rerun revealed that
 the result depends on concurrent execution rather than source semantics.
 
-### H9: Fixture workspaces share the coverage Cargo target
+### H9: fixture workspaces share the coverage Cargo target
 
 **Claim**: The exact-pin and loose-pin fixtures deliberately use the same
 package name and version. Under `make coverage`, they inherit the outer
@@ -396,13 +404,15 @@ script.
 one nested Cargo target reproduce an unexpected loose-pin success, while the
 same repetitions with one target directory per fixture preserve rejection.
 
-#### H9 Falsification Plan
+#### H9 falsification plan
 
 | Step | Action                                                                                      | Expected negative result                                                           |
 | ---- | ------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
 | 1    | Run the exact and loose tests repeatedly under coverage with their inherited common target. | The loose fixture always rejects, disproving shared-target reuse.                  |
 | 2    | Repeat with a distinct target directory owned by each temporary fixture.                    | A loose fixture still succeeds, disproving target sharing as the cause.            |
 | 3    | Inspect verbose Cargo output for build-script execution and target paths.                   | Separate fixture paths already produce separate output units in the shared target. |
+
+_Table 5: H9 falsification steps and expected negative results._
 
 **Tooling**: bounded repeated focused `cargo llvm-cov nextest` runs, temporary
 target directories, and verbose nested Cargo output where needed.
@@ -439,13 +449,13 @@ independent build-script assertions unsound.
 
 ______________________________________________________________________
 
-## Recommended Execution Order
+## Recommended execution order
 
 1. Extend `serial-dylint-ui` with the five active named nested-Cargo clauses.
 2. Prove them with `tests/nextest_ui_filter.rs` and run the focused UI suite.
 3. Run the repository formatting, typecheck, lint, and coverage gates.
 
-## Termination Criteria
+## Termination criteria
 
 - **Scheduling remediation accepted**: the five named nested-Cargo cases
   match `serial-dylint-ui`, the focused regression is reliable, and the
@@ -454,7 +464,7 @@ ______________________________________________________________________
   the five active tests are visibly in this group, or the failure signature
   changes.
 
-## Notes for Executing Agent
+## Notes for executing agent
 
 Work only in the `adopt-namespace-runners` worktree. Do not change production
 lint behaviour or globally serialize the suite. Extend the existing

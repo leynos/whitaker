@@ -22,6 +22,7 @@ import pytest
 from ruamel.yaml import YAML
 
 WORKFLOWS_DIRECTORY = Path(__file__).resolve().parents[2] / ".github/workflows"
+WORKFLOW_FILE_GLOBS = ("*.yaml", "*.yml")
 NAMESPACE_DEFAULT_PROFILE = "namespace-profile-default"
 
 MIGRATED_PULL_REQUEST_JOBS = {
@@ -101,7 +102,8 @@ def test_namespace_pilot_does_not_expand_beyond_the_reviewed_jobs() -> None:
     }
     actual_jobs = {
         (workflow_path.name, job_name)
-        for workflow_path in WORKFLOWS_DIRECTORY.glob("*.yml")
+        for workflow_glob in WORKFLOW_FILE_GLOBS
+        for workflow_path in WORKFLOWS_DIRECTORY.glob(workflow_glob)
         for job_name, job in _workflow_jobs(workflow_path.name).items()
         if isinstance(job, Mapping)
         and isinstance(job.get("runs-on"), str)
