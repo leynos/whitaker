@@ -24,7 +24,7 @@ configuration, localization, and user-interface (UI) tests. All four consume
 the same seam and none of them owns it. The published execplan for 6.5.1 says
 so in as many words: "This plan does not decide that contract. Roadmap item
 6.1.3's ADR does" (`docs/execplans/`
-`6-5-1-collect-brain-trust-diagnostics-into-sarif-emitter.md:1387`).
+`6-5-1-collect-brain-trust-diagnostics-into-sarif-emitter.md:1395`).
 
 This item closes that gap by writing one architectural decision record (ADR).
 After this change a contributor who picks up 6.2.4, 6.3.3, or 6.5.1 can read a
@@ -55,7 +55,7 @@ overturn. Both are called out here so they are not buried.
    route: ADR 005 decides the correct shape, lists every supersession under
    "Known risks and limitations", and leaves the 6.5.1 execplan for its own
    implementer to reconcile at that plan's Stage A, which its text already
-   provides for (`6-5-1-...md:1387-1390`). The alternative — revising the 6.5.1
+   provides for (`6-5-1-...md:1395-1398`). The alternative — revising the 6.5.1
    plan on this branch — is recorded in `Decision log` and rejected there.
 2. **Two milestones add code to a documentation item.** `EP-M2` (an
    architecture-fitness guard) and `EP-M3` (a doc-comment correction in
@@ -226,10 +226,10 @@ Thresholds that trigger escalation, not quality targets.
 - Observation: the interface shapes the 6.5.1 execplan defers to this ADR
   cannot compile. They form a Cargo dependency cycle.
   Evidence: `whitaker_sarif::span_to_region(span: SourceSpan) -> Region`
-  (`6-5-1-...md:1262-1264`) requires `whitaker_sarif` to depend on
+  (`6-5-1-...md:1270-1272`) requires `whitaker_sarif` to depend on
   `whitaker-common`; `BrainTrustSubject { file_uri: whitaker_sarif::FileUri,`
   `span: whitaker_common::span::SourceSpan }` in
-  `common/src/brain_trust_sarif/finding.rs` (`6-5-1-...md:1315-1320`) requires
+  `common/src/brain_trust_sarif/finding.rs` (`6-5-1-...md:1323-1328`) requires
   the reverse. Neither edge exists today
   (`crates/whitaker_sarif/Cargo.toml:15-19`, `common/Cargo.toml:15-24`).
   Impact: this is the single most consequential thing the ADR must decide, and
@@ -282,7 +282,7 @@ Thresholds that trigger escalation, not quality targets.
   Impact: the ADR is about to cite this type as normative, and rendered
   rustdoc is the contract a consumer reads. `EP-M3` corrects the literals.
 - Observation: the SARIF model has no `columnKind` field.
-  Evidence: `crates/whitaker_sarif/src/model/run.rs:35-53` lists `tool`,
+  Evidence: `crates/whitaker_sarif/src/model/run.rs:36-54` lists `tool`,
   `invocations`, `results`, and `artefacts` only. SARIF 2.1.0 §3.14.27 defines
   `columnKind` with values `utf16CodeUnits` and `unicodeCodePoints`.
   Impact: the repository's only SARIF producer counts UTF-16 code units
@@ -373,7 +373,7 @@ Thresholds that trigger escalation, not quality targets.
 - **Decision: every Whitaker SARIF run must state `columnKind` explicitly.**
   Rationale: the repository's producer counts UTF-16 code units
   (`crates/whitaker_clones_core/src/run0/span.rs:78-79`) but the model has no
-  field to say so (`crates/whitaker_sarif/src/model/run.rs:35-53`). The default
+  field to say so (`crates/whitaker_sarif/src/model/run.rs:36-54`). The default
   for an absent `columnKind` is contested in the SARIF issue tracker, so
   relying on it is unsafe regardless of which reading is right. Emitting the
   field removes the question. **This supersedes the 6.5.1 execplan's
@@ -393,7 +393,7 @@ Thresholds that trigger escalation, not quality targets.
 - Decision: do not revise `docs/execplans/6-5-1-...md` on this branch.
   Rationale: it belongs to an unmerged sibling branch, its Stage A already
   gates on reading and reconciling with this ADR, and its own text states that
-  where the two disagree "the ADR wins" (`6-5-1-...md:1387-1390`). Editing a
+  where the two disagree "the ADR wins" (`6-5-1-...md:1395-1398`). Editing a
   sibling's plan from here would create a merge conflict on a document neither
   branch owns. The five supersessions are listed in the ADR so its implementer
   finds them. Rejected alternative: revise both, which is tidier on paper and
@@ -408,7 +408,7 @@ Thresholds that trigger escalation, not quality targets.
   `Option` to `Result` later breaks every call site; adding a variant to a
   `#[non_exhaustive]` enum does not. The 6.5.1 plan applies exactly this
   reasoning one layer up, keeping `Ok(None)` for "disabled" and
-  `Ok(Some(empty))` for "clean" (`6-5-1-...md:1376-1378`).
+  `Ok(Some(empty))` for "clean" (`6-5-1-...md:1384-1386`).
   Date/Author: 2026-08-21, planning agent, after design review.
 
 - Decision: `resolve_subject_location` lives in the root `whitaker` crate at
@@ -584,8 +584,12 @@ optional `uri_base_id` (`model/location.rs:61-68`), a validating
 `RegionBuilder` that rejects a zero line or column
 (`builders/location_builder.rs:37-91`), `ResultBuilder`, `RunBuilder`,
 `SarifLogBuilder`, rule descriptors `WHK001` to `WHK003` (`src/rules.rs`), and
-merge and deduplication helpers (`src/merge.rs:104-145`). Nothing in it
-validates that a URI is repository-relative, and it has no `columnKind` field.
+merge and deduplication helpers (`src/merge.rs:104-145`). Its error type is
+`SarifError` (`src/error.rs:21`), and `src/test_support.rs` — `#[doc(hidden)]`,
+not part of the public contract — offers `assert_json_round_trip`,
+`assert_serialized_json`, and `make_keyed_result`, which `EP-M2` should reuse
+rather than hand-roll. Nothing in the crate validates that a URI is
+repository-relative, and it has no `columnKind` field.
 
 The clone detector is the only shipped producer. It emits one-based UTF-16
 code-unit columns (`crates/whitaker_clones_core/src/run0/span.rs:69-79`) and
@@ -604,7 +608,7 @@ lint-supplied English fallback (`common/src/i18n/helpers.rs:180-206`).
 ## Conformance basis
 
 Upstream artefacts, at the revisions present on this branch (base commit
-`f03d3e7`):
+`f259e45`):
 
 - `docs/roadmap.md` item 6.1.3 (lines 288-297) — the requirement discharged
   here. Its five questions are `BTD-REQ-01` to `BTD-REQ-05` below.
@@ -840,7 +844,7 @@ The probe must answer six questions:
 Constraints on the probe:
 
 - Do **not** use `dbg!`. The workspace denies `clippy::dbg_macro`
-  (`Cargo.toml:117`), and driver stderr is captured and diffed against `.stderr`
+  (`Cargo.toml:125`), and driver stderr is captured and diffed against `.stderr`
   fixtures by `dylint_testing`, so a stray print fails UI tests.
 - Use the Makefile's mandatory flags. Building these crates without
   `RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked -D warnings"`
@@ -1300,11 +1304,11 @@ Normative rules:
     slash (§3.14.14), and `Run` has no such field today. **Outstanding
     decision**: the clone detector also emits `uri_base_id: None`
     (`crates/whitaker_clones_core/src/run0/emit.rs:174`) while the model's
-    doctests show `%SRCROOT%` (`model/location.rs:183`). A future item should
+    doctests show `%SRCROOT%` (`model/location.rs:178`). A future item should
     settle that across both producers at once.
 11. **`columnKind`.** Every Whitaker run must state
     `columnKind: "utf16CodeUnits"` explicitly. `Run` has no such field
-    (`crates/whitaker_sarif/src/model/run.rs:35-53`) and must gain one. The
+    (`crates/whitaker_sarif/src/model/run.rs:36-54`) and must gain one. The
     default for an absent `columnKind` is contested, so relying on it is unsafe
     regardless of which reading is correct. **Supersedes the 6.5.1 execplan**,
     which records the opposite as settled.
@@ -1407,7 +1411,7 @@ at finalization, for gated subjects only.**
    truncation from absence.
 5. **The property bag needs a schema statement.** `WhitakerProperties` has no
    version field, no `#[serde(default)]`, and no `deny_unknown_fields`
-   (`crates/whitaker_sarif/src/whitaker_properties.rs:35-52`), so every
+   (`crates/whitaker_sarif/src/whitaker_properties.rs:37-52`), so every
    existing field is mandatory on read while unknown fields are tolerated.
    Turning it into an internally tagged enum makes the tag mandatory and would
    reject every artefact the shipped detector has already written under
@@ -1641,3 +1645,25 @@ a dormant boundary to the live one. `EP-M3` is new. Stage B's probe was
 rewritten — it previously would have measured a temporary directory rather than
 a real Cargo invocation, and so could not have falsified the assumption it
 existed to test.
+
+Revised 2026-09-02 after rebasing onto the reworked 6.5.1 branch.
+
+What changed. The base branch was rewritten, moving the tree this plan's
+factual claims are anchored to from `f03d3e7` to `f259e45`. Every cited file
+and line was re-verified against the new base. All load-bearing claims still
+hold; nine citations shifted and were corrected. Substantively:
+`SarifResult::partial_fingerprints` is still a `HashMap`, so the
+byte-stability supersession stands; `Run` still has no `columnKind` field, so
+that supersession stands; `ArtefactLocation` and the mandatory
+`RelatedLocation::physical_location` are unchanged, so the property-bag
+reasoning in `BTD-REQ-03` stands; and the clone detector still emits
+`uri_base_id: None`, so the outstanding `uriBaseId` decision stands.
+
+The new base also adds `whitaker_sarif::test_support`, carrying
+`assert_json_round_trip` and `assert_serialized_json` alongside
+`make_keyed_result`. The crate inventory in the orientation section now lists
+it and `error.rs`, both previously omitted, so `EP-M2` reuses those helpers
+instead of reimplementing them.
+
+Effect on remaining work. None. No milestone, obligation, or normative rule
+changed; this is a citation-accuracy pass.
