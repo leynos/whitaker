@@ -328,6 +328,22 @@ layer's diff from its immediate base before committing.
   each nested Cargo command now receives the target directory owned by its
   `TempDir`. Ten focused concurrent coverage repetitions passed; no production
   build-script behaviour changed.
+- [x] 2026-09-02: Resolved the five verified inline CodeRabbit findings from
+  PR #381 review `5083956521` in `dfdc84f`: sentence-case debugging headings,
+  table captions, capability-scoped test filesystem access, diagnosable
+  coverage assertions, and `.yaml` workflow discovery. `make check-fmt`,
+  `make typecheck`, `make lint`, `make test` (1,653 passed, 5 skipped),
+  `make markdownlint`, `make nixie`, `make test-workflow-contracts`, and the
+  focused workflow contracts all passed.
+- [x] 2026-09-02: Resolved the current review's coverage-boundary pre-merge
+  error in functional head `b6d2871`. The new isolated Makefile test runs fake
+  coverage, recursive Make, and nested Cargo processes, proving that both
+  target variables contain the same absolute directory; the developers' guide
+  documents the corresponding override rule. The same deterministic gate set
+  passed before commit.
+- [ ] 2026-09-02: Keep merge gated on exact-head GitHub checks and no blocking
+  CodeRabbit concerns. Fresh review queue `d211e006` is pending; do not merge
+  until its result and the checks for the subsequently pushed head are green.
 - [ ] Complete EP-M3, submit the draft stack, and monitor Namespace jobs.
 
 ## Surprises & discoveries
