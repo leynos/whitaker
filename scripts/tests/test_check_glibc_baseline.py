@@ -78,7 +78,7 @@ def stub_readelf(
 
 
 @pytest.mark.parametrize(
-    ("versions", "expected"),
+    "case",
     [
         (("GLIBC_2.17",), ((2, 17),)),
         (("GLIBC_2.17", "GLIBC_2.35"), ((2, 17), (2, 35))),
@@ -89,10 +89,10 @@ def test_read_required_glibc_versions_accepts_allowed_versions(
     checker: Checker,
     elf_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    versions: tuple[str, ...],
-    expected: tuple[GlibcVersion, ...],
+    case: tuple[tuple[str, ...], tuple[GlibcVersion, ...]],
 ) -> None:
     """Accept GLIBC requirements at or below the supported baseline."""
+    versions, expected = case
     stub_readelf(monkeypatch, checker, {elf_path: version_needs(*versions)})
 
     assert checker.read_required_glibc_versions(elf_path) == expected

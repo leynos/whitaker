@@ -14,6 +14,7 @@ Example
 from __future__ import annotations
 
 import argparse
+import itertools
 import re
 import subprocess
 import sys
@@ -58,6 +59,32 @@ def format_glibc_version(version: GlibcVersion) -> str:
     return f"GLIBC_{major}.{minor}"
 
 
+def _version_needs_lines(version_info: str) -> tuple[str, ...]:
+    """Return normalized lines from the ELF version-needs section.
+
+    Example
+    -------
+        >>> _version_needs_lines("Version needs section '.gnu.version_r':\n Name: GLIBC_2.35")
+        ('Name: GLIBC_2.35',)
+    """
+    lines = tuple(line.strip() for line in version_info.splitlines())
+    section_start = next(
+        (
+            index
+            for index, line in enumerate(lines)
+            if line.startswith("Version needs section")
+        ),
+        None,
+    )
+    if section_start is None:
+        message = "readelf output did not contain ELF version information"
+        raise ElfInspectionError(message)
+    section_body = lines[section_start + 1 :]
+    return tuple(
+        itertools.takewhile(lambda line: not line.startswith("Version "), section_body)
+    )
+
+
 def parse_required_glibc_versions(version_info: str) -> tuple[GlibcVersion, ...]:
     """Return GLIBC requirements from ``readelf --version-info`` output.
 
@@ -73,25 +100,83 @@ def parse_required_glibc_versions(version_info: str) -> tuple[GlibcVersion, ...]
     if "No version information found" in version_info:
         return ()
 
-    in_version_needs_section = False
-    found_version_needs_section = False
-    requirements: set[GlibcVersion] = set()
-    for raw_line in version_info.splitlines():
-        line = raw_line.strip()
-        if line.startswith("Version needs section"):
-            in_version_needs_section = True
-            found_version_needs_section = True
-            continue
-        if in_version_needs_section and line.startswith("Version "):
-            in_version_needs_section = False
-        if in_version_needs_section:
-            for match in GLIBC_VERSION_PATTERN.finditer(line):
-                requirements.add((int(match["major"]), int(match["minor"])))
-
-    if not found_version_needs_section:
-        message = "readelf output did not contain ELF version information"
-        raise ElfInspectionError(message)
+    requirements = {
+        (int(match["major"]), int(match["minor"]))
+        for line in _version_needs_lines(version_info)
+        for match in GLIBC_VERSION_PATTERN.finditer(line)
+    }
     return tuple(sorted(requirements))
+
+
+def _require_readable_file(path: Path) -> None:
+    """Reject a path that does not identify a readable file.
+
+    Example
+    -------
+        >>> _require_readable_file(Path("missing"))
+        Traceback (most recent call last):
+        ...
+        ElfInspectionError: input is not a readable file: missing
+    """
+    if not path.is_file():
+        message = f"input is not a readable file: {path}"
+        raise ElfInspectionError(message)
+
+
+def _run_readelf(path: Path) -> subprocess.CompletedProcess[str]:
+    """Run the fixed readelf inspection command for an ELF path.
+
+    Example
+    -------
+        >>> _run_readelf(Path("target/release/whitaker")).returncode
+        0
+    """
+    try:
+        return subprocess.run(  # noqa: S603,S607  # Static tool and path come from this CLI.
+            [READELF, "--version-info", "--wide", str(path)],
+            capture_output=True,
+            check=False,
+            text=True,
+        )
+    except OSError as error:
+        message = f"could not execute {READELF} for {path}: {error}"
+        raise ElfInspectionError(message) from error
+
+
+def _require_successful_readelf(
+    path: Path, completed: subprocess.CompletedProcess[str]
+) -> None:
+    """Reject a failed readelf inspection result.
+
+    Example
+    -------
+        >>> result = subprocess.CompletedProcess([], 1, "", "not an ELF file")
+        >>> _require_successful_readelf(Path("binary"), result)
+        Traceback (most recent call last):
+        ...
+        ElfInspectionError: could not inspect ELF file binary: not an ELF file
+    """
+    if completed.returncode != 0:
+        detail = completed.stderr.strip() or completed.stdout.strip()
+        message = f"could not inspect ELF file {path}: {detail}"
+        raise ElfInspectionError(message)
+
+
+def _parse_readelf_requirements(
+    path: Path, version_info: str
+) -> tuple[GlibcVersion, ...]:
+    """Parse readelf output with path-specific failure context.
+
+    Example
+    -------
+        >>> _parse_readelf_requirements(Path("binary"), "No version information found")
+        ()
+    """
+    try:
+        return parse_required_glibc_versions(version_info)
+    except ElfInspectionError as error:
+        message = f"could not parse ELF version information for {path}: {error}"
+        raise ElfInspectionError(message) from error
 
 
 def read_required_glibc_versions(path: Path) -> tuple[GlibcVersion, ...]:
@@ -102,31 +187,10 @@ def read_required_glibc_versions(path: Path) -> tuple[GlibcVersion, ...]:
         >>> read_required_glibc_versions(Path("target/release/whitaker"))
         ((2, 35),)
     """
-    if not path.is_file():
-        message = f"input is not a readable file: {path}"
-        raise ElfInspectionError(message)
-
-    try:
-        completed = subprocess.run(  # noqa: S603,S607  # Static tool and path come from this CLI.
-            [READELF, "--version-info", "--wide", str(path)],
-            capture_output=True,
-            check=False,
-            text=True,
-        )
-    except OSError as error:
-        message = f"could not execute {READELF} for {path}: {error}"
-        raise ElfInspectionError(message) from error
-
-    if completed.returncode != 0:
-        detail = completed.stderr.strip() or completed.stdout.strip()
-        message = f"could not inspect ELF file {path}: {detail}"
-        raise ElfInspectionError(message)
-
-    try:
-        return parse_required_glibc_versions(completed.stdout)
-    except ElfInspectionError as error:
-        message = f"could not parse ELF version information for {path}: {error}"
-        raise ElfInspectionError(message) from error
+    _require_readable_file(path)
+    completed = _run_readelf(path)
+    _require_successful_readelf(path, completed)
+    return _parse_readelf_requirements(path, completed.stdout)
 
 
 def maximum_required_glibc(

@@ -410,6 +410,11 @@ the published v0.2.7 assets' `GLIBC_2.39` requirement.
   variable-driven wrapper would obscure rather than strengthen the release
   boundary. The validation instruction therefore means running the checker CLI
   explicitly.
+- 2026-09-01: Keep the glibc checker's extracted helpers private to its release
+  boundary. Repository search found no other ELF-inspection abstraction, and
+  the helpers exist only to separate version-needs parsing, process execution,
+  result validation, and contextual error reporting. They are not a general
+  subprocess or ELF API and must not be called from packaging or build code.
 
 ## Outcomes & retrospective
 
