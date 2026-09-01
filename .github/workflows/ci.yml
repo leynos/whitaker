@@ -129,7 +129,8 @@ jobs:
         # Match the lint-fixing pass that `make fmt` and `make check-fmt` share.
         run: |
           bun install --no-progress --global "markdownlint-cli2@${MARKDOWNLINT_CLI2_VERSION}"
-          installed_markdownlint_version="$(markdownlint-cli2 --version | head -n 1 | tr -d '\r')"
+          markdownlint_version_output="$(markdownlint-cli2 --version)"
+          installed_markdownlint_version="${markdownlint_version_output%%$'\n'*}"
           expected_markdownlint_version="markdownlint-cli2 v${MARKDOWNLINT_CLI2_VERSION}"
           if [[ "${installed_markdownlint_version}" != "${expected_markdownlint_version}"* ]]; then
             echo "expected ${expected_markdownlint_version}, got ${installed_markdownlint_version}" >&2

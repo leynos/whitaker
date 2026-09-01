@@ -61,7 +61,10 @@ def test_linux_full_provisions_pinned_markdown_tools_before_checking() -> None:
         'bun install --no-progress --global "markdownlint-cli2@${MARKDOWNLINT_CLI2_VERSION}"'
         in markdownlint_install_script
     )
-    assert "markdownlint-cli2 --version | head -n 1 | tr -d '\\r'" in (
+    assert 'markdownlint_version_output="$(markdownlint-cli2 --version)"' in (
+        markdownlint_install_script
+    )
+    assert "installed_markdownlint_version=\"${markdownlint_version_output%%$'\\n'*}\"" in (
         markdownlint_install_script
     )
     assert (
