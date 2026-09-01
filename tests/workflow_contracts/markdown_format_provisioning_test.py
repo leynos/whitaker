@@ -6,7 +6,7 @@ from typing import Any
 
 import yaml
 
-WORKFLOW_PATH = Path(__file__).resolve().parents[2] / ".github/workflows/ci.yml"
+WORKFLOW_PATH: Path = Path(__file__).resolve().parents[2] / ".github/workflows/ci.yml"
 
 
 def _load_workflow() -> dict[str, Any]:
