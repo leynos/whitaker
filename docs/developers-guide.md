@@ -197,6 +197,27 @@ make test NEXTEST_PROFILE=ci
 Continuous Integration (CI) always uses the `ci` profile, so installer tests
 are never silently skipped in the pipeline.
 
+
+### Coverage and nested Cargo builds
+
+`make coverage` uses the same selected crate set and warning policy as
+`make test`, but runs it through `cargo llvm-cov nextest`. The Makefile assigns
+the absolute `COVERAGE_TARGET_DIR` (by default,
+`$(CURDIR)/target/llvm-cov-target`) to both `CARGO_LLVM_COV_TARGET_DIR` and
+`CARGO_TARGET_DIR`.
+
+The first variable makes `cargo-llvm-cov` instrument its output in that
+directory. The second is inherited by nested Cargo commands that Dylint UI
+harnesses start while compiling examples. Both values must remain identical:
+`cargo-llvm-cov` otherwise passes its target only as a Nextest argument, and a
+nested Cargo process falls back to the ordinary `target/debug` tree. That can
+mix instrumented and non-instrumented dependency artefacts.
+
+When isolating a coverage run, override `COVERAGE_TARGET_DIR` rather than
+either environment variable individually. Fixture workspaces that intentionally
+use the same package identity must still select their own nested `--target-dir`
+to avoid reusing one another's build-script output.
+
 The CI workflow is split by purpose rather than running the same stack on every
 operating system. `linux-full` is the authoritative gate for formatting,
 Mermaid/Nixie/Markdown validation, `make lint`, and `make publish-check`.
