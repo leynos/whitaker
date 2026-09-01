@@ -370,6 +370,22 @@ fresh LLVM coverage target directory and passed. Nextest resolves it to seven
 executions because `example_compiles_under_test_harness` has three bounded
 cases, alongside the four single negative cases.
 
+Run `33562381054` disproved a concurrency-only explanation: the serial
+aliased-companion example passed directly before the first harness case failed
+three times. The outer LLVM coverage command uses `target/llvm-cov-target`, but
+the nested Dylint Cargo command rebuilt the example and `rstest` under the
+ordinary shared `target/debug`. The narrow fix is a per-runner
+`CARGO_TARGET_DIR` binding in Whitaker's test harness. It keeps nested Cargo
+artefacts self-consistent without modifying lint production code or the wider
+test schedule.
+
+The fix selects the existing LLVM coverage target, not a fresh target per
+example: `cargo-llvm-cov` exposes the base through `CARGO_LLVM_COV_TARGET_DIR`
+and runs Nextest in its `llvm-cov-target` child. The shared UI test helper now
+maps nested Cargo to that child for the runner closure and restores the ambient
+`CARGO_TARGET_DIR` afterwards. This preserves warm coverage artefacts while
+preventing fallback to the ordinary target.
+
 All published `zip` 8.x versions declare Rust 1.88. A trial with `zip` 6.0.0,
 its default features narrowed to the capabilities Whitaker uses, and `time`
 0.3.45 resolved a Rust-1.85-compatible dependency graph. Compilation then

@@ -279,6 +279,56 @@ supported.
   and passed. The resolved group contained all seven concrete executions: three
   parameterized example cases and four single negative cases.
 
+#### H7: Sequential Dylint example builds mutate a non-coverage target
+
+**Claim**: `cargo llvm-cov` passes its instrumented target directory to Nextest
+as `--target-dir`, but does not export it as `CARGO_TARGET_DIR` to the test
+process. `dylint_testing::Test::example` therefore rebuilds each example in the
+workspace's ordinary `target` directory while inheriting coverage `RUSTFLAGS`.
+Sequential Dylint test processes share and mutate that directory, leaving Cargo
+with a fresh fingerprint for `rstest` but a missing usable rlib.
+
+**Prediction**: The nested Cargo command reports paths below `target/debug`, not
+`target/llvm-cov-target`; a unique `CARGO_TARGET_DIR` held for one runner
+closure gives that nested build self-consistent dependencies and prevents the
+`E0463` failure.
+
+**Falsification**: If the nested command already uses the LLVM coverage target,
+or if a uniquely assigned target still reports `E0463`, target sharing is not
+the active cause.
+
+#### H7 execution checkpoint
+
+- Namespace run `33562381054` ran `cargo nextest` with
+  `--target-dir .../target/llvm-cov-target`, while the failed nested Cargo
+  command emitted both the example and `rstest` paths under `.../target/debug`.
+- The preceding aliased-companion case passed in the same serial test group;
+  the first `example_compiles_under_test_harness` case then failed three times.
+  This falsifies an inter-test concurrency-only explanation.
+- `dylint_testing` 6.0.1 removes and rebuilds example artefacts in the target
+  directory returned by Cargo metadata. Its source explicitly records a
+  temporary target directory as the unresolved safer alternative.
+- Test a scoped `CARGO_TARGET_DIR` guard in Whitaker's shared UI test helper.
+  It must cover preparation and the runner closure, restore the ambient
+  environment, and leave lint production code unchanged.
+
+#### H7 decision
+
+Use the coverage target already created by `cargo-llvm-cov`, rather than a new
+target per example. `CARGO_LLVM_COV_TARGET_DIR` names the base target
+directory; the tool's recorded Nextest command uses its `llvm-cov-target`
+child. The shared UI harness now sets `CARGO_TARGET_DIR` to that child while it
+prepares and runs one Dylint UI closure, restoring any caller value afterwards.
+This is narrower than an isolated target per example, preserves warm coverage
+artefacts, and prevents nested Cargo from falling back to ordinary `target`
+artefacts.
+
+- The helper contract sets a synthetic coverage base, observes the derived
+  `llvm-cov-target` in the runner closure, and proves restoration afterwards.
+- A fresh selected `cargo llvm-cov nextest --no-report` run over all five
+  `no_unwrap_or_else_panic` nested-Cargo harnesses passed with the derived
+  coverage target.
+
 ______________________________________________________________________
 
 ## Recommended Execution Order

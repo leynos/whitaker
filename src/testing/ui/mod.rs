@@ -6,7 +6,7 @@
 //! This module centralizes input validation so lint crates can depend on a
 //! small helper rather than repeat the same checks.
 
-use std::{env, fmt};
+use std::{env, fmt, path::PathBuf};
 
 use camino::{Utf8Path, Utf8PathBuf};
 
@@ -187,6 +187,13 @@ pub fn run_with_runner(
 /// - `VCPKG_ROOT`: must be set to `C:\vcpkg` when that directory exists and the
 ///   variable is otherwise absent, so downstream `cargo` invocations resolve vcpkg.
 ///
+/// During LLVM coverage, `cargo-llvm-cov` runs Nextest with
+/// `<base>/llvm-cov-target` but exposes only `base` through
+/// `CARGO_LLVM_COV_TARGET_DIR`. The nested Cargo commands issued by
+/// `dylint_testing` do not receive Nextest's `--target-dir`; direct them to the
+/// same coverage target so Cargo does not reuse ordinary-target artefacts built
+/// with incompatible coverage metadata.
+///
 /// Each mutation and restoration step acquires `env_test_guard()` only for the
 /// environment write itself. The guard deliberately does not hold that mutex
 /// across the UI runner callback, because runner closures can perform their
@@ -194,6 +201,7 @@ pub fn run_with_runner(
 struct RunnerEnvGuard {
     #[cfg(windows)]
     vcpkg_root_was_absent: bool,
+    coverage_target_previous: Option<Option<std::ffi::OsString>>,
     rustc_wrapper_previous: Option<std::ffi::OsString>,
 }
 
@@ -215,6 +223,16 @@ impl Drop for RunnerEnvGuard {
                 env::set_var("RUSTC_WRAPPER", prev);
             }
         }
+        if let Some(previous) = &self.coverage_target_previous {
+            match previous {
+                Some(previous) => unsafe {
+                    env::set_var("CARGO_TARGET_DIR", previous);
+                },
+                None => unsafe {
+                    env::remove_var("CARGO_TARGET_DIR");
+                },
+            }
+        }
     }
 }
 
@@ -225,14 +243,15 @@ fn runner_env_guard() -> Option<RunnerEnvGuard> {
     let vcpkg_applicable = vcpkg_candidate.is_dir();
 
     let _env_guard = env_test_guard();
+    let coverage_target = coverage_target_dir();
     let has_rustc_wrapper = env::var_os("RUSTC_WRAPPER").is_some();
 
     #[cfg(windows)]
-    if !vcpkg_applicable && !has_rustc_wrapper {
+    if !vcpkg_applicable && !has_rustc_wrapper && coverage_target.is_none() {
         return None;
     }
     #[cfg(not(windows))]
-    if !has_rustc_wrapper {
+    if !has_rustc_wrapper && coverage_target.is_none() {
         return None;
     }
 
@@ -254,9 +273,20 @@ fn runner_env_guard() -> Option<RunnerEnvGuard> {
             env::remove_var("RUSTC_WRAPPER");
         }
     });
+    let coverage_target_previous = coverage_target.map(|target| {
+        let previous = env::var_os("CARGO_TARGET_DIR");
+        // SAFETY: `_env_guard` serializes this environment mutation.
+        unsafe {
+            env::set_var("CARGO_TARGET_DIR", target);
+        }
+        previous
+    });
 
     #[cfg(windows)]
-    if !vcpkg_root_was_absent && rustc_wrapper_previous.is_none() {
+    if !vcpkg_root_was_absent
+        && rustc_wrapper_previous.is_none()
+        && coverage_target_previous.is_none()
+    {
         // Nothing was mutated; release the guard early.
         return None;
     }
@@ -264,8 +294,16 @@ fn runner_env_guard() -> Option<RunnerEnvGuard> {
     Some(RunnerEnvGuard {
         #[cfg(windows)]
         vcpkg_root_was_absent,
+        coverage_target_previous,
         rustc_wrapper_previous,
     })
+}
+
+fn coverage_target_dir() -> Option<PathBuf> {
+    env::var_os("CARGO_LLVM_COV_TARGET_DIR")
+        .filter(|base| !base.is_empty())
+        .map(PathBuf::from)
+        .map(|base| base.join("llvm-cov-target"))
 }
 
 fn directory_is_rooted(path: &Utf8Path) -> bool {
