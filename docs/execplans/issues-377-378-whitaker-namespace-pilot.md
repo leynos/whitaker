@@ -1,7 +1,6 @@
 # Restore portable Whitaker installation and pilot Namespace runners
 
-Status: IN PROGRESS — EP-M1 implementation and deterministic gates complete;
-CodeRabbit review pending.
+Status: IN PROGRESS — EP-M1 complete and reviewed; EP-M2 is next.
 
 This ExecPlan delivers three reviewable changes as one GitHub stacked pull
 request chain. The bottom layer restores a cold `whitaker-installer` source
@@ -262,8 +261,12 @@ layer's diff from its immediate base before committing.
   1.88, while `zip` 7.2.0 supports Rust 1.83.
 - [x] 2026-09-01: Obtained approval to downgrade `zip` from 8.x to 7.2.0 and
   preserve the Rust 1.85 installer MSRV.
-- [x] 2026-09-01: Completed EP-M1 implementation and deterministic validation;
-  the bottom stack layer is ready to commit and review.
+- [x] 2026-09-01: Completed EP-M1 implementation and deterministic validation
+  in commit `d2234a1`.
+- [x] 2026-09-01: Re-ran `publish-check` against committed `HEAD`; all 1,665
+  CI-profile tests and both selected package verifications passed.
+- [x] 2026-09-01: Ran `coderabbit review --agent` through the scrutineer for
+  EP-M1; it completed with zero findings and no rate-limit event.
 - [ ] Complete EP-M2 and commit the middle stack layer.
 - [ ] Complete EP-M3, submit the draft stack, and monitor Namespace jobs.
 
@@ -364,3 +367,9 @@ archive, Makefile, and scoped actionlint gates pass. The full Nextest result is
 warnings but reports no vulnerabilities. Whitaker has no `doc-coverage` target,
 so that Netsuke-specific gate is not applicable. EP-M2 and EP-M3 have not
 started.
+
+The post-commit publication gate also passes: its CI-profile Nextest run
+reported 1,665 passed and 5 skipped, the cloned-HEAD Dylint library build listed
+all ten expected libraries, and both `whitaker-common` and
+`whitaker-installer` packages verified. CodeRabbit reported no high-, medium-,
+or low-severity concerns for the committed milestone.
