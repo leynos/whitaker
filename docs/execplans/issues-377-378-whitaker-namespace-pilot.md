@@ -1,6 +1,7 @@
 # Restore portable Whitaker installation and pilot Namespace runners
 
-Status: IN PROGRESS — EP-M1 complete and reviewed; EP-M2 in progress.
+Status: IN PROGRESS — EP-M1 complete and reviewed; EP-M2 committed and awaiting
+review.
 
 This ExecPlan delivers three reviewable changes as one GitHub stacked pull
 request chain. The bottom layer restores a cold `whitaker-installer` source
@@ -292,9 +293,12 @@ layer's diff from its immediate base before committing.
 - [x] 2026-09-01: Built the installer and dependency tools inside Ubuntu 22.04;
   all three require at most `GLIBC_2.34`, below the `GLIBC_2.35` ceiling.
 - [x] 2026-09-01: Passed the EP-M2 formatting, documentation, workflow,
-  type-check, lint, full test, release dry-run, audit, Makefile, actionlint,
-  and diff-hygiene gates. Nextest reported 1,652 passed and 5 skipped.
-- [ ] Complete EP-M2 and commit the middle stack layer.
+  type-check, lint, full test, release dry-run, audit, Makefile, actionlint, and
+  diff-hygiene gates. Nextest reported 1,652 passed and 5 skipped.
+- [x] 2026-09-01: Committed EP-M2 as `3456839` and passed the committed-HEAD
+  publication check: 1,665 CI-profile tests, all ten lint libraries, and both
+  selected packages verified.
+- [ ] Complete the EP-M2 CodeRabbit milestone review.
 - [ ] Complete EP-M3, submit the draft stack, and monitor Namespace jobs.
 
 ## Surprises & discoveries
@@ -410,15 +414,14 @@ the published v0.2.7 assets' `GLIBC_2.39` requirement.
 ## Outcomes & retrospective
 
 EP-M1 now declares Rust 1.85 in the installer manifest, enforces a real locked
-packaged-crate install in the Makefile and Linux CI, and retains only the `zip` 7.2
-Deflate feature. Removing the unused `time` integration also leaves
-`cargo audit` with no known vulnerabilities. The focused MSRV install,
-formatting, Markdown, Mermaid, workflow-contract, type-check, Clippy, full
-test, release archive, Makefile, and scoped actionlint gates pass. The full
-Nextest result is 1,652 passed and 5 skipped. `cargo audit` retains four
-pre-existing allowed warnings but reports no vulnerabilities. Whitaker has no
-`doc-coverage` target, so that Netsuke-specific gate is not applicable. EP-M2
-and EP-M3 have not started.
+packaged-crate install in the Makefile and Linux CI, and retains only the `zip`
+7.2 Deflate feature. Removing the unused `time` integration also leaves `cargo
+audit` with no known vulnerabilities. The focused MSRV install, formatting,
+Markdown, Mermaid, workflow-contract, type-check, Clippy, full test, release
+archive, Makefile, and scoped actionlint gates pass. The full Nextest result is
+1,652 passed and 5 skipped. `cargo audit` retains four pre-existing allowed
+warnings but reports no vulnerabilities. Whitaker has no `doc-coverage` target,
+so that Netsuke-specific gate is not applicable.
 
 The post-commit publication gate also passes: its CI-profile Nextest run
 reported 1,665 passed and 5 skipped, the cloned-HEAD Dylint library build
@@ -438,4 +441,7 @@ tagged packaged-artefact compatibility job that checks and executes all three
 release tools before publication. The downloaded v0.2.7 negative control failed
 at `GLIBC_2.39`; clean Ubuntu 22.04 builds of the installer and both dependency
 tools passed at `GLIBC_2.34`. All deterministic milestone gates pass with 1,652
-Nextest cases successful and 5 skipped.
+Nextest cases successful and 5 skipped. The committed-HEAD publication check
+then passed 1,665 CI-profile tests with 5 skipped, built and listed all ten
+expected Dylint libraries from a clone of `f005d9c`, and verified the
+`whitaker-common` and `whitaker-installer` packages.

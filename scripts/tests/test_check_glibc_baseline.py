@@ -187,14 +187,14 @@ def test_main_rejects_missing_file(
     assert "not a readable file" in capsys.readouterr().err
 
 
-def test_main_rejects_unparseable_version_information(
+def test_main_rejects_unparsable_version_information(
     checker: Checker,
     elf_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """Fail closed when readelf succeeds without parsable ELF metadata."""
-    stub_readelf(monkeypatch, checker, {elf_path: "unrecognised output"})
+    stub_readelf(monkeypatch, checker, {elf_path: "unrecognized output"})
 
     assert checker.main([str(elf_path)]) == 2
     assert "could not parse ELF version information" in capsys.readouterr().err
