@@ -12,9 +12,10 @@ env:
   BUILD_PROFILE: debug
   CARGO_INCREMENTAL: 0
   CARGO_TERM_COLOR: always
-  # `make check-fmt` shells out to mdtablefix. Keep CI on the same canonical
-  # formatter release used to normalize the checked-in documentation.
+  # `make check-fmt` shells out to both Markdown formatters. Keep CI on the
+  # same releases used to normalize the checked-in documentation.
   MDTABLEFIX_VERSION: '0.5.0'
+  MARKDOWNLINT_CLI2_VERSION: '0.20.0'
   RUSTFLAGS: -D warnings
   RUSTDOCFLAGS: -D warnings
   SCCACHE_GHA_ENABLED: "true"
@@ -87,6 +88,11 @@ jobs:
         with:
           tool: nextest@0.9.114
 
+      - name: Install bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6  # v2
+        with:
+          bun-version: '1.2.21'
+
       - name: Cache mdtablefix
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
@@ -119,13 +125,19 @@ jobs:
             exit 1
           fi
 
+      - name: Install Markdown lint CLI
+        # Match the lint-fixing pass that `make fmt` and `make check-fmt` share.
+        run: |
+          bun install --no-progress --global "markdownlint-cli2@${MARKDOWNLINT_CLI2_VERSION}"
+          installed_markdownlint_version="$(markdownlint-cli2 --version | head -n 1 | tr -d '\r')"
+          expected_markdownlint_version="markdownlint-cli2 v${MARKDOWNLINT_CLI2_VERSION}"
+          if [[ "${installed_markdownlint_version}" != "${expected_markdownlint_version}"* ]]; then
+            echo "expected ${expected_markdownlint_version}, got ${installed_markdownlint_version}" >&2
+            exit 1
+          fi
+
       - name: Check formatting
         run: make check-fmt
-
-      - name: Install bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6  # v2
-        with:
-          bun-version: '1.2.21'
 
       - name: Install Mermaid CLI
         run: |

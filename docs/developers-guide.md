@@ -306,9 +306,10 @@ the original source. It accepts either LF or CRLF when the content is otherwise
 identical, and removes the temporary directory on exit. It never formats or
 rewrites a working-tree file. `mdtablefix` remains the owner of table padding
 and paragraph wrapping; `markdownlint-cli2` remains the owner of Markdown lint
-rules and its fixing pass. The `linux-full` CI job caches the formatter binary
-but verifies the workflow-level version pin before running `make check-fmt`, so
-a cold runner and a stale cache produce the same canonical output.
+rules and its fixing pass. The `linux-full` CI job installs both pinned tools
+before running `make check-fmt`; it caches `mdtablefix` but verifies its
+workflow-level version pin. This makes a cold runner and a stale cache produce
+the same canonical output.
 
 Keep the script scoped to `make check-fmt` and its focused process tests. Reuse
 it when another repository-owned gate needs to verify this exact Markdown

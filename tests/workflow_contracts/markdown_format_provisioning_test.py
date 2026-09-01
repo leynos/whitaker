@@ -16,17 +16,20 @@ def _load_workflow() -> dict[str, Any]:
     return loaded
 
 
-def test_linux_full_provisions_the_pinned_formatter_before_checking() -> None:
-    """Require a verified mdtablefix installation before the format gate."""
+def test_linux_full_provisions_pinned_markdown_tools_before_checking() -> None:
+    """Require verified Markdown tool installations before the format gate."""
     workflow = _load_workflow()
     assert workflow["env"]["MDTABLEFIX_VERSION"] == "0.5.0"
+    assert workflow["env"]["MARKDOWNLINT_CLI2_VERSION"] == "0.20.0"
     steps = workflow["jobs"]["linux-full"]["steps"]
     steps_by_name = {step["name"]: step for step in steps if "name" in step}
     step_names = [step["name"] for step in steps if "name" in step]
 
     assert (
-        step_names.index("Cache mdtablefix")
+        step_names.index("Install bun")
+        < step_names.index("Cache mdtablefix")
         < step_names.index("Install mdtablefix")
+        < step_names.index("Install Markdown lint CLI")
         < step_names.index("Check formatting")
     )
 
@@ -51,4 +54,17 @@ def test_linux_full_provisions_the_pinned_formatter_before_checking() -> None:
     assert "mdtablefix --version 2>/dev/null" in install_script
     assert "installed_mdtablefix_version=\"$(mdtablefix --version | tr -d '\\r')\"" in (
         install_script
+    )
+
+    markdownlint_install_script = steps_by_name["Install Markdown lint CLI"]["run"]
+    assert (
+        'bun install --no-progress --global "markdownlint-cli2@${MARKDOWNLINT_CLI2_VERSION}"'
+        in markdownlint_install_script
+    )
+    assert "markdownlint-cli2 --version | head -n 1 | tr -d '\\r'" in (
+        markdownlint_install_script
+    )
+    assert (
+        'expected_markdownlint_version="markdownlint-cli2 v${MARKDOWNLINT_CLI2_VERSION}"'
+        in markdownlint_install_script
     )
