@@ -319,9 +319,9 @@ layer's diff from its immediate base before committing.
   added intentional actionlint labels, and added structural contracts for both
   migrated and retained runner assignments.
 - [x] 2026-09-01: Diagnosed the Namespace-only coverage `E0463` as an omitted
-  scheduling contract for three named nested-Cargo Dylint UI tests; extended
-  the existing `serial-dylint-ui` group without changing production lint code
-  or the no-blanket-retry policy.
+  scheduling contract for the five active nested-Cargo Dylint UI tests;
+  extended the existing `serial-dylint-ui` group without changing production
+  lint code or the no-blanket-retry policy.
 - [ ] Complete EP-M3, submit the draft stack, and monitor Namespace jobs.
 
 ## Surprises & discoveries
@@ -355,14 +355,20 @@ prepends the real Cargo bin directory again. Give those subprocess fixtures an
 isolated home so their stale-tool and failed-install scenarios remain
 deterministic; this is a test-only correction with no production effect.
 
-Namespace `coverage-check` subsequently reported `E0463` from nested-Cargo
-`rstest_helper_should_be_fixture` UI cases, while a fresh local full
-`make coverage` passed all 1,652 selected tests. The affected tests were absent
-from the existing `serial-dylint-ui` Nextest filter. Extend that narrow group
-for the two observed example harnesses and their directly equivalent `trybuild`
-case; retain the existing scoped Windows retry rather than adding a blanket
-retry or serializing the suite. The configuration contract now keeps those
-three named clauses present.
+Namespace `coverage-check` subsequently reported `E0463` from nested-Cargo UI
+cases, while a fresh local full `make coverage` passed all 1,652 selected
+tests. The first failure identified three absent
+`rstest_helper_should_be_fixture` clauses. A fresh run later failed in a mapped
+`no_unwrap_or_else_panic` case, proving that its two unmapped sibling example
+harnesses could still race it. Extend the narrow group for all five active
+shared-target harnesses; retain the existing scoped Windows retry rather than
+adding a blanket retry or serializing the suite. The configuration contract now
+keeps every active nested-Cargo clause present.
+
+The complete five-entry `no_unwrap_or_else_panic` set was then selected under a
+fresh LLVM coverage target directory and passed. Nextest resolves it to seven
+executions because `example_compiles_under_test_harness` has three bounded
+cases, alongside the four single negative cases.
 
 All published `zip` 8.x versions declare Rust 1.88. A trial with `zip` 6.0.0,
 its default features narrowed to the capabilities Whitaker uses, and `time`

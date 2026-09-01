@@ -242,21 +242,59 @@ retries. It prevents concurrent nested Cargo/compiler work against shared
 target resources on the constrained Namespace runners. The checked-in
 `tests/nextest_ui_filter.rs` contract must keep the three clauses present.
 
+#### H6: Unmapped sibling example harnesses race the mapped case
+
+**Claim**: The fresh Namespace run's
+`no_unwrap_or_else_panic::ui::example_compiles_under_test_harness::case_1`
+already belongs to `serial-dylint-ui`, but two sibling example harnesses in the
+same crate do not. They can therefore run concurrently with the mapped case and
+overwrite the coverage-instrumented target artefacts that nested Cargo uses.
+
+**Prediction**: Nextest's resolved default-profile group contains the observed
+failing case but omits
+`hand_written_test_companion_does_not_exempt_parent_function` and
+`aliased_test_crate_non_companion_does_not_exempt_parent_function`. Both
+omitted tests call the same `run_example_under_test_harness` helper.
+
+**Falsification**: If either omitted test is already in `serial-dylint-ui`, or
+if it does not call that helper, this scheduling extension would not be
+supported.
+
+#### H6 execution checkpoint
+
+- `cargo nextest show-config test-groups` with the Makefile's dynamic-linking
+  `RUSTFLAGS` proved the failing `example_compiles_under_test_harness` cases
+  are already in `serial-dylint-ui`.
+- Source inspection found five, and only five, non-Windows callers of
+  `run_example_under_test_harness` in `no_unwrap_or_else_panic`. The existing
+  group covered three; it omitted the handwritten-companion and aliased-test
+  negative cases.
+- The analogous `no_expect_outside_tests` harnesses are excluded by the
+  checked-in `TEST_EXCLUDES`, so they are not active in `make coverage` and do
+  not belong in this narrowly scoped scheduling group.
+- Extend the filter and its checked-in contract by exactly the two omitted
+  `no_unwrap_or_else_panic` clauses. This completes the active shared-target
+  set without serializing unrelated tests or changing production lint code.
+- A fresh `cargo llvm-cov nextest --no-report` run selected the completed set
+  and passed. The resolved group contained all seven concrete executions: three
+  parameterized example cases and four single negative cases.
+
 ______________________________________________________________________
 
 ## Recommended Execution Order
 
-1. Extend `serial-dylint-ui` with the three named nested-Cargo clauses.
+1. Extend `serial-dylint-ui` with the five active named nested-Cargo clauses.
 2. Prove them with `tests/nextest_ui_filter.rs` and run the focused UI suite.
 3. Run the repository formatting, typecheck, lint, and coverage gates.
 
 ## Termination Criteria
 
-- **Scheduling remediation accepted**: the three named nested-Cargo cases
+- **Scheduling remediation accepted**: the five named nested-Cargo cases
   match `serial-dylint-ui`, the focused regression is reliable, and the
   complete coverage target passes.
 - **Escalation trigger**: a Namespace coverage job still reports `E0463` after
-  the three tests are visibly in this group, or the failure signature changes.
+  the five active tests are visibly in this group, or the failure signature
+  changes.
 
 ## Notes for Executing Agent
 

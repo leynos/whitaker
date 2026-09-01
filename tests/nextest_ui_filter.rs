@@ -19,10 +19,12 @@ use std::path::Path;
 use rstest::{fixture, rstest};
 use toml::Value;
 
-const NESTED_CARGO_UI_FILTER_CLAUSES: [&str; 3] = [
+const NESTED_CARGO_UI_FILTER_CLAUSES: [&str; 5] = [
     "test(example_compiles_without_diagnostics)",
     "test(example_harness_collects_call_site_evidence)",
     "test(trybuild_fixtures_compile_without_diagnostics)",
+    "test(ui::hand_written_test_companion_does_not_exempt_parent_function)",
+    "test(ui::aliased_test_crate_non_companion_does_not_exempt_parent_function)",
 ];
 
 /// Parses `.config/nextest.toml` into a [`Value`].
