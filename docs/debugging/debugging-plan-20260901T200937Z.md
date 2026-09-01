@@ -237,7 +237,7 @@ the nextest metadata show that the existing `serial-dylint-ui` filter omitted
 `trybuild_fixtures_compile_without_diagnostics` case was omitted too.
 
 Extend that existing, narrow test group for these three named harnesses. This
-does not change lint production behaviour, serialise the whole suite, or add
+does not change lint production behaviour, serialize the whole suite, or add
 retries. It prevents concurrent nested Cargo/compiler work against shared
 target resources on the constrained Namespace runners. The checked-in
 `tests/nextest_ui_filter.rs` contract must keep the three clauses present.

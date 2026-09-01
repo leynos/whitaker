@@ -245,7 +245,6 @@ Table: Test profiles and typical usage.
 When working on `whitaker-installer` code, run the full suite locally before
 pushing to catch installer regressions early.
 
-
 ### Namespace runner pilot
 
 The pilot uses the deployed `namespace-profile-default` profile. Its verified
