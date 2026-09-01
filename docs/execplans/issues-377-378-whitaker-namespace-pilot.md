@@ -526,5 +526,17 @@ EP-M3 now moves the repository-owned `coverage-check` and `linux-full` jobs to
 the deployed, uncached `namespace-profile-default` while retaining platform,
 release, main-branch coverage, and externally owned reusable-workflow runner
 boundaries. Structural contracts and actionlint cover both migrated and
-retained assignments. Pull-request admission, runtime, queueing, and Namespace
-job evidence remain to be recorded before the pilot is complete.
+retained assignments. Namespace run `33566432251` admitted both migrated jobs
+to 4-vCPU, 16-GB Linux instances within about two seconds of workflow creation;
+the jobs began after about 12 seconds. `coverage-check` completed successfully
+at 22:36:10 UTC and `linux-full` at 22:38:28 UTC. The retained Windows job also
+passed at 22:41:12 UTC. A post-gate `coderabbit review --agent` reported zero
+high-, medium-, or low-severity findings at `e858760`.
+
+The stable coverage result required one explicit build boundary beyond runner
+placement: `make coverage` now gives outer LLVM coverage and nested Dylint
+Cargo the same absolute target directory. A syscall trace proved the nested
+example build inherited the outer target, and the fresh Namespace run no longer
+reported `E0463`. The pilot therefore distinguishes fast runner admission from
+build-tool target isolation rather than attributing the earlier test failure to
+Namespace contention.

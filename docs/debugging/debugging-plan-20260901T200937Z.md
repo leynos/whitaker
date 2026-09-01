@@ -351,6 +351,13 @@ the explicit target boundary and this explanation is incomplete.
 - A fresh verbose selected coverage run used
   `/data/tmp/whitaker-h8-coverage.dXwowg` as Nextest's `--target-dir`; all three
   `example_compiles_under_test_harness` cases passed without `E0463`.
+- A syscall trace captured the nested Dylint `cargo build --example` process
+  with `CARGO_TARGET_DIR=/data/tmp/whitaker-h8-coverage.dXwowg`, proving that
+  it inherited the outer Nextest target rather than falling back to
+  `target/debug`.
+- Fresh Namespace run `33566432251` then passed `coverage-check`, `linux-full`,
+  and `windows-compat`; the migrated Linux jobs were admitted without material
+  queueing delay. This accepts H8 and closes the escalation trigger.
 
 #### H8 decision
 
