@@ -76,6 +76,16 @@ def test_recipe_cargo_calls_thread_cargo_locked(target: str) -> None:
         )
 
 
+def test_installer_msrv_recipe_is_a_locked_rust_185_source_install() -> None:
+    """The installer MSRV target uses an isolated root and runs the binary."""
+    recipe = "\n".join(_makefile_recipe_lines("installer-msrv-check"))
+
+    assert "mktemp -d \"$${TMPDIR:-/tmp}/whitaker-installer-msrv.XXXXXX\"" in recipe
+    assert "$(CARGO) +1.85.0 install --locked --path installer --root" in recipe
+    assert '"$$TMP_DIR/bin/whitaker-installer" --version' in recipe
+    assert "rm -rf -- \"$$TMP_DIR\"" in recipe
+
+
 def _write_stub(directory: Path, name: str, body: str) -> Path:
     """Write an executable shell stub and return its path."""
     path = directory / name

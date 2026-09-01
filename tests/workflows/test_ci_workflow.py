@@ -218,7 +218,7 @@ def _assert_coverage_checkout_and_setup(coverage_job: Mapping[str, Any]) -> None
     setup_step = _find_step(coverage_job, "Setup Rust")
     assert setup_step.get("uses") == (
         "leynos/shared-actions/.github/actions/setup-rust@"
-        "18bed1ca49a6de3d8882bd72635a32ae3f023d57"
+        "f4764bea8d813b1a8f7ebc37a44907d3c3b1e0e4"
     ), "coverage-check must reuse the current main-branch Rust setup pin"
 
 
@@ -256,7 +256,7 @@ def _assert_codescene_check(coverage_job: Mapping[str, Any]) -> None:
     ), "the CodeScene step must guard its pull-request secret"
     assert check_step.get("uses") == (
         "leynos/shared-actions/.github/actions/upload-codescene-coverage@"
-        "18bed1ca49a6de3d8882bd72635a32ae3f023d57"
+        "f4764bea8d813b1a8f7ebc37a44907d3c3b1e0e4"
     ), "coverage-check must use the proven CodeScene action pin"
     assert check_step.get("with") == {
         "format": "lcov",
@@ -336,7 +336,7 @@ def test_linux_full_keeps_the_full_linux_validation_stack(
     ), "linux-full must install Merman 0.7.0 with its pinned Rust 1.95 toolchain"
     merman_setup = _find_step(linux_job, "Setup Rust for Merman")
     assert merman_setup.get("uses") == (
-        "dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9"
+        "dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772"
     ), "linux-full must pin the Merman Rust setup action"
     assert merman_setup.get("with", {}).get("toolchain") == "1.95.0", (
         "linux-full must pin Merman's Rust toolchain"
@@ -358,6 +358,30 @@ def test_linux_full_keeps_the_full_linux_validation_stack(
     assert markdown_globs == ("**/*.md\n!**/.uv-cache/**\n!**/.uv-tools/**\n"), (
         "Markdown lint must exclude rollout-owned uv cache and tool directories"
     )
+
+
+def test_linux_full_runs_the_installer_msrv_check(
+    workflow: Mapping[str, Any],
+) -> None:
+    """Ensure Linux checks the locked installer build under Rust 1.85."""
+    jobs = _get_mapping_item(workflow, "jobs", parent_name="CI workflow")
+    linux_job = _get_mapping_item(jobs, "linux-full", parent_name="CI workflow jobs")
+
+    _assert_steps_in_order(
+        _step_names(linux_job),
+        ["Setup Rust for installer MSRV", "Installer MSRV check"],
+        "linux-full must check the installer's declared Rust 1.85 MSRV",
+    )
+    msrv_setup = _find_step(linux_job, "Setup Rust for installer MSRV")
+    assert msrv_setup.get("uses") == (
+        "dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772"
+    ), "linux-full must pin the installer MSRV toolchain action"
+    assert msrv_setup.get("with", {}).get("toolchain") == "1.85.0", (
+        "linux-full must install the installer's declared Rust 1.85 MSRV"
+    )
+    assert _find_step(linux_job, "Installer MSRV check").get("run") == (
+        "make installer-msrv-check"
+    ), "linux-full must run the locked installer MSRV check"
 
 
 def test_windows_compat_stays_limited_to_windows_compatibility_checks(

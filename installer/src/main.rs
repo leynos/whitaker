@@ -222,25 +222,25 @@ fn ensure_whitaker_workspace(
         WorkspaceAction, clone_directory, decide_workspace_action, ensure_workspace,
     };
 
-    if !args.quiet
-        && let Some(clone_dir) = clone_directory(dirs)
-    {
-        let cwd = std::env::current_dir()
-            .ok()
-            .and_then(|p| Utf8PathBuf::try_from(p).ok());
+    if !args.quiet {
+        if let Some(clone_dir) = clone_directory(dirs) {
+            let cwd = std::env::current_dir()
+                .ok()
+                .and_then(|p| Utf8PathBuf::try_from(p).ok());
 
-        let Some(cwd) = cwd else {
-            return ensure_workspace(dirs, !args.no_update);
-        };
+            let Some(cwd) = cwd else {
+                return ensure_workspace(dirs, !args.no_update);
+            };
 
-        match decide_workspace_action(&cwd, &clone_dir, !args.no_update) {
-            WorkspaceAction::CloneTo(dir) => {
-                write_stderr_line(stderr, format!("Cloning Whitaker repository to {dir}..."));
+            match decide_workspace_action(&cwd, &clone_dir, !args.no_update) {
+                WorkspaceAction::CloneTo(dir) => {
+                    write_stderr_line(stderr, format!("Cloning Whitaker repository to {dir}..."));
+                }
+                WorkspaceAction::UpdateAt(dir) => {
+                    write_stderr_line(stderr, format!("Updating Whitaker repository at {dir}..."));
+                }
+                WorkspaceAction::UseCurrentDir(_) | WorkspaceAction::UseExisting(_) => {}
             }
-            WorkspaceAction::UpdateAt(dir) => {
-                write_stderr_line(stderr, format!("Updating Whitaker repository at {dir}..."));
-            }
-            WorkspaceAction::UseCurrentDir(_) | WorkspaceAction::UseExisting(_) => {}
         }
     }
 

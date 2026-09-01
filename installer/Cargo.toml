@@ -2,6 +2,7 @@
 name = "whitaker-installer"
 version = "0.2.7"
 edition = "2024"
+rust-version = "1.85"
 description = "Installer CLI for Whitaker Dylint lint libraries"
 readme = "README.md"
 license.workspace = true

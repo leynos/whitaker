@@ -51,6 +51,19 @@ either install fails, the script exits non-zero and the gate fails fast rather
 than proceeding with stale or absent tools. This behaviour is covered by
 `tests/workflows/test_install_dylint_tools.py`.
 
+The installer declares Rust 1.85 as its minimum supported Rust version. Before
+publishing, run the real locked source-install check as well as the publish
+gate:
+
+```sh
+make installer-msrv-check
+```
+
+The installer keeps `zip` at the 7.2-compatible line because `zip` 8 requires
+Rust 1.88. Its dependency configuration enables only the Deflate feature needed
+by the installer, so do not broaden that constraint without rechecking the Rust
+1.85 build.
+
 To validate the installer archive path used by the release workflow on the
 current host platform, run:
 

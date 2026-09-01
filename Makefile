@@ -1,4 +1,4 @@
-.PHONY: help all clean test coverage build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke release-installer-dry-run package-lints workflow-test workflow-test-deps test-workflow-contracts test-markdown-format verus kani verus-clone-detector kani-clone-detector spelling spelling-config spelling-config-write spelling-phrase-check spelling-helper-test
+.PHONY: help all clean test coverage build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke installer-msrv-check release-installer-dry-run package-lints workflow-test workflow-test-deps test-workflow-contracts test-markdown-format verus kani verus-clone-detector kani-clone-detector spelling spelling-config spelling-config-write spelling-phrase-check spelling-helper-test
 
 # Appended only on targets that invoke binaries commonly installed under these
 # prefixes (cargo/bun/user-local), so the default recipe environment stays
@@ -234,6 +234,13 @@ install-smoke: ## Install whitaker-installer and verify basic functionality
 	command -v whitaker-installer >/dev/null; \
 	whitaker-installer --help >/dev/null; \
 	whitaker-installer --version >/dev/null
+
+installer-msrv-check: ## Install whitaker-installer with its declared MSRV
+	set -eu; \
+	TMP_DIR=$$(mktemp -d "$${TMPDIR:-/tmp}/whitaker-installer-msrv.XXXXXX"); \
+	trap 'rm -rf -- "$$TMP_DIR"' EXIT INT TERM HUP; \
+	$(CARGO) +1.85.0 install --locked --path installer --root "$$TMP_DIR"; \
+	"$$TMP_DIR/bin/whitaker-installer" --version >/dev/null
 
 release-installer-dry-run: ## Build and package the host-platform installer archive
 	set -eu; \

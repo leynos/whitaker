@@ -1,6 +1,7 @@
 # Restore portable Whitaker installation and pilot Namespace runners
 
-Status: DRAFT — awaiting approval before implementation.
+Status: IN PROGRESS — EP-M1 implementation and deterministic gates complete;
+CodeRabbit review pending.
 
 This ExecPlan delivers three reviewable changes as one GitHub stacked pull
 request chain. The bottom layer restores a cold `whitaker-installer` source
@@ -50,7 +51,7 @@ is Ubuntu 22.04 with glibc 2.35.
 
 The Namespace pilot uses the deployed `namespace-profile-default` profile:
 Ubuntu 22.04, amd64, 4 vCPU, 16 GB, and no cache volume. No Namespace profile
-mutation is authorized or required. Existing artifact and cache backends remain
+mutation is authorized or required. Existing artefact and cache backends remain
 unchanged during the pilot. Windows, macOS, release publication, rolling
 release, and externally selected runners remain on their current platforms
 unless a checked-in job contract proves that migration is both compatible and
@@ -96,7 +97,7 @@ the installed dependency binaries inside Ubuntu 22.04.
 
 The pilot risk is confusing runner admission, image prerequisites, cache
 behaviour, and command execution. Mitigate this by changing runner placement
-without changing cache or artifact systems, using structural workflow tests,
+without changing cache or artefact systems, using structural workflow tests,
 and correlating GitHub job timestamps with `nsc github job list`.
 
 Stacking creates a review dependency: the Namespace PR cannot merge before the
@@ -192,7 +193,7 @@ layer. Remaining work is the Namespace pilot.
 
 Create the `adopt-namespace-runners` stack layer and Git Donkey worktree on top
 of EP-M2. Inventory every workflow job, reusable workflow, composite action,
-permission, cache, artifact hand-off, architecture, and assumed executable.
+permission, cache, artefact hand-off, architecture, and assumed executable.
 Record a GitHub/UbiCloud baseline from recent successful runs before changing
 runner labels.
 
@@ -202,7 +203,7 @@ missing tools explicitly under existing version pins. Add
 `.github/actionlint.yaml`, update deterministic workflow contracts for migrated
 and retained assignments, and document the deployed uncached profile and every
 exception in the developers' guide. Do not change actions/cache, sccache,
-artifacts, release publication, Windows, macOS, mutation testing, or Docker
+artefacts, release publication, Windows, macOS, mutation testing, or Docker
 contracts in this baseline layer.
 
 Push the stack and create draft linked PRs. Use the pull-request run to prove
@@ -253,8 +254,16 @@ layer's diff from its immediate base before committing.
 - [x] 2026-09-01: Filed issues #377 and #378 with acceptance criteria.
 - [x] 2026-09-01: Created the `fix-installer-msrv` Git Donkey worktree from
   `origin/main`.
-- [ ] Obtain approval for this ExecPlan.
-- [ ] Complete EP-M1 and commit the bottom stack layer.
+- [x] 2026-09-01: Obtained approval for this ExecPlan and began EP-M1.
+- [x] 2026-09-01: Reproduced the EP-M1 negative control with
+  `cargo +1.85.0 install --locked --path installer`: `time` 0.3.53, `time-core`
+  0.1.9, and `zip` 8.6.0 require Rust 1.88.
+- [x] 2026-09-01: Confirmed every published `zip` 8.x release requires Rust
+  1.88, while `zip` 7.2.0 supports Rust 1.83.
+- [x] 2026-09-01: Obtained approval to downgrade `zip` from 8.x to 7.2.0 and
+  preserve the Rust 1.85 installer MSRV.
+- [x] 2026-09-01: Completed EP-M1 implementation and deterministic validation;
+  the bottom stack layer is ready to commit and review.
 - [ ] Complete EP-M2 and commit the middle stack layer.
 - [ ] Complete EP-M3, submit the draft stack, and monitor Namespace jobs.
 
@@ -271,6 +280,54 @@ Cache isolation exposed rather than solved the second failure. Namespace had no
 1.85 project compiler. Cargo then rejected the locked dependency graph before
 building any Whitaker code.
 
+The local EP-M1 negative control reproduced that exact failure from the
+checked-in lockfile. Cargo metadata alone accepted the graph, so the permanent
+gate must perform the real locked install rather than relying on metadata or a
+resolver-only check.
+
+The full CI workflow contract module also failed unchanged `main` because two
+action-pin expectations had not moved with the deployed workflow pins. EP-M1
+touches this same contract module, so the stale expected SHAs are aligned with
+the already-pinned workflow values as a test-only prerequisite correction; no
+workflow behaviour changes as a result.
+
+The complete workflow test suite exposed another unchanged-main failure when
+the developer already has the pinned `cargo-dylint` in `~/.cargo/bin`. The
+provisioning fixtures put stubs first on `PATH`, but the Makefile deliberately
+prepends the real Cargo bin directory again. Give those subprocess fixtures an
+isolated home so their stale-tool and failed-install scenarios remain
+deterministic; this is a test-only correction with no production effect.
+
+All published `zip` 8.x versions declare Rust 1.88. A trial with `zip` 6.0.0,
+its default features narrowed to the capabilities Whitaker uses, and `time`
+0.3.45 resolved a Rust-1.85-compatible dependency graph. Compilation then
+reached Whitaker source and exposed let-chains in `installer/src/list.rs` and
+`installer/src/main.rs` that were not stabilized until after Rust 1.85.
+Rewriting those expressions does not require a feature or command-line change,
+but selecting `zip` 7.2.0 crosses the current direct dependency's major-version
+boundary and therefore required the approval mandated by this plan's tolerance
+section.
+
+The first Rust-1.85-compatible lock graph selected `time` 0.3.45 through
+`zip`'s optional `time` feature. `cargo audit` reported RUSTSEC-2026-0009, while
+the patched `time` 0.3.47 requires Rust 1.88. Whitaker uses `zip::DateTime`'s
+built-in representation rather than the external time-crate conversions, so
+removing that unused feature eliminates the vulnerable transitive dependency
+without changing archive behaviour.
+
+`publish-check` clones the repository's committed `HEAD` for its Dylint
+artefact phase, so a pre-commit invocation validated that phase at the preceding
+plan-only commit while its `cargo package --allow-dirty` phase validated the
+current manifests. Re-run the complete target after committing EP-M1 so every
+phase exercises the milestone commit before requesting review.
+
+Repository-wide `actionlint` currently reports the intentional UbiCloud runner
+label because no custom-label configuration exists, plus pre-existing SC2193
+findings in the release workflows. An invocation ignoring only those known
+categories passes. EP-M3 already owns `.github/actionlint.yaml`; the release
+script findings are assessed alongside the release workflow in EP-M2 rather
+than obscured by an EP-M1 change.
+
 ## Decision log
 
 - 2026-09-01: Use three PR layers rather than combining release engineering
@@ -286,8 +343,24 @@ building any Whitaker code.
 - 2026-09-01: Reuse the existing uncached Namespace default profile. Creating
   or mutating remote profiles is unnecessary for the initial pilot and would
   confound runner-placement measurements.
+- 2026-09-01: Begin implementation after the user explicitly approved this
+  ExecPlan and requested the complete three-layer rollout.
+- 2026-09-01: Pause EP-M1 before accepting the experimental `zip` downgrade.
+  The Rust 1.85 outcome requires either an approved move from `zip` 8.x to
+  7.2.0 or a user-approved MSRV increase to Rust 1.88.
+- 2026-09-01: Preserve Rust 1.85 after the user approved the `zip` 7.2.0
+  downgrade. Keep the dependency feature set narrow and rewrite the post-1.85
+  let-chain without changing behaviour or the public command line.
 
 ## Outcomes & retrospective
 
-No implementation has started. Update this section after each milestone with
-the observed commands, results, deviations, performance, and remaining work.
+EP-M1 now declares Rust 1.85 in the installer manifest, enforces a real locked
+source install in the Makefile and Linux CI, and retains only the `zip` 7.2
+Deflate feature. Removing the unused `time` integration also leaves `cargo
+audit` with no known vulnerabilities. The focused MSRV install, formatting,
+Markdown, Mermaid, workflow-contract, type-check, Clippy, full test, release
+archive, Makefile, and scoped actionlint gates pass. The full Nextest result is
+1,652 passed and 5 skipped. `cargo audit` retains four pre-existing allowed
+warnings but reports no vulnerabilities. Whitaker has no `doc-coverage` target,
+so that Netsuke-specific gate is not applicable. EP-M2 and EP-M3 have not
+started.
