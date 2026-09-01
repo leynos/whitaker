@@ -443,5 +443,5 @@ at `GLIBC_2.39`; clean Ubuntu 22.04 builds of the installer and both dependency
 tools passed at `GLIBC_2.34`. All deterministic milestone gates pass with 1,652
 Nextest cases successful and 5 skipped. The committed-HEAD publication check
 then passed 1,665 CI-profile tests with 5 skipped, built and listed all ten
-expected Dylint libraries from a clone of `f005d9c`, and verified the
+expected Dylint libraries from a clone of `3456839`, and verified the
 `whitaker-common` and `whitaker-installer` packages.
