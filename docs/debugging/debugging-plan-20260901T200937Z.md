@@ -315,19 +315,50 @@ the active cause.
 #### H7 decision
 
 Use the coverage target already created by `cargo-llvm-cov`, rather than a new
-target per example. `CARGO_LLVM_COV_TARGET_DIR` names the base target
-directory; the tool's recorded Nextest command uses its `llvm-cov-target`
-child. The shared UI harness now sets `CARGO_TARGET_DIR` to that child while it
-prepares and runs one Dylint UI closure, restoring any caller value afterwards.
-This is narrower than an isolated target per example, preserves warm coverage
-artefacts, and prevents nested Cargo from falling back to ordinary `target`
-artefacts.
+target per example. This decision was falsified by Namespace run `33564463057`:
+the normal coverage driver did not export `CARGO_LLVM_COV_TARGET_DIR` to test
+processes, so the UI helper could not derive that target.
 
-- The helper contract sets a synthetic coverage base, observes the derived
-  `llvm-cov-target` in the runner closure, and proves restoration afterwards.
-- A fresh selected `cargo llvm-cov nextest --no-report` run over all five
-  `no_unwrap_or_else_panic` nested-Cargo harnesses passed with the derived
-  coverage target.
+- The helper mapping is removed rather than retaining a source of driver
+  assumptions or its resulting `option_option` and `shadow_reuse` lints.
+
+#### H8: The coverage driver needs an explicit shared Cargo target
+
+**Claim**: `cargo-llvm-cov` 0.6.24 passes its coverage directory to Nextest
+only with `--target-dir`. Its `show-env` subcommand prints
+`CARGO_LLVM_COV_TARGET_DIR`, but the normal Nextest invocation does not export
+that variable to the test process. The H7 helper therefore cannot derive the
+outer target on CI and leaves nested Dylint Cargo builds in `target/debug`.
+
+**Prediction**: If the `coverage` recipe explicitly sets both
+`CARGO_LLVM_COV_TARGET_DIR` and `CARGO_TARGET_DIR` to the same exact coverage
+target before invoking `cargo llvm-cov`, the outer Nextest command and every
+nested Cargo build use that directory. A verbose selected UI run will report
+the nested example `--out-dir` below that target, rather than `target/debug`.
+
+**Falsification**: If the local verbose nested Cargo command still emits an
+ordinary `target/debug` path with both variables set, Cargo does not inherit
+the explicit target boundary and this explanation is incomplete.
+
+#### H8 execution checkpoint
+
+- cargo-llvm-cov `v0.6.24` source confirms the claim: `show-env` prints
+  `CARGO_LLVM_COV_TARGET_DIR`, whereas `run_nextest` calls `set_env` and passes
+  its target only through `--target-dir`.
+- The coverage recipe now exports both variables as
+  `$(CURDIR)/target/llvm-cov-target`, so 0.6.24 consumes the former as its
+  exact outer target and nested Dylint Cargo inherits the latter.
+- A fresh verbose selected coverage run used
+  `/data/tmp/whitaker-h8-coverage.dXwowg` as Nextest's `--target-dir`; all three
+  `example_compiles_under_test_harness` cases passed without `E0463`.
+
+#### H8 decision
+
+Keep coverage target selection at the Makefile command boundary. The shared UI
+helper remains responsible only for Dylint's known `RUSTC_WRAPPER` and Windows
+`VCPKG_ROOT` adjustments; it must not infer cargo-llvm-cov implementation
+details. The Makefile contract requires the two outer/nested Cargo variables to
+remain equal.
 
 ______________________________________________________________________
 

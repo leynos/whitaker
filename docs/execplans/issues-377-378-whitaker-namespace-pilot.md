@@ -379,12 +379,15 @@ ordinary shared `target/debug`. The narrow fix is a per-runner
 artefacts self-consistent without modifying lint production code or the wider
 test schedule.
 
-The fix selects the existing LLVM coverage target, not a fresh target per
-example: `cargo-llvm-cov` exposes the base through `CARGO_LLVM_COV_TARGET_DIR`
-and runs Nextest in its `llvm-cov-target` child. The shared UI test helper now
-maps nested Cargo to that child for the runner closure and restores the ambient
-`CARGO_TARGET_DIR` afterwards. This preserves warm coverage artefacts while
-preventing fallback to the ordinary target.
+Run `33564463057` falsified the shared UI helper mapping. The CI process has no
+`CARGO_LLVM_COV_TARGET_DIR`; cargo-llvm-cov 0.6.24's `show-env` emits that
+name, but its normal Nextest command supplies only `--target-dir`. The
+correction is to define the exact coverage directory at the `make coverage`
+boundary through both `CARGO_LLVM_COV_TARGET_DIR` and `CARGO_TARGET_DIR`,
+rather than requiring test-helper code to infer a driver-private target path. A
+fresh verbose local coverage run used that exact target directory for Nextest
+and passed all three `example_compiles_under_test_harness` cases without
+`E0463`.
 
 All published `zip` 8.x versions declare Rust 1.88. A trial with `zip` 6.0.0,
 its default features narrowed to the capabilities Whitaker uses, and `time`

@@ -108,29 +108,6 @@ fn runner_env_guard_clears_and_restores_rustc_wrapper() {
     assert_eq!(env::var_os("RUSTC_WRAPPER"), Some("sccache".into()));
 }
 
-#[test]
-fn runner_env_guard_routes_nested_cargo_to_llvm_coverage_target() {
-    let _serial_guard = runner_env_guard_test_lock();
-    let coverage_base = env::temp_dir().join("whitaker-ui-harness-coverage-base");
-    let _coverage_base = EnvVarGuard::set("CARGO_LLVM_COV_TARGET_DIR", &coverage_base);
-    let _target_dir = EnvVarGuard::set("CARGO_TARGET_DIR", "previous-target");
-    let expected_target = coverage_base.join("llvm-cov-target");
-
-    run_with_runner("lint", "ui", |_, _| {
-        assert_eq!(
-            env::var_os("CARGO_TARGET_DIR"),
-            Some(expected_target.clone().into_os_string())
-        );
-        Ok(())
-    })
-    .expect("runner should use the LLVM coverage target");
-
-    assert_eq!(
-        env::var_os("CARGO_TARGET_DIR"),
-        Some("previous-target".into())
-    );
-}
-
 #[cfg(windows)]
 #[test]
 fn windows_env_guard_leaves_absent_rustc_wrapper_untouched() {
