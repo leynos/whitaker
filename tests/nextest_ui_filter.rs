@@ -10,13 +10,20 @@
 //! This test scans for all lint crates that declare a `tests/ui.rs` integration
 //! test (which produces a binary named `ui` with a top-level test name of
 //! `ui`, **not** `ui::ui`) and asserts that the nextest filter contains the
-//! clause needed to capture that pattern.
+//! clause needed to capture that pattern. It also protects the named nested
+//! Cargo UI harnesses that share compiler resources on constrained runners.
 
 use std::fs;
 use std::path::Path;
 
 use rstest::{fixture, rstest};
 use toml::Value;
+
+const NESTED_CARGO_UI_FILTER_CLAUSES: [&str; 3] = [
+    "test(example_compiles_without_diagnostics)",
+    "test(example_harness_collects_call_site_evidence)",
+    "test(trybuild_fixtures_compile_without_diagnostics)",
+];
 
 /// Parses `.config/nextest.toml` into a [`Value`].
 fn load_nextest_config() -> Value {
@@ -98,7 +105,9 @@ fn serial_dylint_ui_override() -> Value {
 }
 
 #[rstest]
-fn serial_dylint_ui_filter_captures_integration_ui_binaries(serial_dylint_ui_override: Value) {
+fn serial_dylint_ui_filter_captures_integration_and_nested_cargo_ui_tests(
+    serial_dylint_ui_override: Value,
+) {
     let filter = extract_filter(&serial_dylint_ui_override);
     let crates = crates_with_integration_ui_test();
 
@@ -116,6 +125,15 @@ fn serial_dylint_ui_filter_captures_integration_ui_binaries(serial_dylint_ui_ove
          to capture integration test binaries named `ui` with a top-level \
          `fn ui()` (e.g. {crates:?}); found filter: {filter}"
     );
+
+    for filter_clause in NESTED_CARGO_UI_FILTER_CLAUSES {
+        assert!(
+            filter.contains(filter_clause),
+            "the serial-dylint-ui filter must capture nested Cargo UI test \
+             `{filter_clause}` so its compiler resources are serialized on \
+             constrained runners; found filter: {filter}"
+        );
+    }
 }
 
 #[rstest]
