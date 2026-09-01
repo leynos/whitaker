@@ -141,7 +141,7 @@ def test_requires_at_least_one_markdown_file(formatter: tuple[Path, Path]) -> No
     )
 
     assert result.returncode == 64, result.stderr
-    assert "Usage:" in result.stderr, result.stderr
+    assert result.stderr == "Usage: check-markdown-format.sh <file>...\n"
     assert not call_log.exists(), "the formatter must not run for an empty file list"
 
 
@@ -158,7 +158,28 @@ def test_reports_a_missing_formatter(tmp_path: Path) -> None:
     )
 
     assert result.returncode == 127, result.stderr
-    assert "is not installed or not on PATH" in result.stderr, result.stderr
+    assert result.stderr == (
+        "check-markdown-format.sh: "
+        f"'{tmp_path / 'missing-mdtablefix'}' is not installed or not on PATH.\n"
+    )
+
+
+def test_reports_a_missing_markdown_linter(
+    formatter: tuple[Path, Path], tmp_path: Path
+) -> None:
+    """Explain how to supply the Markdown linter when its executable is unavailable."""
+    executable, call_log = formatter
+    source = tmp_path / "source.md"
+    source.write_text("formatted\n", encoding="utf-8")
+    missing_linter = tmp_path / "missing-markdownlint-cli2"
+
+    result = _run_checker(executable, call_log, missing_linter, source)
+
+    assert result.returncode == 127, result.stderr
+    assert result.stderr == (
+        "check-markdown-format.sh: "
+        f"'{missing_linter}' is not installed or not on PATH.\n"
+    )
 
 
 def test_accepts_lf_and_crlf_without_modifying_sources(
@@ -222,9 +243,11 @@ def test_reports_each_noncanonical_source_without_modifying_it(
     )
 
     assert result.returncode == 1, result.stderr
-    assert str(unformatted_source) in result.stderr, result.stderr
-    assert str(mixed_source) in result.stderr, result.stderr
-    assert str(canonical_source) not in result.stderr, result.stderr
+    assert result.stderr == (
+        "The following Markdown files are not formatted; run 'make fmt':\n"
+        f"  {unformatted_source}\n"
+        f"  {mixed_source}\n"
+    )
     assert unformatted_source.read_bytes() == b"unformatted\n", (
         "the checker modified the unformatted source"
     )
