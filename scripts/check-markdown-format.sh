@@ -2,21 +2,16 @@
 # Verifies that Markdown sources are already in the canonical form `make fmt`
 # produces, without modifying any tracked file.
 #
-# `mdtablefix` owns table padding and paragraph wrapping. It has no check-only
-# mode, so this script formats staged copies in one batch, then compares each
-# result against the corresponding source without modifying tracked files.
+# `mdtablefix` owns table padding and paragraph wrapping, while
+# `markdownlint-cli2` owns Markdown lint fixes. Neither has a check-only mode,
+# so this script applies both formatter stages to staged copies in one batch,
+# then compares each result against the corresponding source without modifying
+# tracked files.
 # `mdtablefix` emits LF, whereas Git can check text out with CRLF on Windows;
 # the comparison accepts only either exact line-ending form. Keep the flags in
 # step with the `mdtablefix` invocation in `mdformat-all`, which `make fmt`
 # runs.
 #
-# `make fmt` also applies `markdownlint-cli2 --fix` after `mdtablefix`, but that
-# pass is deliberately not replayed here. `make markdownlint` already rejects
-# any lint violation, so on a passing tree `--fix` has nothing to change.
-# Comparing against `mdtablefix` alone additionally surfaces documents the two
-# tools would fight over -- a heading nested inside an ordered list, for
-# instance, ends the list for `mdtablefix` while `MD029` keeps renumbering it --
-# which indicates malformed Markdown that should be restructured.
 set -euo pipefail
 
 if [[ $# -eq 0 ]]; then
@@ -25,9 +20,15 @@ if [[ $# -eq 0 ]]; then
 fi
 
 MDTABLEFIX="${MDTABLEFIX:-mdtablefix}"
+MDLINT="${MDLINT:-markdownlint-cli2}"
 
 if ! command -v "$MDTABLEFIX" >/dev/null 2>&1; then
   echo "$(basename "$0"): '$MDTABLEFIX' is not installed or not on PATH." >&2
+  exit 127
+fi
+
+if ! command -v "$MDLINT" >/dev/null 2>&1; then
+  echo "$(basename "$0"): '$MDLINT' is not installed or not on PATH." >&2
   exit 127
 fi
 
@@ -45,6 +46,7 @@ done
 
 "$MDTABLEFIX" --in-place --wrap --renumber --breaks --ellipsis --fences \
   "${staged_files[@]}"
+"$MDLINT" --fix "${staged_files[@]}"
 
 unformatted=()
 for index in "${!original_files[@]}"; do

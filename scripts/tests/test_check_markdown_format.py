@@ -2,7 +2,7 @@
 
 import json
 import os
-import subprocess  # ruff: ignore[suspicious-subprocess-import] - the boundary is under test.
+import subprocess  # noqa: S404 - the boundary is under test.
 import sys
 import tempfile
 import textwrap
@@ -76,6 +76,35 @@ def _write_fake_formatter(directory: Path) -> tuple[Path, Path]:
     return executable, call_log
 
 
+def _write_fake_markdown_linter(directory: Path) -> Path:
+    """Create a Markdown linter fixture that changes only lint-only markers."""
+    executable = directory / "markdownlint-cli2"
+    executable.write_text(
+        textwrap.dedent(
+            """\
+            #!__PYTHON__
+            import pathlib
+            import sys
+
+            if len(sys.argv) < 3 or sys.argv[1] != "--fix":
+                print("expected --fix and Markdown paths", file=sys.stderr)
+                raise SystemExit(64)
+
+            for path in sys.argv[2:]:
+                source = pathlib.Path(path)
+                source.write_bytes(
+                    source.read_bytes().replace(
+                        b"needs-markdownlint-fix", b"fixed-by-markdownlint"
+                    )
+                )
+            """
+        ).replace("__PYTHON__", sys.executable),
+        encoding="utf-8",
+    )
+    executable.chmod(0o755)
+    return executable
+
+
 @pytest.fixture
 def formatter(tmp_path: Path) -> tuple[Path, Path]:
     """Provide a controlled formatter executable and its call log."""
@@ -85,14 +114,16 @@ def formatter(tmp_path: Path) -> tuple[Path, Path]:
 def _run_checker(
     formatter: Path,
     call_log: Path,
+    markdown_linter: Path,
     *files: Path,
 ) -> subprocess.CompletedProcess[str]:
     """Run the checker against files with the controlled formatter fixture."""
     environment = os.environ | {
         "MDTABLEFIX": str(formatter),
         "MDTABLEFIX_CALL_LOG": str(call_log),
+        "MDLINT": str(markdown_linter),
     }
-    return subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - executes the controlled fixture.
+    return subprocess.run(  # noqa: S603 - executes the controlled fixture.
         [str(CHECKER), *(str(file) for file in files)],
         capture_output=True,
         check=False,
@@ -105,7 +136,9 @@ def test_requires_at_least_one_markdown_file(formatter: tuple[Path, Path]) -> No
     """Reject an empty file list before trying to invoke the formatter."""
     executable, call_log = formatter
 
-    result = _run_checker(executable, call_log)
+    result = _run_checker(
+        executable, call_log, _write_fake_markdown_linter(executable.parent)
+    )
 
     assert result.returncode == 64, result.stderr
     assert "Usage:" in result.stderr, result.stderr
@@ -117,7 +150,12 @@ def test_reports_a_missing_formatter(tmp_path: Path) -> None:
     source = tmp_path / "source.md"
     source.write_text("formatted\n", encoding="utf-8")
 
-    result = _run_checker(tmp_path / "missing-mdtablefix", tmp_path / "calls", source)
+    result = _run_checker(
+        tmp_path / "missing-mdtablefix",
+        tmp_path / "calls",
+        _write_fake_markdown_linter(tmp_path),
+        source,
+    )
 
     assert result.returncode == 127, result.stderr
     assert "is not installed or not on PATH" in result.stderr, result.stderr
@@ -129,12 +167,13 @@ def test_accepts_lf_and_crlf_without_modifying_sources(
 ) -> None:
     """Accept exact canonical output in either Git checkout line-ending form."""
     executable, call_log = formatter
+    markdown_linter = _write_fake_markdown_linter(executable.parent)
     lf_source = tmp_path / "lf.md"
     crlf_source = tmp_path / "crlf.md"
     lf_source.write_bytes(b"formatted\n")
     crlf_source.write_bytes(b"formatted\r\n")
 
-    result = _run_checker(executable, call_log, lf_source, crlf_source)
+    result = _run_checker(executable, call_log, markdown_linter, lf_source, crlf_source)
 
     assert result.returncode == 0, result.stderr
     assert lf_source.read_bytes() == b"formatted\n", (
@@ -165,6 +204,7 @@ def test_reports_each_noncanonical_source_without_modifying_it(
 ) -> None:
     """Reject altered and mixed-ending files while leaving every source intact."""
     executable, call_log = formatter
+    markdown_linter = _write_fake_markdown_linter(executable.parent)
     unformatted_source = tmp_path / "unformatted.md"
     mixed_source = tmp_path / "mixed.md"
     canonical_source = tmp_path / "canonical.md"
@@ -175,6 +215,7 @@ def test_reports_each_noncanonical_source_without_modifying_it(
     result = _run_checker(
         executable,
         call_log,
+        markdown_linter,
         unformatted_source,
         mixed_source,
         canonical_source,
@@ -202,6 +243,25 @@ def test_reports_each_noncanonical_source_without_modifying_it(
     )
 
 
+def test_detects_a_markdownlint_only_fix_without_modifying_the_source(
+    formatter: tuple[Path, Path],
+    tmp_path: Path,
+) -> None:
+    """Reject a source requiring only the Markdown lint fixing pass."""
+    executable, call_log = formatter
+    markdown_linter = _write_fake_markdown_linter(executable.parent)
+    source = tmp_path / "lint-only.md"
+    source.write_bytes(b"formatted\nneeds-markdownlint-fix\n")
+
+    result = _run_checker(executable, call_log, markdown_linter, source)
+
+    assert result.returncode == 1, result.stderr
+    assert str(source) in result.stderr, result.stderr
+    assert source.read_bytes() == b"formatted\nneeds-markdownlint-fix\n", (
+        "the checker modified the source requiring a Markdown lint fix"
+    )
+
+
 @given(
     lines=st.lists(st.text(alphabet=LINE_ALPHABET, max_size=40), min_size=2, max_size=5)
 )
@@ -212,6 +272,7 @@ def test_accepts_only_uniform_canonical_line_endings(lines: list[str]) -> None:
     with tempfile.TemporaryDirectory() as directory_name:
         directory = Path(directory_name)
         executable, call_log = _write_fake_formatter(directory)
+        markdown_linter = _write_fake_markdown_linter(directory)
         lf_source = directory / "lf.md"
         crlf_source = directory / "crlf.md"
         mixed_source = directory / "mixed.md"
@@ -221,8 +282,10 @@ def test_accepts_only_uniform_canonical_line_endings(lines: list[str]) -> None:
             (lines[0] + "\r\n" + "\n".join(lines[1:]) + "\n").encode()
         )
 
-        passing = _run_checker(executable, call_log, lf_source, crlf_source)
-        failing = _run_checker(executable, call_log, mixed_source)
+        passing = _run_checker(
+            executable, call_log, markdown_linter, lf_source, crlf_source
+        )
+        failing = _run_checker(executable, call_log, markdown_linter, mixed_source)
 
     assert passing.returncode == 0, passing.stderr
     assert failing.returncode == 1, failing.stderr

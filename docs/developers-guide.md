@@ -297,15 +297,15 @@ make fmt        # Apply formatting
 options and then fixes Markdown lint findings. `make check-fmt` invokes
 `scripts/check-markdown-format.sh` after the Rust formatter check. The Makefile
 passes every Markdown source outside repository and tool caches to that script
-in one batch.
+in batches.
 
 The checker owns only the non-mutating comparison boundary. It copies each
-source to a temporary directory, asks `mdtablefix` to format those copies with
-the same options as `mdformat-all`, and compares the result with the original
-source. It accepts either LF or CRLF when the content is otherwise identical,
-and removes the temporary directory on exit. It never formats or rewrites a
-working-tree file. `mdtablefix` remains the owner of table padding and
-paragraph wrapping; `markdownlint-cli2` remains the owner of Markdown lint
+source to a temporary directory, asks `mdtablefix` and `markdownlint-cli2` to
+apply the same fixing passes as `mdformat-all`, and compares the result with
+the original source. It accepts either LF or CRLF when the content is otherwise
+identical, and removes the temporary directory on exit. It never formats or
+rewrites a working-tree file. `mdtablefix` remains the owner of table padding
+and paragraph wrapping; `markdownlint-cli2` remains the owner of Markdown lint
 rules and its fixing pass. The `linux-full` CI job caches the formatter binary
 but verifies the workflow-level version pin before running `make check-fmt`, so
 a cold runner and a stale cache produce the same canonical output.
@@ -314,8 +314,8 @@ Keep the script scoped to `make check-fmt` and its focused process tests. Reuse
 it when another repository-owned gate needs to verify this exact Markdown
 canonical form, rather than reproducing the staging and line-ending logic in a
 second wrapper. Keep its formatter flags in step with `mdformat-all`, and use
-the `MDTABLEFIX` Makefile override when a locally installed formatter is not on
-the default `PATH`.
+the `MDTABLEFIX` or `MDLINT` Makefile override when a locally installed
+formatter is not on the default `PATH`.
 
 Run the focused checker tests with:
 

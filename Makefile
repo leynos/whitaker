@@ -175,7 +175,7 @@ check-fmt: ## Verify formatting
 	$(CARGO) fmt --all -- --check
 	@$(MD_FILES_FIND) | xargs -0 sh -c '\
 		if [ "$$#" -gt 0 ]; then \
-			MDTABLEFIX="$(MDTABLEFIX)" scripts/check-markdown-format.sh "$$@"; \
+			MDTABLEFIX="$(MDTABLEFIX)" MDLINT="$(MDLINT)" scripts/check-markdown-format.sh "$$@"; \
 		fi' sh
 
 markdownlint: spelling ## Lint Markdown files and enforce spelling
