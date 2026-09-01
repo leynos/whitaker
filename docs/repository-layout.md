@@ -24,7 +24,7 @@ formal verification helpers.
 | `crates/`    | Individual lint crates, selected vendored `rustc_*` compatibility crates, and support crates such as clone-analysis and SARIF output. |
 | `docs/`      | User, developer, design, roadmap, decision-record, and planning documentation.                                                        |
 | `installer/` | The `whitaker-installer` crate, packaging logic, and installer-specific behaviour tests.                                              |
-| `scripts/`   | Repository automation for checksums, Kani, and Verus setup and execution.                                                             |
+| `scripts/`   | Repository automation for checksums, Markdown formatting, Kani, and Verus setup and execution.                                        |
 | `skills/`    | Agent-facing skills that document repeatable maintenance and remediation workflows.                                                   |
 | `src/`       | Root library code that assembles shared lint registration and workspace-facing APIs.                                                  |
 | `suite/`     | The suite crate used to package and expose the lint set coherently.                                                                   |
@@ -95,6 +95,9 @@ an integrated suite and carries its own source and tests.
   feature files, UI harness coverage, and workflow validation support.
 - `common/tests/` and the per-crate `tests/` directories hold crate-scoped
   behavioural and integration coverage.
+- `scripts/check-markdown-format.sh` verifies the canonical Markdown formatter
+  output without modifying source files; its process tests live in
+  `scripts/tests/test_check_markdown_format.py`.
 - Per-crate `ui/`, `ui-cy/`, `ui-gd/`, and similar directories store compiler
   fixture inputs and expected diagnostics.
 - `scripts/run-kani.sh` and `scripts/run-verus.sh` are the entry points for the

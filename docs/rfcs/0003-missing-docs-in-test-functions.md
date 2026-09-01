@@ -183,9 +183,9 @@ documentation comment, and its help text SHOULD show a `///` comment directly
 above the function. It MUST use Whitaker's localized diagnostic conventions.
 
 Pre-expansion lints have a Dylint-specific suppression limitation:
-`cfg_attr(dylint_lib = ..., allow(...))` is not available before expansion.
-The Dylint 6.0.1 documentation records this limitation and its workaround.
-When an individually justified exception is unavoidable, consumers can use the
+`cfg_attr(dylint_lib = ..., allow(...))` is not available before expansion. The
+Dylint 6.0.1 documentation records this limitation and its workaround. When an
+individually justified exception is unavoidable, consumers can use the
 documented two-attribute workaround:[^2]
 
 ```rust
