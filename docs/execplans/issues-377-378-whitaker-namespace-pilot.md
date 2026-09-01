@@ -1,6 +1,6 @@
 # Restore portable Whitaker installation and pilot Namespace runners
 
-Status: IN PROGRESS — EP-M1 and EP-M2 complete and reviewed; EP-M3 is next.
+Status: IN PROGRESS — EP-M1 and EP-M2 complete and reviewed; EP-M3 in progress.
 
 This ExecPlan delivers three reviewable changes as one GitHub stacked pull
 request chain. The bottom layer restores a cold `whitaker-installer` source
@@ -299,6 +299,25 @@ layer's diff from its immediate base before committing.
   selected packages verified.
 - [x] 2026-09-01: Ran `coderabbit review --agent` through the scrutineer for
   EP-M2; it completed with zero findings and no rate-limit event.
+- [x] 2026-09-01: Confirmed the deployed `namespace-profile-default` with
+  `nsc github profile describe --profile_id ghpf_d442h2l2nj56q -o json`: Ubuntu
+  22.04, amd64, 4 vCPUs, 16,384 MB, remote builder, and no
+  `cache_volume_settings` field. No profile was mutated.
+- [x] 2026-09-01: Captured the pre-migration GitHub baseline from five
+  successful CI runs with `gh run view`. Median queue/execution times were
+  9s/24m11s for `linux-full` and 21s/13m29s for `coverage-check`; the complete
+  run/job sample is recorded in `docs/developers-guide.md`.
+- [x] 2026-09-01: Ran
+      `nsc github job list --repository leynos/whitaker --since 7d` with
+      `--max_entries 100 -o json`; it returned `null`, so there
+      were no pre-migration Whitaker Namespace jobs to compare.
+- [x] 2026-09-01: Documented the pilot's two intended migrated PR jobs and
+  the retained Windows, main-branch coverage, release, rolling-release, and
+  externally selected mutation exceptions. Cache volumes remain disabled and no
+  Namespace cache persistence is claimed.
+- [x] 2026-09-01: Migrated only `CI`'s `coverage-check` and `linux-full` jobs,
+  added intentional actionlint labels, and added structural contracts for both
+  migrated and retained runner assignments.
 - [ ] Complete EP-M3, submit the draft stack, and monitor Namespace jobs.
 
 ## Surprises & discoveries
@@ -415,6 +434,20 @@ the published v0.2.7 assets' `GLIBC_2.39` requirement.
   the helpers exist only to separate version-needs parsing, process execution,
   result validation, and contextual error reporting. They are not a general
   subprocess or ELF API and must not be called from packaging or build code.
+- 2026-09-01: Use the deployed `namespace-profile-default` unchanged for the
+  pilot. The read-only profile description proves the required Ubuntu 22.04,
+  amd64, 4-vCPU, 16-GB shape and absence of cache-volume settings; creating or
+  mutating a profile would invalidate the baseline and is out of scope.
+- 2026-09-01: Treat the empty `nsc github job list` result as the UbiCloud /
+  Namespace pre-migration baseline rather than inventing Namespace timing data.
+  Compare queue and execution durations only after migrated jobs have completed
+  successfully.
+- 2026-09-01: Migrate only `coverage-check` and `linux-full` in the pilot.
+  Both are repository-owned pull-request Linux jobs whose prior UbiCloud
+  standard-4 resource class matches the deployed Namespace shape. Retain the
+  main-branch coverage, release, Windows, mutation, and reusable-workflow
+  assignments to preserve their distinct event, platform, or ownership
+  boundaries.
 
 ## Outcomes & retrospective
 
@@ -450,3 +483,10 @@ Nextest cases successful and 5 skipped. The committed-HEAD publication check
 then passed 1,665 CI-profile tests with 5 skipped, built and listed all ten
 expected Dylint libraries from a clone of `3456839`, and verified the
 `whitaker-common` and `whitaker-installer` packages.
+
+EP-M3 now moves the repository-owned `coverage-check` and `linux-full` jobs to
+the deployed, uncached `namespace-profile-default` while retaining platform,
+release, main-branch coverage, and externally owned reusable-workflow runner
+boundaries. Structural contracts and actionlint cover both migrated and
+retained assignments. Pull-request admission, runtime, queueing, and Namespace
+job evidence remain to be recorded before the pilot is complete.

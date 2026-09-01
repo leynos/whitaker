@@ -122,8 +122,8 @@ def test_ci_splits_linux_and_windows_jobs_by_purpose(
         parent_name="CI workflow jobs",
     )
 
-    assert linux_job.get("runs-on") == "ubicloud-standard-4-ubuntu-2404", (
-        "linux-full must run on the dedicated Ubicloud Linux runner"
+    assert linux_job.get("runs-on") == "namespace-profile-default", (
+        "linux-full must run on the deployed Namespace Linux runner"
     )
     assert windows_job.get("runs-on") == "windows-latest", (
         "windows-compat must keep using the hosted Windows runner"
@@ -185,8 +185,8 @@ def _coverage_check_job(workflow: Mapping[str, Any]) -> dict[str, Any]:
     assert coverage_job.get("if") == "github.event_name == 'pull_request'", (
         "coverage-check must run only for pull requests"
     )
-    assert coverage_job.get("runs-on") == "ubicloud-standard-4-ubuntu-2404", (
-        "coverage-check must use the dedicated Ubicloud Linux runner"
+    assert coverage_job.get("runs-on") == "namespace-profile-default", (
+        "coverage-check must use the deployed Namespace Linux runner"
     )
     assert coverage_job.get("defaults", {}).get("run", {}).get("shell") == "bash", (
         "coverage-check must use Bash for Makefile targets"
@@ -345,9 +345,9 @@ def test_linux_full_keeps_the_full_linux_validation_stack(
         _find_step(linux_job, "Enforce en-GB-oxendict spelling").get("run")
         == "make spelling"
     ), "linux-full must run the spelling gate"
-    assert _find_step(linux_job, "Setup uv").get("with", {}).get("version") == "0.11.19", (
-        "linux-full must use the tested uv version"
-    )
+    assert (
+        _find_step(linux_job, "Setup uv").get("with", {}).get("version") == "0.11.19"
+    ), "linux-full must use the tested uv version"
     markdown_globs = (
         _find_step(linux_job, "Markdown lint")
         .get("with", {})
