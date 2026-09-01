@@ -312,17 +312,17 @@ boundary and therefore required the approval mandated by this plan's tolerance
 section.
 
 The first Rust-1.85-compatible lock graph selected `time` 0.3.45 through
-`zip`'s optional `time` feature. `cargo audit` reported RUSTSEC-2026-0009, while
-the patched `time` 0.3.47 requires Rust 1.88. Whitaker uses `zip::DateTime`'s
-built-in representation rather than the external time-crate conversions, so
-removing that unused feature eliminates the vulnerable transitive dependency
-without changing archive behaviour.
+`zip`'s optional `time` feature. `cargo audit` reported RUSTSEC-2026-0009,
+while the patched `time` 0.3.47 requires Rust 1.88. Whitaker uses
+`zip::DateTime`'s built-in representation rather than the external time-crate
+conversions, so removing that unused feature eliminates the vulnerable
+transitive dependency without changing archive behaviour.
 
 `publish-check` clones the repository's committed `HEAD` for its Dylint
-artefact phase, so a pre-commit invocation validated that phase at the preceding
-plan-only commit while its `cargo package --allow-dirty` phase validated the
-current manifests. Re-run the complete target after committing EP-M1 so every
-phase exercises the milestone commit before requesting review.
+artefact phase, so a pre-commit invocation validated that phase at the
+preceding plan-only commit while its `cargo package --allow-dirty` phase
+validated the current manifests. Re-run the complete target after committing
+EP-M1 so every phase exercises the milestone commit before requesting review.
 
 Repository-wide `actionlint` currently reports the intentional UbiCloud runner
 label because no custom-label configuration exists, plus pre-existing SC2193
@@ -359,17 +359,17 @@ than obscured by an EP-M1 change.
 
 EP-M1 now declares Rust 1.85 in the installer manifest, enforces a real locked
 source install in the Makefile and Linux CI, and retains only the `zip` 7.2
-Deflate feature. Removing the unused `time` integration also leaves `cargo
-audit` with no known vulnerabilities. The focused MSRV install, formatting,
-Markdown, Mermaid, workflow-contract, type-check, Clippy, full test, release
-archive, Makefile, and scoped actionlint gates pass. The full Nextest result is
-1,652 passed and 5 skipped. `cargo audit` retains four pre-existing allowed
-warnings but reports no vulnerabilities. Whitaker has no `doc-coverage` target,
-so that Netsuke-specific gate is not applicable. EP-M2 and EP-M3 have not
-started.
+Deflate feature. Removing the unused `time` integration also leaves
+`cargo audit` with no known vulnerabilities. The focused MSRV install,
+formatting, Markdown, Mermaid, workflow-contract, type-check, Clippy, full
+test, release archive, Makefile, and scoped actionlint gates pass. The full
+Nextest result is 1,652 passed and 5 skipped. `cargo audit` retains four
+pre-existing allowed warnings but reports no vulnerabilities. Whitaker has no
+`doc-coverage` target, so that Netsuke-specific gate is not applicable. EP-M2
+and EP-M3 have not started.
 
 The post-commit publication gate also passes: its CI-profile Nextest run
-reported 1,665 passed and 5 skipped, the cloned-HEAD Dylint library build listed
-all ten expected libraries, and both `whitaker-common` and
+reported 1,665 passed and 5 skipped, the cloned-HEAD Dylint library build
+listed all ten expected libraries, and both `whitaker-common` and
 `whitaker-installer` packages verified. CodeRabbit reported no high-, medium-,
 or low-severity concerns for the committed milestone.
