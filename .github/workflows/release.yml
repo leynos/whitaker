@@ -28,7 +28,7 @@ jobs:
       matrix:
         include:
           - target: x86_64-unknown-linux-gnu
-            os: ubuntu-latest
+            os: ubuntu-22.04
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-24.04-arm
           - target: x86_64-apple-darwin
@@ -86,6 +86,7 @@ jobs:
         run: |
           set -euxo pipefail
           mkdir -p dist
+          # shellcheck disable=SC2193 # GitHub expands matrix.target at runtime.
           if [[ "${{ matrix.target }}" == *windows* ]]; then
             PACKAGER="./target/release/whitaker-package-installer.exe"
           else
@@ -96,6 +97,13 @@ jobs:
             --target "${{ matrix.target }}" \
             --binary-path "${{ steps.binary.outputs.path }}" \
             --output-dir dist
+
+      - name: Check glibc baseline
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        run: |
+          set -euxo pipefail
+          python scripts/check_glibc_baseline.py --maximum-glibc GLIBC_2.35 \
+            "${{ steps.binary.outputs.path }}"
 
       - name: Generate SHA-256 checksum
         run: |
@@ -126,7 +134,7 @@ jobs:
       matrix:
         include:
           - target: x86_64-unknown-linux-gnu
-            os: ubuntu-latest
+            os: ubuntu-22.04
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-24.04-arm
           - target: x86_64-apple-darwin
@@ -167,6 +175,7 @@ jobs:
           mkdir -p dist
           mkdir -p dependency-root
           python installer/scripts/dependency_binaries_manifest.py > /tmp/dependency-binaries.tsv
+          # shellcheck disable=SC2193 # GitHub expands matrix.target at runtime.
           if [[ "${{ matrix.target }}" == *windows* ]]; then
             PACKAGER="./target/release/whitaker-package-dependency-binary.exe"
           else
@@ -180,6 +189,7 @@ jobs:
               --target "${{ matrix.target }}" \
               --version "$version" \
               "$package"
+            # shellcheck disable=SC2193 # GitHub expands matrix.target at runtime.
             if [[ "${{ matrix.target }}" == *windows* ]]; then
               executable="dependency-root/bin/${binary}.exe"
             else
@@ -191,6 +201,14 @@ jobs:
               --binary-path "$executable" \
               --output-dir dist
           done < /tmp/dependency-binaries.tsv
+
+      - name: Check glibc baseline
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        run: |
+          set -euxo pipefail
+          python scripts/check_glibc_baseline.py --maximum-glibc GLIBC_2.35 \
+            dependency-root/bin/cargo-dylint \
+            dependency-root/bin/dylint-link
 
       - name: Generate SHA-256 checksums
         run: |
@@ -214,15 +232,92 @@ jobs:
             dist/*.sha256
           retention-days: 5
 
+  release-compatibility:
+    # A partial release may contain no x86_64 Linux artefacts. In that case
+    # there is nothing to verify, but any available x86_64 set must be complete
+    # and runnable before publication proceeds.
+    if: ${{ !cancelled() }}
+    needs:
+      - build-installer
+      - build-dependency-binaries
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: Setup Rust
+        uses: leynos/shared-actions/.github/actions/setup-rust@f4764bea8d813b1a8f7ebc37a44907d3c3b1e0e4
+
+      - name: Read pinned toolchain
+        id: toolchain
+        run: |
+          set -euxo pipefail
+          channel=$(awk -F '"' '/^channel/ {print $2}' rust-toolchain.toml)
+          echo "channel=$channel" >> "$GITHUB_OUTPUT"
+
+      - name: Download x86 installer artefact
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          pattern: installer-x86_64-unknown-linux-gnu
+          merge-multiple: true
+          path: dist
+
+      - name: Download x86 dependency artefacts
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          pattern: dependency-binaries-x86_64-unknown-linux-gnu
+          merge-multiple: true
+          path: dist
+
+      - name: Verify x86 packaged compatibility
+        run: |
+          set -euxo pipefail
+          shopt -s nullglob
+          installer_archives=(dist/whitaker-installer-x86_64-unknown-linux-gnu-v*.tgz)
+          dependency_archives=(
+            dist/cargo-dylint-x86_64-unknown-linux-gnu-v*.tgz
+            dist/dylint-link-x86_64-unknown-linux-gnu-v*.tgz
+          )
+          if [[ "${#installer_archives[@]}" -eq 0 && "${#dependency_archives[@]}" -eq 0 ]]; then
+            echo "No x86_64 Linux artefacts were produced; skipping compatibility verification."
+            exit 0
+          fi
+          if [[ "${#installer_archives[@]}" -ne 1 || "${#dependency_archives[@]}" -ne 2 ]]; then
+            echo "::error::The x86_64 Linux artefact set is incomplete."
+            exit 1
+          fi
+          VERIFY_DIR=$(mktemp -d)
+          trap 'rm -rf -- "$VERIFY_DIR"' EXIT INT TERM HUP
+          for archive in "${installer_archives[@]}" "${dependency_archives[@]}"; do
+            tar -xzf "$archive" -C "$VERIFY_DIR"
+          done
+          installer=$(find "$VERIFY_DIR" -type f -name whitaker-installer -print -quit)
+          cargo_dylint=$(find "$VERIFY_DIR" -type f -name cargo-dylint -print -quit)
+          dylint_link=$(find "$VERIFY_DIR" -type f -name dylint-link -print -quit)
+          [[ -n "$installer" && -n "$cargo_dylint" && -n "$dylint_link" ]]
+          python scripts/check_glibc_baseline.py --maximum-glibc GLIBC_2.35 \
+            "$installer" "$cargo_dylint" "$dylint_link"
+          "$installer" --version
+          "$cargo_dylint" dylint --version
+          RUSTUP_TOOLCHAIN="${{ steps.toolchain.outputs.channel }}" \
+            "$dylint_link" --version
+
   publish:
     # Publish whatever the build legs produced instead of discarding the
     # successful legs when one fails: !cancelled() keeps this job running
     # after a failed need, and the artefact downloads below tolerate absent
     # legs. The job still fails when nothing at all was built.
-    if: ${{ !cancelled() && (github.ref_type == 'tag' || (github.event_name == 'workflow_dispatch' && github.event.inputs.tag != '')) }}
+    if: ${{ !cancelled() && needs.release-compatibility.result == 'success' && (github.ref_type == 'tag' || (github.event_name == 'workflow_dispatch' && github.event.inputs.tag != '')) }}
     needs:
       - build-installer
       - build-dependency-binaries
+      - release-compatibility
     runs-on: ubuntu-latest
     permissions:
       contents: write

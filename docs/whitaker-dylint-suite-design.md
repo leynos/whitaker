@@ -1611,6 +1611,15 @@ publishes the archives plus checksums to GitHub Releases. The
 archive creation logic, validated by unit tests and BDD scenarios in
 `installer/tests/features/installer_release.feature`.
 
+**Linux compatibility decision:** Published x86_64 GNU/Linux installer,
+dependency-tool, and lint artefacts are built on Ubuntu 22.04 and may require
+no glibc symbol newer than `GLIBC_2.35`. The read-only
+`scripts/check_glibc_baseline.py` release adapter validates explicit ELF paths
+after build and before upload; it does not own building, packaging, extracting,
+downloading, or executing artefacts. The tagged release workflow separately
+extracts the packaged installer and dependency tools on Ubuntu 22.04 and runs
+all three executable surfaces before publication.
+
 [^1]: <https://github.com/leynos/whitaker/pull/93>
 [^2]: <https://github.com/leynos/whitaker/pull/93#discussion_r1234567890>
 

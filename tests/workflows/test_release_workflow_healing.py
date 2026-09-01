@@ -42,6 +42,7 @@ DEPENDENCY_TARGETS = {
 }
 
 NATIVE_RUNNERS = {
+    "x86_64-unknown-linux-gnu": "ubuntu-22.04",
     "aarch64-unknown-linux-gnu": "ubuntu-24.04-arm",
     "x86_64-apple-darwin": "macos-15-intel",
 }
@@ -147,3 +148,72 @@ def test_release_publish_tolerates_partial_build_failures() -> None:
         assert step.get("continue-on-error") is True, (
             f"'{step_name}' must tolerate absent artefacts from failed legs"
         )
+
+
+def _step_names(workflow_path, job_name):
+    """Return the ordered names for a workflow job's steps."""
+    job = _job_from(workflow_path, job_name)
+    return [step["name"] for step in job["steps"]]
+
+
+def test_linux_release_legs_check_glibc_before_upload() -> None:
+    """Each Linux artefact lane checks the conservative glibc baseline first."""
+    expected_jobs = {
+        RELEASE_WORKFLOW_PATH: (
+            "build-installer",
+            "build-dependency-binaries",
+        ),
+        WORKFLOW_PATH: (
+            "build-lints",
+            "build-dependency-binaries",
+        ),
+    }
+    upload_names = {
+        "build-installer": "Upload artefact",
+        "build-lints": "Upload artefact",
+        "build-dependency-binaries": "Upload dependency artefact",
+    }
+    for workflow_path, job_names in expected_jobs.items():
+        for job_name in job_names:
+            names = _step_names(workflow_path, job_name)
+            assert names.index("Check glibc baseline") < names.index(
+                upload_names[job_name]
+            ), f"{workflow_path.name}:{job_name} must check glibc before upload"
+            check = _find_step_by_name(
+                _job_from(workflow_path, job_name)["steps"],
+                "Check glibc baseline",
+            )
+            assert check is not None
+            check_script = check.get("run")
+            assert isinstance(check_script, str)
+            assert "check_glibc_baseline.py" in check_script
+            assert "GLIBC_2.35" in check_script
+
+
+def test_tagged_release_requires_packaged_compatibility_verification() -> None:
+    """The tagged publish job waits for successful Ubuntu compatibility checks."""
+    compatibility = _job_from(RELEASE_WORKFLOW_PATH, "release-compatibility")
+    assert compatibility["runs-on"] == "ubuntu-22.04"
+    assert compatibility["needs"] == ["build-installer", "build-dependency-binaries"]
+    compatibility_condition = str(compatibility["if"])
+    assert "!cancelled()" in compatibility_condition
+    assert "needs.build-installer.result" not in compatibility_condition
+    assert "needs.build-dependency-binaries.result" not in compatibility_condition
+    names = _step_names(RELEASE_WORKFLOW_PATH, "release-compatibility")
+    assert names.index("Verify x86 packaged compatibility") < len(names)
+    verification = _find_step_by_name(
+        compatibility["steps"],
+        "Verify x86 packaged compatibility",
+    )
+    assert verification is not None
+    script = verification.get("run")
+    assert isinstance(script, str)
+    assert "whitaker-installer" in script
+    assert "cargo_dylint" in script
+    assert "dylint_link" in script
+    assert 'cargo_dylint" dylint --version' in script
+    assert '"$dylint_link" --version' in script
+
+    publish = _job_from(RELEASE_WORKFLOW_PATH, "publish")
+    assert "release-compatibility" in publish["needs"]
+    assert "needs.release-compatibility.result == 'success'" in str(publish["if"])

@@ -78,6 +78,22 @@ the required `awk`, `jq`, `mktemp`, `python`, and `rustc` commands before doing
 build work. On Windows, run it from an environment that provides those tools,
 such as the Bash shell used by CI.
 
+
+## Linux compatibility baseline
+
+Published `x86_64-unknown-linux-gnu` installer, dependency-tool, and lint
+artefacts support Ubuntu 22.04 and its glibc 2.35 runtime. Their release matrix
+entries therefore use the explicit `ubuntu-22.04` runner rather than the moving
+`ubuntu-latest` label.
+
+Before upload, release jobs run `scripts/check_glibc_baseline.py` over every
+published ELF executable or shared library and reject a required symbol newer
+than `GLIBC_2.35`. The tagged workflow then downloads and extracts the packaged
+x86_64 installer and dependency archives on Ubuntu 22.04 and executes the
+installer, `cargo-dylint`, and `dylint-link`. Do not change the runner baseline
+or maximum symbol version independently; update the ADR, checker calls, and
+packaged smoke contract together.
+
 ## Dry run
 
 Perform a dry run to see the exact artefacts that would be uploaded:

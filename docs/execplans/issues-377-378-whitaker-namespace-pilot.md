@@ -1,6 +1,6 @@
 # Restore portable Whitaker installation and pilot Namespace runners
 
-Status: IN PROGRESS — EP-M1 complete and reviewed; EP-M2 is next.
+Status: IN PROGRESS — EP-M1 complete and reviewed; EP-M2 in progress.
 
 This ExecPlan delivers three reviewable changes as one GitHub stacked pull
 request chain. The bottom layer restores a cold `whitaker-installer` source
@@ -188,6 +188,15 @@ check for `GLIBC_2.39`, newly built assets pass at or below 2.35, release
 workflow contracts pass, and all repository gates pass. Commit the layer with
 issue #378 in the subject and body.
 
+The glibc checker is owned by `scripts/` and is reusable only at release
+boundaries that already hold built ELF files. Callers select the supported
+baseline and pass explicit files; the checker reads ELF version metadata and
+reports compatibility but does not build, package, extract, download, or run
+artefacts. Workflow jobs compose it after building and before uploading, while
+script tests supply deterministic tool output. Keep packaging and end-to-end
+execution in their existing owners rather than expanding this checker into a
+general release orchestrator.
+
 Recovery is to revert the release runner and verification additions as one
 layer. Remaining work is the Namespace pilot.
 
@@ -273,6 +282,18 @@ layer's diff from its immediate base before committing.
   contract.
 - [x] 2026-09-01: Ran `coderabbit review --agent` through the scrutineer for
   EP-M1; it completed with zero findings and no rate-limit event.
+- [x] 2026-09-01: Created the `conservative-linux-release` Git Donkey worktree
+  from EP-M1 and registered both branches as a two-layer `gh stack`.
+- [x] 2026-09-01: Added the read-only ELF/glibc checker and established the
+  negative control: all three downloaded v0.2.7 x86_64 executables require
+  `GLIBC_2.39` and are rejected above the 2.35 baseline.
+- [x] 2026-09-01: Added Ubuntu 22.04 runner, pre-upload checker, packaged smoke,
+  and partial-publication workflow contracts for tagged and rolling releases.
+- [x] 2026-09-01: Built the installer and dependency tools inside Ubuntu 22.04;
+  all three require at most `GLIBC_2.34`, below the `GLIBC_2.35` ceiling.
+- [x] 2026-09-01: Passed the EP-M2 formatting, documentation, workflow,
+  type-check, lint, full test, release dry-run, audit, Makefile, actionlint,
+  and diff-hygiene gates. Nextest reported 1,652 passed and 5 skipped.
 - [ ] Complete EP-M2 and commit the middle stack layer.
 - [ ] Complete EP-M3, submit the draft stack, and monitor Namespace jobs.
 
@@ -337,6 +358,18 @@ categories passes. EP-M3 already owns `.github/actionlint.yaml`; the release
 script findings are assessed alongside the release workflow in EP-M2 rather
 than obscured by an EP-M1 change.
 
+The release workflow's SC2193 findings come from ShellCheck evaluating GitHub
+matrix expressions before Actions substitutes their runtime values. EP-M2 keeps
+the comparisons and adds narrowly scoped inline directives with the
+runtime-expansion rationale; `actionlint` then passes both touched release
+workflows without a global ignore.
+
+The Ubuntu 22.04 positive control produced `whitaker-installer`, `cargo-dylint`
+6.0.1, and `dylint-link` 4.0.0 with a maximum required symbol of `GLIBC_2.34`
+for each executable. This leaves one minor-version margin beneath the declared
+`GLIBC_2.35` ceiling and demonstrates that the explicit build baseline corrects
+the published v0.2.7 assets' `GLIBC_2.39` requirement.
+
 ## Decision log
 
 - 2026-09-01: Use three PR layers rather than combining release engineering
@@ -363,11 +396,21 @@ than obscured by an EP-M1 change.
 - 2026-09-01: Verify Rust 1.85 against the packaged crate rather than the
   workspace path. This matches the published-consumer boundary named by issue
   #377 and keeps the package artefact isolated from stale build output.
+- 2026-09-01: Apply the Ubuntu 22.04 and glibc 2.35 contract to both tagged and
+  rolling x86_64 artefact builders. Rolling lint libraries and dependency tools
+  share the same consumer boundary as tagged installer assets, so leaving them
+  on `ubuntu-latest` would preserve the compatibility defect in another release
+  channel.
+- 2026-09-01: Invoke the glibc checker directly from each workflow rather than
+  add a Make target. The explicit ELF list differs by job, and a
+  variable-driven wrapper would obscure rather than strengthen the release
+  boundary. The validation instruction therefore means running the checker CLI
+  explicitly.
 
 ## Outcomes & retrospective
 
 EP-M1 now declares Rust 1.85 in the installer manifest, enforces a real locked
-source install in the Makefile and Linux CI, and retains only the `zip` 7.2
+packaged-crate install in the Makefile and Linux CI, and retains only the `zip` 7.2
 Deflate feature. Removing the unused `time` integration also leaves
 `cargo audit` with no known vulnerabilities. The focused MSRV install,
 formatting, Markdown, Mermaid, workflow-contract, type-check, Clippy, full
@@ -388,3 +431,11 @@ installs `whitaker-installer` under Rust 1.85 so it exercises the published
 crate boundary. The Namespace adoption procedure is tracked in issue #386 until
 its owner publishes a stable URL; this does not change the remaining EP-M2 or
 EP-M3 implementation scope.
+
+EP-M2 now fixes both tagged and rolling x86_64 release builders to Ubuntu
+22.04, rejects ELF requirements above `GLIBC_2.35` before upload, and adds a
+tagged packaged-artefact compatibility job that checks and executes all three
+release tools before publication. The downloaded v0.2.7 negative control failed
+at `GLIBC_2.39`; clean Ubuntu 22.04 builds of the installer and both dependency
+tools passed at `GLIBC_2.34`. All deterministic milestone gates pass with 1,652
+Nextest cases successful and 5 skipped.
