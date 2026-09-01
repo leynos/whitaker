@@ -322,6 +322,12 @@ layer's diff from its immediate base before committing.
   scheduling contract for the five active nested-Cargo Dylint UI tests;
   extended the existing `serial-dylint-ui` group without changing production
   lint code or the no-blanket-retry policy.
+- [x] 2026-09-02: Isolated the build-script integration fixtures from the
+  outer LLVM coverage target. Concurrent fixtures intentionally share a
+  temporary package identity but validate different workspace manifests, so
+  each nested Cargo command now receives the target directory owned by its
+  `TempDir`. Ten focused concurrent coverage repetitions passed; no production
+  build-script behaviour changed.
 - [ ] Complete EP-M3, submit the draft stack, and monitor Namespace jobs.
 
 ## Surprises & discoveries
@@ -388,6 +394,15 @@ rather than requiring test-helper code to infer a driver-private target path. A
 fresh verbose local coverage run used that exact target directory for Nextest
 and passed all three `example_compiles_under_test_harness` cases without
 `E0463`.
+
+A documentation-only rerun later exposed a separate race in
+`build_script_integration`: the exact- and loose-parser fixtures inherit the
+same outer coverage target while declaring the same temporary package identity.
+One of three concurrent focused runs let the loose fixture's nested
+`cargo check` succeed, so its rejection assertion failed. The test-only repair
+passes each fixture's own `TempDir/target` through `--target-dir`; ten repeated
+concurrent coverage runs then passed. The production build script was already
+correct and remains unchanged.
 
 All published `zip` 8.x versions declare Rust 1.88. A trial with `zip` 6.0.0,
 its default features narrowed to the capabilities Whitaker uses, and `time`
@@ -540,3 +555,8 @@ example build inherited the outer target, and the fresh Namespace run no longer
 reported `E0463`. The pilot therefore distinguishes fast runner admission from
 build-tool target isolation rather than attributing the earlier test failure to
 Namespace contention.
+
+The build-script integration tests add a second, narrower boundary: their
+temporary workspaces now own nested Cargo output even when the outer coverage
+job deliberately shares one target directory. This prevents fixture-specific
+manifest validation from reusing another fixture's build-script result.

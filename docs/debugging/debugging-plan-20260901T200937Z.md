@@ -369,6 +369,76 @@ remain equal.
 
 ______________________________________________________________________
 
+## Follow-up: Build-script fixture cross-contamination
+
+The fresh coverage rerun in GitHub Actions run `33567979265` exposed a distinct
+failure after H8: `build_script_rejects_a_loose_workspace_parser_pin` observed
+a successful nested `cargo check` while the exact-pin companion passed at the
+same time. The rejection assertion is at line 51 of
+`crates/whitaker_clones_core/tests/build_script_integration.rs`. Functional head
+`e858760` had passed full coverage; a documentation-only rerun revealed that
+the result depends on concurrent execution rather than source semantics.
+
+### H9: Fixture workspaces share the coverage Cargo target
+
+**Claim**: The exact-pin and loose-pin fixtures deliberately use the same
+package name and version. Under `make coverage`, they inherit the outer
+`CARGO_TARGET_DIR`; simultaneous nested Cargo commands can therefore reuse the
+exact fixture's build-script output for the loose fixture. The loose build then
+succeeds without executing its own manifest validation.
+
+**Plausibility**: High — the two tests differ only in their temporary workspace
+manifest, run concurrently, and the fresh failure is precisely an incorrect
+successful build rather than a compilation or assertion error from the build
+script.
+
+**Prediction**: Repeated concurrent focused coverage runs that explicitly share
+one nested Cargo target reproduce an unexpected loose-pin success, while the
+same repetitions with one target directory per fixture preserve rejection.
+
+#### H9 Falsification Plan
+
+| Step | Action                                                                                      | Expected negative result                                                           |
+| ---- | ------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| 1    | Run the exact and loose tests repeatedly under coverage with their inherited common target. | The loose fixture always rejects, disproving shared-target reuse.                  |
+| 2    | Repeat with a distinct target directory owned by each temporary fixture.                    | A loose fixture still succeeds, disproving target sharing as the cause.            |
+| 3    | Inspect verbose Cargo output for build-script execution and target paths.                   | Separate fixture paths already produce separate output units in the shared target. |
+
+**Tooling**: bounded repeated focused `cargo llvm-cov nextest` runs, temporary
+target directories, and verbose nested Cargo output where needed.
+
+**Confidence on falsification**: High. The experiment holds all source inputs
+constant except the nested Cargo target boundary, which is the suspected shared
+state.
+
+**Falsification sub-agent**: alchemist. This plan amendment was prepared by the
+planning agent; the alchemist executes its tests and reports observations
+before a corrective patch is selected.
+
+#### H9 execution checkpoint
+
+- The delegated alchemist ran the exact and loose fixtures concurrently under
+  `cargo llvm-cov nextest --no-report -j 2` with fresh shared outer targets.
+  Two runs passed; one failed exactly at the loose-pin assertion because its
+  nested `cargo check` succeeded. That is the H9 prediction, so H9 survives.
+- `BuildFixture` now gives each temporary workspace an explicit `--target-dir`
+  beneath its own `TempDir`, rather than inheriting the outer coverage target.
+  The new command-shape regression test asserts that boundary directly.
+- Ten concurrent focused coverage repetitions against one shared outer target
+  completed with two passing fixture tests each and no `FAIL` output. This
+  accepts fixture target isolation as the smallest correction. Production
+  build-script semantics remain unchanged.
+
+#### H9 decision
+
+Keep the outer coverage target shared for the repository suite, but make the
+build-script integration fixtures own their nested Cargo target directories.
+Those fixtures intentionally vary a workspace manifest while keeping the
+temporary package identity stable; sharing compiled output would make their
+independent build-script assertions unsound.
+
+______________________________________________________________________
+
 ## Recommended Execution Order
 
 1. Extend `serial-dylint-ui` with the five active named nested-Cargo clauses.
