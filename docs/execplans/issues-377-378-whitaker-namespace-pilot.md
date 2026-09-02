@@ -265,7 +265,7 @@ layer's diff from its immediate base before committing.
 - [x] 2026-09-01: Obtained approval to downgrade `zip` from 8.x to 7.2.0 and
   preserve the Rust 1.85 installer MSRV.
 - [x] 2026-09-01: Completed EP-M1 implementation and deterministic validation
-  in commit `d2234a1`.
+  in commits `f7dec85` and `b9846ff`.
 - [x] 2026-09-01: Re-ran `publish-check` against committed `HEAD`; all 1,665
   CI-profile tests and both selected package verifications passed.
 - [x] 2026-09-01: Extended `installer-msrv-check` to package, extract, and

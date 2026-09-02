@@ -146,19 +146,26 @@ case "$1" in
 package)
     package_source="$CARGO_TARGET_DIR/package-source/whitaker-installer-0.2.5"
     mkdir -p "$package_source" "$CARGO_TARGET_DIR/package"
-    : > "$package_source/Cargo.toml"
+    printf '[package]\nname = "whitaker-installer"\nversion = "0.2.5"\n' \
+        > "$package_source/Cargo.toml"
     tar -czf "$CARGO_TARGET_DIR/package/whitaker-installer-0.2.5.crate" \\
         -C "${package_source%/*}" "${package_source##*/}"
     ;;
 install)
     root=""
+    path=""
     previous=""
     for argument in "$@"; do
         if [ "$previous" = "--root" ]; then root="$argument"; fi
+        if [ "$previous" = "--path" ]; then path="$argument"; fi
         previous="$argument"
     done
+    test -f "$path/Cargo.toml"
+    grep -qx 'name = "whitaker-installer"' "$path/Cargo.toml"
     mkdir -p "$root/bin"
-    printf '#!/bin/sh\\nexit 0\\n' > "$root/bin/whitaker-installer"
+    printf '%s\\n' "$path" > "$root/.installed-from-packaged-crate"
+    printf '#!/bin/sh\\ntest -f "$(dirname "$0")/../.installed-from-packaged-crate"\\n' \
+        > "$root/bin/whitaker-installer"
     chmod 755 "$root/bin/whitaker-installer"
     ;;
 esac''',
@@ -242,6 +249,9 @@ def test_installer_msrv_check_runs_the_packaged_crate(tmp_path: Path) -> None:
     )
     assert recorded[1].startswith("+1.85.0 install --locked --path "), (
         f"MSRV target must install the extracted packaged crate: {recorded!r}"
+    )
+    assert "/package-source/whitaker-installer-0.2.5" in recorded[1], (
+        f"MSRV target must install the extracted archive source: {recorded!r}"
     )
     assert " --root " in recorded[1], (
         f"MSRV target must install into an isolated root: {recorded!r}"
