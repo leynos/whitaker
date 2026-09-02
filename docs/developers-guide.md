@@ -39,6 +39,27 @@ package with `--locked` into a temporary root and run `--version`. It removes
 the temporary directory on exit. This checks the published package boundary; do
 not replace it with a workspace-path installation.
 
+### Linux release compatibility
+
+Published x86_64 GNU/Linux installer, dependency, and lint artefacts target the
+Ubuntu 22.04 glibc baseline and must not require a version newer than
+`GLIBC_2.35`. The release workflows enforce that contract by inspecting ELF
+version-needs metadata with `readelf`, rather than relying on a runner label.
+
+Use the checker locally after changing a Linux release build or its
+dependencies:
+
+```sh
+python scripts/check_glibc_baseline.py --maximum-glibc GLIBC_2.35 <ELF>...
+```
+
+`readelf` must be available on `PATH`. The rolling-release workflow runs the
+checker before upload; tagged releases download the packaged installer and
+every dependency archive named by `installer/dependency-binaries.toml`, then
+inspect their executable payloads before publishing. `make test-glibc-baseline`
+runs the checker’s acceptance, rejection, and generated parser/invariant tests;
+the Linux CI lane executes that target.
+
 ## Running Tests
 
 Run the test suite from the workspace root:

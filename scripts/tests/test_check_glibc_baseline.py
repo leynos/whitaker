@@ -12,9 +12,13 @@ from pathlib import Path
 from typing import Protocol, cast
 
 import pytest
+from hypothesis import given, strategies as st
 
 SCRIPTS = Path(__file__).resolve().parents[1]
 GlibcVersion = tuple[int, int]
+GLIBC_VERSIONS = st.tuples(
+    st.integers(min_value=0, max_value=99), st.integers(min_value=0, max_value=999)
+)
 
 
 class Checker(Protocol):
@@ -32,6 +36,32 @@ class Checker(Protocol):
 
     def read_required_glibc_versions(self, path: Path) -> tuple[GlibcVersion, ...]:
         """Read the GLIBC requirements for the supplied ELF path."""
+        ...
+
+    def parse_glibc_version(self, value: str) -> GlibcVersion:
+        """Parse the supplied GLIBC version string."""
+        ...
+
+    def format_glibc_version(self, version: GlibcVersion) -> str:
+        """Format the supplied comparable GLIBC version."""
+        ...
+
+    def parse_required_glibc_versions(
+        self, version_info: str
+    ) -> tuple[GlibcVersion, ...]:
+        """Parse the required GLIBC versions from readelf output."""
+        ...
+
+    def maximum_required_glibc(
+        self, requirements: tuple[GlibcVersion, ...]
+    ) -> GlibcVersion | None:
+        """Return the highest GLIBC requirement, when present."""
+        ...
+
+    def requirements_exceed_baseline(
+        self, requirements: tuple[GlibcVersion, ...], baseline: GlibcVersion
+    ) -> tuple[GlibcVersion, ...]:
+        """Return requirements higher than the supplied baseline."""
         ...
 
 
@@ -96,6 +126,32 @@ def test_read_required_glibc_versions_accepts_allowed_versions(
     stub_readelf(monkeypatch, checker, {elf_path: version_needs(*versions)})
 
     assert checker.read_required_glibc_versions(elf_path) == expected
+
+
+@pytest.mark.parametrize(
+    ("required", "arguments"),
+    [
+        ("GLIBC_2.17", []),
+        ("GLIBC_2.35", []),
+        ("GLIBC_2.39", ["--maximum-glibc", "GLIBC_2.39"]),
+    ],
+    ids=["older-baseline", "baseline", "custom-baseline"],
+)
+def test_main_accepts_versions_at_or_below_baseline(
+    checker: Checker,
+    elf_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    required: str,
+    arguments: list[str],
+) -> None:
+    """Accept a binary whose greatest GLIBC requirement meets the baseline."""
+    stub_readelf(monkeypatch, checker, {elf_path: version_needs(required)})
+
+    assert checker.main([*arguments, str(elf_path)]) == 0
+    output = capsys.readouterr()
+    assert output.out == f"{elf_path}: maximum required GLIBC version: {required}\n"
+    assert output.err == ""
 
 
 def test_main_rejects_glibc_239(
@@ -207,3 +263,52 @@ def test_parse_glibc_version_rejects_malformed_baseline(
     """Reject a baseline that is not an exact GLIBC_X.Y version."""
     with pytest.raises(SystemExit):
         checker.parse_arguments(["--maximum-glibc", value, "binary"])
+
+
+@given(GLIBC_VERSIONS)
+def test_glibc_version_formatting_round_trips(
+    checker: Checker, version: GlibcVersion
+) -> None:
+    """Preserve every generated GLIBC version through formatting and parsing."""
+    assert checker.parse_glibc_version(checker.format_glibc_version(version)) == version
+
+
+@given(st.lists(GLIBC_VERSIONS, max_size=20))
+def test_parser_sorts_and_deduplicates_generated_requirements(
+    checker: Checker, versions: list[GlibcVersion]
+) -> None:
+    """Return sorted unique requirements for every generated version-needs list."""
+    rendered_versions = tuple(
+        checker.format_glibc_version(version) for version in versions
+    )
+
+    assert checker.parse_required_glibc_versions(
+        version_needs(*rendered_versions)
+    ) == tuple(sorted(set(versions)))
+
+
+@given(st.lists(GLIBC_VERSIONS, max_size=20), GLIBC_VERSIONS)
+def test_requirements_above_baseline_obey_the_ordering_invariant(
+    checker: Checker, requirements: list[GlibcVersion], baseline: GlibcVersion
+) -> None:
+    """Return only generated requirements that are strictly above the baseline."""
+    exceeded = checker.requirements_exceed_baseline(tuple(requirements), baseline)
+
+    assert all(version > baseline for version in exceeded)
+    assert len(exceeded) + sum(version <= baseline for version in requirements) == len(
+        requirements
+    )
+
+
+@given(st.lists(GLIBC_VERSIONS, max_size=20))
+def test_maximum_requirement_bounds_every_generated_requirement(
+    checker: Checker, requirements: list[GlibcVersion]
+) -> None:
+    """Return no maximum for empty inputs and otherwise bound every requirement."""
+    maximum = checker.maximum_required_glibc(tuple(requirements))
+
+    if not requirements:
+        assert maximum is None
+    else:
+        assert maximum in requirements
+        assert all(version <= maximum for version in requirements)
