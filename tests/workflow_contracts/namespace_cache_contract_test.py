@@ -11,7 +11,7 @@ CACHE_ACTION = (
 )
 SETUP_RUST_ACTION = (
     "leynos/shared-actions/.github/actions/setup-rust@"
-    "ac1395031510fbded4e8e1bfb863c91982a183c8"
+    "93ad65e414a16e8f8933a1ca114ccd480fdfa87e"
 )
 NAMESPACE_JOBS = {
     "coverage-check": 2,
