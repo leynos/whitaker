@@ -43,13 +43,14 @@ jobs:
         id: namespace-cache
         uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547  # v1
         with:
-          cache: |
-            rust
-            uv
           path: |
             ~/.cargo/bin
+            ~/.cargo/git
+            ~/.cargo/registry
             ~/.rustup
             ~/.cache/sccache
+            ~/.cache/uv
+            ~/.local/share/uv
 
       - name: Record Namespace cache state
         env:
@@ -141,15 +142,16 @@ jobs:
         id: namespace-cache
         uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547  # v1
         with:
-          cache: |
-            bun
-            rust
-            uv
           path: |
+            ~/.bun/install/cache
             ~/.cargo/bin
+            ~/.cargo/git
+            ~/.cargo/registry
             ~/.rustup
             ~/.cache/cargo-binstall
             ~/.cache/sccache
+            ~/.cache/uv
+            ~/.local/share/uv
 
       - name: Record Namespace cache state
         env:

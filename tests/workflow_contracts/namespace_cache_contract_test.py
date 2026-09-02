@@ -51,6 +51,10 @@ def test_namespace_jobs_have_one_external_cache_owner() -> None:
         setup_step = steps["Setup Rust"]
 
         assert cache_step["uses"] == CACHE_ACTION
+        assert "cache" not in cache_step["with"]
+        cached_paths = cache_step["with"]["path"]
+        assert "~/.cargo/registry" in cached_paths
+        assert "~/.cache/uv" in cached_paths
         assert names.index("Set up Namespace cache") < names.index("Setup Rust")
         assert setup_step["uses"] == SETUP_RUST_ACTION
         assert setup_step["with"] == {

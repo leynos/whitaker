@@ -243,9 +243,14 @@ The Namespace Linux jobs use a repository-specific Namespace volume for Cargo,
 Rust toolchains, installed tool binaries, `uv`, Bun, and the local `sccache`
 directory. `windows-compat` remains GitHub-hosted and retains the GitHub Actions
 `sccache` backend. The two backends are deliberately separate: no
-`actions/cache` step owns a path mounted by the Namespace cache action.
+`actions/cache` step owns a path mounted by the Namespace cache action. The
+Namespace jobs list their durable paths explicitly. They do not use the cache
+action's `rust` mode because it mounts the disposable Cargo `target` directory,
+conflicts with clean builds, and duplicates sccache's ownership. They similarly
+cache Bun and uv data by path so cache planning never requires those commands
+to be installed already.
 
-The shared target cache is intentionally scoped to debug builds:
+The shared compiler cache is intentionally scoped to debug builds:
 
 - `BUILD_PROFILE=debug` keeps cache paths centred on the profile used by the
   normal test and typecheck jobs.
