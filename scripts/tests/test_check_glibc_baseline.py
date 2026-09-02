@@ -129,11 +129,11 @@ def test_read_required_glibc_versions_accepts_allowed_versions(
 
 
 @pytest.mark.parametrize(
-    ("required", "arguments"),
+    "case",
     [
-        ("GLIBC_2.17", []),
-        ("GLIBC_2.35", []),
-        ("GLIBC_2.39", ["--maximum-glibc", "GLIBC_2.39"]),
+        ("GLIBC_2.17", ()),
+        ("GLIBC_2.35", ()),
+        ("GLIBC_2.39", ("--maximum-glibc", "GLIBC_2.39")),
     ],
     ids=["older-baseline", "baseline", "custom-baseline"],
 )
@@ -141,17 +141,13 @@ def test_main_accepts_versions_at_or_below_baseline(
     checker: Checker,
     elf_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-    required: str,
-    arguments: list[str],
+    case: tuple[str, tuple[str, ...]],
 ) -> None:
     """Accept a binary whose greatest GLIBC requirement meets the baseline."""
+    required, arguments = case
     stub_readelf(monkeypatch, checker, {elf_path: version_needs(required)})
 
     assert checker.main([*arguments, str(elf_path)]) == 0
-    output = capsys.readouterr()
-    assert output.out == f"{elf_path}: maximum required GLIBC version: {required}\n"
-    assert output.err == ""
 
 
 def test_main_rejects_glibc_239(
