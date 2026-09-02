@@ -341,10 +341,13 @@ layer's diff from its immediate base before committing.
   target variables contain the same absolute directory; the developers' guide
   documents the corresponding override rule. The same deterministic gate set
   passed before commit.
-- [ ] 2026-09-02: Keep merge gated on exact-head GitHub checks and no blocking
-  CodeRabbit concerns. Fresh review queue `d211e006` is pending; do not merge
-  until its result and the checks for the subsequently pushed head are green.
-- [ ] Complete EP-M3, submit the draft stack, and monitor Namespace jobs.
+- [x] 2026-09-02: After #382 squash-merged as `8ac23d1`, rebased the twelve
+  Namespace-only commits from `691773c` onto that exact `origin/main` tip. The
+  rebase retained the #382 baseline and replayed every Namespace commit
+  one-to-one; a workspace compile passed after each replayed commit.
+- [ ] Keep merge gated on exact-head GitHub checks and no blocking CodeRabbit
+  concerns. Do not merge until the result for the rebased, pushed head is green.
+- [ ] Complete EP-M3 and monitor Namespace jobs.
 
 ## Surprises & discoveries
 
@@ -517,6 +520,10 @@ the published v0.2.7 assets' `GLIBC_2.39` requirement.
   main-branch coverage, release, Windows, mutation, and reusable-workflow
   assignments to preserve their distinct event, platform, or ownership
   boundaries.
+- 2026-09-02: Rebase the Namespace-only layer onto #382's `8ac23d1` squash
+  rather than retaining the obsolete stacked parent. This preserves #382's
+  released baseline while keeping the runner pilot's independently reviewed
+  commits and contracts intact.
 
 ## Outcomes & retrospective
 
