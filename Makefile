@@ -239,7 +239,22 @@ installer-msrv-check: ## Install whitaker-installer with its declared MSRV
 	set -eu; \
 	TMP_DIR=$$(mktemp -d "$${TMPDIR:-/tmp}/whitaker-installer-msrv.XXXXXX"); \
 	trap 'rm -rf -- "$$TMP_DIR"' EXIT INT TERM HUP; \
-	$(CARGO) +1.85.0 install --locked --path installer --root "$$TMP_DIR"; \
+	CARGO_TARGET_DIR="$$TMP_DIR/target" $(CARGO) +1.85.0 package --locked -p whitaker-installer --allow-dirty; \
+	set -- "$$TMP_DIR"/target/package/whitaker-installer-*.crate; \
+	if [ "$$#" -ne 1 ] || [ ! -f "$$1" ]; then \
+		echo "Expected exactly one packaged whitaker-installer crate"; \
+		exit 1; \
+	fi; \
+	PACKAGE_ARCHIVE="$$1"; \
+	PACKAGE_SOURCE_DIR="$$TMP_DIR/package-source"; \
+	mkdir -p "$$PACKAGE_SOURCE_DIR"; \
+	tar -xzf "$$PACKAGE_ARCHIVE" -C "$$PACKAGE_SOURCE_DIR"; \
+	PACKAGE_ROOT=$$(find "$$PACKAGE_SOURCE_DIR" -mindepth 1 -maxdepth 1 -type d -name 'whitaker-installer-*' -print -quit); \
+	if [ -z "$$PACKAGE_ROOT" ]; then \
+		echo "Packaged whitaker-installer crate did not contain a source directory"; \
+		exit 1; \
+	fi; \
+	$(CARGO) +1.85.0 install --locked --path "$$PACKAGE_ROOT" --root "$$TMP_DIR"; \
 	"$$TMP_DIR/bin/whitaker-installer" --version >/dev/null
 
 release-installer-dry-run: ## Build and package the host-platform installer archive

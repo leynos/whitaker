@@ -16,20 +16,23 @@ pull-request jobs.
 
 Issue [#377](https://github.com/leynos/whitaker/issues/377) defines the cold
 installer contract. Issue [#378](https://github.com/leynos/whitaker/issues/378)
-defines the Linux glibc contract. `docs/adr-001-prebuilt-dylint-libraries.md`
-requires Linux release portability through a conservative glibc baseline.
+defines the Linux glibc contract. Issue
+[#387](https://github.com/leynos/whitaker/issues/387) defines the Namespace
+pilot. `docs/adr-001-prebuilt-dylint-libraries.md` requires Linux release
+portability through a conservative glibc baseline.
 `docs/whitaker-dylint-suite-design.md` and `docs/publishing.md` define the
-installer and publishing flows. The estate adoption procedure is
-`/home/leynos/docs/namespace-github-actions-adoption-recipe.md`, last verified
-with `nsc` 0.0.561 on 2026-09-01.
+installer and publishing flows. Issue
+[#386](https://github.com/leynos/whitaker/issues/386) tracks publication of the
+separately maintained estate adoption procedure at a stable URL; its
+workstation-local source was last verified with `nsc` 0.0.561 on 2026-09-01.
 
 The trace links are:
 
 - ISSUE-377 -> EP-M1 -> `make installer-msrv-check`;
 - ISSUE-378 -> ADR-001 -> EP-M2 -> release workflow contracts and an Ubuntu
   22.04 packaged-artefact smoke test; and
-- NAMESPACE-PILOT -> EP-M3 -> workflow contracts, `actionlint`, GitHub Actions,
-  and `nsc github job list` evidence.
+- ISSUE-387 -> EP-M3 -> workflow contracts, `actionlint`, GitHub Actions, and
+  `nsc github job list` evidence.
 
 ## Constraints
 
@@ -210,9 +213,9 @@ admission and provisioning with
 `nsc github job list --repository leynos/whitaker`. Compare queue time,
 execution time, and outcome with the recorded baseline. If a job fails,
 classify admission, provisioning, image prerequisite, command execution, cache,
-and teardown separately before editing. Update
-`/home/leynos/docs/namespace-github-actions-adoption-recipe.md` with any
-generalizable finding.
+and teardown separately before editing. Update the stable estate adoption
+procedure once issue [#386](https://github.com/leynos/whitaker/issues/386) has
+published it with a reviewable URL.
 
 The milestone is complete when structural tests and all repository gates pass,
 the expected jobs appear in `nsc`, and representative migrated jobs complete
@@ -265,6 +268,9 @@ layer's diff from its immediate base before committing.
   in commit `d2234a1`.
 - [x] 2026-09-01: Re-ran `publish-check` against committed `HEAD`; all 1,665
   CI-profile tests and both selected package verifications passed.
+- [x] 2026-09-01: Extended `installer-msrv-check` to package, extract, and
+  install the crate boundary with Rust 1.85, matching issue #377's publication
+  contract.
 - [x] 2026-09-01: Ran `coderabbit review --agent` through the scrutineer for
   EP-M1; it completed with zero findings and no rate-limit event.
 - [ ] Complete EP-M2 and commit the middle stack layer.
@@ -354,6 +360,9 @@ than obscured by an EP-M1 change.
 - 2026-09-01: Preserve Rust 1.85 after the user approved the `zip` 7.2.0
   downgrade. Keep the dependency feature set narrow and rewrite the post-1.85
   let-chain without changing behaviour or the public command line.
+- 2026-09-01: Verify Rust 1.85 against the packaged crate rather than the
+  workspace path. This matches the published-consumer boundary named by issue
+  #377 and keeps the package artefact isolated from stale build output.
 
 ## Outcomes & retrospective
 
@@ -373,3 +382,9 @@ reported 1,665 passed and 5 skipped, the cloned-HEAD Dylint library build
 listed all ten expected libraries, and both `whitaker-common` and
 `whitaker-installer` packages verified. CodeRabbit reported no high-, medium-,
 or low-severity concerns for the committed milestone.
+
+Revision note (2026-09-01): The MSRV verification now packages, extracts, and
+installs `whitaker-installer` under Rust 1.85 so it exercises the published
+crate boundary. The Namespace adoption procedure is tracked in issue #386 until
+its owner publishes a stable URL; this does not change the remaining EP-M2 or
+EP-M3 implementation scope.

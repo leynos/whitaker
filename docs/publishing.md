@@ -52,8 +52,8 @@ than proceeding with stale or absent tools. This behaviour is covered by
 `tests/workflows/test_install_dylint_tools.py`.
 
 The installer declares Rust 1.85 as its minimum supported Rust version. Before
-publishing, run the real locked source-install check as well as the publish
-gate:
+publishing, run the real locked packaged-crate install check as well as the
+publish gate:
 
 ```sh
 make installer-msrv-check
