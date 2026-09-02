@@ -122,9 +122,9 @@ def test_ci_splits_linux_and_windows_jobs_by_purpose(
         parent_name="CI workflow jobs",
     )
 
-    assert linux_job.get("runs-on") == "namespace-profile-default", (
-        "linux-full must run on the deployed Namespace Linux runner"
-    )
+    assert linux_job.get("runs-on") == (
+        "namespace-profile-rust-linux-ci;overrides.cache-tag=whitaker-linux-amd64-v1"
+    ), "linux-full must run on the deployed Namespace Linux runner"
     assert windows_job.get("runs-on") == "windows-latest", (
         "windows-compat must keep using the hosted Windows runner"
     )
@@ -136,7 +136,7 @@ def test_ci_splits_linux_and_windows_jobs_by_purpose(
     )
 
 
-def test_ci_enables_shared_sccache_env_and_debug_target_cache_scope(
+def test_ci_enables_sccache_and_debug_target_cache_scope(
     workflow: Mapping[str, Any],
 ) -> None:
     """Ensure the workflow enables sccache and narrows cache scope to debug builds."""
@@ -146,8 +146,8 @@ def test_ci_enables_shared_sccache_env_and_debug_target_cache_scope(
         "CI must set BUILD_PROFILE=debug so shared target caching does not "
         "expand to the entire target tree"
     )
-    assert env.get("SCCACHE_GHA_ENABLED") == "true", (
-        "CI must enable the GitHub Actions-backed sccache integration"
+    assert "SCCACHE_GHA_ENABLED" not in env, (
+        "Namespace jobs must not inherit the GitHub Actions sccache backend"
     )
     assert env.get("RUSTC_WRAPPER") == "sccache", "CI must route rustc through sccache"
     assert str(env.get("CARGO_INCREMENTAL")) == "0", (
@@ -185,18 +185,24 @@ def _coverage_check_job(workflow: Mapping[str, Any]) -> dict[str, Any]:
     assert coverage_job.get("if") == "github.event_name == 'pull_request'", (
         "coverage-check must run only for pull requests"
     )
-    assert coverage_job.get("runs-on") == "namespace-profile-default", (
-        "coverage-check must use the deployed Namespace Linux runner"
-    )
+    assert coverage_job.get("runs-on") == (
+        "namespace-profile-rust-linux-light;overrides.cache-tag=whitaker-linux-amd64-v1"
+    ), "coverage-check must use the deployed Namespace Linux runner"
     assert coverage_job.get("defaults", {}).get("run", {}).get("shell") == "bash", (
         "coverage-check must use Bash for Makefile targets"
     )
     assert _step_names(coverage_job) == [
         "Checkout",
+        "Set up Namespace cache",
+        "Record Namespace cache state",
         "Setup Rust",
+        "Install sccache",
         "Install cargo-nextest",
         "Install cargo-llvm-cov",
+        "Reset sccache statistics",
         "Generate coverage",
+        "Record sccache effectiveness",
+        "Upload sccache statistics",
         "Check coverage against CodeScene gates",
     ], "coverage-check must contain only the approved ordered steps"
     return coverage_job
@@ -218,8 +224,12 @@ def _assert_coverage_checkout_and_setup(coverage_job: Mapping[str, Any]) -> None
     setup_step = _find_step(coverage_job, "Setup Rust")
     assert setup_step.get("uses") == (
         "leynos/shared-actions/.github/actions/setup-rust@"
-        "f4764bea8d813b1a8f7ebc37a44907d3c3b1e0e4"
+        "ac1395031510fbded4e8e1bfb863c91982a183c8"
     ), "coverage-check must reuse the current main-branch Rust setup pin"
+    assert setup_step.get("with") == {
+        "cache-provider": "external",
+        "use-sccache": False,
+    }, "coverage-check must give Namespace sole ownership of Rust caches"
 
 
 def _assert_coverage_tool_installation(coverage_job: Mapping[str, Any]) -> None:
@@ -256,7 +266,7 @@ def _assert_codescene_check(coverage_job: Mapping[str, Any]) -> None:
     ), "the CodeScene step must guard its pull-request secret"
     assert check_step.get("uses") == (
         "leynos/shared-actions/.github/actions/upload-codescene-coverage@"
-        "f4764bea8d813b1a8f7ebc37a44907d3c3b1e0e4"
+        "32c8ea649ea44d40119f348ad48861212532061f"
     ), "coverage-check must use the proven CodeScene action pin"
     assert check_step.get("with") == {
         "format": "lcov",
@@ -309,11 +319,10 @@ def test_linux_full_keeps_the_full_linux_validation_stack(
     _assert_steps_in_order(
         _step_names(linux_job),
         [
-            "Check formatting",
             "Install bun",
+            "Check formatting",
             "Install Mermaid CLI",
             "Setup uv",
-            "Setup Rust for Merman",
             "Install Merman CLI",
             "Install Nixie",
             "Enforce en-GB-oxendict spelling",
@@ -331,16 +340,13 @@ def test_linux_full_keeps_the_full_linux_validation_stack(
         'make publish-check PUBLISH_PACKAGES="whitaker-common whitaker-installer"'
     ), "linux-full must publish-check the release crates on Linux only"
 
-    assert _find_step(linux_job, "Install Merman CLI").get("run") == (
-        'cargo +1.95.0 install merman-cli --version "=0.7.0" --locked'
-    ), "linux-full must install Merman 0.7.0 with its pinned Rust 1.95 toolchain"
-    merman_setup = _find_step(linux_job, "Setup Rust for Merman")
-    assert merman_setup.get("uses") == (
-        "dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772"
-    ), "linux-full must pin the Merman Rust setup action"
-    assert merman_setup.get("with", {}).get("toolchain") == "1.95.0", (
-        "linux-full must pin Merman's Rust toolchain"
+    merman_install = _find_step(linux_job, "Install Merman CLI").get("run", "")
+    assert "merman-cli-x86_64-unknown-linux-gnu.tar.xz" in merman_install
+    assert "dfdc2a978a884aa5a2ad5b85285fb5175cb435e82cf96efa860a550749e09d99" in (
+        merman_install
     )
+    assert "sha256sum --check" in merman_install
+    assert "cargo install" not in merman_install
     assert (
         _find_step(linux_job, "Enforce en-GB-oxendict spelling").get("run")
         == "make spelling"
@@ -407,7 +413,8 @@ def test_windows_compat_stays_limited_to_windows_compatibility_checks(
             "Test",
             "Installer smoke test",
             "Installer release dry run",
-            "Show sccache stats",
+            "Record sccache effectiveness",
+            "Upload sccache statistics",
         ],
         (
             "windows-compat must stay focused on Rust tests, installer smoke "
@@ -420,7 +427,6 @@ def test_windows_compat_stays_limited_to_windows_compatibility_checks(
         "Install bun",
         "Install Mermaid CLI",
         "Setup uv",
-        "Setup Rust for Merman",
         "Install Merman CLI",
         "Install Nixie",
         "Enforce en-GB-oxendict spelling",

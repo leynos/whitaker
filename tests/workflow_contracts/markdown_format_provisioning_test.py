@@ -1,6 +1,5 @@
 """Validate CI provisioning for the canonical Markdown formatter."""
 
-import re
 from pathlib import Path
 from typing import Any
 
@@ -26,31 +25,28 @@ def test_linux_full_provisions_pinned_markdown_tools_before_checking() -> None:
     step_names = [step["name"] for step in steps if "name" in step]
 
     assert (
-        step_names.index("Install bun")
-        < step_names.index("Cache mdtablefix")
+        step_names.index("Set up Namespace cache")
+        < step_names.index("Install bun")
         < step_names.index("Install mdtablefix")
         < step_names.index("Install Markdown lint CLI")
         < step_names.index("Check formatting")
     )
 
-    cache_action = steps_by_name["Cache mdtablefix"]["uses"]
-    assert re.fullmatch(r"actions/cache@[0-9a-f]{40}", cache_action)
-    cache_key = steps_by_name["Cache mdtablefix"]["with"]["key"]
-    assert "runner.os" in cache_key
-    assert "runner.arch" in cache_key
-    assert "env.MDTABLEFIX_VERSION" in cache_key
+    cache_step = steps_by_name["Set up Namespace cache"]
+    assert cache_step["uses"] == (
+        "namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547"
+    )
+    assert "~/.cargo/bin" in cache_step["with"]["path"]
+    assert "~/.cache/cargo-binstall" in cache_step["with"]["path"]
 
     install_script = steps_by_name["Install mdtablefix"]["run"]
     assert 'expected_mdtablefix_version="mdtablefix ${MDTABLEFIX_VERSION}"' in (
         install_script
     )
-    assert (
-        'cargo binstall --no-confirm --locked "mdtablefix@${MDTABLEFIX_VERSION}"'
-        in (install_script)
-    )
-    assert 'cargo install --locked mdtablefix --version "${MDTABLEFIX_VERSION}"' in (
-        install_script
-    )
+    assert "cargo binstall --no-confirm --locked" in install_script
+    assert "--strategies crate-meta-data,quick-install" in install_script
+    assert '"mdtablefix@${MDTABLEFIX_VERSION}"' in install_script
+    assert "cargo install" not in install_script
     assert "mdtablefix --version 2>/dev/null" in install_script
     assert "installed_mdtablefix_version=\"$(mdtablefix --version | tr -d '\\r')\"" in (
         install_script
@@ -64,8 +60,9 @@ def test_linux_full_provisions_pinned_markdown_tools_before_checking() -> None:
     assert 'markdownlint_version_output="$(markdownlint-cli2 --version)"' in (
         markdownlint_install_script
     )
-    assert "installed_markdownlint_version=\"${markdownlint_version_output%%$'\\n'*}\"" in (
-        markdownlint_install_script
+    assert (
+        "installed_markdownlint_version=\"${markdownlint_version_output%%$'\\n'*}\""
+        in (markdownlint_install_script)
     )
     assert (
         'expected_markdownlint_version="markdownlint-cli2 v${MARKDOWNLINT_CLI2_VERSION}"'

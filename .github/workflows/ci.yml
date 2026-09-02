@@ -18,7 +18,6 @@ env:
   MARKDOWNLINT_CLI2_VERSION: '0.20.0'
   RUSTFLAGS: -D warnings
   RUSTDOCFLAGS: -D warnings
-  SCCACHE_GHA_ENABLED: "true"
   RUSTC_WRAPPER: sccache
 # CodeScene coverage: main-branch coverage is uploaded by
 # coverage-main.yml on push. The pull-request changed-line gate runs in
@@ -27,7 +26,9 @@ env:
 jobs:
   coverage-check:
     if: github.event_name == 'pull_request'
-    runs-on: namespace-profile-default
+    runs-on: namespace-profile-rust-linux-light;overrides.cache-tag=whitaker-linux-amd64-v1
+    env:
+      NEXTEST_TEST_THREADS: 2
     defaults:
       run:
         shell: bash
@@ -38,21 +39,78 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Set up Namespace cache
+        id: namespace-cache
+        uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547  # v1
+        with:
+          cache: |
+            rust
+            uv
+          path: |
+            ~/.cargo/bin
+            ~/.rustup
+            ~/.cache/sccache
+
+      - name: Record Namespace cache state
+        env:
+          NAMESPACE_CACHE_HIT: ${{ steps.namespace-cache.outputs.cache-hit }}
+        run: |
+          {
+            printf '### Cache observations\n\n'
+            printf -- "- Cache tag: \`whitaker-linux-amd64-v1\`\n"
+            printf -- "- Namespace volume hit: \`%s\`\n" "${NAMESPACE_CACHE_HIT}"
+            printf -- '- Archive restore/save: not applicable; Namespace exposes the volume locally.\n'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@32c8ea649ea44d40119f348ad48861212532061f
+        uses: leynos/shared-actions/.github/actions/setup-rust@ac1395031510fbded4e8e1bfb863c91982a183c8
+        with:
+          cache-provider: external
+          use-sccache: false
+
+      - name: Install sccache
+        uses: taiki-e/install-action@db22c42b5af88356329b9a8056bb2c2f026d5a10
+        with:
+          tool: sccache@0.14.0
+          fallback: none
 
       - name: Install cargo-nextest
         uses: taiki-e/install-action@db22c42b5af88356329b9a8056bb2c2f026d5a10
         with:
           tool: nextest@0.9.114
+          fallback: none
 
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@db22c42b5af88356329b9a8056bb2c2f026d5a10
         with:
           tool: cargo-llvm-cov@0.6.24
+          fallback: none
+
+      - name: Reset sccache statistics
+        run: sccache --zero-stats
 
       - name: Generate coverage
         run: make coverage
+
+      - name: Record sccache effectiveness
+        if: always()
+        run: |
+          sccache --show-stats | tee sccache-stats.txt
+          sccache --show-stats --stats-format json > sccache-stats.json
+          {
+            printf '### sccache\n\n```text\n'
+            cat sccache-stats.txt
+            printf '```\n'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload sccache statistics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
+        with:
+          name: sccache-stats-coverage-check
+          path: sccache-stats.json
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Check coverage against CodeScene gates
         env:
@@ -67,7 +125,9 @@ jobs:
           installer-checksum: ${{ vars.CODESCENE_CLI_SHA256 }}
 
   linux-full:
-    runs-on: namespace-profile-default
+    runs-on: namespace-profile-rust-linux-ci;overrides.cache-tag=whitaker-linux-amd64-v1
+    env:
+      NEXTEST_TEST_THREADS: 4
     defaults:
       run:
         shell: bash
@@ -77,11 +137,48 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Set up Namespace cache
+        id: namespace-cache
+        uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547  # v1
+        with:
+          cache: |
+            bun
+            rust
+            uv
+          path: |
+            ~/.cargo/bin
+            ~/.rustup
+            ~/.cache/cargo-binstall
+            ~/.cache/sccache
+
+      - name: Record Namespace cache state
+        env:
+          NAMESPACE_CACHE_HIT: ${{ steps.namespace-cache.outputs.cache-hit }}
+        run: |
+          {
+            printf '### Cache observations\n\n'
+            printf -- "- Cache tag: \`whitaker-linux-amd64-v1\`\n"
+            printf -- "- Namespace volume hit: \`%s\`\n" "${NAMESPACE_CACHE_HIT}"
+            printf -- '- Archive restore/save: not applicable; Namespace exposes the volume locally.\n'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Check Verus FragmentId bridge
         run: scripts/check-verus-fragment-id-bridge.sh
 
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@32c8ea649ea44d40119f348ad48861212532061f
+        uses: leynos/shared-actions/.github/actions/setup-rust@ac1395031510fbded4e8e1bfb863c91982a183c8
+        with:
+          cache-provider: external
+          use-sccache: false
+
+      - name: Install sccache
+        uses: taiki-e/install-action@db22c42b5af88356329b9a8056bb2c2f026d5a10
+        with:
+          tool: sccache@0.14.0
+          fallback: none
+
+      - name: Reset sccache statistics
+        run: sccache --zero-stats
 
       - name: Setup Rust for installer MSRV
         uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772  # master
@@ -95,20 +192,12 @@ jobs:
         uses: taiki-e/install-action@db22c42b5af88356329b9a8056bb2c2f026d5a10
         with:
           tool: nextest@0.9.114
+          fallback: none
 
       - name: Install bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6  # v2
         with:
           bun-version: '1.2.21'
-
-      - name: Cache mdtablefix
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
-        with:
-          path: |
-            ~/.cargo/bin/mdtablefix
-            ~/.cargo/bin/mdtablefix.exe
-            ~/.cache/cargo-binstall
-          key: mdtablefix-${{ runner.os }}-${{ runner.arch }}-${{ env.MDTABLEFIX_VERSION }}
 
       - name: Install mdtablefix
         # `make check-fmt` needs the exact release that defines the repository's
@@ -120,12 +209,9 @@ jobs:
             installed_mdtablefix_version="$(mdtablefix --version 2>/dev/null | tr -d '\r')"
           fi
           if [[ "${installed_mdtablefix_version}" != "${expected_mdtablefix_version}" ]]; then
-            if cargo binstall --version >/dev/null 2>&1; then
-              cargo binstall --no-confirm --locked "mdtablefix@${MDTABLEFIX_VERSION}"
-            else
-              echo "cargo-binstall unavailable; building mdtablefix from crates.io"
-              cargo install --locked mdtablefix --version "${MDTABLEFIX_VERSION}"
-            fi
+            cargo binstall --no-confirm --locked \
+              --strategies crate-meta-data,quick-install \
+              "mdtablefix@${MDTABLEFIX_VERSION}"
           fi
           installed_mdtablefix_version="$(mdtablefix --version | tr -d '\r')"
           if [[ "${installed_mdtablefix_version}" != "${expected_mdtablefix_version}" ]]; then
@@ -163,13 +249,33 @@ jobs:
       - name: GLIBC baseline checker
         run: make test-glibc-baseline
 
-      - name: Setup Rust for Merman
-        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772  # master
-        with:
-          toolchain: '1.95.0'
-
       - name: Install Merman CLI
-        run: cargo +1.95.0 install merman-cli --version "=0.7.0" --locked
+        run: |
+          expected_merman_version="merman-cli 0.7.0"
+          installed_merman_version=""
+          if command -v merman-cli >/dev/null 2>&1; then
+            installed_merman_version="$(merman-cli --version 2>/dev/null | tr -d '\r')"
+          fi
+          if [[ "${installed_merman_version}" != "${expected_merman_version}" ]]; then
+            archive="merman-cli-x86_64-unknown-linux-gnu.tar.xz"
+            archive_url="https://github.com/Latias94/merman/releases/download/v0.7.0/${archive}"
+            expected_sha256="dfdc2a978a884aa5a2ad5b85285fb5175cb435e82cf96efa860a550749e09d99"
+            install_directory="$(mktemp -d)"
+            trap 'find "${install_directory}" -depth -delete' EXIT
+            curl --fail --location --silent --show-error \
+              --output "${install_directory}/${archive}" "${archive_url}"
+            printf '%s  %s\n' "${expected_sha256}" "${install_directory}/${archive}" \
+              | sha256sum --check
+            tar -xJf "${install_directory}/${archive}" -C "${install_directory}"
+            install -m 0755 \
+              "${install_directory}/merman-cli-x86_64-unknown-linux-gnu/merman-cli" \
+              "${HOME}/.cargo/bin/merman-cli"
+          fi
+          installed_merman_version="$(merman-cli --version | tr -d '\r')"
+          if [[ "${installed_merman_version}" != "${expected_merman_version}" ]]; then
+            echo "expected ${expected_merman_version}, got ${installed_merman_version}" >&2
+            exit 1
+          fi
 
       - name: Install Nixie
         run: uv tool install --python 3.14 "nixie-cli==1.1.0"
@@ -197,8 +303,31 @@ jobs:
       - name: Publish dry run
         run: make publish-check PUBLISH_PACKAGES="whitaker-common whitaker-installer"
 
+      - name: Record sccache effectiveness
+        if: always()
+        run: |
+          sccache --show-stats | tee sccache-stats.txt
+          sccache --show-stats --stats-format json > sccache-stats.json
+          {
+            printf '### sccache\n\n```text\n'
+            cat sccache-stats.txt
+            printf '```\n'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload sccache statistics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
+        with:
+          name: sccache-stats-linux-full
+          path: sccache-stats.json
+          if-no-files-found: error
+          retention-days: 14
+
   windows-compat:
     runs-on: windows-latest
+    env:
+      NEXTEST_TEST_THREADS: 4
+      SCCACHE_GHA_ENABLED: "true"
     defaults:
       run:
         shell: bash
@@ -215,6 +344,10 @@ jobs:
         uses: taiki-e/install-action@db22c42b5af88356329b9a8056bb2c2f026d5a10
         with:
           tool: nextest@0.9.114
+          fallback: none
+
+      - name: Reset sccache statistics
+        run: sccache --zero-stats
 
       - name: Test
         run: make test NEXTEST_PROFILE=ci
@@ -225,6 +358,22 @@ jobs:
       - name: Installer release dry run
         run: make release-installer-dry-run
 
-      - name: Show sccache stats
+      - name: Record sccache effectiveness
         if: ${{ always() }}
-        run: sccache --show-stats || true
+        run: |
+          sccache --show-stats | tee sccache-stats.txt
+          sccache --show-stats --stats-format json > sccache-stats.json
+          {
+            printf '### sccache\n\n```text\n'
+            cat sccache-stats.txt
+            printf '```\n'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload sccache statistics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
+        with:
+          name: sccache-stats-windows-compat
+          path: sccache-stats.json
+          if-no-files-found: error
+          retention-days: 14
