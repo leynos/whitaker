@@ -18,11 +18,15 @@ def _load_workflow() -> dict[str, Any]:
 def test_linux_full_provisions_pinned_markdown_tools_before_checking() -> None:
     """Require verified Markdown tool installations before the format gate."""
     workflow = _load_workflow()
-    assert workflow["env"]["MDTABLEFIX_VERSION"] == "0.5.0"
+    assert workflow["env"]["MDTABLEFIX_VERSION"] == "0.5.0", (
+        "CI must pin the mdtablefix release version"
+    )
     assert workflow["env"]["MDTABLEFIX_LINUX_X64_SHA256"] == (
         "bd38cd30f0405120c453b3e80b0d4e78a34d93d2c2121a0fd4ace4a54bacaeeb"
+    ), "CI must pin the verified mdtablefix Linux x86_64 checksum"
+    assert workflow["env"]["MARKDOWNLINT_CLI2_VERSION"] == "0.20.0", (
+        "CI must pin the Markdown lint CLI version"
     )
-    assert workflow["env"]["MARKDOWNLINT_CLI2_VERSION"] == "0.20.0"
     steps = workflow["jobs"]["linux-full"]["steps"]
     steps_by_name = {step["name"]: step for step in steps if "name" in step}
     step_names = [step["name"] for step in steps if "name" in step]
@@ -33,7 +37,7 @@ def test_linux_full_provisions_pinned_markdown_tools_before_checking() -> None:
         < step_names.index("Install mdtablefix")
         < step_names.index("Install Markdown lint CLI")
         < step_names.index("Check formatting")
-    )
+    ), "CI must cache and install Markdown tools before checking formatting"
 
     cache_step = steps_by_name["Set up Namespace cache"]
     assert cache_step["uses"] == (

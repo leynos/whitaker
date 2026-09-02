@@ -22,16 +22,16 @@ NAMESPACE_JOBS = {
 def _load_jobs() -> dict[str, dict[str, Any]]:
     """Load the CI jobs as workflow mappings."""
     workflow = yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8"))
-    assert isinstance(workflow, dict)
+    assert isinstance(workflow, dict), "CI workflow must parse to a mapping"
     jobs = workflow.get("jobs")
-    assert isinstance(jobs, dict)
+    assert isinstance(jobs, dict), "CI workflow must declare a jobs mapping"
     return jobs
 
 
 def _steps_by_name(job: dict[str, Any]) -> dict[str, dict[str, Any]]:
     """Index the named workflow steps for one job."""
     steps = job.get("steps")
-    assert isinstance(steps, list)
+    assert isinstance(steps, list), "Namespace job must declare a step list"
     return {step["name"]: step for step in steps if isinstance(step.get("name"), str)}
 
 
@@ -49,22 +49,40 @@ def test_namespace_jobs_have_one_external_cache_owner() -> None:
         names = _step_names(job)
         cache_step = steps["Set up Namespace cache"]
         setup_step = steps["Setup Rust"]
+        cache_actions = [
+            step for step in job["steps"] if step.get("uses") == CACHE_ACTION
+        ]
 
-        assert cache_step["uses"] == CACHE_ACTION
-        assert "cache" not in cache_step["with"]
+        assert len(cache_actions) == 1, (
+            f"{job_name} must declare exactly one Namespace cache action"
+        )
+        assert cache_step["uses"] == CACHE_ACTION, (
+            f"{job_name} must use the pinned Namespace cache action"
+        )
+        assert "cache" not in cache_step["with"], (
+            f"{job_name} must configure explicit cache paths"
+        )
         cached_paths = cache_step["with"]["path"]
-        assert "~/.cargo/registry" in cached_paths
-        assert "~/.cache/uv" in cached_paths
-        assert names.index("Set up Namespace cache") < names.index("Setup Rust")
-        assert setup_step["uses"] == SETUP_RUST_ACTION
+        assert "~/.cargo/registry" in cached_paths, (
+            f"{job_name} must cache Cargo registry downloads"
+        )
+        assert "~/.cache/uv" in cached_paths, (
+            f"{job_name} must cache uv downloads"
+        )
+        assert names.index("Set up Namespace cache") < names.index("Setup Rust"), (
+            f"{job_name} must mount its cache before Rust setup"
+        )
+        assert setup_step["uses"] == SETUP_RUST_ACTION, (
+            f"{job_name} must use the pinned shared Rust setup action"
+        )
         assert setup_step["with"] == {
             "cache-provider": "external",
             "use-sccache": False,
-        }
+        }, f"{job_name} must delegate cache ownership to Namespace"
         assert not any(
             str(step.get("uses", "")).startswith("actions/cache@")
             for step in steps.values()
-        )
+        ), f"{job_name} must not mix GitHub and Namespace caches"
 
 
 def test_namespace_jobs_report_volume_and_compiler_cache_results() -> None:

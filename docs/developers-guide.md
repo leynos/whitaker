@@ -261,9 +261,9 @@ The shared compiler cache is intentionally scoped to debug builds:
 - `RUSTFLAGS=-D warnings` and `RUSTDOCFLAGS=-D warnings` preserve the
   warnings-as-errors contract even when builds are routed through `sccache`.
 
-Each build lane resets `sccache` counters before compilation, appends the human
-readable statistics to the job summary, and retains the JSON statistics for 14
-days. Namespace jobs also record the cache tag and the cache action's
+Each build lane resets `sccache` counters before compilation, appends the
+human-readable statistics to the job summary, and retains the JSON statistics
+for 14 days. Namespace jobs also record the cache tag and the cache action's
 `cache-hit` output. Namespace volumes are mounted locally, so there is no
 archive restore or save phase and the action exposes no transfer-byte metric.
 Use `nsc instance report` after comparable cold and warm runs to correlate
@@ -293,6 +293,8 @@ pushing to catch installer regressions early.
 The repository-owned pull-request Linux jobs use two deployed Ubuntu 24.04
 amd64 profiles:
 
+Table: Deployed Namespace profiles for repository-owned Linux jobs.
+
 | Job              | Profile            | Shape        | Cache volume |
 | ---------------- | ------------------ | ------------ | ------------ |
 | `coverage-check` | `rust-linux-light` | 2 vCPU, 4 GB | 20 GB        |
@@ -300,8 +302,9 @@ amd64 profiles:
 
 Both runner labels append `overrides.cache-tag=whitaker-linux-amd64-v1`, so the
 profiles attach one repository-specific volume rather than allocating a volume
-per shape. Cache writes are restricted to `main`. Pull-request jobs read the
-last trusted generation but cannot publish one.
+per shape. The cache action exposes a locally writable mount, but both deployed
+profiles set `allow_commit_from_branch` to `main`. Pull-request jobs therefore
+read the last trusted generation without publishing their local changes.
 
 `coverage-check` is excluded from `workflow_dispatch`, so a manual run against
 `main` makes `linux-full` the sole cold-cache producer and avoids two jobs

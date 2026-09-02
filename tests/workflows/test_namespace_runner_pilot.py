@@ -23,13 +23,15 @@ from ruamel.yaml import YAML
 
 WORKFLOWS_DIRECTORY = Path(__file__).resolve().parents[2] / ".github/workflows"
 WORKFLOW_FILE_GLOBS = ("*.yaml", "*.yml")
-NAMESPACE_CACHE_TAG = "overrides.cache-tag=whitaker-linux-amd64-v1"
-NAMESPACE_LINUX_CI_PROFILE = f"namespace-profile-rust-linux-ci;{NAMESPACE_CACHE_TAG}"
-NAMESPACE_LINUX_LIGHT_PROFILE = (
+NAMESPACE_CACHE_TAG: str = "overrides.cache-tag=whitaker-linux-amd64-v1"
+NAMESPACE_LINUX_CI_PROFILE: str = (
+    f"namespace-profile-rust-linux-ci;{NAMESPACE_CACHE_TAG}"
+)
+NAMESPACE_LINUX_LIGHT_PROFILE: str = (
     f"namespace-profile-rust-linux-light;{NAMESPACE_CACHE_TAG}"
 )
 
-MIGRATED_PULL_REQUEST_JOBS = {
+MIGRATED_PULL_REQUEST_JOBS: dict[str, dict[str, str]] = {
     "ci.yml": {
         "coverage-check": NAMESPACE_LINUX_LIGHT_PROFILE,
         "linux-full": NAMESPACE_LINUX_CI_PROFILE,

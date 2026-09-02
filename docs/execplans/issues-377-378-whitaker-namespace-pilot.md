@@ -127,13 +127,15 @@ installer, `cargo-dylint`, and `dylint-link`. Existing v0.2.7 assets are the
 negative control: their ELF tables contain `GLIBC_2.39` and fail to start on
 Ubuntu 22.04.
 
-The third invariant, INV-RUNNER, is that each repository-owned migrated Linux
-job uses `namespace-profile-default`, while jobs with retained platform
-contracts keep their existing runner expressions. Deterministic workflow tests
-enumerate the expected assignments and reject a GitHub-hosted, UbiCloud, or
-wrong Namespace label at a migrated site. `actionlint` validates the
-intentional self-hosted label. A live pull-request run plus `nsc` admission
-evidence discharges the external runner axiom.
+The third invariant, INV-RUNNER, is that `coverage-check` uses
+`namespace-profile-rust-linux-light` and `linux-full` uses
+`namespace-profile-rust-linux-ci`, with both labels selecting the shared
+`whitaker-linux-amd64-v1` cache tag. Jobs with retained platform contracts keep
+their existing runner expressions. Deterministic workflow tests enumerate the
+expected assignments and reject a GitHub-hosted, UbiCloud, or wrong Namespace
+label at a migrated site. `actionlint` validates the intentional self-hosted
+labels. A live pull-request run plus `nsc` admission evidence discharges the
+external runner axiom.
 
 These are finite configuration partitions rather than unbounded algorithms, so
 parameterized example tests and real boundary execution provide proportionate
