@@ -224,7 +224,7 @@ def _assert_coverage_checkout_and_setup(coverage_job: Mapping[str, Any]) -> None
     setup_step = _find_step(coverage_job, "Setup Rust")
     assert setup_step.get("uses") == (
         "leynos/shared-actions/.github/actions/setup-rust@"
-        "93ad65e414a16e8f8933a1ca114ccd480fdfa87e"
+        "5daae0a332441d170d88ca648c9e71f0bbe96cb3"
     ), "coverage-check must reuse the current main-branch Rust setup pin"
     assert setup_step.get("with") == {
         "cache-provider": "external",

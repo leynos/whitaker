@@ -63,7 +63,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@93ad65e414a16e8f8933a1ca114ccd480fdfa87e
+        uses: leynos/shared-actions/.github/actions/setup-rust@5daae0a332441d170d88ca648c9e71f0bbe96cb3
         with:
           cache-provider: external
           use-sccache: false
@@ -166,7 +166,7 @@ jobs:
         run: scripts/check-verus-fragment-id-bridge.sh
 
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@93ad65e414a16e8f8933a1ca114ccd480fdfa87e
+        uses: leynos/shared-actions/.github/actions/setup-rust@5daae0a332441d170d88ca648c9e71f0bbe96cb3
         with:
           cache-provider: external
           use-sccache: false
