@@ -248,7 +248,8 @@ Namespace jobs list their durable paths explicitly. They do not use the cache
 action's `rust` mode because it mounts the disposable Cargo `target` directory,
 conflicts with clean builds, and duplicates sccache's ownership. They similarly
 cache Bun and uv data by path so cache planning never requires those commands
-to be installed already.
+to be installed already. Both Linux lanes install the supported prebuilt
+sccache 0.16.0 release and forbid an installer fallback to compilation.
 
 The shared compiler cache is intentionally scoped to debug builds:
 

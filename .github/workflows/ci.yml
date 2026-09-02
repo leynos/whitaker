@@ -72,7 +72,7 @@ jobs:
       - name: Install sccache
         uses: taiki-e/install-action@db22c42b5af88356329b9a8056bb2c2f026d5a10
         with:
-          tool: sccache@0.14.0
+          tool: sccache@0.16.0
           fallback: none
 
       - name: Install cargo-nextest
@@ -176,7 +176,7 @@ jobs:
       - name: Install sccache
         uses: taiki-e/install-action@db22c42b5af88356329b9a8056bb2c2f026d5a10
         with:
-          tool: sccache@0.14.0
+          tool: sccache@0.16.0
           fallback: none
 
       - name: Reset sccache statistics
