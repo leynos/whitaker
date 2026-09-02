@@ -270,11 +270,12 @@ Use `nsc instance report` after comparable cold and warm runs to correlate
 these statistics with runtime and paid unit-minutes.
 
 Tool setup must not compile tools from source. `taiki-e/install-action` calls
-disable fallbacks and use checksum-verified release artefacts. `mdtablefix`
-uses only `cargo-binstall` metadata or QuickInstall strategies; the compile
-strategy is excluded. Merman 0.7.0 is installed from its official Linux release
-archive after checking the pinned SHA-256 digest. The attached volume retains
-the installed binaries and package download stores.
+pin a release whose catalogue contains each requested tool, disable fallbacks,
+and use checksum-verified release artefacts. `mdtablefix` uses only
+`cargo-binstall` metadata or QuickInstall strategies; the compile strategy is
+excluded. Merman 0.7.0 is installed from its official Linux release archive
+after checking the pinned SHA-256 digest. The attached volume retains the
+installed binaries and package download stores.
 
 Table: Test profiles and typical usage.
 

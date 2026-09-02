@@ -110,7 +110,11 @@ def test_namespace_tool_installers_cannot_compile_fallbacks() -> None:
         for step in steps.values():
             if str(step.get("uses", "")).startswith("taiki-e/install-action@"):
                 assert step.get("with", {}).get("fallback") == "none"
-        assert steps["Install sccache"]["with"]["tool"] == "sccache@0.16.0"
+        sccache_step = steps["Install sccache"]
+        assert sccache_step["uses"] == (
+            "taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68"
+        )
+        assert sccache_step["with"]["tool"] == "sccache@0.16.0"
 
     merman_script = _steps_by_name(jobs["linux-full"])["Install Merman CLI"]["run"]
     assert "sha256sum --check" in merman_script
