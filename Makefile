@@ -19,6 +19,10 @@ NEXTEST_PROFILE ?=
 # over the exact same crate subset (TEST_CARGO_FLAGS) and RUSTFLAGS.
 TEST_RUNNER ?= nextest run
 COVERAGE_OUTPUT ?= lcov.info
+# Both the outer coverage driver and nested Cargo invocations must use this
+# exact directory. cargo-llvm-cov otherwise passes its target only as a
+# Nextest argument, which Dylint's nested Cargo build cannot observe.
+COVERAGE_TARGET_DIR ?= $(CURDIR)/target/llvm-cov-target
 RUST_FLAGS ?= -D warnings
 RUSTDOC_FLAGS ?= --cfg docsrs -D warnings
 MDLINT ?= $(or $(shell command -v markdownlint-cli2 2>/dev/null),$(HOME)/.bun/bin/markdownlint-cli2)
@@ -130,7 +134,9 @@ coverage: ## Generate LCOV coverage over the CI-tested crate subset
 	@# so coverage never attempts a bare `--workspace` build the suite
 	@# cannot support.
 	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v cargo-llvm-cov >/dev/null || { echo "Install cargo-llvm-cov (cargo install cargo-llvm-cov)"; exit 1; }
-	@$(MAKE) test TEST_RUNNER="llvm-cov nextest --lcov --output-path $(COVERAGE_OUTPUT)"
+	@CARGO_LLVM_COV_TARGET_DIR="$(COVERAGE_TARGET_DIR)" \
+		CARGO_TARGET_DIR="$(COVERAGE_TARGET_DIR)" \
+		$(MAKE) test TEST_RUNNER="llvm-cov nextest --lcov --output-path $(COVERAGE_OUTPUT)"
 
 workflow-test: workflow-test-deps ## Run opt-in GitHub workflow smoke tests with act + pytest
 	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v act >/dev/null || { echo "Install act to run workflow tests"; exit 1; }

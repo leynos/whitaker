@@ -3394,6 +3394,7 @@ name = "whitaker"
 version = "0.2.7"
 dependencies = [
  "camino",
+ "cap-std 4.0.3",
  "cargo_metadata",
  "clap",
  "dylint_linting",

@@ -254,7 +254,6 @@ fn runner_env_guard() -> Option<RunnerEnvGuard> {
             env::remove_var("RUSTC_WRAPPER");
         }
     });
-
     #[cfg(windows)]
     if !vcpkg_root_was_absent && rustc_wrapper_previous.is_none() {
         // Nothing was mutated; release the guard early.

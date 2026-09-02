@@ -42,7 +42,23 @@ def test_recipe_lines_are_empty_for_an_absent_target() -> None:
         "an absent Makefile target must yield no recipe lines"
     )
 
+def test_coverage_recipe_exports_one_explicit_nested_cargo_target() -> None:
+    """Require outer coverage and nested Cargo builds to share one target."""
+    makefile = (REPO_ROOT / "Makefile").read_text(encoding="utf-8")
+    recipe = "\n".join(_makefile_recipe_lines("coverage"))
 
+    assert "COVERAGE_TARGET_DIR ?= $(CURDIR)/target/llvm-cov-target" in makefile, (
+        "coverage must provide the default shared Cargo target directory"
+    )
+    assert 'CARGO_LLVM_COV_TARGET_DIR="$(COVERAGE_TARGET_DIR)"' in recipe, (
+        "coverage must direct cargo-llvm-cov to the shared Cargo target directory"
+    )
+    assert 'CARGO_TARGET_DIR="$(COVERAGE_TARGET_DIR)"' in recipe, (
+        "coverage must expose the shared target directory to nested Cargo commands"
+    )
+    assert '$(MAKE) test TEST_RUNNER="llvm-cov nextest' in recipe, (
+        "coverage must invoke the nested test runner through cargo-llvm-cov"
+    )
 def _cargo_invocation(recipe_line: str) -> str:
     """Return the `$(CARGO) ...` call in a recipe line, trimmed at its terminator.
 

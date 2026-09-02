@@ -1,6 +1,6 @@
 # Restore portable Whitaker installation and pilot Namespace runners
 
-Status: IN PROGRESS — EP-M1 and EP-M2 complete and reviewed; EP-M3 is next.
+Status: IN PROGRESS — EP-M1 and EP-M2 complete and reviewed; EP-M3 in progress.
 
 This ExecPlan delivers three reviewable changes as one GitHub stacked pull
 request chain. The bottom layer restores a cold `whitaker-installer` source
@@ -299,7 +299,55 @@ layer's diff from its immediate base before committing.
   selected packages verified.
 - [x] 2026-09-01: Ran `coderabbit review --agent` through the scrutineer for
   EP-M2; it completed with zero findings and no rate-limit event.
-- [ ] Complete EP-M3, submit the draft stack, and monitor Namespace jobs.
+- [x] 2026-09-01: Confirmed the deployed `namespace-profile-default` with
+  `nsc github profile describe --profile_id ghpf_d442h2l2nj56q -o json`: Ubuntu
+  22.04, amd64, 4 vCPUs, 16,384 MB, remote builder, and no
+  `cache_volume_settings` field. No profile was mutated.
+- [x] 2026-09-01: Captured the pre-migration GitHub baseline from five
+  successful CI runs with `gh run view`. Median queue/execution times were
+  9s/24m11s for `linux-full` and 21s/13m29s for `coverage-check`; the complete
+  run/job sample is recorded in `docs/developers-guide.md`.
+- [x] 2026-09-01: Ran
+      `nsc github job list --repository leynos/whitaker --since 7d` with
+      `--max_entries 100 -o json`; it returned `null`, so there
+      were no pre-migration Whitaker Namespace jobs to compare.
+- [x] 2026-09-01: Documented the pilot's two intended migrated PR jobs and
+  the retained Windows, main-branch coverage, release, rolling-release, and
+  externally selected mutation exceptions. Cache volumes remain disabled and no
+  Namespace cache persistence is claimed.
+- [x] 2026-09-01: Migrated only `CI`'s `coverage-check` and `linux-full` jobs,
+  added intentional actionlint labels, and added structural contracts for both
+  migrated and retained runner assignments.
+- [x] 2026-09-01: Diagnosed the Namespace-only coverage `E0463` as an omitted
+  scheduling contract for the five active nested-Cargo Dylint UI tests;
+  extended the existing `serial-dylint-ui` group without changing production
+  lint code or the no-blanket-retry policy.
+- [x] 2026-09-02: Isolated the build-script integration fixtures from the
+  outer LLVM coverage target. Concurrent fixtures intentionally share a
+  temporary package identity but validate different workspace manifests, so
+  each nested Cargo command now receives the target directory owned by its
+  `TempDir`. Ten focused concurrent coverage repetitions passed; no production
+  build-script behaviour changed.
+- [x] 2026-09-02: Resolved the five verified inline CodeRabbit findings from
+  PR #381 review `5083956521` in `dfdc84f`: sentence-case debugging headings,
+  table captions, capability-scoped test filesystem access, diagnosable
+  coverage assertions, and `.yaml` workflow discovery. `make check-fmt`,
+  `make typecheck`, `make lint`, `make test` (1,653 passed, 5 skipped),
+  `make markdownlint`, `make nixie`, `make test-workflow-contracts`, and the
+  focused workflow contracts all passed.
+- [x] 2026-09-02: Resolved the current review's coverage-boundary pre-merge
+  error in functional head `b6d2871`. The new isolated Makefile test runs fake
+  coverage, recursive Make, and nested Cargo processes, proving that both
+  target variables contain the same absolute directory; the developers' guide
+  documents the corresponding override rule. The same deterministic gate set
+  passed before commit.
+- [x] 2026-09-02: After #382 squash-merged as `8ac23d1`, rebased the twelve
+  Namespace-only commits from `691773c` onto that exact `origin/main` tip. The
+  rebase retained the #382 baseline and replayed every Namespace commit
+  one-to-one; a workspace compile passed after each replayed commit.
+- [ ] Keep merge gated on exact-head GitHub checks and no blocking CodeRabbit
+  concerns. Do not merge until the result for the rebased, pushed head is green.
+- [ ] Complete EP-M3 and monitor Namespace jobs.
 
 ## Surprises & discoveries
 
@@ -331,6 +379,49 @@ provisioning fixtures put stubs first on `PATH`, but the Makefile deliberately
 prepends the real Cargo bin directory again. Give those subprocess fixtures an
 isolated home so their stale-tool and failed-install scenarios remain
 deterministic; this is a test-only correction with no production effect.
+
+Namespace `coverage-check` subsequently reported `E0463` from nested-Cargo UI
+cases, while a fresh local full `make coverage` passed all 1,652 selected
+tests. The first failure identified three absent
+`rstest_helper_should_be_fixture` clauses. A fresh run later failed in a mapped
+`no_unwrap_or_else_panic` case, proving that its two unmapped sibling example
+harnesses could still race it. Extend the narrow group for all five active
+shared-target harnesses; retain the existing scoped Windows retry rather than
+adding a blanket retry or serializing the suite. The configuration contract now
+keeps every active nested-Cargo clause present.
+
+The complete five-entry `no_unwrap_or_else_panic` set was then selected under a
+fresh LLVM coverage target directory and passed. Nextest resolves it to seven
+executions because `example_compiles_under_test_harness` has three bounded
+cases, alongside the four single negative cases.
+
+Run `33562381054` disproved a concurrency-only explanation: the serial
+aliased-companion example passed directly before the first harness case failed
+three times. The outer LLVM coverage command uses `target/llvm-cov-target`, but
+the nested Dylint Cargo command rebuilt the example and `rstest` under the
+ordinary shared `target/debug`. The narrow fix is a per-runner
+`CARGO_TARGET_DIR` binding in Whitaker's test harness. It keeps nested Cargo
+artefacts self-consistent without modifying lint production code or the wider
+test schedule.
+
+Run `33564463057` falsified the shared UI helper mapping. The CI process has no
+`CARGO_LLVM_COV_TARGET_DIR`; cargo-llvm-cov 0.6.24's `show-env` emits that
+name, but its normal Nextest command supplies only `--target-dir`. The
+correction is to define the exact coverage directory at the `make coverage`
+boundary through both `CARGO_LLVM_COV_TARGET_DIR` and `CARGO_TARGET_DIR`,
+rather than requiring test-helper code to infer a driver-private target path. A
+fresh verbose local coverage run used that exact target directory for Nextest
+and passed all three `example_compiles_under_test_harness` cases without
+`E0463`.
+
+A documentation-only rerun later exposed a separate race in
+`build_script_integration`: the exact- and loose-parser fixtures inherit the
+same outer coverage target while declaring the same temporary package identity.
+One of three concurrent focused runs let the loose fixture's nested
+`cargo check` succeed, so its rejection assertion failed. The test-only repair
+passes each fixture's own `TempDir/target` through `--target-dir`; ten repeated
+concurrent coverage runs then passed. The production build script was already
+correct and remains unchanged.
 
 All published `zip` 8.x versions declare Rust 1.88. A trial with `zip` 6.0.0,
 its default features narrowed to the capabilities Whitaker uses, and `time`
@@ -415,6 +506,24 @@ the published v0.2.7 assets' `GLIBC_2.39` requirement.
   the helpers exist only to separate version-needs parsing, process execution,
   result validation, and contextual error reporting. They are not a general
   subprocess or ELF API and must not be called from packaging or build code.
+- 2026-09-01: Use the deployed `namespace-profile-default` unchanged for the
+  pilot. The read-only profile description proves the required Ubuntu 22.04,
+  amd64, 4-vCPU, 16-GB shape and absence of cache-volume settings; creating or
+  mutating a profile would invalidate the baseline and is out of scope.
+- 2026-09-01: Treat the empty `nsc github job list` result as the UbiCloud /
+  Namespace pre-migration baseline rather than inventing Namespace timing data.
+  Compare queue and execution durations only after migrated jobs have completed
+  successfully.
+- 2026-09-01: Migrate only `coverage-check` and `linux-full` in the pilot.
+  Both are repository-owned pull-request Linux jobs whose prior UbiCloud
+  standard-4 resource class matches the deployed Namespace shape. Retain the
+  main-branch coverage, release, Windows, mutation, and reusable-workflow
+  assignments to preserve their distinct event, platform, or ownership
+  boundaries.
+- 2026-09-02: Rebase the Namespace-only layer onto #382's `8ac23d1` squash
+  rather than retaining the obsolete stacked parent. This preserves #382's
+  released baseline while keeping the runner pilot's independently reviewed
+  commits and contracts intact.
 
 ## Outcomes & retrospective
 
@@ -450,3 +559,27 @@ Nextest cases successful and 5 skipped. The committed-HEAD publication check
 then passed 1,665 CI-profile tests with 5 skipped, built and listed all ten
 expected Dylint libraries from a clone of `3456839`, and verified the
 `whitaker-common` and `whitaker-installer` packages.
+
+EP-M3 now moves the repository-owned `coverage-check` and `linux-full` jobs to
+the deployed, uncached `namespace-profile-default` while retaining platform,
+release, main-branch coverage, and externally owned reusable-workflow runner
+boundaries. Structural contracts and actionlint cover both migrated and
+retained assignments. Namespace run `33566432251` admitted both migrated jobs
+to 4-vCPU, 16-GB Linux instances within about two seconds of workflow creation;
+the jobs began after about 12 seconds. `coverage-check` completed successfully
+at 22:36:10 UTC and `linux-full` at 22:38:28 UTC. The retained Windows job also
+passed at 22:41:12 UTC. A post-gate `coderabbit review --agent` reported zero
+high-, medium-, or low-severity findings at `e858760`.
+
+The stable coverage result required one explicit build boundary beyond runner
+placement: `make coverage` now gives outer LLVM coverage and nested Dylint
+Cargo the same absolute target directory. A syscall trace proved the nested
+example build inherited the outer target, and the fresh Namespace run no longer
+reported `E0463`. The pilot therefore distinguishes fast runner admission from
+build-tool target isolation rather than attributing the earlier test failure to
+Namespace contention.
+
+The build-script integration tests add a second, narrower boundary: their
+temporary workspaces now own nested Cargo output even when the outer coverage
+job deliberately shares one target directory. This prevents fixture-specific
+manifest validation from reusing another fixture's build-script result.

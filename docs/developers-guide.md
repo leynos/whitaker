@@ -197,6 +197,26 @@ make test NEXTEST_PROFILE=ci
 Continuous Integration (CI) always uses the `ci` profile, so installer tests
 are never silently skipped in the pipeline.
 
+### Coverage and nested Cargo builds
+
+`make coverage` uses the same selected crate set and warning policy as
+`make test`, but runs it through `cargo llvm-cov nextest`. The Makefile assigns
+the absolute `COVERAGE_TARGET_DIR` (by default,
+`$(CURDIR)/target/llvm-cov-target`) to both `CARGO_LLVM_COV_TARGET_DIR` and
+`CARGO_TARGET_DIR`.
+
+The first variable makes `cargo-llvm-cov` instrument its output in that
+directory. The second is inherited by nested Cargo commands that Dylint UI
+harnesses start while compiling examples. Both values must remain identical:
+`cargo-llvm-cov` otherwise passes its target only as a Nextest argument, and a
+nested Cargo process falls back to the ordinary `target/debug` tree. That can
+mix instrumented and non-instrumented dependency artefacts.
+
+When isolating a coverage run, override `COVERAGE_TARGET_DIR` rather than
+either environment variable individually. Fixture workspaces that intentionally
+use the same package identity must still select their own nested `--target-dir`
+to avoid reusing one another's build-script output.
+
 The CI workflow is split by purpose rather than running the same stack on every
 operating system. `linux-full` is the authoritative gate for formatting,
 Mermaid/Nixie/Markdown validation, `make lint`, and `make publish-check`.
@@ -244,6 +264,62 @@ Table: Test profiles and typical usage.
 
 When working on `whitaker-installer` code, run the full suite locally before
 pushing to catch installer regressions early.
+
+### Namespace runner pilot
+
+The pilot uses the deployed `namespace-profile-default` profile. Its verified
+specification is Ubuntu 22.04 on amd64 with 4 vCPUs and 16 GB of memory. The
+profile has no cache volume. Namespace's runner action and toolchain caches
+must not be described as persistent through a Namespace volume; the workflow's
+existing GitHub Actions cache and `sccache` configuration remain separate
+systems.
+
+Only the repository-owned Linux jobs in the pull-request `CI` workflow that fit
+this 4-vCPU contract use the Namespace profile: `coverage-check` and
+`linux-full`. The following jobs retain their existing runners or selection
+mechanism: `windows-compat` requires Windows; `coverage-upload` is the
+main-branch coverage baseline; release and rolling-release jobs are release
+boundaries; and `mutation` calls an externally owned reusable workflow whose
+caller-selected runner is not controlled here. These retained assignments are
+deliberate exceptions, not alternate Namespace profiles.
+
+The pre-migration baseline was captured on 2026-09-01 with the following
+read-only commands:
+
+```sh
+gh run view 33410178021 --repo leynos/whitaker \
+  --json name,url,status,conclusion,createdAt,startedAt,updatedAt,jobs
+gh run view 33369228466 --repo leynos/whitaker \
+  --json name,url,status,conclusion,createdAt,startedAt,updatedAt,jobs
+gh run view 33345742967 --repo leynos/whitaker \
+  --json name,url,status,conclusion,createdAt,startedAt,updatedAt,jobs
+gh run view 33340945546 --repo leynos/whitaker \
+  --json name,url,status,conclusion,createdAt,startedAt,updatedAt,jobs
+gh run view 33322310248 --repo leynos/whitaker \
+  --json name,url,status,conclusion,createdAt,startedAt,updatedAt,jobs
+nsc github job list --repository leynos/whitaker --since 7d \
+  --max_entries 100 -o json
+```
+
+All five GitHub `CI` runs completed successfully. Their workflow wall times
+were 18m37s, 20m53s, 29m25s, 41m30s, and 59m29s respectively. Job execution
+times were:
+
+| Run                                     | `linux-full` | `windows-compat` | `coverage-check` |
+| --------------------------------------- | ------------ | ---------------- | ---------------- |
+| [33410178021][whitaker-run-33410178021] | 18m27s       | 15m54s           | 10m36s           |
+| [33369228466][whitaker-run-33369228466] | 20m30s       | 16m57s           | 12m28s           |
+| [33345742967][whitaker-run-33345742967] | 24m11s       | 25m18s           | 13m53s           |
+| [33340945546][whitaker-run-33340945546] | 26m16s       | 26m44s           | 14m15s           |
+| [33322310248][whitaker-run-33322310248] | 26m06s       | 25m47s           | 13m29s           |
+
+The corresponding job queue waits were 9s/24s/25s, 23s/23s/23s, 20s/246s/21s,
+8s/885s/21s, and 8s/2,021s/8s in the same column order. Median queue/execution
+times were 9s/24m11s for `linux-full`, 246s/25m18s for `windows-compat`, and
+21s/13m29s for `coverage-check`. `nsc github job list` returned JSON `null`,
+confirming that no Whitaker Namespace jobs were available for the pre-migration
+comparison. After migration, compare queue and execution time separately and
+record successful Namespace jobs with the same command.
 
 ### Workflow pins and Dependabot
 
@@ -2402,3 +2478,8 @@ This builds, tests, and validates packages in a production-like environment
 without the `prefer-dynamic` flag used during development.
 
 [issue-180]: https://github.com/leynos/whitaker/issues/180
+[whitaker-run-33410178021]: https://github.com/leynos/whitaker/actions/runs/33410178021
+[whitaker-run-33369228466]: https://github.com/leynos/whitaker/actions/runs/33369228466
+[whitaker-run-33345742967]: https://github.com/leynos/whitaker/actions/runs/33345742967
+[whitaker-run-33340945546]: https://github.com/leynos/whitaker/actions/runs/33340945546
+[whitaker-run-33322310248]: https://github.com/leynos/whitaker/actions/runs/33322310248
