@@ -7,10 +7,10 @@ request chain. The bottom layer restores a cold `whitaker-installer` source
 installation under its declared minimum supported Rust version (MSRV). The
 middle layer makes the x86_64 Linux release artefacts portable to Ubuntu 22.04.
 The top layer migrates compatible Whitaker continuous-integration jobs from
-UbiCloud to the existing uncached Namespace pilot profile. Success is visible
-when the installer builds under Rust 1.85, release artefacts require no glibc
-symbol newer than `GLIBC_2.35`, and Namespace admits and completes the migrated
-pull-request jobs.
+UbiCloud to bounded Namespace profiles with one shared cache volume. Success is
+visible when the installer builds under Rust 1.85, release artefacts require no
+glibc symbol newer than `GLIBC_2.35`, and Namespace admits and completes the
+migrated pull-request jobs.
 
 ## Conformance basis
 
@@ -51,10 +51,11 @@ fix must change the build baseline and verification, not silently substitute a
 musl target or remove an artefact. The oldest supported baseline for this work
 is Ubuntu 22.04 with glibc 2.35.
 
-The Namespace pilot uses the deployed `namespace-profile-default` profile:
-Ubuntu 22.04, amd64, 4 vCPU, 16 GB, and no cache volume. No Namespace profile
-mutation is authorized or required. Existing artefact and cache backends remain
-unchanged during the pilot. Windows, macOS, release publication, rolling
+The Namespace pilot now uses Ubuntu 24.04 amd64 profiles capped at 4 vCPUs and
+8 GB. `coverage-check` uses the 2-vCPU/4-GB `rust-linux-light` profile;
+`linux-full` uses the 4-vCPU/8-GB `rust-linux-ci` profile. Both attach the same
+20-GB cache volume through cache tag `whitaker-linux-amd64-v1`, and only trusted
+`main` runs may populate it. Windows, macOS, release publication, rolling
 release, and externally selected runners remain on their current platforms
 unless a checked-in job contract proves that migration is both compatible and
 within this plan.
@@ -98,9 +99,9 @@ Mitigate this by inspecting every packaged x86_64 Linux executable and running
 the installed dependency binaries inside Ubuntu 22.04.
 
 The pilot risk is confusing runner admission, image prerequisites, cache
-behaviour, and command execution. Mitigate this by changing runner placement
-without changing cache or artefact systems, using structural workflow tests,
-and correlating GitHub job timestamps with `nsc github job list`.
+behaviour, and command execution. Mitigate this with structural workflow tests,
+one cache owner per path, cache-hit and sccache telemetry, and correlation of
+GitHub job timestamps with `nsc github job list`.
 
 Stacking creates a review dependency: the Namespace PR cannot merge before the
 portability layers beneath it. This is intentional because the top layer uses
@@ -126,13 +127,15 @@ installer, `cargo-dylint`, and `dylint-link`. Existing v0.2.7 assets are the
 negative control: their ELF tables contain `GLIBC_2.39` and fail to start on
 Ubuntu 22.04.
 
-The third invariant, INV-RUNNER, is that each repository-owned migrated Linux
-job uses `namespace-profile-default`, while jobs with retained platform
-contracts keep their existing runner expressions. Deterministic workflow tests
-enumerate the expected assignments and reject a GitHub-hosted, UbiCloud, or
-wrong Namespace label at a migrated site. `actionlint` validates the
-intentional self-hosted label. A live pull-request run plus `nsc` admission
-evidence discharges the external runner axiom.
+The third invariant, INV-RUNNER, is that `coverage-check` uses
+`namespace-profile-rust-linux-light` and `linux-full` uses
+`namespace-profile-rust-linux-ci`, with both labels selecting the shared
+`whitaker-linux-amd64-v1` cache tag. Jobs with retained platform contracts keep
+their existing runner expressions. Deterministic workflow tests enumerate the
+expected assignments and reject a GitHub-hosted, UbiCloud, or wrong Namespace
+label at a migrated site. `actionlint` validates the intentional self-hosted
+labels. A live pull-request run plus `nsc` admission evidence discharges the
+external runner axiom.
 
 These are finite configuration partitions rather than unbounded algorithms, so
 parameterized example tests and real boundary execution provide proportionate
@@ -233,6 +236,18 @@ issue, pull-request, run, and job URLs.
 
 Recovery is a revert of the runner-placement layer; the two portability fixes
 beneath it remain independently useful.
+
+#### Cache-optimization revision (2026-09-02)
+
+The initial uncached placement proved admission but consumed too many Namespace
+unit-minutes. The optimization revision replaces that measurement-only
+configuration with bounded cached profiles. It must keep each expensive
+dependency, tool, and compiler output under one cache owner, install tools only
+from checksum-verified prebuilt releases, cap nextest at the profile's vCPU
+count, prevent pull requests from writing the shared cache, and emit both the
+Namespace cache result and sccache JSON statistics. `coverage-check` is omitted
+from `main`, so a manual main-branch dispatch runs only `linux-full` and makes
+that job the single cache-population owner.
 
 ## Validation commands
 
@@ -345,6 +360,23 @@ layer's diff from its immediate base before committing.
   Namespace-only commits from `691773c` onto that exact `origin/main` tip. The
   rebase retained the #382 baseline and replayed every Namespace commit
   one-to-one; a workspace compile passed after each replayed commit.
+- [x] 2026-09-02: Replaced the uncached 4-vCPU/16-GB pilot placement with the
+  bounded `rust-linux-light` and `rust-linux-ci` profiles. Both jobs use cache
+  tag `whitaker-linux-amd64-v1`; `coverage-check` is capped at two nextest
+  workers and `linux-full` at four.
+- [x] 2026-09-02: Made the Namespace cache volume the sole owner of Rust, uv,
+  Bun, prebuilt-tool, and local sccache paths. The workflows disable
+  overlapping shared-action GitHub caches, require binary-only installers, and
+  publish cache-hit plus sccache JSON evidence.
+- [x] 2026-09-02: Passed the cache revision's focused 17 workflow contracts,
+  formatting, lint, full test (1,653 passed and 5 skipped), Markdown, and
+  Mermaid gates. A first local test attempt was invalidated when a concurrent
+  target-directory sweep removed its executable; the clean rerun passed.
+- [x] 2026-09-02: Removed the temporary `mdtablefix` source-build exception
+  after issue #453 published and verified the v0.5.0 Linux x86_64 asset. The
+  workflow pins its SHA-256, installs it atomically into the cached binary
+  directory, and no longer retains a dedicated source-build target. The full
+  deterministic gate passed with 1,653 tests and 12 workflow contracts.
 - [ ] Keep merge gated on exact-head GitHub checks and no blocking CodeRabbit
   concerns. Do not merge until the result for the rebased, pushed head is green.
 - [ ] Complete EP-M3 and monitor Namespace jobs.
@@ -361,6 +393,12 @@ Cache isolation exposed rather than solved the second failure. Namespace had no
 `cargo-binstall`, so the fallback compiled from crates.io with Cuprum's Rust
 1.85 project compiler. Cargo then rejected the locked dependency graph before
 building any Whitaker code.
+
+Repairing the missing `mdtablefix` asset exposed two release-retry hazards.
+Compressed archive timestamps made an unchanged rebuild differ byte-for-byte,
+and the moving stable Rust channel could change the executable itself. The
+upstream fix now normalizes archive metadata and pins Rust 1.89.0; a second
+backfill run recognized all ten assets as identical.
 
 The local EP-M1 negative control reproduced that exact failure from the
 checked-in lockfile. Cargo metadata alone accepted the graph, so the permanent
@@ -524,6 +562,15 @@ the published v0.2.7 assets' `GLIBC_2.39` requirement.
   rather than retaining the obsolete stacked parent. This preserves #382's
   released baseline while keeping the runner pilot's independently reviewed
   commits and contracts intact.
+- 2026-09-02: Supersede the uncached measurement baseline after the user halted
+  the estate rollout for cost control. Use 2 vCPUs/4 GB for the coverage gate,
+  4 vCPUs/8 GB for the full build gate, and one shared cache tag rather than
+  independent per-job caches. This keeps the ceiling at four cores while a
+  single trusted main-branch job prevents cache-population stampedes.
+- 2026-09-02: Remove the `mdtablefix` source fallback as soon as its official
+  v0.5.0 asset is verified. Download that asset directly, pin its SHA-256, and
+  cache only the installed executable under `~/.cargo/bin`; retaining the
+  former build target would preserve an obsolete exception and waste storage.
 
 ## Outcomes & retrospective
 
@@ -583,3 +630,15 @@ The build-script integration tests add a second, narrower boundary: their
 temporary workspaces now own nested Cargo output even when the outer coverage
 job deliberately shares one target directory. This prevents fixture-specific
 manifest validation from reusing another fixture's build-script result.
+
+The cache-optimization revision retains those behavioural boundaries while
+changing the execution substrate. Both migrated jobs use Ubuntu 24.04, one
+shared 20-GB Namespace cache, checksum-verified prebuilt tools, and bounded
+nextest concurrency. Cache-hit output and sccache JSON make cold-versus-warm
+performance observable; pull requests are readers, while the main-branch
+`linux-full` job is the sole cache writer.
+
+The final tool-installation revision removes the last source-build exception.
+`mdtablefix` now follows the same trusted-binary policy as the other CI tools,
+and its official asset, checksum, installed executable, and cache ownership are
+protected by workflow contracts.

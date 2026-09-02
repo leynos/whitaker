@@ -228,24 +228,30 @@ packaging path stays valid. The release dry-run target is a POSIX-shell target;
 Windows CI runs it under Bash and requires the same command-line tools as local
 POSIX environments.
 
-Both lanes share the workflow-level environment contract: `BUILD_PROFILE=debug`
-narrows `sccache` keys to debug builds only, preventing cache pollution from
-release builds; `CARGO_INCREMENTAL=0` disables incremental compilation, which
-is incompatible with `sccache`; `RUSTC_WRAPPER=sccache` routes all `rustc`
-invocations through `sccache`; `SCCACHE_GHA_ENABLED=true` activates the GitHub
-Actions cache backend for `sccache`; and `RUSTFLAGS=-D warnings` and
-`RUSTDOCFLAGS=-D warnings` deny compiler and doc warnings as errors across both
-lanes. Together, these variables keep the cache scope narrow, ensure `sccache`
-is active for all compilation, and enforce a warnings-as-errors build contract.
+The lanes share the workflow-level build contract: `BUILD_PROFILE=debug` narrows
+`sccache` keys to debug builds only; `CARGO_INCREMENTAL=0` disables
+incremental compilation, which is incompatible with `sccache`;
+`RUSTC_WRAPPER=sccache` routes all `rustc` invocations through `sccache`; and
+`RUSTFLAGS=-D warnings` and `RUSTDOCFLAGS=-D warnings` deny compiler and doc
+warnings across both lanes. Cache storage is job-specific. The Namespace Linux
+jobs use the attached volume, while `windows-compat` alone sets
+`SCCACHE_GHA_ENABLED=true` for its GitHub Actions backend.
 
 ### CI build caching
 
-CI uses `sccache` through the GitHub Actions backend to share Rust compilation
-artefacts between the Linux and Windows lanes. The workflow sets
-`SCCACHE_GHA_ENABLED=true` and `RUSTC_WRAPPER=sccache`, so Cargo invokes
-`rustc` through `sccache` automatically.
+The Namespace Linux jobs use a repository-specific Namespace volume for Cargo,
+Rust toolchains, installed tool binaries, `uv`, Bun, and the local `sccache`
+directory. `windows-compat` remains GitHub-hosted and retains the GitHub Actions
+`sccache` backend. The two backends are deliberately separate: no
+`actions/cache` step owns a path mounted by the Namespace cache action. The
+Namespace jobs list their durable paths explicitly. They do not use the cache
+action's `rust` mode because it mounts the disposable Cargo `target` directory,
+conflicts with clean builds, and duplicates sccache's ownership. They similarly
+cache Bun and uv data by path so cache planning never requires those commands
+to be installed already. Both Linux lanes install the supported prebuilt
+sccache 0.16.0 release and forbid an installer fallback to compilation.
 
-The shared target cache is intentionally scoped to debug builds:
+The shared compiler cache is intentionally scoped to debug builds:
 
 - `BUILD_PROFILE=debug` keeps cache paths centred on the profile used by the
   normal test and typecheck jobs.
@@ -254,6 +260,23 @@ The shared target cache is intentionally scoped to debug builds:
   without improving repeatability.
 - `RUSTFLAGS=-D warnings` and `RUSTDOCFLAGS=-D warnings` preserve the
   warnings-as-errors contract even when builds are routed through `sccache`.
+
+Each build lane resets `sccache` counters before compilation, appends the
+human-readable statistics to the job summary, and retains the JSON statistics
+for 14 days. Namespace jobs also record the cache tag and the cache action's
+`cache-hit` output. Namespace volumes are mounted locally, so there is no
+archive restore or save phase and the action exposes no transfer-byte metric.
+Use `nsc instance report` after comparable cold and warm runs to correlate
+these statistics with runtime and paid unit-minutes.
+
+Tool setup must not compile tools from source. `taiki-e/install-action` calls
+pin a release whose catalogue contains each requested tool, disable fallbacks,
+and use checksum-verified release artefacts. `mdtablefix` 0.5.0 is installed
+from its official Linux x86_64 release asset after checking the SHA-256 pinned
+in the workflow. The attached volume retains the installed executable under
+`~/.cargo/bin`; a cold cache downloads it, while a warm cache verifies and
+reuses it without invoking Cargo. Merman 0.7.0 is installed from its official
+Linux release archive after checking the pinned SHA-256 digest.
 
 Table: Test profiles and typical usage.
 
@@ -267,18 +290,34 @@ pushing to catch installer regressions early.
 
 ### Namespace runner pilot
 
-The pilot uses the deployed `namespace-profile-default` profile. Its verified
-specification is Ubuntu 22.04 on amd64 with 4 vCPUs and 16 GB of memory. The
-profile has no cache volume. Namespace's runner action and toolchain caches
-must not be described as persistent through a Namespace volume; the workflow's
-existing GitHub Actions cache and `sccache` configuration remain separate
-systems.
+The repository-owned pull-request Linux jobs use two deployed Ubuntu 24.04
+amd64 profiles:
 
-Only the repository-owned Linux jobs in the pull-request `CI` workflow that fit
-this 4-vCPU contract use the Namespace profile: `coverage-check` and
-`linux-full`. The following jobs retain their existing runners or selection
-mechanism: `windows-compat` requires Windows; `coverage-upload` is the
-main-branch coverage baseline; release and rolling-release jobs are release
+Table: Deployed Namespace profiles for repository-owned Linux jobs.
+
+| Job              | Profile            | Shape        | Cache volume |
+| ---------------- | ------------------ | ------------ | ------------ |
+| `coverage-check` | `rust-linux-light` | 2 vCPU, 4 GB | 20 GB        |
+| `linux-full`     | `rust-linux-ci`    | 4 vCPU, 8 GB | 20 GB        |
+
+Both runner labels append `overrides.cache-tag=whitaker-linux-amd64-v1`, so the
+profiles attach one repository-specific volume rather than allocating a volume
+per shape. The cache action exposes a locally writable mount, but both deployed
+profiles set `allow_commit_from_branch` to `main`. Pull-request jobs therefore
+read the last trusted generation without publishing their local changes.
+
+`coverage-check` is excluded from `workflow_dispatch`, so a manual run against
+`main` makes `linux-full` the sole cold-cache producer and avoids two jobs
+building the same empty generation. After changing a correctness input or cache
+generation, dispatch one trusted `main` run before comparing warm pull
+requests. The tag's schema suffix must advance when OS, architecture,
+toolchain, lockfile interpretation, build profile, features, or cache layout
+becomes incompatible.
+
+Nextest concurrency matches each paid shape: coverage uses two test threads and
+the full Linux gate uses four. The following jobs retain their existing runners
+or selection mechanism: `windows-compat` requires Windows; `coverage-upload` is
+the main-branch coverage baseline; release and rolling-release jobs are release
 boundaries; and `mutation` calls an externally owned reusable workflow whose
 caller-selected runner is not controlled here. These retained assignments are
 deliberate exceptions, not alternate Namespace profiles.

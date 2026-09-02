@@ -23,12 +23,18 @@ from ruamel.yaml import YAML
 
 WORKFLOWS_DIRECTORY = Path(__file__).resolve().parents[2] / ".github/workflows"
 WORKFLOW_FILE_GLOBS = ("*.yaml", "*.yml")
-NAMESPACE_DEFAULT_PROFILE = "namespace-profile-default"
+NAMESPACE_CACHE_TAG: str = "overrides.cache-tag=whitaker-linux-amd64-v1"
+NAMESPACE_LINUX_CI_PROFILE: str = (
+    f"namespace-profile-rust-linux-ci;{NAMESPACE_CACHE_TAG}"
+)
+NAMESPACE_LINUX_LIGHT_PROFILE: str = (
+    f"namespace-profile-rust-linux-light;{NAMESPACE_CACHE_TAG}"
+)
 
-MIGRATED_PULL_REQUEST_JOBS = {
+MIGRATED_PULL_REQUEST_JOBS: dict[str, dict[str, str]] = {
     "ci.yml": {
-        "coverage-check": NAMESPACE_DEFAULT_PROFILE,
-        "linux-full": NAMESPACE_DEFAULT_PROFILE,
+        "coverage-check": NAMESPACE_LINUX_LIGHT_PROFILE,
+        "linux-full": NAMESPACE_LINUX_CI_PROFILE,
     },
 }
 
@@ -74,8 +80,8 @@ def _workflow_jobs(workflow_name: str) -> Mapping[str, Any]:
 def _assert_runner_assignments(assignments: Mapping[str, Mapping[str, str]]) -> None:
     """Assert that each named workflow job uses its declared runner.
 
-    For example, supplying ``{"ci.yml": {"linux-full": "namespace-profile-default"}}``
-    fails if the job is moved to a hosted runner or another Namespace profile.
+    For example, supplying the expected ``linux-full`` profile fails if the job
+    is moved to a hosted runner or another Namespace profile.
     """
     for workflow_name, expected_jobs in assignments.items():
         jobs = _workflow_jobs(workflow_name)
