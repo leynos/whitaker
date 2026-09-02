@@ -78,7 +78,6 @@ the required `awk`, `jq`, `mktemp`, `python`, and `rustc` commands before doing
 build work. On Windows, run it from an environment that provides those tools,
 such as the Bash shell used by CI.
 
-
 ## Linux compatibility baseline
 
 Published `x86_64-unknown-linux-gnu` installer, dependency-tool, and lint

@@ -420,13 +420,13 @@ the published v0.2.7 assets' `GLIBC_2.39` requirement.
 
 EP-M1 now declares Rust 1.85 in the installer manifest, enforces a real locked
 packaged-crate install in the Makefile and Linux CI, and retains only the `zip`
-7.2 Deflate feature. Removing the unused `time` integration also leaves `cargo
-audit` with no known vulnerabilities. The focused MSRV install, formatting,
-Markdown, Mermaid, workflow-contract, type-check, Clippy, full test, release
-archive, Makefile, and scoped actionlint gates pass. The full Nextest result is
-1,652 passed and 5 skipped. `cargo audit` retains four pre-existing allowed
-warnings but reports no vulnerabilities. Whitaker has no `doc-coverage` target,
-so that Netsuke-specific gate is not applicable.
+7.2 Deflate feature. Removing the unused `time` integration also leaves
+`cargo audit` with no known vulnerabilities. The focused MSRV install,
+formatting, Markdown, Mermaid, workflow-contract, type-check, Clippy, full
+test, release archive, Makefile, and scoped actionlint gates pass. The full
+Nextest result is 1,652 passed and 5 skipped. `cargo audit` retains four
+pre-existing allowed warnings but reports no vulnerabilities. Whitaker has no
+`doc-coverage` target, so that Netsuke-specific gate is not applicable.
 
 The post-commit publication gate also passes: its CI-profile Nextest run
 reported 1,665 passed and 5 skipped, the cloned-HEAD Dylint library build
