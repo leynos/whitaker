@@ -24,6 +24,8 @@ Run these checks:
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from tests.workflows.rolling_release_workflow_test_support import (
     _find_step_by_name,
     _get_job_dict,
@@ -42,6 +44,7 @@ DEPENDENCY_TARGETS = {
 }
 
 NATIVE_RUNNERS = {
+    "x86_64-unknown-linux-gnu": "ubuntu-22.04",
     "aarch64-unknown-linux-gnu": "ubuntu-24.04-arm",
     "x86_64-apple-darwin": "macos-15-intel",
 }
@@ -147,3 +150,156 @@ def test_release_publish_tolerates_partial_build_failures() -> None:
         assert step.get("continue-on-error") is True, (
             f"'{step_name}' must tolerate absent artefacts from failed legs"
         )
+
+
+def _step_names(workflow_path: Path, job_name: str) -> list[str]:
+    """Return the ordered names for a workflow job's steps."""
+    job = _job_from(workflow_path, job_name)
+    return [step["name"] for step in job["steps"]]
+
+
+def test_linux_release_legs_check_glibc_before_upload() -> None:
+    """Each Linux artefact lane checks the conservative glibc baseline first."""
+    expected_jobs = {
+        RELEASE_WORKFLOW_PATH: (
+            "build-installer",
+            "build-dependency-binaries",
+        ),
+        WORKFLOW_PATH: (
+            "build-lints",
+            "build-dependency-binaries",
+        ),
+    }
+    upload_names = {
+        "build-installer": "Upload artefact",
+        "build-lints": "Upload artefact",
+        "build-dependency-binaries": "Upload dependency artefact",
+    }
+    for workflow_path, job_names in expected_jobs.items():
+        for job_name in job_names:
+            names = _step_names(workflow_path, job_name)
+            assert names.index("Check glibc baseline") < names.index(
+                upload_names[job_name]
+            ), f"{workflow_path.name}:{job_name} must check glibc before upload"
+            check = _find_step_by_name(
+                _job_from(workflow_path, job_name)["steps"],
+                "Check glibc baseline",
+            )
+            assert check is not None
+            check_script = check.get("run")
+            assert isinstance(check_script, str)
+            assert "check_glibc_baseline.py" in check_script
+            assert "GLIBC_2.35" in check_script
+
+
+def test_rolling_dependency_glibc_check_reads_the_manifest() -> None:
+    """The rolling check covers every dependency binary selected for packaging."""
+    job = _job_from(WORKFLOW_PATH, "build-dependency-binaries")
+    check = _find_step_by_name(job["steps"], "Check glibc baseline")
+    assert check is not None, "rolling dependency job must check the glibc baseline"
+    match check.get("run"):
+        case str() as script:
+            assert "dependency_binaries_manifest.py --output /tmp/dependency-binaries.tsv" in script, (
+                "rolling check must regenerate the dependency manifest"
+            )
+            assert "binaries=()" in script, (
+                "rolling check must collect manifest-derived binaries"
+            )
+            assert "while IFS=$'\\t' read -r _package binary _version; do" in script, (
+                "rolling check must read every manifest record"
+            )
+            assert 'binaries+=("dependency-root/bin/${binary}")' in script, (
+                "rolling check must check each manifest binary"
+            )
+            assert "done < /tmp/dependency-binaries.tsv" in script, (
+                "rolling check must consume the regenerated manifest"
+            )
+            assert '"${binaries[@]}"' in script, (
+                "rolling check must pass every manifest binary to the checker"
+            )
+        case value:
+            raise AssertionError(
+                f"rolling glibc check must be a shell script, got {value!r}"
+            )
+
+
+def test_tagged_release_requires_packaged_compatibility_verification() -> None:
+    """The tagged publish job waits for successful Ubuntu compatibility checks."""
+    compatibility = _job_from(RELEASE_WORKFLOW_PATH, "release-compatibility")
+    assert compatibility["runs-on"] == "ubuntu-22.04"
+    assert compatibility["needs"] == ["build-installer", "build-dependency-binaries"]
+    compatibility_condition = str(compatibility["if"])
+    assert "!cancelled()" in compatibility_condition
+    assert "needs.build-installer.result" not in compatibility_condition
+    assert "needs.build-dependency-binaries.result" not in compatibility_condition
+    checkout = _find_step_by_name(compatibility["steps"], "Checkout")
+    assert checkout is not None, "release compatibility must check out the tagged source"
+    assert checkout.get("with", {}).get("persist-credentials") is False, (
+        "release compatibility must not retain credentials before running artefacts"
+    )
+    installer_download = _find_step_by_name(
+        compatibility["steps"], "Download x86 installer artefact"
+    )
+    assert installer_download is not None, "release compatibility must download the installer"
+    assert "continue-on-error" not in installer_download, (
+        "a successful installer producer must require its artefact download"
+    )
+    assert installer_download.get("if") == "needs.build-installer.result == 'success'", (
+        "installer download must run only after a successful installer build"
+    )
+    dependency_download = _find_step_by_name(
+        compatibility["steps"], "Download x86 dependency artefacts"
+    )
+    assert dependency_download is not None, (
+        "release compatibility must download dependency artefacts"
+    )
+    assert "continue-on-error" not in dependency_download, (
+        "a successful dependency producer must require its artefact download"
+    )
+    assert dependency_download.get("if") == (
+        "needs.build-dependency-binaries.result == 'success'"
+    ), "dependency download must run only after a successful dependency build"
+    names = _step_names(RELEASE_WORKFLOW_PATH, "release-compatibility")
+    assert names.index("Verify x86 packaged compatibility") < len(names)
+    verification = _find_step_by_name(
+        compatibility["steps"],
+        "Verify x86 packaged compatibility",
+    )
+    assert verification is not None, "release compatibility must verify artefacts"
+    match verification.get("run"):
+        case str() as script:
+            assert "dependency_binaries_manifest.py --output /tmp/dependency-binaries.tsv" in script, (
+                "tagged verification must regenerate the dependency manifest"
+            )
+            assert "dependency_archives=()" in script, (
+                "tagged verification must collect manifest-derived archives"
+            )
+            assert "dependency_binaries=()" in script, (
+                "tagged verification must collect manifest-derived binary names"
+            )
+            assert "while IFS=$'\\t' read -r package binary _version; do" in script, (
+                "tagged verification must read every manifest record"
+            )
+            assert 'dependency_archives+=(dist/"${package}"-x86_64-unknown-linux-gnu-v*.tgz)' in script, (
+                "tagged verification must require every manifest archive"
+            )
+            assert 'dependency_binaries+=("${binary}")' in script, (
+                "tagged verification must discover every manifest binary"
+            )
+            assert '"${binaries[@]}"' in script, (
+                "tagged verification must check every manifest binary"
+            )
+            assert '"$cargo_dylint" dylint --version' in script, (
+                "tagged verification must exercise cargo-dylint"
+            )
+            assert '"$dylint_link" --version' in script, (
+                "tagged verification must exercise dylint-link"
+            )
+        case value:
+            raise AssertionError(
+                f"tagged compatibility verification must be a shell script, got {value!r}"
+            )
+
+    publish = _job_from(RELEASE_WORKFLOW_PATH, "publish")
+    assert "release-compatibility" in publish["needs"]
+    assert "needs.release-compatibility.result == 'success'" in str(publish["if"])

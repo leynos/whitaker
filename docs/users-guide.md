@@ -20,6 +20,11 @@ The published `whitaker-installer` crate requires Rust 1.85 or newer. This is
 the first stable compiler that supports the Rust 2024 edition used by the
 installer.
 
+Published x86_64 GNU/Linux installer, dependency, and lint artefacts target the
+Ubuntu 22.04 `GLIBC_2.35` baseline and do not require a newer glibc version. On
+an incompatible system, build Whitaker and its dependencies from source instead
+of using the published Linux artefacts.
+
 ### Standalone installation (recommended)
 
 The simplest way to use Whitaker is via the standalone installer, which handles

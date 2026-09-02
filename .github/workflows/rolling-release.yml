@@ -81,7 +81,7 @@ jobs:
       matrix:
         include:
           - target: x86_64-unknown-linux-gnu
-            os: ubuntu-latest
+            os: ubuntu-22.04
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-24.04-arm
           - target: x86_64-apple-darwin
@@ -155,6 +155,19 @@ jobs:
             --output-dir dist \
             --release-dir "target/${{ matrix.target }}/release"
 
+      - name: Check glibc baseline
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        run: |
+          set -euxo pipefail
+          shopt -s nullglob
+          lint_libraries=(target/${{ matrix.target }}/release/*.so)
+          if [[ "${#lint_libraries[@]}" -eq 0 ]]; then
+            echo "::error::No x86_64 Linux lint libraries were built."
+            exit 1
+          fi
+          python scripts/check_glibc_baseline.py --maximum-glibc GLIBC_2.35 \
+            "${lint_libraries[@]}"
+
       - name: Diagnostics (package artefact)
         if: failure()
         run: |
@@ -183,7 +196,7 @@ jobs:
       matrix:
         include:
           - target: x86_64-unknown-linux-gnu
-            os: ubuntu-latest
+            os: ubuntu-22.04
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-24.04-arm
           - target: x86_64-apple-darwin
@@ -222,6 +235,7 @@ jobs:
           mkdir -p dist
           mkdir -p dependency-root
           python installer/scripts/dependency_binaries_manifest.py --output /tmp/dependency-binaries.tsv
+          # shellcheck disable=SC2193 # GitHub expands matrix.target at runtime.
           if [[ "${{ matrix.target }}" == *windows* ]]; then
             PACKAGER="./target/release/whitaker-package-dependency-binary.exe"
           else
@@ -235,6 +249,7 @@ jobs:
               --target "${{ matrix.target }}" \
               --version "$version" \
               "$package"
+            # shellcheck disable=SC2193 # GitHub expands matrix.target at runtime.
             if [[ "${{ matrix.target }}" == *windows* ]]; then
               executable="dependency-root/bin/${binary}.exe"
             else
@@ -246,6 +261,18 @@ jobs:
               --binary-path "$executable" \
               --output-dir dist
           done < /tmp/dependency-binaries.tsv
+
+      - name: Check glibc baseline
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        run: |
+          set -euxo pipefail
+          python installer/scripts/dependency_binaries_manifest.py --output /tmp/dependency-binaries.tsv
+          binaries=()
+          while IFS=$'\t' read -r _package binary _version; do
+            binaries+=("dependency-root/bin/${binary}")
+          done < /tmp/dependency-binaries.tsv
+          python scripts/check_glibc_baseline.py --maximum-glibc GLIBC_2.35 \
+            "${binaries[@]}"
 
       - name: Generate SHA-256 checksums
         run: |

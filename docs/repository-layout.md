@@ -105,6 +105,10 @@ an integrated suite and carries its own source and tests.
   fixture inputs and expected diagnostics.
 - `scripts/run-kani.sh` and `scripts/run-verus.sh` are the entry points for the
   formal verification tooling described in the developer documentation.
+- `scripts/check_glibc_baseline.py` verifies that repository-published
+  GNU/Linux ELF artefacts do not exceed the release's declared glibc baseline.
+  Release workflows pass explicit, already-built files; the script does not own
+  building, packaging, extraction, or process smoke tests.
 - `verus/` stores proof-focused material that sits alongside, rather than
   inside, the production crates.
 

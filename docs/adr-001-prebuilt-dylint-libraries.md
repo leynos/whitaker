@@ -91,8 +91,8 @@ Concrete decisions:
   require both CI and the installer to use it.
 - Build a target matrix covering `x86_64-unknown-linux-gnu`,
   `aarch64-unknown-linux-gnu`, `x86_64-apple-darwin`, `aarch64-apple-darwin`,
-  and `x86_64-pc-windows-msvc`. Linux builds target a conservative glibc
-  baseline using the oldest supported runner image.
+  and `x86_64-pc-windows-msvc`. Linux x86_64 builds use Ubuntu 22.04 and must
+  not require glibc symbols newer than `GLIBC_2.35`.
 - Name artefacts `whitaker-lints-<git_sha>-<toolchain>-<target>.tar.zst`.
 - Ship a `manifest.json` alongside each artefact (not embedded in the archive).
   The manifest captures the git SHA, toolchain, target triple, build time,
@@ -163,6 +163,21 @@ Non-goals:
   handling of extraction paths.
 
 ## Implementation notes
+
+### Linux compatibility boundary
+
+The tagged and rolling release workflows build x86_64 GNU/Linux artefacts on
+the explicit `ubuntu-22.04` runner. Before upload, the repository-owned
+`scripts/check_glibc_baseline.py` checker inspects each ELF executable and
+shared library and rejects requirements newer than glibc 2.35. The tagged
+release additionally extracts the packaged installer and dependency binaries on
+Ubuntu 22.04 and executes them before publication.
+
+The checker is a read-only release-boundary adapter: callers pass explicit,
+already-built ELF paths and the selected maximum glibc version. It does not own
+building, packaging, downloading, extraction, or process smoke tests. Reuse it
+for repository-published GNU/Linux ELF artefacts; keep other release actions in
+their existing workflow or packaging owner.
 
 ### Rolling release strategy (task 3.4.2)
 

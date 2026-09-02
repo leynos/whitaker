@@ -1,4 +1,4 @@
-.PHONY: help all clean test coverage build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke installer-msrv-check release-installer-dry-run package-lints workflow-test workflow-test-deps test-workflow-contracts test-markdown-format verus kani verus-clone-detector kani-clone-detector spelling spelling-config spelling-config-write spelling-phrase-check spelling-helper-test
+.PHONY: help all clean test coverage build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke installer-msrv-check release-installer-dry-run package-lints workflow-test workflow-test-deps test-workflow-contracts test-markdown-format test-glibc-baseline verus kani verus-clone-detector kani-clone-detector spelling spelling-config spelling-config-write spelling-phrase-check spelling-helper-test
 
 # Appended only on targets that invoke binaries commonly installed under these
 # prefixes (cargo/bun/user-local), so the default recipe environment stays
@@ -151,6 +151,12 @@ test-markdown-format: ## Validate the Markdown formatter checker
 	@PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python 3.14 \
 		--with pytest==9.0.2 --with hypothesis==6.151.9 \
 		python -m pytest scripts/tests/test_check_markdown_format.py -c /dev/null \
+		--rootdir=. -p no:cacheprovider
+
+test-glibc-baseline: ## Validate the Linux release glibc-baseline checker
+	@$(UV_ENV) $(UV) run --no-project --python 3.14 \
+		--with pytest==9.0.2 --with hypothesis==6.151.9 \
+		python -m pytest scripts/tests/test_check_glibc_baseline.py -c /dev/null \
 		--rootdir=. -p no:cacheprovider
 
 workflow-test-deps: ## Install Python dependencies for workflow tests
