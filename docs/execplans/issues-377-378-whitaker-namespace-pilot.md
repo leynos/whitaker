@@ -370,6 +370,11 @@ layer's diff from its immediate base before committing.
   formatting, lint, full test (1,653 passed and 5 skipped), Markdown, and
   Mermaid gates. A first local test attempt was invalidated when a concurrent
   target-directory sweep removed its executable; the clean rerun passed.
+- [x] 2026-09-02: Removed the temporary `mdtablefix` source-build exception
+  after issue #453 published and verified the v0.5.0 Linux x86_64 asset. The
+  workflow pins its SHA-256, installs it atomically into the cached binary
+  directory, and no longer retains a dedicated source-build target. The full
+  deterministic gate passed with 1,653 tests and 12 workflow contracts.
 - [ ] Keep merge gated on exact-head GitHub checks and no blocking CodeRabbit
   concerns. Do not merge until the result for the rebased, pushed head is green.
 - [ ] Complete EP-M3 and monitor Namespace jobs.
@@ -386,6 +391,12 @@ Cache isolation exposed rather than solved the second failure. Namespace had no
 `cargo-binstall`, so the fallback compiled from crates.io with Cuprum's Rust
 1.85 project compiler. Cargo then rejected the locked dependency graph before
 building any Whitaker code.
+
+Repairing the missing `mdtablefix` asset exposed two release-retry hazards.
+Compressed archive timestamps made an unchanged rebuild differ byte-for-byte,
+and the moving stable Rust channel could change the executable itself. The
+upstream fix now normalizes archive metadata and pins Rust 1.89.0; a second
+backfill run recognized all ten assets as identical.
 
 The local EP-M1 negative control reproduced that exact failure from the
 checked-in lockfile. Cargo metadata alone accepted the graph, so the permanent
@@ -554,6 +565,10 @@ the published v0.2.7 assets' `GLIBC_2.39` requirement.
   4 vCPUs/8 GB for the full build gate, and one shared cache tag rather than
   independent per-job caches. This keeps the ceiling at four cores while a
   single trusted main-branch job prevents cache-population stampedes.
+- 2026-09-02: Remove the `mdtablefix` source fallback as soon as its official
+  v0.5.0 asset is verified. Download that asset directly, pin its SHA-256, and
+  cache only the installed executable under `~/.cargo/bin`; retaining the
+  former build target would preserve an obsolete exception and waste storage.
 
 ## Outcomes & retrospective
 
@@ -620,3 +635,8 @@ shared 20-GB Namespace cache, checksum-verified prebuilt tools, and bounded
 nextest concurrency. Cache-hit output and sccache JSON make cold-versus-warm
 performance observable; pull requests are readers, while the main-branch
 `linux-full` job is the sole cache writer.
+
+The final tool-installation revision removes the last source-build exception.
+`mdtablefix` now follows the same trusted-binary policy as the other CI tools,
+and its official asset, checksum, installed executable, and cache ownership are
+protected by workflow contracts.
