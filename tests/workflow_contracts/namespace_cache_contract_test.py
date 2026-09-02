@@ -116,6 +116,18 @@ def test_namespace_tool_installers_cannot_compile_fallbacks() -> None:
         )
         assert sccache_step["with"]["tool"] == "sccache@0.16.0"
 
+    mdtablefix_step = _steps_by_name(jobs["linux-full"])["Install mdtablefix"]
+    mdtablefix_script = mdtablefix_step["run"]
+    assert "releases/download/v${MDTABLEFIX_VERSION}/mdtablefix-linux-x86_64" in (
+        mdtablefix_script
+    )
+    assert "sha256sum --check --status" in mdtablefix_script
+    assert "cargo install" not in mdtablefix_script
+    cache_paths = _steps_by_name(jobs["linux-full"])["Set up Namespace cache"][
+        "with"
+    ]["path"]
+    assert "~/.cache/mdtablefix-build" not in cache_paths
+
     merman_script = _steps_by_name(jobs["linux-full"])["Install Merman CLI"]["run"]
     assert "sha256sum --check" in merman_script
     assert "merman-cli 0.7.0" in merman_script

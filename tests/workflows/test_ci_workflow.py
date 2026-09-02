@@ -236,7 +236,9 @@ def _assert_coverage_tool_installation(coverage_job: Mapping[str, Any]) -> None:
     """Assert tool pins and coverage generation for the coverage job."""
     nextest_step = _find_step(coverage_job, "Install cargo-nextest")
     llvm_cov_step = _find_step(coverage_job, "Install cargo-llvm-cov")
-    installer_action = "taiki-e/install-action@db22c42b5af88356329b9a8056bb2c2f026d5a10"
+    installer_action = (
+        "taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68"
+    )
     assert nextest_step.get("uses") == installer_action, (
         "cargo-nextest must use the repository-approved installer action pin"
     )

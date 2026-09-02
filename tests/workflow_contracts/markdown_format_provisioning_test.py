@@ -19,6 +19,9 @@ def test_linux_full_provisions_pinned_markdown_tools_before_checking() -> None:
     """Require verified Markdown tool installations before the format gate."""
     workflow = _load_workflow()
     assert workflow["env"]["MDTABLEFIX_VERSION"] == "0.5.0"
+    assert workflow["env"]["MDTABLEFIX_LINUX_X64_SHA256"] == (
+        "bd38cd30f0405120c453b3e80b0d4e78a34d93d2c2121a0fd4ace4a54bacaeeb"
+    )
     assert workflow["env"]["MARKDOWNLINT_CLI2_VERSION"] == "0.20.0"
     steps = workflow["jobs"]["linux-full"]["steps"]
     steps_by_name = {step["name"]: step for step in steps if "name" in step}
@@ -38,14 +41,20 @@ def test_linux_full_provisions_pinned_markdown_tools_before_checking() -> None:
     )
     assert "~/.cargo/bin" in cache_step["with"]["path"]
     assert "~/.cache/cargo-binstall" in cache_step["with"]["path"]
+    assert "~/.cache/mdtablefix-build" not in cache_step["with"]["path"]
 
     install_script = steps_by_name["Install mdtablefix"]["run"]
     assert 'expected_mdtablefix_version="mdtablefix ${MDTABLEFIX_VERSION}"' in (
         install_script
     )
-    assert "cargo binstall --no-confirm --locked" in install_script
-    assert "--strategies crate-meta-data,quick-install" in install_script
-    assert '"mdtablefix@${MDTABLEFIX_VERSION}"' in install_script
+    assert "releases/download/v${MDTABLEFIX_VERSION}/mdtablefix-linux-x86_64" in (
+        install_script
+    )
+    assert "${MDTABLEFIX_LINUX_X64_SHA256}" in install_script
+    assert "sha256sum --check --status" in install_script
+    assert 'install -m 0755 "${download}" "${destination}.new"' in install_script
+    assert 'mv "${destination}.new" "${destination}"' in install_script
+    assert "cargo binstall" not in install_script
     assert "cargo install" not in install_script
     assert "mdtablefix --version 2>/dev/null" in install_script
     assert "installed_mdtablefix_version=\"$(mdtablefix --version | tr -d '\\r')\"" in (

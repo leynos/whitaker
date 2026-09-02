@@ -271,11 +271,12 @@ these statistics with runtime and paid unit-minutes.
 
 Tool setup must not compile tools from source. `taiki-e/install-action` calls
 pin a release whose catalogue contains each requested tool, disable fallbacks,
-and use checksum-verified release artefacts. `mdtablefix` uses only
-`cargo-binstall` metadata or QuickInstall strategies; the compile strategy is
-excluded. Merman 0.7.0 is installed from its official Linux release archive
-after checking the pinned SHA-256 digest. The attached volume retains the
-installed binaries and package download stores.
+and use checksum-verified release artefacts. `mdtablefix` 0.5.0 is installed
+from its official Linux x86_64 release asset after checking the SHA-256 pinned
+in the workflow. The attached volume retains the installed executable under
+`~/.cargo/bin`; a cold cache downloads it, while a warm cache verifies and
+reuses it without invoking Cargo. Merman 0.7.0 is installed from its official
+Linux release archive after checking the pinned SHA-256 digest.
 
 Table: Test profiles and typical usage.
 

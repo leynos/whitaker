@@ -15,6 +15,7 @@ env:
   # `make check-fmt` shells out to both Markdown formatters. Keep CI on the
   # same releases used to normalize the checked-in documentation.
   MDTABLEFIX_VERSION: '0.5.0'
+  MDTABLEFIX_LINUX_X64_SHA256: bd38cd30f0405120c453b3e80b0d4e78a34d93d2c2121a0fd4ace4a54bacaeeb
   MARKDOWNLINT_CLI2_VERSION: '0.20.0'
   RUSTFLAGS: -D warnings
   RUSTDOCFLAGS: -D warnings
@@ -76,13 +77,13 @@ jobs:
           fallback: none
 
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@db22c42b5af88356329b9a8056bb2c2f026d5a10
+        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
         with:
           tool: nextest@0.9.114
           fallback: none
 
       - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@db22c42b5af88356329b9a8056bb2c2f026d5a10
+        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
         with:
           tool: cargo-llvm-cov@0.6.24
           fallback: none
@@ -191,7 +192,7 @@ jobs:
         run: make installer-msrv-check
 
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@db22c42b5af88356329b9a8056bb2c2f026d5a10
+        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
         with:
           tool: nextest@0.9.114
           fallback: none
@@ -211,9 +212,15 @@ jobs:
             installed_mdtablefix_version="$(mdtablefix --version 2>/dev/null | tr -d '\r')"
           fi
           if [[ "${installed_mdtablefix_version}" != "${expected_mdtablefix_version}" ]]; then
-            cargo binstall --no-confirm --locked \
-              --strategies crate-meta-data,quick-install \
-              "mdtablefix@${MDTABLEFIX_VERSION}"
+            download="${RUNNER_TEMP}/mdtablefix-linux-x86_64"
+            destination="${HOME}/.cargo/bin/mdtablefix"
+            url="https://github.com/leynos/mdtablefix/releases/download/v${MDTABLEFIX_VERSION}/mdtablefix-linux-x86_64"
+            curl --fail --location --proto '=https' --tlsv1.2 "${url}" -o "${download}"
+            echo "${MDTABLEFIX_LINUX_X64_SHA256}  ${download}" \
+              | sha256sum --check --status
+            mkdir -p "$(dirname "${destination}")"
+            install -m 0755 "${download}" "${destination}.new"
+            mv "${destination}.new" "${destination}"
           fi
           installed_mdtablefix_version="$(mdtablefix --version | tr -d '\r')"
           if [[ "${installed_mdtablefix_version}" != "${expected_mdtablefix_version}" ]]; then
@@ -343,7 +350,7 @@ jobs:
         uses: leynos/shared-actions/.github/actions/setup-rust@32c8ea649ea44d40119f348ad48861212532061f
 
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@db22c42b5af88356329b9a8056bb2c2f026d5a10
+        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
         with:
           tool: nextest@0.9.114
           fallback: none
