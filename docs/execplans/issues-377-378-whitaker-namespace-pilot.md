@@ -292,8 +292,8 @@ layer's diff from its immediate base before committing.
 - [x] 2026-09-01: Built the installer and dependency tools inside Ubuntu 22.04;
   all three require at most `GLIBC_2.34`, below the `GLIBC_2.35` ceiling.
 - [x] 2026-09-01: Passed the EP-M2 formatting, documentation, workflow,
-  type-check, lint, full test, release dry-run, audit, Makefile, actionlint, and
-  diff-hygiene gates. Nextest reported 1,652 passed and 5 skipped.
+  type-check, lint, full test, release dry-run, audit, Makefile, actionlint,
+  and diff-hygiene gates. Nextest reported 1,652 passed and 5 skipped.
 - [x] 2026-09-01: Committed EP-M2 as `3456839` and passed the committed-HEAD
   publication check: 1,665 CI-profile tests, all ten lint libraries, and both
   selected packages verified.
