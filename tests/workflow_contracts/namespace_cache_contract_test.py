@@ -156,6 +156,13 @@ def test_namespace_tool_installers_cannot_compile_fallbacks() -> None:
     assert "sha256sum --check" in merman_script
     assert "merman-cli 0.7.0" in merman_script
 
+    nixie_script = _steps_by_name(jobs["linux-full"])["Install Nixie"]["run"]
+    assert "if command -v nixie" in nixie_script
+    assert 'uv tool install --force --python 3.14 "nixie-cli==1.1.0"' in (
+        nixie_script
+    )
+    assert nixie_script.count("command -v nixie") == 2
+
 
 def test_namespace_jobs_share_one_repository_cache_tag() -> None:
     """Avoid duplicate volumes while retaining different measured shapes."""

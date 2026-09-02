@@ -251,7 +251,9 @@ cache Bun and uv data by path so cache planning never requires those commands
 to be installed already. The uv cache contract includes downloads under
 `~/.cache/uv`, installed tool environments under `~/.local/share/uv`, and their
 executable shims under `~/.local/bin`; restoring only the environment store can
-make uv report a tool as installed while leaving its command unavailable. Both
+make uv report a tool as installed while leaving its command unavailable. The
+Nixie installer therefore forces installation only when its shim is absent,
+which repairs a partial cache generation from the cached uv artefacts. Both
 Linux lanes install the supported prebuilt sccache 0.16.0 release and forbid an
 installer fallback to compilation.
 

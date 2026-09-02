@@ -289,7 +289,13 @@ jobs:
           fi
 
       - name: Install Nixie
-        run: uv tool install --python 3.14 "nixie-cli==1.1.0"
+        run: |
+          if command -v nixie >/dev/null 2>&1; then
+            uv tool install --python 3.14 "nixie-cli==1.1.0"
+          else
+            uv tool install --force --python 3.14 "nixie-cli==1.1.0"
+          fi
+          command -v nixie
 
       - name: Enforce en-GB-oxendict spelling
         run: make spelling

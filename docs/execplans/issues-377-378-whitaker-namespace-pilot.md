@@ -377,14 +377,14 @@ layer's diff from its immediate base before committing.
   workflow pins its SHA-256, installs it atomically into the cached binary
   directory, and no longer retains a dedicated source-build target. The full
   deterministic gate passed with 1,653 tests and 12 workflow contracts.
-- [x] 2026-09-02: Merged the cache optimization as PR #390 at exact reviewed
-  head `4323ef4`; all deterministic gates, GitHub checks, and an independent
-  CodeRabbit review passed.
-- [x] 2026-09-03: Added uv's executable-shim directory to both Namespace cache
+- [x] 2026-09-02: Merged the cache optimization as pull request (PR) #390 at
+  exact reviewed head `4323ef4`; all deterministic gates, GitHub checks, and an
+  independent CodeRabbit review passed.
+- [x] 2026-09-02: Added uv's executable-shim directory to both Namespace cache
   mounts and enforced the complete uv cache boundary in workflow contracts. The
   full deterministic gate passed with 1,653 tests and 12 workflow contracts.
-- [ ] Cache uv's executable-shim directory, validate the correction, merge it,
-  and repeat the trusted-producer and unchanged warm-run measurements.
+- [ ] Merge the uv cache correction, then repeat the trusted-producer and
+  unchanged warm-run measurements.
 - [ ] Complete EP-M3 and monitor Namespace jobs.
 
 ## Surprises & discoveries
@@ -583,10 +583,12 @@ the published v0.2.7 assets' `GLIBC_2.39` requirement.
   v0.5.0 asset is verified. Download that asset directly, pin its SHA-256, and
   cache only the installed executable under `~/.cargo/bin`; retaining the
   former build target would preserve an obsolete exception and waste storage.
-- 2026-09-03: Cache uv's environment store and executable-shim directory
+- 2026-09-02: Cache uv's environment store and executable-shim directory
   together. Keep the existing cache tag because adding the missing mount is a
-  compatible extension: the trusted `main` producer can populate it without
-  invalidating the existing Cargo, Rust, and sccache data.
+  compatible extension. Repair an older, partial generation by forcing the
+  wheel-backed Nixie installation only when its executable shim is absent; the
+  trusted `main` producer can then populate the new mount without invalidating
+  the existing Cargo, Rust, and sccache data.
 
 ## Outcomes & retrospective
 
