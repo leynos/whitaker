@@ -1,4 +1,4 @@
-.PHONY: help all clean test coverage build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke release-installer-dry-run package-lints workflow-test workflow-test-deps test-workflow-contracts verus kani verus-clone-detector kani-clone-detector spelling spelling-config spelling-config-write spelling-phrase-check spelling-helper-test
+.PHONY: help all clean test coverage build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke release-installer-dry-run package-lints workflow-test workflow-test-deps test-workflow-contracts test-markdown-format verus kani verus-clone-detector kani-clone-detector spelling spelling-config spelling-config-write spelling-phrase-check spelling-helper-test
 
 # Appended only on targets that invoke binaries commonly installed under these
 # prefixes (cargo/bun/user-local), so the default recipe environment stays
@@ -22,6 +22,7 @@ COVERAGE_OUTPUT ?= lcov.info
 RUST_FLAGS ?= -D warnings
 RUSTDOC_FLAGS ?= --cfg docsrs -D warnings
 MDLINT ?= $(or $(shell command -v markdownlint-cli2 2>/dev/null),$(HOME)/.bun/bin/markdownlint-cli2)
+MDTABLEFIX ?= mdtablefix
 NIXIE ?= nixie
 WHITAKER_REPO ?= $(CURDIR)
 WHITAKER_REV ?= HEAD
@@ -53,6 +54,14 @@ DYLINT_LINK_VERSION ?= 6.0.1
 # needs a newer rustc than the repository's pinned nightly provides.
 DYLINT_TOOLS_TOOLCHAIN ?= stable
 WHITAKER_SCRIPT ?= $(HOME)/.local/bin/whitaker
+
+# Markdown sources checked by `check-fmt`. Keep generated output and local tool
+# caches out of this list; the checker itself never writes to these sources.
+MD_FILES_FIND = find . \
+	\( -type d \( -name .git -o -name target -o -name .venv -o \
+	-name .uv-cache -o -name .uv-tools -o -name .pytest_cache -o \
+	-name .vtcode -o -name memories -o -name node_modules \) -prune \) -o \
+	\( -type f -name '*.md' -print0 \)
 
 build: target/debug/$(APP) ## Build debug binary
 release: target/release/$(APP) ## Build release binary
@@ -138,6 +147,12 @@ test-workflow-contracts: ## Validate the mutation-testing caller contract
 	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v $(UV) >/dev/null || { echo "uv is required for workflow contract tests"; exit 1; }
 	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; $(UV) run --with 'pytest>=8' --with 'pyyaml>=6' pytest tests/workflow_contracts -q
 
+test-markdown-format: ## Validate the Markdown formatter checker
+	@PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python 3.14 \
+		--with pytest==9.0.2 --with hypothesis==6.151.9 \
+		python -m pytest scripts/tests/test_check_markdown_format.py -c /dev/null \
+		--rootdir=. -p no:cacheprovider
+
 workflow-test-deps: ## Install Python dependencies for workflow tests
 	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v $(UV) >/dev/null || { echo "uv is required for workflow tests"; exit 1; }
 	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; $(UV) venv --allow-existing $(WORKFLOW_TEST_VENV)
@@ -157,6 +172,10 @@ fmt: ## Format Rust and Markdown sources
 
 check-fmt: ## Verify formatting
 	$(CARGO) fmt --all -- --check
+	@$(MD_FILES_FIND) | xargs -0 sh -c '\
+		if [ "$$#" -gt 0 ]; then \
+			MDTABLEFIX="$(MDTABLEFIX)" MDLINT="$(MDLINT)" scripts/check-markdown-format.sh "$$@"; \
+		fi' sh
 
 markdownlint: spelling ## Lint Markdown files and enforce spelling
 	export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; $(MDLINT) '**/*.md' '!**/.uv-cache/**' '!**/.uv-tools/**'

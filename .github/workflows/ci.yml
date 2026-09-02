@@ -12,6 +12,10 @@ env:
   BUILD_PROFILE: debug
   CARGO_INCREMENTAL: 0
   CARGO_TERM_COLOR: always
+  # `make check-fmt` shells out to both Markdown formatters. Keep CI on the
+  # same releases used to normalize the checked-in documentation.
+  MDTABLEFIX_VERSION: '0.5.0'
+  MARKDOWNLINT_CLI2_VERSION: '0.20.0'
   RUSTFLAGS: -D warnings
   RUSTDOCFLAGS: -D warnings
   SCCACHE_GHA_ENABLED: "true"
@@ -84,13 +88,57 @@ jobs:
         with:
           tool: nextest@0.9.114
 
-      - name: Check formatting
-        run: make check-fmt
-
       - name: Install bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6  # v2
         with:
           bun-version: '1.2.21'
+
+      - name: Cache mdtablefix
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: |
+            ~/.cargo/bin/mdtablefix
+            ~/.cargo/bin/mdtablefix.exe
+            ~/.cache/cargo-binstall
+          key: mdtablefix-${{ runner.os }}-${{ runner.arch }}-${{ env.MDTABLEFIX_VERSION }}
+
+      - name: Install mdtablefix
+        # `make check-fmt` needs the exact release that defines the repository's
+        # canonical Markdown output, even when the cache restores an older binary.
+        run: |
+          expected_mdtablefix_version="mdtablefix ${MDTABLEFIX_VERSION}"
+          installed_mdtablefix_version=""
+          if command -v mdtablefix >/dev/null 2>&1; then
+            installed_mdtablefix_version="$(mdtablefix --version 2>/dev/null | tr -d '\r')"
+          fi
+          if [[ "${installed_mdtablefix_version}" != "${expected_mdtablefix_version}" ]]; then
+            if cargo binstall --version >/dev/null 2>&1; then
+              cargo binstall --no-confirm --locked "mdtablefix@${MDTABLEFIX_VERSION}"
+            else
+              echo "cargo-binstall unavailable; building mdtablefix from crates.io"
+              cargo install --locked mdtablefix --version "${MDTABLEFIX_VERSION}"
+            fi
+          fi
+          installed_mdtablefix_version="$(mdtablefix --version | tr -d '\r')"
+          if [[ "${installed_mdtablefix_version}" != "${expected_mdtablefix_version}" ]]; then
+            echo "expected ${expected_mdtablefix_version}, got ${installed_mdtablefix_version}" >&2
+            exit 1
+          fi
+
+      - name: Install Markdown lint CLI
+        # Match the lint-fixing pass that `make fmt` and `make check-fmt` share.
+        run: |
+          bun install --no-progress --global "markdownlint-cli2@${MARKDOWNLINT_CLI2_VERSION}"
+          markdownlint_version_output="$(markdownlint-cli2 --version)"
+          installed_markdownlint_version="${markdownlint_version_output%%$'\n'*}"
+          expected_markdownlint_version="markdownlint-cli2 v${MARKDOWNLINT_CLI2_VERSION}"
+          if [[ "${installed_markdownlint_version}" != "${expected_markdownlint_version}"* ]]; then
+            echo "expected ${expected_markdownlint_version}, got ${installed_markdownlint_version}" >&2
+            exit 1
+          fi
+
+      - name: Check formatting
+        run: make check-fmt
 
       - name: Install Mermaid CLI
         run: |

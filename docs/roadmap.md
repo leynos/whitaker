@@ -92,15 +92,14 @@ published-GPUI workspace invocation.
   Requires 2.1.1 and 2.3.4.
 - [ ] 2.2.11. Deliver the `missing_docs_in_test_functions` pre-expansion AST
   pass and candidate-selection predicate for test-harness compilations. See
-  [RFC 0003](rfcs/0003-missing-docs-in-test-functions.md) §§6-7. Requires
-  2.1.1.
+  [RFC 0003](rfcs/0003-missing-docs-in-test-functions.md) §§6-7. Requires 2.1.1.
   - Success: diagnostics occur only for source-authored, undocumented
     functions in test harnesses, with an identifier span when available; both
     `///` and `#[doc = "..."]` are recognized as documentation.
 - [ ] 2.2.12. Add typed include/exclude configuration with workspace-relative,
-  slash-normalized path matching and safe invalid-pattern handling. See [RFC
-  0003](rfcs/0003-missing-docs-in-test-functions.md) §6. Requires 1.1.2 and
-  2.2.11.
+  slash-normalized path matching and safe invalid-pattern handling. See
+  [RFC 0003](rfcs/0003-missing-docs-in-test-functions.md) §6. Requires 1.1.2
+  and 2.2.11.
   - Success: exclusions take precedence, separators behave equivalently,
     non-relative or invalid patterns produce actionable diagnostics, and no
     pattern can widen enforcement beyond the workspace.

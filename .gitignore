@@ -12,6 +12,7 @@ __pycache__/
 .coverage.*
 htmlcov/
 .pytest_cache/
+.hypothesis/
 .mypy_cache/
 .ruff_cache/
 .typos-oxendict-base.json

@@ -291,29 +291,66 @@ make check-fmt  # Verify formatting
 make fmt        # Apply formatting
 ```
 
+## Markdown formatting checks
+
+`make fmt` runs `mdformat-all`, which applies the repository's `mdtablefix`
+options and then fixes Markdown lint findings. `make check-fmt` invokes
+`scripts/check-markdown-format.sh` after the Rust formatter check. The Makefile
+passes every Markdown source outside repository and tool caches to that script
+in batches.
+
+The checker owns only the non-mutating comparison boundary. It copies each
+source to a temporary directory, asks `mdtablefix` and `markdownlint-cli2` to
+apply the same fixing passes as `mdformat-all`, and compares the result with
+the original source. It accepts either LF or CRLF when the content is otherwise
+identical, and removes the temporary directory on exit. It never formats or
+rewrites a working-tree file. `mdtablefix` remains the owner of table padding
+and paragraph wrapping; `markdownlint-cli2` remains the owner of Markdown lint
+rules and its fixing pass. The `linux-full` CI job installs both pinned tools
+before running `make check-fmt`; it caches `mdtablefix` but verifies its
+workflow-level version pin. This makes a cold runner and a stale cache produce
+the same canonical output.
+
+Keep the script scoped to `make check-fmt` and its focused process tests. Reuse
+it when another repository-owned gate needs to verify this exact Markdown
+canonical form, rather than reproducing the staging and line-ending logic in a
+second wrapper. Keep its formatter flags in step with `mdformat-all`, and use
+the `MDTABLEFIX` or `MDLINT` Makefile override when a locally installed
+formatter is not on the default `PATH`.
+
+Run the focused checker tests with:
+
+```sh
+make test-markdown-format
+```
+
+The target uses isolated `uv` dependencies and does not rewrite Markdown
+sources or other tracked files.
+
 ## Mutation-testing workflow contract tests
 
 Whitaker runs scheduled, informational mutation testing through a thin caller
-workflow, [`.github/workflows/mutation-testing.yml`](../.github/workflows/mutation-testing.yml),
+workflow,
+[`.github/workflows/mutation-testing.yml`](../.github/workflows/mutation-testing.yml),
 which delegates to the shared reusable workflow
-`leynos/shared-actions/.github/workflows/mutation-cargo.yml`. The heavy
-lifting — running `cargo-mutants`, sharding, and summarizing survivors — lives
-in `shared-actions`; this repository carries only declarative configuration.
-The run is **informational only**: it never gates a pull request. Survivors
-are reported through the job summary and downloadable artefacts so they can be
+`leynos/shared-actions/.github/workflows/mutation-cargo.yml`. The heavy lifting
+— running `cargo-mutants`, sharding, and summarizing survivors — lives in
+`shared-actions`; this repository carries only declarative configuration. The
+run is **informational only**: it never gates a pull request. Survivors are
+reported through the job summary and downloadable artefacts so they can be
 triaged into tests, not enforced as a blocking check.
 
 The workflow runs in two modes. A **daily schedule** (04:50 UTC) fires a
 change-scoped run that mutates only the source files touched within the
 detection window, so quiet days are cheap no-ops. A **manual dispatch** (the
-Actions "Run workflow" control) mutates the whole workspace; select a branch
-in that control to exercise a feature branch.
+Actions "Run workflow" control) mutates the whole workspace; select a branch in
+that control to exercise a feature branch.
 
 The caller passes a small set of configuration inputs, each carrying intent:
 
 - `paths` — `src/,common/,crates/,installer/,suite/`, the workspace member
-  prefixes rooted at the repository root; there are no top-level `examples/`
-  or `benches/` directories to add.
+  prefixes rooted at the repository root; there are no top-level `examples/` or
+  `benches/` directories to add.
 - `exclude-globs` — scaffolding whose surviving mutants would be noise rather
   than genuine test gaps: the `rustc_*` proxy crates and the `clippy_utils`
   stub (both re-export compiler internals), each lint's `ui/` and `examples/`
@@ -332,16 +369,16 @@ excluded). Those crates enable `feature(rustc_private)` under the
 (`-C prefer-dynamic -Z force-unstable-if-unmarked`) that the `test` and
 `typecheck` Makefile targets inject per invocation — see the note in
 [`.cargo/config.toml`](../.cargo/config.toml), which deliberately keeps that
-flag out of workspace-wide configuration because it would break `cargo
-install` for `whitaker-installer`. The shared mutation workflow has no
-equivalent per-crate RUSTFLAGS step, so it cannot reproduce
-`TEST_CARGO_FLAGS` faithfully across the whole workspace. Consequently this
-adoption is **pin-only**: the caller declares the best approximation of the CI
-scope it safely can, rather than a `--test-workspace` run that mirrors
-`make test` crate-for-crate, and the contract test asserts only that this
-declared configuration holds — not that a full workspace mutation baseline
-passes. [ADR 004](adr-004-pin-only-mutation-testing-contract.md) records this
-decision, its alternatives, and the accepted limitations.
+flag out of workspace-wide configuration because it would break `cargo install`
+for `whitaker-installer`. The shared mutation workflow has no equivalent
+per-crate RUSTFLAGS step, so it cannot reproduce `TEST_CARGO_FLAGS` faithfully
+across the whole workspace. Consequently this adoption is **pin-only**: the
+caller declares the best approximation of the CI scope it safely can, rather
+than a `--test-workspace` run that mirrors `make test` crate-for-crate, and the
+contract test asserts only that this declared configuration holds — not that a
+full workspace mutation baseline passes.
+[ADR 004](adr-004-pin-only-mutation-testing-contract.md) records this decision,
+its alternatives, and the accepted limitations.
 
 The `uses:` reference pins the shared workflow to a full 40-character commit
 SHA rather than a branch or tag, so a force-push upstream cannot silently
@@ -353,17 +390,19 @@ without any accompanying test edit.
 
 Because the caller is configuration rather than code, a contract test suite,
 [`tests/workflow_contracts/mutation_testing_test.py`](../tests/workflow_contracts/mutation_testing_test.py),
-pins the shape it must uphold, failing the pull request when the caller
-drifts — repointing the pin at a branch, widening the token scope, or
-dropping a configuration input — rather than letting the breakage surface
-only in a scheduled run. Run it locally with:
+pins the shape it must uphold, failing the pull request when the caller drifts
+— repointing the pin at a branch, widening the token scope, or dropping a
+configuration input — rather than letting the breakage surface only in a
+scheduled run. Run it locally with:
 
 ```sh
 make test-workflow-contracts
 ```
 
-which wraps `uv run --with 'pytest>=8' --with 'pyyaml>=6' pytest
-tests/workflow_contracts -q`. The suite validates:
+which wraps
+`uv run --with 'pytest>=8' --with 'pyyaml>=6' pytest
+tests/workflow_contracts -q`.
+The suite validates:
 
 - the `uses:` reference targets `mutation-cargo.yml` pinned to a full commit
   SHA;
