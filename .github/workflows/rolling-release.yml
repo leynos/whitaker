@@ -266,9 +266,13 @@ jobs:
         if: matrix.target == 'x86_64-unknown-linux-gnu'
         run: |
           set -euxo pipefail
+          python installer/scripts/dependency_binaries_manifest.py --output /tmp/dependency-binaries.tsv
+          binaries=()
+          while IFS=$'\t' read -r _package binary _version; do
+            binaries+=("dependency-root/bin/${binary}")
+          done < /tmp/dependency-binaries.tsv
           python scripts/check_glibc_baseline.py --maximum-glibc GLIBC_2.35 \
-            dependency-root/bin/cargo-dylint \
-            dependency-root/bin/dylint-link
+            "${binaries[@]}"
 
       - name: Generate SHA-256 checksums
         run: |

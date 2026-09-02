@@ -245,7 +245,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ env.RELEASE_TAG }}
 
@@ -261,7 +261,7 @@ jobs:
 
       - name: Download x86 installer artefact
         continue-on-error: true
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           pattern: installer-x86_64-unknown-linux-gnu
           merge-multiple: true
@@ -269,7 +269,7 @@ jobs:
 
       - name: Download x86 dependency artefacts
         continue-on-error: true
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           pattern: dependency-binaries-x86_64-unknown-linux-gnu
           merge-multiple: true

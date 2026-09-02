@@ -1612,8 +1612,8 @@ archive creation logic, validated by unit tests and BDD scenarios in
 `installer/tests/features/installer_release.feature`.
 
 **Linux compatibility decision:** Published x86_64 GNU/Linux installer,
-dependency-tool, and lint artefacts are built on Ubuntu 22.04 and may require
-no glibc symbol newer than `GLIBC_2.35`. The read-only
+dependency-tool, and lint artefacts are built on Ubuntu 22.04 and must not
+require any glibc symbol newer than `GLIBC_2.35`. The read-only
 `scripts/check_glibc_baseline.py` release adapter validates explicit ELF paths
 after build and before upload; it does not own building, packaging, extracting,
 downloading, or executing artefacts. The tagged release workflow separately

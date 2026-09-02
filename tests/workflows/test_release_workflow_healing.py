@@ -24,6 +24,8 @@ Run these checks:
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from tests.workflows.rolling_release_workflow_test_support import (
     _find_step_by_name,
     _get_job_dict,
@@ -150,7 +152,7 @@ def test_release_publish_tolerates_partial_build_failures() -> None:
         )
 
 
-def _step_names(workflow_path, job_name):
+def _step_names(workflow_path: Path, job_name: str) -> list[str]:
     """Return the ordered names for a workflow job's steps."""
     job = _job_from(workflow_path, job_name)
     return [step["name"] for step in job["steps"]]
@@ -188,6 +190,21 @@ def test_linux_release_legs_check_glibc_before_upload() -> None:
             assert isinstance(check_script, str)
             assert "check_glibc_baseline.py" in check_script
             assert "GLIBC_2.35" in check_script
+
+
+def test_rolling_dependency_glibc_check_reads_the_manifest() -> None:
+    """The rolling check covers every dependency binary selected for packaging."""
+    job = _job_from(WORKFLOW_PATH, "build-dependency-binaries")
+    check = _find_step_by_name(job["steps"], "Check glibc baseline")
+    assert check is not None
+    script = check.get("run")
+    assert isinstance(script, str)
+    assert "dependency_binaries_manifest.py --output /tmp/dependency-binaries.tsv" in script
+    assert "binaries=()" in script
+    assert "while IFS=$'\\t' read -r _package binary _version; do" in script
+    assert 'binaries+=("dependency-root/bin/${binary}")' in script
+    assert "done < /tmp/dependency-binaries.tsv" in script
+    assert '"${binaries[@]}"' in script
 
 
 def test_tagged_release_requires_packaged_compatibility_verification() -> None:
