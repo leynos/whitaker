@@ -197,7 +197,6 @@ make test NEXTEST_PROFILE=ci
 Continuous Integration (CI) always uses the `ci` profile, so installer tests
 are never silently skipped in the pipeline.
 
-
 ### Coverage and nested Cargo builds
 
 `make coverage` uses the same selected crate set and warning policy as
