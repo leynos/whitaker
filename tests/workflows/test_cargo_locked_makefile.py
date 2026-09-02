@@ -76,6 +76,27 @@ def test_recipe_cargo_calls_thread_cargo_locked(target: str) -> None:
         )
 
 
+def test_installer_msrv_recipe_installs_the_packaged_crate() -> None:
+    """Require the MSRV target to install the packaged crate in an isolated root."""
+    recipe = "\n".join(_makefile_recipe_lines("installer-msrv-check"))
+
+    assert "$(CARGO) +1.85.0 package --locked -p whitaker-installer --allow-dirty" in recipe, (
+        "MSRV target must create the publishable installer crate"
+    )
+    assert "tar -xzf \"$$PACKAGE_ARCHIVE\" -C \"$$PACKAGE_SOURCE_DIR\"" in recipe, (
+        "MSRV target must extract the packaged crate before installing it"
+    )
+    assert "$(CARGO) +1.85.0 install --locked --path \"$$PACKAGE_ROOT\" --root" in recipe, (
+        "MSRV target must install the packaged crate with locked Rust 1.85.0 dependencies"
+    )
+    assert '"$$TMP_DIR/bin/whitaker-installer" --version' in recipe, (
+        "MSRV target must check the installed binary"
+    )
+    assert "rm -rf -- \"$$TMP_DIR\"" in recipe, (
+        "MSRV target must clean up its temporary root"
+    )
+
+
 def _write_stub(directory: Path, name: str, body: str) -> Path:
     """Write an executable shell stub and return its path."""
     path = directory / name
@@ -109,6 +130,43 @@ done
 touch "$output_dir/whitaker-installer.tgz"
 EOF
     chmod 755 "target/$target/release/whitaker-package-installer"
+    ;;
+esac''',
+    )
+
+
+def _write_msrv_check_cargo_stub(directory: Path) -> Path:
+    """Write a Cargo stand-in that packages and installs a minimal crate archive."""
+    return _write_stub(
+        directory,
+        "cargo",
+        '''echo "$@" >> "$CARGO_LOCKED_LOG"
+if [ "$1" = "+1.85.0" ]; then shift; fi
+case "$1" in
+package)
+    package_source="$CARGO_TARGET_DIR/package-source/whitaker-installer-0.2.5"
+    mkdir -p "$package_source" "$CARGO_TARGET_DIR/package"
+    printf '[package]\nname = "whitaker-installer"\nversion = "0.2.5"\n' \
+        > "$package_source/Cargo.toml"
+    tar -czf "$CARGO_TARGET_DIR/package/whitaker-installer-0.2.5.crate" \\
+        -C "${package_source%/*}" "${package_source##*/}"
+    ;;
+install)
+    root=""
+    path=""
+    previous=""
+    for argument in "$@"; do
+        if [ "$previous" = "--root" ]; then root="$argument"; fi
+        if [ "$previous" = "--path" ]; then path="$argument"; fi
+        previous="$argument"
+    done
+    test -f "$path/Cargo.toml"
+    grep -qx 'name = "whitaker-installer"' "$path/Cargo.toml"
+    mkdir -p "$root/bin"
+    printf '%s\\n' "$path" > "$root/.installed-from-packaged-crate"
+    printf '#!/bin/sh\\ntest -f "$(dirname "$0")/../.installed-from-packaged-crate"\\n' \
+        > "$root/bin/whitaker-installer"
+    chmod 755 "$root/bin/whitaker-installer"
     ;;
 esac''',
     )
@@ -170,6 +228,34 @@ def _run_make(
         f"stdout: {result.stdout}\nstderr: {result.stderr}"
     )
     return log.read_text(encoding="utf-8").splitlines()
+
+
+def test_installer_msrv_check_runs_the_packaged_crate(tmp_path: Path) -> None:
+    """Run the MSRV target through packaging, installation, and binary verification."""
+    stub_dir = tmp_path / "bin"
+    stub_dir.mkdir()
+    cargo = _write_msrv_check_cargo_stub(stub_dir)
+
+    recorded = _run_make(
+        "installer-msrv-check",
+        MakeRunEnvironment(cargo=cargo, locked="", stub_dir=stub_dir),
+    )
+
+    assert recorded[0] == "+1.85.0 package --locked -p whitaker-installer --allow-dirty", (
+        f"MSRV target must package the installer before installing it: {recorded!r}"
+    )
+    assert len(recorded) == 2, (
+        f"MSRV target must run exactly package and install Cargo calls: {recorded!r}"
+    )
+    assert recorded[1].startswith("+1.85.0 install --locked --path "), (
+        f"MSRV target must install the extracted packaged crate: {recorded!r}"
+    )
+    assert "/package-source/whitaker-installer-0.2.5" in recorded[1], (
+        f"MSRV target must install the extracted archive source: {recorded!r}"
+    )
+    assert " --root " in recorded[1], (
+        f"MSRV target must install into an isolated root: {recorded!r}"
+    )
 
 
 def _write_tool_stubs(stub_dir: Path) -> None:

@@ -1524,6 +1524,14 @@ still rely on workspace metadata and the suite without installing the CLI. The
 decision records the Phase 3 packaging model and guards against regressions to
 workspace-root binary exposure.[^1][^2]
 
+**MSRV decision:** `whitaker-installer` declares Rust 1.85 as its minimum
+supported Rust version. The repository's `installer-msrv-check` Makefile target
+performs a locked source install with Rust 1.85 into a temporary root and runs
+the resulting binary's `--version` command. This real installation boundary is
+the authoritative compatibility check for installer changes. The installer
+keeps the `zip` dependency on the 7.2-compatible line because `zip` 8 requires
+Rust 1.88; only its Deflate feature is enabled.
+
 ### Installer release artefacts (cargo-binstall)
 
 **Decision:** Support `cargo binstall whitaker-installer` by publishing GitHub

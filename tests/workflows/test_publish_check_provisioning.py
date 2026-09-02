@@ -169,6 +169,11 @@ def _run_publish_check(stub_dir: Path) -> subprocess.CompletedProcess[str]:
     """Run the real publish-check target with stubs first on PATH."""
     env = os.environ.copy()
     env["PATH"] = f"{stub_dir}:/usr/bin:/bin"
+    # The Makefile prepends `$HOME/.cargo/bin`; isolate it so a host-installed
+    # cargo-dylint cannot bypass the harness's deliberately stale stub.
+    isolated_home = stub_dir.parent / "home"
+    isolated_home.mkdir()
+    env["HOME"] = str(isolated_home)
     env.pop("WHITAKER", None)
     return subprocess.run(
         [

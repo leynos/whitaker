@@ -88,10 +88,10 @@ fn determine_scan_roots(cli_target: Option<&Utf8Path>) -> Result<Vec<Utf8PathBuf
     if let Some(default) = default_target_dir() {
         roots.push(default);
     }
-    if let Some(prebuilt) = default_prebuilt_target_dir()
-        && !roots.iter().any(|root| root == &prebuilt)
-    {
-        roots.push(prebuilt);
+    if let Some(prebuilt) = default_prebuilt_target_dir() {
+        if !roots.iter().any(|root| root == &prebuilt) {
+            roots.push(prebuilt);
+        }
     }
 
     if roots.is_empty() {

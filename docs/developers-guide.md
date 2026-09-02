@@ -22,6 +22,23 @@ CI also installs or provides job-specific tools such as `cargo-nextest`, `bun`,
 `uv`, Mermaid CLI, and Nixie before running the targets that need them. Local
 runs of those targets require the same tools on `PATH`.
 
+### Installer compatibility
+
+The workspace builds with the nightly toolchain pinned in
+`rust-toolchain.toml`, but the published `whitaker-installer` supports Rust
+1.85 and newer. Run the following check after changing the installer, its
+dependencies, or packaging:
+
+```sh
+make installer-msrv-check
+```
+
+The target packages `whitaker-installer` into an isolated temporary target
+directory, extracts the resulting `.crate`, then uses Rust 1.85 to install that
+package with `--locked` into a temporary root and run `--version`. It removes
+the temporary directory on exit. This checks the published package boundary; do
+not replace it with a workspace-path installation.
+
 ## Running Tests
 
 Run the test suite from the workspace root:

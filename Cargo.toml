@@ -37,7 +37,10 @@ sha2 = "0.11.0"
 tar = "0.4.44"
 ureq = "3.2.0"
 zstd = "0.13.3"
-zip = "8"
+# Version 8 requires Rust 1.88; the installer supports Rust 1.85. The
+# installer creates and reads Deflate-compressed archives, so it does not need
+# ZIP's optional codecs or date/time crate integration.
+zip = { version = "7.2.0", default-features = false, features = ["deflate"] }
 rstest = "0.26.1"
 rstest-bdd = "0.5.0"
 rstest-bdd-macros = "0.5.0"

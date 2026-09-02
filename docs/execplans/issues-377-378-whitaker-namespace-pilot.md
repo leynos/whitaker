@@ -1,0 +1,390 @@
+# Restore portable Whitaker installation and pilot Namespace runners
+
+Status: IN PROGRESS — EP-M1 complete and reviewed; EP-M2 is next.
+
+This ExecPlan delivers three reviewable changes as one GitHub stacked pull
+request chain. The bottom layer restores a cold `whitaker-installer` source
+installation under its declared minimum supported Rust version (MSRV). The
+middle layer makes the x86_64 Linux release artefacts portable to Ubuntu 22.04.
+The top layer migrates compatible Whitaker continuous-integration jobs from
+UbiCloud to the existing uncached Namespace pilot profile. Success is visible
+when the installer builds under Rust 1.85, release artefacts require no glibc
+symbol newer than `GLIBC_2.35`, and Namespace admits and completes the migrated
+pull-request jobs.
+
+## Conformance basis
+
+Issue [#377](https://github.com/leynos/whitaker/issues/377) defines the cold
+installer contract. Issue [#378](https://github.com/leynos/whitaker/issues/378)
+defines the Linux glibc contract. Issue
+[#387](https://github.com/leynos/whitaker/issues/387) defines the Namespace
+pilot. `docs/adr-001-prebuilt-dylint-libraries.md` requires Linux release
+portability through a conservative glibc baseline.
+`docs/whitaker-dylint-suite-design.md` and `docs/publishing.md` define the
+installer and publishing flows. Issue
+[#386](https://github.com/leynos/whitaker/issues/386) tracks publication of the
+separately maintained estate adoption procedure at a stable URL; its
+workstation-local source was last verified with `nsc` 0.0.561 on 2026-09-01.
+
+The trace links are:
+
+- ISSUE-377 -> EP-M1 -> `make installer-msrv-check`;
+- ISSUE-378 -> ADR-001 -> EP-M2 -> release workflow contracts and an Ubuntu
+  22.04 packaged-artefact smoke test; and
+- ISSUE-387 -> EP-M3 -> workflow contracts, `actionlint`, GitHub Actions, and
+  `nsc github job list` evidence.
+
+## Constraints
+
+The three pull requests must remain a linear stack and each layer must be a
+coherent, independently validated repository state. Branches and worktrees are
+created with Git Donkey and linked with `gh stack`; stack branches are pushed
+with `gh stack push` or `gh stack submit`, never an unleased force push.
+
+The installer remains a Rust 2024 binary crate. Its MSRV is Rust 1.85 unless
+evidence proves that an existing public requirement makes that impossible. A
+dependency pin is permitted only when it is required to uphold that declared
+MSRV and remains inside the dependency's compatible public API range.
+
+The x86_64 Linux release target remains `x86_64-unknown-linux-gnu`. The release
+fix must change the build baseline and verification, not silently substitute a
+musl target or remove an artefact. The oldest supported baseline for this work
+is Ubuntu 22.04 with glibc 2.35.
+
+The Namespace pilot uses the deployed `namespace-profile-default` profile:
+Ubuntu 22.04, amd64, 4 vCPU, 16 GB, and no cache volume. No Namespace profile
+mutation is authorized or required. Existing artefact and cache backends remain
+unchanged during the pilot. Windows, macOS, release publication, rolling
+release, and externally selected runners remain on their current platforms
+unless a checked-in job contract proves that migration is both compatible and
+within this plan.
+
+The repository's action SHA pinning, permission model, documentation style,
+Rust lint policy, and generated-file ownership rules remain intact.
+`Cargo.lock` is regenerated through Cargo rather than edited by hand.
+
+## Tolerances (exception triggers)
+
+Stop and request direction if Rust 1.85 compatibility requires removing a
+feature, changing the installer's public command-line interface, or pinning a
+dependency outside a SemVer-compatible range. A deliberate MSRV newer than 1.85
+also requires approval because it changes ISSUE-377's proposed outcome.
+
+Stop if Ubuntu 22.04 cannot build the existing x86_64 GNU artefacts without a
+new cross-compilation system, privileged container, third-party binary mirror,
+or new signing/trust boundary. A simple explicit runner label, package install,
+or repository-owned verification script is within tolerance.
+
+For the Namespace layer, retain a job on its current runner and document the
+reason when a required executable, Docker privilege, architecture, secret, or
+performance contract is unavailable. Stop if the existing profile cannot admit
+Whitaker jobs, if a migration would weaken permissions, or if three consecutive
+pilot runs fail for the same Namespace-specific reason.
+
+No single layer may absorb unrelated formatting, dependency upgrades, roadmap
+work, or pre-existing failures. Any changed code file must remain below 400
+lines.
+
+## Risks
+
+The main MSRV risk is that a transitive dependency raises its compiler floor
+without an obvious direct manifest change. Mitigate this with an explicit
+`rust-version`, a locked install target, and a CI job that runs the real Cargo
+installation under Rust 1.85.
+
+The release risk is a false portability result from checking only the installer
+while downloaded `cargo-dylint` or `dylint-link` still require glibc 2.39.
+Mitigate this by inspecting every packaged x86_64 Linux executable and running
+the installed dependency binaries inside Ubuntu 22.04.
+
+The pilot risk is confusing runner admission, image prerequisites, cache
+behaviour, and command execution. Mitigate this by changing runner placement
+without changing cache or artefact systems, using structural workflow tests,
+and correlating GitHub job timestamps with `nsc github job list`.
+
+Stacking creates a review dependency: the Namespace PR cannot merge before the
+portability layers beneath it. This is intentional because the top layer uses
+the contracts established below and GitHub requires lower stack layers to meet
+merge requirements first.
+
+## Verification plan
+
+The first invariant, INV-MSRV, is that the installer's locked dependency graph
+is accepted by Rust 1.85 and produces a runnable `whitaker-installer`. The
+external axiom is Cargo's enforcement of package `rust-version` and dependency
+MSRVs. A focused real installation discharges the invariant. The negative
+control is the current main-branch lock graph, which the Cuprum run
+demonstrated Cargo rejects because `time`, `time-core`, and `zip` require Rust
+1.88.
+
+The second invariant, INV-GLIBC, is that every packaged x86_64 Linux executable
+requires no glibc symbol newer than 2.35. The lemma is that a binary built and
+executed against the oldest supported runtime cannot acquire an unobserved
+newer symbol requirement after packaging. A repository script will parse ELF
+version references, and an Ubuntu 22.04 smoke job will execute the packaged
+installer, `cargo-dylint`, and `dylint-link`. Existing v0.2.7 assets are the
+negative control: their ELF tables contain `GLIBC_2.39` and fail to start on
+Ubuntu 22.04.
+
+The third invariant, INV-RUNNER, is that each repository-owned migrated Linux
+job uses `namespace-profile-default`, while jobs with retained platform
+contracts keep their existing runner expressions. Deterministic workflow tests
+enumerate the expected assignments and reject a GitHub-hosted, UbiCloud, or
+wrong Namespace label at a migrated site. `actionlint` validates the
+intentional self-hosted label. A live pull-request run plus `nsc` admission
+evidence discharges the external runner axiom.
+
+These are finite configuration partitions rather than unbounded algorithms, so
+parameterized example tests and real boundary execution provide proportionate
+rigour. Property tests, model checking, and formal proofs would not strengthen
+the relevant guarantees. Non-vacuity comes from testing each named executable,
+each migrated job, each retained runner class, and the known failing v0.2.7
+artefacts.
+
+## Milestones
+
+### EP-M1: Declare and enforce installer MSRV
+
+Start in the Git Donkey worktree for `fix-installer-msrv`, based exactly on the
+observed `origin/main` tip. Add the smallest failing workflow or Makefile
+contract that requires a real locked installer build under Rust 1.85. Run it
+against the current lock graph and record the expected dependency-MSRV failure.
+
+Declare `rust-version = "1.85"` for `whitaker-installer`. Use Cargo metadata to
+identify the narrowest compatible direct or transitive dependency constraints,
+then regenerate `Cargo.lock`. Do not hand-edit the lockfile. Add an
+`installer-msrv-check` target and CI step that install into a temporary root,
+execute `whitaker-installer --version`, and remove the temporary installation.
+Update the users' guide, publishing guide, design document, and repository
+layout only where the new target or policy needs a durable signpost.
+
+The milestone is complete when the focused check fails on the original graph,
+passes on the corrected graph, and the repository's formatting, linting, test,
+documentation, and publish gates pass. Commit the layer with issue #377 in the
+subject and body.
+
+Recovery is to revert the manifest constraint, regenerated lockfile, test, and
+documentation together. Remaining work is ISSUE-378 and the Namespace pilot.
+
+### EP-M2: Enforce the x86_64 Linux glibc baseline
+
+Create the `conservative-linux-release` stack layer and Git Donkey worktree on
+top of EP-M1. First add workflow-contract tests that reject `ubuntu-latest` for
+the two x86_64 Linux release matrix entries and require the declared Ubuntu
+22.04 baseline. Add a compatibility check that rejects a fixture or downloaded
+binary naming `GLIBC_2.39`; record the expected red result.
+
+Change both x86_64 release matrix entries to an explicit Ubuntu 22.04 runner.
+Add a small repository-owned script that determines the maximum required glibc
+symbol version for ELF executables and fails above 2.35. Apply it to the
+packaged installer and dependency binaries before upload, then add an Ubuntu
+22.04 end-to-end smoke job or release dry-run path that extracts and executes
+all three tools. Keep architecture-specific non-Linux runners and artefact
+names unchanged. Update ADR-001, the design document, publishing guide, and
+repository layout for the owned script and enforced baseline.
+
+The milestone is complete when the existing v0.2.7 Linux assets fail the new
+check for `GLIBC_2.39`, newly built assets pass at or below 2.35, release
+workflow contracts pass, and all repository gates pass. Commit the layer with
+issue #378 in the subject and body.
+
+Recovery is to revert the release runner and verification additions as one
+layer. Remaining work is the Namespace pilot.
+
+### EP-M3: Add Whitaker to the Namespace pilot
+
+Create the `adopt-namespace-runners` stack layer and Git Donkey worktree on top
+of EP-M2. Inventory every workflow job, reusable workflow, composite action,
+permission, cache, artefact hand-off, architecture, and assumed executable.
+Record a GitHub/UbiCloud baseline from recent successful runs before changing
+runner labels.
+
+Migrate only compatible repository-owned pull-request Linux jobs whose current
+4-vCPU resource contract fits the deployed 4-vCPU/16-GB profile. Provision
+missing tools explicitly under existing version pins. Add
+`.github/actionlint.yaml`, update deterministic workflow contracts for migrated
+and retained assignments, and document the deployed uncached profile and every
+exception in the developers' guide. Do not change actions/cache, sccache,
+artefacts, release publication, Windows, macOS, mutation testing, or Docker
+contracts in this baseline layer.
+
+Push the stack and create draft linked PRs. Use the pull-request run to prove
+admission and provisioning with
+`nsc github job list --repository leynos/whitaker`. Compare queue time,
+execution time, and outcome with the recorded baseline. If a job fails,
+classify admission, provisioning, image prerequisite, command execution, cache,
+and teardown separately before editing. Update the stable estate adoption
+procedure once issue [#386](https://github.com/leynos/whitaker/issues/386) has
+published it with a reviewable URL.
+
+The milestone is complete when structural tests and all repository gates pass,
+the expected jobs appear in `nsc`, and representative migrated jobs complete
+successfully. Commit the layer, submit the three-PR draft stack, and record the
+issue, pull-request, run, and job URLs.
+
+Recovery is a revert of the runner-placement layer; the two portability fixes
+beneath it remain independently useful.
+
+## Validation commands
+
+Run focused checks during each red-green-refactor cycle, followed by the full
+repository gates before committing a layer:
+
+```bash
+make check-fmt
+make lint
+make test
+make typecheck
+make markdownlint
+make nixie
+make test-workflow-contracts
+make publish-check PUBLISH_PACKAGES="whitaker-common whitaker-installer"
+make release-installer-dry-run
+```
+
+Validate workflow syntax with the repository's installed `actionlint` policy.
+Run the new MSRV and glibc targets explicitly because they exercise external
+toolchains and runtime boundaries. Use `git diff --check` and inspect each
+layer's diff from its immediate base before committing.
+
+## Progress
+
+- [x] 2026-09-01: Confirmed the Cuprum cache-hit glibc failure and cold source
+  installation MSRV failure.
+- [x] 2026-09-01: Inspected Whitaker v0.2.7 release artefacts and confirmed
+  `GLIBC_2.39` in both `whitaker-installer` and `cargo-dylint`.
+- [x] 2026-09-01: Filed issues #377 and #378 with acceptance criteria.
+- [x] 2026-09-01: Created the `fix-installer-msrv` Git Donkey worktree from
+  `origin/main`.
+- [x] 2026-09-01: Obtained approval for this ExecPlan and began EP-M1.
+- [x] 2026-09-01: Reproduced the EP-M1 negative control with
+  `cargo +1.85.0 install --locked --path installer`: `time` 0.3.53, `time-core`
+  0.1.9, and `zip` 8.6.0 require Rust 1.88.
+- [x] 2026-09-01: Confirmed every published `zip` 8.x release requires Rust
+  1.88, while `zip` 7.2.0 supports Rust 1.83.
+- [x] 2026-09-01: Obtained approval to downgrade `zip` from 8.x to 7.2.0 and
+  preserve the Rust 1.85 installer MSRV.
+- [x] 2026-09-01: Completed EP-M1 implementation and deterministic validation
+  in commits `f7dec85` and `b9846ff`.
+- [x] 2026-09-01: Re-ran `publish-check` against committed `HEAD`; all 1,665
+  CI-profile tests and both selected package verifications passed.
+- [x] 2026-09-01: Extended `installer-msrv-check` to package, extract, and
+  install the crate boundary with Rust 1.85, matching issue #377's publication
+  contract.
+- [x] 2026-09-01: Ran `coderabbit review --agent` through the scrutineer for
+  EP-M1; it completed with zero findings and no rate-limit event.
+- [ ] Complete EP-M2 and commit the middle stack layer.
+- [ ] Complete EP-M3, submit the draft stack, and monitor Namespace jobs.
+
+## Surprises & discoveries
+
+The original pilot documentation attributed the failure to prebuilt
+`cargo-dylint`, but the first process that failed was the cached
+`whitaker-installer` executable. Direct ELF inspection established that both
+published binaries require `GLIBC_2.39`, so the durable release fix must cover
+the installer and dependency tools.
+
+Cache isolation exposed rather than solved the second failure. Namespace had no
+`cargo-binstall`, so the fallback compiled from crates.io with Cuprum's Rust
+1.85 project compiler. Cargo then rejected the locked dependency graph before
+building any Whitaker code.
+
+The local EP-M1 negative control reproduced that exact failure from the
+checked-in lockfile. Cargo metadata alone accepted the graph, so the permanent
+gate must perform the real locked install rather than relying on metadata or a
+resolver-only check.
+
+The full CI workflow contract module also failed unchanged `main` because two
+action-pin expectations had not moved with the deployed workflow pins. EP-M1
+touches this same contract module, so the stale expected SHAs are aligned with
+the already-pinned workflow values as a test-only prerequisite correction; no
+workflow behaviour changes as a result.
+
+The complete workflow test suite exposed another unchanged-main failure when
+the developer already has the pinned `cargo-dylint` in `~/.cargo/bin`. The
+provisioning fixtures put stubs first on `PATH`, but the Makefile deliberately
+prepends the real Cargo bin directory again. Give those subprocess fixtures an
+isolated home so their stale-tool and failed-install scenarios remain
+deterministic; this is a test-only correction with no production effect.
+
+All published `zip` 8.x versions declare Rust 1.88. A trial with `zip` 6.0.0,
+its default features narrowed to the capabilities Whitaker uses, and `time`
+0.3.45 resolved a Rust-1.85-compatible dependency graph. Compilation then
+reached Whitaker source and exposed let-chains in `installer/src/list.rs` and
+`installer/src/main.rs` that were not stabilized until after Rust 1.85.
+Rewriting those expressions does not require a feature or command-line change,
+but selecting `zip` 7.2.0 crosses the current direct dependency's major-version
+boundary and therefore required the approval mandated by this plan's tolerance
+section.
+
+The first Rust-1.85-compatible lock graph selected `time` 0.3.45 through
+`zip`'s optional `time` feature. `cargo audit` reported RUSTSEC-2026-0009,
+while the patched `time` 0.3.47 requires Rust 1.88. Whitaker uses
+`zip::DateTime`'s built-in representation rather than the external time-crate
+conversions, so removing that unused feature eliminates the vulnerable
+transitive dependency without changing archive behaviour.
+
+`publish-check` clones the repository's committed `HEAD` for its Dylint
+artefact phase, so a pre-commit invocation validated that phase at the
+preceding plan-only commit while its `cargo package --allow-dirty` phase
+validated the current manifests. Re-run the complete target after committing
+EP-M1 so every phase exercises the milestone commit before requesting review.
+
+Repository-wide `actionlint` currently reports the intentional UbiCloud runner
+label because no custom-label configuration exists, plus pre-existing SC2193
+findings in the release workflows. An invocation ignoring only those known
+categories passes. EP-M3 already owns `.github/actionlint.yaml`; the release
+script findings are assessed alongside the release workflow in EP-M2 rather
+than obscured by an EP-M1 change.
+
+## Decision log
+
+- 2026-09-01: Use three PR layers rather than combining release engineering
+  and runner migration. This preserves independent rollback and keeps each
+  issue's acceptance evidence reviewable.
+- 2026-09-01: Set the proposed installer MSRV to Rust 1.85 because it is the
+  first stable Rust 2024 compiler and matches the discovered consumer. Treat a
+  higher floor as a user-approved deviation rather than an incidental
+  dependency outcome.
+- 2026-09-01: Target glibc 2.35 rather than merely replacing a runner label.
+  An explicit executable compatibility gate protects future release workflow
+  changes from recreating the defect.
+- 2026-09-01: Reuse the existing uncached Namespace default profile. Creating
+  or mutating remote profiles is unnecessary for the initial pilot and would
+  confound runner-placement measurements.
+- 2026-09-01: Begin implementation after the user explicitly approved this
+  ExecPlan and requested the complete three-layer rollout.
+- 2026-09-01: Pause EP-M1 before accepting the experimental `zip` downgrade.
+  The Rust 1.85 outcome requires either an approved move from `zip` 8.x to
+  7.2.0 or a user-approved MSRV increase to Rust 1.88.
+- 2026-09-01: Preserve Rust 1.85 after the user approved the `zip` 7.2.0
+  downgrade. Keep the dependency feature set narrow and rewrite the post-1.85
+  let-chain without changing behaviour or the public command line.
+- 2026-09-01: Verify Rust 1.85 against the packaged crate rather than the
+  workspace path. This matches the published-consumer boundary named by issue
+  #377 and keeps the package artefact isolated from stale build output.
+
+## Outcomes & retrospective
+
+EP-M1 now declares Rust 1.85 in the installer manifest, enforces a real locked
+source install in the Makefile and Linux CI, and retains only the `zip` 7.2
+Deflate feature. Removing the unused `time` integration also leaves
+`cargo audit` with no known vulnerabilities. The focused MSRV install,
+formatting, Markdown, Mermaid, workflow-contract, type-check, Clippy, full
+test, release archive, Makefile, and scoped actionlint gates pass. The full
+Nextest result is 1,652 passed and 5 skipped. `cargo audit` retains four
+pre-existing allowed warnings but reports no vulnerabilities. Whitaker has no
+`doc-coverage` target, so that Netsuke-specific gate is not applicable. EP-M2
+and EP-M3 have not started.
+
+The post-commit publication gate also passes: its CI-profile Nextest run
+reported 1,665 passed and 5 skipped, the cloned-HEAD Dylint library build
+listed all ten expected libraries, and both `whitaker-common` and
+`whitaker-installer` packages verified. CodeRabbit reported no high-, medium-,
+or low-severity concerns for the committed milestone.
+
+Revision note (2026-09-01): The MSRV verification now packages, extracts, and
+installs `whitaker-installer` under Rust 1.85 so it exercises the published
+crate boundary. The Namespace adoption procedure is tracked in issue #386 until
+its owner publishes a stable URL; this does not change the remaining EP-M2 or
+EP-M3 implementation scope.
