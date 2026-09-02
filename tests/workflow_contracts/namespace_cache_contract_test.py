@@ -69,6 +69,12 @@ def test_namespace_jobs_have_one_external_cache_owner() -> None:
         assert "~/.cache/uv" in cached_paths, (
             f"{job_name} must cache uv downloads"
         )
+        assert "~/.local/share/uv" in cached_paths, (
+            f"{job_name} must cache installed uv tool environments"
+        )
+        assert "~/.local/bin" in cached_paths, (
+            f"{job_name} must cache uv tool executable shims"
+        )
         assert names.index("Set up Namespace cache") < names.index("Setup Rust"), (
             f"{job_name} must mount its cache before Rust setup"
         )

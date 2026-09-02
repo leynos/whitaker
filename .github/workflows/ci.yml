@@ -51,6 +51,7 @@ jobs:
             ~/.rustup
             ~/.cache/sccache
             ~/.cache/uv
+            ~/.local/bin
             ~/.local/share/uv
 
       - name: Record Namespace cache state
@@ -152,6 +153,7 @@ jobs:
             ~/.cache/cargo-binstall
             ~/.cache/sccache
             ~/.cache/uv
+            ~/.local/bin
             ~/.local/share/uv
 
       - name: Record Namespace cache state
