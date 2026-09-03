@@ -53,20 +53,32 @@ def test_ubicloud_jobs_use_only_the_pinned_ubicloud_cache_action() -> None:
         assert restore_steps(job), f"{job_name} must restore at least one cache"
 
 
+def _assert_one_owner_per_path(
+    job_name: str,
+    steps: list[dict[str, object]],
+) -> None:
+    """Assert that no two of the supplied cache steps claim the same path.
+
+    For example, passing a job's restore steps fails if both the registry and
+    the tools step list ``~/.cargo/bin``.
+    """
+    owned: dict[str, str] = {}
+    for step in steps:
+        name = str(step["name"])
+        for path in cache_paths(step):
+            previous = owned.get(path)
+            assert previous is None, (
+                f"{job_name}: {path} is claimed by both {previous!r} and {name!r}"
+            )
+            owned[path] = name
+
+
 def test_each_cached_path_has_exactly_one_owner_per_job() -> None:
     """Two cache steps claiming one directory would race to define its content."""
     for job_name in UBICLOUD_JOBS:
         job = load_job(job_name)
-        for steps in (restore_steps(job), save_steps(job)):
-            owned: dict[str, str] = {}
-            for step in steps:
-                for path in cache_paths(step):
-                    previous = owned.get(path)
-                    assert previous is None, (
-                        f"{job_name}: {path} is claimed by both {previous!r} "
-                        f"and {step['name']!r}"
-                    )
-                    owned[path] = str(step["name"])
+        _assert_one_owner_per_path(job_name, restore_steps(job))
+        _assert_one_owner_per_path(job_name, save_steps(job))
 
 
 def test_cache_restores_precede_every_expensive_install_or_build() -> None:
