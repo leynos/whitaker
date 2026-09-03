@@ -350,12 +350,13 @@ The shared compiler cache is intentionally scoped to debug builds:
   warnings-as-errors contract even when builds are routed through `sccache`.
 
 `sccache` is configured in exactly one place. The workflows declare
-`SCCACHE_BACKEND: gha`, and `scripts/select-sccache-backend.sh` translates that
+`SCCACHE_BACKEND`, and `scripts/select-sccache-backend.sh` translates that
 single value into the backend's environment before any Cargo invocation.
-Setting it to `local` instead exports `SCCACHE_DIR` and `SCCACHE_CACHE_SIZE`
-and activates the `~/.cache/sccache` archive steps, which are otherwise
-skipped. The two backends are never configured together: `sccache` would then
-report a plausible hit rate while writing to a store nobody owns.
+`local` exports `SCCACHE_DIR` and `SCCACHE_CACHE_SIZE` and activates the
+`~/.cache/sccache` archive steps; `gha` exports `SCCACHE_GHA_ENABLED` and
+leaves those steps skipped. The two backends are never configured together:
+`sccache` would then report a plausible hit rate while writing to a store
+nobody owns.
 
 The GitHub Actions backend needs `ACTIONS_RESULTS_URL` and
 `ACTIONS_RUNTIME_TOKEN`, which GitHub exposes to actions rather than to `run`
@@ -365,12 +366,25 @@ two values into the job environment when, and only when, the GHA backend is
 selected. Without it the wrapper falls back to `Local disk` and the job pays a
 compiler cache's setup cost for nothing.
 
-Choose the backend from the first cold writer's evidence rather than from
-preference. If `sccache --show-stats` reports write errors above roughly two
-percent of requests, or the Ubicloud cache listing shows no `sccache` entries,
-the backend is writing to GitHub's cache and competing with the Windows lane
-for GitHub's ten-gigabyte per-repository limit; switch the one declaration to
-`local`.
+`local` is the deployed backend, chosen from measurement rather than from
+preference. The first Ubicloud run with the GitHub Actions backend selected,
+[33748602187][whitaker-run-33748602187], proved the credentials export works
+and the backend proved useless in the same breath. `linux-full` reported
+`Cache location ghac`, 4,771 compile requests, 0 read errors, and 3,788 write
+errors against 3,788 store attempts; `coverage-check` reported 2,834 requests
+and 2,245 write errors against 2,245 attempts. Every single store failed, so
+the compiler cache would have retained nothing no matter how many runs
+followed. The threshold for abandoning that backend is write errors above
+roughly two percent of requests, or an Ubicloud cache listing with no `sccache`
+entries.
+
+The local directory has known trade-offs. Its archive grows with every new
+compilation unit until `SCCACHE_CACHE_SIZE` trims it, so a warm run restores
+and re-saves the whole directory even when only a few objects changed. That is
+why the key carries the run identifier with a `restore-keys` prefix, and why
+the save is restricted to the lane's single writer. Measure the restore and
+save duration against the compile seconds avoided; raise `SCCACHE_CACHE_SIZE`
+above its 2 GB default only if the trim rate makes warm runs miss.
 
 Each build lane resets `sccache` counters before compilation and then runs
 `scripts/record-sccache-effectiveness.sh`, which appends the human-readable
@@ -2675,6 +2689,7 @@ This builds, tests, and validates packages in a production-like environment
 without the `prefer-dynamic` flag used during development.
 
 [issue-180]: https://github.com/leynos/whitaker/issues/180
+[whitaker-run-33748602187]: https://github.com/leynos/whitaker/actions/runs/33748602187
 [whitaker-run-33410178021]: https://github.com/leynos/whitaker/actions/runs/33410178021
 [whitaker-run-33369228466]: https://github.com/leynos/whitaker/actions/runs/33369228466
 [whitaker-run-33345742967]: https://github.com/leynos/whitaker/actions/runs/33345742967

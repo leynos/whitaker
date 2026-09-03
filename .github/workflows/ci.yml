@@ -19,8 +19,11 @@ env:
   # Compiler-cache backend selector. `gha` routes sccache at the GitHub
   # Actions cache service; `local` routes it at the cached directory owned by
   # the "Restore the compiler cache directory" steps. Flipping this one line
-  # switches every Linux lane once the cold run's write-error count is known.
-  SCCACHE_BACKEND: gha
+  # switches every Linux lane. `local` is deployed because the GHA backend's
+  # first cold run on Ubicloud (run 33748602187) reported `Cache location
+  # ghac`, 0 read errors, and a write error for every one of its 3,788 store
+  # attempts, so it cached nothing at all.
+  SCCACHE_BACKEND: local
   # `make check-fmt` shells out to both Markdown formatters. Keep CI on the
   # same releases used to normalize the checked-in documentation.
   MDTABLEFIX_VERSION: '0.5.0'

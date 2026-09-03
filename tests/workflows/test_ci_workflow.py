@@ -151,8 +151,9 @@ def test_ci_enables_sccache_and_debug_target_cache_scope(
         "the backend selector, not the workflow, exports the sccache backend "
         "variables so only one backend is ever configured"
     )
-    assert env.get("SCCACHE_BACKEND") == "gha", (
-        "CI must declare the compiler-cache backend in one switchable place"
+    assert env.get("SCCACHE_BACKEND") in {"gha", "local"}, (
+        "CI must declare the compiler-cache backend in one switchable place, "
+        "naming a backend the selector script understands"
     )
     assert str(env.get("LINUX_RUNNER_VCPUS")) == "2", (
         "CI must derive its concurrency bounds from the Ubicloud shape"

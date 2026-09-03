@@ -116,11 +116,20 @@ def test_no_workflow_requests_unbounded_pytest_parallelism() -> None:
 
 def test_compiler_cache_uses_exactly_one_selected_backend() -> None:
     """Two configured backends make the reported hit rate unattributable."""
+    declared = {
+        workflow_name: load_workflow(workflow_name)["env"]["SCCACHE_BACKEND"]
+        for workflow_name in set(UBICLOUD_JOBS.values())
+    }
+    assert set(declared.values()) <= {"gha", "local"}, (
+        "SCCACHE_BACKEND must name a backend scripts/select-sccache-backend.sh "
+        f"understands, not {sorted(set(declared.values()))}"
+    )
+    assert len(set(declared.values())) == 1, (
+        f"every Linux workflow must select the same backend, not {declared}"
+    )
+
     for workflow_name in set(UBICLOUD_JOBS.values()):
         workflow = load_workflow(workflow_name)
-        assert workflow["env"]["SCCACHE_BACKEND"] == "gha", (
-            f"{workflow_name} must declare the backend once, at workflow level"
-        )
         assert workflow["env"]["RUSTC_WRAPPER"] == "sccache", (
             f"{workflow_name} must route every rustc invocation through sccache"
         )
