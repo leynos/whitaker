@@ -1,6 +1,7 @@
 # Restore portable Whitaker installation and pilot Namespace runners
 
-Status: IN PROGRESS — EP-M1 and EP-M2 complete and reviewed; EP-M3 in progress.
+Status: IN PROGRESS — EP-M1 and EP-M2 complete and reviewed; EP-M3 superseded
+by the Ubicloud migration recorded in the 2026-09-03 addendum below.
 
 This ExecPlan delivers three reviewable changes as one GitHub stacked pull
 request chain. The bottom layer restores a cold `whitaker-installer` source
@@ -601,6 +602,70 @@ the published v0.2.7 assets' `GLIBC_2.39` requirement.
   `~/.cache/merman` boundary and keep Whitaker's contract focused on action
   provenance, inputs, ordering, and cache ownership instead of duplicating the
   installer's internal shell implementation.
+
+## Addendum (2026-09-03): Ubicloud supersedes the Namespace runner substrate
+
+Nothing above is rewritten. This addendum records what changed after EP-M3's
+Namespace pilot and what remains open, so the plan matches the deployed
+configuration.
+
+Namespace is no longer the runner substrate. Linux developer-blocking jobs run
+on `ubicloud-standard-2-ubuntu-2404`; Windows stays on `windows-latest` because
+Ubicloud publishes Linux images only; and scheduled, release, and
+reusable-workflow jobs stay GitHub-hosted because they are not
+developer-blocking. Every `namespace-profile-*` label and the Namespace cache
+volume are gone, along with the empty-mount-point guards that a cache volume
+needed and an archive-based cache does not.
+
+Caching moved from one shared Namespace volume to per-path archives.
+`actions/cache/restore` and `actions/cache/save`, both pinned to
+`55cc8345863c7cc4c66a329aec7e433d2d1c52a9` (v6.1.0), serve every lane on both
+providers, because Ubicloud's transparent cache intercepts that version. Every
+cached path has exactly one owner inside its job, every key family has exactly
+one writer, restores run on every event, and saves are restricted to `main`. No
+job archives a Cargo `target` tree.
+
+The compiler cache runs in local-directory mode. `SCCACHE_BACKEND` selects it
+in one place, and `local` is deployed because the GitHub Actions backend stored
+nothing on this repository's Ubicloud runners: runs 33748602187 and 33756048103
+each reported `Cache location ghac`, zero read errors, and a write error for
+every store attempt, 3,788 of 3,788 and 2,245 of 2,245. The same runs' Windows
+lane wrote through the same backend with zero write errors, placing the fault
+in the Ubicloud cache proxy's write path. Whitaker and Cuprum are the
+local-mode arm of a deliberate A/B; Netsuke and rstest-bdd stay on the Actions
+backend.
+
+Tool provisioning gained provenance rather than trust. The Dylint host tools
+are checksum-pinned prebuilt release archives, the installed version is
+recorded beside the binary so a cached `dylint-link` cannot outlive a version
+bump, and the Clippy source mirror is a cached bare repository validated as
+bare and pointed at the pinned upstream before reuse.
+
+CI runs the Rust test suite once per distinct lane. `coverage-check` is the
+Linux pull-request gate, `coverage-upload` the `main`-branch writer,
+`windows-compat` the platform lane, and `linux-full` the static-linking lane
+inside `make publish-check`. No Linux job runs a bare `make test`, and a
+contract test now fails if one reappears.
+
+Deviation from the recipe worth naming: the recipe's exit gate expects an
+explicit `cache-hit: true` on every warm restore. The compiler-cache key ends
+with `github.run_id` and is restored through a `restore-keys` prefix, so its
+`cache-hit` is structurally `false` on every warm run. The evidence is
+therefore read from the matched key rather than from `cache-hit`, and the job
+summary reports `exact hit`, `prefix restore from <key>`, or `miss`.
+
+Open before this repository can exit the pilot:
+
+- [ ] Dispatch the cold writer on `main` with
+  `gh workflow run ci.yml --repo leynos/whitaker --ref main`, then take two
+  unchanged warm runs.
+- [ ] Record queue time, wall time, billed minutes, the per-step cache
+  outcome, restore and save size and duration, and `sccache --show-stats` for
+  all three runs.
+- [ ] Confirm the published entries with
+  `ubi gh leynos/whitaker list-cache-entries`.
+- [ ] Decide the sccache A/B against Cuprum once both have warm evidence.
+- [ ] Close the doctest gap, which no lane currently executes.
 
 ## Outcomes & retrospective
 

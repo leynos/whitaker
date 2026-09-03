@@ -115,7 +115,7 @@ inspect_mirror() {
         true) ;;
         false) return "${MIRROR_REBUILD}" ;;
         *)
-            echo "git reported an unparseable bare-repository state" \
+            echo "git reported an unparsable bare-repository state" \
                 "'${bare}' for ${candidate}." >&2
             return "${MIRROR_ENVIRONMENT}"
             ;;

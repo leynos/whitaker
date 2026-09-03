@@ -348,6 +348,20 @@ failure on a warm mirror is only a warning, because the revision the build
 script needs is historical and is already present. All three Linux lanes now
 restore the mirror and provision it before any Cargo invocation.
 
+The script owns a deletion, so it proves what it is deleting. It resolves both
+its argument and its trusted cache root (`CLIPPY_MIRROR_ROOT`, defaulting to
+`~/.cache/whitaker-mirrors`) to physical paths and refuses anything that is not
+the one `rust-clippy.git` inside that root. A suffix match such as
+`/tmp/project/rust-clippy.git` no longer authorizes a removal.
+
+It also classifies the restored path rather than reducing it to one boolean. A
+generation is reused only when git reports it bare and its `remote.origin.url`
+is the pinned upstream, because a non-bare directory or a mirror of some other
+repository would leave `dylint_driver` without the Clippy revision it needs. A
+non-bare or wrongly pointed generation is rebuilt. An unreadable path, a
+non-directory, or an unparsable verdict from git is an environment fault: the
+script aborts and never repairs it by deleting the path.
+
 The pinned Dylint host tools follow the same rule.
 `scripts/install-dylint-tools.sh` once ran `cargo install --locked` for
 `cargo-dylint` and `dylint-link` into a `mktemp -d` root, so both were
@@ -365,6 +379,18 @@ contract is unchanged; neither participates in the download-and-verify install
 path. `DYLINT_TOOLS_SHA256_CARGO_DYLINT` and `DYLINT_TOOLS_SHA256_DYLINT_LINK`
 exist solely so the behavioural tests can verify a locally generated fixture
 archive: they replace the expected digest and cannot disable verification.
+
+Presence in that durable root is not proof of a version. `cargo-dylint` can be
+probed with `cargo-dylint dylint --version`, but `dylint-link` is a linker shim
+that forwards `--version` to `cc`, so it cannot be. Every install therefore
+records the version it wrote in a `.<tool>.version` marker beside the binary,
+and a cached `dylint-link` is reused only when that marker matches the
+requested pin. Without it, a shim installed for an older `DYLINT_LINK_VERSION`
+would survive a version bump indefinitely in the unversioned root and be paired
+with a newer `cargo-dylint`. A system copy on `PATH` is accepted only when the
+tools root holds no `dylint-link` at all; it predates the script and carries no
+provenance, so the script says so on stderr rather than implying it verified
+anything.
 
 The shared compiler cache is intentionally scoped to debug builds:
 
@@ -451,10 +477,20 @@ hypothetical: `mozilla-actions/sccache-action` exports only `SCCACHE_PATH` and
 does not set `RUSTC_WRAPPER`, so before the wrapper was set explicitly no Cargo
 invocation in `coverage-main.yml` was wrapped at all.
 
-`scripts/record-cache-observations.sh` renders every restore step's key and
-`cache-hit` result into the job summary, including the steps a lane does not
-use, so an operator can explain any miss from the run evidence without
-re-reading the workflow. It runs under `if: always()`. Restore and save byte
+`scripts/record-cache-observations.sh` renders every restore step's primary
+key, the key it actually matched, and its `cache-hit` result into the job
+summary, including the steps a lane does not use, so an operator can explain
+any restore from the run evidence without re-reading the workflow. It runs under
+`if: always()`.
+
+The matched key, not `cache-hit`, is what classifies a restore. The cache
+action reports `cache-hit: true` only for an exact primary-key match, so a
+successful `restore-keys` restore and a complete miss both surface as a falsy
+value. Every warm compiler-cache restore takes the prefix path, because that
+key ends with the current `github.run_id` and can never match exactly. The
+summary therefore reports `exact hit`, `prefix restore from <key>`, or `miss`,
+and prints the raw `cache-hit` value verbatim beside it, showing an absent
+value as `unset` rather than coercing it to `false`. Restore and save byte
 counts and durations are not step outputs; read the cache action's own
 `Cache Size` and transfer lines from the job log, and confirm an entry exists
 on Ubicloud's side with the cache-entries API rather than assuming a save
@@ -489,6 +525,45 @@ Table: Test profiles and typical usage.
 
 When working on `whitaker-installer` code, run the full suite locally before
 pushing to catch installer regressions early.
+
+### One gate per executed test set
+
+A coverage job and a test-only job on the same platform bill twice for one
+result, so CI runs the Rust suite once per distinct lane and no more. Every
+lane that executes it differs from the others in platform, linkage, or trigger.
+
+Table: Lanes that execute the Rust test suite, and what makes each distinct.
+
+| Job               | Platform         | Command                        | What differs                                |
+| ----------------- | ---------------- | ------------------------------ | ------------------------------------------- |
+| `coverage-check`  | Ubicloud Linux   | `make coverage`                | the pull-request gate for Linux             |
+| `coverage-upload` | Ubicloud Linux   | `make coverage`                | runs on `main` pushes, never the same event |
+| `windows-compat`  | `windows-latest` | `make test NEXTEST_PROFILE=ci` | a different platform                        |
+| `linux-full`      | Ubicloud Linux   | `make publish-check`           | production-like static linking              |
+
+`make coverage` delegates to the `make test` recipe and swaps only the driver to
+`cargo llvm-cov nextest`, so the instrumented run and the plain run share one
+package set, one feature set, and one target set:
+`--workspace --all-targets --all-features` minus the eleven CI-excluded crates.
+That is why no Linux job needs a separate `make test` step, and why adding one
+would be pure duplication.
+
+`linux-full` is not an exception to that rule. Its suite runs inside
+`make publish-check`, which deliberately omits the `-C prefer-dynamic` flag the
+other lanes use, so it exercises the static linkage the published crates ship
+with. Dropping it would remove a linkage the coverage lane never covers.
+
+`tests/workflow_contracts/lane_deduplication_contract_test.py` holds this
+shape. It fails if a Linux test-only lane reappears, if the surviving gate
+narrows its package, target, or feature set, or if a job starts executing tests
+without a recorded reason for not being a duplicate.
+
+Doctests are a known gap in every lane. `--all-targets` excludes them, and
+`cargo llvm-cov nextest` does not run them either, so the roughly 830 doctest
+fences in the workspace are compiled by `cargo doc` in `make lint` but never
+executed. Closing that gap means adding a `cargo test --doc` step and budgeting
+for its first run; it is tracked as follow-up work rather than folded into the
+runner migration.
 
 ### Runner placement policy
 
