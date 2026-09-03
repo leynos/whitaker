@@ -8,10 +8,14 @@ vocabulary here lets each contract module stay focused on one policy.
 
 from __future__ import annotations
 
+import typing as typ
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+if typ.TYPE_CHECKING:  # pragma: no cover - typing only
+    from collections.abc import Iterable
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOWS_DIRECTORY = REPOSITORY_ROOT / ".github/workflows"
@@ -79,6 +83,26 @@ def load_job(job_name: str) -> dict[str, Any]:
     return job
 
 
+def all_jobs() -> list[tuple[str, str, dict[str, Any]]]:
+    """Return every job in every checked-in workflow as a name triple.
+
+    For example, a caller can scan the result for jobs whose inline scripts
+    execute the test suite, without listing the workflow files itself.
+    """
+    discovered: list[tuple[str, str, dict[str, Any]]] = []
+    for pattern in ("*.yml", "*.yaml"):
+        for workflow_path in sorted(WORKFLOWS_DIRECTORY.glob(pattern)):
+            jobs = load_workflow(workflow_path.name).get("jobs")
+            if not isinstance(jobs, dict):
+                continue
+            discovered.extend(
+                (workflow_path.name, job_name, job)
+                for job_name, job in jobs.items()
+                if isinstance(job, dict)
+            )
+    return discovered
+
+
 def job_steps(job: dict[str, Any]) -> list[dict[str, Any]]:
     """Return the ordered step list for one job."""
     steps = job.get("steps")
@@ -88,7 +112,9 @@ def job_steps(job: dict[str, Any]) -> list[dict[str, Any]]:
 
 def step_names(job: dict[str, Any]) -> list[str]:
     """Return the ordered step names for one job."""
-    return [step["name"] for step in job_steps(job) if isinstance(step.get("name"), str)]
+    return [
+        step["name"] for step in job_steps(job) if isinstance(step.get("name"), str)
+    ]
 
 
 def steps_by_name(job: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -107,6 +133,39 @@ def cache_paths(step: dict[str, Any]) -> list[str]:
     """
     raw = step.get("with", {}).get("path", "")
     return [line.strip() for line in str(raw).splitlines() if line.strip()]
+
+
+def duplicate_path_owners(steps: list[dict[str, Any]]) -> dict[str, list[str]]:
+    """Return each cached path claimed by more than one of ``steps``.
+
+    Ownership is the invariant the whole cache design rests on, so it is
+    computed here as a pure function over a step list rather than asserted
+    inline: the concrete workflows and the generated cases in the property
+    suite then exercise one implementation.
+
+    For example, two steps that both list ``~/.cargo/bin`` yield
+    ``{"~/.cargo/bin": ["Restore Cargo registry", "Restore the tools"]}``.
+    """
+    owners: dict[str, list[str]] = {}
+    for step in steps:
+        name = str(step.get("name", ""))
+        for path in cache_paths(step):
+            owners.setdefault(path, []).append(name)
+    return {path: names for path, names in owners.items() if len(names) > 1}
+
+
+def key_family(key: str, families: Iterable[str]) -> str | None:
+    """Return the reviewed key family a rendered cache key belongs to.
+
+    The longest matching prefix wins, so a family that is itself a prefix of
+    another never captures the more specific one. Returns ``None`` when no
+    family claims the key, which the contract treats as an unreviewed key.
+
+    For example, ``key_family("sccache-lint-v1-Linux", CACHE_KEY_WRITERS)``
+    returns ``"sccache-lint-v1-"``.
+    """
+    matches = [family for family in families if key.startswith(family)]
+    return max(matches, key=len) if matches else None
 
 
 def restore_steps(job: dict[str, Any]) -> list[dict[str, Any]]:

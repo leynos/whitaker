@@ -10,7 +10,9 @@ from ubicloud_workflow_support import (
     RESTORE_ACTION,
     SAVE_ACTION,
     cache_paths,
+    duplicate_path_owners,
     job_steps,
+    key_family,
     load_job,
     restore_steps,
     save_steps,
@@ -79,15 +81,10 @@ def _assert_one_owner_per_path(
     For example, passing a job's restore steps fails if both the registry and
     the tools step list ``~/.cargo/bin``.
     """
-    owned: dict[str, str] = {}
-    for step in steps:
-        name = str(step["name"])
-        for path in cache_paths(step):
-            previous = owned.get(path)
-            assert previous is None, (
-                f"{job_name}: {path} is claimed by both {previous!r} and {name!r}"
-            )
-            owned[path] = name
+    conflicts = duplicate_path_owners(steps)
+    assert not conflicts, f"{job_name}: each path needs one owner, but " + "; ".join(
+        f"{path} is claimed by {owners}" for path, owners in conflicts.items()
+    )
 
 
 def test_each_cached_path_has_exactly_one_owner_per_job() -> None:
@@ -150,10 +147,7 @@ def test_every_cache_key_family_has_exactly_one_writer() -> None:
             match = PRIMARY_KEY_REFERENCE.match(key)
             assert match is not None
             prefix = str(_restore_step_by_id(job, match.group(1))["with"]["key"])
-            family = next(
-                (name for name in CACHE_KEY_WRITERS if prefix.startswith(name)),
-                None,
-            )
+            family = key_family(prefix, CACHE_KEY_WRITERS)
             assert family is not None, f"unreviewed cache key family: {prefix}"
             previous = observed.get(family)
             assert previous is None, (
@@ -183,7 +177,9 @@ def test_every_restore_step_is_reported_in_the_job_summary() -> None:
         assert observations.get("if") == "always()", (
             f"{job_name} must record cache observations even when the job fails"
         )
-        reported = "\n".join(f"{key}: {value}" for key, value in observations["env"].items())
+        reported = "\n".join(
+            f"{key}: {value}" for key, value in observations["env"].items()
+        )
         for step in restore_steps(job):
             step_id = str(step["id"])
             assert f"steps.{step_id}.outputs.cache-primary-key" in reported, (
@@ -191,6 +187,10 @@ def test_every_restore_step_is_reported_in_the_job_summary() -> None:
             )
             assert f"steps.{step_id}.outputs.cache-hit" in reported, (
                 f"{job_name}: {step['name']!r} must report its cache-hit result"
+            )
+            assert f"steps.{step_id}.outputs.cache-matched-key" in reported, (
+                f"{job_name}: {step['name']!r} must report the key it matched, "
+                "so a prefix restore is distinguishable from a cold miss"
             )
 
 

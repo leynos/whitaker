@@ -156,7 +156,7 @@ workflow-test: workflow-test-deps ## Run opt-in GitHub workflow smoke tests with
 
 test-workflow-contracts: ## Validate the mutation-testing caller contract
 	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v $(UV) >/dev/null || { echo "uv is required for workflow contract tests"; exit 1; }
-	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; $(UV) run --with 'pytest>=8' --with 'pyyaml>=6' pytest tests/workflow_contracts -q
+	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; $(UV) run --with 'pytest>=8' --with 'pyyaml>=6' --with 'hypothesis>=6' pytest tests/workflow_contracts -q
 
 test-markdown-format: ## Validate the Markdown formatter checker
 	@PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python 3.14 \
