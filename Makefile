@@ -54,8 +54,13 @@ WORKFLOW_TEST_VENV ?= .venv
 LINT_CRATES ?= bumpy_road_function conditional_max_n_branches function_attrs_follow_docs module_max_lines module_must_have_inner_docs no_expect_outside_tests test_must_not_have_example no_std_fs_operations no_unwrap_or_else_panic whitaker_suite
 CARGO_DYLINT_VERSION ?= 6.0.1
 DYLINT_LINK_VERSION ?= 6.0.1
-# Host-tool installs run under this toolchain: the dylint 6.0.1 lockfile
-# needs a newer rustc than the repository's pinned nightly provides.
+# The pinned host tools are downloaded once into a durable directory rather
+# than a temporary root, so CI can cache them under one owner and a warm run
+# observes a hit instead of repeating the download.
+DYLINT_TOOLS_DIR ?= $(HOME)/.cache/whitaker-dylint-tools
+# Retained only so the provisioning script's argument contract is unchanged.
+# The host tools are now downloaded as verified prebuilt binaries, so no
+# toolchain participates in their installation.
 DYLINT_TOOLS_TOOLCHAIN ?= stable
 WHITAKER_SCRIPT ?= $(HOME)/.local/bin/whitaker
 
@@ -345,9 +350,10 @@ publish-check: ## Build, test, and validate packages before publishing
 	RUSTFLAGS="-Z force-unstable-if-unmarked $(RUST_FLAGS)" $(CARGO) +$$TOOLCHAIN nextest run $(CARGO_LOCKED) --profile ci $(TEST_CARGO_FLAGS) $(BUILD_JOBS); \
 	TMP_DIR=$$(mktemp -d); \
 	trap 'rm -rf "$$TMP_DIR"' 0 INT TERM HUP; \
-	DYLINT_TOOLS_DIR="$$TMP_DIR/dylint-tools"; \
+	DYLINT_TOOLS_DIR="$(DYLINT_TOOLS_DIR)"; \
+	mkdir -p "$$DYLINT_TOOLS_DIR/bin"; \
+	export PATH="$$DYLINT_TOOLS_DIR/bin:$$PATH"; \
 	scripts/install-dylint-tools.sh "$$DYLINT_TOOLS_DIR" "$(CARGO_DYLINT_VERSION)" "$(DYLINT_LINK_VERSION)" "$(CARGO)" "$(DYLINT_TOOLS_TOOLCHAIN)"; \
-	if [ -d "$$DYLINT_TOOLS_DIR/bin" ]; then export PATH="$$DYLINT_TOOLS_DIR/bin:$$PATH"; fi; \
 	TARGET_DIR="$$TMP_DIR/target"; \
 	git clone "$(WHITAKER_REPO)" "$$TMP_DIR/whitaker-src"; \
 	cd "$$TMP_DIR/whitaker-src" || exit 1; \
