@@ -526,44 +526,66 @@ Table: Test profiles and typical usage.
 When working on `whitaker-installer` code, run the full suite locally before
 pushing to catch installer regressions early.
 
-### One gate per executed test set
+### One execution of the test suite per pull request
 
 A coverage job and a test-only job on the same platform bill twice for one
-result, so CI runs the Rust suite once per distinct lane and no more. Every
-lane that executes it differs from the others in platform, linkage, or trigger.
+result. The coverage job is therefore the single execution of the Rust suite
+per pull request on Linux, and no other Linux job executes tests at all.
 
-Table: Lanes that execute the Rust test suite, and what makes each distinct.
+Table: Jobs that execute the Rust test suite.
 
-| Job               | Platform         | Command                        | What differs                                |
-| ----------------- | ---------------- | ------------------------------ | ------------------------------------------- |
-| `coverage-check`  | Ubicloud Linux   | `make coverage`                | the pull-request gate for Linux             |
-| `coverage-upload` | Ubicloud Linux   | `make coverage`                | runs on `main` pushes, never the same event |
-| `windows-compat`  | `windows-latest` | `make test NEXTEST_PROFILE=ci` | a different platform                        |
-| `linux-full`      | Ubicloud Linux   | `make publish-check`           | production-like static linking              |
+| Job               | Platform         | Command                          | Role                                      |
+| ----------------- | ---------------- | -------------------------------- | ----------------------------------------- |
+| `coverage-check`  | Ubicloud Linux   | `make coverage`, `make test-doc` | the single Linux pull-request execution   |
+| `coverage-upload` | Ubicloud Linux   | `make coverage`, `make test-doc` | the trunk baseline, on `main` pushes only |
+| `windows-compat`  | `windows-latest` | `make test NEXTEST_PROFILE=ci`   | a different platform                      |
 
 `make coverage` delegates to the `make test` recipe and swaps only the driver to
-`cargo llvm-cov nextest`, so the instrumented run and the plain run share one
-package set, one feature set, and one target set:
-`--workspace --all-targets --all-features` minus the eleven CI-excluded crates.
-That is why no Linux job needs a separate `make test` step, and why adding one
-would be pure duplication.
+`cargo llvm-cov nextest`, so the instrumented run keeps one package set, one
+feature set, and one target set: `--workspace --all-targets --all-features`
+minus the eleven CI-excluded crates. Both coverage lanes run identical flags,
+so the pull-request gate and the trunk baseline are comparable.
 
-`linux-full` is not an exception to that rule. Its suite runs inside
-`make publish-check`, which deliberately omits the `-C prefer-dynamic` flag the
-other lanes use, so it exercises the static linkage the published crates ship
-with. Dropping it would remove a linkage the coverage lane never covers.
+`make test-doc` is the second half of that one executed set, not a second lane.
+`cargo llvm-cov nextest` executes no doctests and `--all-targets` excludes
+them, so without this step the workspace's doctest fences are compiled by
+`cargo doc` in `make lint` and never run.
+
+Two things about the doctest lane are easy to get wrong.
+
+Its `RUSTFLAGS` deliberately omit the
+`-C prefer-dynamic -Z force-unstable-if-unmarked` pair that the test lane needs
+for its `cdylib` lint crates. A doctest is compiled as its own crate, and
+`force-unstable-if-unmarked` then makes every doctest fail to load the very
+library it is documenting, with `E0658`. With the plain `-D warnings` flags the
+same doctests pass.
+
+`DOCTEST_EXCLUDES` drops every crate that links `rustc_private`: the lint
+crates, the `rustc_*` proxy shims, `clippy_utils`, the `whitaker` root, and the
+suite. That is a structural limit rather than a policy choice. A doctest for
+those crates has no `#![feature(rustc_private)]` of its own and cannot compile
+at all, so the flags exclude what cannot run rather than what is not worth
+running. The remaining four packages, `whitaker-common`, `whitaker-installer`,
+`whitaker_sarif`, and `whitaker_clones_core`, hold the documented public API
+and contribute 335 doctests in about 18 seconds warm.
+
+`linux-full` executes no tests. It survives as a job because
+`main-required-checks` requires that context by name, and it carries the
+formatting, spelling, Markdown, Mermaid, lint, Dylint, workflow-contract,
+GLIBC-baseline, MSRV, and packaging work. Its former uninstrumented run inside
+`make publish-check` is gone, and `make publish-check` no longer runs the suite
+at all.
+
+That removal does cost one thing worth naming. The `publish-check` run used
+production-like static linking, without `-C prefer-dynamic`, which no surviving
+lane exercises. Linking is still covered at build time by the workspace and
+per-lint release builds that `publish-check` continues to run; what is no
+longer covered is executing the suite under that linkage.
 
 `tests/workflow_contracts/lane_deduplication_contract_test.py` holds this
-shape. It fails if a Linux test-only lane reappears, if the surviving gate
-narrows its package, target, or feature set, or if a job starts executing tests
-without a recorded reason for not being a duplicate.
-
-Doctests are a known gap in every lane. `--all-targets` excludes them, and
-`cargo llvm-cov nextest` does not run them either, so the roughly 830 doctest
-fences in the workspace are compiled by `cargo doc` in `make lint` but never
-executed. Closing that gap means adding a `cargo test --doc` step and budgeting
-for its first run; it is tracked as follow-up work rather than folded into the
-runner migration.
+shape. It fails if a second Linux execution appears, if the surviving gate
+narrows its package, target, or feature set, if either coverage lane loses its
+doctest step, or if `publish-check` starts running the suite again.
 
 ### Runner placement policy
 

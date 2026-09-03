@@ -1,24 +1,25 @@
-"""Keep one Linux gate for the Rust test suite, and keep it complete.
+"""Execute the Rust test suite exactly once per pull request on Linux.
 
-A coverage job and a test-only job on the same platform bill twice for one
-executed set. Whitaker's pull-request gate therefore runs the suite once on
-Linux, inside `coverage-check`, and the instrumented run stays in lockstep
-with the plain run it replaced: `make coverage` reuses the `make test`
-recipe and swaps only the driver, so both share one package set, one
-feature set, and one target set.
+The coverage job is the single execution. `coverage-check` runs
+`make coverage`, which reuses the `make test` recipe and swaps only the
+driver to `cargo llvm-cov nextest`, so the instrumented run keeps one
+package set, one feature set, and one target set. It then runs
+`make test-doc`, because `cargo llvm-cov nextest` executes no doctests and
+`--all-targets` excludes them. Those two steps together are one executed
+set, not two lanes.
 
-The other lanes that execute tests are not duplicates of it:
+`linux-full` executes no tests at all. It survives as a job because
+`main-required-checks` requires that context by name, and it carries the
+formatting, spelling, Markdown, Mermaid, lint, Dylint, workflow-contract,
+and packaging work. Its former uninstrumented run inside
+`make publish-check` is gone.
 
-- `windows-compat` runs the suite on a different platform;
-- `linux-full` runs it once more inside `make publish-check`, with
-  production-like static linking rather than the `prefer-dynamic` flags the
-  coverage lane needs for its `cdylib` lint crates; and
-- `coverage-upload` runs on `main` pushes, never on the same event as
-  `coverage-check`.
+The two remaining executions are not duplicates: `windows-compat` runs the
+suite on a different platform, and `coverage-upload` runs it on `main`
+pushes, never on the same event as `coverage-check`.
 
-These tests fail if a Linux test-only lane reappears, if the surviving gate
-narrows what it executes, or if a new job starts running tests without a
-recorded reason.
+These tests fail if a second Linux execution appears, if the surviving gate
+narrows what it executes, or if the doctest half of that gate goes missing.
 
 Run this contract with:
 
@@ -49,24 +50,31 @@ REQUIRED_TEST_FLAGS = ("--workspace", "--all-targets", "--all-features")
 #: such as `test-glibc-baseline` and `test-workflow-contracts`.
 MAKE_TEST = re.compile(r"\bmake test(?![-\w])")
 
+#: The doctest half of the single execution.
+MAKE_TEST_DOC = re.compile(r"\bmake test-doc\b")
+
 #: Commands whose presence in a job means that job executes the Rust suite.
+#: `make test-doc` is deliberately absent: it is the second step of the
+#: coverage lane's one executed set, not an execution of its own.
 TEST_COMMANDS = (
     MAKE_TEST,
     re.compile(r"\bmake coverage\b"),
-    re.compile(r"\bmake publish-check\b"),
-    re.compile(r"\bcargo(?:\s+\+\S+)?\s+test\b"),
+    re.compile(r"\bcargo(?:\s+\+\S+)?\s+test\b(?!\s+--doc)"),
     re.compile(r"\bnextest\s+run\b"),
     re.compile(r"\bllvm-cov\b"),
 )
 
 #: Every job permitted to execute the Rust suite, with the reason it is not
-#: a duplicate of the Linux coverage gate.
+#: a second execution of the Linux coverage gate.
 JUSTIFIED_TEST_LANES: dict[str, str] = {
-    "coverage-check": "the Linux pull-request gate",
+    "coverage-check": "the single Linux pull-request execution",
     "coverage-upload": "the main-branch coverage writer, a different trigger",
     "windows-compat": "a different platform",
-    "linux-full": "production-like static linking inside publish-check",
 }
+
+#: Both lanes that generate coverage must execute the identical set, so the
+#: pull-request gate and the trunk baseline are comparable.
+COVERAGE_LANES = ("coverage-check", "coverage-upload")
 
 
 def _inline_scripts(job: dict[str, typ.Any]) -> str:
@@ -125,6 +133,63 @@ def test_no_linux_job_adds_a_plain_test_step() -> None:
     )
 
 
+def test_linux_full_executes_no_tests() -> None:
+    """The lint lane carries no execution of its own, instrumented or not."""
+    scripts = _inline_scripts(load_job("linux-full"))
+    executing = sorted(
+        pattern.pattern for pattern in TEST_COMMANDS if pattern.search(scripts)
+    )
+    assert not executing, (
+        "linux-full must run lint, format, and packaging work only; "
+        f"it still executes {executing}"
+    )
+
+
+def test_linux_full_and_windows_compat_remain_emitted() -> None:
+    """`main-required-checks` requires both contexts by job name.
+
+    Removing either job, or renaming its context with an explicit `name` or a
+    matrix, would leave the ruleset waiting for a context that never arrives.
+    """
+    for job_name in ("linux-full", "windows-compat"):
+        job = load_job(job_name)
+        assert "name" not in job, (
+            f"{job_name} must keep its job id as its required check context"
+        )
+        assert "strategy" not in job, (
+            f"{job_name} must not become a matrix job; that renames its context"
+        )
+
+
+@pytest.mark.parametrize("job_name", COVERAGE_LANES)
+def test_each_coverage_lane_runs_the_doctests(job_name: str) -> None:
+    """Doctests are the half of the executed set nextest cannot reach."""
+    assert MAKE_TEST_DOC.search(_inline_scripts(load_job(job_name))), (
+        f"{job_name} must run the doctests; no other lane executes them"
+    )
+
+
+def test_the_doctest_lane_covers_the_whole_documented_surface() -> None:
+    """The doctest flags must not narrow below the whole workspace.
+
+    Crates that link `rustc_private` are excluded because a doctest is
+    compiled as its own crate and cannot load them, not because their
+    documentation is exempt.
+    """
+    flags = _makefile_variable("DOCTEST_CARGO_FLAGS")
+    for flag in ("--workspace", "--all-features"):
+        assert flag in flags, f"DOCTEST_CARGO_FLAGS must keep {flag}; got {flags!r}"
+
+
+def test_publish_check_no_longer_executes_the_suite() -> None:
+    """Its uninstrumented run was the second Linux execution."""
+    recipe = MAKEFILE.read_text(encoding="utf-8").split("\npublish-check:", 1)[1]
+    recipe = recipe.split("\n\n", 1)[0]
+    assert "nextest run" not in recipe, (
+        "publish-check must not re-run the suite the coverage lane executed"
+    )
+
+
 def test_windows_keeps_its_own_platform_lane() -> None:
     """Platform coverage is not duplication, so the Windows lane stays."""
     scripts = _inline_scripts(load_job("windows-compat"))
@@ -157,9 +222,9 @@ def test_the_surviving_gate_executes_the_whole_workspace(flag: str) -> None:
 
 
 def test_no_unrecorded_job_executes_the_test_suite() -> None:
-    """A new test-executing lane must state why it is not a duplicate."""
+    """A new test-executing lane must state why it is not a second execution."""
     unrecorded = sorted(_jobs_matching(TEST_COMMANDS) - set(JUSTIFIED_TEST_LANES))
     assert not unrecorded, (
         "each job that executes tests must be recorded with the reason it is "
-        f"not a duplicate of the Linux coverage gate: {unrecorded}"
+        f"not a second execution of the Linux coverage gate: {unrecorded}"
     )

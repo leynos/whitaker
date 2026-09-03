@@ -30,11 +30,15 @@ succeed:
 make publish-check PUBLISH_PACKAGES="whitaker-common whitaker-installer"
 ```
 
-This target builds the workspace, runs tests with the pinned toolchain, and
-packages the crates named in `PUBLISH_PACKAGES` for inspection, which here
-means both `whitaker-common` and `whitaker-installer`. The target runs under
-`set -eu`, so any failed step aborts the gate immediately rather than
-continuing with a partially built or stale toolchain.
+This target builds the workspace, builds each lint library, and packages the
+crates named in `PUBLISH_PACKAGES` for inspection, which here means both
+`whitaker-common` and `whitaker-installer`. The target runs under `set -eu`, so
+any failed step aborts the gate immediately rather than continuing with a
+partially built or stale toolchain.
+
+It runs no tests. The coverage job is the single execution of the suite per
+pull request, so re-running it here would bill twice for one result; see "One
+execution of the test suite per pull request" in the developers' guide.
 
 Before building the lint libraries, `publish-check` provisions the pinned
 Dylint tools by delegating to `scripts/install-dylint-tools.sh`. Nothing is

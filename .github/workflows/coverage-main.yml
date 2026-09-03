@@ -183,6 +183,12 @@ jobs:
       - name: Generate coverage
         run: make coverage
 
+      - name: Run doctests
+        # `cargo llvm-cov nextest` executes no doctests and `--all-targets`
+        # excludes them, so this is the only step in the repository that runs
+        # them. It is the second half of one executed set, not a second lane.
+        run: make test-doc
+
       - name: Record sccache effectiveness
         if: always()
         run: bash scripts/record-sccache-effectiveness.sh

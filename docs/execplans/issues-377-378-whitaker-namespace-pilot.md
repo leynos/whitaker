@@ -641,11 +641,27 @@ recorded beside the binary so a cached `dylint-link` cannot outlive a version
 bump, and the Clippy source mirror is a cached bare repository validated as
 bare and pointed at the pinned upstream before reuse.
 
-CI runs the Rust test suite once per distinct lane. `coverage-check` is the
-Linux pull-request gate, `coverage-upload` the `main`-branch writer,
-`windows-compat` the platform lane, and `linux-full` the static-linking lane
-inside `make publish-check`. No Linux job runs a bare `make test`, and a
-contract test now fails if one reappears.
+CI executes the Rust test suite once per pull request on Linux. The coverage
+job is that single execution: `coverage-check` runs `make coverage` and then
+`make test-doc`, which together are one executed set, because
+`cargo llvm-cov nextest` runs no doctests and `--all-targets` excludes them.
+`coverage-upload` runs identical flags on `main` so the trunk baseline is
+comparable, and `windows-compat` covers the other platform. `linux-full`
+executes no tests; it survives as a required check context carrying the lint,
+format, Dylint, and packaging work, and `make publish-check` no longer runs the
+suite. A contract test fails if a second Linux execution appears or if either
+coverage lane loses its doctest step.
+
+The doctest lane excludes every crate that links `rustc_private` and runs
+without the `-C prefer-dynamic -Z force-unstable-if-unmarked` pair the test
+lane needs. Both are structural: a doctest is compiled as its own crate, so it
+has no `#![feature(rustc_private)]` and cannot load those libraries. The four
+remaining packages contribute 335 doctests in about 18 seconds warm.
+
+Removing the `publish-check` run costs one thing worth naming: it executed the
+suite under production-like static linking, which no surviving lane does.
+Linking is still covered at build time by the workspace and per-lint release
+builds.
 
 Deviation from the recipe worth naming: the recipe's exit gate expects an
 explicit `cache-hit: true` on every warm restore. The compiler-cache key ends
@@ -665,7 +681,8 @@ Open before this repository can exit the pilot:
 - [ ] Confirm the published entries with
   `ubi gh leynos/whitaker list-cache-entries`.
 - [ ] Decide the sccache A/B against Cuprum once both have warm evidence.
-- [ ] Close the doctest gap, which no lane currently executes.
+- [ ] Decide whether executing the suite under static linking needs a lane
+  of its own, now that `publish-check` no longer does it.
 
 ## Outcomes & retrospective
 

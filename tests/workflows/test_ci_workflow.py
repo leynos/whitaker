@@ -217,6 +217,7 @@ def _coverage_check_job(workflow: Mapping[str, Any]) -> dict[str, Any]:
         "Install cargo-llvm-cov",
         "Reset sccache statistics",
         "Generate coverage",
+        "Run doctests",
         "Record sccache effectiveness",
         "Upload sccache statistics",
         "Check coverage against CodeScene gates",
@@ -271,6 +272,10 @@ def _assert_coverage_tool_installation(coverage_job: Mapping[str, Any]) -> None:
     assert _find_step(coverage_job, "Generate coverage").get("run") == (
         "make coverage"
     ), "coverage-check must preserve Whitaker's crate exclusions and RUSTFLAGS"
+
+    assert _find_step(coverage_job, "Run doctests").get("run") == ("make test-doc"), (
+        "coverage-check must execute the doctests nextest cannot reach"
+    )
 
 
 def _assert_codescene_check(coverage_job: Mapping[str, Any]) -> None:
