@@ -1,11 +1,19 @@
 """Validate Namespace cache ownership, tool provenance, and observability."""
 
+import shlex
 from pathlib import Path
 from typing import Any
 
 import yaml
 
-WORKFLOW_PATH = Path(__file__).resolve().parents[2] / ".github/workflows/ci.yml"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+WORKFLOW_PATH = REPO_ROOT / ".github/workflows/ci.yml"
+COVERAGE_WORKFLOW_PATH = REPO_ROOT / ".github/workflows/coverage-main.yml"
+DYLINT_TOOLS_SCRIPT = REPO_ROOT / "scripts/install-dylint-tools.sh"
+CACHE_STATE_SCRIPT = "scripts/record-namespace-cache-state.sh"
+CLIPPY_MIRROR_SCRIPT = "scripts/provision-clippy-mirror.sh"
+SCCACHE_STATS_SCRIPT = "scripts/record-sccache-effectiveness.sh"
+CLIPPY_MIRROR_CACHE_PATH = "~/.cache/whitaker-mirrors"
 CACHE_ACTION = (
     "namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547"
 )
@@ -42,6 +50,21 @@ def _steps_by_name(job: dict[str, Any]) -> dict[str, dict[str, Any]]:
 def _step_names(job: dict[str, Any]) -> list[str]:
     """Return the ordered names from one workflow job."""
     return list(_steps_by_name(job))
+
+
+def _recorded_cache_paths(run_script: str) -> set[str]:
+    """Return the paths the cache-state recorder is asked to measure.
+
+    The first argument is the cache tag; the rest are cached paths.
+    """
+    words = shlex.split(run_script.replace("\\\n", " "))
+    start = words.index(CACHE_STATE_SCRIPT)
+    return set(words[start + 2 :])
+
+
+def _mounted_cache_paths(cache_step: dict[str, Any]) -> set[str]:
+    """Return the paths the Namespace cache action mounts."""
+    return {line.strip() for line in cache_step["with"]["path"].splitlines() if line.strip()}
 
 
 def test_namespace_jobs_have_one_external_cache_owner() -> None:
@@ -107,13 +130,19 @@ def test_namespace_jobs_report_volume_and_compiler_cache_results() -> None:
         assert cache_summary["env"]["NAMESPACE_CACHE_HIT"] == (
             "${{ steps.namespace-cache.outputs.cache-hit }}"
         )
-        assert "NAMESPACE_CACHE_HIT" in cache_summary["run"]
+        assert CACHE_STATE_SCRIPT in cache_summary["run"], (
+            f"{job_name} must record cache state through the shared recorder"
+        )
+        recorded = _recorded_cache_paths(cache_summary["run"])
+        mounted = _mounted_cache_paths(steps["Set up Namespace cache"])
+        assert recorded == mounted, (
+            f"{job_name} must report the restored size of every mounted path; "
+            f"mounted {sorted(mounted)}, recorded {sorted(recorded)}"
+        )
         assert names.index("Reset sccache statistics") < names.index(
             "Record sccache effectiveness"
         )
-        stats_script = steps["Record sccache effectiveness"]["run"]
-        assert "sccache --show-stats" in stats_script
-        assert "--stats-format json" in stats_script
+        assert SCCACHE_STATS_SCRIPT in steps["Record sccache effectiveness"]["run"]
         upload_step = steps["Upload sccache statistics"]
         assert upload_step["with"]["path"] == "sccache-stats.json"
         assert upload_step["with"]["retention-days"] == 14
@@ -188,3 +217,117 @@ def test_namespace_jobs_share_one_repository_cache_tag() -> None:
         "overrides.cache-tag=whitaker-linux-amd64-v1",
         "namespace-profile-rust-linux-ci;overrides.cache-tag=whitaker-linux-amd64-v1",
     }
+
+
+def _load_coverage_steps() -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
+    """Load the main-branch coverage job's steps in order and by name."""
+    workflow = yaml.safe_load(COVERAGE_WORKFLOW_PATH.read_text(encoding="utf-8"))
+    job = workflow["jobs"]["coverage-upload"]
+    return job["steps"], _steps_by_name(job)
+
+
+def test_clippy_source_fetch_has_one_cache_owner() -> None:
+    """Require a cached Clippy mirror before anything builds `dylint_driver`.
+
+    `dylint_driver`'s build script clones rust-lang/rust-clippy to read
+    `clippy_utils/src/sym.rs`. Left unowned, that clone repeats on every cold
+    build and fails when GitHub rejects the unauthenticated request.
+    """
+    jobs = _load_jobs()
+    for job_name in NAMESPACE_JOBS:
+        job = jobs[job_name]
+        steps = _steps_by_name(job)
+        names = _step_names(job)
+        cached_paths = _mounted_cache_paths(steps["Set up Namespace cache"])
+        assert CLIPPY_MIRROR_CACHE_PATH in cached_paths, (
+            f"{job_name} must cache the Clippy mirror's parent directory"
+        )
+        mirror_step = steps["Provision the Clippy source mirror"]
+        assert CLIPPY_MIRROR_SCRIPT in mirror_step["run"]
+        assert mirror_step["id"] == "clippy-mirror"
+        assert names.index("Set up Namespace cache") < names.index(
+            "Provision the Clippy source mirror"
+        ), f"{job_name} must mount the cache before populating the mirror"
+        assert names.index("Provision the Clippy source mirror") < names.index(
+            "Setup Rust"
+        ), f"{job_name} must provision the mirror before any Cargo build"
+
+
+def test_clippy_mirror_is_not_the_cache_mount_point() -> None:
+    """Keep the mirror below the mounted directory, never at it.
+
+    A cold volume materializes the mount point as a directory, so a mirror
+    placed at the mount point cannot be replaced when a stale generation is
+    discarded.
+    """
+    jobs = _load_jobs()
+    for job_name in NAMESPACE_JOBS:
+        run_script = _steps_by_name(jobs[job_name])[
+            "Provision the Clippy source mirror"
+        ]["run"]
+        assert "whitaker-mirrors/rust-clippy.git" in run_script, (
+            f"{job_name} must place the mirror below the cached directory"
+        )
+
+
+def test_only_one_namespace_job_can_publish_a_cache_generation() -> None:
+    """Designate a single writer for the shared repository cache tag.
+
+    Both Namespace jobs attach `whitaker-linux-amd64-v1`. The deployed
+    profiles only publish generations from `main`, and `coverage-check` is
+    restricted to pull requests, so `linux-full` is the sole writer and no
+    two lanes can populate the same cold key concurrently.
+    """
+    jobs = _load_jobs()
+    workflow = yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8"))
+    triggers = set(workflow[True] if True in workflow else workflow["on"])
+    assert triggers == {"pull_request", "workflow_dispatch"}
+    assert jobs["coverage-check"]["if"] == "github.event_name == 'pull_request'", (
+        "coverage-check must stay pull-request only so it never writes a "
+        "cache generation"
+    )
+    assert "if" not in jobs["linux-full"], (
+        "linux-full is the designated cache writer and must run on dispatch"
+    )
+
+
+def test_coverage_upload_owns_its_clippy_mirror_and_measures_sccache() -> None:
+    """Hold the GitHub-hosted coverage job to the same cache contract."""
+    workflow = yaml.safe_load(COVERAGE_WORKFLOW_PATH.read_text(encoding="utf-8"))
+    assert workflow["env"]["RUSTC_WRAPPER"] == "sccache", (
+        "coverage must route nested Cargo builds through the compiler cache"
+    )
+    ordered, steps = _load_coverage_steps()
+    names = [step["name"] for step in ordered if isinstance(step.get("name"), str)]
+
+    cache_step = steps["Cache the Clippy source mirror"]
+    assert cache_step["uses"].startswith("actions/cache@")
+    assert cache_step["with"]["path"] == CLIPPY_MIRROR_CACHE_PATH
+    assert CLIPPY_MIRROR_SCRIPT in steps["Provision the Clippy source mirror"]["run"]
+    assert names.index("Cache the Clippy source mirror") < names.index(
+        "Provision the Clippy source mirror"
+    )
+    assert names.index("Provision the Clippy source mirror") < names.index(
+        "Generate coverage"
+    )
+    assert names.index("Reset sccache statistics") < names.index("Generate coverage")
+    assert SCCACHE_STATS_SCRIPT in steps["Record sccache effectiveness"]["run"]
+
+    checkout = steps["Checkout"]
+    assert "@v" not in checkout["uses"], "pin the checkout action by commit SHA"
+    for step in ordered:
+        if str(step.get("uses", "")).startswith("taiki-e/install-action@"):
+            assert step["with"]["fallback"] == "none"
+            assert "@" in step["with"]["tool"], "pin every installed tool version"
+
+
+def test_dylint_host_tools_are_not_built_from_source() -> None:
+    """Reject the Cargo source build for the pinned Dylint host tools."""
+    script = DYLINT_TOOLS_SCRIPT.read_text(encoding="utf-8")
+    assert "cargo install" not in script, (
+        "install-dylint-tools.sh must use the checksum-verified prebuilt "
+        "release archives"
+    )
+    assert "sha256" in script.lower(), (
+        "install-dylint-tools.sh must verify a pinned digest"
+    )

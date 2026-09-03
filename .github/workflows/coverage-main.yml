@@ -28,6 +28,12 @@ env:
   BUILD_PROFILE: debug
   CARGO_INCREMENTAL: 0
   CARGO_TERM_COLOR: always
+  # The shared Rust setup action installs sccache but leaves the wrapper
+  # unset here, so run 33692863541 recorded zero compile requests while
+  # still paying the cache's setup cost. Set it explicitly so every Cargo
+  # invocation, including the nested build `cargo llvm-cov` launches, is
+  # routed through the compiler cache.
+  RUSTC_WRAPPER: sccache
 
 jobs:
   coverage-upload:
@@ -37,7 +43,28 @@ jobs:
         shell: bash
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7
+        with:
+          persist-credentials: false
+
+      - name: Cache the Clippy source mirror
+        # `dylint_driver`'s build script clones rust-lang/rust-clippy while
+        # building. Run 33704041072 failed three times because GitHub
+        # rejected that unauthenticated clone. Give the fetch one cache
+        # owner. This job is GitHub-hosted, so the owner is an
+        # `actions/cache` entry; it mounts no Namespace path.
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v4
+        with:
+          path: ~/.cache/whitaker-mirrors
+          key: whitaker-clippy-mirror-v1
+
+      - name: Provision the Clippy source mirror
+        id: clippy-mirror
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          bash scripts/provision-clippy-mirror.sh \
+            "$HOME/.cache/whitaker-mirrors/rust-clippy.git"
 
       - name: Setup Rust
         uses: leynos/shared-actions/.github/actions/setup-rust@32c8ea649ea44d40119f348ad48861212532061f
@@ -46,14 +73,23 @@ jobs:
         uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
         with:
           tool: nextest@0.9.114
+          fallback: none
 
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
         with:
-          tool: cargo-llvm-cov
+          tool: cargo-llvm-cov@0.6.24
+          fallback: none
+
+      - name: Reset sccache statistics
+        run: sccache --zero-stats
 
       - name: Generate coverage
         run: make coverage
+
+      - name: Record sccache effectiveness
+        if: always()
+        run: bash scripts/record-sccache-effectiveness.sh
 
       - name: Upload coverage data to CodeScene
         env:

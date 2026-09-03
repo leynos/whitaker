@@ -195,6 +195,8 @@ def _coverage_check_job(workflow: Mapping[str, Any]) -> dict[str, Any]:
         "Checkout",
         "Set up Namespace cache",
         "Record Namespace cache state",
+        "Provision the Clippy source mirror",
+        "Record Clippy mirror cache result",
         "Setup Rust",
         "Install sccache",
         "Install cargo-nextest",
@@ -325,7 +327,6 @@ def test_linux_full_keeps_the_full_linux_validation_stack(
             "Check formatting",
             "Install Mermaid CLI",
             "Setup uv",
-            "Install Merman CLI",
             "Install Nixie",
             "Enforce en-GB-oxendict spelling",
             "Nixie",
@@ -342,13 +343,11 @@ def test_linux_full_keeps_the_full_linux_validation_stack(
         'make publish-check PUBLISH_PACKAGES="whitaker-common whitaker-installer"'
     ), "linux-full must publish-check the release crates on Linux only"
 
-    merman_install = _find_step(linux_job, "Install Merman CLI").get("run", "")
-    assert "merman-cli-x86_64-unknown-linux-gnu.tar.xz" in merman_install
-    assert "dfdc2a978a884aa5a2ad5b85285fb5175cb435e82cf96efa860a550749e09d99" in (
-        merman_install
-    )
-    assert "sha256sum --check" in merman_install
-    assert "cargo install" not in merman_install
+    # The shared `install-nixie` action now owns Merman's checksum-verified
+    # download; `namespace_cache_contract_test.py` pins that action's inputs.
+    assert not any(
+        name == "Install Merman CLI" for name in _step_names(linux_job)
+    ), "Merman setup belongs to the shared install-nixie action"
     assert (
         _find_step(linux_job, "Enforce en-GB-oxendict spelling").get("run")
         == "make spelling"
