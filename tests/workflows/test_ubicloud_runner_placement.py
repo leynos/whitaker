@@ -106,41 +106,66 @@ def _all_jobs() -> list[tuple[str, str, Mapping[str, Any]]]:
     ]
 
 
-def _runner_labels(job: Mapping[str, Any]) -> list[str] | None:
-    """Return every runner label a job's ``runs-on`` selector requests.
+def _labels_from_sequence(selector: list[Any]) -> list[str] | None:
+    """Return a sequence selector's labels, or ``None`` if any is not a string."""
+    if all(isinstance(entry, str) for entry in selector):
+        return list(selector)
+    return None
+
+
+def _mapping_labels(selector: Mapping[str, Any]) -> list[str] | None:
+    """Return the ``labels`` entry of a mapping selector as a string list."""
+    labels = selector.get("labels", [])
+    if isinstance(labels, str):
+        return [labels]
+    if isinstance(labels, list) and all(isinstance(entry, str) for entry in labels):
+        return list(labels)
+    return None
+
+
+def _labels_from_mapping(selector: Mapping[str, Any]) -> list[str] | None:
+    """Return a ``group``/``labels`` selector's labels, including the group.
+
+    The group name joins the label list because a runner group named for a
+    provider must not exempt its job from the placement checks.
+    """
+    labels = _mapping_labels(selector)
+    if labels is None:
+        return None
+    group = selector.get("group")
+    if group is None:
+        return labels
+    return [*labels, group] if isinstance(group, str) else None
+
+
+def _labels_from_selector(selector: Any) -> list[str] | None:
+    """Return the labels one ``runs-on`` selector requests, or ``None``.
 
     ``runs-on`` accepts a scalar label, a sequence of labels, or a
-    ``group``/``labels`` mapping, and a reusable-workflow call omits it
-    altogether. For example, a job whose selector is
-    ``{"group": "linux", "labels": ["ubicloud-standard-2-ubuntu-2404"]}``
-    yields both strings, so a label smuggled into a mapping is still
-    classified. ``None`` is returned for any other shape, so callers fail
-    closed instead of skipping the job.
+    ``group``/``labels`` mapping. ``None`` means the selector matches none of
+    those shapes, so callers fail closed instead of skipping the job.
     """
-    if "runs-on" not in job:
-        return [] if isinstance(job.get("uses"), str) else None
-    selector = job["runs-on"]
     if isinstance(selector, str):
         return [selector]
     if isinstance(selector, list):
-        if all(isinstance(entry, str) for entry in selector):
-            return list(selector)
-        return None
+        return _labels_from_sequence(selector)
     if isinstance(selector, Mapping):
-        labels = selector.get("labels", [])
-        if isinstance(labels, str):
-            labels = [labels]
-        if not isinstance(labels, list):
-            return None
-        if not all(isinstance(entry, str) for entry in labels):
-            return None
-        group = selector.get("group")
-        if group is None:
-            return list(labels)
-        if not isinstance(group, str):
-            return None
-        return [*labels, group]
+        return _labels_from_mapping(selector)
     return None
+
+
+def _runner_labels(job: Mapping[str, Any]) -> list[str] | None:
+    """Return every runner label a job requests, or ``None`` if unreadable.
+
+    A reusable-workflow call declares ``uses`` and no ``runs-on`` at all, and
+    requests no labels of its own. For example, a job whose selector is
+    ``{"group": "linux", "labels": ["ubicloud-standard-2-ubuntu-2404"]}``
+    yields both strings, so a label smuggled into a mapping is still
+    classified.
+    """
+    if "runs-on" not in job:
+        return [] if isinstance(job.get("uses"), str) else None
+    return _labels_from_selector(job["runs-on"])
 
 
 def _jobs_with_label_prefix(prefix: str) -> set[tuple[str, str]]:
