@@ -84,6 +84,7 @@ fn assert_stderr_contains(
 // Fixture
 // ---------------------------------------------------------------------------
 
+/// Creates the world shared by a toolchain scenario's setup and assertions.
 #[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
 pub fn world() -> ToolchainWorld {
@@ -94,26 +95,31 @@ pub fn world() -> ToolchainWorld {
 // Given steps
 // ---------------------------------------------------------------------------
 
+/// Configures an auto-detection dry-run scenario.
 #[given("the installer is invoked with auto-detect toolchain")]
 pub fn given_auto_detect_toolchain(world: &ToolchainWorld) -> Result<(), String> {
     setup_dry_run_scenario(world, &["--dry-run"])
 }
 
+/// Configures an auto-detection dry-run scenario in quiet mode.
 #[given("the installer is invoked with auto-detect toolchain in quiet mode")]
 pub fn given_auto_detect_toolchain_quiet(world: &ToolchainWorld) -> Result<(), String> {
     setup_dry_run_scenario(world, &["--dry-run", "--quiet"])
 }
 
+/// Configures an auto-detection installation scenario.
 #[given("the installer is invoked with auto-detect toolchain to a temporary directory")]
 pub fn given_auto_detect_toolchain_install(world: &ToolchainWorld) -> Result<(), String> {
     setup_auto_install_scenario(world)
 }
 
+/// Configures an isolated rustup scenario that exercises auto-installation.
 #[given("the installer is invoked with isolated rustup to force auto-install")]
 pub fn given_isolated_rustup_auto_install(world: &ToolchainWorld) -> Result<(), String> {
     setup_auto_install_scenario(world)
 }
 
+/// Configures an isolated rustup installation scenario in quiet mode.
 #[given("the installer is invoked with isolated rustup in quiet mode")]
 pub fn given_isolated_rustup_quiet(world: &ToolchainWorld) -> Result<(), String> {
     // Use --skip-wrapper to prevent writing to the user's real ~/.local/bin.
@@ -123,11 +129,13 @@ pub fn given_isolated_rustup_quiet(world: &ToolchainWorld) -> Result<(), String>
     )
 }
 
+/// Configures a scenario for a missing toolchain.
 #[given("the installer is invoked with a non-existent toolchain")]
 pub fn given_nonexistent_toolchain(world: &ToolchainWorld) -> Result<(), String> {
     setup_failure_scenario(world, &[])
 }
 
+/// Configures a quiet-mode scenario for a missing toolchain.
 #[given("the installer is invoked with a non-existent toolchain in quiet mode")]
 pub fn given_nonexistent_toolchain_quiet(world: &ToolchainWorld) -> Result<(), String> {
     setup_failure_scenario(world, &["--quiet"])
@@ -137,6 +145,7 @@ pub fn given_nonexistent_toolchain_quiet(world: &ToolchainWorld) -> Result<(), S
 // When steps
 // ---------------------------------------------------------------------------
 
+/// Runs the installer with the scenario's isolated rustup environment.
 #[when("the installer CLI is run")]
 pub fn when_installer_cli_run(world: &ToolchainWorld) -> Result<(), String> {
     skip_if_needed!(world);
@@ -169,6 +178,7 @@ pub fn when_installer_cli_run(world: &ToolchainWorld) -> Result<(), String> {
 // Then steps
 // ---------------------------------------------------------------------------
 
+/// Asserts that the installer command completed successfully.
 #[then("the CLI exits successfully")]
 pub fn then_cli_exits_successfully(world: &ToolchainWorld) -> Result<(), String> {
     skip_if_needed!(world);
@@ -183,6 +193,7 @@ pub fn then_cli_exits_successfully(world: &ToolchainWorld) -> Result<(), String>
     }
 }
 
+/// Asserts that dry-run output names the expected toolchain.
 #[then("dry-run output shows the detected toolchain")]
 pub fn then_dry_run_shows_toolchain(world: &ToolchainWorld) -> Result<(), String> {
     skip_if_needed!(world);
@@ -198,16 +209,19 @@ pub fn then_dry_run_shows_toolchain(world: &ToolchainWorld) -> Result<(), String
     }
 }
 
+/// Asserts that no toolchain installation message was emitted.
 #[then("no toolchain installation message is shown")]
 pub fn then_no_install_message(world: &ToolchainWorld) -> Result<(), String> {
     assert_toolchain_install_message_presence(world, false)
 }
 
+/// Asserts that the toolchain installation message was emitted.
 #[then("the toolchain installation message is shown")]
 pub fn then_install_message_shown(world: &ToolchainWorld) -> Result<(), String> {
     assert_toolchain_install_message_presence(world, true)
 }
 
+/// Asserts that installation succeeded, allowing the isolated-toolchain skip.
 #[then("installation succeeds or is skipped")]
 pub fn then_installation_succeeds_or_is_skipped(world: &ToolchainWorld) -> Result<(), String> {
     skip_if_needed!(world);
@@ -223,12 +237,14 @@ pub fn then_installation_succeeds_or_is_skipped(world: &ToolchainWorld) -> Resul
     ensure_toolchain_installed_in_isolated_env(world)
 }
 
+/// Asserts that the requested toolchain is present in the isolated environment.
 #[then("the toolchain is installed in the isolated environment")]
 pub fn then_toolchain_installed_in_isolated_env(world: &ToolchainWorld) -> Result<(), String> {
     skip_if_needed!(world);
     ensure_toolchain_installed_in_isolated_env(world)
 }
 
+/// Asserts that the suite library was staged or prebuilt installation succeeded.
 #[then("the suite library is staged")]
 pub fn then_suite_library_is_staged(world: &ToolchainWorld) -> Result<(), String> {
     skip_if_needed!(world);
@@ -249,6 +265,7 @@ pub fn then_suite_library_is_staged(world: &ToolchainWorld) -> Result<(), String
     }
 }
 
+/// Asserts that the installer command failed.
 #[then("the CLI exits with an error")]
 pub fn then_cli_exits_with_error(world: &ToolchainWorld) -> Result<(), String> {
     skip_if_needed!(world);
@@ -261,6 +278,7 @@ pub fn then_cli_exits_with_error(world: &ToolchainWorld) -> Result<(), String> {
     Ok(())
 }
 
+/// Asserts that stderr reports a toolchain installation failure.
 #[then("the error mentions toolchain installation failure")]
 pub fn then_error_mentions_install_failure(world: &ToolchainWorld) -> Result<(), String> {
     assert_stderr_contains(world, TOOLCHAIN_ERROR_MARKER, |stderr| {
@@ -268,6 +286,7 @@ pub fn then_error_mentions_install_failure(world: &ToolchainWorld) -> Result<(),
     })
 }
 
+/// Asserts that the failure output includes the selected toolchain name.
 #[then("the error includes the toolchain name")]
 pub fn then_error_includes_toolchain_name(world: &ToolchainWorld) -> Result<(), String> {
     assert_stderr_contains(world, FAKE_TOOLCHAIN, |stderr| {
@@ -275,6 +294,7 @@ pub fn then_error_includes_toolchain_name(world: &ToolchainWorld) -> Result<(), 
     })
 }
 
+/// Asserts that quiet-mode failure output stays within the line-count limit.
 #[then("the error output is minimal")]
 pub fn then_error_output_is_minimal(world: &ToolchainWorld) -> Result<(), String> {
     skip_if_needed!(world);
