@@ -37,19 +37,33 @@ means both `whitaker-common` and `whitaker-installer`. The target runs under
 continuing with a partially built or stale toolchain.
 
 Before building the lint libraries, `publish-check` provisions the pinned
-Dylint tools by delegating to `scripts/install-dylint-tools.sh`. Host-tool
-installs run under the toolchain named by `DYLINT_TOOLS_TOOLCHAIN` (default
-`stable`), because the dylint 6.0.1 lockfile requires a newer rustc than the
-repository's pinned nightly provides. The script compares any installed
-`cargo-dylint` against `CARGO_DYLINT_VERSION`, and checks `dylint-link` via
-`cargo install --list` (`dylint-link` is a linker shim whose `--version` is
-forwarded to `cc`, so it cannot be probed directly). Tools that are missing or
-mismatched are installed into an isolated, per-run temporary root; the Makefile
-prepends that root's `bin/` directory to `PATH` only when it exists, so the
-pinned versions take precedence without touching any system-wide install. If
-either install fails, the script exits non-zero and the gate fails fast rather
-than proceeding with stale or absent tools. This behaviour is covered by
-`tests/workflows/test_install_dylint_tools.py`.
+Dylint tools by delegating to `scripts/install-dylint-tools.sh`. Nothing is
+built from source: the script downloads the upstream `trailofbits/dylint`
+prebuilt Linux release archives for `cargo-dylint` and `dylint-link` and
+verifies each against a SHA-256 digest pinned in the script, so a gate never
+spends minutes recompiling a host tool that upstream already publishes as a
+trusted binary. Only a version with a pinned digest can be installed; a request
+for any other version is a hard error rather than an unverified download or a
+silent fall back to a source build.
+
+The script compares any installed `cargo-dylint` against
+`CARGO_DYLINT_VERSION`, probing it as `cargo-dylint dylint --version` because
+since 6.x the binary rejects a bare `--version`. `dylint-link` cannot report
+its own version at all: it is a linker shim that forwards `--version` to `cc`,
+so its presence is instead detected from an executable at
+`DYLINT_TOOLS_DIR/bin/dylint-link` or a system copy on `PATH`, replacing the
+former `cargo install --list` probe. Tools that are missing or mismatched are
+installed into `DYLINT_TOOLS_DIR` (default `~/.cache/whitaker-dylint-tools`), a
+durable directory rather than a per-run temporary root, so CI can cache the
+tools under one owner and a warm run observes a hit instead of repeating the
+download. The Makefile prepends that directory's `bin/` to `PATH` before
+invoking the script, so the pinned versions take precedence without touching
+any system-wide install. The script still accepts the trailing `CARGO` and
+`TOOLCHAIN` arguments, but only so the caller's contract is unchanged now that
+no Cargo build occurs; neither participates in the download-and-verify install
+path. If either install fails, the script exits non-zero and the gate fails
+fast rather than proceeding with stale or unverified tools. This behaviour is
+covered by `tests/workflows/test_install_dylint_tools.py`.
 
 The installer declares Rust 1.85 as its minimum supported Rust version. Before
 publishing, run the real locked packaged-crate install check as well as the

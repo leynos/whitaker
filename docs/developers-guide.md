@@ -240,24 +240,52 @@ jobs use the attached volume, while `windows-compat` alone sets
 ### CI build caching
 
 The Namespace Linux jobs use a repository-specific Namespace volume for Cargo,
-Rust toolchains, installed tool binaries, `uv`, Bun, and the local `sccache`
-directory. `windows-compat` remains GitHub-hosted and retains the GitHub Actions
-`sccache` backend. The two backends are deliberately separate: no
-`actions/cache` step owns a path mounted by the Namespace cache action. The
-Namespace jobs list their durable paths explicitly. They do not use the cache
-action's `rust` mode because it mounts the disposable Cargo `target` directory,
-conflicts with clean builds, and duplicates sccache's ownership. They similarly
-cache Bun and uv data by path so cache planning never requires those commands
-to be installed already. The uv cache contract includes downloads under
-`~/.cache/uv`, installed tool environments under `~/.local/share/uv`, and their
-executable shims under `~/.local/bin`; restoring only the environment store can
-make uv report a tool as installed while leaving its command unavailable. The
-shared Nixie installer therefore forces installation only when its shim is
-absent, which repairs a partial cache generation from the cached uv artefacts.
-It stores the verified Merman executable under `~/.cache/merman`, which the
-full Linux gate persists alongside the uv directories. Both Linux lanes install
-the supported prebuilt sccache 0.16.0 release and forbid an installer fallback
-to compilation.
+Rust toolchains, installed tool binaries, `uv`, Bun, the Clippy source mirror
+under `~/.cache/whitaker-mirrors`, and the local `sccache` directory.
+`windows-compat` remains GitHub-hosted and retains the GitHub Actions `sccache`
+backend. The two backends are deliberately separate: no `actions/cache` step
+owns a path mounted by the Namespace cache action. The Namespace jobs list
+their durable paths explicitly. They do not use the cache action's `rust` mode
+because it mounts the disposable Cargo `target` directory, conflicts with clean
+builds, and duplicates sccache's ownership. They similarly cache Bun and uv
+data by path so cache planning never requires those commands to be installed
+already. The uv cache contract includes downloads under `~/.cache/uv`,
+installed tool environments under `~/.local/share/uv`, and their executable
+shims under `~/.local/bin`; restoring only the environment store can make uv
+report a tool as installed while leaving its command unavailable. The shared
+Nixie installer therefore forces installation only when its shim is absent,
+which repairs a partial cache generation from the cached uv artefacts. It
+stores the verified Merman executable under `~/.cache/merman`, which the full
+Linux gate persists alongside the uv directories. The full Linux gate also
+mounts `~/.cache/whitaker-dylint-tools`, the durable root that owns the pinned
+Dylint host tools, so a warm generation skips their download entirely. Both
+Linux lanes install the supported prebuilt sccache 0.16.0 release and forbid an
+installer fallback to compilation.
+
+Both Namespace lanes and the GitHub-hosted `coverage-upload` job also give the
+Clippy source fetch a single cache owner. `dylint_driver` 6.0.1's build script
+reads `clippy_utils/src/sym.rs` at the revision matching the pinned dated
+nightly and obtains it by running a full
+`git clone https://github.com/rust-lang/rust-clippy` into a temporary
+directory. The build script performs that clone for any dated nightly on or
+after 2025-05-06, and Whitaker pins `nightly-2026-05-28`, so every cold build of
+`dylint_driver` repeated an unowned multi-hundred-megabyte network clone.
+Coverage run 33704041072 failed three consecutive attempts with
+`fatal: could not read Username for 'https://github.com'`, an unauthenticated
+rejection from the shared runner egress. `scripts/provision-clippy-mirror.sh`
+therefore maintains a bare mirror at
+`~/.cache/whitaker-mirrors/rust-clippy.git` and rewrites the upstream URL to it
+with `url.<mirror>.insteadOf`, so the build script's clone becomes a local,
+hard-linking copy. The mirror sits below the cached directory
+`~/.cache/whitaker-mirrors` rather than at the mount point itself, because a
+cold volume materializes the mount point as a directory and discarding a stale
+generation must never attempt to remove a live mount. A cold clone is
+authenticated with the job token when one is present and retried with backoff;
+a refresh failure on a warm mirror is only a warning, because the revision the
+build script needs is historical and is already present. The Namespace jobs own
+the mirror through the attached volume, while `coverage-upload` owns it through
+an `actions/cache` entry keyed `whitaker-clippy-mirror-v1` that mounts no
+Namespace path, so the two backends still do not overlap.
 
 The shared compiler cache is intentionally scoped to debug builds:
 
@@ -269,13 +297,31 @@ The shared compiler cache is intentionally scoped to debug builds:
 - `RUSTFLAGS=-D warnings` and `RUSTDOCFLAGS=-D warnings` preserve the
   warnings-as-errors contract even when builds are routed through `sccache`.
 
-Each build lane resets `sccache` counters before compilation, appends the
-human-readable statistics to the job summary, and retains the JSON statistics
-for 14 days. Namespace jobs also record the cache tag and the cache action's
-`cache-hit` output. Namespace volumes are mounted locally, so there is no
-archive restore or save phase and the action exposes no transfer-byte metric.
-Use `nsc instance report` after comparable cold and warm runs to correlate
-these statistics with runtime and paid unit-minutes.
+Each build lane resets `sccache` counters before compilation and then runs
+`scripts/record-sccache-effectiveness.sh`, which appends the human-readable
+statistics to the job summary and retains the JSON statistics for 14 days. That
+script warns when `sccache` reports zero compile requests, because a run with
+no compile requests paid the compiler cache's setup cost while `RUSTC_WRAPPER`
+never reached a single `rustc` invocation. Treat zero compile requests as a
+failed cache integration, not as a clean zero-miss result.
+
+Namespace jobs additionally call `scripts/record-namespace-cache-state.sh`,
+which records the cache tag, the cache action's `cache-hit` output labelled as
+"all mounted paths present", and the restored size of every mounted path, and
+warns when nothing was restored. The `cache-hit` output is not a volume-hit
+signal: it is false whenever any single listed path is absent from the restored
+generation, so a genuinely warm volume that predates a newly added path still
+reports false. Run 33704058579 logged `cache-hit: false` while
+`nsc instance report` recorded `cache_volume_hit: true` for the same job, and
+that run reached an 82.31% `sccache` hit rate. The `cache_volume_hit` column of
+`nsc instance report` is therefore the authoritative volume-hit signal; the
+cache action does not expose it. The per-path sizes carry the rest of the
+evidence, because the action mounts every requested path, so a cold volume
+leaves each mount point present but empty and presence alone proves nothing.
+Namespace volumes are mounted locally, so there is no archive restore or save
+phase and the action exposes no transfer-byte metric. Use `nsc instance report`
+after comparable cold and warm runs to correlate these statistics with runtime
+and paid unit-minutes.
 
 Tool setup must not compile tools from source. `taiki-e/install-action` calls
 pin a release whose catalogue contains each requested tool, disable fallbacks,
@@ -288,6 +334,24 @@ at `bffacaf91d3f3515110679a30fbf6dc781ddc549` (shared-actions PR #423) owns
 Nixie 1.1.0 and Merman 0.7.0 setup. It verifies Merman's official release
 archive and cached executable against pinned SHA-256 digests, reconciles the
 uv-managed Nixie installation, and never falls back to a source build.
+
+The pinned Dylint host tools follow the same rule.
+`scripts/install-dylint-tools.sh` once ran `cargo install --locked` for
+`cargo-dylint` and `dylint-link` into a `mktemp -d` root, so both were
+recompiled on every run and never cached. It now downloads the upstream
+`trailofbits/dylint` v6.0.1 prebuilt Linux release archives, verifies each
+against a SHA-256 digest pinned in the script, and installs the executables
+into the caller's root. Only a version with a pinned digest can be installed;
+any other version is a hard error rather than an unverified download or a
+fallback to a source build. The Makefile passes `DYLINT_TOOLS_DIR`, defaulting
+to `~/.cache/whitaker-dylint-tools`, instead of a temporary root, and prepends
+its `bin` directory to `PATH` before invoking the script, so a warm cache skips
+the download entirely. The script keeps its `CARGO` and `TOOLCHAIN` arguments
+only so the caller's contract is unchanged; neither participates in the
+download-and-verify install path. `DYLINT_TOOLS_SHA256_CARGO_DYLINT` and
+`DYLINT_TOOLS_SHA256_DYLINT_LINK` exist solely so the behavioural tests can
+verify a locally generated fixture archive: they replace the expected digest
+and cannot disable verification.
 
 Table: Test profiles and typical usage.
 
@@ -317,10 +381,13 @@ per shape. The cache action exposes a locally writable mount, but both deployed
 profiles set `allow_commit_from_branch` to `main`. Pull-request jobs therefore
 read the last trusted generation without publishing their local changes.
 
-`coverage-check` is excluded from `workflow_dispatch`, so a manual run against
-`main` makes `linux-full` the sole cold-cache producer and avoids two jobs
-building the same empty generation. After changing a correctness input or cache
-generation, dispatch one trusted `main` run before comparing warm pull
+That single-writer arrangement is now enforced rather than merely described.
+`coverage-check` is restricted to pull requests, so `linux-full` is the only
+job that can publish a generation and two lanes can never populate the same
+cold key. A workflow-contract test asserts that arrangement, so a change that
+would let a second lane build the same empty generation fails the gate instead
+of quietly doubling cold-cache cost. After changing a correctness input or
+cache generation, dispatch one trusted `main` run before comparing warm pull
 requests. The tag's schema suffix must advance when OS, architecture,
 toolchain, lockfile interpretation, build profile, features, or cache layout
 becomes incompatible.
@@ -332,6 +399,21 @@ the main-branch coverage baseline; release and rolling-release jobs are release
 boundaries; and `mutation` calls an externally owned reusable workflow whose
 caller-selected runner is not controlled here. These retained assignments are
 deliberate exceptions, not alternate Namespace profiles.
+
+`coverage-upload` stays GitHub-hosted, but
+`.github/workflows/coverage-main.yml` now carries the same provenance and cache
+contract as the Namespace lanes. It pins `actions/checkout` by commit SHA with
+`persist-credentials: false`, pins `cargo-llvm-cov@0.6.24`, and sets
+`fallback: none` on both `taiki-e/install-action` calls so a missing prebuilt
+binary fails the job instead of silently compiling the tool. It also sets
+`RUSTC_WRAPPER: sccache` at workflow level: the shared Rust setup action
+installs sccache but leaves the wrapper unset, so run 33692863541 succeeded
+while sccache reported zero compile requests, meaning the wrapper never reached
+the compiler and the job paid a compiler cache's setup cost for nothing. The
+job now resets sccache counters before `make coverage` and records the
+statistics afterwards through `scripts/record-sccache-effectiveness.sh`, so a
+broken wrapper is visible in the run evidence rather than passing as a clean
+zero-miss run.
 
 The pre-migration baseline was captured on 2026-09-01 with the following
 read-only commands:
