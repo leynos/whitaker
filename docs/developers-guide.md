@@ -272,9 +272,13 @@ at a time. That is why every caller of the shared `setup-rust` action passes
 `target/${BUILD_PROFILE}` alongside the registry. `windows-compat` was
 archiving exactly that until it moved to the external provider and gained its
 own registry cache. The release and rolling-release workflows still call the
-shared action with its default provider; they are release boundaries rather
-than developer-blocking lanes and are out of scope here, but they need the same
-treatment.
+shared action with its default `github` provider, because they are release
+boundaries rather than developer-blocking lanes. They no longer archive a
+`target` tree either: every caller in this repository now pins the shared
+action at `f6d4d5f549655c118f86f371b8d55c200d3efa50`, the first revision whose
+built-in provider stopped archiving `target/<profile>`. Expect one cold Cargo
+cache on those lanes after the repin, because the key no longer carries the
+build profile.
 
 Every cached path has exactly one owner inside its job, and every key family
 has exactly one job permitted to write it.
@@ -503,10 +507,11 @@ from its official Linux x86_64 release asset after checking the SHA-256 pinned
 in the workflow. The tools cache retains the installed executable under
 `~/.cargo/bin`; a cold cache downloads it, while a warm cache verifies and
 reuses it without invoking Cargo. The SHA-pinned shared `install-nixie` action
-at `bffacaf91d3f3515110679a30fbf6dc781ddc549` (shared-actions PR #423) owns
-Nixie 1.1.0 and Merman 0.7.0 setup. It verifies Merman's official release
-archive and cached executable against pinned SHA-256 digests, reconciles the
-uv-managed Nixie installation, and never falls back to a source build.
+at `f6d4d5f549655c118f86f371b8d55c200d3efa50` (shared-actions PR #423, repinned
+to `main`) owns Nixie 1.1.0 and Merman 0.7.0 setup. It verifies Merman's
+official release archive and cached executable against pinned SHA-256 digests,
+reconciles the uv-managed Nixie installation, and never falls back to a source
+build.
 
 The uv cache contract includes downloads under `~/.cache/uv`, installed tool
 environments under `~/.local/share/uv`, and their executable shims under

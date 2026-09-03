@@ -241,7 +241,7 @@ def _assert_coverage_checkout_and_setup(coverage_job: Mapping[str, Any]) -> None
     setup_step = _find_step(coverage_job, "Setup Rust")
     assert setup_step.get("uses") == (
         "leynos/shared-actions/.github/actions/setup-rust@"
-        "5daae0a332441d170d88ca648c9e71f0bbe96cb3"
+        "f6d4d5f549655c118f86f371b8d55c200d3efa50"
     ), "coverage-check must reuse the current main-branch Rust setup pin"
     assert setup_step.get("with") == {
         "cache-provider": "external",
@@ -289,7 +289,7 @@ def _assert_codescene_check(coverage_job: Mapping[str, Any]) -> None:
     ), "the CodeScene step must guard its pull-request secret"
     assert check_step.get("uses") == (
         "leynos/shared-actions/.github/actions/upload-codescene-coverage@"
-        "32c8ea649ea44d40119f348ad48861212532061f"
+        "f6d4d5f549655c118f86f371b8d55c200d3efa50"
     ), "coverage-check must use the proven CodeScene action pin"
     assert check_step.get("with") == {
         "format": "lcov",

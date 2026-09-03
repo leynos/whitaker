@@ -28,9 +28,14 @@ CACHE_ACTION_SHA = "55cc8345863c7cc4c66a329aec7e433d2d1c52a9"
 RESTORE_ACTION = f"actions/cache/restore@{CACHE_ACTION_SHA}"
 SAVE_ACTION = f"actions/cache/save@{CACHE_ACTION_SHA}"
 INSTALL_ACTION = "taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68"
+#: shared-actions `main` at the merge of #422, #425, #427, #428, and #432.
+#: This is the first revision whose built-in `github` cache provider stops
+#: archiving `target/<profile>`, so no shared action can reintroduce the
+#: second owner of compiler output that `sccache` already owns. Every caller
+#: in this repository pins this one revision.
+SHARED_ACTIONS_REF = "f6d4d5f549655c118f86f371b8d55c200d3efa50"
 SETUP_RUST_ACTION = (
-    "leynos/shared-actions/.github/actions/setup-rust@"
-    "5daae0a332441d170d88ca648c9e71f0bbe96cb3"
+    f"leynos/shared-actions/.github/actions/setup-rust@{SHARED_ACTIONS_REF}"
 )
 
 #: Every Ubicloud job, mapped to the workflow that declares it.
