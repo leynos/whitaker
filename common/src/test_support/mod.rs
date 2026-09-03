@@ -71,6 +71,11 @@ pub struct EnvVarGuard {
     previous: Option<OsString>,
 }
 
+enum EnvVarMutation<'a> {
+    Set(&'a OsStr),
+    Remove,
+}
+
 impl EnvVarGuard {
     /// Sets `key` to `value`, returning a guard that restores the previous
     /// value or removes the variable when dropped.
@@ -92,11 +97,22 @@ impl EnvVarGuard {
     }
 
     fn set_scoped(key: &str, value: impl AsRef<OsStr>) -> Self {
+        Self::mutate_scoped(key, EnvVarMutation::Set(value.as_ref()))
+    }
+
+    fn remove_scoped(key: &str) -> Self {
+        Self::mutate_scoped(key, EnvVarMutation::Remove)
+    }
+
+    fn mutate_scoped(key: &str, mutation: EnvVarMutation<'_>) -> Self {
         let _env_guard = env_test_guard();
         let previous = std::env::var_os(key);
         // SAFETY: `env_test_guard` serializes this environment mutation.
         unsafe {
-            std::env::set_var(key, value);
+            match mutation {
+                EnvVarMutation::Set(value) => std::env::set_var(key, value),
+                EnvVarMutation::Remove => std::env::remove_var(key),
+            }
         }
         Self {
             key: key.to_owned(),
@@ -118,19 +134,6 @@ impl EnvVarGuard {
     #[must_use]
     pub fn remove(key: &'static str) -> Self {
         Self::remove_scoped(key)
-    }
-
-    fn remove_scoped(key: &str) -> Self {
-        let _env_guard = env_test_guard();
-        let previous = std::env::var_os(key);
-        // SAFETY: `env_test_guard` serializes this environment mutation.
-        unsafe {
-            std::env::remove_var(key);
-        }
-        Self {
-            key: key.to_owned(),
-            previous,
-        }
     }
 }
 

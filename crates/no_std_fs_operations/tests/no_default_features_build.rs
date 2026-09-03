@@ -18,7 +18,7 @@
 use std::process::Command;
 
 use anyhow::Context as _;
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use serde_json::Value;
 use tempfile::TempDir;
@@ -78,14 +78,22 @@ fn workspace_root() -> anyhow::Result<Utf8PathBuf> {
     let manifest_dir = Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let mut candidate = manifest_dir.as_path();
     loop {
-        if let Ok(directory) = Dir::open_ambient_dir(candidate, ambient_authority())
-            && let Ok(workspace) = directory.read_to_string("Cargo.toml")
-            && workspace.contains("[workspace]")
-        {
+        if is_workspace_root(candidate) {
             return Ok(candidate.to_path_buf());
         }
         candidate = candidate
             .parent()
             .context("workspace root not found above CARGO_MANIFEST_DIR")?;
     }
+}
+
+/// Returns whether `candidate` contains a workspace manifest.
+fn is_workspace_root(candidate: &Utf8Path) -> bool {
+    let Ok(directory) = Dir::open_ambient_dir(candidate, ambient_authority()) else {
+        return false;
+    };
+    let Ok(manifest) = directory.read_to_string("Cargo.toml") else {
+        return false;
+    };
+    manifest.contains("[workspace]")
 }
