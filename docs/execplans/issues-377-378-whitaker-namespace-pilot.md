@@ -377,8 +377,21 @@ layer's diff from its immediate base before committing.
   workflow pins its SHA-256, installs it atomically into the cached binary
   directory, and no longer retains a dedicated source-build target. The full
   deterministic gate passed with 1,653 tests and 12 workflow contracts.
-- [ ] Keep merge gated on exact-head GitHub checks and no blocking CodeRabbit
-  concerns. Do not merge until the result for the rebased, pushed head is green.
+- [x] 2026-09-02: Merged the cache optimization as pull request (PR) #390 at
+  exact reviewed head `4323ef4`; all deterministic gates, GitHub checks, and an
+  independent CodeRabbit review passed.
+- [x] 2026-09-02: Added uv's executable-shim directory to both Namespace cache
+  mounts and enforced the complete uv cache boundary in workflow contracts. The
+  full deterministic gate passed with 1,653 tests and 12 workflow contracts.
+- [x] 2026-09-03: Replaced Whitaker's bespoke Merman and Nixie setup with the
+  SHA-pinned shared `install-nixie` action merged from shared-actions PR #423 at
+  `bffacaf91d3f3515110679a30fbf6dc781ddc549`. The full Linux job now caches
+  the action-owned `~/.cache/merman` directory alongside the complete uv cache
+  boundary. The focused five cache contracts, all 12 workflow contracts,
+  formatting, type-check, lint, full test (1,653 passed and 5 skipped),
+  Markdown, Mermaid, and actionlint gates passed.
+- [ ] Merge the uv cache correction, then repeat the trusted-producer and
+  unchanged warm-run measurements.
 - [ ] Complete EP-M3 and monitor Namespace jobs.
 
 ## Surprises & discoveries
@@ -399,6 +412,12 @@ Compressed archive timestamps made an unchanged rebuild differ byte-for-byte,
 and the moving stable Rust channel could change the executable itself. The
 upstream fix now normalizes archive metadata and pins Rust 1.89.0; a second
 backfill run recognized all ten assets as identical.
+
+The first unchanged warm run after PR #390 restored uv's tool environment but
+not its executable shim. `uv tool install` reported Nixie 1.1.0 as installed,
+then `make nixie` failed because `nixie` was absent from `PATH`. uv stores
+those two parts under `~/.local/share/uv` and `~/.local/bin` respectively, so
+both directories are one cache correctness boundary.
 
 The local EP-M1 negative control reproduced that exact failure from the
 checked-in lockfile. Cargo metadata alone accepted the graph, so the permanent
@@ -571,6 +590,17 @@ the published v0.2.7 assets' `GLIBC_2.39` requirement.
   v0.5.0 asset is verified. Download that asset directly, pin its SHA-256, and
   cache only the installed executable under `~/.cargo/bin`; retaining the
   former build target would preserve an obsolete exception and waste storage.
+- 2026-09-02: Cache uv's environment store and executable-shim directory
+  together. Keep the existing cache tag because adding the missing mount is a
+  compatible extension. Repair an older, partial generation by forcing the
+  wheel-backed Nixie installation only when its executable shim is absent; the
+  trusted `main` producer can then populate the new mount without invalidating
+  the existing Cargo, Rust, and sccache data.
+- 2026-09-03: Delegate Nixie and Merman provisioning to the SHA-pinned shared
+  `install-nixie` action from shared-actions PR #423. Persist its documented
+  `~/.cache/merman` boundary and keep Whitaker's contract focused on action
+  provenance, inputs, ordering, and cache ownership instead of duplicating the
+  installer's internal shell implementation.
 
 ## Outcomes & retrospective
 
@@ -642,3 +672,8 @@ The final tool-installation revision removes the last source-build exception.
 `mdtablefix` now follows the same trusted-binary policy as the other CI tools,
 and its official asset, checksum, installed executable, and cache ownership are
 protected by workflow contracts.
+
+Nixie and Merman provisioning now follows the same shared estate boundary.
+Whitaker pins the shared action's merge commit, persists the action-owned
+Merman cache, and tests the caller contract without taking ownership of the
+shared installer's internal implementation.
