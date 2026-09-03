@@ -162,11 +162,21 @@ def _publish(harness: Harness, tool: str, payload: str) -> None:
     harness.digests[tool] = _make_archive(harness.fixture_dir, tool, payload)
 
 
+class ToolVersions(typ.NamedTuple):
+    """The pinned host-tool versions one scripted run requests.
+
+    For example, ``ToolVersions(cargo_dylint="5.0.0")`` asks for a version
+    with no pinned digest, which the script must reject.
+    """
+
+    cargo_dylint: str = CARGO_DYLINT_VERSION
+    dylint_link: str = DYLINT_LINK_VERSION
+
+
 def _run_script(
     harness: Harness,
     *,
-    cargo_dylint_version: str = CARGO_DYLINT_VERSION,
-    dylint_link_version: str = DYLINT_LINK_VERSION,
+    versions: ToolVersions = ToolVersions(),
     toolchain: str | None = None,
     extra_env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
@@ -179,8 +189,8 @@ def _run_script(
     argv = [
         str(SCRIPT),
         str(harness.tools_root),
-        cargo_dylint_version,
-        dylint_link_version,
+        versions.cargo_dylint,
+        versions.dylint_link,
         "cargo",
     ]
     if toolchain is not None:
@@ -296,7 +306,7 @@ def test_unpinned_version_aborts(tmp_path: Path) -> None:
     harness = _make_harness(tmp_path)
     _write_stub(harness.stub_dir, "dylint-link", "exit 0")
 
-    result = _run_script(harness, cargo_dylint_version="5.0.0")
+    result = _run_script(harness, versions=ToolVersions(cargo_dylint="5.0.0"))
 
     assert result.returncode != 0
     assert "5.0.0" in result.stderr
