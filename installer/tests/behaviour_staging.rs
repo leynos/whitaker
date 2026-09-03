@@ -109,12 +109,14 @@ mod staging_failure {
         }
     }
 
+    /// Creates the world used by the unwritable-staging-directory scenario.
     #[whitaker_test_macros::allow_fixture_expansion_lints]
     #[fixture]
     pub fn staging_failure_world() -> StagingFailureWorld {
         StagingFailureWorld::default()
     }
 
+    /// Creates a staging directory whose permissions reject writes.
     #[given("a non-writable staging directory")]
     pub fn given_non_writable_dir(
         staging_failure_world: &StagingFailureWorld,
@@ -146,6 +148,7 @@ mod staging_failure {
         Ok(())
     }
 
+    /// Runs staging and records its result for the scenario assertions.
     #[when("the staging directory is prepared")]
     pub fn when_staging_prepared(
         staging_failure_world: &StagingFailureWorld,
@@ -181,6 +184,7 @@ mod staging_failure {
         Ok(())
     }
 
+    /// Confirms staging reports the expected target-not-writable error.
     #[then("staging fails with a target not writable error")]
     pub fn then_staging_fails_not_writable(
         staging_failure_world: &StagingFailureWorld,
