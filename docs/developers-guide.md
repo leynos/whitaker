@@ -401,34 +401,44 @@ there for the whole job while reporting zero requests. The contract tests
 enforce that ordering. The GitHub-hosted Windows lane needs no export, because
 there the variables are already visible to `run:` steps.
 
-`gha` is the deployed backend. The Actions cache service is the store
-Ubicloud's transparent cache intercepts, so `sccache` objects land beside the
-archive caches rather than in GitHub's. That was verified from Cuprum's
-Ubicloud cache listing on 2026-09-03, where the `sccache/...` keys written by
-its pull-request run 33748907011 appear. An earlier reading of Whitaker's own
-GitHub cache misattributed `sccache/...` objects to a Linux job; those came
-from the GitHub-hosted Windows lane, because Whitaker's Linux jobs were still
-on Namespace that day.
+`local` is the deployed backend, chosen from measurement. The Actions cache
+service is the store Ubicloud's transparent cache intercepts, and Cuprum's
+Ubicloud cache listing on 2026-09-03 shows `sccache/...` keys written by its
+pull-request run 33748907011, so the `gha` backend does reach Ubicloud's store
+in that project. It does not work in this one.
 
-Whitaker's own measurement is not yet consistent with that conclusion and must
-be re-read on the next run. Run [33748602187][whitaker-run-33748602187], the
-first Ubicloud run with `gha` selected, reported `Cache location ghac` in both
-Linux jobs, proving the credentials reached `sccache`, and then failed every
-single store: 3,788 write errors against 3,788 attempts in `linux-full` and
-2,245 against 2,245 in `coverage-check`, with 0 read errors. The same workload
-in `local` mode on the next run reported 0 read and 0 write errors. Treat write
-errors above roughly two percent of requests, or an Ubicloud cache listing with
-no `sccache` entries for Whitaker, as the signal to switch.
+Whitaker reproduced a total write failure twice, with identical counters. Runs
+[33748602187][whitaker-run-33748602187] and
+[33756048103][whitaker-run-33756048103] each reported `Cache location ghac` in
+both Linux jobs, proving the credentials reached `sccache`, then failed every
+store: 3,788 write errors against 3,788 attempts in `linux-full` and 2,245
+against 2,245 in `coverage-check`, with 0 read errors both times. The second
+run had already moved the credential export ahead of everything and swapped the
+archive caches to `actions/cache` v6.1.0, so neither the ordering nor the cache
+client explains it.
 
-Switching is one line. `local` has known trade-offs. Its archive grows with
-every new compilation unit until `SCCACHE_CACHE_SIZE` trims it, so a warm run
-restores and re-saves the whole directory even when only a few objects changed.
-That is why the key carries the run identifier with a `restore-keys` prefix,
-and why the save is restricted to the lane's single writer. The cap defaults to
-4 GB rather than 2 GB because the store holds two build shapes, the ordinary
-debug objects and the instrumented coverage objects; a one-shape cap would
-evict each shape in turn. Measure the restore and save duration against the
-compile seconds avoided.
+The same run's GitHub-hosted `windows-compat` job used the same backend and
+wrote 1,529 hits with 0 write errors, which places the failure in the Ubicloud
+cache proxy's write path rather than in `sccache` or in the credentials. One
+difference is worth chasing before anyone re-enables `gha` here: the Windows
+job reported a hashed cache name, `cb1f7e36...`, because the shared setup
+action sets `SCCACHE_GHA_VERSION`, while the Linux jobs reported the default
+`sccache-v0.16.0`.
+
+Switching back is one line. Treat write errors above roughly two percent of
+requests, or an Ubicloud cache listing with no `sccache` entries for Whitaker,
+as the signal to stay on `local`.
+
+`local` has known trade-offs. Its archive grows with every new compilation unit
+until `SCCACHE_CACHE_SIZE` trims it, so a warm run restores and re-saves the
+whole directory even when only a few objects changed. That is why the key
+carries the run identifier with a `restore-keys` prefix, and why the save is
+restricted to the lane's single writer. The cap defaults to 4 GB rather than 2
+GB because the store holds two build shapes, the ordinary debug objects and the
+instrumented coverage objects; a one-shape cap would evict each shape in turn.
+It also routes the compiler cache through the same `actions/cache` transport as
+every other archive, so one working write path serves the whole design. Measure
+the restore and save duration against the compile seconds avoided.
 
 Each build lane resets `sccache` counters before compilation and then runs
 `scripts/record-sccache-effectiveness.sh`, which appends the human-readable
@@ -2740,6 +2750,7 @@ without the `prefer-dynamic` flag used during development.
 
 [issue-180]: https://github.com/leynos/whitaker/issues/180
 [whitaker-run-33748602187]: https://github.com/leynos/whitaker/actions/runs/33748602187
+[whitaker-run-33756048103]: https://github.com/leynos/whitaker/actions/runs/33756048103
 [whitaker-run-33410178021]: https://github.com/leynos/whitaker/actions/runs/33410178021
 [whitaker-run-33369228466]: https://github.com/leynos/whitaker/actions/runs/33369228466
 [whitaker-run-33345742967]: https://github.com/leynos/whitaker/actions/runs/33345742967

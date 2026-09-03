@@ -16,13 +16,18 @@ env:
   # its Cargo build parallelism and nextest thread count from this value, so
   # changing the label cannot leave the suite oversubscribed on a smaller VM.
   LINUX_RUNNER_VCPUS: '2'
-  # Compiler-cache backend selector. `gha` routes sccache at the Actions cache
-  # service, which Ubicloud's transparent cache intercepts; `local` routes it
-  # at the directory owned by the "Restore the compiler cache directory"
-  # steps. Flipping this one line switches every Linux lane. See the
-  # developers' guide for the evidence behind the deployed choice and for the
-  # write-error threshold that would move it to `local`.
-  SCCACHE_BACKEND: gha
+  # Compiler-cache backend selector for the Linux lanes. `gha` routes sccache
+  # at the Actions cache service; `local` routes it at the directory owned by
+  # the "Restore the compiler cache directory" steps. Flipping this one line
+  # switches every Linux lane.
+  #
+  # `local` is deployed because `gha` stores nothing on Whitaker's Ubicloud
+  # runners. Runs 33748602187 and 33756048103 each reported `Cache location
+  # ghac`, 0 read errors, and a write error for every single store attempt,
+  # 3,788 of 3,788 and 2,245 of 2,245. The GitHub-hosted Windows lane in the
+  # same run wrote through `ghac` with 0 write errors, so the failure is
+  # specific to the Ubicloud cache proxy's write path, not to the backend.
+  SCCACHE_BACKEND: local
   # `make check-fmt` shells out to both Markdown formatters. Keep CI on the
   # same releases used to normalize the checked-in documentation.
   MDTABLEFIX_VERSION: '0.5.0'

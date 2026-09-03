@@ -35,9 +35,10 @@ env:
   # Keep in step with ci.yml: one named constant for the Ubicloud shape.
   LINUX_RUNNER_VCPUS: '2'
   # One-line switch between the Actions cache backend and a cached local
-  # directory. Keep in step with ci.yml; see
+  # directory. `local` is deployed because `gha` failed every store attempt on
+  # Ubicloud twice. Keep in step with ci.yml; see
   # scripts/select-sccache-backend.sh and the developers' guide.
-  SCCACHE_BACKEND: gha
+  SCCACHE_BACKEND: local
   # The shared Rust setup action installs sccache but leaves the wrapper
   # unset here, so run 33692863541 recorded zero compile requests while
   # still paying the cache's setup cost. Set it explicitly so every Cargo
