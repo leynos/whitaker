@@ -13,6 +13,10 @@ SETUP_RUST_ACTION = (
     "leynos/shared-actions/.github/actions/setup-rust@"
     "5daae0a332441d170d88ca648c9e71f0bbe96cb3"
 )
+INSTALL_NIXIE_ACTION = (
+    "leynos/shared-actions/.github/actions/install-nixie@"
+    "bffacaf91d3f3515110679a30fbf6dc781ddc549"
+)
 NAMESPACE_JOBS = {
     "coverage-check": 2,
     "linux-full": 4,
@@ -151,17 +155,27 @@ def test_namespace_tool_installers_cannot_compile_fallbacks() -> None:
         "with"
     ]["path"]
     assert "~/.cache/mdtablefix-build" not in cache_paths
+    assert "~/.cache/merman" in cache_paths
 
-    merman_script = _steps_by_name(jobs["linux-full"])["Install Merman CLI"]["run"]
-    assert "sha256sum --check" in merman_script
-    assert "merman-cli 0.7.0" in merman_script
-
-    nixie_script = _steps_by_name(jobs["linux-full"])["Install Nixie"]["run"]
-    assert "if command -v nixie" in nixie_script
-    assert 'uv tool install --force --python 3.14 "nixie-cli==1.1.0"' in (
-        nixie_script
+    linux_full = jobs["linux-full"]
+    linux_steps = _steps_by_name(linux_full)
+    linux_step_names = _step_names(linux_full)
+    nixie_step = linux_steps["Install Nixie"]
+    assert "Install Merman CLI" not in linux_steps
+    assert nixie_step == {
+        "name": "Install Nixie",
+        "uses": INSTALL_NIXIE_ACTION,
+        "with": {
+            "nixie-version": "1.1.0",
+            "merman-version": "0.7.0",
+            "python-version": "3.14",
+        },
+    }
+    assert linux_step_names.index("Set up Namespace cache") < linux_step_names.index(
+        "Install Nixie"
     )
-    assert nixie_script.count("command -v nixie") == 2
+    assert linux_step_names.index("Setup uv") < linux_step_names.index("Install Nixie")
+    assert linux_step_names.index("Install Nixie") < linux_step_names.index("Nixie")
 
 
 def test_namespace_jobs_share_one_repository_cache_tag() -> None:

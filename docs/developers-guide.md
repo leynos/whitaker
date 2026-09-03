@@ -252,10 +252,12 @@ to be installed already. The uv cache contract includes downloads under
 `~/.cache/uv`, installed tool environments under `~/.local/share/uv`, and their
 executable shims under `~/.local/bin`; restoring only the environment store can
 make uv report a tool as installed while leaving its command unavailable. The
-Nixie installer therefore forces installation only when its shim is absent,
-which repairs a partial cache generation from the cached uv artefacts. Both
-Linux lanes install the supported prebuilt sccache 0.16.0 release and forbid an
-installer fallback to compilation.
+shared Nixie installer therefore forces installation only when its shim is
+absent, which repairs a partial cache generation from the cached uv artefacts.
+It stores the verified Merman executable under `~/.cache/merman`, which the
+full Linux gate persists alongside the uv directories. Both Linux lanes install
+the supported prebuilt sccache 0.16.0 release and forbid an installer fallback
+to compilation.
 
 The shared compiler cache is intentionally scoped to debug builds:
 
@@ -281,8 +283,11 @@ and use checksum-verified release artefacts. `mdtablefix` 0.5.0 is installed
 from its official Linux x86_64 release asset after checking the SHA-256 pinned
 in the workflow. The attached volume retains the installed executable under
 `~/.cargo/bin`; a cold cache downloads it, while a warm cache verifies and
-reuses it without invoking Cargo. Merman 0.7.0 is installed from its official
-Linux release archive after checking the pinned SHA-256 digest.
+reuses it without invoking Cargo. The SHA-pinned shared `install-nixie` action
+at `bffacaf91d3f3515110679a30fbf6dc781ddc549` (shared-actions PR #423) owns
+Nixie 1.1.0 and Merman 0.7.0 setup. It verifies Merman's official release
+archive and cached executable against pinned SHA-256 digests, reconciles the
+uv-managed Nixie installation, and never falls back to a source build.
 
 Table: Test profiles and typical usage.
 
@@ -750,7 +755,7 @@ tracked source.
 
 `make nixie` validates the repository's Mermaid diagrams. Continuous
 Integration installs Nixie 1.1.0 and its Merman 0.7.0 dependency on the Linux
-documentation leg.
+documentation leg through the SHA-pinned shared `install-nixie` action.
 
 ### Verus scope and trust boundary
 

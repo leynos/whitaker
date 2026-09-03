@@ -151,6 +151,7 @@ jobs:
             ~/.cargo/registry
             ~/.rustup
             ~/.cache/cargo-binstall
+            ~/.cache/merman
             ~/.cache/sccache
             ~/.cache/uv
             ~/.local/bin
@@ -260,42 +261,12 @@ jobs:
       - name: GLIBC baseline checker
         run: make test-glibc-baseline
 
-      - name: Install Merman CLI
-        run: |
-          expected_merman_version="merman-cli 0.7.0"
-          installed_merman_version=""
-          if command -v merman-cli >/dev/null 2>&1; then
-            installed_merman_version="$(merman-cli --version 2>/dev/null | tr -d '\r')"
-          fi
-          if [[ "${installed_merman_version}" != "${expected_merman_version}" ]]; then
-            archive="merman-cli-x86_64-unknown-linux-gnu.tar.xz"
-            archive_url="https://github.com/Latias94/merman/releases/download/v0.7.0/${archive}"
-            expected_sha256="dfdc2a978a884aa5a2ad5b85285fb5175cb435e82cf96efa860a550749e09d99"
-            install_directory="$(mktemp -d)"
-            trap 'find "${install_directory}" -depth -delete' EXIT
-            curl --fail --location --silent --show-error \
-              --output "${install_directory}/${archive}" "${archive_url}"
-            printf '%s  %s\n' "${expected_sha256}" "${install_directory}/${archive}" \
-              | sha256sum --check
-            tar -xJf "${install_directory}/${archive}" -C "${install_directory}"
-            install -m 0755 \
-              "${install_directory}/merman-cli-x86_64-unknown-linux-gnu/merman-cli" \
-              "${HOME}/.cargo/bin/merman-cli"
-          fi
-          installed_merman_version="$(merman-cli --version | tr -d '\r')"
-          if [[ "${installed_merman_version}" != "${expected_merman_version}" ]]; then
-            echo "expected ${expected_merman_version}, got ${installed_merman_version}" >&2
-            exit 1
-          fi
-
       - name: Install Nixie
-        run: |
-          if command -v nixie >/dev/null 2>&1; then
-            uv tool install --python 3.14 "nixie-cli==1.1.0"
-          else
-            uv tool install --force --python 3.14 "nixie-cli==1.1.0"
-          fi
-          command -v nixie
+        uses: leynos/shared-actions/.github/actions/install-nixie@bffacaf91d3f3515110679a30fbf6dc781ddc549
+        with:
+          nixie-version: '1.1.0'
+          merman-version: '0.7.0'
+          python-version: '3.14'
 
       - name: Enforce en-GB-oxendict spelling
         run: make spelling

@@ -383,6 +383,13 @@ layer's diff from its immediate base before committing.
 - [x] 2026-09-02: Added uv's executable-shim directory to both Namespace cache
   mounts and enforced the complete uv cache boundary in workflow contracts. The
   full deterministic gate passed with 1,653 tests and 12 workflow contracts.
+- [x] 2026-09-03: Replaced Whitaker's bespoke Merman and Nixie setup with the
+  SHA-pinned shared `install-nixie` action merged from shared-actions PR #423 at
+  `bffacaf91d3f3515110679a30fbf6dc781ddc549`. The full Linux job now caches
+  the action-owned `~/.cache/merman` directory alongside the complete uv cache
+  boundary. The focused five cache contracts, all 12 workflow contracts,
+  formatting, type-check, lint, full test (1,653 passed and 5 skipped),
+  Markdown, Mermaid, and actionlint gates passed.
 - [ ] Merge the uv cache correction, then repeat the trusted-producer and
   unchanged warm-run measurements.
 - [ ] Complete EP-M3 and monitor Namespace jobs.
@@ -589,6 +596,11 @@ the published v0.2.7 assets' `GLIBC_2.39` requirement.
   wheel-backed Nixie installation only when its executable shim is absent; the
   trusted `main` producer can then populate the new mount without invalidating
   the existing Cargo, Rust, and sccache data.
+- 2026-09-03: Delegate Nixie and Merman provisioning to the SHA-pinned shared
+  `install-nixie` action from shared-actions PR #423. Persist its documented
+  `~/.cache/merman` boundary and keep Whitaker's contract focused on action
+  provenance, inputs, ordering, and cache ownership instead of duplicating the
+  installer's internal shell implementation.
 
 ## Outcomes & retrospective
 
@@ -660,3 +672,8 @@ The final tool-installation revision removes the last source-build exception.
 `mdtablefix` now follows the same trusted-binary policy as the other CI tools,
 and its official asset, checksum, installed executable, and cache ownership are
 protected by workflow contracts.
+
+Nixie and Merman provisioning now follows the same shared estate boundary.
+Whitaker pins the shared action's merge commit, persists the action-owned
+Merman cache, and tests the caller contract without taking ownership of the
+shared installer's internal implementation.
