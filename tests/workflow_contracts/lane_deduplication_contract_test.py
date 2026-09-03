@@ -100,6 +100,27 @@ def _jobs_matching(patterns: Iterable[re.Pattern[str]]) -> set[str]:
     }
 
 
+def _make_recipe(target: str) -> str:
+    """Return one Make target's recipe, blank lines included.
+
+    Splitting on the first blank line would truncate the recipe, because Make
+    permits a blank line inside one. A command placed after that line would
+    then escape every assertion made about the recipe.
+    """
+    lines = MAKEFILE.read_text(encoding="utf-8").splitlines()
+    start = next(
+        (index for index, line in enumerate(lines) if line.startswith(f"{target}:")),
+        None,
+    )
+    assert start is not None, f"{target} must be defined in the Makefile"
+    body: list[str] = []
+    for line in lines[start + 1 :]:
+        if line and not line.startswith("\t"):
+            break
+        body.append(line)
+    return "\n".join(body)
+
+
 def _makefile_variable(name: str) -> str:
     """Return one Makefile variable's raw definition."""
     text = MAKEFILE.read_text(encoding="utf-8")
@@ -183,8 +204,7 @@ def test_the_doctest_lane_covers_the_whole_documented_surface() -> None:
 
 def test_publish_check_no_longer_executes_the_suite() -> None:
     """Its uninstrumented run was the second Linux execution."""
-    recipe = MAKEFILE.read_text(encoding="utf-8").split("\npublish-check:", 1)[1]
-    recipe = recipe.split("\n\n", 1)[0]
+    recipe = _make_recipe("publish-check")
     assert "nextest run" not in recipe, (
         "publish-check must not re-run the suite the coverage lane executed"
     )
@@ -200,8 +220,7 @@ def test_windows_keeps_its_own_platform_lane() -> None:
 
 def test_coverage_reuses_the_plain_test_recipe() -> None:
     """The instrumented run must not drift from the run it replaced."""
-    text = MAKEFILE.read_text(encoding="utf-8")
-    recipe = text.split("\ncoverage:", 1)[1].split("\n\n", 1)[0]
+    recipe = _make_recipe("coverage")
     assert "$(MAKE) test TEST_RUNNER=" in recipe, (
         "coverage must delegate to the test recipe rather than restate it"
     )

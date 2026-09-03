@@ -111,10 +111,18 @@ def job_steps(job: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def step_names(job: dict[str, Any]) -> list[str]:
-    """Return the ordered step names for one job."""
-    return [
-        step["name"] for step in job_steps(job) if isinstance(step.get("name"), str)
-    ]
+    """Return the ordered step names for one job.
+
+    Every step must be named. Silently dropping an unnamed step would let it
+    sit anywhere in the order, including ahead of the compiler-cache
+    credential export whose position the ordering contracts police.
+    """
+    names: list[str] = []
+    for index, step in enumerate(job_steps(job)):
+        name = step.get("name")
+        assert isinstance(name, str), f"step {index} must declare a name: {step!r}"
+        names.append(name)
+    return names
 
 
 def steps_by_name(job: dict[str, Any]) -> dict[str, dict[str, Any]]:

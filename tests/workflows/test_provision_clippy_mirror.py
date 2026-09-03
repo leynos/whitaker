@@ -110,7 +110,10 @@ def _make_harness(tmp_path: Path) -> Harness:
     )
 
 
-def _run(harness: Harness, mirror: Path | None = None) -> subprocess.CompletedProcess:
+def _run(
+    harness: Harness,
+    mirror: Path | None = None,
+) -> subprocess.CompletedProcess[str]:
     """Invoke the script for one mirror path."""
     target = harness.mirror if mirror is None else mirror
     return subprocess.run(

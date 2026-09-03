@@ -106,24 +106,29 @@ def _all_jobs() -> list[tuple[str, str, Mapping[str, Any]]]:
     ]
 
 
-def _labels_from_sequence(selector: list[Any]) -> list[str] | None:
+def _labels_from_sequence(selector: list[object]) -> list[str] | None:
     """Return a sequence selector's labels, or ``None`` if any is not a string."""
     if all(isinstance(entry, str) for entry in selector):
-        return list(selector)
+        return [entry for entry in selector if isinstance(entry, str)]
     return None
 
 
-def _mapping_labels(selector: Mapping[str, Any]) -> list[str] | None:
-    """Return the ``labels`` entry of a mapping selector as a string list."""
-    labels = selector.get("labels", [])
-    if isinstance(labels, str):
-        return [labels]
-    if isinstance(labels, list) and all(isinstance(entry, str) for entry in labels):
-        return list(labels)
-    return None
+def _mapping_labels(selector: Mapping[str, object]) -> list[str] | None:
+    """Return the ``labels`` entry of a mapping selector as a string list.
+
+    A bare string is one label. Anything that is not a string or a list of
+    strings is unreadable, so the caller fails closed rather than guessing.
+    """
+    match selector.get("labels", []):
+        case str() as label:
+            return [label]
+        case list() as labels if all(isinstance(entry, str) for entry in labels):
+            return [entry for entry in labels if isinstance(entry, str)]
+        case _:
+            return None
 
 
-def _labels_from_mapping(selector: Mapping[str, Any]) -> list[str] | None:
+def _labels_from_mapping(selector: Mapping[str, object]) -> list[str] | None:
     """Return a ``group``/``labels`` selector's labels, including the group.
 
     The group name joins the label list because a runner group named for a
@@ -132,29 +137,34 @@ def _labels_from_mapping(selector: Mapping[str, Any]) -> list[str] | None:
     labels = _mapping_labels(selector)
     if labels is None:
         return None
-    group = selector.get("group")
-    if group is None:
-        return labels
-    return [*labels, group] if isinstance(group, str) else None
+    match selector.get("group"):
+        case None:
+            return labels
+        case str() as group:
+            return [*labels, group]
+        case _:
+            return None
 
 
-def _labels_from_selector(selector: Any) -> list[str] | None:
+def _labels_from_selector(selector: object) -> list[str] | None:
     """Return the labels one ``runs-on`` selector requests, or ``None``.
 
     ``runs-on`` accepts a scalar label, a sequence of labels, or a
     ``group``/``labels`` mapping. ``None`` means the selector matches none of
     those shapes, so callers fail closed instead of skipping the job.
     """
-    if isinstance(selector, str):
-        return [selector]
-    if isinstance(selector, list):
-        return _labels_from_sequence(selector)
-    if isinstance(selector, Mapping):
-        return _labels_from_mapping(selector)
-    return None
+    match selector:
+        case str() as label:
+            return [label]
+        case list() as entries:
+            return _labels_from_sequence(entries)
+        case Mapping() as mapping:
+            return _labels_from_mapping(mapping)
+        case _:
+            return None
 
 
-def _runner_labels(job: Mapping[str, Any]) -> list[str] | None:
+def _runner_labels(job: Mapping[str, object]) -> list[str] | None:
     """Return every runner label a job requests, or ``None`` if unreadable.
 
     A reusable-workflow call declares ``uses`` and no ``runs-on`` at all, and
@@ -243,7 +253,7 @@ def test_ubicloud_placement_does_not_expand_beyond_the_reviewed_jobs() -> None:
     ],
 )
 def test_runner_labels_reads_every_supported_selector_form(
-    job: Mapping[str, Any],
+    job: Mapping[str, object],
     expected: list[str] | None,
 ) -> None:
     """Every documented selector form is read, and nothing else is trusted."""
