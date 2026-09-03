@@ -3,11 +3,7 @@
 //! Scenarios validate locale resolution and fallback handling so lints can
 //! depend on deterministic localization outcomes.
 
-use std::{
-    borrow::Cow,
-    cell::RefCell,
-    sync::{Mutex, MutexGuard, PoisonError},
-};
+use std::{borrow::Cow, cell::RefCell};
 
 use logtest::Logger;
 use rstest::{fixture, rstest};
@@ -17,11 +13,9 @@ use whitaker_common::{
         Arguments, DiagnosticMessageSet, FluentValue, Localizer, MessageKey, MessageResolution,
         get_localizer_for_lint, noop_reporter, safe_resolve_message_set, testing::RecordingEmitter,
     },
-    test_support::with_locale,
+    test_support::{EnvTestGuard, env_test_guard, with_locale},
 };
 use whitaker_test_macros::allow_fixture_expansion_lints;
-
-static ENVIRONMENT_LOCK: Mutex<()> = Mutex::new(());
 
 fn unquote(value: &str) -> &str {
     value
@@ -39,16 +33,15 @@ struct HelperWorld {
     result: RefCell<Option<DiagnosticMessageSet>>,
     emitter: RecordingEmitter,
     environment_locale: RefCell<Option<String>>,
-    _guard: MutexGuard<'static, ()>,
+    _guard: EnvTestGuard,
 }
 
 impl HelperWorld {
+    /// Creates a scenario world that holds the shared environment protocol.
     fn new() -> Self {
-        // The guard protects only process-wide environment mutation; a
-        // poisoned lock carries no invalid state, so recovering is safe.
-        let guard = ENVIRONMENT_LOCK
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner);
+        // Keep the shared guard for the scenario lifetime so locale changes
+        // cannot interleave with other process-environment test helpers.
+        let guard = env_test_guard();
 
         Self {
             configuration: RefCell::new(None),

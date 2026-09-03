@@ -4,8 +4,7 @@ use super::{HarnessError, run_with_runner};
 use camino::{Utf8Path, Utf8PathBuf};
 use rstest::rstest;
 use std::env;
-use std::sync::{Mutex, MutexGuard, OnceLock};
-use whitaker_common::test_support::EnvVarGuard;
+use whitaker_common::test_support::{EnvTestGuard, EnvVarGuard, env_test_guard};
 
 #[rstest]
 #[case(
@@ -125,21 +124,19 @@ fn windows_env_guard_leaves_absent_rustc_wrapper_untouched() {
 }
 
 #[test]
-fn runner_env_guard_test_lock_recovers_after_panic() {
+fn runner_env_guard_test_lock_releases_after_panic() {
     let result = std::panic::catch_unwind(|| {
         let _serial_guard = runner_env_guard_test_lock();
-        panic!("intentionally poison the UI environment test lock");
+        panic!("intentionally release the UI environment test lock");
     });
 
     assert!(result.is_err());
     let _serial_guard = runner_env_guard_test_lock();
 }
 
-fn runner_env_guard_test_lock() -> MutexGuard<'static, ()> {
+/// Acquires the production environment protocol for assertions spanning a callback.
+fn runner_env_guard_test_lock() -> EnvTestGuard {
     // These tests inspect process-global environment state after callbacks,
     // so their whole bodies must run serially rather than only each mutation.
-    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-    LOCK.get_or_init(|| Mutex::new(()))
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
+    env_test_guard()
 }
