@@ -53,17 +53,22 @@ emit_hit() {
 }
 
 # GitHub rejects some unauthenticated clones from shared CI egress ranges,
-# which surfaces as `could not read Username for 'https://github.com'`. Send
-# the job's token when one is available so the cold clone is authenticated,
-# and retry a transient rejection rather than failing the whole job.
+# which surfaces as `could not read Username for 'https://github.com'`. Try the
+# job's token first when one is available, because an authenticated request is
+# not subject to the anonymous rate limit. Fall back to anonymous attempts so a
+# token the upstream repository does not accept cannot defeat a clone that
+# would otherwise have succeeded, and retry a transient rejection rather than
+# failing the whole job.
 clone_mirror() {
     local attempt
     local -a auth=()
     local token="${GH_TOKEN:-${GITHUB_TOKEN:-}}"
-    if [[ -n "${token}" ]]; then
-        auth=(-c "http.${CLIPPY_URL}.extraheader=Authorization: Bearer ${token}")
-    fi
     for ((attempt = 1; attempt <= CLONE_ATTEMPTS; attempt++)); do
+        if [[ "${attempt}" -eq 1 && -n "${token}" ]]; then
+            auth=(-c "http.${CLIPPY_URL}.extraheader=Authorization: Bearer ${token}")
+        else
+            auth=()
+        fi
         discard_stale_mirror
         if git "${auth[@]}" clone --mirror "${CLIPPY_URL}" "${mirror}"; then
             return 0
