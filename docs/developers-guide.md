@@ -241,13 +241,40 @@ GitHub-hosted and shares none of the Ubicloud constants.
 ### CI build caching
 
 Every Linux job runs on an ephemeral Ubicloud virtual machine whose disk is
-destroyed when the job ends, so all durable state is an archive in Ubicloud
-Cache. The jobs use `ubicloud/cache/restore` and `ubicloud/cache/save` pinned to
-`92361f338d82d2c58a98875f1b5c95cd14cd6b2a` (v4.1.2). They never use
-`actions/cache`: the Ubicloud action reads `UBICLOUD_CACHE_URL` and
-`UBICLOUD_RUNTIME_TOKEN` from the virtual machine's environment, and mixing
-clients would split one logical cache across two stores. `windows-compat`
-remains GitHub-hosted and keeps the GitHub Actions `sccache` backend.
+destroyed when the job ends, so all durable state is an archive. Every lane,
+Ubicloud and GitHub-hosted alike, uses `actions/cache/restore` and
+`actions/cache/save` pinned to `55cc8345863c7cc4c66a329aec7e433d2d1c52a9`
+(v6.1.0).
+
+One action and one pin serve both providers because Ubicloud's transparent
+cache intercepts that version. This was verified from the Ubicloud console's
+cache listing on 2026-09-03: Axinite's Linux keys written by v6.1.0 appear in
+its Ubicloud listing while its Windows keys appear in GitHub's, and Whitaker's
+older v4.3.0 pin (`0057852b`) had left nothing in Ubicloud's listing at all.
+The deprecated `ubicloud/cache` fork is deliberately not used: it reads
+`UBICLOUD_CACHE_URL` and `UBICLOUD_RUNTIME_TOKEN` from the virtual machine's
+environment, which a GitHub-hosted runner never supplies, so it could not serve
+the Windows lane. Check the first `main` run in the listing again with:
+
+```sh
+ubi gh leynos/whitaker list-cache-entries
+```
+
+No job archives a Cargo `target` tree, and none may. `sccache` is the single
+owner of compiler output for every build shape. The lint and test lanes compile
+ordinary debug objects while the coverage lane compiles
+`-C instrument-coverage` objects; both shapes coexist in one `sccache` store
+keyed by their flags, and run 33744418209 recorded 0 non-cacheable compilations
+for the instrumented build. A `target` archive would be a second owner, would
+be invalidated far more often than the registry, and could hold only one shape
+at a time. That is why every caller of the shared `setup-rust` action passes
+`cache-provider: external`: its `github` provider archives
+`target/${BUILD_PROFILE}` alongside the registry. `windows-compat` was
+archiving exactly that until it moved to the external provider and gained its
+own registry cache. The release and rolling-release workflows still call the
+shared action with its default provider; they are release boundaries rather
+than developer-blocking lanes and are out of scope here, but they need the same
+treatment.
 
 Every cached path has exactly one owner inside its job, and every key family
 has exactly one job permitted to write it.
@@ -366,25 +393,42 @@ two values into the job environment when, and only when, the GHA backend is
 selected. Without it the wrapper falls back to `Local disk` and the job pays a
 compiler cache's setup cost for nothing.
 
-`local` is the deployed backend, chosen from measurement rather than from
-preference. The first Ubicloud run with the GitHub Actions backend selected,
-[33748602187][whitaker-run-33748602187], proved the credentials export works
-and the backend proved useless in the same breath. `linux-full` reported
-`Cache location ghac`, 4,771 compile requests, 0 read errors, and 3,788 write
-errors against 3,788 store attempts; `coverage-check` reported 2,834 requests
-and 2,245 write errors against 2,245 attempts. Every single store failed, so
-the compiler cache would have retained nothing no matter how many runs
-followed. The threshold for abandoning that backend is write errors above
-roughly two percent of requests, or an Ubicloud cache listing with no `sccache`
-entries.
+That export must run before anything starts the `sccache` server, which is why
+it sits immediately after checkout in every Linux job. `sccache --zero-stats`,
+`--start-server`, and the first wrapped `rustc` all start the server, and a
+server started without the variables comes up in local-disk mode and stays
+there for the whole job while reporting zero requests. The contract tests
+enforce that ordering. The GitHub-hosted Windows lane needs no export, because
+there the variables are already visible to `run:` steps.
 
-The local directory has known trade-offs. Its archive grows with every new
-compilation unit until `SCCACHE_CACHE_SIZE` trims it, so a warm run restores
-and re-saves the whole directory even when only a few objects changed. That is
-why the key carries the run identifier with a `restore-keys` prefix, and why
-the save is restricted to the lane's single writer. Measure the restore and
-save duration against the compile seconds avoided; raise `SCCACHE_CACHE_SIZE`
-above its 2 GB default only if the trim rate makes warm runs miss.
+`gha` is the deployed backend. The Actions cache service is the store
+Ubicloud's transparent cache intercepts, so `sccache` objects land beside the
+archive caches rather than in GitHub's. That was verified from Cuprum's
+Ubicloud cache listing on 2026-09-03, where the `sccache/...` keys written by
+its pull-request run 33748907011 appear. An earlier reading of Whitaker's own
+GitHub cache misattributed `sccache/...` objects to a Linux job; those came
+from the GitHub-hosted Windows lane, because Whitaker's Linux jobs were still
+on Namespace that day.
+
+Whitaker's own measurement is not yet consistent with that conclusion and must
+be re-read on the next run. Run [33748602187][whitaker-run-33748602187], the
+first Ubicloud run with `gha` selected, reported `Cache location ghac` in both
+Linux jobs, proving the credentials reached `sccache`, and then failed every
+single store: 3,788 write errors against 3,788 attempts in `linux-full` and
+2,245 against 2,245 in `coverage-check`, with 0 read errors. The same workload
+in `local` mode on the next run reported 0 read and 0 write errors. Treat write
+errors above roughly two percent of requests, or an Ubicloud cache listing with
+no `sccache` entries for Whitaker, as the signal to switch.
+
+Switching is one line. `local` has known trade-offs. Its archive grows with
+every new compilation unit until `SCCACHE_CACHE_SIZE` trims it, so a warm run
+restores and re-saves the whole directory even when only a few objects changed.
+That is why the key carries the run identifier with a `restore-keys` prefix,
+and why the save is restricted to the lane's single writer. The cap defaults to
+4 GB rather than 2 GB because the store holds two build shapes, the ordinary
+debug objects and the instrumented coverage objects; a one-shape cap would
+evict each shape in turn. Measure the restore and save duration against the
+compile seconds avoided.
 
 Each build lane resets `sccache` counters before compilation and then runs
 `scripts/record-sccache-effectiveness.sh`, which appends the human-readable
@@ -485,6 +529,12 @@ label cannot leave the suite oversubscribed. `windows-compat` keeps its own
 value because `windows-latest` is a four-vCPU GitHub-hosted shape. No suite in
 this repository uses `pytest-xdist`; if one adopts it, give it an explicit
 worker count rather than `-n auto`.
+
+`windows-compat` keeps the shared Rust setup action's own `sccache` setup,
+which installs the binary and exports the Actions cache credentials. It needs
+no separate export step, and it owns one registry archive of its own keyed by
+`runner.os` and `runner.arch` so a Linux archive can never be restored onto
+Windows.
 
 `.github/actionlint.yaml` registers `ubicloud-standard-2-ubuntu-2404` as the
 only self-hosted label in use. Keep that list equal to the labels the workflows
