@@ -180,7 +180,11 @@ install_tool() {
     trap 'rm -rf -- "$workdir"' 0 INT TERM HUP
 
     archive="$workdir/${stem}.tar.gz"
+    # Bound both the handshake and the transfer. A stalled connection would
+    # otherwise hold the step open until the job's own timeout, turning a
+    # transient network fault into a wasted hour of paid runner time.
     curl --fail --location --proto '=https' --tlsv1.2 \
+        --connect-timeout 30 --max-time 300 \
         --silent --show-error \
         --output "$archive" \
         "${release_base_url}/v${version}/${stem}.tar.gz"

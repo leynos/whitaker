@@ -2842,8 +2842,11 @@ Before publishing, run the full validation suite:
 make publish-check
 ```
 
-This builds, tests, and validates packages in a production-like environment
-without the `prefer-dynamic` flag used during development.
+This builds each package and every lint library in a production-like
+environment, without the `prefer-dynamic` flag used during development, and
+packages the crates for inspection. It runs no tests: the coverage job is the
+single execution of the suite per pull request, as described in "One execution
+of the test suite per pull request" above.
 
 [issue-180]: https://github.com/leynos/whitaker/issues/180
 [whitaker-run-33748602187]: https://github.com/leynos/whitaker/actions/runs/33748602187
