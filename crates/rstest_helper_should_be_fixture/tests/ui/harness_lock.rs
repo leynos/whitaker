@@ -1,10 +1,10 @@
 //! Example-harness lock protocol for the UI test binary.
 //!
-//! `tests/ui.rs`'s `ExampleHarness` fixture serializes example compilations
-//! across separate nextest processes with a filesystem lock. This module owns
-//! that protocol — the lock type, its stale-owner recovery, and the adapter
-//! tests that exercise it — so `ui.rs` stays focused on the example and
-//! trybuild assertions.
+//! `tests/ui.rs` serializes example and trybuild compilations across separate
+//! nextest processes with a filesystem lock. This module owns that protocol —
+//! the lock type, its stale-owner recovery, and the adapter tests that exercise
+//! it — so `ui.rs` stays focused on assertions rather than cross-process
+//! coordination.
 
 use std::{
     fs::{File, OpenOptions},
@@ -40,7 +40,7 @@ pub(crate) struct ExampleHarnessLock {
 }
 
 impl ExampleHarnessLock {
-    /// Returns the lock directory serializing the current example run.
+    /// Returns the lock directory serializing the current UI fixture compilation.
     pub(crate) fn path(&self) -> &Path {
         &self.path
     }
