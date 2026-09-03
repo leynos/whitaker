@@ -1,4 +1,4 @@
-.PHONY: help all clean test coverage build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke installer-msrv-check release-installer-dry-run package-lints workflow-test workflow-test-deps test-workflow-contracts test-markdown-format test-glibc-baseline verus kani verus-clone-detector kani-clone-detector spelling spelling-config spelling-config-write spelling-phrase-check spelling-helper-test
+.PHONY: help all clean test test-doc coverage build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke installer-msrv-check release-installer-dry-run package-lints workflow-test workflow-test-deps test-workflow-contracts test-markdown-format test-glibc-baseline verus kani verus-clone-detector kani-clone-detector spelling spelling-config spelling-config-write spelling-phrase-check spelling-helper-test
 
 # Appended only on targets that invoke binaries commonly installed under these
 # prefixes (cargo/bun/user-local), so the default recipe environment stays
@@ -13,6 +13,21 @@ BUILD_JOBS ?=
 CARGO_FLAGS ?= --workspace --all-targets --all-features
 TEST_EXCLUDES ?= --exclude rustc_ast --exclude rustc_attr_data_structures --exclude rustc_hir --exclude rustc_lint --exclude rustc_middle --exclude rustc_session --exclude rustc_span --exclude whitaker --exclude function_attrs_follow_docs --exclude module_max_lines --exclude no_expect_outside_tests
 TEST_CARGO_FLAGS ?= $(CARGO_FLAGS) $(TEST_EXCLUDES)
+# Doctests cannot run for a crate that links `rustc_private`. A doctest is
+# compiled as its own crate without `#![feature(rustc_private)]`, so every
+# lint crate, the `rustc_*` proxy shims, `clippy_utils`, the `whitaker` root,
+# and the suite fail at `E0658` before a single assertion runs. The remaining
+# four packages hold the documented public API and are the doctest lane.
+DOCTEST_EXCLUDES ?= --exclude bumpy_road_function --exclude clippy_utils \
+	--exclude conditional_max_n_branches --exclude function_attrs_follow_docs \
+	--exclude module_max_lines --exclude module_must_have_inner_docs \
+	--exclude no_expect_outside_tests --exclude no_std_fs_operations \
+	--exclude no_unwrap_or_else_panic --exclude rstest_helper_should_be_fixture \
+	--exclude rustc_ast --exclude rustc_attr_data_structures --exclude rustc_hir \
+	--exclude rustc_lint --exclude rustc_middle --exclude rustc_session \
+	--exclude rustc_span --exclude test_must_not_have_example \
+	--exclude whitaker --exclude whitaker_suite
+DOCTEST_CARGO_FLAGS ?= --workspace --all-features $(DOCTEST_EXCLUDES)
 NEXTEST_PROFILE ?=
 # The cargo test driver. `test` runs `cargo nextest run`; `coverage`
 # overrides this with `cargo llvm-cov nextest ...` so instrumentation runs
@@ -54,8 +69,13 @@ WORKFLOW_TEST_VENV ?= .venv
 LINT_CRATES ?= bumpy_road_function conditional_max_n_branches function_attrs_follow_docs module_max_lines module_must_have_inner_docs no_expect_outside_tests test_must_not_have_example no_std_fs_operations no_unwrap_or_else_panic whitaker_suite
 CARGO_DYLINT_VERSION ?= 6.0.1
 DYLINT_LINK_VERSION ?= 6.0.1
-# Host-tool installs run under this toolchain: the dylint 6.0.1 lockfile
-# needs a newer rustc than the repository's pinned nightly provides.
+# The pinned host tools are downloaded once into a durable directory rather
+# than a temporary root, so CI can cache them under one owner and a warm run
+# observes a hit instead of repeating the download.
+DYLINT_TOOLS_DIR ?= $(HOME)/.cache/whitaker-dylint-tools
+# Retained only so the provisioning script's argument contract is unchanged.
+# The host tools are now downloaded as verified prebuilt binaries, so no
+# toolchain participates in their installation.
 DYLINT_TOOLS_TOOLCHAIN ?= stable
 WHITAKER_SCRIPT ?= $(HOME)/.local/bin/whitaker
 
@@ -138,6 +158,15 @@ coverage: ## Generate LCOV coverage over the CI-tested crate subset
 		CARGO_TARGET_DIR="$(COVERAGE_TARGET_DIR)" \
 		$(MAKE) test TEST_RUNNER="llvm-cov nextest --lcov --output-path $(COVERAGE_OUTPUT)"
 
+test-doc: ## Run the workspace doctests, which no other lane executes
+	@# `cargo llvm-cov nextest` runs no doctests and `--all-targets` excludes
+	@# them, so this target is the only place they run. The RUSTFLAGS here
+	@# deliberately omit the `-C prefer-dynamic -Z force-unstable-if-unmarked`
+	@# pair the test lane uses: a doctest is compiled as a separate crate, and
+	@# `force-unstable-if-unmarked` then makes every one of them fail to load
+	@# its own library at `E0658`.
+	RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) test --doc $(CARGO_LOCKED) $(DOCTEST_CARGO_FLAGS) $(BUILD_JOBS)
+
 workflow-test: workflow-test-deps ## Run opt-in GitHub workflow smoke tests with act + pytest
 	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v act >/dev/null || { echo "Install act to run workflow tests"; exit 1; }
 	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v $(UV) >/dev/null || { echo "uv is required for workflow tests"; exit 1; }
@@ -151,7 +180,7 @@ workflow-test: workflow-test-deps ## Run opt-in GitHub workflow smoke tests with
 
 test-workflow-contracts: ## Validate the mutation-testing caller contract
 	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v $(UV) >/dev/null || { echo "uv is required for workflow contract tests"; exit 1; }
-	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; $(UV) run --with 'pytest>=8' --with 'pyyaml>=6' pytest tests/workflow_contracts -q
+	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; $(UV) run --with 'pytest>=8' --with 'pyyaml>=6' --with 'hypothesis>=6' pytest tests/workflow_contracts -q
 
 test-markdown-format: ## Validate the Markdown formatter checker
 	@PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python 3.14 \
@@ -333,8 +362,10 @@ release-installer-dry-run: ## Build and package the host-platform installer arch
 		exit 1; \
 	fi
 
-publish-check: ## Build, test, and validate packages before publishing
-	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v cargo-nextest >/dev/null || { echo "Install cargo-nextest (cargo install cargo-nextest)"; exit 1; }
+# The Rust suite is executed once per pull request, by the coverage lane.
+# This target therefore builds and validates the packages without re-running
+# it; see "One gate per executed test set" in the developers' guide.
+publish-check: ## Build and validate packages before publishing
 	set -eu; \
 	export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; \
 	PINNED_TOOLCHAIN=$$(awk -F '\"' '/^channel/ {print $$2}' rust-toolchain.toml); \
@@ -342,12 +373,12 @@ publish-check: ## Build, test, and validate packages before publishing
 	ORIG_DIR="$(CURDIR)"; \
 	rustup component add --toolchain "$$TOOLCHAIN" rust-src rustc-dev llvm-tools-preview; \
 	RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) build $(CARGO_LOCKED) --workspace --all-features $(BUILD_JOBS); \
-	RUSTFLAGS="-Z force-unstable-if-unmarked $(RUST_FLAGS)" $(CARGO) +$$TOOLCHAIN nextest run $(CARGO_LOCKED) --profile ci $(TEST_CARGO_FLAGS) $(BUILD_JOBS); \
 	TMP_DIR=$$(mktemp -d); \
 	trap 'rm -rf "$$TMP_DIR"' 0 INT TERM HUP; \
-	DYLINT_TOOLS_DIR="$$TMP_DIR/dylint-tools"; \
+	DYLINT_TOOLS_DIR="$(DYLINT_TOOLS_DIR)"; \
+	mkdir -p "$$DYLINT_TOOLS_DIR/bin"; \
+	export PATH="$$DYLINT_TOOLS_DIR/bin:$$PATH"; \
 	scripts/install-dylint-tools.sh "$$DYLINT_TOOLS_DIR" "$(CARGO_DYLINT_VERSION)" "$(DYLINT_LINK_VERSION)" "$(CARGO)" "$(DYLINT_TOOLS_TOOLCHAIN)"; \
-	if [ -d "$$DYLINT_TOOLS_DIR/bin" ]; then export PATH="$$DYLINT_TOOLS_DIR/bin:$$PATH"; fi; \
 	TARGET_DIR="$$TMP_DIR/target"; \
 	git clone "$(WHITAKER_REPO)" "$$TMP_DIR/whitaker-src"; \
 	cd "$$TMP_DIR/whitaker-src" || exit 1; \

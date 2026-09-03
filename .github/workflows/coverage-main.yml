@@ -15,6 +15,10 @@ name: Coverage (main)
 # way to exclude crates, and whitaker's suite cannot run a bare
 # `--workspace` build (eleven crates are excluded from CI test runs and the
 # dylint UI tests need per-target RUSTFLAGS).
+#
+# This is the only Whitaker job that runs automatically on the trusted
+# branch, so it is the writer for every coverage-lane cache key. `ci.yml`'s
+# `coverage-check` restores those keys and never saves.
 
 on:
   push:
@@ -28,39 +32,211 @@ env:
   BUILD_PROFILE: debug
   CARGO_INCREMENTAL: 0
   CARGO_TERM_COLOR: always
+  # Keep in step with ci.yml: one named constant for the Ubicloud shape.
+  LINUX_RUNNER_VCPUS: '2'
+  # One-line switch between the Actions cache backend and a cached local
+  # directory. `local` is deployed because `gha` failed every store attempt on
+  # Ubicloud twice. Keep in step with ci.yml; see
+  # scripts/select-sccache-backend.sh and the developers' guide.
+  SCCACHE_BACKEND: local
+  # The shared Rust setup action installs sccache but leaves the wrapper
+  # unset here, so run 33692863541 recorded zero compile requests while
+  # still paying the cache's setup cost. Set it explicitly so every Cargo
+  # invocation, including the nested build `cargo llvm-cov` launches, is
+  # routed through the compiler cache.
+  RUSTC_WRAPPER: sccache
 
 jobs:
   coverage-upload:
-    runs-on: ubicloud-standard-4-ubuntu-2404
+    runs-on: ubicloud-standard-2-ubuntu-2404
+    timeout-minutes: 40
     defaults:
       run:
         shell: bash
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7
+        with:
+          persist-credentials: false
+
+      - name: Expose the Actions cache credentials to sccache
+        # Must precede anything that starts the sccache server. A `run:` step
+        # on Ubicloud cannot see these variables, so a server started before
+        # this step comes up in local-disk mode and stays there for the whole
+        # job, reporting zero requests. GitHub-hosted lanes need no export.
+        if: env.SCCACHE_BACKEND == 'gha'
+        uses: actions/github-script@373c709c69115d41ff229c7e5df9f8788daa9553  # v9
+        with:
+          script: |
+            core.setSecret(process.env.ACTIONS_RUNTIME_TOKEN ?? '');
+            for (const name of ['ACTIONS_RESULTS_URL', 'ACTIONS_RUNTIME_TOKEN']) {
+              const value = process.env[name];
+              if (value) { core.exportVariable(name, value); }
+            }
+
+      - name: Bound concurrency to the runner shape
+        run: |
+          {
+            printf 'CARGO_BUILD_JOBS=%s\n' "${LINUX_RUNNER_VCPUS}"
+            printf 'NEXTEST_TEST_THREADS=%s\n' "${LINUX_RUNNER_VCPUS}"
+          } >> "$GITHUB_ENV"
+
+      - name: Select the compiler cache backend
+        run: bash scripts/select-sccache-backend.sh
+
+      - name: Restore Cargo registry
+        id: cargo-registry
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cargo-registry-coverage-v1-${{ runner.os }}-${{ runner.arch }}-${{ runner.environment }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
+          restore-keys: |
+            cargo-registry-coverage-v1-${{ runner.os }}-${{ runner.arch }}-${{ runner.environment }}-
+
+      - name: Restore the Rust toolchain and installed tools
+        id: rust-tools
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: |
+            ~/.rustup
+            ~/.cargo/bin
+            ~/.local/bin
+            ~/.cache/uv
+            ~/.local/share/uv
+          key: tools-coverage-v1-${{ runner.os }}-${{ runner.arch }}-${{ runner.environment }}-ubuntu2404-sccache0.16.0-nextest0.9.114-llvmcov0.6.24-${{ hashFiles('rust-toolchain.toml') }}
+
+      - name: Restore the Clippy source mirror
+        id: clippy-mirror-cache
+        # `dylint_driver`'s build script clones rust-lang/rust-clippy while
+        # building. Run 33704041072 failed three times because GitHub
+        # rejected that unauthenticated clone. Give the fetch one cache
+        # owner, keyed by the Dylint version whose build script performs it
+        # and by the pinned nightly whose revision it needs.
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: ~/.cache/whitaker-mirrors
+          key: clippy-mirror-v1-dylint6.0.1-${{ hashFiles('rust-toolchain.toml') }}
+
+      - name: Restore the compiler cache directory
+        id: sccache-dir
+        if: env.SCCACHE_BACKEND == 'local'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: ~/.cache/sccache
+          key: sccache-coverage-v1-${{ runner.os }}-${{ runner.arch }}-${{ runner.environment }}-${{ hashFiles('rust-toolchain.toml') }}-${{ github.run_id }}
+          restore-keys: |
+            sccache-coverage-v1-${{ runner.os }}-${{ runner.arch }}-${{ runner.environment }}-${{ hashFiles('rust-toolchain.toml') }}-
+
+      - name: Record cache observations
+        if: always()
+        env:
+          CARGO_REGISTRY_KEY: ${{ steps.cargo-registry.outputs.cache-primary-key }}
+          CARGO_REGISTRY_MATCHED: ${{ steps.cargo-registry.outputs.cache-matched-key }}
+          CARGO_REGISTRY_HIT: ${{ steps.cargo-registry.outputs.cache-hit }}
+          RUST_TOOLS_KEY: ${{ steps.rust-tools.outputs.cache-primary-key }}
+          RUST_TOOLS_MATCHED: ${{ steps.rust-tools.outputs.cache-matched-key }}
+          RUST_TOOLS_HIT: ${{ steps.rust-tools.outputs.cache-hit }}
+          CLIPPY_MIRROR_KEY: ${{ steps.clippy-mirror-cache.outputs.cache-primary-key }}
+          CLIPPY_MIRROR_MATCHED: ${{ steps.clippy-mirror-cache.outputs.cache-matched-key }}
+          CLIPPY_MIRROR_HIT: ${{ steps.clippy-mirror-cache.outputs.cache-hit }}
+          SCCACHE_DIR_KEY: ${{ steps.sccache-dir.outputs.cache-primary-key }}
+          SCCACHE_DIR_MATCHED: ${{ steps.sccache-dir.outputs.cache-matched-key }}
+          SCCACHE_DIR_HIT: ${{ steps.sccache-dir.outputs.cache-hit }}
+        run: bash scripts/record-cache-observations.sh
+
+      - name: Provision the Clippy source mirror
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          bash scripts/provision-clippy-mirror.sh \
+            "$HOME/.cache/whitaker-mirrors/rust-clippy.git"
 
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@32c8ea649ea44d40119f348ad48861212532061f
+        uses: leynos/shared-actions/.github/actions/setup-rust@f6d4d5f549655c118f86f371b8d55c200d3efa50
+        with:
+          cache-provider: external
+          use-sccache: false
+
+      - name: Install sccache
+        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
+        with:
+          tool: sccache@0.16.0
+          fallback: none
 
       - name: Install cargo-nextest
         uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
         with:
           tool: nextest@0.9.114
+          fallback: none
 
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
         with:
-          tool: cargo-llvm-cov
+          tool: cargo-llvm-cov@0.6.24
+          fallback: none
+
+      - name: Reset sccache statistics
+        run: sccache --zero-stats
 
       - name: Generate coverage
         run: make coverage
+
+      - name: Run doctests
+        # `cargo llvm-cov nextest` executes no doctests and `--all-targets`
+        # excludes them, so this is the only step in the repository that runs
+        # them. It is the second half of one executed set, not a second lane.
+        run: make test-doc
+
+      - name: Record sccache effectiveness
+        if: always()
+        run: bash scripts/record-sccache-effectiveness.sh
 
       - name: Upload coverage data to CodeScene
         env:
           CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
         if: env.CS_ACCESS_TOKEN != ''
-        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@32c8ea649ea44d40119f348ad48861212532061f
+        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@f6d4d5f549655c118f86f371b8d55c200d3efa50
         with:
           format: lcov
           access-token: ${{ env.CS_ACCESS_TOKEN }}
           installer-checksum: ${{ vars.CODESCENE_CLI_SHA256 }}
+
+      # This job is the sole writer for the coverage-lane keys and for the
+      # shared Clippy mirror. `ci.yml` restores them and never saves, so two
+      # lanes can never race to populate the same cold key.
+      - name: Save Cargo registry
+        if: github.ref == 'refs/heads/main' && steps.cargo-registry.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ steps.cargo-registry.outputs.cache-primary-key }}
+
+      - name: Save the Rust toolchain and installed tools
+        if: github.ref == 'refs/heads/main' && steps.rust-tools.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: |
+            ~/.rustup
+            ~/.cargo/bin
+            ~/.local/bin
+            ~/.cache/uv
+            ~/.local/share/uv
+          key: ${{ steps.rust-tools.outputs.cache-primary-key }}
+
+      - name: Save the Clippy source mirror
+        if: github.ref == 'refs/heads/main' && steps.clippy-mirror-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: ~/.cache/whitaker-mirrors
+          key: ${{ steps.clippy-mirror-cache.outputs.cache-primary-key }}
+
+      - name: Save the compiler cache directory
+        if: env.SCCACHE_BACKEND == 'local' && github.ref == 'refs/heads/main'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: ~/.cache/sccache
+          key: ${{ steps.sccache-dir.outputs.cache-primary-key }}

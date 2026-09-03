@@ -26,6 +26,7 @@ import pytest
 from ruamel.yaml import YAML
 
 WORKFLOW_PATH = Path(__file__).resolve().parents[2] / ".github/workflows/ci.yml"
+UBICLOUD_LINUX_RUNNER = "ubicloud-standard-2-ubuntu-2404"
 
 
 @pytest.fixture(scope="module")
@@ -122,9 +123,9 @@ def test_ci_splits_linux_and_windows_jobs_by_purpose(
         parent_name="CI workflow jobs",
     )
 
-    assert linux_job.get("runs-on") == (
-        "namespace-profile-rust-linux-ci;overrides.cache-tag=whitaker-linux-amd64-v1"
-    ), "linux-full must run on the deployed Namespace Linux runner"
+    assert linux_job.get("runs-on") == UBICLOUD_LINUX_RUNNER, (
+        "linux-full must run on the reviewed Ubicloud Linux runner"
+    )
     assert windows_job.get("runs-on") == "windows-latest", (
         "windows-compat must keep using the hosted Windows runner"
     )
@@ -147,7 +148,15 @@ def test_ci_enables_sccache_and_debug_target_cache_scope(
         "expand to the entire target tree"
     )
     assert "SCCACHE_GHA_ENABLED" not in env, (
-        "Namespace jobs must not inherit the GitHub Actions sccache backend"
+        "the backend selector, not the workflow, exports the sccache backend "
+        "variables so only one backend is ever configured"
+    )
+    assert env.get("SCCACHE_BACKEND") in {"gha", "local"}, (
+        "CI must declare the compiler-cache backend in one switchable place, "
+        "naming a backend the selector script understands"
+    )
+    assert str(env.get("LINUX_RUNNER_VCPUS")) == "2", (
+        "CI must derive its concurrency bounds from the Ubicloud shape"
     )
     assert env.get("RUSTC_WRAPPER") == "sccache", "CI must route rustc through sccache"
     assert str(env.get("CARGO_INCREMENTAL")) == "0", (
@@ -185,22 +194,30 @@ def _coverage_check_job(workflow: Mapping[str, Any]) -> dict[str, Any]:
     assert coverage_job.get("if") == "github.event_name == 'pull_request'", (
         "coverage-check must run only for pull requests"
     )
-    assert coverage_job.get("runs-on") == (
-        "namespace-profile-rust-linux-light;overrides.cache-tag=whitaker-linux-amd64-v1"
-    ), "coverage-check must use the deployed Namespace Linux runner"
+    assert coverage_job.get("runs-on") == UBICLOUD_LINUX_RUNNER, (
+        "coverage-check must use the reviewed Ubicloud Linux runner"
+    )
     assert coverage_job.get("defaults", {}).get("run", {}).get("shell") == "bash", (
         "coverage-check must use Bash for Makefile targets"
     )
     assert _step_names(coverage_job) == [
         "Checkout",
-        "Set up Namespace cache",
-        "Record Namespace cache state",
+        "Expose the Actions cache credentials to sccache",
+        "Bound concurrency to the runner shape",
+        "Select the compiler cache backend",
+        "Restore Cargo registry",
+        "Restore the Rust toolchain and installed tools",
+        "Restore the Clippy source mirror",
+        "Restore the compiler cache directory",
+        "Record cache observations",
+        "Provision the Clippy source mirror",
         "Setup Rust",
         "Install sccache",
         "Install cargo-nextest",
         "Install cargo-llvm-cov",
         "Reset sccache statistics",
         "Generate coverage",
+        "Run doctests",
         "Record sccache effectiveness",
         "Upload sccache statistics",
         "Check coverage against CodeScene gates",
@@ -224,12 +241,12 @@ def _assert_coverage_checkout_and_setup(coverage_job: Mapping[str, Any]) -> None
     setup_step = _find_step(coverage_job, "Setup Rust")
     assert setup_step.get("uses") == (
         "leynos/shared-actions/.github/actions/setup-rust@"
-        "5daae0a332441d170d88ca648c9e71f0bbe96cb3"
+        "f6d4d5f549655c118f86f371b8d55c200d3efa50"
     ), "coverage-check must reuse the current main-branch Rust setup pin"
     assert setup_step.get("with") == {
         "cache-provider": "external",
         "use-sccache": False,
-    }, "coverage-check must give Namespace sole ownership of Rust caches"
+    }, "coverage-check must own its Cargo cache and sccache configuration"
 
 
 def _assert_coverage_tool_installation(coverage_job: Mapping[str, Any]) -> None:
@@ -256,6 +273,10 @@ def _assert_coverage_tool_installation(coverage_job: Mapping[str, Any]) -> None:
         "make coverage"
     ), "coverage-check must preserve Whitaker's crate exclusions and RUSTFLAGS"
 
+    assert _find_step(coverage_job, "Run doctests").get("run") == ("make test-doc"), (
+        "coverage-check must execute the doctests nextest cannot reach"
+    )
+
 
 def _assert_codescene_check(coverage_job: Mapping[str, Any]) -> None:
     """Assert the CodeScene changed-line coverage contract."""
@@ -268,7 +289,7 @@ def _assert_codescene_check(coverage_job: Mapping[str, Any]) -> None:
     ), "the CodeScene step must guard its pull-request secret"
     assert check_step.get("uses") == (
         "leynos/shared-actions/.github/actions/upload-codescene-coverage@"
-        "32c8ea649ea44d40119f348ad48861212532061f"
+        "f6d4d5f549655c118f86f371b8d55c200d3efa50"
     ), "coverage-check must use the proven CodeScene action pin"
     assert check_step.get("with") == {
         "format": "lcov",
@@ -325,7 +346,6 @@ def test_linux_full_keeps_the_full_linux_validation_stack(
             "Check formatting",
             "Install Mermaid CLI",
             "Setup uv",
-            "Install Merman CLI",
             "Install Nixie",
             "Enforce en-GB-oxendict spelling",
             "Nixie",
@@ -342,13 +362,11 @@ def test_linux_full_keeps_the_full_linux_validation_stack(
         'make publish-check PUBLISH_PACKAGES="whitaker-common whitaker-installer"'
     ), "linux-full must publish-check the release crates on Linux only"
 
-    merman_install = _find_step(linux_job, "Install Merman CLI").get("run", "")
-    assert "merman-cli-x86_64-unknown-linux-gnu.tar.xz" in merman_install
-    assert "dfdc2a978a884aa5a2ad5b85285fb5175cb435e82cf96efa860a550749e09d99" in (
-        merman_install
-    )
-    assert "sha256sum --check" in merman_install
-    assert "cargo install" not in merman_install
+    # The shared `install-nixie` action now owns Merman's checksum-verified
+    # download; `ubicloud_tool_provenance_test.py` pins the installer contract.
+    assert not any(
+        name == "Install Merman CLI" for name in _step_names(linux_job)
+    ), "Merman setup belongs to the shared install-nixie action"
     assert (
         _find_step(linux_job, "Enforce en-GB-oxendict spelling").get("run")
         == "make spelling"

@@ -384,12 +384,15 @@ def test_publish_check_forwards_cargo_locked_to_every_invocation(
 
     lock_relevant = [line for line in recorded if _is_lock_relevant_invocation(line)]
     heads = [_cargo_head(line) for line in lock_relevant]
-    # publish-check must exercise the workspace build, nextest, a per-lint build,
-    # and packaging — not just a single invocation.
+    # publish-check must exercise the workspace build, a per-lint build, and
+    # packaging — not just a single invocation. It deliberately runs no tests:
+    # the coverage lane is the single execution of the suite per pull request.
     assert heads.count("build") >= 2, (
         f"publish-check should run the workspace and per-lint builds; recorded: {recorded!r}"
     )
-    assert "nextest run" in heads, f"publish-check should run nextest; recorded: {recorded!r}"
+    assert "nextest run" not in heads, (
+        f"publish-check must not re-run the suite the coverage lane executed; recorded: {recorded!r}"
+    )
     assert "package" in heads, f"publish-check should package crates; recorded: {recorded!r}"
     for line in lock_relevant:
         assert _has_locked_flag(line) == bool(locked), (

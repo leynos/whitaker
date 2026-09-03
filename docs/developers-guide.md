@@ -233,31 +233,168 @@ The lanes share the workflow-level build contract: `BUILD_PROFILE=debug` narrows
 incremental compilation, which is incompatible with `sccache`;
 `RUSTC_WRAPPER=sccache` routes all `rustc` invocations through `sccache`; and
 `RUSTFLAGS=-D warnings` and `RUSTDOCFLAGS=-D warnings` deny compiler and doc
-warnings across both lanes. Cache storage is job-specific. The Namespace Linux
-jobs use the attached volume, while `windows-compat` alone sets
-`SCCACHE_GHA_ENABLED=true` for its GitHub Actions backend.
+warnings across both lanes. Cache storage is job-specific. The Linux lanes read
+one workflow-level `SCCACHE_BACKEND` switch, while `windows-compat` sets
+`SCCACHE_GHA_ENABLED=true` in its own job environment because it is
+GitHub-hosted and shares none of the Ubicloud constants.
 
 ### CI build caching
 
-The Namespace Linux jobs use a repository-specific Namespace volume for Cargo,
-Rust toolchains, installed tool binaries, `uv`, Bun, and the local `sccache`
-directory. `windows-compat` remains GitHub-hosted and retains the GitHub Actions
-`sccache` backend. The two backends are deliberately separate: no
-`actions/cache` step owns a path mounted by the Namespace cache action. The
-Namespace jobs list their durable paths explicitly. They do not use the cache
-action's `rust` mode because it mounts the disposable Cargo `target` directory,
-conflicts with clean builds, and duplicates sccache's ownership. They similarly
-cache Bun and uv data by path so cache planning never requires those commands
-to be installed already. The uv cache contract includes downloads under
-`~/.cache/uv`, installed tool environments under `~/.local/share/uv`, and their
-executable shims under `~/.local/bin`; restoring only the environment store can
-make uv report a tool as installed while leaving its command unavailable. The
-shared Nixie installer therefore forces installation only when its shim is
-absent, which repairs a partial cache generation from the cached uv artefacts.
-It stores the verified Merman executable under `~/.cache/merman`, which the
-full Linux gate persists alongside the uv directories. Both Linux lanes install
-the supported prebuilt sccache 0.16.0 release and forbid an installer fallback
-to compilation.
+Every Linux job runs on an ephemeral Ubicloud virtual machine whose disk is
+destroyed when the job ends, so all durable state is an archive. Every lane,
+Ubicloud and GitHub-hosted alike, uses `actions/cache/restore` and
+`actions/cache/save` pinned to `55cc8345863c7cc4c66a329aec7e433d2d1c52a9`
+(v6.1.0).
+
+One action and one pin serve both providers because Ubicloud's transparent
+cache intercepts that version. This was verified from the Ubicloud console's
+cache listing on 2026-09-03: Axinite's Linux keys written by v6.1.0 appear in
+its Ubicloud listing while its Windows keys appear in GitHub's, and Whitaker's
+older v4.3.0 pin (`0057852b`) had left nothing in Ubicloud's listing at all.
+The deprecated `ubicloud/cache` fork is deliberately not used: it reads
+`UBICLOUD_CACHE_URL` and `UBICLOUD_RUNTIME_TOKEN` from the virtual machine's
+environment, which a GitHub-hosted runner never supplies, so it could not serve
+the Windows lane. Check the first `main` run in the listing again with:
+
+```sh
+ubi gh leynos/whitaker list-cache-entries
+```
+
+No job archives a Cargo `target` tree, and none may. `sccache` is the single
+owner of compiler output for every build shape. The lint and test lanes compile
+ordinary debug objects while the coverage lane compiles
+`-C instrument-coverage` objects; both shapes coexist in one `sccache` store
+keyed by their flags, and run 33744418209 recorded 0 non-cacheable compilations
+for the instrumented build. A `target` archive would be a second owner, would
+be invalidated far more often than the registry, and could hold only one shape
+at a time. That is why every caller of the shared `setup-rust` action passes
+`cache-provider: external`: its `github` provider archives
+`target/${BUILD_PROFILE}` alongside the registry. `windows-compat` was
+archiving exactly that until it moved to the external provider and gained its
+own registry cache. The release and rolling-release workflows still call the
+shared action with its default `github` provider because they are release
+boundaries rather than developer-blocking lanes. They no longer archive a
+`target` tree either: every caller in this repository now pins the shared
+action at `f6d4d5f549655c118f86f371b8d55c200d3efa50`, the first revision whose
+built-in provider stopped archiving `target/<profile>`. Expect one cold Cargo
+cache on those lanes after the repin because the key no longer carries the
+build profile.
+
+Every cached path has exactly one owner inside its job, and every key family
+has exactly one job permitted to write it.
+
+Table: Cache ownership for the Ubicloud Linux lanes.
+
+| Key family                    | Cached paths                                                                    | Writer            | Restore-only lanes             |
+| ----------------------------- | ------------------------------------------------------------------------------- | ----------------- | ------------------------------ |
+| `cargo-registry-coverage-v1-` | `~/.cargo/registry`, `~/.cargo/git`                                             | `coverage-upload` | `coverage-check`               |
+| `cargo-registry-lint-v1-`     | `~/.cargo/registry`, `~/.cargo/git`                                             | `linux-full`      | `linux-full`                   |
+| `tools-coverage-v1-`          | `~/.rustup`, `~/.cargo/bin`, `~/.local/bin`, `~/.cache/uv`, `~/.local/share/uv` | `coverage-upload` | `coverage-check`               |
+| `tools-lint-v1-`              | the same paths plus `~/.bun/install/cache` and `~/.cache/merman`                | `linux-full`      | `linux-full`                   |
+| `dylint-tools-v1-`            | `~/.cache/whitaker-dylint-tools`                                                | `linux-full`      | `linux-full`                   |
+| `clippy-mirror-v1-`           | `~/.cache/whitaker-mirrors`                                                     | `coverage-upload` | `linux-full`, `coverage-check` |
+| `sccache-<lane>-v1-`          | `~/.cache/sccache`                                                              | the lane's writer | the lane's readers             |
+
+Each key carries an explicit `v1` schema generation so the whole family can be
+invalidated deliberately. Registry keys hash `rust-toolchain.toml` and
+`Cargo.lock`; tool keys spell out each pinned tool version and hash
+`rust-toolchain.toml`; the Dylint host-tools key names the `cargo-dylint` and
+`dylint-link` versions the Makefile installs; and the Clippy mirror key names
+the Dylint version whose build script performs the clone. Every key also carries
+`runner.os`, `runner.arch`, and `runner.environment`, and the compiled-tool
+keys add the Ubuntu release because a binary built on Ubuntu 24.04 must never
+be restored onto 22.04.
+
+Restores run on every event. Saves are guarded by
+`github.ref == 'refs/heads/main'` and, except for the compiler cache, by a
+missed restore. A pull request therefore reads the trusted generation without
+publishing a competing write and without the `Unable to reserve cache` noise
+that two racing lanes produce.
+
+`coverage-main.yml` is the only Whitaker job that runs automatically on the
+trunk, so it is the writer for the coverage-lane keys and for the shared Clippy
+mirror. `ci.yml` has no push trigger, so `linux-full` publishes the lint-lane
+keys when it is dispatched against `main`:
+
+```sh
+gh workflow run ci.yml --repo leynos/whitaker --ref main
+```
+
+Dispatch that run after changing a lint-lane tool pin, the pinned toolchain, or
+a cache generation, and before comparing warm pull requests. Until it runs, the
+lint lane restores the previous generation through its `restore-keys` prefix
+and reports the miss in the job summary.
+
+An archive-based cache needs no empty-directory guard. A restore whose key
+misses creates nothing at all, so a script cannot mistake a materialized mount
+point for a populated cache. That hazard belonged to the Namespace cache
+volume, which appeared as an existing directory whether or not it held a
+generation.
+
+The Clippy source fetch needs a single cache owner. `dylint_driver` 6.0.1's
+build script reads `clippy_utils/src/sym.rs` at the revision matching the
+pinned dated nightly and obtains it by running a full
+`git clone https://github.com/rust-lang/rust-clippy` into a temporary
+directory. The build script performs that clone for any dated nightly on or
+after 2025-05-06, and Whitaker pins `nightly-2026-05-28`, so every cold build of
+`dylint_driver` repeats an unowned multi-hundred-megabyte network clone. That
+clone is intermittent rather than merely occasionally broken: run 33692863541
+hit `fatal: could not read Username for 'https://github.com'` on nextest tries
+1 and 2 and passed only on try 3, while run 33704041072 failed all three tries
+and failed the job. `scripts/provision-clippy-mirror.sh` gives that fetch one
+owner. It maintains a bare mirror and rewrites the upstream URL to it with
+`url.<mirror>.insteadOf`, so the build script's clone becomes a local,
+hard-linking copy. The mirror sits below the cached directory rather than at
+the cache path itself, so discarding a stale generation can never attempt to
+remove the directory the cache action manages. A cold clone is authenticated
+with the job token when one is present and retried with backoff; a refresh
+failure on a warm mirror is only a warning because the revision the build
+script needs is historical and is already present. All three Linux lanes now
+restore the mirror and provision it before any Cargo invocation.
+
+The script owns a deletion, so it proves what it is deleting. It resolves both
+its argument and its trusted cache root (`CLIPPY_MIRROR_ROOT`, defaulting to
+`~/.cache/whitaker-mirrors`) to physical paths and refuses anything that is not
+the one `rust-clippy.git` inside that root. A suffix match such as
+`/tmp/project/rust-clippy.git` no longer authorizes a removal.
+
+It also classifies the restored path rather than reducing it to one boolean. A
+generation is reused only when git reports it bare and its `remote.origin.url`
+is the pinned upstream because a non-bare directory or a mirror of some other
+repository would leave `dylint_driver` without the Clippy revision it needs. A
+non-bare or wrongly pointed generation is rebuilt. An unreadable path, a
+non-directory, or an unparsable verdict from git is an environment fault: the
+script aborts and never repairs it by deleting the path.
+
+The pinned Dylint host tools follow the same rule.
+`scripts/install-dylint-tools.sh` once ran `cargo install --locked` for
+`cargo-dylint` and `dylint-link` into a `mktemp -d` root, so both were
+recompiled on every run and never cached. It now downloads the upstream
+`trailofbits/dylint` v6.0.1 prebuilt Linux release archives, verifies each
+against a SHA-256 digest pinned in the script, and installs the executables
+into the caller's root. Only a version with a pinned digest can be installed;
+any other version is a hard error rather than an unverified download or a
+fallback to a source build. The Makefile passes `DYLINT_TOOLS_DIR`, defaulting
+to `~/.cache/whitaker-dylint-tools`, instead of a temporary root, and prepends
+its `bin` directory to `PATH` before invoking the script. `linux-full` owns
+that directory as a cache, so a warm generation skips the download entirely.
+The script keeps its `CARGO` and `TOOLCHAIN` arguments only so the caller's
+contract is unchanged; neither participates in the download-and-verify install
+path. `DYLINT_TOOLS_SHA256_CARGO_DYLINT` and `DYLINT_TOOLS_SHA256_DYLINT_LINK`
+exist solely so the behavioural tests can verify a locally generated fixture
+archive: they replace the expected digest and cannot disable verification.
+
+Presence in that durable root is not proof of a version. `cargo-dylint` can be
+probed with `cargo-dylint dylint --version`, but `dylint-link` is a linker shim
+that forwards `--version` to `cc`, so it cannot be. Every install therefore
+records the version it wrote in a `.<tool>.version` marker beside the binary,
+and a cached `dylint-link` is reused only when that marker matches the
+requested pin. Without it, a shim installed for an older `DYLINT_LINK_VERSION`
+would survive a version bump indefinitely in the unversioned root and be paired
+with a newer `cargo-dylint`. A system copy on `PATH` is accepted only when the
+tools root holds no `dylint-link` at all; it predates the script and carries no
+provenance, so the script says so on stderr rather than implying it verified
+anything.
 
 The shared compiler cache is intentionally scoped to debug builds:
 
@@ -269,25 +406,119 @@ The shared compiler cache is intentionally scoped to debug builds:
 - `RUSTFLAGS=-D warnings` and `RUSTDOCFLAGS=-D warnings` preserve the
   warnings-as-errors contract even when builds are routed through `sccache`.
 
-Each build lane resets `sccache` counters before compilation, appends the
-human-readable statistics to the job summary, and retains the JSON statistics
-for 14 days. Namespace jobs also record the cache tag and the cache action's
-`cache-hit` output. Namespace volumes are mounted locally, so there is no
-archive restore or save phase and the action exposes no transfer-byte metric.
-Use `nsc instance report` after comparable cold and warm runs to correlate
-these statistics with runtime and paid unit-minutes.
+`sccache` is configured in exactly one place. The workflows declare
+`SCCACHE_BACKEND`, and `scripts/select-sccache-backend.sh` translates that
+single value into the backend's environment before any Cargo invocation.
+`local` exports `SCCACHE_DIR` and `SCCACHE_CACHE_SIZE` and activates the
+`~/.cache/sccache` archive steps; `gha` exports `SCCACHE_GHA_ENABLED` and
+leaves those steps skipped. The two backends are never configured together:
+`sccache` would then report a plausible hit rate while writing to a store
+nobody owns.
+
+The GitHub Actions backend needs `ACTIONS_RESULTS_URL` and
+`ACTIONS_RUNTIME_TOKEN`, which GitHub exposes to actions rather than to `run`
+steps. The shared Rust setup action is configured with `use-sccache: false`, so
+nothing else exports them; a small `actions/github-script` step re-exports the
+two values into the job environment when, and only when, the GHA backend is
+selected. Without it the wrapper falls back to `Local disk` and the job pays a
+compiler cache's setup cost for nothing.
+
+That export must run before anything starts the `sccache` server, which is why
+it sits immediately after checkout in every Linux job. `sccache --zero-stats`,
+`--start-server`, and the first wrapped `rustc` all start the server, and a
+server started without the variables comes up in local-disk mode and stays
+there for the whole job while reporting zero requests. The contract tests
+enforce that ordering. The GitHub-hosted Windows lane needs no export, because
+there the variables are already visible to `run:` steps.
+
+`local` is the deployed backend, chosen from measurement. The Actions cache
+service is the store Ubicloud's transparent cache intercepts, and Cuprum's
+Ubicloud cache listing on 2026-09-03 shows `sccache/...` keys written by its
+pull-request run 33748907011, so the `gha` backend does reach Ubicloud's store
+in that project. It does not work in this one.
+
+Whitaker reproduced a total write failure twice, with identical counters. Runs
+[33748602187][whitaker-run-33748602187] and
+[33756048103][whitaker-run-33756048103] each reported `Cache location ghac` in
+both Linux jobs, proving the credentials reached `sccache`, then failed every
+store: 3,788 write errors against 3,788 attempts in `linux-full` and 2,245
+against 2,245 in `coverage-check`, with 0 read errors both times. The second
+run had already moved the credential export ahead of everything and swapped the
+archive caches to `actions/cache` v6.1.0, so neither the ordering nor the cache
+client explains it.
+
+The same run's GitHub-hosted `windows-compat` job used the same backend and
+wrote 1,529 hits with 0 write errors, which places the failure in the Ubicloud
+cache proxy's write path rather than in `sccache` or in the credentials. One
+difference is worth chasing before anyone re-enables `gha` here: the Windows
+job reported a hashed cache name, `cb1f7e36...` because the shared setup action
+sets `SCCACHE_GHA_VERSION`, while the Linux jobs reported the default
+`sccache-v0.16.0`.
+
+Switching back is one line. Treat write errors above roughly two percent of
+requests, or an Ubicloud cache listing with no `sccache` entries for Whitaker,
+as the signal to stay on `local`.
+
+`local` has known trade-offs. Its archive grows with every new compilation unit
+until `SCCACHE_CACHE_SIZE` trims it, so a warm run restores and re-saves the
+whole directory even when only a few objects changed. That is why the key
+carries the run identifier with a `restore-keys` prefix, and why the save is
+restricted to the lane's single writer. The cap defaults to 4 GB rather than 2
+GB because the store holds two build shapes, the ordinary debug objects and the
+instrumented coverage objects; a one-shape cap would evict each shape in turn.
+It also routes the compiler cache through the same `actions/cache` transport as
+every other archive, so one working write path serves the whole design. Measure
+the restore and save duration against the compile seconds avoided.
+
+Each build lane resets `sccache` counters before compilation and then runs
+`scripts/record-sccache-effectiveness.sh`, which appends the human-readable
+statistics to the job summary, retains the JSON statistics, and warns when
+`sccache` reports zero compile requests. A run with no compile requests paid
+the compiler cache's setup cost while `RUSTC_WRAPPER` never reached a single
+`rustc` invocation, so treat zero compile requests as a failed cache
+integration, not as a clean zero-miss result. That failure mode is not
+hypothetical: `mozilla-actions/sccache-action` exports only `SCCACHE_PATH` and
+does not set `RUSTC_WRAPPER`, so before the wrapper was set explicitly no Cargo
+invocation in `coverage-main.yml` was wrapped at all.
+
+`scripts/record-cache-observations.sh` renders every restore step's primary
+key, the key it actually matched, and its `cache-hit` result into the job
+summary, including the steps a lane does not use, so an operator can explain
+any restore from the run evidence without re-reading the workflow. It runs under
+`if: always()`.
+
+The matched key, not `cache-hit`, is what classifies a restore. The cache
+action reports `cache-hit: true` only for an exact primary-key match, so a
+successful `restore-keys` restore and a complete miss both surface as a falsy
+value. Every warm compiler-cache restore takes the prefix path because that key
+ends with the current `github.run_id` and can never match exactly. The summary
+therefore reports `exact hit`, `prefix restore from <key>`, or `miss`, and
+prints the raw `cache-hit` value verbatim beside it, showing an absent value as
+`unset` rather than coercing it to `false`. Restore and save byte counts and
+durations are not step outputs; read the cache action's own `Cache Size` and
+transfer lines from the job log, and confirm an entry exists on Ubicloud's side
+with the cache-entries API rather than assuming a save succeeded.
 
 Tool setup must not compile tools from source. `taiki-e/install-action` calls
 pin a release whose catalogue contains each requested tool, disable fallbacks,
 and use checksum-verified release artefacts. `mdtablefix` 0.5.0 is installed
 from its official Linux x86_64 release asset after checking the SHA-256 pinned
-in the workflow. The attached volume retains the installed executable under
+in the workflow. The tools cache retains the installed executable under
 `~/.cargo/bin`; a cold cache downloads it, while a warm cache verifies and
 reuses it without invoking Cargo. The SHA-pinned shared `install-nixie` action
-at `bffacaf91d3f3515110679a30fbf6dc781ddc549` (shared-actions PR #423) owns
-Nixie 1.1.0 and Merman 0.7.0 setup. It verifies Merman's official release
-archive and cached executable against pinned SHA-256 digests, reconciles the
-uv-managed Nixie installation, and never falls back to a source build.
+at `f6d4d5f549655c118f86f371b8d55c200d3efa50` (shared-actions PR #423, repinned
+to `main`) owns Nixie 1.1.0 and Merman 0.7.0 setup. It verifies Merman's
+official release archive and cached executable against pinned SHA-256 digests,
+reconciles the uv-managed Nixie installation, and never falls back to a source
+build.
+
+The uv cache contract includes downloads under `~/.cache/uv`, installed tool
+environments under `~/.local/share/uv`, and their executable shims under
+`~/.local/bin`. Restoring only the environment store can make uv report a tool
+as installed while leaving its command unavailable, so all three live in one
+cache step with one owner. The shared Nixie installer therefore forces
+installation only when its shim is absent, which repairs a partial cache
+generation from the cached uv artefacts.
 
 Table: Test profiles and typical usage.
 
@@ -299,39 +530,133 @@ Table: Test profiles and typical usage.
 When working on `whitaker-installer` code, run the full suite locally before
 pushing to catch installer regressions early.
 
-### Namespace runner pilot
+### One execution of the test suite per pull request
 
-The repository-owned pull-request Linux jobs use two deployed Ubuntu 24.04
-amd64 profiles:
+A coverage job and a test-only job on the same platform bill twice for one
+result. The coverage job is therefore the single execution of the Rust suite
+per pull request on Linux, and no other Linux job executes tests at all.
 
-Table: Deployed Namespace profiles for repository-owned Linux jobs.
+Table: Jobs that execute the Rust test suite.
 
-| Job              | Profile            | Shape        | Cache volume |
-| ---------------- | ------------------ | ------------ | ------------ |
-| `coverage-check` | `rust-linux-light` | 2 vCPU, 4 GB | 20 GB        |
-| `linux-full`     | `rust-linux-ci`    | 4 vCPU, 8 GB | 20 GB        |
+| Job               | Platform         | Command                          | Role                                      |
+| ----------------- | ---------------- | -------------------------------- | ----------------------------------------- |
+| `coverage-check`  | Ubicloud Linux   | `make coverage`, `make test-doc` | the single Linux pull-request execution   |
+| `coverage-upload` | Ubicloud Linux   | `make coverage`, `make test-doc` | the trunk baseline, on `main` pushes only |
+| `windows-compat`  | `windows-latest` | `make test NEXTEST_PROFILE=ci`   | a different platform                      |
 
-Both runner labels append `overrides.cache-tag=whitaker-linux-amd64-v1`, so the
-profiles attach one repository-specific volume rather than allocating a volume
-per shape. The cache action exposes a locally writable mount, but both deployed
-profiles set `allow_commit_from_branch` to `main`. Pull-request jobs therefore
-read the last trusted generation without publishing their local changes.
+`make coverage` delegates to the `make test` recipe and swaps only the driver to
+`cargo llvm-cov nextest`, so the instrumented run keeps one package set, one
+feature set, and one target set: `--workspace --all-targets --all-features`
+minus the eleven CI-excluded crates. Both coverage lanes run identical flags,
+so the pull-request gate and the trunk baseline are comparable.
 
-`coverage-check` is excluded from `workflow_dispatch`, so a manual run against
-`main` makes `linux-full` the sole cold-cache producer and avoids two jobs
-building the same empty generation. After changing a correctness input or cache
-generation, dispatch one trusted `main` run before comparing warm pull
-requests. The tag's schema suffix must advance when OS, architecture,
-toolchain, lockfile interpretation, build profile, features, or cache layout
-becomes incompatible.
+`make test-doc` is the second half of that one executed set, not a second lane.
+`cargo llvm-cov nextest` executes no doctests and `--all-targets` excludes
+them, so without this step the workspace's doctest fences are compiled by
+`cargo doc` in `make lint` and never run.
 
-Nextest concurrency matches each paid shape: coverage uses two test threads and
-the full Linux gate uses four. The following jobs retain their existing runners
-or selection mechanism: `windows-compat` requires Windows; `coverage-upload` is
-the main-branch coverage baseline; release and rolling-release jobs are release
-boundaries; and `mutation` calls an externally owned reusable workflow whose
-caller-selected runner is not controlled here. These retained assignments are
-deliberate exceptions, not alternate Namespace profiles.
+Two things about the doctest lane are easy to get wrong.
+
+Its `RUSTFLAGS` deliberately omit the
+`-C prefer-dynamic -Z force-unstable-if-unmarked` pair that the test lane needs
+for its `cdylib` lint crates. A doctest is compiled as its own crate, and
+`force-unstable-if-unmarked` then makes every doctest fail to load the very
+library it is documenting, with `E0658`. With the plain `-D warnings` flags the
+same doctests pass.
+
+`DOCTEST_EXCLUDES` drops every crate that links `rustc_private`: the lint
+crates, the `rustc_*` proxy shims, `clippy_utils`, the `whitaker` root, and the
+suite. That is a structural limit rather than a policy choice. A doctest for
+those crates has no `#![feature(rustc_private)]` of its own and cannot compile
+at all, so the flags exclude what cannot run rather than what is not worth
+running. The remaining four packages, `whitaker-common`, `whitaker-installer`,
+`whitaker_sarif`, and `whitaker_clones_core`, hold the documented public API
+and contribute 335 doctests in about 18 seconds warm.
+
+`linux-full` executes no tests. It survives as a job because
+`main-required-checks` requires that context by name, and it carries the
+formatting, spelling, Markdown, Mermaid, lint, Dylint, workflow-contract,
+GLIBC-baseline, MSRV, and packaging work. Its former uninstrumented run inside
+`make publish-check` is gone, and `make publish-check` no longer runs the suite
+at all.
+
+That removal does cost one thing worth naming. The `publish-check` run used
+production-like static linking, without `-C prefer-dynamic`, which no surviving
+lane exercises. Linking is still covered at build time by the workspace and
+per-lint release builds that `publish-check` continues to run; what is no
+longer covered is executing the suite under that linkage.
+
+`tests/workflow_contracts/lane_deduplication_contract_test.py` holds this
+shape. It fails if a second Linux execution appears, if the surviving gate
+narrows its package, target, or feature set, if either coverage lane loses its
+doctest step, or if `publish-check` starts running the suite again.
+
+### Runner placement policy
+
+Linux developer-blocking jobs run on Ubicloud managed runners. Everything else
+runs on GitHub-hosted runners.
+
+Table: Runner placement for repository-owned jobs.
+
+| Job                              | Workflow                             | Runner                            | Why                               |
+| -------------------------------- | ------------------------------------ | --------------------------------- | --------------------------------- |
+| `coverage-check`                 | `ci.yml`                             | `ubicloud-standard-2-ubuntu-2404` | Blocking Linux gate               |
+| `linux-full`                     | `ci.yml`                             | `ubicloud-standard-2-ubuntu-2404` | Blocking Linux gate               |
+| `coverage-upload`                | `coverage-main.yml`                  | `ubicloud-standard-2-ubuntu-2404` | Trunk Linux gate and cache writer |
+| `windows-compat`                 | `ci.yml`                             | `windows-latest`                  | Ubicloud has no Windows image     |
+| `mutation`                       | `mutation-testing.yml`               | Reusable workflow's own choice    | Nightly, not blocking             |
+| `automerge`                      | `dependabot-automerge.yml`           | Reusable workflow's own choice    | API-bound                         |
+| Release and rolling-release jobs | `release.yml`, `rolling-release.yml` | GitHub-hosted matrices            | Release boundaries                |
+
+Ubicloud publishes Ubuntu images only, on x64 and arm64, so Windows and macOS
+lanes have no Ubicloud counterpart and stay GitHub-hosted permanently. That is
+not a temporary compromise: `windows-compat` queued for a median of two seconds
+on `windows-latest` in the 2026-09-01 to 2026-09-03 sample, so GitHub-hosted
+Windows is not the contention this migration targets. Public repositories pay
+nothing for GitHub-hosted standard runners, which is also why the release and
+administrative lanes stay there.
+
+`ubicloud-standard-2-ubuntu-2404` is 2 vCPU and 8 GB. The label names the
+Ubuntu release explicitly rather than relying on Ubicloud's default, so a
+change to that default cannot silently move compiled artefacts between glibc
+versions. `ubicloud-standard-4` is the ceiling, not the default. Escalate a job
+to it only with evidence from at least three warm runs showing peak memory
+above roughly 6 GB, or the larger shape at least halving the job's duration
+(the per-minute rate doubles, so anything less increases billed minutes), or
+the larger shape removing the job from the workflow's critical path. Whitaker's
+earlier `linux-full` history on `ubicloud-standard-4-ubuntu-2404`, a median of
+about 16 minutes, is not escalation evidence: those runs restored no Cargo
+archive and installed tools from source on every run.
+
+Every Ubicloud job declares `timeout-minutes`. Ubicloud runners register as
+self-hosted just-in-time runners, so GitHub's five-day self-hosted limit
+applies rather than the six-hour hosted limit, and a hung job would otherwise
+bill for days.
+
+Test and build concurrency is bounded by one named constant.
+`LINUX_RUNNER_VCPUS` is declared once per workflow and a single step derives
+both `CARGO_BUILD_JOBS` and `NEXTEST_TEST_THREADS` from it, so changing the
+label cannot leave the suite oversubscribed. `windows-compat` keeps its own
+value because `windows-latest` is a four-vCPU GitHub-hosted shape. No suite in
+this repository uses `pytest-xdist`; if one adopts it, give it an explicit
+worker count rather than `-n auto`.
+
+`windows-compat` keeps the shared Rust setup action's own `sccache` setup,
+which installs the binary and exports the Actions cache credentials. It needs
+no separate export step, and it owns one registry archive of its own keyed by
+`runner.os` and `runner.arch` so a Linux archive can never be restored onto
+Windows.
+
+`.github/actionlint.yaml` registers `ubicloud-standard-2-ubuntu-2404` as the
+only self-hosted label in use. Keep that list equal to the labels the workflows
+actually reference.
+
+The `main` ruleset requires the `linux-full` and `windows-compat` status-check
+contexts. GitHub derives a context from the job's name, so neither job may gain
+an explicit `name` or a matrix that embeds the runner label; either change
+would leave the ruleset waiting for a context the workflow no longer emits. The
+migration deliberately changed no job name, so no ruleset edit was needed.
+`tests/workflows/test_ubicloud_runner_placement.py` enforces this.
 
 The pre-migration baseline was captured on 2026-09-01 with the following
 read-only commands:
@@ -347,8 +672,6 @@ gh run view 33340945546 --repo leynos/whitaker \
   --json name,url,status,conclusion,createdAt,startedAt,updatedAt,jobs
 gh run view 33322310248 --repo leynos/whitaker \
   --json name,url,status,conclusion,createdAt,startedAt,updatedAt,jobs
-nsc github job list --repository leynos/whitaker --since 7d \
-  --max_entries 100 -o json
 ```
 
 All five GitHub `CI` runs completed successfully. Their workflow wall times
@@ -366,10 +689,9 @@ times were:
 The corresponding job queue waits were 9s/24s/25s, 23s/23s/23s, 20s/246s/21s,
 8s/885s/21s, and 8s/2,021s/8s in the same column order. Median queue/execution
 times were 9s/24m11s for `linux-full`, 246s/25m18s for `windows-compat`, and
-21s/13m29s for `coverage-check`. `nsc github job list` returned JSON `null`,
-confirming that no Whitaker Namespace jobs were available for the pre-migration
-comparison. After migration, compare queue and execution time separately and
-record successful Namespace jobs with the same command.
+21s/13m29s for `coverage-check`. After migration, compare queue time and
+execution time separately, and read Ubicloud queue time as the roughly
+20-second cost of creating a virtual machine per job rather than as contention.
 
 ### Workflow pins and Dependabot
 
@@ -2524,10 +2846,15 @@ Before publishing, run the full validation suite:
 make publish-check
 ```
 
-This builds, tests, and validates packages in a production-like environment
-without the `prefer-dynamic` flag used during development.
+This builds each package and every lint library in a production-like
+environment, without the `prefer-dynamic` flag used during development, and
+packages the crates for inspection. It runs no tests: the coverage job is the
+single execution of the suite per pull request, as described in "One execution
+of the test suite per pull request" above.
 
 [issue-180]: https://github.com/leynos/whitaker/issues/180
+[whitaker-run-33748602187]: https://github.com/leynos/whitaker/actions/runs/33748602187
+[whitaker-run-33756048103]: https://github.com/leynos/whitaker/actions/runs/33756048103
 [whitaker-run-33410178021]: https://github.com/leynos/whitaker/actions/runs/33410178021
 [whitaker-run-33369228466]: https://github.com/leynos/whitaker/actions/runs/33369228466
 [whitaker-run-33345742967]: https://github.com/leynos/whitaker/actions/runs/33345742967

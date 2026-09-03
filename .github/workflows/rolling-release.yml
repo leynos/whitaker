@@ -98,7 +98,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@32c8ea649ea44d40119f348ad48861212532061f
+        uses: leynos/shared-actions/.github/actions/setup-rust@f6d4d5f549655c118f86f371b8d55c200d3efa50
 
       - name: Read pinned toolchain
         id: toolchain
@@ -211,7 +211,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@32c8ea649ea44d40119f348ad48861212532061f
+        uses: leynos/shared-actions/.github/actions/setup-rust@f6d4d5f549655c118f86f371b8d55c200d3efa50
 
       - name: Add target
         run: rustup target add "${{ matrix.target }}"
@@ -318,7 +318,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@32c8ea649ea44d40119f348ad48861212532061f
+        uses: leynos/shared-actions/.github/actions/setup-rust@f6d4d5f549655c118f86f371b8d55c200d3efa50
 
       - name: Build dependency packaging tool
         run: cargo build --release -p whitaker-installer --bin whitaker-package-dependency-binary
