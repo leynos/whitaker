@@ -16,9 +16,13 @@ import yaml
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOWS_DIRECTORY = REPOSITORY_ROOT / ".github/workflows"
 
-CACHE_ACTION_SHA = "92361f338d82d2c58a98875f1b5c95cd14cd6b2a"
-RESTORE_ACTION = f"ubicloud/cache/restore@{CACHE_ACTION_SHA}"
-SAVE_ACTION = f"ubicloud/cache/save@{CACHE_ACTION_SHA}"
+#: `actions/cache` v6.1.0. Ubicloud's transparent cache intercepts this
+#: version, so Linux archives land in Ubicloud's store and Windows archives
+#: land in GitHub's, from one action and one pin. The deprecated
+#: `ubicloud/cache` fork is deliberately not used.
+CACHE_ACTION_SHA = "55cc8345863c7cc4c66a329aec7e433d2d1c52a9"
+RESTORE_ACTION = f"actions/cache/restore@{CACHE_ACTION_SHA}"
+SAVE_ACTION = f"actions/cache/save@{CACHE_ACTION_SHA}"
 INSTALL_ACTION = "taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68"
 SETUP_RUST_ACTION = (
     "leynos/shared-actions/.github/actions/setup-rust@"
@@ -32,6 +36,11 @@ UBICLOUD_JOBS: dict[str, str] = {
     "coverage-upload": "coverage-main.yml",
 }
 
+#: Every job that owns cache archives, including the GitHub-hosted Windows
+#: lane. Cache ownership rules apply to all of them; Ubicloud-specific rules
+#: such as the backend selector apply only to `UBICLOUD_JOBS`.
+CACHING_JOBS: dict[str, str] = UBICLOUD_JOBS | {"windows-compat": "ci.yml"}
+
 #: The single job permitted to save each cache key family.
 CACHE_KEY_WRITERS: dict[str, str] = {
     "cargo-registry-coverage-v1-": "coverage-upload",
@@ -42,6 +51,7 @@ CACHE_KEY_WRITERS: dict[str, str] = {
     "clippy-mirror-v1-": "coverage-upload",
     "sccache-coverage-v1-": "coverage-upload",
     "sccache-lint-v1-": "linux-full",
+    "cargo-registry-windows-v1-": "windows-compat",
 }
 
 
@@ -57,11 +67,11 @@ def load_workflow(workflow_name: str) -> dict[str, Any]:
 
 
 def load_job(job_name: str) -> dict[str, Any]:
-    """Return one Ubicloud job mapping by name.
+    """Return one cache-owning job mapping by name.
 
     For example, ``load_job("linux-full")["steps"]`` yields its step list.
     """
-    workflow = load_workflow(UBICLOUD_JOBS[job_name])
+    workflow = load_workflow(CACHING_JOBS[job_name])
     jobs = workflow.get("jobs")
     assert isinstance(jobs, dict), "workflow must declare a jobs mapping"
     job = jobs.get(job_name)

@@ -6,9 +6,9 @@ import re
 
 from ubicloud_workflow_support import (
     CACHE_KEY_WRITERS,
+    CACHING_JOBS,
     RESTORE_ACTION,
     SAVE_ACTION,
-    UBICLOUD_JOBS,
     cache_paths,
     job_steps,
     load_job,
@@ -33,24 +33,41 @@ def _restore_step_by_id(job: dict[str, object], step_id: str) -> dict[str, objec
     raise AssertionError(f"no restore step declares id {step_id!r}")
 
 
-def test_ubicloud_jobs_use_only_the_pinned_ubicloud_cache_action() -> None:
-    """Reject GitHub and Namespace cache clients on Ubicloud runners.
+def test_every_lane_uses_one_pinned_cache_action() -> None:
+    """One action and one pin across Ubicloud and GitHub-hosted lanes.
 
-    `ubicloud/cache` reads `UBICLOUD_CACHE_URL` and `UBICLOUD_RUNTIME_TOKEN`
-    from the VM environment, so mixing backends would silently split one
-    logical cache across two stores.
+    Ubicloud's transparent cache intercepts `actions/cache` v6.1.0, so Linux
+    archives reach Ubicloud's store and Windows archives reach GitHub's
+    without the deprecated `ubicloud/cache` fork, which needs virtual-machine
+    variables a GitHub-hosted runner never supplies.
     """
-    for job_name in UBICLOUD_JOBS:
+    for job_name in CACHING_JOBS:
         job = load_job(job_name)
         for step in job_steps(job):
             uses = str(step.get("uses", ""))
-            assert not uses.startswith("actions/cache"), (
-                f"{job_name} must not use the GitHub cache action on Ubicloud"
+            assert not uses.startswith("ubicloud/cache"), (
+                f"{job_name} must not use the deprecated ubicloud/cache fork"
             )
             assert not uses.startswith("namespacelabs/"), (
                 f"{job_name} must not retain a Namespace cache action"
             )
         assert restore_steps(job), f"{job_name} must restore at least one cache"
+
+
+def test_no_job_archives_a_cargo_target_tree() -> None:
+    """sccache is the single owner of compiler output, for every build shape.
+
+    An archived `target` tree would be a second owner, would be invalidated far
+    more often than the registry, and cannot hold more than one of the debug
+    and instrumented shapes at a time.
+    """
+    for job_name in CACHING_JOBS:
+        job = load_job(job_name)
+        for step in restore_steps(job) + save_steps(job):
+            for path in cache_paths(step):
+                assert "target" not in path.split("/"), (
+                    f"{job_name}: {step['name']!r} must not archive {path}"
+                )
 
 
 def _assert_one_owner_per_path(
@@ -75,7 +92,7 @@ def _assert_one_owner_per_path(
 
 def test_each_cached_path_has_exactly_one_owner_per_job() -> None:
     """Two cache steps claiming one directory would race to define its content."""
-    for job_name in UBICLOUD_JOBS:
+    for job_name in CACHING_JOBS:
         job = load_job(job_name)
         _assert_one_owner_per_path(job_name, restore_steps(job))
         _assert_one_owner_per_path(job_name, save_steps(job))
@@ -83,7 +100,7 @@ def test_each_cached_path_has_exactly_one_owner_per_job() -> None:
 
 def test_cache_restores_precede_every_expensive_install_or_build() -> None:
     """A restore after the first install would download what it already holds."""
-    for job_name in UBICLOUD_JOBS:
+    for job_name in CACHING_JOBS:
         job = load_job(job_name)
         names = step_names(job)
         setup_index = names.index(FIRST_EXPENSIVE_STEP)
@@ -96,7 +113,7 @@ def test_cache_restores_precede_every_expensive_install_or_build() -> None:
 
 def test_saves_are_restricted_to_the_trusted_branch() -> None:
     """A pull request reads the published generation and never republishes it."""
-    for job_name in UBICLOUD_JOBS:
+    for job_name in CACHING_JOBS:
         job = load_job(job_name)
         for step in save_steps(job):
             condition = str(step.get("if", ""))
@@ -107,7 +124,7 @@ def test_saves_are_restricted_to_the_trusted_branch() -> None:
 
 def test_saves_reuse_the_rendered_key_and_paths_of_their_restore() -> None:
     """A save that re-renders its key can drift from the key it restored."""
-    for job_name in UBICLOUD_JOBS:
+    for job_name in CACHING_JOBS:
         job = load_job(job_name)
         for step in save_steps(job):
             key = str(step.get("with", {}).get("key", ""))
@@ -126,7 +143,7 @@ def test_saves_reuse_the_rendered_key_and_paths_of_their_restore() -> None:
 def test_every_cache_key_family_has_exactly_one_writer() -> None:
     """Never let two lanes populate the same cold key."""
     observed: dict[str, str] = {}
-    for job_name in UBICLOUD_JOBS:
+    for job_name in CACHING_JOBS:
         job = load_job(job_name)
         for step in save_steps(job):
             key = str(step["with"]["key"])
@@ -159,7 +176,7 @@ def test_restore_only_lanes_never_save() -> None:
 
 def test_every_restore_step_is_reported_in_the_job_summary() -> None:
     """An unexplained miss is indistinguishable from a broken key without this."""
-    for job_name in UBICLOUD_JOBS:
+    for job_name in CACHING_JOBS:
         job = load_job(job_name)
         steps = steps_by_name(job)
         observations = steps["Record cache observations"]
@@ -178,12 +195,12 @@ def test_every_restore_step_is_reported_in_the_job_summary() -> None:
 
 
 def test_cache_actions_stay_on_one_reviewed_pin() -> None:
-    """Restore and save must not drift onto different forks or versions."""
-    for job_name in UBICLOUD_JOBS:
+    """Restore and save must not drift onto different versions."""
+    for job_name in CACHING_JOBS:
         job = load_job(job_name)
         for step in job_steps(job):
             uses = str(step.get("uses", ""))
-            if uses.startswith("ubicloud/cache/restore"):
-                assert uses == RESTORE_ACTION
-            if uses.startswith("ubicloud/cache/save"):
-                assert uses == SAVE_ACTION
+            if uses.startswith("actions/cache/restore"):
+                assert uses == RESTORE_ACTION, f"{job_name} restore pin drifted"
+            if uses.startswith("actions/cache/save"):
+                assert uses == SAVE_ACTION, f"{job_name} save pin drifted"

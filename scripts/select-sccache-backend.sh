@@ -17,12 +17,17 @@
 # exported separately, because GitHub exposes them to actions rather than to
 # `run` steps. `local` needs a bounded directory, because the archive grows
 # with every new compilation unit until `SCCACHE_CACHE_SIZE` trims it.
+#
+# The local cap is sized for two build shapes, not one. The lint and test
+# lanes compile ordinary debug objects while the coverage lane compiles
+# `-C instrument-coverage` objects, and both live in the same store keyed by
+# their flags, so a one-shape cap would evict each shape in turn.
 set -euo pipefail
 
 backend=${SCCACHE_BACKEND:-gha}
 env_file=${GITHUB_ENV:-/dev/stdout}
 local_cache_dir=${SCCACHE_LOCAL_DIR:-${HOME}/.cache/sccache}
-local_cache_size=${SCCACHE_LOCAL_CACHE_SIZE:-2G}
+local_cache_size=${SCCACHE_LOCAL_CACHE_SIZE:-4G}
 
 case "${backend}" in
     gha)

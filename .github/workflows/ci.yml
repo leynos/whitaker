@@ -16,14 +16,13 @@ env:
   # its Cargo build parallelism and nextest thread count from this value, so
   # changing the label cannot leave the suite oversubscribed on a smaller VM.
   LINUX_RUNNER_VCPUS: '2'
-  # Compiler-cache backend selector. `gha` routes sccache at the GitHub
-  # Actions cache service; `local` routes it at the cached directory owned by
-  # the "Restore the compiler cache directory" steps. Flipping this one line
-  # switches every Linux lane. `local` is deployed because the GHA backend's
-  # first cold run on Ubicloud (run 33748602187) reported `Cache location
-  # ghac`, 0 read errors, and a write error for every one of its 3,788 store
-  # attempts, so it cached nothing at all.
-  SCCACHE_BACKEND: local
+  # Compiler-cache backend selector. `gha` routes sccache at the Actions cache
+  # service, which Ubicloud's transparent cache intercepts; `local` routes it
+  # at the directory owned by the "Restore the compiler cache directory"
+  # steps. Flipping this one line switches every Linux lane. See the
+  # developers' guide for the evidence behind the deployed choice and for the
+  # write-error threshold that would move it to `local`.
+  SCCACHE_BACKEND: gha
   # `make check-fmt` shells out to both Markdown formatters. Keep CI on the
   # same releases used to normalize the checked-in documentation.
   MDTABLEFIX_VERSION: '0.5.0'
@@ -56,6 +55,21 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Expose the Actions cache credentials to sccache
+        # Must precede anything that starts the sccache server. A `run:` step
+        # on Ubicloud cannot see these variables, so a server started before
+        # this step comes up in local-disk mode and stays there for the whole
+        # job, reporting zero requests. GitHub-hosted lanes need no export.
+        if: env.SCCACHE_BACKEND == 'gha'
+        uses: actions/github-script@373c709c69115d41ff229c7e5df9f8788daa9553  # v9
+        with:
+          script: |
+            core.setSecret(process.env.ACTIONS_RUNTIME_TOKEN ?? '');
+            for (const name of ['ACTIONS_RESULTS_URL', 'ACTIONS_RUNTIME_TOKEN']) {
+              const value = process.env[name];
+              if (value) { core.exportVariable(name, value); }
+            }
+
       - name: Bound concurrency to the runner shape
         run: |
           {
@@ -66,23 +80,9 @@ jobs:
       - name: Select the compiler cache backend
         run: bash scripts/select-sccache-backend.sh
 
-      - name: Expose the Actions cache credentials to sccache
-        if: env.SCCACHE_BACKEND == 'gha'
-        uses: actions/github-script@373c709c69115d41ff229c7e5df9f8788daa9553  # v9
-        with:
-          script: |
-            // GitHub exposes these to actions, not to `run` steps, so sccache
-            // cannot reach the Actions cache service without them. Mask the
-            // token before re-exporting it into the job environment.
-            core.setSecret(process.env.ACTIONS_RUNTIME_TOKEN ?? '');
-            for (const name of ['ACTIONS_RESULTS_URL', 'ACTIONS_RUNTIME_TOKEN']) {
-              const value = process.env[name];
-              if (value) { core.exportVariable(name, value); }
-            }
-
       - name: Restore Cargo registry
         id: cargo-registry
-        uses: ubicloud/cache/restore@92361f338d82d2c58a98875f1b5c95cd14cd6b2a  # v4.1.2
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: |
             ~/.cargo/registry
@@ -93,7 +93,7 @@ jobs:
 
       - name: Restore the Rust toolchain and installed tools
         id: rust-tools
-        uses: ubicloud/cache/restore@92361f338d82d2c58a98875f1b5c95cd14cd6b2a  # v4.1.2
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: |
             ~/.rustup
@@ -105,7 +105,7 @@ jobs:
 
       - name: Restore the Clippy source mirror
         id: clippy-mirror-cache
-        uses: ubicloud/cache/restore@92361f338d82d2c58a98875f1b5c95cd14cd6b2a  # v4.1.2
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: ~/.cache/whitaker-mirrors
           key: clippy-mirror-v1-dylint6.0.1-${{ hashFiles('rust-toolchain.toml') }}
@@ -113,7 +113,7 @@ jobs:
       - name: Restore the compiler cache directory
         id: sccache-dir
         if: env.SCCACHE_BACKEND == 'local'
-        uses: ubicloud/cache/restore@92361f338d82d2c58a98875f1b5c95cd14cd6b2a  # v4.1.2
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: ~/.cache/sccache
           key: sccache-coverage-v1-${{ runner.os }}-${{ runner.arch }}-${{ runner.environment }}-${{ hashFiles('rust-toolchain.toml') }}-${{ github.run_id }}
@@ -207,6 +207,21 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Expose the Actions cache credentials to sccache
+        # Must precede anything that starts the sccache server. A `run:` step
+        # on Ubicloud cannot see these variables, so a server started before
+        # this step comes up in local-disk mode and stays there for the whole
+        # job, reporting zero requests. GitHub-hosted lanes need no export.
+        if: env.SCCACHE_BACKEND == 'gha'
+        uses: actions/github-script@373c709c69115d41ff229c7e5df9f8788daa9553  # v9
+        with:
+          script: |
+            core.setSecret(process.env.ACTIONS_RUNTIME_TOKEN ?? '');
+            for (const name of ['ACTIONS_RESULTS_URL', 'ACTIONS_RUNTIME_TOKEN']) {
+              const value = process.env[name];
+              if (value) { core.exportVariable(name, value); }
+            }
+
       - name: Bound concurrency to the runner shape
         run: |
           {
@@ -217,23 +232,9 @@ jobs:
       - name: Select the compiler cache backend
         run: bash scripts/select-sccache-backend.sh
 
-      - name: Expose the Actions cache credentials to sccache
-        if: env.SCCACHE_BACKEND == 'gha'
-        uses: actions/github-script@373c709c69115d41ff229c7e5df9f8788daa9553  # v9
-        with:
-          script: |
-            // GitHub exposes these to actions, not to `run` steps, so sccache
-            // cannot reach the Actions cache service without them. Mask the
-            // token before re-exporting it into the job environment.
-            core.setSecret(process.env.ACTIONS_RUNTIME_TOKEN ?? '');
-            for (const name of ['ACTIONS_RESULTS_URL', 'ACTIONS_RUNTIME_TOKEN']) {
-              const value = process.env[name];
-              if (value) { core.exportVariable(name, value); }
-            }
-
       - name: Restore Cargo registry
         id: cargo-registry
-        uses: ubicloud/cache/restore@92361f338d82d2c58a98875f1b5c95cd14cd6b2a  # v4.1.2
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: |
             ~/.cargo/registry
@@ -244,7 +245,7 @@ jobs:
 
       - name: Restore the Rust toolchain and installed tools
         id: rust-tools
-        uses: ubicloud/cache/restore@92361f338d82d2c58a98875f1b5c95cd14cd6b2a  # v4.1.2
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: |
             ~/.rustup
@@ -258,14 +259,14 @@ jobs:
 
       - name: Restore the Dylint host tools
         id: dylint-tools
-        uses: ubicloud/cache/restore@92361f338d82d2c58a98875f1b5c95cd14cd6b2a  # v4.1.2
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: ~/.cache/whitaker-dylint-tools
           key: dylint-tools-v1-${{ runner.os }}-${{ runner.arch }}-${{ runner.environment }}-ubuntu2404-cargo-dylint6.0.1-dylint-link6.0.1
 
       - name: Restore the Clippy source mirror
         id: clippy-mirror-cache
-        uses: ubicloud/cache/restore@92361f338d82d2c58a98875f1b5c95cd14cd6b2a  # v4.1.2
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: ~/.cache/whitaker-mirrors
           key: clippy-mirror-v1-dylint6.0.1-${{ hashFiles('rust-toolchain.toml') }}
@@ -273,7 +274,7 @@ jobs:
       - name: Restore the compiler cache directory
         id: sccache-dir
         if: env.SCCACHE_BACKEND == 'local'
-        uses: ubicloud/cache/restore@92361f338d82d2c58a98875f1b5c95cd14cd6b2a  # v4.1.2
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: ~/.cache/sccache
           key: sccache-lint-v1-${{ runner.os }}-${{ runner.arch }}-${{ runner.environment }}-${{ hashFiles('rust-toolchain.toml') }}-${{ github.run_id }}
@@ -444,7 +445,7 @@ jobs:
       # `workflow_dispatch` run on `main`; see the developers' guide.
       - name: Save Cargo registry
         if: github.ref == 'refs/heads/main' && steps.cargo-registry.outputs.cache-hit != 'true'
-        uses: ubicloud/cache/save@92361f338d82d2c58a98875f1b5c95cd14cd6b2a  # v4.1.2
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: |
             ~/.cargo/registry
@@ -453,7 +454,7 @@ jobs:
 
       - name: Save the Rust toolchain and installed tools
         if: github.ref == 'refs/heads/main' && steps.rust-tools.outputs.cache-hit != 'true'
-        uses: ubicloud/cache/save@92361f338d82d2c58a98875f1b5c95cd14cd6b2a  # v4.1.2
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: |
             ~/.rustup
@@ -467,14 +468,14 @@ jobs:
 
       - name: Save the Dylint host tools
         if: github.ref == 'refs/heads/main' && steps.dylint-tools.outputs.cache-hit != 'true'
-        uses: ubicloud/cache/save@92361f338d82d2c58a98875f1b5c95cd14cd6b2a  # v4.1.2
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: ~/.cache/whitaker-dylint-tools
           key: ${{ steps.dylint-tools.outputs.cache-primary-key }}
 
       - name: Save the compiler cache directory
         if: env.SCCACHE_BACKEND == 'local' && github.ref == 'refs/heads/main'
-        uses: ubicloud/cache/save@92361f338d82d2c58a98875f1b5c95cd14cd6b2a  # v4.1.2
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: ~/.cache/sccache
           key: ${{ steps.sccache-dir.outputs.cache-primary-key }}
@@ -495,8 +496,35 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Restore Cargo registry
+        id: cargo-registry
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin
+          key: cargo-registry-windows-v1-${{ runner.os }}-${{ runner.arch }}-${{ runner.environment }}-nextest0.9.114-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
+          restore-keys: |
+            cargo-registry-windows-v1-${{ runner.os }}-${{ runner.arch }}-${{ runner.environment }}-
+
+      - name: Record cache observations
+        if: always()
+        env:
+          CARGO_REGISTRY_KEY: ${{ steps.cargo-registry.outputs.cache-primary-key }}
+          CARGO_REGISTRY_HIT: ${{ steps.cargo-registry.outputs.cache-hit }}
+        run: bash scripts/record-cache-observations.sh
+
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@32c8ea649ea44d40119f348ad48861212532061f
+        # `cache-provider: external` stops the shared action archiving
+        # `target/${BUILD_PROFILE}`. No job in this repository caches a
+        # `target` tree; sccache owns compiler output for every build shape.
+        # This lane keeps the shared action's sccache setup, which installs
+        # the binary and exports the Actions cache credentials that a
+        # GitHub-hosted `run:` step can already see anyway.
+        uses: leynos/shared-actions/.github/actions/setup-rust@5daae0a332441d170d88ca648c9e71f0bbe96cb3
+        with:
+          cache-provider: external
 
       - name: Install cargo-nextest
         uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
@@ -528,3 +556,16 @@ jobs:
           path: sccache-stats.json
           if-no-files-found: error
           retention-days: 14
+
+      # Windows archives land in GitHub's cache rather than Ubicloud's, so the
+      # key carries `runner.os` and `runner.arch` and this lane is the only
+      # writer for it.
+      - name: Save Cargo registry
+        if: github.ref == 'refs/heads/main' && steps.cargo-registry.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin
+          key: ${{ steps.cargo-registry.outputs.cache-primary-key }}

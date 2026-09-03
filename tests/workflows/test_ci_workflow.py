@@ -202,9 +202,9 @@ def _coverage_check_job(workflow: Mapping[str, Any]) -> dict[str, Any]:
     )
     assert _step_names(coverage_job) == [
         "Checkout",
+        "Expose the Actions cache credentials to sccache",
         "Bound concurrency to the runner shape",
         "Select the compiler cache backend",
-        "Expose the Actions cache credentials to sccache",
         "Restore Cargo registry",
         "Restore the Rust toolchain and installed tools",
         "Restore the Clippy source mirror",

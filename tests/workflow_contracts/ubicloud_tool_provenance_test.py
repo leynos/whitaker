@@ -70,7 +70,11 @@ def test_mdtablefix_is_installed_from_a_checksum_verified_release() -> None:
 
 
 def test_setup_rust_delegates_cache_and_compiler_cache_ownership() -> None:
-    """The shared action must not become a second owner of either cache."""
+    """The shared action must not become a second owner of either cache.
+
+    Its `github` provider archives `target/${BUILD_PROFILE}` alongside the
+    registry, so every lane that calls it must ask for `external`.
+    """
     for job_name in UBICLOUD_JOBS:
         setup = steps_by_name(load_job(job_name))["Setup Rust"]
         assert setup["uses"] == SETUP_RUST_ACTION, (
@@ -79,6 +83,14 @@ def test_setup_rust_delegates_cache_and_compiler_cache_ownership() -> None:
         assert setup["with"] == {"cache-provider": "external", "use-sccache": False}, (
             f"{job_name} must own its Cargo cache and sccache configuration"
         )
+
+    windows = steps_by_name(load_job("windows-compat"))["Setup Rust"]
+    assert windows["uses"] == SETUP_RUST_ACTION, (
+        "windows-compat must use the reviewed shared Rust setup pin"
+    )
+    assert windows["with"]["cache-provider"] == "external", (
+        "windows-compat must not let the shared action archive a target tree"
+    )
 
 
 def test_one_named_constant_bounds_build_and_test_concurrency() -> None:
@@ -149,6 +161,29 @@ def test_compiler_cache_uses_exactly_one_selected_backend() -> None:
         assert names.index("Select the compiler cache backend") < names.index(
             "Setup Rust"
         ), f"{job_name} must choose a backend before any Cargo invocation"
+        _assert_credentials_precede_the_sccache_server(job_name, names)
+
+
+def _assert_credentials_precede_the_sccache_server(
+    job_name: str,
+    names: list[str],
+) -> None:
+    """Assert the credential export runs before anything starts sccache.
+
+    A `run:` step on Ubicloud cannot see the Actions cache variables. A server
+    started before the export comes up in local-disk mode and stays there for
+    the whole job, reporting zero requests, which looks like a passing build
+    with a silently dead compiler cache.
+    """
+    export_index = names.index("Expose the Actions cache credentials to sccache")
+    assert export_index == 1, (
+        f"{job_name} must export the credentials immediately after checkout, "
+        f"not at position {export_index}"
+    )
+    for later_step in ("Install sccache", "Reset sccache statistics", "Setup Rust"):
+        assert export_index < names.index(later_step), (
+            f"{job_name} must export the credentials before {later_step!r}"
+        )
 
 
 def test_compiler_cache_effectiveness_is_always_recorded() -> None:

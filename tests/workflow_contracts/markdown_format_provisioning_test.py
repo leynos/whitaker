@@ -41,7 +41,7 @@ def test_linux_full_provisions_pinned_markdown_tools_before_checking() -> None:
 
     cache_step = steps_by_name["Restore the Rust toolchain and installed tools"]
     assert cache_step["uses"] == (
-        "ubicloud/cache/restore@92361f338d82d2c58a98875f1b5c95cd14cd6b2a"
+        "actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9"
     )
     # The verified mdtablefix release lands in `~/.cargo/bin`, and the bun
     # global install for markdownlint-cli2 reuses `~/.bun/install/cache`.
