@@ -49,40 +49,21 @@ jobs:
             ~/.cargo/git
             ~/.cargo/registry
             ~/.rustup
-            ~/.cache/whitaker-mirrors
             ~/.cache/sccache
             ~/.cache/uv
             ~/.local/bin
             ~/.local/share/uv
 
       - name: Record Namespace cache state
-        # `cache-hit` is false whenever any single listed path is absent, so
-        # it cannot distinguish an empty volume from a warm one. Record the
-        # restored size of every mounted path alongside it.
         env:
           NAMESPACE_CACHE_HIT: ${{ steps.namespace-cache.outputs.cache-hit }}
         run: |
-          bash scripts/record-namespace-cache-state.sh whitaker-linux-amd64-v1 \
-            '~/.cargo/bin' '~/.cargo/git' '~/.cargo/registry' '~/.rustup' \
-            '~/.cache/whitaker-mirrors' '~/.cache/sccache' '~/.cache/uv' \
-            '~/.local/bin' '~/.local/share/uv'
-
-      - name: Provision the Clippy source mirror
-        id: clippy-mirror
-        # `dylint_driver`'s build script clones rust-lang/rust-clippy on every
-        # cold build. Give that fetch one cache owner on the mounted volume.
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          bash scripts/provision-clippy-mirror.sh \
-            "$HOME/.cache/whitaker-mirrors/rust-clippy.git"
-
-      - name: Record Clippy mirror cache result
-        env:
-          CLIPPY_MIRROR_HIT: ${{ steps.clippy-mirror.outputs.clippy-mirror-hit }}
-        run: |
-          printf -- '- Clippy mirror restored: `%s`\n' "${CLIPPY_MIRROR_HIT}" \
-            >> "$GITHUB_STEP_SUMMARY"
+          {
+            printf '### Cache observations\n\n'
+            printf -- "- Cache tag: \`whitaker-linux-amd64-v1\`\n"
+            printf -- "- Namespace volume hit: \`%s\`\n" "${NAMESPACE_CACHE_HIT}"
+            printf -- '- Archive restore/save: not applicable; Namespace exposes the volume locally.\n'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Setup Rust
         uses: leynos/shared-actions/.github/actions/setup-rust@5daae0a332441d170d88ca648c9e71f0bbe96cb3
@@ -116,7 +97,14 @@ jobs:
 
       - name: Record sccache effectiveness
         if: always()
-        run: bash scripts/record-sccache-effectiveness.sh
+        run: |
+          sccache --show-stats | tee sccache-stats.txt
+          sccache --show-stats --stats-format json > sccache-stats.json
+          {
+            printf '### sccache\n\n```text\n'
+            cat sccache-stats.txt
+            printf '```\n'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload sccache statistics
         if: always()
@@ -164,44 +152,21 @@ jobs:
             ~/.rustup
             ~/.cache/cargo-binstall
             ~/.cache/merman
-            ~/.cache/whitaker-dylint-tools
-            ~/.cache/whitaker-mirrors
             ~/.cache/sccache
             ~/.cache/uv
             ~/.local/bin
             ~/.local/share/uv
 
       - name: Record Namespace cache state
-        # `cache-hit` is false whenever any single listed path is absent, so
-        # it cannot distinguish an empty volume from a warm one. Record the
-        # restored size of every mounted path alongside it.
         env:
           NAMESPACE_CACHE_HIT: ${{ steps.namespace-cache.outputs.cache-hit }}
         run: |
-          bash scripts/record-namespace-cache-state.sh whitaker-linux-amd64-v1 \
-            '~/.bun/install/cache' '~/.cargo/bin' '~/.cargo/git' \
-            '~/.cargo/registry' '~/.rustup' '~/.cache/cargo-binstall' \
-            '~/.cache/merman' '~/.cache/whitaker-dylint-tools' \
-            '~/.cache/whitaker-mirrors' \
-            '~/.cache/sccache' '~/.cache/uv' '~/.local/bin' \
-            '~/.local/share/uv'
-
-      - name: Provision the Clippy source mirror
-        id: clippy-mirror
-        # `dylint_driver`'s build script clones rust-lang/rust-clippy on every
-        # cold build. Give that fetch one cache owner on the mounted volume.
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          bash scripts/provision-clippy-mirror.sh \
-            "$HOME/.cache/whitaker-mirrors/rust-clippy.git"
-
-      - name: Record Clippy mirror cache result
-        env:
-          CLIPPY_MIRROR_HIT: ${{ steps.clippy-mirror.outputs.clippy-mirror-hit }}
-        run: |
-          printf -- '- Clippy mirror restored: `%s`\n' "${CLIPPY_MIRROR_HIT}" \
-            >> "$GITHUB_STEP_SUMMARY"
+          {
+            printf '### Cache observations\n\n'
+            printf -- "- Cache tag: \`whitaker-linux-amd64-v1\`\n"
+            printf -- "- Namespace volume hit: \`%s\`\n" "${NAMESPACE_CACHE_HIT}"
+            printf -- '- Archive restore/save: not applicable; Namespace exposes the volume locally.\n'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Check Verus FragmentId bridge
         run: scripts/check-verus-fragment-id-bridge.sh
@@ -328,7 +293,14 @@ jobs:
 
       - name: Record sccache effectiveness
         if: always()
-        run: bash scripts/record-sccache-effectiveness.sh
+        run: |
+          sccache --show-stats | tee sccache-stats.txt
+          sccache --show-stats --stats-format json > sccache-stats.json
+          {
+            printf '### sccache\n\n```text\n'
+            cat sccache-stats.txt
+            printf '```\n'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload sccache statistics
         if: always()
@@ -376,7 +348,14 @@ jobs:
 
       - name: Record sccache effectiveness
         if: ${{ always() }}
-        run: bash scripts/record-sccache-effectiveness.sh
+        run: |
+          sccache --show-stats | tee sccache-stats.txt
+          sccache --show-stats --stats-format json > sccache-stats.json
+          {
+            printf '### sccache\n\n```text\n'
+            cat sccache-stats.txt
+            printf '```\n'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload sccache statistics
         if: always()

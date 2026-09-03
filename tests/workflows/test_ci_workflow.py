@@ -195,8 +195,6 @@ def _coverage_check_job(workflow: Mapping[str, Any]) -> dict[str, Any]:
         "Checkout",
         "Set up Namespace cache",
         "Record Namespace cache state",
-        "Provision the Clippy source mirror",
-        "Record Clippy mirror cache result",
         "Setup Rust",
         "Install sccache",
         "Install cargo-nextest",
