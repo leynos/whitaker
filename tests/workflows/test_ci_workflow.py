@@ -26,6 +26,7 @@ import pytest
 from ruamel.yaml import YAML
 
 WORKFLOW_PATH = Path(__file__).resolve().parents[2] / ".github/workflows/ci.yml"
+UBICLOUD_LINUX_RUNNER = "ubicloud-standard-2-ubuntu-2404"
 
 
 @pytest.fixture(scope="module")
@@ -122,9 +123,9 @@ def test_ci_splits_linux_and_windows_jobs_by_purpose(
         parent_name="CI workflow jobs",
     )
 
-    assert linux_job.get("runs-on") == (
-        "namespace-profile-rust-linux-ci;overrides.cache-tag=whitaker-linux-amd64-v1"
-    ), "linux-full must run on the deployed Namespace Linux runner"
+    assert linux_job.get("runs-on") == UBICLOUD_LINUX_RUNNER, (
+        "linux-full must run on the reviewed Ubicloud Linux runner"
+    )
     assert windows_job.get("runs-on") == "windows-latest", (
         "windows-compat must keep using the hosted Windows runner"
     )
@@ -147,7 +148,14 @@ def test_ci_enables_sccache_and_debug_target_cache_scope(
         "expand to the entire target tree"
     )
     assert "SCCACHE_GHA_ENABLED" not in env, (
-        "Namespace jobs must not inherit the GitHub Actions sccache backend"
+        "the backend selector, not the workflow, exports the sccache backend "
+        "variables so only one backend is ever configured"
+    )
+    assert env.get("SCCACHE_BACKEND") == "gha", (
+        "CI must declare the compiler-cache backend in one switchable place"
+    )
+    assert str(env.get("LINUX_RUNNER_VCPUS")) == "2", (
+        "CI must derive its concurrency bounds from the Ubicloud shape"
     )
     assert env.get("RUSTC_WRAPPER") == "sccache", "CI must route rustc through sccache"
     assert str(env.get("CARGO_INCREMENTAL")) == "0", (
@@ -185,16 +193,23 @@ def _coverage_check_job(workflow: Mapping[str, Any]) -> dict[str, Any]:
     assert coverage_job.get("if") == "github.event_name == 'pull_request'", (
         "coverage-check must run only for pull requests"
     )
-    assert coverage_job.get("runs-on") == (
-        "namespace-profile-rust-linux-light;overrides.cache-tag=whitaker-linux-amd64-v1"
-    ), "coverage-check must use the deployed Namespace Linux runner"
+    assert coverage_job.get("runs-on") == UBICLOUD_LINUX_RUNNER, (
+        "coverage-check must use the reviewed Ubicloud Linux runner"
+    )
     assert coverage_job.get("defaults", {}).get("run", {}).get("shell") == "bash", (
         "coverage-check must use Bash for Makefile targets"
     )
     assert _step_names(coverage_job) == [
         "Checkout",
-        "Set up Namespace cache",
-        "Record Namespace cache state",
+        "Bound concurrency to the runner shape",
+        "Select the compiler cache backend",
+        "Expose the Actions cache credentials to sccache",
+        "Restore Cargo registry",
+        "Restore the Rust toolchain and installed tools",
+        "Restore the Clippy source mirror",
+        "Restore the compiler cache directory",
+        "Record cache observations",
+        "Provision the Clippy source mirror",
         "Setup Rust",
         "Install sccache",
         "Install cargo-nextest",
@@ -229,7 +244,7 @@ def _assert_coverage_checkout_and_setup(coverage_job: Mapping[str, Any]) -> None
     assert setup_step.get("with") == {
         "cache-provider": "external",
         "use-sccache": False,
-    }, "coverage-check must give Namespace sole ownership of Rust caches"
+    }, "coverage-check must own its Cargo cache and sccache configuration"
 
 
 def _assert_coverage_tool_installation(coverage_job: Mapping[str, Any]) -> None:
@@ -342,7 +357,7 @@ def test_linux_full_keeps_the_full_linux_validation_stack(
     ), "linux-full must publish-check the release crates on Linux only"
 
     # The shared `install-nixie` action now owns Merman's checksum-verified
-    # download; `namespace_cache_contract_test.py` pins that action's inputs.
+    # download; `ubicloud_tool_provenance_test.py` pins the installer contract.
     assert not any(
         name == "Install Merman CLI" for name in _step_names(linux_job)
     ), "Merman setup belongs to the shared install-nixie action"

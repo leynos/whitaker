@@ -1,5 +1,3 @@
 self-hosted-runner:
   labels:
-    - namespace-profile-rust-linux-ci;overrides.cache-tag=whitaker-linux-amd64-v1
-    - namespace-profile-rust-linux-light;overrides.cache-tag=whitaker-linux-amd64-v1
-    - ubicloud-standard-4-ubuntu-2404
+    - ubicloud-standard-2-ubuntu-2404

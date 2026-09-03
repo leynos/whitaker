@@ -32,19 +32,21 @@ def test_linux_full_provisions_pinned_markdown_tools_before_checking() -> None:
     step_names = [step["name"] for step in steps if "name" in step]
 
     assert (
-        step_names.index("Set up Namespace cache")
+        step_names.index("Restore the Rust toolchain and installed tools")
         < step_names.index("Install bun")
         < step_names.index("Install mdtablefix")
         < step_names.index("Install Markdown lint CLI")
         < step_names.index("Check formatting")
     ), "CI must cache and install Markdown tools before checking formatting"
 
-    cache_step = steps_by_name["Set up Namespace cache"]
+    cache_step = steps_by_name["Restore the Rust toolchain and installed tools"]
     assert cache_step["uses"] == (
-        "namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547"
+        "ubicloud/cache/restore@92361f338d82d2c58a98875f1b5c95cd14cd6b2a"
     )
+    # The verified mdtablefix release lands in `~/.cargo/bin`, and the bun
+    # global install for markdownlint-cli2 reuses `~/.bun/install/cache`.
     assert "~/.cargo/bin" in cache_step["with"]["path"]
-    assert "~/.cache/cargo-binstall" in cache_step["with"]["path"]
+    assert "~/.bun/install/cache" in cache_step["with"]["path"]
     assert "~/.cache/mdtablefix-build" not in cache_step["with"]["path"]
 
     install_script = steps_by_name["Install mdtablefix"]["run"]

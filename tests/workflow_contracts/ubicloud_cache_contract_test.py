@@ -1,0 +1,177 @@
+"""Validate Ubicloud cache ownership, write policy, and observability."""
+
+from __future__ import annotations
+
+import re
+
+from ubicloud_workflow_support import (
+    CACHE_KEY_WRITERS,
+    RESTORE_ACTION,
+    SAVE_ACTION,
+    UBICLOUD_JOBS,
+    cache_paths,
+    job_steps,
+    load_job,
+    restore_steps,
+    save_steps,
+    step_names,
+    steps_by_name,
+)
+
+PRIMARY_KEY_REFERENCE = re.compile(
+    r"^\$\{\{\s*steps\.([\w-]+)\.outputs\.cache-primary-key\s*\}\}$"
+)
+TRUSTED_BRANCH_GUARD = "github.ref == 'refs/heads/main'"
+FIRST_EXPENSIVE_STEP = "Setup Rust"
+
+
+def _restore_step_by_id(job: dict[str, object], step_id: str) -> dict[str, object]:
+    """Return the restore step carrying the supplied identifier."""
+    for step in restore_steps(job):
+        if step.get("id") == step_id:
+            return step
+    raise AssertionError(f"no restore step declares id {step_id!r}")
+
+
+def test_ubicloud_jobs_use_only_the_pinned_ubicloud_cache_action() -> None:
+    """Reject GitHub and Namespace cache clients on Ubicloud runners.
+
+    `ubicloud/cache` reads `UBICLOUD_CACHE_URL` and `UBICLOUD_RUNTIME_TOKEN`
+    from the VM environment, so mixing backends would silently split one
+    logical cache across two stores.
+    """
+    for job_name in UBICLOUD_JOBS:
+        job = load_job(job_name)
+        for step in job_steps(job):
+            uses = str(step.get("uses", ""))
+            assert not uses.startswith("actions/cache"), (
+                f"{job_name} must not use the GitHub cache action on Ubicloud"
+            )
+            assert not uses.startswith("namespacelabs/"), (
+                f"{job_name} must not retain a Namespace cache action"
+            )
+        assert restore_steps(job), f"{job_name} must restore at least one cache"
+
+
+def test_each_cached_path_has_exactly_one_owner_per_job() -> None:
+    """Two cache steps claiming one directory would race to define its content."""
+    for job_name in UBICLOUD_JOBS:
+        job = load_job(job_name)
+        for steps in (restore_steps(job), save_steps(job)):
+            owned: dict[str, str] = {}
+            for step in steps:
+                for path in cache_paths(step):
+                    previous = owned.get(path)
+                    assert previous is None, (
+                        f"{job_name}: {path} is claimed by both {previous!r} "
+                        f"and {step['name']!r}"
+                    )
+                    owned[path] = str(step["name"])
+
+
+def test_cache_restores_precede_every_expensive_install_or_build() -> None:
+    """A restore after the first install would download what it already holds."""
+    for job_name in UBICLOUD_JOBS:
+        job = load_job(job_name)
+        names = step_names(job)
+        setup_index = names.index(FIRST_EXPENSIVE_STEP)
+        for step in restore_steps(job):
+            assert names.index(str(step["name"])) < setup_index, (
+                f"{job_name}: {step['name']!r} must restore before "
+                f"{FIRST_EXPENSIVE_STEP!r}"
+            )
+
+
+def test_saves_are_restricted_to_the_trusted_branch() -> None:
+    """A pull request reads the published generation and never republishes it."""
+    for job_name in UBICLOUD_JOBS:
+        job = load_job(job_name)
+        for step in save_steps(job):
+            condition = str(step.get("if", ""))
+            assert TRUSTED_BRANCH_GUARD in condition, (
+                f"{job_name}: {step['name']!r} must save only on the trunk"
+            )
+
+
+def test_saves_reuse_the_rendered_key_and_paths_of_their_restore() -> None:
+    """A save that re-renders its key can drift from the key it restored."""
+    for job_name in UBICLOUD_JOBS:
+        job = load_job(job_name)
+        for step in save_steps(job):
+            key = str(step.get("with", {}).get("key", ""))
+            match = PRIMARY_KEY_REFERENCE.match(key)
+            assert match is not None, (
+                f"{job_name}: {step['name']!r} must save the primary key its "
+                "restore step rendered"
+            )
+            restore = _restore_step_by_id(job, match.group(1))
+            assert cache_paths(step) == cache_paths(restore), (
+                f"{job_name}: {step['name']!r} must save exactly the paths "
+                f"{restore['name']!r} restored"
+            )
+
+
+def test_every_cache_key_family_has_exactly_one_writer() -> None:
+    """Never let two lanes populate the same cold key."""
+    observed: dict[str, str] = {}
+    for job_name in UBICLOUD_JOBS:
+        job = load_job(job_name)
+        for step in save_steps(job):
+            key = str(step["with"]["key"])
+            match = PRIMARY_KEY_REFERENCE.match(key)
+            assert match is not None
+            prefix = str(_restore_step_by_id(job, match.group(1))["with"]["key"])
+            family = next(
+                (name for name in CACHE_KEY_WRITERS if prefix.startswith(name)),
+                None,
+            )
+            assert family is not None, f"unreviewed cache key family: {prefix}"
+            previous = observed.get(family)
+            assert previous is None, (
+                f"{family} is written by both {previous} and {job_name}"
+            )
+            observed[family] = job_name
+
+    for family, writer in CACHE_KEY_WRITERS.items():
+        assert observed.get(family) == writer, (
+            f"{family} must be written only by {writer}"
+        )
+
+
+def test_restore_only_lanes_never_save() -> None:
+    """`coverage-check` runs on pull requests alone, so it can never be a writer."""
+    assert not save_steps(load_job("coverage-check")), (
+        "coverage-check must restore the coverage lane's keys without saving"
+    )
+
+
+def test_every_restore_step_is_reported_in_the_job_summary() -> None:
+    """An unexplained miss is indistinguishable from a broken key without this."""
+    for job_name in UBICLOUD_JOBS:
+        job = load_job(job_name)
+        steps = steps_by_name(job)
+        observations = steps["Record cache observations"]
+        assert observations.get("if") == "always()", (
+            f"{job_name} must record cache observations even when the job fails"
+        )
+        reported = "\n".join(f"{key}: {value}" for key, value in observations["env"].items())
+        for step in restore_steps(job):
+            step_id = str(step["id"])
+            assert f"steps.{step_id}.outputs.cache-primary-key" in reported, (
+                f"{job_name}: {step['name']!r} must report its rendered key"
+            )
+            assert f"steps.{step_id}.outputs.cache-hit" in reported, (
+                f"{job_name}: {step['name']!r} must report its cache-hit result"
+            )
+
+
+def test_cache_actions_stay_on_one_reviewed_pin() -> None:
+    """Restore and save must not drift onto different forks or versions."""
+    for job_name in UBICLOUD_JOBS:
+        job = load_job(job_name)
+        for step in job_steps(job):
+            uses = str(step.get("uses", ""))
+            if uses.startswith("ubicloud/cache/restore"):
+                assert uses == RESTORE_ACTION
+            if uses.startswith("ubicloud/cache/save"):
+                assert uses == SAVE_ACTION
