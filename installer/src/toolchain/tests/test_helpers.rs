@@ -4,6 +4,7 @@ use std::{cell::RefCell, process::ExitStatus};
 
 use super::*;
 
+/// Builds a successful or failed Unix process status for a mock command.
 #[cfg(unix)]
 pub fn exit_status(code: i32) -> ExitStatus {
     use std::os::unix::process::ExitStatusExt;
@@ -11,6 +12,7 @@ pub fn exit_status(code: i32) -> ExitStatus {
     ExitStatusExt::from_raw(code << 8)
 }
 
+/// Builds a successful or failed Windows process status for a mock command.
 #[cfg(windows)]
 pub fn exit_status(code: i32) -> ExitStatus {
     use std::os::windows::process::ExitStatusExt;
@@ -18,6 +20,7 @@ pub fn exit_status(code: i32) -> ExitStatus {
     ExitStatusExt::from_raw(code as u32)
 }
 
+/// Creates mock command output with the supplied exit status and no output.
 pub fn output_with_status(code: i32) -> Output {
     Output {
         status: exit_status(code),
@@ -26,6 +29,7 @@ pub fn output_with_status(code: i32) -> Output {
     }
 }
 
+/// Creates mock command output with the supplied exit status and stderr text.
 pub fn output_with_stderr(code: i32, stderr: &str) -> Output {
     Output {
         status: exit_status(code),
@@ -34,6 +38,7 @@ pub fn output_with_stderr(code: i32, stderr: &str) -> Output {
     }
 }
 
+/// Creates the toolchain value used by installer unit tests.
 pub fn test_toolchain(channel: &str) -> Toolchain {
     Toolchain {
         channel: channel.to_owned(),
@@ -103,12 +108,14 @@ fn expect_rustup_command<F>(
         });
 }
 
+/// Expected arguments and output for one ordered toolchain installation call.
 pub struct ToolchainInstallExpectation<'a> {
     pub channel: &'a str,
     pub exit_code: i32,
     pub stderr: Option<&'a str>,
 }
 
+/// Registers an ordered expectation for `rustup run ... rustc --version`.
 pub fn expect_rustc_version(
     runner: &mut MockCommandRunner,
     seq: &mut mockall::Sequence,
@@ -164,7 +171,11 @@ pub fn expect_toolchain_install(
     );
 }
 
-/// Helper to test that `ensure_installed` fails with the expected error.
+/// Verifies that an installer operation fails with the expected error.
+///
+/// The caller supplies mock setup, the operation to invoke, and an error
+/// matcher. The helper panics if the operation succeeds or the matcher rejects
+/// the returned installer error.
 pub fn assert_install_fails_with<F, I, E>(
     toolchain: &Toolchain,
     setup_mocks: F,
