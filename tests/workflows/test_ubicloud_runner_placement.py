@@ -106,19 +106,76 @@ def _all_jobs() -> list[tuple[str, str, Mapping[str, Any]]]:
     ]
 
 
+def _runner_labels(job: Mapping[str, Any]) -> list[str] | None:
+    """Return every runner label a job's ``runs-on`` selector requests.
+
+    ``runs-on`` accepts a scalar label, a sequence of labels, or a
+    ``group``/``labels`` mapping, and a reusable-workflow call omits it
+    altogether. For example, a job whose selector is
+    ``{"group": "linux", "labels": ["ubicloud-standard-2-ubuntu-2404"]}``
+    yields both strings, so a label smuggled into a mapping is still
+    classified. ``None`` is returned for any other shape, so callers fail
+    closed instead of skipping the job.
+    """
+    if "runs-on" not in job:
+        return [] if isinstance(job.get("uses"), str) else None
+    selector = job["runs-on"]
+    if isinstance(selector, str):
+        return [selector]
+    if isinstance(selector, list):
+        if all(isinstance(entry, str) for entry in selector):
+            return list(selector)
+        return None
+    if isinstance(selector, Mapping):
+        labels = selector.get("labels", [])
+        if isinstance(labels, str):
+            labels = [labels]
+        if not isinstance(labels, list):
+            return None
+        if not all(isinstance(entry, str) for entry in labels):
+            return None
+        group = selector.get("group")
+        if group is None:
+            return list(labels)
+        if not isinstance(group, str):
+            return None
+        return [*labels, group]
+    return None
+
+
+def _jobs_with_label_prefix(prefix: str) -> set[tuple[str, str]]:
+    """Return every job requesting at least one label with ``prefix``."""
+    return {
+        (workflow_name, job_name)
+        for workflow_name, job_name, job in _all_jobs()
+        if any(label.startswith(prefix) for label in _runner_labels(job) or ())
+    }
+
+
 def test_linux_developer_blocking_jobs_use_the_reviewed_ubicloud_label() -> None:
     """Ensure each blocking Linux job uses the measured two-vCPU shape."""
     _assert_runner_assignments(UBICLOUD_LINUX_JOBS)
 
 
-def test_no_namespace_runner_labels_remain() -> None:
-    """Reject any surviving Namespace profile label."""
-    offenders = [
+def test_every_job_declares_a_classifiable_runner_selector() -> None:
+    """Reject a selector the placement contract cannot read.
+
+    An unreadable selector would silently exempt its job from both the
+    Namespace and Ubicloud checks below, so it fails here instead.
+    """
+    unreadable = [
         f"{workflow_name}:{job_name}"
         for workflow_name, job_name, job in _all_jobs()
-        if isinstance(job.get("runs-on"), str)
-        and job["runs-on"].startswith("namespace-profile-")
+        if _runner_labels(job) is None
     ]
+    assert not unreadable, (
+        f"every job must declare a readable runs-on selector: {unreadable}"
+    )
+
+
+def test_no_namespace_runner_labels_remain() -> None:
+    """Reject any surviving Namespace profile label."""
+    offenders = sorted(_jobs_with_label_prefix("namespace-profile-"))
     assert not offenders, f"Namespace runner labels must be gone: {offenders}"
 
 
@@ -129,14 +186,43 @@ def test_ubicloud_placement_does_not_expand_beyond_the_reviewed_jobs() -> None:
         for workflow_name, jobs in UBICLOUD_LINUX_JOBS.items()
         for job_name in jobs
     }
-    actual_jobs = {
-        (workflow_name, job_name)
-        for workflow_name, job_name, job in _all_jobs()
-        if isinstance(job.get("runs-on"), str) and job["runs-on"].startswith("ubicloud")
-    }
-    assert actual_jobs == expected_jobs, (
+    assert _jobs_with_label_prefix("ubicloud") == expected_jobs, (
         "Ubicloud runner placement must remain limited to the reviewed Linux jobs"
     )
+
+
+@pytest.mark.parametrize(
+    ("job", "expected"),
+    [
+        pytest.param({"runs-on": "ubuntu-latest"}, ["ubuntu-latest"], id="scalar"),
+        pytest.param(
+            {"runs-on": ["self-hosted", "namespace-profile-default"]},
+            ["self-hosted", "namespace-profile-default"],
+            id="sequence",
+        ),
+        pytest.param(
+            {"runs-on": {"group": "linux", "labels": ["ubicloud-standard-2"]}},
+            ["ubicloud-standard-2", "linux"],
+            id="group-and-labels",
+        ),
+        pytest.param(
+            {"runs-on": {"labels": "ubicloud-standard-2"}},
+            ["ubicloud-standard-2"],
+            id="scalar-labels-in-mapping",
+        ),
+        pytest.param({"uses": "./.github/workflows/x.yml"}, [], id="reusable-call"),
+        pytest.param({"runs-on": 4}, None, id="non-string-scalar"),
+        pytest.param({"runs-on": ["ok", 4]}, None, id="non-string-in-sequence"),
+        pytest.param({"runs-on": {"group": 4}}, None, id="non-string-group"),
+        pytest.param({"steps": []}, None, id="missing-selector"),
+    ],
+)
+def test_runner_labels_reads_every_supported_selector_form(
+    job: Mapping[str, Any],
+    expected: list[str] | None,
+) -> None:
+    """Every documented selector form is read, and nothing else is trusted."""
+    assert _runner_labels(job) == expected, f"unexpected labels for {job}"
 
 
 def test_windows_and_release_jobs_stay_github_hosted() -> None:
@@ -170,8 +256,7 @@ def test_ubicloud_jobs_declare_a_timeout() -> None:
         for job_name in expected_jobs:
             timeout = jobs[job_name].get("timeout-minutes")
             assert isinstance(timeout, int) and 0 < timeout <= 60, (
-                f"{workflow_name}:{job_name} must declare a bounded "
-                "timeout-minutes"
+                f"{workflow_name}:{job_name} must declare a bounded timeout-minutes"
             )
 
 

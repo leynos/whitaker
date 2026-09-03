@@ -28,9 +28,17 @@
 # cargo-dylint is probed via `cargo-dylint dylint --version` (the
 # subcommand form: since 6.x the binary rejects a bare --version), and
 # the version is field 2 of that output. dylint-link cannot be probed
-# the same way: it is a linker shim that forwards --version to cc, so
-# its presence is detected from an executable at TOOLS_ROOT/bin or a
-# system copy on PATH.
+# the same way: it is a linker shim that forwards --version to cc.
+#
+# Presence is therefore not proof of the requested pin. TOOLS_ROOT is a
+# durable, unversioned cache directory that `publish-check` prepends to
+# PATH, so a binary installed for an older DYLINT_LINK_VERSION would
+# otherwise survive a version bump indefinitely and be paired with a newer
+# cargo-dylint. Every install records the version it wrote in a marker file
+# beside the binary, and a cached dylint-link is reused only when that
+# marker matches the requested version. A system copy on PATH is accepted
+# only when TOOLS_ROOT holds no dylint-link at all: it predates this script,
+# carries no provenance, and reinstalling over it is not this script's job.
 #
 # Testing hook
 # ------------
@@ -118,6 +126,24 @@ expected_sha256() {
     pinned_sha256 "$1" "$2"
 }
 
+# Provenance marker beside the installed binary. A dotted name keeps it out
+# of the way of anything that iterates over TOOLS_ROOT/bin looking for
+# executables.
+version_marker() {
+    printf '%s\n' "$tools_root/bin/.$1.version"
+}
+
+record_installed_version() {
+    printf '%s\n' "$2" >"$(version_marker "$1")"
+}
+
+recorded_version() {
+    marker=$(version_marker "$1")
+    if [ -f "$marker" ]; then
+        cat "$marker"
+    fi
+}
+
 verify_sha256() {
     archive=$1
     expected=$2
@@ -174,6 +200,7 @@ install_tool() {
     cp "$staged" "$tools_root/bin/${tool}.new"
     chmod 0755 "$tools_root/bin/${tool}.new"
     mv "$tools_root/bin/${tool}.new" "$tools_root/bin/$tool"
+    record_installed_version "$tool" "$version"
 
     rm -rf -- "$workdir"
     trap - 0 INT TERM HUP
@@ -181,6 +208,29 @@ install_tool() {
 
 probe_cargo_dylint() {
     "$@" dylint --version 2>/dev/null | awk '{print $2}' || true
+}
+
+# Provision dylint-link, whose version cannot be probed from the binary.
+# Ordered most to least trustworthy: a marked isolated copy is reused, an
+# unmarked or stale isolated copy is replaced, and an unattributable system
+# copy is accepted only when this script owns nothing.
+provision_dylint_link() {
+    version=$1
+    if [ -x "$tools_root/bin/dylint-link" ]; then
+        if [ "$(recorded_version dylint-link)" = "$version" ]; then
+            return 0
+        fi
+        echo "install-dylint-tools: replacing dylint-link in $tools_root/bin;" \
+            "it is not recorded as version $version" >&2
+        install_tool dylint-link "$version"
+        return 0
+    fi
+    if command -v dylint-link >/dev/null 2>&1; then
+        echo "install-dylint-tools: using the system dylint-link;" \
+            "its version cannot be probed and is not verified" >&2
+        return 0
+    fi
+    install_tool dylint-link "$version"
 }
 
 installed_cargo_dylint=$(probe_cargo_dylint cargo-dylint)
@@ -192,7 +242,4 @@ if [ "$installed_cargo_dylint" != "$cargo_dylint_version" ]; then
     fi
 fi
 
-if [ ! -x "$tools_root/bin/dylint-link" ] &&
-    ! command -v dylint-link >/dev/null 2>&1; then
-    install_tool dylint-link "$dylint_link_version"
-fi
+provision_dylint_link "$dylint_link_version"

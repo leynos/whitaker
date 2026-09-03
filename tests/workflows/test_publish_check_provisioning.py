@@ -49,7 +49,7 @@ def _build_release_archive(destination: Path, tool: str, version: str) -> str:
     named after the archive stem containing a single executable.
     """
     stem = f"{tool}-x86_64-unknown-linux-gnu-v{version}"
-    payload = b"#!/bin/sh\nif [ \"$1\" = dylint ] && [ \"$2\" = --version ]; then\n"
+    payload = b'#!/bin/sh\nif [ "$1" = dylint ] && [ "$2" = --version ]; then\n'
     payload += f'    echo "cargo-dylint {version}"\n'.encode()
     payload += b"    exit 0\nfi\nexit 0\n"
     buffer = io.BytesIO()
@@ -63,7 +63,9 @@ def _build_release_archive(destination: Path, tool: str, version: str) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def _write_curl_stub(stub_dir: Path, log: Path, archives: Path, *, exit_code: int) -> None:
+def _write_curl_stub(
+    stub_dir: Path, log: Path, archives: Path, *, exit_code: int
+) -> None:
     """Serve the generated archives, or fail with ``exit_code``."""
     _write_stub(
         stub_dir,
@@ -172,7 +174,9 @@ esac""",
     )
 
 
-def _write_harness(stub_dir: Path, *, install_exit: int = 0) -> tuple[Path, dict[str, str]]:
+def _write_harness(
+    stub_dir: Path, *, install_exit: int = 0
+) -> tuple[Path, dict[str, str]]:
     """Write the full stub command set for a publish-check run.
 
     Every stub appends ``<command> <args>`` to ``invocations.log``; each
@@ -184,7 +188,8 @@ def _write_harness(stub_dir: Path, *, install_exit: int = 0) -> tuple[Path, dict
     archives.mkdir(exist_ok=True)
     digests = {
         tool: _build_release_archive(
-            archives / f"{tool}-x86_64-unknown-linux-gnu-v{CARGO_DYLINT_VERSION}.tar.gz",
+            archives
+            / f"{tool}-x86_64-unknown-linux-gnu-v{CARGO_DYLINT_VERSION}.tar.gz",
             tool,
             CARGO_DYLINT_VERSION,
         )
@@ -246,14 +251,18 @@ def test_stale_tool_installs_and_isolated_bin_wins(tmp_path: Path) -> None:
         "the pinned release archive must be downloaded"
     )
     assert "cargo install" not in log, "no host tool may be compiled from source"
-    assert "cargo-dylint" in log.split("dylint-resolved", 1)[1]
+    assert "cargo-dylint" in log.split("dylint-resolved", 1)[1], (
+        "the resolution line must name the tool it resolved"
+    )
     resolved = next(
         line for line in log.splitlines() if line.startswith("dylint-resolved ")
     ).removeprefix("dylint-resolved ")
     assert resolved != str(stub_dir / "cargo-dylint"), (
         "the stale system stub must not win once the isolated root exists"
     )
-    assert resolved.endswith("/whitaker-dylint-tools/bin/cargo-dylint")
+    assert resolved.endswith("/whitaker-dylint-tools/bin/cargo-dylint"), (
+        f"the durable tools root must win PATH resolution, got {resolved}"
+    )
 
 
 def test_failed_download_aborts_before_clone_and_packaging(tmp_path: Path) -> None:
@@ -264,11 +273,13 @@ def test_failed_download_aborts_before_clone_and_packaging(tmp_path: Path) -> No
 
     result = _run_publish_check(stub_dir, overrides)
 
-    assert result.returncode != 0
+    assert result.returncode != 0, "a failed download must fail publish-check"
     log = log_path.read_text()
-    assert "git clone" not in log
-    assert "dylint-resolved" not in log
-    assert "cargo package" not in log
+    assert "git clone" not in log, "no clone may run after a failed install"
+    assert "dylint-resolved" not in log, (
+        "no tool resolution may run after a failed install"
+    )
+    assert "cargo package" not in log, "no packaging may run after a failed install"
     assert "build --release" not in log, (
         "no per-lint release build may run after a failed install"
     )

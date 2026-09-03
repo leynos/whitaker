@@ -24,6 +24,10 @@
 # their flags, so a one-shape cap would evict each shape in turn.
 set -euo pipefail
 
+# An unset or empty selector keeps the historical Actions-service default, so
+# a lane that drops the workflow-level declaration behaves as it did before
+# this script existed rather than failing at its first Cargo step. Any other
+# unrecognized value is a typo and is rejected.
 backend=${SCCACHE_BACKEND:-gha}
 env_file=${GITHUB_ENV:-/dev/stdout}
 local_cache_dir=${SCCACHE_LOCAL_DIR:-${HOME}/.cache/sccache}

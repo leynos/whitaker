@@ -8,7 +8,10 @@ used by the `publish-check` Makefile target:
 - matching system tools produce no download and no tools root;
 - a stale or missing cargo-dylint downloads, verifies, and installs the
   pinned archive into the tools root;
-- a missing dylint-link does the same for its own archive;
+- a missing dylint-link does the same for its own archive, and records
+  the version it installed;
+- a cached dylint-link is reused only when that recorded version
+  matches the requested pin, because the binary cannot be probed;
 - a digest mismatch aborts without installing anything;
 - an unsupported architecture aborts;
 - a version with no pinned digest aborts rather than downloading an
@@ -218,8 +221,10 @@ def test_matching_tools_download_nothing(tmp_path: Path) -> None:
     result = _run_script(harness, toolchain=TOOLCHAIN)
 
     assert result.returncode == 0, result.stderr
-    assert _downloads(harness) == ""
-    assert not harness.tools_root.exists()
+    assert _downloads(harness) == "", "matching system tools must trigger no download"
+    assert not harness.tools_root.exists(), (
+        "the isolated tools root must not be created when nothing is installed"
+    )
 
 
 @pytest.mark.parametrize(
@@ -246,11 +251,13 @@ def test_stale_or_missing_cargo_dylint_installs_pin(
 
     assert result.returncode == 0, result.stderr
     installed = harness.tools_root / "bin" / "cargo-dylint"
-    assert os.access(installed, os.X_OK)
+    assert os.access(installed, os.X_OK), f"{installed} must be executable"
     assert f"cargo-dylint-{_host_target()}-v{PINNED_VERSION}.tar.gz" in _downloads(
         harness
+    ), "the pinned cargo-dylint archive must be the only download"
+    assert not list((harness.tools_root / "bin").glob("*.new")), (
+        "no partially written staging file may survive the install"
     )
-    assert not list((harness.tools_root / "bin").glob("*.new"))
 
 
 def test_missing_dylint_link_installs_pin(tmp_path: Path) -> None:
@@ -263,8 +270,80 @@ def test_missing_dylint_link_installs_pin(tmp_path: Path) -> None:
 
     assert result.returncode == 0, result.stderr
     installed = harness.tools_root / "bin" / "dylint-link"
-    assert os.access(installed, os.X_OK)
-    assert not (harness.tools_root / "bin" / "cargo-dylint").exists()
+    assert os.access(installed, os.X_OK), f"{installed} must be executable"
+    assert not (harness.tools_root / "bin" / "cargo-dylint").exists(), (
+        "a matching cargo-dylint must not be reinstalled alongside dylint-link"
+    )
+    marker = harness.tools_root / "bin" / ".dylint-link.version"
+    assert marker.read_text().strip() == PINNED_VERSION, (
+        "the install must record the version the next run reads"
+    )
+
+
+def _seed_cached_dylint_link(
+    harness: Harness,
+    marker: str | None,
+) -> Path:
+    """Install a dylint-link into the durable root with an optional marker.
+
+    ``marker`` is the version this script would have recorded when it
+    installed the binary. ``None`` leaves no marker, standing for a binary
+    that predates version tracking or was placed there by something else.
+    """
+    binary = harness.tools_root / "bin" / "dylint-link"
+    binary.parent.mkdir(parents=True, exist_ok=True)
+    binary.write_text("#!/bin/sh\nexit 0\n")
+    binary.chmod(0o755)
+    if marker is not None:
+        (binary.parent / ".dylint-link.version").write_text(f"{marker}\n")
+    return binary
+
+
+def test_cached_dylint_link_with_a_matching_marker_is_reused(
+    tmp_path: Path,
+) -> None:
+    """A recorded pin is provenance enough to skip the download."""
+    harness = _make_harness(tmp_path)
+    _write_cargo_dylint_stub(harness.stub_dir, f"cargo-dylint {PINNED_VERSION}")
+    _seed_cached_dylint_link(harness, PINNED_VERSION)
+
+    result = _run_script(harness)
+
+    assert result.returncode == 0, result.stderr
+    assert _downloads(harness) == "", (
+        "a recorded matching pin must not be downloaded again"
+    )
+
+
+@pytest.mark.parametrize(
+    "marker",
+    [pytest.param(None, id="unmarked"), pytest.param("5.0.0", id="stale-marker")],
+)
+def test_cached_dylint_link_without_the_requested_pin_is_replaced(
+    tmp_path: Path,
+    marker: str | None,
+) -> None:
+    """Presence in the durable root is not proof of the requested version.
+
+    The root survives across runs and across version bumps, so an
+    unattributable or outdated binary must be replaced rather than paired
+    with a newer cargo-dylint.
+    """
+    harness = _make_harness(tmp_path)
+    _write_cargo_dylint_stub(harness.stub_dir, f"cargo-dylint {PINNED_VERSION}")
+    _seed_cached_dylint_link(harness, marker)
+    _publish(harness, "dylint-link", "exit 0")
+
+    result = _run_script(harness)
+
+    assert result.returncode == 0, result.stderr
+    assert f"dylint-link-{_host_target()}-v{PINNED_VERSION}.tar.gz" in _downloads(
+        harness
+    ), "an unverified cached dylint-link must be replaced by the pinned archive"
+    recorded = (harness.tools_root / "bin" / ".dylint-link.version").read_text()
+    assert recorded.strip() == PINNED_VERSION, (
+        f"the install must record the version it wrote, got {recorded!r}"
+    )
 
 
 def test_digest_mismatch_aborts_and_installs_nothing(tmp_path: Path) -> None:
@@ -276,9 +355,11 @@ def test_digest_mismatch_aborts_and_installs_nothing(tmp_path: Path) -> None:
 
     result = _run_script(harness)
 
-    assert result.returncode != 0
-    assert "SHA-256 mismatch" in result.stderr
-    assert not harness.tools_root.exists()
+    assert result.returncode != 0, "a digest mismatch must fail the script"
+    assert "SHA-256 mismatch" in result.stderr, result.stderr
+    assert not harness.tools_root.exists(), (
+        "an unverified archive must leave no tools root behind"
+    )
 
 
 def test_unsupported_architecture_aborts(tmp_path: Path) -> None:
@@ -296,9 +377,11 @@ esac""",
 
     result = _run_script(harness)
 
-    assert result.returncode != 0
-    assert "riscv64" in result.stderr
-    assert not harness.tools_root.exists()
+    assert result.returncode != 0, "an unsupported architecture must fail"
+    assert "riscv64" in result.stderr, result.stderr
+    assert not harness.tools_root.exists(), (
+        "an unsupported architecture must leave no tools root behind"
+    )
 
 
 def test_unpinned_version_aborts(tmp_path: Path) -> None:
@@ -308,15 +391,19 @@ def test_unpinned_version_aborts(tmp_path: Path) -> None:
 
     result = _run_script(harness, versions=ToolVersions(cargo_dylint="5.0.0"))
 
-    assert result.returncode != 0
-    assert "5.0.0" in result.stderr
-    assert _downloads(harness) == ""
-    assert not harness.tools_root.exists()
+    assert result.returncode != 0, "an unpinned version must fail the script"
+    assert "5.0.0" in result.stderr, result.stderr
+    assert _downloads(harness) == "", "an unpinned version must never be downloaded"
+    assert not harness.tools_root.exists(), (
+        "an unpinned version must leave no tools root behind"
+    )
 
 
 def test_script_never_builds_from_source() -> None:
     """The provisioning path must not compile a host tool."""
-    assert "cargo install" not in SCRIPT.read_text()
+    assert "cargo install" not in SCRIPT.read_text(), (
+        f"{SCRIPT.name} must not compile a host tool from source"
+    )
 
 
 def test_rejects_wrong_argument_count() -> None:
@@ -327,5 +414,5 @@ def test_rejects_wrong_argument_count() -> None:
         text=True,
         check=False,
     )
-    assert result.returncode == 2
-    assert "usage:" in result.stderr
+    assert result.returncode == 2, "a wrong argument count must exit 2"
+    assert "usage:" in result.stderr, result.stderr

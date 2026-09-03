@@ -18,9 +18,14 @@
 # and rewrites the upstream URL to it with `url.<mirror>.insteadOf`, so the
 # build script's clone becomes a local, hard-linking copy.
 #
-# MIRROR_DIR must be a child of the cached directory, never the cache mount
-# point itself: a cold volume materializes the mount point as a directory,
-# and removing a stale generation must not attempt to remove a live mount.
+# MIRROR_DIR must be `rust-clippy.git` directly inside the trusted cache
+# root (`CLIPPY_MIRROR_ROOT`, defaulting to `~/.cache/whitaker-mirrors`).
+# The root is the directory the cache step owns and the mirror is a child of
+# it, never the root itself: a cold volume materializes the root as an empty
+# directory, and discarding a stale generation must not remove the root. The
+# argument is resolved to a physical path and compared with the resolved
+# root, so a path that merely ends in `rust-clippy.git` is refused and a
+# failed clone can never discard an unrelated directory.
 #
 # The script writes `clippy-mirror-hit=true|false` to `GITHUB_OUTPUT` when
 # that variable is set, so the caller can record an observable hit or miss.
@@ -32,8 +37,16 @@
 set -euo pipefail
 
 CLIPPY_URL='https://github.com/rust-lang/rust-clippy'
+MIRROR_BASENAME='rust-clippy.git'
 CLONE_ATTEMPTS=3
 CLONE_BACKOFF_SECONDS=5
+
+# Inspection outcomes. `REBUILD` means "no usable mirror here, clone one";
+# `ENVIRONMENT` means "the machine is wrong, not the cache generation", and
+# is never repaired by discarding the path.
+MIRROR_USABLE=0
+MIRROR_REBUILD=1
+MIRROR_ENVIRONMENT=2
 
 if [[ "$#" -ne 1 ]]; then
     echo "usage: $0 MIRROR_DIR" >&2
@@ -41,15 +54,91 @@ if [[ "$#" -ne 1 ]]; then
 fi
 
 mirror=$1
+mirror_root=${CLIPPY_MIRROR_ROOT:-${HOME}/.cache/whitaker-mirrors}
 
-# A restored cache generation and an empty mount point are both directories,
-# so existence proves nothing. Ask git whether this is a usable mirror.
-is_mirror() { git -C "$1" rev-parse --is-bare-repository >/dev/null 2>&1; }
+fail() {
+    echo "provision-clippy-mirror: $*" >&2
+    exit 1
+}
+
+# Resolve a directory to its physical path without requiring it to exist:
+# the deepest existing ancestor is resolved and the remaining components are
+# appended. A cold cache root does not exist yet, so `realpath -e` would
+# reject the very case this guard has to police.
+resolve_path() {
+    local target=$1 suffix=''
+    target=${target%/}
+    [[ -n "${target}" ]] || target=/
+    while [[ ! -d "${target}" ]]; do
+        case "${target}" in
+            */?*) ;;
+            *) fail "cannot resolve ${1}" ;;
+        esac
+        suffix="/${target##*/}${suffix}"
+        target=${target%/*}
+        [[ -n "${target}" ]] || target=/
+    done
+    printf '%s%s\n' "$(cd "${target}" && pwd -P)" "${suffix}"
+}
+
+# Refuse to manage anything but the one mirror directory this script owns,
+# so a mistyped argument can never discard a cache root or a home directory.
+# Suffix matching is not enough: `/tmp/project/rust-clippy.git` ends in the
+# expected name but belongs to nobody.
+resolved_root=$(resolve_path "${mirror_root}")
+resolved_mirror=$(resolve_path "${mirror}")
+if [[ "${resolved_mirror}" != "${resolved_root}/${MIRROR_BASENAME}" ]]; then
+    fail "refusing to manage ${mirror};" \
+        "expected ${resolved_root}/${MIRROR_BASENAME}"
+fi
+mirror=${resolved_mirror}
+
+# A restored cache generation, an empty mount point, and a half-written
+# clone are all directories, so existence proves nothing. Classify the path
+# rather than reducing it to one boolean: a bare repository pointed at the
+# wrong upstream is a stale generation to replace, while an unreadable path
+# is a machine fault the job must not paper over by deleting it.
+inspect_mirror() {
+    local candidate=$1 bare origin
+    [[ -e "${candidate}" ]] || return "${MIRROR_REBUILD}"
+    if [[ ! -d "${candidate}" ]]; then
+        echo "${candidate} exists but is not a directory." >&2
+        return "${MIRROR_ENVIRONMENT}"
+    fi
+    if [[ ! -r "${candidate}" || ! -x "${candidate}" ]]; then
+        echo "${candidate} is not readable and searchable." >&2
+        return "${MIRROR_ENVIRONMENT}"
+    fi
+    bare=$(git -C "${candidate}" rev-parse --is-bare-repository 2>/dev/null) ||
+        return "${MIRROR_REBUILD}"
+    case "${bare}" in
+        true) ;;
+        false) return "${MIRROR_REBUILD}" ;;
+        *)
+            echo "git reported an unparseable bare-repository state" \
+                "'${bare}' for ${candidate}." >&2
+            return "${MIRROR_ENVIRONMENT}"
+            ;;
+    esac
+    origin=$(git -C "${candidate}" config --get remote.origin.url 2>/dev/null) ||
+        origin=''
+    case "${origin}" in
+        "${CLIPPY_URL}" | "${CLIPPY_URL}.git") return "${MIRROR_USABLE}" ;;
+        *) return "${MIRROR_REBUILD}" ;;
+    esac
+}
 
 emit_hit() {
     if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
         printf 'clippy-mirror-hit=%s\n' "$1" >>"${GITHUB_OUTPUT}"
     fi
+}
+
+# Only ever reached for a path the startup guard proved is the cache-owned
+# mirror, so the removal is bounded to this script's own generation.
+discard_stale_mirror() {
+    [[ -e "${mirror}" ]] || return 0
+    rm -rf -- "${mirror}"
 }
 
 # GitHub intermittently rejects unauthenticated clones from shared CI egress
@@ -81,36 +170,27 @@ clone_mirror() {
     return 1
 }
 
-# Refuse to touch anything but the mirror directory this script owns, so a
-# mistyped argument can never delete a cache mount point or a home directory.
-discard_stale_mirror() {
-    case "${mirror}" in
-        */rust-clippy.git) ;;
-        *)
-            echo "Refusing to manage ${mirror}: expected a" \
-                "'rust-clippy.git' directory." >&2
-            return 1
-            ;;
-    esac
-    if [[ -e "${mirror}" ]]; then
-        find "${mirror}" -mindepth 1 -delete
-        rmdir "${mirror}"
-    fi
-}
-
-if is_mirror "${mirror}"; then
-    echo "Reusing the cached Clippy mirror at ${mirror}"
-    emit_hit true
-    if ! git -C "${mirror}" remote update --prune; then
-        echo "::warning::Could not refresh the cached Clippy mirror;" \
-            "continuing with the restored generation."
-    fi
-else
-    echo "No cached Clippy mirror at ${mirror}; cloning it once."
-    emit_hit false
-    mkdir -p "$(dirname "${mirror}")"
-    clone_mirror
-fi
+inspection=0
+inspect_mirror "${mirror}" || inspection=$?
+case "${inspection}" in
+    "${MIRROR_USABLE}")
+        echo "Reusing the cached Clippy mirror at ${mirror}"
+        emit_hit true
+        if ! git -C "${mirror}" remote update --prune; then
+            echo "::warning::Could not refresh the cached Clippy mirror;" \
+                "continuing with the restored generation."
+        fi
+        ;;
+    "${MIRROR_REBUILD}")
+        echo "No usable Clippy mirror at ${mirror}; cloning it once."
+        emit_hit false
+        mkdir -p "$(dirname "${mirror}")"
+        clone_mirror
+        ;;
+    *)
+        fail "cannot inspect ${mirror}; refusing to discard it."
+        ;;
+esac
 
 # Rewrite both spellings the upstream build script could use. `insteadOf`
 # is additive, so drop any previous values before setting ours to keep

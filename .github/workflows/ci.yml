@@ -129,12 +129,16 @@ jobs:
         if: always()
         env:
           CARGO_REGISTRY_KEY: ${{ steps.cargo-registry.outputs.cache-primary-key }}
+          CARGO_REGISTRY_MATCHED: ${{ steps.cargo-registry.outputs.cache-matched-key }}
           CARGO_REGISTRY_HIT: ${{ steps.cargo-registry.outputs.cache-hit }}
           RUST_TOOLS_KEY: ${{ steps.rust-tools.outputs.cache-primary-key }}
+          RUST_TOOLS_MATCHED: ${{ steps.rust-tools.outputs.cache-matched-key }}
           RUST_TOOLS_HIT: ${{ steps.rust-tools.outputs.cache-hit }}
           CLIPPY_MIRROR_KEY: ${{ steps.clippy-mirror-cache.outputs.cache-primary-key }}
+          CLIPPY_MIRROR_MATCHED: ${{ steps.clippy-mirror-cache.outputs.cache-matched-key }}
           CLIPPY_MIRROR_HIT: ${{ steps.clippy-mirror-cache.outputs.cache-hit }}
           SCCACHE_DIR_KEY: ${{ steps.sccache-dir.outputs.cache-primary-key }}
+          SCCACHE_DIR_MATCHED: ${{ steps.sccache-dir.outputs.cache-matched-key }}
           SCCACHE_DIR_HIT: ${{ steps.sccache-dir.outputs.cache-hit }}
         run: bash scripts/record-cache-observations.sh
 
@@ -290,14 +294,19 @@ jobs:
         if: always()
         env:
           CARGO_REGISTRY_KEY: ${{ steps.cargo-registry.outputs.cache-primary-key }}
+          CARGO_REGISTRY_MATCHED: ${{ steps.cargo-registry.outputs.cache-matched-key }}
           CARGO_REGISTRY_HIT: ${{ steps.cargo-registry.outputs.cache-hit }}
           RUST_TOOLS_KEY: ${{ steps.rust-tools.outputs.cache-primary-key }}
+          RUST_TOOLS_MATCHED: ${{ steps.rust-tools.outputs.cache-matched-key }}
           RUST_TOOLS_HIT: ${{ steps.rust-tools.outputs.cache-hit }}
           DYLINT_TOOLS_KEY: ${{ steps.dylint-tools.outputs.cache-primary-key }}
+          DYLINT_TOOLS_MATCHED: ${{ steps.dylint-tools.outputs.cache-matched-key }}
           DYLINT_TOOLS_HIT: ${{ steps.dylint-tools.outputs.cache-hit }}
           CLIPPY_MIRROR_KEY: ${{ steps.clippy-mirror-cache.outputs.cache-primary-key }}
+          CLIPPY_MIRROR_MATCHED: ${{ steps.clippy-mirror-cache.outputs.cache-matched-key }}
           CLIPPY_MIRROR_HIT: ${{ steps.clippy-mirror-cache.outputs.cache-hit }}
           SCCACHE_DIR_KEY: ${{ steps.sccache-dir.outputs.cache-primary-key }}
+          SCCACHE_DIR_MATCHED: ${{ steps.sccache-dir.outputs.cache-matched-key }}
           SCCACHE_DIR_HIT: ${{ steps.sccache-dir.outputs.cache-hit }}
         run: bash scripts/record-cache-observations.sh
 
@@ -517,6 +526,7 @@ jobs:
         if: always()
         env:
           CARGO_REGISTRY_KEY: ${{ steps.cargo-registry.outputs.cache-primary-key }}
+          CARGO_REGISTRY_MATCHED: ${{ steps.cargo-registry.outputs.cache-matched-key }}
           CARGO_REGISTRY_HIT: ${{ steps.cargo-registry.outputs.cache-hit }}
         run: bash scripts/record-cache-observations.sh
 
