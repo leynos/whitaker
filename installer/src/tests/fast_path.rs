@@ -107,6 +107,7 @@ fn try_fast_path_installation_returns_some_build_path_when_staged_suite_enabled(
         ..InstallArgs::default()
     };
 
+    let _guard = env_test_guard();
     with_var(TEST_STAGE_SUITE_ENV, Some("1"), || {
         let ctx = fast_path_fixture.context();
         let mut stderr = Vec::new();

@@ -64,6 +64,8 @@ fn collection_summary_paths_are_fresh_per_call() {
 }
 #[test]
 fn trybuild_fixtures_compile_without_diagnostics() {
+    let _lock = ExampleHarnessLock::acquire()
+        .expect("example harness lock should serialize trybuild fixture compilation");
     let cases = trybuild::TestCases::new();
     cases.pass("tests/ui/bootstrap_zero_diagnostic.rs");
     cases.pass("tests/ui/collection_zero_diagnostic.rs");
