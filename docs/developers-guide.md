@@ -272,12 +272,12 @@ at a time. That is why every caller of the shared `setup-rust` action passes
 `target/${BUILD_PROFILE}` alongside the registry. `windows-compat` was
 archiving exactly that until it moved to the external provider and gained its
 own registry cache. The release and rolling-release workflows still call the
-shared action with its default `github` provider, because they are release
+shared action with its default `github` provider because they are release
 boundaries rather than developer-blocking lanes. They no longer archive a
 `target` tree either: every caller in this repository now pins the shared
 action at `f6d4d5f549655c118f86f371b8d55c200d3efa50`, the first revision whose
 built-in provider stopped archiving `target/<profile>`. Expect one cold Cargo
-cache on those lanes after the repin, because the key no longer carries the
+cache on those lanes after the repin because the key no longer carries the
 build profile.
 
 Every cached path has exactly one owner inside its job, and every key family
@@ -302,7 +302,7 @@ invalidated deliberately. Registry keys hash `rust-toolchain.toml` and
 `dylint-link` versions the Makefile installs; and the Clippy mirror key names
 the Dylint version whose build script performs the clone. Every key also carries
 `runner.os`, `runner.arch`, and `runner.environment`, and the compiled-tool
-keys add the Ubuntu release, because a binary built on Ubuntu 24.04 must never
+keys add the Ubuntu release because a binary built on Ubuntu 24.04 must never
 be restored onto 22.04.
 
 Restores run on every event. Saves are guarded by
@@ -348,7 +348,7 @@ hard-linking copy. The mirror sits below the cached directory rather than at
 the cache path itself, so discarding a stale generation can never attempt to
 remove the directory the cache action manages. A cold clone is authenticated
 with the job token when one is present and retried with backoff; a refresh
-failure on a warm mirror is only a warning, because the revision the build
+failure on a warm mirror is only a warning because the revision the build
 script needs is historical and is already present. All three Linux lanes now
 restore the mirror and provision it before any Cargo invocation.
 
@@ -360,7 +360,7 @@ the one `rust-clippy.git` inside that root. A suffix match such as
 
 It also classifies the restored path rather than reducing it to one boolean. A
 generation is reused only when git reports it bare and its `remote.origin.url`
-is the pinned upstream, because a non-bare directory or a mirror of some other
+is the pinned upstream because a non-bare directory or a mirror of some other
 repository would leave `dylint_driver` without the Clippy revision it needs. A
 non-bare or wrongly pointed generation is rebuilt. An unreadable path, a
 non-directory, or an unparsable verdict from git is an environment fault: the
@@ -451,8 +451,8 @@ The same run's GitHub-hosted `windows-compat` job used the same backend and
 wrote 1,529 hits with 0 write errors, which places the failure in the Ubicloud
 cache proxy's write path rather than in `sccache` or in the credentials. One
 difference is worth chasing before anyone re-enables `gha` here: the Windows
-job reported a hashed cache name, `cb1f7e36...`, because the shared setup
-action sets `SCCACHE_GHA_VERSION`, while the Linux jobs reported the default
+job reported a hashed cache name, `cb1f7e36...` because the shared setup action
+sets `SCCACHE_GHA_VERSION`, while the Linux jobs reported the default
 `sccache-v0.16.0`.
 
 Switching back is one line. Treat write errors above roughly two percent of
@@ -490,15 +490,14 @@ any restore from the run evidence without re-reading the workflow. It runs under
 The matched key, not `cache-hit`, is what classifies a restore. The cache
 action reports `cache-hit: true` only for an exact primary-key match, so a
 successful `restore-keys` restore and a complete miss both surface as a falsy
-value. Every warm compiler-cache restore takes the prefix path, because that
-key ends with the current `github.run_id` and can never match exactly. The
-summary therefore reports `exact hit`, `prefix restore from <key>`, or `miss`,
-and prints the raw `cache-hit` value verbatim beside it, showing an absent
-value as `unset` rather than coercing it to `false`. Restore and save byte
-counts and durations are not step outputs; read the cache action's own
-`Cache Size` and transfer lines from the job log, and confirm an entry exists
-on Ubicloud's side with the cache-entries API rather than assuming a save
-succeeded.
+value. Every warm compiler-cache restore takes the prefix path because that key
+ends with the current `github.run_id` and can never match exactly. The summary
+therefore reports `exact hit`, `prefix restore from <key>`, or `miss`, and
+prints the raw `cache-hit` value verbatim beside it, showing an absent value as
+`unset` rather than coercing it to `false`. Restore and save byte counts and
+durations are not step outputs; read the cache action's own `Cache Size` and
+transfer lines from the job log, and confirm an entry exists on Ubicloud's side
+with the cache-entries API rather than assuming a save succeeded.
 
 Tool setup must not compile tools from source. `taiki-e/install-action` calls
 pin a release whose catalogue contains each requested tool, disable fallbacks,

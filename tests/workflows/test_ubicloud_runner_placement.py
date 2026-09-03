@@ -108,22 +108,29 @@ def _all_jobs() -> list[tuple[str, str, Mapping[str, Any]]]:
 
 def _labels_from_sequence(selector: list[object]) -> list[str] | None:
     """Return a sequence selector's labels, or ``None`` if any is not a string."""
-    if all(isinstance(entry, str) for entry in selector):
-        return [entry for entry in selector if isinstance(entry, str)]
-    return None
+    labels: list[str] = []
+    for entry in selector:
+        match entry:
+            case str():
+                labels.append(entry)
+            case _:
+                return None
+    return labels
 
 
 def _mapping_labels(selector: Mapping[str, object]) -> list[str] | None:
     """Return the ``labels`` entry of a mapping selector as a string list.
 
-    A bare string is one label. Anything that is not a string or a list of
-    strings is unreadable, so the caller fails closed rather than guessing.
+    A bare string is one label, and a list is read by the same sequence reader
+    the bare-sequence form uses, so one implementation validates both shapes.
+    Anything else is unreadable and the caller fails closed rather than
+    guessing.
     """
     match selector.get("labels", []):
         case str() as label:
             return [label]
-        case list() as labels if all(isinstance(entry, str) for entry in labels):
-            return [entry for entry in labels if isinstance(entry, str)]
+        case list() as labels:
+            return _labels_from_sequence(labels)
         case _:
             return None
 
@@ -131,9 +138,16 @@ def _mapping_labels(selector: Mapping[str, object]) -> list[str] | None:
 def _labels_from_mapping(selector: Mapping[str, object]) -> list[str] | None:
     """Return a ``group``/``labels`` selector's labels, including the group.
 
+    A mapping carrying neither key names no runner at all. Reading it as an
+    empty label list would let it satisfy the fail-closed selector check and
+    then match no placement rule, exempting its job from both. It is
+    unreadable instead.
+
     The group name joins the label list because a runner group named for a
     provider must not exempt its job from the placement checks.
     """
+    if "labels" not in selector and "group" not in selector:
+        return None
     labels = _mapping_labels(selector)
     if labels is None:
         return None
@@ -249,6 +263,10 @@ def test_ubicloud_placement_does_not_expand_beyond_the_reviewed_jobs() -> None:
         pytest.param({"runs-on": 4}, None, id="non-string-scalar"),
         pytest.param({"runs-on": ["ok", 4]}, None, id="non-string-in-sequence"),
         pytest.param({"runs-on": {"group": 4}}, None, id="non-string-group"),
+        pytest.param({"runs-on": {}}, None, id="empty-mapping"),
+        pytest.param(
+            {"runs-on": {"timeout": 5}}, None, id="mapping-without-selector-keys"
+        ),
         pytest.param({"steps": []}, None, id="missing-selector"),
     ],
 )
