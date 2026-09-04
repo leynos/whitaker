@@ -487,6 +487,35 @@ summary, including the steps a lane does not use, so an operator can explain
 any restore from the run evidence without re-reading the workflow. It runs under
 `if: always()`.
 
+A save needs disk headroom of its own. `actions/cache/save` stages a compressed
+archive locally before uploading it, so a save costs roughly the size of the
+archive on top of the tree it is archiving. Whitaker's first cache-writing run,
+the merge of #393, died with `No space left on device` between two save steps on
+`ubicloud-standard-2`. Every step before the saves had succeeded, so the
+failure was capacity at save time rather than anything about the work.
+
+Two changes keep that from recurring, and neither needs a larger runner. Every
+job that saves now discards its scratch tree first, with no exemptions: the
+coverage lanes drop `target/llvm-cov-target` once `cargo llvm-cov` has written
+`lcov.info`, and `linux-full` and `windows-compat` drop `target` after their
+last consumer. No job caches a target tree, so all three are pure scratch by
+that point, and dropping the instrumented tree also gives the doctest build its
+headroom. Every discard runs under `if: always()` so a later failure cannot
+leave the disk full.
+
+`windows-compat` stages a smaller archive onto a larger GitHub-hosted disk and
+has never run out of space, but it is covered anyway. The rule follows from how
+`actions/cache/save` stages an archive, which does not vary by platform, and a
+contract with one exemption invites a second.
+
+Free disk is then recorded rather than assumed.
+`scripts/record-cache-observations.sh` prints `df -h` for the root volume and
+for `RUNNER_TEMP`, where the cache action stages its archives, once in the main
+observation block and again from its `headroom` form immediately before the
+first save. The contract tests assert that every saving job discards its
+scratch tree and records headroom before its first save step, so a new save
+cannot be added without the headroom that makes it survivable.
+
 The matched key, not `cache-hit`, is what classifies a restore. The cache
 action reports `cache-hit: true` only for an exact primary-key match, so a
 successful `restore-keys` restore and a complete miss both surface as a falsy

@@ -108,6 +108,69 @@ def test_cache_restores_precede_every_expensive_install_or_build() -> None:
             )
 
 
+#: Steps that discard a scratch tree, mapped to the job that owns them. Every
+#: job with saves must free its scratch before the first archive is staged,
+#: with no exemptions: the rule is about how `actions/cache/save` stages an
+#: archive, which does not vary by platform or by disk size.
+SCRATCH_DISCARD_STEPS: dict[str, str] = {
+    "coverage-upload": "Discard the instrumented target tree",
+    "linux-full": "Discard the build target tree",
+    "windows-compat": "Discard the build target tree",
+}
+
+
+def test_scratch_trees_are_discarded_before_any_save() -> None:
+    """A save stages a compressed archive locally, so it needs headroom.
+
+    Whitaker's first cache-writing run died with `No space left on device`
+    between two save steps while an instrumented target tree it never caches
+    was still on disk. Every saving job must therefore discard its scratch
+    tree before the first archive is staged.
+    """
+    for job_name, discard_name in SCRATCH_DISCARD_STEPS.items():
+        job = load_job(job_name)
+        names = step_names(job)
+        assert discard_name in names, (
+            f"{job_name} must discard its scratch tree before saving"
+        )
+        discard_index = names.index(discard_name)
+        for step in save_steps(job):
+            save_index = names.index(str(step["name"]))
+            assert discard_index < save_index, (
+                f"{job_name}: {step['name']!r} stages an archive before "
+                f"{discard_name!r} frees the disk"
+            )
+
+
+def test_every_saving_job_discards_scratch_first() -> None:
+    """No job may gain save steps without also freeing its scratch tree."""
+    saving: set[str] = {
+        job_name for job_name in CACHING_JOBS if save_steps(load_job(job_name))
+    }
+    unguarded: list[str] = sorted(saving - set(SCRATCH_DISCARD_STEPS))
+    assert not unguarded, (
+        f"these jobs save archives without first discarding a scratch tree: {unguarded}"
+    )
+
+
+def test_disk_headroom_is_recorded_before_the_saves() -> None:
+    """Headroom must be evidence in the run, not something a failure reveals."""
+    for job_name in SCRATCH_DISCARD_STEPS:
+        job = load_job(job_name)
+        names = step_names(job)
+        steps = steps_by_name(job)
+        headroom = "Record disk headroom before the saves"
+        assert headroom in names, f"{job_name} must record headroom before saving"
+        assert steps[headroom].get("if") == "always()", (
+            f"{job_name} must record headroom even when the job fails"
+        )
+        headroom_index = names.index(headroom)
+        for step in save_steps(job):
+            assert headroom_index < names.index(str(step["name"])), (
+                f"{job_name}: headroom must be recorded before {step['name']!r}"
+            )
+
+
 def test_saves_are_restricted_to_the_trusted_branch() -> None:
     """A pull request reads the published generation and never republishes it."""
     for job_name in CACHING_JOBS:

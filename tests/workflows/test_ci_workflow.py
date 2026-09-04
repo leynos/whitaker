@@ -217,6 +217,7 @@ def _coverage_check_job(workflow: Mapping[str, Any]) -> dict[str, Any]:
         "Install cargo-llvm-cov",
         "Reset sccache statistics",
         "Generate coverage",
+        "Discard the instrumented target tree",
         "Run doctests",
         "Record sccache effectiveness",
         "Upload sccache statistics",
@@ -275,6 +276,14 @@ def _assert_coverage_tool_installation(coverage_job: Mapping[str, Any]) -> None:
 
     assert _find_step(coverage_job, "Run doctests").get("run") == ("make test-doc"), (
         "coverage-check must execute the doctests nextest cannot reach"
+    )
+
+    discard = _find_step(coverage_job, "Discard the instrumented target tree")
+    assert discard.get("run") == "rm -rf target/llvm-cov-target", (
+        "the instrumented tree is scratch and must be freed once lcov is written"
+    )
+    assert discard.get("if") == "always()", (
+        "the scratch tree must be freed even when a later step fails"
     )
 
 

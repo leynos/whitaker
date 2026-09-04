@@ -4,6 +4,7 @@
 # Usage:
 #   CARGO_REGISTRY_KEY=... CARGO_REGISTRY_MATCHED=... CARGO_REGISTRY_HIT=... \
 #     scripts/record-cache-observations.sh
+#   scripts/record-cache-observations.sh headroom
 #
 # Each restore step exports its rendered primary key, the key the action
 # actually matched, and its `cache-hit` output under a fixed prefix. This
@@ -29,6 +30,14 @@
 #
 # Restore and save byte counts and durations are not available as step
 # outputs. Read them from the cache action's own log lines in the job log.
+#
+# Both forms report free disk. `actions/cache/save` writes a compressed
+# archive locally before uploading it, so a save needs headroom roughly the
+# size of the archive on top of the tree it is archiving. Whitaker's first
+# cache-writing run died with `No space left on device` between two save
+# steps, having reported nothing beforehand, so headroom is recorded as
+# evidence rather than discovered by failing. The `headroom` form emits only
+# the disk block and is called again immediately before the first save.
 set -euo pipefail
 
 # Ordered so the summary reads from the coarsest cache to the finest.
@@ -41,6 +50,21 @@ CACHE_STEPS=(
 )
 
 summary=${GITHUB_STEP_SUMMARY:-/dev/stdout}
+mode=${1:-observations}
+
+# Report free space on the two filesystems a job can exhaust: the workspace
+# and toolchain live under the root volume, and the cache action stages its
+# archives under RUNNER_TEMP. They are frequently the same filesystem, which
+# the reader can see for themselves from the device column.
+emit_disk_headroom() {
+    local label=$1 path
+    printf -- '- Disk headroom (%s):\n\n```text\n' "${label}"
+    for path in / "${RUNNER_TEMP:-}"; do
+        [[ -n "${path}" && -d "${path}" ]] || continue
+        df -h "${path}" 2>/dev/null || echo "df failed for ${path}"
+    done
+    printf '```\n'
+}
 
 # Classify one restore from its primary and matched keys. Kept separate from
 # rendering so the three outcomes can be read, and tested, on their own.
@@ -75,11 +99,27 @@ emit_observation() {
         "${hit:-unset}"
 }
 
-{
-    printf '### Cache observations\n\n'
-    # shellcheck disable=SC2016  # The backticks are Markdown, not a subshell.
-    printf -- '- Compiler cache backend: `%s`\n' "${SCCACHE_BACKEND:-unset}"
-    for entry in "${CACHE_STEPS[@]}"; do
-        emit_observation "${entry%%:*}" "${entry##*:}"
-    done
-} >>"${summary}"
+case "${mode}" in
+    observations)
+        {
+            printf '### Cache observations\n\n'
+            # shellcheck disable=SC2016  # Backticks are Markdown, not a subshell.
+            printf -- '- Compiler cache backend: `%s`\n' \
+                "${SCCACHE_BACKEND:-unset}"
+            for entry in "${CACHE_STEPS[@]}"; do
+                emit_observation "${entry%%:*}" "${entry##*:}"
+            done
+            emit_disk_headroom "before the build"
+        } >>"${summary}"
+        ;;
+    headroom)
+        {
+            printf '### Disk headroom before the cache saves\n\n'
+            emit_disk_headroom "before the saves"
+        } >>"${summary}"
+        ;;
+    *)
+        echo "usage: $0 [observations|headroom]" >&2
+        exit 2
+        ;;
+esac
