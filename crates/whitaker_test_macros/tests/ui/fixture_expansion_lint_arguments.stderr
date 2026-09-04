@@ -1,5 +1,5 @@
 error: allow_fixture_expansion_lints does not accept arguments
- --> tests/ui/fixture_expansion_lint_arguments.rs:3:33
-  |
-3 | #[allow_fixture_expansion_lints(unexpected)]
-  |                                 ^^^^^^^^^^
+  --> tests/ui/fixture_expansion_lint_arguments.rs:10:33
+   |
+10 | #[allow_fixture_expansion_lints(unexpected)]
+   |                                 ^^^^^^^^^^

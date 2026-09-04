@@ -83,31 +83,26 @@ use staging_failure::staging_failure_world;
 mod staging_failure {
     //! Unix-only world and steps for staging permission failures.
 
-    use std::{fs, os::unix::fs::PermissionsExt};
-
+    use cap_std::{
+        ambient_authority,
+        fs::{Dir, OpenOptions, PermissionsExt},
+    };
     use tempfile::TempDir;
     use whitaker_installer::error::InstallerError;
 
     use super::*;
 
+    const STAGING_SUBDIRECTORY: &str = "nightly-2026-05-28/release";
+
     /// State shared by the unwritable-staging-directory scenario steps.
+    #[derive(Default)]
     pub struct StagingFailureWorld {
         stager: RefCell<Option<Stager>>,
         result: RefCell<Option<Result<(), InstallerError>>>,
         skip_assertions: Cell<bool>,
         // Keep the temporary directory alive for the lifetime of the test.
         temp_dir: RefCell<Option<TempDir>>,
-    }
-
-    impl Default for StagingFailureWorld {
-        fn default() -> Self {
-            Self {
-                stager: RefCell::new(None),
-                result: RefCell::new(None),
-                skip_assertions: Cell::new(false),
-                temp_dir: RefCell::new(None),
-            }
-        }
+        root_dir: RefCell<Option<Dir>>,
     }
 
     /// Creates the world used by the unwritable-staging-directory scenario.
@@ -126,18 +121,22 @@ mod staging_failure {
         let temp_dir =
             TempDir::new().map_err(|error| format!("failed to create temp dir: {error}"))?;
         let dir_path = temp_dir.path();
+        let root_dir = Dir::open_ambient_dir(dir_path, ambient_authority())
+            .map_err(|error| format!("failed to open temp dir: {error}"))?;
 
         // Create the nested staging path structure that Stager expects.
-        let staging_path = dir_path.join("nightly-2026-05-28").join("release");
-        fs::create_dir_all(&staging_path)
+        root_dir
+            .create_dir_all(STAGING_SUBDIRECTORY)
             .map_err(|error| format!("failed to create staging path: {error}"))?;
 
         // Make the directory read-only (no write permission).
-        let mut perms = fs::metadata(&staging_path)
+        let mut perms = root_dir
+            .metadata(STAGING_SUBDIRECTORY)
             .map_err(|error| format!("failed to get metadata: {error}"))?
             .permissions();
         perms.set_mode(0o555); // readable/traversable, not writable
-        fs::set_permissions(&staging_path, perms)
+        root_dir
+            .set_permissions(STAGING_SUBDIRECTORY, perms)
             .map_err(|error| format!("failed to set permissions: {error}"))?;
 
         let utf8_path = Utf8PathBuf::try_from(dir_path.to_path_buf())
@@ -146,6 +145,7 @@ mod staging_failure {
 
         staging_failure_world.stager.replace(Some(stager));
         staging_failure_world.temp_dir.replace(Some(temp_dir));
+        staging_failure_world.root_dir.replace(Some(root_dir));
         Ok(())
     }
 
@@ -162,19 +162,18 @@ mod staging_failure {
         // Best-effort probe to avoid flakes on filesystems that ignore directory
         // permissions. If we can unexpectedly create a file in the staging
         // directory, mark assertions as skipped for this scenario.
-        let probe_path = stager.staging_path().as_std_path().join("write-probe");
-        if let Ok(file) = std::fs::OpenOptions::new()
-            .create_new(true)
-            .write(true)
-            .open(&probe_path)
+        let root_dir_slot = staging_failure_world.root_dir.borrow();
+        let root_dir = root_dir_slot
+            .as_ref()
+            .ok_or_else(|| String::from("staging setup must retain its temp directory"))?;
+        let probe_path = format!("{STAGING_SUBDIRECTORY}/write-probe");
+        if let Ok(file) =
+            root_dir.open_with(&probe_path, OpenOptions::new().create_new(true).write(true))
         {
             drop(file);
-            std::fs::remove_file(&probe_path).map_err(|error| {
-                format!(
-                    "failed to remove write probe {}: {error}",
-                    probe_path.display()
-                )
-            })?;
+            root_dir
+                .remove_file(&probe_path)
+                .map_err(|error| format!("failed to remove write probe: {error}"))?;
             staging_failure_world.skip_assertions.set(true);
         } else {
             // Expected: directory is not writable, continue.
