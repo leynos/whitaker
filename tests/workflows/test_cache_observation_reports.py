@@ -176,8 +176,10 @@ def test_headroom_covers_the_archive_staging_directory(tmp_path: Path) -> None:
     staging.mkdir()
     _, summary = _run_observations(tmp_path, "headroom", RUNNER_TEMP=str(staging))
 
-    filesystem_lines = [line for line in summary.splitlines() if line.startswith("/")]
-    assert len(filesystem_lines) >= 2, (
+    # `df` names some filesystems `overlay` or `tmpfs`, so counting its
+    # headers is the only device-independent way to prove two reports.
+    headers = [line for line in summary.splitlines() if line.startswith("Filesystem")]
+    assert len(headers) == 2, (
         f"both the root volume and RUNNER_TEMP must be reported, got {summary!r}"
     )
 

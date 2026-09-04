@@ -495,12 +495,18 @@ the merge of #393, died with `No space left on device` between two save steps on
 failure was capacity at save time rather than anything about the work.
 
 Two changes keep that from recurring, and neither needs a larger runner. Every
-job that saves now discards its scratch tree first: the coverage lanes drop
-`target/llvm-cov-target` once `cargo llvm-cov` has written `lcov.info`, and
-`linux-full` drops `target` after its last consumer. No job caches a target
-tree, so both are pure scratch by that point, and dropping them also gives the
-doctest build its headroom. Both discards run under `if: always()` so a later
-failure cannot leave the disk full.
+job that saves now discards its scratch tree first, with no exemptions: the
+coverage lanes drop `target/llvm-cov-target` once `cargo llvm-cov` has written
+`lcov.info`, and `linux-full` and `windows-compat` drop `target` after their
+last consumer. No job caches a target tree, so all three are pure scratch by
+that point, and dropping the instrumented tree also gives the doctest build its
+headroom. Every discard runs under `if: always()` so a later failure cannot
+leave the disk full.
+
+`windows-compat` stages a smaller archive onto a larger GitHub-hosted disk and
+has never run out of space, but it is covered anyway. The rule follows from how
+`actions/cache/save` stages an archive, which does not vary by platform, and a
+contract with one exemption invites a second.
 
 Free disk is then recorded rather than assumed.
 `scripts/record-cache-observations.sh` prints `df -h` for the root volume and

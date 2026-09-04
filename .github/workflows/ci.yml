@@ -584,6 +584,13 @@ jobs:
       - name: Installer release dry run
         run: make release-installer-dry-run
 
+      - name: Discard the build target tree
+        # The last consumer of `target` has run. This lane saves a smaller
+        # archive onto a larger disk than the Ubicloud lanes, but the rule is
+        # the same for every saving job rather than one with exceptions.
+        if: always()
+        run: rm -rf target
+
       - name: Record sccache effectiveness
         if: ${{ always() }}
         run: bash scripts/record-sccache-effectiveness.sh
@@ -596,6 +603,10 @@ jobs:
           path: sccache-stats.json
           if-no-files-found: error
           retention-days: 14
+
+      - name: Record disk headroom before the saves
+        if: always()
+        run: bash scripts/record-cache-observations.sh headroom
 
       # Windows archives land in GitHub's cache rather than Ubicloud's, so the
       # key carries `runner.os` and `runner.arch` and this lane is the only

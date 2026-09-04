@@ -108,11 +108,14 @@ def test_cache_restores_precede_every_expensive_install_or_build() -> None:
             )
 
 
-#: Steps that discard a scratch tree, mapped to the job that owns them. A job
-#: with saves must free its scratch before the first archive is staged.
-SCRATCH_DISCARD_STEPS = {
+#: Steps that discard a scratch tree, mapped to the job that owns them. Every
+#: job with saves must free its scratch before the first archive is staged,
+#: with no exemptions: the rule is about how `actions/cache/save` stages an
+#: archive, which does not vary by platform or by disk size.
+SCRATCH_DISCARD_STEPS: dict[str, str] = {
     "coverage-upload": "Discard the instrumented target tree",
     "linux-full": "Discard the build target tree",
+    "windows-compat": "Discard the build target tree",
 }
 
 
@@ -141,11 +144,12 @@ def test_scratch_trees_are_discarded_before_any_save() -> None:
 
 def test_every_saving_job_discards_scratch_first() -> None:
     """No job may gain save steps without also freeing its scratch tree."""
-    saving = {job_name for job_name in CACHING_JOBS if save_steps(load_job(job_name))}
-    unguarded = sorted(saving - set(SCRATCH_DISCARD_STEPS) - {"windows-compat"})
+    saving: set[str] = {
+        job_name for job_name in CACHING_JOBS if save_steps(load_job(job_name))
+    }
+    unguarded: list[str] = sorted(saving - set(SCRATCH_DISCARD_STEPS))
     assert not unguarded, (
-        "these jobs save archives without first discarding a scratch tree: "
-        f"{unguarded}"
+        f"these jobs save archives without first discarding a scratch tree: {unguarded}"
     )
 
 
