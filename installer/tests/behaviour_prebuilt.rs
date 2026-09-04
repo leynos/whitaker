@@ -93,24 +93,16 @@ impl ArtefactDownloader for StubDownloader {
             .unwrap_or_else(PoisonError::into_inner)
             .take()
             .unwrap_or_default();
-        match behaviour {
-            ArchiveBehaviour::CorrectChecksum => {
-                let destination = Utf8Path::from_path(dest).ok_or_else(|| {
-                    DownloadError::Io(std::io::Error::other(
-                        "archive destination path must be valid UTF-8",
-                    ))
-                })?;
-                write_file(destination, FAKE_ARCHIVE).map_err(DownloadError::Io)
-            }
-            ArchiveBehaviour::WrongChecksum => {
-                let destination = Utf8Path::from_path(dest).ok_or_else(|| {
-                    DownloadError::Io(std::io::Error::other(
-                        "archive destination path must be valid UTF-8",
-                    ))
-                })?;
-                write_file(destination, b"tampered content").map_err(DownloadError::Io)
-            }
-        }
+        let archive_contents = match behaviour {
+            ArchiveBehaviour::CorrectChecksum => FAKE_ARCHIVE,
+            ArchiveBehaviour::WrongChecksum => b"tampered content",
+        };
+        let destination = Utf8Path::from_path(dest).ok_or_else(|| {
+            DownloadError::Io(std::io::Error::other(
+                "archive destination path must be valid UTF-8",
+            ))
+        })?;
+        write_file(destination, archive_contents).map_err(DownloadError::Io)
     }
 }
 
@@ -252,7 +244,7 @@ fn when_prebuilt_attempted(world: &mut PrebuiltWorld) -> Result<(), String> {
     let staging_root = world
         .staging_root
         .as_ref()
-        .ok_or_else(|| String::from("staging_root set"))?;
+        .ok_or_else(|| String::from("scenario fixture must provide a staging root"))?;
     let destination_dir = if world.force_destination_conflict {
         let occupied = staging_root.join("occupied");
         write_file(&occupied, b"occupied file")
@@ -276,7 +268,7 @@ fn when_prebuilt_attempted(world: &mut PrebuiltWorld) -> Result<(), String> {
     let manifest_behaviour = world
         .manifest_behaviour
         .take()
-        .ok_or_else(|| String::from("manifest_behaviour set"))?;
+        .ok_or_else(|| String::from("scenario must configure a manifest response"))?;
     let archive_behaviour = world
         .archive_behaviour
         .take()
@@ -307,7 +299,7 @@ fn prebuilt_result(world: &PrebuiltWorld) -> Result<&PrebuiltResult, String> {
     world
         .result
         .as_ref()
-        .ok_or_else(|| String::from("result set"))
+        .ok_or_else(|| String::from("prebuilt download attempt must run before assertions"))
 }
 
 #[then("the prebuilt result is success")]

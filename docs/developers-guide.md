@@ -214,6 +214,36 @@ This split keeps ordinary UI fixtures simple while still letting regression
 tests cover `rustc --test`, file-backed modules, per-case configuration, and
 real proc-macro crates where needed.
 
+### Installer toolchain scenarios
+
+The installer toolchain scenarios in `installer/tests/behaviour_toolchain.rs`
+share their step implementations from `installer/tests/toolchain_steps`. The
+`ToolchainWorld` state is populated in scenario order: a `given` setup step
+records CLI arguments and its temporary target directory, install-oriented
+setup also records the pinned channel and isolated `RUSTUP_HOME` and
+`CARGO_HOME`, the `when` step captures command output, and `then` steps inspect
+that output and the resulting installation. Step authors must preserve this
+`given` → `when` → `then` order because each phase consumes state established
+by the preceding phase.
+
+Use the feature-specific setup helpers rather than assembling this state in a
+scenario binding. `setup_dry_run_scenario` prepares detection cases,
+`setup_install_scenario` creates isolated rustup and Cargo homes for an install,
+`setup_failure_scenario` selects the synthetic `FAKE_TOOLCHAIN`, and
+`setup_auto_install_scenario` adds the auto-install options used by the success
+cases. These helpers allocate a temporary target directory and the command
+runner removes `RUSTUP_TOOLCHAIN` and sets `RUSTUP_AUTO_INSTALL=0`, so host
+toolchain settings cannot affect a scenario. Install cases also use
+`--skip-wrapper` where applicable to avoid writing to the developer's wrapper
+directory.
+
+Scenarios that require the pinned toolchain skip when it is not installed.
+Auto-install scenarios skip on Windows because downloads are too slow for the
+behaviour suite. A skip sets `ToolchainWorld::should_skip_assertions`, allowing
+later assertion steps to return without inspecting missing output, and is
+reported through `rstest_bdd::skip!`. Keep these skip rules in the shared setup
+helpers so all scenario variants retain the same isolation and lifecycle.
+
 ### Test profiles
 
 By default, `make test` excludes slow installer integration tests
