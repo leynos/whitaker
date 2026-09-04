@@ -14,7 +14,10 @@ use crate::{
     test_support::env_test_guard,
 };
 use camino::Utf8Path;
-use cap_std::{ambient_authority, fs::PermissionsExt, fs_utf8::Dir};
+use cap_std::{ambient_authority, fs_utf8::Dir};
+
+#[cfg(unix)]
+use cap_std::fs::PermissionsExt;
 
 /// Repository installer test double that always reports a missing archive.
 pub struct AlwaysNotFoundRepositoryInstaller;
