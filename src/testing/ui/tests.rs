@@ -95,6 +95,7 @@ fn propagates_runner_failures() {
 
 #[test]
 fn run_ui_test_panics_with_context_from_runner_failure() {
+    let _serial_guard = runner_env_guard_test_lock();
     let panic = std::panic::catch_unwind(|| {
         run_ui_test("lint", "ui", |_, _| {
             Err(String::from("known runner failure"))

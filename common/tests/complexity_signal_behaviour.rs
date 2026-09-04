@@ -2,6 +2,7 @@
 
 use std::cell::{Cell, RefCell};
 
+use proptest::prelude::*;
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use whitaker_common::complexity_signal::{
@@ -151,6 +152,16 @@ const fn ulp_distance(left: f64, right: f64) -> Option<u64> {
     Some(monotonic_bits(left).abs_diff(monotonic_bits(right)))
 }
 
+/// Reconstructs a float from the ordering representation used for ULP tests.
+const fn f64_from_monotonic_bits(bits: u64) -> f64 {
+    let raw_bits = if (bits & (1 << 63)) == 0 {
+        !bits
+    } else {
+        bits & !(1 << 63)
+    };
+    f64::from_bits(raw_bits)
+}
+
 /// Asserts that two floating-point vectors are equal within a tiny tolerance.
 ///
 /// This helper is intended for deterministic test values that may experience
@@ -192,6 +203,57 @@ fn approx_vector_rejects_finite_value_for_infinite_expectation() {
 #[should_panic(expected = "expected element 0 to be")]
 fn approx_vector_rejects_infinite_value_for_finite_expectation() {
     assert_vec_approx_eq(&[f64::INFINITY], &[f64::MAX]);
+}
+
+proptest! {
+    #[test]
+    fn monotonic_bits_preserve_finite_numeric_order(
+        left_bits in any::<u64>(),
+        right_bits in any::<u64>(),
+    ) {
+        let left = f64::from_bits(left_bits);
+        let right = f64::from_bits(right_bits);
+        prop_assume!(left.is_finite() && right.is_finite() && left != right);
+
+        prop_assert_eq!(left < right, monotonic_bits(left) < monotonic_bits(right));
+        prop_assert_eq!(left > right, monotonic_bits(left) > monotonic_bits(right));
+    }
+
+    #[test]
+    fn ulp_distance_is_identity_and_symmetric_for_finite_values(
+        left_bits in any::<u64>(),
+        right_bits in any::<u64>(),
+    ) {
+        let left = f64::from_bits(left_bits);
+        let right = f64::from_bits(right_bits);
+        prop_assume!(left.is_finite() && right.is_finite());
+
+        prop_assert_eq!(ulp_distance(left, left), Some(0));
+        prop_assert_eq!(ulp_distance(left, right), ulp_distance(right, left));
+    }
+
+    #[test]
+    fn adjacent_finite_representations_are_one_ulp_apart(bits in 0_u64..u64::MAX) {
+        let left = f64::from_bits(bits);
+        let right = f64::from_bits(bits + 1);
+        prop_assume!(left.is_finite() && right.is_finite());
+
+        prop_assert_eq!(ulp_distance(left, right), Some(1));
+    }
+
+    #[test]
+    fn vector_approximation_accepts_finite_values_within_the_ulp_tolerance(
+        ordered_bits in any::<u64>(),
+        distance in 0_u64..=MAX_ULP_DISTANCE,
+    ) {
+        prop_assume!(ordered_bits <= u64::MAX - distance);
+        let expected_bits = ordered_bits + distance;
+        let actual = f64_from_monotonic_bits(ordered_bits);
+        let expected = f64_from_monotonic_bits(expected_bits);
+        prop_assume!(actual.is_finite() && expected.is_finite());
+
+        assert_vec_approx_eq(&[actual], &[expected]);
+    }
 }
 
 #[given("a function spanning lines {start} to {end}")]
