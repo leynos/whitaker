@@ -191,11 +191,8 @@ fn build_stub_executor(world: &DependencyBinaryWorld, tool: &str) -> Result<Stub
         world.repository_behaviour,
         Some(RepositoryInstallerBehaviour::SuccessWithFailedVerification)
     );
-    let repository_verification = match (expect_repository_verification, should_verification_fail) {
-        (false, _) => RepositoryVerification::Skip,
-        (true, true) => RepositoryVerification::Fails,
-        (true, false) => RepositoryVerification::Succeeds,
-    };
+    let repository_verification =
+        repository_verification_for(expect_repository_verification, should_verification_fail);
     Ok(StubExecutor::new(expected_calls(
         tool,
         &ExpectedCallConfig {
@@ -209,13 +206,22 @@ fn build_stub_executor(world: &DependencyBinaryWorld, tool: &str) -> Result<Stub
     )?))
 }
 
+/// Selects the repository verification outcome required by the scenario.
+const fn repository_verification_for(
+    expects_repository_verification: bool,
+    should_verification_fail: bool,
+) -> RepositoryVerification {
+    match (expects_repository_verification, should_verification_fail) {
+        (false, _) => RepositoryVerification::Skip,
+        (true, true) => RepositoryVerification::Fails,
+        (true, false) => RepositoryVerification::Succeeds,
+    }
+}
+
 /// Stages a runnable `dylint-link` fake in the executables directory so PATH
 /// lookups succeed.
 fn stage_dylint_link_on_path(bin_dir: &Path) -> Result<(), String> {
-    #[cfg(windows)]
-    let dylint_link_path = bin_dir.join("dylint-link.cmd");
-    #[cfg(not(windows))]
-    let dylint_link_path = bin_dir.join("dylint-link");
+    let dylint_link_path = path_binary_location(bin_dir, "dylint-link");
     write_fake_binary(&dylint_link_path, true)
         .map_err(|error| format!("stage dylint-link fake: {error}"))?;
     Ok(())

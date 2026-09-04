@@ -207,18 +207,19 @@ fn is_binary_on_path_handles_windows_executable_suffixes(
     #[case] binary_name: &str,
     #[case] dir_index: usize,
     #[case] expected: bool,
-) {
+) -> std::io::Result<()> {
     with_fake_path(
         |directories| write_fake_binary(&directories[dir_index].join(binary_name), true),
         || {
             assert_eq!(is_binary_on_path(binary_name), expected);
         },
-    );
+    )?;
+    Ok(())
 }
 
 #[cfg(windows)]
 #[test]
-fn check_dylint_tools_detects_dylint_link_via_pathext_suffix() {
+fn check_dylint_tools_detects_dylint_link_via_pathext_suffix() -> std::io::Result<()> {
     with_fake_path(
         |directories| {
             write_fake_binary_with_status(&directories[0].join("dylint-link.cmd"), true, 0)
@@ -243,5 +244,6 @@ fn check_dylint_tools_detects_dylint_link_via_pathext_suffix() {
                 executor.assert_finished();
             });
         },
-    );
+    )?;
+    Ok(())
 }
