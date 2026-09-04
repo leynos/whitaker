@@ -276,7 +276,8 @@ fn install_dylint_tools_skips_dylint_link_when_cargo_dylint_source_build_install
             install_options(&repository_installer, false),
         )
         .expect("cargo-dylint source build should satisfy both tools");
-    });
+    })
+    .expect("stage fake dylint-link on PATH");
 
     let output = String::from_utf8(stderr).expect("stderr should be UTF-8");
     assert!(output.contains("Installed cargo-dylint from source with cargo install."));
@@ -296,7 +297,7 @@ fn staged_unrunnable_dylint_link() -> std::io::Result<(tempfile::TempDir, PathBu
         dir.path(),
         "dylint-link",
     );
-    crate::test_utils::dependency_binary_helpers::write_fake_binary_with_status(&path, true, 1);
+    crate::test_utils::dependency_binary_helpers::write_fake_binary_with_status(&path, true, 1)?;
     Ok((dir, path))
 }
 
@@ -372,7 +373,8 @@ fn install_dylint_tools_falls_back_when_repository_dylint_link_install_fails() {
             install_options(&repository_installer, false),
         )
         .expect("binstall fallback should succeed");
-    });
+    })
+    .expect("stage fake dylint-link on PATH");
 
     let output = String::from_utf8(stderr).expect("stderr should be UTF-8");
     assert!(output.contains("Repository install for dylint-link unavailable"));

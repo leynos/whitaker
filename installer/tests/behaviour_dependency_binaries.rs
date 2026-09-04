@@ -70,7 +70,8 @@ impl DependencyBinaryInstaller for StubRepositoryInstaller {
                             &bin_dir,
                             &format!("{}-{}", dependency.package(), target),
                         );
-                        write_fake_binary(&installed_path, true);
+                        write_fake_binary(&installed_path, true)
+                            .map_err(DependencyBinaryInstallError::Io)?;
                         Ok(installed_path)
                     },
                 )
@@ -215,7 +216,8 @@ fn stage_dylint_link_on_path(bin_dir: &Path) -> Result<(), String> {
     let dylint_link_path = bin_dir.join("dylint-link.cmd");
     #[cfg(not(windows))]
     let dylint_link_path = bin_dir.join("dylint-link");
-    write_fake_binary(&dylint_link_path, true);
+    write_fake_binary(&dylint_link_path, true)
+        .map_err(|error| format!("stage dylint-link fake: {error}"))?;
     Ok(())
 }
 

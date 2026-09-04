@@ -121,7 +121,9 @@ fn resolve_requested_crates_rejects_unknown_lints() {
 }
 
 #[rstest]
-fn ensure_dylint_tools_skips_install_when_installed(test_base_dirs: TestBaseDirs) {
+fn ensure_dylint_tools_skips_install_when_installed(
+    test_base_dirs: TestBaseDirs,
+) -> std::io::Result<()> {
     with_fake_binary_on_path("dylint-link", || {
         let executor = StubExecutor::new(vec![
             cargo_dylint_check().expect("cargo-dylint dependency version should resolve"),
@@ -138,7 +140,8 @@ fn ensure_dylint_tools_skips_install_when_installed(test_base_dirs: TestBaseDirs
         assert!(result.is_ok());
         assert!(stderr.is_empty());
         executor.assert_finished();
-    });
+    })?;
+    Ok(())
 }
 
 #[rstest]
@@ -153,7 +156,7 @@ fn ensure_dylint_tools_installs_missing_tools(
     #[case] quiet: bool,
     #[case] expected_start: &str,
     #[case] expected_end: &str,
-) {
+) -> std::io::Result<()> {
     with_fake_binary_on_path("dylint-link", || {
         let executor = StubExecutor::new(vec![
             ExpectedCall {
@@ -200,11 +203,14 @@ fn ensure_dylint_tools_installs_missing_tools(
             );
         }
         executor.assert_finished();
-    });
+    })?;
+    Ok(())
 }
 
 #[rstest]
-fn ensure_dylint_tools_propagates_install_failures(test_base_dirs: TestBaseDirs) {
+fn ensure_dylint_tools_propagates_install_failures(
+    test_base_dirs: TestBaseDirs,
+) -> std::io::Result<()> {
     with_fake_binary_on_path("dylint-link", || {
         let executor = StubExecutor::new(vec![
             ExpectedCall {
@@ -240,7 +246,8 @@ fn ensure_dylint_tools_propagates_install_failures(test_base_dirs: TestBaseDirs)
                     && message == "cargo install failed"
         ));
         executor.assert_finished();
-    });
+    })?;
+    Ok(())
 }
 
 #[derive(Debug, Clone)]
