@@ -3415,7 +3415,7 @@ dependencies = [
 
 [[package]]
 name = "whitaker-common"
-version = "0.2.8"
+version = "0.2.7"
 dependencies = [
  "camino",
  "fluent-templates",
@@ -3435,7 +3435,7 @@ dependencies = [
 
 [[package]]
 name = "whitaker-installer"
-version = "0.2.8"
+version = "0.2.7"
 dependencies = [
  "camino",
  "cap-std 4.0.3",
