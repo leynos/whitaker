@@ -29,3 +29,15 @@ fn scenario_dry_run_rejects_experimental_lint_without_opt_in(cli_world: CliWorld
 fn scenario_dry_run_accepts_experimental_lint_with_opt_in(cli_world: CliWorld) {
     let _ = cli_world;
 }
+
+// Appended at the end of the feature file so the index-based bindings above
+// keep their meaning.
+#[scenario(path = "tests/features/installer.feature", index = 23)]
+fn scenario_dry_run_reports_the_pinned_suite(cli_world: CliWorld) {
+    let _ = cli_world;
+}
+
+#[scenario(path = "tests/features/installer.feature", index = 24)]
+fn scenario_hostile_suite_ref_is_refused(cli_world: CliWorld) {
+    let _ = cli_world;
+}

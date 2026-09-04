@@ -4,6 +4,7 @@
 //! from the main entrypoint to keep the binary small and focused on
 //! orchestration.
 
+use crate::artefact::suite_ref::SuiteRef;
 use crate::crate_name::CrateName;
 use crate::resolution::EXPERIMENTAL_LINT_CRATES;
 use camino::Utf8PathBuf;
@@ -133,6 +134,17 @@ pub struct InstallArgs {
     #[arg(long)]
     pub no_update: bool,
 
+    /// Build the lint suite from this git reference instead of the branch tip.
+    ///
+    /// Accepts a tag, a branch or a commit. Without it the suite comes from
+    /// whatever is at the default branch tip, so a change there alters lint
+    /// results with no commit in the consuming repository.
+    ///
+    /// A pinned suite is built from source: prebuilt artefacts are published
+    /// only for the tip, so pinning trades install time for reproducibility.
+    #[arg(long = "suite-version", alias = "suite-ref", value_name = "REF")]
+    pub suite_version: Option<SuiteRef>,
+
     /// Skip prebuilt artefact download and build from source.
     #[arg(long = "build-only")]
     pub is_build_only: bool,
@@ -218,6 +230,7 @@ impl Default for InstallArgs {
             skip_deps: false,
             skip_wrapper: false,
             no_update: false,
+            suite_version: None,
             is_build_only: false,
         }
     }

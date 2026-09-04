@@ -73,6 +73,22 @@ whitaker-installer list --json
 whitaker-installer --dry-run
 ```
 
+### Pin the lint suite
+
+```bash
+whitaker-installer --suite-version v0.2.7
+```
+
+Without a pin the suite is built from the default branch tip, so a change there
+alters lint results with no commit in the consuming repository. A pin accepts a
+tag, a branch or a commit.
+
+A pinned suite is built from source, because prebuilt lint libraries are
+published only for the branch tip, and a pin cannot be applied from inside a
+Whitaker checkout, because checking out a reference there would move the
+working tree. See the
+[users' guide](../docs/users-guide.md#pinning-the-lint-suite).
+
 ## Available Lints
 
 Whitaker lints are divided into two categories:

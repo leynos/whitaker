@@ -16,15 +16,37 @@ use support::{
     assert_cli_exits_successfully, assert_cli_exits_with_error, assert_dry_run_output_is_shown,
     assert_experimental_lint_dry_run_output_is_shown,
     assert_experimental_lint_opt_in_message_is_shown, assert_installation_succeeds_or_is_skipped,
+    assert_pinned_suite_is_named, assert_rejected_suite_ref_is_named,
     assert_suite_library_is_staged, assert_unknown_lint_message_is_shown,
     configure_dry_run_experimental_lint, configure_dry_run_experimental_lint_with_opt_in,
-    configure_dry_run_unknown_lint, configure_dry_run_with_target_dir, configure_suite_install,
+    configure_dry_run_unknown_lint, configure_dry_run_with_pinned_suite,
+    configure_dry_run_with_target_dir, configure_hostile_suite_ref, configure_suite_install,
     is_toolchain_installed, pinned_toolchain_channel, run_installer_cli, workspace_root,
 };
 
 #[given("the installer is invoked with dry-run and a target directory")]
 fn given_dry_run_with_target_dir(cli_world: &CliWorld) {
     configure_dry_run_with_target_dir(cli_world);
+}
+
+#[given("the installer is invoked with dry-run and a pinned suite")]
+fn given_dry_run_with_pinned_suite(cli_world: &CliWorld) {
+    configure_dry_run_with_pinned_suite(cli_world);
+}
+
+#[given("the installer is invoked with a suite reference git would reject")]
+fn given_hostile_suite_ref(cli_world: &CliWorld) {
+    configure_hostile_suite_ref(cli_world);
+}
+
+#[then("the pinned suite is named in the dry-run output")]
+fn then_pinned_suite_is_named(cli_world: &CliWorld) {
+    assert_pinned_suite_is_named(cli_world);
+}
+
+#[then("the rejected suite reference is named")]
+fn then_rejected_suite_ref_is_named(cli_world: &CliWorld) {
+    assert_rejected_suite_ref_is_named(cli_world);
 }
 
 #[given("the installer is invoked with dry-run and an unknown lint")]

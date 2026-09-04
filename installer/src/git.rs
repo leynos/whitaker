@@ -4,6 +4,7 @@
 //! including initial cloning and subsequent updates. Operations have a
 //! configurable timeout to prevent hangs on network issues.
 
+use crate::artefact::suite_ref::SuiteRef;
 use crate::error::{InstallerError, Result};
 use crate::workspace::WHITAKER_REPO_URL;
 use camino::Utf8Path;
@@ -60,6 +61,54 @@ pub fn update_repository(repo: &Utf8Path) -> Result<()> {
         let stderr = String::from_utf8_lossy(&output.stderr);
         return Err(InstallerError::Git {
             operation: "pull",
+            message: stderr.trim().to_owned(),
+        });
+    }
+
+    Ok(())
+}
+
+/// Checks out a reference in an existing Whitaker clone.
+///
+/// Fetches first, so that a reference published after the clone was made is
+/// available. Tags are fetched explicitly because a clone made before a tag
+/// existed does not learn of it from a plain fetch of the default branch.
+///
+/// The reference is a [`SuiteRef`], which has already refused anything git
+/// would reject and anything that would reach the command line as an option
+/// rather than as a reference.
+///
+/// # Errors
+///
+/// Returns `InstallerError::Git` if the fetch or the checkout fails, or if
+/// either times out.
+pub fn checkout_ref(repo: &Utf8Path, reference: &SuiteRef) -> Result<()> {
+    let fetch = run_git_with_timeout(
+        &["fetch", "--tags", "--force", "origin"],
+        Some(repo),
+        "fetch",
+    )?;
+    if !fetch.status.success() {
+        let stderr = String::from_utf8_lossy(&fetch.stderr);
+        return Err(InstallerError::Git {
+            operation: "fetch",
+            message: stderr.trim().to_owned(),
+        });
+    }
+
+    // `--detach` because the checkout is a build input rather than somewhere
+    // work happens: landing on a local branch would make a later `pull` in
+    // this clone move the pinned suite underneath the caller.
+    let output = run_git_with_timeout(
+        &["checkout", "--detach", "--force", reference.as_str()],
+        Some(repo),
+        "checkout",
+    )?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(InstallerError::Git {
+            operation: "checkout",
             message: stderr.trim().to_owned(),
         });
     }

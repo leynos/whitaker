@@ -105,6 +105,19 @@ pub enum InstallerError {
         reason: String,
     },
 
+    /// A suite pin was requested from inside a Whitaker working tree.
+    #[error(
+        "cannot pin the suite to \"{reference}\" from inside a Whitaker workspace at {path}; \
+         checking out a reference here would move your own working tree. \
+         Run the installer from another directory, or check out the reference yourself."
+    )]
+    SuitePinInWorkspace {
+        /// The requested reference.
+        reference: String,
+        /// The workspace that would have been moved.
+        path: String,
+    },
+
     /// A Cargo.toml file could not be parsed during workspace detection.
     #[error("invalid Cargo.toml at {path}: {reason}")]
     InvalidCargoToml {
@@ -230,6 +243,10 @@ impl Clone for InstallerError {
             }
             Self::WorkspaceNotFound { reason } => Self::WorkspaceNotFound {
                 reason: reason.clone(),
+            },
+            Self::SuitePinInWorkspace { reference, path } => Self::SuitePinInWorkspace {
+                reference: reference.clone(),
+                path: path.clone(),
             },
             Self::InvalidCargoToml { path, reason } => Self::InvalidCargoToml {
                 path: path.clone(),

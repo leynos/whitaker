@@ -234,6 +234,74 @@ pub(super) fn assert_cli_exits_successfully(cli_world: &CliWorld) {
     assert_exit_status(cli_world, true);
 }
 
+/// The reference used by the pinning scenarios.
+///
+/// A tag that exists upstream, so the scenario reads as a realistic pin, and
+/// a dry run never resolves it: nothing is fetched or checked out.
+pub(super) const PINNED_SUITE_REF: &str = "v0.2.7";
+
+/// A reference `git` itself would refuse, and which must never reach it.
+///
+/// The leading dash is the case that matters: passed through, `git checkout`
+/// would read it as an option rather than as a reference.
+pub(super) const HOSTILE_SUITE_REF: &str = "--upload-pack=touch /tmp/whitaker-pwned";
+
+pub(super) fn configure_dry_run_with_pinned_suite(cli_world: &CliWorld) {
+    let Some(channel) = ensure_required_toolchain_available(cli_world) else {
+        return;
+    };
+
+    let target_dir = setup_temp_dir(cli_world);
+    cli_world.args.replace(vec![
+        "--dry-run".to_owned(),
+        "--toolchain".to_owned(),
+        channel,
+        "--target-dir".to_owned(),
+        target_dir,
+        "--suite-version".to_owned(),
+        PINNED_SUITE_REF.to_owned(),
+    ]);
+}
+
+pub(super) fn configure_hostile_suite_ref(cli_world: &CliWorld) {
+    // Deliberately no toolchain guard: the reference is refused while parsing
+    // arguments, long before anything needs a toolchain, and the scenario is
+    // only meaningful if it runs everywhere.
+    cli_world.args.replace(vec![
+        "--dry-run".to_owned(),
+        format!("--suite-version={HOSTILE_SUITE_REF}"),
+    ]);
+}
+
+pub(super) fn assert_pinned_suite_is_named(cli_world: &CliWorld) {
+    if cli_world.skip_assertions.get() {
+        return;
+    }
+
+    let output = get_output(cli_world);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert!(
+        stderr.contains(&format!("Suite: {PINNED_SUITE_REF}")),
+        "dry run should name the pinned suite, got: {stderr}"
+    );
+}
+
+pub(super) fn assert_rejected_suite_ref_is_named(cli_world: &CliWorld) {
+    let output = get_output(cli_world);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert!(
+        stderr.contains("suite reference"),
+        "the error should say what was wrong, got: {stderr}"
+    );
+    // The value is echoed so the caller can see which argument was refused.
+    assert!(
+        stderr.contains("--upload-pack"),
+        "the error should name the value, got: {stderr}"
+    );
+}
+
 pub(super) fn assert_dry_run_output_is_shown(cli_world: &CliWorld) {
     if cli_world.skip_assertions.get() {
         return;

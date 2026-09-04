@@ -16,6 +16,7 @@
 //! - [`packaging_error`] — Error types for packaging operations.
 //! - [`schema_version`] — Manifest version newtype (`SchemaVersion`).
 //! - [`sha256_digest`] — SHA-256 digest newtype (`Sha256Digest`).
+//! - [`suite_ref`] — Lint suite git reference newtype (`SuiteRef`).
 //! - [`target`] — Target triple validation (`TargetTriple`).
 //! - [`toolchain_channel`] — Toolchain channel newtype (`ToolchainChannel`).
 //! - [`download`] — Artefact download trait and HTTP implementation.
@@ -34,6 +35,7 @@ pub mod packaging;
 pub mod packaging_error;
 pub mod schema_version;
 pub mod sha256_digest;
+pub mod suite_ref;
 pub mod target;
 pub mod toolchain_channel;
 pub mod verification;

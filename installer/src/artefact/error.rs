@@ -33,6 +33,15 @@ pub enum ArtefactError {
         reason: String,
     },
 
+    /// A suite reference is not one git would accept.
+    #[error("invalid suite reference \"{value}\": {reason}")]
+    InvalidSuiteRef {
+        /// The rejected reference string.
+        value: String,
+        /// Description of the validation failure.
+        reason: String,
+    },
+
     /// A schema version is outside the accepted range.
     #[error("unsupported schema version {value}; current maximum is {max}")]
     UnsupportedSchemaVersion {

@@ -3,6 +3,7 @@
 //! This module provides utilities for detecting whether the current directory
 //! is a Whitaker workspace and for resolving platform-specific clone locations.
 
+use crate::artefact::suite_ref::SuiteRef;
 use crate::dirs::BaseDirs;
 use crate::error::{InstallerError, Result};
 use camino::{Utf8Path, Utf8PathBuf};
@@ -98,33 +99,125 @@ pub fn decide_workspace_action(
     }
 }
 
+/// How the workspace should be established for one install.
+///
+/// A pair rather than two arguments because the second only means anything
+/// alongside the first: a pin makes the update question moot, since the
+/// reference is fetched and checked out either way.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct WorkspacePlan {
+    /// Whether an existing clone should be updated to the branch tip.
+    pub should_update: bool,
+    /// The reference to build the lint suite from, if the caller pinned one.
+    pub suite_ref: Option<SuiteRef>,
+}
+
+impl WorkspacePlan {
+    /// A plan that updates an existing clone and pins nothing.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use whitaker_installer::workspace::WorkspacePlan;
+    ///
+    /// let plan = WorkspacePlan::updating(true);
+    /// assert!(plan.should_update);
+    /// assert!(plan.suite_ref.is_none());
+    /// ```
+    #[must_use]
+    pub fn updating(should_update: bool) -> Self {
+        Self {
+            should_update,
+            suite_ref: None,
+        }
+    }
+}
+
 /// Ensures a Whitaker workspace is available, cloning if necessary.
 ///
 /// If the current directory is already a Whitaker workspace, returns its path.
 /// Otherwise, clones or updates the repository in the platform-specific data
-/// directory. Set `update` to `true` to run `git pull` on existing clones.
+/// directory. Set `should_update` to `true` to run `git pull` on existing
+/// clones.
+///
+/// When the plan carries a suite reference, the clone is fetched and that
+/// reference checked out, so the suite is built from it rather than from the
+/// branch tip. The fetch happens whether or not `should_update` is set,
+/// because a pin is an explicit request for a particular reference and that
+/// reference may have been published after the clone was made.
 ///
 /// # Errors
 ///
-/// Returns an error if the clone directory cannot be determined or if
-/// cloning/updating fails.
-pub fn ensure_workspace(dirs: &dyn BaseDirs, update: bool) -> Result<Utf8PathBuf> {
+/// Returns an error if the clone directory cannot be determined, if
+/// cloning, updating or checking out fails, or if a pin was requested while
+/// the current directory is itself a Whitaker workspace, since checking out
+/// there would move the caller's own working tree.
+pub fn ensure_workspace(dirs: &dyn BaseDirs, plan: &WorkspacePlan) -> Result<Utf8PathBuf> {
     let cwd = current_dir_utf8()?;
     let clone_dir = clone_directory(dirs).ok_or_else(|| InstallerError::WorkspaceNotFound {
         reason: "could not determine data directory for cloning".to_owned(),
     })?;
 
-    match decide_workspace_action(&cwd, &clone_dir, update) {
-        WorkspaceAction::UseCurrentDir(dir) | WorkspaceAction::UseExisting(dir) => Ok(dir),
+    let action = plan_workspace_action(&cwd, &clone_dir, plan)?;
+    let dir = match action {
+        WorkspaceAction::UseCurrentDir(dir) | WorkspaceAction::UseExisting(dir) => dir,
         WorkspaceAction::CloneTo(dir) => {
             crate::git::clone_repository(&dir)?;
-            Ok(dir)
+            dir
         }
         WorkspaceAction::UpdateAt(dir) => {
             crate::git::update_repository(&dir)?;
-            Ok(dir)
+            dir
         }
+    };
+
+    if let Some(reference) = plan.suite_ref.as_ref() {
+        crate::git::checkout_ref(&dir, reference)?;
     }
+    Ok(dir)
+}
+
+/// Decides the action for a plan, refusing a pin that would move the caller.
+///
+/// Separate from [`ensure_workspace`] and pure, so the refusal can be tested
+/// without a clone, a network, or a change to the process-wide current
+/// directory that would race every other test.
+///
+/// # Errors
+///
+/// Returns `InstallerError::SuitePinInWorkspace` when a reference is pinned
+/// and the current directory is itself a Whitaker workspace, because checking
+/// out there would move the caller's own working tree.
+///
+/// # Examples
+///
+/// ```
+/// use camino::Utf8Path;
+/// use whitaker_installer::workspace::{plan_workspace_action, WorkspacePlan};
+///
+/// let plan = WorkspacePlan::updating(false);
+/// let action = plan_workspace_action(
+///     Utf8Path::new("/somewhere/else"),
+///     Utf8Path::new("/data/whitaker"),
+///     &plan,
+/// );
+/// assert!(action.is_ok());
+/// ```
+pub fn plan_workspace_action(
+    cwd: &Utf8Path,
+    clone_dir: &Utf8Path,
+    plan: &WorkspacePlan,
+) -> Result<WorkspaceAction> {
+    let action = decide_workspace_action(cwd, clone_dir, plan.should_update);
+    if let (WorkspaceAction::UseCurrentDir(dir), Some(reference)) =
+        (&action, plan.suite_ref.as_ref())
+    {
+        return Err(InstallerError::SuitePinInWorkspace {
+            reference: reference.as_str().to_owned(),
+            path: dir.to_string(),
+        });
+    }
+    Ok(action)
 }
 
 /// Returns the workspace path without performing any side effects.
@@ -332,6 +425,75 @@ mod tests {
             matches!(err, InstallerError::WorkspaceNotFound { .. }),
             "expected WorkspaceNotFound error, got: {err:?}"
         );
+    }
+
+    #[rstest]
+    fn plan_refuses_a_pin_inside_a_whitaker_workspace(temp_workspace: TempWorkspace) {
+        // Checking out a reference here would move the caller's own working
+        // tree, discarding whatever they were doing. Refused rather than
+        // done, and the error says where to run it instead.
+        write_cargo_toml(&temp_workspace.path, "whitaker");
+        let clone_dir = temp_workspace.path.join("clone_target");
+        let plan = WorkspacePlan {
+            should_update: false,
+            suite_ref: Some("v0.2.7".try_into().expect("valid reference")),
+        };
+
+        let result = plan_workspace_action(&temp_workspace.path, &clone_dir, &plan);
+
+        let error = result.expect_err("a pin here should be refused");
+        assert!(
+            matches!(error, InstallerError::SuitePinInWorkspace { .. }),
+            "expected SuitePinInWorkspace, got: {error:?}"
+        );
+        let rendered = error.to_string();
+        assert!(rendered.contains("v0.2.7"), "{rendered}");
+    }
+
+    #[rstest]
+    fn plan_uses_a_whitaker_workspace_when_nothing_is_pinned(temp_workspace: TempWorkspace) {
+        // The counterpart: without a pin the current workspace is used, which
+        // is what a Whitaker developer running the installer in-tree expects.
+        write_cargo_toml(&temp_workspace.path, "whitaker");
+        let clone_dir = temp_workspace.path.join("clone_target");
+
+        let action = plan_workspace_action(
+            &temp_workspace.path,
+            &clone_dir,
+            &WorkspacePlan::updating(false),
+        )
+        .expect("no pin, so no refusal");
+
+        assert_eq!(
+            action,
+            WorkspaceAction::UseCurrentDir(temp_workspace.path.clone())
+        );
+    }
+
+    #[rstest]
+    fn plan_clones_and_pins_from_outside_a_workspace(temp_workspace: TempWorkspace) {
+        // The CI case: not in a Whitaker checkout, so the pin applies to the
+        // installer's own clone and nothing of the caller's is touched.
+        let clone_dir = temp_workspace.path.join("clone_target");
+        let plan = WorkspacePlan {
+            should_update: true,
+            suite_ref: Some("v0.2.7".try_into().expect("valid reference")),
+        };
+
+        let action = plan_workspace_action(&temp_workspace.path, &clone_dir, &plan)
+            .expect("a pin outside a workspace is fine");
+
+        assert_eq!(action, WorkspaceAction::CloneTo(clone_dir));
+    }
+
+    #[rstest]
+    fn the_default_plan_pins_nothing_and_does_not_update() {
+        // The default has to stay the branch tip: pinning costs a source
+        // build, because prebuilt artefacts exist only for the tip.
+        let plan = WorkspacePlan::default();
+
+        assert!(plan.suite_ref.is_none());
+        assert!(!plan.should_update);
     }
 
     #[test]

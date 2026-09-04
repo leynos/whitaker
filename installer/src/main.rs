@@ -17,6 +17,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use clap::Parser;
 use std::io::Write;
 use std::time::Instant;
+use whitaker_installer::artefact::suite_ref::SuiteRef;
 use whitaker_installer::cli::{Cli, Command, InstallArgs};
 use whitaker_installer::crate_name::CrateName;
 use whitaker_installer::deps::SystemCommandExecutor;
@@ -183,6 +184,7 @@ fn run_dry(args: &InstallArgs, dirs: &dyn BaseDirs, stderr: &mut dyn Write) -> R
         skip_deps: args.skip_deps,
         skip_wrapper: args.skip_wrapper,
         no_update: args.no_update,
+        suite_ref: args.suite_version.as_ref().map(SuiteRef::as_str),
         jobs: args.jobs,
         crates: &requested_crates,
     };
@@ -219,7 +221,12 @@ fn ensure_whitaker_workspace(
     stderr: &mut dyn Write,
 ) -> Result<Utf8PathBuf> {
     use whitaker_installer::workspace::{
-        WorkspaceAction, clone_directory, decide_workspace_action, ensure_workspace,
+        WorkspaceAction, WorkspacePlan, clone_directory, decide_workspace_action, ensure_workspace,
+    };
+
+    let plan = WorkspacePlan {
+        should_update: !args.no_update,
+        suite_ref: args.suite_version.clone(),
     };
 
     if !args.quiet {
@@ -229,7 +236,7 @@ fn ensure_whitaker_workspace(
                 .and_then(|p| Utf8PathBuf::try_from(p).ok());
 
             let Some(cwd) = cwd else {
-                return ensure_workspace(dirs, !args.no_update);
+                return ensure_workspace(dirs, &plan);
             };
 
             match decide_workspace_action(&cwd, &clone_dir, !args.no_update) {
@@ -241,10 +248,13 @@ fn ensure_whitaker_workspace(
                 }
                 WorkspaceAction::UseCurrentDir(_) | WorkspaceAction::UseExisting(_) => {}
             }
+            if let Some(reference) = plan.suite_ref.as_ref() {
+                write_stderr_line(stderr, format!("Pinning lint suite to {reference}..."));
+            }
         }
     }
 
-    ensure_workspace(dirs, !args.no_update)
+    ensure_workspace(dirs, &plan)
 }
 
 /// Detects or overrides the toolchain, then verifies it is installed.
