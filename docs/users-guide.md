@@ -6,6 +6,15 @@ explains how to integrate the lints into a project and configure them.
 For contributors who want to develop new lints or work on Whitaker itself, see
 the [Developer's Guide](developers-guide.md).
 
+## Upgrading library consumers
+
+Version 0.3.0 includes source-breaking spelling changes to public Rust APIs.
+Existing library consumers must update imports, field access, and builder calls
+to the names listed in the
+[Whitaker 0.3.0 migration guide](v0-3-0-migration-guide.md). The changes affect
+Rust source only: SARIF 2.1.0 JSON keys retain their schema-defined spellings,
+so existing serialized data requires no migration.
+
 ## Quick Setup
 
 ### Prerequisites
