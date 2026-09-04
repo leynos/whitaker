@@ -5,7 +5,7 @@ use std::{
     sync::{Mutex, PoisonError},
 };
 
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use clap::Parser;
 use rstest::fixture;
 use rstest_bdd_macros::{given, then, when};
@@ -95,10 +95,20 @@ impl ArtefactDownloader for StubDownloader {
             .unwrap_or_default();
         match behaviour {
             ArchiveBehaviour::CorrectChecksum => {
-                write_file(dest, FAKE_ARCHIVE).map_err(DownloadError::Io)
+                let destination = Utf8Path::from_path(dest).ok_or_else(|| {
+                    DownloadError::Io(std::io::Error::other(
+                        "archive destination path must be valid UTF-8",
+                    ))
+                })?;
+                write_file(destination, FAKE_ARCHIVE).map_err(DownloadError::Io)
             }
             ArchiveBehaviour::WrongChecksum => {
-                write_file(dest, b"tampered content").map_err(DownloadError::Io)
+                let destination = Utf8Path::from_path(dest).ok_or_else(|| {
+                    DownloadError::Io(std::io::Error::other(
+                        "archive destination path must be valid UTF-8",
+                    ))
+                })?;
+                write_file(destination, b"tampered content").map_err(DownloadError::Io)
             }
         }
     }
@@ -114,7 +124,12 @@ impl ArtefactExtractor for StubExtractor {
         dest_dir: &Path,
     ) -> Result<Vec<String>, ExtractionError> {
         let source_name = "libwhitaker_suite.so".to_owned();
-        write_file(&dest_dir.join(&source_name), b"fake").map_err(ExtractionError::Io)?;
+        let destination_dir = Utf8Path::from_path(dest_dir).ok_or_else(|| {
+            ExtractionError::Io(std::io::Error::other(
+                "extraction destination path must be valid UTF-8",
+            ))
+        })?;
+        write_file(&destination_dir.join(&source_name), b"fake").map_err(ExtractionError::Io)?;
         Ok(vec![source_name])
     }
 }
@@ -240,7 +255,7 @@ fn when_prebuilt_attempted(world: &mut PrebuiltWorld) -> Result<(), String> {
         .ok_or_else(|| String::from("staging_root set"))?;
     let destination_dir = if world.force_destination_conflict {
         let occupied = staging_root.join("occupied");
-        write_file(occupied.as_std_path(), b"occupied file")
+        write_file(&occupied, b"occupied file")
             .map_err(|error| format!("write occupied file: {error}"))?;
         occupied.join("child").join("lib")
     } else {

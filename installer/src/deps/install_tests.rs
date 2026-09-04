@@ -12,7 +12,7 @@ use crate::test_utils::dependency_binary_helpers::{
 #[case(InstallOutcome::CargoInstall)]
 fn update_status_after_install_refreshes_link_for_local_cargo_dylint_installs(
     #[case] outcome: InstallOutcome,
-) {
+) -> std::io::Result<()> {
     with_fake_binary_on_path("dylint-link", || {
         // The companion refresh confirms the dylint-link version against
         // Cargo's installed-binary registry after the PATH probe passes.
@@ -30,7 +30,8 @@ fn update_status_after_install_refreshes_link_for_local_cargo_dylint_installs(
         assert!(status.cargo_dylint);
         assert!(status.dylint_link);
         executor.assert_finished();
-    });
+    })?;
+    Ok(())
 }
 
 #[test]
