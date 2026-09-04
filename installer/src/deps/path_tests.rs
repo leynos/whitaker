@@ -180,11 +180,16 @@ fn is_binary_on_path_checks_multiple_directories() -> std::io::Result<()> {
 }
 
 #[cfg(unix)]
-#[test]
-fn is_executable_file_rejects_non_executable_files() -> std::io::Result<()> {
+#[rstest::rstest]
+#[case::non_executable(false, false)]
+#[case::executable(true, true)]
+fn is_executable_file_matches_executable_permission(
+    #[case] has_execute_permission: bool,
+    #[case] expected_is_executable: bool,
+) -> std::io::Result<()> {
     let temp_dir = tempfile::tempdir().expect("create temp dir");
     let binary_path = temp_dir.path().join("dylint-link");
-    write_fake_binary(&binary_path, false)?;
+    write_fake_binary(&binary_path, has_execute_permission)?;
 
     let directory = Dir::open_ambient_dir(
         Utf8Path::from_path(temp_dir.path()).expect("temp path is UTF-8"),
@@ -192,27 +197,10 @@ fn is_executable_file_rejects_non_executable_files() -> std::io::Result<()> {
     )
     .expect("open temp-dir capability");
 
-    assert!(!is_executable_file(
-        &directory,
-        Utf8Path::new("dylint-link")
-    ));
-    Ok(())
-}
-
-#[cfg(unix)]
-#[test]
-fn is_executable_file_accepts_executable_files() -> std::io::Result<()> {
-    let temp_dir = tempfile::tempdir().expect("create temp dir");
-    let binary_path = temp_dir.path().join("dylint-link");
-    write_fake_binary(&binary_path, true)?;
-
-    let directory = Dir::open_ambient_dir(
-        Utf8Path::from_path(temp_dir.path()).expect("temp path is UTF-8"),
-        ambient_authority(),
-    )
-    .expect("open temp-dir capability");
-
-    assert!(is_executable_file(&directory, Utf8Path::new("dylint-link")));
+    assert_eq!(
+        is_executable_file(&directory, Utf8Path::new("dylint-link")),
+        expected_is_executable,
+    );
     Ok(())
 }
 
