@@ -144,7 +144,7 @@ def run_act(
 
 
 def test_workflow_produces_expected_artefact_and_logs(tmp_path: Path) -> None:
-    artefact_dir = tmp_path / "act-artifacts"
+    artefact_dir = tmp_path / "act-artefacts"
     code, artdir, logs = run_act(artefact_dir=artefact_dir)
     assert code == 0, f"act failed:\n{logs}"
 
@@ -214,7 +214,7 @@ loop:
    from cmd_mox import CmdMox
 
    def test_record(tmp_path: Path) -> None:
-       artefact_dir = tmp_path / "act-artifacts"
+       artefact_dir = tmp_path / "act-artefacts"
        with CmdMox() as mox:
            gh = mox.spy("gh").passthrough()
            mox.replay()
@@ -229,7 +229,7 @@ loop:
 
    ```python
    def test_replay(tmp_path: Path, cmd_mox) -> None:
-       artefact_dir = tmp_path / "act-artifacts"
+       artefact_dir = tmp_path / "act-artefacts"
        cmd_mox.mock("gh").with_args(
            "release",
            "view",

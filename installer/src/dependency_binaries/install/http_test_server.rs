@@ -184,7 +184,6 @@ fn serve_connection(
         .write_all(header.as_bytes())
         .and_then(|()| stream.write_all(body))
         .and_then(|()| stream.flush());
-    if write_result.is_err() {
-        // The client disconnected early; there is nothing further to serve.
-    }
+    // The client may disconnect early; there is nothing further to serve.
+    let _ = write_result;
 }

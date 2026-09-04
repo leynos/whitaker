@@ -60,12 +60,13 @@ impl Default for ConditionalMaxNBranches {
     }
 }
 
-/// Registration glue expanded from `dylint_linting::impl_late_lint!`.
-///
-/// The macro generates undocumented public registration items, so the
-/// expansion is scoped to this private module and only the documented lint
-/// static is re-exported.
 mod registration {
+    //! Provides the public Dylint registration for this lint.
+    //!
+    //! The `dylint_linting::impl_late_lint!` macro generates undocumented
+    //! public registration items, so its expansion is scoped to this private
+    //! module and only the documented lint static is re-exported.
+
     use super::ConditionalMaxNBranches;
 
     dylint_linting::impl_late_lint! {

@@ -7,35 +7,10 @@ use rustc_lint::LateContext;
 use rustc_span::sym;
 use whitaker_common::SimplePath;
 
-/// Category describing how the `std::fs` item is being used.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum UsageCategory {
-    /// `use std::fs::{..}` imports.
-    Import,
-    /// Type positions referencing `std::fs` types (structs, aliases).
-    Type,
-    /// Value-level calls, struct literals, or method invocations.
-    Call,
-}
-
-impl UsageCategory {
-    /// Returns a stable &str identifier for use in tests and localization.
-    #[cfg(test)]
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Import => "import",
-            Self::Type => "type",
-            Self::Call => "call",
-        }
-    }
-}
-
 /// Normalized view of a `std::fs` operation for diagnostics and tests.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct StdFsUsage {
     operation: String,
-    category: UsageCategory,
 }
 
 impl StdFsUsage {
@@ -45,15 +20,12 @@ impl StdFsUsage {
     /// # Examples
     ///
     /// ```ignore
-    /// # use crate::usage::{StdFsUsage, UsageCategory};
-    /// let usage = StdFsUsage::new(String::from("std::fs::read"), UsageCategory::Call);
+    /// # use crate::usage::StdFsUsage;
+    /// let usage = StdFsUsage::new(String::from("std::fs::read"));
     /// assert_eq!(usage.operation(), "std::fs::read");
     /// ```
-    pub fn new(operation: String, category: UsageCategory) -> Self {
-        Self {
-            operation,
-            category,
-        }
+    pub fn new(operation: String) -> Self {
+        Self { operation }
     }
 
     /// Returns the fully qualified operation path (e.g., `std::fs::read`).
@@ -62,19 +34,12 @@ impl StdFsUsage {
     /// # Examples
     ///
     /// ```ignore
-    /// # use crate::usage::{StdFsUsage, UsageCategory};
-    /// let usage = StdFsUsage::new(String::from("std::fs::remove_file"), UsageCategory::Call);
+    /// # use crate::usage::StdFsUsage;
+    /// let usage = StdFsUsage::new(String::from("std::fs::remove_file"));
     /// assert_eq!(usage.operation(), "std::fs::remove_file");
     /// ```
     pub fn operation(&self) -> &str {
         &self.operation
-    }
-
-    /// Returns the usage category.
-    #[cfg(test)]
-    #[must_use]
-    pub const fn category(&self) -> UsageCategory {
-        self.category
     }
 }
 
@@ -86,19 +51,18 @@ impl StdFsUsage {
 /// ```ignore
 /// # use rustc_hir as hir;
 /// # use rustc_lint::LateContext;
-/// # use crate::usage::{classify_qpath, UsageCategory};
+/// # use crate::usage::classify_qpath;
 /// # fn example<'tcx>(cx: &LateContext<'tcx>, qpath: &hir::QPath<'tcx>, hir_id: hir::HirId) {
-/// let _ = classify_qpath(cx, qpath, hir_id, UsageCategory::Call);
+/// let _ = classify_qpath(cx, qpath, hir_id);
 /// # }
 /// ```
 pub fn classify_qpath(
     cx: &LateContext<'_>,
     qpath: &hir::QPath<'_>,
     hir_id: hir::HirId,
-    category: UsageCategory,
 ) -> Option<StdFsUsage> {
     let res = cx.qpath_res(qpath, hir_id);
-    classify_res(cx, res, category)
+    classify_res(cx, res)
 }
 
 /// Classify using a `Res` obtained from HIR traversal.
@@ -109,14 +73,14 @@ pub fn classify_qpath(
 /// ```ignore
 /// # use rustc_hir::def::Res;
 /// # use rustc_lint::LateContext;
-/// # use crate::usage::{classify_res, UsageCategory};
+/// # use crate::usage::classify_res;
 /// # fn example<'tcx>(cx: &LateContext<'tcx>, res: Res) {
-/// let _ = classify_res(cx, res, UsageCategory::Type);
+/// let _ = classify_res(cx, res);
 /// # }
 /// ```
-pub fn classify_res(cx: &LateContext<'_>, res: Res, category: UsageCategory) -> Option<StdFsUsage> {
+pub fn classify_res(cx: &LateContext<'_>, res: Res) -> Option<StdFsUsage> {
     res.opt_def_id()
-        .and_then(|def_id| classify_def_id(cx, def_id, category))
+        .and_then(|def_id| classify_def_id(cx, def_id))
 }
 
 /// Classify a `DefId` by inspecting its fully qualified path.
@@ -127,23 +91,19 @@ pub fn classify_res(cx: &LateContext<'_>, res: Res, category: UsageCategory) -> 
 /// ```ignore
 /// # use rustc_hir::def_id::DefId;
 /// # use rustc_lint::LateContext;
-/// # use crate::usage::{classify_def_id, UsageCategory};
+/// # use crate::usage::classify_def_id;
 /// # fn example<'tcx>(cx: &LateContext<'tcx>, def_id: DefId) {
-/// let _ = classify_def_id(cx, def_id, UsageCategory::Call);
+/// let _ = classify_def_id(cx, def_id);
 /// # }
 /// ```
-pub fn classify_def_id(
-    cx: &LateContext<'_>,
-    def_id: DefId,
-    category: UsageCategory,
-) -> Option<StdFsUsage> {
+pub fn classify_def_id(cx: &LateContext<'_>, def_id: DefId) -> Option<StdFsUsage> {
     if cx.tcx.crate_name(def_id.krate) != sym::std {
         return None;
     }
 
     let label = cx.tcx.def_path_str(def_id);
 
-    label_is_std_fs(&label).then(|| StdFsUsage::new(label, category))
+    label_is_std_fs(&label).then(|| StdFsUsage::new(label))
 }
 
 fn is_std_fs_path(path: &SimplePath) -> bool {
