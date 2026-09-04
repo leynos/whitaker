@@ -111,7 +111,13 @@ fn finds_nearest_workspace_manifest(
     let member = fixture.root.join("nested-workspace").join("member");
     let workspace = fixture.root.join("nested-workspace").join("Cargo.toml");
 
-    assert_eq!(find_workspace_manifest(&member)?, workspace);
+    let located = find_workspace_manifest(&member)?;
+    if located != workspace {
+        return Err(format!(
+            "expected the nearest workspace manifest at `{workspace}`, found `{located}`"
+        )
+        .into());
+    }
     Ok(())
 }
 
@@ -124,7 +130,9 @@ fn ignores_non_workspace_manifests(
 
     let manifest = fixture.root.join("Cargo.toml");
 
-    assert!(!is_workspace_manifest(&manifest)?);
+    if is_workspace_manifest(&manifest)? {
+        return Err("a package-only manifest must not count as a workspace manifest".into());
+    }
     Ok(())
 }
 
@@ -139,12 +147,12 @@ fn reports_missing_workspace_manifest(
     let error = find_workspace_manifest(&nested)
         .expect_err("a directory without a workspace manifest should fail");
 
-    assert_eq!(
-        error
-            .downcast_ref::<std::io::Error>()
-            .map(std::io::Error::kind),
-        Some(std::io::ErrorKind::NotFound)
-    );
+    let kind = error
+        .downcast_ref::<std::io::Error>()
+        .map(std::io::Error::kind);
+    if kind != Some(std::io::ErrorKind::NotFound) {
+        return Err(format!("expected a NotFound I/O error, found {kind:?}").into());
+    }
     Ok(())
 }
 
@@ -157,7 +165,10 @@ fn reads_a_located_manifest(
 
     let manifest = fixture.root.join("Cargo.toml");
 
-    assert_eq!(read_workspace_manifest(&manifest)?, WORKSPACE_MANIFEST);
+    let contents = read_workspace_manifest(&manifest)?;
+    if contents != WORKSPACE_MANIFEST {
+        return Err(format!("manifest contents must round-trip, found `{contents}`").into());
+    }
     Ok(())
 }
 
@@ -166,23 +177,24 @@ fn read_of_absent_manifest_reports_not_found() -> Result<(), Box<dyn std::error:
     let directory = tempdir()?;
     let manifest = directory.path().join("Cargo.toml");
 
-    let manifest = Utf8PathBuf::from_path_buf(manifest).expect("temporary paths must be UTF-8");
-    let error =
-        read_workspace_manifest(&manifest).expect_err("reading an absent manifest should fail");
+    let manifest_path = Utf8PathBuf::from_path_buf(manifest)
+        .map_err(|path| format!("temporary path `{}` must be UTF-8", path.display()))?;
+    let error = read_workspace_manifest(&manifest_path)
+        .expect_err("reading an absent manifest should fail");
 
-    assert_eq!(
-        error
-            .downcast_ref::<std::io::Error>()
-            .map(std::io::Error::kind),
-        Some(std::io::ErrorKind::NotFound)
-    );
+    let kind = error
+        .downcast_ref::<std::io::Error>()
+        .map(std::io::Error::kind);
+    if kind != Some(std::io::ErrorKind::NotFound) {
+        return Err(format!("expected a NotFound I/O error, found {kind:?}").into());
+    }
     Ok(())
 }
 
 proptest! {
     #[test]
     fn exact_version_accepts_only_non_empty_exact_pins(
-        prefix in prop_oneof![Just("=".to_owned()), Just("^".to_owned()), Just("".to_owned())],
+        prefix in prop_oneof![Just("=".to_owned()), Just("^".to_owned()), Just(String::new())],
         suffix in "[A-Za-z0-9._-]{0,32}",
     ) {
         let requirement = format!("{prefix}{suffix}");

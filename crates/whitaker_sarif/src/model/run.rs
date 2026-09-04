@@ -148,6 +148,7 @@ pub struct Artifact {
 mod tests {
     use super::*;
     use crate::model::location::ArtifactLocation;
+    use crate::test_support::{assert_json_round_trip, assert_serialized_json};
 
     #[test]
     fn run_round_trip() {
@@ -167,13 +168,7 @@ mod tests {
             results: Vec::new(),
             artifacts: Vec::new(),
         };
-        match serde_json::to_string(&run) {
-            Ok(json) => match serde_json::from_str::<Run>(&json) {
-                Ok(parsed) => assert_eq!(run, parsed),
-                Err(e) => panic!("failed to deserialize: {e}"),
-            },
-            Err(e) => panic!("failed to serialize: {e}"),
-        }
+        assert_json_round_trip(&run);
     }
 
     #[test]
@@ -191,32 +186,32 @@ mod tests {
             results: Vec::new(),
             artifacts: Vec::new(),
         };
-        match serde_json::to_string(&run) {
-            Ok(json) => {
-                assert!(!json.contains("\"invocations\""));
-                assert!(!json.contains("\"results\""));
-                assert!(!json.contains("\"artifacts\""));
-                assert!(!json.contains("\"rules\""));
-            }
-            Err(e) => panic!("failed to serialize: {e}"),
-        }
+        assert_serialized_json(&run, |json| {
+            assert!(
+                !json.contains("\"invocations\""),
+                "empty invocations present: {json}"
+            );
+            assert!(
+                !json.contains("\"results\""),
+                "empty results present: {json}"
+            );
+            assert!(
+                !json.contains("\"artifacts\""),
+                "empty artefacts present: {json}"
+            );
+            assert!(!json.contains("\"rules\""), "empty rules present: {json}");
+        });
     }
 
     #[test]
     fn artifact_round_trip() {
-        let artifact = Artifact {
+        let artefact = Artifact {
             location: ArtifactLocation {
                 uri: "src/lib.rs".into(),
                 uri_base_id: Some("%SRCROOT%".into()),
             },
             mime_type: Some("text/x-rust".into()),
         };
-        match serde_json::to_string(&artifact) {
-            Ok(json) => match serde_json::from_str::<Artifact>(&json) {
-                Ok(parsed) => assert_eq!(artifact, parsed),
-                Err(e) => panic!("failed to deserialize: {e}"),
-            },
-            Err(e) => panic!("failed to serialize: {e}"),
-        }
+        assert_json_round_trip(&artefact);
     }
 }

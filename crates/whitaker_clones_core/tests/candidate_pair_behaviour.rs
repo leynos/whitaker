@@ -7,6 +7,7 @@ use std::cell::RefCell;
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use whitaker_clones_core::{CandidatePair, FragmentId};
+use whitaker_test_macros::allow_fixture_expansion_lints;
 
 #[derive(Debug, Default)]
 struct CandidatePairWorld {
@@ -15,17 +16,18 @@ struct CandidatePairWorld {
     pair: RefCell<Option<CandidatePair>>,
 }
 
+#[allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> CandidatePairWorld {
     CandidatePairWorld::default()
 }
 
 fn with_pair(world: &CandidatePairWorld, assert_fn: impl FnOnce(&CandidatePair)) {
-    let pair = world.pair.borrow();
-    match pair.as_ref() {
-        Some(pair) => assert_fn(pair),
-        None => panic!("candidate pair must be present before running assertions"),
-    }
+    let borrowed_pair = world.pair.borrow();
+    let Some(candidate_pair) = borrowed_pair.as_ref() else {
+        panic!("candidate pair must be present before running assertions");
+    };
+    assert_fn(candidate_pair);
 }
 
 #[given("input fragment IDs {left} and {right}")]
@@ -56,14 +58,18 @@ fn then_the_canonical_pair_is(world: &CandidatePairWorld, left: String, right: S
     with_pair(world, |pair| {
         assert_eq!(
             (pair.left().as_str(), pair.right().as_str()),
-            (left.as_str(), right.as_str())
+            (left.as_str(), right.as_str()),
+            "canonical pair ordering must match the scenario expectation"
         );
     });
 }
 
 #[then("no candidate pair is returned")]
 fn then_no_candidate_pair_is_returned(world: &CandidatePairWorld) {
-    assert!(world.pair.borrow().is_none());
+    assert!(
+        world.pair.borrow().is_none(),
+        "no candidate pair must be returned for identical fragment IDs"
+    );
 }
 
 #[scenario(path = "tests/features/candidate_pair.feature", index = 0)]

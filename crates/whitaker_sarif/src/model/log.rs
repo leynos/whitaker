@@ -55,6 +55,7 @@ impl Default for SarifLog {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::{assert_json_round_trip, assert_serialized_json};
 
     #[test]
     fn default_log_has_correct_version() {
@@ -70,33 +71,23 @@ mod tests {
 
     #[test]
     fn round_trip_empty_log() {
-        let log = SarifLog::default();
-        match serde_json::to_string(&log) {
-            Ok(json) => match serde_json::from_str::<SarifLog>(&json) {
-                Ok(parsed) => assert_eq!(log, parsed),
-                Err(e) => panic!("deserialization failed: {e}"),
-            },
-            Err(e) => panic!("serialization failed: {e}"),
-        }
+        assert_json_round_trip(&SarifLog::default());
     }
 
     #[test]
     fn schema_field_serializes_as_dollar_schema() {
-        let log = SarifLog::default();
-        match serde_json::to_string(&log) {
-            Ok(json) => assert!(json.contains("\"$schema\"")),
-            Err(e) => panic!("serialization failed: {e}"),
-        }
+        assert_serialized_json(&SarifLog::default(), |json| {
+            assert!(json.contains("\"$schema\""), "missing $schema key: {json}");
+        });
     }
 
     #[test]
     fn empty_runs_present_in_json() {
-        let log = SarifLog::default();
-        match serde_json::to_string(&log) {
-            Ok(json) => {
-                assert!(json.contains("\"runs\":[]") || json.contains("\"runs\": []"));
-            }
-            Err(e) => panic!("serialization failed: {e}"),
-        }
+        assert_serialized_json(&SarifLog::default(), |json| {
+            assert!(
+                json.contains("\"runs\":[]") || json.contains("\"runs\": []"),
+                "empty runs array missing: {json}"
+            );
+        });
     }
 }

@@ -1,11 +1,10 @@
 //! Tests that verify the UI harness runner validates inputs and propagates
 //! errors from custom runners.
-use super::{HarnessError, run_with_runner};
+use super::{HarnessError, run_ui_test, run_with_runner};
 use camino::{Utf8Path, Utf8PathBuf};
 use rstest::rstest;
 use std::env;
-use std::sync::{Mutex, MutexGuard, OnceLock};
-use whitaker_common::test_support::EnvVarGuard;
+use whitaker_common::test_support::{EnvTestGuard, EnvVarGuard, env_test_guard};
 
 #[rstest]
 #[case(
@@ -95,6 +94,24 @@ fn propagates_runner_failures() {
 }
 
 #[test]
+fn run_ui_test_panics_with_context_from_runner_failure() {
+    let panic = std::panic::catch_unwind(|| {
+        run_ui_test("lint", "ui", |_, _| {
+            Err(String::from("known runner failure"))
+        });
+    })
+    .expect_err("runner failure should panic at the UI test boundary");
+    let message = panic
+        .downcast::<String>()
+        .map(|message| *message)
+        .expect("the formatted UI-test panic should carry a string message");
+
+    assert!(message.contains("lint"));
+    assert!(message.contains("ui"));
+    assert!(message.contains("known runner failure"));
+}
+
+#[test]
 fn runner_env_guard_clears_and_restores_rustc_wrapper() {
     let _serial_guard = runner_env_guard_test_lock();
     let _guard = EnvVarGuard::set("RUSTC_WRAPPER", "sccache");
@@ -125,21 +142,32 @@ fn windows_env_guard_leaves_absent_rustc_wrapper_untouched() {
 }
 
 #[test]
-fn runner_env_guard_test_lock_recovers_after_panic() {
+fn runner_env_guard_test_lock_releases_after_panic() {
     let result = std::panic::catch_unwind(|| {
         let _serial_guard = runner_env_guard_test_lock();
-        panic!("intentionally poison the UI environment test lock");
+        panic!("intentionally release the UI environment test lock");
     });
 
     assert!(result.is_err());
-    let _serial_guard = runner_env_guard_test_lock();
+    let (acquired_sender, acquired_receiver) = std::sync::mpsc::channel();
+    let thread = std::thread::spawn(move || {
+        let _serial_guard = runner_env_guard_test_lock();
+        acquired_sender
+            .send(())
+            .expect("second thread must report lock acquisition");
+    });
+
+    acquired_receiver
+        .recv_timeout(std::time::Duration::from_secs(1))
+        .expect("second thread should acquire the released environment lock");
+    thread
+        .join()
+        .expect("second environment-lock test thread should complete");
 }
 
-fn runner_env_guard_test_lock() -> MutexGuard<'static, ()> {
+/// Acquires the production environment protocol for assertions spanning a callback.
+fn runner_env_guard_test_lock() -> EnvTestGuard {
     // These tests inspect process-global environment state after callbacks,
     // so their whole bodies must run serially rather than only each mutation.
-    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-    LOCK.get_or_init(|| Mutex::new(()))
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
+    env_test_guard()
 }

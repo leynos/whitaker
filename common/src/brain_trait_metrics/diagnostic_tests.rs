@@ -1,11 +1,13 @@
 //! Unit tests for brain trait diagnostic formatting.
 
-use super::*;
-use crate::brain_trait_metrics::TraitMetricsBuilder;
-use crate::brain_trait_metrics::evaluation::BrainTraitDisposition;
-use crate::decomposition_advice::SubjectKind;
-use crate::test_support::decomposition::{decomposition_suggestions, transport_trait_fixture};
 use rstest::rstest;
+
+use super::*;
+use crate::{
+    brain_trait_metrics::{TraitMetricsBuilder, evaluation::BrainTraitDisposition},
+    decomposition_advice::SubjectKind,
+    test_support::decomposition::{decomposition_suggestions, transport_trait_fixture},
+};
 
 // ---------------------------------------------------------------------------
 // Helper: build diagnostics for formatting tests
@@ -20,7 +22,7 @@ struct DiagnosticInput<'a> {
 }
 
 /// Builds a diagnostic for a trait with the given method breakdown.
-fn build_diagnostic(input: DiagnosticInput<'_>) -> BrainTraitDiagnostic {
+fn build_diagnostic(input: &DiagnosticInput<'_>) -> BrainTraitDiagnostic {
     let mut builder = TraitMetricsBuilder::new(input.name);
     for i in 0..input.required {
         builder.add_required_method(format!("req_{i}"));
@@ -39,7 +41,7 @@ fn build_diagnostic(input: DiagnosticInput<'_>) -> BrainTraitDiagnostic {
 /// Builds a primary message for a trait with 15 required + 10 default
 /// methods, each default having CC=5 (CC sum=50).
 fn primary_message_with_defaults() -> String {
-    let diag = build_diagnostic(DiagnosticInput {
+    let diag = build_diagnostic(&DiagnosticInput {
         name: "Parser",
         required: 15,
         default: 10,
@@ -55,9 +57,12 @@ fn primary_message_with_defaults() -> String {
 #[case("15 required", "required count")]
 #[case("10 default", "default count")]
 #[case("CC=50", "CC sum")]
-fn primary_message_with_defaults_contains(#[case] fragment: &str, #[case] _description: &str) {
+fn primary_message_with_defaults_contains(#[case] fragment: &str, #[case] description: &str) {
     let msg = primary_message_with_defaults();
-    assert!(msg.contains(fragment), "missing fragment: {fragment}");
+    assert!(
+        msg.contains(fragment),
+        "missing {description} fragment: {fragment}"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -66,7 +71,7 @@ fn primary_message_with_defaults_contains(#[case] fragment: &str, #[case] _descr
 
 #[rstest]
 fn primary_message_omits_cc_when_zero() {
-    let diag = build_diagnostic(DiagnosticInput {
+    let diag = build_diagnostic(&DiagnosticInput {
         name: "Simple",
         required: 10,
         default: 0,
@@ -87,7 +92,7 @@ fn primary_message_omits_cc_when_zero() {
 
 #[rstest]
 fn primary_message_with_only_default_methods() {
-    let diag = build_diagnostic(DiagnosticInput {
+    let diag = build_diagnostic(&DiagnosticInput {
         name: "AllDefault",
         required: 0,
         default: 5,
@@ -115,7 +120,7 @@ fn note_contains_expected_fragment(
     #[case] fragment: &str,
 ) {
     let (required, default, cc_per_default) = shape;
-    let diag = build_diagnostic(DiagnosticInput {
+    let diag = build_diagnostic(&DiagnosticInput {
         name,
         required,
         default,
@@ -130,7 +135,7 @@ fn note_contains_expected_fragment(
 
 #[rstest]
 fn note_omits_cc_when_no_default_methods() {
-    let diag = build_diagnostic(DiagnosticInput {
+    let diag = build_diagnostic(&DiagnosticInput {
         name: "Foo",
         required: 10,
         default: 0,
@@ -149,7 +154,7 @@ fn note_omits_cc_when_no_default_methods() {
 
 #[rstest]
 fn decomposition_note_delegates_to_shared_renderer_for_traits() {
-    let diagnostic = build_diagnostic(DiagnosticInput {
+    let diagnostic = build_diagnostic(&DiagnosticInput {
         name: "Transport",
         required: 2,
         default: 2,
@@ -191,7 +196,7 @@ fn help_suggestions(
     #[case] fragment: &str,
 ) {
     let (required, default, cc_per_default) = shape;
-    let diag = build_diagnostic(DiagnosticInput {
+    let diag = build_diagnostic(&DiagnosticInput {
         name,
         required,
         default,
@@ -236,7 +241,7 @@ fn total_item_count_includes_associated_items() {
 /// Builds a diagnostic for accessor tests: trait "Qux" with 10
 /// required, 5 default (CC=4 each), CC sum=20.
 fn accessor_diagnostic() -> BrainTraitDiagnostic {
-    build_diagnostic(DiagnosticInput {
+    build_diagnostic(&DiagnosticInput {
         name: "Qux",
         required: 10,
         default: 5,

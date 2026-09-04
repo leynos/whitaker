@@ -1,9 +1,10 @@
 //! Test helpers for toolchain tests.
 
-use super::*;
-use std::cell::RefCell;
-use std::process::ExitStatus;
+use std::{cell::RefCell, process::ExitStatus};
 
+use super::*;
+
+/// Builds a successful or failed Unix process status for a mock command.
 #[cfg(unix)]
 pub fn exit_status(code: i32) -> ExitStatus {
     use std::os::unix::process::ExitStatusExt;
@@ -11,6 +12,7 @@ pub fn exit_status(code: i32) -> ExitStatus {
     ExitStatusExt::from_raw(code << 8)
 }
 
+/// Builds a successful or failed Windows process status for a mock command.
 #[cfg(windows)]
 pub fn exit_status(code: i32) -> ExitStatus {
     use std::os::windows::process::ExitStatusExt;
@@ -18,6 +20,7 @@ pub fn exit_status(code: i32) -> ExitStatus {
     ExitStatusExt::from_raw(code as u32)
 }
 
+/// Creates mock command output with the supplied exit status and no output.
 pub fn output_with_status(code: i32) -> Output {
     Output {
         status: exit_status(code),
@@ -26,6 +29,7 @@ pub fn output_with_status(code: i32) -> Output {
     }
 }
 
+/// Creates mock command output with the supplied exit status and stderr text.
 pub fn output_with_stderr(code: i32, stderr: &str) -> Output {
     Output {
         status: exit_status(code),
@@ -34,6 +38,7 @@ pub fn output_with_stderr(code: i32, stderr: &str) -> Output {
     }
 }
 
+/// Creates the toolchain value used by installer unit tests.
 pub fn test_toolchain(channel: &str) -> Toolchain {
     Toolchain {
         channel: channel.to_owned(),
@@ -82,7 +87,7 @@ pub struct RustupExpectation<'a> {
 fn expect_rustup_command<F>(
     runner: &mut MockCommandRunner,
     seq: &mut mockall::Sequence,
-    expectation: RustupExpectation<'_>,
+    expectation: &RustupExpectation<'_>,
     matcher: F,
 ) where
     F: Fn(&str, &[&str]) -> bool + Send + 'static,
@@ -95,68 +100,84 @@ fn expect_rustup_command<F>(
         .times(1)
         .in_sequence(seq)
         .returning(move |_, _| {
-            let output = match stderr.as_deref() {
-                Some(message) => output_with_stderr(exit_code, message),
-                None => output_with_status(exit_code),
-            };
+            let output = stderr.as_deref().map_or_else(
+                || output_with_status(exit_code),
+                |message| output_with_stderr(exit_code, message),
+            );
             Ok(output)
         });
 }
 
+/// Expected arguments and output for one ordered toolchain installation call.
 pub struct ToolchainInstallExpectation<'a> {
     pub channel: &'a str,
     pub exit_code: i32,
     pub stderr: Option<&'a str>,
 }
 
+/// Registers an ordered expectation for `rustup run ... rustc --version`.
 pub fn expect_rustc_version(
     runner: &mut MockCommandRunner,
     seq: &mut mockall::Sequence,
     channel: &str,
     exit_code: i32,
 ) {
-    let channel = channel.to_owned();
+    let expected_channel = channel.to_owned();
     runner
         .expect_run()
         .withf(move |program, args| {
+            let [run, actual_channel, rustc, version] = args else {
+                return false;
+            };
             program == "rustup"
-                && args.len() == 4
-                && args[0] == "run"
-                && args[1] == channel
-                && args[2] == "rustc"
-                && args[3] == "--version"
+                && *run == "run"
+                && *actual_channel == expected_channel
+                && *rustc == "rustc"
+                && *version == "--version"
         })
         .times(1)
         .in_sequence(seq)
         .returning(move |_, _| Ok(output_with_status(exit_code)));
 }
 
+/// Registers one ordered `rustup toolchain install` expectation.
+///
+/// The expectation must provide the exact toolchain `channel`, the expected
+/// process `exit_code`, and optional standard-error output. The expectation is
+/// added to `seq`, so the install command must occur at its declared position
+/// in the runner's ordered command sequence.
 pub fn expect_toolchain_install(
     runner: &mut MockCommandRunner,
     seq: &mut mockall::Sequence,
-    expectation: ToolchainInstallExpectation<'_>,
+    expectation: &ToolchainInstallExpectation<'_>,
 ) {
-    let channel = expectation.channel.to_owned();
+    let expected_channel = expectation.channel.to_owned();
     expect_rustup_command(
         runner,
         seq,
-        RustupExpectation {
+        &RustupExpectation {
             exit_code: expectation.exit_code,
             stderr: expectation.stderr,
         },
         move |program, args| {
+            let [toolchain, install, actual_channel] = args else {
+                return false;
+            };
             program == "rustup"
-                && args.len() == 3
-                && args[0] == "toolchain"
-                && args[1] == "install"
-                && args[2] == channel
+                && *toolchain == "toolchain"
+                && *install == "install"
+                && *actual_channel == expected_channel
         },
     );
 }
 
-/// Helper to test that ensure_installed fails with the expected error.
+/// Verifies that an installer operation fails with the expected error.
+///
+/// The caller supplies mock setup, the operation to invoke, and an error
+/// matcher. The helper panics if the operation succeeds or the matcher rejects
+/// the returned installer error.
 pub fn assert_install_fails_with<F, I, E>(
-    toolchain: Toolchain,
+    toolchain: &Toolchain,
     setup_mocks: F,
     install: I,
     error_matcher: E,
@@ -170,7 +191,7 @@ pub fn assert_install_fails_with<F, I, E>(
 
     setup_mocks(&mut runner, &mut seq);
 
-    let err = install(&toolchain, &runner).expect_err("expected installation failure");
+    let err = install(toolchain, &runner).expect_err("expected installation failure");
 
     error_matcher(err);
 }
@@ -180,21 +201,23 @@ pub fn matches_multi_component_add(
     channel: &str,
     components: &[&str],
 ) -> impl Fn(&str, &[&str]) -> bool + use<> {
-    let channel = channel.to_owned();
-    let components: Vec<String> = components.iter().map(|s| (*s).to_owned()).collect();
+    let expected_channel = channel.to_owned();
+    let expected_components: Vec<String> = components.iter().map(|s| (*s).to_owned()).collect();
     move |program, args| {
-        let Some(actual_components) = args.get(4..) else {
+        let Some((&[component, add, toolchain_flag, actual_channel], actual_components)) =
+            args.split_at_checked(4)
+        else {
             return false;
         };
         program == "rustup"
-            && args[0] == "component"
-            && args[1] == "add"
-            && args[2] == "--toolchain"
-            && args[3] == channel
-            && actual_components.len() == components.len()
+            && component == "component"
+            && add == "add"
+            && toolchain_flag == "--toolchain"
+            && actual_channel == expected_channel
+            && actual_components.len() == expected_components.len()
             && actual_components
                 .iter()
-                .zip(&components)
+                .zip(&expected_components)
                 .all(|(a, b)| *a == b)
     }
 }

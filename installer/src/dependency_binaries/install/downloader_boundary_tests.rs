@@ -5,29 +5,21 @@
 //! runs without the network. The server helper lives here (not in `downloader.rs`)
 //! to keep that module within its size budget; it is test support for these cases.
 
-use super::downloader::download_from_urls;
-// Only the non-UTF-8 production-path test (gated `#[cfg(unix)]`) drives the
-// trait and concrete downloader; keep these imports on the same gate so other
-// platforms do not see them as unused.
-#[cfg(unix)]
-use super::downloader::{DependencyArchiveDownloader, RepositoryArchiveDownloader};
-use super::http_test_server::{CannedResponse, LocalServer};
-use super::installer::DependencyBinaryInstallError;
-use crate::hex::to_lower_hex;
+// `Read` is used across platforms for `read_to_end`.
+use std::{collections::HashMap, io::Read, path::PathBuf, time::Duration};
+
 use camino::Utf8Path;
-use cap_std::ambient_authority;
-use cap_std::fs_utf8::Dir;
+use cap_std::{ambient_authority, fs_utf8::Dir};
 use rstest::{fixture, rstest};
 use sha2::{Digest, Sha256};
-use std::collections::HashMap;
-// `io` is only referenced by the `#[cfg(unix)]` non-UTF-8 tests (`io::ErrorKind`);
-// `Read` is used across platforms for `read_to_end`.
-#[cfg(unix)]
-use std::io;
-use std::io::Read;
-use std::path::PathBuf;
-use std::time::Duration;
 use tempfile::TempDir;
+
+use super::{
+    downloader::download_from_urls,
+    http_test_server::{CannedResponse, LocalServer},
+    installer::DependencyBinaryInstallError,
+};
+use crate::hex::to_lower_hex;
 
 /// A short-timeout agent fixture for driving the local server.
 #[fixture]
@@ -61,14 +53,15 @@ impl DownloadHarness {
 
     /// Open the destination's parent directory as a capability, for asserting on
     /// the written archive.
-    fn destination_dir(&self) -> Dir {
-        let parent = Utf8Path::from_path(
-            self.destination
-                .parent()
-                .expect("destination has a parent directory"),
-        )
-        .expect("temp path is UTF-8");
-        Dir::open_ambient_dir(parent, ambient_authority()).expect("open temp dir capability")
+    fn destination_dir(&self) -> std::io::Result<Dir> {
+        let parent = self
+            .destination
+            .parent()
+            .and_then(Utf8Path::from_path)
+            .ok_or_else(|| {
+                std::io::Error::other("destination must have a UTF-8 parent directory")
+            })?;
+        Dir::open_ambient_dir(parent, ambient_authority())
     }
 }
 
@@ -79,15 +72,15 @@ impl DownloadHarness {
 #[fixture]
 fn download_harness(
     #[default(HashMap::new())] routes: HashMap<String, CannedResponse>,
-) -> DownloadHarness {
+) -> std::io::Result<DownloadHarness> {
     let server = LocalServer::start(routes);
-    let temp = TempDir::new().expect("create temp dir");
+    let temp = TempDir::new()?;
     let destination = temp.path().join("archive.tgz");
-    DownloadHarness {
+    Ok(DownloadHarness {
         server,
         _temp: temp,
         destination,
-    }
+    })
 }
 
 #[rstest]
@@ -103,7 +96,7 @@ fn download_from_urls_writes_the_archive_and_requests_both_endpoints(agent: ureq
         "/archive.tgz.sha256".to_owned(),
         CannedResponse::ok(format!("{checksum}  archive.tgz\n").into_bytes()),
     );
-    let harness = download_harness(routes);
+    let harness = download_harness(routes).expect("download harness should start");
 
     download_from_urls(
         &agent,
@@ -118,6 +111,7 @@ fn download_from_urls_writes_the_archive_and_requests_both_endpoints(agent: ureq
     let mut written = Vec::new();
     harness
         .destination_dir()
+        .expect("destination directory should open")
         .open("archive.tgz")
         .expect("open written archive")
         .read_to_end(&mut written)
@@ -140,7 +134,7 @@ fn download_from_urls_reports_a_checksum_mismatch(agent: ureq::Agent) {
         "/archive.tgz.sha256".to_owned(),
         CannedResponse::ok(format!("{wrong_checksum}  archive.tgz\n").into_bytes()),
     );
-    let harness = download_harness(routes);
+    let harness = download_harness(routes).expect("download harness should start");
 
     let error = download_from_urls(
         &agent,
@@ -171,7 +165,10 @@ fn download_from_urls_reports_a_checksum_mismatch(agent: ureq::Agent) {
     // The unverified archive must not survive a checksum mismatch, so a retry
     // never reads stale data from the destination.
     assert!(
-        !harness.destination_dir().exists("archive.tgz"),
+        !harness
+            .destination_dir()
+            .expect("destination directory should open")
+            .exists("archive.tgz"),
         "archive must be removed from the destination after a checksum mismatch",
     );
 }
@@ -187,7 +184,7 @@ fn download_from_urls_rejects_an_oversized_checksum_sidecar(agent: ureq::Agent) 
         "/archive.tgz.sha256".to_owned(),
         CannedResponse::ok(vec![b'a'; 128 * 1024]),
     );
-    let harness = download_harness(routes);
+    let harness = download_harness(routes).expect("download harness should start");
 
     let error = download_from_urls(
         &agent,
@@ -209,7 +206,10 @@ fn download_from_urls_rejects_an_oversized_checksum_sidecar(agent: ureq::Agent) 
     }
 
     assert!(
-        !harness.destination_dir().exists("archive.tgz"),
+        !harness
+            .destination_dir()
+            .expect("destination directory should open")
+            .exists("archive.tgz"),
         "archive must be removed after an oversized checksum sidecar",
     );
 }
@@ -233,7 +233,7 @@ fn download_from_urls_removes_the_partial_archive_when_the_write_fails(agent: ur
         "/archive.tgz.sha256".to_owned(),
         CannedResponse::ok(sidecar.into_bytes()),
     );
-    let harness = download_harness(routes);
+    let harness = download_harness(routes).expect("download harness should start");
 
     let error = download_from_urls(
         &agent,
@@ -259,7 +259,10 @@ fn download_from_urls_removes_the_partial_archive_when_the_write_fails(agent: ur
     );
 
     assert!(
-        !harness.destination_dir().exists("archive.tgz"),
+        !harness
+            .destination_dir()
+            .expect("destination directory should open")
+            .exists("archive.tgz"),
         "partial archive must be removed after a write failure",
     );
 }
@@ -277,7 +280,7 @@ fn download_from_urls_accepts_an_uppercase_checksum_sidecar(agent: ureq::Agent) 
         "/archive.tgz.sha256".to_owned(),
         CannedResponse::ok(format!("{checksum}  archive.tgz\n").into_bytes()),
     );
-    let harness = download_harness(routes);
+    let harness = download_harness(routes).expect("download harness should start");
 
     download_from_urls(
         &agent,
@@ -306,7 +309,7 @@ fn download_from_urls_rejects_a_malformed_checksum_sidecar(
         "/archive.tgz.sha256".to_owned(),
         CannedResponse::ok(sidecar.as_bytes().to_vec()),
     );
-    let harness = download_harness(routes);
+    let harness = download_harness(routes).expect("download harness should start");
     let checksum_url = harness.checksum_url();
 
     let error = download_from_urls(
@@ -327,73 +330,14 @@ fn download_from_urls_rejects_a_malformed_checksum_sidecar(
 
     // The archive was written before the checksum failed, so it must be removed.
     assert!(
-        !harness.destination_dir().exists("archive.tgz"),
+        !harness
+            .destination_dir()
+            .expect("destination directory should open")
+            .exists("archive.tgz"),
         "archive must be removed after a checksum retrieval failure",
     );
 }
 
 #[cfg(unix)]
-#[test]
-fn download_from_urls_rejects_a_non_utf8_destination_before_any_request() {
-    use std::os::unix::ffi::OsStringExt as _;
-
-    // No route is registered; the server exists only to prove it is never
-    // contacted for an invalid destination.
-    let server = LocalServer::start(HashMap::new());
-
-    // 0x80 is a lone UTF-8 continuation byte, so this path is never valid UTF-8
-    // and must be rejected during validation, before any HTTP request.
-    let invalid = std::path::PathBuf::from(std::ffi::OsString::from_vec(vec![
-        b'/', b't', b'm', b'p', b'/', 0x80, b'.', b't', b'g', b'z',
-    ]));
-
-    let error = download_from_urls(
-        &agent(),
-        &server.url("/archive.tgz"),
-        &server.url("/archive.tgz.sha256"),
-        &invalid,
-    )
-    .expect_err("non-UTF-8 destination must be rejected");
-
-    match error {
-        DependencyBinaryInstallError::Io(source) => {
-            assert_eq!(source.kind(), io::ErrorKind::InvalidInput);
-        }
-        other => panic!("expected an Io error, got {other:?}"),
-    }
-    assert!(
-        server.requested_paths().is_empty(),
-        "no HTTP request must be made for an invalid destination",
-    );
-}
-
-#[cfg(unix)]
-#[test]
-fn download_rejects_a_non_utf8_destination_before_any_network_access() {
-    use std::os::unix::ffi::OsStringExt as _;
-
-    // 0x80 is a lone UTF-8 continuation byte, so this path is never valid UTF-8.
-    // The production `download` must reject it during path validation, which
-    // happens before any HTTP call, so the test needs no network.
-    let invalid = std::path::PathBuf::from(std::ffi::OsString::from_vec(vec![
-        b'/', b't', b'm', b'p', b'/', 0x80, b'.', b't', b'g', b'z',
-    ]));
-
-    let downloader = RepositoryArchiveDownloader;
-    let error = downloader
-        .download("whitaker-dependency", &invalid)
-        .expect_err("non-UTF-8 destination must be rejected");
-
-    match error {
-        DependencyBinaryInstallError::Io(source) => {
-            assert_eq!(source.kind(), io::ErrorKind::InvalidInput);
-            assert!(
-                source
-                    .to_string()
-                    .contains("destination archive path is not valid UTF-8"),
-                "error should identify the non-UTF-8 destination, got: {source}",
-            );
-        }
-        other => panic!("expected an Io error, got {other:?}"),
-    }
-}
+#[path = "downloader_boundary_tests/non_utf8.rs"]
+mod non_utf8;

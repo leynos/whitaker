@@ -71,6 +71,36 @@ make test
 This executes unit, behaviour, and UI harness tests. The shared target enables
 `rstest` fixtures and `rstest-bdd` scenarios.
 
+### Fixture expansion lint macro
+
+The workspace-owned `whitaker_test_macros` crate provides
+`allow_fixture_expansion_lints` for one narrow test-support case: an
+`#[rstest::fixture]` declaration whose macro expansion triggers the
+`unused_braces` lint. Apply the attribute only to that fixture declaration. It
+must not be used on test functions, production code, or as a general mechanism
+for suppressing unrelated lints.
+
+The crate is a non-publishable, path-only workspace dependency. It is available
+to workspace test-support code, but is not a public distribution or runtime
+dependency.
+
+Reuse the shared macro rather than adding crate-local equivalents. Compose it
+with `#[fixture]` by placing it immediately before that attribute:
+
+```rust
+use rstest::fixture;
+use whitaker_test_macros::allow_fixture_expansion_lints;
+
+#[allow_fixture_expansion_lints]
+#[fixture]
+fn world() -> World {
+    World::default()
+}
+```
+
+The macro owns only the narrowly scoped expansion-lint allowance; fixture
+definition and expansion remain the responsibility of `rstest`.
+
 ### Integration tests for lint exclusion behaviour
 
 The `no_std_fs_operations` crate includes end-to-end behavioural coverage for
@@ -173,6 +203,12 @@ the artefact from the dependency directory next to the current test binary.
 `dependency_rlib` scans `target/.../deps` for `lib<crate>-*.rlib`, prefers the
 most recently modified artefact from the current build, and falls back to a
 stable path ordering when timestamps tie before emitting the `--extern` flag.
+
+Standard UI-test entry points should use
+`whitaker::testing::ui::run_ui_test(crate_name, directory, runner)`. This
+helper owns the common runner error handling and panics with the standard
+`RunnerFailure` formatting. Entry points that need custom result handling
+should continue to use `run_with_runner` instead.
 
 This split keeps ordinary UI fixtures simple while still letting regression
 tests cover `rustc --test`, file-backed modules, per-case configuration, and
@@ -2279,13 +2315,26 @@ exercise the real build or download paths.
 Installer regression helpers that mutate process-wide environment variables
 must coordinate through `installer/src/test_support.rs`.
 
-- `env_test_guard()` acquires a shared `Mutex` before any test calls
+- `env_test_guard()` acquires the shared re-entrant guard before any test calls
   `temp_env::with_var` or `temp_env::with_var_unset`.
-- Hold that guard for the full lifetime of the test setup so no parallel case
-  can observe a half-applied environment change.
+- Hold that guard for the full lifetime of the environment mutation, including
+  restoration, so no parallel case can observe a half-applied environment
+  change.
 - `installer/src/staged_suite.rs` shows the intended pattern: acquire the
   guard, create the temporary target directory, then run the env-mutating test
   body.
+
+For a single variable or locale override, prefer
+`whitaker_common::test_support::{with_env_var, with_env_var_removed,
+with_locale}`.
+Each helper holds the shared guard for its complete callback, including
+restoration, so it also coordinates with `EnvVarGuard`. Do not acquire a
+separate mutex around those helpers. `env_test_guard()` is the sole shared
+synchronization mechanism and is reentrant: a callback may safely call a UI
+runner or another helper that acquires it for nested setup. The common
+test-support module owns this lock; callers must reuse it rather than adding
+crate-local environment locks. `EnvTestGuard` is the corresponding façade type
+when a test fixture must retain the guard beyond local scope.
 
 For example:
 
@@ -2306,18 +2355,19 @@ fixture-based test setup used by the staged-suite coverage.
 Workspace-level UI harness tests that mutate process-wide environment variables
 must use `whitaker_common::test_support::EnvVarGuard`. Use `EnvVarGuard::set`
 to install a temporary value and `EnvVarGuard::remove` to make a variable
-absent for the duration of a test. The guard acquires `env_test_guard()` only
-while it captures, mutates, or restores the variable; it must not hold that
-mutex while a runner callback executes, because the callback may need its own
-guarded environment setup.
+absent for the duration of a test. The guard retains `env_test_guard()` from
+construction through restoration in `Drop`, preventing another thread from
+interleaving a mutation or restoring stale state. Because this guard is
+re-entrant, code on the same thread may still use nested helpers that acquire
+the shared protocol.
 
 `whitaker::testing::ui::run_with_runner` applies a specialized guard before
-invoking the Dylint UI runner. On every platform it clears `RUSTC_WRAPPER` only
-while the runner needs bare `rustc` invocations for
-`dylint_testing::Test::example`. On Windows it also sets `VCPKG_ROOT` to
-`C:\vcpkg` when that directory exists and the variable is otherwise absent.
-Restoration uses the same shared environment mutex, but the runner callback
-itself executes without holding that mutex to avoid nested-lock deadlocks.
+invoking the Dylint UI runner and retains it through the callback and
+restoration. On every platform it clears `RUSTC_WRAPPER` while the runner needs
+bare `rustc` invocations for `dylint_testing::Test::example`. On Windows it
+also sets `VCPKG_ROOT` to `C:\vcpkg` when that directory exists and the
+variable is otherwise absent. The shared guard is re-entrant, so the runner
+callback can safely acquire it for nested environment setup.
 
 Example-based UI tests in `rstest_helper_should_be_fixture` also use a
 cross-process directory lock under the system temporary directory. `nextest`
