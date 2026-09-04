@@ -4,6 +4,7 @@
 //! to users when installation fails. Each error includes recovery hints where
 //! applicable.
 
+use crate::artefact::suite_ref::SuiteRef;
 use crate::crate_name::CrateName;
 use camino::Utf8PathBuf;
 use thiserror::Error;
@@ -113,9 +114,9 @@ pub enum InstallerError {
     )]
     SuitePinInWorkspace {
         /// The requested reference.
-        reference: String,
+        reference: SuiteRef,
         /// The workspace that would have been moved.
-        path: String,
+        path: Utf8PathBuf,
     },
 
     /// A Cargo.toml file could not be parsed during workspace detection.
