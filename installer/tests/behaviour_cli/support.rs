@@ -130,18 +130,7 @@ fn matching_files(dir: &Path, substring: &str) -> Vec<String> {
 }
 
 pub(super) fn configure_dry_run_with_target_dir(cli_world: &CliWorld) {
-    let Some(channel) = ensure_required_toolchain_available(cli_world) else {
-        return;
-    };
-
-    let target_dir = setup_temp_dir(cli_world);
-    cli_world.args.replace(vec![
-        "--dry-run".to_owned(),
-        "--toolchain".to_owned(),
-        channel,
-        "--target-dir".to_owned(),
-        target_dir,
-    ]);
+    configure_dry_run_with(cli_world, &[]);
 }
 
 pub(super) fn configure_dry_run_unknown_lint(cli_world: &CliWorld) {
@@ -246,21 +235,29 @@ pub(super) const PINNED_SUITE_REF: &str = "v0.2.7";
 /// would read it as an option rather than as a reference.
 pub(super) const HOSTILE_SUITE_REF: &str = "--upload-pack=touch /tmp/whitaker-pwned";
 
-pub(super) fn configure_dry_run_with_pinned_suite(cli_world: &CliWorld) {
+/// Configure a dry run in a temporary target directory, plus `extra`.
+///
+/// Every scenario that needs a real toolchain and somewhere to stage builds
+/// starts the same way; the difference between them is the tail.
+fn configure_dry_run_with(cli_world: &CliWorld, extra: &[&str]) {
     let Some(channel) = ensure_required_toolchain_available(cli_world) else {
         return;
     };
 
     let target_dir = setup_temp_dir(cli_world);
-    cli_world.args.replace(vec![
+    let mut args = vec![
         "--dry-run".to_owned(),
         "--toolchain".to_owned(),
         channel,
         "--target-dir".to_owned(),
         target_dir,
-        "--suite-version".to_owned(),
-        PINNED_SUITE_REF.to_owned(),
-    ]);
+    ];
+    args.extend(extra.iter().map(|argument| (*argument).to_owned()));
+    cli_world.args.replace(args);
+}
+
+pub(super) fn configure_dry_run_with_pinned_suite(cli_world: &CliWorld) {
+    configure_dry_run_with(cli_world, &["--suite-version", PINNED_SUITE_REF]);
 }
 
 pub(super) fn configure_hostile_suite_ref(cli_world: &CliWorld) {

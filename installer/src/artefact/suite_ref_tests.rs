@@ -54,14 +54,22 @@ fn rejects_a_reference_longer_than_the_limit() {
 }
 
 #[rstest]
-fn the_error_names_the_value_and_the_reason() {
-    let result: Result<SuiteRef> = "main~1".try_into();
+#[case::forbidden_character("main~1", "character git forbids")]
+#[case::leading_dash("-x", "must not begin with '-'")]
+#[case::empty_value("", "must not be empty")]
+#[case::reflog("main@{now}", "must not contain '@{'")]
+fn the_error_names_the_value_and_the_reason(#[case] value: &str, #[case] reason: &str) {
+    // Both halves matter and are asserted separately: the value so the caller
+    // can see which argument was refused, and the reason so they know what to
+    // change. Asserting only that the message mentions some character would
+    // pass on the echoed value alone.
+    let result: Result<SuiteRef> = value.try_into();
 
     let error = result.expect_err("should be rejected");
     let rendered = error.to_string();
 
-    assert!(rendered.contains("main~1"), "{rendered}");
-    assert!(rendered.contains('~'), "{rendered}");
+    assert!(rendered.contains(value), "value missing from: {rendered}");
+    assert!(rendered.contains(reason), "reason missing from: {rendered}");
 }
 
 #[rstest]

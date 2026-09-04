@@ -117,49 +117,77 @@ impl fmt::Display for SuiteRef {
     }
 }
 
+/// One rule a reference must satisfy, and what to say when it does not.
+///
+/// A table rather than a chain of guards: each rule reads as the single
+/// question it asks, and adding one does not lengthen a function.
+struct Rule {
+    /// Whether the value breaks this rule.
+    breaks: fn(&str) -> bool,
+    /// What to tell the caller when it does.
+    reason: &'static str,
+}
+
+/// Every rule, in the order a reader would ask them.
+///
+/// The first two are about how the value reaches a command line; the rest are
+/// what `git check-ref-format` itself refuses, checked here so a bad reference
+/// fails before a clone has been paid for rather than after.
+const RULES: &[Rule] = &[
+    Rule {
+        breaks: str::is_empty,
+        reason: "must not be empty",
+    },
+    Rule {
+        // A leading dash reaches `git checkout` as an option rather than as a
+        // reference, so it is refused here rather than misread there.
+        breaks: |value| value.starts_with('-'),
+        reason: "must not begin with '-'",
+    },
+    Rule {
+        breaks: |value| value.len() > MAX_LEN,
+        reason: "is longer than the limit",
+    },
+    Rule {
+        breaks: |value| value.starts_with('/') || value.ends_with('/'),
+        reason: "must not begin or end with '/'",
+    },
+    Rule {
+        breaks: |value| value.ends_with(".lock"),
+        reason: "must not end with '.lock'",
+    },
+    Rule {
+        breaks: |value| value.contains(".."),
+        reason: "must not contain '..'",
+    },
+    Rule {
+        breaks: |value| value.contains("//"),
+        reason: "must not contain '//'",
+    },
+    Rule {
+        breaks: |value| value.contains("@{"),
+        reason: "must not contain '@{'",
+    },
+    Rule {
+        breaks: |value| value.chars().any(|c| FORBIDDEN.contains(&c)),
+        reason: "must not contain a character git forbids in a reference",
+    },
+    Rule {
+        breaks: |value| value.chars().any(char::is_control),
+        reason: "must not contain control characters",
+    },
+];
+
 /// Reject a reference git would refuse, or that would reach a command line
 /// as something other than a reference.
 fn validate_suite_ref(value: &str) -> Result<()> {
-    let reject = |reason: &str| {
-        Err(ArtefactError::InvalidSuiteRef {
+    match RULES.iter().find(|rule| (rule.breaks)(value)) {
+        Some(rule) => Err(ArtefactError::InvalidSuiteRef {
             value: value.to_owned(),
-            reason: reason.to_owned(),
-        })
-    };
-
-    if value.is_empty() {
-        return reject("must not be empty");
+            reason: rule.reason.to_owned(),
+        }),
+        None => Ok(()),
     }
-    if value.len() > MAX_LEN {
-        return reject(&format!("must be at most {MAX_LEN} characters"));
-    }
-    // A leading dash reaches `git checkout` as an option rather than as a
-    // reference, so it is refused here rather than misread there.
-    if value.starts_with('-') {
-        return reject("must not begin with '-'");
-    }
-    if value.starts_with('/') || value.ends_with('/') {
-        return reject("must not begin or end with '/'");
-    }
-    if value.ends_with(".lock") {
-        return reject("must not end with '.lock'");
-    }
-    if value.contains("..") {
-        return reject("must not contain '..'");
-    }
-    if value.contains("//") {
-        return reject("must not contain '//'");
-    }
-    if value.contains("@{") {
-        return reject("must not contain '@{'");
-    }
-    if let Some(found) = value.chars().find(|c| FORBIDDEN.contains(c)) {
-        return reject(&format!("must not contain {found:?}"));
-    }
-    if value.chars().any(char::is_control) {
-        return reject("must not contain control characters");
-    }
-    Ok(())
 }
 
 #[cfg(test)]

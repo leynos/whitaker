@@ -163,6 +163,16 @@ pub struct ListArgs {
 }
 
 impl InstallArgs {
+    /// Whether the arguments alone rule out a prebuilt artefact.
+    ///
+    /// Three unrelated reasons, so they are named here rather than read as one
+    /// condition: the caller asked to build, the caller asked for experimental
+    /// lints which are never published, or the caller pinned a suite that the
+    /// rolling release cannot carry.
+    fn arguments_force_a_source_build(&self) -> bool {
+        self.is_build_only || self.experimental || self.suite_version.is_some()
+    }
+
     /// Return true when installer settings permit a prebuilt download attempt.
     ///
     /// Prebuilt artefacts are skipped when:
@@ -198,10 +208,7 @@ impl InstallArgs {
     /// ```
     #[must_use]
     pub fn should_attempt_prebuilt(&self, requested_crates: &[CrateName]) -> bool {
-        // A pin can never be served from the rolling release, which carries
-        // only the tip, so attempting it would spend a download and a manifest
-        // parse to learn what the pin already says.
-        if self.is_build_only || self.experimental || self.suite_version.is_some() {
+        if self.arguments_force_a_source_build() {
             return false;
         }
         !requested_crates
