@@ -71,7 +71,6 @@ make test
 This executes unit, behaviour, and UI harness tests. The shared target enables
 `rstest` fixtures and `rstest-bdd` scenarios.
 
-
 ### Fixture expansion lint macro
 
 The workspace-owned `whitaker_test_macros` crate provides
@@ -2327,11 +2326,12 @@ must coordinate through `installer/src/test_support.rs`.
 
 For a single variable or locale override, prefer
 `whitaker_common::test_support::{with_env_var, with_env_var_removed,
-with_locale}`. Each helper holds the shared guard for its complete callback,
-including restoration, so it also coordinates with `EnvVarGuard`. Do not
-acquire a separate mutex around those helpers. `env_test_guard()` is the sole
-shared synchronization mechanism and is reentrant: a callback may safely call
-a UI runner or another helper that acquires it for nested setup. The common
+with_locale}`.
+Each helper holds the shared guard for its complete callback, including
+restoration, so it also coordinates with `EnvVarGuard`. Do not acquire a
+separate mutex around those helpers. `env_test_guard()` is the sole shared
+synchronization mechanism and is reentrant: a callback may safely call a UI
+runner or another helper that acquires it for nested setup. The common
 test-support module owns this lock; callers must reuse it rather than adding
 crate-local environment locks. `EnvTestGuard` is the corresponding façade type
 when a test fixture must retain the guard beyond local scope.
@@ -2364,11 +2364,10 @@ the shared protocol.
 `whitaker::testing::ui::run_with_runner` applies a specialized guard before
 invoking the Dylint UI runner and retains it through the callback and
 restoration. On every platform it clears `RUSTC_WRAPPER` while the runner needs
-bare `rustc` invocations for
-`dylint_testing::Test::example`. On Windows it also sets `VCPKG_ROOT` to
-`C:\vcpkg` when that directory exists and the variable is otherwise absent.
-The shared guard is re-entrant, so the runner callback can safely acquire it
-for nested environment setup.
+bare `rustc` invocations for `dylint_testing::Test::example`. On Windows it
+also sets `VCPKG_ROOT` to `C:\vcpkg` when that directory exists and the
+variable is otherwise absent. The shared guard is re-entrant, so the runner
+callback can safely acquire it for nested environment setup.
 
 Example-based UI tests in `rstest_helper_should_be_fixture` also use a
 cross-process directory lock under the system temporary directory. `nextest`
