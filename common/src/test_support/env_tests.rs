@@ -9,6 +9,7 @@ use std::{
 };
 
 use super::{EnvVarGuard, env_test_guard, with_env_var, with_env_var_removed, with_locale};
+use proptest::prelude::*;
 
 const ABSENT_SET_KEY: &str = "WHITAKER_TEST_SUPPORT_ABSENT_SET";
 const REMOVED_KEY: &str = "WHITAKER_TEST_SUPPORT_REMOVED";
@@ -16,6 +17,7 @@ const SET_PANIC_KEY: &str = "WHITAKER_TEST_SUPPORT_SET_PANIC";
 const REMOVE_PANIC_KEY: &str = "WHITAKER_TEST_SUPPORT_REMOVE_PANIC";
 const SCOPED_KEY: &str = "WHITAKER_TEST_SUPPORT_SCOPED";
 const OVERLAPPING_GUARDS_KEY: &str = "WHITAKER_TEST_SUPPORT_OVERLAPPING_GUARDS";
+const PROPERTY_KEY: &str = "WHITAKER_TEST_SUPPORT_PROPERTY";
 
 struct GuardThread {
     release_sender: mpsc::Sender<()>,
@@ -231,10 +233,13 @@ fn scoped_mutation_allows_nested_shared_environment_setup() {
 
 #[test]
 fn overlapping_env_var_guards_wait_for_mutation_and_restoration() {
-    assert!(
-        std::env::var_os(OVERLAPPING_GUARDS_KEY).is_none(),
-        "the unique regression key must start absent"
-    );
+    {
+        let _guard = env_test_guard();
+        assert!(
+            std::env::var_os(OVERLAPPING_GUARDS_KEY).is_none(),
+            "the unique regression key must start absent"
+        );
+    }
     let first_guard = spawn_first_guard();
     first_guard.wait_for_creation("first guard must be created before the second starts");
     let (second_guard, second_attempted_receiver) = spawn_second_guard();
@@ -273,6 +278,7 @@ fn overlapping_env_var_guards_wait_for_mutation_and_restoration() {
     second_guard.wait_for_drop("second guard must restore after release");
     first_guard.join("first guard thread must complete");
     second_guard.join("second guard thread must complete");
+    let _guard = env_test_guard();
     assert!(std::env::var_os(OVERLAPPING_GUARDS_KEY).is_none());
 }
 
@@ -298,4 +304,70 @@ fn locale_scopes_restore_set_and_removed_values() {
     });
     assert!(std::env::var_os("DYLINT_LOCALE").is_none());
     drop(cleared);
+}
+
+proptest! {
+    #[test]
+    fn scoped_environment_transitions_restore_the_initial_value(
+        initial in prop_oneof![Just(None), Just(Some("first")), Just(Some("second"))],
+        transitions in prop::collection::vec(0_u8..6, 1..8),
+    ) {
+        let _protocol = env_test_guard();
+        let baseline = match initial {
+            Some(value) => EnvVarGuard::set(PROPERTY_KEY, value),
+            None => EnvVarGuard::remove(PROPERTY_KEY),
+        };
+
+        for transition in transitions {
+            match transition {
+                0 => {
+                    let temporary_visible = with_env_var(PROPERTY_KEY, "temporary", || {
+                        std::env::var_os(PROPERTY_KEY).as_deref()
+                            == Some(OsStr::new("temporary"))
+                    });
+                    prop_assert!(temporary_visible);
+                }
+                1 => {
+                    let removed = with_env_var_removed(PROPERTY_KEY, || {
+                        std::env::var_os(PROPERTY_KEY).is_none()
+                    });
+                    prop_assert!(removed);
+                }
+                2 => {
+                    let (inner_removed, outer_restored) = with_env_var(PROPERTY_KEY, "outer", || {
+                        let inner_removed = with_env_var_removed(PROPERTY_KEY, || {
+                            std::env::var_os(PROPERTY_KEY).is_none()
+                        });
+                        let outer_restored = std::env::var_os(PROPERTY_KEY).as_deref()
+                            == Some(OsStr::new("outer"));
+                        (inner_removed, outer_restored)
+                    });
+                    prop_assert!(inner_removed);
+                    prop_assert!(outer_restored);
+                }
+                3 => {
+                    let panic = catch_unwind(AssertUnwindSafe(|| {
+                        with_env_var(PROPERTY_KEY, "temporary", || panic!("test panic"));
+                    }));
+                    prop_assert!(panic.is_err());
+                }
+                4 => {
+                    let competing_guard = EnvVarGuard::set(PROPERTY_KEY, "guarded");
+                    drop(competing_guard);
+                }
+                5 => {
+                    let panic = catch_unwind(AssertUnwindSafe(|| {
+                        with_env_var_removed(PROPERTY_KEY, || panic!("test panic"));
+                    }));
+                    prop_assert!(panic.is_err());
+                }
+                _ => unreachable!("the transition strategy only yields values below six"),
+            }
+
+            let restored = std::env::var_os(PROPERTY_KEY);
+            prop_assert_eq!(restored.as_deref(), initial.map(OsStr::new));
+        }
+
+        drop(baseline);
+    }
 }

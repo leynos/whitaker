@@ -90,6 +90,7 @@ mod staging_failure {
 
     use super::*;
 
+    /// State shared by the unwritable-staging-directory scenario steps.
     pub struct StagingFailureWorld {
         stager: RefCell<Option<Stager>>,
         result: RefCell<Option<Result<(), InstallerError>>>,
