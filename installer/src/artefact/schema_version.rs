@@ -100,7 +100,7 @@ mod tests {
     fn rejects_version_zero() {
         let result = SchemaVersion::try_from(0_u32);
         assert!(result.is_err());
-        let err = result.unwrap_err();
+        let err = result.expect_err("schema version zero must be rejected");
         assert!(matches!(
             err,
             ArtefactError::UnsupportedSchemaVersion { value: 0, max: 1 }

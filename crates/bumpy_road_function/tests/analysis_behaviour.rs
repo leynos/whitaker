@@ -10,7 +10,7 @@ extern crate rustc_driver;
 use std::cell::RefCell;
 
 use bumpy_road_function::analysis::{
-    DEFAULT_THRESHOLD, Settings, Weights, detect_bumps, normalise_settings, top_two_bumps,
+    DEFAULT_THRESHOLD, Settings, Weights, detect_bumps, normalize_settings, top_two_bumps,
 };
 use rstest::{fixture, rstest};
 use rstest_bdd_macros::{given, scenario, then, when};
@@ -58,11 +58,11 @@ use rstest_bdd_macros::{given, scenario, then, when};
     },
     Settings::default(),
 )]
-fn normalise_settings_falls_back_to_defaults(
+fn normalize_settings_falls_back_to_defaults(
     #[case] settings: Settings,
     #[case] expected: Settings,
 ) {
-    let normalized = normalise_settings(settings);
+    let normalized = normalize_settings(settings);
     assert_eq!(normalized, expected);
 }
 
@@ -174,7 +174,7 @@ fn when_set_threshold(world: &World, threshold: f64) {
 #[when("I normalize the settings")]
 fn when_normalize(world: &World) {
     let settings = *world.settings.borrow();
-    let normalized = normalise_settings(settings);
+    let normalized = normalize_settings(settings);
     world.normalized.replace(Some(normalized));
 }
 

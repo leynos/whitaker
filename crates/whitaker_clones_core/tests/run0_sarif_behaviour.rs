@@ -314,7 +314,7 @@ fn then_primary_file_is(world: &Run0World, file_uri: String) {
             panic!("a primary location must be present");
         };
         assert_eq!(
-            location.physical_location.artifact_location.uri, file_uri,
+            location.physical_location.artefact_location.uri, file_uri,
             "primary file URI must match the scenario expectation"
         );
     });

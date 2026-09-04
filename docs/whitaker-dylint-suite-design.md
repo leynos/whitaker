@@ -1237,7 +1237,7 @@ and predicate complexity.
 
 Collect segments `(start_line, end_line, value)` using `SourceMap` mapping and
 accumulate contributions with weights (`wD = 1.0`, `wP = 0.5`, `wK = 0.5`).
-Rasterise once per function to produce a per-line signal `C[line]` representing
+Rasterize once per function to produce a per-line signal `C[line]` representing
 local complexity.
 
 ```rust
@@ -1295,7 +1295,7 @@ highlight the top two intervals in the diagnostic.
 
 1. Walk the function HIR, updating depth and collecting segments for blocks,
    branches, and predicate spans.
-2. Rasterise segments to per-line values, then smooth with the configured
+2. Rasterize segments to per-line values, then smooth with the configured
    window.
 3. Detect bumps where the smoothed value meets or exceeds `threshold`.
 4. Emit a diagnostic on the function name span when bumps ≥ 2, attaching labels
@@ -1321,7 +1321,7 @@ functions typically remain below the threshold after smoothing. Deep single
 nests fall under other lints such as `excessive_nesting`.
 
 **Performance.** The pass is linear in the size of each function’s HIR. Segment
-rasterisation touches at most the number of lines in the function, keeping the
+rasterization touches at most the number of lines in the function, keeping the
 overhead negligible for typical Rust code.
 
 **Test plan.** Provide UI cases covering two separated nested blocks,
@@ -1366,7 +1366,7 @@ function and is suitable as a stable Dylint rule in the default suite.
 
 ### Phase 0 — Repo scaffolding
 
-- Initialise workspace
+- Initialize workspace
   - Create `Cargo.toml` with `[workspace]`, resolver = 2, members = `crates/*`,
     `common`, `suite`, `installer`.
   - Add `rust-toolchain.toml` (pin nightly) and `rustfmt.toml`.
@@ -1651,7 +1651,10 @@ used by the installer itself.
 - Extend `.github/workflows/release.yml` so tagged releases publish the same
   dependency-binary archives and provenance document next to the
   `whitaker-installer` archives.
-- Teach `installer/src/deps.rs` to install missing tools in this order:
+- Keep the dependency-tool installer in `installer/src/deps/mod.rs` so its
+  implementation children, including `install.rs`, remain colocated with the
+  module that owns the fallback policy.
+- Teach `installer/src/deps/mod.rs` to install missing tools in this order:
   repository archive, `cargo binstall`, then `cargo install`. Repository-path
   failures stay non-fatal and degrade cleanly into the Cargo fallback path.
 
