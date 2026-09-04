@@ -10,8 +10,8 @@ documentation = "https://github.com/leynos/whitaker/tree/main/docs/users-guide.m
 version = "0.2.7"
 
 [workspace.dependencies]
-whitaker-common = { path = "common", version = "0.2.7" }
-whitaker-installer = { path = "installer", version = "0.2.7" }
+whitaker-common = { path = "common", version = "0.2.8" }
+whitaker-installer = { path = "installer", version = "0.2.8" }
 whitaker = { path = ".", version = "0.2.7" }
 camino = "1.2.1"
 cap-std = { version = "4.0.2", features = ["fs_utf8"] }

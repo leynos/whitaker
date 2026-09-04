@@ -166,7 +166,9 @@ impl InstallArgs {
     /// Return true when installer settings permit a prebuilt download attempt.
     ///
     /// Prebuilt artefacts are skipped when:
-    /// - `--build-only` is set, or
+    /// - `--build-only` is set,
+    /// - `--suite-version` pins the suite, because prebuilt artefacts are
+    ///   published only for the branch tip and so can never satisfy a pin, or
     /// - experimental lint behaviour is requested, either via
     ///   `--experimental` (suite build) or explicit experimental crates when
     ///   the experimental crate list is non-empty.
@@ -187,10 +189,19 @@ impl InstallArgs {
     ///     ..InstallArgs::default()
     /// };
     /// assert!(!build_only_args.should_attempt_prebuilt(&requested));
+    ///
+    /// let pinned_args = InstallArgs {
+    ///     suite_version: Some("v0.2.7".try_into().expect("valid reference")),
+    ///     ..InstallArgs::default()
+    /// };
+    /// assert!(!pinned_args.should_attempt_prebuilt(&requested));
     /// ```
     #[must_use]
     pub fn should_attempt_prebuilt(&self, requested_crates: &[CrateName]) -> bool {
-        if self.is_build_only || self.experimental {
+        // A pin can never be served from the rolling release, which carries
+        // only the tip, so attempting it would spend a download and a manifest
+        // parse to learn what the pin already says.
+        if self.is_build_only || self.experimental || self.suite_version.is_some() {
             return false;
         }
         !requested_crates

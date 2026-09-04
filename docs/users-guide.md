@@ -123,9 +123,17 @@ resolve.
 Two consequences are worth knowing before pinning.
 
 **A pinned suite is built from source.** Prebuilt lint libraries are published
-only for the branch tip, under the `rolling` tag, so a pin cannot be served
-from them and the install compiles the suite locally. Pinning trades install
-time for reproducibility.
+only for the branch tip, under the `rolling` tag, so a pin can never be served
+from them; the installer does not attempt the download at all when a pin is
+set, and compiles the suite locally instead. Pinning trades install time for
+reproducibility, and that is the whole of the trade: a pinned lane is slower on
+a cold cache and does not change what it produces.
+
+The prebuilt path would not help a pin even if artefacts existed for every tag.
+A lint library must be built with the exact toolchain that will load it, and
+artefacts are named for the toolchain they were built with, so a pin held
+against a newer `rust-toolchain.toml` misses and builds from source anyway. The
+guarantee a pin buys is reproducibility, not speed.
 
 **A pin cannot be applied from inside a Whitaker checkout.** Checking out a
 reference there would move the working tree, so the installer refuses and says

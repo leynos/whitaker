@@ -110,6 +110,30 @@ fn should_attempt_prebuilt_false_when_build_only() {
 }
 
 #[test]
+fn should_attempt_prebuilt_false_when_the_suite_is_pinned() {
+    // The rolling release carries the tip and nothing else, so a pinned
+    // install can only ever be served by a source build. Attempting the
+    // download first would spend a request to learn what the pin already says.
+    let args = InstallArgs {
+        suite_version: Some("v0.2.7".try_into().expect("valid reference")),
+        ..InstallArgs::default()
+    };
+    let requested = vec![CrateName::from("whitaker_suite")];
+    assert!(!args.should_attempt_prebuilt(&requested));
+}
+
+#[test]
+fn should_attempt_prebuilt_true_when_the_suite_is_not_pinned() {
+    // The counterpart, so the skip cannot quietly become unconditional.
+    let args = InstallArgs {
+        suite_version: None,
+        ..InstallArgs::default()
+    };
+    let requested = vec![CrateName::from("whitaker_suite")];
+    assert!(args.should_attempt_prebuilt(&requested));
+}
+
+#[test]
 fn should_attempt_prebuilt_false_when_experimental_flag_enabled() {
     let args = InstallArgs {
         experimental: true,
