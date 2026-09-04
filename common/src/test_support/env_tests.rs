@@ -306,6 +306,54 @@ fn locale_scopes_restore_set_and_removed_values() {
     drop(cleared);
 }
 
+fn transition_exposes_temporary_value() -> Result<(), TestCaseError> {
+    let temporary_visible = with_env_var(PROPERTY_KEY, "temporary", || {
+        std::env::var_os(PROPERTY_KEY).as_deref() == Some(OsStr::new("temporary"))
+    });
+    prop_assert!(temporary_visible);
+    Ok(())
+}
+
+fn transition_removes_temporary_value() -> Result<(), TestCaseError> {
+    let removed = with_env_var_removed(PROPERTY_KEY, || std::env::var_os(PROPERTY_KEY).is_none());
+    prop_assert!(removed);
+    Ok(())
+}
+
+fn transition_restores_outer_value_after_nested_removal() -> Result<(), TestCaseError> {
+    let (inner_removed, outer_restored) = with_env_var(PROPERTY_KEY, "outer", || {
+        let inner_removed =
+            with_env_var_removed(PROPERTY_KEY, || std::env::var_os(PROPERTY_KEY).is_none());
+        let outer_restored = std::env::var_os(PROPERTY_KEY).as_deref() == Some(OsStr::new("outer"));
+        (inner_removed, outer_restored)
+    });
+    prop_assert!(inner_removed);
+    prop_assert!(outer_restored);
+    Ok(())
+}
+
+fn transition_restores_value_after_set_callback_panic() -> Result<(), TestCaseError> {
+    let panic = catch_unwind(AssertUnwindSafe(|| {
+        with_env_var(PROPERTY_KEY, "temporary", || panic!("test panic"));
+    }));
+    prop_assert!(panic.is_err());
+    Ok(())
+}
+
+fn transition_drops_competing_guard() -> Result<(), TestCaseError> {
+    let competing_guard = EnvVarGuard::set(PROPERTY_KEY, "guarded");
+    drop(competing_guard);
+    Ok(())
+}
+
+fn transition_restores_value_after_remove_callback_panic() -> Result<(), TestCaseError> {
+    let panic = catch_unwind(AssertUnwindSafe(|| {
+        with_env_var_removed(PROPERTY_KEY, || panic!("test panic"));
+    }));
+    prop_assert!(panic.is_err());
+    Ok(())
+}
+
 proptest! {
     #[test]
     fn scoped_environment_transitions_restore_the_initial_value(
@@ -320,47 +368,12 @@ proptest! {
 
         for transition in transitions {
             match transition {
-                0 => {
-                    let temporary_visible = with_env_var(PROPERTY_KEY, "temporary", || {
-                        std::env::var_os(PROPERTY_KEY).as_deref()
-                            == Some(OsStr::new("temporary"))
-                    });
-                    prop_assert!(temporary_visible);
-                }
-                1 => {
-                    let removed = with_env_var_removed(PROPERTY_KEY, || {
-                        std::env::var_os(PROPERTY_KEY).is_none()
-                    });
-                    prop_assert!(removed);
-                }
-                2 => {
-                    let (inner_removed, outer_restored) = with_env_var(PROPERTY_KEY, "outer", || {
-                        let inner_removed = with_env_var_removed(PROPERTY_KEY, || {
-                            std::env::var_os(PROPERTY_KEY).is_none()
-                        });
-                        let outer_restored = std::env::var_os(PROPERTY_KEY).as_deref()
-                            == Some(OsStr::new("outer"));
-                        (inner_removed, outer_restored)
-                    });
-                    prop_assert!(inner_removed);
-                    prop_assert!(outer_restored);
-                }
-                3 => {
-                    let panic = catch_unwind(AssertUnwindSafe(|| {
-                        with_env_var(PROPERTY_KEY, "temporary", || panic!("test panic"));
-                    }));
-                    prop_assert!(panic.is_err());
-                }
-                4 => {
-                    let competing_guard = EnvVarGuard::set(PROPERTY_KEY, "guarded");
-                    drop(competing_guard);
-                }
-                5 => {
-                    let panic = catch_unwind(AssertUnwindSafe(|| {
-                        with_env_var_removed(PROPERTY_KEY, || panic!("test panic"));
-                    }));
-                    prop_assert!(panic.is_err());
-                }
+                0 => transition_exposes_temporary_value()?,
+                1 => transition_removes_temporary_value()?,
+                2 => transition_restores_outer_value_after_nested_removal()?,
+                3 => transition_restores_value_after_set_callback_panic()?,
+                4 => transition_drops_competing_guard()?,
+                5 => transition_restores_value_after_remove_callback_panic()?,
                 _ => unreachable!("the transition strategy only yields values below six"),
             }
 
