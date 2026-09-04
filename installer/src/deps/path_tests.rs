@@ -225,8 +225,11 @@ fn check_dylint_tools_detects_dylint_link_via_pathext_suffix() {
         },
         || {
             temp_env::with_var("PATHEXT", Some(".CMD;.BAT"), || {
-                let executor =
-                    StubExecutor::new(vec![cargo_dylint_check(), dylint_link_install_list_check()]);
+                let executor = StubExecutor::new(vec![
+                    cargo_dylint_check().expect("cargo-dylint dependency version should resolve"),
+                    dylint_link_install_list_check()
+                        .expect("dylint-link dependency version should resolve"),
+                ]);
 
                 let status = check_dylint_tools(&executor);
 
