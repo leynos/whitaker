@@ -4,6 +4,7 @@
 //! to users when installation fails. Each error includes recovery hints where
 //! applicable.
 
+use crate::artefact::suite_ref::SuiteRef;
 use crate::crate_name::CrateName;
 use camino::Utf8PathBuf;
 use thiserror::Error;
@@ -103,6 +104,19 @@ pub enum InstallerError {
     WorkspaceNotFound {
         /// Description of why the workspace was not found.
         reason: String,
+    },
+
+    /// A suite pin was requested from inside a Whitaker working tree.
+    #[error(
+        "cannot pin the suite to \"{reference}\" from inside a Whitaker workspace at {path}; \
+         checking out a reference here would move your own working tree. \
+         Run the installer from another directory, or check out the reference yourself."
+    )]
+    SuitePinInWorkspace {
+        /// The requested reference.
+        reference: SuiteRef,
+        /// The workspace that would have been moved.
+        path: Utf8PathBuf,
     },
 
     /// A Cargo.toml file could not be parsed during workspace detection.
@@ -230,6 +244,10 @@ impl Clone for InstallerError {
             }
             Self::WorkspaceNotFound { reason } => Self::WorkspaceNotFound {
                 reason: reason.clone(),
+            },
+            Self::SuitePinInWorkspace { reference, path } => Self::SuitePinInWorkspace {
+                reference: reference.clone(),
+                path: path.clone(),
             },
             Self::InvalidCargoToml { path, reason } => Self::InvalidCargoToml {
                 path: path.clone(),

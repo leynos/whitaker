@@ -102,6 +102,7 @@ pub fn success_message(count: usize, target_dir: &Utf8Path) -> String {
 ///     skip_deps: false,
 ///     skip_wrapper: false,
 ///     no_update: false,
+///     suite_ref: None,
 ///     jobs: None,
 ///     crates: &crates,
 /// };
@@ -128,6 +129,8 @@ pub struct DryRunInfo<'a> {
     pub skip_wrapper: bool,
     /// Whether repository updates are disabled.
     pub no_update: bool,
+    /// The reference the lint suite is pinned to, if any.
+    pub suite_ref: Option<&'a str>,
     /// Optional parallel job count.
     pub jobs: Option<usize>,
     /// Crates to be built.
@@ -149,6 +152,12 @@ impl DryRunInfo<'_> {
             format!("Skip deps: {}", self.skip_deps),
             format!("Skip wrapper: {}", self.skip_wrapper),
             format!("No update: {}", self.no_update),
+            // Named even when absent, because "which suite is this?" is the
+            // question a dry run is most often used to answer.
+            format!(
+                "Suite: {}",
+                self.suite_ref.unwrap_or("default branch tip (unpinned)")
+            ),
         ];
 
         if let Some(jobs) = self.jobs {

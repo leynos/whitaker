@@ -134,3 +134,15 @@ Feature: Whitaker lint library installer
     When the installer CLI is run
     Then the CLI exits successfully
     And experimental lint dry-run output is shown
+
+  Scenario: Dry-run reports the pinned lint suite
+    Given the installer is invoked with dry-run and a pinned suite
+    When the installer CLI is run
+    Then the CLI exits successfully
+    And the pinned suite is named in the dry-run output
+
+  Scenario: A suite reference git would not take is refused
+    Given the installer is invoked with a suite reference git would reject
+    When the installer CLI is run
+    Then the CLI exits with an error
+    And the rejected suite reference is named

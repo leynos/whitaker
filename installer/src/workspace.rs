@@ -3,6 +3,7 @@
 //! This module provides utilities for detecting whether the current directory
 //! is a Whitaker workspace and for resolving platform-specific clone locations.
 
+use crate::artefact::suite_ref::SuiteRef;
 use crate::dirs::BaseDirs;
 use crate::error::{InstallerError, Result};
 use camino::{Utf8Path, Utf8PathBuf};
@@ -98,33 +99,161 @@ pub fn decide_workspace_action(
     }
 }
 
+/// How the workspace should be established for one install.
+///
+/// A pair rather than two arguments because the second only means anything
+/// alongside the first: a pin makes the update question moot, since the
+/// reference is fetched and checked out either way.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct WorkspacePlan {
+    /// Whether an existing clone should be updated to the branch tip.
+    pub should_update: bool,
+    /// The reference to build the lint suite from, if the caller pinned one.
+    pub suite_ref: Option<SuiteRef>,
+}
+
+impl WorkspacePlan {
+    /// A plan that updates an existing clone and pins nothing.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use whitaker_installer::workspace::WorkspacePlan;
+    ///
+    /// let plan = WorkspacePlan::updating(true);
+    /// assert!(plan.should_update);
+    /// assert!(plan.suite_ref.is_none());
+    /// ```
+    #[must_use]
+    pub fn updating(should_update: bool) -> Self {
+        Self {
+            should_update,
+            suite_ref: None,
+        }
+    }
+}
+
 /// Ensures a Whitaker workspace is available, cloning if necessary.
 ///
 /// If the current directory is already a Whitaker workspace, returns its path.
 /// Otherwise, clones or updates the repository in the platform-specific data
-/// directory. Set `update` to `true` to run `git pull` on existing clones.
+/// directory. Set `should_update` to `true` to run `git pull` on existing
+/// clones.
+///
+/// When the plan carries a suite reference, the clone is fetched and that
+/// reference checked out, so the suite is built from it rather than from the
+/// branch tip. The fetch happens whether or not `should_update` is set,
+/// because a pin is an explicit request for a particular reference and that
+/// reference may have been published after the clone was made.
 ///
 /// # Errors
 ///
-/// Returns an error if the clone directory cannot be determined or if
-/// cloning/updating fails.
-pub fn ensure_workspace(dirs: &dyn BaseDirs, update: bool) -> Result<Utf8PathBuf> {
+/// Returns an error if the clone directory cannot be determined, if
+/// cloning, updating or checking out fails, or if a pin was requested while
+/// the current directory is itself a Whitaker workspace, since checking out
+/// there would move the caller's own working tree.
+pub fn ensure_workspace(dirs: &dyn BaseDirs, plan: &WorkspacePlan) -> Result<Utf8PathBuf> {
     let cwd = current_dir_utf8()?;
     let clone_dir = clone_directory(dirs).ok_or_else(|| InstallerError::WorkspaceNotFound {
         reason: "could not determine data directory for cloning".to_owned(),
     })?;
 
-    match decide_workspace_action(&cwd, &clone_dir, update) {
-        WorkspaceAction::UseCurrentDir(dir) | WorkspaceAction::UseExisting(dir) => Ok(dir),
+    let action = plan_workspace_action(&cwd, &clone_dir, plan)?;
+    let dir = match action {
+        WorkspaceAction::UseCurrentDir(dir) => dir,
+        WorkspaceAction::UseExisting(dir) => {
+            reuse_existing_clone(&dir, plan)?;
+            dir
+        }
         WorkspaceAction::CloneTo(dir) => {
             crate::git::clone_repository(&dir)?;
-            Ok(dir)
+            dir
         }
         WorkspaceAction::UpdateAt(dir) => {
-            crate::git::update_repository(&dir)?;
-            Ok(dir)
+            update_existing_clone(&dir, plan)?;
+            dir
         }
+    };
+
+    if let Some(reference) = plan.suite_ref.as_ref() {
+        crate::git::checkout_ref(&dir, reference)?;
     }
+    Ok(dir)
+}
+
+/// Prepares an existing clone that is about to be updated.
+///
+/// A pinned plan does not pull at all: `checkout_ref` fetches for itself, and
+/// a pull here would run against the detached `HEAD` a previous pinned install
+/// left behind, where git refuses with "You are not currently on a branch".
+///
+/// An unpinned plan restores the default branch first for the same reason,
+/// since without it one pinned install would break every later update in that
+/// clone.
+fn update_existing_clone(dir: &Utf8Path, plan: &WorkspacePlan) -> Result<()> {
+    if plan.suite_ref.is_some() {
+        return Ok(());
+    }
+    if crate::git::is_detached_head(dir)? {
+        crate::git::restore_default_branch(dir)?;
+    }
+    crate::git::update_repository(dir)
+}
+
+/// Prepares an existing clone that is being reused without updating.
+///
+/// An unpinned reuse must not silently inherit the commit a previous pinned
+/// install left checked out, which is what `--no-update` would otherwise mean
+/// after any pin: the caller asked for the suite as it stands in the clone,
+/// not for somebody else's pin.
+fn reuse_existing_clone(dir: &Utf8Path, plan: &WorkspacePlan) -> Result<()> {
+    if plan.suite_ref.is_some() || !crate::git::is_detached_head(dir)? {
+        return Ok(());
+    }
+    crate::git::restore_default_branch(dir)
+}
+
+/// Decides the action for a plan, refusing a pin that would move the caller.
+///
+/// Separate from [`ensure_workspace`] and pure, so the refusal can be tested
+/// without a clone, a network, or a change to the process-wide current
+/// directory that would race every other test.
+///
+/// # Errors
+///
+/// Returns `InstallerError::SuitePinInWorkspace` when a reference is pinned
+/// and the current directory is itself a Whitaker workspace, because checking
+/// out there would move the caller's own working tree.
+///
+/// # Examples
+///
+/// ```
+/// use camino::Utf8Path;
+/// use whitaker_installer::workspace::{plan_workspace_action, WorkspacePlan};
+///
+/// let plan = WorkspacePlan::updating(false);
+/// let action = plan_workspace_action(
+///     Utf8Path::new("/somewhere/else"),
+///     Utf8Path::new("/data/whitaker"),
+///     &plan,
+/// );
+/// assert!(action.is_ok());
+/// ```
+pub fn plan_workspace_action(
+    cwd: &Utf8Path,
+    clone_dir: &Utf8Path,
+    plan: &WorkspacePlan,
+) -> Result<WorkspaceAction> {
+    let action = decide_workspace_action(cwd, clone_dir, plan.should_update);
+    if let (WorkspaceAction::UseCurrentDir(dir), Some(reference)) =
+        (&action, plan.suite_ref.as_ref())
+    {
+        return Err(InstallerError::SuitePinInWorkspace {
+            reference: reference.clone(),
+            path: dir.clone(),
+        });
+    }
+    Ok(action)
 }
 
 /// Returns the workspace path without performing any side effects.
@@ -195,192 +324,5 @@ fn is_cargo_workspace_root(cargo_toml: &Utf8Path) -> Result<bool> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::dirs::{MockBaseDirs, SystemBaseDirs};
-    use rstest::{fixture, rstest};
-    use std::fs;
-    use std::path::PathBuf;
-    use tempfile::TempDir;
-
-    /// A temporary directory converted to a UTF-8 path for workspace tests.
-    struct TempWorkspace {
-        _temp: TempDir,
-        path: Utf8PathBuf,
-    }
-
-    #[fixture]
-    fn temp_workspace() -> TempWorkspace {
-        let temp = TempDir::new().expect("failed to create temp dir");
-        let path = Utf8PathBuf::try_from(temp.path().to_owned()).expect("non-UTF8 temp path");
-        TempWorkspace { _temp: temp, path }
-    }
-
-    fn write_cargo_toml(dir: &Utf8Path, package_name: &str) {
-        let cargo_toml = dir.join("Cargo.toml");
-        fs::write(
-            cargo_toml,
-            format!("[package]\nname = \"{package_name}\"\nversion = \"0.1.0\"\n"),
-        )
-        .expect("failed to write Cargo.toml");
-    }
-
-    #[rstest]
-    #[case::whitaker_project(Some("whitaker"), true)]
-    #[case::other_project(Some("other-project"), false)]
-    #[case::empty_dir(None, false)]
-    fn is_whitaker_workspace_detection(
-        temp_workspace: TempWorkspace,
-        #[case] package_name: Option<&str>,
-        #[case] expected: bool,
-    ) {
-        if let Some(name) = package_name {
-            write_cargo_toml(&temp_workspace.path, name);
-        }
-        assert_eq!(is_whitaker_workspace(&temp_workspace.path), expected);
-    }
-
-    #[test]
-    fn clone_directory_returns_some_on_supported_platforms() {
-        // This test may fail on unsupported platforms, but should pass on
-        // Linux, macOS, and Windows.
-        let dirs = SystemBaseDirs::new().expect("failed to create SystemBaseDirs");
-        let dir = clone_directory(&dirs);
-        assert!(dir.is_some(), "expected clone_directory to return Some");
-        assert!(
-            dir.as_ref()
-                .is_some_and(|p| p.as_str().contains("whitaker")),
-            "expected path to contain 'whitaker'"
-        );
-    }
-
-    #[rstest]
-    fn decide_workspace_action_uses_cwd_when_whitaker(temp_workspace: TempWorkspace) {
-        write_cargo_toml(&temp_workspace.path, "whitaker");
-        let clone_dir = Utf8PathBuf::from("/nonexistent/clone/dir");
-
-        let action = decide_workspace_action(&temp_workspace.path, &clone_dir, true);
-
-        assert_eq!(action, WorkspaceAction::UseCurrentDir(temp_workspace.path));
-    }
-
-    #[rstest]
-    fn decide_workspace_action_clones_when_empty(temp_workspace: TempWorkspace) {
-        // temp_workspace.path is empty (no Cargo.toml), clone_dir doesn't exist
-        let clone_dir = temp_workspace.path.join("clone_target");
-
-        let action = decide_workspace_action(&temp_workspace.path, &clone_dir, true);
-
-        assert_eq!(action, WorkspaceAction::CloneTo(clone_dir));
-    }
-
-    #[rstest]
-    fn decide_workspace_action_updates_when_clone_exists(temp_workspace: TempWorkspace) {
-        // Create a clone directory (not a whitaker workspace, just exists)
-        let clone_dir = temp_workspace.path.join("clone_target");
-        fs::create_dir(&clone_dir).expect("failed to create clone dir");
-
-        let action = decide_workspace_action(&temp_workspace.path, &clone_dir, true);
-
-        assert_eq!(action, WorkspaceAction::UpdateAt(clone_dir));
-    }
-
-    #[rstest]
-    fn decide_workspace_action_uses_existing_when_no_update(temp_workspace: TempWorkspace) {
-        let clone_dir = temp_workspace.path.join("clone_target");
-        fs::create_dir(&clone_dir).expect("failed to create clone dir");
-
-        let action = decide_workspace_action(&temp_workspace.path, &clone_dir, false);
-
-        assert_eq!(action, WorkspaceAction::UseExisting(clone_dir));
-    }
-
-    // -------------------------------------------------------------------------
-    // Behavioural tests for workspace orchestration with mocked dependencies
-    // -------------------------------------------------------------------------
-
-    fn mock_dirs_returning(data_dir: Option<PathBuf>) -> MockBaseDirs {
-        let mut mock = MockBaseDirs::new();
-        mock.expect_whitaker_data_dir().return_const(data_dir);
-        mock
-    }
-
-    #[rstest]
-    fn resolve_workspace_path_returns_clone_dir_when_not_in_workspace(
-        temp_workspace: TempWorkspace,
-    ) {
-        // Mock returns a data directory inside temp workspace
-        let expected_dir = temp_workspace.path.join("data").join("whitaker");
-        let mock = mock_dirs_returning(Some(expected_dir.clone().into_std_path_buf()));
-
-        let result = resolve_workspace_path(&mock);
-
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), expected_dir);
-    }
-
-    #[rstest]
-    fn resolve_workspace_path_errors_when_data_dir_unavailable(temp_workspace: TempWorkspace) {
-        let _ = temp_workspace; // Ensure fixture is used
-        let mock = mock_dirs_returning(None);
-
-        let result = resolve_workspace_path(&mock);
-
-        assert!(result.is_err());
-        let err = result.unwrap_err();
-        assert!(
-            matches!(err, InstallerError::WorkspaceNotFound { .. }),
-            "expected WorkspaceNotFound error, got: {err:?}"
-        );
-    }
-
-    #[test]
-    fn clone_directory_returns_none_when_data_dir_unavailable() {
-        let mock = mock_dirs_returning(None);
-        assert!(clone_directory(&mock).is_none());
-    }
-
-    #[rstest]
-    fn clone_directory_returns_path_from_mock(temp_workspace: TempWorkspace) {
-        let expected = temp_workspace.path.join("data").join("whitaker");
-        let mock = mock_dirs_returning(Some(expected.clone().into_std_path_buf()));
-        assert_eq!(clone_directory(&mock), Some(expected));
-    }
-
-    // Tests for find_workspace_root
-
-    fn write_workspace_cargo_toml(dir: &Utf8Path) {
-        fs::write(
-            dir.join("Cargo.toml"),
-            "[workspace]\nmembers = [\"crates/*\"]\n",
-        )
-        .expect("failed to write workspace Cargo.toml");
-    }
-
-    #[rstest]
-    fn find_workspace_root_finds_workspace_in_current_dir(temp_workspace: TempWorkspace) {
-        write_workspace_cargo_toml(&temp_workspace.path);
-        assert_eq!(
-            find_workspace_root(&temp_workspace.path).unwrap(),
-            temp_workspace.path
-        );
-    }
-
-    #[rstest]
-    fn find_workspace_root_finds_workspace_in_parent_dir(temp_workspace: TempWorkspace) {
-        write_workspace_cargo_toml(&temp_workspace.path);
-        let subdir = temp_workspace.path.join("crates").join("my_crate");
-        fs::create_dir_all(&subdir).expect("failed to create subdirs");
-        assert_eq!(find_workspace_root(&subdir).unwrap(), temp_workspace.path);
-    }
-
-    #[rstest]
-    fn find_workspace_root_errors_when_no_workspace_found(temp_workspace: TempWorkspace) {
-        write_cargo_toml(&temp_workspace.path, "not_a_workspace");
-        let result = find_workspace_root(&temp_workspace.path);
-        assert!(matches!(
-            result.unwrap_err(),
-            InstallerError::WorkspaceNotFound { .. }
-        ));
-    }
-}
+#[path = "workspace_tests.rs"]
+mod tests;

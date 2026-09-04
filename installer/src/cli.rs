@@ -4,6 +4,7 @@
 //! from the main entrypoint to keep the binary small and focused on
 //! orchestration.
 
+use crate::artefact::suite_ref::SuiteRef;
 use crate::crate_name::CrateName;
 use crate::resolution::EXPERIMENTAL_LINT_CRATES;
 use camino::Utf8PathBuf;
@@ -133,6 +134,17 @@ pub struct InstallArgs {
     #[arg(long)]
     pub no_update: bool,
 
+    /// Build the lint suite from this git reference instead of the branch tip.
+    ///
+    /// Accepts a tag, a branch or a commit. Without it the suite comes from
+    /// whatever is at the default branch tip, so a change there alters lint
+    /// results with no commit in the consuming repository.
+    ///
+    /// A pinned suite is built from source: prebuilt artefacts are published
+    /// only for the tip, so pinning trades install time for reproducibility.
+    #[arg(long = "suite-version", alias = "suite-ref", value_name = "REF")]
+    pub suite_version: Option<SuiteRef>,
+
     /// Skip prebuilt artefact download and build from source.
     #[arg(long = "build-only")]
     pub is_build_only: bool,
@@ -151,10 +163,22 @@ pub struct ListArgs {
 }
 
 impl InstallArgs {
+    /// Whether the arguments alone rule out a prebuilt artefact.
+    ///
+    /// Three unrelated reasons, so they are named here rather than read as one
+    /// condition: the caller asked to build, the caller asked for experimental
+    /// lints which are never published, or the caller pinned a suite that the
+    /// rolling release cannot carry.
+    fn arguments_force_a_source_build(&self) -> bool {
+        self.is_build_only || self.experimental || self.suite_version.is_some()
+    }
+
     /// Return true when installer settings permit a prebuilt download attempt.
     ///
     /// Prebuilt artefacts are skipped when:
-    /// - `--build-only` is set, or
+    /// - `--build-only` is set,
+    /// - `--suite-version` pins the suite, because prebuilt artefacts are
+    ///   published only for the branch tip and so can never satisfy a pin, or
     /// - experimental lint behaviour is requested, either via
     ///   `--experimental` (suite build) or explicit experimental crates when
     ///   the experimental crate list is non-empty.
@@ -175,10 +199,16 @@ impl InstallArgs {
     ///     ..InstallArgs::default()
     /// };
     /// assert!(!build_only_args.should_attempt_prebuilt(&requested));
+    ///
+    /// let pinned_args = InstallArgs {
+    ///     suite_version: Some("v0.2.7".try_into().expect("valid reference")),
+    ///     ..InstallArgs::default()
+    /// };
+    /// assert!(!pinned_args.should_attempt_prebuilt(&requested));
     /// ```
     #[must_use]
     pub fn should_attempt_prebuilt(&self, requested_crates: &[CrateName]) -> bool {
-        if self.is_build_only || self.experimental {
+        if self.arguments_force_a_source_build() {
             return false;
         }
         !requested_crates
@@ -218,6 +248,7 @@ impl Default for InstallArgs {
             skip_deps: false,
             skip_wrapper: false,
             no_update: false,
+            suite_version: None,
             is_build_only: false,
         }
     }

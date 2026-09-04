@@ -110,6 +110,30 @@ fn should_attempt_prebuilt_false_when_build_only() {
 }
 
 #[test]
+fn should_attempt_prebuilt_false_when_the_suite_is_pinned() {
+    // The rolling release carries the tip and nothing else, so a pinned
+    // install can only ever be served by a source build. Attempting the
+    // download first would spend a request to learn what the pin already says.
+    let args = InstallArgs {
+        suite_version: Some("v0.2.7".try_into().expect("valid reference")),
+        ..InstallArgs::default()
+    };
+    let requested = vec![CrateName::from("whitaker_suite")];
+    assert!(!args.should_attempt_prebuilt(&requested));
+}
+
+#[test]
+fn should_attempt_prebuilt_true_when_the_suite_is_not_pinned() {
+    // The counterpart, so the skip cannot quietly become unconditional.
+    let args = InstallArgs {
+        suite_version: None,
+        ..InstallArgs::default()
+    };
+    let requested = vec![CrateName::from("whitaker_suite")];
+    assert!(args.should_attempt_prebuilt(&requested));
+}
+
+#[test]
 fn should_attempt_prebuilt_false_when_experimental_flag_enabled() {
     let args = InstallArgs {
         experimental: true,
@@ -141,6 +165,43 @@ fn should_attempt_prebuilt_true_for_stable_bumpy_road_requests() {
 fn cli_parses_boolean_flags(#[case] args: &[&str], #[case] check: fn(&Cli) -> bool) {
     let cli = Cli::parse_from(args);
     assert!(check(&cli));
+}
+
+/// The suite pin is the one flag whose value reaches a `git` command line,
+/// so both the accepted spellings and the refusals are held here.
+#[rstest]
+#[case::tag(&["whitaker-installer", "--suite-version", "v0.2.7"], "v0.2.7")]
+#[case::equals_form(&["whitaker-installer", "--suite-version=v0.2.7"], "v0.2.7")]
+#[case::alias(&["whitaker-installer", "--suite-ref", "main"], "main")]
+#[case::commit(&["whitaker-installer", "--suite-version", "2bc0c3f"], "2bc0c3f")]
+fn cli_parses_the_suite_pin(#[case] args: &[&str], #[case] expected: &str) {
+    let cli = Cli::parse_from(args);
+
+    let reference = cli.install.suite_version.expect("pin should have parsed");
+    assert_eq!(reference.as_str(), expected);
+}
+
+#[rstest]
+fn cli_leaves_the_suite_unpinned_by_default() {
+    // The default is the branch tip, which keeps the prebuilt fast path
+    // reachable. Pinning is opt-in and costs a source build.
+    let cli = Cli::parse_from(["whitaker-installer"]);
+
+    assert!(cli.install.suite_version.is_none());
+}
+
+#[rstest]
+#[case::option_injection(&["whitaker-installer", "--suite-version=--upload-pack=touch /tmp/x"])]
+#[case::traversal(&["whitaker-installer", "--suite-version=v1..v2"])]
+#[case::reflog(&["whitaker-installer", "--suite-version=main@{yesterday}"])]
+#[case::space(&["whitaker-installer", "--suite-version=my branch"])]
+#[case::empty(&["whitaker-installer", "--suite-version="])]
+fn cli_refuses_a_reference_git_would_not_take(#[case] args: &[&str]) {
+    // Refused at the boundary rather than passed to git and explained after a
+    // clone has already been paid for.
+    let result = Cli::try_parse_from(args);
+
+    assert!(result.is_err(), "{args:?} should have been rejected");
 }
 
 /// Parameterized tests for repeatable verbosity flags.
