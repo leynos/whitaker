@@ -333,10 +333,9 @@ mod tests {
 
     impl Drop for ProbeCleanup {
         fn drop(&mut self) {
-            if self.dir.remove_file(&self.name).is_err() {
-                // A correct run never writes the probe into this directory, so
-                // a missing file is the expected case.
-            }
+            // A correct run never writes the probe into this directory, so a
+            // missing file is the expected case.
+            let _ = self.dir.remove_file(&self.name);
         }
     }
 

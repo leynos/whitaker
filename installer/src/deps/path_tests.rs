@@ -1,5 +1,7 @@
 //! Tests for PATH-based dependency-binary discovery helpers.
 
+use camino::Utf8Path;
+use cap_std::{ambient_authority, fs_utf8::Dir};
 use temp_env::with_vars_unset;
 
 use super::*;
@@ -184,7 +186,16 @@ fn is_executable_file_rejects_non_executable_files() -> std::io::Result<()> {
     let binary_path = temp_dir.path().join("dylint-link");
     write_fake_binary(&binary_path, false)?;
 
-    assert!(!is_executable_file(&binary_path));
+    let directory = Dir::open_ambient_dir(
+        Utf8Path::from_path(temp_dir.path()).expect("temp path is UTF-8"),
+        ambient_authority(),
+    )
+    .expect("open temp-dir capability");
+
+    assert!(!is_executable_file(
+        &directory,
+        Utf8Path::new("dylint-link")
+    ));
     Ok(())
 }
 
@@ -195,7 +206,13 @@ fn is_executable_file_accepts_executable_files() -> std::io::Result<()> {
     let binary_path = temp_dir.path().join("dylint-link");
     write_fake_binary(&binary_path, true)?;
 
-    assert!(is_executable_file(&binary_path));
+    let directory = Dir::open_ambient_dir(
+        Utf8Path::from_path(temp_dir.path()).expect("temp path is UTF-8"),
+        ambient_authority(),
+    )
+    .expect("open temp-dir capability");
+
+    assert!(is_executable_file(&directory, Utf8Path::new("dylint-link")));
     Ok(())
 }
 

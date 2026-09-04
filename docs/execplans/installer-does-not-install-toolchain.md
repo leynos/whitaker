@@ -186,7 +186,7 @@ already installed, no rustup install command should run. If rustup fails, the
 installer should return an error and can be re-run once the environment
 recovers.
 
-## Artefacts and Notes
+## Artefacts and notes
 
 Example log (expected after change):
 

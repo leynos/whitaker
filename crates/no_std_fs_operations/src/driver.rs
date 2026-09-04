@@ -4,9 +4,7 @@
 use crate::config::{LINT_NAME, load_configuration};
 use crate::diagnostics::emit_diagnostic;
 use crate::exclusion::PathExclusions;
-use crate::usage::{
-    StdFsUsage, UsageCategory, classify_def_id, classify_qpath, classify_res, label_is_std_fs,
-};
+use crate::usage::{StdFsUsage, classify_def_id, classify_qpath, classify_res, label_is_std_fs};
 use log::{debug, info};
 use rustc_hir as hir;
 use rustc_hir::AmbigArg;
@@ -76,7 +74,7 @@ impl<'tcx> LateLintPass<'tcx> for NoStdFsOperations {
                 span: path.span,
             };
             for res in path.res.present_items() {
-                let usage = classify_res(cx, res, UsageCategory::Import);
+                let usage = classify_res(cx, res);
                 self.emit_optional(cx, site, usage);
             }
         }
@@ -92,18 +90,18 @@ impl<'tcx> LateLintPass<'tcx> for NoStdFsOperations {
         };
         match &expr.kind {
             hir::ExprKind::Path(qpath) => {
-                let usage = classify_qpath(cx, qpath, expr.hir_id, UsageCategory::Call);
+                let usage = classify_qpath(cx, qpath, expr.hir_id);
                 self.emit_optional(cx, site, usage);
             }
             hir::ExprKind::Struct(qpath, ..) => {
-                let usage = classify_qpath(cx, qpath, expr.hir_id, UsageCategory::Call);
+                let usage = classify_qpath(cx, qpath, expr.hir_id);
                 self.emit_optional(cx, site, usage);
             }
             hir::ExprKind::MethodCall(segment, receiver, ..) => {
                 let mut usage = cx
                     .typeck_results()
                     .type_dependent_def_id(expr.hir_id)
-                    .and_then(|def_id| classify_def_id(cx, def_id, UsageCategory::Call));
+                    .and_then(|def_id| classify_def_id(cx, def_id));
 
                 if usage.is_none() {
                     usage = self.receiver_usage_for_method(cx, receiver, segment.ident.as_str());
@@ -120,7 +118,7 @@ impl<'tcx> LateLintPass<'tcx> for NoStdFsOperations {
             return;
         }
         if let hir::TyKind::Path(qpath) = &ty.kind {
-            let usage = classify_qpath(cx, qpath, ty.hir_id, UsageCategory::Type);
+            let usage = classify_qpath(cx, qpath, ty.hir_id);
             self.emit_optional(
                 cx,
                 LintSite {
@@ -204,7 +202,7 @@ impl NoStdFsOperations {
         }
 
         let operation = format!("{label}::{method}");
-        Some(StdFsUsage::new(operation, UsageCategory::Call))
+        Some(StdFsUsage::new(operation))
     }
 }
 

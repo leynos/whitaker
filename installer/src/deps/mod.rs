@@ -10,6 +10,8 @@ use crate::dependency_binaries::{
 };
 use crate::dirs::{BaseDirs, SystemBaseDirs};
 use crate::error::{InstallerError, Result};
+use camino::Utf8Path;
+use cap_std::{ambient_authority, fs_utf8::Dir};
 use std::io;
 use std::io::Write;
 use std::path::Path;
@@ -273,27 +275,31 @@ fn find_binary_on_path(binary_name: &str) -> Option<std::path::PathBuf> {
 }
 
 fn find_binary_in_directory(directory: &Path, binary_name: &str) -> Option<std::path::PathBuf> {
-    binary_candidates(directory, binary_name)
+    let directory = Utf8Path::from_path(directory)?;
+    let directory_capability = Dir::open_ambient_dir(directory, ambient_authority()).ok()?;
+
+    binary_candidates(binary_name)
         .into_iter()
-        .find(|candidate| is_executable_file(candidate))
+        .find(|candidate| is_executable_file(&directory_capability, Utf8Path::new(candidate)))
+        .map(|candidate| directory.join(candidate).into_std_path_buf())
 }
 
-fn binary_candidates(directory: &Path, binary_name: &str) -> Vec<std::path::PathBuf> {
+fn binary_candidates(binary_name: &str) -> Vec<String> {
     #[cfg(windows)]
     let mut candidates = Vec::new();
     #[cfg(not(windows))]
-    let candidates = vec![directory.join(binary_name)];
+    let candidates = vec![binary_name.to_owned()];
     #[cfg(windows)]
     {
         if Path::new(binary_name).extension().is_some() {
-            candidates.push(directory.join(binary_name));
+            candidates.push(binary_name.to_owned());
         } else {
             let lowercase_name = binary_name.to_ascii_lowercase();
             candidates.extend(
                 windows_path_extensions()
                     .into_iter()
                     .filter(|extension| !lowercase_name.ends_with(&extension.to_ascii_lowercase()))
-                    .map(|extension| directory.join(format!("{binary_name}{extension}"))),
+                    .map(|extension| format!("{binary_name}{extension}")),
             );
         }
     }
@@ -323,17 +329,21 @@ fn windows_path_extensions() -> Vec<String> {
 }
 
 #[cfg(unix)]
-fn is_executable_file(path: &Path) -> bool {
-    use std::os::unix::fs::PermissionsExt;
+fn is_executable_file(directory: &Dir, path: &Utf8Path) -> bool {
+    use cap_std::fs::PermissionsExt;
 
-    std::fs::metadata(path)
+    directory
+        .metadata(path)
         .map(|metadata| metadata.is_file() && metadata.permissions().mode() & 0o111 != 0)
         .unwrap_or(false)
 }
 
 #[cfg(not(unix))]
-fn is_executable_file(path: &Path) -> bool {
-    path.is_file()
+fn is_executable_file(directory: &Dir, path: &Utf8Path) -> bool {
+    directory
+        .metadata(path)
+        .map(|metadata| metadata.is_file())
+        .unwrap_or(false)
 }
 
 #[cfg(test)]
