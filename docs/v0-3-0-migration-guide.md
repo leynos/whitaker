@@ -33,8 +33,8 @@ let locale = normalize_locale(Some("en-GB"));
 
 The complete function mapping is:
 
-| 0.2.x name | 0.3.0 name |
-| --- | --- |
+| 0.2.x name         | 0.3.0 name         |
+| ------------------ | ------------------ |
 | `normalise_locale` | `normalize_locale` |
 | `rasterise_signal` | `rasterize_signal` |
 
@@ -62,8 +62,8 @@ fn normalized(settings: Settings) -> Settings {
 
 The old `normalise_settings` function is replaced by `normalize_settings`.
 
-| 0.2.x name | 0.3.0 name |
-| --- | --- |
+| 0.2.x name           | 0.3.0 name           |
+| -------------------- | -------------------- |
 | `normalise_settings` | `normalize_settings` |
 
 ## `whitaker_sarif` APIs
