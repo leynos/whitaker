@@ -179,6 +179,14 @@ jobs:
       - name: Generate coverage
         run: make coverage
 
+      - name: Discard the instrumented target tree
+        # `cargo llvm-cov` has already written lcov.info, and no job caches a
+        # target tree, so this is the largest piece of pure scratch on the
+        # disk. This lane saves nothing, but it frees the doctest build the
+        # same headroom the writer lane needs for its cache archives.
+        if: always()
+        run: rm -rf target/llvm-cov-target
+
       - name: Run doctests
         # `cargo llvm-cov nextest` executes no doctests and `--all-targets`
         # excludes them, so this is the only step in the repository that runs
@@ -446,6 +454,13 @@ jobs:
       - name: Publish dry run
         run: make publish-check PUBLISH_PACKAGES="whitaker-common whitaker-installer"
 
+      - name: Discard the build target tree
+        # The last consumer of `target` has run. No job caches a target tree,
+        # so removing it here gives the saves below the headroom they need to
+        # stage their archives.
+        if: always()
+        run: rm -rf target
+
       - name: Record sccache effectiveness
         if: always()
         run: bash scripts/record-sccache-effectiveness.sh
@@ -458,6 +473,10 @@ jobs:
           path: sccache-stats.json
           if-no-files-found: error
           retention-days: 14
+
+      - name: Record disk headroom before the saves
+        if: always()
+        run: bash scripts/record-cache-observations.sh headroom
 
       # Saves are restricted to the trusted branch, so a pull request reads the
       # published generation without racing another lane for the same key. This

@@ -13,6 +13,8 @@ Covered behaviour:
   reported as three distinct outcomes;
 - the raw `cache-hit` value is preserved verbatim, including when absent;
 - the selected compiler-cache backend is named in the summary;
+- free disk is reported before the build and again before the saves, and an
+  unrecognized mode is a usage error;
 - the sccache reporter writes both artefact formats and echoes the stats
   into the summary; and
 - a run with zero compile requests raises a workflow warning.
@@ -41,6 +43,7 @@ REGISTRY_PREFIX = "cargo-registry-lint-v1-Linux-X64-self-hosted-"
 
 def _run_observations(
     tmp_path: Path,
+    *arguments: str,
     **overrides: str,
 ) -> tuple[subprocess.CompletedProcess[str], str]:
     """Run the observation reporter and return its result and the summary."""
@@ -53,7 +56,7 @@ def _run_observations(
         **overrides,
     }
     result = subprocess.run(
-        ["bash", str(OBSERVATIONS_SCRIPT)],
+        ["bash", str(OBSERVATIONS_SCRIPT), *arguments],
         capture_output=True,
         text=True,
         check=False,
@@ -144,6 +147,48 @@ def test_absent_hit_output_is_not_coerced_to_false(tmp_path: Path) -> None:
     line = _registry_line(summary)
     assert "cache-hit `unset`" in line, line
     assert "exact hit" in line, line
+
+
+def test_headroom_is_reported_before_the_build(tmp_path: Path) -> None:
+    """The default form carries free disk alongside the cache outcomes."""
+    result, summary = _run_observations(tmp_path)
+
+    assert result.returncode == 0, result.stderr
+    assert "- Disk headroom (before the build):" in summary, summary
+    assert "Filesystem" in summary, "df output must reach the summary"
+
+
+def test_headroom_mode_reports_only_disk(tmp_path: Path) -> None:
+    """The pre-save form is a headroom report, not a second cache report."""
+    result, summary = _run_observations(tmp_path, "headroom")
+
+    assert result.returncode == 0, result.stderr
+    assert "### Disk headroom before the cache saves" in summary, summary
+    assert "- Disk headroom (before the saves):" in summary, summary
+    assert "inactive in this job" not in summary, (
+        "the headroom form must not repeat the cache observations"
+    )
+
+
+def test_headroom_covers_the_archive_staging_directory(tmp_path: Path) -> None:
+    """The cache action stages archives under RUNNER_TEMP, so report it too."""
+    staging = tmp_path / "runner-temp"
+    staging.mkdir()
+    _, summary = _run_observations(tmp_path, "headroom", RUNNER_TEMP=str(staging))
+
+    filesystem_lines = [line for line in summary.splitlines() if line.startswith("/")]
+    assert len(filesystem_lines) >= 2, (
+        f"both the root volume and RUNNER_TEMP must be reported, got {summary!r}"
+    )
+
+
+def test_unknown_mode_is_a_usage_error(tmp_path: Path) -> None:
+    """A mistyped mode must fail rather than silently report nothing."""
+    result, summary = _run_observations(tmp_path, "hedroom")
+
+    assert result.returncode == 2, result.stdout
+    assert "usage:" in result.stderr, result.stderr
+    assert summary == "", "a rejected mode must write no summary"
 
 
 def _write_sccache_stub(tmp_path: Path, requests: str) -> Path:

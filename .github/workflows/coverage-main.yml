@@ -183,6 +183,15 @@ jobs:
       - name: Generate coverage
         run: make coverage
 
+      - name: Discard the instrumented target tree
+        # `cargo llvm-cov` has already written lcov.info, and no job caches a
+        # target tree, so this is the largest piece of pure scratch on the
+        # disk. Removing it before the doctest build and before the saves is
+        # what keeps a save from dying on `No space left on device`: the cache
+        # action stages a compressed archive locally before uploading it.
+        if: always()
+        run: rm -rf target/llvm-cov-target
+
       - name: Run doctests
         # `cargo llvm-cov nextest` executes no doctests and `--all-targets`
         # excludes them, so this is the only step in the repository that runs
@@ -202,6 +211,10 @@ jobs:
           format: lcov
           access-token: ${{ env.CS_ACCESS_TOKEN }}
           installer-checksum: ${{ vars.CODESCENE_CLI_SHA256 }}
+
+      - name: Record disk headroom before the saves
+        if: always()
+        run: bash scripts/record-cache-observations.sh headroom
 
       # This job is the sole writer for the coverage-lane keys and for the
       # shared Clippy mirror. `ci.yml` restores them and never saves, so two
