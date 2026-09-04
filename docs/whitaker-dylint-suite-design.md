@@ -1651,7 +1651,10 @@ used by the installer itself.
 - Extend `.github/workflows/release.yml` so tagged releases publish the same
   dependency-binary archives and provenance document next to the
   `whitaker-installer` archives.
-- Teach `installer/src/deps.rs` to install missing tools in this order:
+- Keep the dependency-tool installer in `installer/src/deps/mod.rs` so its
+  implementation children, including `install.rs`, remain colocated with the
+  module that owns the fallback policy.
+- Teach `installer/src/deps/mod.rs` to install missing tools in this order:
   repository archive, `cargo binstall`, then `cargo install`. Repository-path
   failures stay non-fatal and degrade cleanly into the Cargo fallback path.
 

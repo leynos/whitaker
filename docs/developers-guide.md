@@ -1673,7 +1673,7 @@ no longer implements `io::Write`, so neither `format!("{:x}", digest)` nor
 shared by `downloader.rs`, `artefact/packaging.rs`, and the `sha256_hex` test
 helper.
 
-`installer/src/deps.rs` drives the high-level fallback order:
+`installer/src/deps/mod.rs` drives the high-level fallback order:
 
 1. Attempt the repository-hosted dependency archive for the current target.
 2. Verify the installed tool is now usable. `cargo-dylint` is checked by
@@ -1747,7 +1747,7 @@ A Cargo-managed `dylint-link` already on `PATH` is checked by resolving an
 executable file and comparing the version Cargo recorded for it, which needs no
 execution either.
 
-The `dylint-link` verification in `installer/src/deps.rs` is implemented by
+The `dylint-link` verification in `installer/src/deps/mod.rs` is implemented by
 five small private helpers:
 
 - `find_binary_on_path(binary_name)` returns the first executable candidate so
