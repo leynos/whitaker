@@ -183,8 +183,8 @@ pub fn run_with_runner(
 /// # Panics
 ///
 /// Panics when [`run_with_runner`] returns a harness or runner error. The
-/// panic preserves the standard `RunnerFailure` format, including the crate
-/// name, UI directory, and runner failure details.
+/// panic preserves crate and UI-directory context while using
+/// [`HarnessError`]'s display implementation for the precise error details.
 ///
 /// # Examples
 ///
@@ -200,13 +200,7 @@ pub fn run_ui_test(
 ) {
     let directory = ui_directory.into();
     run_with_runner(crate_name, directory.clone(), runner).unwrap_or_else(|error| {
-        panic!(
-            concat!(
-                "UI tests should execute without diffs: RunnerFailure {{ crate_name: \"{}\", ",
-                "directory: \"{}\", message: {} }}"
-            ),
-            crate_name, directory, error
-        )
+        panic!("UI tests should execute without diffs for {crate_name} in {directory}: {error}")
     });
 }
 /// Serializes environment mutations required by `run_with_runner`.
