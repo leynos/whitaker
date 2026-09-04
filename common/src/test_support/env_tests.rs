@@ -365,7 +365,8 @@ proptest! {
             }
 
             let restored = std::env::var_os(PROPERTY_KEY);
-            prop_assert_eq!(restored.as_deref(), initial.map(OsStr::new));
+            let expected = initial.map(OsStr::new);
+            prop_assert_eq!(restored.as_deref(), expected);
         }
 
         drop(baseline);
