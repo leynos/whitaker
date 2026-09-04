@@ -17,7 +17,7 @@ use crate::{
 };
 
 #[test]
-fn check_dylint_tools_reports_installed_tools() {
+fn check_dylint_tools_reports_installed_tools() -> std::io::Result<()> {
     with_fake_binary_on_path("dylint-link", || {
         let executor = StubExecutor::new(vec![
             cargo_dylint_check().expect("cargo-dylint dependency version should resolve"),
@@ -35,16 +35,19 @@ fn check_dylint_tools_reports_installed_tools() {
             }
         );
         executor.assert_finished();
-    });
+    })?;
+    Ok(())
 }
 
 #[rstest::rstest]
 #[case::stale_version("cargo-dylint 5.0.0\n")]
 #[case::unparsable_output("not a version\n")]
-fn check_dylint_tools_rejects_unusable_cargo_dylint_output(#[case] version_stdout: &str) {
+fn check_dylint_tools_rejects_unusable_cargo_dylint_output(
+    #[case] version_stdout: &str,
+) -> std::io::Result<()> {
     // The fake PATH keeps dylint-link absent so only cargo-dylint is probed.
     with_fake_path(
-        |_| (),
+        |_| Ok(()),
         || {
             let executor = StubExecutor::new(vec![cargo_dylint_check_with_result(Ok(
                 stdout_output(version_stdout),
@@ -61,7 +64,8 @@ fn check_dylint_tools_rejects_unusable_cargo_dylint_output(#[case] version_stdou
             );
             executor.assert_finished();
         },
-    );
+    )?;
+    Ok(())
 }
 
 #[rstest::rstest]
@@ -71,7 +75,9 @@ fn check_dylint_tools_rejects_unusable_cargo_dylint_output(#[case] version_stdou
     args: vec!["install", "--list"],
     result: Ok(stdout_output("ripgrep v14.1.0:\n    rg\n")),
 })]
-fn check_dylint_tools_rejects_unpinned_dylint_link(#[case] install_list_check: ExpectedCall) {
+fn check_dylint_tools_rejects_unpinned_dylint_link(
+    #[case] install_list_check: ExpectedCall,
+) -> std::io::Result<()> {
     with_fake_binary_on_path("dylint-link", || {
         let executor = StubExecutor::new(vec![
             cargo_dylint_check().expect("cargo-dylint dependency version should resolve"),
@@ -88,11 +94,12 @@ fn check_dylint_tools_rejects_unpinned_dylint_link(#[case] install_list_check: E
             }
         );
         executor.assert_finished();
-    });
+    })?;
+    Ok(())
 }
 
 #[test]
-fn check_dylint_tools_rejects_non_invocable_dylint_link_on_path() {
+fn check_dylint_tools_rejects_non_invocable_dylint_link_on_path() -> std::io::Result<()> {
     with_fake_path(
         |directories| {
             let first_dir = &directories[0];
@@ -119,7 +126,8 @@ fn check_dylint_tools_rejects_non_invocable_dylint_link_on_path() {
             );
             executor.assert_finished();
         },
-    );
+    )?;
+    Ok(())
 }
 
 #[test]
@@ -139,17 +147,19 @@ fn is_binary_on_path_returns_false_when_path_is_empty() {
 }
 
 #[test]
-fn is_binary_on_path_returns_false_when_binary_is_missing_from_all_directories() {
+fn is_binary_on_path_returns_false_when_binary_is_missing_from_all_directories()
+-> std::io::Result<()> {
     with_fake_path(
-        |_| (),
+        |_| Ok(()),
         || {
             assert!(!is_binary_on_path("dylint-link"));
         },
-    );
+    )?;
+    Ok(())
 }
 
 #[test]
-fn is_binary_on_path_checks_multiple_directories() {
+fn is_binary_on_path_checks_multiple_directories() -> std::io::Result<()> {
     with_fake_path(
         |directories| {
             let second_dir = &directories[1];
@@ -163,27 +173,30 @@ fn is_binary_on_path_checks_multiple_directories() {
         || {
             assert!(is_binary_on_path("dylint-link"));
         },
-    );
+    )?;
+    Ok(())
 }
 
 #[cfg(unix)]
 #[test]
-fn is_executable_file_rejects_non_executable_files() {
+fn is_executable_file_rejects_non_executable_files() -> std::io::Result<()> {
     let temp_dir = tempfile::tempdir().expect("create temp dir");
     let binary_path = temp_dir.path().join("dylint-link");
-    write_fake_binary(&binary_path, false);
+    write_fake_binary(&binary_path, false)?;
 
     assert!(!is_executable_file(&binary_path));
+    Ok(())
 }
 
 #[cfg(unix)]
 #[test]
-fn is_executable_file_accepts_executable_files() {
+fn is_executable_file_accepts_executable_files() -> std::io::Result<()> {
     let temp_dir = tempfile::tempdir().expect("create temp dir");
     let binary_path = temp_dir.path().join("dylint-link");
-    write_fake_binary(&binary_path, true);
+    write_fake_binary(&binary_path, true)?;
 
     assert!(is_executable_file(&binary_path));
+    Ok(())
 }
 
 #[cfg(windows)]

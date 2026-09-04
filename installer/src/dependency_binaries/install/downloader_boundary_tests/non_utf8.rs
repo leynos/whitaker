@@ -2,28 +2,34 @@
 
 use std::io;
 
+use rstest::fixture;
+
 use super::super::downloader::{DependencyArchiveDownloader, RepositoryArchiveDownloader};
 use super::*;
 
-#[test]
-fn download_from_urls_rejects_a_non_utf8_destination_before_any_request() {
+#[fixture]
+fn non_utf8_destination() -> std::path::PathBuf {
     use std::os::unix::ffi::OsStringExt as _;
 
+    // 0x80 is a lone UTF-8 continuation byte, so this path is never valid UTF-8.
+    std::path::PathBuf::from(std::ffi::OsString::from_vec(vec![
+        b'/', b't', b'm', b'p', b'/', 0x80, b'.', b't', b'g', b'z',
+    ]))
+}
+
+#[rstest::rstest]
+fn download_from_urls_rejects_a_non_utf8_destination_before_any_request(
+    non_utf8_destination: std::path::PathBuf,
+) {
     // No route is registered; the server exists only to prove it is never
     // contacted for an invalid destination.
     let server = LocalServer::start(HashMap::new());
-
-    // 0x80 is a lone UTF-8 continuation byte, so this path is never valid UTF-8
-    // and must be rejected during validation, before any HTTP request.
-    let invalid = std::path::PathBuf::from(std::ffi::OsString::from_vec(vec![
-        b'/', b't', b'm', b'p', b'/', 0x80, b'.', b't', b'g', b'z',
-    ]));
 
     let error = download_from_urls(
         &agent(),
         &server.url("/archive.tgz"),
         &server.url("/archive.tgz.sha256"),
-        &invalid,
+        &non_utf8_destination,
     )
     .expect_err("non-UTF-8 destination must be rejected");
 
@@ -39,20 +45,15 @@ fn download_from_urls_rejects_a_non_utf8_destination_before_any_request() {
     );
 }
 
-#[test]
-fn download_rejects_a_non_utf8_destination_before_any_network_access() {
-    use std::os::unix::ffi::OsStringExt as _;
-
-    // 0x80 is a lone UTF-8 continuation byte, so this path is never valid UTF-8.
+#[rstest::rstest]
+fn download_rejects_a_non_utf8_destination_before_any_network_access(
+    non_utf8_destination: std::path::PathBuf,
+) {
     // The production `download` must reject it during path validation, which
     // happens before any HTTP call, so the test needs no network.
-    let invalid = std::path::PathBuf::from(std::ffi::OsString::from_vec(vec![
-        b'/', b't', b'm', b'p', b'/', 0x80, b'.', b't', b'g', b'z',
-    ]));
-
     let downloader = RepositoryArchiveDownloader;
     let error = downloader
-        .download("whitaker-dependency", &invalid)
+        .download("whitaker-dependency", &non_utf8_destination)
         .expect_err("non-UTF-8 destination must be rejected");
 
     match error {
