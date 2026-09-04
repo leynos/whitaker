@@ -161,6 +161,18 @@ const RULES: &[Rule] = &[
         reason: "must not contain '..'",
     },
     Rule {
+        // git rejects a reference whose last character is a dot, and one
+        // whose components begin with one, so `main.`, `.main` and
+        // `refs/heads/.hidden` are all refused. Verified against
+        // `git check-ref-format`.
+        breaks: |value| value.ends_with('.'),
+        reason: "must not end with '.'",
+    },
+    Rule {
+        breaks: |value| value.split('/').any(|part| part.starts_with('.')),
+        reason: "must not have a component beginning with '.'",
+    },
+    Rule {
         breaks: |value| value.contains("//"),
         reason: "must not contain '//'",
     },

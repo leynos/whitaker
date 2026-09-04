@@ -38,6 +38,9 @@ fn accepts_a_usable_reference(#[case] value: &str) {
 #[case::asterisk("refs/*")]
 #[case::bracket("main[0]")]
 #[case::backslash("main\\x")]
+#[case::trailing_dot("main.")]
+#[case::leading_dot(".main")]
+#[case::hidden_component("refs/heads/.hidden")]
 fn rejects_a_reference_git_would_not_take(#[case] value: &str) {
     let result: Result<SuiteRef> = value.try_into();
 
