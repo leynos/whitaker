@@ -50,7 +50,7 @@ Use the checker locally after changing a Linux release build or its
 dependencies:
 
 ```sh
-python scripts/check_glibc_baseline.py --maximum-glibc GLIBC_2.35 <ELF>...
+scripts/check_glibc_baseline.py --maximum-glibc GLIBC_2.35 <ELF>...
 ```
 
 `readelf` must be available on `PATH`. The rolling-release workflow runs the
@@ -815,6 +815,38 @@ make lint       # Run Clippy
 make check-fmt  # Verify formatting
 make fmt        # Apply formatting
 ```
+
+## Python script interpreter convention
+
+Every Python script that a workflow or the `Makefile` runs by path carries the
+same preamble, a shebang above a script-metadata block, and is committed with
+its executable bit set:
+
+```python
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.13"
+# dependencies = []
+# ///
+```
+
+Call sites invoke the script directly, never as `python <script>`. The reason
+is release-specific. The x86_64 GNU/Linux legs of `release.yml` and
+`rolling-release.yml` run on `ubuntu-22.04` to hold the `GLIBC_2.35` baseline,
+and that image's `python` is 3.10. A script handed to that interpreter runs on
+a version nobody chose, so the first use of a newer standard-library feature,
+`tomllib` being the one that has already happened, fails at release time and
+nowhere else. `setup-rust` installs `uv` on every runner, so the shebang
+resolves on Linux, macOS, and Windows alike.
+
+The executable bit matters as much as the shebang: without it a fresh checkout
+fails with exit code 126, and files created by tooling default to mode 644.
+
+`tests/workflows/test_ci_script_interpreter_contract.py` discovers the call
+sites rather than listing them, so a new script or a new caller is covered
+automatically. It fails if a call site reverts to an ambient interpreter, if a
+directly invoked script loses its shebang or its `requires-python`, or if Git
+records the script as non-executable.
 
 ## Markdown formatting checks
 
@@ -1843,9 +1875,9 @@ binary name, and version.
 Usage:
 
 ```sh
-python3 installer/scripts/dependency_binaries_manifest.py
-python3 installer/scripts/dependency_binaries_manifest.py custom.toml
-python3 installer/scripts/dependency_binaries_manifest.py -o matrix.tsv
+installer/scripts/dependency_binaries_manifest.py
+installer/scripts/dependency_binaries_manifest.py custom.toml
+installer/scripts/dependency_binaries_manifest.py -o matrix.tsv
 ```
 
 The script validates manifest uniqueness (rejecting duplicate `package`
@@ -2814,13 +2846,13 @@ published archives.
 Generate checksums for archives in the default `dist/` directory:
 
 ```sh
-python scripts/generate_checksums.py
+scripts/generate_checksums.py
 ```
 
 Generate checksums for archives in a custom directory:
 
 ```sh
-python scripts/generate_checksums.py /path/to/archives
+scripts/generate_checksums.py /path/to/archives
 ```
 
 #### Public API

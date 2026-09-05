@@ -300,13 +300,8 @@ installer-msrv-check: ## Install whitaker-installer with its declared MSRV
 
 release-installer-dry-run: ## Build and package the host-platform installer archive
 	set -eu; \
-	PYTHON=$$(command -v python3 || command -v python || true); \
-	if [ -z "$$PYTHON" ]; then \
-		echo "Install python3 or python to run release-installer-dry-run"; \
-		exit 1; \
-	fi; \
 	[ -n "$(CARGO)" ] || { echo "Install cargo to run release-installer-dry-run"; exit 1; }; \
-	for tool in awk jq mktemp rustc; do \
+	for tool in awk jq mktemp rustc uv; do \
 		command -v "$$tool" >/dev/null || { echo "Install $$tool to run release-installer-dry-run"; exit 1; }; \
 	done; \
 	TMP_DIR=$$(mktemp -d); \
@@ -338,7 +333,7 @@ release-installer-dry-run: ## Build and package the host-platform installer arch
 		--target "$$HOST_TRIPLE" \
 		--binary-path "$$INSTALLER_BIN" \
 		--output-dir "$$DIST_DIR"; \
-	"$$PYTHON" scripts/generate_checksums.py "$$DIST_DIR"; \
+	scripts/generate_checksums.py "$$DIST_DIR"; \
 	found_archive=false; \
 	for archive in $$ARCHIVE_GLOB; do \
 		if [ -f "$$archive" ]; then \

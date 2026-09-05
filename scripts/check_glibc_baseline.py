@@ -1,4 +1,8 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.13"
+# dependencies = []
+# ///
 """Reject Linux binaries that require a newer glibc baseline.
 
 The release workflow builds Linux artefacts on Ubuntu 22.04, whose glibc
@@ -6,9 +10,15 @@ baseline is ``GLIBC_2.35``. This checker reads the ELF version-needs metadata
 instead of trusting the runner label, so publishing fails if a build image
 silently changes.
 
+Run through uv rather than the ambient interpreter. The x86_64 Linux legs that
+call this script run on ubuntu-22.04, where ``python`` is 3.10; anything this
+module later borrows from a newer standard library would fail there, at release
+time, and nowhere else. Pinning the interpreter here removes that class of
+failure rather than the one instance of it.
+
 Example
 -------
-    python scripts/check_glibc_baseline.py dist/whitaker-installer
+    scripts/check_glibc_baseline.py dist/whitaker-installer
 """
 
 from __future__ import annotations

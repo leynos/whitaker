@@ -1,13 +1,22 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.13"
+# dependencies = []
+# ///
 """Generate SHA-256 checksum files for release archives.
 
 This script generates `.sha256` checksum files for all archive files
 in the specified directory. Archives are processed using a streaming
 approach to avoid memory pressure with large files.
 
+Run through uv rather than the ambient interpreter. The release workflow calls
+this script from ubuntu-22.04 legs whose ``python`` is 3.10, so a later use of
+a newer standard-library feature would fail at release time and nowhere else.
+Pinning the interpreter here removes that class of failure.
+
 Example
 -------
-    python scripts/generate_checksums.py dist/
+    scripts/generate_checksums.py dist/
 
 The script expects to find archive files matching the configured patterns
 and produces `<archive>.sha256` files in the same directory.
