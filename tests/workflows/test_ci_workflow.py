@@ -301,7 +301,7 @@ def _assert_codescene_check(coverage_job: Mapping[str, Any]) -> None:
     ), "the CodeScene step must guard its pull-request secret"
     assert check_step.get("uses") == (
         "leynos/shared-actions/.github/actions/upload-codescene-coverage@"
-        "f6d4d5f549655c118f86f371b8d55c200d3efa50"
+        "7cb894fe62c40951cccf33819548095e64a1291e"
     ), "coverage-check must use the proven CodeScene action pin"
     assert check_step.get("with") == {
         "format": "lcov",
