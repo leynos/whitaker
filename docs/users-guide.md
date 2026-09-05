@@ -204,16 +204,19 @@ the artefact and why it could not be fetched:
 whitaker-installer --no-source-fallback
 ```
 
-Any value other than an empty string, `0` or `false` enables the rule, because
-exporting the variable at all expresses an intention and reading an
-unrecognized value as off would quietly remove a protection.
+Any value other than an empty string, `0` or `false` enables the rule. The
+comparison ignores case and surrounding whitespace, so `FALSE` and ` false `
+also turn it off. Exporting the variable at all expresses an intention, and
+reading an unrecognized value as off would quietly remove a protection; a value
+that is not valid text enables the rule for the same reason.
 
 The flag is rejected alongside `--build-only`, `--experimental` and
 `--suite-version`. Each of those requires a source build, so combining them is
 a contradiction rather than a preference, and the installer says so instead of
 silently preferring one.
 
-Every run prints the path it took on standard output:
+Each installation that selects a suite source prints the path it took on
+standard output. A dry run selects none, so it prints nothing:
 
 ```text
 whitaker-installer: suite-source=prebuilt

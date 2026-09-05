@@ -2942,7 +2942,10 @@ callers that cannot easily add a flag, turns each fallback into an
 `InstallerError::SourceFallbackForbidden` naming the artefact and the reason
 the fetch failed. The flag conflicts with `--build-only`, `--experimental` and
 `--suite-version`, because each of those requires a source build, so clap
-rejects the combination rather than silently preferring one.
+rejects the combination rather than silently preferring one. clap only sees
+flags, so `InstallArgs::validate_source_options` repeats the check against the
+effective policy before any work starts; otherwise a lane that enabled the rule
+through the environment would meet the contradiction as a mid-install error.
 
 The environment variable treats any value other than an empty string, `0` or
 `false` as on, case-insensitively. Exporting the variable expresses an
@@ -2953,7 +2956,9 @@ for.
 decisions about how a run reacts to an absent artefact, and threading two
 booleans through the same signatures would let them drift apart.
 
-Every install prints the path it took on standard output:
+Each installation that selects a suite source prints the path it took on
+standard output, through the writer the caller injected rather than through
+`println!`. A dry run returns before the selection and prints nothing:
 
 ```text
 whitaker-installer: suite-source=prebuilt

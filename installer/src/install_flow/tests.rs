@@ -208,12 +208,20 @@ fn try_prebuilt_installation_prune_error_falls_back_to_local_build() {
 }
 
 /// Reports the artefact as unavailable, the shape a republish window produces.
+///
+/// It writes the same two lines the production `attempt_prebuilt` writes
+/// before returning `Fallback`. The caller deliberately does not repeat them,
+/// so a stub that stayed silent would make the default path look as though
+/// nothing had been reported at all.
 fn stub_attempt_prebuilt_unavailable(
     _config: &PrebuiltConfig<'_>,
-    _stderr: &mut dyn Write,
+    stderr: &mut dyn Write,
 ) -> PrebuiltResult {
+    let reason = "repository asset not found";
+    write_stderr_line(stderr, format!("Prebuilt download unavailable: {reason}"));
+    write_stderr_line(stderr, "Falling back to local compilation.");
     PrebuiltResult::Fallback {
-        reason: "repository asset not found".to_owned(),
+        reason: reason.to_owned(),
     }
 }
 

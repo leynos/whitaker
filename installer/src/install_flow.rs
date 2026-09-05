@@ -214,10 +214,16 @@ fn try_prebuilt_installation_with(
     let staging_path = match attempt_prebuilt(&prebuilt_config, stderr) {
         PrebuiltResult::Success { staging_path } => staging_path,
         PrebuiltResult::Fallback { reason } => {
-            // `attempt_prebuilt` has already reported the reason, so the
-            // refusal repeats it rather than losing it behind a bare error.
-            return prebuilt_unavailable(context.args, "a prebuilt lint library", &reason, stderr)
-                .map(|_| None);
+            // `attempt_prebuilt` has already written the unavailable notice
+            // and, where a fallback is permitted, the fallback line. Repeating
+            // either here would print it twice, so only the refusal is added.
+            if context.args.forbids_source_fallback() {
+                return Err(InstallerError::SourceFallbackForbidden {
+                    artefact: "a prebuilt lint library".to_owned(),
+                    reason,
+                });
+            }
+            return Ok(None);
         }
     };
     if let Err(error) = prune_prebuilt_libraries(

@@ -100,6 +100,7 @@ fn try_fast_path_installation(
 ///
 /// Returns an error if any step fails.
 fn run_install(args: &InstallArgs, stderr: &mut dyn Write) -> Result<()> {
+    args.validate_source_options()?;
     let dirs = SystemBaseDirs::new().ok_or_else(|| InstallerError::WorkspaceNotFound {
         reason: "could not determine platform directories".to_owned(),
     })?;
@@ -134,7 +135,7 @@ fn run_install(args: &InstallArgs, stderr: &mut dyn Write) -> Result<()> {
     if let Some((staging_path, install_mode)) =
         try_fast_path_installation(&fast_path_context, stderr)?
     {
-        report_suite_source(install_mode);
+        report_suite_source(install_mode, &mut std::io::stdout())?;
         let finish_context = FinishInstallContext {
             args,
             dirs: &dirs,
@@ -157,7 +158,7 @@ fn run_install(args: &InstallArgs, stderr: &mut dyn Write) -> Result<()> {
     let build_results = perform_build(&context, &requested_crates, stderr)?;
     let staging_path = stage_libraries(&context, &build_results, stderr)?;
     // Step 5: Generate wrapper scripts if requested
-    report_suite_source(InstallMode::Build);
+    report_suite_source(InstallMode::Build, &mut std::io::stdout())?;
     let finish_context = FinishInstallContext {
         args,
         dirs: &dirs,
@@ -174,12 +175,13 @@ fn run_install(args: &InstallArgs, stderr: &mut dyn Write) -> Result<()> {
 /// caller reads it. `install-whitaker` previously had to infer the path from
 /// the wording of a fallback notice, which meant a rephrasing could silently
 /// turn a source build into a reported success.
-fn report_suite_source(install_mode: InstallMode) {
+fn report_suite_source(install_mode: InstallMode, stdout: &mut dyn Write) -> Result<()> {
     let source = match install_mode {
         InstallMode::Download => "prebuilt",
         InstallMode::Build => "source",
     };
-    println!("whitaker-installer: suite-source={source}");
+    writeln!(stdout, "whitaker-installer: suite-source={source}")
+        .map_err(|source| InstallerError::WriteFailed { source })
 }
 
 /// Runs in dry-run mode, showing configuration without side effects.
