@@ -280,21 +280,27 @@ archiving exactly that until it moved to the external provider and gained its
 own registry cache. The release and rolling-release workflows still call the
 shared action with its default `github` provider because they are release
 boundaries rather than developer-blocking lanes. They no longer archive a
-`target` tree either: they pin the shared action at
-`f6d4d5f549655c118f86f371b8d55c200d3efa50`, the first revision whose built-in
-provider stopped archiving `target/<profile>`. Expect one cold Cargo cache on
-those lanes after the repin because the key no longer carries the build profile.
+`target` tree either.
 
-The developer-blocking lanes have since moved ahead of them, to
-`7cb894fe62c40951cccf33819548095e64a1291e`. That revision keeps the `target`
-rule and adds two things the older pin lacks: it restores the caller's Actions
+Every caller pins one revision, `7cb894fe62c40951cccf33819548095e64a1291e`. It
+keeps the rule that the built-in provider does not archive `target/<profile>`,
+and adds two things the previous pin lacked: it restores the caller's Actions
 cache-service selection, and it starts the `sccache` server from a `run:` step
-after those exports. The lanes that cut tags stay behind until a tag has run on
-the newer wiring, since a green pull request is not evidence that a release
-still builds. `tests/workflow_contracts/shared_action_pin_split_test.py` holds
-each group to its own revision by value, so neither half can drift alone, and
-fails once the two constants converge so the split is collapsed rather than
-left describing nothing.
+after those exports. Expect one cold Cargo cache on a lane the first time it
+moves because the key no longer carries the build profile.
+
+The lanes were briefly split, with the release boundaries held back until "a
+tag has run on the newer wiring". That exit condition was the wrong one for
+this repository, not because the risk was imaginary but because the evidence
+was available far sooner elsewhere. Whitaker is a rolling release:
+`rolling-release.yml` runs on every merge to `main` and publishes the artefacts
+consumers install, so it is a release path that reports within minutes, while a
+tag might be months away. The proof accordingly comes from the first merge
+after the lanes converge rather than from a tag, and a revert restores the
+previous pin if that run regresses.
+`tests/workflow_contracts/shared_action_pin_test.py` holds every call to the
+one constant by value, and rejects a workflow that calls `setup-rust` without
+appearing in its list, so a new caller cannot end up pinned by nobody's rule.
 
 Every cached path has exactly one owner inside its job, and every key family
 has exactly one job permitted to write it.
@@ -558,7 +564,7 @@ from its official Linux x86_64 release asset after checking the SHA-256 pinned
 in the workflow. The tools cache retains the installed executable under
 `~/.cargo/bin`; a cold cache downloads it, while a warm cache verifies and
 reuses it without invoking Cargo. The SHA-pinned shared `install-nixie` action
-at `f6d4d5f549655c118f86f371b8d55c200d3efa50` (shared-actions PR #423, repinned
+at `7cb894fe62c40951cccf33819548095e64a1291e` (shared-actions PR #423, repinned
 to `main`) owns Nixie 1.1.0 and Merman 0.7.0 setup. It verifies Merman's
 official release archive and cached executable against pinned SHA-256 digests,
 reconciles the uv-managed Nixie installation, and never falls back to a source
