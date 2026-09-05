@@ -29,7 +29,6 @@ impl BaseDirs for TestBaseDirs {
 }
 
 static PRUNE_HOOK_CALLED: AtomicBool = AtomicBool::new(false);
-const PINNED_COMMIT: &str = "abc12340000000000000000000000000000000ab";
 
 fn stub_detect_host_target() -> Result<String> {
     Ok("x86_64-unknown-linux-gnu".to_owned())
@@ -46,20 +45,6 @@ fn stub_resolve_destination_dir(
 fn stub_attempt_prebuilt(_config: &PrebuiltConfig<'_>, _stderr: &mut dyn Write) -> PrebuiltResult {
     PrebuiltResult::Success {
         staging_path: Utf8PathBuf::from("/tmp/whitaker-test-staging"),
-    }
-}
-
-fn stub_reject_mismatched_pinned_prebuilt(
-    config: &PrebuiltConfig<'_>,
-    _stderr: &mut dyn Write,
-) -> PrebuiltResult {
-    assert_eq!(
-        config.expected_git_sha.map(CommitSha::as_str),
-        Some(PINNED_COMMIT),
-        "the resolved pinned commit must reach prebuilt validation"
-    );
-    PrebuiltResult::Fallback {
-        reason: "git SHA mismatch: manifest has deadbeef, pinned commit is abc1234".to_owned(),
     }
 }
 
@@ -188,7 +173,6 @@ fn try_prebuilt_installation_prune_error_falls_back_to_local_build() {
         dirs: &dirs,
         requested_crates: &requested_crates,
         toolchain_channel: "nightly-2026-05-28",
-        expected_git_sha: None,
     };
 
     let mut stderr = Vec::new();
@@ -220,39 +204,5 @@ fn try_prebuilt_installation_prune_error_falls_back_to_local_build() {
     assert!(
         stderr.contains("Falling back to local compilation."),
         "fallback message should be emitted, stderr: {stderr}"
-    );
-}
-
-#[test]
-fn pinned_commit_provenance_reaches_prebuilt_validation() {
-    let dirs = TestBaseDirs {
-        data_dir: Some(PathBuf::from("/tmp/whitaker-test-data")),
-    };
-    let args = InstallArgs::default();
-    let requested_crates = vec![CrateName::from(SUITE_CRATE)];
-    let expected_git_sha = CommitSha::try_from(PINNED_COMMIT).expect("valid pinned commit");
-    let context = PrebuiltInstallationContext {
-        args: &args,
-        dirs: &dirs,
-        requested_crates: &requested_crates,
-        toolchain_channel: "nightly-2026-05-28",
-        expected_git_sha: Some(&expected_git_sha),
-    };
-
-    let mut stderr = Vec::new();
-    let result = try_prebuilt_installation_with(
-        &context,
-        &mut stderr,
-        PrebuiltInstallationHooks {
-            detect_host_target: stub_detect_host_target,
-            resolve_destination_dir: stub_resolve_destination_dir,
-            attempt_prebuilt: stub_reject_mismatched_pinned_prebuilt,
-            prune_prebuilt_libraries: stub_prune_prebuilt_libraries,
-        },
-    );
-
-    assert!(
-        matches!(result, Ok(None)),
-        "a mismatched pinned manifest must fall back to source compilation"
     );
 }

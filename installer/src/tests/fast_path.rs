@@ -24,7 +24,6 @@ impl FastPathFixture {
             requested_crates: &self.requested_crates,
             toolchain: &self.toolchain,
             target_dir: &self.target_dir,
-            expected_git_sha: None,
         }
     }
 }

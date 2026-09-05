@@ -30,16 +30,6 @@ fn scenario_dry_run_accepts_experimental_lint_with_opt_in(cli_world: CliWorld) {
     let _ = cli_world;
 }
 
-#[scenario(path = "tests/features/installer.feature", index = 23)]
-fn scenario_pin_the_suite_to_a_ref_in_dry_run(cli_world: CliWorld) {
-    let _ = cli_world;
-}
-
-#[scenario(path = "tests/features/installer.feature", index = 24)]
-fn scenario_refuse_ref_inside_a_whitaker_workspace(cli_world: CliWorld) {
-    let _ = cli_world;
-}
-
 // Appended at the end of the feature file so the index-based bindings above
 // keep their meaning.
 #[scenario(path = "tests/features/installer.feature", index = 23)]

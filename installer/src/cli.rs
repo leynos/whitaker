@@ -47,8 +47,6 @@ use clap::{Parser, Subcommand};
     "    $ whitaker-installer --individual-lints\n\n",
     "  Include experimental lints in the suite:\n",
     "    $ whitaker-installer --experimental\n\n",
-    "  Pin the suite to a specific commit SHA or tag:\n",
-    "    $ whitaker-installer --ref v0.2.5\n\n",
     "  List installed lints:\n",
     "    $ whitaker-installer list\n\n",
     "  Preview without building:\n",
@@ -150,10 +148,6 @@ pub struct InstallArgs {
     /// Skip prebuilt artefact download and build from source.
     #[arg(long = "build-only")]
     pub is_build_only: bool,
-
-    /// Install the lint suite at a specific commit SHA or tag [default: rolling].
-    #[arg(long = "ref", value_name = "REF")]
-    pub git_ref: Option<String>,
 }
 
 /// Arguments for the list command.
@@ -256,7 +250,6 @@ impl Default for InstallArgs {
             no_update: false,
             suite_version: None,
             is_build_only: false,
-            git_ref: None,
         }
     }
 }

@@ -1,5 +1,0 @@
----
-source: installer/src/workspace_progress.rs
-expression: "format!(\"{output:?}\")"
----
-""

@@ -122,17 +122,18 @@ resolve.
 
 Two consequences are worth knowing before pinning.
 
-**A pinned suite normally builds from source.** The rolling prebuilt archive
-can be reused only when its full recorded commit matches the resolved pin
-exactly; otherwise the installer compiles the pinned suite locally. This keeps
-the provenance check strict while retaining the fast path for a matching
-commit. A lint library must also be built with the exact toolchain that loads
-it, so a pin against a different `rust-toolchain.toml` builds from source.
+**A pinned suite is built from source.** Prebuilt lint libraries are published
+only for the branch tip, under the `rolling` tag, so a pin can never be served
+from them; the installer does not attempt the download at all when a pin is
+set, and compiles the suite locally instead. Pinning trades install time for
+reproducibility, and that is the whole of the trade: a pinned lane is slower on
+a cold cache and does not change what it produces.
 
-With `--suite-version --no-update`, the installer resolves a locally available
-pin without fetching, which permits offline pinned installs. A pinned managed
-clone is detached; a later unpinned update reattaches it to the default branch
-before pulling.
+The prebuilt path would not help a pin even if artefacts existed for every tag.
+A lint library must be built with the exact toolchain that will load it, and
+artefacts are named for the toolchain they were built with, so a pin held
+against a newer `rust-toolchain.toml` misses and builds from source anyway. The
+guarantee a pin buys is reproducibility, not speed.
 
 **A pin cannot be applied from inside a Whitaker checkout.** Checking out a
 reference there would move the working tree, so the installer refuses and says

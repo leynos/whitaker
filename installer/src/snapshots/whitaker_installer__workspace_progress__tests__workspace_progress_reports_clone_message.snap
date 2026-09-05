@@ -1,5 +1,0 @@
----
-source: installer/src/workspace_progress.rs
-expression: "String::from_utf8(output).expect(\"UTF-8 output\")"
----
-Cloning Whitaker repository to /managed/whitaker...

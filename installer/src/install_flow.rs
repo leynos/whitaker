@@ -83,8 +83,6 @@ pub(crate) struct PrebuiltInstallationContext<'a> {
     pub(crate) requested_crates: &'a [CrateName],
     /// Toolchain channel resolved for this install.
     pub(crate) toolchain_channel: &'a str,
-    /// Resolved pinned commit SHA, when installing at a specific `--ref`.
-    pub(crate) expected_git_sha: Option<&'a str>,
 }
 
 /// Context for recording one successful install in aggregate metrics.
@@ -183,7 +181,6 @@ fn try_prebuilt_installation_with(
         toolchain: context.toolchain_channel,
         destination_dir: &destination_dir,
         quiet: context.args.quiet,
-        expected_git_sha: context.expected_git_sha,
     };
 
     let PrebuiltResult::Success { staging_path } = attempt_prebuilt(&prebuilt_config, stderr)

@@ -19,12 +19,6 @@
 - [Roadmap](roadmap.md) tracks planned work, implementation phases, and larger
   changes that have not yet landed.
 
-
-## Migration guides
-
-- [Migrating to 0.3.0](migrations/0.3.0.md) summarizes installer pinning,
-  rolling-default behaviour, and the workspace rules for pinned checkouts.
-
 ## Primary design documents
 
 - [Whitaker Dylint suite design](whitaker-dylint-suite-design.md) explains the

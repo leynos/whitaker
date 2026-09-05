@@ -105,7 +105,6 @@ pub fn success_message(count: usize, target_dir: &Utf8Path) -> String {
 ///     suite_ref: None,
 ///     jobs: None,
 ///     crates: &crates,
-///     git_ref: None,
 /// };
 ///
 /// let output = info.display_text();
@@ -136,8 +135,6 @@ pub struct DryRunInfo<'a> {
     pub jobs: Option<usize>,
     /// Crates to be built.
     pub crates: &'a [CrateName],
-    /// The commit SHA or tag the suite is pinned to, if any.
-    pub git_ref: Option<&'a str>,
 }
 
 impl DryRunInfo<'_> {
@@ -163,10 +160,6 @@ impl DryRunInfo<'_> {
             ),
         ];
 
-        if let Some(git_ref) = self.git_ref {
-            lines.push(format!("Pinned ref: {git_ref}"));
-        }
-
         if let Some(jobs) = self.jobs {
             lines.push(format!("Parallel jobs: {jobs}"));
         }
@@ -183,6 +176,10 @@ impl DryRunInfo<'_> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use camino::Utf8PathBuf;
+    use rstest::{fixture, rstest};
+
     /// Shared fixture providing a test library path.
     #[fixture]
     fn test_path() -> Utf8PathBuf {
@@ -223,36 +220,6 @@ mod tests {
         assert!(display.contains("PowerShell"));
     }
 
-    fn dry_run_info<'a>(git_ref: Option<&'a str>, crates: &'a [CrateName]) -> DryRunInfo<'a> {
-        DryRunInfo {
-            workspace_root: Utf8Path::new("/home/user/whitaker"),
-            toolchain: "nightly-2025-01-15",
-            target_dir: Utf8Path::new("/home/user/.local/share/dylint/lib"),
-            verbosity: 0,
-            quiet: false,
-            skip_deps: false,
-            skip_wrapper: false,
-            no_update: false,
-            jobs: None,
-            crates,
-            git_ref,
-        }
-    }
-
-    #[rstest]
-    fn dry_run_display_includes_ref_when_pinned() {
-        let crates = vec![CrateName::from("whitaker_suite")];
-        let text = dry_run_info(Some("v0.2.5"), &crates).display_text();
-        assert!(text.contains("Pinned ref: v0.2.5"), "output: {text}");
-    }
-
-    #[rstest]
-    fn dry_run_display_omits_ref_when_unpinned() {
-        let crates = vec![CrateName::from("whitaker_suite")];
-        let text = dry_run_info(None, &crates).display_text();
-        assert!(!text.contains("Pinned ref:"), "output: {text}");
-    }
-
     #[rstest]
     #[case::singular(1, "1 lint library")]
     #[case::plural(5, "5 lint libraries")]
@@ -260,54 +227,5 @@ mod tests {
         let path = Utf8PathBuf::from("/tmp");
         let msg = success_message(count, &path);
         assert!(msg.contains(expected));
-    }
-
-    #[rstest]
-    #[case::default(
-        None,
-        None,
-        concat!(
-            "Dry run - no files will be modified\n\n",
-            "Workspace root: /home/user/whitaker\n",
-            "Toolchain: nightly-2025-01-15\n",
-            "Target directory: /home/user/.local/share/dylint/lib\n",
-            "Verbosity level: 0\n",
-            "Quiet: false\n",
-            "Skip deps: false\n",
-            "Skip wrapper: false\n",
-            "No update: false\n\n",
-            "Crates to build:\n",
-            "  - whitaker_suite"
-        )
-    )]
-    #[case::pinned(
-        Some("v0.2.5"),
-        Some(4),
-        concat!(
-            "Dry run - no files will be modified\n\n",
-            "Workspace root: /home/user/whitaker\n",
-            "Toolchain: nightly-2025-01-15\n",
-            "Target directory: /home/user/.local/share/dylint/lib\n",
-            "Verbosity level: 0\n",
-            "Quiet: false\n",
-            "Skip deps: false\n",
-            "Skip wrapper: false\n",
-            "No update: false\n",
-            "Pinned ref: v0.2.5\n",
-            "Parallel jobs: 4\n\n",
-            "Crates to build:\n",
-            "  - whitaker_suite"
-        )
-    )]
-    fn dry_run_display_matches_expected_format(
-        #[case] git_ref: Option<&str>,
-        #[case] jobs: Option<usize>,
-        #[case] expected: &str,
-    ) {
-        let crates = vec![CrateName::from("whitaker_suite")];
-        let mut info = dry_run_info(git_ref, &crates);
-        info.jobs = jobs;
-
-        assert_eq!(info.display_text(), expected);
     }
 }

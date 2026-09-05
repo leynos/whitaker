@@ -2,36 +2,31 @@
 //!
 //! Split from `workspace.rs` to keep each file inside the repository's
 //! 400-line limit; the module they exercise is unchanged.
-use cap_std::{ambient_authority, fs_utf8::Dir};
+
+use super::*;
 use crate::dirs::{MockBaseDirs, SystemBaseDirs};
 use rstest::{fixture, rstest};
+use std::fs;
 use std::path::PathBuf;
-use super::*;
 use tempfile::TempDir;
 
 /// A temporary directory converted to a UTF-8 path for workspace tests.
 struct TempWorkspace {
     _temp: TempDir,
     path: Utf8PathBuf,
-    dir: Dir,
 }
 
 #[fixture]
 fn temp_workspace() -> TempWorkspace {
     let temp = TempDir::new().expect("failed to create temp dir");
     let path = Utf8PathBuf::try_from(temp.path().to_owned()).expect("non-UTF8 temp path");
-    let dir = Dir::open_ambient_dir(&path, ambient_authority())
-        .expect("failed to open temporary workspace directory");
-    TempWorkspace {
-        _temp: temp,
-        path,
-        dir,
-    }
+    TempWorkspace { _temp: temp, path }
 }
 
-fn write_cargo_toml(dir: &Dir, package_name: &str) {
-    dir.write(
-        "Cargo.toml",
+fn write_cargo_toml(dir: &Utf8Path, package_name: &str) {
+    let cargo_toml = dir.join("Cargo.toml");
+    fs::write(
+        cargo_toml,
         format!("[package]\nname = \"{package_name}\"\nversion = \"0.1.0\"\n"),
     )
     .expect("failed to write Cargo.toml");
@@ -47,7 +42,7 @@ fn is_whitaker_workspace_detection(
     #[case] expected: bool,
 ) {
     if let Some(name) = package_name {
-        write_cargo_toml(&temp_workspace.dir, name);
+        write_cargo_toml(&temp_workspace.path, name);
     }
     assert_eq!(is_whitaker_workspace(&temp_workspace.path), expected);
 }
@@ -68,7 +63,7 @@ fn clone_directory_returns_some_on_supported_platforms() {
 
 #[rstest]
 fn decide_workspace_action_uses_cwd_when_whitaker(temp_workspace: TempWorkspace) {
-    write_cargo_toml(&temp_workspace.dir, "whitaker");
+    write_cargo_toml(&temp_workspace.path, "whitaker");
     let clone_dir = Utf8PathBuf::from("/nonexistent/clone/dir");
 
     let action = decide_workspace_action(&temp_workspace.path, &clone_dir, true);
@@ -90,10 +85,7 @@ fn decide_workspace_action_clones_when_empty(temp_workspace: TempWorkspace) {
 fn decide_workspace_action_updates_when_clone_exists(temp_workspace: TempWorkspace) {
     // Create a clone directory (not a whitaker workspace, just exists)
     let clone_dir = temp_workspace.path.join("clone_target");
-    temp_workspace
-        .dir
-        .create_dir("clone_target")
-        .expect("failed to create clone dir");
+    fs::create_dir(&clone_dir).expect("failed to create clone dir");
 
     let action = decide_workspace_action(&temp_workspace.path, &clone_dir, true);
 
@@ -103,10 +95,7 @@ fn decide_workspace_action_updates_when_clone_exists(temp_workspace: TempWorkspa
 #[rstest]
 fn decide_workspace_action_uses_existing_when_no_update(temp_workspace: TempWorkspace) {
     let clone_dir = temp_workspace.path.join("clone_target");
-    temp_workspace
-        .dir
-        .create_dir("clone_target")
-        .expect("failed to create clone dir");
+    fs::create_dir(&clone_dir).expect("failed to create clone dir");
 
     let action = decide_workspace_action(&temp_workspace.path, &clone_dir, false);
 
@@ -132,10 +121,7 @@ fn resolve_workspace_path_returns_clone_dir_when_not_in_workspace(temp_workspace
     let result = resolve_workspace_path(&mock);
 
     assert!(result.is_ok());
-    assert_eq!(
-        result.expect("workspace path should resolve from the mock data directory"),
-        expected_dir
-    );
+    assert_eq!(result.unwrap(), expected_dir);
 }
 
 #[rstest]
@@ -146,7 +132,7 @@ fn resolve_workspace_path_errors_when_data_dir_unavailable(temp_workspace: TempW
     let result = resolve_workspace_path(&mock);
 
     assert!(result.is_err());
-    let err = result.expect_err("workspace path should fail without a data directory");
+    let err = result.unwrap_err();
     assert!(
         matches!(err, InstallerError::WorkspaceNotFound { .. }),
         "expected WorkspaceNotFound error, got: {err:?}"
@@ -373,43 +359,37 @@ fn clone_directory_returns_path_from_mock(temp_workspace: TempWorkspace) {
 
 // Tests for find_workspace_root
 
-fn write_workspace_cargo_toml(dir: &Dir) {
-    dir.write("Cargo.toml", "[workspace]\nmembers = [\"crates/*\"]\n")
-        .expect("failed to write workspace Cargo.toml");
+fn write_workspace_cargo_toml(dir: &Utf8Path) {
+    fs::write(
+        dir.join("Cargo.toml"),
+        "[workspace]\nmembers = [\"crates/*\"]\n",
+    )
+    .expect("failed to write workspace Cargo.toml");
 }
 
 #[rstest]
 fn find_workspace_root_finds_workspace_in_current_dir(temp_workspace: TempWorkspace) {
-    write_workspace_cargo_toml(&temp_workspace.dir);
+    write_workspace_cargo_toml(&temp_workspace.path);
     assert_eq!(
-        find_workspace_root(&temp_workspace.path).expect("workspace root should be found"),
+        find_workspace_root(&temp_workspace.path).unwrap(),
         temp_workspace.path
     );
 }
 
 #[rstest]
 fn find_workspace_root_finds_workspace_in_parent_dir(temp_workspace: TempWorkspace) {
-    write_workspace_cargo_toml(&temp_workspace.dir);
+    write_workspace_cargo_toml(&temp_workspace.path);
     let subdir = temp_workspace.path.join("crates").join("my_crate");
-    temp_workspace
-        .dir
-        .create_dir_all("crates/my_crate")
-        .expect("failed to create workspace subdirectories");
-    assert_eq!(
-        find_workspace_root(&subdir).expect("workspace root should be found from child crate"),
-        temp_workspace.path
-    );
+    fs::create_dir_all(&subdir).expect("failed to create subdirs");
+    assert_eq!(find_workspace_root(&subdir).unwrap(), temp_workspace.path);
 }
 
 #[rstest]
 fn find_workspace_root_errors_when_no_workspace_found(temp_workspace: TempWorkspace) {
-    write_cargo_toml(&temp_workspace.dir, "not_a_workspace");
+    write_cargo_toml(&temp_workspace.path, "not_a_workspace");
     let result = find_workspace_root(&temp_workspace.path);
     assert!(matches!(
-        result.expect_err("non-workspace package should not have a workspace root"),
+        result.unwrap_err(),
         InstallerError::WorkspaceNotFound { .. }
     ));
 }
-
-#[path = "workspace_lock_workflow_tests.rs"]
-mod workspace_lock_workflow_tests;

@@ -69,7 +69,6 @@ pub mod test_support;
 pub mod toolchain;
 pub mod version;
 pub mod workspace;
-mod workspace_lock;
 pub mod wrapper;
 
 #[cfg(test)]

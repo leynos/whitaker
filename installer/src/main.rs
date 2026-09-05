@@ -76,7 +76,6 @@ fn try_fast_path_installation(
         dirs: context.dirs,
         requested_crates: context.requested_crates,
         toolchain_channel: context.toolchain.channel(),
-        expected_git_sha: context.expected_git_sha,
     };
     if let Some(staging_path) = try_prebuilt_installation(&prebuilt_context, stderr)? {
         return Ok(Some((staging_path, InstallMode::Download)));
@@ -131,7 +130,6 @@ fn run_install(args: &InstallArgs, stderr: &mut dyn Write) -> Result<()> {
         requested_crates: &requested_crates,
         toolchain: &toolchain,
         target_dir: &target_dir,
-        expected_git_sha: workspace.pinned_commit.as_deref(),
     };
     if let Some((staging_path, install_mode)) =
         try_fast_path_installation(&fast_path_context, stderr)?
@@ -189,7 +187,6 @@ fn run_dry(args: &InstallArgs, dirs: &dyn BaseDirs, stderr: &mut dyn Write) -> R
         suite_ref: args.suite_version.as_ref().map(SuiteRef::as_str),
         jobs: args.jobs,
         crates: &requested_crates,
-        git_ref: args.git_ref.as_deref(),
     };
     write_stderr_line(stderr, info.display_text());
     Ok(())
@@ -254,10 +251,6 @@ fn ensure_whitaker_workspace(
             if let Some(reference) = plan.suite_ref.as_ref() {
                 write_stderr_line(stderr, format!("Pinning lint suite to {reference}..."));
             }
-        }
-
-        if let Some(git_ref) = git_ref {
-            write_stderr_line(stderr, format!("Pinning Whitaker suite to {git_ref}..."));
         }
     }
 
@@ -324,7 +317,6 @@ struct FastPathContext<'a> {
     requested_crates: &'a [CrateName],
     toolchain: &'a Toolchain,
     target_dir: &'a Utf8PathBuf,
-    expected_git_sha: Option<&'a str>,
 }
 
 /// Finalize installation and record aggregate installer metrics.
