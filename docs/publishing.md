@@ -21,6 +21,14 @@ and depends on the shared support crate
    points to the same release for both published crates.
 4. Regenerate the lockfile if needed.
 
+The bump goes to `main` as its own commit rather than through a pull request.
+CI's `installer-msrv-check` packages `whitaker-installer`, which resolves
+`whitaker-common` from crates.io, so a lockstep bump asks the registry for a
+version that only the publish below can supply. `main` stays red on that check
+until `whitaker-common` is published, which is why the tag is cut immediately
+after the bump. Removing that circularity is tracked in
+[#405](https://github.com/leynos/whitaker/issues/405).
+
 ## Pre-publish validation
 
 Run the project publish gate to ensure production-like builds and packaging

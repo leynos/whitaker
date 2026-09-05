@@ -234,7 +234,7 @@ jobs:
           set -euxo pipefail
           mkdir -p dist
           mkdir -p dependency-root
-          python installer/scripts/dependency_binaries_manifest.py --output /tmp/dependency-binaries.tsv
+          installer/scripts/dependency_binaries_manifest.py --output /tmp/dependency-binaries.tsv
           # shellcheck disable=SC2193 # GitHub expands matrix.target at runtime.
           if [[ "${{ matrix.target }}" == *windows* ]]; then
             PACKAGER="./target/release/whitaker-package-dependency-binary.exe"
@@ -266,7 +266,7 @@ jobs:
         if: matrix.target == 'x86_64-unknown-linux-gnu'
         run: |
           set -euxo pipefail
-          python installer/scripts/dependency_binaries_manifest.py --output /tmp/dependency-binaries.tsv
+          installer/scripts/dependency_binaries_manifest.py --output /tmp/dependency-binaries.tsv
           binaries=()
           while IFS=$'\t' read -r _package binary _version; do
             binaries+=("dependency-root/bin/${binary}")
