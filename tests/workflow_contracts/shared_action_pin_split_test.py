@@ -15,6 +15,7 @@ the constant that documents why, so neither half can drift alone.
 from __future__ import annotations
 
 import typing as typ
+from typing import Final
 
 import pytest
 
@@ -27,21 +28,21 @@ from ubicloud_workflow_support import (
 if typ.TYPE_CHECKING:  # pragma: no cover - typing only
     from collections.abc import Iterator
 
-SETUP_RUST_PREFIX = "leynos/shared-actions/.github/actions/setup-rust@"
+SETUP_RUST_PREFIX: Final[str] = "leynos/shared-actions/.github/actions/setup-rust@"
 
 #: The lanes a pull request blocks on, which take the newer revision.
-CI_LANE_WORKFLOWS = frozenset({"ci.yml", "coverage-main.yml"})
+CI_LANE_WORKFLOWS: Final[frozenset[str]] = frozenset({"ci.yml", "coverage-main.yml"})
 
 #: The lanes that cut tags, which stay behind until a tag proves the wiring.
-RELEASE_LANE_WORKFLOWS = frozenset({"release.yml", "rolling-release.yml"})
+RELEASE_LANE_WORKFLOWS: Final[frozenset[str]] = frozenset(
+    {"release.yml", "rolling-release.yml"}
+)
 
 
 def _steps(job: dict[str, object]) -> list[dict[str, object]]:
-    """Return a job's steps, or none for a job that calls another workflow.
-
-    A caller job declares `uses` at the job level and has no step list, so it
-    is skipped rather than treated as malformed.
-    """
+    """Return a job's steps, or none when it declares no step list."""
+    # A job that calls another workflow declares `uses` at the job level and
+    # has no steps, so it is skipped rather than treated as malformed.
     steps = job.get("steps")
     if not isinstance(steps, list):
         return []
@@ -97,7 +98,12 @@ def test_each_lane_group_pins_its_own_revision(
 ) -> None:
     """Every call in a group must name that group's revision, not the other's."""
     calls = _uses_for(workflows)
-    assert calls, f"no setup-rust call found in {sorted(workflows)}"
+    covered = {workflow_name for workflow_name, _, _ in calls}
+    assert covered == workflows, (
+        f"every workflow in the group must call setup-rust; {sorted(workflows)} "
+        f"was expected but {sorted(covered)} was found. A lane-wide non-empty "
+        "result would let one workflow lose its calls unnoticed"
+    )
     mismatched = [
         (workflow_name, job_name, reference)
         for workflow_name, job_name, reference in calls

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import typing as typ
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
 
 import yaml
 
@@ -37,7 +37,7 @@ INSTALL_ACTION = "taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce6
 #: `install-nixie` still pin it. They are release boundaries rather than
 #: developer-blocking lanes, so they move only once a tag has run on the newer
 #: wiring, not because a pull request went green on it.
-RELEASE_LANE_SHARED_ACTIONS_REF = "f6d4d5f549655c118f86f371b8d55c200d3efa50"
+RELEASE_LANE_SHARED_ACTIONS_REF: Final[str] = "f6d4d5f549655c118f86f371b8d55c200d3efa50"
 
 #: shared-actions `main` at the merge of #458. Beyond the `target` rule above,
 #: this revision restores the caller's Actions cache-service selection and
@@ -49,7 +49,7 @@ RELEASE_LANE_SHARED_ACTIONS_REF = "f6d4d5f549655c118f86f371b8d55c200d3efa50"
 #: Asserted by value rather than by shape, so a bump has to update this
 #: constant and someone has to confirm the new revision still leaves this
 #: repository the sole owner of its caches.
-CI_LANE_SHARED_ACTIONS_REF = "7cb894fe62c40951cccf33819548095e64a1291e"
+CI_LANE_SHARED_ACTIONS_REF: Final[str] = "7cb894fe62c40951cccf33819548095e64a1291e"
 
 SETUP_RUST_ACTION = (
     f"leynos/shared-actions/.github/actions/setup-rust@{CI_LANE_SHARED_ACTIONS_REF}"
