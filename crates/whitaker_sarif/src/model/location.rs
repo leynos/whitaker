@@ -189,6 +189,34 @@ mod tests {
     }
 
     #[test]
+    fn physical_location_serializes_sarif_wire_keys() {
+        let physical = PhysicalLocation {
+            artefact_location: ArtefactLocation {
+                uri: "src/lib.rs".into(),
+                uri_base_id: Some("%SRCROOT%".into()),
+            },
+            region: Some(Region {
+                start_line: 5,
+                start_column: None,
+                end_line: None,
+                end_column: None,
+                byte_offset: None,
+                byte_length: None,
+            }),
+        };
+        assert_serialized_json(&physical, |json| {
+            assert!(
+                json.contains("\"artifactLocation\""),
+                "SARIF artefact-location key missing: {json}"
+            );
+            assert!(
+                !json.contains("\"artefactLocation\""),
+                "derived artefactLocation key present: {json}"
+            );
+        });
+    }
+
+    #[test]
     fn related_location_round_trip() {
         let rl = RelatedLocation {
             id: 1,

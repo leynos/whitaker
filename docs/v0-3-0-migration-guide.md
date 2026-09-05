@@ -62,6 +62,8 @@ fn normalized(settings: Settings) -> Settings {
 
 The old `normalise_settings` function is replaced by `normalize_settings`.
 
+The complete settings mapping is:
+
 | 0.2.x name           | 0.3.0 name           |
 | -------------------- | -------------------- |
 | `normalise_settings` | `normalize_settings` |
