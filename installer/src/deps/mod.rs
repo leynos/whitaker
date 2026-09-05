@@ -10,8 +10,7 @@ use crate::dependency_binaries::{
 };
 use crate::dirs::{BaseDirs, SystemBaseDirs};
 use crate::error::{InstallerError, Result};
-use camino::Utf8Path;
-use cap_std::{ambient_authority, fs_utf8::Dir};
+use cap_std::{ambient_authority, fs::Dir};
 use std::io;
 use std::io::Write;
 use std::path::Path;
@@ -275,13 +274,14 @@ fn find_binary_on_path(binary_name: &str) -> Option<std::path::PathBuf> {
 }
 
 fn find_binary_in_directory(directory: &Path, binary_name: &str) -> Option<std::path::PathBuf> {
-    let directory = Utf8Path::from_path(directory)?;
+    // `cap_std::fs::Dir` (not `fs_utf8`) keeps PATH entries that are not
+    // valid UTF-8 in the scan instead of silently dropping them.
     let directory_capability = Dir::open_ambient_dir(directory, ambient_authority()).ok()?;
 
     binary_candidates(binary_name)
         .into_iter()
-        .find(|candidate| is_executable_file(&directory_capability, Utf8Path::new(candidate)))
-        .map(|candidate| directory.join(candidate).into_std_path_buf())
+        .find(|candidate| is_executable_file(&directory_capability, candidate))
+        .map(|candidate| directory.join(candidate))
 }
 
 fn binary_candidates(binary_name: &str) -> Vec<String> {
@@ -329,19 +329,19 @@ fn windows_path_extensions() -> Vec<String> {
 }
 
 #[cfg(unix)]
-fn is_executable_file(directory: &Dir, path: &Utf8Path) -> bool {
+fn is_executable_file(directory: &Dir, candidate: &str) -> bool {
     use cap_std::fs::PermissionsExt;
 
     directory
-        .metadata(path)
+        .metadata(candidate)
         .map(|metadata| metadata.is_file() && metadata.permissions().mode() & 0o111 != 0)
         .unwrap_or(false)
 }
 
 #[cfg(not(unix))]
-fn is_executable_file(directory: &Dir, path: &Utf8Path) -> bool {
+fn is_executable_file(directory: &Dir, candidate: &str) -> bool {
     directory
-        .metadata(path)
+        .metadata(candidate)
         .map(|metadata| metadata.is_file())
         .unwrap_or(false)
 }

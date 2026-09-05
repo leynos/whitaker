@@ -19,6 +19,8 @@ ignore = [
   "(?m)^    #\\[serde\\(rename = \"artifactLocation\"\\)\\]$",
   "(?m)^    #\\[serde\\(default, rename = \"artifacts\", skip_serializing_if = \"Vec::is_empty\"\\)\\]$",
   "(?m)^                !json\\.contains\\(\"\\\\\"artifacts\\\\\"\"\\),$",
+  "(?m)^                json\\.contains\\(\"\\\\\"artifacts\\\\\"\"\\),$",
+  "(?m)^                json\\.contains\\(\"\\\\\"artifactLocation\\\\\"\"\\),$",
   "(?m)^        \"\\-\\-artifact\\-server\\-path\",$",
   "(?m)^        let Message::CompilerArtifact\\(artefact\\) = message else \\{$",
   "(?m)^        let Ok\\(Message::CompilerArtifact\\(artefact\\)\\) = message else \\{$",

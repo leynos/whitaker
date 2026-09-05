@@ -35,6 +35,8 @@ extend-exclude = [
 locale = "en-gb"
 extend-ignore-re = [
     "(?m)^                !json\\.contains\\(\"\\\\\"artifacts\\\\\"\"\\),$",
+    "(?m)^                json\\.contains\\(\"\\\\\"artifactLocation\\\\\"\"\\),$",
+    "(?m)^                json\\.contains\\(\"\\\\\"artifacts\\\\\"\"\\),$",
     "(?m)^        \"\\-\\-artifact\\-server\\-path\",$",
     "(?m)^        let Message::CompilerArtifact\\(artefact\\) = message else \\{$",
     "(?m)^        let Ok\\(Message::CompilerArtifact\\(artefact\\)\\) = message else \\{$",

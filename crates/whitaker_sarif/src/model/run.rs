@@ -150,6 +150,7 @@ pub struct Artefact {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::builders::RunBuilder;
     use crate::model::location::ArtefactLocation;
     use crate::test_support::{assert_json_round_trip, assert_serialized_json};
 
@@ -203,6 +204,29 @@ mod tests {
                 "empty artefacts present: {json}"
             );
             assert!(!json.contains("\"rules\""), "empty rules present: {json}");
+        });
+    }
+
+    #[test]
+    fn populated_run_serializes_artefacts_wire_key() {
+        let run = RunBuilder::new("test", "1.0")
+            .with_artefact(Artefact {
+                location: ArtefactLocation {
+                    uri: "src/lib.rs".into(),
+                    uri_base_id: Some("%SRCROOT%".into()),
+                },
+                mime_type: Some("text/x-rust".into()),
+            })
+            .build();
+        assert_serialized_json(&run, |json| {
+            assert!(
+                json.contains("\"artifacts\""),
+                "SARIF artefact-list key missing: {json}"
+            );
+            assert!(
+                !json.contains("\"artefacts\""),
+                "derived artefacts key present: {json}"
+            );
         });
     }
 
