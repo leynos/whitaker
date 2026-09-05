@@ -41,12 +41,20 @@ _AMBIENT_INTERPRETER = re.compile(
     re.VERBOSE,
 )
 
-# A repository script in command position: at the start of a command, after a
-# shell separator, after leading environment assignments, or as the whole of a
-# workflow's single-line `run:` value, which is the form that would otherwise
-# slip past a boundary written only for shell syntax.
+# A repository script in command position. Two shapes reach one: a workflow's
+# single-line `run:` value, and the start of a shell command, which is the
+# start of a line or a separator, optionally behind control keywords and
+# environment assignments.
+#
+# The keywords and `run:` are anchored to a boundary rather than matched
+# anywhere. `then`, `do`, `else` and `run:` are ordinary words elsewhere, so an
+# unanchored alternative reads `echo then scripts/tool.py` as an invocation of
+# a script that is really an argument to `echo`.
 _DIRECT_INVOCATION = re.compile(
-    r"""(?:^|[;&|(]|\bthen\b|\bdo\b|\belse\b|\brun:[ \t]*)\s*
+    r"""(?:
+            ^[ \t]*(?:-[ \t]+)?run:[ \t]*
+          | (?:^|[;&|(])[ \t]*(?:(?:then|do|else)[ \t]+)*
+        )
         (?:[A-Za-z_]\w*=(?:"[^"]*"|'[^']*'|\S*)[ \t]+)*
         (?P<script>(?:[\w.@-]+/)+[\w.@-]+\.py)\b""",
     re.VERBOSE | re.MULTILINE,
@@ -131,10 +139,18 @@ def test_command_positions_are_recognized(line: str) -> None:
     [
         pytest.param("          python scripts/tool.py", id="ambient-interpreter"),
         pytest.param("          uv run --script scripts/tool.py", id="explicit-uv-run"),
+        pytest.param("          echo then scripts/tool.py", id="keyword-as-argument"),
+        pytest.param("          echo do scripts/tool.py", id="do-as-argument"),
+        pytest.param("          grep run: scripts/tool.py", id="run-key-as-argument"),
     ],
 )
-def test_interpreter_led_invocations_are_not_command_positions(line: str) -> None:
-    """A script preceded by an interpreter is an argument, not a command."""
+def test_arguments_are_not_command_positions(line: str) -> None:
+    """A script that is an argument must not be read as a command.
+
+    A false positive is not merely noise here: it would hold an unrelated path
+    to the shebang and executable-bit rules, so the contract could fail on
+    workflow text that is perfectly correct.
+    """
     assert not _DIRECT_INVOCATION.findall(line)
 
 
