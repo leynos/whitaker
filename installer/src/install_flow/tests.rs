@@ -206,3 +206,91 @@ fn try_prebuilt_installation_prune_error_falls_back_to_local_build() {
         "fallback message should be emitted, stderr: {stderr}"
     );
 }
+
+/// Reports the artefact as unavailable, the shape a republish window produces.
+fn stub_attempt_prebuilt_unavailable(
+    _config: &PrebuiltConfig<'_>,
+    _stderr: &mut dyn Write,
+) -> PrebuiltResult {
+    PrebuiltResult::Fallback {
+        reason: "repository asset not found".to_owned(),
+    }
+}
+
+fn prebuilt_context_for<'a>(
+    args: &'a InstallArgs,
+    dirs: &'a TestBaseDirs,
+    requested_crates: &'a [CrateName],
+) -> PrebuiltInstallationContext<'a> {
+    PrebuiltInstallationContext {
+        args,
+        dirs,
+        requested_crates,
+        toolchain_channel: "nightly-2026-05-28",
+    }
+}
+
+fn run_with_unavailable_prebuilt(args: &InstallArgs) -> (Result<Option<Utf8PathBuf>>, String) {
+    let dirs = TestBaseDirs {
+        data_dir: Some(PathBuf::from("/tmp/whitaker-test-data")),
+    };
+    let requested_crates = vec![CrateName::from(SUITE_CRATE)];
+    let context = prebuilt_context_for(args, &dirs, &requested_crates);
+    let mut stderr = Vec::new();
+    let result = try_prebuilt_installation_with(
+        &context,
+        &mut stderr,
+        PrebuiltInstallationHooks {
+            detect_host_target: stub_detect_host_target,
+            resolve_destination_dir: stub_resolve_destination_dir,
+            attempt_prebuilt: stub_attempt_prebuilt_unavailable,
+            prune_prebuilt_libraries: stub_prune_prebuilt_libraries,
+        },
+    );
+    let stderr = String::from_utf8(stderr).expect("stderr should be utf-8");
+    (result, stderr)
+}
+
+#[test]
+fn a_missing_suite_artefact_falls_back_without_the_flag() {
+    // The behaviour the flag exists to change, asserted here so the pair reads
+    // as a choice rather than the flag looking like the only path.
+    let (result, stderr) = run_with_unavailable_prebuilt(&InstallArgs::default());
+
+    assert!(
+        matches!(result, Ok(None)),
+        "an absent artefact should fall back to a local build by default"
+    );
+    assert!(
+        stderr.contains("Falling back to local compilation."),
+        "the fallback should be announced, stderr: {stderr}"
+    );
+}
+
+#[test]
+fn a_missing_suite_artefact_fails_under_the_flag() {
+    // A local compilation succeeds, which is why this has to be an error
+    // rather than a warning: the run would otherwise report success having
+    // built a suite nobody pinned.
+    let args = InstallArgs {
+        no_source_fallback: true,
+        ..InstallArgs::default()
+    };
+
+    let (result, _stderr) = run_with_unavailable_prebuilt(&args);
+
+    let error = result.expect_err("an absent artefact must fail when a source build is forbidden");
+    assert!(
+        matches!(error, InstallerError::SourceFallbackForbidden { .. }),
+        "expected a source-fallback refusal, got: {error}"
+    );
+    let message = error.to_string();
+    assert!(
+        message.contains("repository asset not found"),
+        "the refusal must carry the download's own reason, got: {message}"
+    );
+    assert!(
+        message.contains("prebuilt lint library"),
+        "the refusal must name what was missing, got: {message}"
+    );
+}
