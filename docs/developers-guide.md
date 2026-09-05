@@ -277,8 +277,7 @@ boundaries rather than developer-blocking lanes. They no longer archive a
 `target` tree either: they pin the shared action at
 `f6d4d5f549655c118f86f371b8d55c200d3efa50`, the first revision whose built-in
 provider stopped archiving `target/<profile>`. Expect one cold Cargo cache on
-those lanes after the repin because the key no longer carries the build
-profile.
+those lanes after the repin because the key no longer carries the build profile.
 
 The developer-blocking lanes have since moved ahead of them, to
 `7cb894fe62c40951cccf33819548095e64a1291e`. That revision keeps the `target`
