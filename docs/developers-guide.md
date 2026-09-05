@@ -274,11 +274,22 @@ archiving exactly that until it moved to the external provider and gained its
 own registry cache. The release and rolling-release workflows still call the
 shared action with its default `github` provider because they are release
 boundaries rather than developer-blocking lanes. They no longer archive a
-`target` tree either: every caller in this repository now pins the shared
-action at `f6d4d5f549655c118f86f371b8d55c200d3efa50`, the first revision whose
-built-in provider stopped archiving `target/<profile>`. Expect one cold Cargo
-cache on those lanes after the repin because the key no longer carries the
-build profile.
+`target` tree either: they pin the shared action at
+`f6d4d5f549655c118f86f371b8d55c200d3efa50`, the first revision whose built-in
+provider stopped archiving `target/<profile>`. Expect one cold Cargo cache on
+those lanes after the repin because the key no longer carries the build
+profile.
+
+The developer-blocking lanes have since moved ahead of them, to
+`7cb894fe62c40951cccf33819548095e64a1291e`. That revision keeps the `target`
+rule and adds two things the older pin lacks: it restores the caller's Actions
+cache-service selection, and it starts the `sccache` server from a `run:` step
+after those exports. The lanes that cut tags stay behind until a tag has run on
+the newer wiring, since a green pull request is not evidence that a release
+still builds. `tests/workflow_contracts/shared_action_pin_split_test.py` holds
+each group to its own revision by value, so neither half can drift alone, and
+fails once the two constants converge so the split is collapsed rather than
+left describing nothing.
 
 Every cached path has exactly one owner inside its job, and every key family
 has exactly one job permitted to write it.
