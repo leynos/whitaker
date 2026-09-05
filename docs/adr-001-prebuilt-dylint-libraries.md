@@ -182,10 +182,26 @@ their existing workflow or packaging owner.
 ### Rolling release strategy (task 3.4.2)
 
 The CI workflow `.github/workflows/rolling-release.yml` uses a single `rolling`
-GitHub Release tag that is replaced on each push to `main`. This avoids asset
-accumulation and simplifies the installer's download URL construction. The
-workflow deletes the existing release before creating a new one with
-`gh release create rolling --prerelease --latest=false`.
+GitHub Release tag that is refreshed on each push to `main`. This avoids asset
+accumulation and simplifies the installer's download URL construction.
+
+The release is updated in place by `scripts/publish-rolling-release.sh`, never
+deleted. It previously ran `gh release delete rolling --cleanup-tag` before
+`gh release create`, which left the release, its assets and the tag itself
+absent for six to seven seconds on every publish. A consumer landed in that
+gap: chutoro's `Install Whitaker` step began at 02:47:02 on 2026-09-05, the
+same second a delete began, could not fetch
+`cargo-dylint-x86_64-unknown-linux-gnu-v6.0.1.tgz`, and fell back to building
+the Dylint tools from source.
+
+The script uploads new assets before removing superseded ones, so the published
+set is a superset of one generation or the other at every instant. Lint
+archives carry the commit in their names and so need no replacement at all.
+Per-target manifests are replaced last among the uploads, after the archives
+they name, so a consumer reads a consistent pair rather than a manifest
+pointing at something absent. The tag moves once every upload has completed,
+and superseded lint archives are removed last. Dependency archives are only
+touched when the dependency manifest changed and they were rebuilt.
 
 ### External manifest model (task 3.4.2, revised)
 

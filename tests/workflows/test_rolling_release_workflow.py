@@ -22,7 +22,6 @@ Run the `act` smoke test:
 from __future__ import annotations
 
 import os
-import re
 import shlex
 from pathlib import Path
 
@@ -122,7 +121,9 @@ jobs:
         install_components_script(workflow_text)
 
 
-def test_install_components_uses_only_matrix_target_rustc_dev(workflow_text: str) -> None:
+def test_install_components_uses_only_matrix_target_rustc_dev(
+    workflow_text: str,
+) -> None:
     """Ensure install step avoids conflicting dual-target rustc-dev installs."""
     run_script = install_components_script(workflow_text)
     expected_target = "${{ matrix.target }}"
@@ -141,9 +142,9 @@ def test_install_components_uses_only_matrix_target_rustc_dev(workflow_text: str
     rustc_dev_commands = [
         command for command in parsed_commands if "rustc-dev" in command
     ]
-    assert (
-        len(rustc_dev_commands) == 1
-    ), "install step must contain exactly one rustc-dev rustup install command"
+    assert len(rustc_dev_commands) == 1, (
+        "install step must contain exactly one rustc-dev rustup install command"
+    )
 
     rustc_dev_command = rustc_dev_commands[0]
     assert "--target" in rustc_dev_command, (
@@ -153,14 +154,11 @@ def test_install_components_uses_only_matrix_target_rustc_dev(workflow_text: str
     assert target_flag_index + 1 < len(rustc_dev_command), (
         "rustc-dev install command must include a target value"
     )
-    assert (
-        rustc_dev_command[target_flag_index + 1] == expected_target
-    ), "rustc-dev install command must target the matrix target"
-    assert (
-        "llvm-tools-preview" in rustc_dev_command
-    ), (
-        "rustc-dev install command must include llvm-tools-preview in the same "
-        "command"
+    assert rustc_dev_command[target_flag_index + 1] == expected_target, (
+        "rustc-dev install command must target the matrix target"
+    )
+    assert "llvm-tools-preview" in rustc_dev_command, (
+        "rustc-dev install command must include llvm-tools-preview in the same command"
     )
     rust_src_commands = [
         command for command in parsed_commands if "rust-src" in command
@@ -168,7 +166,7 @@ def test_install_components_uses_only_matrix_target_rustc_dev(workflow_text: str
     assert not rust_src_commands, (
         "install step must not install rust-src because it conflicts with "
         "targeted rustc-dev payloads on some runners"
-)
+    )
 
 
 def test_publish_job_runs_even_if_build_lints_fails(workflow_text: str) -> None:
@@ -183,7 +181,9 @@ def test_publish_job_runs_even_if_build_lints_fails(workflow_text: str) -> None:
         "publish job must run even when build-lints has failing matrix legs"
     )
 
-    download_step = _find_step_by_name(publish_job.get("steps"), "Download all artefacts")
+    download_step = _find_step_by_name(
+        publish_job.get("steps"), "Download all artefacts"
+    )
     if download_step is None:
         pytest.fail("publish job must download build artefacts before publish checks")
     assert download_step.get("continue-on-error") is True, (
@@ -200,8 +200,7 @@ def _assert_step_guard_gated_on_assets_only(
     """Assert a publish-step guard depends only on collected assets."""
     step = _find_step_by_name(steps, step_name)
     assert step is not None, (
-        f"publish job must include {step_name!r} before rolling release "
-        f"{action}"
+        f"publish job must include {step_name!r} before rolling release {action}"
     )
 
     guard = _github_expression_value(step.get("if"))
@@ -248,87 +247,59 @@ def test_publish_release_does_not_require_full_dependency_matrix_success(
         "publication waits for all successful dependency artefacts to be "
         "collected"
     )
-    steps = publish_job.get("steps")
     _assert_step_guard_gated_on_assets_only(
-        steps, "Delete existing rolling release", "deletion"
-    )
-    _assert_step_guard_gated_on_assets_only(
-        steps, "Create rolling release", "creation"
+        publish_job.get("steps"),
+        "Republish the rolling release in place",
+        "republish",
     )
 
 
-def test_restore_step_guards_against_missing_dependency_assets(
+def test_the_publish_step_never_destroys_the_release(
     workflow_text: str,
 ) -> None:
-    """Ensure restore step checks for archive assets before downloading.
+    """Republishing must not empty the tag, and must not restore to re-upload.
 
-    The rolling release may contain only lint archives (no .tgz/.zip
-    dependency binary assets) during bootstrapping or when dependency
-    binaries have not yet been published. The restore step must probe the
-    release assets, check specifically for archive file extensions, and
-    skip gracefully rather than failing on a no-match download.
+    The workflow used to delete the release with `--cleanup-tag` and recreate
+    it, which left the tag absent for the whole republish, and it downloaded
+    the previous release's dependency archives so it could upload them again.
+    Both are gone: the archives stay published when they are unchanged, and
+    the release is updated in place. The commands are asserted rather than the
+    step names, because a step renamed around a `gh release delete` would pass
+    a name check while reopening the gap.
     """
     workflow_mapping = _load_workflow_mapping(workflow_text)
     jobs = _get_job_dict(workflow_mapping, "jobs")
     publish_job = _get_job_dict(jobs, "publish")
-    restore_step = _find_step_by_name(
-        publish_job.get("steps"),
-        "Restore dependency archives from previous release",
-    )
-    assert restore_step is not None, (
-        "publish job must have a 'Restore dependency archives from previous "
-        "release' step"
-    )
-    run_script = restore_step.get("run", "")
-    assert isinstance(run_script, str), "restore step must have a run script"
-
-    assert "gh release view rolling" in run_script, (
-        "restore step must probe the rolling release assets before downloading"
-    )
-    assert "gh release download rolling" in run_script, (
-        "restore step must still download assets when they are present"
-    )
-    assert run_script.index("gh release view rolling") < run_script.index(
-        "gh release download rolling"
-    ), (
-        "restore step must probe the rolling release assets before attempting "
-        "to download them"
+    steps = publish_job.get("steps")
+    assert isinstance(steps, list), "publish job must declare steps"
+    scripts = " ".join(
+        str(step.get("run", "")) for step in steps if isinstance(step, dict)
     )
 
-    # The guard must use a case-based control flow to filter archives by
-    # extension, ensuring checksum-only releases do not falsely trigger
-    # a download attempt.
-    assert re.search(r"case\s+[\"']?\$", run_script), (
-        "restore step must use a case statement to filter asset names by "
-        "extension pattern"
+    assert "gh release delete " not in scripts, (
+        "deleting the release empties the rolling tag for the whole republish"
     )
-    assert re.search(
-        r"\*\.tgz\s*\|\s*\*\.zip\s*\)",
-        run_script,
-    ), (
-        "restore step case guard must check for .tgz and .zip archive "
-        "extensions specifically"
+    assert "--cleanup-tag" not in scripts, (
+        "removing the tag fails every consumer resolving it, not only those "
+        "fetching an asset"
     )
-
-    # The guard must exit 0 when no dependency assets are found rather than
-    # letting gh release download fail on a no-match pattern.
-    assert "exit 0" in run_script, (
-        "restore step must exit cleanly when no dependency assets are found"
+    assert "gh release download rolling" not in scripts, (
+        "downloading published dependency archives in order to upload them "
+        "again replaces assets that never changed"
+    )
+    assert "scripts/publish-rolling-release.sh" in scripts, (
+        "the publish job must delegate to the in-place republish script, whose "
+        "own contract tests cover the ordering"
     )
 
-    # Only release-not-found errors are benign; auth/network/API failures
-    # must propagate so incomplete releases are not silently published.
-    assert re.search(
-        r"grep\s+.*\s+[\"'](release not found|no releases? found|404)",
-        run_script,
-        re.IGNORECASE,
-    ), (
-        "restore step must use grep to specifically match missing-release "
-        "errors (release not found, no releases found, 404) rather than "
-        "swallowing all gh failures"
-    )
-    assert "exit 1" in run_script, (
-        "restore step must fail on unexpected gh errors (auth, network, API)"
+
+def test_the_publish_step_is_gated_on_assets_only(workflow_text: str) -> None:
+    """The republish must run whenever assets exist, whatever else failed."""
+    workflow_mapping = _load_workflow_mapping(workflow_text)
+    jobs = _get_job_dict(workflow_mapping, "jobs")
+    publish_job = _get_job_dict(jobs, "publish")
+    _assert_step_guard_gated_on_assets_only(
+        publish_job.get("steps"), "Republish the rolling release in place", "republish"
     )
 
 
