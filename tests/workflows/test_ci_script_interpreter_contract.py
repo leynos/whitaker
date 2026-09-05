@@ -66,35 +66,59 @@ _DIRECT_INVOCATION = re.compile(
 _REQUIRES_PYTHON = re.compile(r'^#\s*requires-python\s*=\s*"(?P<specifier>[^"]*)"')
 _SUPPORTED_SPECIFIER = re.compile(r"^>=\s*(?P<version>\d+(?:\.\d+)*)$")
 
-#: A quoted argument. A regular expression cannot parse a shell, so rather than
-#: pretending otherwise the scanner locates quoted spans and refuses to read a
-#: command out of one: `echo "(scripts/tool.py)"` contains a separator and a
-#: path, and neither means what the shape of the text suggests.
-_QUOTED_SPAN = re.compile(r"'[^']*'|\"[^\"]*\"")
+#: A quoted argument, which may span lines. A regular expression cannot parse a
+#: shell, so rather than pretending otherwise the scanner locates quoted spans
+#: and refuses to read a command out of one: `echo "(scripts/tool.py)"` contains
+#: a separator and a path, and neither means what the shape of the text
+#: suggests.
+_QUOTED_SPAN = re.compile(r"'[^']*'|\"[^\"]*\"", re.DOTALL)
 
 
-def _quoted_ranges(line: str) -> list[tuple[int, int]]:
-    """Return the character ranges of quoted arguments in one line."""
-    return [match.span() for match in _QUOTED_SPAN.finditer(line)]
+def _quoted_ranges(text: str) -> list[tuple[int, int]]:
+    """Return the character ranges of quoted arguments in some text.
+
+    Scanning the whole text rather than each line in turn is deliberate: a
+    quoted argument may contain newlines, and per-line scanning would reset
+    the quoting state at every one of them, so the continuation lines of a
+    quoted string would read as commands.
+
+    Parameters
+    ----------
+    text : str
+        The workflow or Makefile text to scan.
+
+    Returns
+    -------
+    list[tuple[int, int]]
+        Half-open character ranges, each covering one quoted argument.
+    """
+    return [match.span() for match in _QUOTED_SPAN.finditer(text)]
 
 
 def command_position_scripts(text: str) -> list[str]:
     """Return the script paths that text invokes as commands.
 
-    Matching runs a line at a time, and a match whose path falls inside a
-    quoted argument is discarded: quotes are the one piece of shell structure
-    that changes what a separator means, and ignoring them turns ordinary
-    argument text into a call site the contract would then police.
+    A match whose path falls inside a quoted argument is discarded. Quotes are
+    the one piece of shell structure that changes what a separator means, and
+    ignoring them turns ordinary argument text into a call site the contract
+    would then police.
+
+    Parameters
+    ----------
+    text : str
+        The workflow or Makefile text to scan.
+
+    Returns
+    -------
+    list[str]
+        Every script path in command position, in the order it appears.
     """
-    found: list[str] = []
-    for line in text.splitlines():
-        quoted = _quoted_ranges(line)
-        found.extend(
-            match.group("script")
-            for match in _DIRECT_INVOCATION.finditer(line)
-            if not any(start <= match.start("script") < end for start, end in quoted)
-        )
-    return found
+    quoted = _quoted_ranges(text)
+    return [
+        match.group("script")
+        for match in _DIRECT_INVOCATION.finditer(text)
+        if not any(start <= match.start("script") < end for start, end in quoted)
+    ]
 
 
 def _scanned_files() -> Iterator[Path]:
@@ -183,6 +207,17 @@ def test_arguments_are_not_command_positions(line: str) -> None:
     workflow text that is perfectly correct.
     """
     assert not command_position_scripts(line)
+
+
+def test_a_quoted_argument_spanning_lines_is_not_a_command() -> None:
+    """A quoted string's continuation lines are text, not commands.
+
+    Scanning line by line would reset the quoting state at every newline, so
+    the second line of a quoted argument would start at a line boundary and
+    read as an invocation.
+    """
+    text = '          echo "first line\n          scripts/tool.py"\n'
+    assert not command_position_scripts(text)
 
 
 def test_direct_invocations_are_discovered() -> None:
