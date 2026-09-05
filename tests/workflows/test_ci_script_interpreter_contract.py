@@ -71,7 +71,7 @@ _SUPPORTED_SPECIFIER = re.compile(r"^>=\s*(?P<version>\d+(?:\.\d+)*)$")
 #: and refuses to read a command out of one: `echo "(scripts/tool.py)"` contains
 #: a separator and a path, and neither means what the shape of the text
 #: suggests.
-_QUOTED_SPAN = re.compile(r"'[^']*'|\"[^\"]*\"", re.DOTALL)
+_QUOTED_SPAN = re.compile(r"'[^']*'|\"(?:[^\"\\]|\\.)*\"", re.DOTALL)
 
 
 def _quoted_ranges(text: str) -> list[tuple[int, int]]:
@@ -197,6 +197,10 @@ def test_command_positions_are_recognized(line: str) -> None:
         pytest.param("          grep run: scripts/tool.py", id="run-key-as-argument"),
         pytest.param('          echo "(scripts/tool.py)"', id="quoted-argument"),
         pytest.param("          echo '; scripts/tool.py'", id="quoted-separator"),
+        pytest.param(
+            '          echo "text \\" ; scripts/tool.py \\" text"',
+            id="escaped-quote-inside-quotes",
+        ),
     ],
 )
 def test_arguments_are_not_command_positions(line: str) -> None:
