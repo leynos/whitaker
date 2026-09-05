@@ -197,6 +197,24 @@ class MakeRunEnvironment:
     stub_dir: Path
 
 
+# Targets whose recipes run a repository script through its `uv run --script`
+# shebang. Only these get `uv` on the stubbed PATH, so the other targets keep
+# the minimal environment they were written against.
+_TARGETS_REQUIRING_UV = frozenset({"release-installer-dry-run"})
+
+
+def _stub_path(target: str, stub_dir: Path) -> str:
+    """Return the PATH a stubbed `make` run should see for one target."""
+    entries = [str(stub_dir)]
+    if target in _TARGETS_REQUIRING_UV:
+        uv = shutil.which("uv")
+        if uv is None:  # pragma: no cover - environment guard
+            pytest.skip(f"uv is required to run the {target} recipe")
+        entries.append(str(Path(uv).parent))
+    entries.extend(["/usr/bin", "/bin"])
+    return ":".join(entries)
+
+
 def _run_make(
     target: str,
     environment: MakeRunEnvironment,
@@ -221,7 +239,7 @@ def _run_make(
     log = environment.stub_dir / f"{target}-{environment.locked or 'unlocked'}.log"
     process_env = os.environ | {
         "CARGO_LOCKED_LOG": str(log),
-        "PATH": f"{environment.stub_dir}:/usr/bin:/bin",
+        "PATH": _stub_path(target, environment.stub_dir),
     }
     process_env.pop("CARGO_LOCKED", None)
     make_arguments = ["make", target, f"CARGO={environment.cargo}"]

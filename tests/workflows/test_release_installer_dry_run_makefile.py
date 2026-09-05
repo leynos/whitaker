@@ -34,18 +34,16 @@ def test_release_dry_run_checks_required_tools(
     release_installer_dry_run_recipe: str,
 ) -> None:
     """Ensure missing shell tools fail before build work starts."""
-    assert "PYTHON=$$(command -v python3 || command -v python || true)" in (
-        release_installer_dry_run_recipe
-    ), "release-installer-dry-run must resolve python3 or python"
-    assert "Install python3 or python to run release-installer-dry-run" in (
-        release_installer_dry_run_recipe
-    ), "release-installer-dry-run must explain missing Python tools"
     assert '[ -n "$(CARGO)" ] || { echo "Install cargo to run release-installer-dry-run"; exit 1; }' in (
         release_installer_dry_run_recipe
     ), "release-installer-dry-run must validate the Cargo command"
-    assert "for tool in awk jq mktemp rustc; do" in (
+    # `uv` is required rather than an ambient interpreter: the checksum script
+    # selects its own Python through a `uv run --script` shebang, so a host
+    # with python3 but without uv would fail inside the recipe instead of at
+    # its tool check.
+    assert "for tool in awk jq mktemp rustc uv; do" in (
         release_installer_dry_run_recipe
-    ), "release-installer-dry-run must validate required shell tools"
+    ), "release-installer-dry-run must validate required shell tools, including uv"
     assert "Install $$tool to run release-installer-dry-run" in (
         release_installer_dry_run_recipe
     ), "release-installer-dry-run must explain missing shell tools"
@@ -119,9 +117,13 @@ def test_release_dry_run_generates_and_validates_checksums(
     release_installer_dry_run_recipe: str,
 ) -> None:
     """Ensure archive and checksum creation are both validated."""
-    assert '"$$PYTHON" scripts/generate_checksums.py "$$DIST_DIR"' in (
+    assert 'scripts/generate_checksums.py "$$DIST_DIR"' in (
         release_installer_dry_run_recipe
     ), "checksum generation and validation must be invoked"
+    assert "$$PYTHON" not in release_installer_dry_run_recipe, (
+        "the checksum script must run through its uv shebang, not through an "
+        "ambient interpreter whose version the release legs do not control"
+    )
     assert "Expected installer archive matching $$ARCHIVE_GLOB" in (
         release_installer_dry_run_recipe
     ), "release dry run must validate archive creation"

@@ -102,13 +102,13 @@ jobs:
         if: matrix.target == 'x86_64-unknown-linux-gnu'
         run: |
           set -euxo pipefail
-          python scripts/check_glibc_baseline.py --maximum-glibc GLIBC_2.35 \
+          scripts/check_glibc_baseline.py --maximum-glibc GLIBC_2.35 \
             "${{ steps.binary.outputs.path }}"
 
       - name: Generate SHA-256 checksum
         run: |
           set -euxo pipefail
-          python scripts/generate_checksums.py dist/
+          scripts/generate_checksums.py dist/
 
       - name: Diagnostics (package archive)
         if: failure()
@@ -206,14 +206,14 @@ jobs:
         if: matrix.target == 'x86_64-unknown-linux-gnu'
         run: |
           set -euxo pipefail
-          python scripts/check_glibc_baseline.py --maximum-glibc GLIBC_2.35 \
+          scripts/check_glibc_baseline.py --maximum-glibc GLIBC_2.35 \
             dependency-root/bin/cargo-dylint \
             dependency-root/bin/dylint-link
 
       - name: Generate SHA-256 checksums
         run: |
           set -euxo pipefail
-          python scripts/generate_checksums.py dist/
+          scripts/generate_checksums.py dist/
 
       - name: Diagnostics (dependency binaries)
         if: failure()
@@ -311,7 +311,7 @@ jobs:
           cargo_dylint=$(find "$VERIFY_DIR" -type f -name cargo-dylint -print -quit)
           dylint_link=$(find "$VERIFY_DIR" -type f -name dylint-link -print -quit)
           [[ -n "$installer" && -n "$cargo_dylint" && -n "$dylint_link" ]]
-          python scripts/check_glibc_baseline.py --maximum-glibc GLIBC_2.35 \
+          scripts/check_glibc_baseline.py --maximum-glibc GLIBC_2.35 \
             "$installer" "${binaries[@]}"
           "$installer" --version
           "$cargo_dylint" dylint --version

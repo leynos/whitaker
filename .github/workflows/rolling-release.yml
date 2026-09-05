@@ -165,7 +165,7 @@ jobs:
             echo "::error::No x86_64 Linux lint libraries were built."
             exit 1
           fi
-          python scripts/check_glibc_baseline.py --maximum-glibc GLIBC_2.35 \
+          scripts/check_glibc_baseline.py --maximum-glibc GLIBC_2.35 \
             "${lint_libraries[@]}"
 
       - name: Diagnostics (package artefact)
@@ -271,7 +271,7 @@ jobs:
           while IFS=$'\t' read -r _package binary _version; do
             binaries+=("dependency-root/bin/${binary}")
           done < /tmp/dependency-binaries.tsv
-          python scripts/check_glibc_baseline.py --maximum-glibc GLIBC_2.35 \
+          scripts/check_glibc_baseline.py --maximum-glibc GLIBC_2.35 \
             "${binaries[@]}"
 
       - name: Generate SHA-256 checksums
