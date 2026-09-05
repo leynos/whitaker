@@ -230,11 +230,17 @@ POSIX environments.
 
 The lanes share the workflow-level build contract: `BUILD_PROFILE=debug` narrows
 `sccache` keys to debug builds only; `CARGO_INCREMENTAL=0` disables
-incremental compilation, which is incompatible with `sccache`;
-`RUSTC_WRAPPER=sccache` routes all `rustc` invocations through `sccache`; and
+incremental compilation, which is incompatible with `sccache`; and
 `RUSTFLAGS=-D warnings` and `RUSTDOCFLAGS=-D warnings` deny compiler and doc
-warnings across both lanes. Cache storage is job-specific. The Linux lanes read
-one workflow-level `SCCACHE_BACKEND` switch, while `windows-compat` sets
+warnings across both lanes. `RUSTC_WRAPPER` is deliberately absent from that
+contract. The shared Rust setup action installs `sccache` and exports the
+wrapper as the absolute path of the binary it installed, and it stands aside
+when a caller has already set the variable. A workflow-level
+`RUSTC_WRAPPER=sccache` would therefore leave every lane wrapped by whichever
+`sccache` happened to be on `PATH` rather than the one the action provisioned,
+which is reported as `metric setup-rust.sccache.wrapper=caller-set`. Cache
+storage is job-specific. The Linux lanes read one workflow-level
+`SCCACHE_BACKEND` switch, while `windows-compat` sets
 `SCCACHE_GHA_ENABLED=true` in its own job environment because it is
 GitHub-hosted and shares none of the Ubicloud constants.
 
@@ -427,19 +433,22 @@ nobody owns.
 
 The GitHub Actions backend needs `ACTIONS_RESULTS_URL` and
 `ACTIONS_RUNTIME_TOKEN`, which GitHub exposes to actions rather than to `run`
-steps. The shared Rust setup action is configured with `use-sccache: false`, so
-nothing else exports them; a small `actions/github-script` step re-exports the
-two values into the job environment when, and only when, the GHA backend is
-selected. Without it the wrapper falls back to `Local disk` and the job pays a
-compiler cache's setup cost for nothing.
+steps. That is the shared Rust setup action's concern now, not this
+repository's. It records the caller's cache-service selection before
+`mozilla-actions/sccache-action` overwrites it, restores it afterwards, and
+starts the server from a `run:` step positioned after those exports, so a
+server started for the GHA backend comes up bound to the right endpoint. This
+repository previously re-exported the two values from an
+`actions/github-script` step immediately after checkout; that step is gone,
+because two arms configuring one `sccache` is the failure it was written to
+avoid.
 
-That export must run before anything starts the `sccache` server, which is why
-it sits immediately after checkout in every Linux job. `sccache --zero-stats`,
-`--start-server`, and the first wrapped `rustc` all start the server, and a
-server started without the variables comes up in local-disk mode and stays
-there for the whole job while reporting zero requests. The contract tests
-enforce that ordering. The GitHub-hosted Windows lane needs no export, because
-there the variables are already visible to `run:` steps.
+The ordering that mattered still matters, expressed differently. `sccache`
+binds its backend once, when the server starts, so the backend selector and the
+compiler-cache directory restore both run before `Setup Rust`, which is what
+starts the server. The contract tests enforce both positions and reject a lane
+that installs or zeroes `sccache` itself. The GitHub-hosted Windows lane needs
+no export, because there the variables are already visible to `run:` steps.
 
 `local` is the deployed backend, chosen from measurement. The Actions cache
 service is the store Ubicloud's transparent cache intercepts, and Cuprum's
@@ -480,16 +489,20 @@ It also routes the compiler cache through the same `actions/cache` transport as
 every other archive, so one working write path serves the whole design. Measure
 the restore and save duration against the compile seconds avoided.
 
-Each build lane resets `sccache` counters before compilation and then runs
+Each build lane starts from zeroed `sccache` counters and then runs
 `scripts/record-sccache-effectiveness.sh`, which appends the human-readable
 statistics to the job summary, retains the JSON statistics, and warns when
-`sccache` reports zero compile requests. A run with no compile requests paid
-the compiler cache's setup cost while `RUSTC_WRAPPER` never reached a single
-`rustc` invocation, so treat zero compile requests as a failed cache
-integration, not as a clean zero-miss result. That failure mode is not
-hypothetical: `mozilla-actions/sccache-action` exports only `SCCACHE_PATH` and
-does not set `RUSTC_WRAPPER`, so before the wrapper was set explicitly no Cargo
-invocation in `coverage-main.yml` was wrapped at all.
+`sccache` reports zero compile requests. On the Linux lanes the zeroing is done
+by the shared action's server start, which reports
+`metric setup-rust.sccache.server=started` or `started-stats-not-zeroed` so a
+failed zero is visible rather than inferred; `windows-compat` still zeroes
+explicitly. A run with no compile requests paid the compiler cache's setup cost
+while `RUSTC_WRAPPER` never reached a single `rustc` invocation, so treat zero
+compile requests as a failed cache integration, not as a clean zero-miss
+result. That failure mode is not hypothetical: `mozilla-actions/sccache-action`
+exports only `SCCACHE_PATH` and does not set `RUSTC_WRAPPER`, so before a
+wrapper was exported no Cargo invocation in `coverage-main.yml` was wrapped at
+all.
 
 `scripts/record-cache-observations.sh` renders every restore step's primary
 key, the key it actually matched, and its `cache-hit` result into the job
