@@ -15,10 +15,11 @@
 //! the Makefile gate applies) but uses an isolated target directory so it never
 //! contends with the outer build.
 
-use std::path::PathBuf;
 use std::process::Command;
 
 use anyhow::Context as _;
+use camino::Utf8PathBuf;
+use cap_std::{ambient_authority, fs_utf8::Dir};
 use serde_json::Value;
 use tempfile::TempDir;
 
@@ -43,7 +44,7 @@ fn crate_builds_without_dylint_driver_feature() -> anyhow::Result<()> {
         .arg("--no-default-features")
         .arg("--lib")
         .arg("--message-format=json")
-        .current_dir(&workspace_root)
+        .current_dir(workspace_root.as_std_path())
         .env("CARGO_TARGET_DIR", target_dir.path())
         .output()
         .context("failed to execute nested cargo check")?;
@@ -72,19 +73,22 @@ fn crate_builds_without_dylint_driver_feature() -> anyhow::Result<()> {
 }
 
 /// Returns the workspace root containing this crate's manifest.
-fn workspace_root() -> anyhow::Result<PathBuf> {
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let mut candidate = manifest_dir.as_path();
+fn workspace_root() -> anyhow::Result<Utf8PathBuf> {
+    let mut candidate = Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     loop {
         if candidate.join("Cargo.toml").is_file() {
-            let workspace = std::fs::read_to_string(candidate.join("Cargo.toml"))
+            let directory = Dir::open_ambient_dir(&candidate, ambient_authority())
+                .context("failed to open candidate workspace directory")?;
+            let workspace = directory
+                .read_to_string("Cargo.toml")
                 .context("failed to read candidate workspace Cargo.toml")?;
             if workspace.contains("[workspace]") {
-                return Ok(candidate.to_path_buf());
+                return Ok(candidate);
             }
         }
         candidate = candidate
             .parent()
-            .context("workspace root not found above CARGO_MANIFEST_DIR")?;
+            .context("workspace root not found above CARGO_MANIFEST_DIR")?
+            .to_owned();
     }
 }

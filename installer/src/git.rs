@@ -4,6 +4,11 @@
 //! including initial cloning and subsequent updates. Operations have a
 //! configurable timeout to prevent hangs on network issues.
 
+#[path = "git/commit_sha.rs"]
+mod commit_sha;
+
+pub use commit_sha::CommitSha;
+
 use crate::artefact::suite_ref::SuiteRef;
 use crate::error::{InstallerError, Result};
 use crate::workspace::WHITAKER_REPO_URL;
