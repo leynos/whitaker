@@ -287,13 +287,17 @@ keeps the rule that the built-in provider does not archive `target/<profile>`,
 and adds two things the previous pin lacked: it restores the caller's Actions
 cache-service selection, and it starts the `sccache` server from a `run:` step
 after those exports. Expect one cold Cargo cache on a lane the first time it
-moves, because the key no longer carries the build profile.
+moves because the key no longer carries the build profile.
 
-The lanes were briefly split, with the release boundaries held back on the
-reasoning that a green pull request is not evidence that a release still
-builds. That reasoning does not apply here. Whitaker is a rolling release:
-`rolling-release.yml` runs on every merge to `main`, so those lanes had already
-been exercising the newer wiring on every merge.
+The lanes were briefly split, with the release boundaries held back until "a
+tag has run on the newer wiring". That exit condition was the wrong one for
+this repository, not because the risk was imaginary but because the evidence
+was available far sooner elsewhere. Whitaker is a rolling release:
+`rolling-release.yml` runs on every merge to `main` and publishes the artefacts
+consumers install, so it is a release path that reports within minutes, while a
+tag might be months away. The proof accordingly comes from the first merge
+after the lanes converge rather than from a tag, and a revert restores the
+previous pin if that run regresses.
 `tests/workflow_contracts/shared_action_pin_test.py` holds every call to the
 one constant by value, and rejects a workflow that calls `setup-rust` without
 appearing in its list, so a new caller cannot end up pinned by nobody's rule.
