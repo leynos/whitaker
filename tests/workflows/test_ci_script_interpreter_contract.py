@@ -42,17 +42,21 @@ _AMBIENT_INTERPRETER = re.compile(
 )
 
 # A repository script in command position: at the start of a command, after a
-# shell separator, or after leading environment assignments.
+# shell separator, after leading environment assignments, or as the whole of a
+# workflow's single-line `run:` value, which is the form that would otherwise
+# slip past a boundary written only for shell syntax.
 _DIRECT_INVOCATION = re.compile(
-    r"""(?:^|[;&|(]|\bthen\b|\bdo\b|\belse\b)\s*
+    r"""(?:^|[;&|(]|\bthen\b|\bdo\b|\belse\b|\brun:[ \t]*)\s*
         (?:[A-Za-z_][\w]*=\S*\s+)*
         (?P<script>(?:[\w.@-]+/)+[\w.@-]+\.py)\b""",
     re.VERBOSE | re.MULTILINE,
 )
 
-_REQUIRES_PYTHON = re.compile(
-    r'^#\s*requires-python\s*=\s*"[><=~^]*(?P<version>[\d.]+)"'
-)
+# The whole specifier is captured, not a version glimpsed inside it: `<3.13`
+# and `^3.13` both contain "3.13" while permitting or requiring an interpreter
+# the repository does not support.
+_REQUIRES_PYTHON = re.compile(r'^#\s*requires-python\s*=\s*"(?P<specifier>[^"]*)"')
+_SUPPORTED_SPECIFIER = re.compile(r"^>=\s*(?P<version>\d+(?:\.\d+)*)$")
 
 
 def _scanned_files() -> Iterator[Path]:
@@ -93,6 +97,39 @@ def _index_mode(path: Path) -> str:
     return result.stdout.split()[0]
 
 
+@pytest.mark.parametrize(
+    "line",
+    [
+        pytest.param("      - run: scripts/tool.py --flag", id="inline-run"),
+        pytest.param("          scripts/tool.py --flag", id="block-run"),
+        pytest.param("          set -e; scripts/tool.py", id="after-separator"),
+        pytest.param("          PYTHONPATH=x scripts/tool.py", id="after-assignment"),
+        pytest.param("          if x; then scripts/tool.py; fi", id="after-then"),
+    ],
+)
+def test_command_positions_are_recognized(line: str) -> None:
+    """Cover the call-site shapes a workflow may use.
+
+    The single-line `run:` form is the one a boundary written only for shell
+    syntax misses, and a missed call site makes the contract silently weaker
+    rather than red.
+    """
+    matches = [match.group("script") for match in _DIRECT_INVOCATION.finditer(line)]
+    assert matches == ["scripts/tool.py"]
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        pytest.param("          python scripts/tool.py", id="ambient-interpreter"),
+        pytest.param("          uv run --script scripts/tool.py", id="explicit-uv-run"),
+    ],
+)
+def test_interpreter_led_invocations_are_not_command_positions(line: str) -> None:
+    """A script preceded by an interpreter is an argument, not a command."""
+    assert not _DIRECT_INVOCATION.findall(line)
+
+
 def test_direct_invocations_are_discovered() -> None:
     """The scan finds call sites; an empty scan would make the suite vacuous."""
     scripts = _shebang_scripts()
@@ -109,14 +146,22 @@ def test_directly_invoked_scripts_pin_their_interpreter(script: Path) -> None:
         f"{script.name} is invoked by path, so its shebang selects the "
         f"interpreter; expected {UV_SHEBANG!r}, found {lines[0]!r}"
     )
-    versions = [
-        tuple(int(part) for part in match.group("version").split("."))
+    specifiers = [
+        match.group("specifier")
         for line in lines[1:12]
         if (match := _REQUIRES_PYTHON.match(line))
     ]
-    assert versions, f"{script.name} declares no requires-python in its script metadata"
-    assert versions[0] >= MINIMUM_PYTHON, (
-        f"{script.name} allows Python {versions[0]}, below the repository floor"
+    assert specifiers, (
+        f"{script.name} declares no requires-python in its script metadata"
+    )
+    supported = _SUPPORTED_SPECIFIER.match(specifiers[0])
+    assert supported, (
+        f"{script.name} declares requires-python {specifiers[0]!r}; the "
+        'repository supports only a lower bound of the form ">=X.Y"'
+    )
+    version = tuple(int(part) for part in supported.group("version").split("."))
+    assert version >= MINIMUM_PYTHON, (
+        f"{script.name} allows Python {version}, below the repository floor"
     )
 
 

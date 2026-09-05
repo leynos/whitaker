@@ -809,7 +809,8 @@ make fmt        # Apply formatting
 ## Python script interpreter convention
 
 Every Python script that a workflow or the `Makefile` runs by path carries the
-same two-line preamble and is committed with its executable bit set:
+same preamble, a shebang above a script-metadata block, and is committed with
+its executable bit set:
 
 ```python
 #!/usr/bin/env -S uv run --script
