@@ -58,8 +58,24 @@ mapfile -t assets <"${asset_list}"
 title="Rolling Release (${RELEASE_SHORT_SHA})"
 notes="Prebuilt lint libraries from commit ${RELEASE_SHA}."
 
+# The release names the tag, and its `target_commitish` is the branch rather
+# than a commit, so moving the tag is a plain ref update. GitHub ignores
+# `target_commitish` when patching a published release, which is why the tag
+# and not the release is what moves.
+move_tag() {
+    echo "Moving ${tag} to ${RELEASE_SHA}."
+    gh api \
+        --method PATCH \
+        "repos/${repository}/git/refs/tags/${tag}" \
+        -f "sha=${RELEASE_SHA}" \
+        -F force=true >/dev/null
+}
+
 # A release that does not exist yet cannot be updated in place, and there is no
-# window to protect because there is nothing published to lose.
+# window to protect because there is nothing published to lose. The tag still
+# moves: a deleted release can leave its tag behind, and `gh release create`
+# binds to an existing tag rather than repointing it, so without this the tag
+# would sit at an older commit while the notes named this one.
 if ! published=$(gh release view "${tag}" --json assets --jq '.assets[].name' 2>/dev/null); then
     echo "Rolling release absent; creating it with the full asset set."
     gh release create "${tag}" \
@@ -68,6 +84,7 @@ if ! published=$(gh release view "${tag}" --json assets --jq '.assets[].name' 2>
         --prerelease \
         --latest=false \
         "${assets[@]}"
+    move_tag
     exit 0
 fi
 
@@ -122,9 +139,35 @@ fi
 # Reached only when this run rebuilt an asset that already exists under the
 # same name, which today means the dependency archives after a manifest
 # change. `--clobber` deletes first, so it is confined to that case.
+#
+# An archive and its `.sha256` must never disagree. Clobbering both together
+# would publish the new archive while the old checksum was still up, and a
+# consumer verifying the digest in that instant gets a mismatch, which is a
+# hard failure rather than a retryable absence. So the old checksum is removed
+# first: the states a consumer can observe are old archive with no checksum,
+# new archive with no checksum, then both new. A missing checksum is something
+# a caller can retry; a wrong one is not.
 if [[ "${#replacement_assets[@]}" -gt 0 ]]; then
     echo "Replacing ${#replacement_assets[@]} rebuilt asset(s)."
-    gh release upload "${tag}" --clobber "${replacement_assets[@]}"
+    replacement_archives=()
+    replacement_checksums=()
+    for path in "${replacement_assets[@]}"; do
+        case "$(basename -- "${path}")" in
+            *.sha256) replacement_checksums+=("${path}") ;;
+            *) replacement_archives+=("${path}") ;;
+        esac
+    done
+    for path in ${replacement_checksums+"${replacement_checksums[@]}"}; do
+        name=$(basename -- "${path}")
+        echo "Withdrawing the superseded checksum ${name}."
+        gh release delete-asset "${tag}" "${name}" --yes
+    done
+    if [[ "${#replacement_archives[@]}" -gt 0 ]]; then
+        gh release upload "${tag}" --clobber "${replacement_archives[@]}"
+    fi
+    if [[ "${#replacement_checksums[@]}" -gt 0 ]]; then
+        gh release upload "${tag}" "${replacement_checksums[@]}"
+    fi
 fi
 
 if [[ "${#manifest_assets[@]}" -gt 0 ]]; then
@@ -132,16 +175,7 @@ if [[ "${#manifest_assets[@]}" -gt 0 ]]; then
     gh release upload "${tag}" --clobber "${manifest_assets[@]}"
 fi
 
-# The release names the tag, and its `target_commitish` is the branch rather
-# than a commit, so moving the tag is a plain ref update. GitHub ignores
-# `target_commitish` when patching a published release, which is why the tag
-# and not the release is what moves.
-echo "Moving ${tag} to ${RELEASE_SHA}."
-gh api \
-    --method PATCH \
-    "repos/${repository}/git/refs/tags/${tag}" \
-    -f "sha=${RELEASE_SHA}" \
-    -F force=true >/dev/null
+move_tag
 
 gh release edit "${tag}" --title "${title}" --notes "${notes}" >/dev/null
 

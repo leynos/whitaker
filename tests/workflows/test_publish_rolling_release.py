@@ -314,3 +314,70 @@ def test_an_empty_asset_list_refuses_to_publish(
     assert run.returncode != 0
     assert "empty" in run.stdout.lower()
     assert not run.matching("release upload")
+
+
+def test_the_tag_moves_even_when_the_release_is_absent(
+    publish: typ.Callable[..., PublishRun],
+) -> None:
+    """A deleted release can leave its tag behind at an older commit.
+
+    `gh release create` binds to an existing tag rather than repointing it, so
+    without an explicit move the tag would sit at the previous commit while the
+    release notes named this one, and every consumer would fetch the wrong
+    generation while the run reported success.
+    """
+    run = publish(
+        local_assets=["whitaker-lints-0123456-linux.tar.zst", "manifest-linux.json"],
+        published=[],
+        release_exists=False,
+    )
+
+    assert run.returncode == 0, run.stdout
+    moves = run.matching("git/refs/tags/rolling")
+    assert len(moves) == 1, "the bootstrap path must move the tag exactly once"
+    creation = next(
+        index
+        for index, command in enumerate(run.commands)
+        if "release create" in command
+    )
+    assert creation < run.commands.index(moves[0]), (
+        "the tag must be repointed after the release binds to it"
+    )
+
+
+def test_a_rebuilt_archive_never_disagrees_with_its_checksum(
+    publish: typ.Callable[..., PublishRun],
+) -> None:
+    """A stale checksum beside a new archive is a hard failure, not a retry.
+
+    Clobbering both together would publish the new archive while the old
+    checksum was still up. A consumer verifying the digest in that instant sees
+    a mismatch and stops. Withdrawing the checksum first leaves only states a
+    caller can retry: an absent checksum, never a wrong one.
+    """
+    archive = "cargo-dylint-x86_64-unknown-linux-gnu-v6.0.2.tgz"
+    run = publish(
+        local_assets=[archive, f"{archive}.sha256", "manifest-linux.json"],
+        published=[archive, f"{archive}.sha256", "manifest-linux.json"],
+    )
+
+    assert run.returncode == 0, run.stdout
+    withdrawal = run.matching("delete-asset", f"{archive}.sha256")
+    assert withdrawal, "the superseded checksum must be withdrawn before the archive"
+    withdrawal_index = run.commands.index(withdrawal[0])
+    archive_upload = next(
+        index
+        for index, command in enumerate(run.commands)
+        if "release upload" in command
+        and archive in command
+        and ".sha256" not in command
+    )
+    checksum_upload = next(
+        index
+        for index, command in enumerate(run.commands)
+        if "release upload" in command and f"{archive}.sha256" in command
+    )
+    assert withdrawal_index < archive_upload < checksum_upload, (
+        "the order must be withdraw the checksum, replace the archive, then "
+        f"publish the new checksum; got {run.commands}"
+    )
