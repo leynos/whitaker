@@ -26,13 +26,13 @@ import pytest
 if typ.TYPE_CHECKING:  # pragma: no cover - typing only
     from pathlib import Path
 
-SCRIPT = "scripts/publish-rolling-release.sh"
+SCRIPT: str = "scripts/publish-rolling-release.sh"
 
 #: A dependency archive whose name is stable across publishes. This is the
 #: asset class that broke a consumer, so it has its own assertions.
-DEPENDENCY_ARCHIVE = "cargo-dylint-x86_64-unknown-linux-gnu-v6.0.1.tgz"
+DEPENDENCY_ARCHIVE: str = "cargo-dylint-x86_64-unknown-linux-gnu-v6.0.1.tgz"
 
-_GH_STUB = """#!/usr/bin/env bash
+_GH_STUB: str = """#!/usr/bin/env bash
 printf '%s\\n' "$*" >> "$GH_LOG"
 if [[ "$1 $2" == "release view" ]]; then
     if [[ "${RELEASE_EXISTS}" != "true" ]]; then
@@ -259,7 +259,8 @@ def test_the_tag_moves_after_every_upload(
         for index, command in enumerate(run.commands)
         if "release upload" in command
     ]
-    assert uploads and max(uploads) < tag_moves[0], (
+    assert uploads, "no upload was recorded, so the ordering proves nothing"
+    assert max(uploads) < tag_moves[0], (
         "the tag moved while assets were still being uploaded"
     )
 

@@ -190,7 +190,7 @@ deleted. It previously ran `gh release delete rolling --cleanup-tag` before
 `gh release create`, which left the release, its assets and the tag itself
 absent for six to seven seconds on every publish. A consumer landed in that
 gap: chutoro's `Install Whitaker` step began at 02:47:02 on 2026-09-05, the
-same second a delete began, could not fetch
+same second that a deletion began, could not fetch
 `cargo-dylint-x86_64-unknown-linux-gnu-v6.0.1.tgz`, and fell back to building
 the Dylint tools from source.
 
