@@ -158,7 +158,11 @@ def test_ci_enables_sccache_and_debug_target_cache_scope(
     assert str(env.get("LINUX_RUNNER_VCPUS")) == "2", (
         "CI must derive its concurrency bounds from the Ubicloud shape"
     )
-    assert env.get("RUSTC_WRAPPER") == "sccache", "CI must route rustc through sccache"
+    assert "RUSTC_WRAPPER" not in env, (
+        "the shared Rust setup action exports the wrapper as the absolute path "
+        "of the sccache it installed; a workflow-level value makes it stand "
+        "aside and leaves the lane on whichever sccache is on PATH"
+    )
     assert str(env.get("CARGO_INCREMENTAL")) == "0", (
         "CI must disable incremental Cargo builds when relying on sccache"
     )
@@ -202,7 +206,6 @@ def _coverage_check_job(workflow: Mapping[str, Any]) -> dict[str, Any]:
     )
     assert _step_names(coverage_job) == [
         "Checkout",
-        "Expose the Actions cache credentials to sccache",
         "Bound concurrency to the runner shape",
         "Select the compiler cache backend",
         "Restore Cargo registry",
@@ -212,10 +215,8 @@ def _coverage_check_job(workflow: Mapping[str, Any]) -> dict[str, Any]:
         "Record cache observations",
         "Provision the Clippy source mirror",
         "Setup Rust",
-        "Install sccache",
         "Install cargo-nextest",
         "Install cargo-llvm-cov",
-        "Reset sccache statistics",
         "Generate coverage",
         "Discard the instrumented target tree",
         "Run doctests",
@@ -246,8 +247,10 @@ def _assert_coverage_checkout_and_setup(coverage_job: Mapping[str, Any]) -> None
     ), "coverage-check must reuse the current main-branch Rust setup pin"
     assert setup_step.get("with") == {
         "cache-provider": "external",
-        "use-sccache": False,
-    }, "coverage-check must own its Cargo cache and sccache configuration"
+    }, (
+        "coverage-check must own its Cargo cache and take the shared "
+        "compiler-cache arm, which `use-sccache: false` would disable"
+    )
 
 
 def _assert_coverage_tool_installation(coverage_job: Mapping[str, Any]) -> None:

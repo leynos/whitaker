@@ -23,10 +23,9 @@ DERIVED_CONCURRENCY_VARIABLES = ("CARGO_BUILD_JOBS", "NEXTEST_TEST_THREADS")
 #: Tool pins that must appear verbatim in the lane's tools cache key, so a
 #: version bump cannot silently reuse an archive built from the old pins.
 TOOL_PINS_IN_KEY: dict[str, tuple[str, ...]] = {
-    "coverage-check": ("sccache0.16.0", "nextest0.9.114", "llvmcov0.6.24"),
-    "coverage-upload": ("sccache0.16.0", "nextest0.9.114", "llvmcov0.6.24"),
+    "coverage-check": ("nextest0.9.114", "llvmcov0.6.24"),
+    "coverage-upload": ("nextest0.9.114", "llvmcov0.6.24"),
     "linux-full": (
-        "sccache0.16.0",
         "nextest0.9.114",
         "msrv1.85.0",
         "bun1.2.21",
@@ -80,8 +79,9 @@ def test_setup_rust_delegates_cache_and_compiler_cache_ownership() -> None:
         assert setup["uses"] == SETUP_RUST_ACTION, (
             f"{job_name} must use the reviewed shared Rust setup pin"
         )
-        assert setup["with"] == {"cache-provider": "external", "use-sccache": False}, (
-            f"{job_name} must own its Cargo cache and sccache configuration"
+        assert setup["with"] == {"cache-provider": "external"}, (
+            f"{job_name} must own its Cargo cache and take the shared "
+            "compiler-cache arm, which `use-sccache: false` would disable"
         )
 
     windows = steps_by_name(load_job("windows-compat"))["Setup Rust"]
@@ -142,8 +142,13 @@ def test_compiler_cache_uses_exactly_one_selected_backend() -> None:
 
     for workflow_name in set(UBICLOUD_JOBS.values()):
         workflow = load_workflow(workflow_name)
-        assert workflow["env"]["RUSTC_WRAPPER"] == "sccache", (
-            f"{workflow_name} must route every rustc invocation through sccache"
+        # The shared action exports the wrapper as the absolute path of the
+        # sccache it installed. A workflow-level `RUSTC_WRAPPER: sccache` would
+        # make it stand aside and report `wrapper=caller-set`, leaving the lane
+        # dependent on whichever sccache happened to be on PATH.
+        assert "RUSTC_WRAPPER" not in workflow["env"], (
+            f"{workflow_name} must let the shared action export the wrapper "
+            "for the sccache it installed"
         )
         assert "SCCACHE_GHA_ENABLED" not in workflow["env"], (
             f"{workflow_name} must let the selector export the backend variables"
@@ -154,36 +159,31 @@ def test_compiler_cache_uses_exactly_one_selected_backend() -> None:
         names = step_names(job)
         selector = steps_by_name(job)["Select the compiler cache backend"]
         assert "scripts/select-sccache-backend.sh" in str(selector["run"])
-        credentials = steps_by_name(job)["Expose the Actions cache credentials to sccache"]
-        assert credentials["if"] == "env.SCCACHE_BACKEND == 'gha'", (
-            f"{job_name} must export the Actions cache credentials only for GHA"
-        )
         assert names.index("Select the compiler cache backend") < names.index(
             "Setup Rust"
         ), f"{job_name} must choose a backend before any Cargo invocation"
-        _assert_credentials_precede_the_sccache_server(job_name, names)
+        _assert_the_shared_action_owns_the_compiler_cache(job_name, names)
 
 
-def _assert_credentials_precede_the_sccache_server(
+def _assert_the_shared_action_owns_the_compiler_cache(
     job_name: str,
     names: list[str],
 ) -> None:
-    """Assert the credential export runs before anything starts sccache.
-
-    A `run:` step on Ubicloud cannot see the Actions cache variables. A server
-    started before the export comes up in local-disk mode and stays there for
-    the whole job, reporting zero requests, which looks like a passing build
-    with a silently dead compiler cache.
-    """
-    export_index = names.index("Expose the Actions cache credentials to sccache")
-    assert export_index == 1, (
-        f"{job_name} must export the credentials immediately after checkout, "
-        f"not at position {export_index}"
-    )
-    for later_step in ("Install sccache", "Reset sccache statistics", "Setup Rust"):
-        assert export_index < names.index(later_step), (
-            f"{job_name} must export the credentials before {later_step!r}"
+    """Assert the shared setup action alone owns the compiler cache."""
+    # sccache binds its backend when the server starts, so whoever starts it
+    # decides where the objects go. Two arms in one job is the failure this
+    # guards: the lane would install one sccache, start another, and report a
+    # hit rate for a store nobody owns.
+    for bespoke in ("Install sccache", "Reset sccache statistics"):
+        assert bespoke not in names, (
+            f"{job_name} must not run its own {bespoke!r}; the shared action "
+            "installs sccache, starts the server and zeroes the counters"
         )
+    restore_index = names.index("Restore the compiler cache directory")
+    assert restore_index < names.index("Setup Rust"), (
+        f"{job_name} must restore the compiler cache directory before the "
+        "shared action starts the server, which binds the directory once"
+    )
 
 
 def test_compiler_cache_effectiveness_is_always_recorded() -> None:
@@ -191,7 +191,7 @@ def test_compiler_cache_effectiveness_is_always_recorded() -> None:
     for job_name in UBICLOUD_JOBS:
         job = load_job(job_name)
         names = step_names(job)
-        assert names.index("Reset sccache statistics") < names.index(
+        assert names.index("Setup Rust") < names.index(
             "Record sccache effectiveness"
         ), f"{job_name} must zero the counters before the build"
         record = steps_by_name(job)["Record sccache effectiveness"]

@@ -39,12 +39,13 @@ env:
   # Ubicloud twice. Keep in step with ci.yml; see
   # scripts/select-sccache-backend.sh and the developers' guide.
   SCCACHE_BACKEND: local
-  # The shared Rust setup action installs sccache but leaves the wrapper
-  # unset here, so run 33692863541 recorded zero compile requests while
-  # still paying the cache's setup cost. Set it explicitly so every Cargo
-  # invocation, including the nested build `cargo llvm-cov` launches, is
-  # routed through the compiler cache.
-  RUSTC_WRAPPER: sccache
+  # RUSTC_WRAPPER is deliberately absent. The shared Rust setup action now
+  # exports it as the absolute path of the sccache it installed, and stands
+  # aside when a caller has already set the variable, so a value here would
+  # leave every lane wrapped by whichever sccache is on PATH. The zero-request
+  # failure of run 33692863541 predates that export; the wrapper reaches every
+  # Cargo invocation, including the nested build `cargo llvm-cov` launches,
+  # because it is inherited from the job environment either way.
 
 jobs:
   coverage-upload:
@@ -58,21 +59,6 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7
         with:
           persist-credentials: false
-
-      - name: Expose the Actions cache credentials to sccache
-        # Must precede anything that starts the sccache server. A `run:` step
-        # on Ubicloud cannot see these variables, so a server started before
-        # this step comes up in local-disk mode and stays there for the whole
-        # job, reporting zero requests. GitHub-hosted lanes need no export.
-        if: env.SCCACHE_BACKEND == 'gha'
-        uses: actions/github-script@373c709c69115d41ff229c7e5df9f8788daa9553  # v9
-        with:
-          script: |
-            core.setSecret(process.env.ACTIONS_RUNTIME_TOKEN ?? '');
-            for (const name of ['ACTIONS_RESULTS_URL', 'ACTIONS_RUNTIME_TOKEN']) {
-              const value = process.env[name];
-              if (value) { core.exportVariable(name, value); }
-            }
 
       - name: Bound concurrency to the runner shape
         run: |
@@ -105,7 +91,7 @@ jobs:
             ~/.local/bin
             ~/.cache/uv
             ~/.local/share/uv
-          key: tools-coverage-v1-${{ runner.os }}-${{ runner.arch }}-${{ runner.environment }}-ubuntu2404-sccache0.16.0-nextest0.9.114-llvmcov0.6.24-${{ hashFiles('rust-toolchain.toml') }}
+          key: tools-coverage-v1-${{ runner.os }}-${{ runner.arch }}-${{ runner.environment }}-ubuntu2404-nextest0.9.114-llvmcov0.6.24-${{ hashFiles('rust-toolchain.toml') }}
 
       - name: Restore the Clippy source mirror
         id: clippy-mirror-cache
@@ -157,13 +143,6 @@ jobs:
         uses: leynos/shared-actions/.github/actions/setup-rust@7cb894fe62c40951cccf33819548095e64a1291e
         with:
           cache-provider: external
-          use-sccache: false
-
-      - name: Install sccache
-        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
-        with:
-          tool: sccache@0.16.0
-          fallback: none
 
       - name: Install cargo-nextest
         uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
@@ -176,9 +155,6 @@ jobs:
         with:
           tool: cargo-llvm-cov@0.6.24
           fallback: none
-
-      - name: Reset sccache statistics
-        run: sccache --zero-stats
 
       - name: Generate coverage
         run: make coverage
