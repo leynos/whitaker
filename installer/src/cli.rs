@@ -148,6 +148,23 @@ pub struct InstallArgs {
     /// Skip prebuilt artefact download and build from source.
     #[arg(long = "build-only")]
     pub is_build_only: bool,
+
+    /// Fail rather than build from source when a published artefact is absent.
+    ///
+    /// The installer's fallbacks are silent successes: a missing prebuilt lint
+    /// library becomes a local compilation, and a missing Dylint tool archive
+    /// becomes `cargo install`. Both work, so a run that took either looks
+    /// healthy while having built something nobody pinned, slowly. In CI that
+    /// is a defect rather than a degraded mode, so this turns each fallback
+    /// into an error naming what was missing.
+    ///
+    /// Rejected alongside the flags that require a source build, because
+    /// asking for both is a contradiction rather than a preference.
+    #[arg(
+        long = "no-source-fallback",
+        conflicts_with_all = ["is_build_only", "experimental", "suite_version"]
+    )]
+    pub no_source_fallback: bool,
 }
 
 /// Arguments for the list command.
@@ -162,7 +179,46 @@ pub struct ListArgs {
     pub target_dir: Option<Utf8PathBuf>,
 }
 
+/// Name of the environment variable that forbids a source build.
+pub const NO_SOURCE_FALLBACK_ENV: &str = "WHITAKER_NO_SOURCE_FALLBACK";
+
+/// Whether the environment forbids falling back to a source build.
+///
+/// Any value other than the empty string, `0` or `false` enables the rule.
+/// A caller who exported the variable at all meant something by it, and
+/// reading an unrecognized value as "off" would silently disable a
+/// protection.
+fn environment_forbids_source_fallback() -> bool {
+    match std::env::var(NO_SOURCE_FALLBACK_ENV) {
+        Ok(value) => !matches!(
+            value.trim().to_ascii_lowercase().as_str(),
+            "" | "0" | "false"
+        ),
+        Err(_) => false,
+    }
+}
+
 impl InstallArgs {
+    /// Whether a missing published artefact must fail rather than build.
+    ///
+    /// The environment variable exists for callers that cannot easily add a
+    /// flag, such as a composite action invoking the installer through a
+    /// wrapper. Either source enables the rule; neither disables the other,
+    /// because a caller who set one meant it.
+    #[must_use]
+    pub fn forbids_source_fallback(&self) -> bool {
+        self.no_source_fallback || environment_forbids_source_fallback()
+    }
+
+    /// How this run should react to a missing published artefact.
+    #[must_use]
+    pub fn source_policy(&self) -> crate::deps::SourcePolicy {
+        crate::deps::SourcePolicy {
+            quiet: self.quiet,
+            no_source_fallback: self.forbids_source_fallback(),
+        }
+    }
+
     /// Whether the arguments alone rule out a prebuilt artefact.
     ///
     /// Three unrelated reasons, so they are named here rather than read as one
@@ -249,6 +305,7 @@ impl Default for InstallArgs {
             skip_wrapper: false,
             no_update: false,
             suite_version: None,
+            no_source_fallback: false,
             is_build_only: false,
         }
     }
@@ -298,3 +355,41 @@ impl Cli {
 #[cfg(test)]
 #[path = "cli_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+mod no_source_fallback_tests {
+    use super::*;
+    use rstest::rstest;
+
+    fn install_args(no_source_fallback: bool) -> InstallArgs {
+        InstallArgs {
+            no_source_fallback,
+            ..InstallArgs::default()
+        }
+    }
+
+    #[rstest]
+    #[case::unset(None, false, false)]
+    #[case::flag_alone(None, true, true)]
+    #[case::empty_is_off(Some(""), false, false)]
+    #[case::zero_is_off(Some("0"), false, false)]
+    #[case::false_is_off(Some("false"), false, false)]
+    #[case::one_is_on(Some("1"), false, true)]
+    #[case::true_is_on(Some("true"), false, true)]
+    #[case::yes_is_on(Some("yes"), false, true)]
+    #[case::mixed_case_false_is_off(Some("FALSE"), false, false)]
+    #[case::flag_wins_over_off_value(Some("false"), true, true)]
+    fn the_environment_and_the_flag_agree_on_the_rule(
+        #[case] environment: Option<&str>,
+        #[case] flag: bool,
+        #[case] expected: bool,
+    ) {
+        // A caller who exported the variable meant something by it, so an
+        // unrecognized value enables the rule rather than silently disabling
+        // a protection. `0`, `false` and empty are the three shapes that
+        // conventionally mean "off".
+        temp_env::with_var(NO_SOURCE_FALLBACK_ENV, environment, || {
+            assert_eq!(install_args(flag).forbids_source_fallback(), expected);
+        });
+    }
+}

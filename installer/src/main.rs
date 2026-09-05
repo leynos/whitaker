@@ -20,7 +20,7 @@ use std::time::Instant;
 use whitaker_installer::artefact::suite_ref::SuiteRef;
 use whitaker_installer::cli::{Cli, Command, InstallArgs};
 use whitaker_installer::crate_name::CrateName;
-use whitaker_installer::deps::SystemCommandExecutor;
+use whitaker_installer::deps::{SourcePolicy, SystemCommandExecutor};
 use whitaker_installer::dirs::{BaseDirs, SystemBaseDirs};
 use whitaker_installer::error::{InstallerError, Result};
 use whitaker_installer::install_metrics::InstallMode;
@@ -109,7 +109,7 @@ fn run_install(args: &InstallArgs, stderr: &mut dyn Write) -> Result<()> {
     let install_started = Instant::now();
     // Step 1: Check and install Dylint dependencies if needed
     if !args.skip_deps {
-        ensure_dylint_tools(args.quiet, stderr)?;
+        ensure_dylint_tools(args.source_policy(), stderr)?;
     }
     // Step 2: Ensure workspace is available (clone if needed)
     let workspace_root = ensure_whitaker_workspace(args, &dirs, stderr)?;
@@ -134,6 +134,7 @@ fn run_install(args: &InstallArgs, stderr: &mut dyn Write) -> Result<()> {
     if let Some((staging_path, install_mode)) =
         try_fast_path_installation(&fast_path_context, stderr)?
     {
+        report_suite_source(install_mode);
         let finish_context = FinishInstallContext {
             args,
             dirs: &dirs,
@@ -156,6 +157,7 @@ fn run_install(args: &InstallArgs, stderr: &mut dyn Write) -> Result<()> {
     let build_results = perform_build(&context, &requested_crates, stderr)?;
     let staging_path = stage_libraries(&context, &build_results, stderr)?;
     // Step 5: Generate wrapper scripts if requested
+    report_suite_source(InstallMode::Build);
     let finish_context = FinishInstallContext {
         args,
         dirs: &dirs,
@@ -164,6 +166,20 @@ fn run_install(args: &InstallArgs, stderr: &mut dyn Write) -> Result<()> {
         install_started,
     };
     finish_install_and_record_metrics(&finish_context, stderr)
+}
+
+/// Announce, on stdout, whether the suite came from a published artefact.
+///
+/// stdout rather than stderr, and a fixed shape rather than prose, because a
+/// caller reads it. `install-whitaker` previously had to infer the path from
+/// the wording of a fallback notice, which meant a rephrasing could silently
+/// turn a source build into a reported success.
+fn report_suite_source(install_mode: InstallMode) {
+    let source = match install_mode {
+        InstallMode::Download => "prebuilt",
+        InstallMode::Build => "source",
+    };
+    println!("whitaker-installer: suite-source={source}");
 }
 
 /// Runs in dry-run mode, showing configuration without side effects.
@@ -209,9 +225,9 @@ fn determine_dry_run_target_dir(
 }
 
 /// Checks for and installs Dylint tools if missing.
-fn ensure_dylint_tools(quiet: bool, stderr: &mut dyn Write) -> Result<()> {
+fn ensure_dylint_tools(policy: SourcePolicy, stderr: &mut dyn Write) -> Result<()> {
     let executor = SystemCommandExecutor;
-    ensure_dylint_tools_with_executor(&executor, quiet, stderr)
+    ensure_dylint_tools_with_executor(&executor, policy, stderr)
 }
 
 /// Ensures a Whitaker workspace is available.

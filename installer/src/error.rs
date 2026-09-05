@@ -12,6 +12,19 @@ use thiserror::Error;
 /// Errors that can occur during the installation process.
 #[derive(Debug, Error)]
 pub enum InstallerError {
+    /// A published artefact was absent and `--no-source-fallback` forbade the
+    /// source build that would otherwise have replaced it.
+    #[error(
+        "{artefact} is not available and --no-source-fallback is set, so the \
+         source build that would have replaced it did not run: {reason}"
+    )]
+    SourceFallbackForbidden {
+        /// What could not be fetched, in terms a caller can act on.
+        artefact: String,
+        /// Why the fetch failed, as reported by the download.
+        reason: String,
+    },
+
     /// Failed to detect the Rust toolchain from configuration.
     #[error("toolchain detection failed: {reason}")]
     ToolchainDetection {
@@ -261,6 +274,10 @@ impl Clone for InstallerError {
             Self::DependencyInstall { tool, message } => Self::DependencyInstall {
                 tool,
                 message: message.clone(),
+            },
+            Self::SourceFallbackForbidden { artefact, reason } => Self::SourceFallbackForbidden {
+                artefact: artefact.clone(),
+                reason: reason.clone(),
             },
             Self::WrapperGeneration(message) => Self::WrapperGeneration(message.clone()),
             Self::ScanFailed { source } => Self::ScanFailed {

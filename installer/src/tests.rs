@@ -26,7 +26,10 @@ fn dependency_install_options<'a>(
         dirs,
         repository_installer,
         target: Some(TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid target")),
-        quiet,
+        policy: SourcePolicy {
+            quiet,
+            no_source_fallback: false,
+        },
     }
 }
 

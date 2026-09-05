@@ -79,6 +79,20 @@ impl DylintToolStatus {
     }
 }
 
+/// How a run should react when a published artefact is missing.
+///
+/// Carried together because they travel together: every layer that decides
+/// whether to print also decides whether a source build is acceptable, and
+/// threading two booleans through the same five signatures invites them to
+/// drift apart.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct SourcePolicy {
+    /// Whether stderr output should be suppressed.
+    pub quiet: bool,
+    /// Whether a missing artefact is an error rather than a source build.
+    pub no_source_fallback: bool,
+}
+
 /// Additional install options used by test-support hooks.
 #[cfg(any(test, feature = "test-support"))]
 pub struct DependencyInstallOptions<'a> {
@@ -88,8 +102,8 @@ pub struct DependencyInstallOptions<'a> {
     pub repository_installer: &'a dyn DependencyBinaryInstaller,
     /// Host target override used for repository asset naming.
     pub target: Option<crate::installer_packaging::TargetTriple>,
-    /// Whether stderr output should be suppressed.
-    pub quiet: bool,
+    /// How the run reacts to a missing published artefact.
+    pub policy: SourcePolicy,
 }
 
 /// Checks whether the Dylint tools are installed.
@@ -107,14 +121,22 @@ pub fn install_dylint_tools(
     status: &DylintToolStatus,
 ) -> Result<()> {
     let mut sink = io::sink();
-    install_dylint_tools_with_output(executor, status, true, &mut sink)
+    install_dylint_tools_with_output(
+        executor,
+        status,
+        SourcePolicy {
+            quiet: true,
+            no_source_fallback: false,
+        },
+        &mut sink,
+    )
 }
 
 /// Install missing tools while writing progress output to `stderr`.
 pub fn install_dylint_tools_with_output(
     executor: &dyn CommandExecutor,
     status: &DylintToolStatus,
-    quiet: bool,
+    policy: SourcePolicy,
     stderr: &mut dyn Write,
 ) -> Result<()> {
     let repository_installer = RepositoryDependencyBinaryInstaller;
@@ -133,7 +155,8 @@ pub fn install_dylint_tools_with_output(
                 target.as_ref(),
             ),
             cargo_fallback_mode,
-            quiet,
+            quiet: policy.quiet,
+            no_source_fallback: policy.no_source_fallback,
         },
     )
 }
@@ -159,7 +182,8 @@ pub fn install_dylint_tools_with_options(
                 options.target.as_ref(),
             ),
             cargo_fallback_mode,
-            quiet: options.quiet,
+            quiet: options.policy.quiet,
+            no_source_fallback: options.policy.no_source_fallback,
         },
     )
 }

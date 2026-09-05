@@ -21,6 +21,12 @@ pub(super) struct InstallContext<'a> {
     pub(super) repo: Option<RepositoryInstallContext<'a>>,
     pub(super) cargo_fallback_mode: InstallMode,
     pub(super) quiet: bool,
+    /// Refuse `cargo install` when the published archive is absent.
+    ///
+    /// The Cargo fallback succeeds, so a run that took it installed a tool
+    /// built from unpinned sources and reported success. That is the outcome
+    /// that produced a green build with the wrong Dylint tooling.
+    pub(super) no_source_fallback: bool,
 }
 
 pub(super) fn install_missing_tools(
@@ -143,6 +149,13 @@ pub(super) fn install_tool(
                 );
             }
         }
+    }
+
+    if context.no_source_fallback {
+        return Err(InstallerError::SourceFallbackForbidden {
+            artefact: format!("a published {} archive", tool.package),
+            reason: "the repository release did not provide it for this target".to_owned(),
+        });
     }
 
     install_tool_with_cargo(executor, cargo_install_plan, stderr, context)

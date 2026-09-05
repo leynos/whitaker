@@ -23,7 +23,10 @@ fn install_options<'a>(
         dirs: Box::leak(Box::new(dirs)),
         repository_installer,
         target: Some(target),
-        quiet,
+        policy: SourcePolicy {
+            quiet,
+            no_source_fallback: false,
+        },
     }
 }
 
@@ -404,6 +407,7 @@ fn install_tool_errors_when_dependency_manifest_entry_is_missing() {
             ),
             cargo_fallback_mode: InstallMode::Binstall,
             quiet: false,
+            no_source_fallback: false,
         },
     )
     .expect_err("missing dependency manifest entry should be an install error");
