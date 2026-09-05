@@ -66,6 +66,36 @@ _DIRECT_INVOCATION = re.compile(
 _REQUIRES_PYTHON = re.compile(r'^#\s*requires-python\s*=\s*"(?P<specifier>[^"]*)"')
 _SUPPORTED_SPECIFIER = re.compile(r"^>=\s*(?P<version>\d+(?:\.\d+)*)$")
 
+#: A quoted argument. A regular expression cannot parse a shell, so rather than
+#: pretending otherwise the scanner locates quoted spans and refuses to read a
+#: command out of one: `echo "(scripts/tool.py)"` contains a separator and a
+#: path, and neither means what the shape of the text suggests.
+_QUOTED_SPAN = re.compile(r"'[^']*'|\"[^\"]*\"")
+
+
+def _quoted_ranges(line: str) -> list[tuple[int, int]]:
+    """Return the character ranges of quoted arguments in one line."""
+    return [match.span() for match in _QUOTED_SPAN.finditer(line)]
+
+
+def command_position_scripts(text: str) -> list[str]:
+    """Return the script paths that text invokes as commands.
+
+    Matching runs a line at a time, and a match whose path falls inside a
+    quoted argument is discarded: quotes are the one piece of shell structure
+    that changes what a separator means, and ignoring them turns ordinary
+    argument text into a call site the contract would then police.
+    """
+    found: list[str] = []
+    for line in text.splitlines():
+        quoted = _quoted_ranges(line)
+        found.extend(
+            match.group("script")
+            for match in _DIRECT_INVOCATION.finditer(line)
+            if not any(start <= match.start("script") < end for start, end in quoted)
+        )
+    return found
+
 
 def _scanned_files() -> Iterator[Path]:
     """Yield the files that describe how CI and the Makefile call scripts."""
@@ -84,8 +114,8 @@ def _shebang_scripts() -> list[Path]:
     found: dict[Path, None] = {}
     for source in _scanned_files():
         text = source.read_text(encoding="utf-8")
-        for match in _DIRECT_INVOCATION.finditer(text):
-            script = _repository_script(match.group("script"))
+        for candidate in command_position_scripts(text):
+            script = _repository_script(candidate)
             if script is not None:
                 found[script] = None
     return sorted(found)
@@ -130,8 +160,7 @@ def test_command_positions_are_recognized(line: str) -> None:
     syntax misses, and a missed call site makes the contract silently weaker
     rather than red.
     """
-    matches = [match.group("script") for match in _DIRECT_INVOCATION.finditer(line)]
-    assert matches == ["scripts/tool.py"]
+    assert command_position_scripts(line) == ["scripts/tool.py"]
 
 
 @pytest.mark.parametrize(
@@ -142,6 +171,8 @@ def test_command_positions_are_recognized(line: str) -> None:
         pytest.param("          echo then scripts/tool.py", id="keyword-as-argument"),
         pytest.param("          echo do scripts/tool.py", id="do-as-argument"),
         pytest.param("          grep run: scripts/tool.py", id="run-key-as-argument"),
+        pytest.param('          echo "(scripts/tool.py)"', id="quoted-argument"),
+        pytest.param("          echo '; scripts/tool.py'", id="quoted-separator"),
     ],
 )
 def test_arguments_are_not_command_positions(line: str) -> None:
@@ -151,7 +182,7 @@ def test_arguments_are_not_command_positions(line: str) -> None:
     to the shebang and executable-bit rules, so the contract could fail on
     workflow text that is perfectly correct.
     """
-    assert not _DIRECT_INVOCATION.findall(line)
+    assert not command_position_scripts(line)
 
 
 def test_direct_invocations_are_discovered() -> None:
