@@ -87,6 +87,8 @@ environment-variable workaround.
 - `--suite-version REF` (alias `--suite-ref`) — Build the lint suite from a
   given tag, branch or commit rather than from the default branch tip. See
   [Pinning the lint suite](#pinning-the-lint-suite)
+- `--no-source-fallback` — Fail rather than build from source when a published
+  artefact is absent. See [Refusing a source build](#refusing-a-source-build)
 
 ### Adding Whitaker to a project
 
@@ -185,6 +187,48 @@ Scripts or CI pipelines that consume rolling-release archives should verify
 that the required target archive exists before proceeding. Treat missing
 archives as an expected condition for rolling releases rather than assuming the
 artefact set is complete.
+
+### Refusing a source build
+
+The installer prefers published binaries and falls back to building from source
+when one is missing: a prebuilt lint library becomes a local compilation, and a
+Dylint tool archive becomes `cargo install`. Both succeed, which is the
+difficulty. A run that took either reports success while having built something
+nobody pinned, and the only sign is a line in the log.
+
+`--no-source-fallback`, or `WHITAKER_NO_SOURCE_FALLBACK` in the environment for
+callers that cannot easily add a flag, turns each fallback into an error naming
+the artefact and why it could not be fetched:
+
+```sh
+whitaker-installer --no-source-fallback
+```
+
+Any value other than an empty string, `0` or `false` enables the rule. The
+comparison ignores case and surrounding whitespace, so `FALSE` and ` false `
+also turn it off. Exporting the variable at all expresses an intention, and
+reading an unrecognized value as off would quietly remove a protection; a value
+that is not valid text enables the rule for the same reason.
+
+The flag is rejected alongside `--build-only`, `--experimental` and
+`--suite-version`. Each of those requires a source build, so combining them is
+a contradiction rather than a preference, and the installer says so instead of
+silently preferring one.
+
+Each installation that selects a suite source prints the path it took on
+standard output. A dry run selects none, so it prints nothing:
+
+```text
+whitaker-installer: suite-source=prebuilt
+```
+
+The value is `prebuilt` or `source`. Read that line rather than matching on the
+wording of a fallback notice, which may be rephrased.
+
+The rolling release is the reason this exists. It is republished on every push
+to `main`, and a consumer whose install starts during a republish can miss an
+archive that is present moments later. In CI a source build is a defect rather
+than a degraded mode, so fail and retry rather than proceeding.
 
 ### Selecting individual lints
 

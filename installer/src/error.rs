@@ -12,6 +12,29 @@ use thiserror::Error;
 /// Errors that can occur during the installation process.
 #[derive(Debug, Error)]
 pub enum InstallerError {
+    /// A source build is both required by an option and forbidden by policy.
+    #[error(
+        "{option} requires a source build, which --no-source-fallback or \
+         WHITAKER_NO_SOURCE_FALLBACK forbids; drop one of the two"
+    )]
+    ConflictingSourceOptions {
+        /// The option that requires the source build now forbidden.
+        option: String,
+    },
+
+    /// A published artefact was absent and `--no-source-fallback` forbade the
+    /// source build that would otherwise have replaced it.
+    #[error(
+        "{artefact} is not available and --no-source-fallback is set, so the \
+         source build that would have replaced it did not run: {reason}"
+    )]
+    SourceFallbackForbidden {
+        /// What could not be fetched, in terms a caller can act on.
+        artefact: String,
+        /// Why the fetch failed, as reported by the download.
+        reason: String,
+    },
+
     /// Failed to detect the Rust toolchain from configuration.
     #[error("toolchain detection failed: {reason}")]
     ToolchainDetection {
@@ -262,6 +285,13 @@ impl Clone for InstallerError {
                 tool,
                 message: message.clone(),
             },
+            Self::ConflictingSourceOptions { option } => Self::ConflictingSourceOptions {
+                option: option.clone(),
+            },
+            Self::SourceFallbackForbidden { artefact, reason } => Self::SourceFallbackForbidden {
+                artefact: artefact.clone(),
+                reason: reason.clone(),
+            },
             Self::WrapperGeneration(message) => Self::WrapperGeneration(message.clone()),
             Self::ScanFailed { source } => Self::ScanFailed {
                 source: clone_io_error(source),
@@ -289,102 +319,5 @@ impl Clone for InstallerError {
 pub type Result<T> = std::result::Result<T, InstallerError>;
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn toolchain_not_installed_suggests_install_command() {
-        let err = InstallerError::ToolchainNotInstalled {
-            toolchain: "nightly-2026-05-28".to_owned(),
-        };
-        let msg = err.to_string();
-        assert!(msg.contains("rustup toolchain install"));
-        assert!(msg.contains("nightly-2026-05-28"));
-    }
-
-    #[test]
-    fn toolchain_install_failed_includes_toolchain_and_message() {
-        let err = InstallerError::ToolchainInstallFailed {
-            toolchain: "nightly-2026-05-28".to_owned(),
-            message: "network error".to_owned(),
-        };
-        let msg = err.to_string();
-        assert!(msg.contains("nightly-2026-05-28"));
-        assert!(msg.contains("network error"));
-    }
-
-    #[test]
-    fn toolchain_component_install_failed_includes_components() {
-        let err = InstallerError::ToolchainComponentInstallFailed {
-            toolchain: "nightly-2026-05-28".to_owned(),
-            components: "rust-src, rustc-dev".to_owned(),
-            message: "component error".to_owned(),
-        };
-        let msg = err.to_string();
-        assert!(msg.contains("nightly-2026-05-28"));
-        assert!(msg.contains("rust-src, rustc-dev"));
-        assert!(msg.contains("component error"));
-    }
-
-    #[test]
-    fn build_failed_includes_crate_name() {
-        let err = InstallerError::BuildFailed {
-            crate_name: CrateName::from("module_max_lines"),
-            reason: "compilation error".to_owned(),
-        };
-        let msg = err.to_string();
-        assert!(msg.contains("module_max_lines"));
-        assert!(msg.contains("compilation error"));
-    }
-
-    #[test]
-    fn git_error_includes_operation_and_message() {
-        let err = InstallerError::Git {
-            operation: "clone",
-            message: "network error".to_owned(),
-        };
-        let msg = err.to_string();
-        assert!(msg.contains("clone"));
-        assert!(msg.contains("network error"));
-    }
-
-    #[test]
-    fn dependency_install_error_includes_tool_name() {
-        let err = InstallerError::DependencyInstall {
-            tool: "cargo-dylint",
-            message: "network error".to_owned(),
-        };
-        let msg = err.to_string();
-        assert!(msg.contains("cargo-dylint"));
-        assert!(msg.contains("network error"));
-    }
-
-    #[test]
-    fn wrapper_generation_error_includes_message() {
-        let err = InstallerError::WrapperGeneration("permission denied".to_owned());
-        let msg = err.to_string();
-        assert!(msg.contains("permission denied"));
-    }
-
-    #[test]
-    fn scan_failed_includes_reason() {
-        let source = std::io::Error::other("directory not found");
-        let err = InstallerError::ScanFailed { source };
-        let msg = err.to_string();
-        assert!(msg.contains("scan"));
-        // Verify the source error is preserved via the Error trait
-        let source_err = std::error::Error::source(&err);
-        assert!(source_err.is_some());
-    }
-
-    #[test]
-    fn write_failed_includes_reason() {
-        let source = std::io::Error::other("permission denied");
-        let err = InstallerError::WriteFailed { source };
-        let msg = err.to_string();
-        assert!(msg.contains("write"));
-        // Verify the source error is preserved via the Error trait
-        let source_err = std::error::Error::source(&err);
-        assert!(source_err.is_some());
-    }
-}
+#[path = "error_tests.rs"]
+mod tests;

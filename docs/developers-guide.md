@@ -2929,6 +2929,53 @@ packaged. Checksum files are uploaded alongside archives as workflow artefacts,
 allowing users to verify download integrity using standard tools (see the
 [README](../README.md) for platform-specific verification instructions).
 
+## Refusing a source build
+
+The installer prefers published binaries and falls back to a source build when
+one is absent: a missing prebuilt lint library becomes a local compilation, and
+a missing Dylint tool archive becomes `cargo install`. Both succeed. A run that
+took either reports success while having built something nobody pinned, and the
+only evidence is a line in the log.
+
+`--no-source-fallback`, or `WHITAKER_NO_SOURCE_FALLBACK` in the environment for
+callers that cannot easily add a flag, turns each fallback into an
+`InstallerError::SourceFallbackForbidden` naming the artefact and the reason
+the fetch failed. The flag conflicts with `--build-only`, `--experimental` and
+`--suite-version`, because each of those requires a source build, so clap
+rejects the combination rather than silently preferring one. clap only sees
+flags, so `InstallArgs::validate_source_options` repeats the check against the
+effective policy before any work starts; otherwise a lane that enabled the rule
+through the environment would meet the contradiction as a mid-install error.
+
+The environment variable treats any value other than an empty string, `0` or
+`false` as on, case-insensitively. Exporting the variable expresses an
+intention, and reading `yes` as off would remove a protection the caller asked
+for.
+
+`quiet` and this rule travel together as `deps::SourcePolicy`. Both are
+decisions about how a run reacts to an absent artefact, and threading two
+booleans through the same signatures would let them drift apart.
+
+Each installation that selects a suite source prints the path it took on
+standard output, through the writer the caller injected rather than through
+`println!`. A dry run returns before the selection and prints nothing:
+
+```text
+whitaker-installer: suite-source=prebuilt
+```
+
+The value is `prebuilt` or `source`. That line is the contract a consumer
+should read. `install-whitaker` currently infers the path by matching the
+wording of a fallback notice on stderr, which a rephrasing would break
+silently; the fixed shape on stdout replaces that match once the action adopts
+this release.
+
+The rolling release is why this exists. It is republished on every push to
+`main`, so a consumer whose install starts during a republish can miss an
+archive that is present moments later. In continuous integration a source build
+is a defect rather than a degraded mode, so the right response is to fail and
+retry.
+
 ## Publishing
 
 Before publishing, run the full validation suite:

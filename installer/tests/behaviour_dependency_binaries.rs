@@ -11,7 +11,7 @@ use whitaker_installer::dependency_binaries::{
 };
 use whitaker_installer::dependency_packaging::render_provenance_markdown;
 use whitaker_installer::deps::{
-    DependencyInstallOptions, DylintToolStatus, install_dylint_tools_with_options,
+    DependencyInstallOptions, DylintToolStatus, SourcePolicy, install_dylint_tools_with_options,
 };
 use whitaker_installer::dirs::BaseDirs;
 use whitaker_installer::installer_packaging::TargetTriple;
@@ -231,7 +231,7 @@ fn when_dependency_installation_runs(world: &mut DependencyBinaryWorld) {
                 dirs: &dirs,
                 repository_installer: &repository_installer,
                 target,
-                quiet: false,
+                policy: SourcePolicy::default(),
             },
         )
     };

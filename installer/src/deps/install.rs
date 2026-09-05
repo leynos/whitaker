@@ -21,6 +21,12 @@ pub(super) struct InstallContext<'a> {
     pub(super) repo: Option<RepositoryInstallContext<'a>>,
     pub(super) cargo_fallback_mode: InstallMode,
     pub(super) quiet: bool,
+    /// Refuse `cargo install` when the published archive is absent.
+    ///
+    /// The Cargo fallback succeeds, so a run that took it installed a tool
+    /// built from unpinned sources and reported success. That is the outcome
+    /// that produced a green build with the wrong Dylint tooling.
+    pub(super) no_source_fallback: bool,
 }
 
 pub(super) fn install_missing_tools(
@@ -112,40 +118,58 @@ pub(super) fn install_tool(
                 return Ok(InstallOutcome::RepositoryRelease);
             }
             Ok(_) => {
-                write_message(
-                    stderr,
-                    context.quiet,
-                    format!(
-                        "Repository install for {} failed verification; falling back to Cargo.",
-                        tool.package
-                    ),
-                );
+                refuse_or_announce_fallback(tool, "failed verification", stderr, context)?;
             }
             Err(error) if error.is_not_found() => {
                 cargo_install_plan = cargo_install_plan.skip_binstall();
-                write_message(
+                refuse_or_announce_fallback(
+                    tool,
+                    &format!("unavailable: {error}"),
                     stderr,
-                    context.quiet,
-                    format!(
-                        "Repository install for {} unavailable: {error}. Falling back to Cargo.",
-                        tool.package
-                    ),
-                );
+                    context,
+                )?;
             }
             Err(error) => {
-                write_message(
+                refuse_or_announce_fallback(
+                    tool,
+                    &format!("unavailable: {error}"),
                     stderr,
-                    context.quiet,
-                    format!(
-                        "Repository install for {} unavailable: {error}. Falling back to Cargo.",
-                        tool.package
-                    ),
-                );
+                    context,
+                )?;
             }
         }
     }
 
     install_tool_with_cargo(executor, cargo_install_plan, stderr, context)
+}
+
+/// Announce the Cargo fallback, or refuse it and say why it was not taken.
+///
+/// The decision belongs in each failure arm rather than after them. Deciding
+/// afterwards printed "falling back to Cargo" and then refused to do it, which
+/// tells an operator the opposite of what happened, and it discarded the
+/// repository's own reason in favour of a generic one.
+fn refuse_or_announce_fallback(
+    tool: &DependencyTool,
+    reason: &str,
+    stderr: &mut dyn Write,
+    context: &InstallContext<'_>,
+) -> Result<()> {
+    if context.no_source_fallback {
+        return Err(InstallerError::SourceFallbackForbidden {
+            artefact: format!("a published {} archive", tool.package),
+            reason: format!("the repository install {reason}"),
+        });
+    }
+    write_message(
+        stderr,
+        context.quiet,
+        format!(
+            "Repository install for {} {reason}. Falling back to Cargo.",
+            tool.package
+        ),
+    );
+    Ok(())
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

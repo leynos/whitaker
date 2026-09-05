@@ -148,6 +148,23 @@ pub struct InstallArgs {
     /// Skip prebuilt artefact download and build from source.
     #[arg(long = "build-only")]
     pub is_build_only: bool,
+
+    /// Fail rather than build from source when a published artefact is absent.
+    ///
+    /// The installer's fallbacks are silent successes: a missing prebuilt lint
+    /// library becomes a local compilation, and a missing Dylint tool archive
+    /// becomes `cargo install`. Both work, so a run that took either looks
+    /// healthy while having built something nobody pinned, slowly. In CI that
+    /// is a defect rather than a degraded mode, so this turns each fallback
+    /// into an error naming what was missing.
+    ///
+    /// Rejected alongside the flags that require a source build, because
+    /// asking for both is a contradiction rather than a preference.
+    #[arg(
+        long = "no-source-fallback",
+        conflicts_with_all = ["is_build_only", "experimental", "suite_version"]
+    )]
+    pub no_source_fallback: bool,
 }
 
 /// Arguments for the list command.
@@ -161,6 +178,10 @@ pub struct ListArgs {
     #[arg(short, long, value_name = "DIR")]
     pub target_dir: Option<Utf8PathBuf>,
 }
+
+mod source_policy;
+
+pub use source_policy::NO_SOURCE_FALLBACK_ENV;
 
 impl InstallArgs {
     /// Whether the arguments alone rule out a prebuilt artefact.
@@ -249,6 +270,7 @@ impl Default for InstallArgs {
             skip_wrapper: false,
             no_update: false,
             suite_version: None,
+            no_source_fallback: false,
             is_build_only: false,
         }
     }

@@ -14,7 +14,7 @@ use whitaker_installer::builder::{library_extension, library_prefix};
 use whitaker_installer::cli::InstallArgs;
 use whitaker_installer::crate_name::CrateName;
 use whitaker_installer::deps::{
-    CommandExecutor, check_dylint_tools, install_dylint_tools_with_output,
+    CommandExecutor, SourcePolicy, check_dylint_tools, install_dylint_tools_with_output,
 };
 #[cfg(test)]
 use whitaker_installer::deps::{DependencyInstallOptions, install_dylint_tools_with_options};
@@ -52,12 +52,12 @@ pub(crate) fn ensure_dylint_tools_core(
 
 pub(crate) fn ensure_dylint_tools_with_executor(
     executor: &dyn CommandExecutor,
-    quiet: bool,
+    policy: SourcePolicy,
     stderr: &mut dyn Write,
 ) -> Result<()> {
     let status = check_dylint_tools(executor);
-    ensure_dylint_tools_core(quiet, stderr, status.all_installed(), |stderr| {
-        install_dylint_tools_with_output(executor, &status, quiet, stderr)
+    ensure_dylint_tools_core(policy.quiet, stderr, status.all_installed(), |stderr| {
+        install_dylint_tools_with_output(executor, &status, policy, stderr)
     })
 }
 
@@ -68,9 +68,12 @@ pub(crate) fn ensure_dylint_tools_with_options(
     options: DependencyInstallOptions<'_>,
 ) -> Result<()> {
     let status = check_dylint_tools(executor);
-    ensure_dylint_tools_core(options.quiet, stderr, status.all_installed(), |stderr| {
-        install_dylint_tools_with_options(executor, &status, stderr, options)
-    })
+    ensure_dylint_tools_core(
+        options.policy.quiet,
+        stderr,
+        status.all_installed(),
+        |stderr| install_dylint_tools_with_options(executor, &status, stderr, options),
+    )
 }
 
 /// Context needed to attempt prebuilt installation.
@@ -95,6 +98,28 @@ pub(crate) struct MetricsWriteContext<'a> {
     pub(crate) install_mode: InstallMode,
     /// Elapsed duration for this successful install run.
     pub(crate) elapsed: Duration,
+}
+
+/// Report a prebuilt failure, or refuse it when a source build is forbidden.
+///
+/// Every prebuilt failure here used to end the same way: a message, then a
+/// local compilation that succeeds. That is a silent success, and in CI it is
+/// the defect rather than a degraded mode, so `--no-source-fallback` turns
+/// each one into an error naming what was missing and why.
+fn prebuilt_unavailable(
+    args: &InstallArgs,
+    artefact: &str,
+    error: &dyn std::fmt::Display,
+    stderr: &mut dyn Write,
+) -> Result<Option<Utf8PathBuf>> {
+    if args.forbids_source_fallback() {
+        return Err(InstallerError::SourceFallbackForbidden {
+            artefact: artefact.to_owned(),
+            reason: error.to_string(),
+        });
+    }
+    write_prebuilt_fallback_message(args.quiet, error, stderr);
+    Ok(None)
 }
 
 /// Write fallback message when prebuilt installation fails.
@@ -162,8 +187,7 @@ fn try_prebuilt_installation_with(
     let host_target = match detect_host_target() {
         Ok(target) => target,
         Err(error) => {
-            write_prebuilt_fallback_message(context.args.quiet, &error, stderr);
-            return Ok(None);
+            return prebuilt_unavailable(context.args, "the host target", &error, stderr);
         }
     };
 
@@ -171,8 +195,12 @@ fn try_prebuilt_installation_with(
         match resolve_destination_dir(context.dirs, context.toolchain_channel, &host_target) {
             Ok(destination) => destination,
             Err(error) => {
-                write_prebuilt_fallback_message(context.args.quiet, &error, stderr);
-                return Ok(None);
+                return prebuilt_unavailable(
+                    context.args,
+                    "the prebuilt library directory",
+                    &error,
+                    stderr,
+                );
             }
         };
 
@@ -183,17 +211,32 @@ fn try_prebuilt_installation_with(
         quiet: context.args.quiet,
     };
 
-    let PrebuiltResult::Success { staging_path } = attempt_prebuilt(&prebuilt_config, stderr)
-    else {
-        return Ok(None);
+    let staging_path = match attempt_prebuilt(&prebuilt_config, stderr) {
+        PrebuiltResult::Success { staging_path } => staging_path,
+        PrebuiltResult::Fallback { reason } => {
+            // `attempt_prebuilt` has already written the unavailable notice
+            // and, where a fallback is permitted, the fallback line. Repeating
+            // either here would print it twice, so only the refusal is added.
+            if context.args.forbids_source_fallback() {
+                return Err(InstallerError::SourceFallbackForbidden {
+                    artefact: "a prebuilt lint library".to_owned(),
+                    reason,
+                });
+            }
+            return Ok(None);
+        }
     };
     if let Err(error) = prune_prebuilt_libraries(
         &staging_path,
         context.toolchain_channel,
         context.requested_crates,
     ) {
-        write_prebuilt_fallback_message(context.args.quiet, &error, stderr);
-        return Ok(None);
+        return prebuilt_unavailable(
+            context.args,
+            "the pruned prebuilt libraries",
+            &error,
+            stderr,
+        );
     }
     Ok(Some(staging_path))
 }
