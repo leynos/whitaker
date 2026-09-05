@@ -323,47 +323,13 @@ jobs:
       - name: Build dependency packaging tool
         run: cargo build --release -p whitaker-installer --bin whitaker-package-dependency-binary
 
-      - name: Restore dependency archives from previous release
-        if: needs.dependency-manifest-changes.outputs.should_build == 'false'
-        run: |
-          set -euxo pipefail
-          mkdir -p dist
-          # Check whether the rolling release has any dependency binary
-          # assets before attempting to download. The release may contain
-          # only lint archives when dependency binaries have not yet been
-          # published, e.g. during bootstrapping.
-          gh_err=$(mktemp)
-          if ! asset_names=$(gh release view rolling --json assets --jq '.assets[].name' 2>"$gh_err"); then
-            if grep -qi "release not found" "$gh_err"; then
-              echo "Rolling release does not exist yet; skipping restore."
-              rm -f "$gh_err"
-              exit 0
-            fi
-            echo "::error::gh release view failed:" >&2
-            cat "$gh_err" >&2
-            rm -f "$gh_err"
-            exit 1
-          fi
-          rm -f "$gh_err"
-          # Filter the asset list for dependency binary archives and their
-          # checksums using newline-safe iteration, then download each by
-          # exact name so the probe and download cannot diverge.
-          has_archives=false
-          download_args=()
-          while IFS= read -r name; do
-            case "$name" in
-              *.tgz|*.zip) has_archives=true; download_args+=(--pattern "$name") ;;
-              *.sha256)                       download_args+=(--pattern "$name") ;;
-            esac
-          done <<< "$asset_names"
-          if [[ "$has_archives" == "false" ]]; then
-            echo "No dependency binary assets found on rolling release; skipping restore."
-            exit 0
-          fi
-          gh release download rolling "${download_args[@]}" --dir dist
-        env:
-          GH_TOKEN: ${{ github.token }}
-
+      # No "restore the dependency archives" step. They are only rebuilt
+      # when the dependency manifest changes; the rest of the time they are
+      # already published, and the release is no longer destroyed, so
+      # downloading them in order to upload them again would replace assets
+      # that never changed. `gh release upload --clobber` deletes before it
+      # uploads, so that round trip was itself a window on precisely the
+      # assets a consumer needs.
       - name: Download all artefacts
         continue-on-error: true
         uses: actions/download-artifact@v8
@@ -420,25 +386,16 @@ jobs:
           ./target/release/whitaker-package-dependency-binary provenance --output-dir dist
           printf '%s\n' "dist/dependency-binaries-licences.md" >> dist/release-assets.txt
 
-      - name: Delete existing rolling release
-        if: steps.assets.outputs.has_assets == 'true'
-        run: gh release delete rolling --cleanup-tag --yes || true
-        env:
-          GH_TOKEN: ${{ github.token }}
-
-      - name: Create rolling release
+      # One step, not two. The previous delete-then-create pair left the
+      # rolling tag, its release and every asset absent for six to seven
+      # seconds on each publish, and a consumer landed in that gap.
+      - name: Republish the rolling release in place
         if: steps.assets.outputs.has_assets == 'true'
         run: |
-          set -euxo pipefail
-          SHA=$(git rev-parse --short HEAD)
-          FULL_SHA=$(git rev-parse HEAD)
-          mapfile -t RELEASE_ASSETS < dist/release-assets.txt
-          gh release create rolling \
-            --title "Rolling Release (${SHA})" \
-            --notes "Prebuilt lint libraries from commit ${FULL_SHA}." \
-            --prerelease \
-            --latest=false \
-            "${RELEASE_ASSETS[@]}"
+          set -euo pipefail
+          RELEASE_SHA=$(git rev-parse HEAD) \
+          RELEASE_SHORT_SHA=$(git rev-parse --short HEAD) \
+            bash scripts/publish-rolling-release.sh
         env:
           GH_TOKEN: ${{ github.token }}
 

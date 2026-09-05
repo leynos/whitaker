@@ -1845,13 +1845,20 @@ input instead of rebuilding dependency binaries on every `workflow_dispatch`.
 Use that input when the rolling release needs to recover from an earlier
 dependency-binary build or publish failure, or when the current rolling release
 is missing the expected `.tgz` or `.zip` dependency archives. Leave it set to
-`false` for a manual republish that should reuse or restore the existing
-dependency archives.
+`false` for a manual republish that should leave the existing dependency
+archives exactly where they are.
+
+Leaving them alone is the whole point, and it is why the publish no longer
+downloads them. The release is updated in place rather than deleted, so an
+archive that was not rebuilt is already published and needs no round trip.
+Fetching it in order to upload it again would replace an asset that never
+changed, and `gh release upload --clobber` deletes before it uploads, so that
+round trip was itself a window on precisely the assets a consumer needs.
 
 Figure: Rolling-release dependency-binary decision flow. The workflow checks
 whether the event is a manual dispatch or a push to `main`, then decides
-whether to set `should_build` and either rebuild dependency binaries or restore
-the existing rolling-release archives.
+whether to set `should_build` and either rebuild the dependency binaries or
+leave the published archives untouched.
 
 ```mermaid
 flowchart TD
@@ -1870,8 +1877,8 @@ flowchart TD
     E --> H[Run build_dependency_binaries job]
     F --> I[Skip build_dependency_binaries job]
 
-    H --> J[Publish job uses freshly built dependency archives]
-    I --> K[Publish job restores dependency archives from existing rolling release]
+    H --> J[Publish job replaces the dependency archives it rebuilt]
+    I --> K[Publish job leaves the published dependency archives untouched]
 
     J --> L[End]
     K --> L[End]
