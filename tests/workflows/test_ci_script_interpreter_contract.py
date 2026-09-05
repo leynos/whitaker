@@ -47,7 +47,7 @@ _AMBIENT_INTERPRETER = re.compile(
 # slip past a boundary written only for shell syntax.
 _DIRECT_INVOCATION = re.compile(
     r"""(?:^|[;&|(]|\bthen\b|\bdo\b|\belse\b|\brun:[ \t]*)\s*
-        (?:[A-Za-z_][\w]*=\S*\s+)*
+        (?:[A-Za-z_]\w*=(?:"[^"]*"|'[^']*'|\S*)[ \t]+)*
         (?P<script>(?:[\w.@-]+/)+[\w.@-]+\.py)\b""",
     re.VERBOSE | re.MULTILINE,
 )
@@ -104,6 +104,14 @@ def _index_mode(path: Path) -> str:
         pytest.param("          scripts/tool.py --flag", id="block-run"),
         pytest.param("          set -e; scripts/tool.py", id="after-separator"),
         pytest.param("          PYTHONPATH=x scripts/tool.py", id="after-assignment"),
+        pytest.param(
+            '          RELEASE_NOTE="candidate build" scripts/tool.py',
+            id="after-quoted-assignment",
+        ),
+        pytest.param(
+            "          A=1 B='two words' scripts/tool.py",
+            id="after-several-assignments",
+        ),
         pytest.param("          if x; then scripts/tool.py; fi", id="after-then"),
     ],
 )
