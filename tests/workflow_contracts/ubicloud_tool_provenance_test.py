@@ -169,13 +169,11 @@ def _assert_the_shared_action_owns_the_compiler_cache(
     job_name: str,
     names: list[str],
 ) -> None:
-    """Assert one arm installs and starts sccache, and that it is the shared one.
-
-    sccache binds its backend when the server starts, so whoever starts it
-    decides where the objects go. Two arms in one job is the failure this
-    guards: the lane would install one sccache, start another, and report a
-    hit rate for a store nobody owns.
-    """
+    """Assert the shared setup action alone owns the compiler cache."""
+    # sccache binds its backend when the server starts, so whoever starts it
+    # decides where the objects go. Two arms in one job is the failure this
+    # guards: the lane would install one sccache, start another, and report a
+    # hit rate for a store nobody owns.
     for bespoke in ("Install sccache", "Reset sccache statistics"):
         assert bespoke not in names, (
             f"{job_name} must not run its own {bespoke!r}; the shared action "
