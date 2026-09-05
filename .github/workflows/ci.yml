@@ -150,7 +150,7 @@ jobs:
             "$HOME/.cache/whitaker-mirrors/rust-clippy.git"
 
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@f6d4d5f549655c118f86f371b8d55c200d3efa50
+        uses: leynos/shared-actions/.github/actions/setup-rust@7cb894fe62c40951cccf33819548095e64a1291e
         with:
           cache-provider: external
           use-sccache: false
@@ -335,7 +335,7 @@ jobs:
         run: scripts/check-verus-fragment-id-bridge.sh
 
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@f6d4d5f549655c118f86f371b8d55c200d3efa50
+        uses: leynos/shared-actions/.github/actions/setup-rust@7cb894fe62c40951cccf33819548095e64a1291e
         with:
           cache-provider: external
           use-sccache: false
@@ -562,7 +562,7 @@ jobs:
         # This lane keeps the shared action's sccache setup, which installs
         # the binary and exports the Actions cache credentials that a
         # GitHub-hosted `run:` step can already see anyway.
-        uses: leynos/shared-actions/.github/actions/setup-rust@f6d4d5f549655c118f86f371b8d55c200d3efa50
+        uses: leynos/shared-actions/.github/actions/setup-rust@7cb894fe62c40951cccf33819548095e64a1291e
         with:
           cache-provider: external
 
