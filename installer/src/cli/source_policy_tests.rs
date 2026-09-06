@@ -2,6 +2,7 @@
 
 use super::NO_SOURCE_FALLBACK_ENV;
 use crate::cli::InstallArgs;
+use whitaker_common::test_support::env_test_guard;
 
 fn install_args(no_source_fallback: bool) -> InstallArgs {
     InstallArgs {
@@ -19,6 +20,10 @@ fn install_args(no_source_fallback: bool) -> InstallArgs {
 /// the mutation serial whatever the runner does.
 #[test]
 fn the_environment_and_the_flag_agree_on_the_rule() {
+    // One process-wide variable, so the guard rather than the loop: a
+    // sibling test running concurrently would otherwise observe this one's
+    // value and fail intermittently.
+    let _guard = env_test_guard();
     // A caller who exported the variable meant something by it, so an
     // unrecognized value enables the rule rather than silently disabling
     // a protection. Empty, `0` and `false` are the three shapes that
@@ -54,6 +59,10 @@ fn the_environment_and_the_flag_agree_on_the_rule() {
 #[cfg(unix)]
 #[test]
 fn a_non_unicode_environment_value_enables_the_rule() {
+    // One process-wide variable, so the guard rather than the loop: a
+    // sibling test running concurrently would otherwise observe this one's
+    // value and fail intermittently.
+    let _guard = env_test_guard();
     use std::ffi::OsString;
     use std::os::unix::ffi::OsStringExt;
 
@@ -70,6 +79,10 @@ fn a_non_unicode_environment_value_enables_the_rule() {
 /// told to build from source and forbidden from doing so.
 #[test]
 fn the_environment_conflicts_with_a_source_only_option() {
+    // One process-wide variable, so the guard rather than the loop: a
+    // sibling test running concurrently would otherwise observe this one's
+    // value and fail intermittently.
+    let _guard = env_test_guard();
     let cases: &[(&str, InstallArgs)] = &[
         (
             "--build-only",
@@ -108,6 +121,10 @@ fn the_environment_conflicts_with_a_source_only_option() {
 
 #[test]
 fn a_source_only_option_is_accepted_without_the_policy() {
+    // One process-wide variable, so the guard rather than the loop: a
+    // sibling test running concurrently would otherwise observe this one's
+    // value and fail intermittently.
+    let _guard = env_test_guard();
     // The pair: the same arguments are fine when nothing forbids a source
     // build, so the rejection is about the contradiction rather than the
     // option.

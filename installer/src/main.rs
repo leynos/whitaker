@@ -10,14 +10,13 @@ mod staged_suite;
 #[cfg(test)]
 use crate::install_flow::ensure_dylint_tools_with_options;
 use crate::install_flow::{
-    MetricsWriteContext, PrebuiltInstallationContext, detect_host_target,
-    ensure_dylint_tools_with_executor, try_prebuilt_installation, write_install_metrics,
+    MetricsWriteContext, PrebuiltInstallationContext, ensure_dylint_tools_with_executor,
+    try_prebuilt_installation, write_install_metrics,
 };
 use camino::{Utf8Path, Utf8PathBuf};
 use clap::Parser;
 use std::io::Write;
 use std::time::Instant;
-use whitaker_installer::artefact::suite_ref::SuiteRef;
 use whitaker_installer::cli::{Cli, Command, InstallArgs};
 use whitaker_installer::crate_name::CrateName;
 use whitaker_installer::deps::{SourcePolicy, SystemCommandExecutor};
@@ -25,9 +24,8 @@ use whitaker_installer::dirs::{BaseDirs, SystemBaseDirs};
 use whitaker_installer::error::{InstallerError, Result};
 use whitaker_installer::install_metrics::InstallMode;
 use whitaker_installer::list::{determine_target_dir, run_list};
-use whitaker_installer::output::{DryRunInfo, ShellSnippet, write_stderr_line};
+use whitaker_installer::output::{ShellSnippet, write_stderr_line};
 use whitaker_installer::pipeline::{PipelineContext, perform_build, stage_libraries};
-use whitaker_installer::prebuilt_path::prebuilt_library_dir;
 use whitaker_installer::resolution::{
     CrateResolutionOptions, resolve_crates, validate_crate_names,
 };
@@ -49,8 +47,8 @@ fn main() {
 fn run(cli: &Cli, stdout: &mut dyn Write, stderr: &mut dyn Write) -> Result<()> {
     match &cli.command {
         Some(Command::List(args)) => run_list(args, stdout),
-        Some(Command::Install(args)) => run_install(args, stderr),
-        None => run_install(cli.install_args(), stderr),
+        Some(Command::Install(args)) => run_install(args, stdout, stderr),
+        None => run_install(cli.install_args(), stdout, stderr),
     }
 }
 
@@ -99,7 +97,7 @@ fn try_fast_path_installation(
 /// # Errors
 ///
 /// Returns an error if any step fails.
-fn run_install(args: &InstallArgs, stderr: &mut dyn Write) -> Result<()> {
+fn run_install(args: &InstallArgs, stdout: &mut dyn Write, stderr: &mut dyn Write) -> Result<()> {
     args.validate_source_options()?;
     let dirs = SystemBaseDirs::new().ok_or_else(|| InstallerError::WorkspaceNotFound {
         reason: "could not determine platform directories".to_owned(),
@@ -135,7 +133,7 @@ fn run_install(args: &InstallArgs, stderr: &mut dyn Write) -> Result<()> {
     if let Some((staging_path, install_mode)) =
         try_fast_path_installation(&fast_path_context, stderr)?
     {
-        report_suite_source(install_mode, &mut std::io::stdout())?;
+        report_suite_source(install_mode, stdout)?;
         let finish_context = FinishInstallContext {
             args,
             dirs: &dirs,
@@ -158,7 +156,7 @@ fn run_install(args: &InstallArgs, stderr: &mut dyn Write) -> Result<()> {
     let build_results = perform_build(&context, &requested_crates, stderr)?;
     let staging_path = stage_libraries(&context, &build_results, stderr)?;
     // Step 5: Generate wrapper scripts if requested
-    report_suite_source(InstallMode::Build, &mut std::io::stdout())?;
+    report_suite_source(InstallMode::Build, stdout)?;
     let finish_context = FinishInstallContext {
         args,
         dirs: &dirs,
@@ -184,47 +182,9 @@ fn report_suite_source(install_mode: InstallMode, stdout: &mut dyn Write) -> Res
         .map_err(|source| InstallerError::WriteFailed { source })
 }
 
-/// Runs in dry-run mode, showing configuration without side effects.
-fn run_dry(args: &InstallArgs, dirs: &dyn BaseDirs, stderr: &mut dyn Write) -> Result<()> {
-    use whitaker_installer::workspace::resolve_workspace_path;
+mod dry_run;
 
-    let workspace_root = resolve_workspace_path(dirs)?;
-    let requested_crates = resolve_requested_crates(args)?;
-    let toolchain = resolve_toolchain(&workspace_root, args.toolchain.as_deref())?;
-    toolchain.verify_installed()?;
-    let target_dir = determine_dry_run_target_dir(args, dirs, &toolchain, &requested_crates)?;
-    let info = DryRunInfo {
-        workspace_root: &workspace_root,
-        toolchain: toolchain.channel(),
-        target_dir: &target_dir,
-        verbosity: args.verbosity,
-        quiet: args.quiet,
-        skip_deps: args.skip_deps,
-        skip_wrapper: args.skip_wrapper,
-        no_update: args.no_update,
-        suite_ref: args.suite_version.as_ref().map(SuiteRef::as_str),
-        jobs: args.jobs,
-        crates: &requested_crates,
-    };
-    write_stderr_line(stderr, info.display_text());
-    Ok(())
-}
-
-fn determine_dry_run_target_dir(
-    args: &InstallArgs,
-    dirs: &dyn BaseDirs,
-    toolchain: &Toolchain,
-    requested_crates: &[CrateName],
-) -> Result<Utf8PathBuf> {
-    let build_target_dir = determine_target_dir(args.target_dir.as_deref())?;
-    if !args.should_attempt_prebuilt(requested_crates) {
-        return Ok(build_target_dir);
-    }
-    let Ok(host_target) = detect_host_target() else {
-        return Ok(build_target_dir);
-    };
-    Ok(prebuilt_library_dir(dirs, toolchain.channel(), &host_target).unwrap_or(build_target_dir))
-}
+use dry_run::run_dry;
 
 /// Checks for and installs Dylint tools if missing.
 fn ensure_dylint_tools(policy: SourcePolicy, stderr: &mut dyn Write) -> Result<()> {

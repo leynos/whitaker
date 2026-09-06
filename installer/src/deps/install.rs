@@ -140,6 +140,19 @@ pub(super) fn install_tool(
         }
     }
 
+    // Reached when no repository install was attempted at all, because the
+    // base directories could not be resolved. The refusals inside the failure
+    // arms never run on this path, so without this a run that forbids a source
+    // build would take one anyway, quietly.
+    if context.no_source_fallback {
+        return Err(InstallerError::SourceFallbackForbidden {
+            artefact: format!("a published {} archive", tool.package),
+            reason: "no repository install was attempted, because the base \
+                     directories could not be resolved"
+                .to_owned(),
+        });
+    }
+
     install_tool_with_cargo(executor, cargo_install_plan, stderr, context)
 }
 

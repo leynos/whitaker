@@ -97,3 +97,54 @@ fn write_failed_includes_reason() {
     let source_err = std::error::Error::source(&err);
     assert!(source_err.is_some());
 }
+
+#[test]
+fn conflicting_source_options_names_the_offending_option() {
+    // The message is what a caller acts on, so it has to name both the option
+    // that requires a source build and the two ways the rule can be enabled.
+    let err = InstallerError::ConflictingSourceOptions {
+        option: "--build-only".to_owned(),
+    };
+
+    let message = err.to_string();
+    assert!(message.contains("--build-only"), "got: {message}");
+    assert!(message.contains("--no-source-fallback"), "got: {message}");
+    assert!(
+        message.contains("WHITAKER_NO_SOURCE_FALLBACK"),
+        "the environment route must be named too, got: {message}"
+    );
+}
+
+#[test]
+fn source_fallback_forbidden_carries_the_artefact_and_the_reason() {
+    // Without the reason the operator learns only that something was absent,
+    // and the download's own explanation is the part that says what to do.
+    let err = InstallerError::SourceFallbackForbidden {
+        artefact: "a published cargo-dylint archive".to_owned(),
+        reason: "the repository install unavailable: not found".to_owned(),
+    };
+
+    let message = err.to_string();
+    assert!(
+        message.contains("a published cargo-dylint archive"),
+        "got: {message}"
+    );
+    assert!(message.contains("not found"), "got: {message}");
+}
+
+#[test]
+fn the_policy_errors_survive_a_clone() {
+    // `InstallerError::clone` matches every variant by hand, so a new variant
+    // that nobody added an arm for is a panic waiting for the first caller.
+    for err in [
+        InstallerError::ConflictingSourceOptions {
+            option: "--experimental".to_owned(),
+        },
+        InstallerError::SourceFallbackForbidden {
+            artefact: "a prebuilt lint library".to_owned(),
+            reason: "repository asset not found".to_owned(),
+        },
+    ] {
+        assert_eq!(err.clone().to_string(), err.to_string());
+    }
+}

@@ -2964,11 +2964,12 @@ standard output, through the writer the caller injected rather than through
 whitaker-installer: suite-source=prebuilt
 ```
 
-The value is `prebuilt` or `source`. That line is the contract a consumer
-should read. `install-whitaker` currently infers the path by matching the
-wording of a fallback notice on stderr, which a rephrasing would break
-silently; the fixed shape on stdout replaces that match once the action adopts
-this release.
+The value is `prebuilt` or `source`. It is additive rather than a replacement.
+`install-whitaker` infers the path by matching the wording of the installer's
+fallback notice on standard output, which a rephrasing would break silently,
+and it keeps doing so; the marker gives it a second and stable signal. Dropping
+the scan in favour of the marker alone would let a source build the marker
+missed pass as `prebuilt`, so both stay.
 
 The rolling release is why this exists. It is republished on every push to
 `main`, so a consumer whose install starts during a republish can miss an

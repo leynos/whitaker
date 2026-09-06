@@ -222,8 +222,11 @@ standard output. A dry run selects none, so it prints nothing:
 whitaker-installer: suite-source=prebuilt
 ```
 
-The value is `prebuilt` or `source`. Read that line rather than matching on the
-wording of a fallback notice, which may be rephrased.
+The value is `prebuilt` or `source`. It reports where the suite came from and
+adds to the existing checks rather than replacing them: `install-whitaker`
+still scans the installer's standard output for the fallback notice and fails
+an unapproved source build on what it finds there. Reading only the marker
+would let a source build the marker missed pass as `prebuilt`.
 
 The rolling release is the reason this exists. It is republished on every push
 to `main`, and a consumer whose install starts during a republish can miss an

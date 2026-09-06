@@ -507,3 +507,48 @@ fn the_same_missing_archive_falls_back_without_the_policy() {
     assert!(output.contains("Repository install for cargo-dylint unavailable"));
     executor.assert_finished();
 }
+
+#[test]
+fn an_unresolvable_repository_context_still_refuses_a_source_build() {
+    // The hole this closes: with no base directories the repository install is
+    // never attempted, so the refusals inside the failure arms never run and
+    // `cargo install` was reached unguarded. A run that forbade a source build
+    // would have taken one, and reported success.
+    //
+    // The executor expects nothing. Asserting only the error would pass while
+    // Cargo had already been invoked, which is the failure itself.
+    let executor = StubExecutor::new(vec![]);
+    let mut stderr = Vec::new();
+
+    let error = install_missing_tools(
+        &executor,
+        &DylintToolStatus {
+            cargo_dylint: false,
+            dylint_link: true,
+        },
+        &mut stderr,
+        &InstallContext {
+            repo: None,
+            cargo_fallback_mode: InstallMode::CargoInstall,
+            quiet: false,
+            no_source_fallback: true,
+        },
+    )
+    .expect_err("no repository context must not become a licence to build");
+
+    assert!(
+        matches!(error, InstallerError::SourceFallbackForbidden { .. }),
+        "expected a source-fallback refusal, got: {error}"
+    );
+    let message = error.to_string();
+    assert!(
+        message.contains("cargo-dylint"),
+        "the refusal must name the tool, got: {message}"
+    );
+    assert!(
+        message.contains("base") && message.contains("directories"),
+        "the reason must say why no repository install was attempted, not \
+         repeat the generic one, got: {message}"
+    );
+    executor.assert_finished();
+}

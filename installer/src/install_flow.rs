@@ -208,7 +208,11 @@ fn try_prebuilt_installation_with(
         target: &host_target,
         toolchain: context.toolchain_channel,
         destination_dir: &destination_dir,
-        quiet: context.args.quiet,
+        // Silence the pipeline's own reporting when a source build is
+        // forbidden. It would otherwise announce "Falling back to local
+        // compilation" immediately before the refusal that stops exactly that,
+        // which tells an operator the opposite of what happened.
+        quiet: context.args.quiet || context.args.forbids_source_fallback(),
     };
 
     let staging_path = match attempt_prebuilt(&prebuilt_config, stderr) {
