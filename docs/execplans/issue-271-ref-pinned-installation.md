@@ -8,6 +8,15 @@ Status: IMPLEMENTED
 
 Issue: [leynos/whitaker#271](https://github.com/leynos/whitaker/issues/271)
 
+> Historical note: This plan records the original `--ref` implementation for
+> issue #271. Whitaker 0.2.8 shipped the canonical `--suite-version` option,
+> with `--suite-ref` as its alias, through #404; references below to `--ref`,
+> `git_ref`, and the superseded helper APIs describe that earlier design and
+> are not the current CLI contract. The current implementation keeps the
+> rolling prebuilt path for unpinned installs, builds pinned installations
+> from source, and resolves a requested ref locally before fetching on a miss
+> so an already-present ref can be used offline with `--no-update`.
+
 ## Purpose / big picture
 
 `whitaker-installer` currently installs the lint suite from a mutable source:

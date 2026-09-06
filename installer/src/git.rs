@@ -114,11 +114,10 @@ pub fn restore_default_branch(repo: &Utf8Path) -> Result<()> {
         });
     }
     let remote_branch = String::from_utf8_lossy(&head.stdout).trim().to_owned();
-    // `origin/main` names the remote-tracking ref; the local branch to return
-    // to is its last component.
+    // Remove only the remote name: default branches may themselves contain
+    // slashes, such as `release/stable`.
     let branch = remote_branch
-        .rsplit('/')
-        .next()
+        .strip_prefix("origin/")
         .unwrap_or(&remote_branch)
         .to_owned();
 
@@ -164,11 +163,11 @@ fn resolve_commit(repo: &Utf8Path, reference: &SuiteRef) -> Result<Option<String
 
 /// Checks out a reference in an existing Whitaker clone.
 ///
-/// Fetches first, so a reference published after the clone was made is
-/// available, then resolves it preferring the remote's view and checks out
-/// the resulting commit detached. Detached because the checkout is a build
-/// input rather than somewhere work happens: landing on a local branch would
-/// let a later `pull` move the pinned suite underneath the caller.
+/// Resolves locally before fetching, so an existing pin can be checked out
+/// offline. On a local miss, it fetches and resolves the reference before
+/// checking out the resulting commit detached. Detached because the checkout
+/// is a build input rather than somewhere work happens: landing on a local
+/// branch would let a later `pull` move the pinned suite underneath the caller.
 ///
 /// A reference reachable from no branch and no tag, such as a commit on an
 /// unmerged branch, is fetched explicitly as a second attempt, because
@@ -183,22 +182,24 @@ fn resolve_commit(repo: &Utf8Path, reference: &SuiteRef) -> Result<Option<String
 /// Returns `InstallerError::Git` if a fetch or the checkout fails, if either
 /// times out, or if the reference cannot be resolved at all.
 pub fn checkout_ref(repo: &Utf8Path, reference: &SuiteRef) -> Result<()> {
-    let fetch = run_git_with_timeout(
-        &["fetch", "--tags", "--force", "origin"],
-        Some(repo),
-        "fetch",
-    )?;
-    if !fetch.status.success() {
-        let stderr = String::from_utf8_lossy(&fetch.stderr);
-        return Err(InstallerError::Git {
-            operation: "fetch",
-            message: stderr.trim().to_owned(),
-        });
-    }
-
     let commit = match resolve_commit(repo, reference)? {
         Some(commit) => commit,
         None => {
+            let fetch = run_git_with_timeout(
+                &["fetch", "--tags", "--force", "origin"],
+                Some(repo),
+                "fetch",
+            )?;
+            if !fetch.status.success() {
+                let stderr = String::from_utf8_lossy(&fetch.stderr);
+                return Err(InstallerError::Git {
+                    operation: "fetch",
+                    message: stderr.trim().to_owned(),
+                });
+            }
+            if let Some(commit) = resolve_commit(repo, reference)? {
+                return checkout_detached(repo, &commit);
+            }
             // Nothing local matches, so ask the remote for this reference by
             // name. This is what reaches a commit that no branch or tag
             // contains, which a caller pinning an exact SHA may well name.
@@ -218,8 +219,13 @@ pub fn checkout_ref(repo: &Utf8Path, reference: &SuiteRef) -> Result<()> {
         }
     };
 
+    checkout_detached(repo, &commit)
+}
+
+/// Checks out `commit` detached, preserving the selected suite revision.
+fn checkout_detached(repo: &Utf8Path, commit: &str) -> Result<()> {
     let output = run_git_with_timeout(
-        &["checkout", "--detach", "--force", &commit],
+        &["checkout", "--detach", "--force", commit],
         Some(repo),
         "checkout",
     )?;
