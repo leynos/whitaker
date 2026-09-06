@@ -146,3 +146,21 @@ Feature: Whitaker lint library installer
     When the installer CLI is run
     Then the CLI exits with an error
     And the rejected suite reference is named
+
+  Scenario: A forbidden source build is rejected alongside a source-only option
+    Given the installer is invoked with dry-run, no source fallback, and build-only
+    When the installer CLI is run
+    Then the CLI exits with an error
+    And the contradiction between the two options is explained
+
+  Scenario: Dry-run reports no suite source
+    Given the installer is invoked with dry-run and no source fallback
+    When the installer CLI is run
+    Then the CLI exits successfully
+    And no suite-source marker is written to standard output
+
+  Scenario: The environment forbids a source build a flag then requires
+    Given the installer is invoked with build-only and the environment forbidding a source build
+    When the installer CLI is run
+    Then the CLI exits with an error
+    And the contradiction between the two options is explained

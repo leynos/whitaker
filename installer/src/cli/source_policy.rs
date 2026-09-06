@@ -20,18 +20,11 @@ pub const NO_SOURCE_FALLBACK_ENV: &str = "WHITAKER_NO_SOURCE_FALLBACK";
 /// A caller who exported the variable at all meant something by it, and
 /// reading an unrecognized value as "off" would silently disable a
 /// protection.
-fn environment_forbids_source_fallback() -> bool {
-    match std::env::var(NO_SOURCE_FALLBACK_ENV) {
-        Ok(value) => !matches!(
-            value.trim().to_ascii_lowercase().as_str(),
-            "" | "0" | "false"
-        ),
-        // Present but not valid Unicode. The variable was set, so the rule
-        // is on: reading unreadable bytes as "off" would disable a protection
-        // precisely when the value cannot be inspected.
-        Err(std::env::VarError::NotUnicode(_)) => true,
-        Err(std::env::VarError::NotPresent) => false,
-    }
+fn value_enables_the_rule(value: &str) -> bool {
+    !matches!(
+        value.trim().to_ascii_lowercase().as_str(),
+        "" | "0" | "false"
+    )
 }
 
 impl InstallArgs {
@@ -51,7 +44,41 @@ impl InstallArgs {
     /// ```
     #[must_use]
     pub fn forbids_source_fallback(&self) -> bool {
-        self.no_source_fallback || environment_forbids_source_fallback()
+        match std::env::var(NO_SOURCE_FALLBACK_ENV) {
+            Ok(value) => self.forbids_source_fallback_with(Some(value.as_str())),
+            // Present but not valid text. The variable was set, so the rule is
+            // on: reading unreadable bytes as "off" would remove a protection
+            // precisely where nothing can be said about intent. `.ok()` would
+            // have collapsed this into absence.
+            Err(std::env::VarError::NotUnicode(_)) => true,
+            Err(std::env::VarError::NotPresent) => self.forbids_source_fallback_with(None),
+        }
+    }
+
+    /// Whether a supplied environment value, with the flag, forbids a build.
+    ///
+    /// The environment is read by the caller and passed in, so the decision
+    /// itself is a pure function of its inputs. Reading the process directly
+    /// here made the rule untestable without mutating global state, and put a
+    /// dependency on the environment inside logic that only decides.
+    ///
+    /// `None` means the variable is absent. A value that is present but not
+    /// valid text should arrive as `Some("")`'s opposite: see
+    /// [`Self::forbids_source_fallback`], which treats unreadable bytes as an
+    /// intention to enable the rule.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use whitaker_installer::cli::InstallArgs;
+    ///
+    /// let args = InstallArgs::default();
+    /// assert!(args.forbids_source_fallback_with(Some("1")));
+    /// assert!(!args.forbids_source_fallback_with(None));
+    /// ```
+    #[must_use]
+    pub fn forbids_source_fallback_with(&self, environment: Option<&str>) -> bool {
+        self.no_source_fallback || environment.is_some_and(value_enables_the_rule)
     }
 
     /// Reject a run that both forbids and requires a source build.

@@ -18,6 +18,10 @@ pub(super) struct CliWorld {
     skip_assertions: Cell<bool>,
     requires_toolchain: Cell<bool>,
     should_use_test_staged_suite: Cell<bool>,
+    /// Environment the child process should see, for rules a flag cannot
+    /// express. Set on the command rather than on this process, so a scenario
+    /// cannot leak a variable into its siblings.
+    environment: RefCell<Vec<(String, String)>>,
     toolchain: RefCell<Option<String>>,
     // Keep temp_dir alive for the lifetime of the scenario.
     temp_dir: RefCell<Option<TempDir>>,
@@ -193,6 +197,9 @@ pub(super) fn run_installer_cli(cli_world: &CliWorld) {
     command.current_dir(workspace_root());
     if cli_world.should_use_test_staged_suite.get() {
         command.env(TEST_STAGE_SUITE_ENV, "1");
+    }
+    for (name, value) in cli_world.environment.borrow().iter() {
+        command.env(name, value);
     }
 
     let output = command.output().expect("failed to run whitaker-installer");
@@ -446,5 +453,65 @@ pub(super) fn assert_suite_library_is_staged(cli_world: &CliWorld) {
          stdout={}, stderr={stderr}",
         matching_files(&staging_dir, ""),
         String::from_utf8_lossy(&output.stdout),
+    );
+}
+
+/// Configure a run whose rule arrives through the environment, not a flag.
+///
+/// clap cannot see an environment variable, so this is the path its
+/// `conflicts_with` cannot cover and the post-parse check exists for.
+pub(super) fn configure_environment_forbidding_source_build_with_build_only(cli_world: &CliWorld) {
+    cli_world
+        .args
+        .replace(vec!["--dry-run".to_owned(), "--build-only".to_owned()]);
+    cli_world
+        .environment
+        .borrow_mut()
+        .push(("WHITAKER_NO_SOURCE_FALLBACK".to_owned(), "1".to_owned()));
+}
+
+/// Configure a run that both forbids and requires a source build.
+///
+/// No toolchain guard: clap refuses the pair while parsing arguments, long
+/// before anything needs a toolchain, so the scenario is meaningful on every
+/// machine.
+pub(super) fn configure_forbidden_source_build_with_build_only(cli_world: &CliWorld) {
+    cli_world.args.replace(vec![
+        "--dry-run".to_owned(),
+        "--no-source-fallback".to_owned(),
+        "--build-only".to_owned(),
+    ]);
+}
+
+/// Configure a dry run that forbids a source build.
+pub(super) fn configure_dry_run_forbidding_source_fallback(cli_world: &CliWorld) {
+    configure_dry_run_with(cli_world, &["--no-source-fallback"]);
+}
+
+pub(super) fn assert_source_option_contradiction_is_explained(cli_world: &CliWorld) {
+    let output = get_output(cli_world);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    // Both halves, because naming only one leaves the caller guessing which
+    // to drop.
+    assert!(
+        stderr.contains("--no-source-fallback"),
+        "the error should name the rule, got: {stderr}"
+    );
+    assert!(
+        stderr.contains("--build-only"),
+        "the error should name the option it contradicts, got: {stderr}"
+    );
+}
+
+pub(super) fn assert_no_suite_source_marker(cli_world: &CliWorld) {
+    let output = get_output(cli_world);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // A dry run installs nothing, so it selects no suite source. Writing the
+    // marker anyway would tell a consumer a build happened when none did.
+    assert!(
+        !stdout.contains("suite-source="),
+        "a dry run must not claim a suite source, stdout: {stdout}"
     );
 }

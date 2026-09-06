@@ -136,3 +136,32 @@ fn a_source_only_option_is_accepted_without_the_policy() {
         assert!(args.validate_source_options().is_ok());
     });
 }
+
+/// The same table against the pure form, which needs no global mutation.
+///
+/// These cases are the rule itself. The guarded test above exists only to
+/// prove that the process-reading wrapper agrees with it, so the rule is
+/// covered here whatever a runner does with threads.
+#[test]
+fn a_supplied_value_and_the_flag_agree_on_the_rule() {
+    let cases: &[(Option<&str>, bool, bool)] = &[
+        (None, false, false),
+        (None, true, true),
+        (Some(""), false, false),
+        (Some("0"), false, false),
+        (Some("false"), false, false),
+        (Some("FALSE"), false, false),
+        (Some(" false "), false, false),
+        (Some("1"), false, true),
+        (Some("true"), false, true),
+        (Some("yes"), false, true),
+        (Some("false"), true, true),
+    ];
+    for (environment, flag, expected) in cases {
+        assert_eq!(
+            install_args(*flag).forbids_source_fallback_with(*environment),
+            *expected,
+            "value {environment:?} with flag {flag} should give {expected}"
+        );
+    }
+}
