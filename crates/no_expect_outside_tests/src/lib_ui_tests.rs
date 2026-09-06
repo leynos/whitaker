@@ -317,6 +317,21 @@ fn example_compiles_under_test_harness(#[case] name: &str, #[case] label: &str) 
     "File-backed cfg(test)",
     &[],
 )]
+// Compiled with `--test`, which is the only way these say anything. Without
+// it the `#[cfg(test)]` module is stripped before the lint runs, so the
+// fixture passes because there is nothing left to inspect.
+#[case(
+    "ui",
+    "pass_expect_in_cfg_test_module_helper",
+    "cfg(test) helper without a test attribute",
+    &[],
+)]
+#[case(
+    "ui",
+    "pass_expect_in_nested_cfg_test_module",
+    "cfg(test) helper two modules down",
+    &[],
+)]
 fn fixture_compiles_under_test_harness(
     #[case] directory: &str,
     #[case] fixture_name: &str,

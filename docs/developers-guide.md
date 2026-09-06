@@ -2757,6 +2757,28 @@ Create test fixtures under `crates/my_new_lint/ui/`:
 - `fail_*.rs` - Code that should trigger the lint
 - `fail_*.stderr` - Expected diagnostic output
 
+## Recognizing test-only code
+
+`#[cfg(test)]` does not reach a late lint pass as written. The compiler
+evaluates it during expansion and leaves a parsed `CfgTrace` attribute in its
+place, so a lint that inspects only unparsed attributes sees no `cfg(test)`
+anywhere and treats every test module's contents as production code.
+
+`whitaker::hir::cfg_trace_gates_on_test` is the one recognizer for this, shared
+by `no_expect_outside_tests` and `no_unwrap_or_else_panic`. It honours
+negation, so `not(test)` does not read as test context and `not(not(test))`
+does, and it accepts `any` and `all` because either leaves the item present in
+a test build. Use it rather than adding another private copy: the two lints
+each carried one, so the same defect existed twice and was found only when
+three consuming repositories went red.
+
+A fixture for this behaviour has to be built with `--test`, and the call it
+exercises must not sit in a `#[test]` function. Without `--test` the module is
+stripped before the lint runs, and inside a `#[test]` function the call is
+exempt through the test attribute, so the fixture passes without saying
+anything about module ancestry. Every `cfg(test)` fixture in the suite was
+vacuous for one of those two reasons until 2026-09-06.
+
 ## Testing Lints from Git
 
 To test lints directly from a Git repository without installing:

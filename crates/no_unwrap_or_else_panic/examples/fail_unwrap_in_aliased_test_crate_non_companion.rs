@@ -8,9 +8,9 @@
 // The Dylint UI harness compiles this fixture with `-D no_unwrap_or_else_panic`
 // on the command line, so the lint is registered and denied there without an
 // in-source lint attribute that plain rustc would reject as an unknown lint.
-#[cfg(test)]
 #[expect(
     dead_code,
+    clippy::unnecessary_literal_unwrap,
     reason = "compiled by the Dylint UI harness solely to assert the emitted lint; never invoked. Migration to #[whitaker_support::dylint_expect] is tracked by roadmap item 2.2.9."
 )]
 fn aliased_test_crate_non_companion_subject(value: i32) {

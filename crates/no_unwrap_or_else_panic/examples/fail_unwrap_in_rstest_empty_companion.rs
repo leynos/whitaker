@@ -11,9 +11,9 @@
     deny(no_unwrap_or_else_panic)
 )]
 
-#[cfg(test)]
 #[expect(
     dead_code,
+    clippy::unnecessary_literal_unwrap,
     reason = "fixture body is exercised by the Dylint UI compile only"
 )]
 fn rstest_empty_companion_subject(value: i32) {

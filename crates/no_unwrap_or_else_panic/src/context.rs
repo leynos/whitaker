@@ -28,6 +28,8 @@ use rustc_hir::attrs::AttributeKind as HirAttributeKind;
 use rustc_lint::LateContext;
 #[cfg(feature = "dylint-driver")]
 use rustc_span::sym;
+#[cfg(feature = "dylint-driver")]
+use whitaker::hir::cfg_trace_gates_on_test;
 
 /// Summarize the context for a given HIR node.
 #[cfg(feature = "dylint-driver")]
@@ -145,6 +147,10 @@ fn item_name(item: &hir::Item<'_>) -> Option<String> {
 /// Returns `true` when the attribute is `#[cfg(test)]` or a `cfg_attr(test, cfg(test))`
 /// wrapper, ensuring test-only scopes are treated as exempt.
 fn is_cfg_test_attribute(attr: &hir::Attribute) -> bool {
+    if cfg_trace_gates_on_test(attr) {
+        return true;
+    }
+
     // Parsed attributes (like #[must_use]) are not cfg-related; skip them to
     // avoid panics when calling path() on arbitrary parsed attributes.
     let hir::Attribute::Unparsed(_) = attr else {

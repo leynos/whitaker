@@ -9,7 +9,7 @@ use rustc_hir::Node;
 use rustc_hir::attrs::AttributeKind as HirAttributeKind;
 use rustc_lint::LateContext;
 use rustc_span::sym;
-use whitaker::hir::has_test_like_hir_attributes;
+use whitaker::hir::{cfg_trace_gates_on_test, has_test_like_hir_attributes};
 use whitaker_common::{
     Attribute, AttributeKind, AttributePath, ContextEntry, ContextKind,
     PARSED_ATTRIBUTE_PLACEHOLDER, in_test_like_context_with,
@@ -246,6 +246,10 @@ where
 /// }
 /// ```
 pub(crate) fn is_cfg_test_attribute(attr: &hir::Attribute) -> bool {
+    if cfg_trace_gates_on_test(attr) {
+        return true;
+    }
+
     // Parsed attributes (like #[must_use]) are not cfg-related; skip them to
     // avoid panics when calling path() on arbitrary parsed attributes.
     let hir::Attribute::Unparsed(_) = attr else {
