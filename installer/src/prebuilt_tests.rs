@@ -16,6 +16,7 @@ fn base_config(destination_dir: &Utf8Path) -> PrebuiltConfig<'_> {
         toolchain: TOOLCHAIN,
         destination_dir,
         quiet: true,
+        allow_source_fallback: true,
     }
 }
 

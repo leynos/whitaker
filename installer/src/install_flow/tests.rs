@@ -214,12 +214,14 @@ fn try_prebuilt_installation_prune_error_falls_back_to_local_build() {
 /// so a stub that stayed silent would make the default path look as though
 /// nothing had been reported at all.
 fn stub_attempt_prebuilt_unavailable(
-    _config: &PrebuiltConfig<'_>,
+    config: &PrebuiltConfig<'_>,
     stderr: &mut dyn Write,
 ) -> PrebuiltResult {
     let reason = "repository asset not found";
     write_stderr_line(stderr, format!("Prebuilt download unavailable: {reason}"));
-    write_stderr_line(stderr, "Falling back to local compilation.");
+    if config.allow_source_fallback {
+        write_stderr_line(stderr, "Falling back to local compilation.");
+    }
     PrebuiltResult::Fallback {
         reason: reason.to_owned(),
     }
@@ -288,6 +290,15 @@ fn a_missing_suite_artefact_fails_under_the_flag() {
     let (result, _stderr) = run_with_unavailable_prebuilt(&args);
 
     let error = result.expect_err("an absent artefact must fail when a source build is forbidden");
+    assert!(
+        _stderr.contains("Prebuilt download unavailable"),
+        "the artefact's absence is worth reporting either way, stderr: {_stderr}"
+    );
+    assert!(
+        !_stderr.contains("Falling back to local compilation."),
+        "promising a fallback the policy forbids says the opposite of what \
+         happens next, stderr: {_stderr}"
+    );
     assert!(
         matches!(error, InstallerError::SourceFallbackForbidden { .. }),
         "expected a source-fallback refusal, got: {error}"
