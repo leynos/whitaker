@@ -8,6 +8,8 @@
 
 #[cfg(test)]
 mod tests {
+    //! Test-only helpers whose ancestry is the whole point of this fixture.
+
     fn first_item(items: &[u8]) -> u8 {
         items.first().copied().expect("cfg(test) ancestry permits expect")
     }

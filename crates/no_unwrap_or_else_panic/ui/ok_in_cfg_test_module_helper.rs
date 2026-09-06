@@ -10,6 +10,8 @@
 
 #[cfg(test)]
 mod tests {
+    //! Test-only helpers whose ancestry is the whole point of this fixture.
+
     fn fallback(value: Result<i32, &str>) -> i32 {
         value.unwrap_or_else(|error| panic!("fallback failed: {error}"))
     }

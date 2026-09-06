@@ -2765,12 +2765,15 @@ place, so a lint that inspects only unparsed attributes sees no `cfg(test)`
 anywhere and treats every test module's contents as production code.
 
 `whitaker::hir::cfg_trace_gates_on_test` is the one recognizer for this, shared
-by `no_expect_outside_tests` and `no_unwrap_or_else_panic`. It honours
-negation, so `not(test)` does not read as test context and `not(not(test))`
-does, and it accepts `any` and `all` because either leaves the item present in
-a test build. Use it rather than adding another private copy: the two lints
-each carried one, so the same defect existed twice and was found only when
-three consuming repositories went red.
+by `no_expect_outside_tests` and `no_unwrap_or_else_panic`. It asks whether the
+predicate is unsatisfiable when `test` is false, rather than whether `test`
+appears in it. That distinction matters: `any(test, feature = "x")` mentions
+`test` and still keeps the item in a production build with `x` enabled, so
+reading it as test-only would exempt production code. Every predicate other than
+`test` is treated as unknown and assumed satisfiable, because the conservative
+direction is to examine code rather than skip it. Use it rather than adding
+another private copy: the two lints each carried one, so the same defect
+existed twice and was found only when three consuming repositories went red.
 
 A fixture for this behaviour has to be built with `--test`, and the call it
 exercises must not sit in a `#[test]` function. Without `--test` the module is

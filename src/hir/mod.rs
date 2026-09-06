@@ -10,6 +10,10 @@ use rustc_lint::LateContext;
 use rustc_span::Span;
 use whitaker_common::{Attribute, AttributeKind, AttributePath, SpanRecoveryFrame};
 
+mod cfg_trace;
+
+pub use cfg_trace::cfg_trace_gates_on_test;
+
 static HARNESS_DESCRIPTOR_SYMBOL: LazyLock<rustc_span::Symbol> =
     LazyLock::new(|| rustc_span::Symbol::intern("RSTEST_HARNESS_DESCRIPTOR"));
 
@@ -91,61 +95,6 @@ fn walk_span_chain(start: Span) -> impl Iterator<Item = Span> {
 /// Collects ordered [`SpanRecoveryFrame`] values for a `rustc_span::Span`.
 ///
 /// The first frame is always the original span when it is not dummy. Later
-/// Whether a `cfg_trace` attribute gates its item on the `test` predicate.
-///
-/// `#[cfg(...)]` does not survive into the HIR as written. The compiler
-/// evaluates it during expansion and leaves a parsed `CfgTrace` behind so
-/// tools can still see what the item was gated on. A lint that reads only
-/// unparsed attributes therefore sees no `cfg(test)` anywhere, inline or
-/// file-backed, and treats every test module's contents as production code.
-///
-/// Shared rather than duplicated: two lints carried the same private copy of
-/// this decision, so the same defect existed twice and was fixed once.
-///
-/// # Parameters
-///
-/// - `attr`: The HIR attribute to inspect.
-///
-/// # Returns
-///
-/// Whether the attribute leaves its item present only in a test build.
-///
-/// # Examples
-///
-/// ```ignore
-/// if whitaker::hir::cfg_trace_gates_on_test(attr) {
-///     // The item is inside `#[cfg(test)]`.
-/// }
-/// ```
-#[must_use]
-pub fn cfg_trace_gates_on_test(attr: &hir::Attribute) -> bool {
-    let hir::Attribute::Parsed(hir::attrs::AttributeKind::CfgTrace(entries)) = attr else {
-        return false;
-    };
-    entries
-        .iter()
-        .any(|(entry, _)| cfg_entry_gates_on_test(entry, true))
-}
-
-/// Whether one `cfg` entry gates its item on `test`, honouring negation.
-///
-/// `not(test)` gates the item on *not* being a test build, so it must not read
-/// as test context, and `not(not(test))` restores it. `any` and `all` both
-/// count, because either leaves the item present in a test build, which is the
-/// question the caller is asking.
-fn cfg_entry_gates_on_test(entry: &hir::attrs::CfgEntry, positive: bool) -> bool {
-    use hir::attrs::CfgEntry;
-
-    match entry {
-        CfgEntry::NameValue { name, .. } => positive && *name == rustc_span::sym::test,
-        CfgEntry::Not(inner, _) => cfg_entry_gates_on_test(inner, !positive),
-        CfgEntry::All(nested, _) | CfgEntry::Any(nested, _) => nested
-            .iter()
-            .any(|inner| cfg_entry_gates_on_test(inner, positive)),
-        CfgEntry::Bool(..) | CfgEntry::Version(..) => false,
-    }
-}
-
 /// frames follow the `source_callsite()` chain produced by
 /// [`walk_span_chain`], preserving each yielded span together with its
 /// `from_expansion()` state in a [`SpanRecoveryFrame`].

@@ -8,7 +8,11 @@
 
 #[cfg(test)]
 mod tests {
+    //! The gated module; only this level carries `#[cfg(test)]`.
+
     mod helpers {
+        //! An ungated submodule, so the lint must walk the ancestry.
+
         pub(super) fn first_item(items: &[u8]) -> u8 {
             items
                 .first()

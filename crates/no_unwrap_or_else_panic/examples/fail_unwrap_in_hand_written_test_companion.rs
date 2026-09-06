@@ -16,8 +16,11 @@
 // on the command line, so the lint is registered and denied there without an
 // in-source lint attribute that plain rustc would reject as an unknown lint.
 #[expect(
-    dead_code,
     clippy::unnecessary_literal_unwrap,
+    reason = "the literal is the point: the fixture asserts the lint fires on a panicking fallback, and a runtime value would add nothing"
+)]
+#[expect(
+    dead_code,
     reason = "compiled by the Dylint UI harness solely to assert the emitted lint; never invoked. Migration to #[whitaker_support::dylint_expect] is tracked by roadmap item 2.2.9."
 )]
 fn hand_written_test_companion_subject(value: i32) {

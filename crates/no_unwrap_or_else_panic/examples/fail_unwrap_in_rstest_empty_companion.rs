@@ -12,8 +12,11 @@
 )]
 
 #[expect(
-    dead_code,
     clippy::unnecessary_literal_unwrap,
+    reason = "the literal is the point: the fixture asserts the lint fires on a panicking fallback, and a runtime value would add nothing"
+)]
+#[expect(
+    dead_code,
     reason = "fixture body is exercised by the Dylint UI compile only"
 )]
 fn rstest_empty_companion_subject(value: i32) {
