@@ -5,6 +5,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use rstest::{fixture, rstest};
 use temp_env::with_var_unset;
 use whitaker_installer::crate_name::CrateName;
+use whitaker_installer::deps::SourcePolicy;
 use whitaker_installer::test_support::{TEST_STAGE_SUITE_ENV, env_test_guard};
 use whitaker_installer::toolchain::Toolchain;
 
@@ -20,6 +21,12 @@ impl FastPathFixture {
     fn context(&self) -> FastPathContext<'_> {
         FastPathContext {
             args: &self.args,
+            // Stated rather than read from the environment, so an exported
+            // `WHITAKER_NO_SOURCE_FALLBACK` cannot change what these exercise.
+            policy: SourcePolicy {
+                quiet: false,
+                no_source_fallback: false,
+            },
             dirs: &self.dirs,
             requested_crates: &self.requested_crates,
             toolchain: &self.toolchain,

@@ -103,7 +103,31 @@ impl InstallArgs {
     /// assert!(InstallArgs::default().validate_source_options().is_ok());
     /// ```
     pub fn validate_source_options(&self) -> crate::error::Result<()> {
-        if !self.forbids_source_fallback() {
+        self.validate_source_options_with(self.forbids_source_fallback())
+    }
+
+    /// The same check against a policy the caller already resolved.
+    ///
+    /// `run_install` reads the environment once and passes the answer here, so
+    /// a run cannot validate against one answer and install against another.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::InstallerError::ConflictingSourceOptions`] when
+    /// the rule is in force alongside an option that requires a source build.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use whitaker_installer::cli::InstallArgs;
+    ///
+    /// assert!(InstallArgs::default().validate_source_options_with(false).is_ok());
+    /// ```
+    pub fn validate_source_options_with(
+        &self,
+        no_source_fallback: bool,
+    ) -> crate::error::Result<()> {
+        if !no_source_fallback {
             return Ok(());
         }
         let requires_source = if self.is_build_only {

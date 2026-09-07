@@ -71,9 +71,7 @@ fn try_fast_path_installation(
 ) -> Result<Option<(Utf8PathBuf, InstallMode)>> {
     let prebuilt_context = PrebuiltInstallationContext {
         args: context.args,
-        // Read the environment once, here at the command boundary, rather than
-        // at each decision point inside the flow.
-        policy: context.args.source_policy(),
+        policy: context.policy,
         dirs: context.dirs,
         requested_crates: context.requested_crates,
         toolchain_channel: context.toolchain.channel(),
@@ -101,7 +99,10 @@ fn try_fast_path_installation(
 ///
 /// Returns an error if any step fails.
 fn run_install(args: &InstallArgs, stdout: &mut dyn Write, stderr: &mut dyn Write) -> Result<()> {
-    args.validate_source_options()?;
+    // The one environment read for the whole run. Everything below consults
+    // this answer, so validation and installation cannot disagree.
+    let policy = args.source_policy();
+    args.validate_source_options_with(policy.no_source_fallback)?;
     let dirs = SystemBaseDirs::new().ok_or_else(|| InstallerError::WorkspaceNotFound {
         reason: "could not determine platform directories".to_owned(),
     })?;
@@ -111,7 +112,7 @@ fn run_install(args: &InstallArgs, stdout: &mut dyn Write, stderr: &mut dyn Writ
     let install_started = Instant::now();
     // Step 1: Check and install Dylint dependencies if needed
     if !args.skip_deps {
-        ensure_dylint_tools(args.source_policy(), stderr)?;
+        ensure_dylint_tools(policy, stderr)?;
     }
     // Step 2: Ensure workspace is available (clone if needed)
     let workspace_root = ensure_whitaker_workspace(args, &dirs, stderr)?;
@@ -128,6 +129,7 @@ fn run_install(args: &InstallArgs, stdout: &mut dyn Write, stderr: &mut dyn Writ
     // Step 3.5: Attempt prebuilt download or staged-suite fast path.
     let fast_path_context = FastPathContext {
         args,
+        policy,
         dirs: &dirs,
         requested_crates: &requested_crates,
         toolchain: &toolchain,
@@ -294,6 +296,13 @@ struct FinishInstallContext<'a> {
 /// Aggregates the immutable inputs for fast-path installation attempts.
 struct FastPathContext<'a> {
     args: &'a InstallArgs,
+    /// The source-fallback rule, resolved once for the whole run.
+    ///
+    /// `InstallArgs::source_policy` reads the process environment. Resolving it
+    /// here and passing it down means the dependency and suite paths cannot
+    /// observe different answers, which a change to the environment between two
+    /// reads would otherwise allow.
+    policy: SourcePolicy,
     dirs: &'a dyn BaseDirs,
     requested_crates: &'a [CrateName],
     toolchain: &'a Toolchain,
