@@ -6,6 +6,7 @@ use std::cell::{Cell, Ref, RefCell};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use tempfile::TempDir;
+use whitaker_installer::cli::NO_SOURCE_FALLBACK_ENV;
 use whitaker_installer::dirs::SystemBaseDirs;
 use whitaker_installer::prebuilt_path::prebuilt_library_dir;
 use whitaker_installer::test_support::TEST_STAGE_SUITE_ENV;
@@ -195,6 +196,11 @@ pub(super) fn run_installer_cli(cli_world: &CliWorld) {
     let mut command = Command::new(env!("CARGO_BIN_EXE_whitaker-installer"));
     command.args(args.iter());
     command.current_dir(workspace_root());
+    // The child inherits this process's environment, so a developer or a runner
+    // that exports either of these would change every scenario that does not
+    // set them. Clear both before the scenario's own variables go on.
+    command.env_remove(NO_SOURCE_FALLBACK_ENV);
+    command.env_remove(TEST_STAGE_SUITE_ENV);
     if cli_world.should_use_test_staged_suite.get() {
         command.env(TEST_STAGE_SUITE_ENV, "1");
     }

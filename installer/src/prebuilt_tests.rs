@@ -217,3 +217,46 @@ fn destination_creation_failure_returns_fallback() {
         other => panic!("expected Fallback, got {other:?}"),
     }
 }
+
+/// A quiet run that forbids a fallback still carries the reason to its caller.
+///
+/// `--quiet` suppresses the pipeline's progress lines, including the
+/// unavailable-artefact notice. That loses nothing, because the reason travels
+/// in the returned `Fallback` and the caller turns it into
+/// `SourceFallbackForbidden`, whose message names both the artefact and the
+/// reason. This test holds that contract: silence on the stream, reason in the
+/// value.
+#[test]
+fn a_quiet_forbidden_run_returns_the_reason_without_writing_to_stderr() {
+    let (_temp, destination_dir) = destination_dir();
+    let config = PrebuiltConfig {
+        quiet: true,
+        allow_source_fallback: false,
+        ..base_config(&destination_dir)
+    };
+
+    let mut downloader = MockArtefactDownloader::new();
+    downloader.expect_download_manifest().returning(|_| {
+        Err(DownloadError::NotFound {
+            url: "https://example.invalid/manifest.json".to_owned(),
+        })
+    });
+    let extractor = MockArtefactExtractor::new();
+
+    let mut stderr = Vec::new();
+    let result = attempt_prebuilt_with(&config, &downloader, &extractor, &mut stderr);
+
+    assert!(
+        stderr.is_empty(),
+        "a quiet run must write nothing, got: {}",
+        String::from_utf8_lossy(&stderr)
+    );
+    match result {
+        PrebuiltResult::Fallback { reason } => assert!(
+            reason.contains("artefact not found"),
+            "the reason must survive the quiet guard so the refusal can name \
+             it, got: {reason}"
+        ),
+        other => panic!("expected Fallback, got {other:?}"),
+    }
+}

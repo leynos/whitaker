@@ -4,6 +4,31 @@ use super::NO_SOURCE_FALLBACK_ENV;
 use crate::cli::InstallArgs;
 use whitaker_common::test_support::env_test_guard;
 
+/// The rule, as one table.
+///
+/// Each entry is the environment value, the `--no-source-fallback` flag, and
+/// the verdict the pair must produce. A caller who exported the variable meant
+/// something by it, so an unrecognized value enables the rule rather than
+/// silently disabling a protection; empty, `0` and `false` are the three shapes
+/// that conventionally mean "off".
+///
+/// Both tests below read this table. Two copies of it would drift, and the
+/// point of the pair is that the pure form and the process-reading wrapper
+/// agree on the same cases.
+const POLICY_CASES: &[(Option<&str>, bool, bool)] = &[
+    (None, false, false),
+    (None, true, true),
+    (Some(""), false, false),
+    (Some("0"), false, false),
+    (Some("false"), false, false),
+    (Some("FALSE"), false, false),
+    (Some(" false "), false, false),
+    (Some("1"), false, true),
+    (Some("true"), false, true),
+    (Some("yes"), false, true),
+    (Some("false"), true, true),
+];
+
 fn install_args(no_source_fallback: bool) -> InstallArgs {
     InstallArgs {
         no_source_fallback,
@@ -24,24 +49,7 @@ fn the_environment_and_the_flag_agree_on_the_rule() {
     // sibling test running concurrently would otherwise observe this one's
     // value and fail intermittently.
     let _guard = env_test_guard();
-    // A caller who exported the variable meant something by it, so an
-    // unrecognized value enables the rule rather than silently disabling
-    // a protection. Empty, `0` and `false` are the three shapes that
-    // conventionally mean "off".
-    let cases: &[(Option<&str>, bool, bool)] = &[
-        (None, false, false),
-        (None, true, true),
-        (Some(""), false, false),
-        (Some("0"), false, false),
-        (Some("false"), false, false),
-        (Some("FALSE"), false, false),
-        (Some(" false "), false, false),
-        (Some("1"), false, true),
-        (Some("true"), false, true),
-        (Some("yes"), false, true),
-        (Some("false"), true, true),
-    ];
-    for (environment, flag, expected) in cases {
+    for (environment, flag, expected) in POLICY_CASES {
         temp_env::with_var(NO_SOURCE_FALLBACK_ENV, *environment, || {
             assert_eq!(
                 install_args(*flag).forbids_source_fallback(),
@@ -144,20 +152,7 @@ fn a_source_only_option_is_accepted_without_the_policy() {
 /// covered here whatever a runner does with threads.
 #[test]
 fn a_supplied_value_and_the_flag_agree_on_the_rule() {
-    let cases: &[(Option<&str>, bool, bool)] = &[
-        (None, false, false),
-        (None, true, true),
-        (Some(""), false, false),
-        (Some("0"), false, false),
-        (Some("false"), false, false),
-        (Some("FALSE"), false, false),
-        (Some(" false "), false, false),
-        (Some("1"), false, true),
-        (Some("true"), false, true),
-        (Some("yes"), false, true),
-        (Some("false"), true, true),
-    ];
-    for (environment, flag, expected) in cases {
+    for (environment, flag, expected) in POLICY_CASES {
         assert_eq!(
             install_args(*flag).forbids_source_fallback_with(*environment),
             *expected,
