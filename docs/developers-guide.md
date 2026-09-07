@@ -3095,7 +3095,10 @@ this section updated in the same change.
 
 `tests/workflow_contracts/timeout_ordering_test.py` asserts the ordering by
 value, over every step in every workflow that runs the suite, in both the
-`.yml` and `.yaml` extensions. Three details of its shape are deliberate.
+`.yml` and `.yaml` extensions. Its readings live alongside it: the lane
+discovery and the command matching in `suite_lanes.py`, the nextest arithmetic
+in `timeout_budgets.py`, and the profile pins in `nextest_profile_test.py`.
+Four details of its shape are deliberate.
 
 It enumerates every suite-running step, including those in jobs that declare no
 ceiling, so a missing `timeout-minutes` shows up as a lane with no budget
@@ -3116,10 +3119,20 @@ drop that lane from the contract silently and take its ceiling with it;
 as an invocation, and both are reported, because a contract that cannot tell
 what a line does should say so rather than guess.
 
+It pins the condition each lane carries. A skipped step runs no suite, so none
+of the budgets above says anything about it: `if: false` on the step or on its
+job would leave a lane that looks bounded and is not, and so would a plausible
+condition that quietly excluded the event the lane exists for. The conditions
+are pinned by value rather than tested for falsity, because YAML parses `false`
+to a boolean and enumerating falsy spellings would miss the plausible ones
+anyway. `coverage-check` legitimately runs on pull requests only, because
+`coverage-main.yml` covers the trunk. The lane coordinates are compared both
+ways, so a lane appearing without an entry fails too.
+
 It pins the values the tables above state as well as ordering them: the base
 `slow-timeout` on both profiles compared as a whole table, the 45 m whole-run
 budget, both overrides' whole `slow-timeout` including the grace period, and
-the 70-minute ceiling on every suite lane. The ordering assertions hold for a
+the 80-minute ceiling on every suite lane. The ordering assertions hold for a
 range of values, so on their own they would let any of these drift to a number
 nobody chose while still passing. The grace period is pinned for the same
 reason it is read: the watchdog and the ceiling above it are sized to cover
