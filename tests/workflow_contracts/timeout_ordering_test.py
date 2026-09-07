@@ -27,16 +27,12 @@ Run via ``make test-workflow-contracts``.
 
 from __future__ import annotations
 
-import re
-import tomllib
 import typing as typ
 
 import pytest
-import yaml
 from timeout_budgets import (
     NEXTEST_CONFIG,
     CEILING_MARGIN_SECONDS,
-    NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS,
     OUTSIDE_SUITE_ALLOWANCE_SECONDS,
     TERMINATION_SAFETY_MARGIN_SECONDS,
     global_timeout,
@@ -44,205 +40,21 @@ from timeout_budgets import (
     profile_blocks,
     root_section,
     required_ceiling,
-    seconds,
     termination_allowance,
 )
-from ubicloud_workflow_support import REPOSITORY_ROOT, WORKFLOWS_DIRECTORY
 
 #: The commands that run the workspace suite under nextest. A step running
 #: one of these is bound by both nextest tiers; a step running anything
 #: else is not, which is why the list is exact rather than a substring
 #: search for "test".
-SUITE_COMMANDS: typ.Final[tuple[str, ...]] = ("make test", "make coverage")
-
-#: Commands that contain a suite command as a prefix but run something
-#: else entirely. `make test-doc` is doctests, outside nextest; the other
-#: two are checkers that happen to be named for what they check.
-NOT_SUITE_COMMANDS: typ.Final[tuple[str, ...]] = (
-    "make test-doc",
-    "make test-glibc-baseline",
-    "make test-workflow-contracts",
-    "make test-markdown-format",
+from suite_lanes import (
+    _watchdog_offences,
+    SUITE_COMMANDS,
+    SuiteLane,
+    _declared_jobs,
+    _disguised_suite_lines,
+    _lanes_in_job,
 )
-
-#: Shapes that put a suite command on a line without running it as the
-#: step's own command, or without letting its failure end the step. A
-#: line carrying one is neither a suite invocation nor safely ignored,
-#: so the contract refuses to judge it and says so.
-#:
-#: `if false; then make test; fi` keeps the text and runs nothing, which
-#: would drop the lane from this contract silently, taking its ceiling
-#: with it. `make test || true` does run the suite but discards its
-#: verdict, so the lane's budgets are checked while its result is not.
-DISGUISES: typ.Final[tuple[str, ...]] = (
-    "|| true",
-    "|| :",
-    "if ",
-    "&&",
-    ";",
-    "|",
-)
-
-#: The environment variable the shared coverage action reads for its
-#: cargo watchdog. Asserted absent: this repository does not use that
-#: action, and a lane that adopted it would inherit its 1,800 s default.
-WATCHDOG_VARIABLE: typ.Final[str] = "RUN_RUST_CARGO_WAIT_TIMEOUT"
-COVERAGE_ACTION: typ.Final[str] = "shared-actions/.github/actions/generate-coverage"
-
-class SuiteLane(typ.NamedTuple):
-    """One step that runs the suite, with the job budget enclosing it.
-
-    Attributes
-    ----------
-    workflow : str
-        The workflow file's name.
-    job : str
-        The job the step belongs to.
-    step : str
-        The step's declared name.
-    command : str
-        The whole command line it runs, not the matched constant, so the
-        profile can be read from it.
-    job_timeout : float or None
-        The enclosing job's ``timeout-minutes`` in seconds, or None when
-        the job declares none and so inherits GitHub's six-hour default.
-    """
-
-    workflow: str
-    job: str
-    step: str
-    command: str
-    job_timeout: float | None
-
-    def __str__(self) -> str:
-        """Return a location suitable for a failure message.
-
-        Returns
-        -------
-        str
-            ``workflow:job:step`` for this lane.
-        """
-        return f"{self.workflow}:{self.job}:{self.step!r}"
-
-
-def _suite_command(run: str) -> str | None:
-    """Return the suite command a step runs, or None.
-
-    ``make test-doc`` and the checkers named for what they check all begin
-    with a suite command's text. Matching by prefix would bind them to
-    budgets they do not run under, and would let a genuine suite step
-    escape by being renamed.
-
-    Parameters
-    ----------
-    run : str
-        A step's ``run`` script.
-
-    Returns
-    -------
-    str or None
-        The whole command line, or None when the step runs no suite
-        command. The line rather than the matched constant, because the
-        profile the lane runs under is an argument on it.
-    """
-    candidates = (line.strip() for line in run.splitlines())
-    return next((line for line in candidates if _is_suite_line(line)), None)
-
-
-def _names_a_suite_command(line: str) -> bool:
-    """Return whether one line mentions a suite command at all.
-
-    Mentioning is weaker than invoking, and deliberately so: the two are
-    compared below, and a line that mentions one without invoking it is
-    the case this contract refuses to judge.
-
-    Parameters
-    ----------
-    line : str
-        One stripped line of a step's script.
-
-    Returns
-    -------
-    bool
-        True when a suite command's text appears on the line.
-    """
-    if any(line.startswith(other) for other in NOT_SUITE_COMMANDS):
-        return False
-    return any(command in line for command in SUITE_COMMANDS)
-
-
-def _is_suite_line(line: str) -> bool:
-    """Return whether one stripped line invokes the suite plainly.
-
-    ``make test-doc`` and the checkers named for what they check all
-    begin with a suite command's text, so they are excluded first and by
-    exact prefix rather than by substring.
-
-    Plainly means the line is the command and its arguments, and nothing
-    else. A line that also carries a conditional, a separator or a
-    status suppressor is not judged here: :func:`_disguised_suite_lines`
-    reports it instead, because such a line may run the suite, may not,
-    and may discard its verdict, and this contract cannot tell which.
-
-    Parameters
-    ----------
-    line : str
-        One stripped line of a step's script.
-
-    Returns
-    -------
-    bool
-        True when the line runs a suite command and nothing else.
-    """
-    if not _names_a_suite_command(line):
-        return False
-    if any(disguise in line for disguise in DISGUISES):
-        return False
-    return any(
-        line == command or line.startswith(f"{command} ") for command in SUITE_COMMANDS
-    )
-
-
-def _disguised_suite_lines(run: str) -> list[str]:
-    """Return lines naming a suite command without plainly running one.
-
-    Parameters
-    ----------
-    run : str
-        A step's ``run`` script.
-
-    Returns
-    -------
-    list[str]
-        The offending lines, stripped.
-    """
-    return [
-        line
-        for raw in run.splitlines()
-        if (line := raw.strip())
-        and _names_a_suite_command(line)
-        and not _is_suite_line(line)
-    ]
-
-
-def _workflow_documents() -> dict[str, dict[str, typ.Any]]:
-    """Return every workflow document, keyed by file name.
-
-    Both extensions are read. A lane in the other one would otherwise
-    escape every assertion below without failing anything.
-
-    Returns
-    -------
-    dict[str, dict[str, typ.Any]]
-        File name to parsed document.
-    """
-    documents: dict[str, dict[str, typ.Any]] = {}
-    for pattern in ("*.yml", "*.yaml"):
-        for path in sorted(WORKFLOWS_DIRECTORY.glob(pattern)):
-            parsed = yaml.safe_load(path.read_text(encoding="utf-8"))
-            if isinstance(parsed, dict):
-                documents[path.name] = parsed
-    return documents
 
 
 @pytest.fixture(scope="module")
@@ -272,90 +84,6 @@ def suite_lanes() -> tuple[SuiteLane, ...]:
         One entry per suite-running step.
     """
     return tuple(lane for job in _declared_jobs() for lane in _lanes_in_job(job))
-
-
-class _Job(typ.NamedTuple):
-    """One job of one workflow, with the file it came from.
-
-    Attributes
-    ----------
-    workflow : str
-        The workflow file's name.
-    name : str
-        The job's identifier.
-    body : dict[str, typ.Any]
-        The job's parsed mapping.
-    """
-
-    workflow: str
-    name: str
-    body: dict[str, typ.Any]
-
-
-def _declared_jobs() -> tuple[_Job, ...]:
-    """Return every job in every workflow, with its file.
-
-    Flattening the two levels here is what keeps the callers below to
-    one loop each: a job's identity travels with it rather than being
-    reconstructed from an enclosing scope.
-
-    Returns
-    -------
-    tuple[_Job, ...]
-        Every declared job.
-    """
-    return tuple(
-        _Job(workflow=name, name=str(job_name), body=job)
-        for name, document in _workflow_documents().items()
-        for job_name, job in (document.get("jobs") or {}).items()
-        if isinstance(job, dict)
-    )
-
-
-def _job_ceiling(job: _Job) -> float | None:
-    """Return a job's ``timeout-minutes`` in seconds, or None.
-
-    Parameters
-    ----------
-    job : _Job
-        The job to read.
-
-    Returns
-    -------
-    float or None
-        The ceiling in seconds, or None when the job declares none and
-        so inherits GitHub's six-hour default.
-    """
-    raw = job.body.get("timeout-minutes")
-    return None if raw is None else float(raw) * 60.0
-
-
-def _lanes_in_job(job: _Job) -> tuple[SuiteLane, ...]:
-    """Return the suite-running lanes one job declares.
-
-    Parameters
-    ----------
-    job : _Job
-        The job to read.
-
-    Returns
-    -------
-    tuple[SuiteLane, ...]
-        One entry per suite-running step in that job.
-    """
-    ceiling = _job_ceiling(job)
-    steps = (step for step in job.body.get("steps") or [] if isinstance(step, dict))
-    return tuple(
-        SuiteLane(
-            workflow=job.workflow,
-            job=job.name,
-            step=str(step.get("name", "")) or job.name,
-            command=command,
-            job_timeout=ceiling,
-        )
-        for step in steps
-        if (command := _suite_command(str(step.get("run", "")))) is not None
-    )
 
 
 def test_the_suite_runs_somewhere(suite_lanes: tuple[SuiteLane, ...]) -> None:
@@ -483,199 +211,26 @@ def test_the_cargo_watchdog_tier_is_absent_rather_than_defaulted() -> None:
     )
 
 
-def _watchdog_offences(job: _Job) -> tuple[str, ...]:
-    """Return the ways one job would reintroduce the watchdog tier.
-
-    Both halves are looked for: the action itself, and the variable that
-    configures it. The variable is read at all three scopes GitHub
-    resolves, because a value at workflow or job level is inherited by
-    every step and a check reading only the step's own environment would
-    miss it entirely, which is the opposite of what this asserts.
-
-    Parameters
-    ----------
-    job : _Job
-        The job to read.
-
-    Returns
-    -------
-    tuple[str, ...]
-        One entry per offence, naming the job and what it did.
-    """
-    where = f"{job.workflow}:{job.name}"
-    offences: list[str] = []
-    if _sets_watchdog(_workflow_documents()[job.workflow]):
-        offences.append(f"{job.workflow} sets {WATCHDOG_VARIABLE} at workflow level")
-    if _sets_watchdog(job.body):
-        offences.append(f"{where} sets {WATCHDOG_VARIABLE} at job level")
-    for step in job.body.get("steps") or []:
-        if not isinstance(step, dict):
-            continue
-        if COVERAGE_ACTION in str(step.get("uses", "")):
-            offences.append(f"{where} uses {COVERAGE_ACTION}")
-        if _sets_watchdog(step):
-            offences.append(f"{where} sets {WATCHDOG_VARIABLE} on a step")
-    return tuple(offences)
-
-
-def _sets_watchdog(owner: dict[str, typ.Any]) -> bool:
-    """Return whether one scope sets the watchdog variable.
-
-    Parameters
-    ----------
-    owner : dict[str, typ.Any]
-        A workflow, job or step mapping.
-
-    Returns
-    -------
-    bool
-        True when its ``env`` names the variable.
-    """
-    environment = owner.get("env")
-    return isinstance(environment, dict) and WATCHDOG_VARIABLE in environment
-
-
-#: The base per-test allowance both profiles must declare, as the guide
-#: states it. Asserted by value rather than by shape, because the
-#: ordering assertions hold for a wide range of values and would not
-#: notice a profile drifting to a budget nobody chose.
-BASE_SLOW_TIMEOUT: typ.Final[dict[str, object]] = {
-    "period": "300s",
-    "terminate-after": 1,
-    "grace-period": "5s",
-}
-
-#: The whole-run budget both profiles must declare.
-REQUIRED_GLOBAL_TIMEOUT: typ.Final[str] = "45m"
-
-#: The overrides both profiles carry, keyed by the binary or filter they
-#: exist for, with the whole ``slow-timeout`` each must declare. Both
-#: are named so one cannot be dropped while the other keeps the profile
-#: looking deliberate, and the table is compared whole rather than field
-#: by field, so an added or removed key fails too. The grace period
-#: matters as much as the period: it is what nextest waits before
-#: killing a test it has signalled, and the watchdog above is sized to
-#: cover it.
-REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, object]]] = {
-    "binary(behaviour_toolchain)": {
-        "period": "30m",
-        "terminate-after": 1,
-        "grace-period": "5s",
-    },
-    "test(driver::ui::)": {
-        "period": "10m",
-        "terminate-after": 1,
-        "grace-period": "5s",
-    },
-}
-
 #: The ceiling every suite-running lane must declare, in minutes, as
 #: `docs/developers-guide.md` records it. Pinned as well as derived: the
 #: derivation accepts any ceiling above its requirement, so a value
 #: nobody chose passes it while drifting away from the guide.
 REQUIRED_CEILING_MINUTES: typ.Final[int] = 80
 
-
-@pytest.fixture(scope="module")
-def parsed_nextest() -> dict[str, typ.Any]:
-    """Return the nextest configuration, parsed.
-
-    Parsed rather than matched for the value assertions below: a
-    commented-out budget reads as an active one to a regular expression,
-    so a line nobody meant could satisfy an assertion about a value.
-
-    Returns
-    -------
-    dict[str, typ.Any]
-        The parsed document.
-    """
-    return tomllib.loads(NEXTEST_CONFIG.read_text(encoding="utf-8"))
-
-
-@pytest.mark.parametrize("profile", ["default", "ci"], ids=str)
-def test_each_profile_declares_the_base_allowance_the_guide_states(
-    parsed_nextest: dict[str, typ.Any], profile: str
-) -> None:
-    """The ordering holds for many values; only one is documented.
-
-    Asserting the ordering alone would let a profile drift to a budget
-    nobody chose and the guide does not describe, while every comparison
-    still passed. This pins the three fields the guide names, so a change
-    to any of them has to change the guide in the same commit.
-    """
-    section = parsed_nextest["profile"][profile]
-    assert section.get("slow-timeout") == BASE_SLOW_TIMEOUT, (
-        f"[profile.{profile}] must declare the base slow-timeout the "
-        f"developers' guide states, {BASE_SLOW_TIMEOUT}; got "
-        f"{section.get('slow-timeout')}"
-    )
-
-
-@pytest.mark.parametrize("profile", ["default", "ci"], ids=str)
-def test_each_profile_declares_the_whole_run_budget(
-    parsed_nextest: dict[str, typ.Any], profile: str
-) -> None:
-    """Both profiles carry it, and carry the same one.
-
-    `ci` would fall back to the default profile's budget if it declared
-    none, so this is repository policy rather than a nextest
-    requirement. The policy exists because the two profiles run
-    different sets of tests, and a budget that governs one lane should
-    be readable in the profile that lane selects.
-    """
-    section = parsed_nextest["profile"][profile]
-    assert section.get("global-timeout") == REQUIRED_GLOBAL_TIMEOUT, (
-        f"[profile.{profile}] must set global-timeout to "
-        f"{REQUIRED_GLOBAL_TIMEOUT}; got {section.get('global-timeout')}"
-    )
-
-
-@pytest.mark.parametrize("profile", ["default", "ci"], ids=str)
-@pytest.mark.parametrize(
-    ("needle", "budget"), sorted(REQUIRED_OVERRIDES.items()), ids=str
-)
-def test_each_profile_states_the_overrides_its_own_tests_need(
-    parsed_nextest: dict[str, typ.Any],
-    profile: str,
-    needle: str,
-    budget: dict[str, object],
-) -> None:
-    """Both profiles declare both allowances, whole.
-
-    nextest consults ``[[profile.default.overrides]]`` when ``ci`` is
-    selected, so restating them is repository policy rather than a
-    correctness requirement: ``ci`` is the profile that includes the
-    toolchain binaries, and an allowance that only exists one section
-    away is one a reader of this profile will not see. Restating it also
-    makes a later divergence between the two profiles explicit rather
-    than silent.
-
-    The ``slow-timeout`` is compared as a whole table, so the grace
-    period is asserted alongside the period and the multiplier. Checking
-    the period alone would let the grace period be dropped, and the
-    watchdog above these budgets is sized to cover exactly that wait.
-
-    Only overrides that declare a budget are counted. The default
-    profile matches ``binary(behaviour_toolchain)`` twice, once for the
-    allowance and once to serialize three scenarios that contend on
-    shared rustup state, and the second carries no timeout to assert.
-    """
-    overrides = parsed_nextest["profile"][profile].get("overrides") or []
-    matching = [
-        override
-        for override in overrides
-        if needle in str(override.get("filter", ""))
-        and "slow-timeout" in override
-    ]
-    assert len(matching) == 1, (
-        f"[profile.{profile}] must carry exactly one override matching "
-        f"{needle!r} that declares a slow-timeout, found {len(matching)}; "
-        f"each profile states its own allowances"
-    )
-    assert matching[0].get("slow-timeout") == budget, (
-        f"[profile.{profile}]'s {needle!r} override must declare {budget}, got "
-        f"{matching[0].get('slow-timeout')}"
-    )
+#: The condition each suite lane legitimately carries, keyed by workflow
+#: and job, as the step's ``if`` and its job's.
+#:
+#: A skipped step runs no suite, so none of the budgets above says
+#: anything about it. `if: false` on either would leave a lane that
+#: looks bounded and is not, and so would a plausible condition that
+#: quietly excluded the event the lane exists for. `ci.yml`'s
+#: `coverage-check` job legitimately runs on pull requests only, because
+#: `coverage-main.yml` covers the trunk.
+REQUIRED_CONDITIONS: typ.Final[dict[tuple[str, str], tuple[object, object]]] = {
+    ("ci.yml", "coverage-check"): (None, "github.event_name == 'pull_request'"),
+    ("ci.yml", "windows-compat"): (None, None),
+    ("coverage-main.yml", "coverage-upload"): (None, None),
+}
 
 
 def test_every_suite_lane_carries_the_documented_ceiling(
@@ -744,7 +299,7 @@ def test_the_required_ceiling_carries_all_four_terms() -> None:
     what makes the missing term visible.
     """
     block = (
-        '[profile.example]\n'
+        "[profile.example]\n"
         'slow-timeout = { period = "300s", terminate-after = 1, grace-period = "5s" }\n'
         'global-timeout = "45m"\n'
     )
@@ -757,4 +312,48 @@ def test_the_required_ceiling_carries_all_four_terms() -> None:
     assert required_ceiling(block) == pytest.approx(expected), (
         f"the requirement is the whole-run budget, the termination allowance, "
         f"the outside allowance and the margin, added; expected {expected}"
+    )
+
+
+def test_each_suite_lane_carries_the_condition_it_is_meant_to(
+    suite_lanes: tuple[SuiteLane, ...],
+) -> None:
+    """A skipped step runs no suite, so no budget above bounds it.
+
+    Every assertion above reads a lane's declared budgets and says
+    nothing about whether the step runs. `if: false` on the step or on
+    its job would leave a lane that looks bounded and is not, and this
+    contract would certify it. So would a plausible condition that
+    quietly excluded the event the lane exists for, which is why the
+    conditions are pinned by value rather than checked for falsity:
+    YAML parses `false` to a boolean, and enumerating falsy spellings
+    would miss the plausible ones anyway.
+
+    `coverage-check` legitimately runs on pull requests only, because
+    `coverage-main.yml` covers the trunk, so that value is pinned rather
+    than forbidden. The coordinates are compared both ways first, so a
+    new lane with no entry fails rather than passing unexamined.
+
+    Proved by mutation: `if: false` on the coverage step, the same on
+    its job, `coverage-check` narrowed to a push-only condition, and a
+    coordinate dropped from ``REQUIRED_CONDITIONS`` each fail this test.
+    """
+    found: dict[tuple[str, str], set[tuple[object, object]]] = {}
+    for lane in suite_lanes:
+        found.setdefault((lane.workflow, lane.job), set()).add(lane.condition)
+    assert set(found) == set(REQUIRED_CONDITIONS), (
+        f"the suite lanes are not the ones this contract pins: "
+        f"unlisted {sorted(set(found) - set(REQUIRED_CONDITIONS))}, missing "
+        f"{sorted(set(REQUIRED_CONDITIONS) - set(found))}; a lane with no "
+        f"entry here is a lane whose condition nobody has judged"
+    )
+    wrong = {
+        coordinate: (expected, found[coordinate])
+        for coordinate, expected in REQUIRED_CONDITIONS.items()
+        if found[coordinate] != {expected}
+    }
+    assert not wrong, (
+        f"these suite lanes do not carry the conditions the developers' "
+        f"guide records, as expected versus found: {wrong}; a lane that is "
+        f"skipped runs no suite, so none of the budgets above bounds it"
     )
