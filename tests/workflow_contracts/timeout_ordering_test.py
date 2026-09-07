@@ -31,14 +31,15 @@ import typing as typ
 
 import pytest
 from timeout_budgets import (
+    Profile,
     NEXTEST_CONFIG,
     CEILING_MARGIN_SECONDS,
     OUTSIDE_SUITE_ALLOWANCE_SECONDS,
     TERMINATION_SAFETY_MARGIN_SECONDS,
+    bounds_a_single_test,
     global_timeout,
     largest_period,
-    profile_blocks,
-    root_section,
+    profiles,
     required_ceiling,
     termination_allowance,
 )
@@ -58,7 +59,7 @@ from suite_lanes import (
 
 
 @pytest.fixture(scope="module")
-def nextest_profiles() -> dict[str, str]:
+def nextest_profiles() -> dict[str, Profile]:
     """Return each nextest profile's text.
 
     Returns
@@ -66,7 +67,7 @@ def nextest_profiles() -> dict[str, str]:
     dict[str, str]
         Profile name to its section and overrides.
     """
-    return profile_blocks(NEXTEST_CONFIG.read_text(encoding="utf-8"))
+    return profiles(NEXTEST_CONFIG.read_text(encoding="utf-8"))
 
 
 @pytest.fixture(scope="module")
@@ -100,7 +101,7 @@ def test_the_suite_runs_somewhere(suite_lanes: tuple[SuiteLane, ...]) -> None:
 
 @pytest.mark.parametrize("profile", ["default", "ci"], ids=str)
 def test_every_profile_bounds_a_single_test(
-    nextest_profiles: dict[str, str], profile: str
+    nextest_profiles: dict[str, Profile], profile: str
 ) -> None:
     """A test that hangs must be killed, not merely reported slow.
 
@@ -109,10 +110,9 @@ def test_every_profile_bounds_a_single_test(
     tests it includes and the default profile excludes ran with no
     allowance at all, on the lane whose job had no ceiling either.
     """
-    block = nextest_profiles.get(profile)
-    assert block is not None, f"nextest.toml must declare [profile.{profile}]"
-    root = root_section(block)
-    assert "terminate-after" in root, (
+    parsed = nextest_profiles.get(profile)
+    assert parsed is not None, f"nextest.toml must declare [profile.{profile}]"
+    assert bounds_a_single_test(parsed), (
         f"[profile.{profile}] itself must set slow-timeout with "
         f"terminate-after. An override satisfies the profile as a whole while "
         f"leaving every test the override does not match with no bound at "
@@ -122,7 +122,7 @@ def test_every_profile_bounds_a_single_test(
 
 @pytest.mark.parametrize("profile", ["default", "ci"], ids=str)
 def test_the_global_timeout_sits_above_the_largest_single_test(
-    nextest_profiles: dict[str, str], profile: str
+    nextest_profiles: dict[str, Profile], profile: str
 ) -> None:
     """Tier two must not pre-empt tier one.
 
@@ -130,9 +130,9 @@ def test_the_global_timeout_sits_above_the_largest_single_test(
     before the test that allowance exists for can finish, and the failure
     names the run rather than the test.
     """
-    block = nextest_profiles[profile]
-    whole_run = global_timeout(block)
-    longest = largest_period(block)
+    parsed = nextest_profiles[profile]
+    whole_run = global_timeout(parsed)
+    longest = largest_period(parsed)
     assert whole_run > longest, (
         f"[profile.{profile}]'s {whole_run:.0f}s global-timeout is not above "
         f"its {longest:.0f}s largest per-test slow-timeout; the run would end "
@@ -157,7 +157,7 @@ def test_every_suite_lane_declares_a_job_ceiling(
 
 
 def test_the_job_ceiling_covers_the_run_and_the_work_around_it(
-    suite_lanes: tuple[SuiteLane, ...], nextest_profiles: dict[str, str]
+    suite_lanes: tuple[SuiteLane, ...], nextest_profiles: dict[str, Profile]
 ) -> None:
     """Tier four must not pre-empt tier two.
 
@@ -174,14 +174,14 @@ def test_the_job_ceiling_covers_the_run_and_the_work_around_it(
         # runs under `default`; only an explicit `NEXTEST_PROFILE=ci` on
         # the command line selects the other one.
         profile = "ci" if "NEXTEST_PROFILE=ci" in lane.command else "default"
-        block = nextest_profiles[profile]
-        required = required_ceiling(block)
+        parsed = nextest_profiles[profile]
+        required = required_ceiling(parsed)
         assert lane.job_timeout is not None, str(lane)
         assert lane.job_timeout >= required, (
             f"{lane} has a job ceiling of {lane.job_timeout:.0f}s, below the "
             f"{required:.0f}s needed to cover [profile.{profile}]'s "
-            f"{global_timeout(block):.0f}s whole-run budget, "
-            f"{termination_allowance(block):.0f}s for nextest to terminate the "
+            f"{global_timeout(parsed):.0f}s whole-run budget, "
+            f"{termination_allowance(parsed):.0f}s for nextest to terminate the "
             f"run, {OUTSIDE_SUITE_ALLOWANCE_SECONDS:.0f}s of build and "
             f"other work outside its window, and a "
             f"{CEILING_MARGIN_SECONDS:.0f}s margin above that sum; an overrun "
@@ -298,18 +298,20 @@ def test_the_required_ceiling_carries_all_four_terms() -> None:
     smaller number. Driving the derivation with a controlled profile is
     what makes the missing term visible.
     """
-    block = (
+    config_text = (
         "[profile.example]\n"
-        'slow-timeout = { period = "300s", terminate-after = 1, grace-period = "5s" }\n'
+        'slow-timeout = { period = "300s", terminate-after = 1, '
+        'grace-period = "5s" }\n'
         'global-timeout = "45m"\n'
     )
+    parsed = profiles(config_text)["example"]
     expected = (
         45 * 60.0
         + (5.0 + TERMINATION_SAFETY_MARGIN_SECONDS)
         + OUTSIDE_SUITE_ALLOWANCE_SECONDS
         + CEILING_MARGIN_SECONDS
     )
-    assert required_ceiling(block) == pytest.approx(expected), (
+    assert required_ceiling(parsed) == pytest.approx(expected), (
         f"the requirement is the whole-run budget, the termination allowance, "
         f"the outside allowance and the margin, added; expected {expected}"
     )
