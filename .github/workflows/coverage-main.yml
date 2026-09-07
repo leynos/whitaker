@@ -50,7 +50,9 @@ env:
 jobs:
   coverage-upload:
     runs-on: ubicloud-standard-2-ubuntu-2404
-    timeout-minutes: 40
+    # Above the 45 m nextest global timeout plus a cold build and the work
+    # either side of the suite; kept in step with ci.yml's coverage lane.
+    timeout-minutes: 70
     defaults:
       run:
         shell: bash
