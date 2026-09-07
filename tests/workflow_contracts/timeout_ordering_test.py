@@ -4,14 +4,15 @@ Four budgets can end a run, each set somewhere different, and they only
 work if each sits above the one inside it. Three of the four were missing
 or partial here.
 
-The `ci` profile, which the Windows lane runs, had no per-test allowance
-at all: `[[profile.default.overrides]]` belongs to the default profile
-and another profile does not inherit it, so the toolchain-installing
-tests that profile includes, and that the default profile excludes, ran
-unbounded. Neither profile set a `global-timeout`, so nothing bounded the
-whole run. And the Windows lane declared no `timeout-minutes`, inheriting
+No profile set a base `slow-timeout`, so an ordinary hung test was
+reported slow for ever rather than terminated, on every lane. The named
+exceptions were bounded: `[[profile.default.overrides]]` are consulted
+when `ci` is selected too, so the toolchain and dylint allowances did
+reach the Windows lane. What nothing bounded was everything else.
+Neither profile set a `global-timeout`, so nothing bounded the whole
+run. And the Windows lane declared no `timeout-minutes`, inheriting
 GitHub's six-hour default, which left the outermost tier missing on the
-one lane that had no inner ones either.
+one lane whose inner tiers were weakest.
 
 The third tier of the canonical four, the shared coverage action's cargo
 watchdog, does not exist here and its absence is asserted rather than
@@ -645,9 +646,9 @@ BASE_SLOW_TIMEOUT: typ.Final[dict[str, object]] = {
 REQUIRED_GLOBAL_TIMEOUT: typ.Final[str] = "45m"
 
 #: The `ci` profile's overrides, keyed by the binary or filter they
-#: exist for. These are the two the default profile carries and `ci`
-#: does not inherit, so they are named here to stop one being dropped
-#: while the other keeps the profile looking bounded.
+#: exist for. These are the two the default profile also carries and
+#: `ci` restates as its own, so both are named here to stop one being
+#: dropped while the other keeps the profile looking deliberate.
 REQUIRED_CI_OVERRIDES: typ.Final[dict[str, str]] = {
     "binary(behaviour_toolchain)": "30m",
     "test(driver::ui::)": "10m",
@@ -695,9 +696,11 @@ def test_each_profile_declares_the_whole_run_budget(
 ) -> None:
     """Both profiles carry it, and carry the same one.
 
-    A profile does not inherit another's, so a budget set on one and not
-    the other leaves whichever lane runs the second unbounded, which is
-    the state this branch corrects.
+    `ci` would fall back to the default profile's budget if it declared
+    none, so this is repository policy rather than a nextest
+    requirement. The policy exists because the two profiles run
+    different sets of tests, and a budget that governs one lane should
+    be readable in the profile that lane selects.
     """
     section = parsed_nextest["profile"][profile]
     assert section.get("global-timeout") == REQUIRED_GLOBAL_TIMEOUT, (
@@ -709,16 +712,18 @@ def test_each_profile_declares_the_whole_run_budget(
 @pytest.mark.parametrize(
     ("needle", "period"), sorted(REQUIRED_CI_OVERRIDES.items()), ids=str
 )
-def test_the_ci_profile_keeps_the_overrides_it_does_not_inherit(
+def test_the_ci_profile_states_the_overrides_its_own_tests_need(
     parsed_nextest: dict[str, typ.Any], needle: str, period: str
 ) -> None:
-    """`ci` restates the default profile's overrides because it must.
+    """`ci` restates the default profile's overrides as its own.
 
-    ``[[profile.default.overrides]]`` belongs to the default profile, so
-    the toolchain and dylint allowances do not reach `ci`, which is the
-    profile that includes the toolchain binaries. Dropping either would
-    leave `ci` looking bounded, since its base allowance would still be
-    there, while the tests that need the longest ran under 300 s.
+    nextest consults ``[[profile.default.overrides]]`` when ``ci`` is
+    selected, so this is repository policy rather than a correctness
+    requirement: ``ci`` is the profile that includes the toolchain
+    binaries, and an allowance that only exists one section away is one
+    a reader of this profile will not see. Restating it also makes a
+    later divergence between the two profiles explicit rather than
+    silent.
     """
     overrides = parsed_nextest["profile"]["ci"].get("overrides") or []
     matching = [
@@ -726,7 +731,7 @@ def test_the_ci_profile_keeps_the_overrides_it_does_not_inherit(
     ]
     assert len(matching) == 1, (
         f"[profile.ci] must carry exactly one override matching {needle!r}, "
-        f"found {len(matching)}; it does not inherit the default profile's"
+        f"found {len(matching)}; this profile states its own allowances"
     )
     budget = matching[0].get("slow-timeout") or {}
     assert budget.get("period") == period, (
