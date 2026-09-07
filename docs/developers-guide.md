@@ -2973,7 +2973,7 @@ tier went.
 | Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`, both profiles       | 300 s default; 10 m for the dylint UI harnesses, 30 m for the toolchain-installing behaviour tests |
 | nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, both profiles       | 45 m                                                                                               |
 | Cargo watchdog           | one `cargo` invocation, wall clock | not used here, see below                    | absent                                                                                             |
-| Job `timeout-minutes`    | the whole job                      | `ci.yml` and `coverage-main.yml`, job level | 70 m for every lane that runs the suite                                                            |
+| Job `timeout-minutes`    | the whole job                      | `ci.yml` and `coverage-main.yml`, job level | 80 m for every lane that runs the suite                                                            |
 
 *Table: the timers that can end a run, innermost first.*
 
@@ -3039,14 +3039,18 @@ raises the requirement too.
 
 So the ceiling is sized as the whole-run budget, plus the five-second grace
 period, plus a minute of margin, plus the build and the steps either side of
-the suite: 45 m + 5 s + 1 m + 15 m, taken up to 70 m.
+the suite: 45 m + 5 s + 1 m + 15 m, which is a little over 61 minutes.
 
-That rounding is not incidental. A ceiling equal to the sum it contains cancels
-the job at the moment the innermost timer would have reported the overrun, and
-the report is the only thing that makes an overrun actionable, so every lane
-carries at least fifteen minutes above its requirement rather than merely
-reaching it. Here the requirement is a little over 61 minutes and the ceiling
-is 70.
+The ceiling is not that requirement. Every lane carries at least fifteen
+minutes above it, because a ceiling equal to the sum it contains cancels the
+job at the moment the innermost timer would have reported the overrun, and the
+report is the only thing that makes an overrun actionable. The ceiling is
+therefore 80.
+
+This section first said 70, which is 8.9 minutes above the requirement. That
+number was chosen before the fifteen-minute margin was written down, and it
+does not satisfy the rule this guide now states, so it has been corrected
+rather than kept as a special case.
 
 ### What the values are sized against
 
@@ -3104,6 +3108,13 @@ suite command's text and none of them runs the suite, so a prefix match would
 bind them to budgets they do not run under. The line, rather than the matched
 command, is what it keeps, because `NEXTEST_PROFILE=ci` on that line is what
 decides which profile's budgets a lane is judged against.
+
+It also refuses a step that names a suite command without plainly running one.
+`if false; then make test; fi` keeps the text and runs nothing, which would
+drop that lane from the contract silently and take its ceiling with it;
+`make test || true` runs the suite but discards its verdict. Neither is judged
+as an invocation, and both are reported, because a contract that cannot tell
+what a line does should say so rather than guess.
 
 It pins the values the tables above state as well as ordering them: the base
 `slow-timeout` on both profiles compared as a whole table, the 45 m whole-run
