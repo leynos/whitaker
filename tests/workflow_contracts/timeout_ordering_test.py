@@ -140,6 +140,29 @@ def profile_blocks(config_text: str) -> dict[str, str]:
     return {name: "".join(lines) for name, lines in blocks.items()}
 
 
+def _root_section(block: str) -> str:
+    """Return one profile's own text, without its overrides.
+
+    The base allowance and an override's are different claims: an
+    override bounds the tests its filter matches, and the profile's own
+    bounds the rest. A search over the whole block conflates them, so
+    removing the base allowance would go unnoticed as long as any
+    override remained, and every unmatched test would run unbounded.
+
+    Parameters
+    ----------
+    block : str
+        One profile's section and its overrides.
+
+    Returns
+    -------
+    str
+        The text before the first ``[[profile.<name>.overrides]]``.
+    """
+    marker = re.search(r"^\[\[profile\.", block, re.MULTILINE)
+    return block if marker is None else block[: marker.start()]
+
+
 def largest_period(block: str) -> float:
     """Return the longest per-test allowance a profile sets.
 
@@ -159,15 +182,19 @@ def largest_period(block: str) -> float:
 
 
 def termination_allowance(block: str) -> float:
-    """Return the time nextest may take to stop the run, in seconds.
+    """Return the time to allow for stopping the run, in seconds.
 
-    Hitting the global timeout starts nextest's ordinary termination
-    procedure rather than stopping the run: on Unix it signals the process
-    group and waits ``slow-timeout.grace-period`` before killing it; on
-    Windows termination is immediate and the grace period is ignored for
-    timeouts. Read from the configuration rather than fixed, because a
-    profile that raised its grace period past a hard-coded allowance would
-    drift out of the requirement this contract exists to hold.
+    Two terms, added rather than maximized, because they answer
+    different questions. The first is what nextest will spend: on Linux
+    and macOS it signals the process group and waits
+    ``slow-timeout.grace-period`` before killing it, read from the
+    configuration so a profile that raised it raises the requirement
+    too. On Windows termination is immediate and that term is zero.
+
+    The second is a safety margin against a grace period nobody has
+    read. Taking the larger of the two, as an earlier version did, hid
+    which was which: a configuration with a ninety-second grace period
+    and one with none produced the same answer for different reasons.
 
     Parameters
     ----------
@@ -177,8 +204,7 @@ def termination_allowance(block: str) -> float:
     Returns
     -------
     float
-        The largest configured grace period, or the floor when that is
-        smaller or absent.
+        The configured grace period plus the safety margin.
     """
     periods = _GRACE_PERIOD.findall(block)
     largest = max((seconds(period) for period in periods), default=0.0)
@@ -263,14 +289,32 @@ def _suite_command(run: str) -> str | None:
         command. The line rather than the matched constant, because the
         profile the lane runs under is an argument on it.
     """
-    for line in run.splitlines():
-        stripped = line.strip()
-        if any(stripped.startswith(other) for other in NOT_SUITE_COMMANDS):
-            continue
-        for command in SUITE_COMMANDS:
-            if stripped == command or stripped.startswith(f"{command} "):
-                return stripped
-    return None
+    candidates = (line.strip() for line in run.splitlines())
+    return next((line for line in candidates if _is_suite_line(line)), None)
+
+
+def _is_suite_line(line: str) -> bool:
+    """Return whether one stripped line invokes the suite.
+
+    ``make test-doc`` and the checkers named for what they check all
+    begin with a suite command's text, so they are excluded first and by
+    exact prefix rather than by substring.
+
+    Parameters
+    ----------
+    line : str
+        One stripped line of a step's script.
+
+    Returns
+    -------
+    bool
+        True when the line runs a suite command.
+    """
+    if any(line.startswith(other) for other in NOT_SUITE_COMMANDS):
+        return False
+    return any(
+        line == command or line.startswith(f"{command} ") for command in SUITE_COMMANDS
+    )
 
 
 def _workflow_documents() -> dict[str, dict[str, typ.Any]]:
@@ -319,29 +363,91 @@ def suite_lanes() -> tuple[SuiteLane, ...]:
     tuple[SuiteLane, ...]
         One entry per suite-running step.
     """
-    lanes: list[SuiteLane] = []
-    for name, document in _workflow_documents().items():
-        for job_name, job in (document.get("jobs") or {}).items():
-            if not isinstance(job, dict):
-                continue
-            raw_timeout = job.get("timeout-minutes")
-            timeout = None if raw_timeout is None else float(raw_timeout) * 60.0
-            for step in job.get("steps") or []:
-                if not isinstance(step, dict):
-                    continue
-                command = _suite_command(str(step.get("run", "")))
-                if command is None:
-                    continue
-                lanes.append(
-                    SuiteLane(
-                        workflow=name,
-                        job=str(job_name),
-                        step=str(step.get("name", "")) or str(job_name),
-                        command=command,
-                        job_timeout=timeout,
-                    )
-                )
-    return tuple(lanes)
+    return tuple(lane for job in _declared_jobs() for lane in _lanes_in_job(job))
+
+
+class _Job(typ.NamedTuple):
+    """One job of one workflow, with the file it came from.
+
+    Attributes
+    ----------
+    workflow : str
+        The workflow file's name.
+    name : str
+        The job's identifier.
+    body : dict[str, typ.Any]
+        The job's parsed mapping.
+    """
+
+    workflow: str
+    name: str
+    body: dict[str, typ.Any]
+
+
+def _declared_jobs() -> tuple[_Job, ...]:
+    """Return every job in every workflow, with its file.
+
+    Flattening the two levels here is what keeps the callers below to
+    one loop each: a job's identity travels with it rather than being
+    reconstructed from an enclosing scope.
+
+    Returns
+    -------
+    tuple[_Job, ...]
+        Every declared job.
+    """
+    return tuple(
+        _Job(workflow=name, name=str(job_name), body=job)
+        for name, document in _workflow_documents().items()
+        for job_name, job in (document.get("jobs") or {}).items()
+        if isinstance(job, dict)
+    )
+
+
+def _job_ceiling(job: _Job) -> float | None:
+    """Return a job's ``timeout-minutes`` in seconds, or None.
+
+    Parameters
+    ----------
+    job : _Job
+        The job to read.
+
+    Returns
+    -------
+    float or None
+        The ceiling in seconds, or None when the job declares none and
+        so inherits GitHub's six-hour default.
+    """
+    raw = job.body.get("timeout-minutes")
+    return None if raw is None else float(raw) * 60.0
+
+
+def _lanes_in_job(job: _Job) -> tuple[SuiteLane, ...]:
+    """Return the suite-running lanes one job declares.
+
+    Parameters
+    ----------
+    job : _Job
+        The job to read.
+
+    Returns
+    -------
+    tuple[SuiteLane, ...]
+        One entry per suite-running step in that job.
+    """
+    ceiling = _job_ceiling(job)
+    steps = (step for step in job.body.get("steps") or [] if isinstance(step, dict))
+    return tuple(
+        SuiteLane(
+            workflow=job.workflow,
+            job=job.name,
+            step=str(step.get("name", "")) or job.name,
+            command=command,
+            job_timeout=ceiling,
+        )
+        for step in steps
+        if (command := _suite_command(str(step.get("run", "")))) is not None
+    )
 
 
 def test_the_suite_runs_somewhere(suite_lanes: tuple[SuiteLane, ...]) -> None:
@@ -369,9 +475,12 @@ def test_every_profile_bounds_a_single_test(
     """
     block = nextest_profiles.get(profile)
     assert block is not None, f"nextest.toml must declare [profile.{profile}]"
-    assert "terminate-after" in block, (
-        f"[profile.{profile}] must set slow-timeout with terminate-after, or a "
-        f"hung test is reported slow for ever and only the job timer ends it"
+    root = _root_section(block)
+    assert "terminate-after" in root, (
+        f"[profile.{profile}] itself must set slow-timeout with "
+        f"terminate-after. An override satisfies the profile as a whole while "
+        f"leaving every test the override does not match with no bound at "
+        f"all, which is the state this contract exists to detect"
     )
 
 
@@ -459,20 +568,63 @@ def test_the_cargo_watchdog_tier_is_absent_rather_than_defaulted() -> None:
     canonical section exists to prevent, so both halves are asserted:
     the action is not used, and the variable is not set.
     """
-    offenders: list[str] = []
-    for name, document in _workflow_documents().items():
-        for job_name, job in (document.get("jobs") or {}).items():
-            if not isinstance(job, dict):
-                continue
-            for step in job.get("steps") or []:
-                if not isinstance(step, dict):
-                    continue
-                if COVERAGE_ACTION in str(step.get("uses", "")):
-                    offenders.append(f"{name}:{job_name} uses {COVERAGE_ACTION}")
-                if WATCHDOG_VARIABLE in (step.get("env") or {}):
-                    offenders.append(f"{name}:{job_name} sets {WATCHDOG_VARIABLE}")
+    offenders = [
+        offence for job in _declared_jobs() for offence in _watchdog_offences(job)
+    ]
     assert not offenders, (
         f"the cargo watchdog tier is documented as absent here, so adopting "
         f"it needs the developers' guide updated in the same change: "
         f"{offenders}"
     )
+
+
+def _watchdog_offences(job: _Job) -> tuple[str, ...]:
+    """Return the ways one job would reintroduce the watchdog tier.
+
+    Both halves are looked for: the action itself, and the variable that
+    configures it. The variable is read at all three scopes GitHub
+    resolves, because a value at workflow or job level is inherited by
+    every step and a check reading only the step's own environment would
+    miss it entirely, which is the opposite of what this asserts.
+
+    Parameters
+    ----------
+    job : _Job
+        The job to read.
+
+    Returns
+    -------
+    tuple[str, ...]
+        One entry per offence, naming the job and what it did.
+    """
+    where = f"{job.workflow}:{job.name}"
+    offences: list[str] = []
+    if _sets_watchdog(_workflow_documents()[job.workflow]):
+        offences.append(f"{job.workflow} sets {WATCHDOG_VARIABLE} at workflow level")
+    if _sets_watchdog(job.body):
+        offences.append(f"{where} sets {WATCHDOG_VARIABLE} at job level")
+    for step in job.body.get("steps") or []:
+        if not isinstance(step, dict):
+            continue
+        if COVERAGE_ACTION in str(step.get("uses", "")):
+            offences.append(f"{where} uses {COVERAGE_ACTION}")
+        if _sets_watchdog(step):
+            offences.append(f"{where} sets {WATCHDOG_VARIABLE} on a step")
+    return tuple(offences)
+
+
+def _sets_watchdog(owner: dict[str, typ.Any]) -> bool:
+    """Return whether one scope sets the watchdog variable.
+
+    Parameters
+    ----------
+    owner : dict[str, typ.Any]
+        A workflow, job or step mapping.
+
+    Returns
+    -------
+    bool
+        True when its ``env`` names the variable.
+    """
+    environment = owner.get("env")
+    return isinstance(environment, dict) and WATCHDOG_VARIABLE in environment
