@@ -754,7 +754,7 @@ def test_each_profile_states_the_overrides_its_own_tests_need(
 
     Only overrides that declare a budget are counted. The default
     profile matches ``binary(behaviour_toolchain)`` twice, once for the
-    allowance and once to serialise three scenarios that contend on
+    allowance and once to serialize three scenarios that contend on
     shared rustup state, and the second carries no timeout to assert.
     """
     overrides = parsed_nextest["profile"][profile].get("overrides") or []
