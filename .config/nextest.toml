@@ -21,11 +21,14 @@ global-timeout = "45m"
 # CI profile — run the full suite including slow installer tests.
 [profile.ci]
 default-filter = "not kind(example)"
-# `[[profile.default.overrides]]` belongs to the default profile alone;
-# another profile does not inherit it. Without the two below, this profile,
-# which is the one the Windows lane runs, had no per-test bound at all, and
-# the toolchain-installing behaviour tests it includes and the default
-# profile excludes are exactly the ones that need the longest.
+# This profile is what the Windows lane runs, and it had no base per-test
+# bound: nothing here terminated an ordinary hung test, whichever profile
+# ran it. nextest does consult `[[profile.default.overrides]]` when this
+# profile is selected, so the toolchain and dylint allowances below were
+# already in force; they are restated as this profile's own because this
+# is the profile that includes the binaries they exist for, and the
+# budgets that govern CI belong where a reader of this profile finds
+# them.
 slow-timeout = { period = "300s", terminate-after = 1, grace-period = "5s" }
 global-timeout = "45m"
 

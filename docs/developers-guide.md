@@ -2984,19 +2984,39 @@ Each tier must sit above the one before it.
 Three of the four were absent or partial before this was written, and the gaps
 compounded rather than sitting apart.
 
-`[[profile.default.overrides]]` belongs to the default profile; another profile
-does not inherit it. The `ci` profile, which is what the Windows lane runs,
-therefore had no per-test allowance at all. It is also the profile that
-*includes* the toolchain-installing behaviour tests the default profile
-excludes, which are the tests the 30 m allowance exists for. So the longest
-tests in the suite ran with no bound on the lane that had none.
+No profile set a base `slow-timeout`. nextest's own default reports a slow test
+without ever terminating it, so an ordinary hung test was reported slow for
+ever on every lane, and only the job timer could end it.
+
+The named exceptions were bounded. A custom profile inherits
+`[profile.default]`, and when a custom profile is selected nextest still
+consults `[[profile.default.overrides]]`, applying a matching default override
+ahead of the selected profile's own scalar setting. So the 30 m toolchain and
+10 m dylint allowances did reach the `ci` profile, which is what the Windows
+lane runs. What nothing bounded was every test those two overrides do not name.
 
 Neither profile set a `global-timeout`, so nothing bounded the whole run.
 
 The Windows lane declared no `timeout-minutes`, inheriting GitHub's six-hour
-default. That left the outermost tier missing on the one lane that had no inner
-ones either: a hung test there could have burned six hours before anything
-stopped it, and the cancellation would have discarded the log.
+default. That left the outermost tier missing as well: a hung test there could
+have burned six hours before anything stopped it, and the cancellation would
+have discarded the log.
+
+### Both profiles state their own budgets
+
+Each profile now declares its own base `slow-timeout` and `global-timeout`, and
+`ci` restates the toolchain and dylint allowances as its own overrides. None of
+that is required for the run to be bounded: `ci` would inherit all of it.
+
+It is repository policy, for two reasons. `ci` is the profile that includes the
+toolchain-installing behaviour tests the default profile excludes, so it is the
+profile with the longest tests, and the budgets that govern the lane belong
+where a reader of that profile will find them. Restating them also makes a
+later divergence between the two profiles explicit rather than silent, since a
+changed default would otherwise change CI without touching the `ci` section.
+
+The contract holds that policy, and its failure messages say so rather than
+claiming nextest requires it.
 
 ### The clocks do not start together
 
