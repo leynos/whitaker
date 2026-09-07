@@ -2954,7 +2954,19 @@ for.
 
 `quiet` and this rule travel together as `deps::SourcePolicy`. Both are
 decisions about how a run reacts to an absent artefact, and threading two
-booleans through the same signatures would let them drift apart.
+booleans through the same signatures would let them drift apart. The policy is
+resolved once, in `main`, and passed down.
+`InstallArgs::forbids_source_fallback` reads the process environment, so
+consulting it at each decision point would read ambient state repeatedly within
+a single installation.
+
+Refusals are not counted. `InstallMetrics` records successful installs only,
+and adding failure categories is not a matter of four more fields: the file is
+unversioned JSON and the loader maps any parse failure to a default, so a file
+written by an older installer would be silently replaced by zeroes. That
+compatibility decision is
+[issue #422](https://github.com/leynos/whitaker/issues/422), deliberately
+separate from the refusal itself.
 
 Each installation that selects a suite source prints the path it took on
 standard output, through the writer the caller injected rather than through
