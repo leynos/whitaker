@@ -645,14 +645,32 @@ BASE_SLOW_TIMEOUT: typ.Final[dict[str, object]] = {
 #: The whole-run budget both profiles must declare.
 REQUIRED_GLOBAL_TIMEOUT: typ.Final[str] = "45m"
 
-#: The `ci` profile's overrides, keyed by the binary or filter they
-#: exist for. These are the two the default profile also carries and
-#: `ci` restates as its own, so both are named here to stop one being
-#: dropped while the other keeps the profile looking deliberate.
-REQUIRED_CI_OVERRIDES: typ.Final[dict[str, str]] = {
-    "binary(behaviour_toolchain)": "30m",
-    "test(driver::ui::)": "10m",
+#: The overrides both profiles carry, keyed by the binary or filter they
+#: exist for, with the whole ``slow-timeout`` each must declare. Both
+#: are named so one cannot be dropped while the other keeps the profile
+#: looking deliberate, and the table is compared whole rather than field
+#: by field, so an added or removed key fails too. The grace period
+#: matters as much as the period: it is what nextest waits before
+#: killing a test it has signalled, and the watchdog above is sized to
+#: cover it.
+REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, object]]] = {
+    "binary(behaviour_toolchain)": {
+        "period": "30m",
+        "terminate-after": 1,
+        "grace-period": "5s",
+    },
+    "test(driver::ui::)": {
+        "period": "10m",
+        "terminate-after": 1,
+        "grace-period": "5s",
+    },
 }
+
+#: The ceiling every suite-running lane must declare, in minutes, as
+#: `docs/developers-guide.md` records it. Pinned as well as derived: the
+#: derivation accepts any ceiling above its requirement, so a value
+#: nobody chose passes it while drifting away from the guide.
+REQUIRED_CEILING_MINUTES: typ.Final[int] = 70
 
 
 @pytest.fixture(scope="module")
@@ -709,36 +727,72 @@ def test_each_profile_declares_the_whole_run_budget(
     )
 
 
+@pytest.mark.parametrize("profile", ["default", "ci"], ids=str)
 @pytest.mark.parametrize(
-    ("needle", "period"), sorted(REQUIRED_CI_OVERRIDES.items()), ids=str
+    ("needle", "budget"), sorted(REQUIRED_OVERRIDES.items()), ids=str
 )
-def test_the_ci_profile_states_the_overrides_its_own_tests_need(
-    parsed_nextest: dict[str, typ.Any], needle: str, period: str
+def test_each_profile_states_the_overrides_its_own_tests_need(
+    parsed_nextest: dict[str, typ.Any],
+    profile: str,
+    needle: str,
+    budget: dict[str, object],
 ) -> None:
-    """`ci` restates the default profile's overrides as its own.
+    """Both profiles declare both allowances, whole.
 
     nextest consults ``[[profile.default.overrides]]`` when ``ci`` is
-    selected, so this is repository policy rather than a correctness
-    requirement: ``ci`` is the profile that includes the toolchain
-    binaries, and an allowance that only exists one section away is one
-    a reader of this profile will not see. Restating it also makes a
-    later divergence between the two profiles explicit rather than
-    silent.
+    selected, so restating them is repository policy rather than a
+    correctness requirement: ``ci`` is the profile that includes the
+    toolchain binaries, and an allowance that only exists one section
+    away is one a reader of this profile will not see. Restating it also
+    makes a later divergence between the two profiles explicit rather
+    than silent.
+
+    The ``slow-timeout`` is compared as a whole table, so the grace
+    period is asserted alongside the period and the multiplier. Checking
+    the period alone would let the grace period be dropped, and the
+    watchdog above these budgets is sized to cover exactly that wait.
+
+    Only overrides that declare a budget are counted. The default
+    profile matches ``binary(behaviour_toolchain)`` twice, once for the
+    allowance and once to serialise three scenarios that contend on
+    shared rustup state, and the second carries no timeout to assert.
     """
-    overrides = parsed_nextest["profile"]["ci"].get("overrides") or []
+    overrides = parsed_nextest["profile"][profile].get("overrides") or []
     matching = [
-        override for override in overrides if needle in str(override.get("filter", ""))
+        override
+        for override in overrides
+        if needle in str(override.get("filter", ""))
+        and "slow-timeout" in override
     ]
     assert len(matching) == 1, (
-        f"[profile.ci] must carry exactly one override matching {needle!r}, "
-        f"found {len(matching)}; this profile states its own allowances"
+        f"[profile.{profile}] must carry exactly one override matching "
+        f"{needle!r} that declares a slow-timeout, found {len(matching)}; "
+        f"each profile states its own allowances"
     )
-    budget = matching[0].get("slow-timeout") or {}
-    assert budget.get("period") == period, (
-        f"[profile.ci]'s {needle!r} override must allow {period}, got "
-        f"{budget.get('period')}"
+    assert matching[0].get("slow-timeout") == budget, (
+        f"[profile.{profile}]'s {needle!r} override must declare {budget}, got "
+        f"{matching[0].get('slow-timeout')}"
     )
-    assert budget.get("terminate-after") == 1, (
-        f"[profile.ci]'s {needle!r} override must set terminate-after = 1, so "
-        f"the period is the budget rather than a fifth or a tenth of it"
+
+
+def test_every_suite_lane_carries_the_documented_ceiling(
+    suite_lanes: tuple[SuiteLane, ...],
+) -> None:
+    """The value is the guide's, not merely one above the requirement.
+
+    The derivation asserts the ordering holds, and it holds for a range
+    of ceilings, so a lane drifting to a value nobody chose still passes
+    it. This asserts the value the developers' guide states, which is
+    that requirement plus the fifteen minutes of slack the guide asks
+    for above it.
+    """
+    wrong = {
+        str(lane): lane.job_timeout
+        for lane in suite_lanes
+        if lane.job_timeout != REQUIRED_CEILING_MINUTES * 60.0
+    }
+    assert not wrong, (
+        f"these suite lanes do not carry the documented "
+        f"{REQUIRED_CEILING_MINUTES}-minute ceiling: {wrong}; change the "
+        f"developers' guide with them or change them back"
     )
