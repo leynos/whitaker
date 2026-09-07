@@ -29,6 +29,7 @@ const POLICY_CASES: &[(Option<&str>, bool, bool)] = &[
     (Some("false"), true, true),
 ];
 
+/// Build arguments carrying only the flag under test.
 fn install_args(no_source_fallback: bool) -> InstallArgs {
     InstallArgs {
         no_source_fallback,
@@ -128,6 +129,10 @@ fn the_environment_conflicts_with_a_source_only_option() {
 }
 
 #[test]
+/// A source-only option is fine when nothing forbids a source build.
+///
+/// The pair for the rejection above: without it, the rejection could be about
+/// the option rather than the contradiction, and nothing would say so.
 fn a_source_only_option_is_accepted_without_the_policy() {
     // One process-wide variable, so the guard rather than the loop: a
     // sibling test running concurrently would otherwise observe this one's

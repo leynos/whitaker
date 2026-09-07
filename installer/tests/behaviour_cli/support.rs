@@ -494,6 +494,9 @@ pub(super) fn configure_dry_run_forbidding_source_fallback(cli_world: &CliWorld)
     configure_dry_run_with(cli_world, &["--no-source-fallback"]);
 }
 
+/// The refusal must name both halves of the contradiction.
+///
+/// Naming only one leaves the caller guessing which of the two to drop.
 pub(super) fn assert_source_option_contradiction_is_explained(cli_world: &CliWorld) {
     let output = get_output(cli_world);
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -539,6 +542,10 @@ pub(super) fn assert_suite_source_marker_names_the_path(cli_world: &CliWorld) {
     );
 }
 
+/// A dry run selects no suite source, so it must claim none.
+///
+/// Writing the marker anyway would tell a consumer a build happened when
+/// nothing was installed.
 pub(super) fn assert_no_suite_source_marker(cli_world: &CliWorld) {
     let output = get_output(cli_world);
     let stdout = String::from_utf8_lossy(&output.stdout);
