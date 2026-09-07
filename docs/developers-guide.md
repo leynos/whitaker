@@ -2960,20 +2960,20 @@ of the test suite per pull request" above.
 
 ## Test timeouts: four tiers, outermost last
 
-Four independent timers can end a test run, each set somewhere different.
-A run that dies without an obvious cause is nearly always one of them, so it
-is worth knowing which is which and in what order they can fire. The
-canonical statement of the rule lives in the `generate-coverage` README in
+Four independent timers can end a test run, each set somewhere different. A run
+that dies without an obvious cause is nearly always one of them, so it is worth
+knowing which is which and in what order they can fire. The canonical statement
+of the rule lives in the `generate-coverage` README in
 [`leynos/shared-actions`][shared-actions-coverage]; this section records what
 this repository sets, what each value is sized against, and where the third
 tier went.
 
-| Tier | What it bounds | Where it is set | Current value |
-| --- | --- | --- | --- |
-| Per-test `slow-timeout` | one test | `.config/nextest.toml`, both profiles | 300 s default; 10 m for the dylint UI harnesses, 30 m for the toolchain-installing behaviour tests |
-| nextest `global-timeout` | the whole test run | `.config/nextest.toml`, both profiles | 45 m |
-| Cargo watchdog | one `cargo` invocation, wall clock | not used here, see below | absent |
-| Job `timeout-minutes` | the whole job | `ci.yml` and `coverage-main.yml`, job level | 70 m for every lane that runs the suite |
+| Tier                     | What it bounds                     | Where it is set                             | Current value                                                                                      |
+| ------------------------ | ---------------------------------- | ------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`, both profiles       | 300 s default; 10 m for the dylint UI harnesses, 30 m for the toolchain-installing behaviour tests |
+| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, both profiles       | 45 m                                                                                               |
+| Cargo watchdog           | one `cargo` invocation, wall clock | not used here, see below                    | absent                                                                                             |
+| Job `timeout-minutes`    | the whole job                      | `ci.yml` and `coverage-main.yml`, job level | 70 m for every lane that runs the suite                                                            |
 
 *Table: the timers that can end a run, innermost first.*
 
@@ -2981,12 +2981,12 @@ Each tier must sit above the one before it.
 
 ### What was missing
 
-Three of the four were absent or partial before this was written, and the
-gaps compounded rather than sitting apart.
+Three of the four were absent or partial before this was written, and the gaps
+compounded rather than sitting apart.
 
-`[[profile.default.overrides]]` belongs to the default profile; another
-profile does not inherit it. The `ci` profile, which is what the Windows lane
-runs, therefore had no per-test allowance at all. It is also the profile that
+`[[profile.default.overrides]]` belongs to the default profile; another profile
+does not inherit it. The `ci` profile, which is what the Windows lane runs,
+therefore had no per-test allowance at all. It is also the profile that
 *includes* the toolchain-installing behaviour tests the default profile
 excludes, which are the tests the 30 m allowance exists for. So the longest
 tests in the suite ran with no bound on the lane that had none.
@@ -2994,9 +2994,9 @@ tests in the suite ran with no bound on the lane that had none.
 Neither profile set a `global-timeout`, so nothing bounded the whole run.
 
 The Windows lane declared no `timeout-minutes`, inheriting GitHub's six-hour
-default. That left the outermost tier missing on the one lane that had no
-inner ones either: a hung test there could have burned six hours before
-anything stopped it, and the cancellation would have discarded the log.
+default. That left the outermost tier missing on the one lane that had no inner
+ones either: a hung test there could have burned six hours before anything
+stopped it, and the cancellation would have discarded the log.
 
 ### The clocks do not start together
 
@@ -3023,43 +3023,42 @@ the suite: 45 m + 5 s + 1 m + 15 m, taken up to 70 m.
 
 ### What the values are sized against
 
-The 45 m whole-run budget is not a measurement, it is a bound. It has to
-exceed the 30 m a single toolchain-installing test may legitimately spend, and
-it does so with 15 m to spare, which is comfortably more than any observed
-whole run has needed.
+The 45 m whole-run budget is not a measurement, it is a bound. It has to exceed
+the 30 m a single toolchain-installing test may legitimately spend, and it does
+so with 15 m to spare, which is comfortably more than any observed whole run
+has needed.
 
 The 15 m allowance for work outside nextest's window is measured, from the
 worst of several runs rather than one:
 
-| Lane | Worst suite step | Worst whole job | Outside the step | Run |
-| --- | --- | --- | --- | --- |
-| `coverage-upload` | 614 s | 785 s | 171 s | 33824606032 |
-| `coverage-check` | 481 s | 576 s | 95 s | 34070807851 |
-| `windows-compat` | 845 s | 1,099 s | 254 s | 34070807851 |
+| Lane              | Worst suite step | Worst whole job | Outside the step | Run         |
+| ----------------- | ---------------- | --------------- | ---------------- | ----------- |
+| `coverage-upload` | 614 s            | 785 s           | 171 s            | 33824606032 |
+| `coverage-check`  | 481 s            | 576 s           | 95 s             | 34070807851 |
+| `windows-compat`  | 845 s            | 1,099 s         | 254 s            | 34070807851 |
 
 *Table: measured suite-step and whole-job durations, read across 38 successful
 `coverage-main.yml` runs and 8 of `ci.yml`.*
 
 None of those was a genuinely cold run, which is why the allowance is 15 m
-against a worst observation of 254 s rather than something close to it. One
-run is not a measurement of the cold case; it is the coldest run seen so far.
+against a worst observation of 254 s rather than something close to it. One run
+is not a measurement of the cold case; it is the coldest run seen so far.
 
 ### The tier that is absent, and why
 
 The canonical section has four tiers because the shared `generate-coverage`
 action wraps its `cargo` invocation in a wall-clock watchdog, defaulting to
-1,800 s. This repository does not use that action: `coverage-main.yml`
-explains that it hard-codes `cargo llvm-cov --workspace` with no way to
-exclude crates, and this suite cannot run a bare `--workspace` build. Coverage
-runs through `make coverage` instead, so there is no watchdog and no third
-tier.
+1,800 s. This repository does not use that action: `coverage-main.yml` explains
+that it hard-codes `cargo llvm-cov --workspace` with no way to exclude crates,
+and this suite cannot run a bare `--workspace` build. Coverage runs through
+`make coverage` instead, so there is no watchdog and no third tier.
 
 That absence is asserted rather than assumed. A lane that adopted the action
-without setting `RUN_RUST_CARGO_WAIT_TIMEOUT` would inherit the 1,800 s
-default underneath a 45 m nextest budget, which is exactly the inversion the
-canonical section exists to prevent, and it would do so silently. The contract
-therefore fails if either the action appears or the variable is set, so
-adopting it needs this section updated in the same change.
+without setting `RUN_RUST_CARGO_WAIT_TIMEOUT` would inherit the 1,800 s default
+underneath a 45 m nextest budget, which is exactly the inversion the canonical
+section exists to prevent, and it would do so silently. The contract therefore
+fails if either the action appears or the variable is set, so adopting it needs
+this section updated in the same change.
 
 ### The contract
 
@@ -3067,8 +3066,8 @@ adopting it needs this section updated in the same change.
 value, over every step in every workflow that runs the suite, in both the
 `.yml` and `.yaml` extensions. Three details of its shape are deliberate.
 
-It enumerates every suite-running step, including those in jobs that declare
-no ceiling, so a missing `timeout-minutes` shows up as a lane with no budget
+It enumerates every suite-running step, including those in jobs that declare no
+ceiling, so a missing `timeout-minutes` shows up as a lane with no budget
 rather than as no lane at all. That is how the Windows lane's absent ceiling
 went unnoticed.
 
