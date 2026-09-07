@@ -80,6 +80,14 @@ pub(crate) fn ensure_dylint_tools_with_options(
 pub(crate) struct PrebuiltInstallationContext<'a> {
     /// CLI install arguments.
     pub(crate) args: &'a InstallArgs,
+    /// The source-fallback rule, resolved once at the command boundary.
+    ///
+    /// `InstallArgs::forbids_source_fallback` reads the process environment,
+    /// so calling it at each decision point would read ambient state three
+    /// times in one installation and could reach different answers. The
+    /// environment is read once, into this field, and every decision below
+    /// consults the answer.
+    pub(crate) policy: SourcePolicy,
     /// Base directory provider.
     pub(crate) dirs: &'a dyn BaseDirs,
     /// Crates requested for this installation.
@@ -107,18 +115,18 @@ pub(crate) struct MetricsWriteContext<'a> {
 /// the defect rather than a degraded mode, so `--no-source-fallback` turns
 /// each one into an error naming what was missing and why.
 fn prebuilt_unavailable(
-    args: &InstallArgs,
+    policy: SourcePolicy,
     artefact: &str,
     error: &dyn std::fmt::Display,
     stderr: &mut dyn Write,
 ) -> Result<Option<Utf8PathBuf>> {
-    if args.forbids_source_fallback() {
+    if policy.no_source_fallback {
         return Err(InstallerError::SourceFallbackForbidden {
             artefact: artefact.to_owned(),
             reason: error.to_string(),
         });
     }
-    write_prebuilt_fallback_message(args.quiet, error, stderr);
+    write_prebuilt_fallback_message(policy.quiet, error, stderr);
     Ok(None)
 }
 
@@ -187,7 +195,7 @@ fn try_prebuilt_installation_with(
     let host_target = match detect_host_target() {
         Ok(target) => target,
         Err(error) => {
-            return prebuilt_unavailable(context.args, "the host target", &error, stderr);
+            return prebuilt_unavailable(context.policy, "the host target", &error, stderr);
         }
     };
 
@@ -196,7 +204,7 @@ fn try_prebuilt_installation_with(
             Ok(destination) => destination,
             Err(error) => {
                 return prebuilt_unavailable(
-                    context.args,
+                    context.policy,
                     "the prebuilt library directory",
                     &error,
                     stderr,
@@ -208,10 +216,10 @@ fn try_prebuilt_installation_with(
         target: &host_target,
         toolchain: context.toolchain_channel,
         destination_dir: &destination_dir,
-        quiet: context.args.quiet,
+        quiet: context.policy.quiet,
         // The unavailable-artefact line is worth writing either way; only the
         // promise of a fallback has to go when the caller has forbidden one.
-        allow_source_fallback: !context.args.forbids_source_fallback(),
+        allow_source_fallback: !context.policy.no_source_fallback,
     };
 
     let staging_path = match attempt_prebuilt(&prebuilt_config, stderr) {
@@ -220,7 +228,7 @@ fn try_prebuilt_installation_with(
             // `attempt_prebuilt` has already written the unavailable notice
             // and, where a fallback is permitted, the fallback line. Repeating
             // either here would print it twice, so only the refusal is added.
-            if context.args.forbids_source_fallback() {
+            if context.policy.no_source_fallback {
                 return Err(InstallerError::SourceFallbackForbidden {
                     artefact: "a prebuilt lint library".to_owned(),
                     reason,
@@ -235,7 +243,7 @@ fn try_prebuilt_installation_with(
         context.requested_crates,
     ) {
         return prebuilt_unavailable(
-            context.args,
+            context.policy,
             "the pruned prebuilt libraries",
             &error,
             stderr,

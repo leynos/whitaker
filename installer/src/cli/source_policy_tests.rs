@@ -145,6 +145,51 @@ fn a_source_only_option_is_accepted_without_the_policy() {
     });
 }
 
+/// The flag refuses each source-only option, not just the first.
+///
+/// The environment route above covers all three; this covers the flag route,
+/// which reaches `validate_source_options` by a different predicate. Testing
+/// only `--build-only` would leave the other two arms of the `if` chain
+/// unexercised, and an arm that names the wrong option would pass.
+#[test]
+fn the_flag_conflicts_with_every_source_only_option() {
+    let cases: &[(&str, InstallArgs)] = &[
+        (
+            "--build-only",
+            InstallArgs {
+                no_source_fallback: true,
+                is_build_only: true,
+                ..InstallArgs::default()
+            },
+        ),
+        (
+            "--experimental",
+            InstallArgs {
+                no_source_fallback: true,
+                experimental: true,
+                ..InstallArgs::default()
+            },
+        ),
+        (
+            "--suite-version",
+            InstallArgs {
+                no_source_fallback: true,
+                suite_version: Some("v0.2.8".try_into().expect("valid reference")),
+                ..InstallArgs::default()
+            },
+        ),
+    ];
+    for (option, args) in cases {
+        let error = args
+            .validate_source_options()
+            .expect_err("a contradiction must be rejected");
+        assert!(
+            error.to_string().contains(option),
+            "the rejection must name {option}, got: {error}"
+        );
+    }
+}
+
 /// The same table against the pure form, which needs no global mutation.
 ///
 /// These cases are the rule itself. The guarded test above exists only to

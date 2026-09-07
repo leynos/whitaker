@@ -321,3 +321,54 @@ fn write_install_metrics_suppresses_output_in_quiet_mode() {
 
     assert!(stderr.is_empty(), "expected no stderr output in quiet mode");
 }
+
+/// A writer that always fails, for the marker's error path.
+struct FailingWriter;
+
+impl std::io::Write for FailingWriter {
+    fn write(&mut self, _buf: &[u8]) -> std::io::Result<usize> {
+        Err(std::io::Error::other("simulated write failure"))
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Err(std::io::Error::other("simulated flush failure"))
+    }
+}
+
+/// The suite-source marker is a machine-readable contract.
+///
+/// `install-whitaker` parses this line to decide whether a published artefact
+/// was used, so the assertion is on the exact bytes rather than a substring: a
+/// rephrasing is the defect the marker exists to prevent, and a looser
+/// assertion would not catch one.
+#[rstest]
+#[case::prebuilt(InstallMode::Download, "whitaker-installer: suite-source=prebuilt\n")]
+#[case::source(InstallMode::Build, "whitaker-installer: suite-source=source\n")]
+fn the_suite_source_marker_names_the_path_taken(
+    #[case] install_mode: InstallMode,
+    #[case] expected: &str,
+) {
+    let mut stdout = Vec::new();
+
+    report_suite_source(install_mode, &mut stdout).expect("writing the marker should succeed");
+
+    let written = String::from_utf8(stdout).expect("the marker should be utf-8");
+    assert_eq!(written, expected);
+}
+
+/// A failed write is reported rather than swallowed.
+///
+/// The marker is the caller's only signal of which path ran, so losing it
+/// silently would leave a consumer inferring from nothing.
+#[test]
+fn a_failed_marker_write_is_reported() {
+    let mut stdout = FailingWriter;
+
+    let error = report_suite_source(InstallMode::Download, &mut stdout)
+        .expect_err("a failing writer must surface as an error");
+
+    assert!(
+        matches!(error, InstallerError::WriteFailed { .. }),
+        "expected a write failure, got: {error}"
+    );
+}

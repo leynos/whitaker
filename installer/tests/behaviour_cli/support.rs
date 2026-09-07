@@ -510,6 +510,35 @@ pub(super) fn assert_source_option_contradiction_is_explained(cli_world: &CliWor
     );
 }
 
+/// The marker must agree with the path the run actually took.
+///
+/// A fixed expectation would be wrong on one machine or the other: whether a
+/// published artefact is reachable decides which path runs. So the assertion
+/// compares the marker against the evidence already used to locate the staged
+/// library, the prebuilt notice on stderr. A marker that said `prebuilt` after
+/// a local compilation is precisely the silent success the marker exists to
+/// expose.
+pub(super) fn assert_suite_source_marker_names_the_path(cli_world: &CliWorld) {
+    if cli_world.skip_assertions.get() {
+        return;
+    }
+
+    let output = get_output(cli_world);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    let expected = if stderr.contains(PREBUILT_INSTALL_MARKER) {
+        "whitaker-installer: suite-source=prebuilt"
+    } else {
+        "whitaker-installer: suite-source=source"
+    };
+    assert!(
+        stdout.lines().any(|line| line == expected),
+        "expected the marker line {expected:?} on stdout, stdout={stdout}, \
+         stderr={stderr}"
+    );
+}
+
 pub(super) fn assert_no_suite_source_marker(cli_world: &CliWorld) {
     let output = get_output(cli_world);
     let stdout = String::from_utf8_lossy(&output.stdout);

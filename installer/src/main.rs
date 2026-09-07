@@ -71,6 +71,9 @@ fn try_fast_path_installation(
 ) -> Result<Option<(Utf8PathBuf, InstallMode)>> {
     let prebuilt_context = PrebuiltInstallationContext {
         args: context.args,
+        // Read the environment once, here at the command boundary, rather than
+        // at each decision point inside the flow.
+        policy: context.args.source_policy(),
         dirs: context.dirs,
         requested_crates: context.requested_crates,
         toolchain_channel: context.toolchain.channel(),

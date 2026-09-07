@@ -2966,10 +2966,15 @@ whitaker-installer: suite-source=prebuilt
 
 The value is `prebuilt` or `source`. It is additive rather than a replacement.
 `install-whitaker` infers the path by matching the wording of the installer's
-fallback notice on standard output, which a rephrasing would break silently,
-and it keeps doing so; the marker gives it a second and stable signal. Dropping
-the scan in favour of the marker alone would let a source build the marker
-missed pass as `prebuilt`, so both stay.
+fallback notice, which a rephrasing would break silently, and it keeps doing
+so; the marker gives it a second and stable signal. Dropping the scan in favour
+of the marker alone would let a source build the marker missed pass as
+`prebuilt`, so both stay.
+
+The two signals are on different streams, and a consumer has to read the right
+one. The marker is on standard output, alone, so it can be parsed. Every
+diagnostic, including the fallback notice and the unavailable-artefact line,
+goes to standard error through `write_stderr_line`.
 
 The rolling release is why this exists. It is republished on every push to
 `main`, so a consumer whose install starts during a republish can miss an

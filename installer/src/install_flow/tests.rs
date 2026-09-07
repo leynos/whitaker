@@ -170,6 +170,7 @@ fn try_prebuilt_installation_prune_error_falls_back_to_local_build() {
     let requested_crates = vec![CrateName::from(SUITE_CRATE)];
     let context = PrebuiltInstallationContext {
         args: &args,
+        policy: args.source_policy(),
         dirs: &dirs,
         requested_crates: &requested_crates,
         toolchain_channel: "nightly-2026-05-28",
@@ -234,6 +235,7 @@ fn prebuilt_context_for<'a>(
 ) -> PrebuiltInstallationContext<'a> {
     PrebuiltInstallationContext {
         args,
+        policy: args.source_policy(),
         dirs,
         requested_crates,
         toolchain_channel: "nightly-2026-05-28",

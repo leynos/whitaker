@@ -224,9 +224,13 @@ whitaker-installer: suite-source=prebuilt
 
 The value is `prebuilt` or `source`. It reports where the suite came from and
 adds to the existing checks rather than replacing them: `install-whitaker`
-still scans the installer's standard output for the fallback notice and fails
-an unapproved source build on what it finds there. Reading only the marker
-would let a source build the marker missed pass as `prebuilt`.
+still scans the installer's standard error for the fallback notice and fails an
+unapproved source build on what it finds there. Reading only the marker would
+let a source build the marker missed pass as `prebuilt`.
+
+The streams are separate on purpose. The marker is the only thing on standard
+output, so it can be parsed; the fallback notice and every other diagnostic go
+to standard error.
 
 The rolling release is the reason this exists. It is republished on every push
 to `main`, and a consumer whose install starts during a republish can miss an
