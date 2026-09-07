@@ -51,6 +51,30 @@ NOT_SUITE_COMMANDS: typ.Final[tuple[str, ...]] = (
     "make test-markdown-format",
 )
 
+#: Shapes that put a suite command on a line without running it as the
+#: step's own command, or without letting its failure end the step. A
+#: line carrying one is neither a suite invocation nor safely ignored,
+#: so the contract refuses to judge it and says so.
+#:
+#: `if false; then make test; fi` keeps the text and runs nothing, which
+#: would drop the lane from this contract silently, taking its ceiling
+#: with it. `make test || true` does run the suite but discards its
+#: verdict, so the lane's budgets are checked while its result is not.
+DISGUISES: typ.Final[tuple[str, ...]] = (
+    "|| true",
+    "|| :",
+    "if ",
+    "&&",
+    ";",
+    "|",
+)
+
+#: How far a ceiling must sit above the sum it contains, rather than
+#: merely reaching it. A ceiling equal to that sum cancels the job at
+#: the moment the innermost timer would have reported the overrun, and
+#: the report is the only thing that makes an overrun actionable.
+CEILING_MARGIN_SECONDS: typ.Final[float] = 15 * 60.0
+
 #: The environment variable the shared coverage action reads for its
 #: cargo watchdog. Asserted absent: this repository does not use that
 #: action, and a lane that adopted it would inherit its 1,800 s default.
@@ -67,10 +91,16 @@ COVERAGE_ACTION: typ.Final[str] = "shared-actions/.github/actions/generate-cover
 #: with room for a cold build, which none of those runs was.
 OUTSIDE_SUITE_ALLOWANCE_SECONDS: typ.Final[float] = 15 * 60.0
 
-#: Floor for the termination allowance, used when a profile sets no grace
-#: period. Generous against nextest's ten-second default and far too small
-#: to hide a real overrun.
-MINIMUM_TERMINATION_ALLOWANCE_SECONDS: typ.Final[float] = 60.0
+#: What nextest allows a test between `SIGTERM` and `SIGKILL` when a
+#: profile names no `grace-period`. Both profiles here name five
+#: seconds, so this is a fallback rather than the value in force.
+NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS: typ.Final[float] = 10.0
+
+#: Added to that grace period to cover the teardown and report writing
+#: that follow it. A separate term rather than a floor over the two, so
+#: raising a grace period raises the requirement instead of vanishing
+#: into it.
+TERMINATION_SAFETY_MARGIN_SECONDS: typ.Final[float] = 60.0
 
 _DURATION: typ.Final[re.Pattern[str]] = re.compile(
     r"^\s*(?P<value>\d+(?:\.\d+)?)\s*(?P<unit>ms|s|m|h)\s*$"
@@ -193,10 +223,12 @@ def termination_allowance(block: str) -> float:
     configuration so a profile that raised it raises the requirement
     too. On Windows termination is immediate and that term is zero.
 
-    The second is a safety margin against a grace period nobody has
-    read. Taking the larger of the two, as an earlier version did, hid
+    The second is a safety margin for the teardown and report writing
+    that follow. Taking the larger of the two, as an earlier version of
+    this function did while its docstring already described the sum, hid
     which was which: a configuration with a ninety-second grace period
-    and one with none produced the same answer for different reasons.
+    and one with none produced the same answer for different reasons,
+    and a grace period below the margin was absorbed entirely.
 
     Parameters
     ----------
@@ -209,8 +241,11 @@ def termination_allowance(block: str) -> float:
         The configured grace period plus the safety margin.
     """
     periods = _GRACE_PERIOD.findall(block)
-    largest = max((seconds(period) for period in periods), default=0.0)
-    return max(largest, MINIMUM_TERMINATION_ALLOWANCE_SECONDS)
+    largest = max(
+        (seconds(period) for period in periods),
+        default=NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS,
+    )
+    return largest + TERMINATION_SAFETY_MARGIN_SECONDS
 
 
 def global_timeout(block: str) -> float:
@@ -295,12 +330,41 @@ def _suite_command(run: str) -> str | None:
     return next((line for line in candidates if _is_suite_line(line)), None)
 
 
-def _is_suite_line(line: str) -> bool:
-    """Return whether one stripped line invokes the suite.
+def required_ceiling(block: str) -> float:
+    """Return the smallest acceptable job ceiling for one profile.
 
-    ``make test-doc`` and the checkers named for what they check all
-    begin with a suite command's text, so they are excluded first and by
-    exact prefix rather than by substring.
+    Four terms. The whole-run budget is what the suite may spend. The
+    termination allowance is what nextest needs to stop it. The outside
+    allowance is the build and the steps either side, which the job
+    timer covers and the whole-run budget does not. The margin is added
+    because a ceiling equal to that sum cancels the job at the moment
+    nextest would have reported the overrun, and the report is the only
+    thing that makes an overrun actionable.
+
+    Parameters
+    ----------
+    block : str
+        The profile's section of the nextest configuration.
+
+    Returns
+    -------
+    float
+        The smallest acceptable ceiling, in seconds.
+    """
+    return (
+        global_timeout(block)
+        + termination_allowance(block)
+        + OUTSIDE_SUITE_ALLOWANCE_SECONDS
+        + CEILING_MARGIN_SECONDS
+    )
+
+
+def _names_a_suite_command(line: str) -> bool:
+    """Return whether one line mentions a suite command at all.
+
+    Mentioning is weaker than invoking, and deliberately so: the two are
+    compared below, and a line that mentions one without invoking it is
+    the case this contract refuses to judge.
 
     Parameters
     ----------
@@ -310,13 +374,65 @@ def _is_suite_line(line: str) -> bool:
     Returns
     -------
     bool
-        True when the line runs a suite command.
+        True when a suite command's text appears on the line.
     """
     if any(line.startswith(other) for other in NOT_SUITE_COMMANDS):
+        return False
+    return any(command in line for command in SUITE_COMMANDS)
+
+
+def _is_suite_line(line: str) -> bool:
+    """Return whether one stripped line invokes the suite plainly.
+
+    ``make test-doc`` and the checkers named for what they check all
+    begin with a suite command's text, so they are excluded first and by
+    exact prefix rather than by substring.
+
+    Plainly means the line is the command and its arguments, and nothing
+    else. A line that also carries a conditional, a separator or a
+    status suppressor is not judged here: :func:`_disguised_suite_lines`
+    reports it instead, because such a line may run the suite, may not,
+    and may discard its verdict, and this contract cannot tell which.
+
+    Parameters
+    ----------
+    line : str
+        One stripped line of a step's script.
+
+    Returns
+    -------
+    bool
+        True when the line runs a suite command and nothing else.
+    """
+    if not _names_a_suite_command(line):
+        return False
+    if any(disguise in line for disguise in DISGUISES):
         return False
     return any(
         line == command or line.startswith(f"{command} ") for command in SUITE_COMMANDS
     )
+
+
+def _disguised_suite_lines(run: str) -> list[str]:
+    """Return lines naming a suite command without plainly running one.
+
+    Parameters
+    ----------
+    run : str
+        A step's ``run`` script.
+
+    Returns
+    -------
+    list[str]
+        The offending lines, stripped.
+    """
+    return [
+        line
+        for raw in run.splitlines()
+        if (line := raw.strip())
+        and _names_a_suite_command(line)
+        and not _is_suite_line(line)
+    ]
 
 
 def _workflow_documents() -> dict[str, dict[str, typ.Any]]:
@@ -541,20 +657,17 @@ def test_the_job_ceiling_covers_the_run_and_the_work_around_it(
         # the command line selects the other one.
         profile = "ci" if "NEXTEST_PROFILE=ci" in lane.command else "default"
         block = nextest_profiles[profile]
-        required = (
-            global_timeout(block)
-            + termination_allowance(block)
-            + OUTSIDE_SUITE_ALLOWANCE_SECONDS
-        )
+        required = required_ceiling(block)
         assert lane.job_timeout is not None, str(lane)
         assert lane.job_timeout >= required, (
             f"{lane} has a job ceiling of {lane.job_timeout:.0f}s, below the "
             f"{required:.0f}s needed to cover [profile.{profile}]'s "
             f"{global_timeout(block):.0f}s whole-run budget, "
             f"{termination_allowance(block):.0f}s for nextest to terminate the "
-            f"run, and {OUTSIDE_SUITE_ALLOWANCE_SECONDS:.0f}s of build and "
-            f"other work outside its window; an overrun would be cancelled "
-            f"rather than reported"
+            f"run, {OUTSIDE_SUITE_ALLOWANCE_SECONDS:.0f}s of build and "
+            f"other work outside its window, and a "
+            f"{CEILING_MARGIN_SECONDS:.0f}s margin above that sum; an overrun "
+            f"would be cancelled rather than reported"
         )
 
 
@@ -670,7 +783,7 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, object]]] = {
 #: `docs/developers-guide.md` records it. Pinned as well as derived: the
 #: derivation accepts any ceiling above its requirement, so a value
 #: nobody chose passes it while drifting away from the guide.
-REQUIRED_CEILING_MINUTES: typ.Final[int] = 70
+REQUIRED_CEILING_MINUTES: typ.Final[int] = 80
 
 
 @pytest.fixture(scope="module")
@@ -795,4 +908,63 @@ def test_every_suite_lane_carries_the_documented_ceiling(
         f"these suite lanes do not carry the documented "
         f"{REQUIRED_CEILING_MINUTES}-minute ceiling: {wrong}; change the "
         f"developers' guide with them or change them back"
+    )
+
+
+def test_no_step_disguises_a_suite_command() -> None:
+    """A suite command must be the step's command, plainly.
+
+    Two shapes defeat a contract that only recognizes plain
+    invocations, and they fail in opposite directions.
+
+    `if false; then make test; fi` keeps the text and runs nothing. The
+    lane then disappears from `suite_lanes` entirely, so its ceiling
+    stops being checked and this contract passes while the lane it was
+    protecting is unbounded. That is the loss the mutation record exists
+    to catch, and it is silent.
+
+    `make test || true` does run the suite but discards its verdict, so
+    the lane's budgets are asserted while its result is thrown away.
+
+    Neither is judged as an invocation. Both are reported here, because
+    a contract that cannot tell what a line does should say so rather
+    than guess.
+    """
+    disguised = [
+        f"{job.workflow}:{job.name}: {line!r}"
+        for job in _declared_jobs()
+        for step in (job.body.get("steps") or [])
+        if isinstance(step, dict)
+        for line in _disguised_suite_lines(str(step.get("run", "")))
+    ]
+    assert not disguised, (
+        f"these steps name a suite command without plainly running one, so "
+        f"this contract cannot tell whether the lane runs the suite or "
+        f"whether its failure would end the step: {disguised}"
+    )
+
+
+def test_the_required_ceiling_carries_all_four_terms() -> None:
+    """Whole-run budget, termination, outside work, and the margin.
+
+    Both lanes now sit above the requirement with the margin to spare,
+    so dropping the margin from the derivation changes nothing the
+    assertion over the workflows can see: the ceiling still clears the
+    smaller number. Driving the derivation with a controlled profile is
+    what makes the missing term visible.
+    """
+    block = (
+        '[profile.example]\n'
+        'slow-timeout = { period = "300s", terminate-after = 1, grace-period = "5s" }\n'
+        'global-timeout = "45m"\n'
+    )
+    expected = (
+        45 * 60.0
+        + (5.0 + TERMINATION_SAFETY_MARGIN_SECONDS)
+        + OUTSIDE_SUITE_ALLOWANCE_SECONDS
+        + CEILING_MARGIN_SECONDS
+    )
+    assert required_ceiling(block) == pytest.approx(expected), (
+        f"the requirement is the whole-run budget, the termination allowance, "
+        f"the outside allowance and the margin, added; expected {expected}"
     )
