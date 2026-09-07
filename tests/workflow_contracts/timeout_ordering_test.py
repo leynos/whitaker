@@ -27,6 +27,7 @@ Run via ``make test-workflow-contracts``.
 from __future__ import annotations
 
 import re
+import tomllib
 import typing as typ
 
 import pytest
@@ -628,3 +629,111 @@ def _sets_watchdog(owner: dict[str, typ.Any]) -> bool:
     """
     environment = owner.get("env")
     return isinstance(environment, dict) and WATCHDOG_VARIABLE in environment
+
+
+#: The base per-test allowance both profiles must declare, as the guide
+#: states it. Asserted by value rather than by shape, because the
+#: ordering assertions hold for a wide range of values and would not
+#: notice a profile drifting to a budget nobody chose.
+BASE_SLOW_TIMEOUT: typ.Final[dict[str, object]] = {
+    "period": "300s",
+    "terminate-after": 1,
+    "grace-period": "5s",
+}
+
+#: The whole-run budget both profiles must declare.
+REQUIRED_GLOBAL_TIMEOUT: typ.Final[str] = "45m"
+
+#: The `ci` profile's overrides, keyed by the binary or filter they
+#: exist for. These are the two the default profile carries and `ci`
+#: does not inherit, so they are named here to stop one being dropped
+#: while the other keeps the profile looking bounded.
+REQUIRED_CI_OVERRIDES: typ.Final[dict[str, str]] = {
+    "binary(behaviour_toolchain)": "30m",
+    "test(driver::ui::)": "10m",
+}
+
+
+@pytest.fixture(scope="module")
+def parsed_nextest() -> dict[str, typ.Any]:
+    """Return the nextest configuration, parsed.
+
+    Parsed rather than matched for the value assertions below: a
+    commented-out budget reads as an active one to a regular expression,
+    so a line nobody meant could satisfy an assertion about a value.
+
+    Returns
+    -------
+    dict[str, typ.Any]
+        The parsed document.
+    """
+    return tomllib.loads(NEXTEST_CONFIG.read_text(encoding="utf-8"))
+
+
+@pytest.mark.parametrize("profile", ["default", "ci"], ids=str)
+def test_each_profile_declares_the_base_allowance_the_guide_states(
+    parsed_nextest: dict[str, typ.Any], profile: str
+) -> None:
+    """The ordering holds for many values; only one is documented.
+
+    Asserting the ordering alone would let a profile drift to a budget
+    nobody chose and the guide does not describe, while every comparison
+    still passed. This pins the three fields the guide names, so a change
+    to any of them has to change the guide in the same commit.
+    """
+    section = parsed_nextest["profile"][profile]
+    assert section.get("slow-timeout") == BASE_SLOW_TIMEOUT, (
+        f"[profile.{profile}] must declare the base slow-timeout the "
+        f"developers' guide states, {BASE_SLOW_TIMEOUT}; got "
+        f"{section.get('slow-timeout')}"
+    )
+
+
+@pytest.mark.parametrize("profile", ["default", "ci"], ids=str)
+def test_each_profile_declares_the_whole_run_budget(
+    parsed_nextest: dict[str, typ.Any], profile: str
+) -> None:
+    """Both profiles carry it, and carry the same one.
+
+    A profile does not inherit another's, so a budget set on one and not
+    the other leaves whichever lane runs the second unbounded, which is
+    the state this branch corrects.
+    """
+    section = parsed_nextest["profile"][profile]
+    assert section.get("global-timeout") == REQUIRED_GLOBAL_TIMEOUT, (
+        f"[profile.{profile}] must set global-timeout to "
+        f"{REQUIRED_GLOBAL_TIMEOUT}; got {section.get('global-timeout')}"
+    )
+
+
+@pytest.mark.parametrize(
+    ("needle", "period"), sorted(REQUIRED_CI_OVERRIDES.items()), ids=str
+)
+def test_the_ci_profile_keeps_the_overrides_it_does_not_inherit(
+    parsed_nextest: dict[str, typ.Any], needle: str, period: str
+) -> None:
+    """`ci` restates the default profile's overrides because it must.
+
+    ``[[profile.default.overrides]]`` belongs to the default profile, so
+    the toolchain and dylint allowances do not reach `ci`, which is the
+    profile that includes the toolchain binaries. Dropping either would
+    leave `ci` looking bounded, since its base allowance would still be
+    there, while the tests that need the longest ran under 300 s.
+    """
+    overrides = parsed_nextest["profile"]["ci"].get("overrides") or []
+    matching = [
+        override for override in overrides if needle in str(override.get("filter", ""))
+    ]
+    assert len(matching) == 1, (
+        f"[profile.ci] must carry exactly one override matching {needle!r}, "
+        f"found {len(matching)}; it does not inherit the default profile's"
+    )
+    budget = matching[0].get("slow-timeout") or {}
+    assert budget.get("period") == period, (
+        f"[profile.ci]'s {needle!r} override must allow {period}, got "
+        f"{budget.get('period')}"
+    )
+    assert budget.get("terminate-after") == 1, (
+        f"[profile.ci]'s {needle!r} override must set terminate-after = 1, so "
+        f"the period is the budget rather than a fifth or a tenth of it"
+    )
