@@ -3017,9 +3017,9 @@ timeouts. That allowance is seconds rather than minutes, but it is not zero,
 and the contract reads it from the configuration so a profile that raised it
 raises the requirement too.
 
-So the ceiling is sized as the whole-run budget, plus a termination allowance
-of one minute, plus the build and the steps either side of the suite:
-45 m + 1 m + 15 m, taken up to 70 m.
+So the ceiling is sized as the whole-run budget, plus the five-second grace
+period, plus a minute of margin, plus the build and the steps either side of
+the suite: 45 m + 5 s + 1 m + 15 m, taken up to 70 m.
 
 ### What the values are sized against
 
