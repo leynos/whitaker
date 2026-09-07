@@ -52,7 +52,7 @@ jobs:
     runs-on: ubicloud-standard-2-ubuntu-2404
     # Above the 45 m nextest global timeout plus a cold build and the work
     # either side of the suite; kept in step with ci.yml's coverage lane.
-    timeout-minutes: 70
+    timeout-minutes: 80
     defaults:
       run:
         shell: bash
