@@ -3041,6 +3041,13 @@ So the ceiling is sized as the whole-run budget, plus the five-second grace
 period, plus a minute of margin, plus the build and the steps either side of
 the suite: 45 m + 5 s + 1 m + 15 m, taken up to 70 m.
 
+That rounding is not incidental. A ceiling equal to the sum it contains cancels
+the job at the moment the innermost timer would have reported the overrun, and
+the report is the only thing that makes an overrun actionable, so every lane
+carries at least fifteen minutes above its requirement rather than merely
+reaching it. Here the requirement is a little over 61 minutes and the ceiling
+is 70.
+
 ### What the values are sized against
 
 The 45 m whole-run budget is not a measurement, it is a bound. It has to exceed
@@ -3097,6 +3104,16 @@ suite command's text and none of them runs the suite, so a prefix match would
 bind them to budgets they do not run under. The line, rather than the matched
 command, is what it keeps, because `NEXTEST_PROFILE=ci` on that line is what
 decides which profile's budgets a lane is judged against.
+
+It pins the values the tables above state as well as ordering them: the base
+`slow-timeout` on both profiles compared as a whole table, the 45 m whole-run
+budget, both overrides' whole `slow-timeout` including the grace period, and
+the 70-minute ceiling on every suite lane. The ordering assertions hold for a
+range of values, so on their own they would let any of these drift to a number
+nobody chose while still passing. The grace period is pinned for the same
+reason it is read: the watchdog and the ceiling above it are sized to cover
+exactly that wait, so dropping it would leave them covering a wait that no
+longer happens and a test being killed without it.
 
 It compares each job's ceiling against the profile that lane actually runs.
 `make coverage` re-enters `make test` without a profile, so it runs under
