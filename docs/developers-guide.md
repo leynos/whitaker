@@ -3097,13 +3097,23 @@ this section updated in the same change.
 value, over every step in every workflow that runs the suite, in both the
 `.yml` and `.yaml` extensions. Its readings live alongside it: the lane
 discovery and the command matching in `suite_lanes.py`, the nextest arithmetic
-in `timeout_budgets.py`, and the profile pins in `nextest_profile_test.py`.
-Four details of its shape are deliberate.
+in `timeout_budgets.py`, the profile pins in `nextest_profile_test.py`, and the
+readings driven with controlled configurations in `timeout_reading_test.py`.
+Five details of its shape are deliberate.
 
 It enumerates every suite-running step, including those in jobs that declare no
 ceiling, so a missing `timeout-minutes` shows up as a lane with no budget
 rather than as no lane at all. That is how the Windows lane's absent ceiling
 went unnoticed.
+
+It parses `.config/nextest.toml` with `tomllib` rather than matching its text.
+A text match finds a key inside a comment, inside a `filter` string, or in a
+table nextest never consults. The commented-out `global-timeout` is the case
+that matters most, because this contract requires that tier to be present: a
+scraping reader would go on reporting a budget somebody had switched off, and
+the four-tier contract would pass with three. Parsing also keeps a profile's
+own table separate from its overrides, which is what lets the base allowance be
+asserted on its own.
 
 It matches the whole command line rather than a prefix. `make test-doc`,
 `make test-glibc-baseline` and `make test-workflow-contracts` all begin with a

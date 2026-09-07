@@ -2,13 +2,22 @@
 
 Separated from `timeout_ordering_test` so the arithmetic and the
 workflow reading are legible apart, and so neither module carries the
-whole contract. Every function here takes text and returns a number, so
-they can be driven with configurations this repository does not have,
-which is the only way to tell a correct reading from one that happens
-to agree with the file in the tree.
+whole contract. Every function here takes a parsed profile and returns
+a number, so they can be driven with configurations this repository
+does not have, which is the only way to tell a correct reading from one
+that happens to agree with the file in the tree.
+
+The configuration is parsed with ``tomllib`` rather than matched as
+text. A text match finds a key inside a comment, inside a ``filter``
+string, or in a table nextest never consults, and reports a budget the
+runner does not use. The commented-out ``global-timeout`` is the case
+that matters most: this contract requires that tier to be present, and
+a scraping reader would go on reporting a budget that had been switched
+off.
 """
 
 import re
+import tomllib
 import typing as typ
 
 from ubicloud_workflow_support import REPOSITORY_ROOT
@@ -46,14 +55,50 @@ _UNIT_SECONDS: typ.Final[dict[str, float]] = {
     "h": 3600.0,
 }
 
-#: ``period`` as its own key. The lookbehind keeps ``grace-period`` out:
-#: the two sit in the same inline table, and a substring match would read
-#: a termination allowance as a per-test budget.
-_PERIOD: typ.Final[re.Pattern[str]] = re.compile(r'(?<![\w-])period\s*=\s*"([^"]+)"')
-
-_GRACE_PERIOD: typ.Final[re.Pattern[str]] = re.compile(r'grace-period\s*=\s*"([^"]+)"')
-
 NEXTEST_CONFIG = REPOSITORY_ROOT / ".config" / "nextest.toml"
+
+
+class NextestConfigurationError(ValueError):
+    """Raised when the configuration cannot be read as a set of budgets.
+
+    Separate from a budget in the wrong order. A file that is not TOML,
+    a profile that declares no ``slow-timeout``, or one whose
+    ``global-timeout`` has been commented out, is a configuration this
+    contract cannot reason about rather than one whose tiers are
+    inverted.
+    """
+
+
+class Profile(typ.NamedTuple):
+    """One nextest profile, as the runner reads it.
+
+    Attributes
+    ----------
+    name : str
+        The profile's name.
+    own : dict[str, object]
+        The ``[profile.<name>]`` table itself, without its overrides.
+        The base allowance and an override's are different claims: an
+        override bounds the tests its filter matches, and the profile's
+        own bounds the rest, so a search across both would let the base
+        allowance be deleted unnoticed.
+    overrides : tuple[dict[str, object], ...]
+        The profile's ``[[overrides]]`` entries, in file order.
+    """
+
+    name: str
+    own: dict[str, object]
+    overrides: tuple[dict[str, object], ...]
+
+    def tables(self) -> tuple[dict[str, object], ...]:
+        """Return every table the profile reads a budget from.
+
+        Returns
+        -------
+        tuple of dict
+            The profile's own table first, then each override.
+        """
+        return (self.own, *self.overrides)
 
 
 def seconds(duration: str) -> float:
@@ -68,18 +113,41 @@ def seconds(duration: str) -> float:
     -------
     float
         The duration in seconds.
+
+    Raises
+    ------
+    NextestConfigurationError
+        If the text is not a duration nextest would accept.
     """
     match = _DURATION.match(duration)
-    assert match is not None, f"unrecognized nextest duration {duration!r}"
+    if match is None:
+        message = f"unrecognized nextest duration {duration!r}"
+        raise NextestConfigurationError(message)
     return float(match["value"]) * _UNIT_SECONDS[match["unit"]]
 
 
-def profile_blocks(config_text: str) -> dict[str, str]:
-    """Return each profile's own text, keyed by profile name.
+def _table(value: object) -> dict[str, object]:
+    """Return a parsed value as a table, or an empty one.
 
-    Read textually rather than through a TOML parser, because every
-    assertion below must be attached to the profile it belongs to, and
-    both profiles here carry the same keys with different overrides.
+    Parameters
+    ----------
+    value : object
+        Any value ``tomllib`` produced.
+
+    Returns
+    -------
+    dict[str, object]
+        The table, or an empty one when the value is not a table.
+    """
+    return dict(value) if isinstance(value, dict) else {}
+
+
+def profiles(config_text: str) -> dict[str, Profile]:
+    """Return each profile the configuration declares, keyed by name.
+
+    Parsed rather than sliced out of the text, so a key inside a comment
+    or a ``filter`` string is not read as configuration and a profile's
+    own table stays distinguishable from its overrides.
 
     Parameters
     ----------
@@ -88,65 +156,107 @@ def profile_blocks(config_text: str) -> dict[str, str]:
 
     Returns
     -------
-    dict[str, str]
-        Profile name to the text of its section and its overrides.
+    dict[str, Profile]
+        Profile name to its table and overrides.
+
+    Raises
+    ------
+    NextestConfigurationError
+        If the text is not valid TOML.
     """
-    blocks: dict[str, list[str]] = {}
-    current: str | None = None
-    for line in config_text.splitlines(keepends=True):
-        header = re.match(r"^\[\[?profile\.([A-Za-z0-9_-]+)", line)
-        if header is not None:
-            current = header[1]
-            blocks.setdefault(current, [])
-        elif line.startswith("["):
-            current = None
-        if current is not None:
-            blocks[current].append(line)
-    return {name: "".join(lines) for name, lines in blocks.items()}
+    try:
+        parsed = tomllib.loads(config_text)
+    except tomllib.TOMLDecodeError as error:
+        message = f"the nextest configuration is not valid TOML: {error}"
+        raise NextestConfigurationError(message) from error
+    found: dict[str, Profile] = {}
+    for name, raw in _table(parsed.get("profile")).items():
+        table = _table(raw)
+        overrides = tuple(
+            _table(entry)
+            for entry in table.get("overrides", [])
+            if isinstance(entry, dict)
+        )
+        own = {key: value for key, value in table.items() if key != "overrides"}
+        found[str(name)] = Profile(name=str(name), own=own, overrides=overrides)
+    return found
 
 
-def root_section(block: str) -> str:
-    """Return one profile's own text, without its overrides.
-
-    The base allowance and an override's are different claims: an
-    override bounds the tests its filter matches, and the profile's own
-    bounds the rest. A search over the whole block conflates them, so
-    removing the base allowance would go unnoticed as long as any
-    override remained, and every unmatched test would run unbounded.
+def _slow_timeout(table: dict[str, object]) -> dict[str, object] | None:
+    """Return one table's ``slow-timeout``, when it declares one.
 
     Parameters
     ----------
-    block : str
-        One profile's section and its overrides.
+    table : dict[str, object]
+        A profile's own table or one of its overrides.
 
     Returns
     -------
-    str
-        The text before the first ``[[profile.<name>.overrides]]``.
+    dict[str, object] or None
+        The inline table, or None when the key is absent or is a bare
+        duration, which sets a warning period and terminates nothing.
     """
-    marker = re.search(r"^\[\[profile\.", block, re.MULTILINE)
-    return block if marker is None else block[: marker.start()]
+    value = table.get("slow-timeout")
+    return dict(value) if isinstance(value, dict) else None
 
 
-def largest_period(block: str) -> float:
+def bounds_a_single_test(profile: Profile) -> bool:
+    """Return whether the profile's own table terminates a slow test.
+
+    ``terminate-after`` is optional, and without it nextest marks a test
+    slow and lets it run on. An override satisfies the profile as a
+    whole while leaving every test the override does not match with no
+    bound at all, so only the profile's own table counts here.
+
+    Parameters
+    ----------
+    profile : Profile
+        The profile to read.
+
+    Returns
+    -------
+    bool
+        True when the profile's own ``slow-timeout`` sets
+        ``terminate-after``.
+    """
+    table = _slow_timeout(profile.own)
+    return table is not None and table.get("terminate-after") is not None
+
+
+def largest_period(profile: Profile) -> float:
     """Return the longest per-test allowance a profile sets.
 
     Parameters
     ----------
-    block : str
-        One profile's text.
+    profile : Profile
+        The profile to read.
 
     Returns
     -------
     float
         The longest per-test budget, in seconds.
+
+    Raises
+    ------
+    NextestConfigurationError
+        If the profile declares no ``slow-timeout`` period at all.
     """
-    periods = _PERIOD.findall(block)
-    assert periods, "the profile must set at least one slow-timeout period"
-    return max(seconds(period) for period in periods)
+    periods = [
+        seconds(period)
+        for table in profile.tables()
+        if (entry := _slow_timeout(table)) is not None
+        and isinstance(period := entry.get("period"), str)
+    ]
+    if not periods:
+        message = (
+            f"[profile.{profile.name}] declares no slow-timeout period, so no "
+            f"test is bounded and there is no per-test tier to compare against"
+        )
+        raise NextestConfigurationError(message)
+    return max(periods)
 
 
-def termination_allowance(block: str) -> float:
+def termination_allowance(profile: Profile) -> float:
     """Return the time to allow for stopping the run, in seconds.
 
     Two terms, added rather than maximized, because they answer
@@ -165,45 +275,57 @@ def termination_allowance(block: str) -> float:
 
     Parameters
     ----------
-    block : str
-        One profile's text.
+    profile : Profile
+        The profile to read.
 
     Returns
     -------
     float
         The configured grace period plus the safety margin.
     """
-    periods = _GRACE_PERIOD.findall(block)
-    largest = max(
-        (seconds(period) for period in periods),
-        default=NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS,
-    )
+    periods = [
+        seconds(grace)
+        for table in profile.tables()
+        if (entry := _slow_timeout(table)) is not None
+        and isinstance(grace := entry.get("grace-period"), str)
+    ]
+    largest = max(periods, default=NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS)
     return largest + TERMINATION_SAFETY_MARGIN_SECONDS
 
 
-def global_timeout(block: str) -> float:
+def global_timeout(profile: Profile) -> float:
     """Return a profile's whole-run budget in seconds.
+
+    Read from the profile's own table alone: ``global-timeout`` is a
+    profile key, and an ``[[overrides]]`` entry cannot carry one.
 
     Parameters
     ----------
-    block : str
-        One profile's text.
+    profile : Profile
+        The profile to read.
 
     Returns
     -------
     float
         The whole-run budget.
+
+    Raises
+    ------
+    NextestConfigurationError
+        If the profile declares no ``global-timeout``.
     """
-    match = re.search(r'^global-timeout\s*=\s*"([^"]+)"', block, re.MULTILINE)
-    assert match is not None, (
-        "the profile must set global-timeout; without it the whole-run budget "
-        "is unbounded and only the job timer ends a hung run, by cancelling "
-        "it and discarding the log"
-    )
-    return seconds(match[1])
+    budget = profile.own.get("global-timeout")
+    if not isinstance(budget, str):
+        message = (
+            f"[profile.{profile.name}] must set global-timeout; without it the "
+            f"whole-run budget is unbounded and only the job timer ends a hung "
+            f"run, by cancelling it and discarding the log"
+        )
+        raise NextestConfigurationError(message)
+    return seconds(budget)
 
 
-def required_ceiling(block: str) -> float:
+def required_ceiling(profile: Profile) -> float:
     """Return the smallest acceptable job ceiling for one profile.
 
     Four terms. The whole-run budget is what the suite may spend. The
@@ -216,8 +338,8 @@ def required_ceiling(block: str) -> float:
 
     Parameters
     ----------
-    block : str
-        The profile's section of the nextest configuration.
+    profile : Profile
+        The profile to read.
 
     Returns
     -------
@@ -225,8 +347,8 @@ def required_ceiling(block: str) -> float:
         The smallest acceptable ceiling, in seconds.
     """
     return (
-        global_timeout(block)
-        + termination_allowance(block)
+        global_timeout(profile)
+        + termination_allowance(profile)
         + OUTSIDE_SUITE_ALLOWANCE_SECONDS
         + CEILING_MARGIN_SECONDS
     )
