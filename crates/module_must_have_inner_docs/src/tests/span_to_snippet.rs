@@ -1,9 +1,12 @@
 //! Span-to-snippet tests for module doc detection fallbacks.
 
-use super::{ModuleDocDisposition, detect_module_docs_in_span, primary_span_for_disposition};
 use rstest::{fixture, rstest};
-use rustc_span::source_map::{FilePathMapping, SourceMap};
-use rustc_span::{FileName, Span};
+use rustc_span::{
+    FileName, Span,
+    source_map::{FilePathMapping, SourceMap},
+};
+
+use super::{ModuleDocDisposition, detect_module_docs_in_span, primary_span_for_disposition};
 
 #[rstest]
 fn span_to_snippet_failure_returns_unknown(unresolvable_span_fixture: (SourceMap, Span)) {
@@ -25,6 +28,7 @@ fn span_to_snippet_failure_skips_diagnostic(unresolvable_span_fixture: (SourceMa
     );
 }
 
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
 fn unresolvable_span_fixture() -> (SourceMap, Span) {
     unresolvable_span()

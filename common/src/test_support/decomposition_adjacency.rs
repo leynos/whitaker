@@ -1,7 +1,8 @@
 //! Observable adjacency-construction seams for decomposition advice tests.
 
-use crate::decomposition_advice::community::{SimilarityEdge, build_adjacency};
 use thiserror::Error;
+
+use crate::decomposition_advice::community::{SimilarityEdge, build_adjacency};
 
 /// Declarative edge input for test scenarios.
 ///
@@ -89,7 +90,7 @@ impl AdjacencyReport {
     /// assert_eq!(report.node_count(), 4);
     /// ```
     #[must_use]
-    pub fn node_count(&self) -> usize {
+    pub const fn node_count(&self) -> usize {
         self.node_count
     }
 
@@ -100,9 +101,15 @@ impl AdjacencyReport {
     /// ```rust
     /// use whitaker_common::test_support::decomposition::{EdgeInput, adjacency_report};
     ///
-    /// let report = adjacency_report(3, &[
-    ///     EdgeInput { left: 0, right: 2, weight: 7 },
-    /// ]).expect("valid input");
+    /// let report = adjacency_report(
+    ///     3,
+    ///     &[EdgeInput {
+    ///         left: 0,
+    ///         right: 2,
+    ///         weight: 7,
+    ///     }],
+    /// )
+    /// .expect("valid input");
     /// assert_eq!(report.neighbours_of(0), Some(&[(2, 7)][..]));
     /// assert_eq!(report.neighbours_of(10), None);
     /// ```
@@ -116,9 +123,15 @@ impl AdjacencyReport {
     /// ```rust
     /// use whitaker_common::test_support::decomposition::{EdgeInput, adjacency_report};
     ///
-    /// let report = adjacency_report(3, &[
-    ///     EdgeInput { left: 0, right: 1, weight: 5 },
-    /// ]).expect("valid input");
+    /// let report = adjacency_report(
+    ///     3,
+    ///     &[EdgeInput {
+    ///         left: 0,
+    ///         right: 1,
+    ///         weight: 5,
+    ///     }],
+    /// )
+    /// .expect("valid input");
     /// assert!(report.all_indices_in_bounds());
     /// ```
     #[must_use]
@@ -136,9 +149,15 @@ impl AdjacencyReport {
     /// ```rust
     /// use whitaker_common::test_support::decomposition::{EdgeInput, adjacency_report};
     ///
-    /// let report = adjacency_report(3, &[
-    ///     EdgeInput { left: 0, right: 2, weight: 7 },
-    /// ]).expect("valid input");
+    /// let report = adjacency_report(
+    ///     3,
+    ///     &[EdgeInput {
+    ///         left: 0,
+    ///         right: 2,
+    ///         weight: 7,
+    ///     }],
+    /// )
+    /// .expect("valid input");
     /// assert!(report.is_symmetric());
     /// ```
     #[must_use]
@@ -156,17 +175,31 @@ impl AdjacencyReport {
     /// ```rust
     /// use whitaker_common::test_support::decomposition::{EdgeInput, adjacency_report};
     ///
-    /// let report = adjacency_report(4, &[
-    ///     EdgeInput { left: 0, right: 1, weight: 5 },
-    ///     EdgeInput { left: 0, right: 3, weight: 3 },
-    /// ]).expect("valid input");
+    /// let report = adjacency_report(
+    ///     4,
+    ///     &[
+    ///         EdgeInput {
+    ///             left: 0,
+    ///             right: 1,
+    ///             weight: 5,
+    ///         },
+    ///         EdgeInput {
+    ///             left: 0,
+    ///             right: 3,
+    ///             weight: 3,
+    ///         },
+    ///     ],
+    /// )
+    /// .expect("valid input");
     /// assert!(report.is_sorted());
     /// ```
     #[must_use]
     pub fn is_sorted(&self) -> bool {
-        self.neighbours
-            .iter()
-            .all(|bucket| bucket.windows(2).all(|pair| pair[0].0 <= pair[1].0))
+        self.neighbours.iter().all(|bucket| {
+            bucket
+                .windows(2)
+                .all(|pair| matches!(pair, [(left, _), (right, _)] if left <= right))
+        })
     }
 }
 
@@ -182,7 +215,10 @@ fn has_mirror(
 ) -> bool {
     debug_assert!(
         neighbour < neighbours.len(),
-        "has_mirror: neighbour index out of bounds - callers (e.g. adjacency_report) must guarantee valid indices"
+        concat!(
+            "has_mirror: neighbour index out of bounds - callers (e.g. adjacency_report) must ",
+            "guarantee valid indices"
+        )
     );
     neighbours.get(neighbour).map_or(false, |list| {
         list.iter()
@@ -201,9 +237,15 @@ fn has_mirror(
 /// ```rust
 /// use whitaker_common::test_support::decomposition::{EdgeInput, adjacency_report};
 ///
-/// let report = adjacency_report(3, &[
-///     EdgeInput { left: 0, right: 2, weight: 7 },
-/// ]).expect("valid input");
+/// let report = adjacency_report(
+///     3,
+///     &[EdgeInput {
+///         left: 0,
+///         right: 2,
+///         weight: 7,
+///     }],
+/// )
+/// .expect("valid input");
 /// assert_eq!(report.node_count(), 3);
 /// ```
 ///
@@ -263,6 +305,8 @@ pub(crate) fn validate_edges(
 
 #[cfg(test)]
 mod tests {
+    //! Tests for adjacency-report validation of decomposition edge inputs.
+
     use super::{AdjacencyError, EdgeInput, adjacency_report};
 
     #[test]

@@ -287,16 +287,7 @@ mod tests {
             .with_cosine(0.90)
             .build();
         match props {
-            Ok(props) => {
-                let json = serde_json::to_string(&props);
-                match json {
-                    Ok(json) => match serde_json::from_str::<WhitakerProperties>(&json) {
-                        Ok(parsed) => assert_eq!(props, parsed),
-                        Err(e) => panic!("deserialization failed: {e}"),
-                    },
-                    Err(e) => panic!("serialization failed: {e}"),
-                }
-            }
+            Ok(props) => crate::test_support::assert_json_round_trip(&props),
             Err(e) => panic!("unexpected build error: {e}"),
         }
     }

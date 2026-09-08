@@ -1,12 +1,15 @@
 //! Tests for fast-path installer helper behaviour.
 
-use super::*;
 use camino::{Utf8Path, Utf8PathBuf};
 use rstest::{fixture, rstest};
 use temp_env::with_var_unset;
-use whitaker_installer::crate_name::CrateName;
-use whitaker_installer::test_support::{TEST_STAGE_SUITE_ENV, env_test_guard};
-use whitaker_installer::toolchain::Toolchain;
+use whitaker_installer::{
+    crate_name::CrateName,
+    test_support::{TEST_STAGE_SUITE_ENV, env_test_guard},
+    toolchain::Toolchain,
+};
+
+use super::*;
 
 struct FastPathFixture {
     args: InstallArgs,
@@ -33,9 +36,9 @@ fn fast_path_fixture() -> FastPathFixture {
     FastPathFixture {
         args: InstallArgs::default(),
         dirs: TestBaseDirs {
-            home_dir: Some("/tmp".into()),
-            bin_dir: Some("/tmp/bin".into()),
-            data_dir: Some("/tmp".into()),
+            home: Some("/tmp".into()),
+            bin: Some("/tmp/bin".into()),
+            data: Some("/tmp".into()),
         },
         toolchain: Toolchain::with_override(Utf8Path::new("."), "nightly-2026-05-28"),
         target_dir: Utf8PathBuf::from("/tmp/target"),
@@ -46,7 +49,7 @@ fn fast_path_fixture() -> FastPathFixture {
 #[rstest]
 #[case::without_cranelift(false, &[])]
 #[case::with_cranelift(true, &["rustc-codegen-cranelift"])]
-fn resolve_additional_components_parametrised(#[case] cranelift: bool, #[case] expected: &[&str]) {
+fn resolve_additional_components_parametrized(#[case] cranelift: bool, #[case] expected: &[&str]) {
     let args = InstallArgs {
         cranelift,
         ..InstallArgs::default()
@@ -59,7 +62,7 @@ fn resolve_additional_components_parametrised(#[case] cranelift: bool, #[case] e
 fn fast_path_context_holds_supplied_values(fast_path_fixture: FastPathFixture) {
     let ctx = fast_path_fixture.context();
 
-    assert!(std::ptr::eq(ctx.args, &fast_path_fixture.args));
+    assert!(std::ptr::eq(ctx.args, &raw const fast_path_fixture.args));
     assert_eq!(ctx.dirs.home_dir(), Some(PathBuf::from("/tmp")));
     assert_eq!(ctx.toolchain.channel(), "nightly-2026-05-28");
     assert_eq!(ctx.target_dir, &Utf8PathBuf::from("/tmp/target"));
@@ -104,6 +107,7 @@ fn try_fast_path_installation_returns_some_build_path_when_staged_suite_enabled(
         ..InstallArgs::default()
     };
 
+    let _guard = env_test_guard();
     with_var(TEST_STAGE_SUITE_ENV, Some("1"), || {
         let ctx = fast_path_fixture.context();
         let mut stderr = Vec::new();

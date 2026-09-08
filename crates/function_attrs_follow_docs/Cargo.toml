@@ -41,6 +41,7 @@ log = { workspace = true, optional = true }
 whitaker = { workspace = true, features = ["dylint-driver"], optional = true }
 
 [dev-dependencies]
+whitaker_test_macros = { workspace = true }
 rstest = { workspace = true }
 rstest-bdd = { workspace = true }
 rstest-bdd-macros = { workspace = true }

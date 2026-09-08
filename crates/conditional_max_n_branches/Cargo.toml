@@ -42,6 +42,7 @@ serde = { workspace = true, optional = true }
 whitaker = { workspace = true, features = ["dylint-driver"], optional = true }
 
 [dev-dependencies]
+whitaker_test_macros = { workspace = true }
 whitaker-common = { workspace = true }
 whitaker = { workspace = true }
 camino = { workspace = true }

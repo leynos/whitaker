@@ -1,10 +1,14 @@
 //! Behaviour-driven tests for shared `rstest` span recovery helpers.
 
+use std::cell::RefCell;
+
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
-use std::cell::RefCell;
-use whitaker_common::rstest::{SpanRecoveryFrame, UserEditableSpan, recover_user_editable_span};
-use whitaker_common::span::{SourceLocation, SourceSpan};
+use whitaker_common::{
+    rstest::{SpanRecoveryFrame, UserEditableSpan, recover_user_editable_span},
+    span::{SourceLocation, SourceSpan},
+};
+use whitaker_test_macros::allow_fixture_expansion_lints;
 
 #[derive(Default)]
 struct SpanRecoveryWorld {
@@ -27,6 +31,7 @@ impl SpanRecoveryWorld {
     }
 }
 
+#[allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> SpanRecoveryWorld {
     SpanRecoveryWorld::default()
