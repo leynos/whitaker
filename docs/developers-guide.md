@@ -214,7 +214,6 @@ This split keeps ordinary UI fixtures simple while still letting regression
 tests cover `rustc --test`, file-backed modules, per-case configuration, and
 real proc-macro crates where needed.
 
-
 ### Installer toolchain scenarios
 
 The installer toolchain scenarios in `installer/tests/behaviour_toolchain.rs`
