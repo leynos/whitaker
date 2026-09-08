@@ -42,16 +42,60 @@ REQUIRED_GLOBAL_TIMEOUT: typ.Final[str] = "45m"
 #: matters as much as the period: it is what nextest waits before
 #: killing a test it has signalled, and the watchdog above is sized to
 #: cover it.
-REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, object]]] = {
-    "binary(behaviour_toolchain)": {
-        "period": "30m",
-        "terminate-after": 1,
-        "grace-period": "5s",
+#:
+#: The filters are stated whole and matched exactly, per profile. A
+#: substring would accept a narrowed one: dropping a clause from the
+#: `ui` disjunction leaves the needle intact while the tests that clause
+#: named lose the ten-minute allowance and fall back to the base sixty
+#: seconds. The two profiles genuinely differ here, the default one
+#: naming eight more `test(...)` clauses than `ci`, which is exactly the
+#: divergence a shared needle would have hidden.
+REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, dict[str, object]]]] = {
+    "default": {
+        ("binary(behaviour_toolchain)"): {
+            "period": "30m",
+            "terminate-after": 1,
+            "grace-period": "5s",
+        },
+        (
+            "test(driver::ui::) | "
+            "test(tests::ui::) | "
+            "test(ui::ui) | "
+            "test(example_compiles_without_diagnostics) | "
+            "test(example_harness_collects_call_site_evidence) | "
+            "test(trybuild_fixtures_compile_without_diagnostics) | "
+            "test(ui::example_compiles_under_test_harness) | "
+            "test(ui::hand_written_test_companion_does_not_exempt_parent_"
+            "function) | "
+            "test(ui::rstest_unwrap_outside_tests_still_fails_in_non_harness_"
+            "code) | "
+            "test(ui::rstest_empty_companion_does_not_exempt_parent_function)"
+            " | "
+            "test(ui::aliased_test_crate_non_companion_does_not_exempt_parent_"
+            "function) | "
+            "(binary(ui) & test(=ui))"
+        ): {
+            "period": "10m",
+            "terminate-after": 1,
+            "grace-period": "5s",
+        },
     },
-    "test(driver::ui::)": {
-        "period": "10m",
-        "terminate-after": 1,
-        "grace-period": "5s",
+    "ci": {
+        ("binary(behaviour_toolchain)"): {
+            "period": "30m",
+            "terminate-after": 1,
+            "grace-period": "5s",
+        },
+        (
+            "test(driver::ui::) | "
+            "test(tests::ui::) | "
+            "test(ui::ui) | "
+            "(binary(ui) & test(=ui))"
+        ): {
+            "period": "10m",
+            "terminate-after": 1,
+            "grace-period": "5s",
+        },
     },
 }
 
@@ -110,9 +154,13 @@ def test_each_profile_declares_the_whole_run_budget(
     )
 
 
-@pytest.mark.parametrize("profile", ["default", "ci"], ids=str)
 @pytest.mark.parametrize(
-    ("needle", "budget"), sorted(REQUIRED_OVERRIDES.items()), ids=str
+    ("profile", "needle", "budget"),
+    [
+        pytest.param(profile, needle, budget, id=f"{profile}-{needle[:24]}")
+        for profile, overrides in sorted(REQUIRED_OVERRIDES.items())
+        for needle, budget in sorted(overrides.items())
+    ],
 )
 def test_each_profile_states_the_overrides_its_own_tests_need(
     parsed_nextest: dict[str, typ.Any],
@@ -135,6 +183,12 @@ def test_each_profile_states_the_overrides_its_own_tests_need(
     the period alone would let the grace period be dropped, and the
     watchdog above these budgets is sized to cover exactly that wait.
 
+    The filter is compared whole and exactly, per profile. A substring
+    would accept a narrowed filter: dropping a clause from the `ui`
+    disjunction leaves any needle intact while the tests that clause
+    named lose the ten-minute allowance and fall back to the base sixty
+    seconds.
+
     Only overrides that declare a budget are counted. The default
     profile matches ``binary(behaviour_toolchain)`` twice, once for the
     allowance and once to serialize three scenarios that contend on
@@ -144,11 +198,11 @@ def test_each_profile_states_the_overrides_its_own_tests_need(
     matching = [
         override
         for override in overrides
-        if needle in str(override.get("filter", "")) and "slow-timeout" in override
+        if override.get("filter") == needle and "slow-timeout" in override
     ]
     assert len(matching) == 1, (
-        f"[profile.{profile}] must carry exactly one override matching "
-        f"{needle!r} that declares a slow-timeout, found {len(matching)}; "
+        f"[profile.{profile}] must carry exactly one override whose filter is "
+        f"{needle!r} and which declares a slow-timeout, found {len(matching)}; "
         f"each profile states its own allowances"
     )
     assert matching[0].get("slow-timeout") == budget, (

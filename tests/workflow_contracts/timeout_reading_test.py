@@ -15,8 +15,10 @@ off.
 """
 
 import pytest
+from suite_lanes import _suite_commands
 from timeout_budgets import (
     NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS,
+    Profile,
     TERMINATION_SAFETY_MARGIN_SECONDS,
     NextestConfigurationError,
     bounds_a_single_test,
@@ -43,7 +45,7 @@ def _profile(*lines: str) -> str:
     return "\n".join(("[profile.example]", *lines)) + "\n"
 
 
-def _example(*lines: str):
+def _example(*lines: str) -> Profile:
     """Return the parsed profile for those lines.
 
     Parameters
@@ -151,4 +153,43 @@ def test_only_the_profile_s_own_table_bounds_an_unmatched_test() -> None:
     assert not bounds_a_single_test(only_in_override)
     assert bounds_a_single_test(
         _example('slow-timeout = { period = "300s", terminate-after = 1 }')
+    )
+
+
+@pytest.mark.parametrize(
+    ("run", "expected"),
+    [
+        pytest.param("make coverage", ["make coverage"], id="one-command"),
+        pytest.param(
+            "make coverage\nmake test NEXTEST_PROFILE=ci",
+            ["make coverage", "make test NEXTEST_PROFILE=ci"],
+            id="two-commands-under-two-profiles",
+        ),
+        pytest.param(
+            "make coverage\nmake test-doc\nmake test NEXTEST_PROFILE=ci",
+            ["make coverage", "make test NEXTEST_PROFILE=ci"],
+            id="a-non-suite-command-between-them",
+        ),
+        pytest.param("make test-doc", [], id="no-suite-command"),
+    ],
+)
+def test_every_suite_command_in_a_step_becomes_a_lane(
+    run: str, expected: list[str]
+) -> None:
+    """A step running the suite twice is two lanes, not one.
+
+    The reading returned the first match, so a `run` block invoking
+    `make coverage` and then `make test NEXTEST_PROFILE=ci` reported the
+    default-profile lane alone and the `ci` invocation was held to no
+    ceiling at all. That is the case the lane discovery exists to cover,
+    since the two run under different profiles with different budgets.
+
+    Driven here rather than against a workflow because
+    ``lane_deduplication_contract_test`` forbids a second plain test
+    step in a Linux job, so the tree cannot carry the shape this reading
+    has to handle.
+    """
+    assert _suite_commands(run) == expected, (
+        f"{run!r} must yield {expected!r}; every suite command in a step is a "
+        f"lane, because each may name its own profile"
     )

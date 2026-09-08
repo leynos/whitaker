@@ -139,7 +139,11 @@ def _table(value: object) -> dict[str, object]:
     dict[str, object]
         The table, or an empty one when the value is not a table.
     """
-    return dict(value) if isinstance(value, dict) else {}
+    match value:
+        case dict() as table:
+            return dict(table)
+        case _:
+            return {}
 
 
 def profiles(config_text: str) -> dict[str, Profile]:
@@ -173,13 +177,37 @@ def profiles(config_text: str) -> dict[str, Profile]:
     for name, raw in _table(parsed.get("profile")).items():
         table = _table(raw)
         overrides = tuple(
-            _table(entry)
-            for entry in table.get("overrides", [])
-            if isinstance(entry, dict)
+            _table(entry) for entry in table.get("overrides", []) if entry is not None
         )
         own = {key: value for key, value in table.items() if key != "overrides"}
         found[str(name)] = Profile(name=str(name), own=own, overrides=overrides)
     return found
+
+
+def _duration_at(table: dict[str, object], key: str) -> list[str]:
+    """Return the duration a table names at a key, as none or one.
+
+    A list so the comprehensions above can bind it without a second
+    ``isinstance`` and without a walrus: a key that is absent, or holds
+    something that is not a duration string, contributes nothing.
+
+    Parameters
+    ----------
+    table : dict[str, object]
+        A parsed ``slow-timeout`` table.
+    key : str
+        The key to read, ``period`` or ``grace-period``.
+
+    Returns
+    -------
+    list[str]
+        The duration, or nothing.
+    """
+    match table.get(key):
+        case str() as duration:
+            return [duration]
+        case _:
+            return []
 
 
 def _slow_timeout(table: dict[str, object]) -> dict[str, object] | None:
@@ -196,8 +224,11 @@ def _slow_timeout(table: dict[str, object]) -> dict[str, object] | None:
         The inline table, or None when the key is absent or is a bare
         duration, which sets a warning period and terminates nothing.
     """
-    value = table.get("slow-timeout")
-    return dict(value) if isinstance(value, dict) else None
+    match table.get("slow-timeout"):
+        case dict() as inline:
+            return dict(inline)
+        case _:
+            return None
 
 
 def bounds_a_single_test(profile: Profile) -> bool:
@@ -245,7 +276,7 @@ def largest_period(profile: Profile) -> float:
         seconds(period)
         for table in profile.tables()
         if (entry := _slow_timeout(table)) is not None
-        and isinstance(period := entry.get("period"), str)
+        for period in _duration_at(entry, "period")
     ]
     if not periods:
         message = (
@@ -287,7 +318,7 @@ def termination_allowance(profile: Profile) -> float:
         seconds(grace)
         for table in profile.tables()
         if (entry := _slow_timeout(table)) is not None
-        and isinstance(grace := entry.get("grace-period"), str)
+        for grace in _duration_at(entry, "grace-period")
     ]
     largest = max(periods, default=NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS)
     return largest + TERMINATION_SAFETY_MARGIN_SECONDS
@@ -314,15 +345,16 @@ def global_timeout(profile: Profile) -> float:
     NextestConfigurationError
         If the profile declares no ``global-timeout``.
     """
-    budget = profile.own.get("global-timeout")
-    if not isinstance(budget, str):
-        message = (
-            f"[profile.{profile.name}] must set global-timeout; without it the "
-            f"whole-run budget is unbounded and only the job timer ends a hung "
-            f"run, by cancelling it and discarding the log"
-        )
-        raise NextestConfigurationError(message)
-    return seconds(budget)
+    match profile.own.get("global-timeout"):
+        case str() as budget:
+            return seconds(budget)
+        case _:
+            message = (
+                f"[profile.{profile.name}] must set global-timeout; without it "
+                f"the whole-run budget is unbounded and only the job timer ends "
+                f"a hung run, by cancelling it and discarding the log"
+            )
+            raise NextestConfigurationError(message)
 
 
 def required_ceiling(profile: Profile) -> float:
