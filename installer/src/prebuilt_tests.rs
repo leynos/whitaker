@@ -16,6 +16,7 @@ fn base_config(destination_dir: &Utf8Path) -> PrebuiltConfig<'_> {
         toolchain: TOOLCHAIN,
         destination_dir,
         quiet: true,
+        allow_source_fallback: true,
     }
 }
 
@@ -215,4 +216,90 @@ fn destination_creation_failure_returns_fallback() {
         ),
         other => panic!("expected Fallback, got {other:?}"),
     }
+}
+
+/// A quiet run that forbids a fallback still carries the reason to its caller.
+///
+/// `--quiet` suppresses the pipeline's progress lines, including the
+/// unavailable-artefact notice. That loses nothing, because the reason travels
+/// in the returned `Fallback` and the caller turns it into
+/// `SourceFallbackForbidden`, whose message names both the artefact and the
+/// reason. This test holds that contract: silence on the stream, reason in the
+/// value.
+#[test]
+fn a_quiet_forbidden_run_returns_the_reason_without_writing_to_stderr() {
+    let (_temp, destination_dir) = destination_dir();
+    let config = PrebuiltConfig {
+        quiet: true,
+        allow_source_fallback: false,
+        ..base_config(&destination_dir)
+    };
+
+    let mut downloader = MockArtefactDownloader::new();
+    downloader.expect_download_manifest().returning(|_| {
+        Err(DownloadError::NotFound {
+            url: "https://example.invalid/manifest.json".to_owned(),
+        })
+    });
+    let extractor = MockArtefactExtractor::new();
+
+    let mut stderr = Vec::new();
+    let result = attempt_prebuilt_with(&config, &downloader, &extractor, &mut stderr);
+
+    assert!(
+        stderr.is_empty(),
+        "a quiet run must write nothing, got: {}",
+        String::from_utf8_lossy(&stderr)
+    );
+    match result {
+        PrebuiltResult::Fallback { reason } => assert!(
+            reason.contains("artefact not found"),
+            "the reason must survive the quiet guard so the refusal can name \
+             it, got: {reason}"
+        ),
+        other => panic!("expected Fallback, got {other:?}"),
+    }
+}
+
+/// A loud run that forbids a fallback reports the absence and promises nothing.
+///
+/// The two lines are independent. The unavailable notice explains what happened
+/// and is worth writing whatever the policy; the fallback line is a promise
+/// about what happens next, and under `--no-source-fallback` nothing does. This
+/// test holds both halves, because keeping the notice while dropping only the
+/// promise is the whole point of the separate flag.
+#[test]
+fn a_loud_forbidden_run_reports_the_absence_without_promising_a_fallback() {
+    let (_temp, destination_dir) = destination_dir();
+    let config = PrebuiltConfig {
+        quiet: false,
+        allow_source_fallback: false,
+        ..base_config(&destination_dir)
+    };
+
+    let mut downloader = MockArtefactDownloader::new();
+    downloader.expect_download_manifest().returning(|_| {
+        Err(DownloadError::NotFound {
+            url: "https://example.invalid/manifest.json".to_owned(),
+        })
+    });
+    let extractor = MockArtefactExtractor::new();
+
+    let mut stderr = Vec::new();
+    let result = attempt_prebuilt_with(&config, &downloader, &extractor, &mut stderr);
+    let written = String::from_utf8(stderr).expect("stderr should be utf-8");
+
+    assert!(
+        written.contains("Prebuilt download unavailable"),
+        "the absence must be reported, got: {written}"
+    );
+    assert!(
+        !written.contains("Falling back to local compilation."),
+        "promising a fallback the policy forbids says the opposite of what \
+         happens next, got: {written}"
+    );
+    assert!(
+        matches!(result, PrebuiltResult::Fallback { .. }),
+        "expected Fallback, got {result:?}"
+    );
 }

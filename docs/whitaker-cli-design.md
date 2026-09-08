@@ -472,7 +472,23 @@ whitaker install
 whitaker install --build-from-source
 whitaker install --offline
 whitaker install --toolchain nightly-2026-05-28
+whitaker install --no-source-fallback
 ```
+
+Setting `--no-source-fallback` or `WHITAKER_NO_SOURCE_FALLBACK` in the
+environment turns a missing published artefact into an error rather than a
+source build. The fallbacks are silent successes: a missing prebuilt lint
+library becomes a local compilation and a missing Dylint tool archive becomes
+`cargo install`, so a run that took either reports success while having built
+something nobody pinned. In continuous integration that is a defect rather than
+a degraded mode. The option is refused alongside `--build-from-source`,
+`--experimental`, and a pinned suite because each of those requires the source
+build it forbids.
+
+Each installation reports the path it took on standard output as
+`whitaker-installer: suite-source=<prebuilt|source>`, so a consumer reads a
+fixed shape rather than matching the wording of a diagnostic. A dry run selects
+no suite source and writes nothing.
 
 Semantically, `install` should do four things:
 

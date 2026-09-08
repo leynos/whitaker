@@ -41,3 +41,18 @@ fn scenario_dry_run_reports_the_pinned_suite(cli_world: CliWorld) {
 fn scenario_hostile_suite_ref_is_refused(cli_world: CliWorld) {
     let _ = cli_world;
 }
+
+#[scenario(path = "tests/features/installer.feature", index = 25)]
+fn scenario_forbidden_source_build_rejects_a_source_only_option(cli_world: CliWorld) {
+    let _ = cli_world;
+}
+
+#[scenario(path = "tests/features/installer.feature", index = 26)]
+fn scenario_dry_run_writes_no_suite_source_marker(cli_world: CliWorld) {
+    let _ = cli_world;
+}
+
+#[scenario(path = "tests/features/installer.feature", index = 27)]
+fn scenario_environment_forbids_what_a_flag_requires(cli_world: CliWorld) {
+    let _ = cli_world;
+}

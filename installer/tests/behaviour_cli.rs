@@ -16,12 +16,17 @@ use support::{
     assert_cli_exits_successfully, assert_cli_exits_with_error, assert_dry_run_output_is_shown,
     assert_experimental_lint_dry_run_output_is_shown,
     assert_experimental_lint_opt_in_message_is_shown, assert_installation_succeeds_or_is_skipped,
-    assert_pinned_suite_is_named, assert_rejected_suite_ref_is_named,
-    assert_suite_library_is_staged, assert_unknown_lint_message_is_shown,
-    configure_dry_run_experimental_lint, configure_dry_run_experimental_lint_with_opt_in,
+    assert_no_suite_source_marker, assert_pinned_suite_is_named,
+    assert_rejected_suite_ref_is_named, assert_source_option_contradiction_is_explained,
+    assert_suite_library_is_staged, assert_suite_source_marker_names_the_path,
+    assert_unknown_lint_message_is_shown, configure_dry_run_experimental_lint,
+    configure_dry_run_experimental_lint_with_opt_in, configure_dry_run_forbidding_source_fallback,
     configure_dry_run_unknown_lint, configure_dry_run_with_pinned_suite,
-    configure_dry_run_with_target_dir, configure_hostile_suite_ref, configure_suite_install,
-    is_toolchain_installed, pinned_toolchain_channel, run_installer_cli, workspace_root,
+    configure_dry_run_with_target_dir,
+    configure_environment_forbidding_source_build_with_build_only,
+    configure_forbidden_source_build_with_build_only, configure_hostile_suite_ref,
+    configure_suite_install, is_toolchain_installed, pinned_toolchain_channel, run_installer_cli,
+    workspace_root,
 };
 
 #[given("the installer is invoked with dry-run and a target directory")]
@@ -42,6 +47,36 @@ fn given_hostile_suite_ref(cli_world: &CliWorld) {
 #[then("the pinned suite is named in the dry-run output")]
 fn then_pinned_suite_is_named(cli_world: &CliWorld) {
     assert_pinned_suite_is_named(cli_world);
+}
+
+#[given("the installer is invoked with dry-run, no source fallback, and build-only")]
+fn given_forbidden_source_build_with_build_only(cli_world: &CliWorld) {
+    configure_forbidden_source_build_with_build_only(cli_world);
+}
+
+#[given("the installer is invoked with dry-run and no source fallback")]
+fn given_dry_run_forbidding_source_fallback(cli_world: &CliWorld) {
+    configure_dry_run_forbidding_source_fallback(cli_world);
+}
+
+#[given("the installer is invoked with build-only and the environment forbidding a source build")]
+fn given_environment_forbids_source_build_with_build_only(cli_world: &CliWorld) {
+    configure_environment_forbidding_source_build_with_build_only(cli_world);
+}
+
+#[then("the contradiction between the two options is explained")]
+fn then_source_option_contradiction_is_explained(cli_world: &CliWorld) {
+    assert_source_option_contradiction_is_explained(cli_world);
+}
+
+#[then("the suite-source marker names the path taken")]
+fn then_suite_source_marker_names_the_path(cli_world: &CliWorld) {
+    assert_suite_source_marker_names_the_path(cli_world);
+}
+
+#[then("no suite-source marker is written to standard output")]
+fn then_no_suite_source_marker(cli_world: &CliWorld) {
+    assert_no_suite_source_marker(cli_world);
 }
 
 #[then("the rejected suite reference is named")]

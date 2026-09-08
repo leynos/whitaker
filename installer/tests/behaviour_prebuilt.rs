@@ -229,6 +229,7 @@ fn when_prebuilt_attempted(world: &mut PrebuiltWorld) {
         toolchain,
         destination_dir: &destination_dir,
         quiet: true,
+        allow_source_fallback: true,
     };
 
     let manifest_behaviour = world

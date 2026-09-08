@@ -52,6 +52,13 @@ pub struct PrebuiltConfig<'a> {
     pub destination_dir: &'a Utf8Path,
     /// When true, suppress progress output.
     pub quiet: bool,
+    /// Whether a source build may replace a missing artefact.
+    ///
+    /// Separate from `quiet` because the two lines this pipeline writes on a
+    /// failure answer different questions. The artefact being unavailable is
+    /// worth saying either way; announcing a fallback that the caller has
+    /// forbidden tells an operator the opposite of what happens next.
+    pub allow_source_fallback: bool,
 }
 
 /// Internal error type for the prebuilt pipeline.
@@ -110,7 +117,9 @@ pub fn attempt_prebuilt_with(
             let reason = e.to_string();
             if !config.quiet {
                 write_stderr_line(stderr, format!("Prebuilt download unavailable: {reason}"));
-                write_stderr_line(stderr, "Falling back to local compilation.");
+                if config.allow_source_fallback {
+                    write_stderr_line(stderr, "Falling back to local compilation.");
+                }
                 write_stderr_line(stderr, "");
             }
             PrebuiltResult::Fallback { reason }
