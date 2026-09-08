@@ -96,8 +96,13 @@ class SuiteLane(typ.NamedTuple):
         return f"{self.workflow}:{self.job}:{self.step!r}"
 
 
-def _suite_command(run: str) -> str | None:
-    """Return the suite command a step runs, or None.
+def _suite_commands(run: str) -> list[str]:
+    """Return every suite command a step runs, in order.
+
+    All of them, not the first: a step whose ``run`` block invokes
+    ``make coverage`` and then ``make test NEXTEST_PROFILE=ci`` runs the
+    suite twice under two different profiles, and reporting one lane
+    would leave the second bound to no ceiling check at all.
 
     ``make test-doc`` and the checkers named for what they check all begin
     with a suite command's text. Matching by prefix would bind them to
@@ -111,13 +116,12 @@ def _suite_command(run: str) -> str | None:
 
     Returns
     -------
-    str or None
-        The whole command line, or None when the step runs no suite
-        command. The line rather than the matched constant, because the
-        profile the lane runs under is an argument on it.
+    list[str]
+        The whole command line for each, empty when the step runs no
+        suite command. The line rather than the matched constant,
+        because the profile the lane runs under is an argument on it.
     """
-    candidates = (line.strip() for line in run.splitlines())
-    return next((line for line in candidates if _is_suite_line(line)), None)
+    return [line.strip() for line in run.splitlines() if _is_suite_line(line.strip())]
 
 
 def _names_a_suite_command(line: str) -> bool:
@@ -196,6 +200,30 @@ def _disguised_suite_lines(run: str) -> list[str]:
     ]
 
 
+def _mapping(value: object) -> dict[str, typ.Any] | None:
+    """Return a parsed value when it is a mapping, or None.
+
+    One guard rather than an ``isinstance`` at each use, so a malformed
+    job, step or environment is skipped in the same way wherever it is
+    read, and the skipping is named where it happens.
+
+    Parameters
+    ----------
+    value : object
+        Any value the YAML parser produced.
+
+    Returns
+    -------
+    dict[str, typ.Any] or None
+        The mapping, or None when the value is not one.
+    """
+    match value:
+        case dict() as mapping:
+            return mapping
+        case _:
+            return None
+
+
 def _workflow_documents() -> dict[str, dict[str, typ.Any]]:
     """Return every workflow document, keyed by file name.
 
@@ -210,9 +238,11 @@ def _workflow_documents() -> dict[str, dict[str, typ.Any]]:
     documents: dict[str, dict[str, typ.Any]] = {}
     for pattern in ("*.yml", "*.yaml"):
         for path in sorted(WORKFLOWS_DIRECTORY.glob(pattern)):
-            parsed = yaml.safe_load(path.read_text(encoding="utf-8"))
-            if isinstance(parsed, dict):
-                documents[path.name] = parsed
+            match yaml.safe_load(path.read_text(encoding="utf-8")):
+                case dict() as parsed:
+                    documents[path.name] = parsed
+                case _:
+                    continue
     return documents
 
 
@@ -247,10 +277,10 @@ def _declared_jobs() -> tuple[_Job, ...]:
         Every declared job.
     """
     return tuple(
-        _Job(workflow=name, name=str(job_name), body=job)
+        _Job(workflow=name, name=str(job_name), body=body)
         for name, document in _workflow_documents().items()
         for job_name, job in (document.get("jobs") or {}).items()
-        if isinstance(job, dict)
+        if (body := _mapping(job)) is not None
     )
 
 
@@ -286,7 +316,11 @@ def _lanes_in_job(job: _Job) -> tuple[SuiteLane, ...]:
         One entry per suite-running step in that job.
     """
     ceiling = _job_ceiling(job)
-    steps = (step for step in job.body.get("steps") or [] if isinstance(step, dict))
+    steps = (
+        body
+        for step in job.body.get("steps") or []
+        if (body := _mapping(step)) is not None
+    )
     return tuple(
         SuiteLane(
             workflow=job.workflow,
@@ -297,7 +331,7 @@ def _lanes_in_job(job: _Job) -> tuple[SuiteLane, ...]:
             condition=(step.get("if"), job.body.get("if")),
         )
         for step in steps
-        if (command := _suite_command(str(step.get("run", "")))) is not None
+        for command in _suite_commands(str(step.get("run", "")))
     )
 
 
@@ -326,8 +360,9 @@ def _watchdog_offences(job: _Job) -> tuple[str, ...]:
         offences.append(f"{job.workflow} sets {WATCHDOG_VARIABLE} at workflow level")
     if _sets_watchdog(job.body):
         offences.append(f"{where} sets {WATCHDOG_VARIABLE} at job level")
-    for step in job.body.get("steps") or []:
-        if not isinstance(step, dict):
+    for entry in job.body.get("steps") or []:
+        step = _mapping(entry)
+        if step is None:
             continue
         if COVERAGE_ACTION in str(step.get("uses", "")):
             offences.append(f"{where} uses {COVERAGE_ACTION}")
@@ -349,5 +384,8 @@ def _sets_watchdog(owner: dict[str, typ.Any]) -> bool:
     bool
         True when its ``env`` names the variable.
     """
-    environment = owner.get("env")
-    return isinstance(environment, dict) and WATCHDOG_VARIABLE in environment
+    match owner.get("env"):
+        case dict() as environment:
+            return WATCHDOG_VARIABLE in environment
+        case _:
+            return False
