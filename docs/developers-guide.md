@@ -3022,3 +3022,200 @@ of the test suite per pull request" above.
 [whitaker-run-33345742967]: https://github.com/leynos/whitaker/actions/runs/33345742967
 [whitaker-run-33340945546]: https://github.com/leynos/whitaker/actions/runs/33340945546
 [whitaker-run-33322310248]: https://github.com/leynos/whitaker/actions/runs/33322310248
+
+## Test timeouts: four tiers, outermost last
+
+Four independent timers can end a test run, each set somewhere different. A run
+that dies without an obvious cause is nearly always one of them, so it is worth
+knowing which is which and in what order they can fire. The canonical statement
+of the rule lives in the `generate-coverage` README in
+[`leynos/shared-actions`][shared-actions-coverage]; this section records what
+this repository sets, what each value is sized against, and where the third
+tier went.
+
+| Tier                     | What it bounds                     | Where it is set                             | Current value                                                                                      |
+| ------------------------ | ---------------------------------- | ------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`, both profiles       | 300 s default; 10 m for the dylint UI harnesses, 30 m for the toolchain-installing behaviour tests |
+| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, both profiles       | 45 m                                                                                               |
+| Cargo watchdog           | one `cargo` invocation, wall clock | not used here, see below                    | absent                                                                                             |
+| Job `timeout-minutes`    | the whole job                      | `ci.yml` and `coverage-main.yml`, job level | 80 m for every lane that runs the suite                                                            |
+
+*Table: the timers that can end a run, innermost first.*
+
+Each tier must sit above the one before it.
+
+### What was missing
+
+Three of the four were absent or partial before this was written, and the gaps
+compounded rather than sitting apart.
+
+No profile set a base `slow-timeout`. nextest's own default reports a slow test
+without ever terminating it, so an ordinary hung test was reported slow for
+ever on every lane, and only the job timer could end it.
+
+The named exceptions were bounded. A custom profile inherits
+`[profile.default]`, and when a custom profile is selected nextest still
+consults `[[profile.default.overrides]]`, applying a matching default override
+ahead of the selected profile's own scalar setting. So the 30 m toolchain and
+10 m dylint allowances did reach the `ci` profile, which is what the Windows
+lane runs. What nothing bounded was every test those two overrides do not name.
+
+Neither profile set a `global-timeout`, so nothing bounded the whole run.
+
+The Windows lane declared no `timeout-minutes`, inheriting GitHub's six-hour
+default. That left the outermost tier missing as well: a hung test there could
+have burned six hours before anything stopped it, and the cancellation would
+have discarded the log.
+
+### Both profiles state their own budgets
+
+Each profile now declares its own base `slow-timeout` and `global-timeout`, and
+`ci` restates the toolchain and dylint allowances as its own overrides. None of
+that is required for the run to be bounded: `ci` would inherit all of it.
+
+It is repository policy, for two reasons. `ci` is the profile that includes the
+toolchain-installing behaviour tests the default profile excludes, so it is the
+profile with the longest tests, and the budgets that govern the lane belong
+where a reader of that profile will find them. Restating them also makes a
+later divergence between the two profiles explicit rather than silent, since a
+changed default would otherwise change CI without touching the `ci` section.
+
+The contract holds that policy, and its failure messages say so rather than
+claiming nextest requires it.
+
+### The clocks do not start together
+
+Comparing the configured numbers is not enough, because the timers start at
+different moments and cover different work.
+
+The job timer starts when the job starts, before the checkout, the toolchain
+setup and the build, and it is still running through whatever follows the
+suite. nextest's global timeout starts only once tests begin. A ceiling merely
+above the whole-run budget still cancels the job before nextest can report an
+overrun, and a cancellation discards the log that would have explained it.
+
+Hitting the global timeout does not stop the run instantly either. nextest
+follows its ordinary termination procedure: on Unix it signals the process
+group and waits `slow-timeout.grace-period`, five seconds here, before killing
+it. On Windows termination is immediate and the grace period is ignored for
+timeouts. That allowance is seconds rather than minutes, but it is not zero,
+and the contract reads it from the configuration so a profile that raised it
+raises the requirement too.
+
+So the ceiling is sized as the whole-run budget, plus the five-second grace
+period, plus a minute of margin, plus the build and the steps either side of
+the suite: 45 m + 5 s + 1 m + 15 m, which is a little over 61 minutes.
+
+The ceiling is not that requirement. Every lane carries at least fifteen
+minutes above it, because a ceiling equal to the sum it contains cancels the
+job at the moment the innermost timer would have reported the overrun, and the
+report is the only thing that makes an overrun actionable. The ceiling is
+therefore 80.
+
+This section first said 70, which is 8.9 minutes above the requirement. That
+number was chosen before the fifteen-minute margin was written down, and it
+does not satisfy the rule this guide now states, so it has been corrected
+rather than kept as a special case.
+
+### What the values are sized against
+
+The 45 m whole-run budget is not a measurement, it is a bound. It has to exceed
+the 30 m a single toolchain-installing test may legitimately spend, and it does
+so with 15 m to spare, which is comfortably more than any observed whole run
+has needed.
+
+The 15 m allowance for work outside nextest's window is measured, from the
+worst of several runs rather than one:
+
+| Lane              | Worst suite step | Worst whole job | Outside the step | Run         |
+| ----------------- | ---------------- | --------------- | ---------------- | ----------- |
+| `coverage-upload` | 614 s            | 785 s           | 171 s            | 33824606032 |
+| `coverage-check`  | 481 s            | 576 s           | 95 s             | 34070807851 |
+| `windows-compat`  | 845 s            | 1,099 s         | 254 s            | 34070807851 |
+
+*Table: measured suite-step and whole-job durations, read across 38 successful
+`coverage-main.yml` runs and 8 of `ci.yml`.*
+
+None of those was a genuinely cold run, which is why the allowance is 15 m
+against a worst observation of 254 s rather than something close to it. One run
+is not a measurement of the cold case; it is the coldest run seen so far.
+
+### The tier that is absent, and why
+
+The canonical section has four tiers because the shared `generate-coverage`
+action wraps its `cargo` invocation in a wall-clock watchdog, defaulting to
+1,800 s. This repository does not use that action: `coverage-main.yml` explains
+that it hard-codes `cargo llvm-cov --workspace` with no way to exclude crates,
+and this suite cannot run a bare `--workspace` build. Coverage runs through
+`make coverage` instead, so there is no watchdog and no third tier.
+
+That absence is asserted rather than assumed. A lane that adopted the action
+without setting `RUN_RUST_CARGO_WAIT_TIMEOUT` would inherit the 1,800 s default
+underneath a 45 m nextest budget, which is exactly the inversion the canonical
+section exists to prevent, and it would do so silently. The contract therefore
+fails if either the action appears or the variable is set, so adopting it needs
+this section updated in the same change.
+
+### The contract
+
+`tests/workflow_contracts/timeout_ordering_test.py` asserts the ordering by
+value, over every step in every workflow that runs the suite, in both the
+`.yml` and `.yaml` extensions. Its readings live alongside it: the lane
+discovery and the command matching in `suite_lanes.py`, the nextest arithmetic
+in `timeout_budgets.py`, the profile pins in `nextest_profile_test.py`, and the
+readings driven with controlled configurations in `timeout_reading_test.py`.
+Five details of its shape are deliberate.
+
+It enumerates every suite-running step, including those in jobs that declare no
+ceiling, so a missing `timeout-minutes` shows up as a lane with no budget
+rather than as no lane at all. That is how the Windows lane's absent ceiling
+went unnoticed.
+
+It parses `.config/nextest.toml` with `tomllib` rather than matching its text.
+A text match finds a key inside a comment, inside a `filter` string, or in a
+table nextest never consults. The commented-out `global-timeout` is the case
+that matters most, because this contract requires that tier to be present: a
+scraping reader would go on reporting a budget somebody had switched off, and
+the four-tier contract would pass with three. Parsing also keeps a profile's
+own table separate from its overrides, which is what lets the base allowance be
+asserted on its own.
+
+It matches the whole command line rather than a prefix. `make test-doc`,
+`make test-glibc-baseline` and `make test-workflow-contracts` all begin with a
+suite command's text and none of them runs the suite, so a prefix match would
+bind them to budgets they do not run under. The line, rather than the matched
+command, is what it keeps, because `NEXTEST_PROFILE=ci` on that line is what
+decides which profile's budgets a lane is judged against.
+
+It also refuses a step that names a suite command without plainly running one.
+`if false; then make test; fi` keeps the text and runs nothing, which would
+drop that lane from the contract silently and take its ceiling with it;
+`make test || true` runs the suite but discards its verdict. Neither is judged
+as an invocation, and both are reported, because a contract that cannot tell
+what a line does should say so rather than guess.
+
+It pins the condition each lane carries. A skipped step runs no suite, so none
+of the budgets above says anything about it: `if: false` on the step or on its
+job would leave a lane that looks bounded and is not, and so would a plausible
+condition that quietly excluded the event the lane exists for. The conditions
+are pinned by value rather than tested for falsity, because YAML parses `false`
+to a boolean and enumerating falsy spellings would miss the plausible ones
+anyway. `coverage-check` legitimately runs on pull requests only, because
+`coverage-main.yml` covers the trunk. The lane coordinates are compared both
+ways, so a lane appearing without an entry fails too.
+
+It pins the values the tables above state as well as ordering them: the base
+`slow-timeout` on both profiles compared as a whole table, the 45 m whole-run
+budget, both overrides' whole `slow-timeout` including the grace period, and
+the 80-minute ceiling on every suite lane. The ordering assertions hold for a
+range of values, so on their own they would let any of these drift to a number
+nobody chose while still passing. The grace period is pinned for the same
+reason it is read: the watchdog and the ceiling above it are sized to cover
+exactly that wait, so dropping it would leave them covering a wait that no
+longer happens and a test being killed without it.
+
+It compares each job's ceiling against the profile that lane actually runs.
+`make coverage` re-enters `make test` without a profile, so it runs under
+`default`; only the Windows lane passes `NEXTEST_PROFILE=ci`.
+
+[shared-actions-coverage]: https://github.com/leynos/shared-actions/blob/main/.github/actions/generate-coverage/README.md

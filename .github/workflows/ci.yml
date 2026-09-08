@@ -48,7 +48,11 @@ jobs:
   coverage-check:
     if: github.event_name == 'pull_request'
     runs-on: ubicloud-standard-2-ubuntu-2404
-    timeout-minutes: 40
+    # Above the 45 m nextest global timeout plus a cold build and the work
+    # either side of the suite. A ceiling merely above the suite's budget
+    # cancels the job before nextest can report the overrun, and a
+    # cancellation discards the log that would have explained it.
+    timeout-minutes: 80
     defaults:
       run:
         shell: bash
@@ -470,6 +474,11 @@ jobs:
 
   windows-compat:
     runs-on: windows-latest
+    # This lane had no ceiling at all, so it inherited GitHub's six-hour
+    # default: the outermost tier was missing on the one lane that also had
+    # no per-test bound, because `[[profile.default.overrides]]` does not
+    # reach the `ci` profile it runs under.
+    timeout-minutes: 80
     env:
       # `windows-latest` is a 4 vCPU GitHub-hosted shape, so it does not share
       # the Ubicloud constant used by the Linux lanes.
