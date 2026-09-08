@@ -24,3 +24,6 @@ htmlcov/
 *.swp
 *.swo
 *~
+
+# Session scratch produced by local agent tooling.
+.memories/
