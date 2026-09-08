@@ -3,10 +3,11 @@
 //! Helpers are layered following the toolchain step conventions: fallible
 //! lookups return `Result` with a diagnostic message, queries are pure, and
 //! the public assertion wrappers stay thin.
-use crate::prebuilt_markers::PREBUILT_INSTALL_MARKER;
 use std::path::{Path, PathBuf};
-use super::{CliWorld, PINNED_SUITE_REF, expected_prebuilt_target_dir, get_output, matching_files};
-use super::{CliWorld, expected_prebuilt_target_dir, matching_files};
+
+use crate::prebuilt_markers::PREBUILT_INSTALL_MARKER;
+
+use super::{CliWorld, PINNED_SUITE_REF, expected_prebuilt_target_dir, matching_files};
 
 fn assert_exit_status(cli_world: &CliWorld, expected_success: bool) {
     if cli_world.skip_assertions.get() {
@@ -55,8 +56,11 @@ pub(crate) fn assert_pinned_suite_is_named(cli_world: &CliWorld) {
         return;
     }
 
-    let output = get_output(cli_world);
-    let stderr = String::from_utf8_lossy(&output.stderr);
+    let output = match captured_output(cli_world) {
+        Ok(output) => output,
+        Err(message) => panic!("{message}"),
+    };
+    let stderr = output.stderr;
 
     assert!(
         stderr.contains(&format!("Suite: {PINNED_SUITE_REF}")),
@@ -65,8 +69,11 @@ pub(crate) fn assert_pinned_suite_is_named(cli_world: &CliWorld) {
 }
 
 pub(crate) fn assert_rejected_suite_ref_is_named(cli_world: &CliWorld) {
-    let output = get_output(cli_world);
-    let stderr = String::from_utf8_lossy(&output.stderr);
+    let output = match captured_output(cli_world) {
+        Ok(output) => output,
+        Err(message) => panic!("{message}"),
+    };
+    let stderr = output.stderr;
 
     assert!(
         stderr.contains("suite reference"),
