@@ -140,18 +140,18 @@ jobs:
             "$HOME/.cache/whitaker-mirrors/rust-clippy.git"
 
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@7cb894fe62c40951cccf33819548095e64a1291e
+        uses: leynos/shared-actions/.github/actions/setup-rust@6b5cdc2d4c0bb72cafd5a66d24d248ac25827db9
         with:
           cache-provider: external
 
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
+        uses: taiki-e/install-action@e67fa11c4b9316fa714ddf0abed07a0c3143b95b  # v2.87.4
         with:
           tool: nextest@0.9.114
           fallback: none
 
       - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
+        uses: taiki-e/install-action@e67fa11c4b9316fa714ddf0abed07a0c3143b95b  # v2.87.4
         with:
           tool: cargo-llvm-cov@0.6.24
           fallback: none
@@ -182,7 +182,7 @@ jobs:
         env:
           CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
         if: env.CS_ACCESS_TOKEN != ''
-        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@7cb894fe62c40951cccf33819548095e64a1291e
+        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@6b5cdc2d4c0bb72cafd5a66d24d248ac25827db9
         with:
           format: lcov
           access-token: ${{ env.CS_ACCESS_TOKEN }}
