@@ -1,5 +1,10 @@
 .PHONY: help all clean test test-doc coverage build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke installer-msrv-check release-installer-dry-run package-lints workflow-test workflow-test-deps test-workflow-contracts test-markdown-format test-glibc-baseline verus kani verus-clone-detector kani-clone-detector spelling spelling-config spelling-config-write spelling-phrase-check spelling-helper-test skill-frontmatter-lint skill-manifest-validate skill-manifest-check
 
+# Make chooses the recipe shell itself, so the `shell: bash` default in the
+# workflows does not reach recipes; the `/bin/sh` it would otherwise use
+# rejects the `pipefail` that the validation targets require.
+SHELL := bash
+
 # Appended only on targets that invoke binaries commonly installed under these
 # prefixes (cargo/bun/user-local), so the default recipe environment stays
 # aligned with the caller's PATH.

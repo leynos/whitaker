@@ -1194,11 +1194,18 @@ shell probes rather than fixed command names. `CARGO` is resolved at
 make-invocation time: `command -v cargo` is tried first (it returns a
 POSIX-safe path on all platforms, including Windows/Git Bash), falling back to
 `~/.cargo/bin/cargo` when that file is executable. This ordering avoids Windows
-drive-letter paths that confuse the POSIX shell used by make recipes. `MDLINT`
+drive-letter paths that confuse the shell that runs make recipes. `MDLINT`
 prefers the `markdownlint-cli2` binary found on `PATH` (typically a global npm
 or Bun install), falling back to `~/.bun/bin/markdownlint-cli2`. Both variables
 honour an existing environment value if set before invoking make, allowing
 per-developer overrides without modifying the Makefile.
+
+Make selects the shell for recipes itself, and the Makefile declares it
+(`SHELL := bash`). The `shell: bash` default in a workflow's `defaults.run`
+governs the workflow's own `run` steps and does not reach make recipes; Make
+would otherwise use `/bin/sh`, which is `dash` on the CI runner and rejects the
+`set -o pipefail` that validation targets such as `skill-frontmatter-lint`
+require.
 
 `make verus` currently runs both decomposition-advice proofs and the
 clone-detector sidecars for `LshConfig::new`, `CandidatePair::new`, and AST

@@ -208,3 +208,25 @@ def test_lint_depends_on_the_manifest_check() -> None:
     assert "skill-manifest-check" in prerequisites, (
         f"lint must depend on skill-manifest-check; recorded: {prerequisites!r}"
     )
+
+
+def test_make_recipes_run_under_bash() -> None:
+    """The Makefile selects Bash, so a recipe can rely on Bash-only options.
+
+    The workflows run `make` under Bash, but `defaults.run.shell` governs the
+    `run` steps written in a workflow; Make selects the shell for a recipe
+    itself. It otherwise executes recipes with `/bin/sh`, which is `dash` on the
+    CI runner and rejects the `set -o pipefail` that `skill-frontmatter-lint`
+    relies on. The probe is deliberately brittle about which shell answers:
+    `$BASH_VERSION` is set only by Bash, so the target fails wherever Make falls
+    back to `sh`, however `sh` is provided on that host.
+    """
+    probe = (
+        "recipe-shell-probe:\n"
+        '\t@test -n "$$BASH_VERSION" ||'
+        ' { echo "recipes do not run under Bash"; exit 1; }\n'
+    )
+
+    result = _run_make("--eval", probe, "recipe-shell-probe")
+
+    assert result.returncode == 0, result.stdout + result.stderr
