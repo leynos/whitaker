@@ -9,7 +9,9 @@ The manifest `name` is the discovery name a strict loader uses, so a manifest
 that omits it — or sets it to the empty string — is not discoverable.
 `skills-ref` coerces every `metadata` value with `str(v)` rather than rejecting
 other shapes, so a YAML sequence survives validation but reaches consumers as a
-Python repr; that trap is pinned here because the schema check cannot see it.
+Python repr; `skill-metadata-check` rejects those shapes, and both that trap and
+the target that catches it are pinned here because the schema check cannot see
+them.
 
 The gate itself is pinned too, because both of its silent failure modes have
 happened upstream: a shell `for` loop exits with the status of its final
@@ -34,8 +36,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-SHIPPED_MANIFESTS = sorted((REPO_ROOT / "skills").glob("*/SKILL.md"))
+REPO_ROOT: Path = Path(__file__).resolve().parents[2]
+SHIPPED_MANIFESTS: list[Path] = sorted((REPO_ROOT / "skills").glob("*/SKILL.md"))
 
 
 def _run_make(*arguments: str) -> subprocess.CompletedProcess[str]:
@@ -129,6 +131,33 @@ def test_manifest_check_rejects_an_unusable_name(
     assert result.returncode != 0, result.stdout + result.stderr
 
 
+def test_manifest_check_reports_a_schema_failure_before_a_valid_skill(
+    tmp_path: Path,
+) -> None:
+    """A schema rejection fails `skill-manifest-validate`, not just a late one.
+
+    The recipe loops over `SKILL_DIRS` and relies on `set -e` to stop at the
+    first failure. A test over a single fixture cannot tell that apart from a
+    loop that reports only its final iteration, so the invalid fixture is
+    ordered first and a conformant one last.
+    """
+    invalid = _write_manifest(
+        tmp_path / "a-broken",
+        "---\nname: Broken Name\ndescription: A fixture no loader can discover.\n"
+        "---\n\n# Broken\n",
+    )
+    valid = _write_manifest(
+        tmp_path / "z-valid",
+        "---\nname: z-valid\ndescription: A conformant trailing fixture.\n---\n\n# Valid\n",
+    )
+
+    result = _run_make(
+        "skill-manifest-validate", *_skill_dirs_argument(invalid, valid)
+    )
+
+    assert result.returncode != 0, result.stdout + result.stderr
+
+
 @pytest.mark.parametrize(
     "manifest", SHIPPED_MANIFESTS, ids=lambda path: path.parent.name
 )
@@ -149,6 +178,53 @@ def test_shipped_metadata_values_are_strings(manifest: Path) -> None:
         key: value for key, value in metadata.items() if not isinstance(value, str)
     }
     assert not non_strings, f"metadata values must be strings: {non_strings}"
+
+
+def test_metadata_check_accepts_a_conformant_manifest(tmp_path: Path) -> None:
+    """The shape the specification permits passes the target unchanged."""
+    skill_dir = _write_manifest(
+        tmp_path / "conformant-skill",
+        "---\nname: conformant-skill\ndescription: A conformant fixture.\n"
+        "metadata:\n  owner: platform\n---\n\n# Fixture\n",
+    )
+
+    result = _run_make("skill-metadata-check", *_skill_dirs_argument(skill_dir))
+
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize(
+    ("case", "metadata"),
+    [
+        ("sequence-value", "  tags:\n    - one\n"),
+        ("integer-value", "  revision: 3\n"),
+        ("sequence-metadata", "  - one\n"),
+    ],
+)
+def test_metadata_check_rejects_shapes_the_schema_check_coerces(
+    tmp_path: Path, case: str, metadata: str
+) -> None:
+    """The validator catches what `skills-ref` silently rewrites with `str(v)`.
+
+    Each fixture passes schema validation, so a dropped `skill-metadata-check`
+    prerequisite is invisible to `skill-manifest-validate`; the conformant
+    fixture is ordered last so a loop that reported only its final iteration
+    could not make the target pass either.
+    """
+    broken = _write_manifest(
+        tmp_path / f"a-{case}",
+        f"---\nname: a-{case}\ndescription: A fixture.\n"
+        f"metadata:\n{metadata}---\n\n# Fixture\n",
+    )
+    valid = _write_manifest(
+        tmp_path / "z-valid",
+        "---\nname: z-valid\ndescription: A conformant trailing fixture.\n"
+        "metadata:\n  owner: platform\n---\n\n# Valid\n",
+    )
+
+    result = _run_make("skill-metadata-check", *_skill_dirs_argument(broken, valid))
+
+    assert result.returncode != 0, result.stdout + result.stderr
 
 
 def test_frontmatter_lint_reports_an_early_failure(tmp_path: Path) -> None:
@@ -207,6 +283,33 @@ def test_lint_depends_on_the_manifest_check() -> None:
     prerequisites = lint_line.split(":", 1)[1].split("##", 1)[0].split()
     assert "skill-manifest-check" in prerequisites, (
         f"lint must depend on skill-manifest-check; recorded: {prerequisites!r}"
+    )
+
+
+def test_manifest_check_depends_on_the_metadata_check() -> None:
+    """`skill-manifest-check` runs the metadata validator over every skill.
+
+    The validator is reached only through that prerequisite, so dropping it
+    would disable the check while `skill-manifest-validate` still accepted
+    every manifest `skills-ref` coerces.
+    """
+    makefile = (REPO_ROOT / "Makefile").read_text(encoding="utf-8")
+    check_line = next(
+        (
+            line
+            for line in makefile.splitlines()
+            if re.match(r"skill-manifest-check:", line)
+        ),
+        None,
+    )
+
+    assert check_line is not None, (
+        "the Makefile must define the skill-manifest-check target"
+    )
+    prerequisites = check_line.split(":", 1)[1].split("##", 1)[0].split()
+    assert "skill-metadata-check" in prerequisites, (
+        f"skill-manifest-check must depend on skill-metadata-check; "
+        f"recorded: {prerequisites!r}"
     )
 
 

@@ -910,11 +910,11 @@ frontmatter is an Agent Skills manifest. The manifest `name` is the discovery
 name a strict loader uses, so a manifest that omits it is not discoverable.
 
 `make lint` depends on `make skill-manifest-check`, so the contract is enforced
-by the standard gate sequence rather than by a separate opt-in run. Three
+by the standard gate sequence rather than by a separate opt-in run. Four
 targets implement it:
 
 - `make skill-manifest-check`
-  - Aggregate target; runs both targets below.
+  - Aggregate target; runs all three targets below.
 - `make skill-frontmatter-lint`
   - Extracts the YAML frontmatter block of each `SKILL.md` with `awk` and pipes
     it to `yamllint` under the inline `SKILL_YAMLLINT_CONFIG`. That
@@ -923,8 +923,15 @@ targets implement it:
 - `make skill-manifest-validate`
   - Runs `skills-ref validate` over each skill directory to enforce the Agent
     Skills manifest schema.
+- `make skill-metadata-check`
+  - Runs `scripts/check_skill_metadata.py` directly over each skill directory,
+    rejecting a `metadata` key that is present but is not a mapping, and any
+    `metadata` value that is not a string. The script's own uv shebang and
+    inline dependency pin select its interpreter and YAML parser.
 
-All three read `SKILL_DIRS`, which defaults to every `skills/*/SKILL.md`
+Run the checker's unit tests with `make test-skill-metadata-check`.
+
+All four read `SKILL_DIRS`, which defaults to every `skills/*/SKILL.md`
 directory and can be overridden to check one skill or a fixture:
 
 ```sh
@@ -932,12 +939,13 @@ make skill-manifest-check SKILL_DIRS=skills/addressing-whitaker-findings/
 ```
 
 Whitaker has no Python project manifest to hold a development dependency group,
-so the two tool pins live in the Makefile beside the other uv tool pins:
-`YAMLLINT_VERSION` for the `yamllint` release from PyPI, and
-`SKILLS_REF_COMMIT` for the Agent Skills reference validator, fetched from the
-`agentskills` repository at a full commit SHA in the `skills-ref` subdirectory.
-Both run through `uv tool run`, so a cold runner and a warm cache resolve the
-same versions.
+so the three tool pins live in the Makefile beside the other uv tool pins:
+`YAMLLINT_VERSION` for the `yamllint` release from PyPI, `SKILLS_REF_COMMIT`
+for the Agent Skills reference validator, fetched from the `agentskills`
+repository at a full commit SHA in the `skills-ref` subdirectory, and
+`PYYAML_VERSION` for the `pyyaml` release, mirroring the inline pin in
+`scripts/check_skill_metadata.py`. All three run through `uv`, so a cold runner
+and a warm cache resolve the same versions.
 
 `skill-frontmatter-lint` enables `errexit` and `pipefail` so the target fails
 on the first offending manifest. Without them the shell `for` loop would exit
@@ -948,8 +956,8 @@ reported only by the pipeline.
 `skills-ref` coerces every `metadata` value with `str(v)` rather than rejecting
 other shapes, so a YAML sequence survives validation but reaches consumers as a
 Python repr. Keep `metadata` a mapping of strings to strings and encode
-multi-valued entries as one string; the contract test rejects the coercible
-shapes because the schema check cannot see them.
+multi-valued entries as one string; `skill-metadata-check` rejects the
+coercible shapes because the schema check cannot see them.
 
 The contract is pinned by
 [`tests/workflow_contracts/skill_manifest_contract_test.py`](../tests/workflow_contracts/skill_manifest_contract_test.py),
@@ -957,10 +965,14 @@ which runs with the rest of the gate contracts under
 `make test-workflow-contracts`. It asserts that the shipped manifests validate,
 that the default `SKILL_DIRS` glob discovers every one of them, and that
 manifest validation cannot pass vacuously: an absent or empty `name`, a
-non-string `metadata` value, a malformed non-final manifest, and a manifest
-`awk` cannot read must each fail the gate. It also asserts that `lint` still
-depends on `skill-manifest-check`, so dropping the prerequisite fails the
-contract rather than silently disabling validation.
+malformed non-final manifest, and a manifest `awk` cannot read must each fail
+the gate. It also pins what the metadata checker must reject: a sequence value,
+an integer value, and a sequence `metadata`, plus a conformant fixture that
+must still pass. It asserts that a schema failure ordered before a conformant
+skill fails `skill-manifest-validate`. Finally, it asserts that
+`skill-manifest-check` still depends on `skill-metadata-check`, and that `lint`
+still depends on `skill-manifest-check`, so dropping either prerequisite fails
+the contract rather than silently disabling validation.
 
 ## Mutation-testing workflow contract tests
 

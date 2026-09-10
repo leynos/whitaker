@@ -1,4 +1,4 @@
-.PHONY: help all clean test test-doc coverage build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke installer-msrv-check release-installer-dry-run package-lints workflow-test workflow-test-deps test-workflow-contracts test-markdown-format test-glibc-baseline verus kani verus-clone-detector kani-clone-detector spelling spelling-config spelling-config-write spelling-phrase-check spelling-helper-test skill-frontmatter-lint skill-manifest-validate skill-manifest-check
+.PHONY: help all clean test test-doc coverage build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke installer-msrv-check release-installer-dry-run package-lints workflow-test workflow-test-deps test-workflow-contracts test-markdown-format test-glibc-baseline verus kani verus-clone-detector kani-clone-detector spelling spelling-config spelling-config-write spelling-phrase-check spelling-helper-test skill-frontmatter-lint skill-manifest-validate skill-metadata-check skill-manifest-check test-skill-metadata-check
 
 # Make chooses the recipe shell itself, so the `shell: bash` default in the
 # workflows does not reach recipes; the `/bin/sh` it would otherwise use
@@ -61,11 +61,14 @@ TYPOS_CONFIG_BUILDER_SOURCE := git+https://github.com/leynos/typos-config-builde
 TYPOS_CONFIG_BUILDER := $(UV_ENV) $(UV) tool run --python 3.14 \
 	--from "$(TYPOS_CONFIG_BUILDER_SOURCE)" typos-config-builder
 # Agent Skills manifest validation. `lint` depends on `skill-manifest-check`,
-# so a malformed manifest fails the standard gate rather than shipping. Both
-# tools are pinned here rather than in a project manifest because this
-# repository has no Python project; they run through uv like the other pins.
+# so a malformed manifest fails the standard gate rather than shipping. The
+# pins live here rather than in a project manifest because this repository has
+# no Python project; they run through uv like the other pins.
 SKILL_DIRS ?= $(sort $(dir $(wildcard skills/*/SKILL.md)))
 YAMLLINT_VERSION ?= 1.38.0
+# Mirrors the inline `pyyaml` pin in `scripts/check_skill_metadata.py`; the
+# unit tests resolve this one with `uv run --with`.
+PYYAML_VERSION ?= 6.0.2
 SKILLS_REF_COMMIT := 69ef37e9424c0a7ea9dd2293b559e43ec8176379
 SKILLS_REF_SOURCE := git+https://github.com/agentskills/agentskills.git@$(SKILLS_REF_COMMIT)\#subdirectory=skills-ref
 YAMLLINT := $(UV_ENV) $(UV) tool run yamllint@$(YAMLLINT_VERSION)
@@ -213,6 +216,12 @@ test-glibc-baseline: ## Validate the Linux release glibc-baseline checker
 		python -m pytest scripts/tests/test_check_glibc_baseline.py -c /dev/null \
 		--rootdir=. -p no:cacheprovider
 
+test-skill-metadata-check: ## Validate the Agent Skills metadata checker
+	@$(UV_ENV) $(UV) run --no-project --python 3.14 \
+		--with pyyaml==$(PYYAML_VERSION) --with pytest==9.0.2 \
+		python -m pytest scripts/tests/test_check_skill_metadata.py -c /dev/null \
+		--rootdir=. -p no:cacheprovider
+
 workflow-test-deps: ## Install Python dependencies for workflow tests
 	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v $(UV) >/dev/null || { echo "uv is required for workflow tests"; exit 1; }
 	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; $(UV) venv --allow-existing $(WORKFLOW_TEST_VENV)
@@ -239,7 +248,14 @@ skill-manifest-validate: ## Validate every skill directory against the Agent Ski
 		$(SKILLS_REF) validate "$$skill_dir"; \
 	done
 
-skill-manifest-check: skill-frontmatter-lint skill-manifest-validate ## Validate every shipped skill manifest
+skill-metadata-check: ## Reject skill metadata that is not a mapping of strings
+	@# `set -e` stops the loop on the first offending manifest; without it the
+	@# loop exits with the status of its final iteration, so a conformant
+	@# trailing skill masks a malformed earlier one.
+	@set -eu; $(UV_ENV) $(UV) run --no-project --python 3.14 \
+		scripts/check_skill_metadata.py $(SKILL_DIRS)
+
+skill-manifest-check: skill-frontmatter-lint skill-manifest-validate skill-metadata-check ## Validate every shipped skill manifest
 
 lint: skill-manifest-check ## Run Clippy with warnings denied
 	RUSTDOCFLAGS="$(RUSTDOC_FLAGS)" $(CARGO) doc $(CARGO_LOCKED) --workspace --no-deps

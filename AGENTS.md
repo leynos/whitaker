@@ -348,16 +348,18 @@ already enforced by the gate sequence above. When adding, renaming, or editing
 anything under `skills/`, the following are required:
 
 - Run `make lint`. It runs `skill-frontmatter-lint` (`yamllint` over each
-  extracted frontmatter block) and `skill-manifest-validate`
-  (`skills-ref validate` over each skill directory). Both must pass before
-  committing.
+  extracted frontmatter block), `skill-manifest-validate`
+  (`skills-ref validate` over each skill directory), and `skill-metadata-check`
+  (`scripts/check_skill_metadata.py`, which rejects `metadata` that is not a
+  mapping of strings). All three must pass before committing.
 - Run `make test-workflow-contracts`, which exercises
   `tests/workflow_contracts/skill_manifest_contract_test.py`.
 - Keep the directory name equal to the manifest `name`.
 - Keep `metadata` a mapping of strings to strings. `skills-ref` coerces every
   value with `str(v)` rather than rejecting other shapes, so a list or mapping
-  value passes validation but reaches consumers as a Python repr. Encode
-  multi-valued entries as a single string.
+  value passes `skills-ref` validation but would reach consumers as a Python
+  repr; `skill-metadata-check` now rejects it. Encode multi-valued entries as a
+  single string.
 
 Do not weaken these checks to make a manifest pass. Fix the manifest instead of
 excluding it from `SKILL_DIRS` or relaxing the `yamllint` configuration.

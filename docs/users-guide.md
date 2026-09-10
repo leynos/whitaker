@@ -877,11 +877,12 @@ directory that an agent tool reads. For Claude Code that directory is
 
 ```sh
 git clone --depth 1 https://github.com/leynos/whitaker.git /tmp/whitaker
+mkdir -p ~/.claude/skills/
 cp -R /tmp/whitaker/skills/addressing-whitaker-findings ~/.claude/skills/
 ```
 
 The repository gates every shipped manifest, so a malformed one cannot reach a
-copy taken from it: `make lint` runs `skill-frontmatter-lint` and
-`skill-manifest-validate` over each manifest. The
+copy taken from it: `make lint` runs `skill-frontmatter-lint`,
+`skill-manifest-validate`, and `skill-metadata-check` over each manifest. The
 [Developer's Guide](developers-guide.md#skill-manifest-checks) records how
 those targets behave and when to run them alone.
