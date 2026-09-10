@@ -903,6 +903,65 @@ make test-markdown-format
 The target uses isolated `uv` dependencies and does not rewrite Markdown
 sources or other tracked files.
 
+## Skill manifest checks
+
+Every directory under [`skills/`](../skills/) carries a `SKILL.md` whose YAML
+frontmatter is an Agent Skills manifest. The manifest `name` is the discovery
+name a strict loader uses, so a manifest that omits it is not discoverable.
+
+`make lint` depends on `make skill-manifest-check`, so the contract is enforced
+by the standard gate sequence rather than by a separate opt-in run. Three
+targets implement it:
+
+- `make skill-manifest-check`
+  - Aggregate target; runs both targets below.
+- `make skill-frontmatter-lint`
+  - Extracts the YAML frontmatter block of each `SKILL.md` with `awk` and pipes
+    it to `yamllint` under the inline `SKILL_YAMLLINT_CONFIG`. That
+    configuration is the default rule set with `line-length` disabled, because
+    a manifest `description` is legitimately one long line.
+- `make skill-manifest-validate`
+  - Runs `skills-ref validate` over each skill directory to enforce the Agent
+    Skills manifest schema.
+
+All three read `SKILL_DIRS`, which defaults to every `skills/*/SKILL.md`
+directory and can be overridden to check one skill or a fixture:
+
+```sh
+make skill-manifest-check SKILL_DIRS=skills/addressing-whitaker-findings/
+```
+
+Whitaker has no Python project manifest to hold a development dependency group,
+so the two tool pins live in the Makefile beside the other uv tool pins:
+`YAMLLINT_VERSION` for the `yamllint` release from PyPI, and
+`SKILLS_REF_COMMIT` for the Agent Skills reference validator, fetched from the
+`agentskills` repository at a full commit SHA in the `skills-ref` subdirectory.
+Both run through `uv tool run`, so a cold runner and a warm cache resolve the
+same versions.
+
+`skill-frontmatter-lint` enables `errexit` and `pipefail` so the target fails
+on the first offending manifest. Without them the shell `for` loop would exit
+with the status of its final iteration, letting a conformant trailing skill
+mask a malformed earlier one, and a manifest that `awk` cannot read would be
+reported only by the pipeline.
+
+`skills-ref` coerces every `metadata` value with `str(v)` rather than rejecting
+other shapes, so a YAML sequence survives validation but reaches consumers as a
+Python repr. Keep `metadata` a mapping of strings to strings and encode
+multi-valued entries as one string; the contract test rejects the coercible
+shapes because the schema check cannot see them.
+
+The contract is pinned by
+[`tests/workflow_contracts/skill_manifest_contract_test.py`](../tests/workflow_contracts/skill_manifest_contract_test.py),
+which runs with the rest of the gate contracts under
+`make test-workflow-contracts`. It asserts that the shipped manifests validate,
+that the default `SKILL_DIRS` glob discovers every one of them, and that
+manifest validation cannot pass vacuously: an absent or empty `name`, a
+non-string `metadata` value, a malformed non-final manifest, and a manifest
+`awk` cannot read must each fail the gate. It also asserts that `lint` still
+depends on `skill-manifest-check`, so dropping the prerequisite fails the
+contract rather than silently disabling validation.
+
 ## Mutation-testing workflow contract tests
 
 Whitaker runs scheduled, informational mutation testing through a thin caller

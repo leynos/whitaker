@@ -1,4 +1,4 @@
-.PHONY: help all clean test test-doc coverage build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke installer-msrv-check release-installer-dry-run package-lints workflow-test workflow-test-deps test-workflow-contracts test-markdown-format test-glibc-baseline verus kani verus-clone-detector kani-clone-detector spelling spelling-config spelling-config-write spelling-phrase-check spelling-helper-test
+.PHONY: help all clean test test-doc coverage build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke installer-msrv-check release-installer-dry-run package-lints workflow-test workflow-test-deps test-workflow-contracts test-markdown-format test-glibc-baseline verus kani verus-clone-detector kani-clone-detector spelling spelling-config spelling-config-write spelling-phrase-check spelling-helper-test skill-frontmatter-lint skill-manifest-validate skill-manifest-check
 
 # Appended only on targets that invoke binaries commonly installed under these
 # prefixes (cargo/bun/user-local), so the default recipe environment stays
@@ -55,6 +55,20 @@ TYPOS_CONFIG_BUILDER_COMMIT := b604f198797fdd36a567dd0f8f07b13f9539b241
 TYPOS_CONFIG_BUILDER_SOURCE := git+https://github.com/leynos/typos-config-builder.git@$(TYPOS_CONFIG_BUILDER_COMMIT)
 TYPOS_CONFIG_BUILDER := $(UV_ENV) $(UV) tool run --python 3.14 \
 	--from "$(TYPOS_CONFIG_BUILDER_SOURCE)" typos-config-builder
+# Agent Skills manifest validation. `lint` depends on `skill-manifest-check`,
+# so a malformed manifest fails the standard gate rather than shipping. Both
+# tools are pinned here rather than in a project manifest because this
+# repository has no Python project; they run through uv like the other pins.
+SKILL_DIRS ?= $(sort $(dir $(wildcard skills/*/SKILL.md)))
+YAMLLINT_VERSION ?= 1.38.0
+SKILLS_REF_COMMIT := 69ef37e9424c0a7ea9dd2293b559e43ec8176379
+SKILLS_REF_SOURCE := git+https://github.com/agentskills/agentskills.git@$(SKILLS_REF_COMMIT)\#subdirectory=skills-ref
+YAMLLINT := $(UV_ENV) $(UV) tool run yamllint@$(YAMLLINT_VERSION)
+SKILLS_REF := $(UV_ENV) $(UV) tool run --python 3.14 \
+	--from "$(SKILLS_REF_SOURCE)" skills-ref
+# A manifest `description` is legitimately one long line, so the default
+# `line-length` rule is disabled rather than wrapping the frontmatter.
+SKILL_YAMLLINT_CONFIG := {extends: default, rules: {line-length: disable}}
 SPELLING_PY_SRCS := \
 	scripts/typos_rollout_check.py scripts/tests/test_typos_rollout_check.py
 SPELLING_PY_TESTS := scripts/tests/test_typos_rollout_check.py
@@ -203,7 +217,26 @@ target/%/$(APP): ## Build binary in debug or release mode
 	manifest=$$(grep -l whitaker-installer */Cargo.toml crates/*/Cargo.toml); \
 	$(CARGO) build $(CARGO_LOCKED) $(BUILD_JOBS) $(if $(findstring release,$(@)),--release) --bin $(APP) --manifest-path "$$manifest"
 
-lint: ## Run Clippy with warnings denied
+skill-frontmatter-lint: ## Lint the YAML frontmatter of every skill manifest
+	@# `errexit` and `pipefail` fail the target on the first offending manifest.
+	@# Without them the loop exits with the status of its final iteration, so a
+	@# conformant trailing skill masks a malformed earlier one, and an unreadable
+	@# manifest is reported only by the pipeline.
+	@set -euo pipefail; for skill_dir in $(SKILL_DIRS); do \
+		skill_file="$${skill_dir%/}/SKILL.md"; \
+		echo "yamllint $$skill_file frontmatter"; \
+		awk 'NR == 1 { if ($$0 != "---") exit 1; print; next } $$0 == "---" { found = 1; print; exit } { print } END { if (!found) exit 1 }' "$$skill_file" | $(YAMLLINT) -d '$(SKILL_YAMLLINT_CONFIG)' -; \
+	done
+
+skill-manifest-validate: ## Validate every skill directory against the Agent Skills schema
+	@set -eu; for skill_dir in $(SKILL_DIRS); do \
+		echo "skills-ref validate $$skill_dir"; \
+		$(SKILLS_REF) validate "$$skill_dir"; \
+	done
+
+skill-manifest-check: skill-frontmatter-lint skill-manifest-validate ## Validate every shipped skill manifest
+
+lint: skill-manifest-check ## Run Clippy with warnings denied
 	RUSTDOCFLAGS="$(RUSTDOC_FLAGS)" $(CARGO) doc $(CARGO_LOCKED) --workspace --no-deps
 	$(CARGO) clippy $(CARGO_LOCKED) $(CARGO_FLAGS) -- $(RUST_FLAGS)
 
