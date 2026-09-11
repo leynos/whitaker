@@ -137,6 +137,10 @@ artefacts are named for the toolchain they were built with, so a pin held
 against a newer `rust-toolchain.toml` misses and builds from source anyway. The
 guarantee a pin buys is reproducibility, not speed.
 
+With `--no-update`, an already-local `--suite-version` reference resolves
+without network access. A later unpinned update reattaches a detached managed
+clone to its default branch before pulling.
+
 **A pin cannot be applied from inside a Whitaker checkout.** Checking out a
 reference there would move the working tree, so the installer refuses and says
 so. Run it from another directory, where it manages its own clone, or check out
