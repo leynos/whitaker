@@ -15,21 +15,21 @@ formal verification helpers.
 
 ## Top-level directories
 
-| Path         | Purpose                                                                                                                               |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `.cargo/`    | Cargo configuration shared across the workspace.                                                                                      |
-| `.config/`   | Project configuration such as the nextest profile and test filters.                                                                   |
-| `.github/`   | Continuous Integration (CI), release, and automation workflows.                                                                       |
-| `common/`    | Shared analysis, diagnostics, localization, decomposition, and test-support code used across multiple lint crates.                    |
-| `crates/`    | Individual lint crates, selected vendored `rustc_*` compatibility crates, and support crates such as clone-analysis and SARIF output. |
-| `docs/`      | User, developer, design, roadmap, decision-record, and planning documentation.                                                        |
-| `installer/` | The `whitaker-installer` crate, packaging logic, and installer-specific behaviour tests.                                              |
-| `scripts/`   | Repository automation for checksums, Markdown formatting, Kani, and Verus setup and execution.                                        |
-| `skills/`    | Agent-facing skills that document repeatable maintenance and remediation workflows.                                                   |
-| `src/`       | Root library code that assembles shared lint registration and workspace-facing APIs.                                                  |
-| `suite/`     | The suite crate used to package and expose the lint set coherently.                                                                   |
-| `tests/`     | Workspace-level integration, behaviour, UI harness, and workflow tests.                                                               |
-| `verus/`     | Verus proof sidecars and formal verification experiments.                                                                             |
+| Path         | Purpose                                                                                                                                                                                                           |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `.cargo/`    | Cargo configuration shared across the workspace.                                                                                                                                                                  |
+| `.config/`   | Project configuration such as the nextest profile and test filters.                                                                                                                                               |
+| `.github/`   | Continuous Integration (CI), release, and automation workflows.                                                                                                                                                   |
+| `common/`    | Shared analysis, diagnostics, localization, decomposition, and test-support code used across multiple lint crates.                                                                                                |
+| `crates/`    | Individual lint crates, selected vendored `rustc_*` compatibility crates, and support crates such as clone-analysis and SARIF output.                                                                             |
+| `docs/`      | User, developer, design, roadmap, decision-record, and planning documentation.                                                                                                                                    |
+| `installer/` | The `whitaker-installer` crate, packaging logic, and installer-specific behaviour tests.                                                                                                                          |
+| `scripts/`   | Repository automation for checksums, Markdown formatting, Kani, and Verus setup and execution.                                                                                                                    |
+| `skills/`    | Agent-facing skills that document repeatable maintenance and remediation workflows. Each skill is a directory whose `SKILL.md` frontmatter is an Agent Skills manifest, validated by `make skill-manifest-check`. |
+| `src/`       | Root library code that assembles shared lint registration and workspace-facing APIs.                                                                                                                              |
+| `suite/`     | The suite crate used to package and expose the lint set coherently.                                                                                                                                               |
+| `tests/`     | Workspace-level integration, behaviour, UI harness, and workflow tests.                                                                                                                                           |
+| `verus/`     | Verus proof sidecars and formal verification experiments.                                                                                                                                                         |
 
 _Table 1: Top-level repository layout._
 

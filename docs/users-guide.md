@@ -851,3 +851,38 @@ it does not score clones or emit AST-based SARIF results.
 Contributors maintaining the pinned parser should follow the
 [`ra_ap_syntax` re-pinning runbook](developers-guide.md#ra_ap_syntax-re-pinning-runbook)
 in the Developer's Guide.
+
+## Agent skills
+
+Whitaker ships an agent-facing skill under
+[`skills/addressing-whitaker-findings/`](../skills/addressing-whitaker-findings/SKILL.md).
+It distils the remediation patterns from adopting the suite across more than
+forty repositories: what each lint expects, which fixes hold up under review,
+when an exclusion is legitimate, and the traps that cost earlier adopters
+rework. The skill is written for an agent rather than a human reader, and it
+covers the lints described in [Available Lints](#available-lints).
+
+The skill lives in the repository rather than in a separate package, so it
+tracks the suite as the lints change.
+
+A skill is a directory holding a `SKILL.md` whose YAML frontmatter is an Agent
+Skills manifest. The manifest `name` is the discovery name a strict loader
+uses, so a manifest that omits it leaves the skill undiscoverable. Every
+shipped skill directory matches its manifest `name`, so one identifier names
+the skill both on disk and at the point of discovery.
+
+Making the skill available means copying its directory into the skills
+directory that an agent tool reads. For Claude Code that directory is
+`~/.claude/skills/`; other tools that consume Agent Skills use their own:
+
+```sh
+git clone --depth 1 https://github.com/leynos/whitaker.git /tmp/whitaker
+mkdir -p ~/.claude/skills/
+cp -R /tmp/whitaker/skills/addressing-whitaker-findings ~/.claude/skills/
+```
+
+The repository gates every shipped manifest, so a malformed one cannot reach a
+copy taken from it: `make lint` runs `skill-frontmatter-lint`,
+`skill-manifest-validate`, and `skill-metadata-check` over each manifest. The
+[Developer's Guide](developers-guide.md#skill-manifest-checks) records how
+those targets behave and when to run them alone.
