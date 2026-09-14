@@ -15,7 +15,7 @@ off.
 """
 
 import pytest
-from suite_commands import _suite_commands
+from suite_commands import _disguised_suite_lines, _suite_commands
 from timeout_budgets import (
     NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS,
     Profile,
@@ -197,4 +197,43 @@ def test_every_suite_command_in_a_step_becomes_a_lane(
     assert _suite_commands(run) == expected, (
         f"{run!r} must yield {expected!r}; every suite command in a step is a "
         f"lane, because each may name its own profile"
+    )
+
+
+@pytest.mark.parametrize(
+    ("run", "expected"),
+    [
+        pytest.param(
+            "make test-doc; make test",
+            ["make test-doc; make test"],
+            id="a-suite-command-after-a-non-suite-one",
+        ),
+        pytest.param(
+            "make test || true",
+            ["make test || true"],
+            id="a-verdict-discarded",
+        ),
+        pytest.param("make test-doc", [], id="a-plain-non-suite-command"),
+        pytest.param(
+            "make test-doc --nocapture",
+            [],
+            id="a-non-suite-command-with-arguments",
+        ),
+    ],
+)
+def test_a_line_naming_the_suite_without_plainly_running_it_is_reported(
+    run: str, expected: list[str]
+) -> None:
+    """A line the reading cannot judge must be reported, not dropped.
+
+    The non-suite commands are excluded by prefix, and the exclusion
+    used to apply to any line beginning with one. `make test-doc; make
+    test` therefore escaped both halves of the contract: it was not a
+    lane, so no ceiling was checked against it, and it was not
+    disguised either, so nothing said so. The exclusion now holds only
+    for a line that runs that command and nothing else.
+    """
+    assert _disguised_suite_lines(run) == expected, (
+        f"{run!r} must be reported as {expected!r}; a line this reading "
+        f"cannot judge is neither a lane nor safely ignored"
     )

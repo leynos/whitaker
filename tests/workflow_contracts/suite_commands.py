@@ -99,9 +99,25 @@ def _names_a_suite_command(line: str) -> bool:
     bool
         True when a suite command's text appears on the line.
     """
-    if any(line.startswith(other) for other in NOT_SUITE_COMMANDS):
+    if _is_plain_non_suite_command(line):
         return False
     return any(command in line for command in SUITE_COMMANDS)
+
+
+def _is_plain_non_suite_command(line: str) -> bool:
+    """Return whether the whole line is one command that is not the suite."""
+    # The exclusion holds only for a line that runs the named command
+    # and nothing else. `make test-doc; make test` begins with a
+    # non-suite command and goes on to run the suite, so excluding it by
+    # prefix would hide the second invocation from the lane discovery
+    # and from the disguise report alike, leaving it bound to no ceiling
+    # and reported nowhere. A line carrying a separator or a status
+    # suppressor goes to the disguise report instead.
+    if any(disguise in line for disguise in DISGUISES):
+        return False
+    return any(
+        line == other or line.startswith(f"{other} ") for other in NOT_SUITE_COMMANDS
+    )
 
 
 def _is_suite_line(line: str) -> bool:
