@@ -41,7 +41,7 @@ zstd = "0.14.0"
 # installer creates and reads Deflate-compressed archives, so it does not need
 # ZIP's optional codecs or date/time crate integration.
 zip = { version = "7.2.0", default-features = false, features = ["deflate"] }
-rstest = "0.26.1"
+rstest = "0.27.0"
 rstest-bdd = "0.5.0"
 rstest-bdd-macros = "0.5.0"
 proptest = "1"
