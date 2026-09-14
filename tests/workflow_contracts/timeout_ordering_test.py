@@ -48,12 +48,11 @@ from timeout_budgets import (
 #: one of these is bound by both nextest tiers; a step running anything
 #: else is not, which is why the list is exact rather than a substring
 #: search for "test".
+from suite_commands import SUITE_COMMANDS, _disguised_suite_lines
 from suite_lanes import (
     _watchdog_offences,
-    SUITE_COMMANDS,
     SuiteLane,
     _declared_jobs,
-    _disguised_suite_lines,
     _lanes_in_job,
 )
 
