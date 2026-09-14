@@ -3099,7 +3099,7 @@ value, over every step in every workflow that runs the suite, in both the
 discovery and the command matching in `suite_lanes.py`, the nextest arithmetic
 in `timeout_budgets.py`, the profile pins in `nextest_profile_test.py`, and the
 readings driven with controlled configurations in `timeout_reading_test.py`.
-Five details of its shape are deliberate.
+Nine details of its shape are deliberate.
 
 It enumerates every suite-running step, including those in jobs that declare no
 ceiling, so a missing `timeout-minutes` shows up as a lane with no budget
@@ -3115,12 +3115,30 @@ the four-tier contract would pass with three. Parsing also keeps a profile's
 own table separate from its overrides, which is what lets the base allowance be
 asserted on its own.
 
+It reads durations through humantime's grammar rather than a subset of it,
+because that is what nextest reads them with. humantime sums a sequence of
+value-and-unit pairs, so `2h 30m` and `1m30s` are durations; a value may carry
+a fraction with whitespace tolerated around the point, so `1.5m` and `1 . 5 m`
+are both ninety seconds; and `wk`, `wks`, `yr` and `yrs` are units alongside
+the longer spellings. An earlier reader took a single pair from `ms`, `s`, `m`
+or `h` and would have refused configuration the runner accepts, which is a
+manufactured failure rather than a caught one. The grammar and the unit table
+live in `nextest_durations.py`, and `nextest_duration_test.py` pins every unit
+by name rather than sampling them, because one wrong entry would leave every
+ordering above comparing two plausible wrong numbers.
+
 It matches the whole command line rather than a prefix. `make test-doc`,
 `make test-glibc-baseline` and `make test-workflow-contracts` all begin with a
 suite command's text and none of them runs the suite, so a prefix match would
 bind them to budgets they do not run under. The line, rather than the matched
 command, is what it keeps, because `NEXTEST_PROFILE=ci` on that line is what
 decides which profile's budgets a lane is judged against.
+
+It folds backslash continuations before judging a line. A command split across
+two physical lines is still one command, so reading `make test \` and
+`NEXTEST_PROFILE=ci` as separate lines reported a lane whose command carried no
+profile, and that lane would then be held to the default profile's budgets
+rather than to the ones it runs under.
 
 It also refuses a step that names a suite command without plainly running one.
 `if false; then make test; fi` keeps the text and runs nothing, which would

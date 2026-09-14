@@ -46,18 +46,7 @@ def _profile(*lines: str) -> str:
 
 
 def _example(*lines: str) -> Profile:
-    """Return the parsed profile for those lines.
-
-    Parameters
-    ----------
-    *lines : str
-        Lines to put inside ``[profile.example]``.
-
-    Returns
-    -------
-    Profile
-        The parsed profile.
-    """
+    """Return the parsed ``[profile.example]`` those lines declare."""
     return profiles(_profile(*lines))["example"]
 
 
@@ -171,6 +160,16 @@ def test_only_the_profile_s_own_table_bounds_an_unmatched_test() -> None:
             id="a-non-suite-command-between-them",
         ),
         pytest.param("make test-doc", [], id="no-suite-command"),
+        pytest.param(
+            "make test \\\n  NEXTEST_PROFILE=ci",
+            ["make test NEXTEST_PROFILE=ci"],
+            id="a-command-continued-across-two-lines",
+        ),
+        pytest.param(
+            "make coverage \\\n  --keep-going\nmake test-doc",
+            ["make coverage --keep-going"],
+            id="a-continuation-followed-by-another-command",
+        ),
     ],
 )
 def test_every_suite_command_in_a_step_becomes_a_lane(
@@ -183,6 +182,12 @@ def test_every_suite_command_in_a_step_becomes_a_lane(
     default-profile lane alone and the `ci` invocation was held to no
     ceiling at all. That is the case the lane discovery exists to cover,
     since the two run under different profiles with different budgets.
+
+    A backslash continuation is the same fault seen from the other
+    side: read as two physical lines, ``make test \\`` followed by
+    ``NEXTEST_PROFILE=ci`` reported a lane whose command carried no
+    profile, so the lane was held to the default profile's ceilings
+    rather than to the ones it runs under.
 
     Driven here rather than against a workflow because
     ``lane_deduplication_contract_test`` forbids a second plain test

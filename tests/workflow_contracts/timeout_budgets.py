@@ -7,6 +7,10 @@ a number, so they can be driven with configurations this repository
 does not have, which is the only way to tell a correct reading from one
 that happens to agree with the file in the tree.
 
+Durations are read by ``nextest_durations``, which follows humantime's
+grammar rather than a subset of it: refusing a duration nextest accepts
+would fail a configuration the runner is happy with.
+
 The configuration is parsed with ``tomllib`` rather than matched as
 text. A text match finds a key inside a comment, inside a ``filter``
 string, or in a table nextest never consults, and reports a budget the
@@ -16,10 +20,10 @@ a scraping reader would go on reporting a budget that had been switched
 off.
 """
 
-import re
 import tomllib
 import typing as typ
 
+from nextest_durations import NextestConfigurationError, seconds
 from ubicloud_workflow_support import REPOSITORY_ROOT
 
 #: Everything the job timer covers that the whole-run budget does not:
@@ -44,29 +48,7 @@ NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS: typ.Final[float] = 10.0
 #: into it.
 TERMINATION_SAFETY_MARGIN_SECONDS: typ.Final[float] = 60.0
 
-_DURATION: typ.Final[re.Pattern[str]] = re.compile(
-    r"^\s*(?P<value>\d+(?:\.\d+)?)\s*(?P<unit>ms|s|m|h)\s*$"
-)
-
-_UNIT_SECONDS: typ.Final[dict[str, float]] = {
-    "ms": 0.001,
-    "s": 1.0,
-    "m": 60.0,
-    "h": 3600.0,
-}
-
 NEXTEST_CONFIG = REPOSITORY_ROOT / ".config" / "nextest.toml"
-
-
-class NextestConfigurationError(ValueError):
-    """Raised when the configuration cannot be read as a set of budgets.
-
-    Separate from a budget in the wrong order. A file that is not TOML,
-    a profile that declares no ``slow-timeout``, or one whose
-    ``global-timeout`` has been commented out, is a configuration this
-    contract cannot reason about rather than one whose tiers are
-    inverted.
-    """
 
 
 class Profile(typ.NamedTuple):
@@ -99,31 +81,6 @@ class Profile(typ.NamedTuple):
             The profile's own table first, then each override.
         """
         return (self.own, *self.overrides)
-
-
-def seconds(duration: str) -> float:
-    """Convert a nextest duration to seconds.
-
-    Parameters
-    ----------
-    duration : str
-        A duration as nextest spells it, such as ``"45m"``.
-
-    Returns
-    -------
-    float
-        The duration in seconds.
-
-    Raises
-    ------
-    NextestConfigurationError
-        If the text is not a duration nextest would accept.
-    """
-    match = _DURATION.match(duration)
-    if match is None:
-        message = f"unrecognized nextest duration {duration!r}"
-        raise NextestConfigurationError(message)
-    return float(match["value"]) * _UNIT_SECONDS[match["unit"]]
 
 
 def _table(value: object) -> dict[str, object]:
@@ -185,24 +142,10 @@ def profiles(config_text: str) -> dict[str, Profile]:
 
 
 def _duration_at(table: dict[str, object], key: str) -> list[str]:
-    """Return the duration a table names at a key, as none or one.
-
-    A list so the comprehensions above can bind it without a second
-    ``isinstance`` and without a walrus: a key that is absent, or holds
-    something that is not a duration string, contributes nothing.
-
-    Parameters
-    ----------
-    table : dict[str, object]
-        A parsed ``slow-timeout`` table.
-    key : str
-        The key to read, ``period`` or ``grace-period``.
-
-    Returns
-    -------
-    list[str]
-        The duration, or nothing.
-    """
+    """Return the duration a table names at a key, as none or one."""
+    # A list so the comprehensions above can bind it without a second
+    # `isinstance` and without a walrus: a key that is absent, or that
+    # holds something other than a duration string, contributes nothing.
     match table.get(key):
         case str() as duration:
             return [duration]

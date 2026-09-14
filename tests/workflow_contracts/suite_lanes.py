@@ -4,11 +4,14 @@ Separated from the contract so the workflow reading and the assertions
 stay legible apart, and so neither module outgrows the 400-line limit
 ``AGENTS.md`` sets.
 
-The matching is deliberately line-by-line. A contract that finds the
-suite command anywhere inside a multiline ``run`` passes when the step
-wraps it in ``if false; then ...; fi`` or appends ``|| true``, so each
-line is judged as a plain invocation and a disguised one is reported
-rather than counted.
+The matching is deliberately line-by-line, over logical lines rather
+than physical ones. A contract that finds the suite command anywhere
+inside a multiline ``run`` passes when the step wraps it in
+``if false; then ...; fi`` or appends ``|| true``, so each line is
+judged as a plain invocation and a disguised one is reported rather
+than counted. Backslash continuations are folded first, because a
+command split across two physical lines is still one command and its
+arguments decide which budgets the lane runs under.
 """
 
 from __future__ import annotations
@@ -96,32 +99,36 @@ class SuiteLane(typ.NamedTuple):
         return f"{self.workflow}:{self.job}:{self.step!r}"
 
 
+def _logical_lines(run: str) -> list[str]:
+    """Return a script's lines, with backslash continuations folded in."""
+    # A continued command is one command. `make test \` followed by
+    # `NEXTEST_PROFILE=ci` reads line-by-line as a suite invocation with
+    # no profile, so the lane would be checked against the wrong
+    # ceilings. A doubled backslash ends a line with a literal one and
+    # continues nothing.
+    folded: list[str] = []
+    pending = ""
+    for raw in run.splitlines():
+        line = raw.strip()
+        if line.endswith("\\") and not line.endswith("\\\\"):
+            pending = f"{pending}{line[:-1].strip()} "
+            continue
+        folded.append(f"{pending}{line}".strip())
+        pending = ""
+    if pending:
+        folded.append(pending.strip())
+    return folded
+
+
 def _suite_commands(run: str) -> list[str]:
-    """Return every suite command a step runs, in order.
-
-    All of them, not the first: a step whose ``run`` block invokes
-    ``make coverage`` and then ``make test NEXTEST_PROFILE=ci`` runs the
-    suite twice under two different profiles, and reporting one lane
-    would leave the second bound to no ceiling check at all.
-
-    ``make test-doc`` and the checkers named for what they check all begin
-    with a suite command's text. Matching by prefix would bind them to
-    budgets they do not run under, and would let a genuine suite step
-    escape by being renamed.
-
-    Parameters
-    ----------
-    run : str
-        A step's ``run`` script.
-
-    Returns
-    -------
-    list[str]
-        The whole command line for each, empty when the step runs no
-        suite command. The line rather than the matched constant,
-        because the profile the lane runs under is an argument on it.
-    """
-    return [line.strip() for line in run.splitlines() if _is_suite_line(line.strip())]
+    """Return the whole command line of every suite command a step runs."""
+    # All of them, not the first: a step invoking `make coverage` and
+    # then `make test NEXTEST_PROFILE=ci` runs the suite twice under two
+    # profiles, and reporting one lane would leave the second bound to
+    # no ceiling check at all. The line rather than the matched
+    # constant, because the profile the lane runs under is an argument
+    # on it.
+    return [line for line in _logical_lines(run) if _is_suite_line(line)]
 
 
 def _names_a_suite_command(line: str) -> bool:
@@ -193,30 +200,16 @@ def _disguised_suite_lines(run: str) -> list[str]:
     """
     return [
         line
-        for raw in run.splitlines()
-        if (line := raw.strip())
-        and _names_a_suite_command(line)
-        and not _is_suite_line(line)
+        for line in _logical_lines(run)
+        if line and _names_a_suite_command(line) and not _is_suite_line(line)
     ]
 
 
 def _mapping(value: object) -> dict[str, typ.Any] | None:
-    """Return a parsed value when it is a mapping, or None.
-
-    One guard rather than an ``isinstance`` at each use, so a malformed
-    job, step or environment is skipped in the same way wherever it is
-    read, and the skipping is named where it happens.
-
-    Parameters
-    ----------
-    value : object
-        Any value the YAML parser produced.
-
-    Returns
-    -------
-    dict[str, typ.Any] or None
-        The mapping, or None when the value is not one.
-    """
+    """Return a parsed value when it is a mapping, and None when it is not."""
+    # One guard rather than an `isinstance` at each use, so a malformed
+    # job, step or environment is skipped in the same way wherever it is
+    # read, and the skipping is named where it happens.
     match value:
         case dict() as mapping:
             return mapping
