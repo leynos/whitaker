@@ -3567,10 +3567,14 @@ this section updated in the same change.
 `tests/workflow_contracts/timeout_ordering_test.py` asserts the ordering by
 value, over every step in every workflow that runs the suite, in both the
 `.yml` and `.yaml` extensions. Its readings live alongside it: the lane
-discovery and the command matching in `suite_lanes.py`, the nextest arithmetic
-in `timeout_budgets.py`, the profile pins in `nextest_profile_test.py`, and the
-readings driven with controlled configurations in `timeout_reading_test.py`.
-Eleven details of its shape are deliberate.
+discovery in `suite_lanes.py`, which is the half that reads the workflow files;
+the command matching in `suite_commands.py`, which judges a step's script and
+touches no filesystem at all; the nextest arithmetic in `timeout_budgets.py`
+over the duration grammar in `nextest_durations.py`; the profile pins in
+`nextest_profile_test.py`; the lane discovery driven with supplied documents in
+`lane_discovery_test.py`; and the readings driven with controlled
+configurations in `timeout_reading_test.py`. Eleven details of its shape are
+deliberate.
 
 It enumerates every suite-running step, including those in jobs that declare no
 ceiling, so a missing `timeout-minutes` shows up as a lane with no budget
