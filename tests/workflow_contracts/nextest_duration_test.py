@@ -11,8 +11,8 @@ The reader had previously accepted ``ms``, ``s``, ``m`` and ``h`` alone,
 one pair per value. nextest reads durations with humantime, which
 accepts a sequence of pairs and many more spellings, so that reader
 would have rejected configuration the runner runs happily. The values
-below were measured against humantime 2.4.0, the version nextest
-resolves.
+below were measured against humantime 2.3.0, the version the lockfile
+of the pinned cargo-nextest release resolves.
 """
 
 from __future__ import annotations
@@ -45,6 +45,13 @@ def test_every_unit_humantime_accepts_converts_exactly(unit: str) -> None:
         pytest.param("1 . 5 m", 90.0, id="a-fraction-spaced-around-the-point"),
         pytest.param("2wks", 1209600.0, id="the-abbreviated-plural-week"),
         pytest.param("3yrs", 94672800.0, id="the-abbreviated-plural-year"),
+        pytest.param("1 0s", 10.0, id="whitespace-inside-the-number"),
+        pytest.param("1 2 . 5 s", 12.5, id="whitespace-through-a-fraction"),
+        pytest.param("0", 0.0, id="a-bare-zero-with-no-unit"),
+        pytest.param("1.5h", 5400.0, id="a-fraction-of-an-hour-in-whole-seconds"),
+        pytest.param("0.5ms", 0.0005, id="a-fraction-of-a-millisecond"),
+        pytest.param("1nanos", 1e-9, id="the-long-nanosecond-spelling"),
+        pytest.param("1millis", 0.001, id="the-long-millisecond-spelling"),
     ],
 )
 def test_the_shapes_the_repository_does_not_use(duration: str, expected: float) -> None:
@@ -64,6 +71,8 @@ def test_the_shapes_the_repository_does_not_use(duration: str, expected: float) 
         pytest.param("", id="empty"),
         pytest.param("   ", id="whitespace-only"),
         pytest.param("300", id="no-unit"),
+        pytest.param(" 0 ", id="a-padded-bare-zero"),
+        pytest.param("00", id="a-repeated-bare-zero"),
         pytest.param("s", id="no-value"),
         pytest.param("five minutes", id="words"),
         pytest.param("-30s", id="signed"),
@@ -72,6 +81,10 @@ def test_the_shapes_the_repository_does_not_use(duration: str, expected: float) 
         pytest.param("1.5.5m", id="a-second-point"),
         pytest.param("1_000s", id="a-digit-separator"),
         pytest.param("30 fortnights", id="a-unit-humantime-lacks"),
+        pytest.param("1.5ns", id="a-fractional-nanosecond"),
+        pytest.param("0.5ns", id="half-a-nanosecond"),
+        pytest.param("0.123h", id="a-fraction-of-an-hour-below-a-second"),
+        pytest.param("0.0000000001s", id="a-fraction-below-a-nanosecond"),
     ],
 )
 def test_text_humantime_would_reject_is_refused(duration: str) -> None:
@@ -80,6 +93,18 @@ def test_text_humantime_would_reject_is_refused(duration: str) -> None:
     Accepting them is the worse failure of the two: the contract would
     then assert an ordering over a number nothing in the configuration
     produced.
+
+    `` 0 `` and ``00`` are here rather than above because humantime
+    special-cases the exact text ``0`` before it reads a character, so
+    neither is that case and nextest refuses both.
+
+    The four fractions are the other half of the same fault. humantime
+    carries a fraction as a numerator over a power of ten and divides
+    with a remainder check, so it has no step below a nanosecond and
+    refuses one outright; and for hours and longer it divides whole
+    seconds, which is why ``0.123h`` is refused where ``0.123s`` is
+    exact. A reader using floating point would accept all four and
+    report a budget the runner would have rejected at startup.
     """
     with pytest.raises(NextestConfigurationError):
         seconds(duration)

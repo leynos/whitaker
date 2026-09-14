@@ -3119,20 +3119,26 @@ It reads durations through humantime's grammar rather than a subset of it,
 because that is what nextest reads them with. humantime sums a sequence of
 value-and-unit pairs, so `2h 30m` and `1m30s` are durations; a value may carry
 a fraction with whitespace tolerated around the point, so `1.5m` and `1 . 5 m`
-are both ninety seconds; and `wk`, `wks`, `yr` and `yrs` are units alongside
-the longer spellings. An earlier reader took a single pair from `ms`, `s`, `m`
-or `h` and would have refused configuration the runner accepts, which is a
-manufactured failure rather than a caught one. The grammar and the unit table
-live in `nextest_durations.py`, and `nextest_duration_test.py` pins every unit
-by name rather than sampling them, because one wrong entry would leave every
-ordering above comparing two plausible wrong numbers.
+are both ninety seconds; `wk`, `wks`, `yr` and `yrs` are units alongside the
+longer spellings; whitespace inside the number is ignored, so `1 0s` is ten
+seconds; and a bare `0` needs no unit at all. An earlier reader took a single
+pair from `ms`, `s`, `m` or `h` and would have refused configuration the runner
+accepts, which is a manufactured failure rather than a caught one. The grammar
+and the unit table live in `nextest_durations.py`, measured against humantime
+2.3.0, the version the lockfile of the pinned cargo-nextest release resolves,
+and `nextest_duration_test.py` pins every unit by name rather than sampling
+them, because one wrong entry would leave every ordering above comparing two
+plausible wrong numbers.
 
 It matches the whole command line rather than a prefix. `make test-doc`,
 `make test-glibc-baseline` and `make test-workflow-contracts` all begin with a
 suite command's text and none of them runs the suite, so a prefix match would
-bind them to budgets they do not run under. The line, rather than the matched
-command, is what it keeps, because `NEXTEST_PROFILE=ci` on that line is what
-decides which profile's budgets a lane is judged against.
+bind them to budgets they do not run under. The exclusion holds only for a line
+that runs one of those and nothing else: `make test-doc; make test` begins with
+a non-suite command and goes on to run the suite, and excluding it by prefix
+left it bound to no ceiling and reported nowhere. The line, rather than the
+matched command, is what it keeps, because `NEXTEST_PROFILE=ci` on that line is
+what decides which profile's budgets a lane is judged against.
 
 It folds backslash continuations before judging a line. A command split across
 two physical lines is still one command, so reading `make test \` and
@@ -3162,15 +3168,22 @@ raises a per-test allowance and names no `test-group` leaves the tests it
 covers running concurrently against the shared target directory, which is the
 race the groups exist to stop, and a group named but not declared in
 `[test-groups]` is a configuration nextest refuses at startup. So each
-override's `test-group` is asserted alongside its `slow-timeout`, each group is
-pinned at `max-threads = 1`, since any other count parses and serializes
-nothing, and every group any override names is checked against the declarations.
+override's `test-group` and `retries` are asserted alongside its
+`slow-timeout`, each group is pinned at `max-threads = 1`, since any other
+count parses and serializes nothing, and every group any override names is
+checked against the declarations. The retry backoff and delay are pinned with
+the count, because the Dylint UI harnesses retry a transient Windows rename
+failure and `tests/nextest_ui_filter.rs` requires the key.
 
 It drives the lane discovery with workflow documents rather than only with the
 files. `_declared_jobs` takes parsed documents and reads the repository's own
 only when given none, so `lane_discovery_test.py` can put a job with no
 ceiling, a step running the suite twice, and a malformed job through the same
-reading. The tree carries none of those shapes.
+reading. The tree carries none of those shapes. Reading the files is the one
+place the module touches the filesystem, and it fails with a named
+`WorkflowLoadError` carrying the file's name rather than skipping it: a
+workflow the contract cannot read is one whose lanes it cannot judge, and
+skipping it would report a repository with fewer lanes than it has.
 
 It pins the values the tables above state as well as ordering them: the base
 `slow-timeout` on both profiles compared as a whole table, the 45 m whole-run

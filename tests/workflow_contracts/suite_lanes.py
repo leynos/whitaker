@@ -79,34 +79,73 @@ def _mapping(value: object) -> dict[str, typ.Any] | None:
             return None
 
 
+class WorkflowLoadError(OSError):
+    """Raised when a workflow file cannot be read or parsed.
+
+    The one failure this module's boundary can have, named so a caller
+    can tell it from a lane that is unbounded. An unreadable file and a
+    malformed one both mean the contract saw fewer lanes than the
+    repository declares, which would otherwise read as a repository
+    with fewer lanes.
+    """
+
+
 def _workflow_documents(
     directory: pathlib.Path | None = None,
 ) -> dict[str, dict[str, typ.Any]]:
     """Return every workflow document, keyed by file name.
 
-    Reading the repository's own directory is the default rather than
-    the only option: the directory is a parameter so a caller can drive
-    the lane discovery with documents this repository does not contain,
-    which is the only way to separate a correct reading from one that
-    happens to agree with the tree.
+    The one place this module touches the filesystem. Everything below
+    is a query over documents, so a caller can drive the lane discovery
+    with documents this repository does not contain, which is the only
+    way to separate a correct reading from one that happens to agree
+    with the tree.
 
     Both extensions are read. A lane in the other one would otherwise
     escape every assertion below without failing anything.
+
+    Parameters
+    ----------
+    directory : pathlib.Path or None
+        Where to read from. The repository's own workflow directory
+        when none is given.
 
     Returns
     -------
     dict[str, dict[str, typ.Any]]
         File name to parsed document.
+
+    Raises
+    ------
+    WorkflowLoadError
+        If a file cannot be read or is not valid YAML. Raised rather
+        than skipped: a workflow the contract cannot read is one whose
+        lanes it cannot judge, and skipping it would report a
+        repository with fewer lanes than it has.
     """
     documents: dict[str, dict[str, typ.Any]] = {}
     for pattern in ("*.yml", "*.yaml"):
         for path in sorted((directory or WORKFLOWS_DIRECTORY).glob(pattern)):
-            match yaml.safe_load(path.read_text(encoding="utf-8")):
+            match _parsed_workflow(path):
                 case dict() as parsed:
                     documents[path.name] = parsed
                 case _:
                     continue
     return documents
+
+
+def _parsed_workflow(path: pathlib.Path) -> object:
+    """Return one workflow file's parsed content, or fail with its name."""
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError as error:
+        message = f"cannot read the workflow {path.name}: {error}"
+        raise WorkflowLoadError(message) from error
+    try:
+        return yaml.safe_load(text)
+    except yaml.YAMLError as error:
+        message = f"the workflow {path.name} is not valid YAML: {error}"
+        raise WorkflowLoadError(message) from error
 
 
 class _Job(typ.NamedTuple):
@@ -153,7 +192,10 @@ def _declared_jobs(
     return tuple(
         _Job(workflow=name, name=str(job_name), body=body)
         for name, document in found.items()
-        for job_name, job in (document.get("jobs") or {}).items()
+        # `jobs:` can hold anything the YAML parser accepts. A list
+        # there would raise on `.items()`, reporting a parse failure
+        # where the question was whether a lane is bounded.
+        for job_name, job in (_mapping(document.get("jobs")) or {}).items()
         if (body := _mapping(job)) is not None
     )
 
