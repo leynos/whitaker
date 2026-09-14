@@ -34,6 +34,24 @@ BASE_SLOW_TIMEOUT: typ.Final[dict[str, object]] = {
 #: The whole-run budget both profiles must declare.
 REQUIRED_GLOBAL_TIMEOUT: typ.Final[str] = "45m"
 
+class Allowance(typ.NamedTuple):
+    """One override's whole contribution to a profile.
+
+    Attributes
+    ----------
+    slow_timeout : dict[str, object]
+        The whole ``slow-timeout`` table the override must declare.
+    test_group : str or None
+        The group it must name, or None when it names none. The budget
+        and the group are one claim: a test allowed thirty minutes but
+        no longer serialized runs concurrently with its siblings on the
+        shared target directory, which is what the group exists to stop.
+    """
+
+    slow_timeout: dict[str, object]
+    test_group: str | None
+
+
 #: The overrides both profiles carry, keyed by the binary or filter they
 #: exist for, with the whole ``slow-timeout`` each must declare. Both
 #: are named so one cannot be dropped while the other keeps the profile
@@ -50,13 +68,18 @@ REQUIRED_GLOBAL_TIMEOUT: typ.Final[str] = "45m"
 #: seconds. The two profiles genuinely differ here, the default one
 #: naming eight more `test(...)` clauses than `ci`, which is exactly the
 #: divergence a shared needle would have hidden.
-REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, dict[str, object]]]] = {
+REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
     "default": {
-        ("binary(behaviour_toolchain)"): {
-            "period": "30m",
-            "terminate-after": 1,
-            "grace-period": "5s",
-        },
+        ("binary(behaviour_toolchain)"): Allowance(
+            slow_timeout={
+                "period": "30m",
+                "terminate-after": 1,
+                "grace-period": "5s",
+            },
+            # The default profile serializes these in a second override
+            # matching three named scenarios, so this one names none.
+            test_group=None,
+        ),
         (
             "test(driver::ui::) | "
             "test(tests::ui::) | "
@@ -74,29 +97,49 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, dict[str, object]]]] = {
             "test(ui::aliased_test_crate_non_companion_does_not_exempt_parent_"
             "function) | "
             "(binary(ui) & test(=ui))"
-        ): {
-            "period": "10m",
-            "terminate-after": 1,
-            "grace-period": "5s",
-        },
+        ): Allowance(
+            slow_timeout={
+                "period": "10m",
+                "terminate-after": 1,
+                "grace-period": "5s",
+            },
+            test_group="serial-dylint-ui",
+        ),
     },
     "ci": {
-        ("binary(behaviour_toolchain)"): {
-            "period": "30m",
-            "terminate-after": 1,
-            "grace-period": "5s",
-        },
+        ("binary(behaviour_toolchain)"): Allowance(
+            slow_timeout={
+                "period": "30m",
+                "terminate-after": 1,
+                "grace-period": "5s",
+            },
+            test_group="serial-toolchain-installs",
+        ),
         (
             "test(driver::ui::) | "
             "test(tests::ui::) | "
             "test(ui::ui) | "
             "(binary(ui) & test(=ui))"
-        ): {
-            "period": "10m",
-            "terminate-after": 1,
-            "grace-period": "5s",
-        },
+        ): Allowance(
+            slow_timeout={
+                "period": "10m",
+                "terminate-after": 1,
+                "grace-period": "5s",
+            },
+            test_group="serial-dylint-ui",
+        ),
     },
+}
+
+#: Every group an override may name, with the whole table declaring it.
+#: A group a profile names and ``[test-groups]`` does not declare is a
+#: configuration nextest refuses, and one declared without
+#: ``max-threads = 1`` serializes nothing: the UI harnesses would then
+#: build lint libraries concurrently against the shared target
+#: directory, which is the race the groups exist to stop.
+REQUIRED_TEST_GROUPS: typ.Final[dict[str, dict[str, object]]] = {
+    "serial-dylint-ui": {"max-threads": 1},
+    "serial-toolchain-installs": {"max-threads": 1},
 }
 
 
@@ -155,18 +198,18 @@ def test_each_profile_declares_the_whole_run_budget(
 
 
 @pytest.mark.parametrize(
-    ("profile", "needle", "budget"),
+    ("profile", "needle", "allowance"),
     [
-        pytest.param(profile, needle, budget, id=f"{profile}-{needle[:24]}")
+        pytest.param(profile, needle, allowance, id=f"{profile}-{needle[:24]}")
         for profile, overrides in sorted(REQUIRED_OVERRIDES.items())
-        for needle, budget in sorted(overrides.items())
+        for needle, allowance in sorted(overrides.items())
     ],
 )
 def test_each_profile_states_the_overrides_its_own_tests_need(
     parsed_nextest: dict[str, typ.Any],
     profile: str,
     needle: str,
-    budget: dict[str, object],
+    allowance: Allowance,
 ) -> None:
     """Both profiles declare both allowances, whole.
 
@@ -205,7 +248,60 @@ def test_each_profile_states_the_overrides_its_own_tests_need(
         f"{needle!r} and which declares a slow-timeout, found {len(matching)}; "
         f"each profile states its own allowances"
     )
-    assert matching[0].get("slow-timeout") == budget, (
-        f"[profile.{profile}]'s {needle!r} override must declare {budget}, got "
-        f"{matching[0].get('slow-timeout')}"
+    assert matching[0].get("slow-timeout") == allowance.slow_timeout, (
+        f"[profile.{profile}]'s {needle!r} override must declare "
+        f"{allowance.slow_timeout}, got {matching[0].get('slow-timeout')}"
+    )
+    assert matching[0].get("test-group") == allowance.test_group, (
+        f"[profile.{profile}]'s {needle!r} override must name test-group "
+        f"{allowance.test_group!r}, got {matching[0].get('test-group')!r}; a "
+        f"longer allowance without the group lets the tests it covers run "
+        f"concurrently against the shared target directory"
+    )
+
+
+@pytest.mark.parametrize(
+    ("group", "declaration"),
+    sorted(REQUIRED_TEST_GROUPS.items()),
+    ids=sorted(REQUIRED_TEST_GROUPS),
+)
+def test_each_group_the_overrides_name_is_declared_serial(
+    parsed_nextest: dict[str, typ.Any], group: str, declaration: dict[str, object]
+) -> None:
+    """A group exists to serialize, and only `max-threads = 1` does that.
+
+    The overrides above name these groups, and nextest refuses a
+    configuration naming a group `[test-groups]` does not declare. A
+    group declared with any other thread count parses, reads as
+    deliberate, and serializes nothing, so the lint-library builds it
+    covers race on the shared target directory exactly as they did
+    before the group existed. Compared as a whole table so an added key
+    fails too.
+    """
+    declared = parsed_nextest.get("test-groups", {})
+    assert declared.get(group) == declaration, (
+        f"[test-groups] must declare {group} as {declaration}; got "
+        f"{declared.get(group)}"
+    )
+
+
+def test_no_override_names_a_group_the_configuration_lacks(
+    parsed_nextest: dict[str, typ.Any],
+) -> None:
+    """Every group named anywhere is declared, including ones not pinned above.
+
+    The table above pins the groups this contract requires; this catches
+    an override added later that names a group nobody declared, which
+    nextest refuses at startup rather than at the test that needed it.
+    """
+    declared = set(parsed_nextest.get("test-groups", {}))
+    named = {
+        group
+        for section in parsed_nextest["profile"].values()
+        for override in section.get("overrides") or []
+        if (group := override.get("test-group")) is not None
+    }
+    assert named <= declared, (
+        f"every test-group an override names must be declared in "
+        f"[test-groups]; {sorted(named - declared)} are not"
     )

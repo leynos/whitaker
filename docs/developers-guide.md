@@ -3570,7 +3570,7 @@ value, over every step in every workflow that runs the suite, in both the
 discovery and the command matching in `suite_lanes.py`, the nextest arithmetic
 in `timeout_budgets.py`, the profile pins in `nextest_profile_test.py`, and the
 readings driven with controlled configurations in `timeout_reading_test.py`.
-Nine details of its shape are deliberate.
+Eleven details of its shape are deliberate.
 
 It enumerates every suite-running step, including those in jobs that declare no
 ceiling, so a missing `timeout-minutes` shows up as a lane with no budget
@@ -3628,6 +3628,21 @@ anyway. `coverage-check` legitimately runs on pull requests only, because
 `coverage-main.yml` covers the trunk. The lane coordinates are compared both
 ways, so a lane appearing without an entry fails too.
 
+It pins each override's whole entry, not its budget alone. An override that
+raises a per-test allowance and names no `test-group` leaves the tests it
+covers running concurrently against the shared target directory, which is the
+race the groups exist to stop, and a group named but not declared in
+`[test-groups]` is a configuration nextest refuses at startup. So each
+override's `test-group` is asserted alongside its `slow-timeout`, each group is
+pinned at `max-threads = 1`, since any other count parses and serializes
+nothing, and every group any override names is checked against the declarations.
+
+It drives the lane discovery with workflow documents rather than only with the
+files. `_declared_jobs` takes parsed documents and reads the repository's own
+only when given none, so `lane_discovery_test.py` can put a job with no
+ceiling, a step running the suite twice, and a malformed job through the same
+reading. The tree carries none of those shapes.
+
 It pins the values the tables above state as well as ordering them: the base
 `slow-timeout` on both profiles compared as a whole table, the 45 m whole-run
 budget, both overrides' whole `slow-timeout` including the grace period, and
@@ -3641,5 +3656,12 @@ longer happens and a test being killed without it.
 It compares each job's ceiling against the profile that lane actually runs.
 `make coverage` re-enters `make test` without a profile, so it runs under
 `default`; only the Windows lane passes `NEXTEST_PROFILE=ci`.
+
+Finally, `timeout_budget_properties_test.py` states what must hold for values
+this repository does not use: a duration is its number times the length of its
+unit, a composite is the sum of its pairs, the required ceiling never falls
+when the budget it covers rises, and it always sits strictly above that budget.
+Bounded cases pin the numbers in the tree; these catch an arithmetic change
+that agrees with them and with nothing else.
 
 [shared-actions-coverage]: https://github.com/leynos/shared-actions/blob/main/.github/actions/generate-coverage/README.md

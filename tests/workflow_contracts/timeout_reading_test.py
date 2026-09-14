@@ -15,7 +15,7 @@ off.
 """
 
 import pytest
-from suite_lanes import _suite_commands
+from suite_commands import _suite_commands
 from timeout_budgets import (
     NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS,
     Profile,
