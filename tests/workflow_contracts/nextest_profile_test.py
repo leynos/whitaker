@@ -46,10 +46,17 @@ class Allowance(typ.NamedTuple):
         and the group are one claim: a test allowed thirty minutes but
         no longer serialized runs concurrently with its siblings on the
         shared target directory, which is what the group exists to stop.
+    retries : dict[str, object] or None
+        The whole ``retries`` table, or None when the override declares
+        none. Part of the same claim: the Dylint UI harnesses retry a
+        transient Windows rename failure, and `tests/nextest_ui_filter.rs`
+        requires the key, so a change to its count, backoff or delay
+        would otherwise pass every assertion here.
     """
 
     slow_timeout: dict[str, object]
     test_group: str | None
+    retries: dict[str, object] | None = None
 
 
 #: The overrides both profiles carry, keyed by the binary or filter they
@@ -104,6 +111,7 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
                 "grace-period": "5s",
             },
             test_group="serial-dylint-ui",
+            retries={"backoff": "exponential", "count": 2, "delay": "5s"},
         ),
     },
     "ci": {
@@ -221,8 +229,9 @@ def test_each_profile_states_the_overrides_its_own_tests_need(
     makes a later divergence between the two profiles explicit rather
     than silent.
 
-    The ``slow-timeout`` is compared as a whole table, so the grace
-    period is asserted alongside the period and the multiplier. Checking
+    Each policy key is compared as a whole table, so the grace period is
+    asserted alongside the period and the multiplier, and the retry
+    backoff and delay alongside the count. Checking
     the period alone would let the grace period be dropped, and the
     watchdog above these budgets is sized to cover exactly that wait.
 
@@ -257,6 +266,12 @@ def test_each_profile_states_the_overrides_its_own_tests_need(
         f"{allowance.test_group!r}, got {matching[0].get('test-group')!r}; a "
         f"longer allowance without the group lets the tests it covers run "
         f"concurrently against the shared target directory"
+    )
+    assert matching[0].get("retries") == allowance.retries, (
+        f"[profile.{profile}]'s {needle!r} override must declare retries "
+        f"{allowance.retries}, got {matching[0].get('retries')}; the Dylint UI "
+        f"harnesses retry a transient Windows rename failure, and "
+        f"`tests/nextest_ui_filter.rs` requires the key"
     )
 
 
