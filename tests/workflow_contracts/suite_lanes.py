@@ -4,52 +4,20 @@ Separated from the contract so the workflow reading and the assertions
 stay legible apart, and so neither module outgrows the 400-line limit
 ``AGENTS.md`` sets.
 
-The matching is deliberately line-by-line, over logical lines rather
-than physical ones. A contract that finds the suite command anywhere
-inside a multiline ``run`` passes when the step wraps it in
-``if false; then ...; fi`` or appends ``|| true``, so each line is
-judged as a plain invocation and a disguised one is reported rather
-than counted. Backslash continuations are folded first, because a
-command split across two physical lines is still one command and its
-arguments decide which budgets the lane runs under.
+Reading the commands out of a step's script is ``suite_commands``,
+which this module calls. The split keeps the file reading here and the
+text judging there, so the judging can be driven with scripts this
+repository does not contain.
 """
 
 from __future__ import annotations
 
+import pathlib
 import typing as typ
 
 import yaml
+from suite_commands import _disguised_suite_lines, _suite_commands
 from ubicloud_workflow_support import WORKFLOWS_DIRECTORY
-
-SUITE_COMMANDS: typ.Final[tuple[str, ...]] = ("make test", "make coverage")
-
-#: Commands that contain a suite command as a prefix but run something
-#: else entirely. `make test-doc` is doctests, outside nextest; the other
-#: two are checkers that happen to be named for what they check.
-NOT_SUITE_COMMANDS: typ.Final[tuple[str, ...]] = (
-    "make test-doc",
-    "make test-glibc-baseline",
-    "make test-workflow-contracts",
-    "make test-markdown-format",
-)
-
-#: Shapes that put a suite command on a line without running it as the
-#: step's own command, or without letting its failure end the step. A
-#: line carrying one is neither a suite invocation nor safely ignored,
-#: so the contract refuses to judge it and says so.
-#:
-#: `if false; then make test; fi` keeps the text and runs nothing, which
-#: would drop the lane from this contract silently, taking its ceiling
-#: with it. `make test || true` does run the suite but discards its
-#: verdict, so the lane's budgets are checked while its result is not.
-DISGUISES: typ.Final[tuple[str, ...]] = (
-    "|| true",
-    "|| :",
-    "if ",
-    "&&",
-    ";",
-    "|",
-)
 
 #: The environment variable the shared coverage action reads for its
 #: cargo watchdog. Asserted absent: this repository does not use that
@@ -99,112 +67,6 @@ class SuiteLane(typ.NamedTuple):
         return f"{self.workflow}:{self.job}:{self.step!r}"
 
 
-def _logical_lines(run: str) -> list[str]:
-    """Return a script's lines, with backslash continuations folded in."""
-    # A continued command is one command. `make test \` followed by
-    # `NEXTEST_PROFILE=ci` reads line-by-line as a suite invocation with
-    # no profile, so the lane would be checked against the wrong
-    # ceilings. A doubled backslash ends a line with a literal one and
-    # continues nothing.
-    folded: list[str] = []
-    pending = ""
-    for raw in run.splitlines():
-        line = raw.strip()
-        if line.endswith("\\") and not line.endswith("\\\\"):
-            pending = f"{pending}{line[:-1].strip()} "
-            continue
-        folded.append(f"{pending}{line}".strip())
-        pending = ""
-    if pending:
-        folded.append(pending.strip())
-    return folded
-
-
-def _suite_commands(run: str) -> list[str]:
-    """Return the whole command line of every suite command a step runs."""
-    # All of them, not the first: a step invoking `make coverage` and
-    # then `make test NEXTEST_PROFILE=ci` runs the suite twice under two
-    # profiles, and reporting one lane would leave the second bound to
-    # no ceiling check at all. The line rather than the matched
-    # constant, because the profile the lane runs under is an argument
-    # on it.
-    return [line for line in _logical_lines(run) if _is_suite_line(line)]
-
-
-def _names_a_suite_command(line: str) -> bool:
-    """Return whether one line mentions a suite command at all.
-
-    Mentioning is weaker than invoking, and deliberately so: the two are
-    compared below, and a line that mentions one without invoking it is
-    the case this contract refuses to judge.
-
-    Parameters
-    ----------
-    line : str
-        One stripped line of a step's script.
-
-    Returns
-    -------
-    bool
-        True when a suite command's text appears on the line.
-    """
-    if any(line.startswith(other) for other in NOT_SUITE_COMMANDS):
-        return False
-    return any(command in line for command in SUITE_COMMANDS)
-
-
-def _is_suite_line(line: str) -> bool:
-    """Return whether one stripped line invokes the suite plainly.
-
-    ``make test-doc`` and the checkers named for what they check all
-    begin with a suite command's text, so they are excluded first and by
-    exact prefix rather than by substring.
-
-    Plainly means the line is the command and its arguments, and nothing
-    else. A line that also carries a conditional, a separator or a
-    status suppressor is not judged here: :func:`_disguised_suite_lines`
-    reports it instead, because such a line may run the suite, may not,
-    and may discard its verdict, and this contract cannot tell which.
-
-    Parameters
-    ----------
-    line : str
-        One stripped line of a step's script.
-
-    Returns
-    -------
-    bool
-        True when the line runs a suite command and nothing else.
-    """
-    if not _names_a_suite_command(line):
-        return False
-    if any(disguise in line for disguise in DISGUISES):
-        return False
-    return any(
-        line == command or line.startswith(f"{command} ") for command in SUITE_COMMANDS
-    )
-
-
-def _disguised_suite_lines(run: str) -> list[str]:
-    """Return lines naming a suite command without plainly running one.
-
-    Parameters
-    ----------
-    run : str
-        A step's ``run`` script.
-
-    Returns
-    -------
-    list[str]
-        The offending lines, stripped.
-    """
-    return [
-        line
-        for line in _logical_lines(run)
-        if line and _names_a_suite_command(line) and not _is_suite_line(line)
-    ]
-
-
 def _mapping(value: object) -> dict[str, typ.Any] | None:
     """Return a parsed value when it is a mapping, and None when it is not."""
     # One guard rather than an `isinstance` at each use, so a malformed
@@ -217,8 +79,16 @@ def _mapping(value: object) -> dict[str, typ.Any] | None:
             return None
 
 
-def _workflow_documents() -> dict[str, dict[str, typ.Any]]:
+def _workflow_documents(
+    directory: pathlib.Path | None = None,
+) -> dict[str, dict[str, typ.Any]]:
     """Return every workflow document, keyed by file name.
+
+    Reading the repository's own directory is the default rather than
+    the only option: the directory is a parameter so a caller can drive
+    the lane discovery with documents this repository does not contain,
+    which is the only way to separate a correct reading from one that
+    happens to agree with the tree.
 
     Both extensions are read. A lane in the other one would otherwise
     escape every assertion below without failing anything.
@@ -230,7 +100,7 @@ def _workflow_documents() -> dict[str, dict[str, typ.Any]]:
     """
     documents: dict[str, dict[str, typ.Any]] = {}
     for pattern in ("*.yml", "*.yaml"):
-        for path in sorted(WORKFLOWS_DIRECTORY.glob(pattern)):
+        for path in sorted((directory or WORKFLOWS_DIRECTORY).glob(pattern)):
             match yaml.safe_load(path.read_text(encoding="utf-8")):
                 case dict() as parsed:
                     documents[path.name] = parsed
@@ -257,21 +127,32 @@ class _Job(typ.NamedTuple):
     body: dict[str, typ.Any]
 
 
-def _declared_jobs() -> tuple[_Job, ...]:
+def _declared_jobs(
+    documents: dict[str, dict[str, typ.Any]] | None = None,
+) -> tuple[_Job, ...]:
     """Return every job in every workflow, with its file.
 
     Flattening the two levels here is what keeps the callers below to
     one loop each: a job's identity travels with it rather than being
     reconstructed from an enclosing scope.
 
+    Parameters
+    ----------
+    documents : dict[str, dict[str, typ.Any]] or None
+        Parsed workflow documents keyed by file name. The repository's
+        own are read when none are given, so the file reading stays at
+        the boundary and the flattening below is a pure query that can
+        be driven with documents the tree does not contain.
+
     Returns
     -------
     tuple[_Job, ...]
         Every declared job.
     """
+    found = _workflow_documents() if documents is None else documents
     return tuple(
         _Job(workflow=name, name=str(job_name), body=body)
-        for name, document in _workflow_documents().items()
+        for name, document in found.items()
         for job_name, job in (document.get("jobs") or {}).items()
         if (body := _mapping(job)) is not None
     )
