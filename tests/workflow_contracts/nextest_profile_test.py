@@ -196,6 +196,35 @@ def _named_compile_contracts(text: str) -> typ.Iterator[str]:
             yield name["name"]
 
 
+def _period(slow_timeout: object) -> str | None:
+    """Return the period a `slow-timeout` names, whatever shape it takes.
+
+    nextest accepts both `slow-timeout = "10m"` and the table form, and
+    the two mean the same period. Reading only the table would drop a
+    real allowance written the short way, and a contract that stops
+    counting an override that exists is worse than one that fails: it
+    answers wrongly instead of loudly.
+
+    `None` for anything that names no period, which is how an override
+    that declares no `slow-timeout` at all reaches this.
+
+    Examples
+    --------
+    >>> _period({"period": "10m", "terminate-after": 1})
+    '10m'
+    >>> _period("10m")
+    '10m'
+    >>> _period(None) is None
+    True
+    """
+    if isinstance(slow_timeout, str):
+        return slow_timeout
+    if isinstance(slow_timeout, dict):
+        period = slow_timeout.get("period")
+        return period if isinstance(period, str) else None
+    return None
+
+
 def _compile_contract_tests() -> dict[str, pathlib.Path]:
     """Return every test that drives `trybuild`, by name.
 
@@ -427,10 +456,15 @@ def test_every_compile_contract_test_carries_the_long_allowance(
         "no trybuild::TestCases call was found; the discovery has stopped "
         "recognizing compile-contract tests and would sweep an empty set"
     )
+    # `get` on both keys rather than indexing: nextest allows an override
+    # with no `filter`, which selects on platform alone, and such an
+    # override names no test whatever its allowance. An empty string
+    # matches no `test(...)` clause below, which is the same answer a
+    # crash would have hidden.
     long_filters = [
-        override["filter"]
+        override.get("filter", "")
         for override in (NEXTEST["profile"][profile].get("overrides") or [])
-        if override.get("slow-timeout", {}).get("period") == "10m"
+        if _period(override.get("slow-timeout")) == "10m"
     ]
     for name, path in sorted(discovered.items()):
         assert any(f"test({name})" in one for one in long_filters), (
