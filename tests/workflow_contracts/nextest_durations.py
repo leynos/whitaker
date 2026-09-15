@@ -21,6 +21,15 @@ around the point, whitespace inside the number is ignored, and a bare
 ``0`` is a zero duration needing no unit at all. Fractions are exact
 integer arithmetic there, not floating point, and the arithmetic differs
 by unit: see :class:`_Unit`.
+
+That arithmetic is bounded. humantime accumulates in 64-bit unsigned
+integers and checks every multiplication and addition, so a duration can
+be refused for its size as readily as for its spelling, and the bound is
+not one number but several: the value itself, the value times its unit's
+scale, and the running total in each of its two parts. Python's integers
+have no such bound, so the checks are written out here; without them the
+reader would report a budget the runner refuses at startup, which is the
+failure this module exists to avoid. See :class:`_Total`.
 """
 
 from __future__ import annotations
@@ -32,31 +41,50 @@ import typing as typ
 _SECOND: typ.Final[int] = 1_000_000_000
 
 
-class _Unit(typ.NamedTuple):
-    """One humantime unit, as its parser treats it.
+class _Scaling(typ.NamedTuple):
+    """One of humantime's products: a multiplier and where it lands.
+
+    humantime multiplies in the unit the product lands in rather than in
+    nanoseconds throughout, so a year's whole part scales by 31,557,600
+    and the 64-bit check that follows is a check on seconds. Carrying
+    the multiplier and its landing place together is what keeps that
+    pairing from coming apart.
 
     Attributes
     ----------
-    nanoseconds : int
-        One of this unit in nanoseconds. A value's whole part is
-        multiplied by this.
-    fraction_scale : int or None
-        What a fraction's numerator is multiplied by before the exact
-        division humantime requires, or None when the unit admits no
-        fraction at all. ``ns`` is that case: humantime refuses a
-        fractional nanosecond outright rather than rounding it.
-    fraction_in_seconds : bool
-        Whether that division yields seconds rather than nanoseconds.
-        humantime divides whole seconds for hours and longer, so
-        ``0.123h`` is refused where ``0.123s`` is exact. A reader
-        working in nanoseconds throughout would accept durations nextest
-        rejects, and one working in floats would accept every inexact
-        fraction at every unit.
+    scale : int
+        What the value is multiplied by.
+    in_seconds : bool
+        Whether the product is seconds rather than nanoseconds.
     """
 
-    nanoseconds: int
-    fraction_scale: int | None
-    fraction_in_seconds: bool
+    scale: int
+    in_seconds: bool
+
+
+class _Unit(typ.NamedTuple):
+    """One humantime unit, as its parser treats it.
+
+    The two scalings differ, and not only in magnitude: a second's whole
+    part scales by one into seconds while its fraction scales by a
+    thousand million into nanoseconds, and the landing place moves at a
+    different unit for each. Whole parts land in seconds from a second
+    upwards; fractions land in seconds only from an hour upwards, which
+    is why ``0.123h`` is refused where ``0.123s`` is exact.
+
+    Attributes
+    ----------
+    whole : _Scaling
+        How the value's whole part is scaled.
+    fraction : _Scaling or None
+        How a fraction's numerator is scaled before the exact division
+        humantime requires, or None when the unit admits no fraction at
+        all. ``ns`` is that case: humantime refuses a fractional
+        nanosecond outright rather than rounding it.
+    """
+
+    whole: _Scaling
+    fraction: _Scaling | None
 
 
 #: Every spelling humantime accepts, grouped by the unit it names, with
@@ -64,21 +92,36 @@ class _Unit(typ.NamedTuple):
 #: rather than trimmed to the plausible ones, because refusing a unit
 #: nextest accepts would fail a configuration the runner is happy with.
 _UNIT_SPELLINGS: typ.Final[tuple[tuple[tuple[str, ...], _Unit], ...]] = (
-    (("nanos", "nsec", "ns"), _Unit(1, None, False)),
-    (("usec", "us", "µs"), _Unit(1_000, 1_000, False)),
-    (("millis", "msec", "ms"), _Unit(1_000_000, 1_000_000, False)),
-    (("seconds", "second", "secs", "sec", "s"), _Unit(_SECOND, _SECOND, False)),
+    (("nanos", "nsec", "ns"), _Unit(_Scaling(1, False), None)),
+    (("usec", "us", "µs"), _Unit(_Scaling(1_000, False), _Scaling(1_000, False))),
+    (
+        ("millis", "msec", "ms"),
+        _Unit(_Scaling(1_000_000, False), _Scaling(1_000_000, False)),
+    ),
+    (
+        ("seconds", "second", "secs", "sec", "s"),
+        _Unit(_Scaling(1, True), _Scaling(_SECOND, False)),
+    ),
     (
         ("minutes", "minute", "mins", "min", "m"),
-        _Unit(60 * _SECOND, 60 * _SECOND, False),
+        _Unit(_Scaling(60, True), _Scaling(60 * _SECOND, False)),
     ),
-    (("hours", "hour", "hrs", "hr", "h"), _Unit(3_600 * _SECOND, 3_600, True)),
-    (("days", "day", "d"), _Unit(86_400 * _SECOND, 86_400, True)),
-    (("weeks", "week", "wks", "wk", "w"), _Unit(604_800 * _SECOND, 604_800, True)),
-    (("months", "month", "M"), _Unit(2_630_016 * _SECOND, 2_630_016, True)),
+    (
+        ("hours", "hour", "hrs", "hr", "h"),
+        _Unit(_Scaling(3_600, True), _Scaling(3_600, True)),
+    ),
+    (("days", "day", "d"), _Unit(_Scaling(86_400, True), _Scaling(86_400, True))),
+    (
+        ("weeks", "week", "wks", "wk", "w"),
+        _Unit(_Scaling(604_800, True), _Scaling(604_800, True)),
+    ),
+    (
+        ("months", "month", "M"),
+        _Unit(_Scaling(2_630_016, True), _Scaling(2_630_016, True)),
+    ),
     (
         ("years", "year", "yrs", "yr", "y"),
-        _Unit(31_557_600 * _SECOND, 31_557_600, True),
+        _Unit(_Scaling(31_557_600, True), _Scaling(31_557_600, True)),
     ),
 )
 
@@ -88,13 +131,24 @@ _UNITS: typ.Final[dict[str, _Unit]] = {
 
 #: Each unit's length in seconds, for callers comparing budgets.
 UNIT_SECONDS: typ.Final[dict[str, float]] = {
-    spelling: unit.nanoseconds / _SECOND for spelling, unit in _UNITS.items()
+    spelling: float(unit.whole.scale)
+    if unit.whole.in_seconds
+    else unit.whole.scale / _SECOND
+    for spelling, unit in _UNITS.items()
 }
 
 #: Digits with whitespace tolerated between them. humantime's parser
 #: ignores whitespace while it accumulates a number, so ``1 0s`` is ten
 #: seconds rather than a malformed duration.
-_SPACED_DIGITS: typ.Final[str] = r"\d(?:\s*\d)*"
+#:
+#: Spelt ``[0-9]`` rather than ``\d``, which in Python matches every
+#: Unicode decimal digit. humantime matches ``'0'..='9'`` and nothing
+#: else, so an Arabic-Indic or Devanagari numeral is a duration this
+#: reader would otherwise convert happily and nextest would refuse at
+#: startup: the accept-what-the-runner-refuses direction this module
+#: exists to avoid. The whitespace class stays Unicode-aware, because
+#: humantime skips on `char::is_whitespace`, which is too.
+_SPACED_DIGITS: typ.Final[str] = r"[0-9](?:\s*[0-9])*"
 
 #: One value-and-unit pair. The fractional part is optional and
 #: humantime tolerates whitespace around the point; a leading point, a
@@ -113,6 +167,11 @@ _DURATION_TOKEN: typ.Final[re.Pattern[str]] = re.compile(
 _BARE_ZERO: typ.Final[str] = "0"
 
 
+#: The largest value humantime's parser can hold. Its accumulators and
+#: its intermediate products are all ``u64``, checked at every step.
+_U64_MAX: typ.Final[int] = 2**64 - 1
+
+
 class NextestConfigurationError(ValueError):
     """Raised when the configuration cannot be read as a set of budgets.
 
@@ -122,6 +181,61 @@ class NextestConfigurationError(ValueError):
     contract cannot reason about rather than one whose tiers are
     inverted.
     """
+
+
+class _Total:
+    """humantime's running total: whole seconds and a nanosecond part.
+
+    Both are 64-bit unsigned there, and every step is checked, so this
+    carries the pair rather than a single count of nanoseconds. The two
+    differ: ``18446744073709551615ns 18446744073709551615ns`` names
+    thirty-seven seconds, well inside a duration humantime can hold, and
+    is refused all the same because the second value overflows the
+    nanosecond accumulator before it is carried.
+    """
+
+    def __init__(self) -> None:
+        self.seconds = 0
+        self.nanoseconds = 0
+
+    def add(self, duration: str, seconds: int, nanoseconds: int) -> None:
+        """Add one part, refusing what humantime's checks would refuse."""
+        nanos = _u64(duration, self.nanoseconds + nanoseconds)
+        carried = seconds
+        if nanos > _SECOND:
+            carried = _u64(duration, carried + nanos // _SECOND)
+            nanos %= _SECOND
+        total = _u64(duration, self.seconds + carried)
+        # humantime normalizes on a strict `>`, so a nanosecond part of
+        # exactly one second reaches `Duration::new`, which carries it
+        # and aborts the process rather than returning an error when
+        # that carry overflows. nextest cannot run either way, so the
+        # refusal here is the same.
+        if nanos >= _SECOND:
+            total = _u64(duration, total + nanos // _SECOND)
+            nanos %= _SECOND
+        self.seconds = total
+        self.nanoseconds = nanos
+
+    def as_seconds(self) -> float:
+        """Return the total in seconds, which is what every caller compares."""
+        return self.seconds + self.nanoseconds / _SECOND
+
+
+def _u64(duration: str, value: int) -> int:
+    """Return a value humantime could hold, or refuse it as humantime does.
+
+    Every multiplication and addition in its parser is checked against
+    this bound, and Python's integers are not, so each of those steps
+    passes through here.
+    """
+    if value > _U64_MAX:
+        message = (
+            f"unrecognized nextest duration {duration!r}: humantime "
+            f"accumulates in 64-bit integers and this exceeds their range"
+        )
+        raise NextestConfigurationError(message)
+    return value
 
 
 def seconds(duration: str) -> float:
@@ -156,16 +270,15 @@ def seconds(duration: str) -> float:
     if not text:
         message = f"unrecognized nextest duration {duration!r}: it is empty"
         raise NextestConfigurationError(message)
-    total = 0
+    total = _Total()
     position = 0
     while position < len(text):
-        nanoseconds, position = _read_pair(duration, text, position)
-        total += nanoseconds
-    return total / _SECOND
+        position = _read_pair(duration, text, position, total)
+    return total.as_seconds()
 
 
-def _read_pair(duration: str, text: str, position: int) -> tuple[int, int]:
-    """Return one value-and-unit pair in nanoseconds, and where it ends."""
+def _read_pair(duration: str, text: str, position: int, total: _Total) -> int:
+    """Add one value-and-unit pair to the total, and return where it ends."""
     match = _DURATION_TOKEN.match(text, position)
     if match is None:
         message = (
@@ -184,11 +297,24 @@ def _read_pair(duration: str, text: str, position: int) -> tuple[int, int]:
     # humantime ignores whitespace while it accumulates a number and
     # around the fractional point, so the matched digits can read "1 0"
     # or "1 . 5"; int cannot.
-    whole = int(_digits(match["whole"]))
-    nanoseconds = whole * unit.nanoseconds
+    whole = _u64(duration, int(_digits(match["whole"])))
+    _add_scaled(duration, total, whole, unit.whole)
     if match["fraction"] is not None:
-        nanoseconds += _fraction_nanoseconds(duration, match["fraction"], unit)
-    return nanoseconds, match.end()
+        _add_fraction(duration, total, match["fraction"], unit)
+    return match.end()
+
+
+def _add_scaled(duration: str, total: _Total, value: int, scaling: _Scaling) -> None:
+    """Scale one part by its unit and add it, in the unit it lands in."""
+    _add_landed(duration, total, _u64(duration, value * scaling.scale), scaling)
+
+
+def _add_landed(duration: str, total: _Total, amount: int, scaling: _Scaling) -> None:
+    """Add an already-scaled amount to whichever part it belongs in."""
+    if scaling.in_seconds:
+        total.add(duration, amount, 0)
+    else:
+        total.add(duration, 0, amount)
 
 
 def _digits(matched: str) -> str:
@@ -196,32 +322,46 @@ def _digits(matched: str) -> str:
     return "".join(matched.split())
 
 
-def _fraction_nanoseconds(duration: str, matched: str, unit: _Unit) -> int:
-    """Return a fractional part in nanoseconds, or refuse it as humantime does.
+def _add_fraction(duration: str, total: _Total, matched: str, unit: _Unit) -> None:
+    """Add a fractional part, or refuse it as humantime does.
 
     humantime carries the fraction as a numerator over a power of ten
     and divides with a remainder check, so a fraction that is not a
     whole number of the unit's smallest step is an error rather than a
     rounded value. The whole duration is named in the messages below
     rather than the fraction, which is not what anybody wrote.
+
+    Worked through, on ``0.000000001m``. The numerator is 1 and the
+    denominator a thousand million, the digits being read as written. A
+    minute's ``fraction_scale`` is sixty thousand million, one minute in
+    nanoseconds, so the product is that and the exact division leaves
+    sixty: ``0.000000001m`` is sixty nanoseconds, not one. That factor
+    of sixty is the whole reason a minute needs an entry of its own
+    rather than a second's; the same input under a second's scale reads
+    as a single nanosecond, and no configuration in the tree would show
+    the difference.
+
+    The denominator is a power of ten built one digit at a time, and
+    that too is checked: a fraction of twenty digits overflows it where
+    one of nineteen does not, whatever the digits are.
     """
     digits = _digits(matched)
-    numerator = int(digits)
-    denominator = 10 ** len(digits)
-    if unit.fraction_scale is None:
+    numerator = _u64(duration, int(digits))
+    denominator = _u64(duration, 10 ** len(digits))
+    scaling = unit.fraction
+    if scaling is None:
         message = (
             f"unrecognized nextest duration {duration!r}: humantime has no "
             f"step below a nanosecond, so a fractional one is an error"
         )
         raise NextestConfigurationError(message)
-    scaled = numerator * unit.fraction_scale
+    scaled = _u64(duration, numerator * scaling.scale)
     if scaled % denominator:
-        step = "second" if unit.fraction_in_seconds else "nanosecond"
+        step = "second" if scaling.in_seconds else "nanosecond"
         message = (
             f"unrecognized nextest duration {duration!r}: humantime divides "
             f"exactly, and this fraction is not a whole number of the unit's "
             f"{step}s"
         )
         raise NextestConfigurationError(message)
-    quotient = scaled // denominator
-    return quotient * _SECOND if unit.fraction_in_seconds else quotient
+    _add_landed(duration, total, scaled // denominator, scaling)
