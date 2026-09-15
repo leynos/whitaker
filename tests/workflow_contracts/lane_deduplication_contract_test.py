@@ -121,6 +121,21 @@ def _make_recipe(target: str) -> str:
     return "\n".join(body)
 
 
+def _makefile_recipe(target: str) -> str:
+    """Return one Makefile target's recipe lines, joined.
+
+    The recipe rather than the whole file, so an occurrence of the same
+    text under a neighbouring target cannot satisfy an assertion about
+    this one.
+    """
+    text = MAKEFILE.read_text(encoding="utf-8")
+    match = re.search(
+        rf"^{re.escape(target)}:[^\n]*\n((?:\t[^\n]*\n)+)", text, re.MULTILINE
+    )
+    assert match is not None, f"{target} must be a Makefile target with a recipe"
+    return match.group(1)
+
+
 def _makefile_variable(name: str) -> str:
     """Return one Makefile variable's raw definition."""
     text = MAKEFILE.read_text(encoding="utf-8")
@@ -200,6 +215,22 @@ def test_the_doctest_lane_covers_the_whole_documented_surface() -> None:
     flags = _makefile_variable("DOCTEST_CARGO_FLAGS")
     for flag in ("--workspace", "--all-features"):
         assert flag in flags, f"DOCTEST_CARGO_FLAGS must keep {flag}; got {flags!r}"
+
+
+def test_the_contract_lane_collects_its_own_examples() -> None:
+    """A docstring example nothing runs is a claim, not a test.
+
+    The reader in this package carries worked examples of what a
+    duration converts to, and until this flag was added pytest collected
+    the test modules and skipped every example in the package: chutoro
+    #263 found one that had never been true. The recipe is matched
+    rather than any mention of the flag, so a comment naming it does not
+    satisfy this.
+    """
+    recipe = _makefile_recipe("test-workflow-contracts")
+    assert "--doctest-modules" in recipe, (
+        f"the workflow-contracts lane must collect docstring examples; got {recipe!r}"
+    )
 
 
 def test_publish_check_no_longer_executes_the_suite() -> None:
