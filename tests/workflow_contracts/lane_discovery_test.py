@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import pathlib
 import typing as typ
+from unittest import mock
 
 import pytest
 from suite_lanes import (
@@ -37,9 +38,11 @@ def test_a_job_without_a_ceiling_is_still_a_lane() -> None:
     documents = _document(unbounded={"steps": [{"name": "Test", "run": "make test"}]})
     (job,) = _declared_jobs(documents)
     (lane,) = _lanes_in_job(job)
-    assert _job_ceiling(job) is None
+    assert _job_ceiling(job) is None, (
+        "a job declaring no `timeout-minutes` has no ceiling"
+    )
     assert lane.job_timeout is None, "a job declaring no ceiling has no budget"
-    assert lane.command == "make test"
+    assert lane.command == "make test", "the lane must carry the step's own command"
 
 
 def test_a_step_running_the_suite_twice_is_two_lanes() -> None:
@@ -60,8 +63,10 @@ def test_a_step_running_the_suite_twice_is_two_lanes() -> None:
     assert [lane.command for lane in lanes] == [
         "make coverage",
         "make test NEXTEST_PROFILE=ci",
-    ]
-    assert {lane.job_timeout for lane in lanes} == {4800.0}
+    ], "each suite command in the step is its own lane, in the order written"
+    assert {lane.job_timeout for lane in lanes} == {4800.0}, (
+        "both lanes are bounded by the one ceiling the job declares"
+    )
 
 
 def test_a_malformed_job_is_skipped_rather_than_raising() -> None:
@@ -72,7 +77,9 @@ def test_a_malformed_job_is_skipped_rather_than_raising() -> None:
     question was whether a lane is bounded.
     """
     documents = {"ci.yml": {"jobs": {"broken": "not a mapping"}}}
-    assert _declared_jobs(documents) == ()
+    assert _declared_jobs(documents) == (), (
+        "a job that is not a mapping declares no lanes"
+    )
 
 
 def test_a_jobs_key_that_is_not_a_mapping_is_skipped_too() -> None:
@@ -82,8 +89,12 @@ def test_a_jobs_key_that_is_not_a_mapping_is_skipped_too() -> None:
     `jobs` is a list reports no lanes rather than an `AttributeError`
     from a contract that was asked about ceilings.
     """
-    assert _declared_jobs({"ci.yml": {"jobs": ["broken"]}}) == ()
-    assert _declared_jobs({"ci.yml": {"jobs": "broken"}}) == ()
+    assert _declared_jobs({"ci.yml": {"jobs": ["broken"]}}) == (), (
+        "a `jobs` list declares no lanes rather than raising"
+    )
+    assert _declared_jobs({"ci.yml": {"jobs": "broken"}}) == (), (
+        "a `jobs` string declares no lanes rather than raising"
+    )
 
 
 @pytest.mark.parametrize(
@@ -98,11 +109,15 @@ def test_a_ceiling_converts_from_minutes(minutes: int, expected: float) -> None:
     """`timeout-minutes` is minutes; every comparison here is in seconds."""
     documents = _document(bounded={"timeout-minutes": minutes, "steps": []})
     (job,) = _declared_jobs(documents)
-    assert _job_ceiling(job) == pytest.approx(expected)
+    assert _job_ceiling(job) == pytest.approx(expected), (
+        f"`timeout-minutes: {minutes}` is {expected} seconds"
+    )
 
 
-def test_an_unreadable_workflow_fails_by_name(tmp_path: pathlib.Path) -> None:
-    """A workflow the contract cannot read is not a repository with fewer lanes.
+def test_a_workflow_that_is_not_valid_yaml_fails_by_name(
+    tmp_path: pathlib.Path,
+) -> None:
+    """A workflow the contract cannot parse is not a repository with fewer lanes.
 
     Skipping it would leave the discovery reporting exactly what a
     repository with no such workflow reports, so a file that stopped
@@ -113,10 +128,30 @@ def test_an_unreadable_workflow_fails_by_name(tmp_path: pathlib.Path) -> None:
         _workflow_documents(tmp_path)
 
 
+def test_an_unreadable_workflow_fails_by_name(tmp_path: pathlib.Path) -> None:
+    """A file that cannot be opened is a second arm, and needs its own case.
+
+    The invalid-YAML fixture above is perfectly readable, so it reaches
+    `yaml.safe_load` and exercises only that arm: deleting the `OSError`
+    wrapper in `_parsed_workflow` leaves it passing while an unreadable
+    workflow escapes as a bare `OSError` naming no workflow. The read
+    is stubbed rather than staged, because a mode a test can set is a
+    mode the user running it may be able to read through.
+    """
+    (tmp_path / "unreadable.yml").write_text("jobs: {}\n", encoding="utf-8")
+    with (
+        mock.patch.object(pathlib.Path, "read_text", side_effect=OSError("denied")),
+        pytest.raises(WorkflowLoadError, match=r"unreadable\.yml"),
+    ):
+        _workflow_documents(tmp_path)
+
+
 def test_a_directory_of_valid_workflows_reads_both_extensions(
     tmp_path: pathlib.Path,
 ) -> None:
     """A lane in the other extension would otherwise escape every assertion."""
     (tmp_path / "one.yml").write_text("jobs: {a: {steps: []}}\n", encoding="utf-8")
     (tmp_path / "two.yaml").write_text("jobs: {b: {steps: []}}\n", encoding="utf-8")
-    assert sorted(_workflow_documents(tmp_path)) == ["one.yml", "two.yaml"]
+    assert sorted(_workflow_documents(tmp_path)) == ["one.yml", "two.yaml"], (
+        "both workflow extensions must be read"
+    )

@@ -3134,6 +3134,34 @@ and `nextest_duration_test.py` pins every unit by name rather than sampling
 them, because one wrong entry would leave every ordering above comparing two
 plausible wrong numbers.
 
+That arithmetic is bounded as well as exact. humantime accumulates in 64-bit
+unsigned integers and checks every multiplication and addition, so a duration
+can be refused for its size as readily as for its spelling, and the bound is
+not one number: `18446744073709551616s` is one step past the range, while
+`18446744073709551615ns 18446744073709551615ns` names only thirty-seven seconds
+and is refused all the same, because the second value overflows the nanosecond
+accumulator before it is carried into seconds. Python's integers have no such
+bound, so the reader carries humantime's checks explicitly. Without them it
+would report a budget for a configuration nextest refuses at startup, and every
+ordering asserted above it would be a comparison of a number nothing in the
+tree produced.
+
+The carry is where that bound is easiest to get wrong, because one mechanism
+has to give two answers. humantime declines to normalize a nanosecond part of
+exactly one second and leaves it to the conversion that follows, which carries
+it and aborts rather than erroring when the carry overflows. So
+`18446744073709551615s 500ms 500ms` is refused while `0.5s 0.5s` is one second,
+and both are pinned: a reader made merely stricter to refuse the first fails
+the second, and one that drops the carry accepts the first and reports a
+duration a second past the ceiling.
+
+Its digit class is `[0-9]` rather than `\d`, which in Python matches every
+Unicode decimal digit. humantime matches `'0'..='9'` and nothing else, so an
+Arabic-Indic numeral, alone or sitting inside an otherwise ordinary number, is
+a duration this reader would convert happily and nextest would refuse at
+startup. The whitespace class stays Unicode-aware, because humantime skips on
+`char::is_whitespace`, which is too.
+
 It matches the whole command line rather than a prefix. `make test-doc`,
 `make test-glibc-baseline` and `make test-workflow-contracts` all begin with a
 suite command's text and none of them runs the suite, so a prefix match would
