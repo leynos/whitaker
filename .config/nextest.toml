@@ -41,8 +41,13 @@ test-group = "serial-toolchain-installs"
 
 [[profile.ci.overrides]]
 # Dylint UI harnesses build lint libraries; the default profile gives them
-# the same allowance below.
-filter = "test(driver::ui::) | test(tests::ui::) | test(ui::ui) | (binary(ui) & test(=ui))"
+# the same allowance below. `trybuild` compile-contract binaries belong
+# here too: they invoke a nested cargo build, so they cost what a build
+# costs rather than what a test costs. `whitaker-installer`'s binary is
+# named `ui` but its test is not, so the `(binary(ui) & test(=ui))`
+# clause does not reach it; it measured 235 s and timed out at 300 s on
+# the Windows lane under the base allowance.
+filter = "test(driver::ui::) | test(tests::ui::) | test(ui::ui) | test(sha2_0_11_pre_migration_patterns_fail_to_compile) | test(trybuild_fixtures_compile_without_diagnostics) | (binary(ui) & test(=ui))"
 slow-timeout = { period = "10m", terminate-after = 1, grace-period = "5s" }
 test-group = "serial-dylint-ui"
 
@@ -87,7 +92,7 @@ serial-toolchain-installs = { max-threads = 1 }
 # dev-dependency proc-macro hangs during cargo's dev-dependency resolution on
 # Windows CI regardless of whether any example source uses rstest, so all
 # Dylint example compilation for that crate is compiled away on Windows.
-filter = "test(driver::ui::) | test(tests::ui::) | test(ui::ui) | test(example_compiles_without_diagnostics) | test(example_harness_collects_call_site_evidence) | test(trybuild_fixtures_compile_without_diagnostics) | test(ui::example_compiles_under_test_harness) | test(ui::hand_written_test_companion_does_not_exempt_parent_function) | test(ui::rstest_unwrap_outside_tests_still_fails_in_non_harness_code) | test(ui::rstest_empty_companion_does_not_exempt_parent_function) | test(ui::aliased_test_crate_non_companion_does_not_exempt_parent_function) | (binary(ui) & test(=ui))"
+filter = "test(driver::ui::) | test(tests::ui::) | test(ui::ui) | test(sha2_0_11_pre_migration_patterns_fail_to_compile) | test(example_compiles_without_diagnostics) | test(example_harness_collects_call_site_evidence) | test(trybuild_fixtures_compile_without_diagnostics) | test(ui::example_compiles_under_test_harness) | test(ui::hand_written_test_companion_does_not_exempt_parent_function) | test(ui::rstest_unwrap_outside_tests_still_fails_in_non_harness_code) | test(ui::rstest_empty_companion_does_not_exempt_parent_function) | test(ui::aliased_test_crate_non_companion_does_not_exempt_parent_function) | (binary(ui) & test(=ui))"
 test-group = "serial-dylint-ui"
 retries = { backoff = "exponential", count = 2, delay = "5s" }
 slow-timeout = { period = "10m", terminate-after = 1, grace-period = "5s" }
