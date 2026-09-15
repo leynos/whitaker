@@ -3434,6 +3434,19 @@ checked against the declarations. The retry backoff and delay are pinned with
 the count, because the Dylint UI harnesses retry a transient Windows rename
 failure and `tests/nextest_ui_filter.rs` requires the key.
 
+It discovers the compile-contract tests rather than listing them. A test that
+drives `trybuild` invokes a nested cargo build, so it costs what a build costs
+and the base per-test allowance is the wrong order of magnitude for it. There
+are two here, and both are in a binary called `ui`, which is why the set is
+found from the `trybuild::TestCases` calls in the tree and each test is
+required by name: `whitaker-installer`'s test sits in a binary named `ui` but
+is not itself named `ui`, so the `(binary(ui) & test(=ui))` clause never
+reached it. It ran under the base 300-second allowance, passed at 235 seconds,
+and timed out at 300.216 seconds on the Windows lane, cancelling the run. A
+handwritten list would have had the same hole, and a discovery that stops
+recognizing the call would sweep a smaller set silently, so finding nothing is
+a failure rather than a pass.
+
 It drives the lane discovery with workflow documents rather than only with the
 files. `_declared_jobs` takes parsed documents and reads the repository's own
 only when given none, so `lane_discovery_test.py` can put a job with no
