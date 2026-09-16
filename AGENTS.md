@@ -140,14 +140,15 @@ project:
 
     ```sh
     cargo fmt --workspace -- --check
-    $(MD_FILES_FIND) | xargs -0 -r scripts/check-markdown-format.sh
+    mdtablefix --check --git --include-untracked --wrap --renumber --breaks --ellipsis --fences
     ```
 
-    validating Rust and Markdown formatting without modifying files. The
-    Markdown checker skips repository and tool-cache directories at every
-    depth, then checks the remaining sources in batches with `mdtablefix` and
-    `markdownlint-cli2` staged copies. It requires `mdtablefix` and
-    `markdownlint-cli2` on `PATH`.
+    validating Rust and Markdown formatting without modifying files.
+    `--git` selects the Markdown files Git tracks and `--include-untracked`
+    adds untracked files Git does not ignore. It requires `mdtablefix`
+    0.6.0 or later on `PATH`; Markdown linting runs through
+    `make markdownlint` locally and the pinned markdownlint-cli2 action in
+    CI.
   - `make lint` executes:
 
     ```sh

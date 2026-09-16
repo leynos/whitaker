@@ -28,11 +28,12 @@ env:
   # same run wrote through `ghac` with 0 write errors, so the failure is
   # specific to the Ubicloud cache proxy's write path, not to the backend.
   SCCACHE_BACKEND: local
-  # `make check-fmt` shells out to both Markdown formatters. Keep CI on the
-  # same releases used to normalize the checked-in documentation.
-  MDTABLEFIX_VERSION: '0.5.0'
-  MDTABLEFIX_LINUX_X64_SHA256: bd38cd30f0405120c453b3e80b0d4e78a34d93d2c2121a0fd4ace4a54bacaeeb
-  MARKDOWNLINT_CLI2_VERSION: '0.20.0'
+  # `make check-fmt` runs `mdtablefix --check --git`. Keep CI on the same
+  # release used to normalize the checked-in documentation; 0.6.0 is the
+  # first release with `--check` and `--git`. Markdown linting runs through
+  # the pinned markdownlint-cli2 action rather than a shell install.
+  MDTABLEFIX_VERSION: '0.6.0'
+  MDTABLEFIX_LINUX_X64_SHA256: b78b2ac9b396b71073ff0485d9d37717cdcd82893b660b7146ba6d3f70d43ba0
   RUSTFLAGS: -D warnings
   RUSTDOCFLAGS: -D warnings
 # CodeScene coverage: main-branch coverage is uploaded by
@@ -237,7 +238,7 @@ jobs:
             ~/.local/share/uv
             ~/.bun/install/cache
             ~/.cache/merman
-          key: tools-lint-v1-${{ runner.os }}-${{ runner.arch }}-${{ runner.environment }}-ubuntu2404-nextest0.9.114-msrv1.85.0-mdtablefix${{ env.MDTABLEFIX_VERSION }}-mdlint${{ env.MARKDOWNLINT_CLI2_VERSION }}-bun1.2.21-mmdc11.9.0-uv0.11.19-nixie1.1.0-merman0.7.0-${{ hashFiles('rust-toolchain.toml') }}
+          key: tools-lint-v1-${{ runner.os }}-${{ runner.arch }}-${{ runner.environment }}-ubuntu2404-nextest0.9.114-msrv1.85.0-mdtablefix${{ env.MDTABLEFIX_VERSION }}-bun1.2.21-mmdc11.9.0-uv0.11.19-nixie1.1.0-merman0.7.0-${{ hashFiles('rust-toolchain.toml') }}
 
       - name: Restore the Dylint host tools
         id: dylint-tools
@@ -343,18 +344,6 @@ jobs:
             exit 1
           fi
 
-      - name: Install Markdown lint CLI
-        # Match the lint-fixing pass that `make fmt` and `make check-fmt` share.
-        run: |
-          bun install --no-progress --global "markdownlint-cli2@${MARKDOWNLINT_CLI2_VERSION}"
-          markdownlint_version_output="$(markdownlint-cli2 --version)"
-          installed_markdownlint_version="${markdownlint_version_output%%$'\n'*}"
-          expected_markdownlint_version="markdownlint-cli2 v${MARKDOWNLINT_CLI2_VERSION}"
-          if [[ "${installed_markdownlint_version}" != "${expected_markdownlint_version}"* ]]; then
-            echo "expected ${expected_markdownlint_version}, got ${installed_markdownlint_version}" >&2
-            exit 1
-          fi
-
       - name: Check formatting
         run: make check-fmt
 
@@ -389,10 +378,7 @@ jobs:
       - name: Markdown lint
         uses: DavidAnson/markdownlint-cli2-action@21c1be1b93ad9ed58fa840aacc3f279cde2a72ff  # v24.2.0
         with:
-          globs: |
-            **/*.md
-            !**/.uv-cache/**
-            !**/.uv-tools/**
+          globs: '**/*.md'
 
       - name: Lint
         run: make lint

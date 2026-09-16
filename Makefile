@@ -45,7 +45,14 @@ COVERAGE_OUTPUT ?= lcov.info
 COVERAGE_TARGET_DIR ?= $(CURDIR)/target/llvm-cov-target
 RUST_FLAGS ?= -D warnings
 RUSTDOC_FLAGS ?= --cfg docsrs -D warnings
-MDLINT ?= $(or $(shell command -v markdownlint-cli2 2>/dev/null),$(HOME)/.bun/bin/markdownlint-cli2)
+MDLINT ?= $(shell command -v markdownlint-cli2 2>/dev/null || printf '%s' "$$HOME/.bun/bin/markdownlint-cli2")
+# `make fmt` and `make check-fmt` call mdtablefix directly. `--git` selects the
+# Markdown files Git tracks and `--include-untracked` adds the untracked files
+# Git does not ignore, so a new document is formatted before it is staged.
+# Both modes need mdtablefix 0.6.0 or later; CI pins the version at the
+# install-mdtablefix step.
+MDTABLEFIX_SELECT = --git --include-untracked
+MDTABLEFIX_RULES = --wrap --renumber --breaks --ellipsis --fences
 MDTABLEFIX ?= mdtablefix
 NIXIE ?= nixie
 WHITAKER_REPO ?= $(CURDIR)
@@ -263,14 +270,12 @@ lint: skill-manifest-check ## Run Clippy with warnings denied
 
 fmt: ## Format Rust and Markdown sources
 	$(CARGO) fmt --all
-	export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; mdformat-all
+	export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; $(MDTABLEFIX) --in-place $(MDTABLEFIX_SELECT) $(MDTABLEFIX_RULES)
+	export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; $(MDLINT) --fix "**/*.md"
 
 check-fmt: ## Verify formatting
 	$(CARGO) fmt --all -- --check
-	@$(MD_FILES_FIND) | xargs -0 sh -c '\
-		if [ "$$#" -gt 0 ]; then \
-			MDTABLEFIX="$(MDTABLEFIX)" MDLINT="$(MDLINT)" scripts/check-markdown-format.sh "$$@"; \
-		fi' sh
+	$(MDTABLEFIX) --check $(MDTABLEFIX_SELECT) $(MDTABLEFIX_RULES)
 
 markdownlint: spelling ## Lint Markdown files and enforce spelling
 	export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; $(MDLINT) '**/*.md' '!**/.uv-cache/**' '!**/.uv-tools/**'
