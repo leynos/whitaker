@@ -138,16 +138,16 @@ class _Total:
     def add(self, duration: str, seconds: int, nanoseconds: int) -> None:
         """Add one part, refusing what humantime's checks would refuse."""
         nanos = _u64(duration, self.nanoseconds + nanoseconds)
-        carried = seconds
-        if nanos > _SECOND:
-            carried = _u64(duration, carried + nanos // _SECOND)
-            nanos %= _SECOND
-        total = _u64(duration, self.seconds + carried)
-        # humantime normalizes on a strict `>`, so a nanosecond part of
-        # exactly one second reaches `Duration::new`, which carries it
-        # and aborts the process rather than returning an error when
-        # that carry overflows. nextest cannot run either way, so the
-        # refusal here is the same.
+        total = _u64(duration, self.seconds + seconds)
+        # humantime carries twice: its parser normalizes each pair on a
+        # strict `>`, and `Duration::new` carries the remainder on `>=`,
+        # aborting the process rather than erroring when that carry
+        # overflows. nextest cannot run either way, so both are one
+        # refusal here. Written as one branch, because a reader with
+        # both has an unfalsifiable one: over all seventy-one inputs of
+        # the estate differential, removing the strict branch changes
+        # nothing, while removing this one lets three overflowing
+        # composites through.
         if nanos >= _SECOND:
             total = _u64(duration, total + nanos // _SECOND)
             nanos %= _SECOND
