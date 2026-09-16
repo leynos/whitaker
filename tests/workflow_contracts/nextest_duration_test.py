@@ -17,8 +17,16 @@ of the pinned cargo-nextest release resolves.
 
 from __future__ import annotations
 
+import re
+
 import pytest
-from nextest_durations import UNIT_SECONDS, NextestConfigurationError, seconds
+from nextest_durations import (
+    _SPACE_CHARS,
+    _digits,
+    UNIT_SECONDS,
+    NextestConfigurationError,
+    seconds,
+)
 
 
 @pytest.mark.parametrize("unit", sorted(UNIT_SECONDS), ids=sorted(UNIT_SECONDS))
@@ -243,3 +251,75 @@ def test_digits_outside_ascii_are_refused(duration: str) -> None:
     """
     with pytest.raises(NextestConfigurationError):
         seconds(duration)
+
+
+@pytest.mark.parametrize(
+    "duration",
+    [
+        pytest.param("1\x1cs", id="a-file-separator-inside-a-number"),
+        pytest.param("\x1c45m", id="a-file-separator-leading"),
+        pytest.param("45m\x1f", id="a-unit-separator-trailing"),
+        pytest.param("1\x1d0s", id="a-group-separator-between-digits"),
+    ],
+)
+def test_c0_separators_are_not_whitespace_and_are_refused(duration: str) -> None:
+    """Python calls U+001C to U+001F whitespace; humantime does not.
+
+    Rust's ``char::is_whitespace`` is the Unicode White_Space property,
+    which excludes the file, group, record and unit separators. Python's
+    ``\\s``, ``str.strip`` and ``str.split`` all include them, so a
+    reader written the obvious way reads the first of these as one
+    second and the second as forty-five minutes, and reports a budget
+    for a configuration nextest refuses at startup.
+
+    The last is the one nobody would notice: a separator between two
+    digits of an ordinary number, which ``str.split`` silently removes.
+    """
+    with pytest.raises(NextestConfigurationError):
+        seconds(duration)
+
+
+def test_the_whitespace_class_is_rusts_own() -> None:
+    """The class is the Unicode White_Space property, and nothing more.
+
+    Pins the reasoning rather than the consequence. The four separators
+    the previous test refuses are refused because they are absent from
+    this set, and this asserts both directions of that: Python's ``\\s``
+    exceeds the set by exactly those four, and the set exceeds ``\\s``
+    by nothing. If either language's notion of whitespace moves, this
+    fails here rather than in a runner.
+    """
+    ours = set(_SPACE_CHARS)
+    pythons = {c for c in map(chr, range(0x11000)) if re.fullmatch(r"\s", c)}
+    assert pythons - ours == set("\x1c\x1d\x1e\x1f"), (
+        "Python's whitespace must exceed humantime's by exactly the four "
+        f"C0 separators, exceeds it by {sorted(pythons - ours)!r}"
+    )
+    assert not ours - pythons, (
+        "every character this reader treats as whitespace must be one "
+        f"Python agrees is whitespace, {sorted(ours - pythons)!r} are not"
+    )
+
+
+def test_the_digit_join_removes_only_what_the_pattern_tolerated() -> None:
+    """``_digits`` strips the same class the pattern matched, not Python's.
+
+    Reached only through a match, so while the pattern holds it never
+    sees a C0 separator and ``str.split`` here would give the same
+    answer. It is tested directly because that is the whole of the
+    argument: the helper's correctness rests on the pattern's, and a
+    later widening of the pattern would otherwise make ``str.split``
+    delete a separator instead of the reader refusing it.
+
+    A separator is not whitespace, so it survives; a real space does
+    not.
+    """
+    assert _digits("1\x1c0") == "1\x1c0", (
+        "a C0 separator is not whitespace and must survive the join, so "
+        "that a pattern which let one through refuses the duration "
+        "rather than silently reading a different number"
+    )
+    assert _digits("1 0") == "10"
+    assert _digits("1\u20080") == "10", (
+        "a Unicode space humantime skips must be removed like any other"
+    )
