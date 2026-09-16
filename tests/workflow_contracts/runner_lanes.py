@@ -148,6 +148,13 @@ CONDITIONAL_RUNS_ON: Final[typ.Pattern[str]] = re.compile(
 LEG_DISCRIMINATOR: Final[str] = "${{ runner.arch }}"
 
 
+#: The longest `timeout-minutes` any lane here may declare. Not a limit on
+#: what a job needs, but a bound on what a hang can cost: the slowest observed
+#: leg in this repository is under ten minutes, so anything approaching two
+#: hours is a typo or a hang nobody has looked at.
+MAXIMUM_LANE_TIMEOUT_MINUTES: Final[int] = 120
+
+
 #: Every lane whose runner image sets the glibc floor for a consumer of
 #: whitaker's x86_64 Linux binaries. Both rolling-release matrix jobs publish
 #: artefacts that land side by side in an installation, so the floor is the
@@ -271,6 +278,15 @@ LINUX_LEG_GUARD: Final[str] = "runner.os == 'Linux'"
 #: matrix job cannot pass a different input per leg any other way.
 LINUX_ARM_TEMPLATE: Final[str] = "${{ " + LINUX_LEG_GUARD + " && '{linux}' || '{other}' }}"
 
+#: The same form as a pattern, with both arms captured. A matrix job's input
+#: has to name what the other legs receive as well as what the Linux legs do,
+#: or a contract reading only the Linux arm leaves three legs unasserted.
+LEG_CONDITIONAL_INPUT: Final[typ.Pattern[str]] = re.compile(
+    r"\$\{\{\s*" + re.escape(LINUX_LEG_GUARD) + r"\s*"
+    r"&&\s*'(?P<linux>[^']*)'\s*"
+    r"\|\|\s*'(?P<other>[^']*)'\s*\}\}"
+)
+
 
 def runs_even_when_the_job_fails(condition: object) -> bool:
     """Report whether a step's condition still runs it after a failure.
@@ -279,6 +295,12 @@ def runs_even_when_the_job_fails(condition: object) -> bool:
     job's step says ``always() && <leg guard>``, which is the same promise
     narrowed to the legs the rule is about; a rule that demanded the bare form
     would refuse the narrower one and push the guard somewhere weaker.
+
+    Only those two are accepted. Anything else beginning ``always() &&`` is
+    refused, because the conjunction can just as easily switch the step off:
+    ``always() && false`` starts with the same six characters and never runs,
+    which would let the headroom, cache-observation and compiler-cache
+    contracts pass with the telemetry they exist to require turned off.
 
     Parameters
     ----------
@@ -298,11 +320,13 @@ def runs_even_when_the_job_fails(condition: object) -> bool:
     True
     >>> runs_even_when_the_job_fails("runner.os == 'Linux'")
     False
+    >>> runs_even_when_the_job_fails("always() && false")
+    False
     >>> runs_even_when_the_job_fails(None)
     False
     """
     text = str(condition).strip()
-    return text == "always()" or text.startswith("always() && ")
+    return text in {"always()", f"always() && {LINUX_LEG_GUARD}"}
 
 
 def linux_arm(value: object) -> str:
@@ -313,6 +337,11 @@ def linux_arm(value: object) -> str:
     order to pass one input to its Linux legs and another to the rest; any
     other expression is refused, because reporting a guessed value would be
     worse than reporting that it cannot be read.
+
+    Both arms must be present. An expression with only the Linux arm parses
+    and yields the same answer for this function, while leaving whatever the
+    other three legs receive unasserted, so it is refused here rather than
+    silently half-read.
 
     Parameters
     ----------
@@ -330,15 +359,20 @@ def linux_arm(value: object) -> str:
     'external'
     >>> linux_arm("${{ runner.os == 'Linux' && 'external' || 'github' }}")
     'external'
+    >>> linux_arm("${{ runner.os == 'Linux' && 'external' }}")
+    Traceback (most recent call last):
+    ...
+    AssertionError: only the leg-conditional form with both arms is readable...
     """
     text = str(value)
     if "${{" not in text:
         return text
-    prefix = "${{ " + LINUX_LEG_GUARD + " && '"
-    assert text.startswith(prefix) and text.endswith("' }}"), (
-        f"only the leg-conditional form is readable here; got {text!r}"
+    match = LEG_CONDITIONAL_INPUT.fullmatch(text)
+    assert match is not None, (
+        "only the leg-conditional form with both arms is readable here, "
+        f"{LINUX_ARM_TEMPLATE!r}; got {text!r}"
     )
-    return text[len(prefix) :].split("'", 1)[0]
+    return match["linux"]
 
 
 def declared_labels(job: dict[str, Any]) -> set[str]:

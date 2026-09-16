@@ -21,6 +21,7 @@ import pytest
 import yaml
 from runner_lanes import (
     LEG_DISCRIMINATOR,
+    MAXIMUM_LANE_TIMEOUT_MINUTES,
     billable_labels,
     GLIBC_BASELINE_IMAGE,
     GLIBC_BASELINE_LANES,
@@ -218,4 +219,30 @@ def test_the_actionlint_registry_matches_the_labels_in_use() -> None:
     assert registered == in_use, (
         f".github/actionlint.yaml registers {sorted(registered)} but the "
         f"workflows bill for {sorted(in_use)}"
+    )
+
+
+@pytest.mark.parametrize("lane", UBICLOUD_LANES, ids=str)
+def test_every_ubicloud_lane_declares_a_timeout(lane: RunnerLane) -> None:
+    """A hung Ubicloud job bills until something stops it.
+
+    Ubicloud runners register as self-hosted just-in-time runners, so GitHub's
+    five-day self-hosted ceiling applies rather than the six-hour hosted one.
+    The developers' guide has required a timeout on every Ubicloud job since
+    the migration; until now nothing enforced it, and two matrix jobs reached
+    a pull request without one. Documented policy that no contract asserts is
+    how that happened.
+
+    Declared on the job, because a matrix job cannot give one leg a different
+    timeout from another and the bound is wanted on all of them anyway.
+    """
+    job = load_lane(lane)
+    timeout = job.get("timeout-minutes")
+    assert isinstance(timeout, int), (
+        f"{lane} runs on a paid runner and must declare timeout-minutes; "
+        f"got {timeout!r}"
+    )
+    assert 0 < timeout <= MAXIMUM_LANE_TIMEOUT_MINUTES, (
+        f"{lane} declares timeout-minutes {timeout}, outside the reviewed "
+        f"range of 1 to {MAXIMUM_LANE_TIMEOUT_MINUTES}"
     )

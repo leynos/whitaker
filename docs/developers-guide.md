@@ -703,6 +703,16 @@ self-hosted just-in-time runners, so GitHub's five-day self-hosted limit
 applies rather than the six-hour hosted limit, and a hung job would otherwise
 bill for days.
 
+A contract asserts it, which it did not before. This rule was documented and
+unenforced, and two matrix jobs reached a pull request on paid runners with no
+timeout at all before a reviewer caught it. The contract requires a declared
+`timeout-minutes` on every lane in the Ubicloud list and bounds it to two
+hours, which is an order of magnitude above the slowest leg this repository has
+ever run and so catches a typo as readily as an omission. Values are sized from
+observed runs rather than guessed: 30 minutes for `build-lints`, about eight
+times its slowest leg, and 45 for `build-dependency-binaries`, which installs
+every dependency crate from source and is the heavier of the two.
+
 Test and build concurrency is bounded by one named constant.
 `LINUX_RUNNER_VCPUS` is declared once per workflow and a single step derives
 both `CARGO_BUILD_JOBS` and `NEXTEST_TEST_THREADS` from it, so changing the
