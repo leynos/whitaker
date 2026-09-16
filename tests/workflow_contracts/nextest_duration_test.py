@@ -151,6 +151,14 @@ def test_text_humantime_would_reject_is_refused(duration: str) -> None:
             1.8446744073689784e19,
             id="the-largest-year-count",
         ),
+        # The only input in the estate differential that separates when
+        # the carry happens. Every other case accepts or refuses the same
+        # way whether the nanosecond part is carried as each pair is read
+        # or once at the end; this one is accepted only by the first,
+        # because carrying late leaves the accumulator holding 2**64.
+        # Deferring the carry refuses it while humantime accepts, which
+        # is the accept-what-the-runner-refuses direction inverted, and
+        # is the mutation that proves this case load-bearing.
         pytest.param(
             "18446744073709551615ns 1ns",
             18446744073.709551616,
