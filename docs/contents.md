@@ -45,6 +45,12 @@
 - [Brain trust lints design](brain-trust-lints-design.md) describes the lints
   that analyse trait and type structure to surface decomposition guidance.
 
+## Release migration notes
+
+- [Whitaker 0.2.8 migration](migrations/0.2.8.md) explains the released
+  suite-version pinning option and the checkout behaviour that affects existing
+  installer workflows.
+
 ## User-facing and technical reference material
 
 - [Rstest Behaviour-Driven Development (BDD) user's guide](rstest-bdd-users-guide.md)
