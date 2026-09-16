@@ -21,6 +21,7 @@ import re
 
 import pytest
 from nextest_durations import (
+    display_seconds,
     _SPACE_CHARS,
     _digits,
     UNIT_SECONDS,
@@ -323,3 +324,71 @@ def test_the_digit_join_removes_only_what_the_pattern_tolerated() -> None:
     assert _digits("1\u20080") == "10", (
         "a Unicode space humantime skips must be removed like any other"
     )
+
+
+def test_two_budgets_one_second_apart_are_distinguishable() -> None:
+    """Exactness is not pedantry here: a float cannot tell these apart.
+
+    humantime's range reaches 2**64 seconds and a float carries 53 bits
+    of significand, so above 2**53 the representable values are further
+    apart than one second. Both of these are in the differential this
+    reader is measured against, and they are adjacent, so this is the
+    narrowest gap the reader must preserve at the top of its range.
+    """
+    smaller = seconds("18446744073709551614s")
+    larger = seconds("18446744073709551615s")
+    assert smaller != larger, "two budgets a second apart are not one budget"
+    assert float(smaller) == float(larger), (
+        "this is the defect being avoided rather than a property to rely "
+        "on: converted to float the two are the same number, so the "
+        "assertion above would hold whichever way round it was written"
+    )
+
+
+def test_an_ordering_between_them_has_a_direction() -> None:
+    """The ordering assertions are the reason exactness matters.
+
+    Every tier comparison in this repository is an inequality between
+    two of these values. Under float both `<` and `>` are false for the
+    pair below, so an ordering assertion between them passes when it is
+    written backwards, which is the failure that does not look like one.
+    """
+    smaller = seconds("18446744073709551614s")
+    larger = seconds("18446744073709551615s")
+    assert smaller < larger, "the smaller budget must order below the larger"
+    assert not float(smaller) < float(larger), (
+        "again the defect, not a property: in float neither is less than "
+        "the other, so an inequality written either way round holds"
+    )
+
+
+def test_a_period_multiplied_by_its_terminate_after_stays_exact() -> None:
+    """`terminate-after` multiplies a period, and tenths have no float.
+
+    A per-test allowance is a period times a count, and the guide states
+    some of them as decimals. Multiplying the float and comparing with
+    the written total differs by a rounding error, which a tolerance
+    would paper over and an exact value does not need.
+    """
+    period = seconds("0.1s")
+    assert period * 3 == seconds("0.3s"), (
+        "a tenth taken three times is three tenths"
+    )
+    assert float(period) * 3 != float(seconds("0.3s")), (
+        "in float it is not, by 5.55e-17; that is what this reader stops "
+        "reaching the comparisons"
+    )
+
+
+def test_the_display_helper_is_the_lossy_one_on_purpose() -> None:
+    """`display_seconds` is for messages, and says so by being separate.
+
+    Named apart from `seconds` so a caller chooses the lossy conversion
+    rather than receiving it by default, which is how the float got into
+    the comparisons in the first place.
+    """
+    assert display_seconds("45m") == 2700.0
+    assert isinstance(display_seconds("45m"), float)
+    assert display_seconds("18446744073709551614s") == display_seconds(
+        "18446744073709551615s"
+    ), "the display helper is lossy, which is why it is not the comparison"
