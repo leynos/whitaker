@@ -3715,6 +3715,24 @@ It compares each job's ceiling against the profile that lane actually runs.
 `make coverage` re-enters `make test` without a profile, so it runs under
 `default`; only the Windows lane passes `NEXTEST_PROFILE=ci`.
 
+That reading is complete only while the variable is never set another way, so
+`nextest_profile_test.py` sweeps all three `env` scopes, workflow, job and
+step, and requires that none of them names `NEXTEST_PROFILE`. A job-level
+declaration would put every lane in that job under `ci` while the reader still
+judged them under `default`, and nothing would fail, because both profiles
+carry a full set of values and the comparison would simply succeed against the
+wrong ones.
+
+The sweep decides by key membership and reads no value, because a declaration
+masks the outer scopes whatever it holds, and blank has two spellings that
+parse differently: `NEXTEST_PROFILE: ""` is the empty string and a valueless
+`NEXTEST_PROFILE:` is None. A reader testing for truth, or for `is not None`,
+covers the quoted spelling and walks past the valueless one.
+`profile_declaration_test.py` drives the sweep with documents this tree does
+not contain, over both blank spellings and a named one at each of the three
+scopes, because workflows that declare the variable nowhere agree with a sweep
+that reads nothing.
+
 Finally, `timeout_budget_properties_test.py` states what must hold for values
 this repository does not use: a duration is its number times the length of its
 unit, a composite is the sum of its pairs, the required ceiling never falls
