@@ -34,108 +34,22 @@ failure this module exists to avoid. See :class:`_Total`.
 
 from __future__ import annotations
 
+import fractions
 import re
 import typing as typ
 
-#: Nanoseconds in a second, which is the scale the port works in.
-_SECOND: typ.Final[int] = 1_000_000_000
-
-
-class _Scaling(typ.NamedTuple):
-    """One of humantime's products: a multiplier and where it lands.
-
-    humantime multiplies in the unit the product lands in rather than in
-    nanoseconds throughout, so a year's whole part scales by 31,557,600
-    and the 64-bit check that follows is a check on seconds. Carrying
-    the multiplier and its landing place together is what keeps that
-    pairing from coming apart.
-
-    Attributes
-    ----------
-    scale : int
-        What the value is multiplied by.
-    in_seconds : bool
-        Whether the product is seconds rather than nanoseconds.
-    """
-
-    scale: int
-    in_seconds: bool
-
-
-class _Unit(typ.NamedTuple):
-    """One humantime unit, as its parser treats it.
-
-    The two scalings differ, and not only in magnitude: a second's whole
-    part scales by one into seconds while its fraction scales by a
-    thousand million into nanoseconds, and the landing place moves at a
-    different unit for each. Whole parts land in seconds from a second
-    upwards; fractions land in seconds only from an hour upwards, which
-    is why ``0.123h`` is refused where ``0.123s`` is exact.
-
-    Attributes
-    ----------
-    whole : _Scaling
-        How the value's whole part is scaled.
-    fraction : _Scaling or None
-        How a fraction's numerator is scaled before the exact division
-        humantime requires, or None when the unit admits no fraction at
-        all. ``ns`` is that case: humantime refuses a fractional
-        nanosecond outright rather than rounding it.
-    """
-
-    whole: _Scaling
-    fraction: _Scaling | None
-
-
-#: Every spelling humantime accepts, grouped by the unit it names, with
-#: humantime's own definitions of a month and a year. Spelt out in full
-#: rather than trimmed to the plausible ones, because refusing a unit
-#: nextest accepts would fail a configuration the runner is happy with.
-_UNIT_SPELLINGS: typ.Final[tuple[tuple[tuple[str, ...], _Unit], ...]] = (
-    (("nanos", "nsec", "ns"), _Unit(_Scaling(1, False), None)),
-    (("usec", "us", "µs"), _Unit(_Scaling(1_000, False), _Scaling(1_000, False))),
-    (
-        ("millis", "msec", "ms"),
-        _Unit(_Scaling(1_000_000, False), _Scaling(1_000_000, False)),
-    ),
-    (
-        ("seconds", "second", "secs", "sec", "s"),
-        _Unit(_Scaling(1, True), _Scaling(_SECOND, False)),
-    ),
-    (
-        ("minutes", "minute", "mins", "min", "m"),
-        _Unit(_Scaling(60, True), _Scaling(60 * _SECOND, False)),
-    ),
-    (
-        ("hours", "hour", "hrs", "hr", "h"),
-        _Unit(_Scaling(3_600, True), _Scaling(3_600, True)),
-    ),
-    (("days", "day", "d"), _Unit(_Scaling(86_400, True), _Scaling(86_400, True))),
-    (
-        ("weeks", "week", "wks", "wk", "w"),
-        _Unit(_Scaling(604_800, True), _Scaling(604_800, True)),
-    ),
-    (
-        ("months", "month", "M"),
-        _Unit(_Scaling(2_630_016, True), _Scaling(2_630_016, True)),
-    ),
-    (
-        ("years", "year", "yrs", "yr", "y"),
-        _Unit(_Scaling(31_557_600, True), _Scaling(31_557_600, True)),
-    ),
+from nextest_units import (
+    _SECOND,
+    UNIT_SECONDS,
+    _Scaling,
+    _Unit,
+    _UNITS,
 )
 
-_UNITS: typ.Final[dict[str, _Unit]] = {
-    spelling: unit for spellings, unit in _UNIT_SPELLINGS for spelling in spellings
-}
-
-#: Each unit's length in seconds, for callers comparing budgets.
-UNIT_SECONDS: typ.Final[dict[str, float]] = {
-    spelling: float(unit.whole.scale)
-    if unit.whole.in_seconds
-    else unit.whole.scale / _SECOND
-    for spelling, unit in _UNITS.items()
-}
+#: Re-exported so callers keep one import for the reader and its
+#: unit table; the split below is about file length, not about the
+#: two being separable claims.
+__all__ = ["UNIT_SECONDS", "NextestConfigurationError", "seconds", "display_seconds"]
 
 #: The characters humantime treats as whitespace, enumerated.
 #:
@@ -240,9 +154,26 @@ class _Total:
         self.seconds = total
         self.nanoseconds = nanos
 
-    def as_seconds(self) -> float:
-        """Return the total in seconds, which is what every caller compares."""
-        return self.seconds + self.nanoseconds / _SECOND
+    def as_seconds(self) -> fractions.Fraction:
+        """Return the total in seconds, exactly.
+
+        A ``Fraction`` rather than a ``float`` because the values here
+        run to humantime's whole 64-bit range, and a float carries 53
+        bits of significand. Above 2**53 seconds it cannot hold two
+        budgets that differ by one second, so an ordering assertion
+        between them compares equal and passes whichever way round they
+        are. ``18446744073709551614s`` and ``18446744073709551615s`` are
+        both in the differential this reader is measured against, and
+        both convert to the same float.
+
+        The nanosecond part makes the same point at the other end:
+        ``0.1s`` has no exact float, so a budget assembled from tenths
+        and one written as a decimal compare unequal by a rounding
+        error rather than by anything a reader wrote.
+        """
+        return fractions.Fraction(self.seconds) + fractions.Fraction(
+            self.nanoseconds, _SECOND
+        )
 
 
 def _u64(duration: str, value: int) -> int:
@@ -261,7 +192,7 @@ def _u64(duration: str, value: int) -> int:
     return value
 
 
-def seconds(duration: str) -> float:
+def seconds(duration: str) -> fractions.Fraction:
     """Convert a nextest duration to seconds.
 
     Parameters
@@ -272,8 +203,13 @@ def seconds(duration: str) -> float:
 
     Returns
     -------
-    float
-        The duration in seconds.
+    fractions.Fraction
+        The duration in seconds, exactly. Exact because these values
+        are compared with each other: humantime's range reaches
+        2**64 seconds and a float holds 53 bits, so two budgets a
+        second apart can convert to the same float and an ordering
+        between them passes whichever way round it is written. Use
+        ``display_seconds`` when a number is going into a message.
 
     Raises
     ------
@@ -283,12 +219,16 @@ def seconds(duration: str) -> float:
     Examples
     --------
     >>> seconds("45m")
-    2700.0
+    Fraction(2700, 1)
     >>> seconds("2h 30m")
-    9000.0
+    Fraction(9000, 1)
+    >>> seconds("0.5s")
+    Fraction(1, 2)
+    >>> float(seconds("45m"))
+    2700.0
     """
     if duration == _BARE_ZERO:
-        return 0.0
+        return fractions.Fraction(0)
     text = duration.strip(_SPACE_CHARS)
     if not text:
         message = f"unrecognized nextest duration {duration!r}: it is empty"
@@ -298,6 +238,26 @@ def seconds(duration: str) -> float:
     while position < len(text):
         position = _read_pair(duration, text, position, total)
     return total.as_seconds()
+
+
+def display_seconds(duration: str) -> float:
+    """Convert a duration to seconds as a float, for putting in a message.
+
+    Lossy on purpose, and separate from ``seconds`` on purpose. A float
+    is what a reader wants to see in an assertion message; it is not
+    what a comparison should be made on, because above 2**53 seconds it
+    cannot tell two budgets a second apart apart. Keeping the two
+    behind different names means a caller chooses which it wants rather
+    than getting the lossy one by default.
+
+    Examples
+    --------
+    >>> display_seconds("45m")
+    2700.0
+    >>> display_seconds("1.5h")
+    5400.0
+    """
+    return float(seconds(duration))
 
 
 def _read_pair(duration: str, text: str, position: int, total: _Total) -> int:
