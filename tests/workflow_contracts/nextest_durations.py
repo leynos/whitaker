@@ -137,6 +137,30 @@ UNIT_SECONDS: typ.Final[dict[str, float]] = {
     for spelling, unit in _UNITS.items()
 }
 
+#: The characters humantime treats as whitespace, enumerated.
+#:
+#: humantime skips on Rust's ``char::is_whitespace``, which is the
+#: Unicode White_Space property. Python's ``\s`` is that property plus
+#: U+001C to U+001F, the file, group, record and unit separators, and
+#: ``str.strip`` and ``str.split`` have the same four-character excess.
+#: A reader spelling the class ``\s`` therefore reads ``1\x1cs`` as one
+#: second and ``\x1c45m`` as forty-five minutes, both of which nextest
+#: refuses at startup. That is the accept-what-the-runner-refuses
+#: direction this module exists to avoid, and it is why the class is
+#: written out rather than abbreviated.
+#: ``test_the_whitespace_class_is_rusts_own`` pins the difference in
+#: both directions, so a change in either language's notion of
+#: whitespace fails there rather than in a runner.
+_SPACE_CHARS: typ.Final[str] = (
+    "\t\n\v\f\r \x85\xa0\u1680"
+    "\u2000\u2001\u2002\u2003\u2004\u2005"
+    "\u2006\u2007\u2008\u2009\u200a"
+    "\u2028\u2029\u202f\u205f\u3000"
+)
+
+#: The same set as a regular-expression character class.
+_SPACE: typ.Final[str] = f"[{re.escape(_SPACE_CHARS)}]"
+
 #: Digits with whitespace tolerated between them. humantime's parser
 #: ignores whitespace while it accumulates a number, so ``1 0s`` is ten
 #: seconds rather than a malformed duration.
@@ -146,9 +170,8 @@ UNIT_SECONDS: typ.Final[dict[str, float]] = {
 #: else, so an Arabic-Indic or Devanagari numeral is a duration this
 #: reader would otherwise convert happily and nextest would refuse at
 #: startup: the accept-what-the-runner-refuses direction this module
-#: exists to avoid. The whitespace class stays Unicode-aware, because
-#: humantime skips on `char::is_whitespace`, which is too.
-_SPACED_DIGITS: typ.Final[str] = r"[0-9](?:\s*[0-9])*"
+#: exists to avoid.
+_SPACED_DIGITS: typ.Final[str] = rf"[0-9](?:{_SPACE}*[0-9])*"
 
 #: One value-and-unit pair. The fractional part is optional and
 #: humantime tolerates whitespace around the point; a leading point, a
@@ -156,8 +179,8 @@ _SPACED_DIGITS: typ.Final[str] = r"[0-9](?:\s*[0-9])*"
 #: refused there and so are refused here.
 _DURATION_TOKEN: typ.Final[re.Pattern[str]] = re.compile(
     rf"(?P<whole>{_SPACED_DIGITS})"
-    rf"(?:\s*\.\s*(?P<fraction>{_SPACED_DIGITS}))?"
-    r"\s*(?P<unit>[A-Za-zµ]+)\s*"
+    rf"(?:{_SPACE}*\.{_SPACE}*(?P<fraction>{_SPACED_DIGITS}))?"
+    rf"{_SPACE}*(?P<unit>[A-Za-zµ]+){_SPACE}*"
 )
 
 #: The one duration humantime accepts with no unit. Its parser
@@ -266,7 +289,7 @@ def seconds(duration: str) -> float:
     """
     if duration == _BARE_ZERO:
         return 0.0
-    text = duration.strip()
+    text = duration.strip(_SPACE_CHARS)
     if not text:
         message = f"unrecognized nextest duration {duration!r}: it is empty"
         raise NextestConfigurationError(message)
@@ -318,8 +341,14 @@ def _add_landed(duration: str, total: _Total, amount: int, scaling: _Scaling) ->
 
 
 def _digits(matched: str) -> str:
-    """Return a matched digit run with its internal whitespace removed."""
-    return "".join(matched.split())
+    """Return a matched digit run with its internal whitespace removed.
+
+    Removes exactly the characters the pattern tolerated. ``str.split``
+    would additionally drop U+001C to U+001F, which the pattern never
+    let through, so a separator inside a number would vanish rather
+    than be refused.
+    """
+    return re.sub(_SPACE, "", matched)
 
 
 def _add_fraction(duration: str, total: _Total, matched: str, unit: _Unit) -> None:
