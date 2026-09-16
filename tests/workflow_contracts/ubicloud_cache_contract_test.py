@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 
+from runner_lanes import runs_even_when_the_job_fails
 from ubicloud_workflow_support import (
     CACHE_KEY_WRITERS,
     CACHING_JOBS,
@@ -116,6 +117,7 @@ SCRATCH_DISCARD_STEPS: dict[str, str] = {
     "coverage-upload": "Discard the instrumented target tree",
     "linux-full": "Discard the build target tree",
     "windows-compat": "Discard the build target tree",
+    "build-lints": "Discard the build target tree",
 }
 
 
@@ -161,7 +163,7 @@ def test_disk_headroom_is_recorded_before_the_saves() -> None:
         steps = steps_by_name(job)
         headroom = "Record disk headroom before the saves"
         assert headroom in names, f"{job_name} must record headroom before saving"
-        assert steps[headroom].get("if") == "always()", (
+        assert runs_even_when_the_job_fails(steps[headroom].get("if")), (
             f"{job_name} must record headroom even when the job fails"
         )
         headroom_index = names.index(headroom)
@@ -237,7 +239,7 @@ def test_every_restore_step_is_reported_in_the_job_summary() -> None:
         job = load_job(job_name)
         steps = steps_by_name(job)
         observations = steps["Record cache observations"]
-        assert observations.get("if") == "always()", (
+        assert runs_even_when_the_job_fails(observations.get("if")), (
             f"{job_name} must record cache observations even when the job fails"
         )
         reported = "\n".join(

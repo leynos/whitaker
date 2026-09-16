@@ -16,6 +16,11 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  # The Linux legs cache compiler output in a directory this workflow
+  # owns, rather than in the Actions cache service. One declaration, read
+  # by scripts/select-sccache-backend.sh, so the two backends can never be
+  # configured at once.
+  SCCACHE_BACKEND: local
   LINT_CRATES: >-
     bumpy_road_function
     conditional_max_n_branches
@@ -105,8 +110,53 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      # Only the two Linux legs are on Ubicloud and only they cache. The
+      # macOS and Windows legs keep the wiring they have always had, which is
+      # whatever the shared action provides for them.
+      - name: Select the compiler cache backend
+        if: runner.os == 'Linux'
+        run: bash scripts/select-sccache-backend.sh
+
+      - name: Restore Cargo registry
+        id: cargo-registry
+        if: runner.os == 'Linux'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cargo-registry-rolling-v1-${{ runner.os }}-${{ runner.arch }}-${{ runner.environment }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
+          restore-keys: |
+            cargo-registry-rolling-v1-${{ runner.os }}-${{ runner.arch }}-${{ runner.environment }}-
+
+      - name: Restore the compiler cache directory
+        id: sccache-dir
+        if: runner.os == 'Linux' && env.SCCACHE_BACKEND == 'local'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: ~/.cache/sccache
+          key: sccache-rolling-v1-${{ runner.os }}-${{ runner.arch }}-${{ runner.environment }}-${{ hashFiles('rust-toolchain.toml') }}-${{ github.run_id }}
+          restore-keys: |
+            sccache-rolling-v1-${{ runner.os }}-${{ runner.arch }}-${{ runner.environment }}-${{ hashFiles('rust-toolchain.toml') }}-
+
+      - name: Record cache observations
+        if: always() && runner.os == 'Linux'
+        env:
+          CARGO_REGISTRY_KEY: ${{ steps.cargo-registry.outputs.cache-primary-key }}
+          CARGO_REGISTRY_MATCHED: ${{ steps.cargo-registry.outputs.cache-matched-key }}
+          CARGO_REGISTRY_HIT: ${{ steps.cargo-registry.outputs.cache-hit }}
+          SCCACHE_DIR_KEY: ${{ steps.sccache-dir.outputs.cache-primary-key }}
+          SCCACHE_DIR_MATCHED: ${{ steps.sccache-dir.outputs.cache-matched-key }}
+          SCCACHE_DIR_HIT: ${{ steps.sccache-dir.outputs.cache-hit }}
+        run: bash scripts/record-cache-observations.sh
+
+      # "external" hands cache ownership to the restore and save steps above
+      # and below. The other three legs keep the action's built-in caches,
+      # because nothing here owns one for them.
       - name: Setup Rust
         uses: leynos/shared-actions/.github/actions/setup-rust@7cb894fe62c40951cccf33819548095e64a1291e
+        with:
+          cache-provider: ${{ runner.os == 'Linux' && 'external' || 'github' }}
 
       - name: Read pinned toolchain
         id: toolchain
@@ -191,6 +241,38 @@ jobs:
             dist/*.tar.zst
             dist/manifest-*.json
           retention-days: 1
+
+      # The artefact is uploaded by here, so the target tree is expendable.
+      # Discarding it before the saves keeps compiler output out of the
+      # archives, which sccache already owns, and frees the headroom the save
+      # steps need to stage their archives.
+      - name: Discard the build target tree
+        if: always() && runner.os == 'Linux'
+        run: rm -rf target
+
+      - name: Record sccache effectiveness
+        if: always() && runner.os == 'Linux'
+        run: bash scripts/record-sccache-effectiveness.sh
+
+      - name: Record disk headroom before the saves
+        if: always() && runner.os == 'Linux'
+        run: bash scripts/record-cache-observations.sh headroom
+
+      - name: Save Cargo registry
+        if: runner.os == 'Linux' && github.ref == 'refs/heads/main' && steps.cargo-registry.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ steps.cargo-registry.outputs.cache-primary-key }}
+
+      - name: Save the compiler cache directory
+        if: runner.os == 'Linux' && env.SCCACHE_BACKEND == 'local' && github.ref == 'refs/heads/main'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: ~/.cache/sccache
+          key: ${{ steps.sccache-dir.outputs.cache-primary-key }}
 
   build-dependency-binaries:
     needs: dependency-manifest-changes

@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import pytest
 from runner_lanes import (
+    LEG_DISCRIMINATOR,
     GLIBC_BASELINE_IMAGE,
     GLIBC_BASELINE_LANE,
     GLIBC_BASELINE_MAXIMUM,
@@ -31,7 +32,12 @@ from runner_lanes import (
     load_lane,
     matrix_legs,
 )
-from ubicloud_workflow_support import UBICLOUD_JOBS, all_jobs, steps_by_name
+from ubicloud_workflow_support import (
+    UBICLOUD_JOBS,
+    all_jobs,
+    restore_steps,
+    steps_by_name,
+)
 
 
 @pytest.mark.parametrize("lane", UBICLOUD_LANES, ids=str)
@@ -48,14 +54,14 @@ def test_every_declared_ubicloud_lane_resolves_to_an_ubicloud_label(
 def test_the_lane_list_and_the_job_list_name_the_same_whole_jobs() -> None:
     """The two vocabularies cannot be extended one without the other.
 
-    `UBICLOUD_JOBS` predates matrix legs and still drives the cache contracts.
-    Holding the whole-job entries of both lists to each other stops a job
-    being added to one and forgotten in the other, which would leave it
-    uncached or unplaced with every contract still green.
+    `UBICLOUD_JOBS` predates matrix legs and still drives the cache contracts,
+    which are about a step list and so apply to a matrix job whole. This list
+    names placements, so a matrix job appears once per Ubicloud leg. Reducing
+    the lanes to their jobs and comparing the two stops a job being added to
+    one and forgotten in the other, which would leave it uncached or unplaced
+    with every contract still green.
     """
-    from_lanes = {
-        (lane.workflow, lane.job) for lane in UBICLOUD_LANES if lane.leg is None
-    }
+    from_lanes = {(lane.workflow, lane.job) for lane in UBICLOUD_LANES}
     from_jobs = {(workflow, job) for job, workflow in UBICLOUD_JOBS.items()}
     assert from_lanes == from_jobs
 
@@ -133,3 +139,39 @@ def test_the_glibc_baseline_check_runs_on_that_leg_at_that_ceiling() -> None:
         f"{GLIBC_BASELINE_STEP!r} must enforce {GLIBC_BASELINE_MAXIMUM}, the glibc the "
         f"{GLIBC_BASELINE_IMAGE} image ships; got {script!r}"
     )
+
+
+def test_a_matrix_job_keys_its_caches_apart_from_its_own_legs() -> None:
+    """Two legs of one job share a step list, so they share a key template.
+
+    That is the hazard a matrix brings and a single-placement job cannot
+    have. The x86_64 and arm64 lints legs run the same restore and the same
+    save; if the rendered key does not vary with the leg, the second leg to
+    finish overwrites the first leg's archive under the same key, and both
+    legs then restore an archive built for the other architecture. The
+    discriminator is `runner.arch`, which is X64 on one and ARM64 on the
+    other.
+
+    Only the restore steps declare a key template. Each save reuses the
+    primary key its restore rendered, which another contract asserts, so a
+    discriminated restore key is a discriminated save key.
+    """
+    matrix_lanes = {lane for lane in UBICLOUD_LANES if lane.leg is not None}
+    assert matrix_lanes, "this contract needs at least one matrix lane to be about"
+    for lane in sorted(matrix_lanes):
+        job = load_lane(lane)
+        restores = restore_steps(job)
+        assert restores, f"{lane} is a caching lane and must declare restore steps"
+        for step in restores:
+            declared = step.get("with", {})
+            key = str(declared.get("key", ""))
+            assert LEG_DISCRIMINATOR in key, (
+                f"{lane}: {step['name']!r} keys an archive without "
+                f"{LEG_DISCRIMINATOR}, so its legs would overwrite each other: {key!r}"
+            )
+            fallback = str(declared.get("restore-keys", ""))
+            if fallback.strip():
+                assert LEG_DISCRIMINATOR in fallback, (
+                    f"{lane}: {step['name']!r} falls back to a key without "
+                    f"{LEG_DISCRIMINATOR}, so a leg could restore another leg's archive"
+                )

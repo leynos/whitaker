@@ -101,6 +101,12 @@ UBICLOUD_LANES: Final[tuple[RunnerLane, ...]] = (
 #: The prefix every Ubicloud runner label carries.
 UBICLOUD_LABEL_PREFIX: Final[str] = "ubicloud-"
 
+#: What a cache key must vary by inside a matrix job. Both Linux legs of the
+#: rolling release run one restore step and one save step, so only the
+#: rendered key keeps their archives apart.
+LEG_DISCRIMINATOR: Final[str] = "${{ runner.arch }}"
+
+
 #: The lane whose runner image sets the glibc floor for every consumer of
 #: whitaker's x86_64 Linux binaries.
 GLIBC_BASELINE_LANE: Final[RunnerLane] = RunnerLane(
@@ -209,3 +215,81 @@ def lane_label(lane: RunnerLane) -> str:
     label = legs[lane.leg].get("os")
     assert isinstance(label, str), f"{lane} must declare an os for its leg"
     return label
+
+
+#: The guard a step carries when it belongs to the Linux legs of a matrix job
+#: and not to the macOS and Windows legs beside them.
+LINUX_LEG_GUARD: Final[str] = "runner.os == 'Linux'"
+
+#: The one conditional value form this module resolves, as a template. A
+#: matrix job cannot pass a different input per leg any other way.
+LINUX_ARM_TEMPLATE: Final[str] = "${{ " + LINUX_LEG_GUARD + " && '{linux}' || '{other}' }}"
+
+
+def runs_even_when_the_job_fails(condition: object) -> bool:
+    """Report whether a step's condition still runs it after a failure.
+
+    ``always()`` is the whole condition on a job with one placement. A matrix
+    job's step says ``always() && <leg guard>``, which is the same promise
+    narrowed to the legs the rule is about; a rule that demanded the bare form
+    would refuse the narrower one and push the guard somewhere weaker.
+
+    Parameters
+    ----------
+    condition : object
+        A step's ``if`` value, parsed.
+
+    Returns
+    -------
+    bool
+        True when the step runs on failure.
+
+    Examples
+    --------
+    >>> runs_even_when_the_job_fails("always()")
+    True
+    >>> runs_even_when_the_job_fails("always() && runner.os == 'Linux'")
+    True
+    >>> runs_even_when_the_job_fails("runner.os == 'Linux'")
+    False
+    >>> runs_even_when_the_job_fails(None)
+    False
+    """
+    text = str(condition).strip()
+    return text == "always()" or text.startswith("always() && ")
+
+
+def linux_arm(value: object) -> str:
+    """Return what an input resolves to on a Linux leg.
+
+    A literal resolves to itself, which is every non-matrix job here. The only
+    expression understood is the leg-conditional one a matrix job needs in
+    order to pass one input to its Linux legs and another to the rest; any
+    other expression is refused, because reporting a guessed value would be
+    worse than reporting that it cannot be read.
+
+    Parameters
+    ----------
+    value : object
+        A step input's declared value.
+
+    Returns
+    -------
+    str
+        The value a Linux leg receives.
+
+    Examples
+    --------
+    >>> linux_arm("external")
+    'external'
+    >>> linux_arm("${{ runner.os == 'Linux' && 'external' || 'github' }}")
+    'external'
+    """
+    text = str(value)
+    if "${{" not in text:
+        return text
+    prefix = "${{ " + LINUX_LEG_GUARD + " && '"
+    assert text.startswith(prefix) and text.endswith("' }}"), (
+        f"only the leg-conditional form is readable here; got {text!r}"
+    )
+    return text[len(prefix) :].split("'", 1)[0]

@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from runner_lanes import linux_arm, runs_even_when_the_job_fails
 from ubicloud_workflow_support import (
     INSTALL_ACTION,
     REPOSITORY_ROOT,
     SETUP_RUST_ACTION,
+    SUITE_JOBS,
     UBICLOUD_JOBS,
     job_steps,
     load_job,
@@ -79,9 +81,14 @@ def test_setup_rust_delegates_cache_and_compiler_cache_ownership() -> None:
         assert setup["uses"] == SETUP_RUST_ACTION, (
             f"{job_name} must use the reviewed shared Rust setup pin"
         )
-        assert setup["with"] == {"cache-provider": "external"}, (
-            f"{job_name} must own its Cargo cache and take the shared "
-            "compiler-cache arm, which `use-sccache: false` would disable"
+        declared = setup["with"]
+        assert set(declared) == {"cache-provider"}, (
+            f"{job_name} must pass the shared action nothing but the cache "
+            "provider; `use-sccache: false` would disable the compiler-cache arm"
+        )
+        assert linux_arm(declared["cache-provider"]) == "external", (
+            f"{job_name} must own its Cargo cache on its Ubicloud legs rather "
+            "than letting the shared action become a second owner"
         )
 
     windows = steps_by_name(load_job("windows-compat"))["Setup Rust"]
@@ -95,13 +102,13 @@ def test_setup_rust_delegates_cache_and_compiler_cache_ownership() -> None:
 
 def test_one_named_constant_bounds_build_and_test_concurrency() -> None:
     """Cargo and nextest must never oversubscribe the label's two vCPUs."""
-    for workflow_name in set(UBICLOUD_JOBS.values()):
+    for workflow_name in set(SUITE_JOBS.values()):
         workflow = load_workflow(workflow_name)
         assert str(workflow["env"][VCPU_CONSTANT]) == EXPECTED_VCPUS, (
             f"{workflow_name} must declare the Ubicloud shape once"
         )
 
-    for job_name in UBICLOUD_JOBS:
+    for job_name in SUITE_JOBS:
         job = load_job(job_name)
         script = str(steps_by_name(job)["Bound concurrency to the runner shape"]["run"])
         for variable in DERIVED_CONCURRENCY_VARIABLES:
@@ -195,7 +202,7 @@ def test_compiler_cache_effectiveness_is_always_recorded() -> None:
             "Record sccache effectiveness"
         ), f"{job_name} must zero the counters before the build"
         record = steps_by_name(job)["Record sccache effectiveness"]
-        assert record["if"] == "always()", (
+        assert runs_even_when_the_job_fails(record.get("if")), (
             f"{job_name} must publish sccache statistics even when the build fails"
         )
         assert "scripts/record-sccache-effectiveness.sh" in str(record["run"])
@@ -228,7 +235,7 @@ def test_dylint_host_tool_key_matches_the_makefile_pins() -> None:
 
 def test_clippy_mirror_is_owned_and_provisioned_after_its_restore() -> None:
     """The mirror removes an unowned multi-hundred-megabyte upstream clone."""
-    for job_name in UBICLOUD_JOBS:
+    for job_name in SUITE_JOBS:
         job = load_job(job_name)
         names = step_names(job)
         mirror = steps_by_name(job)["Restore the Clippy source mirror"]
