@@ -18,6 +18,7 @@ than guessed at.
 
 from __future__ import annotations
 
+import re
 import typing as typ
 from typing import Any, Final
 
@@ -106,6 +107,40 @@ UBICLOUD_LANES: Final[tuple[RunnerLane, ...]] = (
 
 #: The prefix every Ubicloud runner label carries.
 UBICLOUD_LABEL_PREFIX: Final[str] = "ubicloud-"
+
+#: Labels served by GitHub's own hosted runner pool.
+#:
+#: actionlint knows these natively, so they are the labels a registry may
+#: not contain. Keyed on what GitHub hosts rather than on how one vendor
+#: spells its labels, so a second paid provider needs a registration here
+#: and not a second prefix to match against. A label in neither this set
+#: nor the registry fails the registry contract, which is what a typo
+#: should do.
+GITHUB_HOSTED_LABELS: Final[frozenset[str]] = frozenset(
+    {
+        "ubuntu-latest",
+        "ubuntu-24.04",
+        "ubuntu-24.04-arm",
+        "ubuntu-22.04",
+        "ubuntu-22.04-arm",
+        "windows-latest",
+        "macos-latest",
+        "macos-15",
+        "macos-15-intel",
+    }
+)
+
+#: The whole of a conditional `runs-on`: one condition, then the label
+#: taken when it holds and the label taken when it does not. A lane on
+#: the fork fallback can bill for either arm depending on the head that
+#: triggered it, so a contract asking what a job can bill for has to read
+#: both. Whitaker has no such lane today; the reader is here so that the
+#: registry contract is already right on the pull request that adds one.
+CONDITIONAL_RUNS_ON: Final[typ.Pattern[str]] = re.compile(
+    r"^\$\{\{\s*(?P<condition>.+?)\s*"
+    r"&&\s*'(?P<when_true>[^']+)'\s*"
+    r"\|\|\s*'(?P<when_false>[^']+)'\s*\}\}$"
+)
 
 #: What a cache key must vary by inside a matrix job. Both Linux legs of the
 #: rolling release run one restore step and one save step, so only the
@@ -304,3 +339,59 @@ def linux_arm(value: object) -> str:
         f"only the leg-conditional form is readable here; got {text!r}"
     )
     return text[len(prefix) :].split("'", 1)[0]
+
+
+def declared_labels(job: dict[str, Any]) -> set[str]:
+    """Return every runner label a job could resolve to.
+
+    A matrix job resolves through its legs, so the legs' images are the
+    labels and the `${{ matrix.os }}` deferral itself is not one. A
+    conditional contributes both arms, because which one a run bills for
+    depends on the head that triggered it. Anything else is a literal.
+
+    Examples
+    --------
+    >>> declared_labels({"runs-on": "ubuntu-latest"})
+    {'ubuntu-latest'}
+    >>> sorted(
+    ...     declared_labels(
+    ...         {
+    ...             "runs-on": "${{ github.event.pull_request.head.repo.fork"
+    ...             " && 'ubuntu-latest' || 'ubicloud-standard-2' }}"
+    ...         }
+    ...     )
+    ... )
+    ['ubicloud-standard-2', 'ubuntu-latest']
+    """
+    legs = matrix_legs(job)
+    if legs:
+        declared = [entry.get("os") for entry in legs.values()]
+    else:
+        declared = [job.get("runs-on")]
+    labels: set[str] = set()
+    for value in declared:
+        if not isinstance(value, str):
+            continue
+        if value == MATRIX_RUNNER_EXPRESSION:
+            continue
+        conditional = CONDITIONAL_RUNS_ON.match(value)
+        if conditional:
+            labels.update({conditional["when_true"], conditional["when_false"]})
+            continue
+        labels.add(value)
+    return labels
+
+
+def billable_labels(job: dict[str, Any]) -> set[str]:
+    """Return the labels a job can bill for.
+
+    Everything it could resolve to, less what GitHub hosts itself.
+
+    Examples
+    --------
+    >>> billable_labels({"runs-on": "ubuntu-latest"})
+    set()
+    >>> billable_labels({"runs-on": "ubicloud-standard-2-ubuntu-2404"})
+    {'ubicloud-standard-2-ubuntu-2404'}
+    """
+    return declared_labels(job) - GITHUB_HOSTED_LABELS

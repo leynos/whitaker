@@ -21,6 +21,7 @@ import pytest
 import yaml
 from runner_lanes import (
     LEG_DISCRIMINATOR,
+    billable_labels,
     GLIBC_BASELINE_IMAGE,
     GLIBC_BASELINE_LANES,
     GLIBC_BASELINE_MAXIMUM,
@@ -189,31 +190,32 @@ def test_a_matrix_job_keys_its_caches_apart_from_its_own_legs() -> None:
                     f"{LEG_DISCRIMINATOR}, so a leg could restore another leg's archive"
                 )
 
+def test_the_actionlint_registry_matches_the_labels_in_use() -> None:
+    """The registry and the workflows say the same thing, both ways.
 
-def test_every_ubicloud_label_in_use_is_registered_with_actionlint() -> None:
-    """An unregistered label reads as a typo to the workflow linter.
-
-    actionlint knows GitHub's own labels and nothing else, so an Ubicloud
-    label it has not been told about is reported as unknown. Adding a leg
+    actionlint knows GitHub's own labels and whatever it has been told, so
+    a label it has not been told about is reported as unknown. Adding a leg
     without registering its label leaves the linter failing on a workflow
-    that is correct, which trains a reader to ignore it. Caught here because
-    both halves live in this repository.
+    that is correct, which trains a reader to ignore it.
 
-    Restricted to Ubicloud labels. actionlint knows GitHub's own labels, so
-    demanding a registration for one would make this fail on a lane that had
-    merely moved back, which is a different fault reported by a different
-    contract.
+    Asserted as an equality rather than as a subset, because a stale
+    registration is its own fault: it names a runner assignment that has
+    already been retired and hides that the lane moved. A subset catches
+    the first and not the second.
+
+    "In use" is read from every job in every workflow, through both arms of
+    any conditional, less the labels GitHub hosts. Keyed on what GitHub
+    hosts rather than on a vendor's prefix, so the fork fallback's hosted
+    arm never reaches this question and a second paid provider needs a
+    registration rather than a second prefix to match against. This is the
+    estate's shape, taken from chutoro, which had it right first.
     """
     registry = yaml.safe_load(
         (REPOSITORY_ROOT / ".github/actionlint.yaml").read_text(encoding="utf-8")
     )
     registered = set(registry["self-hosted-runner"]["labels"])
-    in_use = {
-        label
-        for label in (lane_label(lane) for lane in UBICLOUD_LANES)
-        if label.startswith(UBICLOUD_LABEL_PREFIX)
-    }
-    unregistered = sorted(in_use - registered)
-    assert not unregistered, (
-        f"these Ubicloud labels are used but not registered with actionlint: {unregistered}"
+    in_use = {label for _, _, job in all_jobs() for label in billable_labels(job)}
+    assert registered == in_use, (
+        f".github/actionlint.yaml registers {sorted(registered)} but the "
+        f"workflows bill for {sorted(in_use)}"
     )

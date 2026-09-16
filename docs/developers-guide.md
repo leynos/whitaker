@@ -762,9 +762,25 @@ no separate export step, and it owns one registry archive of its own keyed by
 `runner.os` and `runner.arch` so a Linux archive can never be restored onto
 Windows.
 
-`.github/actionlint.yaml` registers `ubicloud-standard-2-ubuntu-2404` as the
-only self-hosted label in use. Keep that list equal to the labels the workflows
-actually reference.
+`.github/actionlint.yaml` registers the paid runner labels the workflows use.
+actionlint knows GitHub's own labels and whatever it has been told, so a label
+it has not been told about is reported as unknown, and a workflow that is
+correct then fails a linter, which teaches a reader to ignore it.
+
+A contract holds the registry and the workflows equal, in both directions. An
+unregistered label is the fault above; a registration left behind after a lane
+moved is its own fault, because it names a runner assignment that has been
+retired and hides that the lane moved. A subset assertion catches the first and
+not the second.
+
+What counts as in use is read from every job in every workflow, through a
+matrix's legs and through both arms of a conditional `runs-on`, less the labels
+GitHub hosts. Both arms matter because a lane on the fork fallback bills for
+either depending on the head that triggered it. The exclusion is keyed on what
+GitHub hosts rather than on a vendor's prefix, so the fork fallback's
+GitHub-hosted arm never reaches the registry question and a second paid
+provider needs a registration rather than a second prefix to match against.
+This is the estate's shape, taken from chutoro.
 
 The `main` ruleset requires the `linux-full` and `windows-compat` status-check
 contexts. GitHub derives a context from the job's name, so neither job may gain
