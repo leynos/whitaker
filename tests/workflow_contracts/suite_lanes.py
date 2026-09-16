@@ -335,26 +335,61 @@ def _job_scopes(
         yield from _step_scopes(where, job)
 
 
-def _env_scopes() -> typ.Iterator[tuple[str, dict[str, typ.Any]]]:
+def _env_scopes(
+    documents: dict[str, dict[str, typ.Any]] | None = None,
+) -> typ.Iterator[tuple[str, dict[str, typ.Any]]]:
     """Yield every scope that may carry an `env` block, with a label.
 
     All three, in the order GitHub resolves them, because a caller
     asking whether a variable is declared anywhere must look at each.
+
+    Parameters
+    ----------
+    documents : dict[str, dict[str, typ.Any]] or None
+        Parsed workflow documents keyed by file name. The repository's
+        own are read when none are given, so the file reading stays at
+        the boundary and the walk below is a pure query that can be
+        driven with documents the tree does not contain.
+
+    Yields
+    ------
+    tuple[str, dict[str, typ.Any]]
+        A label naming the scope, and the scope's mapping.
     """
-    for name, document in _workflow_documents().items():
+    found = _workflow_documents() if documents is None else documents
+    for name, document in found.items():
         yield f"{name}: workflow level", document
         yield from _job_scopes(name, document)
 
 
-def _scopes_declaring_profile() -> list[str]:
+def _scopes_declaring_profile(
+    documents: dict[str, dict[str, typ.Any]] | None = None,
+) -> list[str]:
     """Return every scope whose `env` names the profile variable.
 
-    No value is read and none is needed: an empty declaration selects
-    the default profile as surely as a named one selects a profile, and
-    either is a lane the command-line reader did not see.
+    No value is read and none is needed. A declaration masks the outer
+    scopes whatever it holds, and it has two blank spellings that parse
+    differently: ``NEXTEST_PROFILE: ""`` is the empty string and a
+    valueless ``NEXTEST_PROFILE:`` is None. Both select the default
+    profile as surely as a named value selects a profile, and all three
+    are a lane the command-line reader did not see. Deciding by key
+    membership is what covers the valueless spelling; a truth test or an
+    ``is not None`` test would walk past it.
+
+    Parameters
+    ----------
+    documents : dict[str, dict[str, typ.Any]] or None
+        Parsed workflow documents keyed by file name. The repository's
+        own are read when none are given.
+
+    Returns
+    -------
+    list[str]
+        A label for each scope that declares the variable, in the order
+        GitHub resolves them.
     """
     return [
         label
-        for label, scope in _env_scopes()
-        if PROFILE_VARIABLE in (scope.get("env") or {})
+        for label, scope in _env_scopes(documents)
+        if PROFILE_VARIABLE in (_mapping(scope.get("env")) or {})
     ]
