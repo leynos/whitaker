@@ -228,7 +228,6 @@ extend-ignore-re = [
     "(?m)^Feature: Summarise traversal context for `\\.expect\\(\\.\\.\\)` linting$",
     "(?m)^\\- Helpers to build rules, results, locations, artifacts, and invocations\\.$",
     "(?m)^\\- Lexical segment matching can mis\\-handle renamed imports, glob imports, or$",
-    "(?m)^\\- \\*\\*Checkboxes:\\*\\* Precede task and sub\\-task items with a GitHub Flavored$",
     "(?m)^\\- `\\-\\-artifact\\-server\\-path <dir>`: export uploaded artefacts to a host$",
     "(?m)^bumpy_road_function = Tha iomadh cruinneachadh de loidsig chumhachail neadaichte ann an `\\{ \\$name \\}`\\.$",
     "(?m)^careful setup before a test can execute and, sometimes, teardown afterward\\.$",
@@ -275,6 +274,8 @@ extend-ignore-re = [
     "(?m)^use whitaker_common::i18n::\\{LocaleSelection, LocaleSource, normalise_locale, resolve_localizer\\};$",
     "(?m)^use whitaker_common::i18n::normalise_locale;$",
     "(?s)```.*?```",
+    "Azure\\s+Architecture\\s+Center\\s*\\|\\s*Microsoft\\s+Learn\\b",
+    "GitHub\\s+Flavored\\s+Markdown\\b(?:\\s\\(GFM\\))?",
     "\\brust-analyzer\\b",
     "`[^`\\n]+`",
 ]
@@ -1003,6 +1004,10 @@ extend-ignore-re = [
 "equalizers" = "equalizers"
 "equalizes" = "equalizes"
 "equalizing" = "equalizing"
+"exercize" = "exercise"
+"exercized" = "exercised"
+"exercizes" = "exercises"
+"exercizing" = "exercising"
 "externalisable" = "externalizable"
 "externalisably" = "externalizably"
 "externalisation" = "externalization"
@@ -1946,6 +1951,7 @@ extend-ignore-re = [
 "organizers" = "organizers"
 "organizes" = "organizes"
 "organizing" = "organizing"
+"otherwize" = "otherwise"
 "oxendict" = "oxendict"
 "oxidisable" = "oxidizable"
 "oxidisably" = "oxidizably"
@@ -2267,6 +2273,10 @@ extend-ignore-re = [
 "quantizers" = "quantizers"
 "quantizes" = "quantizes"
 "quantizing" = "quantizing"
+"raize" = "raise"
+"raized" = "raised"
+"raizes" = "raises"
+"raizing" = "raising"
 "randomisable" = "randomizable"
 "randomisably" = "randomizably"
 "randomisation" = "randomization"
