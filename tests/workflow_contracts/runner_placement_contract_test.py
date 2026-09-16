@@ -18,6 +18,7 @@ untouched.
 from __future__ import annotations
 
 import pytest
+import yaml
 from runner_lanes import (
     LEG_DISCRIMINATOR,
     GLIBC_BASELINE_IMAGE,
@@ -33,6 +34,7 @@ from runner_lanes import (
     matrix_legs,
 )
 from ubicloud_workflow_support import (
+    REPOSITORY_ROOT,
     UBICLOUD_JOBS,
     all_jobs,
     restore_steps,
@@ -175,3 +177,23 @@ def test_a_matrix_job_keys_its_caches_apart_from_its_own_legs() -> None:
                     f"{lane}: {step['name']!r} falls back to a key without "
                     f"{LEG_DISCRIMINATOR}, so a leg could restore another leg's archive"
                 )
+
+
+def test_every_ubicloud_label_in_use_is_registered_with_actionlint() -> None:
+    """An unregistered label reads as a typo to the workflow linter.
+
+    actionlint knows GitHub's own labels and nothing else, so an Ubicloud
+    label it has not been told about is reported as unknown. Adding a leg
+    without registering its label leaves the linter failing on a workflow
+    that is correct, which trains a reader to ignore it. Caught here because
+    both halves live in this repository.
+    """
+    registry = yaml.safe_load(
+        (REPOSITORY_ROOT / ".github/actionlint.yaml").read_text(encoding="utf-8")
+    )
+    registered = set(registry["self-hosted-runner"]["labels"])
+    in_use = {lane_label(lane) for lane in UBICLOUD_LANES}
+    unregistered = sorted(in_use - registered)
+    assert not unregistered, (
+        f"these Ubicloud labels are used but not registered with actionlint: {unregistered}"
+    )

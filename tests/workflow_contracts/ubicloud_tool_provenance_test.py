@@ -258,3 +258,27 @@ def test_no_restore_step_is_left_without_an_identifier() -> None:
     for job_name in UBICLOUD_JOBS:
         for step in restore_steps(load_job(job_name)):
             assert step.get("id"), f"{job_name}: {step['name']!r} must declare an id"
+
+
+def test_the_contract_suite_executes_its_own_docstring_examples() -> None:
+    """A documented example that nothing runs is prose, not evidence.
+
+    The helpers in this directory are read by whoever has to extend a
+    contract, and their examples are how a reader learns what a lane name or
+    a resolved label looks like. Without the flag they are never executed, so
+    an example can contradict the helper it documents and every gate stays
+    green. Asserted on the command the target runs, and on the same line, so
+    dropping the flag fails here rather than quietly reducing what runs.
+    """
+    makefile = (REPOSITORY_ROOT / "Makefile").read_text(encoding="utf-8")
+    invocations = [
+        line
+        for line in makefile.splitlines()
+        if "pytest tests/workflow_contracts" in line
+    ]
+    assert invocations, "the Makefile must run the workflow contract suite"
+    for line in invocations:
+        assert "--doctest-modules" in line, (
+            "the contract suite must execute the docstring examples in its own "
+            f"helpers; got {line.strip()!r}"
+        )
