@@ -1227,15 +1227,16 @@ harnesses and the clone-detector harness group in one pass.
 ### Spelling gate
 
 Run `make spelling` to enforce en-GB-oxendict spelling in tracked text. The
-gate uses Typos 1.48.0 together with the repository's generated `typos.toml`,
-and `make markdownlint` includes the spelling gate.
+pinned `typos-config-builder gate` command regenerates `typos.toml`, runs the
+Typos binary it pins over the whole tracked tree, and enforces the shared
+phrase corrections Typos cannot express. `make markdownlint` runs the same gate.
 
-The tracked configuration is built from the shared estate dictionary and the
-narrow `typos.local.toml` overlay. Run `make spelling-config-write` after an
-intentional policy change, and run `make spelling-config` to verify that the
-tracked output is current. The pinned builder refreshes the untracked local
-cache only when the authoritative dictionary is newer, so an already populated
-cache remains usable offline.
+`typos.toml` is regenerated on every run from the live shared dictionary and
+the narrow `typos.local.toml` overlay. Add narrow repository-specific
+terminology to the overlay; because the dictionary is live, `typos.toml` must
+never be drift checked in continuous integration. The gate refreshes the
+untracked local cache only when the authoritative dictionary is newer, so an
+already populated cache remains usable offline.
 
 Do not edit `typos.toml` directly. Preserve public and serialized SARIF terms,
 localization compatibility identifiers, compiler fixtures, workflow keys, and

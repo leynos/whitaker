@@ -206,7 +206,6 @@ ignore = [
   "(?m)^Feature: Summarise traversal context for `\\.expect\\(\\.\\.\\)` linting$",
   "(?m)^\\- Helpers to build rules, results, locations, artifacts, and invocations\\.$",
   "(?m)^\\- Lexical segment matching can mis\\-handle renamed imports, glob imports, or$",
-  "(?m)^\\- \\*\\*Checkboxes:\\*\\* Precede task and sub\\-task items with a GitHub Flavored$",
   "(?m)^\\- `\\-\\-artifact\\-server\\-path <dir>`: export uploaded artefacts to a host$",
   "(?m)^bumpy_road_function = Tha iomadh cruinneachadh de loidsig chumhachail neadaichte ann an `\\{ \\$name \\}`\\.$",
   "(?m)^careful setup before a test can execute and, sometimes, teardown afterward\\.$",
@@ -252,6 +251,8 @@ ignore = [
   "(?m)^use crate::model::run::\\{Artifact, Invocation, Run, Tool, ToolComponent\\};$",
   "(?m)^use whitaker_common::i18n::\\{LocaleSelection, LocaleSource, normalise_locale, resolve_localizer\\};$",
   "(?m)^use whitaker_common::i18n::normalise_locale;$",
+  # Inline code spans are masked; the shared dictionary does not mask them yet.
+  '`[^`\n]+`',
 ]
 
 [files]

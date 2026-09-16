@@ -326,14 +326,13 @@ project:
 
 ## Spelling policy
 
-- `make markdownlint` also enforces en-GB-oxendict spelling with the pinned
-  `typos` release.
-- `typos.toml` is generated. Edit `typos.local.toml` for narrow repository
-  terminology, then run `make spelling-config-write`; never edit generated
-  entries by hand.
-- The configuration builder refreshes the untracked shared dictionary cache
-  only when the authoritative copy is newer. `make spelling-config` verifies
-  the tracked output without replacing it.
+- Enforce en-GB-oxendict spelling with `make spelling`. `make markdownlint`
+  runs the same gate.
+- `typos.toml` is regenerated on every run from the live shared dictionary and
+  the `typos.local.toml` overlay. Never edit generated entries by hand; add
+  narrow repository-specific entries to `typos.local.toml` instead.
+- The gate refreshes the untracked shared dictionary cache only when the
+  authoritative copy is newer, so a valid cache remains usable offline.
 - Preserve external APIs, identifiers, fixtures, snapshots, formal names and
   serialized values. Put quoted prose and identifiers in backticks or fenced
   blocks where possible rather than weakening the shared policy.
