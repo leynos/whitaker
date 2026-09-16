@@ -250,7 +250,7 @@ def test_every_ubicloud_lane_declares_a_timeout(lane: RunnerLane) -> None:
     )
 
 
-def test_an_unrecognised_label_is_reported_rather_than_excused() -> None:
+def test_an_unrecognized_label_is_reported_rather_than_excused() -> None:
     """The hosted set and a vendor prefix are not the same rule.
 
     Over this repository's own workflows the two readings agree exactly, so
@@ -267,18 +267,18 @@ def test_an_unrecognised_label_is_reported_rather_than_excused() -> None:
 
     Raised by jm-tiers-c-4 while porting this contract to lille and netsuke.
     """
-    unrecognised = {"runs-on": "ubuntu-20.04"}
+    unrecognized = {"runs-on": "ubuntu-20.04"}
     assert "ubuntu-20.04" not in GITHUB_HOSTED_LABELS, (
         "this case only discriminates while the label is absent from the "
         "hosted set; adding it there makes the test vacuous"
     )
-    assert billable_labels(unrecognised) == {"ubuntu-20.04"}, (
+    assert billable_labels(unrecognized) == {"ubuntu-20.04"}, (
         "a label that is neither hosted nor reviewed must be reported, so the "
         "registry contract demands it be accounted for rather than ignoring it"
     )
     excused_by_a_prefix_reading = {
         label
-        for label in declared_labels(unrecognised)
+        for label in declared_labels(unrecognized)
         if label.startswith(UBICLOUD_LABEL_PREFIX)
     }
     assert not excused_by_a_prefix_reading, (
