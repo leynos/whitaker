@@ -18,15 +18,16 @@ def _load_workflow() -> dict[str, Any]:
 def test_linux_full_provisions_pinned_markdown_tools_before_checking() -> None:
     """Require verified Markdown tool installations before the format gate."""
     workflow = _load_workflow()
-    assert workflow["env"]["MDTABLEFIX_VERSION"] == "0.5.0", (
+    assert workflow["env"]["MDTABLEFIX_VERSION"] == "0.6.0", (
         "CI must pin the mdtablefix release version"
     )
     assert workflow["env"]["MDTABLEFIX_LINUX_X64_SHA256"] == (
-        "bd38cd30f0405120c453b3e80b0d4e78a34d93d2c2121a0fd4ace4a54bacaeeb"
+        "b78b2ac9b396b71073ff0485d9d37717cdcd82893b660b7146ba6d3f70d43ba0"
     ), "CI must pin the verified mdtablefix Linux x86_64 checksum"
-    assert workflow["env"]["MARKDOWNLINT_CLI2_VERSION"] == "0.20.0", (
-        "CI must pin the Markdown lint CLI version"
-    )
+    # Markdown linting runs through the pinned markdownlint-cli2 action, as
+    # the estate's markdown-formatting-baseline rule requires, so CI carries
+    # no shell install of the linter.
+    assert "MARKDOWNLINT_CLI2_VERSION" not in workflow["env"]
     steps = workflow["jobs"]["linux-full"]["steps"]
     steps_by_name = {step["name"]: step for step in steps if "name" in step}
     step_names = [step["name"] for step in steps if "name" in step]
@@ -35,9 +36,13 @@ def test_linux_full_provisions_pinned_markdown_tools_before_checking() -> None:
         step_names.index("Restore the Rust toolchain and installed tools")
         < step_names.index("Install bun")
         < step_names.index("Install mdtablefix")
-        < step_names.index("Install Markdown lint CLI")
         < step_names.index("Check formatting")
-    ), "CI must cache and install Markdown tools before checking formatting"
+        < step_names.index("Markdown lint")
+    ), "CI must cache and install mdtablefix before checking formatting"
+    assert "Install Markdown lint CLI" not in step_names
+    lint_step = steps_by_name["Markdown lint"]
+    assert lint_step["uses"].startswith("DavidAnson/markdownlint-cli2-action@")
+    assert lint_step["with"]["globs"] == "**/*.md"
 
     cache_step = steps_by_name["Restore the Rust toolchain and installed tools"]
     assert cache_step["uses"] == (
@@ -65,21 +70,4 @@ def test_linux_full_provisions_pinned_markdown_tools_before_checking() -> None:
     assert "mdtablefix --version 2>/dev/null" in install_script
     assert "installed_mdtablefix_version=\"$(mdtablefix --version | tr -d '\\r')\"" in (
         install_script
-    )
-
-    markdownlint_install_script = steps_by_name["Install Markdown lint CLI"]["run"]
-    assert (
-        'bun install --no-progress --global "markdownlint-cli2@${MARKDOWNLINT_CLI2_VERSION}"'
-        in markdownlint_install_script
-    )
-    assert 'markdownlint_version_output="$(markdownlint-cli2 --version)"' in (
-        markdownlint_install_script
-    )
-    assert (
-        "installed_markdownlint_version=\"${markdownlint_version_output%%$'\\n'*}\""
-        in (markdownlint_install_script)
-    )
-    assert (
-        'expected_markdownlint_version="markdownlint-cli2 v${MARKDOWNLINT_CLI2_VERSION}"'
-        in markdownlint_install_script
     )

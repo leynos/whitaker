@@ -275,10 +275,6 @@ fmt: ## Format Rust and Markdown sources
 
 check-fmt: ## Verify formatting
 	$(CARGO) fmt --all -- --check
-	@$(MD_FILES_FIND) | xargs -0 sh -c '\
-		if [ "$$#" -gt 0 ]; then \
-			MDTABLEFIX="$(MDTABLEFIX)" MDLINT="$(MDLINT)" scripts/check-markdown-format.sh "$$@"; \
-		fi' sh
 	$(MDTABLEFIX) --check $(MDTABLEFIX_SELECT) $(MDTABLEFIX_RULES)
 
 markdownlint: spelling ## Lint Markdown files and enforce spelling
