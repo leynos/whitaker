@@ -80,10 +80,18 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # The x86_64 image is load-bearing, not a default. Every consumer of
+          # whitaker's Linux binaries inherits the glibc this leg links
+          # against, and the "Check glibc baseline" step below holds it at
+          # GLIBC_2.35, which is 22.04's. Moving this leg to a newer image
+          # raises the floor for every consumer at once.
           - target: x86_64-unknown-linux-gnu
-            os: ubuntu-22.04
+            os: ubicloud-standard-2-ubuntu-2204
+          # The arm64 leg keeps the 24.04 image it has always built on, so
+          # this placement move changes where it runs and not what it links
+          # against. No baseline check runs here; see the developers' guide.
           - target: aarch64-unknown-linux-gnu
-            os: ubuntu-24.04-arm
+            os: ubicloud-standard-2-arm-ubuntu-2404
           - target: x86_64-apple-darwin
             os: macos-15-intel
           - target: aarch64-apple-darwin
