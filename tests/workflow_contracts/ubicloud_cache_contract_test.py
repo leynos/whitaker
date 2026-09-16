@@ -118,6 +118,7 @@ SCRATCH_DISCARD_STEPS: dict[str, str] = {
     "linux-full": "Discard the build target tree",
     "windows-compat": "Discard the build target tree",
     "build-lints": "Discard the build target tree",
+    "build-dependency-binaries": "Discard the build target tree",
 }
 
 

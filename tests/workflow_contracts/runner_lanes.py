@@ -96,6 +96,12 @@ UBICLOUD_LANES: Final[tuple[RunnerLane, ...]] = (
     RunnerLane("coverage-main.yml", "coverage-upload"),
     RunnerLane("rolling-release.yml", "build-lints", "x86_64-unknown-linux-gnu"),
     RunnerLane("rolling-release.yml", "build-lints", "aarch64-unknown-linux-gnu"),
+    RunnerLane(
+        "rolling-release.yml", "build-dependency-binaries", "x86_64-unknown-linux-gnu"
+    ),
+    RunnerLane(
+        "rolling-release.yml", "build-dependency-binaries", "aarch64-unknown-linux-gnu"
+    ),
 )
 
 #: The prefix every Ubicloud runner label carries.
@@ -107,10 +113,15 @@ UBICLOUD_LABEL_PREFIX: Final[str] = "ubicloud-"
 LEG_DISCRIMINATOR: Final[str] = "${{ runner.arch }}"
 
 
-#: The lane whose runner image sets the glibc floor for every consumer of
-#: whitaker's x86_64 Linux binaries.
-GLIBC_BASELINE_LANE: Final[RunnerLane] = RunnerLane(
-    "rolling-release.yml", "build-lints", "x86_64-unknown-linux-gnu"
+#: Every lane whose runner image sets the glibc floor for a consumer of
+#: whitaker's x86_64 Linux binaries. Both rolling-release matrix jobs publish
+#: artefacts that land side by side in an installation, so the floor is the
+#: higher of the two and neither may be raised alone.
+GLIBC_BASELINE_LANES: Final[tuple[RunnerLane, ...]] = (
+    RunnerLane("rolling-release.yml", "build-lints", "x86_64-unknown-linux-gnu"),
+    RunnerLane(
+        "rolling-release.yml", "build-dependency-binaries", "x86_64-unknown-linux-gnu"
+    ),
 )
 
 #: The Ubicloud image family that supplies that floor. 22.04 ships glibc 2.35.

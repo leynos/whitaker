@@ -22,7 +22,7 @@ import yaml
 from runner_lanes import (
     LEG_DISCRIMINATOR,
     GLIBC_BASELINE_IMAGE,
-    GLIBC_BASELINE_LANE,
+    GLIBC_BASELINE_LANES,
     GLIBC_BASELINE_MAXIMUM,
     GLIBC_BASELINE_SCRIPT,
     GLIBC_BASELINE_STEP,
@@ -109,37 +109,48 @@ def test_only_the_declared_lanes_run_on_ubicloud() -> None:
     assert found == declared
 
 
-def test_the_glibc_baseline_leg_stays_on_the_image_that_supplies_it() -> None:
-    """The x86_64 lints leg's image is the floor every consumer inherits."""
-    label = lane_label(GLIBC_BASELINE_LANE)
+@pytest.mark.parametrize("lane", GLIBC_BASELINE_LANES, ids=str)
+def test_the_glibc_baseline_leg_stays_on_the_image_that_supplies_it(
+    lane: RunnerLane,
+) -> None:
+    """Each x86_64 leg's image is a floor a consumer inherits.
+
+    Both rolling-release matrix jobs publish x86_64 Linux artefacts that a
+    consumer installs together, so a raised image on either one raises the
+    floor for the pair.
+    """
+    label = lane_label(lane)
     assert GLIBC_BASELINE_IMAGE in label, (
-        f"{GLIBC_BASELINE_LANE} must build on the {GLIBC_BASELINE_IMAGE} image, "
+        f"{lane} must build on the {GLIBC_BASELINE_IMAGE} image, "
         f"which ships the glibc its baseline check enforces; got {label!r}"
     )
 
 
-def test_the_glibc_baseline_check_runs_on_that_leg_at_that_ceiling() -> None:
+@pytest.mark.parametrize("lane", GLIBC_BASELINE_LANES, ids=str)
+def test_the_glibc_baseline_check_runs_on_that_leg_at_that_ceiling(
+    lane: RunnerLane,
+) -> None:
     """The image and the check that enforces it are pinned together.
 
     Asserted as the command and its argument rather than as the step's
     presence: a step renamed, or left in place with its ceiling raised, is
     the failure this exists to catch.
     """
-    step = steps_by_name(load_lane(GLIBC_BASELINE_LANE)).get(GLIBC_BASELINE_STEP)
-    assert step is not None, f"{GLIBC_BASELINE_LANE} must declare a {GLIBC_BASELINE_STEP!r} step"
+    step = steps_by_name(load_lane(lane)).get(GLIBC_BASELINE_STEP)
+    assert step is not None, f"{lane} must declare a {GLIBC_BASELINE_STEP!r} step"
     condition = str(step.get("if", ""))
-    assert GLIBC_BASELINE_LANE.leg is not None
-    assert GLIBC_BASELINE_LANE.leg in condition, (
-        f"{GLIBC_BASELINE_STEP!r} must be guarded to the {GLIBC_BASELINE_LANE.leg} leg; "
+    assert lane.leg is not None
+    assert lane.leg in condition, (
+        f"{lane}: {GLIBC_BASELINE_STEP!r} must be guarded to the {lane.leg} leg; "
         f"got {condition!r}"
     )
     script = str(step.get("run", ""))
     assert GLIBC_BASELINE_SCRIPT in script, (
-        f"{GLIBC_BASELINE_STEP!r} must run {GLIBC_BASELINE_SCRIPT}; got {script!r}"
+        f"{lane}: {GLIBC_BASELINE_STEP!r} must run {GLIBC_BASELINE_SCRIPT}; got {script!r}"
     )
     assert f"--maximum-glibc {GLIBC_BASELINE_MAXIMUM}" in script, (
-        f"{GLIBC_BASELINE_STEP!r} must enforce {GLIBC_BASELINE_MAXIMUM}, the glibc the "
-        f"{GLIBC_BASELINE_IMAGE} image ships; got {script!r}"
+        f"{lane}: {GLIBC_BASELINE_STEP!r} must enforce {GLIBC_BASELINE_MAXIMUM}, the glibc "
+        f"the {GLIBC_BASELINE_IMAGE} image ships; got {script!r}"
     )
 
 
@@ -187,12 +198,21 @@ def test_every_ubicloud_label_in_use_is_registered_with_actionlint() -> None:
     without registering its label leaves the linter failing on a workflow
     that is correct, which trains a reader to ignore it. Caught here because
     both halves live in this repository.
+
+    Restricted to Ubicloud labels. actionlint knows GitHub's own labels, so
+    demanding a registration for one would make this fail on a lane that had
+    merely moved back, which is a different fault reported by a different
+    contract.
     """
     registry = yaml.safe_load(
         (REPOSITORY_ROOT / ".github/actionlint.yaml").read_text(encoding="utf-8")
     )
     registered = set(registry["self-hosted-runner"]["labels"])
-    in_use = {lane_label(lane) for lane in UBICLOUD_LANES}
+    in_use = {
+        label
+        for label in (lane_label(lane) for lane in UBICLOUD_LANES)
+        if label.startswith(UBICLOUD_LABEL_PREFIX)
+    }
     unregistered = sorted(in_use - registered)
     assert not unregistered, (
         f"these Ubicloud labels are used but not registered with actionlint: {unregistered}"

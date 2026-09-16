@@ -59,6 +59,7 @@ UBICLOUD_JOBS: dict[str, str] = {
     # so the job belongs here whole; which legs run where is `RunnerLane`'s
     # to say, and `runner_placement_contract_test` holds the two together.
     "build-lints": "rolling-release.yml",
+    "build-dependency-binaries": "rolling-release.yml",
 }
 
 #: Every job that runs this repository's own gates: the suite, the lints, the
@@ -91,6 +92,8 @@ CACHE_KEY_WRITERS: dict[str, str] = {
     "cargo-registry-windows-v1-": "windows-compat",
     "cargo-registry-rolling-v1-": "build-lints",
     "sccache-rolling-v1-": "build-lints",
+    "cargo-registry-depbin-v1-": "build-dependency-binaries",
+    "sccache-depbin-v1-": "build-dependency-binaries",
 }
 
 

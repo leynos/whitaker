@@ -282,11 +282,15 @@ at a time. That is why every caller of the shared `setup-rust` action passes
 `target/${BUILD_PROFILE}` alongside the registry. `windows-compat` was
 archiving exactly that until it moved to the external provider and gained its
 own registry cache. `release.yml` still calls the shared action with its default
-`github` provider, as do the three non-Linux legs of `build-lints`, because
-nothing owns a cache for them; they no longer archive a `target` tree either.
-The two Linux legs of `build-lints` pass `external` and own two families of
-their own, `cargo-registry-rolling-v1-` and `sccache-rolling-v1-`, because the
-rolling release rebuilds ten lint crates from cold on every merge to `main`.
+`github` provider, as do the non-Linux legs of the two rolling-release
+matrices, because nothing owns a cache for them; they no longer archive a
+`target` tree either. The Linux legs pass `external` and own a family pair each:
+`cargo-registry-rolling-v1-` and `sccache-rolling-v1-` for `build-lints`,
+which rebuilds ten lint crates from cold on every merge to `main`, and
+`cargo-registry-depbin-v1-` and `sccache-depbin-v1-` for
+`build-dependency-binaries`, which installs every dependency crate from source
+with `cargo install --locked`. The two jobs are keyed apart because their
+registries hold different crate sets and their keys hash different manifests.
 
 Every caller pins one revision, `7cb894fe62c40951cccf33819548095e64a1291e`. It
 keeps the rule that the built-in provider does not archive `target/<profile>`,
@@ -662,17 +666,17 @@ runs on GitHub-hosted runners.
 
 Table: Runner placement for repository-owned jobs.
 
-| Job                      | Workflow                             | Runner                                                                      | Why                                    |
-| ------------------------ | ------------------------------------ | --------------------------------------------------------------------------- | -------------------------------------- |
-| `coverage-check`         | `ci.yml`                             | `ubicloud-standard-2-ubuntu-2404`                                           | Blocking Linux gate                    |
-| `linux-full`             | `ci.yml`                             | `ubicloud-standard-2-ubuntu-2404`                                           | Blocking Linux gate                    |
-| `coverage-upload`        | `coverage-main.yml`                  | `ubicloud-standard-2-ubuntu-2404`                                           | Trunk Linux gate and cache writer      |
-| `windows-compat`         | `ci.yml`                             | `windows-latest`                                                            | Ubicloud has no Windows image          |
-| `mutation`               | `mutation-testing.yml`               | Reusable workflow's own choice                                              | Nightly, not blocking                  |
-| `automerge`              | `dependabot-automerge.yml`           | Reusable workflow's own choice                                              | API-bound                              |
-| `build-lints` Linux legs | `rolling-release.yml`                | `ubicloud-standard-2-ubuntu-2204` and `ubicloud-standard-2-arm-ubuntu-2404` | Rebuilt from cold on every merge       |
-| `build-lints` other legs | `rolling-release.yml`                | GitHub-hosted matrix                                                        | Ubicloud has no macOS or Windows image |
-| Other release jobs       | `release.yml`, `rolling-release.yml` | GitHub-hosted matrices                                                      | Release boundaries                     |
+| Job                                               | Workflow                   | Runner                                                                      | Why                                    |
+| ------------------------------------------------- | -------------------------- | --------------------------------------------------------------------------- | -------------------------------------- |
+| `coverage-check`                                  | `ci.yml`                   | `ubicloud-standard-2-ubuntu-2404`                                           | Blocking Linux gate                    |
+| `linux-full`                                      | `ci.yml`                   | `ubicloud-standard-2-ubuntu-2404`                                           | Blocking Linux gate                    |
+| `coverage-upload`                                 | `coverage-main.yml`        | `ubicloud-standard-2-ubuntu-2404`                                           | Trunk Linux gate and cache writer      |
+| `windows-compat`                                  | `ci.yml`                   | `windows-latest`                                                            | Ubicloud has no Windows image          |
+| `mutation`                                        | `mutation-testing.yml`     | Reusable workflow's own choice                                              | Nightly, not blocking                  |
+| `automerge`                                       | `dependabot-automerge.yml` | Reusable workflow's own choice                                              | API-bound                              |
+| Linux legs of both `rolling-release.yml` matrices | `rolling-release.yml`      | `ubicloud-standard-2-ubuntu-2204` and `ubicloud-standard-2-arm-ubuntu-2404` | Rebuilt from cold on every merge       |
+| Their macOS and Windows legs                      | `rolling-release.yml`      | GitHub-hosted matrix                                                        | Ubicloud has no macOS or Windows image |
+| Other release jobs                                | `release.yml`              | GitHub-hosted matrices                                                      | Release boundaries                     |
 
 Ubicloud publishes Ubuntu images only, on x64 and arm64, so Windows and macOS
 lanes have no Ubicloud counterpart and stay GitHub-hosted permanently. That is
@@ -709,29 +713,31 @@ worker count rather than `-n auto`.
 
 #### Placement inside a matrix
 
-`build-lints` is the one job whose placement is not readable off its `runs-on`.
-It declares `${{ matrix.os }}` and GitHub runs it five times, on five images;
-the two Linux legs are on Ubicloud and the other three are not. The contracts
-therefore speak of a *lane*, which is a job together with the matrix leg that
-selected its runner, written `build-lints[target]`. A job with no matrix is a
-lane whose leg is absent. `tests/workflow_contracts/runner_lanes.py` resolves a
-lane to the label it actually runs on, by reading the matrix entry rather than
-by evaluating the expression: the only expression it understands is the
-deferral to the matrix, and any other is refused rather than guessed at,
-because reporting an invented label would be worse than reporting that it
-cannot be read.
+`build-lints` and `build-dependency-binaries` are the jobs whose placement is
+not readable off a `runs-on`. Each declares `${{ matrix.os }}` and GitHub runs
+it five times, on five images; in both, the two Linux legs are on Ubicloud and
+the other three are not. The contracts therefore speak of a *lane*, which is a
+job together with the matrix leg that selected its runner, written
+`build-lints[target]`. A job with no matrix is a lane whose leg is absent.
+`tests/workflow_contracts/runner_lanes.py` resolves a lane to the label it
+actually runs on, by reading the matrix entry rather than by evaluating the
+expression: the only expression it understands is the deferral to the matrix,
+and any other is refused rather than guessed at, because reporting an invented
+label would be worse than reporting that it cannot be read.
 
 Two consequences follow, and both are held by contract.
 
-The x86_64 leg's image is not a default. It is
+The x86_64 legs' image is not a default. Both are on
 `ubicloud-standard-2-ubuntu-2204` while every other Ubicloud lane here is on
-2404, because the glibc that leg links against is the floor every consumer of
-whitaker's binaries inherits, and the "Check glibc baseline" step holds it at
-`GLIBC_2.35`, which is what 22.04 ships. The image and the ceiling are pinned
-together, since either alone is defeatable: an image can be raised while the
-check still names the old ceiling, and the ceiling can be raised while the
-image is untouched. The arm64 leg stays on the 2404 arm image it has always
-built on, so this placement changed where it runs and not what it links
+2404, because the glibc those legs link against is the floor every consumer of
+whitaker's binaries inherits, and each job's own "Check glibc baseline" step
+holds it at `GLIBC_2.35`, which is what 22.04 ships. The two jobs publish
+artefacts a consumer installs side by side, so the floor is the higher of the
+two and neither may be raised alone. In each job the image and the ceiling are
+pinned together, since either alone is defeatable: an image can be raised while
+the check still names the old ceiling, and the ceiling can be raised while the
+image is untouched. The arm64 legs stay on the 2404 arm image they have always
+built on, so this placement changed where they run and not what they link
 against; no baseline check runs there.
 
 A matrix job's cache keys must vary by leg. Both Linux legs share one restore

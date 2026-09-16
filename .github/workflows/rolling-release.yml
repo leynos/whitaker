@@ -285,10 +285,14 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # 22.04 for the same reason as the lints legs: this job's own
+          # "Check glibc baseline" step holds these binaries at GLIBC_2.35,
+          # and consumers install them alongside the lint libraries.
           - target: x86_64-unknown-linux-gnu
-            os: ubuntu-22.04
+            os: ubicloud-standard-2-ubuntu-2204
+          # The arm64 leg keeps the 24.04 image family it has always used.
           - target: aarch64-unknown-linux-gnu
-            os: ubuntu-24.04-arm
+            os: ubicloud-standard-2-arm-ubuntu-2404
           - target: x86_64-apple-darwin
             os: macos-15-intel
           - target: aarch64-apple-darwin
@@ -300,8 +304,51 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      # As in build-lints: only the two Linux legs are on Ubicloud and only
+      # they cache. This job installs every dependency crate from source with
+      # `cargo install --locked`, so its registry and compiler caches are
+      # worth more here than anywhere else in the workflow.
+      - name: Select the compiler cache backend
+        if: runner.os == 'Linux'
+        run: bash scripts/select-sccache-backend.sh
+
+      - name: Restore Cargo registry
+        id: cargo-registry
+        if: runner.os == 'Linux'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cargo-registry-depbin-v1-${{ runner.os }}-${{ runner.arch }}-${{ runner.environment }}-${{ hashFiles('installer/dependency-binaries.toml') }}
+          restore-keys: |
+            cargo-registry-depbin-v1-${{ runner.os }}-${{ runner.arch }}-${{ runner.environment }}-
+
+      - name: Restore the compiler cache directory
+        id: sccache-dir
+        if: runner.os == 'Linux' && env.SCCACHE_BACKEND == 'local'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: ~/.cache/sccache
+          key: sccache-depbin-v1-${{ runner.os }}-${{ runner.arch }}-${{ runner.environment }}-${{ hashFiles('installer/dependency-binaries.toml') }}-${{ github.run_id }}
+          restore-keys: |
+            sccache-depbin-v1-${{ runner.os }}-${{ runner.arch }}-${{ runner.environment }}-${{ hashFiles('installer/dependency-binaries.toml') }}-
+
+      - name: Record cache observations
+        if: always() && runner.os == 'Linux'
+        env:
+          CARGO_REGISTRY_KEY: ${{ steps.cargo-registry.outputs.cache-primary-key }}
+          CARGO_REGISTRY_MATCHED: ${{ steps.cargo-registry.outputs.cache-matched-key }}
+          CARGO_REGISTRY_HIT: ${{ steps.cargo-registry.outputs.cache-hit }}
+          SCCACHE_DIR_KEY: ${{ steps.sccache-dir.outputs.cache-primary-key }}
+          SCCACHE_DIR_MATCHED: ${{ steps.sccache-dir.outputs.cache-matched-key }}
+          SCCACHE_DIR_HIT: ${{ steps.sccache-dir.outputs.cache-hit }}
+        run: bash scripts/record-cache-observations.sh
+
       - name: Setup Rust
         uses: leynos/shared-actions/.github/actions/setup-rust@7cb894fe62c40951cccf33819548095e64a1291e
+        with:
+          cache-provider: ${{ runner.os == 'Linux' && 'external' || 'github' }}
 
       - name: Add target
         run: rustup target add "${{ matrix.target }}"
@@ -393,6 +440,37 @@ jobs:
             dist/*.zip
             dist/*.sha256
           retention-days: 1
+
+      # The artefact is uploaded, so both scratch trees are expendable. This
+      # job has two: `target` from the packaging tool, and `dependency-root`
+      # where `cargo install` stages the binaries it has already packaged.
+      - name: Discard the build target tree
+        if: always() && runner.os == 'Linux'
+        run: rm -rf target dependency-root
+
+      - name: Record sccache effectiveness
+        if: always() && runner.os == 'Linux'
+        run: bash scripts/record-sccache-effectiveness.sh
+
+      - name: Record disk headroom before the saves
+        if: always() && runner.os == 'Linux'
+        run: bash scripts/record-cache-observations.sh headroom
+
+      - name: Save Cargo registry
+        if: runner.os == 'Linux' && github.ref == 'refs/heads/main' && steps.cargo-registry.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ steps.cargo-registry.outputs.cache-primary-key }}
+
+      - name: Save the compiler cache directory
+        if: runner.os == 'Linux' && env.SCCACHE_BACKEND == 'local' && github.ref == 'refs/heads/main'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: ~/.cache/sccache
+          key: ${{ steps.sccache-dir.outputs.cache-primary-key }}
 
   publish:
     if: always()
