@@ -271,7 +271,7 @@ lint: skill-manifest-check ## Run Clippy with warnings denied
 fmt: ## Format Rust and Markdown sources
 	$(CARGO) fmt --all
 	export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; $(MDTABLEFIX) --in-place $(MDTABLEFIX_SELECT) $(MDTABLEFIX_RULES)
-	export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; unset FORCE_COLOR; $(MDLINT) --fix "**/*.md"
+	export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; $(MDLINT) --fix "**/*.md"
 
 check-fmt: ## Verify formatting
 	$(CARGO) fmt --all -- --check
