@@ -315,8 +315,14 @@ def test_accepts_only_uniform_canonical_line_endings(lines: list[str]) -> None:
     assert str(mixed_source) in failing.stderr, failing.stderr
 
 
-def test_check_fmt_make_target_invokes_the_markdown_checker() -> None:
-    """Keep the checked-in formatting gate connected to the checker."""
+def test_check_fmt_make_target_checks_the_git_selected_markdown() -> None:
+    """Keep the checked-in formatting gate on the estate mdtablefix check.
+
+    `make check-fmt` runs `mdtablefix --check` over the Markdown files Git
+    tracks plus untracked files Git does not ignore, as the estate's
+    markdown-formatting-baseline rule requires; the linter half of the gate
+    runs through the pinned markdownlint-cli2 action in CI.
+    """
     makefile = (REPOSITORY_ROOT / "Makefile").read_text(encoding="utf-8")
     makefile_lines = makefile.splitlines()
     target_index = makefile_lines.index("check-fmt: ## Verify formatting")
@@ -328,33 +334,12 @@ def test_check_fmt_make_target_invokes_the_markdown_checker() -> None:
             recipe_lines.append(line)
     recipe = "\n".join(recipe_lines)
 
-    required_fragments = {
-        "$(MD_FILES_FIND)": "discover Markdown files",
-        "xargs -0": "preserve Markdown paths containing whitespace",
-        'if [ "$$#" -gt 0 ]': "guard an empty Markdown file list",
-        'scripts/check-markdown-format.sh "$$@"': "check every discovered file",
-    }
-    missing_requirements = [
-        description
-        for fragment, description in required_fragments.items()
-        if fragment not in recipe
-    ]
-    assert not missing_requirements, "check-fmt does not " + ", ".join(
-        missing_requirements
+    assert "$(MDTABLEFIX) --check $(MDTABLEFIX_SELECT) $(MDTABLEFIX_RULES)" in recipe, (
+        "check-fmt must run the mdtablefix check over the Git-selected files"
     )
-
-    required_scan_fragments = {
-        "-type d": "identify cache directories",
-        "-prune": "avoid traversing cache directories",
-        "-name target": "exclude nested build directories",
-        "-name node_modules": "exclude nested dependency directories",
-        "-type f -name '*.md' -print0": "emit only Markdown source files",
-    }
-    missing_scan_requirements = [
-        description
-        for fragment, description in required_scan_fragments.items()
-        if fragment not in makefile
-    ]
-    assert not missing_scan_requirements, "Markdown discovery does not " + ", ".join(
-        missing_scan_requirements
+    assert "scripts/check-markdown-format.sh" not in recipe, (
+        "check-fmt must not depend on a shell-installed markdownlint-cli2"
+    )
+    assert "MDTABLEFIX_SELECT = --git --include-untracked" in makefile, (
+        "mdtablefix must select tracked plus untracked, unignored Markdown"
     )
