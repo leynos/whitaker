@@ -22,6 +22,7 @@ import tomllib
 import typing as typ
 
 import pytest
+from suite_lanes import PROFILE_VARIABLE, _scopes_declaring_profile
 from timeout_budgets import NEXTEST_CONFIG
 
 #: The configuration as nextest would read it, parsed once. Not a
@@ -334,4 +335,34 @@ def test_no_override_names_a_group_the_configuration_lacks(
     assert named <= declared, (
         f"every test-group an override names must be declared in "
         f"[test-groups]; {sorted(named - declared)} are not"
+    )
+
+
+def test_no_workflow_selects_a_profile_through_the_environment() -> None:
+    """The lane reader decides a lane's profile from its command line.
+
+    `timeout_ordering_test` judges each lane against the profile it
+    runs, and it learns that profile from `NEXTEST_PROFILE=ci` appearing
+    in the command. That reading is complete only while the variable is
+    never set any other way. A job-level `env` block naming it would put
+    every lane in that job under `ci` while the reader still judged them
+    under `default`, so the lane would be checked against the wrong
+    budgets and pass.
+
+    Nothing fails when that happens: both profiles carry a full set of
+    values, so the comparison succeeds against the wrong ones. This is
+    the assertion that makes the command-line reading true rather than
+    merely true so far.
+
+    The shape is not hypothetical. It is how a sibling repository
+    selects its coverage profile, because the shared coverage action
+    takes no profile input and the environment is the only lever.
+    """
+    declared = _scopes_declaring_profile()
+    assert not declared, (
+        f"{PROFILE_VARIABLE} is declared in an env block at {declared}; the "
+        f"lane reader takes a lane's profile from its command line, so a "
+        f"lane there would be judged under the wrong profile and checked "
+        f"against budgets it does not run under. Pass it on the command "
+        f"line, or teach the reader to resolve the environment first"
     )

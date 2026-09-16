@@ -305,3 +305,36 @@ def _sets_watchdog(owner: dict[str, typ.Any]) -> bool:
             return WATCHDOG_VARIABLE in environment
         case _:
             return False
+
+
+#: The variable that selects a profile, which this repository passes on
+#: the command line and the lane reader therefore reads from there.
+PROFILE_VARIABLE: typ.Final[str] = "NEXTEST_PROFILE"
+
+
+def _scopes_declaring_profile() -> list[str]:
+    """Return every workflow, job or step whose `env` names the variable.
+
+    Walks all three scopes rather than resolving one, because the claim
+    being held is that no scope declares it at all. A value is not read
+    and does not need to be: an empty declaration selects the default
+    profile just as a named one selects a profile, and either would put
+    the lane under a profile the reader did not see.
+    """
+    found: list[str] = []
+    for name, document in _workflow_documents().items():
+        if PROFILE_VARIABLE in (document.get("env") or {}):
+            found.append(f"{name}: workflow level")
+        for job_id, raw_job in (document.get("jobs") or {}).items():
+            job = _mapping(raw_job)
+            if job is None:
+                continue
+            if PROFILE_VARIABLE in (job.get("env") or {}):
+                found.append(f"{name}:{job_id}: job level")
+            for index, raw_step in enumerate(job.get("steps") or []):
+                step = _mapping(raw_step)
+                if step is None:
+                    continue
+                if PROFILE_VARIABLE in (step.get("env") or {}):
+                    found.append(f"{name}:{job_id}: step {index}")
+    return found
