@@ -20,9 +20,11 @@ from __future__ import annotations
 import pytest
 import yaml
 from runner_lanes import (
+    GITHUB_HOSTED_LABELS,
     LEG_DISCRIMINATOR,
     MAXIMUM_LANE_TIMEOUT_MINUTES,
     billable_labels,
+    declared_labels,
     GLIBC_BASELINE_IMAGE,
     GLIBC_BASELINE_LANES,
     GLIBC_BASELINE_MAXIMUM,
@@ -245,4 +247,42 @@ def test_every_ubicloud_lane_declares_a_timeout(lane: RunnerLane) -> None:
     assert 0 < timeout <= MAXIMUM_LANE_TIMEOUT_MINUTES, (
         f"{lane} declares timeout-minutes {timeout}, outside the reviewed "
         f"range of 1 to {MAXIMUM_LANE_TIMEOUT_MINUTES}"
+    )
+
+
+def test_an_unrecognised_label_is_reported_rather_than_excused() -> None:
+    """The hosted set and a vendor prefix are not the same rule.
+
+    Over this repository's own workflows the two readings agree exactly, so
+    swapping one for the other changes no answer and neither can be said to be
+    proved by the lanes alone. This is the case that separates them, and it is
+    driven directly for that reason.
+
+    `ubuntu-20.04` is a GitHub-hosted family that the estate does not use. A
+    vendor-prefix reading excuses it silently, because it does not begin with
+    the Ubicloud prefix, and the registry contract then says nothing about a
+    lane that has moved to a retired image or acquired a typo. Subtracting a
+    named set of what GitHub hosts instead reports it, which is what a lane
+    running on something nobody reviewed should do.
+
+    Raised by jm-tiers-c-4 while porting this contract to lille and netsuke.
+    """
+    unrecognised = {"runs-on": "ubuntu-20.04"}
+    assert "ubuntu-20.04" not in GITHUB_HOSTED_LABELS, (
+        "this case only discriminates while the label is absent from the "
+        "hosted set; adding it there makes the test vacuous"
+    )
+    assert billable_labels(unrecognised) == {"ubuntu-20.04"}, (
+        "a label that is neither hosted nor reviewed must be reported, so the "
+        "registry contract demands it be accounted for rather than ignoring it"
+    )
+    excused_by_a_prefix_reading = {
+        label
+        for label in declared_labels(unrecognised)
+        if label.startswith(UBICLOUD_LABEL_PREFIX)
+    }
+    assert not excused_by_a_prefix_reading, (
+        "the prefix reading is what this contract deliberately does not use; "
+        "if it reports this label too, the two rules have converged and the "
+        "choice between them no longer needs defending"
     )
