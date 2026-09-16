@@ -312,29 +312,49 @@ def _sets_watchdog(owner: dict[str, typ.Any]) -> bool:
 PROFILE_VARIABLE: typ.Final[str] = "NEXTEST_PROFILE"
 
 
-def _scopes_declaring_profile() -> list[str]:
-    """Return every workflow, job or step whose `env` names the variable.
+def _step_scopes(
+    where: str, job: dict[str, typ.Any]
+) -> typ.Iterator[tuple[str, dict[str, typ.Any]]]:
+    """Yield each step of one job, labelled by its position."""
+    for index, raw_step in enumerate(job.get("steps") or []):
+        step = _mapping(raw_step)
+        if step is not None:
+            yield f"{where}: step {index}", step
 
-    Walks all three scopes rather than resolving one, because the claim
-    being held is that no scope declares it at all. A value is not read
-    and does not need to be: an empty declaration selects the default
-    profile just as a named one selects a profile, and either would put
-    the lane under a profile the reader did not see.
+
+def _job_scopes(
+    name: str, document: dict[str, typ.Any]
+) -> typ.Iterator[tuple[str, dict[str, typ.Any]]]:
+    """Yield each job of one workflow and each of its steps."""
+    for job_id, raw_job in (document.get("jobs") or {}).items():
+        job = _mapping(raw_job)
+        if job is None:
+            continue
+        where = f"{name}:{job_id}"
+        yield f"{where}: job level", job
+        yield from _step_scopes(where, job)
+
+
+def _env_scopes() -> typ.Iterator[tuple[str, dict[str, typ.Any]]]:
+    """Yield every scope that may carry an `env` block, with a label.
+
+    All three, in the order GitHub resolves them, because a caller
+    asking whether a variable is declared anywhere must look at each.
     """
-    found: list[str] = []
     for name, document in _workflow_documents().items():
-        if PROFILE_VARIABLE in (document.get("env") or {}):
-            found.append(f"{name}: workflow level")
-        for job_id, raw_job in (document.get("jobs") or {}).items():
-            job = _mapping(raw_job)
-            if job is None:
-                continue
-            if PROFILE_VARIABLE in (job.get("env") or {}):
-                found.append(f"{name}:{job_id}: job level")
-            for index, raw_step in enumerate(job.get("steps") or []):
-                step = _mapping(raw_step)
-                if step is None:
-                    continue
-                if PROFILE_VARIABLE in (step.get("env") or {}):
-                    found.append(f"{name}:{job_id}: step {index}")
-    return found
+        yield f"{name}: workflow level", document
+        yield from _job_scopes(name, document)
+
+
+def _scopes_declaring_profile() -> list[str]:
+    """Return every scope whose `env` names the profile variable.
+
+    No value is read and none is needed: an empty declaration selects
+    the default profile as surely as a named one selects a profile, and
+    either is a lane the command-line reader did not see.
+    """
+    return [
+        label
+        for label, scope in _env_scopes()
+        if PROFILE_VARIABLE in (scope.get("env") or {})
+    ]
