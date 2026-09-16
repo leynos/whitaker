@@ -298,18 +298,33 @@ def test_scheduled_and_administrative_workflows_stay_github_hosted() -> None:
         )
 
 
+#: A ceiling above this is a runaway rather than a slow lane, whatever the
+#: suite below it is sized for. It is not a sized value and nothing here
+#: derives one: `tests/workflow_contracts/timeout_ordering_test.py` owns the
+#: per-job figures and asserts each against the nextest budget it must cover,
+#: and it runs on every gate, which this module does not. Restating a sized
+#: number here put two contracts in the repository at different values with no
+#: mechanism to notice, and the one that never runs went on asserting 60 after
+#: the ordering made it 80.
+RUNAWAY_CEILING_MINUTES: int = 120
+
+
 def test_ubicloud_jobs_declare_a_timeout() -> None:
     """Ubicloud runners are self-hosted, so GitHub's six-hour cap does not apply.
 
     A hung job would otherwise bill for days against the five-day self-hosted
-    limit, so every Ubicloud job must cap itself.
+    limit, so every Ubicloud job must cap itself. Presence and a runaway bound
+    are what this asserts; the sized figure belongs to the ordering contract.
     """
     for workflow_name, expected_jobs in UBICLOUD_LINUX_JOBS.items():
         jobs = _workflow_jobs(workflow_name)
         for job_name in expected_jobs:
             timeout = jobs[job_name].get("timeout-minutes")
-            assert isinstance(timeout, int) and 0 < timeout <= 60, (
-                f"{workflow_name}:{job_name} must declare a bounded timeout-minutes"
+            assert (
+                isinstance(timeout, int) and 0 < timeout <= RUNAWAY_CEILING_MINUTES
+            ), (
+                f"{workflow_name}:{job_name} must declare a bounded "
+                f"timeout-minutes, at most {RUNAWAY_CEILING_MINUTES}"
             )
 
 
