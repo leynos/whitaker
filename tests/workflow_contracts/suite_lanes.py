@@ -326,7 +326,7 @@ def _job_scopes(
     name: str, document: dict[str, typ.Any]
 ) -> typ.Iterator[tuple[str, dict[str, typ.Any]]]:
     """Yield each job of one workflow and each of its steps."""
-    for job_id, raw_job in (document.get("jobs") or {}).items():
+    for job_id, raw_job in (_mapping(document.get("jobs")) or {}).items():
         job = _mapping(raw_job)
         if job is None:
             continue
