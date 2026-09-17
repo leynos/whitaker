@@ -20,6 +20,7 @@ a scraping reader would go on reporting a budget that had been switched
 off.
 """
 
+import fractions
 import tomllib
 import typing as typ
 
@@ -29,24 +30,24 @@ from ubicloud_workflow_support import REPOSITORY_ROOT
 #: Everything the job timer covers that the whole-run budget does not:
 #: the toolchain setup, the build before nextest starts its clock, and
 #: whatever follows the suite.
-OUTSIDE_SUITE_ALLOWANCE_SECONDS: typ.Final[float] = 15 * 60.0
+OUTSIDE_SUITE_ALLOWANCE_SECONDS: typ.Final[fractions.Fraction] = fractions.Fraction(15 * 60)
 
 #: How far a ceiling must sit above the sum it contains, rather than
 #: merely reaching it. A ceiling equal to that sum cancels the job at
 #: the moment the innermost timer would have reported the overrun, and
 #: the report is the only thing that makes an overrun actionable.
-CEILING_MARGIN_SECONDS: typ.Final[float] = 15 * 60.0
+CEILING_MARGIN_SECONDS: typ.Final[fractions.Fraction] = fractions.Fraction(15 * 60)
 
 #: What nextest allows a test between `SIGTERM` and `SIGKILL` when a
 #: profile names no `grace-period`. Both profiles here name five
 #: seconds, so this is a fallback rather than the value in force.
-NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS: typ.Final[float] = 10.0
+NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS: typ.Final[fractions.Fraction] = fractions.Fraction(10)
 
 #: Added to that grace period to cover the teardown and report writing
 #: that follow it. A separate term rather than a floor over the two, so
 #: raising a grace period raises the requirement instead of vanishing
 #: into it.
-TERMINATION_SAFETY_MARGIN_SECONDS: typ.Final[float] = 60.0
+TERMINATION_SAFETY_MARGIN_SECONDS: typ.Final[fractions.Fraction] = fractions.Fraction(60)
 
 NEXTEST_CONFIG = REPOSITORY_ROOT / ".config" / "nextest.toml"
 
@@ -153,26 +154,14 @@ def _duration_at(table: dict[str, object], key: str) -> list[str]:
             return []
 
 
-def _grace_period(entry: dict[str, object]) -> float:
-    """Return one ``slow-timeout``'s grace period in seconds.
-
-    An omitted ``grace-period`` is not an absent wait: nextest applies
-    its own ten-second default. Contributing nothing for it let a
-    configuration that mixes an explicit five-second period with an
-    omitted one report five seconds, which is less than nextest will
-    actually wait, so the ceiling above it was sized five seconds short.
-
-    Parameters
-    ----------
-    entry : dict[str, object]
-        One ``slow-timeout`` inline table.
-
-    Returns
-    -------
-    float
-        The declared grace period, or nextest's default when the key is
-        absent or holds something other than a duration string.
-    """
+def _grace_period(entry: dict[str, object]) -> fractions.Fraction:
+    """Return one ``slow-timeout``'s grace period in seconds."""
+    # An omitted `grace-period` is not an absent wait: nextest applies its own
+    # ten-second default. Contributing nothing for it let a configuration that
+    # mixes an explicit five-second period with an omitted one report five
+    # seconds, which is less than nextest will actually wait, so the ceiling
+    # above it was sized five seconds short. A key holding something other
+    # than a duration string reads as absent for the same reason.
     for grace in _duration_at(entry, "grace-period"):
         return seconds(grace)
     return NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS
@@ -222,7 +211,7 @@ def bounds_a_single_test(profile: Profile) -> bool:
     return table is not None and table.get("terminate-after") is not None
 
 
-def largest_period(profile: Profile) -> float:
+def largest_period(profile: Profile) -> fractions.Fraction:
     """Return the longest per-test allowance a profile sets.
 
     Parameters
@@ -232,7 +221,7 @@ def largest_period(profile: Profile) -> float:
 
     Returns
     -------
-    float
+    fractions.Fraction
         The longest per-test budget, in seconds.
 
     Raises
@@ -255,7 +244,7 @@ def largest_period(profile: Profile) -> float:
     return max(periods)
 
 
-def termination_allowance(profile: Profile) -> float:
+def termination_allowance(profile: Profile) -> fractions.Fraction:
     """Return the time to allow for stopping the run, in seconds.
 
     Two terms, added rather than maximized, because they answer
@@ -284,7 +273,7 @@ def termination_allowance(profile: Profile) -> float:
 
     Returns
     -------
-    float
+    fractions.Fraction
         The configured grace period plus the safety margin.
     """
     periods = [
@@ -296,7 +285,7 @@ def termination_allowance(profile: Profile) -> float:
     return largest + TERMINATION_SAFETY_MARGIN_SECONDS
 
 
-def global_timeout(profile: Profile) -> float:
+def global_timeout(profile: Profile) -> fractions.Fraction:
     """Return a profile's whole-run budget in seconds.
 
     Read from the profile's own table alone: ``global-timeout`` is a
@@ -309,7 +298,7 @@ def global_timeout(profile: Profile) -> float:
 
     Returns
     -------
-    float
+    fractions.Fraction
         The whole-run budget.
 
     Raises
@@ -329,7 +318,7 @@ def global_timeout(profile: Profile) -> float:
             raise NextestConfigurationError(message)
 
 
-def required_ceiling(profile: Profile) -> float:
+def required_ceiling(profile: Profile) -> fractions.Fraction:
     """Return the smallest acceptable job ceiling for one profile.
 
     Four terms. The whole-run budget is what the suite may spend. The
@@ -347,7 +336,7 @@ def required_ceiling(profile: Profile) -> float:
 
     Returns
     -------
-    float
+    fractions.Fraction
         The smallest acceptable ceiling, in seconds.
     """
     return (
