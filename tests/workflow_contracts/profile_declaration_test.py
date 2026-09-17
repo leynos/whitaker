@@ -176,11 +176,12 @@ def test_nothing_else_is_reported_as_a_declaration(text: str) -> None:
     test over values, which would read the variable's own name as a
     declaration of it.
 
-    The malformed ``jobs`` cases are here because the walk answers by
-    raising rather than by reporting when it meets one: a list or a
-    string has no ``items``, so a document YAML parses and GitHub
-    rejects took the sweep down with an ``AttributeError`` instead of
-    yielding no scopes.
+    The malformed ``jobs`` cases guard the normalisation the walk depends
+    on. ``jobs`` holding a list or a string is a document YAML parses and
+    GitHub rejects, and it must yield no scopes; an unnormalised
+    ``.items()`` on that value raises ``AttributeError`` and takes the
+    sweep down instead of reporting. These cases fail on exactly that
+    regression and on nothing else.
     """
     assert _scopes_declaring_profile(_documents(text)) == [], (
         f"nothing but an `env` mapping whose keys include {PROFILE_VARIABLE} "
