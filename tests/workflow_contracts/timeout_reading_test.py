@@ -101,6 +101,29 @@ def test_a_commented_out_grace_period_is_not_in_force() -> None:
     )
 
 
+def test_an_omitted_grace_period_contributes_nextest_s_default() -> None:
+    """An omission is a ten-second wait, not a zero-second one.
+
+    A profile that declares five seconds of its own and an override that
+    declares none waits ten for anything the override matches. Reading
+    only the declared periods answered five, so the ceiling above was
+    sized for a wait five seconds shorter than nextest's.
+    """
+    config_text = (
+        "[profile.example]\n"
+        'slow-timeout = { period = "300s", terminate-after = 1, '
+        'grace-period = "5s" }\n'
+        "\n"
+        "[[profile.example.overrides]]\n"
+        'filter = "binary(probe)"\n'
+        'slow-timeout = { period = "600s", terminate-after = 1 }\n'
+    )
+    parsed = profiles(config_text)["example"]
+    assert termination_allowance(parsed) == pytest.approx(
+        NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS + TERMINATION_SAFETY_MARGIN_SECONDS
+    )
+
+
 def test_a_filter_naming_a_timeout_key_is_not_a_budget() -> None:
     """An override's ``filter`` is a string, not configuration.
 
