@@ -14,6 +14,8 @@ scraping reader would go on reporting a budget somebody had switched
 off.
 """
 
+import fractions
+
 import pytest
 from suite_commands import _disguised_suite_lines, _suite_commands
 from timeout_budgets import (
@@ -25,6 +27,7 @@ from timeout_budgets import (
     global_timeout,
     largest_period,
     profiles,
+    required_ceiling,
     termination_allowance,
 )
 
@@ -98,6 +101,45 @@ def test_a_commented_out_grace_period_is_not_in_force() -> None:
     unset = _example('slow-timeout = { period = "300s", terminate-after = 1 }')
     assert termination_allowance(unset) == pytest.approx(
         NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS + TERMINATION_SAFETY_MARGIN_SECONDS
+    )
+
+
+def test_the_allowance_is_exact_rather_than_nearest_representable() -> None:
+    """A tenth of a second is not a float, and the ceiling is compared to it.
+
+    `seconds` answers a `Fraction` precisely so a budget can be compared
+    without a tolerance. A default or a margin left as a `float` puts the whole
+    sum back on binary floating point, where `0.1 + 60` is 60.099999999999994,
+    and `required_ceiling` then propagates a value that can round below the
+    exact sum it is meant to cover. Asserted with `==` rather than `approx`,
+    because `approx` is exactly what would hide it.
+    """
+    parsed = _example(
+        'slow-timeout = { period = "300s", terminate-after = 1, '
+        'grace-period = "100ms" }'
+    )
+    assert termination_allowance(parsed) == fractions.Fraction(1, 10) + (
+        TERMINATION_SAFETY_MARGIN_SECONDS
+    ), "a tenth of a second plus the margin must be exact"
+    assert termination_allowance(parsed) != 0.1 + float(
+        TERMINATION_SAFETY_MARGIN_SECONDS
+    ), "the float sum is the value this contract exists to avoid"
+    # The ceiling is what a lane is compared against, so the exactness has to
+    # survive the two constants added after the allowance. The expected value
+    # is written out rather than composed from those constants: composing it
+    # would make the mutation that turns one of them back into a float change
+    # both sides of the comparison, and the assertion would pass either way.
+    #
+    # 45 m + 0.1 s + 60 s + 15 m + 15 m, in seconds.
+    exact = fractions.Fraction(2700) + fractions.Fraction(1, 10)
+    exact += fractions.Fraction(60) + fractions.Fraction(900) * 2
+    whole = _example(
+        'slow-timeout = { period = "300s", terminate-after = 1, '
+        'grace-period = "100ms" }',
+        'global-timeout = "45m"',
+    )
+    assert required_ceiling(whole) == exact, (
+        "the required ceiling must be the exact sum, not the nearest float"
     )
 
 
