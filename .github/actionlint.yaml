@@ -1,3 +1,8 @@
 self-hosted-runner:
   labels:
     - ubicloud-standard-2-ubuntu-2404
+    # The rolling release's x86_64 lints leg. 22.04 rather than 2404 because
+    # its glibc is the floor every consumer of whitaker's binaries inherits.
+    - ubicloud-standard-2-ubuntu-2204
+    # Its arm64 sibling, on the image that leg has always built on.
+    - ubicloud-standard-2-arm-ubuntu-2404

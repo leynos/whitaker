@@ -54,6 +54,24 @@ UBICLOUD_JOBS: dict[str, str] = {
     "coverage-check": "ci.yml",
     "linux-full": "ci.yml",
     "coverage-upload": "coverage-main.yml",
+    # A matrix job, and only two of its five legs are on Ubicloud. The rules
+    # keyed on this mapping are about the step list, which every leg shares,
+    # so the job belongs here whole; which legs run where is `RunnerLane`'s
+    # to say, and `runner_placement_contract_test` holds the two together.
+    "build-lints": "rolling-release.yml",
+    "build-dependency-binaries": "rolling-release.yml",
+}
+
+#: Every job that runs this repository's own gates: the suite, the lints, the
+#: coverage run. They share a shape that a build job does not have, so the
+#: rules about that shape are keyed here rather than on every Ubicloud job.
+#: Nextest concurrency, the Clippy source mirror and the tools cache are all
+#: rules about running the gates, and `build-lints` runs none of them; it
+#: cross-compiles the lint crates for five targets and packages them.
+SUITE_JOBS: dict[str, str] = {
+    "coverage-check": "ci.yml",
+    "linux-full": "ci.yml",
+    "coverage-upload": "coverage-main.yml",
 }
 
 #: Every job that owns cache archives, including the GitHub-hosted Windows
@@ -72,6 +90,10 @@ CACHE_KEY_WRITERS: dict[str, str] = {
     "sccache-coverage-v1-": "coverage-upload",
     "sccache-lint-v1-": "linux-full",
     "cargo-registry-windows-v1-": "windows-compat",
+    "cargo-registry-rolling-v1-": "build-lints",
+    "sccache-rolling-v1-": "build-lints",
+    "cargo-registry-depbin-v1-": "build-dependency-binaries",
+    "sccache-depbin-v1-": "build-dependency-binaries",
 }
 
 

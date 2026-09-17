@@ -45,6 +45,10 @@ Published x86_64 GNU/Linux installer, dependency, and lint artefacts target the
 Ubuntu 22.04 glibc baseline and must not require a version newer than
 `GLIBC_2.35`. The release workflows enforce that contract by inspecting ELF
 version-needs metadata with `readelf`, rather than relying on a runner label.
+The label is pinned as well, by the placement contracts described under
+[Runner placement policy](#runner-placement-policy), but as a second lock
+rather than as the enforcement: the metadata check is what would catch a
+dependency raising the floor on an unchanged image.
 
 Use the checker locally after changing a Linux release build or its
 dependencies:
@@ -277,10 +281,16 @@ at a time. That is why every caller of the shared `setup-rust` action passes
 `cache-provider: external`: its `github` provider archives
 `target/${BUILD_PROFILE}` alongside the registry. `windows-compat` was
 archiving exactly that until it moved to the external provider and gained its
-own registry cache. The release and rolling-release workflows still call the
-shared action with its default `github` provider because they are release
-boundaries rather than developer-blocking lanes. They no longer archive a
-`target` tree either.
+own registry cache. `release.yml` still calls the shared action with its default
+`github` provider, as do the non-Linux legs of the two rolling-release
+matrices, because nothing owns a cache for them; they no longer archive a
+`target` tree either. The Linux legs pass `external` and own a family pair each:
+`cargo-registry-rolling-v1-` and `sccache-rolling-v1-` for `build-lints`,
+which rebuilds ten lint crates from cold on every merge to `main`, and
+`cargo-registry-depbin-v1-` and `sccache-depbin-v1-` for
+`build-dependency-binaries`, which installs every dependency crate from source
+with `cargo install --locked`. The two jobs are keyed apart because their
+registries hold different crate sets and their keys hash different manifests.
 
 Every caller pins one revision, `7cb894fe62c40951cccf33819548095e64a1291e`. It
 keeps the rule that the built-in provider does not archive `target/<profile>`,
@@ -656,15 +666,17 @@ runs on GitHub-hosted runners.
 
 Table: Runner placement for repository-owned jobs.
 
-| Job                              | Workflow                             | Runner                            | Why                               |
-| -------------------------------- | ------------------------------------ | --------------------------------- | --------------------------------- |
-| `coverage-check`                 | `ci.yml`                             | `ubicloud-standard-2-ubuntu-2404` | Blocking Linux gate               |
-| `linux-full`                     | `ci.yml`                             | `ubicloud-standard-2-ubuntu-2404` | Blocking Linux gate               |
-| `coverage-upload`                | `coverage-main.yml`                  | `ubicloud-standard-2-ubuntu-2404` | Trunk Linux gate and cache writer |
-| `windows-compat`                 | `ci.yml`                             | `windows-latest`                  | Ubicloud has no Windows image     |
-| `mutation`                       | `mutation-testing.yml`               | Reusable workflow's own choice    | Nightly, not blocking             |
-| `automerge`                      | `dependabot-automerge.yml`           | Reusable workflow's own choice    | API-bound                         |
-| Release and rolling-release jobs | `release.yml`, `rolling-release.yml` | GitHub-hosted matrices            | Release boundaries                |
+| Job                                               | Workflow                   | Runner                                                                      | Why                                    |
+| ------------------------------------------------- | -------------------------- | --------------------------------------------------------------------------- | -------------------------------------- |
+| `coverage-check`                                  | `ci.yml`                   | `ubicloud-standard-2-ubuntu-2404`                                           | Blocking Linux gate                    |
+| `linux-full`                                      | `ci.yml`                   | `ubicloud-standard-2-ubuntu-2404`                                           | Blocking Linux gate                    |
+| `coverage-upload`                                 | `coverage-main.yml`        | `ubicloud-standard-2-ubuntu-2404`                                           | Trunk Linux gate and cache writer      |
+| `windows-compat`                                  | `ci.yml`                   | `windows-latest`                                                            | Ubicloud has no Windows image          |
+| `mutation`                                        | `mutation-testing.yml`     | Reusable workflow's own choice                                              | Nightly, not blocking                  |
+| `automerge`                                       | `dependabot-automerge.yml` | Reusable workflow's own choice                                              | API-bound                              |
+| Linux legs of both `rolling-release.yml` matrices | `rolling-release.yml`      | `ubicloud-standard-2-ubuntu-2204` and `ubicloud-standard-2-arm-ubuntu-2404` | Rebuilt from cold on every merge       |
+| Their macOS and Windows legs                      | `rolling-release.yml`      | GitHub-hosted matrix                                                        | Ubicloud has no macOS or Windows image |
+| Other release jobs                                | `release.yml`              | GitHub-hosted matrices                                                      | Release boundaries                     |
 
 Ubicloud publishes Ubuntu images only, on x64 and arm64, so Windows and macOS
 lanes have no Ubicloud counterpart and stay GitHub-hosted permanently. That is
@@ -691,6 +703,16 @@ self-hosted just-in-time runners, so GitHub's five-day self-hosted limit
 applies rather than the six-hour hosted limit, and a hung job would otherwise
 bill for days.
 
+A contract asserts it, which it did not before. This rule was documented and
+unenforced, and two matrix jobs reached a pull request on paid runners with no
+timeout at all before a reviewer caught it. The contract requires a declared
+`timeout-minutes` on every lane in the Ubicloud list and bounds it to two
+hours, which is an order of magnitude above the slowest leg this repository has
+ever run and so catches a typo as readily as an omission. Values are sized from
+observed runs rather than guessed: 30 minutes for `build-lints`, about eight
+times its slowest leg, and 45 for `build-dependency-binaries`, which installs
+every dependency crate from source and is the heavier of the two.
+
 Test and build concurrency is bounded by one named constant.
 `LINUX_RUNNER_VCPUS` is declared once per workflow and a single step derives
 both `CARGO_BUILD_JOBS` and `NEXTEST_TEST_THREADS` from it, so changing the
@@ -699,15 +721,76 @@ value because `windows-latest` is a four-vCPU GitHub-hosted shape. No suite in
 this repository uses `pytest-xdist`; if one adopts it, give it an explicit
 worker count rather than `-n auto`.
 
+#### Placement inside a matrix
+
+`build-lints` and `build-dependency-binaries` are the jobs whose placement is
+not readable off a `runs-on`. Each declares `${{ matrix.os }}` and GitHub runs
+it five times, on five images; in both, the two Linux legs are on Ubicloud and
+the other three are not. The contracts therefore speak of a *lane*, which is a
+job together with the matrix leg that selected its runner, written
+`build-lints[target]`. A job with no matrix is a lane whose leg is absent.
+`tests/workflow_contracts/runner_lanes.py` resolves a lane to the label it
+actually runs on, by reading the matrix entry rather than by evaluating the
+expression: the only expression it understands is the deferral to the matrix,
+and any other is refused rather than guessed at, because reporting an invented
+label would be worse than reporting that it cannot be read.
+
+Two consequences follow, and both are held by contract.
+
+The x86_64 legs' image is not a default. Both are on
+`ubicloud-standard-2-ubuntu-2204` while every other Ubicloud lane here is on
+2404, because the glibc those legs link against is the floor every consumer of
+whitaker's binaries inherits, and each job's own "Check glibc baseline" step
+holds it at `GLIBC_2.35`, which is what 22.04 ships. The two jobs publish
+artefacts a consumer installs side by side, so the floor is the higher of the
+two and neither may be raised alone. In each job the image and the ceiling are
+pinned together, since either alone is defeatable: an image can be raised while
+the check still names the old ceiling, and the ceiling can be raised while the
+image is untouched. The arm64 legs stay on the 2404 arm image they have always
+built on, so this placement changed where they run and not what they link
+against; no baseline check runs there.
+
+A matrix job's cache keys must vary by leg. Both Linux legs share one restore
+step and one save step, so if the rendered key does not carry `runner.arch`,
+the second leg to finish overwrites the first leg's archive and both then
+restore an archive built for the other architecture. The discriminator is
+required in the primary key and in the fallbacks alike.
+
+Steps that belong to some legs and not others carry a leg guard, and the
+contracts read it rather than refusing it. A step that must survive a failure
+says `always() && runner.os == 'Linux'`, which is the same promise as a bare
+`always()` with the legs the rule is not about excluded; an input that differs
+per leg is written as one conditional whose Linux arm the contracts read. Rules
+that are about running this repository's own gates, the concurrency constant,
+the Clippy source mirror and the tools cache, are keyed on the suite jobs
+rather than on every Ubicloud job, because `build-lints` runs no gates: it
+cross-compiles the lint crates and packages them.
+
 `windows-compat` keeps the shared Rust setup action's own `sccache` setup,
 which installs the binary and exports the Actions cache credentials. It needs
 no separate export step, and it owns one registry archive of its own keyed by
 `runner.os` and `runner.arch` so a Linux archive can never be restored onto
 Windows.
 
-`.github/actionlint.yaml` registers `ubicloud-standard-2-ubuntu-2404` as the
-only self-hosted label in use. Keep that list equal to the labels the workflows
-actually reference.
+`.github/actionlint.yaml` registers the paid runner labels the workflows use.
+actionlint knows GitHub's own labels and whatever it has been told, so a label
+it has not been told about is reported as unknown, and a workflow that is
+correct then fails a linter, which teaches a reader to ignore it.
+
+A contract holds the registry and the workflows equal, in both directions. An
+unregistered label is the fault above; a registration left behind after a lane
+moved is its own fault, because it names a runner assignment that has been
+retired and hides that the lane moved. A subset assertion catches the first and
+not the second.
+
+What counts as in use is read from every job in every workflow, through a
+matrix's legs and through both arms of a conditional `runs-on`, less the labels
+GitHub hosts. Both arms matter because a lane on the fork fallback bills for
+either depending on the head that triggered it. The exclusion is keyed on what
+GitHub hosts rather than on a vendor's prefix, so the fork fallback's
+GitHub-hosted arm never reaches the registry question and a second paid
+provider needs a registration rather than a second prefix to match against.
+This is the estate's shape, taken from chutoro.
 
 The `main` ruleset requires the `linux-full` and `windows-compat` status-check
 contexts. GitHub derives a context from the job's name, so neither job may gain
