@@ -156,6 +156,14 @@ def test_a_declaration_is_found_at_every_scope_in_every_spelling(
             "    steps:\n      - run: make test\n",
             id="env-as-a-list",
         ),
+        pytest.param(
+            "jobs:\n  - test\n",
+            id="jobs-as-a-list",
+        ),
+        pytest.param(
+            "jobs: test\n",
+            id="jobs-as-a-string",
+        ),
     ],
 )
 def test_nothing_else_is_reported_as_a_declaration(text: str) -> None:
@@ -167,8 +175,18 @@ def test_nothing_else_is_reported_as_a_declaration(text: str) -> None:
     here because ``env`` holding a sequence makes ``in`` a membership
     test over values, which would read the variable's own name as a
     declaration of it.
+
+    The malformed ``jobs`` cases are here because the walk answers by
+    raising rather than by reporting when it meets one: a list or a
+    string has no ``items``, so a document YAML parses and GitHub
+    rejects took the sweep down with an ``AttributeError`` instead of
+    yielding no scopes.
     """
-    assert _scopes_declaring_profile(_documents(text)) == []
+    assert _scopes_declaring_profile(_documents(text)) == [], (
+        f"nothing but an `env` mapping whose keys include {PROFILE_VARIABLE} "
+        f"is a declaration of it; a sweep that reports one of these accuses a "
+        f"workflow that selects no profile through the environment"
+    )
 
 
 def test_every_scope_of_a_workflow_is_walked_at_once() -> None:
@@ -189,4 +207,8 @@ def test_every_scope_of_a_workflow_is_walked_at_once() -> None:
         "example.yml: workflow level",
         "example.yml:test: job level",
         "example.yml:test: step 0",
-    ]
+    ], (
+        f"every scope that declares {PROFILE_VARIABLE} must be reported, in "
+        f"workflow, job then step order; stopping at the first leaves the "
+        f"remaining lanes masked behind a fix that looks complete"
+    )
