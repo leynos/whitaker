@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from _pytest.outcomes import Failed
 from ruamel.yaml import YAML
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
@@ -309,23 +310,80 @@ def test_scheduled_and_administrative_workflows_stay_github_hosted() -> None:
 RUNAWAY_CEILING_MINUTES: int = 120
 
 
+def _assert_bounded_timeout(
+    workflow_name: str, job_name: str, timeout: object
+) -> None:
+    """Fail unless one job declares a positive integer ceiling."""
+    match timeout:
+        case bool():
+            pytest.fail(
+                f"{workflow_name}:{job_name} declares a boolean timeout-minutes; "
+                f"GitHub Actions requires a positive integer"
+            )
+        case int() as minutes:
+            assert 0 < minutes <= RUNAWAY_CEILING_MINUTES, (
+                f"{workflow_name}:{job_name} must declare a bounded "
+                f"timeout-minutes, at most {RUNAWAY_CEILING_MINUTES}"
+            )
+        case _:
+            pytest.fail(
+                f"{workflow_name}:{job_name} must declare timeout-minutes as a "
+                f"positive integer, at most {RUNAWAY_CEILING_MINUTES}"
+            )
+
+
 def test_ubicloud_jobs_declare_a_timeout() -> None:
     """Ubicloud runners are self-hosted, so GitHub's six-hour cap does not apply.
 
     A hung job would otherwise bill for days against the five-day self-hosted
     limit, so every Ubicloud job must cap itself. Presence and a runaway bound
     are what this asserts; the sized figure belongs to the ordering contract.
+
+    A boolean is rejected before the bound is read. ``timeout-minutes: true``
+    loads under YAML 1.2 as Python ``True``, and ``bool`` is a subclass of
+    ``int`` equal to one, so an ``isinstance`` test accepted a declaration
+    GitHub rejects as a workflow error.
     """
     for workflow_name, expected_jobs in UBICLOUD_LINUX_JOBS.items():
         jobs = _workflow_jobs(workflow_name)
         for job_name in expected_jobs:
-            timeout = jobs[job_name].get("timeout-minutes")
-            assert (
-                isinstance(timeout, int) and 0 < timeout <= RUNAWAY_CEILING_MINUTES
-            ), (
-                f"{workflow_name}:{job_name} must declare a bounded "
-                f"timeout-minutes, at most {RUNAWAY_CEILING_MINUTES}"
+            _assert_bounded_timeout(
+                workflow_name, job_name, jobs[job_name].get("timeout-minutes")
             )
+
+
+@pytest.mark.parametrize(
+    ("timeout", "reason"),
+    [
+        pytest.param(True, "boolean", id="true"),
+        pytest.param(False, "boolean", id="false"),
+        pytest.param(None, "positive integer", id="absent"),
+        pytest.param("80", "positive integer", id="string"),
+        pytest.param(0, "bounded", id="zero"),
+        pytest.param(-1, "bounded", id="negative"),
+        pytest.param(RUNAWAY_CEILING_MINUTES + 1, "bounded", id="above-the-ceiling"),
+    ],
+)
+def test_a_timeout_that_is_not_a_bounded_integer_is_rejected(
+    timeout: object, reason: str
+) -> None:
+    """The guard discriminates, so the boolean case is load-bearing.
+
+    ``True`` is the case an ``isinstance(timeout, int)`` test accepted:
+    YAML 1.2 loads ``timeout-minutes: true`` as Python ``True``, ``bool``
+    subclasses ``int``, and ``True`` compares equal to one, so a
+    declaration GitHub rejects as a workflow error passed as a
+    one-minute ceiling. Removing the ``bool`` arm fails the first two
+    cases here and nothing else.
+    """
+    with pytest.raises((AssertionError, Failed), match=reason):
+        _assert_bounded_timeout("example.yml", "build", timeout)
+
+
+def test_a_bounded_integer_timeout_is_accepted() -> None:
+    """The other direction, so the guard refuses only what it must."""
+    _assert_bounded_timeout("example.yml", "build", 1)
+    _assert_bounded_timeout("example.yml", "build", RUNAWAY_CEILING_MINUTES)
 
 
 def test_actionlint_registers_only_the_labels_in_use() -> None:
