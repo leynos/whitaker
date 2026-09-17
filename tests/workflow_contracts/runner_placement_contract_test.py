@@ -34,6 +34,7 @@ from runner_lanes import (
     UBICLOUD_LANES,
     RunnerLane,
     lane_label,
+    leg_guard_selects,
     load_lane,
     matrix_legs,
 )
@@ -142,11 +143,12 @@ def test_the_glibc_baseline_check_runs_on_that_leg_at_that_ceiling(
     """
     step = steps_by_name(load_lane(lane)).get(GLIBC_BASELINE_STEP)
     assert step is not None, f"{lane} must declare a {GLIBC_BASELINE_STEP!r} step"
-    condition = str(step.get("if", ""))
     assert lane.leg is not None
-    assert lane.leg in condition, (
-        f"{lane}: {GLIBC_BASELINE_STEP!r} must be guarded to the {lane.leg} leg; "
-        f"got {condition!r}"
+    condition = step.get("if", "")
+    assert leg_guard_selects(condition, lane.leg), (
+        f"{lane}: {GLIBC_BASELINE_STEP!r} must be guarded to the {lane.leg} leg "
+        "and to nothing else. A containment test would accept a condition that "
+        f"switches the step off while naming the leg; got {condition!r}"
     )
     script = str(step.get("run", ""))
     assert GLIBC_BASELINE_SCRIPT in script, (
@@ -286,3 +288,70 @@ def test_an_unrecognized_label_is_reported_rather_than_excused() -> None:
         "if it reports this label too, the two rules have converged and the "
         "choice between them no longer needs defending"
     )
+
+
+@pytest.mark.parametrize(
+    ("shape", "description"),
+    [
+        pytest.param(
+            {"runs-on": ["self-hosted", "linux", "x64"]},
+            "the list form, which selects a self-hosted runner by label set",
+            id="list",
+        ),
+        pytest.param(
+            {"runs-on": {"group": "ubicloud", "labels": ["ubicloud-standard-2"]}},
+            "the group/labels mapping, which selects from a runner group",
+            id="group-mapping",
+        ),
+    ],
+)
+def test_a_runs_on_shape_this_reader_cannot_inventory_is_refused(
+    shape: dict[str, object], description: str
+) -> None:
+    """A shape the reader cannot inventory must stop the contract, not pass it.
+
+    Both forms are valid GitHub and neither appears in this repository today.
+    Skipping them would have let the registry contract answer "no billable
+    labels" for a job that bills for several, which is the one answer a
+    registry question must never give quietly. The refusal is the smallest
+    correction: it costs nothing until such a job exists, and then it demands
+    the reader be taught the shape rather than the job be excused.
+    """
+    with pytest.raises(AssertionError, match="cannot inventory"):
+        declared_labels(shape)
+
+
+def test_a_leg_guard_that_names_its_leg_but_never_runs_is_refused() -> None:
+    """Naming the leg is not the same as running on it.
+
+    A containment test accepts `false && matrix.target == '<leg>'`, which
+    contains the leg's name and switches the step off. For the glibc baseline
+    that means publishing binaries no baseline check ever read. The guard is
+    therefore matched whole, with the `${{ }}` wrapper and surrounding space
+    normalized because those spell the same condition. A trailing operand is
+    refused for the same reason as a leading one, which is why the whole
+    condition is matched rather than only its start.
+    """
+    leg = "x86_64-unknown-linux-gnu"
+    assert leg_guard_selects(f"matrix.target == '{leg}'", leg)
+    assert leg_guard_selects(f"  ${{{{ matrix.target == '{leg}' }}}}  ", leg)
+    assert not leg_guard_selects(f"false && matrix.target == '{leg}'", leg)
+    assert not leg_guard_selects(f"matrix.target == '{leg}' && false", leg)
+    assert not leg_guard_selects(f"matrix.target != '{leg}'", leg)
+    assert not leg_guard_selects("matrix.target == 'aarch64-unknown-linux-gnu'", leg)
+
+
+def test_a_reusable_workflow_caller_contributes_no_labels() -> None:
+    """A caller with no `runs-on` is not an unsupported shape.
+
+    Two jobs here call a shared workflow and declare no `runs-on`, because the
+    called workflow places its own jobs. Refusing every non-string `runs-on`
+    outright, as the review's proposed fix did, stopped the registry contract
+    on both of them. The exemption is keyed on the caller's `uses`, so a job
+    that declares neither a string `runs-on` nor a `uses` is still refused.
+    """
+    caller = {"uses": "leynos/shared-actions/.github/workflows/thing.yml@sha"}
+    assert declared_labels(caller) == set()
+    assert billable_labels(caller) == set()
+    with pytest.raises(AssertionError, match="cannot inventory"):
+        declared_labels({"steps": []})

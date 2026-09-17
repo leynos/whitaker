@@ -142,6 +142,54 @@ CONDITIONAL_RUNS_ON: Final[typ.Pattern[str]] = re.compile(
     r"\|\|\s*'(?P<when_false>[^']+)'\s*\}\}$"
 )
 
+
+def leg_guard_selects(condition: object, leg: str) -> bool:
+    """Report whether a step's condition runs it on exactly one named leg.
+
+    A containment test is not enough and this is the third guard on this
+    branch to learn it. ``false && matrix.target == 'x86_64-unknown-linux-gnu'``
+    contains the leg's name and never runs, so a substring check accepts a
+    condition that switches the step off, which for the glibc baseline means
+    publishing binaries nothing checked.
+
+    The optional ``${{ }}`` wrapper and surrounding whitespace are normalized,
+    because both spellings are the same condition. Anything else, another
+    operator or a different target, is refused.
+
+    Parameters
+    ----------
+    condition : object
+        A step's ``if`` value, parsed.
+    leg : str
+        The matrix ``target`` the step must be guarded to.
+
+    Returns
+    -------
+    bool
+        True when the condition is exactly that guard.
+
+    Examples
+    --------
+    >>> leg_guard_selects("matrix.target == 'x86_64-unknown-linux-gnu'",
+    ...                   "x86_64-unknown-linux-gnu")
+    True
+    >>> leg_guard_selects("${{ matrix.target == 'x86_64-unknown-linux-gnu' }}",
+    ...                   "x86_64-unknown-linux-gnu")
+    True
+    >>> leg_guard_selects("false && matrix.target == 'x86_64-unknown-linux-gnu'",
+    ...                   "x86_64-unknown-linux-gnu")
+    False
+    >>> leg_guard_selects("matrix.target == 'aarch64-unknown-linux-gnu'",
+    ...                   "x86_64-unknown-linux-gnu")
+    False
+    """
+    text = str(condition).strip()
+    if text.startswith("${{") and text.endswith("}}"):
+        text = text[3:-2].strip()
+    pattern = r"matrix\.target\s*==\s*(['\"])" + re.escape(leg) + r"\1"
+    return re.fullmatch(pattern, text) is not None
+
+
 #: What a cache key must vary by inside a matrix job. Both Linux legs of the
 #: rolling release run one restore step and one save step, so only the
 #: rendered key keeps their archives apart.
@@ -375,6 +423,81 @@ def linux_arm(value: object) -> str:
     return match["linux"]
 
 
+def _runner_declarations(job: dict[str, Any]) -> list[object]:
+    """Return the runner declarations a job resolves through.
+
+    A matrix job defers to its legs, so each leg's image is a declaration and
+    the job's own ``runs-on`` is only the deferral. A reusable-workflow caller
+    declares nothing: the called workflow places its own jobs.
+
+    Parameters
+    ----------
+    job : dict
+        A job mapping, as parsed from a workflow.
+
+    Returns
+    -------
+    list
+        One declaration per leg, or the job's own ``runs-on``, or nothing.
+
+    Examples
+    --------
+    >>> _runner_declarations({"runs-on": "ubuntu-latest"})
+    ['ubuntu-latest']
+    >>> _runner_declarations({"uses": "org/repo/.github/workflows/w.yml@sha"})
+    []
+    """
+    legs = matrix_legs(job)
+    if legs:
+        return [entry.get("os") for entry in legs.values()]
+    if "runs-on" not in job and isinstance(job.get("uses"), str):
+        return []
+    return [job.get("runs-on")]
+
+
+def _labels_from_declaration(value: object) -> set[str]:
+    """Return the labels one runner declaration can resolve to.
+
+    The matrix deferral names no label of its own. A conditional contributes
+    both arms, because which one a run bills for depends on the head that
+    triggered it. Anything else is a literal.
+
+    Parameters
+    ----------
+    value : object
+        One ``runs-on`` declaration, as parsed.
+
+    Returns
+    -------
+    set of str
+        The labels that declaration can resolve to.
+
+    Raises
+    ------
+    AssertionError
+        If the declaration is a shape this reader cannot inventory.
+
+    Examples
+    --------
+    >>> _labels_from_declaration("ubicloud-standard-2")
+    {'ubicloud-standard-2'}
+    >>> _labels_from_declaration(MATRIX_RUNNER_EXPRESSION)
+    set()
+    """
+    assert isinstance(value, str), (
+        "runs-on here is a label or the matrix deferral. The list form and "
+        "the group/labels mapping are valid GitHub and this reader cannot "
+        "inventory them, so a job using one is refused rather than "
+        f"contributing nothing to the registry question; got {value!r}"
+    )
+    if value == MATRIX_RUNNER_EXPRESSION:
+        return set()
+    conditional = CONDITIONAL_RUNS_ON.match(value)
+    if conditional:
+        return {conditional["when_true"], conditional["when_false"]}
+    return {value}
+
+
 def declared_labels(job: dict[str, Any]) -> set[str]:
     """Return every runner label a job could resolve to.
 
@@ -382,6 +505,30 @@ def declared_labels(job: dict[str, Any]) -> set[str]:
     labels and the `${{ matrix.os }}` deferral itself is not one. A
     conditional contributes both arms, because which one a run bills for
     depends on the head that triggered it. Anything else is a literal.
+
+    A job that calls a reusable workflow declares no ``runs-on`` at all: the
+    called workflow places its own jobs and this one bills for nothing, so it
+    contributes no labels. Every other shape the reader cannot inventory is
+    refused rather than skipped, because skipping answers "no labels" for a
+    job that may bill for several and a registry question must never be
+    answered quietly.
+
+    Parameters
+    ----------
+    job : dict
+        A job mapping, as parsed from a workflow.
+
+    Returns
+    -------
+    set of str
+        Every label the job could resolve to, with no expression left in it.
+
+    Raises
+    ------
+    AssertionError
+        If ``runs-on`` is a shape this reader cannot inventory, such as the
+        list form or the ``group``/``labels`` mapping. A reusable-workflow
+        caller is exempt: it declares no ``runs-on`` and bills for nothing.
 
     Examples
     --------
@@ -397,22 +544,10 @@ def declared_labels(job: dict[str, Any]) -> set[str]:
     ... )
     ['ubicloud-standard-2', 'ubuntu-latest']
     """
-    legs = matrix_legs(job)
-    if legs:
-        declared = [entry.get("os") for entry in legs.values()]
-    else:
-        declared = [job.get("runs-on")]
+    declared = _runner_declarations(job)
     labels: set[str] = set()
     for value in declared:
-        if not isinstance(value, str):
-            continue
-        if value == MATRIX_RUNNER_EXPRESSION:
-            continue
-        conditional = CONDITIONAL_RUNS_ON.match(value)
-        if conditional:
-            labels.update({conditional["when_true"], conditional["when_false"]})
-            continue
-        labels.add(value)
+        labels.update(_labels_from_declaration(value))
     return labels
 
 
@@ -420,6 +555,17 @@ def billable_labels(job: dict[str, Any]) -> set[str]:
     """Return the labels a job can bill for.
 
     Everything it could resolve to, less what GitHub hosts itself.
+
+    Parameters
+    ----------
+    job : dict
+        A job mapping, as parsed from a workflow.
+
+    Returns
+    -------
+    set of str
+        The labels that cost money, which are the ones a registry must
+        account for.
 
     Examples
     --------
