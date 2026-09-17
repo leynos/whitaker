@@ -481,9 +481,11 @@ jobs:
   windows-compat:
     runs-on: windows-latest
     # This lane had no ceiling at all, so it inherited GitHub's six-hour
-    # default: the outermost tier was missing on the one lane that also had
-    # no per-test bound, because `[[profile.default.overrides]]` does not
-    # reach the `ci` profile it runs under.
+    # default: the outermost tier was missing on the one lane whose inner
+    # tiers were weakest. `[[profile.default.overrides]]` are consulted
+    # when the `ci` profile is selected, so the named toolchain and UI
+    # tests were bounded; what nothing bounded was every other test, the
+    # `ci` profile having declared no base `slow-timeout` of its own.
     timeout-minutes: 80
     env:
       # `windows-latest` is a 4 vCPU GitHub-hosted shape, so it does not share

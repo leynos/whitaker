@@ -104,10 +104,12 @@ def test_every_profile_bounds_a_single_test(
 ) -> None:
     """A test that hangs must be killed, not merely reported slow.
 
-    Both profiles need this and only one had it. ``ci`` inherits the
-    default profile's scalar keys but not its overrides, so the toolchain
-    tests it includes and the default profile excludes ran with no
-    allowance at all, on the lane whose job had no ceiling either.
+    Both profiles need this and only one had it. ``ci`` does consult
+    ``[[profile.default.overrides]]``, so the toolchain tests it
+    includes and the default profile excludes were bounded by the
+    default profile's allowance. What ran with no allowance at all was
+    every test no override named, on the lane whose job had no ceiling
+    either.
     """
     parsed = nextest_profiles.get(profile)
     assert parsed is not None, f"nextest.toml must declare [profile.{profile}]"
