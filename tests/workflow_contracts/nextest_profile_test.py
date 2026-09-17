@@ -84,8 +84,8 @@ class Allowance(typ.NamedTuple):
 #: The filters are stated whole and matched exactly, per profile. A
 #: substring would accept a narrowed one: dropping a clause from the
 #: `ui` disjunction leaves the needle intact while the tests that clause
-#: named lose the ten-minute allowance and fall back to the base sixty
-#: seconds. The two profiles genuinely differ here, the default one
+#: named lose the ten-minute allowance and fall back to the base three
+#: hundred seconds. The two profiles genuinely differ here, the default one
 #: naming eight more `test(...)` clauses than `ci`, which is exactly the
 #: divergence a shared needle would have hidden.
 REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
@@ -254,8 +254,8 @@ def test_each_profile_states_the_overrides_its_own_tests_need(
     The filter is compared whole and exactly, per profile. A substring
     would accept a narrowed filter: dropping a clause from the `ui`
     disjunction leaves any needle intact while the tests that clause
-    named lose the ten-minute allowance and fall back to the base sixty
-    seconds.
+    named lose the ten-minute allowance and fall back to the base three
+    hundred seconds.
 
     Only overrides that declare a budget are counted. The default
     profile matches ``binary(behaviour_toolchain)`` twice, once for the
