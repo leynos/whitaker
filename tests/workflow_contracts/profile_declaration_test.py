@@ -176,7 +176,7 @@ def test_nothing_else_is_reported_as_a_declaration(text: str) -> None:
     test over values, which would read the variable's own name as a
     declaration of it.
 
-    The malformed ``jobs`` cases guard the normalisation the walk depends
+    The malformed ``jobs`` cases guard the normalization the walk depends
     on. ``jobs`` holding a list or a string is a document YAML parses and
     GitHub rejects, and it must yield no scopes; an unnormalised
     ``.items()`` on that value raises ``AttributeError`` and takes the
