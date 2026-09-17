@@ -144,10 +144,14 @@ class _Total:
         # aborting the process rather than erroring when that carry
         # overflows. nextest cannot run either way, so both are one
         # refusal here. Written as one branch, because a reader with
-        # both has an unfalsifiable one: over all seventy-one inputs of
+        # both has an unfalsifiable one: over all seventy-two inputs of
         # the estate differential, removing the strict branch changes
         # nothing, while removing this one lets three overflowing
-        # composites through.
+        # composites through. The seventy-second input,
+        # `1000000000ns 18446744073709551615ns`, is the one that
+        # separates this shape from a carry deferred to the end: that
+        # shape refuses what humantime accepts and what nextest runs.
+        # Measured at zero disagreements over all seventy-two.
         if nanos >= _SECOND:
             total = _u64(duration, total + nanos // _SECOND)
             nanos %= _SECOND
