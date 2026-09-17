@@ -153,6 +153,31 @@ def _duration_at(table: dict[str, object], key: str) -> list[str]:
             return []
 
 
+def _grace_period(entry: dict[str, object]) -> float:
+    """Return one ``slow-timeout``'s grace period in seconds.
+
+    An omitted ``grace-period`` is not an absent wait: nextest applies
+    its own ten-second default. Contributing nothing for it let a
+    configuration that mixes an explicit five-second period with an
+    omitted one report five seconds, which is less than nextest will
+    actually wait, so the ceiling above it was sized five seconds short.
+
+    Parameters
+    ----------
+    entry : dict[str, object]
+        One ``slow-timeout`` inline table.
+
+    Returns
+    -------
+    float
+        The declared grace period, or nextest's default when the key is
+        absent or holds something other than a duration string.
+    """
+    for grace in _duration_at(entry, "grace-period"):
+        return seconds(grace)
+    return NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS
+
+
 def _slow_timeout(table: dict[str, object]) -> dict[str, object] | None:
     """Return one table's ``slow-timeout``, when it declares one.
 
@@ -247,6 +272,11 @@ def termination_allowance(profile: Profile) -> float:
     and one with none produced the same answer for different reasons,
     and a grace period below the margin was absorbed entirely.
 
+    Every ``slow-timeout`` contributes a term, an omitted
+    ``grace-period`` contributing nextest's default rather than nothing:
+    otherwise a five-second period beside an omission answered five
+    seconds where nextest waits ten.
+
     Parameters
     ----------
     profile : Profile
@@ -258,10 +288,9 @@ def termination_allowance(profile: Profile) -> float:
         The configured grace period plus the safety margin.
     """
     periods = [
-        seconds(grace)
+        _grace_period(entry)
         for table in profile.tables()
         if (entry := _slow_timeout(table)) is not None
-        for grace in _duration_at(entry, "grace-period")
     ]
     largest = max(periods, default=NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS)
     return largest + TERMINATION_SAFETY_MARGIN_SECONDS
