@@ -36,10 +36,18 @@ env:
   MDTABLEFIX_LINUX_X64_SHA256: b78b2ac9b396b71073ff0485d9d37717cdcd82893b660b7146ba6d3f70d43ba0
   RUSTFLAGS: -D warnings
   RUSTDOCFLAGS: -D warnings
-# CodeScene coverage: main-branch coverage is uploaded by
-# coverage-main.yml on push. The pull-request changed-line gate runs in
-# the coverage-check job below via `mode: check` against the same
-# `make coverage` lcov.info that coverage-main.yml generates.
+# CodeScene coverage: `coverage-main.yml` owns it entirely. It uploads
+# main-branch coverage on push, and it is the only workflow here that may
+# hold the CodeScene credential. The pull-request lane below still runs the
+# suite under instrumentation, because `make coverage` is how this repository
+# runs its tests, but it neither contacts CodeScene nor carries that
+# credential: a lane a pull request can start is the wrong place for one, and
+# an outage there reddened pull requests that had touched nothing.
+#
+# The credential's name is deliberately absent from this file. The contract
+# in `tests/workflow_contracts/coverage_boundary_test.py` reads the raw text
+# as well as the parsed values, so a mention in a comment counts: a workflow
+# that names it is a workflow somebody is about to wire it into.
 #
 # Runner policy: Linux developer-blocking jobs run on Ubicloud; Windows stays
 # GitHub-hosted because Ubicloud offers Linux images only. Cache policy: every
@@ -180,17 +188,6 @@ jobs:
           path: sccache-stats.json
           if-no-files-found: error
           retention-days: 14
-
-      - name: Check coverage against CodeScene gates
-        env:
-          CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
-        if: github.event_name == 'pull_request' && env.CS_ACCESS_TOKEN != ''
-        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@a5765019912a8ab6882b12db049c7cde635f3a85
-        with:
-          format: lcov
-          mode: check
-          project-url: https://api.codescene.io/v2/projects/71836
-          access-token: ${{ env.CS_ACCESS_TOKEN }}
 
   linux-full:
     runs-on: ubicloud-standard-2-ubuntu-2404
