@@ -89,6 +89,17 @@ def _assert_steps_in_order(
         search_from = step_index + 1
 
 
+#: The action that submits a report to CodeScene, in either of its modes.
+#: Matched without its version, so a repin does not silently exempt a step.
+CODESCENE_ACTION = "leynos/shared-actions/.github/actions/upload-codescene-coverage"
+
+#: The command form of the same upload, which needs no action reference.
+COVERAGE_COMMAND = "cs-coverage"
+
+#: The credential either route reads.
+CREDENTIAL = "CS_ACCESS_TOKEN"
+
+
 def _find_step(job: Mapping[str, Any], name: str) -> dict[str, Any]:
     """Return a named workflow step from the job mapping."""
     match job.get("steps"):
@@ -222,7 +233,6 @@ def _coverage_check_job(workflow: Mapping[str, Any]) -> dict[str, Any]:
         "Run doctests",
         "Record sccache effectiveness",
         "Upload sccache statistics",
-        "Check coverage against CodeScene gates",
     ], "coverage-check must contain only the approved ordered steps"
     return coverage_job
 
@@ -290,26 +300,35 @@ def _assert_coverage_tool_installation(coverage_job: Mapping[str, Any]) -> None:
     )
 
 
-def _assert_codescene_check(coverage_job: Mapping[str, Any]) -> None:
-    """Assert the CodeScene changed-line coverage contract."""
-    check_step = _find_step(coverage_job, "Check coverage against CodeScene gates")
-    assert check_step.get("env", {}).get("CS_ACCESS_TOKEN") == (
-        "${{ secrets.CS_ACCESS_TOKEN }}"
-    ), "the CodeScene token must remain scoped to the check step"
-    assert check_step.get("if") == (
-        "github.event_name == 'pull_request' && env.CS_ACCESS_TOKEN != ''"
-    ), "the CodeScene step must guard its pull-request secret"
-    assert check_step.get("uses") == (
-        "leynos/shared-actions/.github/actions/upload-codescene-coverage@"
-        "7cb894fe62c40951cccf33819548095e64a1291e"
-    ), "coverage-check must use the proven CodeScene action pin"
-    assert check_step.get("with") == {
-        "format": "lcov",
-        "mode": "check",
-        "project-url": "https://api.codescene.io/v2/projects/71836",
-        "access-token": "${{ env.CS_ACCESS_TOKEN }}",
-        "installer-checksum": "${{ vars.CODESCENE_CLI_SHA256 }}",
-    }, "coverage-check must pass the canonical project and check-mode inputs"
+def _assert_no_codescene_check(coverage_job: Mapping[str, Any]) -> None:
+    """Assert the pull-request lane contacts CodeScene in no way at all.
+
+    This used to assert the opposite: a `Check coverage against CodeScene
+    gates` step, pinned, guarded, and holding the credential. CV-005 moved the
+    whole surface to `coverage-main.yml`. A step here could redden a pull
+    request that touched nothing to do with coverage, because CodeScene was
+    unreachable or a token had rotated, and it put a credential in a lane a
+    pull request can start.
+
+    Every route is named rather than only the step that existed, because
+    deleting one named step and adding another would satisfy a rule written
+    about the name.
+    """
+    steps = coverage_job.get("steps")
+    assert isinstance(steps, list), "the coverage job must declare steps"
+    for step in steps:
+        name = str(step.get("name", ""))
+        assert CODESCENE_ACTION not in str(step.get("uses", "")), (
+            f"{name!r} invokes the CodeScene action; `coverage-main.yml` owns it"
+        )
+        assert COVERAGE_COMMAND not in str(step.get("run", "")), (
+            f"{name!r} runs a {COVERAGE_COMMAND} command; the upload belongs to "
+            f"`coverage-main.yml`"
+        )
+        assert CREDENTIAL not in str(step.get("env", {})), (
+            f"{name!r} carries {CREDENTIAL}; a lane a pull request can start "
+            f"must not hold it"
+        )
 
 
 def test_coverage_check_reuses_bespoke_whitaker_coverage_path(
@@ -320,7 +339,7 @@ def test_coverage_check_reuses_bespoke_whitaker_coverage_path(
     coverage_job = _coverage_check_job(workflow)
     _assert_coverage_checkout_and_setup(coverage_job)
     _assert_coverage_tool_installation(coverage_job)
-    _assert_codescene_check(coverage_job)
+    _assert_no_codescene_check(coverage_job)
 
 
 def _assert_pinned_checkout(job: Mapping[str, Any], job_name: str) -> None:
