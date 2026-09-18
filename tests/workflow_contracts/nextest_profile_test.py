@@ -22,7 +22,11 @@ import tomllib
 import typing as typ
 
 import pytest
-from suite_lanes import PROFILE_VARIABLE, _scopes_declaring_profile
+from suite_lanes import (
+    PROFILE_VARIABLE,
+    _scopes_declaring_profile,
+    _workflow_documents,
+)
 from timeout_budgets import NEXTEST_CONFIG
 
 #: The configuration as nextest would read it, parsed once. Not a
@@ -358,7 +362,7 @@ def test_no_workflow_selects_a_profile_through_the_environment() -> None:
     selects its coverage profile, because the shared coverage action
     takes no profile input and the environment is the only lever.
     """
-    declared = _scopes_declaring_profile()
+    declared = _scopes_declaring_profile(_workflow_documents())
     assert not declared, (
         f"{PROFILE_VARIABLE} is declared in an env block at {declared}; the "
         f"lane reader takes a lane's profile from its command line, so a "

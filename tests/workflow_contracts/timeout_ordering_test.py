@@ -50,10 +50,13 @@ from timeout_budgets import (
 #: search for "test".
 from suite_commands import SUITE_COMMANDS, _disguised_suite_lines
 from suite_lanes import (
+    COVERAGE_ACTION,
+    WATCHDOG_VARIABLE,
     _watchdog_offences,
     SuiteLane,
     _declared_jobs,
     _lanes_in_job,
+    _workflow_documents,
 )
 
 
@@ -83,7 +86,11 @@ def suite_lanes() -> tuple[SuiteLane, ...]:
     tuple[SuiteLane, ...]
         One entry per suite-running step.
     """
-    return tuple(lane for job in _declared_jobs() for lane in _lanes_in_job(job))
+    return tuple(
+        lane
+        for job in _declared_jobs(_workflow_documents())
+        for lane in _lanes_in_job(job)
+    )
 
 
 def test_the_suite_runs_somewhere(suite_lanes: tuple[SuiteLane, ...]) -> None:
@@ -190,6 +197,76 @@ def test_the_job_ceiling_covers_the_run_and_the_work_around_it(
         )
 
 
+@pytest.mark.parametrize(
+    ("document", "expected"),
+    [
+        pytest.param(
+            {"jobs": {"test": {"steps": [{"run": "make test"}]}}},
+            (),
+            id="a-lane-that-does-neither",
+        ),
+        pytest.param(
+            {
+                "env": {WATCHDOG_VARIABLE: "1800"},
+                "jobs": {"test": {"steps": [{"run": "make test"}]}},
+            },
+            (f"ci.yml sets {WATCHDOG_VARIABLE} at workflow level",),
+            id="the-variable-at-workflow-level",
+        ),
+        pytest.param(
+            {
+                "jobs": {
+                    "test": {
+                        "env": {WATCHDOG_VARIABLE: "1800"},
+                        "steps": [{"run": "make test"}],
+                    }
+                }
+            },
+            (f"ci.yml:test sets {WATCHDOG_VARIABLE} at job level",),
+            id="the-variable-at-job-level",
+        ),
+        pytest.param(
+            {
+                "jobs": {
+                    "test": {
+                        "steps": [{"env": {WATCHDOG_VARIABLE: "1800"}, "run": "x"}]
+                    }
+                }
+            },
+            (f"ci.yml:test sets {WATCHDOG_VARIABLE} on a step",),
+            id="the-variable-on-a-step",
+        ),
+        pytest.param(
+            {"jobs": {"test": {"steps": [{"uses": f"{COVERAGE_ACTION}@v1"}]}}},
+            (f"ci.yml:test uses {COVERAGE_ACTION}",),
+            id="the-action-itself",
+        ),
+    ],
+)
+def test_the_watchdog_reading_names_the_scope_it_found(
+    document: dict[str, object], expected: tuple[str, ...]
+) -> None:
+    """Which scope an offence came from, driven over documents.
+
+    The contract below reads this repository's own workflows, which
+    declare none of these, so it agrees with a reading that looked at
+    only one scope, or at none. GitHub resolves `env` at workflow, job
+    and step level and a job inherits the outer two, so a reading that
+    checked the step alone would miss a value that reaches every step.
+    Each case here is the only one its scope answers.
+    """
+    documents = {"ci.yml": document}
+    found = tuple(
+        offence
+        for job in _declared_jobs(documents)
+        for offence in _watchdog_offences(job, documents)
+    )
+    assert found == expected, (
+        f"the reading must report {expected!r} for this document; it "
+        f"reported {found!r}"
+    )
+
+
 def test_the_cargo_watchdog_tier_is_absent_rather_than_defaulted() -> None:
     """The third tier does not exist here, and must not appear unnoticed.
 
@@ -202,8 +279,11 @@ def test_the_cargo_watchdog_tier_is_absent_rather_than_defaulted() -> None:
     canonical section exists to prevent, so both halves are asserted:
     the action is not used, and the variable is not set.
     """
+    documents = _workflow_documents()
     offenders = [
-        offence for job in _declared_jobs() for offence in _watchdog_offences(job)
+        offence
+        for job in _declared_jobs(documents)
+        for offence in _watchdog_offences(job, documents)
     ]
     assert not offenders, (
         f"the cargo watchdog tier is documented as absent here, so adopting "
@@ -278,7 +358,7 @@ def test_no_step_disguises_a_suite_command() -> None:
     """
     disguised = [
         f"{job.workflow}:{job.name}: {line!r}"
-        for job in _declared_jobs()
+        for job in _declared_jobs(_workflow_documents())
         for step in (job.body.get("steps") or [])
         if isinstance(step, dict)
         for line in _disguised_suite_lines(str(step.get("run", "")))
