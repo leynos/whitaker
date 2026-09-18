@@ -1309,8 +1309,16 @@ make test-workflow-contracts
 ```
 
 which wraps
-`uv run --with 'pytest>=8' --with 'pyyaml>=6' pytest
-tests/workflow_contracts -q`.
+`uv run --with 'pytest>=8' --with 'pyyaml>=6' --with 'hypothesis>=6' pytest
+tests/workflow_contracts --doctest-modules -q`.
+
+Two of those flags are load-bearing rather than incidental. `--doctest-modules`
+collects the examples in the support modules' docstrings, so an example that
+states what a reader answers is executed rather than merely read; a helper
+whose documented answer drifts from its behaviour fails here. `hypothesis` is
+what the property suites in this directory need, and running the target without
+it collects nothing from them while still reporting success.
+
 The suite validates:
 
 - the `uses:` reference targets `mutation-cargo.yml` pinned to a full commit
