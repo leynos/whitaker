@@ -167,7 +167,7 @@ class _Job(typ.NamedTuple):
 
 
 def _declared_jobs(
-    documents: dict[str, dict[str, typ.Any]] | None = None,
+    documents: dict[str, dict[str, typ.Any]],
 ) -> tuple[_Job, ...]:
     """Return every job in every workflow, with its file.
 
@@ -177,21 +177,21 @@ def _declared_jobs(
 
     Parameters
     ----------
-    documents : dict[str, dict[str, typ.Any]] or None
-        Parsed workflow documents keyed by file name. The repository's
-        own are read when none are given, so the file reading stays at
-        the boundary and the flattening below is a pure query that can
-        be driven with documents the tree does not contain.
+    documents : dict[str, dict[str, typ.Any]]
+        Parsed workflow documents keyed by file name. Required rather
+        than defaulted, so the one read of the tree is `_workflow_documents`
+        and every query here is a pure function of what it returned. A
+        default that read the tree let a query look pure while depending on
+        the filesystem, and read it once per job besides.
 
     Returns
     -------
     tuple[_Job, ...]
         Every declared job.
     """
-    found = _workflow_documents() if documents is None else documents
     return tuple(
         _Job(workflow=name, name=str(job_name), body=body)
-        for name, document in found.items()
+        for name, document in documents.items()
         # `jobs:` can hold anything the YAML parser accepts. A list
         # there would raise on `.items()`, reporting a parse failure
         # where the question was whether a lane is bounded.
@@ -251,7 +251,10 @@ def _lanes_in_job(job: _Job) -> tuple[SuiteLane, ...]:
     )
 
 
-def _watchdog_offences(job: _Job) -> tuple[str, ...]:
+def _watchdog_offences(
+    job: _Job,
+    documents: dict[str, dict[str, typ.Any]],
+) -> tuple[str, ...]:
     """Return the ways one job would reintroduce the watchdog tier.
 
     Both halves are looked for: the action itself, and the variable that
@@ -264,6 +267,13 @@ def _watchdog_offences(job: _Job) -> tuple[str, ...]:
     ----------
     job : _Job
         The job to read.
+    documents : dict[str, dict[str, typ.Any]]
+        Parsed workflow documents keyed by file name, as `_declared_jobs`
+        takes them. Reading them inside made this the one query here that
+        went to the filesystem per job: the caller loops over jobs, so the
+        tree was parsed once per job rather than once, and the
+        workflow-level half of the answer could not be driven with a
+        document the tree does not contain.
 
     Returns
     -------
@@ -272,7 +282,7 @@ def _watchdog_offences(job: _Job) -> tuple[str, ...]:
     """
     where = f"{job.workflow}:{job.name}"
     offences: list[str] = []
-    if _sets_watchdog(_workflow_documents()[job.workflow]):
+    if _sets_watchdog(documents[job.workflow]):
         offences.append(f"{job.workflow} sets {WATCHDOG_VARIABLE} at workflow level")
     if _sets_watchdog(job.body):
         offences.append(f"{where} sets {WATCHDOG_VARIABLE} at job level")
@@ -336,7 +346,7 @@ def _job_scopes(
 
 
 def _env_scopes(
-    documents: dict[str, dict[str, typ.Any]] | None = None,
+    documents: dict[str, dict[str, typ.Any]],
 ) -> typ.Iterator[tuple[str, dict[str, typ.Any]]]:
     """Yield every scope that may carry an `env` block, with a label.
 
@@ -345,25 +355,22 @@ def _env_scopes(
 
     Parameters
     ----------
-    documents : dict[str, dict[str, typ.Any]] or None
-        Parsed workflow documents keyed by file name. The repository's
-        own are read when none are given, so the file reading stays at
-        the boundary and the walk below is a pure query that can be
-        driven with documents the tree does not contain.
+    documents : dict[str, dict[str, typ.Any]]
+        Parsed workflow documents keyed by file name, read once by the
+        caller through `_workflow_documents`.
 
     Yields
     ------
     tuple[str, dict[str, typ.Any]]
         A label naming the scope, and the scope's mapping.
     """
-    found = _workflow_documents() if documents is None else documents
-    for name, document in found.items():
+    for name, document in documents.items():
         yield f"{name}: workflow level", document
         yield from _job_scopes(name, document)
 
 
 def _scopes_declaring_profile(
-    documents: dict[str, dict[str, typ.Any]] | None = None,
+    documents: dict[str, dict[str, typ.Any]],
 ) -> list[str]:
     """Return every scope whose `env` names the profile variable.
 
@@ -378,9 +385,9 @@ def _scopes_declaring_profile(
 
     Parameters
     ----------
-    documents : dict[str, dict[str, typ.Any]] or None
-        Parsed workflow documents keyed by file name. The repository's
-        own are read when none are given.
+    documents : dict[str, dict[str, typ.Any]]
+        Parsed workflow documents keyed by file name, read once by the
+        caller through `_workflow_documents`.
 
     Returns
     -------
