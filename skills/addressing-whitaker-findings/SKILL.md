@@ -1,6 +1,6 @@
 ---
 name: addressing-whitaker-findings
-description: Best practices for fixing Whitaker Dylint suite findings — per-lint remediation playbook, exclusion policy, and the interaction traps discovered during the leynos estate rollout
+description: Best practices for fixing Whitaker Dylint suite findings — per-lint remediation playbook, excluded_crates and excluded_paths suppression policy, and the interaction traps discovered during the leynos estate rollout
 ---
 
 # Addressing Whitaker findings
@@ -97,11 +97,66 @@ ambient operations belong in a small **boundary crate** (netsuke's `ambient_fs`
 is the reference) with a documented scope-and-reuse policy, excluded in
 `dylint.toml`.
 
-**In-source suppression does not work for this lint** (issue #270): `allow`
-leaves the diagnostic firing and `expect` adds an unfulfilled- expectation
-error on top. The only working escape hatch is crate-level
-`[no_std_fs_operations] excluded_crates` in the root `dylint.toml`. Sanctioned
-exclusion categories, each with a rationale comment:
+**In-source suppression does not work for this lint** (issue #270, still open):
+`allow` leaves the diagnostic firing and `expect` adds an
+unfulfilled-expectation error on top. The lint emits through
+`LintContext::emit_span_lint`, which resolves the lint level at the visitor's
+*current* lint node rather than at the node owning the offending code. Do not
+spend time on `cfg_attr(dylint_lib = ...)` wrappers — they cannot work until
+that lookup is fixed, which is also why ADR-002's `dylint_expect` macro has no
+implementation to adopt.
+
+Two `[no_std_fs_operations]` keys in the root `dylint.toml` are therefore the
+**only** working escape hatches:
+
+- `excluded_crates = ["my_crate"]` — exempts an entire crate.
+- `excluded_paths = ["my_crate::legacy_io", "my_crate::bin::migrate"]` —
+  exempts named modules and everything nested beneath them, leaving the rest of
+  the crate under the capability policy.
+
+A single-crate repository with one ambient corner should prefer
+`excluded_paths` over `excluded_crates`: the finer key is what keeps the policy
+decision visible and reviewable, and it is the difference between exempting a
+module and abandoning the lint for the whole crate. Both keys take Rust
+identifiers with underscores, not Cargo package names with hyphens.
+
+Getting `excluded_paths` entries right:
+
+- Each entry is anchored at the **crate identifier** (`my_app::legacy_io`),
+  not at the `crate::` keyword and not at the workspace root.
+- Matching is **segment-wise**, so `my_app::legacy_io` exempts
+  `my_app::legacy_io` and `my_app::legacy_io::reader`, but never the sibling
+  `my_app::legacy_io_utils`. A `crate::`-prefixed entry silently matches
+  nothing.
+- Malformed entries are discarded rather than repaired, and a warning naming
+  the entry is logged under the `no_std_fs_operations` target. Rejection is
+  deliberate: `SimplePath::parse` drops empty segments, so a trailing separator
+  (`my_app::`) would otherwise collapse to the crate-root prefix `my_app` and
+  disable the lint across the entire crate.
+- Entries name the **enclosing item** of the usage, so an exclusion only bites
+  when every `std::fs` call in that item is genuinely ambient. Check for
+  capability-scoped siblings that the entry would also silence.
+- `excluded_paths` is consulted only for genuine `std::fs` hits, and only when
+  the key is non-empty, so it costs nothing on the common path.
+
+**Choosing between an `excluded_paths` entry and a boundary crate.** Both are
+`dylint.toml` exclusions; the discriminator is whether the ambient code sits
+below its callers or alongside them.
+
+- Reach for `excluded_paths` when the ambient code already sits **below** its
+  callers — a CLI leaf module that resolves config or probes the PATH. Nothing
+  needs to move; the entry names an existing module, and callers keep their
+  ordinary signatures.
+- Reach for a boundary crate when the ambient code sits **alongside** the
+  capability-governed code and would otherwise force an ambient `Dir` handle
+  through callers that have no business holding one. The crate gives the policy
+  a name and a place to document itself.
+
+Naming the repository's existing shape is most of the decision. Do not move
+working code into a new crate merely to avoid a config entry; conversely, do
+not stretch `excluded_paths` far up the tree just to avoid a small crate.
+
+Sanctioned `excluded_crates` categories, each with a rationale comment:
 
 - `build_script_build` — build scripts get ambient paths from Cargo.
 - Test-support crates and integration-test crates that stage fixtures
@@ -163,7 +218,15 @@ Always finish with the repository's full gate suite, not just the Whitaker run.
 ## What not to do
 
 - Do not add `#[allow]`/`#[expect]` for `no_std_fs_operations` — they
-  do not work (issue #270) and reviewers will flag them.
+  do not work (issue #270) and reviewers will flag them. Reach for
+  `excluded_paths`, then `excluded_crates`.
+- Do not reach for `excluded_crates` on a multi-crate workspace when an
+  `excluded_paths` entry names the ambient module. Exempting the whole crate
+  abandons the capability policy everywhere else in it, and the wider key is
+  much harder to narrow later than the narrower key is to widen.
+- Do not write `excluded_paths` entries as `crate::foo::bar` or as bare file
+  paths. Entries are crate-identifier-anchored module paths, and a
+  `crate::`-prefixed entry matches nothing while looking correct.
 - Do not soft-skip the suite ("run whitaker if installed"): a gate
   that cannot fail is not a gate. The Makefile invocation should be
   unconditional, with the binary overridable via a variable
