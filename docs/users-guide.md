@@ -746,9 +746,26 @@ policy.
 > package names (hyphens). For example, use `my_cli_app` rather than
 > `my-cli-app`, and `my_app::legacy_io` rather than `my-app::legacy_io`.
 >
-> **Tip:** For an ad hoc, single-site exemption that travels with the code, a
-> standard `#[allow(no_std_fs_operations)]` attribute on the item or module
-> also works, since the lint honours Rust's lint-level attributes.
+> **Note:** In-source `#[allow]` and `#[expect]` attributes are **not**
+> honoured by this lint
+> ([issue #270](https://github.com/leynos/whitaker/issues/270)). Annotating an
+> item with `#[allow(no_std_fs_operations)]` leaves the diagnostic in place,
+> and using `#[expect]` additionally reports an unfulfilled lint expectation
+> for the same site. The lint emits through
+> `LintContext::emit_span_lint`, which resolves the lint level at the
+> visitor's current lint node rather than at the node that owns the offending
+> code. Scope a suppression through `excluded_paths` instead; for a
+> `which`-style PATH resolver, a single entry such as `my_app::paths` confines
+> the exemption to the module that probes the system PATH.
+>
+> **Note:** A malformed `excluded_paths` entry is discarded rather than
+> repaired, and a warning naming the rejected entry is logged under the
+> `no_std_fs_operations` target. Malformed means an empty string, a bare
+> `::`, or an entry with leading, trailing, or repeated separators. Rejection
+> matters most for a trailing separator: `my_app::` would otherwise collapse
+> to the crate-root prefix `my_app` and disable the lint across the whole
+> crate, which is the opposite of the narrow, module-scoped exemption the
+> entry was meant to express.
 
 **How to fix:** Replace `std::fs` with `cap_std`:
 
