@@ -301,14 +301,13 @@ def _assert_codescene_check(coverage_job: Mapping[str, Any]) -> None:
     ), "the CodeScene step must guard its pull-request secret"
     assert check_step.get("uses") == (
         "leynos/shared-actions/.github/actions/upload-codescene-coverage@"
-        "7cb894fe62c40951cccf33819548095e64a1291e"
+        "a5765019912a8ab6882b12db049c7cde635f3a85"
     ), "coverage-check must use the proven CodeScene action pin"
     assert check_step.get("with") == {
         "format": "lcov",
         "mode": "check",
         "project-url": "https://api.codescene.io/v2/projects/71836",
         "access-token": "${{ env.CS_ACCESS_TOKEN }}",
-        "installer-checksum": "${{ vars.CODESCENE_CLI_SHA256 }}",
     }, "coverage-check must pass the canonical project and check-mode inputs"
 
 
