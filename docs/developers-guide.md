@@ -2531,6 +2531,8 @@ Whitaker data directory keyed by toolchain and target:
 - `--skip-deps` — Skip `cargo-dylint`/`dylint-link` installation check
 - `--skip-wrapper` — Skip wrapper script generation
 - `--no-update` — Don't update existing repository clone
+- `--suite-version REF` (alias `--suite-ref`) — Build the suite from a
+  validated tag, branch or commit reference rather than the default branch tip
 
 ### Using installed lints
 
@@ -2565,6 +2567,53 @@ This skips building entirely, providing faster lint runs during development.
 `installer/src/main.rs` coordinates the installation workflow through a small
 set of focused private helpers. Understanding them is useful when extending the
 installation pipeline.
+
+#### Public Git operation APIs
+
+`SuiteRef` is the validated reference type used by the installer. The canonical
+CLI spelling is `--suite-version REF`; `--suite-ref` is its compatibility
+alias. It accepts a tag, branch or commit reference and rejects empty,
+option-looking, invalid or control-character values before they reach Git. Do
+not introduce a new `--ref` spelling for this interface.
+
+`CommitSha` validates Git commit provenance as a full 40-character lowercase
+hexadecimal object ID. It is re-exported by the Git adapter for callers that
+need a checked commit identity rather than an arbitrary commit-ish.
+
+`checkout_ref(repo, reference)` resolves a suite reference locally first. It
+checks the remote-tracking branch, tag and local commit candidates, preserving
+offline use when the requested object is already present. If none resolves, it
+fetches from `origin`, retries resolution, and then checks out the selected
+commit detached. The detached checkout is intentional: it makes the chosen
+commit an immutable build input rather than a branch that a later pull could
+move.
+
+`git::command::run_git_with_timeout` is owned by the Git adapter and is the
+only permitted path for Git subprocess invocation; public operations compose
+through it.
+
+Workspace orchestration passes a `WorkspacePlan` to
+`ensure_workspace(dirs, plan)`:
+
+```rust
+pub struct WorkspacePlan {
+    pub should_update: bool,
+    pub suite_ref: Option<SuiteRef>,
+}
+
+pub fn ensure_workspace(
+    dirs: &dyn BaseDirs,
+    plan: &WorkspacePlan,
+) -> Result<Utf8PathBuf>;
+```
+
+When a plan reuses an existing managed clone, an unpinned update or reuse first
+checks for a detached `HEAD`. If the previous pinned checkout left it detached,
+`restore_default_branch` reattaches the branch named by `origin/HEAD` before a
+pull or unpinned reuse. A pinned plan leaves the managed clone detached after
+checking out its requested reference. A pin is refused when the current
+directory is itself a Whitaker workspace, because that would mutate the user's
+working tree.
 
 #### `resolve_additional_components`
 
