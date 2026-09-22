@@ -115,6 +115,19 @@ _GLOB_CHARACTERS: typ.Final[frozenset[str]] = frozenset("*?[]!")
 _UNRESOLVED_MARKERS: typ.Final[tuple[str, ...]] = ("$", "~")
 
 
+def _is_a_pattern_or_expression(entry: str) -> bool:
+    """Return whether an entry's meaning is decided by a glob or at run time."""
+    return bool(_GLOB_CHARACTERS & set(entry)) or entry.startswith(_UNRESOLVED_MARKERS)
+
+
+def _descends_from_the_workspace(entry: str) -> bool:
+    """Return whether an entry is a relative path below the workspace root."""
+    # `.` and `./` have no parts left once pathlib drops the `.` component, and
+    # an absolute path may be the workspace or one of its ancestors.
+    path = pathlib.PurePosixPath(entry)
+    return bool(path.parts) and not path.is_absolute() and ".." not in path.parts
+
+
 def _could_hold_the_report(entry: str) -> bool:
     """Return whether one `path` entry could carry the coverage report."""
     # Fails closed, because the question is whether the report *can* leave the
@@ -125,13 +138,9 @@ def _could_hold_the_report(entry: str) -> bool:
     cleaned = entry.strip()
     if not cleaned or COVERAGE_REPORT_PATH in cleaned:
         return True
-    if _GLOB_CHARACTERS & set(cleaned) or cleaned.startswith(_UNRESOLVED_MARKERS):
-        return True
-    # Only a relative path descending from the workspace is concrete. `.` and
-    # `./` have no parts left once pathlib drops the `.` component, and an
-    # absolute path may be the workspace or one of its ancestors.
-    path = pathlib.PurePosixPath(cleaned)
-    return not path.parts or path.is_absolute() or ".." in path.parts
+    return _is_a_pattern_or_expression(cleaned) or not _descends_from_the_workspace(
+        cleaned
+    )
 
 
 def publishes_the_coverage_report(step: dict[str, typ.Any]) -> bool:
@@ -205,39 +214,87 @@ def _iter_strings(value: object) -> cabc.Iterator[str]:
             return
 
 
+def _keeps_the_generated_archive(step: dict[str, typ.Any]) -> bool:
+    """Return whether a step calls the coverage action without the opt-out."""
+    return action_of(step) == GENERATE_COVERAGE_ACTION and not (
+        declines_the_generated_report_archive(step)
+    )
+
+
+def _runs_the_coverage_command(step: dict[str, typ.Any]) -> bool:
+    """Return whether a step's command names the CodeScene client."""
+    run = step.get("run")
+    return isinstance(run, str) and COVERAGE_COMMAND in run
+
+
 def _step_offences(where: str, step: dict[str, typ.Any]) -> list[str]:
     """Return every prohibited reference one step makes."""
-    offences: list[str] = []
-    if publishes_the_coverage_report(step):
-        offences.append(f"{where} publishes the coverage report as an artefact")
-    if action_of(step) == GENERATE_COVERAGE_ACTION and not (
-        declines_the_generated_report_archive(step)
-    ):
-        offences.append(
-            f"{where} invokes the coverage action without declining its own "
-            f"archive ({PUBLICATION_OPT_OUT_INPUT}: {PUBLICATION_OPT_OUT_VALUE})"
-        )
-    if action_of(step) == UPLOAD_COVERAGE_ACTION:
-        offences.append(f"{where} invokes the CodeScene coverage action")
-    run = step.get("run")
-    if isinstance(run, str) and COVERAGE_COMMAND in run:
-        offences.append(f"{where} runs a {COVERAGE_COMMAND} command")
-    return offences
+    checks = (
+        (
+            publishes_the_coverage_report(step),
+            "publishes the coverage report as an artefact",
+        ),
+        (
+            _keeps_the_generated_archive(step),
+            "invokes the coverage action without declining its own archive "
+            f"({PUBLICATION_OPT_OUT_INPUT}: {PUBLICATION_OPT_OUT_VALUE})",
+        ),
+        (
+            action_of(step) == UPLOAD_COVERAGE_ACTION,
+            "invokes the CodeScene coverage action",
+        ),
+        (_runs_the_coverage_command(step), f"runs a {COVERAGE_COMMAND} command"),
+    )
+    return [f"{where} {message}" for found, message in checks if found]
 
 
-def _job_offences(where: str, job: dict[str, typ.Any]) -> list[str]:
-    """Return every prohibited reference one job makes, its steps included."""
+def _forwards_every_secret(job: dict[str, typ.Any]) -> bool:
+    """Return whether a job hands its callee every secret with `inherit`."""
     # `secrets: inherit` names nothing, so a scan for the credential's name
     # finds no mention of it while the called workflow receives it. Forwarding
     # it by name is already caught, because the name is a parsed value.
     forwarded = job.get("secrets")
+    return isinstance(forwarded, str) and forwarded.strip() == INHERITED_SECRETS
+
+
+def _job_offences(where: str, job: dict[str, typ.Any]) -> list[str]:
+    """Return every prohibited reference one job makes, its steps included."""
     offences = (
         [f"{where} forwards every secret with `secrets: {INHERITED_SECRETS}`"]
-        if isinstance(forwarded, str) and forwarded.strip() == INHERITED_SECRETS
+        if _forwards_every_secret(job)
         else []
     )
     for index, step in enumerate(_steps_of(job)):
         offences.extend(_step_offences(f"{where}: step {index}", step))
+    return offences
+
+
+def _jobs_of(document: dict[str, typ.Any]) -> list[tuple[str, dict[str, typ.Any]]]:
+    """Return a workflow's jobs that declare a usable mapping, by name."""
+    declared = document.get("jobs")
+    jobs = declared.items() if isinstance(declared, dict) else ()
+    return [(name, job) for name, job in jobs if isinstance(job, dict)]
+
+
+def _text_offences(
+    name: str, document: dict[str, typ.Any], raw_text: str
+) -> list[str]:
+    """Return every credential or host mention, raw or parsed."""
+    # The raw text is read as well as the parsed values, so a reference inside
+    # a comment, or in a shape the parser flattened away, is still reported.
+    raw_mentions = (
+        (
+            CREDENTIAL_ENVIRONMENT_KEY in raw_text,
+            f"raw text references {CREDENTIAL_ENVIRONMENT_KEY}",
+        ),
+        (CODESCENE_HOST in raw_text.casefold(), f"raw text names {CODESCENE_HOST}"),
+    )
+    offences = [f"{name}: {message}" for found, message in raw_mentions if found]
+    offences.extend(
+        f"{name}: parsed value references {CREDENTIAL_ENVIRONMENT_KEY}"
+        for value in _iter_strings(document)
+        if CREDENTIAL_ENVIRONMENT_KEY in value
+    )
     return offences
 
 
@@ -262,21 +319,9 @@ def coverage_surface_offenders(
     list[str]
         One description per violation, empty when the workflow is clean.
     """
-    offenders: list[str] = []
-    declared = document.get("jobs")
-    for job_name, definition in (declared if isinstance(declared, dict) else {}).items():
-        if not isinstance(definition, dict):
-            continue
-        offenders.extend(_job_offences(f"{name}:{job_name}", definition))
-    # The raw text is read as well as the parsed values, so a reference inside
-    # a comment, or in a shape the parser flattened away, is still reported.
-    if CREDENTIAL_ENVIRONMENT_KEY in raw_text:
-        offenders.append(f"{name}: raw text references {CREDENTIAL_ENVIRONMENT_KEY}")
-    if CODESCENE_HOST in raw_text.casefold():
-        offenders.append(f"{name}: raw text names {CODESCENE_HOST}")
-    offenders.extend(
-        f"{name}: parsed value references {CREDENTIAL_ENVIRONMENT_KEY}"
-        for value in _iter_strings(document)
-        if CREDENTIAL_ENVIRONMENT_KEY in value
-    )
-    return offenders
+    offenders = [
+        offence
+        for job_name, job in _jobs_of(document)
+        for offence in _job_offences(f"{name}:{job_name}", job)
+    ]
+    return offenders + _text_offences(name, document, raw_text)

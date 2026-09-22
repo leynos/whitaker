@@ -180,20 +180,22 @@ def test_a_document_with_nothing_prohibited_is_never_accused(
     assert not offenders, f"a clean document must pass; the reading gave {offenders}"
 
 
-@settings(max_examples=128, derandomize=True)
-@given(
-    surface=_PROHIBITED_STEPS,
-    before=st.lists(_CLEAN_STEP, max_size=3),
-    after=st.lists(_CLEAN_STEP, max_size=3),
-    clean_jobs=st.lists(st.lists(_CLEAN_STEP, max_size=2), max_size=3),
-    job_index=st.integers(min_value=0, max_value=3),
+#: Where a step is placed: the clean steps around it, the clean jobs around its
+#: own, and its job's position among them.
+_PLACEMENT: typ.Final[st.SearchStrategy[dict[str, typ.Any]]] = st.fixed_dictionaries(
+    {
+        "before": st.lists(_CLEAN_STEP, max_size=3),
+        "after": st.lists(_CLEAN_STEP, max_size=3),
+        "clean_jobs": st.lists(st.lists(_CLEAN_STEP, max_size=2), max_size=3),
+        "job_index": st.integers(min_value=0, max_value=3),
+    }
 )
+
+
+@settings(max_examples=128, derandomize=True)
+@given(surface=_PROHIBITED_STEPS, placement=_PLACEMENT)
 def test_every_prohibited_step_is_found_wherever_it_sits(
-    surface: tuple[dict[str, object], str],
-    before: list[dict[str, str]],
-    after: list[dict[str, str]],
-    clean_jobs: list[list[dict[str, str]]],
-    job_index: int,
+    surface: tuple[dict[str, object], str], placement: dict[str, typ.Any]
 ) -> None:
     """Neither the surface nor its position may decide whether it is noticed.
 
@@ -202,15 +204,15 @@ def test_every_prohibited_step_is_found_wherever_it_sits(
     repository's own workflows and miss a surface buried among honest steps.
     """
     step, expected = surface
-    steps = [*before, step, *after]
+    steps = [*placement["before"], step, *placement["after"]]
     document = {
         "on": {"pull_request": None},
-        "jobs": _jobs(clean_jobs, job_index, steps),
+        "jobs": _jobs(placement["clean_jobs"], placement["job_index"], steps),
     }
     offenders = coverage_surface_offenders("scratch.yml", document, "")
     assert any(expected in offence for offence in offenders), (
-        f"{step} must be reported as {expected!r} among {len(before)} steps "
-        f"before it and {len(after)} after; the reading gave {offenders}"
+        f"{step} must be reported as {expected!r} at {placement}; the reading "
+        f"gave {offenders}"
     )
 
 

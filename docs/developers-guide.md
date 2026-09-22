@@ -252,7 +252,7 @@ concurrency group that cancels a publisher run: a cancelled run abandons its
 upload and the cache state it writes, while overlapping runs that both finish
 leave the later push's state in place.
 
-Every workflow contract parses YAML through `parse_workflow` in
+Every workflow contract reads a workflow file through `parse_workflow` in
 `tests/workflow_contracts/ubicloud_workflow_support.py`, a `SafeLoader` that
 refuses a mapping declaring one key twice. PyYAML otherwise keeps the last
 value silently, so a contract reading a job that declares `runs-on` twice would
