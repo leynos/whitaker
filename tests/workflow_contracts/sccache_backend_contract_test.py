@@ -199,6 +199,53 @@ def test_local_backend_lanes_restore_the_directory_they_are_pointed_at() -> None
         )
 
 
+def _jobs_with_steps() -> list[tuple[str, str, dict[str, Any]]]:
+    """Return every job that declares its own step list.
+
+    A job that calls a reusable workflow has none, and so can own no cache
+    step here.
+    """
+    return [
+        (workflow_name, job_name, job)
+        for workflow_name, job_name, job in all_jobs()
+        if isinstance(job.get("steps"), list)
+    ]
+
+
+def _owns_the_directory(step: dict[str, Any]) -> bool:
+    """Return whether one cache step claims the local sccache directory."""
+    return SCCACHE_DIRECTORY in cache_paths(step)
+
+
+def _directory_writers() -> set[str]:
+    """Return ``workflow:job`` for every job that saves the sccache directory."""
+    return {
+        f"{workflow_name}:{job_name}"
+        for workflow_name, job_name, job in _jobs_with_steps()
+        if any(_owns_the_directory(step) for step in save_steps(job))
+    }
+
+
+def _directory_readers() -> dict[str, list[str]]:
+    """Return each restored key family mapped to the jobs that restore it.
+
+    Fails where a restore names a family nobody has reviewed, because the
+    writer lookup below could not then say anything about it either.
+    """
+    readers: dict[str, list[str]] = {}
+    for workflow_name, job_name, job in _jobs_with_steps():
+        for step in restore_steps(job):
+            if not _owns_the_directory(step):
+                continue
+            family = key_family(str(step["with"]["key"]), CACHE_KEY_WRITERS)
+            assert family is not None, (
+                f"{workflow_name}:{job_name} restores {SCCACHE_DIRECTORY} under "
+                "an unreviewed key family"
+            )
+            readers.setdefault(family, []).append(f"{workflow_name}:{job_name}")
+    return readers
+
+
 def test_every_restored_compiler_cache_directory_has_a_writer() -> None:
     """A directory nothing saves is read empty on every run, forever.
 
@@ -206,32 +253,49 @@ def test_every_restored_compiler_cache_directory_has_a_writer() -> None:
     family whose only writer was a `workflow_dispatch` run on `main`, so an
     ordinary pull request compiled almost everything.
     """
-    written: set[str] = set()
-    restored: dict[str, list[str]] = {}
-    for workflow_name, job_name, job in all_jobs():
-        # A job that calls a reusable workflow has no step list of its own, and
-        # so cannot own a cache directory here.
-        if not isinstance(job.get("steps"), list):
-            continue
-        for step in save_steps(job):
-            if SCCACHE_DIRECTORY in cache_paths(step):
-                written.add(f"{workflow_name}:{job_name}")
-        for step in restore_steps(job):
-            if SCCACHE_DIRECTORY not in cache_paths(step):
-                continue
-            family = key_family(str(step["with"]["key"]), CACHE_KEY_WRITERS)
-            assert family is not None, (
-                f"{workflow_name}:{job_name} restores {SCCACHE_DIRECTORY} under "
-                "an unreviewed key family"
-            )
-            restored.setdefault(family, []).append(f"{workflow_name}:{job_name}")
-
-    for family, readers in sorted(restored.items()):
+    written = _directory_writers()
+    for family, readers in sorted(_directory_readers().items()):
         writer = CACHE_KEY_WRITERS[family]
         assert any(entry.endswith(f":{writer}") for entry in written), (
             f"{family} is restored by {readers} but {writer} saves no "
             f"{SCCACHE_DIRECTORY} archive, so every restore reads nothing"
         )
+
+
+#: The one job exempt from the rule below. `windows-compat` is GitHub-hosted,
+#: runs no selector step, and declares its own reviewed Actions-backend arm;
+#: `runner_placement_contract_test` holds its shape instead.
+SELECTOR_EXEMPT_JOBS: frozenset[tuple[str, str]] = frozenset(
+    {("ci.yml", "windows-compat")}
+)
+
+#: Variables only `scripts/select-sccache-backend.sh` may export. Either one
+#: set elsewhere configures a second backend the script cannot see.
+BACKEND_VARIABLES: tuple[str, ...] = ("SCCACHE_GHA_ENABLED", "SCCACHE_DIR")
+
+
+def _backend_variables_set_outside_the_selector() -> list[str]:
+    """Return every place a backend variable is declared, with its scope.
+
+    For example, a workflow that added `SCCACHE_DIR` to its top-level
+    environment yields ``"ci.yml:linux-full sets SCCACHE_DIR at workflow
+    level"``.
+    """
+    offenders: list[str] = []
+    for workflow_name, job_name, job in _jobs_with_steps():
+        if (workflow_name, job_name) in SELECTOR_EXEMPT_JOBS:
+            continue
+        scopes = (
+            ("workflow", _workflow_env(workflow_name)),
+            ("job", job.get("env") or {}),
+        )
+        offenders.extend(
+            f"{workflow_name}:{job_name} sets {variable} at {scope} level"
+            for scope, env in scopes
+            for variable in BACKEND_VARIABLES
+            if variable in env
+        )
+    return offenders
 
 
 def test_no_lane_configures_both_backends_at_once() -> None:
@@ -241,18 +305,8 @@ def test_no_lane_configures_both_backends_at_once() -> None:
     workflow or job that also sets one has configured a second backend the
     script cannot see.
     """
-    for workflow_name, job_name, job in all_jobs():
-        for scope, env in (
-            ("workflow", _workflow_env(workflow_name)),
-            ("job", job.get("env") or {}),
-        ):
-            for variable in ("SCCACHE_GHA_ENABLED", "SCCACHE_DIR"):
-                if workflow_name == "ci.yml" and job_name == "windows-compat":
-                    # GitHub-hosted, no selector step, and its own reviewed
-                    # arm; `runner_placement_contract_test` holds its shape.
-                    continue
-                assert variable not in env, (
-                    f"{workflow_name}:{job_name} sets {variable} at {scope} "
-                    "level; scripts/select-sccache-backend.sh must be the only "
-                    "exporter, or two backends end up configured"
-                )
+    offenders = _backend_variables_set_outside_the_selector()
+    assert not offenders, (
+        "scripts/select-sccache-backend.sh must be the only exporter of the "
+        f"backend variables, but {offenders}"
+    )
