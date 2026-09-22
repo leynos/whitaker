@@ -1,12 +1,18 @@
 name: Coverage (main)
 
 # CodeScene accepts `cs-coverage upload` only for analysed branches, so
-# main-branch coverage is uploaded here on push to main. Pull requests do
-# not upload; the changed-line gate (`cs-coverage check`) is deferred
-# until CodeScene enables the coverage gate for this project (see the note
-# in ci.yml). `workflow_dispatch` allows a manual re-run: automerge merges
-# performed with GITHUB_TOKEN do not fire push-event workflows, so
-# dispatch is the fallback path for uploading coverage from main.
+# main-branch coverage is uploaded here on push to main. This workflow owns
+# the CodeScene surface entirely: no pull-request lane uploads, runs the
+# changed-line check, or holds the credential (see the note in ci.yml and
+# "Who may talk to CodeScene" in the developers' guide). `workflow_dispatch`
+# allows a manual re-run: automerge merges performed with GITHUB_TOKEN do
+# not fire push-event workflows, so dispatch is the fallback path for
+# uploading coverage from main, and the upload step's ref test keeps a
+# dispatch from any other branch from uploading.
+#
+# No concurrency group cancels a run here. A cancelled run abandons its
+# upload and the cache state it writes; runs that overlap both finish, and
+# the later push's state wins.
 #
 # Coverage is generated via `make coverage`, which reuses the `make test`
 # recipe (same crate-exclusion set and prefer-dynamic RUSTFLAGS) with a
@@ -181,7 +187,9 @@ jobs:
       - name: Upload coverage data to CodeScene
         env:
           CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
-        if: env.CS_ACCESS_TOKEN != ''
+        # `workflow_dispatch` can name any branch, so the trigger filter does
+        # not confine this upload to the trunk; the ref test here does.
+        if: env.CS_ACCESS_TOKEN != '' && github.ref == 'refs/heads/main'
         uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@a5765019912a8ab6882b12db049c7cde635f3a85
         with:
           format: lcov

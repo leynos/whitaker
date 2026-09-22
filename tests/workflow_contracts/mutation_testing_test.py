@@ -21,7 +21,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-import yaml
+from ubicloud_workflow_support import parse_workflow
 
 WORKFLOW_PATH = (
     Path(__file__).resolve().parents[2] / ".github" / "workflows" / "mutation-testing.yml"
@@ -47,7 +47,7 @@ EXPECTED_WITH = {
 
 def _load() -> dict[str, object]:
     """Parse the workflow file."""
-    return yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8"))
+    return parse_workflow(WORKFLOW_PATH.read_text(encoding="utf-8"))
 
 
 def _triggers(workflow: dict[str, object]) -> dict[str, object]:

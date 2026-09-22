@@ -5,9 +5,10 @@ Pull-request CI here measures coverage and stops. `make coverage` writes
 the ratchet half of CV-005 is deferred, for the reason the developers' guide
 gives under "The half of CV-005 that is deferred here". What the lane must not
 do is publish that report as an artefact, invoke the CodeScene coverage action,
-run a `cs-coverage` command, or carry the credential either of those needs.
-Those belong to `coverage-main.yml`, which is the only writer of persistent
-coverage state.
+run a `cs-coverage` command, name CodeScene's host, or carry the credential any
+of those needs, whether by name or by `secrets: inherit`. Those belong to
+`coverage-main.yml`, which is the only writer of persistent coverage state.
+Which workflows a pull request reaches is `pull_request_reach`'s to say.
 
 `GENERATE_COVERAGE_ACTION` is named below even though no lane here calls it.
 The rule about declining its archive has to be in force before the first caller
@@ -29,6 +30,7 @@ Run via ``make test-workflow-contracts``.
 """
 
 import collections.abc as cabc
+import pathlib
 import typing as typ
 
 
@@ -66,22 +68,13 @@ COVERAGE_COMMAND: typ.Final[str] = "cs-coverage"
 #: The report the coverage action writes, and the one CodeScene is sent.
 COVERAGE_REPORT_PATH: typ.Final[str] = "lcov.info"
 
-PULL_REQUEST_TRIGGER: typ.Final[str] = "pull_request"
+#: CodeScene's host. A pull-request lane has no reason to name it, and a plain
+#: `curl` to it names neither the action nor the command above.
+CODESCENE_HOST: typ.Final[str] = "codescene.io"
 
-#: The variant that runs in the base repository's context and therefore *can*
-#: read its secrets, unlike `pull_request`. A coverage step here would be worse
-#: than one in an ordinary pull-request job, not equivalent to it.
-PULL_REQUEST_TARGET_TRIGGER: typ.Final[str] = "pull_request_target"
-
-#: The trigger that resumes a run with the base repository's privileges.
-SUBMISSION_TRIGGER: typ.Final[str] = "workflow_run"
-
-REACHABLE_TRIGGERS: typ.Final[tuple[str, ...]] = (
-    PULL_REQUEST_TRIGGER,
-    PULL_REQUEST_TARGET_TRIGGER,
-    SUBMISSION_TRIGGER,
-)
-
+#: The forwarding form that hands a called workflow every secret the caller
+#: holds while naming none of them.
+INHERITED_SECRETS: typ.Final[str] = "inherit"
 
 def _steps_of(job: dict[str, typ.Any]) -> list[dict[str, typ.Any]]:
     """Return a job's step list, or none when it declares an unusable shape."""
@@ -112,61 +105,14 @@ def action_of(step: dict[str, typ.Any]) -> str:
     return uses.split("@", 1)[0] if isinstance(uses, str) else ""
 
 
-def declares_trigger(document: dict[str, typ.Any], trigger: str) -> bool:
-    """Return whether a parsed workflow declares the given trigger.
-
-    Parameters
-    ----------
-    document : dict[str, typ.Any]
-        One parsed workflow document.
-    trigger : str
-        The trigger name, such as `pull_request`.
-
-    Returns
-    -------
-    bool
-        True when the workflow declares it in any of the scalar, sequence or
-        mapping forms `on:` accepts.
-    """
-    # PyYAML reads a bare `on:` key as the boolean True, and `on:` accepts a
-    # scalar, a sequence or a mapping. All four shapes answer the same
-    # question, and a reader that knew only the mapping would call a
-    # `on: pull_request` workflow unreachable.
-    declared = document.get("on", document.get(True))
-    match declared:
-        case str():
-            return declared == trigger
-        case list():
-            return trigger in declared
-        case dict():
-            return trigger in declared
-        case _:
-            return False
-
-
-def is_reachable_by_a_pull_request(document: dict[str, typ.Any]) -> bool:
-    """Return whether a pull request can cause this workflow to run.
-
-    Parameters
-    ----------
-    document : dict[str, typ.Any]
-        One parsed workflow document.
-
-    Returns
-    -------
-    bool
-        True when the workflow declares `pull_request`, `pull_request_target`
-        or `workflow_run`.
-    """
-    # All three count. `pull_request_target` and `workflow_run` resume in the
-    # base repository's context, so a coverage step under either reads a
-    # credential in a run a pull request's contents influenced.
-    return any(declares_trigger(document, name) for name in REACHABLE_TRIGGERS)
-
-
 #: Characters that make a path a pattern rather than a name. A pattern may
 #: match the report however innocent it looks, so one is never cleared.
 _GLOB_CHARACTERS: typ.Final[frozenset[str]] = frozenset("*?[]!")
+
+#: Prefixes whose value is decided at run time. `${{ github.workspace }}`,
+#: `$GITHUB_WORKSPACE` and `~` all resolve to the workspace or above it, and
+#: the reader cannot tell which a given expression names, so none is cleared.
+_UNRESOLVED_MARKERS: typ.Final[tuple[str, ...]] = ("$", "~")
 
 
 def _could_hold_the_report(entry: str) -> bool:
@@ -179,10 +125,13 @@ def _could_hold_the_report(entry: str) -> bool:
     cleaned = entry.strip()
     if not cleaned or COVERAGE_REPORT_PATH in cleaned:
         return True
-    if _GLOB_CHARACTERS & set(cleaned):
+    if _GLOB_CHARACTERS & set(cleaned) or cleaned.startswith(_UNRESOLVED_MARKERS):
         return True
-    parts = [part for part in cleaned.split("/") if part not in ("", ".")]
-    return not parts or ".." in parts
+    # Only a relative path descending from the workspace is concrete. `.` and
+    # `./` have no parts left once pathlib drops the `.` component, and an
+    # absolute path may be the workspace or one of its ancestors.
+    path = pathlib.PurePosixPath(cleaned)
+    return not path.parts or path.is_absolute() or ".." in path.parts
 
 
 def publishes_the_coverage_report(step: dict[str, typ.Any]) -> bool:
@@ -276,6 +225,22 @@ def _step_offences(where: str, step: dict[str, typ.Any]) -> list[str]:
     return offences
 
 
+def _job_offences(where: str, job: dict[str, typ.Any]) -> list[str]:
+    """Return every prohibited reference one job makes, its steps included."""
+    # `secrets: inherit` names nothing, so a scan for the credential's name
+    # finds no mention of it while the called workflow receives it. Forwarding
+    # it by name is already caught, because the name is a parsed value.
+    forwarded = job.get("secrets")
+    offences = (
+        [f"{where} forwards every secret with `secrets: {INHERITED_SECRETS}`"]
+        if isinstance(forwarded, str) and forwarded.strip() == INHERITED_SECRETS
+        else []
+    )
+    for index, step in enumerate(_steps_of(job)):
+        offences.extend(_step_offences(f"{where}: step {index}", step))
+    return offences
+
+
 def coverage_surface_offenders(
     name: str, document: dict[str, typ.Any], raw_text: str
 ) -> list[str]:
@@ -290,7 +255,7 @@ def coverage_surface_offenders(
     raw_text : str
         The workflow's raw text. The credential is matched here as well as in
         the parsed values, so a reference inside a comment or an unparsed shape
-        is still reported.
+        is still reported, and so is CodeScene's host in any letter case.
 
     Returns
     -------
@@ -302,12 +267,13 @@ def coverage_surface_offenders(
     for job_name, definition in (declared if isinstance(declared, dict) else {}).items():
         if not isinstance(definition, dict):
             continue
-        for index, step in enumerate(_steps_of(definition)):
-            offenders.extend(_step_offences(f"{name}:{job_name}: step {index}", step))
+        offenders.extend(_job_offences(f"{name}:{job_name}", definition))
     # The raw text is read as well as the parsed values, so a reference inside
     # a comment, or in a shape the parser flattened away, is still reported.
     if CREDENTIAL_ENVIRONMENT_KEY in raw_text:
         offenders.append(f"{name}: raw text references {CREDENTIAL_ENVIRONMENT_KEY}")
+    if CODESCENE_HOST in raw_text.casefold():
+        offenders.append(f"{name}: raw text names {CODESCENE_HOST}")
     offenders.extend(
         f"{name}: parsed value references {CREDENTIAL_ENVIRONMENT_KEY}"
         for value in _iter_strings(document)

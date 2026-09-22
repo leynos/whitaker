@@ -226,9 +226,37 @@ to avoid reusing one another's build-script output.
 `coverage-main.yml` owns the CodeScene surface entirely. It runs on a push to
 the trunk, it uploads the report, and it is the only workflow here that may
 hold the CodeScene credential. No pull-request lane may invoke the CodeScene
-action, run a `cs-coverage` command, or carry that credential, and
-`tests/workflow_contracts/coverage_boundary_test.py` enforces all three over
+action, run a `cs-coverage` command, name the `codescene.io` host, or carry
+that credential, whether by name or through `secrets: inherit`, and
+`tests/workflow_contracts/coverage_boundary_test.py` enforces all of them over
 every workflow a pull request can reach.
+
+"Every workflow a pull request can reach" is a closure, not a trigger list.
+`tests/workflow_contracts/pull_request_reach.py` starts from the workflows
+declaring `pull_request`, `pull_request_target` or `workflow_run`, in any of
+the scalar, sequence or mapping forms `on:` accepts, and adds every workflow of
+this repository they call through a job-level `uses:`, transitively. A workflow
+declaring only `workflow_call` still runs on a pull request when one of those
+calls it, and `secrets: inherit` hands it the credential. A local call is
+recognized by its shape: the reference is read as a path and must name a file
+directly under `.github/workflows/`, so no list of spellings has to be kept.
+
+The publisher answers `workflow_dispatch` as well as a push to `main`, and a
+dispatch can name any branch, so the trigger filter does not confine the
+upload. The upload step's condition carries `github.ref == 'refs/heads/main'`
+as a conjunct, and `tests/workflow_contracts/publisher_guard_test.py` reads the
+condition as a conjunction: it splits on `&&` and refuses any `||` outside a
+quoted string, because a trailing `|| github.event_name == 'workflow_dispatch'`
+would contain the ref test and make it optional. The same contract refuses a
+concurrency group that cancels a publisher run: a cancelled run abandons its
+upload and the cache state it writes, while overlapping runs that both finish
+leave the later push's state in place.
+
+Every workflow contract parses YAML through `parse_workflow` in
+`tests/workflow_contracts/ubicloud_workflow_support.py`, a `SafeLoader` that
+refuses a mapping declaring one key twice. PyYAML otherwise keeps the last
+value silently, so a contract reading a job that declares `runs-on` twice would
+judge a document with one of the two labels already discarded.
 
 The rule is CV-005, and the reason is that a step needing an external service
 and a secret turns an unrelated pull request red when the service is

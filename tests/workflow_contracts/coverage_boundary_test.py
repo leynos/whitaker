@@ -17,11 +17,12 @@ the rule would pass with every detector deleted.
 Run via ``make test-workflow-contracts``.
 """
 
+import functools
 import typing as typ
 
 import pytest
-import yaml
 from coverage_boundary import (
+    CODESCENE_HOST,
     COVERAGE_COMMAND,
     CREDENTIAL_ENVIRONMENT_KEY,
     GENERATE_COVERAGE_ACTION,
@@ -30,12 +31,15 @@ from coverage_boundary import (
     UPLOAD_COVERAGE_ACTION,
     action_of,
     coverage_surface_offenders,
-    declares_trigger,
-    declines_the_generated_report_archive,
-    is_reachable_by_a_pull_request,
     publishes_the_coverage_report,
 )
-from ubicloud_workflow_support import WORKFLOWS_DIRECTORY, job_steps, load_job
+from pull_request_reach import pull_request_closure
+from ubicloud_workflow_support import (
+    WORKFLOWS_DIRECTORY,
+    job_steps,
+    load_job,
+    parse_workflow,
+)
 
 #: The lane that owns the upload, and is therefore the one exemption.
 PUBLISHER_WORKFLOW: typ.Final[str] = "coverage-main.yml"
@@ -57,17 +61,45 @@ def _synthetic(step_body: str) -> dict[str, typ.Any]:
         "on:\n  pull_request:\njobs:\n  a:\n    runs-on: ubuntu-latest\n"
         f"    steps:\n{step_body}"
     )
-    parsed = yaml.safe_load(text)
+    parsed = parse_workflow(text)
     assert isinstance(parsed, dict), "the synthetic workflow must parse to a mapping"
     return parsed
 
 
 def _workflow_names() -> list[str]:
     """Return every checked-in workflow file name, for parametrization."""
+    # Case-insensitive, so a `.YML` workflow is not skipped in silence.
     return sorted(
         path.name
-        for pattern in ("*.yml", "*.yaml")
-        for path in WORKFLOWS_DIRECTORY.glob(pattern)
+        for path in WORKFLOWS_DIRECTORY.iterdir()
+        if path.suffix.lower() in (".yml", ".yaml")
+    )
+
+
+@functools.cache
+def _repository_closure() -> frozenset[str]:
+    """Return the checked-in workflows a pull request can cause to run."""
+    documents = {
+        name: parsed
+        for name in _workflow_names()
+        if isinstance(
+            parsed := parse_workflow(
+                (WORKFLOWS_DIRECTORY / name).read_text(encoding="utf-8")
+            ),
+            dict,
+        )
+    }
+    return pull_request_closure(documents)
+
+
+def test_the_repository_closure_is_not_empty() -> None:
+    """The sweep below ranges over the closure, so an empty one proves nothing.
+
+    A reader that recognized no trigger would exempt every workflow and pass.
+    `ci.yml` answers `pull_request` and must be in it.
+    """
+    assert "ci.yml" in _repository_closure(), (
+        f"ci.yml serves pull requests; the closure read {_repository_closure()}"
     )
 
 
@@ -76,17 +108,17 @@ def test_no_pull_request_workflow_touches_the_publication_surface(name: str) -> 
     """The boundary, over every workflow a pull request can reach.
 
     `coverage-main.yml` is the exemption and the only one. A lane that a pull
-    request can start must not publish the report, invoke the CodeScene action,
-    run its command, or carry its credential, because all four need a secret
-    that a pull request's own run cannot be trusted with and none of them
-    tells the author anything the ratchet does not.
+    request can start, directly or through a reusable-workflow call, must not
+    publish the report, invoke the CodeScene action, run its command, name its
+    host, or carry its credential, because each needs a secret that a pull
+    request's own run cannot be trusted with and none of them tells the author
+    anything the ratchet does not.
     """
+    if name == PUBLISHER_WORKFLOW or name not in _repository_closure():
+        return
     raw = (WORKFLOWS_DIRECTORY / name).read_text(encoding="utf-8")
-    document = yaml.safe_load(raw)
-    if not isinstance(document, dict) or name == PUBLISHER_WORKFLOW:
-        return
-    if not is_reachable_by_a_pull_request(document):
-        return
+    document = parse_workflow(raw)
+    assert isinstance(document, dict), f"{name} is in the closure, so it parsed"
     offenders = coverage_surface_offenders(name, document, raw)
     assert not offenders, (
         f"{name} can be reached by a pull request, so it must leave the "
@@ -133,9 +165,11 @@ def test_the_publisher_keeps_the_upload_this_boundary_moved_to_it() -> None:
     would still pass.
     """
     raw = (WORKFLOWS_DIRECTORY / PUBLISHER_WORKFLOW).read_text(encoding="utf-8")
-    document = yaml.safe_load(raw)
+    document = parse_workflow(raw)
     assert isinstance(document, dict), f"{PUBLISHER_WORKFLOW} must parse"
-    assert not is_reachable_by_a_pull_request(document), (
+    # The closure rather than the triggers, so a pull-request workflow calling
+    # the publisher cannot make its exemption a hole.
+    assert PUBLISHER_WORKFLOW not in _repository_closure(), (
         f"{PUBLISHER_WORKFLOW} must not be reachable by a pull request, or "
         f"moving the upload into it moves nothing"
     )
@@ -210,6 +244,12 @@ def test_each_forbidden_element_is_reported(step_body: str, expected: str) -> No
         pytest.param("", id="an-empty-path"),
         pytest.param("dist/\nlcov.info", id="one-safe-entry-and-one-not"),
         pytest.param("dist/\n.", id="one-safe-entry-and-the-workspace"),
+        pytest.param("${{ github.workspace }}", id="the-workspace-expression"),
+        pytest.param("${{ github.workspace }}/", id="the-workspace-expression-slashed"),
+        pytest.param("$GITHUB_WORKSPACE", id="the-workspace-variable"),
+        pytest.param("~", id="the-home-directory"),
+        pytest.param("/home/runner/work", id="an-absolute-ancestor"),
+        pytest.param("/", id="the-root"),
     ],
 )
 def test_an_artefact_path_that_could_carry_the_report_is_an_offence(
@@ -222,7 +262,9 @@ def test_an_artefact_path_that_could_carry_the_report_is_an_offence(
     directory the entry names. A glob may match the report however innocent it
     looks, and `dist/*` is here because the reader does not evaluate patterns:
     it refuses them, which is the safe direction for a rule whose false
-    negatives are silent.
+    negatives are silent. An expression, a variable, `~` and an absolute path
+    are refused for the same reason: each may resolve to the workspace or an
+    ancestor of it, and the reader does not resolve them.
 
     `path` is newline-separated, so one unsafe entry publishes the report
     whatever the others name.
@@ -291,10 +333,23 @@ def test_a_lookalike_action_is_a_different_action(suffix: str) -> None:
     )
 
 
-def test_an_artefact_step_naming_another_path_is_not_an_offence() -> None:
-    """Uploading something other than the report is allowed."""
+@pytest.mark.parametrize(
+    "path",
+    [
+        pytest.param("dist/", id="a-directory"),
+        pytest.param("sccache-stats.json", id="the-shape-this-repository-uploads"),
+        pytest.param("./target/nextest/junit.xml", id="a-nested-file"),
+    ],
+)
+def test_an_artefact_step_naming_another_path_is_not_an_offence(path: str) -> None:
+    """Uploading something other than the report is allowed.
+
+    The narrow half of the fail-closed reading: a concrete relative path that
+    descends from the workspace, and does not name the report, is cleared.
+    """
     step_body = (
-        "      - uses: actions/upload-artifact@abc\n        with:\n          path: dist/\n"
+        "      - uses: actions/upload-artifact@abc\n"
+        f"        with:\n          path: {path}\n"
     )
     document = _synthetic(step_body)
     assert not coverage_surface_offenders("scratch.yml", document, ""), (
@@ -316,34 +371,4 @@ def test_the_credential_is_found_in_text_the_parser_would_drop() -> None:
     )
     assert any("raw text" in offence for offence in offenders), (
         f"the credential must be reported from the raw text; got {offenders}"
-    )
-
-
-@pytest.mark.parametrize(
-    ("declaration", "reachable"),
-    [
-        pytest.param("on: pull_request\n", True, id="a-scalar-trigger"),
-        pytest.param("on: [push, pull_request]\n", True, id="a-sequence-trigger"),
-        pytest.param("on:\n  pull_request:\n", True, id="a-mapping-trigger"),
-        pytest.param("on:\n  pull_request_target:\n", True, id="the-privileged-variant"),
-        pytest.param("on:\n  workflow_run:\n", True, id="a-resumed-run"),
-        pytest.param("on:\n  push:\n", False, id="a-push-lane"),
-        pytest.param("on:\n  schedule:\n", False, id="a-scheduled-lane"),
-    ],
-)
-def test_the_trigger_reading_accepts_every_shape_on_takes(
-    declaration: str, reachable: bool
-) -> None:
-    """`on:` has four spellings and PyYAML reads a bare `on` as True.
-
-    A reading that knew only the mapping form would call `on: pull_request`
-    unreachable and exempt it from the whole rule, which is the failure mode
-    that would make this contract quietly cover less than it claims.
-    """
-    parsed = yaml.safe_load(f"{declaration}jobs:\n  a:\n    steps: []\n")
-    assert is_reachable_by_a_pull_request(parsed) is reachable, (
-        f"{declaration!r} must read as reachable={reachable}"
-    )
-    assert declares_trigger(parsed, "pull_request") is (
-        "pull_request" in declaration and "pull_request_target" not in declaration
     )
