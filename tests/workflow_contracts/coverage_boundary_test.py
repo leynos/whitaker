@@ -1,10 +1,12 @@
 """CV-005: only `main` writes persistent coverage state.
 
-A pull-request lane measures coverage and compares it with the ratcheted
-baseline `main` produced. It does not publish the report, call the CodeScene
-action, run a `cs-coverage` command, or hold the credential either of those
-needs. The check step that used to sit in `ci.yml` is why a CodeScene outage or
-a token change could redden a pull request that had touched nothing to do with
+A pull-request lane here measures coverage and stops. Nothing compares the
+report with a baseline: the ratchet half of CV-005 is deferred, and the
+developers' guide says why under "The half of CV-005 that is deferred here".
+What the lane must not do is publish the report, call the CodeScene action, run
+a `cs-coverage` command, or hold the credential either of those needs. The
+check step that used to sit in `ci.yml` is why a CodeScene outage or a token
+change could redden a pull request that had touched nothing to do with
 coverage.
 
 Every assertion here that reads this repository's files is paired with one that
@@ -193,6 +195,57 @@ def test_each_forbidden_element_is_reported(step_body: str, expected: str) -> No
         f"a lane declaring this step must be reported as {expected!r}; "
         f"the reading gave {offenders}"
     )
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        pytest.param("lcov.info", id="the-report-by-name"),
+        pytest.param(".", id="the-workspace-as-a-dot"),
+        pytest.param("./", id="the-workspace-with-a-separator"),
+        pytest.param(".//", id="the-workspace-spelt-oddly"),
+        pytest.param("../workspace", id="a-path-reaching-upward"),
+        pytest.param("**/*.info", id="a-glob-that-matches-it"),
+        pytest.param("dist/*", id="a-glob-that-does-not"),
+        pytest.param("", id="an-empty-path"),
+        pytest.param("dist/\nlcov.info", id="one-safe-entry-and-one-not"),
+        pytest.param("dist/\n.", id="one-safe-entry-and-the-workspace"),
+    ],
+)
+def test_an_artefact_path_that_could_carry_the_report_is_an_offence(
+    path: str,
+) -> None:
+    """Fail closed: the question is what can leave, not how it is spelt.
+
+    A substring test for `lcov.info` clears every one of these. `.` and `./`
+    upload the workspace, which holds the report. `..` reaches above the
+    directory the entry names. A glob may match the report however innocent it
+    looks, and `dist/*` is here because the reader does not evaluate patterns:
+    it refuses them, which is the safe direction for a rule whose false
+    negatives are silent.
+
+    `path` is newline-separated, so one unsafe entry publishes the report
+    whatever the others name.
+    """
+    # A multi-line `path` has to go in as a YAML block scalar. Writing it as a
+    # quoted scalar with `\n` inside puts a literal backslash-n in the value,
+    # and the reader then sees one entry rather than two: the first draft of
+    # this case passed for that reason while proving nothing.
+    if "\n" in path:
+        rendered = "|\n" + "".join(f"            {line}\n" for line in path.split("\n"))
+    else:
+        rendered = f"{path!r}\n"
+    step_body = (
+        "      - uses: actions/upload-artifact@abc\n"
+        "        with:\n"
+        f"          path: {rendered}"
+    )
+    offenders = coverage_surface_offenders(
+        "scratch.yml", _synthetic(step_body), ""
+    )
+    assert any(
+        "publishes the coverage report" in offence for offence in offenders
+    ), f"a path of {path!r} can carry the report; the reading gave {offenders}"
 
 
 def test_an_ordinary_lane_is_not_accused() -> None:

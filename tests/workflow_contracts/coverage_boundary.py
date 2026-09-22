@@ -1,10 +1,18 @@
 """What a pull-request-reachable workflow may not touch.
 
-Pull-request CI generates `lcov.info` and compares it with the ratcheted
-baseline derived from `main`. It does not publish that report as an artefact,
-invoke the CodeScene coverage action, run a `cs-coverage` command, or carry the
-credential either of those needs. Those belong to `coverage-main.yml`, which is
-the only writer of persistent coverage state.
+Pull-request CI here measures coverage and stops. `make coverage` writes
+`lcov.info`, nothing compares it with anything, and no changed-line gate runs:
+the ratchet half of CV-005 is deferred, for the reason the developers' guide
+gives under "The half of CV-005 that is deferred here". What the lane must not
+do is publish that report as an artefact, invoke the CodeScene coverage action,
+run a `cs-coverage` command, or carry the credential either of those needs.
+Those belong to `coverage-main.yml`, which is the only writer of persistent
+coverage state.
+
+`GENERATE_COVERAGE_ACTION` is named below even though no lane here calls it.
+The rule about declining its archive has to be in force before the first caller
+appears, not after, because a caller that reaches the action without the opt-out
+has already published the report.
 
 The coverage action archives the report it generated under a step of its own,
 so declining that archive is part of the same boundary: a caller that reaches
@@ -24,8 +32,10 @@ import collections.abc as cabc
 import typing as typ
 
 
-#: The action that generates coverage. A pull request calls it in ratchet mode
-#: and stops there; `main` calls it to produce the report it publishes.
+#: The shared action that generates coverage. No lane in this repository calls
+#: it: `make coverage` is the driver here, and the guide records why. The
+#: constant exists so the rule about declining the action's own archive is in
+#: force for the first lane that does call it.
 GENERATE_COVERAGE_ACTION: typ.Final[str] = (
     "leynos/shared-actions/.github/actions/generate-coverage"
 )
@@ -83,7 +93,19 @@ def _steps_of(job: dict[str, typ.Any]) -> list[dict[str, typ.Any]]:
 
 
 def action_of(step: dict[str, typ.Any]) -> str:
-    """Return a step's action reference without its version."""
+    """Return a step's action reference without its version.
+
+    Parameters
+    ----------
+    step : dict[str, typ.Any]
+        One parsed workflow step.
+
+    Returns
+    -------
+    str
+        The reference with its `@version` removed, or the empty string when the
+        step runs a command rather than an action.
+    """
     # Splitting on the version separator rather than matching a prefix keeps
     # `upload-codescene-coverage-legacy` from reading as the real action.
     uses = step.get("uses")
@@ -91,7 +113,21 @@ def action_of(step: dict[str, typ.Any]) -> str:
 
 
 def declares_trigger(document: dict[str, typ.Any], trigger: str) -> bool:
-    """Return whether a parsed workflow declares the given trigger."""
+    """Return whether a parsed workflow declares the given trigger.
+
+    Parameters
+    ----------
+    document : dict[str, typ.Any]
+        One parsed workflow document.
+    trigger : str
+        The trigger name, such as `pull_request`.
+
+    Returns
+    -------
+    bool
+        True when the workflow declares it in any of the scalar, sequence or
+        mapping forms `on:` accepts.
+    """
     # PyYAML reads a bare `on:` key as the boolean True, and `on:` accepts a
     # scalar, a sequence or a mapping. All four shapes answer the same
     # question, and a reader that knew only the mapping would call a
@@ -109,28 +145,91 @@ def declares_trigger(document: dict[str, typ.Any], trigger: str) -> bool:
 
 
 def is_reachable_by_a_pull_request(document: dict[str, typ.Any]) -> bool:
-    """Return whether a pull request can cause this workflow to run."""
+    """Return whether a pull request can cause this workflow to run.
+
+    Parameters
+    ----------
+    document : dict[str, typ.Any]
+        One parsed workflow document.
+
+    Returns
+    -------
+    bool
+        True when the workflow declares `pull_request`, `pull_request_target`
+        or `workflow_run`.
+    """
     # All three count. `pull_request_target` and `workflow_run` resume in the
     # base repository's context, so a coverage step under either reads a
     # credential in a run a pull request's contents influenced.
     return any(declares_trigger(document, name) for name in REACHABLE_TRIGGERS)
 
 
+#: Characters that make a path a pattern rather than a name. A pattern may
+#: match the report however innocent it looks, so one is never cleared.
+_GLOB_CHARACTERS: typ.Final[frozenset[str]] = frozenset("*?[]!")
+
+
+def _could_hold_the_report(entry: str) -> bool:
+    """Return whether one `path` entry could carry the coverage report."""
+    # Fails closed, because the question is whether the report *can* leave the
+    # runner, not whether this entry is spelt like it. A substring test for
+    # `lcov.info` clears `.`, `./`, `..`, the workspace under any other
+    # spelling, and every glob, each of which uploads the report while reading
+    # as innocent.
+    cleaned = entry.strip()
+    if not cleaned or COVERAGE_REPORT_PATH in cleaned:
+        return True
+    if _GLOB_CHARACTERS & set(cleaned):
+        return True
+    parts = [part for part in cleaned.split("/") if part not in ("", ".")]
+    return not parts or ".." in parts
+
+
 def publishes_the_coverage_report(step: dict[str, typ.Any]) -> bool:
-    """Return whether a step publishes the coverage report as an artefact."""
+    """Return whether a step publishes the coverage report as an artefact.
+
+    Parameters
+    ----------
+    step : dict[str, typ.Any]
+        One parsed workflow step.
+
+    Returns
+    -------
+    bool
+        True when the step uploads, or could upload, the report. A step of the
+        artefact action that names no path uploads the workspace, which holds
+        the generated report; so does a path of `.`, a path reaching upward
+        through `..`, or any glob. Each of those reads as True rather than as
+        an exemption.
+    """
     if action_of(step) != PUBLISH_ARTEFACT_ACTION:
         return False
-    # A step of the artefact action that names no path uploads the workspace,
-    # which holds the generated report, so it fails closed rather than reading
-    # as an exemption.
     with_ = step.get("with")
     if not isinstance(with_, dict) or "path" not in with_:
         return True
-    return COVERAGE_REPORT_PATH in str(with_["path"])
+    # `path` is newline-separated, and one unsafe entry publishes the report
+    # whatever the others name.
+    return any(
+        _could_hold_the_report(entry) for entry in str(with_["path"]).splitlines()
+    ) or not str(with_["path"]).strip()
 
 
 def declines_the_generated_report_archive(step: dict[str, typ.Any]) -> bool:
-    """Return whether a step tells the coverage action not to archive."""
+    """Return whether a step tells the coverage action not to archive.
+
+    Parameters
+    ----------
+    step : dict[str, typ.Any]
+        One parsed workflow step.
+
+    Returns
+    -------
+    bool
+        True when the step invokes the coverage action and passes the
+        publication opt-out. The value is compared as the string the action
+        itself compares against, so `false`, not a falsy stand-in, suppresses
+        the upload.
+    """
     if action_of(step) != GENERATE_COVERAGE_ACTION:
         return False
     with_ = step.get("with")
@@ -180,7 +279,24 @@ def _step_offences(where: str, step: dict[str, typ.Any]) -> list[str]:
 def coverage_surface_offenders(
     name: str, document: dict[str, typ.Any], raw_text: str
 ) -> list[str]:
-    """Return every prohibited coverage-surface reference in one workflow."""
+    """Return every prohibited coverage-surface reference in one workflow.
+
+    Parameters
+    ----------
+    name : str
+        The workflow file's name, used in the failure messages.
+    document : dict[str, typ.Any]
+        The workflow's parsed document.
+    raw_text : str
+        The workflow's raw text. The credential is matched here as well as in
+        the parsed values, so a reference inside a comment or an unparsed shape
+        is still reported.
+
+    Returns
+    -------
+    list[str]
+        One description per violation, empty when the workflow is clean.
+    """
     offenders: list[str] = []
     declared = document.get("jobs")
     for job_name, definition in (declared if isinstance(declared, dict) else {}).items():
