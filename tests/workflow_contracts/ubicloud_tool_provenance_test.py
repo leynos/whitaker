@@ -134,7 +134,13 @@ def test_no_workflow_requests_unbounded_pytest_parallelism() -> None:
 
 
 def test_compiler_cache_uses_exactly_one_selected_backend() -> None:
-    """Two configured backends make the reported hit rate unattributable."""
+    """Two configured backends make the reported hit rate unattributable.
+
+    Which backend each workflow selects, and what that selection obliges the
+    lane to carry, live in `sccache_backend_contract_test`. What is asserted
+    here is narrower and belongs with tool provenance: whatever the selection,
+    the selector script is the only thing that acts on it.
+    """
     declared = {
         workflow_name: load_workflow(workflow_name)["env"]["SCCACHE_BACKEND"]
         for workflow_name in set(UBICLOUD_JOBS.values())
@@ -142,9 +148,6 @@ def test_compiler_cache_uses_exactly_one_selected_backend() -> None:
     assert set(declared.values()) <= {"gha", "local"}, (
         "SCCACHE_BACKEND must name a backend scripts/select-sccache-backend.sh "
         f"understands, not {sorted(set(declared.values()))}"
-    )
-    assert len(set(declared.values())) == 1, (
-        f"every Linux workflow must select the same backend, not {declared}"
     )
 
     for workflow_name in set(UBICLOUD_JOBS.values()):
@@ -186,11 +189,15 @@ def _assert_the_shared_action_owns_the_compiler_cache(
             f"{job_name} must not run its own {bespoke!r}; the shared action "
             "installs sccache, starts the server and zeroes the counters"
         )
-    restore_index = names.index("Restore the compiler cache directory")
-    assert restore_index < names.index("Setup Rust"), (
-        f"{job_name} must restore the compiler cache directory before the "
-        "shared action starts the server, which binds the directory once"
-    )
+    # Only the local-directory lanes have a directory to restore. Whether a
+    # lane should have one at all is `sccache_backend_contract_test`'s to say;
+    # this only places the restore correctly when one exists.
+    if "Restore the compiler cache directory" in names:
+        restore_index = names.index("Restore the compiler cache directory")
+        assert restore_index < names.index("Setup Rust"), (
+            f"{job_name} must restore the compiler cache directory before the "
+            "shared action starts the server, which binds the directory once"
+        )
 
 
 def test_compiler_cache_effectiveness_is_always_recorded() -> None:

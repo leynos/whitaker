@@ -87,8 +87,11 @@ CACHE_KEY_WRITERS: dict[str, str] = {
     "tools-lint-v1-": "linux-full",
     "dylint-tools-v1-": "linux-full",
     "clippy-mirror-v1-": "coverage-upload",
-    "sccache-coverage-v1-": "coverage-upload",
-    "sccache-lint-v1-": "linux-full",
+    # The `sccache-coverage-v1-` and `sccache-lint-v1-` families are gone, not
+    # merely unlisted. Both Linux workflows run sccache on the `gha` backend
+    # against Ubicloud's cache proxy, so no lane archives `~/.cache/sccache`
+    # and there is no directory for a family to name. The rolling-release
+    # lanes below stay on the local-directory backend and keep theirs.
     "cargo-registry-windows-v1-": "windows-compat",
     "cargo-registry-rolling-v1-": "build-lints",
     "sccache-rolling-v1-": "build-lints",
@@ -306,3 +309,48 @@ def save_steps(job: dict[str, Any]) -> list[dict[str, Any]]:
 def run_scripts(job: dict[str, Any]) -> str:
     """Return every inline shell script in a job, joined for substring checks."""
     return "\n".join(str(step.get("run", "")) for step in job_steps(job))
+
+
+#: The directory the local-disk sccache backend writes to, as every cache step
+#: that has ever owned it spells it.
+SCCACHE_DIRECTORY: Final[str] = "~/.cache/sccache"
+
+#: The step that republishes Ubicloud's cache-proxy credentials through
+#: `GITHUB_ENV`. Asserted by name because the ordering rules are about where it
+#: sits in the step list, and by action because a step that merely carries the
+#: name would satisfy the ordering while exporting nothing.
+CREDENTIALS_STEP: Final[str] = "Export the Ubicloud cache credentials"
+CREDENTIALS_ACTION_PATH: Final[str] = (
+    "leynos/shared-actions/.github/actions/export-ubicloud-cache-credentials"
+)
+
+#: What `scripts/select-sccache-backend.sh` assumes when `SCCACHE_BACKEND` is
+#: unset or empty, kept here so the contract reads the same default the lanes
+#: would actually run under rather than treating an omission as a failure.
+DEFAULT_BACKEND: Final[str] = "gha"
+
+
+def backend_for(workflow_name: str) -> str:
+    """Return the compiler-cache backend one workflow selects.
+
+    The workflows declare `SCCACHE_BACKEND` once, at workflow level, and
+    `scripts/select-sccache-backend.sh` translates it into exactly one set of
+    sccache variables. For example, ``backend_for("ci.yml")`` returns
+    ``"gha"``.
+    """
+    env = load_workflow(workflow_name).get("env", {})
+    declared = str(env.get("SCCACHE_BACKEND", "")).strip()
+    return declared or DEFAULT_BACKEND
+
+
+def sccache_directory_steps(job: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return the job's cache steps that own the local sccache directory.
+
+    Restores and saves together, because the rule they answer to is about the
+    directory existing in the job at all, not about which direction it moves.
+    """
+    return [
+        step
+        for step in restore_steps(job) + save_steps(job)
+        if SCCACHE_DIRECTORY in cache_paths(step)
+    ]

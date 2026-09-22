@@ -440,10 +440,15 @@ keys add the Ubuntu release because a binary built on Ubuntu 24.04 must never
 be restored onto 22.04.
 
 Restores run on every event. Saves are guarded by
-`github.ref == 'refs/heads/main'` and, except for the compiler cache, by a
-missed restore. A pull request therefore reads the trusted generation without
-publishing a competing write and without the `Unable to reserve cache` noise
-that two racing lanes produce.
+`github.ref == 'refs/heads/main'` and by a missed restore. A pull request
+therefore reads the trusted generation without publishing a competing write and
+without the `Unable to reserve cache` noise that two racing lanes produce.
+
+The compiler cache is not one of these archives on the Linux lanes. It runs on
+the Actions backend against Ubicloud's cache proxy, which is not branch
+restricted, so every run both reads and writes it and a pull request warms the
+store for the next one. `rolling-release.yml` keeps a local directory and its
+own key families, and those follow the rule above.
 
 `coverage-main.yml` is the only Whitaker job that runs automatically on the
 trunk, so it is the writer for the coverage-lane keys and for the shared Clippy
@@ -543,69 +548,84 @@ The shared compiler cache is intentionally scoped to debug builds:
 `sccache` is configured in exactly one place. The workflows declare
 `SCCACHE_BACKEND`, and `scripts/select-sccache-backend.sh` translates that
 single value into the backend's environment before any Cargo invocation.
-`local` exports `SCCACHE_DIR` and `SCCACHE_CACHE_SIZE` and activates the
-`~/.cache/sccache` archive steps; `gha` exports `SCCACHE_GHA_ENABLED` and
-leaves those steps skipped. The two backends are never configured together:
-`sccache` would then report a plausible hit rate while writing to a store
-nobody owns.
+`local` exports `SCCACHE_DIR` and `SCCACHE_CACHE_SIZE`, and the lane must then
+own a `~/.cache/sccache` archive; `gha` exports `SCCACHE_GHA_ENABLED`, and the
+lane must then own no such archive. The two backends are never configured
+together: `sccache` would then report a plausible hit rate while writing to a
+store nobody owns.
 
-The GitHub Actions backend needs `ACTIONS_RESULTS_URL` and
-`ACTIONS_RUNTIME_TOKEN`, which GitHub exposes to actions rather than to `run`
-steps. That is the shared Rust setup action's concern now, not this
-repository's. It records the caller's cache-service selection before
-`mozilla-actions/sccache-action` overwrites it, restores it afterwards, and
-starts the server from a `run:` step positioned after those exports, so a
-server started for the GHA backend comes up bound to the right endpoint. This
-repository previously re-exported the two values from an
-`actions/github-script` step immediately after checkout; that step is gone,
-because two arms configuring one `sccache` is the failure it was written to
-avoid.
+The GitHub Actions backend needs the cache service's address and a runtime
+token, and GitHub exposes both to action steps rather than to `run:` steps. On
+an Ubicloud runner that address is not GitHub's: `ACTIONS_CACHE_URL` names a
+proxy on the runner's private network, which stores objects in Ubicloud's own
+cache. `Export the Ubicloud cache credentials` republishes it through
+`GITHUB_ENV` and clears `ACTIONS_CACHE_SERVICE_V2`, because `sccache` prefers
+GitHub's v2 results service whenever that flag is set and the proxy serves v1.
+The shared Rust setup action then records those values before
+`mozilla-actions/sccache-action` overwrites them and restores them afterwards,
+and starts the server from a `run:` step positioned after the restore, so the
+server comes up bound to the proxy.
 
-The ordering that mattered still matters, expressed differently. `sccache`
-binds its backend once, when the server starts, so the backend selector and the
-compiler-cache directory restore both run before `Setup Rust`, which is what
-starts the server. The contract tests enforce both positions and reject a lane
-that installs or zeroes `sccache` itself. The GitHub-hosted Windows lane needs
-no export, because there the variables are already visible to `run:` steps.
+The ordering that mattered still matters. `sccache` binds its backend once,
+when the server starts, so the credentials export runs before the backend
+selector, and both run before `Setup Rust`, which is what starts the server.
+`sccache_backend_contract_test` enforces those positions, rejects a lane that
+installs or zeroes `sccache` itself, and rejects a step that carries the
+credentials step's name without running the action. The GitHub-hosted Windows
+lane needs no export, because there the variables are already visible to `run:`
+steps and the store is GitHub's own.
 
-`local` is the deployed backend, chosen from measurement. The Actions cache
-service is the store Ubicloud's transparent cache intercepts, and Cuprum's
-Ubicloud cache listing on 2026-09-03 shows `sccache/...` keys written by its
-pull-request run 33748907011, so the `gha` backend does reach Ubicloud's store
-in that project. It does not work in this one.
-
-Whitaker reproduced a total write failure twice, with identical counters. Runs
-[33748602187][whitaker-run-33748602187] and
+`gha` is the deployed backend on the Linux lanes, and the record of how it got
+there is worth keeping, because the repository once concluded the opposite.
+Runs [33748602187][whitaker-run-33748602187] and
 [33756048103][whitaker-run-33756048103] each reported `Cache location ghac` in
-both Linux jobs, proving the credentials reached `sccache`, then failed every
-store: 3,788 write errors against 3,788 attempts in `linux-full` and 2,245
-against 2,245 in `coverage-check`, with 0 read errors both times. The second
-run had already moved the credential export ahead of everything and swapped the
-archive caches to `actions/cache` v6.1.0, so neither the ordering nor the cache
-client explains it.
+both Linux jobs and then failed every store: 3,788 write errors against 3,788
+attempts in `linux-full` and 2,245 against 2,245 in `coverage-check`, with 0
+read errors both times. The same runs' GitHub-hosted `windows-compat` job used
+the same backend and wrote 1,529 hits with 0 write errors. The conclusion drawn
+at the time was that Ubicloud's cache proxy had a broken write path, and the
+repository moved to `local`.
 
-The same run's GitHub-hosted `windows-compat` job used the same backend and
-wrote 1,529 hits with 0 write errors, which places the failure in the Ubicloud
-cache proxy's write path rather than in `sccache` or in the credentials. One
-difference is worth chasing before anyone re-enables `gha` here: the Windows
-job reported a hashed cache name, `cb1f7e36...` because the shared setup action
-sets `SCCACHE_GHA_VERSION`, while the Linux jobs reported the default
-`sccache-v0.16.0`.
+That conclusion was wrong, and the evidence for it was the defect. Those runs
+exported `ACTIONS_RESULTS_URL`, which is GitHub's v2 address, rather than the
+proxy's `ACTIONS_CACHE_URL`, and never cleared the v2 flag. `sccache` therefore
+resolved past the proxy to GitHub on every store, which is why the Windows
+lane, whose store really is GitHub's, was unaffected. One write error per store
+attempt is that defect's signature, and netsuke measured the same shape
+independently: 5,310 requests, zero hits, one write error per miss. Whitaker
+never called `export-ubicloud-cache-credentials`; no commit in the repository
+has ever referenced it.
 
-Switching back is one line. Treat write errors above roughly two percent of
-requests, or an Ubicloud cache listing with no `sccache` entries for Whitaker,
-as the signal to stay on `local`.
+With the credentials exported correctly the backend works on this runner class.
+netsuke's coverage lane measures 99.6% hits with `Cache location ghac` on
+`ubicloud-standard-2`, and shared-actions' `test-ubicloud-sccache-proxy`
+workflow compiles on a billed `ubicloud-standard-2` and asserts, from both a
+`run:` step and a composite action step, that the bound endpoint is a private
+address literal and that the cleared v2 flag survived.
 
-`local` has known trade-offs. Its archive grows with every new compilation unit
-until `SCCACHE_CACHE_SIZE` trims it, so a warm run restores and re-saves the
-whole directory even when only a few objects changed. That is why the key
-carries the run identifier with a `restore-keys` prefix, and why the save is
-restricted to the lane's single writer. The cap defaults to 4 GB rather than 2
-GB because the store holds two build shapes, the ordinary debug objects and the
-instrumented coverage objects; a one-shape cap would evict each shape in turn.
-It also routes the compiler cache through the same `actions/cache` transport as
-every other archive, so one working write path serves the whole design. Measure
-the restore and save duration against the compile seconds avoided.
+What `gha` buys here is that every run reads and writes one store. The
+local-directory archive could only be written by a lane that runs on the trunk,
+so an ordinary pull request restored whatever the last `workflow_dispatch` run
+on `main` had saved, or nothing. `coverage-check` measured 3.3% Rust hits on
+run 35597917956 under that arrangement. Nothing about the backend is branch
+restricted, so a pull request warms the store for the next one.
+
+Switching back is one line in each of `ci.yml` and `coverage-main.yml`, plus
+restoring the `~/.cache/sccache` archive steps the contract then requires.
+`rolling-release.yml` stays on `local` and owns its own key families; the
+contract permits the two to differ, because the rule that matters is that a
+lane's reader and its writer agree, not that the whole repository does. Treat
+write errors above roughly two percent of requests, or an Ubicloud cache
+listing with no `sccache` entries for Whitaker, as the signal to look again.
+
+The local-directory backend that `rolling-release.yml` still uses has known
+trade-offs. Its archive grows with every new compilation unit until
+`SCCACHE_CACHE_SIZE` trims it, so a warm run restores and re-saves the whole
+directory even when only a few objects changed. That is why its key carries the
+run identifier with a `restore-keys` prefix, and why its save is restricted to
+the lane's single writer. The cap defaults to 4 GB rather than 2 GB because the
+store holds two build shapes, the ordinary debug objects and the instrumented
+coverage objects; a one-shape cap would evict each shape in turn.
 
 Each build lane starts from zeroed `sccache` counters and then runs
 `scripts/record-sccache-effectiveness.sh`, which appends the human-readable

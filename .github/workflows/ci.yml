@@ -17,17 +17,31 @@ env:
   # changing the label cannot leave the suite oversubscribed on a smaller VM.
   LINUX_RUNNER_VCPUS: '2'
   # Compiler-cache backend selector for the Linux lanes. `gha` routes sccache
-  # at the Actions cache service; `local` routes it at the directory owned by
-  # the "Restore the compiler cache directory" steps. Flipping this one line
-  # switches every Linux lane.
+  # at the Actions cache service, which on an Ubicloud runner is Ubicloud's own
+  # proxy on the private network; `local` routes it at a directory some cache
+  # step must own. Flipping this one line switches every Linux lane in this
+  # workflow.
   #
-  # `local` is deployed because `gha` stores nothing on Whitaker's Ubicloud
-  # runners. Runs 33748602187 and 33756048103 each reported `Cache location
+  # `gha` is deployed. An earlier attempt at it was reverted because it stored
+  # nothing: runs 33748602187 and 33756048103 each reported `Cache location
   # ghac`, 0 read errors, and a write error for every single store attempt,
-  # 3,788 of 3,788 and 2,245 of 2,245. The GitHub-hosted Windows lane in the
-  # same run wrote through `ghac` with 0 write errors, so the failure is
-  # specific to the Ubicloud cache proxy's write path, not to the backend.
-  SCCACHE_BACKEND: local
+  # 3,788 of 3,788 and 2,245 of 2,245, and the conclusion drawn at the time was
+  # that Ubicloud's proxy had a broken write path. That conclusion was wrong.
+  # Neither run exported the proxy's credentials, so sccache never reached the
+  # proxy at all. `mozilla-actions/sccache-action` finishes by writing
+  # `ACTIONS_CACHE_SERVICE_V2=on` to `GITHUB_ENV`; sccache then prefers
+  # GitHub's v2 results service, whose address resolves past the proxy, and
+  # every store fails there. One write error per store attempt is that
+  # defect's signature.
+  #
+  # "Export the Ubicloud cache credentials" publishes the proxy address and
+  # clears the v2 flag, and the pinned `setup-rust` records those values before
+  # the sccache steps run and restores them afterwards, so the clobber cannot
+  # recur. netsuke's lane measures 99.6% hits with `Cache location ghac` on the
+  # same runner class, and shared-actions' `test-ubicloud-sccache-proxy`
+  # workflow compiles on a billed `ubicloud-standard-2` and asserts the bound
+  # endpoint is the private proxy.
+  SCCACHE_BACKEND: gha
   # `make check-fmt` runs `mdtablefix --check --git`. Keep CI on the same
   # release used to normalize the checked-in documentation; 0.6.0 is the
   # first release with `--check` and `--git`. Markdown linting runs through
@@ -75,6 +89,16 @@ jobs:
             printf 'NEXTEST_TEST_THREADS=%s\n' "${LINUX_RUNNER_VCPUS}"
           } >> "$GITHUB_ENV"
 
+      - name: Export the Ubicloud cache credentials
+        # The runner hands `ACTIONS_CACHE_URL` and `ACTIONS_RUNTIME_TOKEN` to
+        # action steps, and this republishes them through `GITHUB_ENV` with the
+        # v2 cache-service flag cleared, because Ubicloud's proxy serves v1. An
+        # sccache server started without them binds local disk for the whole
+        # job and reports a plausible hit rate for a store nothing archives.
+        # It must precede the selector and every later step, because sccache
+        # binds its backend once, when its server starts.
+        uses: leynos/shared-actions/.github/actions/export-ubicloud-cache-credentials@dbe2e22ceaf498d85512679ccded38be9dbe7777
+
       - name: Select the compiler cache backend
         run: bash scripts/select-sccache-backend.sh
 
@@ -108,16 +132,6 @@ jobs:
           path: ~/.cache/whitaker-mirrors
           key: clippy-mirror-v1-dylint6.0.1-${{ hashFiles('rust-toolchain.toml') }}
 
-      - name: Restore the compiler cache directory
-        id: sccache-dir
-        if: env.SCCACHE_BACKEND == 'local'
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
-        with:
-          path: ~/.cache/sccache
-          key: sccache-coverage-v1-${{ runner.os }}-${{ runner.arch }}-${{ runner.environment }}-${{ hashFiles('rust-toolchain.toml') }}-${{ github.run_id }}
-          restore-keys: |
-            sccache-coverage-v1-${{ runner.os }}-${{ runner.arch }}-${{ runner.environment }}-${{ hashFiles('rust-toolchain.toml') }}-
-
       - name: Record cache observations
         if: always()
         env:
@@ -130,9 +144,6 @@ jobs:
           CLIPPY_MIRROR_KEY: ${{ steps.clippy-mirror-cache.outputs.cache-primary-key }}
           CLIPPY_MIRROR_MATCHED: ${{ steps.clippy-mirror-cache.outputs.cache-matched-key }}
           CLIPPY_MIRROR_HIT: ${{ steps.clippy-mirror-cache.outputs.cache-hit }}
-          SCCACHE_DIR_KEY: ${{ steps.sccache-dir.outputs.cache-primary-key }}
-          SCCACHE_DIR_MATCHED: ${{ steps.sccache-dir.outputs.cache-matched-key }}
-          SCCACHE_DIR_HIT: ${{ steps.sccache-dir.outputs.cache-hit }}
         run: bash scripts/record-cache-observations.sh
 
       - name: Provision the Clippy source mirror
@@ -208,6 +219,16 @@ jobs:
             printf 'NEXTEST_TEST_THREADS=%s\n' "${LINUX_RUNNER_VCPUS}"
           } >> "$GITHUB_ENV"
 
+      - name: Export the Ubicloud cache credentials
+        # The runner hands `ACTIONS_CACHE_URL` and `ACTIONS_RUNTIME_TOKEN` to
+        # action steps, and this republishes them through `GITHUB_ENV` with the
+        # v2 cache-service flag cleared, because Ubicloud's proxy serves v1. An
+        # sccache server started without them binds local disk for the whole
+        # job and reports a plausible hit rate for a store nothing archives.
+        # It must precede the selector and every later step, because sccache
+        # binds its backend once, when its server starts.
+        uses: leynos/shared-actions/.github/actions/export-ubicloud-cache-credentials@dbe2e22ceaf498d85512679ccded38be9dbe7777
+
       - name: Select the compiler cache backend
         run: bash scripts/select-sccache-backend.sh
 
@@ -250,16 +271,6 @@ jobs:
           path: ~/.cache/whitaker-mirrors
           key: clippy-mirror-v1-dylint6.0.1-${{ hashFiles('rust-toolchain.toml') }}
 
-      - name: Restore the compiler cache directory
-        id: sccache-dir
-        if: env.SCCACHE_BACKEND == 'local'
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
-        with:
-          path: ~/.cache/sccache
-          key: sccache-lint-v1-${{ runner.os }}-${{ runner.arch }}-${{ runner.environment }}-${{ hashFiles('rust-toolchain.toml') }}-${{ github.run_id }}
-          restore-keys: |
-            sccache-lint-v1-${{ runner.os }}-${{ runner.arch }}-${{ runner.environment }}-${{ hashFiles('rust-toolchain.toml') }}-
-
       - name: Record cache observations
         if: always()
         env:
@@ -275,9 +286,6 @@ jobs:
           CLIPPY_MIRROR_KEY: ${{ steps.clippy-mirror-cache.outputs.cache-primary-key }}
           CLIPPY_MIRROR_MATCHED: ${{ steps.clippy-mirror-cache.outputs.cache-matched-key }}
           CLIPPY_MIRROR_HIT: ${{ steps.clippy-mirror-cache.outputs.cache-hit }}
-          SCCACHE_DIR_KEY: ${{ steps.sccache-dir.outputs.cache-primary-key }}
-          SCCACHE_DIR_MATCHED: ${{ steps.sccache-dir.outputs.cache-matched-key }}
-          SCCACHE_DIR_HIT: ${{ steps.sccache-dir.outputs.cache-hit }}
         run: bash scripts/record-cache-observations.sh
 
       - name: Provision the Clippy source mirror
@@ -442,13 +450,6 @@ jobs:
         with:
           path: ~/.cache/whitaker-dylint-tools
           key: ${{ steps.dylint-tools.outputs.cache-primary-key }}
-
-      - name: Save the compiler cache directory
-        if: env.SCCACHE_BACKEND == 'local' && github.ref == 'refs/heads/main'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
-        with:
-          path: ~/.cache/sccache
-          key: ${{ steps.sccache-dir.outputs.cache-primary-key }}
 
   windows-compat:
     runs-on: windows-latest
