@@ -42,6 +42,17 @@ def guard_conjuncts(condition: str) -> list[str] | None:
     Only operators outside quoted strings count, so a literal `'||'` compared
     against does not make a condition a disjunction.
 
+    Parameters
+    ----------
+    condition : str
+        A step's `if:` value, with or without its `${{ }}` wrapper.
+
+    Returns
+    -------
+    list[str] | None
+        Each conjunct with its whitespace collapsed, or `None` when the
+        condition is a disjunction, so no caller can read one as a conjunction.
+
     >>> guard_conjuncts("${{ env.A != '' && github.ref == 'refs/heads/main' }}")
     ["env.A != ''", "github.ref == 'refs/heads/main'"]
     >>> guard_conjuncts("env.A != '' || github.ref == 'refs/heads/main'") is None
@@ -67,6 +78,17 @@ def guard_conjuncts(condition: str) -> list[str] | None:
 def is_confined_to_main(condition: object) -> bool:
     """Return whether a step condition runs the step only on the trunk.
 
+    Parameters
+    ----------
+    condition : object
+        A step's parsed `if:` value, which may be absent or not a string.
+
+    Returns
+    -------
+    bool
+        True when the condition is a conjunction with the `main` ref test as
+        one of its conjuncts.
+
     >>> is_confined_to_main("github.ref  ==  'refs/heads/main'")
     True
     >>> is_confined_to_main(None)
@@ -90,6 +112,16 @@ def _cancels(concurrency: object) -> bool:
 
 def cancelling_scopes(document: dict[str, typ.Any]) -> list[str]:
     """Return every scope of a workflow whose concurrency may cancel a run.
+
+    Parameters
+    ----------
+    document : dict[str, typ.Any]
+        One parsed workflow document.
+
+    Returns
+    -------
+    list[str]
+        `workflow` and `job <name>` for each scope whose group may cancel.
 
     >>> cancelling_scopes({"concurrency": {"group": "g", "cancel-in-progress": True}})
     ['workflow']

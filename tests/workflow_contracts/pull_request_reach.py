@@ -105,6 +105,17 @@ def local_call(reference: str) -> str | None:
     it under another directory, and its content is not in this tree for any
     rule to read.
 
+    Parameters
+    ----------
+    reference : str
+        A job's `uses:` value.
+
+    Returns
+    -------
+    str | None
+        The called file's name, or `None` when the reference does not name a
+        workflow in this repository.
+
     >>> local_call("./.github/workflows/probe.yml")
     'probe.yml'
     >>> local_call("leynos/shared-actions/.github/workflows/x.yml@abc") is None
@@ -116,6 +127,17 @@ def local_call(reference: str) -> str | None:
 
 def called_workflows(document: dict[str, typ.Any]) -> frozenset[str]:
     """Return the file names of the local reusable workflows a document calls.
+
+    Parameters
+    ----------
+    document : dict[str, typ.Any]
+        One parsed workflow document.
+
+    Returns
+    -------
+    frozenset[str]
+        The names `local_call` resolves from its jobs' `uses:` values; a job
+        that declares no `uses:` string contributes nothing.
 
     >>> sorted(called_workflows(
     ...     {"jobs": {"a": {"uses": "./.github/workflows/probe.yml"}}}
