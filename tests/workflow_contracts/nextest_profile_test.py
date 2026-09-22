@@ -90,8 +90,9 @@ class Allowance(typ.NamedTuple):
 #: `ui` disjunction leaves the needle intact while the tests that clause
 #: named lose the ten-minute allowance and fall back to the base three
 #: hundred seconds. The two profiles genuinely differ here, the default one
-#: naming eight more `test(...)` clauses than `ci`, which is exactly the
-#: divergence a shared needle would have hidden.
+#: naming seven more `test(...)` clauses than `ci`: twelve against five,
+#: with `(binary(ui) & test(=ui))` shared and counted in neither. That
+#: divergence is exactly what a shared needle would have hidden.
 REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
     "default": {
         ("binary(behaviour_toolchain)"): Allowance(

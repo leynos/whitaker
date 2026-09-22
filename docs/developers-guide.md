@@ -1316,8 +1316,10 @@ Two of those flags are load-bearing rather than incidental. `--doctest-modules`
 collects the examples in the support modules' docstrings, so an example that
 states what a reader answers is executed rather than merely read; a helper
 whose documented answer drifts from its behaviour fails here. `hypothesis` is
-what the property suites in this directory need, and running the target without
-it collects nothing from them while still reporting success.
+required by the property suites in this directory, and running the target
+without it fails during collection rather than skipping them: those modules
+import it at module scope, so pytest reports `ModuleNotFoundError` for each and
+stops.
 
 The suite validates:
 
