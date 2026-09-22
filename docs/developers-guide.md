@@ -221,6 +221,49 @@ either environment variable individually. Fixture workspaces that intentionally
 use the same package identity must still select their own nested `--target-dir`
 to avoid reusing one another's build-script output.
 
+#### Who may talk to CodeScene
+
+`coverage-main.yml` owns the CodeScene surface entirely. It runs on a push to
+the trunk, it uploads the report, and it is the only workflow here that may
+hold the CodeScene credential. No pull-request lane may invoke the CodeScene
+action, run a `cs-coverage` command, or carry that credential, and
+`tests/workflow_contracts/coverage_boundary_test.py` enforces all three over
+every workflow a pull request can reach.
+
+The rule is CV-005, and the reason is that a step needing an external service
+and a secret turns an unrelated pull request red when the service is
+unavailable or the token has rotated. The changed-line gate that used to sit in
+`coverage-check` is what it removes, so a pull request no longer receives
+changed-line feedback. That is what the rule takes from every repository that
+adopts it, not something particular to this one.
+
+The credential's name does not appear in any pull-request workflow, not even in
+a comment. The contract reads the raw text as well as the parsed values,
+because a workflow that names it is a workflow somebody is about to wire it
+into.
+
+##### The half of CV-005 that is deferred here
+
+CV-005 also asks a pull-request lane to call the shared `generate-coverage`
+action with `with-ratchet: true`, so that changed-line feedback comes from a
+baseline the trunk wrote rather than from CodeScene. This repository does not
+call that action on either lane. It runs `make coverage`, its own
+`cargo llvm-cov nextest` driver, for the reason given above: the driver reuses
+the exact crate selection and warning policy `make test` uses, and the shared
+action does not obviously reproduce that selection.
+
+So the ratchet half is deferred rather than adopted, and a pull request here
+gets no changed-line comparison at all. Adopting it means answering first
+whether `generate-coverage`'s inputs can reproduce `make coverage`'s selection
+exactly. If they can, the driver decision above is superseded and this section
+changes with it. If they cannot, the gap belongs on the programme desk rather
+than in a workaround here.
+
+The measuring lane is contracted to keep running `make coverage`. That is not
+belt and braces: this repository's coverage run *is* its test run, so a rule
+that only forbade the CodeScene step would also have been satisfied by deleting
+the coverage build, and with it the tests.
+
 The CI workflow is split by purpose rather than running the same stack on every
 operating system. `linux-full` is the authoritative gate for formatting,
 Mermaid/Nixie/Markdown validation, `make lint`, and `make publish-check`.

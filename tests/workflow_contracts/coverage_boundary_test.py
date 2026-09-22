@@ -101,9 +101,18 @@ def test_the_measuring_lane_still_runs_the_instrumented_suite() -> None:
     over the same selection `make test` uses, so this lane's coverage run is
     this repository's test run.
 
-    This repository has no ratchet to compare against, because it does not
-    call the shared `generate-coverage` action; that is recorded on the pull
-    request rather than decided here.
+    Half of CV-005 is deferred here, deliberately. The rule also asks a
+    pull-request lane to call the shared `generate-coverage` action with
+    `with-ratchet: true`, so that changed-line feedback comes from a baseline
+    the trunk wrote. This repository calls that action on neither lane: it runs
+    `make coverage`, whose documented reason is that the driver reuses the
+    exact crate selection and warning policy `make test` uses.
+
+    So a pull request here gets no changed-line comparison at all. Adopting the
+    ratchet means first answering whether `generate-coverage`'s inputs can
+    reproduce that selection exactly; until then the driver decision stands and
+    this contract asserts only that the lane still measures. See "The half of
+    CV-005 that is deferred here" in the developers' guide.
     """
     runs = [
         str(step.get("run", "")) for step in job_steps(load_job(MEASURING_JOB))
