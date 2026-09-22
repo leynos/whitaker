@@ -9,15 +9,15 @@ consistent, and easy to maintain across projects.
 - Use British English based on the
   [Oxford English Dictionary](https://public.oed.com/) locale `en-GB-oxendict`,
   which denotes English for the Great Britain market in the Oxford style:
-  - suffix -ize in words like _realize_ and _organization_ instead of
+  - suffix -ize in words like *realize* and *organization* instead of
      -ise endings,
   - suffix ‑lyse in words not traced to the Greek ‑izo, ‑izein suffixes,
-     such as _analyse_, _paralyse_ and _catalyse_,
-  - suffix -our in words such as _colour_, _behaviour_ and _neighbour_,
-  - suffix -re in words such as _calibre_, _centre_ and _fibre_,
-  - double "l" in words such as _cancelled_, _counsellor_ and _cruellest_,
-  - maintain the "e" in words such as _likeable_, _liveable_ and _rateable_,
-  - suffix -ogue in words such as _analogue_ and _catalogue_,
+     such as *analyse*, *paralyse* and *catalyse*,
+  - suffix -our in words such as *colour*, *behaviour* and *neighbour*,
+  - suffix -re in words such as *calibre*, *centre* and *fibre*,
+  - double "l" in words such as *cancelled*, *counsellor* and *cruellest*,
+  - maintain the "e" in words such as *likeable*, *liveable* and *rateable*,
+  - suffix -ogue in words such as *analogue* and *catalogue*,
   - and so forth.
 - The words **"outwith"** and **"caveat"** are acceptable.
 - Keep United States (US) spelling when used in an API, for example, `color`.
@@ -46,6 +46,12 @@ consistent, and easy to maintain across projects.
 - Always provide a language identifier for fenced code blocks; use `plaintext`
   for non-code text.
 - Use `-` as the first level bullet and renumber lists when items change.
+- Use asterisks for emphasis, `*like this*`, including in table and figure
+  captions. Underscores mean the same thing to a Markdown renderer, but `MD049`
+  rejects a document that mixes the two, and every document here uses
+  asterisks, so an underscore added to one of them fails `make markdownlint`.
+  The templates below are written that way for the same reason: a caption
+  copied out of one lands in a document that is already asterisk-only.
 - Prefer inline links using `[text](url)` or angle brackets around the URL.
 - Ensure blank lines before and after bulleted lists and fenced blocks.
 - Ensure tables have a delimiter line below the header row.
@@ -404,7 +410,7 @@ Include these sections as appropriate to the decision's complexity:
 - Use second-level headings (`##`) for major sections.
 - Use third-level headings (`###`) for subsections (e.g. phases, option names).
 - Use tables to compare options when multiple dimensions are relevant. Include
-  a caption below the table (e.g. “_Table 1: Trade-offs between X and Y._”).
+  a caption below the table (e.g. “*Table 1: Trade-offs between X and Y.*”).
 - Include code snippets with language identifiers when illustrating technical
   approaches. Use `no_run` for illustrative Rust code that should not be
   executed.
@@ -459,7 +465,7 @@ YYYY-MM-DD.
 | --------- | -------- | -------- |
 | <Factor>  | <Value>  | <Value>  |
 
-_Table 1: Comparison of options._
+*Table 1: Comparison of options.*
 
 ## Decision outcome / proposed direction
 
@@ -575,7 +581,7 @@ flowchart TD
     C --> D[Merge]
 ```
 
-_Figure 1: Documentation workflow from draft through merge review._
+*Figure 1: Documentation workflow from draft through merge review.*
 
 ## Roadmap task writing guidelines
 
