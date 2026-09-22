@@ -5,6 +5,14 @@ on:
     types: [opened, synchronize, reopened]
   workflow_dispatch:
 
+# A second push to a pull request supersedes the run already in flight, which
+# otherwise charges a full set of minutes for a result nobody reads. The guard
+# is on the event rather than a literal `true`: a manual dispatch shares the
+# group and must run to completion, and so must any push trigger added later.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 permissions:
   contents: read
 
