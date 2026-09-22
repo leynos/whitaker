@@ -270,6 +270,26 @@ a comment. The contract reads the raw text as well as the parsed values,
 because a workflow that names it is a workflow somebody is about to wire it
 into.
 
+A pull-request workflow also may not publish the coverage report as an
+artefact. The contract judges an `actions/upload-artifact` step by whether its
+`path` *could* carry `lcov.info`, not by whether it names it, so it fails
+closed: a missing or blank `path`, `.` and `./`, anything containing `..`, any
+glob, any `$` expression or variable wherever it sits, a leading `~`, and any
+absolute path are all refused, and one such entry in a multi-line `path` is
+enough. Only a concrete relative path below the workspace that is not the
+report passes, which is the shape the `sccache-stats.json` uploads take. A lane
+that calls the shared `generate-coverage` action must pass
+`publish-artefact: 'false'`, because the action archives the report under a
+step of its own that the caller cannot see.
+
+`tests/workflow_contracts/shell_commands.py` reads what a `run:` block
+executes, as opposed to what it mentions, and the measuring lane's contract
+uses it to require `make coverage`: `echo make coverage` or a comment contains
+the words and runs nothing. It is for requirements only. A prohibition, such as
+"no pull-request lane runs `cs-coverage`", stays a substring test, because
+there over-matching is the safe direction and the reader deliberately
+under-matches.
+
 ##### The half of CV-005 that is deferred here
 
 CV-005 also asks a pull-request lane to call the shared `generate-coverage`

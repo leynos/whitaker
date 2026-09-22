@@ -109,15 +109,19 @@ def action_of(step: dict[str, typ.Any]) -> str:
 #: match the report however innocent it looks, so one is never cleared.
 _GLOB_CHARACTERS: typ.Final[frozenset[str]] = frozenset("*?[]!")
 
-#: Prefixes whose value is decided at run time. `${{ github.workspace }}`,
-#: `$GITHUB_WORKSPACE` and `~` all resolve to the workspace or above it, and
-#: the reader cannot tell which a given expression names, so none is cleared.
-_UNRESOLVED_MARKERS: typ.Final[tuple[str, ...]] = ("$", "~")
+#: The character that starts an expression or a variable. `${{ ... }}` and
+#: `$NAME` are decided at run time wherever they sit: `target/${{ x }}`
+#: reaches the workspace when `x` is `..`, and the reader does not resolve it.
+_EXPRESSION_MARKER: typ.Final[str] = "$"
+
+#: The home directory, which holds the workspace. Only a leading `~` expands.
+_HOME_MARKER: typ.Final[str] = "~"
 
 
 def _is_a_pattern_or_expression(entry: str) -> bool:
     """Return whether an entry's meaning is decided by a glob or at run time."""
-    return bool(_GLOB_CHARACTERS & set(entry)) or entry.startswith(_UNRESOLVED_MARKERS)
+    unresolved = _EXPRESSION_MARKER in entry or entry.startswith(_HOME_MARKER)
+    return unresolved or bool(_GLOB_CHARACTERS & set(entry))
 
 
 def _descends_from_the_workspace(entry: str) -> bool:

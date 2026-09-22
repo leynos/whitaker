@@ -34,6 +34,7 @@ from coverage_boundary import (
     publishes_the_coverage_report,
 )
 from pull_request_reach import pull_request_closure
+from shell_commands import runs_command
 from ubicloud_workflow_support import (
     WORKFLOWS_DIRECTORY,
     job_steps,
@@ -151,7 +152,8 @@ def test_the_measuring_lane_still_runs_the_instrumented_suite() -> None:
     runs = [
         str(step.get("run", "")) for step in job_steps(load_job(MEASURING_JOB))
     ]
-    assert any(MEASURING_COMMAND in script for script in runs), (
+    # Executed, not mentioned: `echo make coverage` contains the words too.
+    assert any(runs_command(script, MEASURING_COMMAND) for script in runs), (
         f"{MEASURING_JOB} must still run `{MEASURING_COMMAND}`; without it the "
         f"pull-request lane runs no tests at all"
     )
@@ -247,6 +249,8 @@ def test_each_forbidden_element_is_reported(step_body: str, expected: str) -> No
         pytest.param("${{ github.workspace }}", id="the-workspace-expression"),
         pytest.param("${{ github.workspace }}/", id="the-workspace-expression-slashed"),
         pytest.param("$GITHUB_WORKSPACE", id="the-workspace-variable"),
+        pytest.param("target/${{ inputs.location }}", id="an-expression-after-a-prefix"),
+        pytest.param("dist/$SUBDIR", id="a-variable-after-a-prefix"),
         pytest.param("~", id="the-home-directory"),
         pytest.param("/home/runner/work", id="an-absolute-ancestor"),
         pytest.param("/", id="the-root"),
@@ -339,6 +343,7 @@ def test_a_lookalike_action_is_a_different_action(suffix: str) -> None:
         pytest.param("dist/", id="a-directory"),
         pytest.param("sccache-stats.json", id="the-shape-this-repository-uploads"),
         pytest.param("./target/nextest/junit.xml", id="a-nested-file"),
+        pytest.param("dist/~old", id="a-tilde-that-does-not-expand"),
     ],
 )
 def test_an_artefact_step_naming_another_path_is_not_an_offence(path: str) -> None:

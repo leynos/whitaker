@@ -23,6 +23,9 @@ LOCAL_WORKFLOW_DIRECTORY: typ.Final[pathlib.PurePosixPath] = pathlib.PurePosixPa
     ".github/workflows"
 )
 
+#: The component GitHub reads as "this repository, at the running commit".
+SAME_COMMIT_PREFIX: typ.Final[str] = "$"
+
 PULL_REQUEST_TRIGGER: typ.Final[str] = "pull_request"
 
 #: The variant that runs in the base repository's context and therefore *can*
@@ -101,6 +104,11 @@ def local_call(reference: str) -> str | None:
     directory. A matcher listing spellings has to be extended for every variant
     anyone proposes, and each omission is a workflow silently outside the lane.
 
+    The one prefix read as syntax is GitHub's `$/`, which its documentation
+    recommends for a same-repository call at the running commit. It is a
+    component of its own, not a directory, so it is dropped before the shape is
+    asked about.
+
     A call to another repository is not followed. Its `owner/repo/` prefix puts
     it under another directory, and its content is not in this tree for any
     rule to read.
@@ -118,10 +126,15 @@ def local_call(reference: str) -> str | None:
 
     >>> local_call("./.github/workflows/probe.yml")
     'probe.yml'
+    >>> local_call("$/.github/workflows/probe.yml")
+    'probe.yml'
     >>> local_call("leynos/shared-actions/.github/workflows/x.yml@abc") is None
     True
     """
-    path = pathlib.PurePosixPath(reference.strip())
+    parts = pathlib.PurePosixPath(reference.strip()).parts
+    if parts[:1] == (SAME_COMMIT_PREFIX,):
+        parts = parts[1:]
+    path = pathlib.PurePosixPath(*parts)
     return path.name if path.parent == LOCAL_WORKFLOW_DIRECTORY else None
 
 

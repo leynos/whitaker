@@ -82,6 +82,25 @@ def test_the_probe_is_reported_once_the_closure_reaches_it() -> None:
     assert any("secrets: inherit" in o for o in caller_offences), caller_offences
 
 
+@pytest.mark.parametrize(
+    "prefix",
+    [pytest.param("./", id="dot-slash"), pytest.param("$/", id="dollar-slash")],
+)
+def test_the_closure_follows_both_documented_spellings(prefix: str) -> None:
+    """GitHub documents `./` and `$/` for a same-repository call.
+
+    Parametrized rather than combined, so each fails on its own; `$/` is the
+    spelling GitHub recommends, and a reader knowing only `./` would drop it.
+    """
+    documents = {
+        "ci.yml": _parsed(_caller(f"{prefix}.github/workflows/probe.yml")),
+        "probe.yml": _parsed(PROBE),
+    }
+    assert pull_request_closure(documents) == frozenset(documents), (
+        f"a call spelt with {prefix!r} reaches the called workflow"
+    )
+
+
 def test_the_closure_is_transitive() -> None:
     """A call two levels down is as reachable as one level down."""
     documents = {
@@ -119,6 +138,7 @@ def test_a_call_to_a_missing_file_is_not_followed() -> None:
     ("reference", "expected"),
     [
         pytest.param("./.github/workflows/probe.yml", "probe.yml", id="dot-slash"),
+        pytest.param("$/.github/workflows/probe.yml", "probe.yml", id="dollar-slash"),
         pytest.param(".github/workflows/probe.yml", "probe.yml", id="bare"),
         pytest.param(".github//workflows/./probe.yml", "probe.yml", id="odd-spelling"),
         pytest.param(
@@ -128,6 +148,7 @@ def test_a_call_to_a_missing_file_is_not_followed() -> None:
         ),
         pytest.param("./.github/actions/probe", None, id="a-local-action"),
         pytest.param("./.github/workflows/sub/probe.yml", None, id="a-subdirectory"),
+        pytest.param("$/elsewhere/.github/workflows/probe.yml", None, id="dollar-elsewhere"),
     ],
 )
 def test_a_local_call_is_recognized_by_shape(
@@ -136,9 +157,10 @@ def test_a_local_call_is_recognized_by_shape(
     """What counts as a call into this repository's own workflows.
 
     Read as a path rather than matched against a list of prefixes, so any
-    spelling that resolves under the workflow directory is local. The last
-    three rows are the narrow half: another repository, a local action, and a
-    path GitHub would not accept as a reusable workflow all stay out.
+    spelling that resolves under the workflow directory is local, and GitHub's
+    documented `$/` same-commit prefix with it. The last four rows are the
+    narrow half: another repository, a local action, and paths GitHub would
+    not accept as a reusable workflow all stay out.
     """
     assert local_call(reference) == expected
 

@@ -115,6 +115,19 @@ class StrictSafeLoader(yaml.SafeLoader):
     ) -> dict[typ.Hashable, Any]:
         """Build one mapping, refusing a key declared twice in it.
 
+        Parameters
+        ----------
+        node : yaml.MappingNode
+            The mapping node being constructed.
+        deep : bool, optional
+            Whether nested values are constructed now rather than lazily, as
+            PyYAML's own `construct_mapping` takes it.
+
+        Returns
+        -------
+        dict[typ.Hashable, Any]
+            The constructed mapping, built by PyYAML once no key repeats.
+
         Raises
         ------
         DuplicateKeyError
@@ -140,6 +153,22 @@ def parse_workflow(text: str) -> object:
     Every contract that reads a workflow goes through this rather than
     `yaml.safe_load`, so a repeated key fails the suite instead of silently
     losing one of its values.
+
+    Parameters
+    ----------
+    text : str
+        A workflow file's text.
+
+    Returns
+    -------
+    object
+        The parsed document. A workflow parses to a mapping; the caller checks
+        that, because a malformed file may parse to anything.
+
+    Raises
+    ------
+    DuplicateKeyError
+        When any mapping in the document declares one key twice.
 
     >>> parse_workflow("on: push\\njobs: {}\\n")
     {True: 'push', 'jobs': {}}

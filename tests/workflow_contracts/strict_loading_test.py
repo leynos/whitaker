@@ -7,6 +7,8 @@ and every contract reading it judges a file it never saw whole.
 Run via ``make test-workflow-contracts``.
 """
 
+import pathlib
+
 import pytest
 from ubicloud_workflow_support import (
     WORKFLOWS_DIRECTORY,
@@ -41,6 +43,6 @@ def test_the_same_key_in_sibling_mappings_is_accepted() -> None:
     ),
     ids=lambda path: path.name,
 )
-def test_every_checked_in_workflow_parses_strictly(path: object) -> None:
+def test_every_checked_in_workflow_parses_strictly(path: pathlib.Path) -> None:
     """Every contract reads these through the strict loader, so each must load."""
     assert isinstance(parse_workflow(path.read_text(encoding="utf-8")), dict)
