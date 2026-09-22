@@ -52,6 +52,7 @@ TERMINATION_SAFETY_MARGIN_SECONDS: typ.Final[fractions.Fraction] = fractions.Fra
 NEXTEST_CONFIG = REPOSITORY_ROOT / ".config" / "nextest.toml"
 
 
+
 class Profile(typ.NamedTuple):
     """One nextest profile, as the runner reads it.
 

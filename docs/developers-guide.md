@@ -3709,7 +3709,15 @@ reading. The tree carries none of those shapes. Reading the files is the one
 place the module touches the filesystem, and it fails with a named
 `WorkflowLoadError` carrying the file's name rather than skipping it: a
 workflow the contract cannot read is one whose lanes it cannot judge, and
-skipping it would report a repository with fewer lanes than it has.
+skipping it would report a repository with fewer lanes than it has. The other
+two inputs follow the same pattern. `nextest_config.py` is the one place the
+nextest configuration is read, and a missing, unreadable, undecodable or
+malformed file fails there as `NextestConfigurationError` naming the file; no
+module reads it at import. `rust_source_texts` in
+`compile_contract_allowance_test.py` is the one place the Rust sources are
+read, failing as `RustSourceError`, and the compile-contract discovery is a
+query over what it returns. `contract_inputs_test.py` drives both boundaries
+over inputs the tree does not have.
 
 It pins the values the tables above state as well as ordering them: the base
 `slow-timeout` on both profiles compared as a whole table, the 45 m whole-run

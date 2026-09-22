@@ -30,9 +30,9 @@ from __future__ import annotations
 import typing as typ
 
 import pytest
+from nextest_config import nextest_config_text
 from timeout_budgets import (
     Profile,
-    NEXTEST_CONFIG,
     CEILING_MARGIN_SECONDS,
     OUTSIDE_SUITE_ALLOWANCE_SECONDS,
     TERMINATION_SAFETY_MARGIN_SECONDS,
@@ -69,7 +69,7 @@ def nextest_profiles() -> dict[str, Profile]:
     dict[str, str]
         Profile name to its section and overrides.
     """
-    return profiles(NEXTEST_CONFIG.read_text(encoding="utf-8"))
+    return profiles(nextest_config_text())
 
 
 @pytest.fixture(scope="module")

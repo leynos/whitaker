@@ -5,9 +5,11 @@ Split from ``timeout_ordering_test``, and again from
 limit ``AGENTS.md`` sets. The ordering assertions there hold for a wide
 range of values, so a profile can drift to a budget nobody chose without
 failing any of them; these pin the values the guide records.
-``NEXTEST`` and ``REQUIRED_OVERRIDES`` are read from here by the
-compile-contract module, which asks a different question of the same
-configuration.
+``REQUIRED_OVERRIDES`` is read from here by the compile-contract
+module, which asks a different question of the same configuration.
+Neither module reads the file at import: each takes the parsed
+configuration from a fixture over ``nextest_config.load_nextest_config``,
+the one boundary that reads it and names the file when it cannot.
 
 nextest's custom profiles inherit ``[profile.default]`` and its
 ``[[overrides]]`` are consulted, so restating the budgets in ``ci`` is
@@ -18,7 +20,6 @@ other is the state these tests exist to catch.
 
 from __future__ import annotations
 
-import tomllib
 import typing as typ
 
 import pytest
@@ -27,15 +28,7 @@ from suite_lanes import (
     _scopes_declaring_profile,
     _workflow_documents,
 )
-from timeout_budgets import NEXTEST_CONFIG
-
-#: The configuration as nextest would read it, parsed once. Not a
-#: fixture, because it is a property of the tree rather than of one
-#: test's arrangement, and because the compile-contract module imports
-#: it.
-NEXTEST: typ.Final[dict[str, typ.Any]] = tomllib.loads(
-    NEXTEST_CONFIG.read_text(encoding="utf-8")
-)
+from nextest_config import load_nextest_config
 
 #: The base per-test allowance both profiles must declare, as the guide
 #: states it. Asserted by value rather than by shape, because the
@@ -185,7 +178,7 @@ def parsed_nextest() -> dict[str, typ.Any]:
     dict[str, typ.Any]
         The parsed document.
     """
-    return tomllib.loads(NEXTEST_CONFIG.read_text(encoding="utf-8"))
+    return load_nextest_config()
 
 
 @pytest.mark.parametrize("profile", ["default", "ci"], ids=str)

@@ -16,12 +16,14 @@ allowance until it drifted past it on the Windows lane.
 
 from __future__ import annotations
 
+import collections.abc as cabc
 import pathlib
 import re
 import typing as typ
 
 import pytest
-from nextest_profile_test import NEXTEST, REQUIRED_OVERRIDES
+from nextest_profile_test import REQUIRED_OVERRIDES
+from nextest_config import load_nextest_config
 from ubicloud_workflow_support import REPOSITORY_ROOT
 
 
@@ -40,16 +42,58 @@ _TEST_FUNCTION: typ.Final[re.Pattern[str]] = re.compile(
 )
 
 
-def _rust_sources() -> typ.Iterator[pathlib.Path]:
-    """Yield every Rust source in the tree, skipping build output.
+class RustSourceError(OSError):
+    """Raised when the tree's Rust sources cannot be read.
 
-    The whole tree rather than a list of directories: a compile contract
-    added under a crate nobody listed would otherwise carry no allowance
-    while every assertion over the list still passed.
+    The discovery below is only as wide as what it was given, so an
+    unreadable file or a missing root means it saw fewer tests than the
+    tree holds. Named, so that reads as a failure to read rather than as
+    a tree with fewer compile contracts.
     """
-    for path in sorted(REPOSITORY_ROOT.rglob("*.rs")):
-        if "target" not in path.parts and not path.name.startswith("."):
-            yield path
+
+
+def rust_source_texts(
+    root: pathlib.Path = REPOSITORY_ROOT,
+) -> dict[pathlib.Path, str]:
+    """Return every Rust source under a root, by path, skipping build output.
+
+    The one place this module touches the filesystem; the discovery is a
+    query over what this returns. The whole tree rather than a list of
+    directories: a compile contract added under a crate nobody listed
+    would otherwise carry no allowance while every assertion over the
+    list still passed.
+
+    Parameters
+    ----------
+    root : pathlib.Path
+        The tree to read; the repository by default.
+
+    Returns
+    -------
+    dict[pathlib.Path, str]
+        Each source's path and text, in path order.
+
+    Raises
+    ------
+    RustSourceError
+        If the root is not a directory, or a source cannot be read or is
+        not UTF-8.
+    """
+    # `rglob` yields nothing for a missing root, which would read as a
+    # tree without compile contracts rather than as no tree at all.
+    if not root.is_dir():
+        message = f"{root} is not a directory, so no Rust source was read"
+        raise RustSourceError(message)
+    texts: dict[pathlib.Path, str] = {}
+    for path in sorted(root.rglob("*.rs")):
+        if "target" in path.parts or path.name.startswith("."):
+            continue
+        try:
+            texts[path] = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as error:
+            message = f"cannot read the Rust source {path}: {error}"
+            raise RustSourceError(message) from error
+    return texts
 
 
 def _named_compile_contracts(text: str) -> typ.Iterator[str]:
@@ -97,8 +141,10 @@ def _period(slow_timeout: object) -> str | None:
     return None
 
 
-def _compile_contract_tests() -> dict[str, pathlib.Path]:
-    """Return every test that drives `trybuild`, by name.
+def compile_contract_tests(
+    sources: cabc.Mapping[pathlib.Path, str],
+) -> dict[str, pathlib.Path]:
+    """Return every test in the given sources that drives `trybuild`, by name.
 
     Found from the call itself rather than from a list, because the
     failure this guards against is a binary nobody remembered: whitaker
@@ -111,10 +157,21 @@ def _compile_contract_tests() -> dict[str, pathlib.Path]:
     failure rather than as nothing to check.
     """
     found: dict[str, pathlib.Path] = {}
-    for path in _rust_sources():
-        text = path.read_text(encoding="utf-8")
+    for path, text in sources.items():
         found.update(dict.fromkeys(_named_compile_contracts(text), path))
     return found
+
+
+@pytest.fixture(name="parsed_nextest", scope="module")
+def parsed_nextest_fixture() -> dict[str, typ.Any]:
+    """Return the nextest configuration, read once at the boundary."""
+    return load_nextest_config()
+
+
+@pytest.fixture(name="rust_sources", scope="module")
+def rust_sources_fixture() -> dict[pathlib.Path, str]:
+    """Return the tree's Rust sources, read once at the boundary."""
+    return rust_source_texts()
 
 
 @pytest.mark.parametrize(
@@ -122,6 +179,8 @@ def _compile_contract_tests() -> dict[str, pathlib.Path]:
 )
 def test_every_compile_contract_test_carries_the_long_allowance(
     profile: str,
+    parsed_nextest: dict[str, typ.Any],
+    rust_sources: dict[pathlib.Path, str],
 ) -> None:
     """A `trybuild` test costs what a build costs, not what a test costs.
 
@@ -140,7 +199,7 @@ def test_every_compile_contract_test_carries_the_long_allowance(
     on. Matching by binary would not do: the two binaries here are both
     called `ui`.
     """
-    discovered = _compile_contract_tests()
+    discovered = compile_contract_tests(rust_sources)
     assert discovered, (
         "no trybuild::TestCases call was found; the discovery has stopped "
         "recognizing compile-contract tests and would sweep an empty set"
@@ -152,7 +211,7 @@ def test_every_compile_contract_test_carries_the_long_allowance(
     # crash would have hidden.
     long_filters = [
         override.get("filter", "")
-        for override in (NEXTEST["profile"][profile].get("overrides") or [])
+        for override in (parsed_nextest["profile"][profile].get("overrides") or [])
         if _period(override.get("slow-timeout")) == "10m"
     ]
     for name, path in sorted(discovered.items()):
