@@ -146,7 +146,10 @@ def test_ghac_lanes_export_the_proxy_credentials_first() -> None:
 def test_the_credentials_step_uses_the_action_that_exports_them() -> None:
     """A step carrying the name but not the action satisfies order and nothing else."""
     for job_name, _ in _ubicloud_jobs_on("gha"):
-        step = steps_by_name(load_job(job_name))[CREDENTIALS_STEP]
+        step = steps_by_name(load_job(job_name)).get(CREDENTIALS_STEP)
+        assert step is not None, (
+            f"{job_name} has no {CREDENTIALS_STEP!r} step at all"
+        )
         uses = str(step.get("uses", ""))
         assert uses.startswith(f"{CREDENTIALS_ACTION_PATH}@"), (
             f"{job_name}: {CREDENTIALS_STEP!r} must run "
