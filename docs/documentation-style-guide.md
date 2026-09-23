@@ -531,28 +531,27 @@ fn add(a: i32, b: i32) -> i32 {
 
 ## API doc comments (Rust)
 
-Use doc comments to document public APIs. Keep them consistent with the
-contents of the manual.
+Every public and private function and method carries a `///` doc comment, as
+`AGENTS.md` requires. Keep them consistent with the contents of the manual.
 
 - Begin each block with `///`.
-- Keep the summary line short, followed by further detail.
-- Explicitly document all parameters with `# Parameters`, describing each
-  argument.
-- Document the return value with `# Returns`.
-- Document any panics or errors with `# Panics` or `# Errors` as appropriate.
+- Start with an imperative one-line summary beginning with a verb.
+- Add a rationale paragraph only where a design choice is non-obvious.
+- Do not add `# Arguments`, `# Parameters` or `# Returns` sections. They are
+  not used in this codebase: name the inputs and the result in the summary or
+  the rationale where they need explaining.
+- Document errors with `# Errors` on functions returning `Result` whose
+  failure semantics are not obvious from the summary, and panics with
+  `# Panics`.
 - Place examples under `# Examples` and mark the code block with `no_run`, so
   they do not execute during documentation tests.
 - Put function attributes after the doc comment.
 
 ```rust,no_run
-/// Returns the sum of `a` and `b`.
+/// Add `b` to `a`, wrapping on overflow rather than panicking.
 ///
-/// # Parameters
-/// - `a`: The first integer to add.
-/// - `b`: The second integer to add.
-///
-/// # Returns
-/// The sum of `a` and `b`.
+/// Callers sum counters that are allowed to roll over, so wrapping is the
+/// defined behaviour rather than an error.
 ///
 /// # Examples
 ///
@@ -560,8 +559,8 @@ contents of the manual.
 /// assert_eq!(add(2, 3), 5);
 /// ```
 #[inline]
-pub fn add(a: i32, b: i32) -> i32 {
-    a + b
+pub fn add(a: u32, b: u32) -> u32 {
+    a.wrapping_add(b)
 }
 ```
 

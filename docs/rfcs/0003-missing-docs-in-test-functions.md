@@ -106,7 +106,7 @@ Source Rust
   -> high-level intermediate representation (HIR): Clippy's ordinary private-item documentation policy
 ```
 
-_Figure 1: Documentation-check ownership across test compilation._
+*Figure 1: Documentation-check ownership across test compilation.*
 
 The diagram shows that Whitaker operates on authored test functions before
 macro expansion, while Clippy retains responsibility for ordinary HIR items.
@@ -305,7 +305,7 @@ workspace invocation.
 | Rustdoc JSON checker                     | Exposes documentation and optional spans                                            | Requires nightly orchestration, JSON processing, and a separate diagnostic channel           |
 | Require docs for every `--test` function | Simple predicate                                                                    | Incorrectly includes unrelated unit-test helpers throughout normal source trees              |
 
-_Table 1: Alternatives for enforcing documentation on selected test functions._
+*Table 1: Alternatives for enforcing documentation on selected test functions.*
 
 An external rustdoc JSON design is principled: its item representation exposes
 documentation and may expose a source span.[^3] It remains an unstable rustdoc

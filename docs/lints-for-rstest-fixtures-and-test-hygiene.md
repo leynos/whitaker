@@ -311,7 +311,7 @@ emit_once_per_group = false
 | `SINGLE_BINDING_PARAGRAPH`           | Contiguous single-output paragraphs            | Medium               | Low to medium | `min_len`, `max_len`, `max_inputs`, mutation policy    | Medium     |
 | `RSTEST_PARAGRAPH_SHOULD_BE_FIXTURE` | Repeated setup paragraphs in `#[rstest]` tests | High                 | Medium        | `min_distinct_tests`, assertion set, input strictness  | High       |
 
-_Table 1: Comparison of target scope, cost, and implementation complexity._
+*Table 1: Comparison of target scope, cost, and implementation complexity.*
 
 For screen readers: The following flowchart summarizes lint data flow from HIR
 traversal to per-lint diagnostics.
@@ -332,7 +332,7 @@ flowchart TD
     J --> M[Emit lint C]
 ```
 
-_Figure 1: High-level analysis and emission flow for the three proposed lints._
+*Figure 1: High-level analysis and emission flow for the three proposed lints.*
 
 For screen readers: The following Gantt chart outlines a staged implementation
 sequence from shared helpers through integration.
@@ -364,7 +364,7 @@ gantt
     Documentation and localization updates            :e2, after d2, 3d
 ```
 
-_Figure 2: Proposed phased implementation timeline for lints A, B, and C._
+*Figure 2: Proposed phased implementation timeline for lints A, B, and C.*
 
 ## Non-goals and boundaries
 

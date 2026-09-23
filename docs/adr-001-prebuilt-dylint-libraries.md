@@ -77,7 +77,7 @@ decision drivers.
 | Artefact storage       | Rolling retention            | None               | Per release                   |
 | Offline support        | Fallback build available     | Always available   | Fallback build for non-tagged |
 
-_Table 1: Trade-offs between distribution approaches._
+*Table 1: Trade-offs between distribution approaches.*
 
 ## Decision outcome / proposed direction
 

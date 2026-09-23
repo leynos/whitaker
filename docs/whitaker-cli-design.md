@@ -202,9 +202,9 @@ sequenceDiagram
   WhitakerCLI-->>User: localized diagnostics and exit code preserving lint failures
 ```
 
-_Figure 1: Sequence diagram showing how `whitaker check` merges configuration,
+*Figure 1: Sequence diagram showing how `whitaker check` merges configuration,
 performs lazy dependency repair when required, records install failures for
-`doctor`, and then delegates to `cargo dylint`._
+`doctor`, and then delegates to `cargo dylint`.*
 
 ## Rule identifiers and selection model
 
@@ -223,7 +223,7 @@ stable rule codes and canonical lint names.
 | `PAN002`   | `no_unwrap_or_else_panic`     |
 | `MAINT001` | `bumpy_road_function`         |
 
-_Table 1: Proposed stable Whitaker rule codes and canonical lint names._
+*Table 1: Proposed stable Whitaker rule codes and canonical lint names.*
 
 Selectors should support the following forms:
 
@@ -458,9 +458,9 @@ erDiagram
   WhitakerConfig ||--o{ FailureEvent : observed_under
 ```
 
-_Figure 2: Entity-relationship diagram showing how Whitaker configuration, lint
+*Figure 2: Entity-relationship diagram showing how Whitaker configuration, lint
 selection, installed bundle manifests, and recorded failure events relate to
-one another._
+one another.*
 
 ## `whitaker install`
 

@@ -43,7 +43,7 @@ only that declared configuration.
 | B: exclude every crate that needs dynamic-linking flags | Runs reliably with the shared workflow by removing the affected crates.                             | Omits important production code, making the reported scope less useful.         | Lower run risk, but accepts the risk of untested affected crates.                  | Makes no full-baseline claim; verification covers only the reduced scope.                        | Reliable execution deliberately omits important affected crates.                        |
 | C: adopt a pin-only declared-configuration contract     | Closest safe approximation supported by the shared workflow.                                        | Retains useful informational coverage without claiming full workspace coverage. | Keeps mutation testing informational and independent of pull-request gates.        | Verifies the caller's declared security and configuration shape, not a full workspace assertion. | A declared-shape contract is the closest safe approximation, not full workspace parity. |
 
-_Table 1: Comparison of mutation-testing options._
+*Table 1: Comparison of mutation-testing options.*
 
 ## Decision outcome / proposed direction
 

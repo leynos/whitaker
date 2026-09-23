@@ -98,7 +98,7 @@ regression, fixture coverage, and full pipeline observability.
 | Drift risk from proof-only models | None          | High                   | Medium                 | Medium   |
 | Coverage of exact regressions     | Strong        | Weak unless duplicated | Weak unless duplicated | Strong   |
 
-_Table 1: Trade-offs between proof strategies for the clone detector pipeline._
+*Table 1: Trade-offs between proof strategies for the clone detector pipeline.*
 
 ## Decision outcome / proposed direction
 

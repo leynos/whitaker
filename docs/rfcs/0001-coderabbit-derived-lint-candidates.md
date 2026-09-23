@@ -65,7 +65,7 @@ enforcement paths.
 | Fallible calls between resource acquisition and guard      | 3        | all major         | `fallible_gap_before_guard`                  |
 | Near-identical tests differing only in literals            | 3        | all trivial       | `parameterizable_duplicate_tests`            |
 
-_Table 1: Unscheduled Rust finding clusters in the CodeRabbit corpus._
+*Table 1: Unscheduled Rust finding clusters in the CodeRabbit corpus.*
 
 ## Goals and non-goals
 
