@@ -46,6 +46,7 @@ TRUNK_BRANCHES: typ.Final[tuple[str, ...]] = ("main",)
 REVIEWED_CONDITIONS: typ.Final[dict[str, tuple[bool, frozenset[str]]]] = {
     "github.event_name == 'pull_request'": (True, frozenset({"pull_request"})),
     "github.event_name != 'push'": (False, frozenset({"push"})),
+    "github.event_name != 'pull_request'": (False, frozenset({"pull_request"})),
 }
 
 #: A step whose script starts one of these compiles, or may compile, Rust.

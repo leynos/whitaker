@@ -41,18 +41,26 @@ TRUNK_WRITERS: typ.Final[dict[str, str]] = {
 }
 
 
+def _is_pull_request_lane_on_gha(
+    job: dict[str, typ.Any], workflow: dict[str, typ.Any], backend: str
+) -> bool:
+    """Return whether a pull request runs this job on the Actions backend."""
+    if backend != "gha":
+        return False
+    if not declares_trigger(workflow, "pull_request"):
+        return False
+    return runs_on(job, "pull_request")
+
+
 def _pull_request_lanes_on_gha() -> set[str]:
     """Return the Ubicloud jobs on the Actions backend a pull request runs."""
-    lanes: set[str] = set()
-    for job_name, workflow_name in UBICLOUD_JOBS.items():
-        workflow = load_workflow(workflow_name)
-        if (
-            backend_for(workflow_name) == "gha"
-            and declares_trigger(workflow, "pull_request")
-            and runs_on(load_job(job_name), "pull_request")
-        ):
-            lanes.add(job_name)
-    return lanes
+    return {
+        job_name
+        for job_name, workflow_name in UBICLOUD_JOBS.items()
+        if _is_pull_request_lane_on_gha(
+            load_job(job_name), load_workflow(workflow_name), backend_for(workflow_name)
+        )
+    }
 
 
 def test_every_pull_request_lane_on_gha_has_a_registered_writer() -> None:
@@ -62,6 +70,29 @@ def test_every_pull_request_lane_on_gha_has_a_registered_writer() -> None:
         f"pull-request lanes on the Actions backend are {sorted(lanes)}, but "
         f"TRUNK_WRITERS registers {sorted(TRUNK_WRITERS)}"
     )
+
+
+@pytest.mark.parametrize(
+    ("job", "triggers", "backend", "expected"),
+    [
+        pytest.param({}, "on: pull_request\n", "gha", True, id="a-lane"),
+        pytest.param({}, "on: pull_request\n", "local", False, id="another-backend"),
+        pytest.param({}, "on:\n  push:\n", "gha", False, id="a-push-workflow"),
+        pytest.param(
+            {"if": "github.event_name != 'pull_request'"},
+            "on: [push, pull_request]\n",
+            "gha",
+            False,
+            id="a-job-kept-off-pull-requests",
+        ),
+    ],
+)
+def test_only_jobs_a_pull_request_runs_on_gha_need_a_writer(
+    job: dict[str, typ.Any], triggers: str, backend: str, expected: bool
+) -> None:
+    """A job no pull request runs, or one on another backend, reads nothing."""
+    workflow = parse_workflow(f"{triggers}jobs: {{}}\n")
+    assert _is_pull_request_lane_on_gha(job, workflow, backend) is expected
 
 
 @pytest.mark.parametrize(("reader", "writer"), sorted(TRUNK_WRITERS.items()))
