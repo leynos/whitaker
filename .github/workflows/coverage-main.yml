@@ -41,10 +41,16 @@ env:
   # Keep in step with ci.yml: one named constant for the Ubicloud shape.
   LINUX_RUNNER_VCPUS: '2'
   # One-line switch between the Actions cache backend and a cached local
-  # directory. `local` is deployed because `gha` failed every store attempt on
-  # Ubicloud twice. Keep in step with ci.yml; see
-  # scripts/select-sccache-backend.sh and the developers' guide.
-  SCCACHE_BACKEND: local
+  # directory. `gha` is deployed. It reaches Ubicloud's own cache proxy rather
+  # than GitHub's cache service, because "Export the Ubicloud cache
+  # credentials" below publishes the proxy address and clears the v2
+  # cache-service flag the proxy does not serve. The earlier `gha` attempt
+  # that failed every store attempt lacked that step; see the longer note in
+  # ci.yml, scripts/select-sccache-backend.sh and the developers' guide. Keep
+  # in step with ci.yml: this lane writes the compiler cache the pull-request
+  # lanes read, so a split between the two files would leave each reading a
+  # store the other never wrote.
+  SCCACHE_BACKEND: gha
   # RUSTC_WRAPPER is deliberately absent. The shared Rust setup action now
   # exports it as the absolute path of the sccache it installed, and stands
   # aside when a caller has already set the variable, so a value here would
@@ -72,6 +78,16 @@ jobs:
             printf 'CARGO_BUILD_JOBS=%s\n' "${LINUX_RUNNER_VCPUS}"
             printf 'NEXTEST_TEST_THREADS=%s\n' "${LINUX_RUNNER_VCPUS}"
           } >> "$GITHUB_ENV"
+
+      - name: Export the Ubicloud cache credentials
+        # The runner hands `ACTIONS_CACHE_URL` and `ACTIONS_RUNTIME_TOKEN` to
+        # action steps, and this republishes them through `GITHUB_ENV` with the
+        # v2 cache-service flag cleared, because Ubicloud's proxy serves v1. An
+        # sccache server started without them binds local disk for the whole
+        # job and reports a plausible hit rate for a store nothing archives.
+        # It must precede the selector and every later step, because sccache
+        # binds its backend once, when its server starts.
+        uses: leynos/shared-actions/.github/actions/export-ubicloud-cache-credentials@dbe2e22ceaf498d85512679ccded38be9dbe7777
 
       - name: Select the compiler cache backend
         run: bash scripts/select-sccache-backend.sh
@@ -111,16 +127,6 @@ jobs:
           path: ~/.cache/whitaker-mirrors
           key: clippy-mirror-v1-dylint6.0.1-${{ hashFiles('rust-toolchain.toml') }}
 
-      - name: Restore the compiler cache directory
-        id: sccache-dir
-        if: env.SCCACHE_BACKEND == 'local'
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
-        with:
-          path: ~/.cache/sccache
-          key: sccache-coverage-v1-${{ runner.os }}-${{ runner.arch }}-${{ runner.environment }}-${{ hashFiles('rust-toolchain.toml') }}-${{ github.run_id }}
-          restore-keys: |
-            sccache-coverage-v1-${{ runner.os }}-${{ runner.arch }}-${{ runner.environment }}-${{ hashFiles('rust-toolchain.toml') }}-
-
       - name: Record cache observations
         if: always()
         env:
@@ -133,9 +139,6 @@ jobs:
           CLIPPY_MIRROR_KEY: ${{ steps.clippy-mirror-cache.outputs.cache-primary-key }}
           CLIPPY_MIRROR_MATCHED: ${{ steps.clippy-mirror-cache.outputs.cache-matched-key }}
           CLIPPY_MIRROR_HIT: ${{ steps.clippy-mirror-cache.outputs.cache-hit }}
-          SCCACHE_DIR_KEY: ${{ steps.sccache-dir.outputs.cache-primary-key }}
-          SCCACHE_DIR_MATCHED: ${{ steps.sccache-dir.outputs.cache-matched-key }}
-          SCCACHE_DIR_HIT: ${{ steps.sccache-dir.outputs.cache-hit }}
         run: bash scripts/record-cache-observations.sh
 
       - name: Provision the Clippy source mirror
@@ -184,6 +187,15 @@ jobs:
         if: always()
         run: bash scripts/record-sccache-effectiveness.sh
 
+      - name: Upload sccache statistics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
+        with:
+          name: sccache-stats-coverage-upload
+          path: sccache-stats.json
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Upload coverage data to CodeScene
         env:
           CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
@@ -230,9 +242,7 @@ jobs:
           path: ~/.cache/whitaker-mirrors
           key: ${{ steps.clippy-mirror-cache.outputs.cache-primary-key }}
 
-      - name: Save the compiler cache directory
-        if: env.SCCACHE_BACKEND == 'local' && github.ref == 'refs/heads/main'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
-        with:
-          path: ~/.cache/sccache
-          key: ${{ steps.sccache-dir.outputs.cache-primary-key }}
+      - name: Check sccache health
+        # Last, so a failure here cannot cost the job its cache saves; the
+        # statistics were uploaded earlier either way.
+        run: python3 scripts/check_sccache_health.py --expect-location ghac sccache-stats.json

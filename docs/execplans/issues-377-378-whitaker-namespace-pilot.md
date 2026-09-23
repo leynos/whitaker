@@ -684,6 +684,36 @@ Open before this repository can exit the pilot:
 - [ ] Decide whether executing the suite under static linking needs a lane
   of its own, now that `publish-check` no longer does it.
 
+## Addendum (2026-09-23): the Linux lanes move to the Actions backend
+
+Nothing above is rewritten. This supersedes the local-directory paragraph of
+the 2026-09-03 addendum for `ci.yml` and `coverage-main.yml`; the
+rolling-release lanes stay on the local-directory backend.
+
+The fault that paragraph placed in the proxy's write path was in the
+credentials. Runs 33748602187 and 33756048103 exported `ACTIONS_RESULTS_URL`,
+GitHub's v2 address, rather than the proxy's `ACTIONS_CACHE_URL`, and never
+cleared `ACTIONS_CACHE_SERVICE_V2`, so sccache resolved past the proxy on every
+store. The lanes now call `export-ubicloud-cache-credentials` before the
+backend selector and before `Setup Rust` starts the server, and a contract
+holds that order.
+
+Evidence from the pull request's own warm run, 35815203116, read from the
+`sccache-stats-*` artefacts, against the local-directory baseline of run
+35597917956:
+
+| Lane             | Backend | Rust hits | Rust misses | Hit rate | Write errors |
+| ---------------- | ------- | --------- | ----------- | -------- | ------------ |
+| `coverage-check` | local   | 52        | 1,522       | 3.3%     | n/a          |
+| `coverage-check` | ghac    | 1,505     | 69          | 95.6%    | 0            |
+| `linux-full`     | local   | 672       | 405         | 62.4%    | n/a          |
+| `linux-full`     | ghac    | 705       | 372         | 65.5%    | 0            |
+
+*Table 1: sccache on the local-directory and Actions backends.*
+
+- [x] Decide the sccache A/B against Cuprum once both have warm evidence:
+  decided for the Linux CI lanes, which move to the Actions backend.
+
 ## Outcomes & retrospective
 
 EP-M1 now declares Rust 1.85 in the installer manifest, enforces a real locked

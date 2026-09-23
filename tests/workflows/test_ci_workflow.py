@@ -218,11 +218,11 @@ def _coverage_check_job(workflow: Mapping[str, Any]) -> dict[str, Any]:
     assert _step_names(coverage_job) == [
         "Checkout",
         "Bound concurrency to the runner shape",
+        "Export the Ubicloud cache credentials",
         "Select the compiler cache backend",
         "Restore Cargo registry",
         "Restore the Rust toolchain and installed tools",
         "Restore the Clippy source mirror",
-        "Restore the compiler cache directory",
         "Record cache observations",
         "Provision the Clippy source mirror",
         "Setup Rust",
