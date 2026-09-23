@@ -31,7 +31,7 @@ formal verification helpers.
 | `tests/`     | Workspace-level integration, behaviour, UI harness, and workflow tests.                                                                                                                                           |
 | `verus/`     | Verus proof sidecars and formal verification experiments.                                                                                                                                                         |
 
-_Table 1: Top-level repository layout._
+*Table 1: Top-level repository layout.*
 
 ## Shared repository files
 

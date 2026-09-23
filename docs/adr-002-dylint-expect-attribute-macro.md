@@ -127,7 +127,7 @@ consuming workspaces and does not address boilerplate or Clippy’s
 | Works in downstream crates without extra config | High     | High     | High     | Low      |
 | Risk of masking cfg issues on an item           | Medium   | Medium   | Medium   | Low      |
 
-_Table 1: Trade-offs between approaches for conditional Dylint suppression._
+*Table 1: Trade-offs between approaches for conditional Dylint suppression.*
 
 ## Decision outcome / proposed direction
 

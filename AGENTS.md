@@ -194,8 +194,19 @@ project:
   end-to-end suites before and after making any change.
 - Every module **must** begin with a module level (`//!`) comment explaining the
   module's purpose and utility.
-- Document public APIs using Rustdoc comments (`///`) so documentation can be
-  generated with cargo doc.
+- Every public and private function and method **must** carry a `///` doc
+  comment: an imperative one-line summary starting with a verb, a rationale
+  paragraph only where a design choice is non-obvious, and a `# Errors` section
+  on functions returning `Result` whose failure semantics are not obvious from
+  the summary. Do not add `# Arguments` or `# Returns` boilerplate; it is not
+  used in this codebase. Documentation generated with `cargo doc` comes from
+  these comments.
+- Python docstrings under `tests/workflow_contracts` and `scripts` follow the
+  `numpy` style guide: a single-line summary for private functions and methods,
+  and full structured documentation for every public interface. What would have
+  gone in a `Parameters` or `Returns` section of a private helper goes in a
+  comment beside the code it explains. This is the wording the review tooling
+  enforces, restated here so the two agree.
 - Prefer immutable data and avoid unnecessary `mut` bindings.
 - Use explicit version ranges in `Cargo.toml` and keep dependencies up-to-date.
 - Avoid `unsafe` code unless absolutely necessary, and document any usage

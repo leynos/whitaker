@@ -27,7 +27,7 @@ tests without dependency artefacts disappearing or becoming unusable.
 | Affected components | `cargo llvm-cov nextest`, Dylint UI example harness, Nextest groups |
 | Recent changes      | `coverage-check` moved from UbiCloud to `namespace-profile-default` |
 
-_Table 1: Context for the recorded coverage failure._
+*Table 1: Context for the recorded coverage failure.*
 
 ### Error artefacts
 
@@ -83,7 +83,7 @@ the filter includes them.
 | 2    | Run the focused coverage cases after adding only the missing filter clauses | `E0463` still occurs while the cases run serially  |
 | 3    | Repeat the focused serial coverage run several times                        | Any serial repetition reproduces the missing crate |
 
-_Table 2: H1 falsification steps and expected negative results._
+*Table 2: H1 falsification steps and expected negative results.*
 
 **Tooling**: `cargo nextest list`, `cargo llvm-cov nextest`, temporary Nextest
 configuration or a minimal filter patch, and the pinned repository toolchain.
@@ -138,7 +138,7 @@ reports `E0463` in a fresh coverage target directory.
 | 1    | Run one failing case under `cargo llvm-cov nextest` with no competing tests | The isolated instrumented case succeeds |
 | 2    | Compare with the same exact case under ordinary `cargo nextest`             | Both isolated variants succeed          |
 
-_Table 3: H2 falsification steps and expected negative results._
+*Table 3: H2 falsification steps and expected negative results.*
 
 **Tooling**: a fresh task-specific target directory, the exact Nextest test
 expression, and `cargo llvm-cov` 0.6.24.
@@ -179,7 +179,7 @@ isolated or concurrent coverage case reliable without changing Nextest grouping.
 | 1    | Run the concurrent focused coverage cases with sccache disabled   | The same `E0463` failure recurs                          |
 | 2    | Inspect whether the nested Cargo command inherits `RUSTC_WRAPPER` | It does not use sccache for the failing rustc invocation |
 
-_Table 4: H3 falsification steps and expected negative results._
+*Table 4: H3 falsification steps and expected negative results.*
 
 **Tooling**: the focused coverage expression, `RUSTC_WRAPPER=`, and captured
 verbose Cargo output.
@@ -412,7 +412,7 @@ same repetitions with one target directory per fixture preserve rejection.
 | 2    | Repeat with a distinct target directory owned by each temporary fixture.                    | A loose fixture still succeeds, disproving target sharing as the cause.            |
 | 3    | Inspect verbose Cargo output for build-script execution and target paths.                   | Separate fixture paths already produce separate output units in the shared target. |
 
-_Table 5: H9 falsification steps and expected negative results._
+*Table 5: H9 falsification steps and expected negative results.*
 
 **Tooling**: bounded repeated focused `cargo llvm-cov nextest` runs, temporary
 target directories, and verbose nested Cargo output where needed.
