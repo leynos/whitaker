@@ -648,6 +648,24 @@ exports only `SCCACHE_PATH` and does not set `RUSTC_WRAPPER`, so before a
 wrapper was exported no Cargo invocation in `coverage-main.yml` was wrapped at
 all.
 
+On the three lanes that use the `gha` backend, `coverage-check`, `linux-full`
+and `coverage-upload`, the statistics are uploaded as a `sccache-stats-<job>`
+artefact under `if: always()`, and then
+`scripts/check_sccache_health.py --expect-location ghac` reads the JSON and
+fails the job on a broken integration: a cache location other than `ghac`, zero
+compile requests, every store failing, or every read failing. The last two are
+the signature of an endpoint the server cannot use, which is what runs
+33748602187 and 33756048103 showed. Isolated read errors, write errors,
+timeouts and cache errors produce warnings instead. A proxy hiccup costs one
+compile, and failing the lane on it would make a pull request depend on an
+external service's good day, which is what moving CodeScene off the
+pull-request lane removed. The upload comes before the check so the evidence
+survives the failure, and `coverage-upload` runs the check last so a failure
+cannot cost it its cache saves.
+`tests/workflow_contracts/sccache_health_contract_test.py` holds that order in
+every gha lane, and `make test-sccache-health` tests the checker, including its
+doctests; `linux-full` runs it.
+
 `scripts/record-cache-observations.sh` renders every restore step's primary
 key, the key it actually matched, and its `cache-hit` result into the job
 summary, including the steps a lane does not use, so an operator can explain

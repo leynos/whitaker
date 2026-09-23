@@ -1,4 +1,4 @@
-.PHONY: help all clean test test-doc coverage build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke installer-msrv-check release-installer-dry-run package-lints workflow-test workflow-test-deps test-workflow-contracts test-markdown-format test-glibc-baseline verus kani verus-clone-detector kani-clone-detector spelling skill-frontmatter-lint skill-manifest-validate skill-metadata-check skill-manifest-check test-skill-metadata-check
+.PHONY: help all clean test test-doc coverage build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke installer-msrv-check release-installer-dry-run package-lints workflow-test workflow-test-deps test-workflow-contracts test-markdown-format test-glibc-baseline test-sccache-health verus kani verus-clone-detector kani-clone-detector spelling skill-frontmatter-lint skill-manifest-validate skill-metadata-check skill-manifest-check test-skill-metadata-check
 
 # Make chooses the recipe shell itself, so the `shell: bash` default in the
 # workflows does not reach recipes; the `/bin/sh` it would otherwise use
@@ -209,6 +209,13 @@ test-glibc-baseline: ## Validate the Linux release glibc-baseline checker
 		--with pytest==9.0.2 --with hypothesis==6.151.9 \
 		python -m pytest scripts/tests/test_check_glibc_baseline.py -c /dev/null \
 		--rootdir=. -p no:cacheprovider
+
+test-sccache-health: ## Validate the sccache health checker the gha lanes run
+	@$(UV_ENV) $(UV) run --no-project --python 3.14 \
+		--with pytest==9.0.2 \
+		python -m pytest scripts/tests/test_check_sccache_health.py -c /dev/null \
+		--rootdir=. -p no:cacheprovider --doctest-modules \
+		scripts/check_sccache_health.py
 
 test-skill-metadata-check: ## Validate the Agent Skills metadata checker
 	@$(UV_ENV) $(UV) run --no-project --python 3.14 \

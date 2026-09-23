@@ -200,6 +200,12 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+      - name: Check sccache health
+        # The statistics are uploaded first, so the evidence survives a
+        # failure here. Fails on a broken integration (wrong backend, nothing
+        # wrapped, every store or read failing); isolated errors only warn.
+        run: python3 scripts/check_sccache_health.py --expect-location ghac sccache-stats.json
+
   linux-full:
     runs-on: ubicloud-standard-2-ubuntu-2404
     timeout-minutes: 60
@@ -366,6 +372,9 @@ jobs:
       - name: GLIBC baseline checker
         run: make test-glibc-baseline
 
+      - name: sccache health checker
+        run: make test-sccache-health
+
       - name: Install Nixie
         uses: leynos/shared-actions/.github/actions/install-nixie@7cb894fe62c40951cccf33819548095e64a1291e
         with:
@@ -412,6 +421,12 @@ jobs:
           path: sccache-stats.json
           if-no-files-found: error
           retention-days: 14
+
+      - name: Check sccache health
+        # The statistics are uploaded first, so the evidence survives a
+        # failure here. Fails on a broken integration (wrong backend, nothing
+        # wrapped, every store or read failing); isolated errors only warn.
+        run: python3 scripts/check_sccache_health.py --expect-location ghac sccache-stats.json
 
       - name: Record disk headroom before the saves
         if: always()
