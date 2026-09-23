@@ -620,9 +620,11 @@ Switching back is one line in each of `ci.yml` and `coverage-main.yml`, plus
 restoring the `~/.cache/sccache` archive steps the contract then requires.
 `rolling-release.yml` stays on `local` and owns its own key families; the
 contract permits the two to differ, because the rule that matters is that a
-lane's reader and its writer agree, not that the whole repository does. Treat
-write errors above roughly two percent of requests, or an Ubicloud cache
-listing with no `sccache` entries for Whitaker, as the signal to look again.
+lane's reader and its writer agree, not that the whole repository does. The
+health check below fails a lane whose write errors and timeouts exceed 10% of
+its store attempts. Treat a rate well under that but persistently above the
+measured 0.1%, or an Ubicloud cache listing with no `sccache` entries for
+Whitaker, as the signal to look again.
 
 The local-directory backend that `rolling-release.yml` still uses has known
 trade-offs. Its archive grows with every new compilation unit until
@@ -653,15 +655,22 @@ and `coverage-upload`, the statistics are uploaded as a `sccache-stats-<job>`
 artefact under `if: always()`, and then
 `scripts/check_sccache_health.py --expect-location ghac` reads the JSON and
 fails the job on a broken integration: a cache location other than `ghac`, zero
-compile requests, every store failing, or every read failing. The last two are
-the signature of an endpoint the server cannot use, which is what runs
-33748602187 and 33756048103 showed. Isolated read errors, write errors,
-timeouts and cache errors produce warnings instead. A proxy hiccup costs one
-compile, and failing the lane on it would make a pull request depend on an
-external service's good day, which is what moving CodeScene off the
-pull-request lane removed. The upload comes before the check so the evidence
-survives the failure, and `coverage-upload` runs the check last so a failure
-cannot cost it its cache saves.
+compile requests, every store failing, or every read failing. Those last two
+are the signature of an endpoint the server cannot use, which is what runs
+33748602187 and 33756048103 showed. It also fails when write errors plus
+timeouts exceed `ERROR_RATE_LIMIT`, one tenth, of the store attempts (writes
+plus write errors), or read errors exceed it of the reads (hits plus misses,
+since `sccache` counts a failed or timed-out lookup as a miss). Exceeding the
+limit fails; reaching it does not. The measured healthy rate is about 0.1%: the
+cold run 35672193433 had one write error and one timeout against 1,572 store
+attempts in `coverage-check` and 1,212 in `linux-full`. So the limit sits two
+orders of magnitude above normal noise and still catches an endpoint that loses
+one compile in ten. Isolated errors below it produce warnings instead. A proxy
+hiccup costs one compile, and failing the lane on it would make a pull request
+depend on an external service's good day, which is what moving CodeScene off
+the pull-request lane removed. The upload comes before the check so the
+evidence survives the failure, and `coverage-upload` runs the check last so a
+failure cannot cost it its cache saves.
 `tests/workflow_contracts/sccache_health_contract_test.py` holds that order in
 every gha lane, and `make test-sccache-health` tests the checker, including its
 doctests; `linux-full` runs it.

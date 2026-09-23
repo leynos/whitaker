@@ -215,7 +215,8 @@ jobs:
       - name: Check sccache health
         # The statistics are uploaded first, so the evidence survives a
         # failure here. Fails on a broken integration (wrong backend, nothing
-        # wrapped, every store or read failing); isolated errors only warn.
+        # wrapped, every store or read failing, or errors above 10% of stores
+        # or reads); isolated errors only warn.
         run: python3 scripts/check_sccache_health.py --expect-location ghac sccache-stats.json
 
   linux-full:
@@ -437,7 +438,8 @@ jobs:
       - name: Check sccache health
         # The statistics are uploaded first, so the evidence survives a
         # failure here. Fails on a broken integration (wrong backend, nothing
-        # wrapped, every store or read failing); isolated errors only warn.
+        # wrapped, every store or read failing, or errors above 10% of stores
+        # or reads); isolated errors only warn.
         run: python3 scripts/check_sccache_health.py --expect-location ghac sccache-stats.json
 
       - name: Record disk headroom before the saves

@@ -9,6 +9,7 @@ import importlib.util
 import json
 import types
 import typing as typ
+from fractions import Fraction
 from pathlib import Path
 
 import pytest
@@ -117,6 +118,98 @@ def test_isolated_errors_warn_without_failing(
     assessment = checker.assess(_document(**stats), "ghac")
     assert assessment.failures == ()
     assert expected in assessment.warnings
+
+
+#: The cold run 35672193433's `coverage-check`: one write error and one timeout
+#: against 1,572 store attempts, the measured healthy rate of about 0.1%.
+MEASURED_COLD_RUN: typ.Final[dict[str, object]] = {
+    "compile_requests": 3333,
+    "cache_hits": {"counts": {"Rust": 1073}},
+    "cache_misses": {"counts": {"Rust": 1572}},
+    "cache_writes": 1571,
+    "cache_write_errors": 1,
+    "cache_read_errors": 0,
+    "cache_timeouts": 1,
+}
+
+
+def test_the_measured_healthy_error_rate_only_warns(checker: typ.Any) -> None:
+    """About 0.1% of stores failing is the proxy on a normal day, not a defect."""
+    assessment = checker.assess(_document(**MEASURED_COLD_RUN), "ghac")
+    assert assessment.failures == ()
+    assert "cache_write_errors is 1" in assessment.warnings
+    assert "cache_timeouts is 1" in assessment.warnings
+
+
+#: One hundred reads and one hundred store attempts, so an error count reads
+#: directly as a percentage of either.
+ONE_HUNDRED_OF_EACH: typ.Final[dict[str, object]] = {
+    "cache_hits": {"counts": {"Rust": 50}},
+    "cache_misses": {"counts": {"Rust": 50}},
+    "cache_writes": 100,
+}
+
+
+@pytest.mark.parametrize(
+    "stats",
+    [
+        pytest.param(
+            {"cache_writes": 89, "cache_write_errors": 11},
+            id="eleven-percent-of-stores-failed-to-write",
+        ),
+        pytest.param(
+            {"cache_writes": 95, "cache_write_errors": 5, "cache_timeouts": 6},
+            id="write-errors-and-timeouts-together-eleven-percent",
+        ),
+        pytest.param(
+            {
+                "cache_hits": {"counts": {"Rust": 60}},
+                "cache_misses": {"counts": {"Rust": 40}},
+                "cache_read_errors": 11,
+            },
+            id="eleven-percent-of-reads-failed",
+        ),
+    ],
+)
+def test_an_error_rate_above_the_limit_fails(
+    checker: typ.Any, stats: dict[str, object]
+) -> None:
+    """Eleven per cent is past the limit, whichever counter carries it.
+
+    Each case keeps one hundred attempts of the kind it judges, so eleven errors
+    is exactly 11%, and leaves the other rate clean.
+    """
+    failures = checker.assess(
+        _document(**(ONE_HUNDRED_OF_EACH | stats)), "ghac"
+    ).failures
+    assert any("exceed 1/10" in failure for failure in failures), failures
+
+
+@pytest.mark.parametrize(
+    "stats",
+    [
+        pytest.param(
+            {"cache_writes": 90, "cache_write_errors": 10}, id="ten-percent-of-stores"
+        ),
+        pytest.param(
+            {"cache_writes": 96, "cache_write_errors": 4, "cache_timeouts": 6},
+            id="ten-percent-of-stores-counting-timeouts",
+        ),
+        pytest.param({"cache_read_errors": 10}, id="ten-percent-of-reads"),
+    ],
+)
+def test_an_error_rate_at_the_limit_still_only_warns(
+    checker: typ.Any, stats: dict[str, object]
+) -> None:
+    """The limit is exceeded, not reached: exactly 10% warns and passes."""
+    assessment = checker.assess(_document(**(ONE_HUNDRED_OF_EACH | stats)), "ghac")
+    assert assessment.failures == ()
+    assert assessment.warnings, "a nonzero error counter must still warn"
+
+
+def test_the_limit_is_ten_percent(checker: typ.Any) -> None:
+    """The named constant is the reviewed value, not a number in a condition."""
+    assert checker.ERROR_RATE_LIMIT == Fraction(1, 10)
 
 
 def test_a_local_lane_is_judged_against_its_own_backend(checker: typ.Any) -> None:
