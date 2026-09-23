@@ -268,8 +268,10 @@ pub(super) use assertions::{
     assert_cli_exits_successfully, assert_cli_exits_with_error, assert_dry_run_output_is_shown,
     assert_experimental_lint_dry_run_output_is_shown,
     assert_experimental_lint_opt_in_message_is_shown, assert_installation_succeeds_or_is_skipped,
-    assert_pinned_suite_is_named, assert_rejected_suite_ref_is_named,
-    assert_suite_library_is_staged, assert_unknown_lint_message_is_shown,
+    assert_no_suite_source_marker, assert_pinned_suite_is_named,
+    assert_rejected_suite_ref_is_named, assert_source_option_contradiction_is_explained,
+    assert_suite_library_is_staged, assert_suite_source_marker_names_the_path,
+    assert_unknown_lint_message_is_shown,
 };
 
 /// Configure a run whose source-fallback rule arrives through the environment.
@@ -295,38 +297,4 @@ pub(super) fn configure_forbidden_source_build_with_build_only(cli_world: &CliWo
 /// Configure a dry run that forbids a source build.
 pub(super) fn configure_dry_run_forbidding_source_fallback(cli_world: &CliWorld) {
     configure_dry_run_with(cli_world, &["--no-source-fallback"]);
-}
-
-/// Assert that a refusal explains both halves of the source-option contradiction.
-pub(super) fn assert_source_option_contradiction_is_explained(cli_world: &CliWorld) {
-    let output = get_output(cli_world);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-
-    assert!(stderr.contains("--no-source-fallback"), "{stderr}");
-    assert!(stderr.contains("--build-only"), "{stderr}");
-}
-
-/// Assert that the reported suite source matches the path used by the install.
-pub(super) fn assert_suite_source_marker_names_the_path(cli_world: &CliWorld) {
-    if cli_world.skip_assertions.get() {
-        return;
-    }
-
-    let output = get_output(cli_world);
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    let expected = if stderr.contains(crate::prebuilt_markers::PREBUILT_INSTALL_MARKER) {
-        "whitaker-installer: suite-source=prebuilt"
-    } else {
-        "whitaker-installer: suite-source=source"
-    };
-
-    assert!(stdout.lines().any(|line| line == expected), "{stdout}\n{stderr}");
-}
-
-/// Assert that a dry run does not claim to have selected a suite source.
-pub(super) fn assert_no_suite_source_marker(cli_world: &CliWorld) {
-    let output = get_output(cli_world);
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(!stdout.contains("suite-source="), "{stdout}");
 }

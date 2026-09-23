@@ -251,6 +251,62 @@ pub(crate) fn assert_suite_library_is_staged(cli_world: &CliWorld) {
     assert_staged_library_unique(&staging_dir, &needle, &output);
 }
 
+/// Assert that a refusal explains both halves of the source-option contradiction.
+pub(crate) fn assert_source_option_contradiction_is_explained(cli_world: &CliWorld) {
+    let output = match captured_output(cli_world) {
+        Ok(output) => output,
+        Err(message) => panic!("{message}"),
+    };
+
+    assert!(
+        output.stderr.contains("--no-source-fallback"),
+        "the error should name the rule, got: {}",
+        output.stderr
+    );
+    assert!(
+        output.stderr.contains("--build-only"),
+        "the error should name the conflicting option, got: {}",
+        output.stderr
+    );
+}
+
+/// Assert that the reported suite source matches the path used by the install.
+pub(crate) fn assert_suite_source_marker_names_the_path(cli_world: &CliWorld) {
+    if cli_world.skip_assertions.get() {
+        return;
+    }
+
+    let output = match captured_output(cli_world) {
+        Ok(output) => output,
+        Err(message) => panic!("{message}"),
+    };
+    let expected = if output.stderr.contains(PREBUILT_INSTALL_MARKER) {
+        "whitaker-installer: suite-source=prebuilt"
+    } else {
+        "whitaker-installer: suite-source=source"
+    };
+
+    assert!(
+        output.stdout.lines().any(|line| line == expected),
+        "expected the marker line {expected:?} on stdout, stdout={}, stderr={}",
+        output.stdout,
+        output.stderr
+    );
+}
+
+/// Assert that a dry run does not claim to have selected a suite source.
+pub(crate) fn assert_no_suite_source_marker(cli_world: &CliWorld) {
+    let output = match captured_output(cli_world) {
+        Ok(output) => output,
+        Err(message) => panic!("{message}"),
+    };
+    assert!(
+        !output.stdout.contains("suite-source="),
+        "a dry run must not claim a suite source, stdout: {}",
+        output.stdout
+    );
+}
+
 /// Banner printed when the installer runs in dry-run mode.
 const DRY_RUN_BANNER: &str = "Dry run - no files will be modified";
 
