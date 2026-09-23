@@ -227,7 +227,8 @@ fn destination_creation_failure_returns_fallback() {
 /// value.
 #[test]
 fn a_quiet_forbidden_run_returns_the_reason_without_writing_to_stderr() {
-    let (_temp, destination_dir) = destination_dir();
+    let (_temp, destination_dir) =
+        destination_dir().expect("destination directory should be created");
     let config = PrebuiltConfig {
         quiet: true,
         allow_source_fallback: false,
@@ -269,7 +270,8 @@ fn a_quiet_forbidden_run_returns_the_reason_without_writing_to_stderr() {
 /// promise is the whole point of the separate flag.
 #[test]
 fn a_loud_forbidden_run_reports_the_absence_without_promising_a_fallback() {
-    let (_temp, destination_dir) = destination_dir();
+    let (_temp, destination_dir) =
+        destination_dir().expect("destination directory should be created");
     let config = PrebuiltConfig {
         quiet: false,
         allow_source_fallback: false,

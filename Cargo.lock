@@ -3395,7 +3395,6 @@ dependencies = [
  "libc",
  "log",
  "mockall",
- "parking_lot",
  "rstest",
  "rstest-bdd",
  "rstest-bdd-macros",
