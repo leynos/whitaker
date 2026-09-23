@@ -492,7 +492,7 @@ jobs:
   windows-compat:
     # Not a trunk writer: the push to `main` exists for `linux-full`'s
     # compiler cache, and a second job there would bill for a result nobody
-    # reads. Windows keeps its first-push cold start; see the developers' guide.
+    # reads. Its own `main` scope is written only by a dispatch; see #457.
     if: github.event_name != 'push'
     runs-on: windows-latest
     # This lane had no ceiling at all, so it inherited GitHub's six-hour

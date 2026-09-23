@@ -813,9 +813,12 @@ request's number or else on `github.ref`. A pull request's run then never
 shares a group with the push run, because a run that starts with cancellation
 on cancels the in-progress runs of its own group.
 
-`windows-compat` has the same first-push cold start against GitHub's own cache,
-which is ref-scoped too. It is not addressed here: its saves still come only
-from a dispatch against `main`.
+`windows-compat` reads GitHub's own cache, which is ref-scoped too, and only a
+dispatch against `main` writes that lane's `main` scope. It is not cold today:
+the first push in run [35825720438][whitaker-run-35825720438] hit 88.3% from a
+generation dispatched on 2026-09-05. But that generation goes stale as `main`
+moves, and a toolchain or flag change would leave every first Windows push cold
+until the next dispatch. [Issue #457][whitaker-issue-457] tracks it.
 
 ### One execution of the test suite per pull request
 
@@ -3538,6 +3541,7 @@ of the test suite per pull request" above.
 [whitaker-run-35825656071]: https://github.com/leynos/whitaker/actions/runs/35825656071
 [whitaker-run-35834924110]: https://github.com/leynos/whitaker/actions/runs/35834924110
 [whitaker-run-35831488853]: https://github.com/leynos/whitaker/actions/runs/35831488853
+[whitaker-issue-457]: https://github.com/leynos/whitaker/issues/457
 [whitaker-run-33410178021]: https://github.com/leynos/whitaker/actions/runs/33410178021
 [whitaker-run-33369228466]: https://github.com/leynos/whitaker/actions/runs/33369228466
 [whitaker-run-33345742967]: https://github.com/leynos/whitaker/actions/runs/33345742967
