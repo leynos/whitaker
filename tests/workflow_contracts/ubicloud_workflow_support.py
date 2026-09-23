@@ -335,11 +335,25 @@ def backend_for(workflow_name: str) -> str:
 
     The workflows declare `SCCACHE_BACKEND` once, at workflow level, and
     `scripts/select-sccache-backend.sh` translates it into exactly one set of
-    sccache variables. For example, ``backend_for("ci.yml")`` returns
-    ``"gha"``.
+    sccache variables. The value is returned as declared, not stripped: the
+    selector matches it verbatim, so `' gha '` fails there and must fail the
+    contract too rather than reading as `gha`.
+
+    Parameters
+    ----------
+    workflow_name : str
+        The workflow file to read, such as ``"ci.yml"``.
+
+    Returns
+    -------
+    str
+        The declared `SCCACHE_BACKEND`, or `DEFAULT_BACKEND` when the workflow
+        leaves it unset or empty, as the selector does.
+
+    For example, ``backend_for("ci.yml")`` returns ``"gha"``.
     """
     env = load_workflow(workflow_name).get("env", {})
-    declared = str(env.get("SCCACHE_BACKEND", "")).strip()
+    declared = str(env.get("SCCACHE_BACKEND", ""))
     return declared or DEFAULT_BACKEND
 
 
@@ -348,6 +362,17 @@ def sccache_directory_steps(job: dict[str, Any]) -> list[dict[str, Any]]:
 
     Restores and saves together, because the rule they answer to is about the
     directory existing in the job at all, not about which direction it moves.
+
+    Parameters
+    ----------
+    job : dict[str, Any]
+        One parsed workflow job.
+
+    Returns
+    -------
+    list[dict[str, Any]]
+        The restore and save steps whose cached paths include
+        `SCCACHE_DIRECTORY`.
     """
     return [
         step

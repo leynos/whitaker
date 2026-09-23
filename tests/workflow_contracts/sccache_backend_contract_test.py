@@ -25,6 +25,7 @@ from ubicloud_workflow_support import (
     CREDENTIALS_ACTION_PATH,
     CREDENTIALS_STEP,
     SCCACHE_DIRECTORY,
+    SETUP_RUST_ACTION,
     UBICLOUD_JOBS,
     all_jobs,
     backend_for,
@@ -47,6 +48,10 @@ if typ.TYPE_CHECKING:  # pragma: no cover - typing only
 #: typo the script rejects at the lane's first step.
 KNOWN_BACKENDS: frozenset[str] = frozenset({"gha", "local"})
 
+#: The shared Rust setup action, without its ref. It starts the sccache
+#: server, so it binds the backend in whatever environment it finds.
+SETUP_RUST_PATH: str = SETUP_RUST_ACTION.split("@", 1)[0]
+
 #: The workflows that declare the Ubicloud lanes, deduplicated.
 UBICLOUD_WORKFLOWS: frozenset[str] = frozenset(UBICLOUD_JOBS.values())
 
@@ -57,17 +62,22 @@ def _workflow_env(workflow_name: str) -> dict[str, Any]:
 
 
 def _mentions_sccache(step: dict[str, Any]) -> bool:
-    """Return whether a step names, runs, or invokes sccache in any way.
+    """Return whether a step names, runs, invokes or starts sccache.
 
     Deliberately generous. A false positive here only tightens the ordering
     rule below, while a false negative would let a step that starts a server
     sit ahead of the credentials export and go unnoticed, which is the whole
     failure being guarded.
+
+    `Setup Rust` is the step that starts the server, and neither its name nor
+    its `uses:` says so. Reading only for the word let the export and the
+    selector move below it together and still pass, so the action is named.
     """
     haystack = " ".join(
         str(step.get(field, "")) for field in ("name", "run", "uses")
     ).lower()
-    return "sccache" in haystack
+    starts_the_server = str(step.get("uses", "")).split("@", 1)[0] == SETUP_RUST_PATH
+    return starts_the_server or "sccache" in haystack
 
 
 def _sccache_step_indices(job: dict[str, Any]) -> list[tuple[int, str]]:
@@ -134,6 +144,11 @@ def test_ghac_lanes_export_the_proxy_credentials_first() -> None:
         assert CREDENTIALS_STEP in names, (
             f"{job_name} runs sccache on the Actions backend without "
             f"{CREDENTIALS_STEP!r}, so its server would bind local disk"
+        )
+        # One export, or the index below and `steps_by_name` in the identity
+        # rule could each judge a different step of the same name.
+        assert names.count(CREDENTIALS_STEP) == 1, (
+            f"{job_name} must declare exactly one {CREDENTIALS_STEP!r} step"
         )
         credentials_index = names.index(CREDENTIALS_STEP)
         for index, name in _sccache_step_indices(job):
@@ -285,9 +300,15 @@ def _backend_variables_set_outside_the_selector() -> list[str]:
     for workflow_name, job_name, job in _jobs_with_steps():
         if (workflow_name, job_name) in SELECTOR_EXEMPT_JOBS:
             continue
-        scopes = (
+        scopes = [
             ("workflow", _workflow_env(workflow_name)),
             ("job", job.get("env") or {}),
+        ]
+        # A step's own `env` configures that step's sccache as surely as a
+        # wider scope, and `Setup Rust` is the step that starts the server.
+        scopes.extend(
+            (f"step {index}", step.get("env") or {})
+            for index, step in enumerate(job_steps(job))
         )
         offenders.extend(
             f"{workflow_name}:{job_name} sets {variable} at {scope} level"

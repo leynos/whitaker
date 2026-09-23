@@ -419,15 +419,21 @@ has exactly one job permitted to write it.
 
 Table: Cache ownership for the Ubicloud Linux lanes.
 
-| Key family                    | Cached paths                                                                    | Writer            | Restore-only lanes             |
-| ----------------------------- | ------------------------------------------------------------------------------- | ----------------- | ------------------------------ |
-| `cargo-registry-coverage-v1-` | `~/.cargo/registry`, `~/.cargo/git`                                             | `coverage-upload` | `coverage-check`               |
-| `cargo-registry-lint-v1-`     | `~/.cargo/registry`, `~/.cargo/git`                                             | `linux-full`      | `linux-full`                   |
-| `tools-coverage-v1-`          | `~/.rustup`, `~/.cargo/bin`, `~/.local/bin`, `~/.cache/uv`, `~/.local/share/uv` | `coverage-upload` | `coverage-check`               |
-| `tools-lint-v1-`              | the same paths plus `~/.bun/install/cache` and `~/.cache/merman`                | `linux-full`      | `linux-full`                   |
-| `dylint-tools-v1-`            | `~/.cache/whitaker-dylint-tools`                                                | `linux-full`      | `linux-full`                   |
-| `clippy-mirror-v1-`           | `~/.cache/whitaker-mirrors`                                                     | `coverage-upload` | `linux-full`, `coverage-check` |
-| `sccache-<lane>-v1-`          | `~/.cache/sccache`                                                              | the lane's writer | the lane's readers             |
+| Key family                    | Cached paths                                                                    | Writer                      | Restore-only lanes             |
+| ----------------------------- | ------------------------------------------------------------------------------- | --------------------------- | ------------------------------ |
+| `cargo-registry-coverage-v1-` | `~/.cargo/registry`, `~/.cargo/git`                                             | `coverage-upload`           | `coverage-check`               |
+| `cargo-registry-lint-v1-`     | `~/.cargo/registry`, `~/.cargo/git`                                             | `linux-full`                | `linux-full`                   |
+| `tools-coverage-v1-`          | `~/.rustup`, `~/.cargo/bin`, `~/.local/bin`, `~/.cache/uv`, `~/.local/share/uv` | `coverage-upload`           | `coverage-check`               |
+| `tools-lint-v1-`              | the same paths plus `~/.bun/install/cache` and `~/.cache/merman`                | `linux-full`                | `linux-full`                   |
+| `dylint-tools-v1-`            | `~/.cache/whitaker-dylint-tools`                                                | `linux-full`                | `linux-full`                   |
+| `clippy-mirror-v1-`           | `~/.cache/whitaker-mirrors`                                                     | `coverage-upload`           | `linux-full`, `coverage-check` |
+| `sccache-rolling-v1-`         | `~/.cache/sccache`                                                              | `build-lints`               | `build-lints`                  |
+| `sccache-depbin-v1-`          | `~/.cache/sccache`                                                              | `build-dependency-binaries` | `build-dependency-binaries`    |
+
+`coverage-check`, `linux-full` and `coverage-upload` archive no compiler cache.
+Their sccache runs on the `gha` backend and reads and writes Ubicloud's cache
+proxy directly, so the two `sccache-*` rows belong to the rolling-release lanes
+alone, which stay on the local-directory backend.
 
 Each key carries an explicit `v1` schema generation so the whole family can be
 invalidated deliberately. Registry keys hash `rust-toolchain.toml` and
@@ -592,9 +598,9 @@ proxy's `ACTIONS_CACHE_URL`, and never cleared the v2 flag. `sccache` therefore
 resolved past the proxy to GitHub on every store, which is why the Windows
 lane, whose store really is GitHub's, was unaffected. One write error per store
 attempt is that defect's signature, and netsuke measured the same shape
-independently: 5,310 requests, zero hits, one write error per miss. Whitaker
-never called `export-ubicloud-cache-credentials`; no commit in the repository
-has ever referenced it.
+independently: 5,310 requests, zero hits, one write error per miss. Those runs
+predate this repository's first use of `export-ubicloud-cache-credentials`:
+until this change no workflow here called it.
 
 With the credentials exported correctly the backend works on this runner class.
 netsuke's coverage lane measures 99.6% hits with `Cache location ghac` on
