@@ -126,22 +126,22 @@ def test_a_local_lane_is_judged_against_its_own_backend(checker: typ.Any) -> Non
 
 
 @pytest.mark.parametrize(
-    ("contents", "status"),
+    "case",
     [
-        pytest.param(json.dumps(_document()), 0, id="healthy"),
-        pytest.param(json.dumps(_document(compile_requests=0)), 1, id="broken"),
-        pytest.param("not json", 1, id="unreadable"),
-        pytest.param("[]", 1, id="not-an-object"),
+        pytest.param((json.dumps(_document()), 0), id="healthy"),
+        pytest.param((json.dumps(_document(compile_requests=0)), 1), id="broken"),
+        pytest.param(("not json", 1), id="unreadable"),
+        pytest.param(("[]", 1), id="not-an-object"),
     ],
 )
 def test_the_exit_status_follows_the_assessment(
     checker: typ.Any,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
-    contents: str,
-    status: int,
+    case: tuple[str, int],
 ) -> None:
     """The job fails exactly when the assessment does, and says why."""
+    contents, status = case
     statistics = tmp_path / "sccache-stats.json"
     statistics.write_text(contents, encoding="utf-8")
     assert checker.main(["--expect-location", "ghac", str(statistics)]) == status
