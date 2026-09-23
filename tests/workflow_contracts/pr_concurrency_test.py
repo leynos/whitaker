@@ -21,9 +21,11 @@ import typing as typ
 import pytest
 from pr_concurrency_support import (
     CANCEL_IN_PROGRESS,
+    GROUP_EXPRESSION,
     UnparsableWorkflowError,
+    UnreadableWorkflowError,
     WorkflowShapeError,
-    _parse,
+    workflow_documents,
     concurrency_violations,
     is_pull_request_startable,
     pull_request_workflows,
@@ -33,22 +35,11 @@ PULL_REQUEST_WORKFLOWS: typ.Final = pull_request_workflows()
 
 
 def _document(**concurrency: object) -> dict[str, object]:
-    """Build a minimal pull-request workflow with the given concurrency.
-
-    Parameters
-    ----------
-    **concurrency : object
-        The keys of the workflow's ``concurrency`` block.
-
-    Returns
-    -------
-    dict[str, object]
-        A parsed-shaped workflow document.
-    """
+    """Build a minimal pull-request workflow with the given concurrency block."""
     return {"on": {"pull_request": None}, "concurrency": dict(concurrency)}
 
 
-GROUP: typ.Final = "${{ github.workflow }}-${{ github.event.pull_request.number }}"
+GROUP: typ.Final = GROUP_EXPRESSION
 CONFORMING: typ.Final = _document(
     group=GROUP, **{"cancel-in-progress": CANCEL_IN_PROGRESS}
 )
@@ -109,13 +100,26 @@ def test_the_conforming_shape_is_accepted() -> None:
             "cancel-in-progress to 'true'",
             id="quoted-true",
         ),
-        pytest.param(
-            _document(
-                group="ci-${{ github.run_id }}",
-                **{"cancel-in-progress": CANCEL_IN_PROGRESS},
-            ),
-            "github.run_id",
-            id="run-id-group",
+        *(
+            pytest.param(
+                _document(group=group, **{"cancel-in-progress": CANCEL_IN_PROGRESS}),
+                "keys its concurrency group on",
+                id=name,
+            )
+            for name, group in (
+                ("run-id-group", "ci-${{ github.run_id }}"),
+                ("sha-group", "${{ github.workflow }}-${{ github.sha }}"),
+                ("run-number-group", "${{ github.workflow }}-${{ github.run_number }}"),
+                ("static-group", "ci"),
+                (
+                    "no-workflow-in-the-group",
+                    "${{ github.event.pull_request.number || github.ref }}",
+                ),
+                (
+                    "no-ref-fallback",
+                    "${{ github.workflow }}-${{ github.event.pull_request.number }}",
+                ),
+            )
         ),
         pytest.param(
             _document(**{"cancel-in-progress": CANCEL_IN_PROGRESS}),
@@ -132,10 +136,15 @@ def test_a_non_conforming_document_is_rejected(
     ``cancel-in-progress: true`` is the case worth stating: it reads as
     an improvement and would cancel a push to main or a scheduled run
     that shares the group. A contract that accepted a truthy value
-    would wave it through.
+    would wave it through. The group cases are the other half: a key that
+    changes on every push cancels nothing, and one shared across pull
+    requests lets them cancel each other, so only the deployed expression
+    passes.
     """
     violations = concurrency_violations(document)
-    assert any(fragment in violation for violation in violations), violations
+    assert any(fragment in violation for violation in violations), (
+        f"expected a violation containing {fragment!r}: {violations}"
+    )
 
 
 @pytest.mark.parametrize(
@@ -206,12 +215,25 @@ def test_a_repeated_key_is_unparsable(tmp_path: pathlib.Path) -> None:
     PyYAML would keep the second block and discard the first, so the sweep
     would judge a group GitHub may not use. The strict parser refuses it.
     """
-    path = tmp_path / "twice.yml"
-    path.write_text(
+    (tmp_path / "twice.yml").write_text(
         "on: pull_request\n"
         "concurrency:\n  group: a\n  cancel-in-progress: true\n"
         "concurrency:\n  group: b\n",
         encoding="utf-8",
     )
     with pytest.raises(UnparsableWorkflowError):
-        _parse(path)
+        workflow_documents(tmp_path)
+
+
+def test_an_unreadable_workflow_is_named(tmp_path: pathlib.Path) -> None:
+    """A file the loader cannot read raises a named error, not a bare OSError."""
+    (tmp_path / "ci.yml").mkdir()
+    with pytest.raises(UnreadableWorkflowError, match=r"ci\.yml"):
+        workflow_documents(tmp_path)
+
+
+def test_the_loader_reads_the_directory_it_is_given(tmp_path: pathlib.Path) -> None:
+    """The directory is injected, so the loader is not tied to this checkout."""
+    (tmp_path / "ci.yml").write_text("on: pull_request\njobs: {}\n", encoding="utf-8")
+    (tmp_path / "notes.txt").write_text("not a workflow", encoding="utf-8")
+    assert list(workflow_documents(tmp_path)) == ["ci.yml"]

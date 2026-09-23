@@ -20,6 +20,9 @@ from ubicloud_workflow_support import parse_workflow
 
 ROOT: typ.Final = Path(__file__).resolve().parents[2]
 
+#: The repository's workflow directory, the loaders' default.
+WORKFLOWS_DIRECTORY: typ.Final = ROOT / ".github" / "workflows"
+
 #: GitHub accepts either extension, so a sweep that scans one is a gap.
 WORKFLOW_SUFFIXES: typ.Final = (".yml", ".yaml")
 
@@ -33,9 +36,14 @@ PULL_REQUEST_TRIGGER: typ.Final = "pull_request"
 #: the contract requires the guarded expression, not a truthy setting.
 CANCEL_IN_PROGRESS: typ.Final = "${{ github.event_name == 'pull_request' }}"
 
-#: A group keyed on the run identifier is unique per run, so it
-#: serializes nothing and can never cancel a predecessor.
-RUN_ID_EXPRESSION: typ.Final = "github.run_id"
+#: The only accepted ``group``. It must be stable across pushes to one pull
+#: request and distinct between workflows and pull requests: a group keyed on
+#: ``github.run_id``, ``github.sha`` or ``github.run_number`` changes on every
+#: push and cancels nothing, and a static one lets unrelated pull requests
+#: cancel each other. The ``github.ref`` fallback keys a dispatch on its branch.
+GROUP_EXPRESSION: typ.Final = (
+    "${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}"
+)
 
 
 class WorkflowShapeError(AssertionError):
@@ -77,6 +85,20 @@ class NotAMappingError(WorkflowShapeError):
             The workflow file name.
         """
         super().__init__(f"{name} must parse to a mapping")
+
+
+class UnreadableWorkflowError(WorkflowShapeError):
+    """A workflow file could not be read from disk."""
+
+    def __init__(self, name: str) -> None:
+        """Name the workflow that could not be read.
+
+        Parameters
+        ----------
+        name : str
+            The workflow file name.
+        """
+        super().__init__(f"{name} could not be read")
 
 
 class UnparsableWorkflowError(WorkflowShapeError):
@@ -125,23 +147,7 @@ def trigger_names(document: dict[str, object]) -> frozenset[str]:
 
 
 def _event_names(triggers: object) -> frozenset[str]:
-    """Normalize the three shapes GitHub accepts under ``on:``.
-
-    Parameters
-    ----------
-    triggers : object
-        The value of the workflow's trigger key.
-
-    Returns
-    -------
-    frozenset[str]
-        The declared event names.
-
-    Raises
-    ------
-    UnreadableTriggersError
-        If the value is none of the three accepted shapes.
-    """
+    """Normalize the three shapes GitHub accepts under ``on:``."""
     match triggers:
         case str():
             return frozenset({triggers})
@@ -180,49 +186,28 @@ def concurrency_violations(document: dict[str, object]) -> list[str]:
     list[str]
         One message per violation; empty when the document conforms.
     """
-    concurrency = document.get("concurrency")
-    if concurrency is None:
-        return ["declares no concurrency: block"]
-    if not isinstance(concurrency, dict):
-        return ["declares a concurrency: that is not a mapping"]
-    return _group_violations(concurrency.get("group")) + _cancel_violations(
-        concurrency.get("cancel-in-progress")
-    )
+    match document.get("concurrency"):
+        case None:
+            return ["declares no concurrency: block"]
+        case dict() as concurrency:
+            return _group_violations(concurrency.get("group")) + _cancel_violations(
+                concurrency.get("cancel-in-progress")
+            )
+        case _:
+            return ["declares a concurrency: that is not a mapping"]
 
 
 def _group_violations(group: object) -> list[str]:
-    """Return the violations of the concurrency group itself.
-
-    Parameters
-    ----------
-    group : object
-        The declared ``group`` value.
-
-    Returns
-    -------
-    list[str]
-        One message per violation; empty when the group conforms.
-    """
+    """Return the violations of the concurrency group itself."""
     if not isinstance(group, str) or not group.strip():
         return ["declares no concurrency group"]
-    if RUN_ID_EXPRESSION in group:
-        return [f"keys its concurrency group on {RUN_ID_EXPRESSION}"]
+    if " ".join(group.split()) != GROUP_EXPRESSION:
+        return [f"keys its concurrency group on {group!r} and not {GROUP_EXPRESSION}"]
     return []
 
 
 def _cancel_violations(cancel: object) -> list[str]:
-    """Return the violations of the ``cancel-in-progress`` setting.
-
-    Parameters
-    ----------
-    cancel : object
-        The declared ``cancel-in-progress`` value.
-
-    Returns
-    -------
-    list[str]
-        One message per violation; empty when the setting conforms.
-    """
+    """Return the violations of the ``cancel-in-progress`` setting."""
     if cancel is None:
         return ["sets no cancel-in-progress"]
     if not isinstance(cancel, str) or " ".join(cancel.split()) != CANCEL_IN_PROGRESS:
@@ -230,18 +215,30 @@ def _cancel_violations(cancel: object) -> list[str]:
     return []
 
 
-def workflow_documents() -> dict[str, dict[str, object]]:
-    """Parse every workflow in the repository.
+def workflow_documents(
+    directory: Path = WORKFLOWS_DIRECTORY,
+) -> dict[str, dict[str, object]]:
+    """Parse every workflow in a directory.
 
-    An unparsable or non-mapping workflow raises a
-    :class:`WorkflowShapeError` subclass from :func:`_parse`.
+    The directory is a parameter so the contract can drive the loader over a
+    synthetic tree; the repository's own is the default.
+
+    Parameters
+    ----------
+    directory : Path
+        The directory holding the workflow files.
 
     Returns
     -------
     dict[str, dict[str, object]]
         Each workflow document, keyed by file name.
+
+    Raises
+    ------
+    WorkflowShapeError
+        A subclass naming the workflow, when one cannot be read, is not
+        parsable YAML, repeats a key, or does not parse to a mapping.
     """
-    directory = ROOT / ".github" / "workflows"
     paths = sorted(
         path for suffix in WORKFLOW_SUFFIXES for path in directory.glob(f"*{suffix}")
     )
@@ -249,27 +246,13 @@ def workflow_documents() -> dict[str, dict[str, object]]:
 
 
 def _parse(path: Path) -> dict[str, object]:
-    """Parse one workflow file.
-
-    Parameters
-    ----------
-    path : Path
-        The workflow file to read.
-
-    Returns
-    -------
-    dict[str, object]
-        The parsed document.
-
-    Raises
-    ------
-    UnparsableWorkflowError
-        If the file is not parsable YAML, or declares one mapping key twice.
-    NotAMappingError
-        If the document does not parse to a mapping.
-    """
+    """Read and parse one workflow file, naming it in any failure."""
     try:
-        document = parse_workflow(path.read_text(encoding="utf-8"))
+        text = path.read_text(encoding="utf-8")
+    except OSError as error:
+        raise UnreadableWorkflowError(path.name) from error
+    try:
+        document = parse_workflow(text)
     except yaml.YAMLError as error:
         raise UnparsableWorkflowError(path.name) from error
     if not isinstance(document, dict):
@@ -277,8 +260,15 @@ def _parse(path: Path) -> dict[str, object]:
     return document
 
 
-def pull_request_workflows() -> dict[str, dict[str, object]]:
+def pull_request_workflows(
+    directory: Path = WORKFLOWS_DIRECTORY,
+) -> dict[str, dict[str, object]]:
     """Load the workflows a pull request can start.
+
+    Parameters
+    ----------
+    directory : Path
+        The directory holding the workflow files.
 
     Returns
     -------
@@ -287,6 +277,6 @@ def pull_request_workflows() -> dict[str, dict[str, object]]:
     """
     return {
         name: document
-        for name, document in workflow_documents().items()
+        for name, document in workflow_documents(directory).items()
         if is_pull_request_startable(document)
     }

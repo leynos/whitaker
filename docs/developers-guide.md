@@ -805,6 +805,39 @@ shape. It fails if a second Linux execution appears, if the surviving gate
 narrows its package, target, or feature set, if either coverage lane loses its
 doctest step, or if `publish-check` starts running the suite again.
 
+### Superseded pull-request runs
+
+A second push to a pull request cancels the `ci.yml` run already in flight,
+which would otherwise charge a full set of minutes for a result nobody reads.
+`ci.yml` declares:
+
+```yaml
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+```
+
+The group is stable across pushes to one pull request and distinct between
+workflows and between pull requests. A key on `github.run_id`, `github.sha` or
+`github.run_number` changes on every push and cancels nothing, and a static key
+would let unrelated pull requests cancel each other. The `github.ref` fallback
+keys a manual dispatch on its branch. Cancellation is conditioned on the event
+rather than set to a literal `true`, so a dispatch that shares the group, or
+any push trigger added later, runs to completion.
+
+Only `pull_request` is in scope. `dependabot-automerge.yml` runs on
+`pull_request_target` and merges, so cancelling it mid-write is not a saving.
+`coverage-main.yml`, `mutation-testing.yml`, `release.yml` and
+`rolling-release.yml` start on push, dispatch or schedule and are untouched;
+`coverage-main.yml` in particular must never cancel, because a cancelled
+publisher abandons its upload and its cache saves.
+
+`tests/workflow_contracts/pr_concurrency_test.py` requires both expressions
+exactly on every workflow a `pull_request` can start, with synthetic cases for
+each wrong group key and for a truthy `cancel-in-progress`. Its loader takes
+the workflow directory as a parameter, so the same cases can drive it over a
+synthetic tree.
+
 ### Runner placement policy
 
 Linux developer-blocking jobs run on Ubicloud managed runners. Everything else
