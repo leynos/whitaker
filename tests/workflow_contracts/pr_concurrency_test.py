@@ -1,0 +1,259 @@
+"""Every pull-request-startable workflow cancels superseded runs.
+
+Pushing twice to a pull request in quick succession leaves the first
+run charging minutes for a result nobody will read. GitHub cancels it
+only when the workflow declares a concurrency group keyed on the pull
+request and sets ``cancel-in-progress``.
+
+The sweep below reads the repository's own workflows. The cases after
+it drive the readers directly with synthetic documents, because a rule
+parametrized over files that already conform passes whether or not it
+discriminates: the synthetic cases are what prove it rejects a missing
+line, a literal ``true`` that would cancel a push to main, and a group
+keyed on the run identifier that serializes nothing.
+
+Run via ``make test-workflow-contracts``.
+"""
+
+import pathlib
+import typing as typ
+
+import pytest
+from pr_concurrency_support import (
+    CANCEL_IN_PROGRESS,
+    GROUP_EXPRESSION,
+    UnparsableWorkflowError,
+    UnreadableWorkflowDirectoryError,
+    UnreadableWorkflowError,
+    WorkflowShapeError,
+    workflow_documents,
+    concurrency_violations,
+    is_pull_request_startable,
+    pull_request_workflows,
+)
+
+PULL_REQUEST_WORKFLOWS: typ.Final = pull_request_workflows()
+
+
+def _document(**concurrency: object) -> dict[str, object]:
+    """Build a minimal pull-request workflow with the given concurrency block."""
+    return {"on": {"pull_request": None}, "concurrency": dict(concurrency)}
+
+
+GROUP: typ.Final = GROUP_EXPRESSION
+CONFORMING: typ.Final = _document(
+    group=GROUP, **{"cancel-in-progress": CANCEL_IN_PROGRESS}
+)
+
+
+def test_the_repository_has_pull_request_workflows() -> None:
+    """The swept set is non-empty.
+
+    A contract over a filtered list is satisfied by an empty list, so a
+    reader that stopped recognizing the ``pull_request`` trigger would
+    report every workflow as conforming. This half fails instead.
+    """
+    assert PULL_REQUEST_WORKFLOWS, (
+        "no workflow was read as pull-request-startable, so the sweep below "
+        "asserts nothing; the trigger reader or the workflow directory moved"
+    )
+
+
+@pytest.mark.parametrize("name", sorted(PULL_REQUEST_WORKFLOWS))
+def test_pull_request_workflow_cancels_superseded_runs(name: str) -> None:
+    """Each pull-request workflow supersedes its own earlier runs."""
+    violations = concurrency_violations(PULL_REQUEST_WORKFLOWS[name])
+    assert not violations, f"{name} " + "; ".join(violations)
+
+
+def test_the_conforming_shape_is_accepted() -> None:
+    """The shape the repository deploys reports no violation.
+
+    Without this the rejection cases below would pass against a reader
+    that refused everything, which would discriminate nothing.
+    """
+    violations = concurrency_violations(CONFORMING)
+    assert not violations, (
+        "the deployed shape must report no violation, or the rejection cases "
+        f"below would pass against a reader that refused everything: {violations}"
+    )
+
+
+@pytest.mark.parametrize(
+    ("document", "fragment"),
+    [
+        pytest.param({"on": {"pull_request": None}}, "no concurrency", id="absent"),
+        pytest.param(
+            {"on": {"pull_request": None}, "concurrency": "ci"},
+            "not a mapping",
+            id="scalar-block",
+        ),
+        pytest.param(
+            _document(group=GROUP), "no cancel-in-progress", id="cancel-line-removed"
+        ),
+        pytest.param(
+            _document(group=GROUP, **{"cancel-in-progress": True}),
+            "cancel-in-progress to True",
+            id="literal-true",
+        ),
+        pytest.param(
+            _document(group=GROUP, **{"cancel-in-progress": "true"}),
+            "cancel-in-progress to 'true'",
+            id="quoted-true",
+        ),
+        *(
+            pytest.param(
+                _document(group=group, **{"cancel-in-progress": CANCEL_IN_PROGRESS}),
+                "keys its concurrency group on",
+                id=name,
+            )
+            for name, group in (
+                ("run-id-group", "ci-${{ github.run_id }}"),
+                ("sha-group", "${{ github.workflow }}-${{ github.sha }}"),
+                ("run-number-group", "${{ github.workflow }}-${{ github.run_number }}"),
+                ("static-group", "ci"),
+                (
+                    "no-workflow-in-the-group",
+                    "${{ github.event.pull_request.number || github.ref }}",
+                ),
+                (
+                    "no-ref-fallback",
+                    "${{ github.workflow }}-${{ github.event.pull_request.number }}",
+                ),
+            )
+        ),
+        pytest.param(
+            _document(**{"cancel-in-progress": CANCEL_IN_PROGRESS}),
+            "no concurrency group",
+            id="group-absent",
+        ),
+    ],
+)
+def test_a_non_conforming_document_is_rejected(
+    document: dict[str, object], fragment: str
+) -> None:
+    """Each way of defeating the rule is reported, and named.
+
+    ``cancel-in-progress: true`` is the case worth stating: it reads as
+    an improvement and would cancel a push to main or a scheduled run
+    that shares the group. A contract that accepted a truthy value
+    would wave it through. The group cases are the other half: a key that
+    changes on every push cancels nothing, and one shared across pull
+    requests lets them cancel each other, so only the deployed expression
+    passes.
+    """
+    violations = concurrency_violations(document)
+    assert any(fragment in violation for violation in violations), (
+        f"expected a violation containing {fragment!r}: {violations}"
+    )
+
+
+@pytest.mark.parametrize(
+    "document",
+    [
+        pytest.param({"on": {"pull_request": None}}, id="mapping-string-key"),
+        pytest.param({True: {"pull_request": None}}, id="mapping-boolean-key"),
+        pytest.param({True: ["push", "pull_request"]}, id="sequence"),
+        pytest.param({True: "pull_request"}, id="bare-scalar"),
+    ],
+)
+def test_the_trigger_reader_covers_every_accepted_shape(
+    document: dict[str, object],
+) -> None:
+    """An unquoted ``on:`` parses as the boolean True and still reads.
+
+    YAML 1.1 folds ``on`` to ``True``, so a reader that looked only
+    under the string key would find no triggers in half the estate's
+    workflows and report them as startable by nothing. GitHub accepts a
+    mapping, a sequence and a bare scalar, so a reader that handles one
+    shape sweeps an incomplete set.
+    """
+    assert is_pull_request_startable(document), (
+        f"{document} declares the pull_request trigger and must read as "
+        "pull-request-startable, or the sweep skips it"
+    )
+
+
+@pytest.mark.parametrize(
+    "document",
+    [
+        pytest.param({"on": {"push": None}}, id="push-only"),
+        pytest.param({"on": {"pull_request_target": None}}, id="pull-request-target"),
+        pytest.param({"on": {"schedule": [{"cron": "0 3 * * *"}]}}, id="schedule"),
+    ],
+)
+def test_a_workflow_no_pull_request_starts_is_out_of_scope(
+    document: dict[str, object],
+) -> None:
+    """Only ``pull_request`` is in scope, and the reader says so.
+
+    ``pull_request_target`` runs with the base repository's token; the
+    workflows on it here push commits and merge, so cancelling one
+    mid-write is not a saving. A reader that folded the two together
+    would widen the rule past what was approved.
+    """
+    assert not is_pull_request_startable(document), (
+        f"{document} declares no pull_request trigger and must stay out of "
+        "scope, or the rule widens past what was approved"
+    )
+
+
+def test_a_workflow_with_no_triggers_is_a_shape_fault() -> None:
+    """No ``on:`` key is malformed, not "startable by nothing"."""
+    with pytest.raises(WorkflowShapeError):
+        is_pull_request_startable({"jobs": {}})
+
+
+def test_an_unreadable_trigger_value_is_a_shape_fault() -> None:
+    """A trigger key of an unexpected type names the workflow, not Python."""
+    with pytest.raises(WorkflowShapeError):
+        is_pull_request_startable({"on": 42})
+
+
+def test_a_repeated_key_is_unparsable(tmp_path: pathlib.Path) -> None:
+    """A workflow declaring `concurrency` twice is refused, not half read.
+
+    PyYAML would keep the second block and discard the first, so the sweep
+    would judge a group GitHub may not use. The strict parser refuses it.
+    """
+    (tmp_path / "twice.yml").write_text(
+        "on: pull_request\n"
+        "concurrency:\n  group: a\n  cancel-in-progress: true\n"
+        "concurrency:\n  group: b\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(UnparsableWorkflowError):
+        workflow_documents(tmp_path)
+
+
+def test_an_unreadable_workflow_is_named(tmp_path: pathlib.Path) -> None:
+    """A file the loader cannot read raises a named error, not a bare OSError."""
+    (tmp_path / "ci.yml").mkdir()
+    with pytest.raises(UnreadableWorkflowError, match=r"ci\.yml"):
+        workflow_documents(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "is_a_file", [pytest.param(False, id="missing"), pytest.param(True, id="a-file")]
+)
+def test_a_directory_that_cannot_be_listed_is_named(
+    tmp_path: pathlib.Path, is_a_file: bool
+) -> None:
+    """A missing or unlistable tree raises; it never reads as no workflows.
+
+    `Path.glob` would have yielded nothing for both, and the sweep would have
+    had an empty mapping to report as conforming.
+    """
+    directory = tmp_path / "workflows"
+    if is_a_file:
+        directory.write_text("not a directory", encoding="utf-8")
+    with pytest.raises(UnreadableWorkflowDirectoryError, match="workflows"):
+        workflow_documents(directory)
+
+
+def test_the_loader_reads_the_directory_it_is_given(tmp_path: pathlib.Path) -> None:
+    """The directory is injected, so the loader is not tied to this checkout."""
+    (tmp_path / "ci.yml").write_text("on: pull_request\njobs: {}\n", encoding="utf-8")
+    (tmp_path / "RELEASE.YAML").write_text("on: push\njobs: {}\n", encoding="utf-8")
+    (tmp_path / "notes.txt").write_text("not a workflow", encoding="utf-8")
+    assert list(workflow_documents(tmp_path)) == ["RELEASE.YAML", "ci.yml"]
