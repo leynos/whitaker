@@ -236,8 +236,20 @@ def bounds_a_single_test(profile: Profile) -> bool:
     return table is not None and table.get("terminate-after") is not None
 
 
+def _terminate_after(entry: dict[str, object]) -> int:
+    """Return how many periods pass before a slow test is terminated."""
+    # One for an absent or non-positive value, since a count nextest would
+    # refuse should not scale a budget. A boolean needs no arm of its own:
+    # `True` is the integer one and `False` is not positive.
+    match entry.get("terminate-after"):
+        case int() as count if count > 0:
+            return count
+        case _:
+            return 1
+
+
 def largest_period(profile: Profile) -> fractions.Fraction:
-    """Return the longest per-test allowance a profile sets.
+    """Return the longest per-test allowance a profile sets, periods times count.
 
     Parameters
     ----------
@@ -254,8 +266,10 @@ def largest_period(profile: Profile) -> fractions.Fraction:
     NextestConfigurationError
         If the profile declares no ``slow-timeout`` period at all.
     """
+    # nextest terminates a test after `terminate-after` periods, not one, so
+    # the per-test tier is the period times that count.
     periods = [
-        seconds(period)
+        seconds(period) * _terminate_after(entry)
         for table in profile.tables()
         if (entry := _slow_timeout(table)) is not None
         for period in _duration_at(entry, "period")

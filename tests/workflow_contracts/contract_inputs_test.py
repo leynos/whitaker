@@ -57,8 +57,12 @@ def test_a_readable_configuration_parses(tmp_path: pathlib.Path) -> None:
     """The other direction, so the boundary refuses rather than always fails."""
     path = tmp_path / "nextest.toml"
     path.write_text(_VALID_CONFIG, encoding="utf-8")
-    assert nextest_config_text(path) == _VALID_CONFIG
-    assert load_nextest_config(path) == {"profile": {"default": {"slow-timeout": "300s"}}}
+    assert nextest_config_text(path) == _VALID_CONFIG, (
+        "the boundary must return the file's text"
+    )
+    assert load_nextest_config(path) == {
+        "profile": {"default": {"slow-timeout": "300s"}}
+    }, "the boundary must return the parsed configuration"
 
 
 def test_a_missing_source_root_is_a_named_error(tmp_path: pathlib.Path) -> None:
@@ -80,7 +84,9 @@ def test_build_output_and_hidden_files_are_not_sources(tmp_path: pathlib.Path) -
     (tmp_path / "target" / "generated.rs").write_text("fn a() {}\n", encoding="utf-8")
     (tmp_path / ".hidden.rs").write_text("fn b() {}\n", encoding="utf-8")
     (tmp_path / "lib.rs").write_text("fn c() {}\n", encoding="utf-8")
-    assert rust_source_texts(tmp_path) == {tmp_path / "lib.rs": "fn c() {}\n"}
+    assert rust_source_texts(tmp_path) == {tmp_path / "lib.rs": "fn c() {}\n"}, (
+        "only the tree's own sources may be read"
+    )
 
 
 def test_the_discovery_attributes_each_call_to_its_own_test() -> None:
@@ -95,7 +101,9 @@ def test_the_discovery_attributes_each_call_to_its_own_test() -> None:
         "#[test]\nfn compiles() {\n    let t = trybuild::TestCases::new();\n}\n"
     )
     path = pathlib.Path("crate/tests/ui.rs")
-    assert compile_contract_tests({path: source}) == {"compiles": path}
+    assert compile_contract_tests({path: source}) == {"compiles": path}, (
+        "the call must be credited to the test that holds it"
+    )
 
 
 #: A helper declared above the test that calls it, and one declared below.
@@ -136,10 +144,14 @@ def test_a_helper_passes_its_call_to_the_test_that_calls_it() -> None:
     assert compile_contract_tests({path: _HELPERS}) == {
         "calls_the_earlier_helper": path,
         "calls_the_later_helper": path,
-    }
+    }, "both callers, and only they, must be found"
 
 
 def test_a_brace_in_a_literal_does_not_end_a_body() -> None:
     """A literal `}` must not close the test before its call is read."""
-    source = '#[test]\nfn quoted() {\n    let s = "}";\n    trybuild::TestCases::new();\n}\n'
-    assert compile_contract_tests({pathlib.Path("t.rs"): source}) == {"quoted": pathlib.Path("t.rs")}
+    source = (
+        '#[test]\nfn quoted() {\n    let s = "}";\n    trybuild::TestCases::new();\n}\n'
+    )
+    assert compile_contract_tests({pathlib.Path("t.rs"): source}) == {
+        "quoted": pathlib.Path("t.rs")
+    }, "a literal brace must not end the body"

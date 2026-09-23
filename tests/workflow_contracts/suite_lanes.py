@@ -138,7 +138,7 @@ def _parsed_workflow(path: pathlib.Path) -> object:
     """Return one workflow file's parsed content, or fail with its name."""
     try:
         text = path.read_text(encoding="utf-8")
-    except OSError as error:
+    except (OSError, UnicodeDecodeError) as error:
         message = f"cannot read the workflow {path.name}: {error}"
         raise WorkflowLoadError(message) from error
     try:

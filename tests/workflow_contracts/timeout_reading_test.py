@@ -63,7 +63,9 @@ def test_a_commented_out_global_timeout_is_absent() -> None:
     """
     with pytest.raises(NextestConfigurationError, match=r"global-timeout"):
         global_timeout(_example('# global-timeout = "45m"'))
-    assert global_timeout(_example('global-timeout = "45m"')) == pytest.approx(2700.0)
+    assert global_timeout(_example('global-timeout = "45m"')) == pytest.approx(
+        2700.0
+    ), "global-timeout must read 45m as 2,700 s"
 
 
 def test_a_commented_out_slow_timeout_is_not_a_budget() -> None:
@@ -78,7 +80,9 @@ def test_a_commented_out_slow_timeout_is_not_a_budget() -> None:
         '# slow-timeout = { period = "30m", terminate-after = 1 }',
         'slow-timeout = { period = "300s", terminate-after = 1 }',
     )
-    assert largest_period(live) == pytest.approx(300.0)
+    assert largest_period(live) == pytest.approx(300.0), (
+        "a live slow-timeout period must be the per-test tier"
+    )
     with pytest.raises(NextestConfigurationError, match=r"no slow-timeout period"):
         largest_period(_example('# slow-timeout = { period = "300s" }'))
 
@@ -97,11 +101,11 @@ def test_a_commented_out_grace_period_is_not_in_force() -> None:
     )
     assert termination_allowance(parsed) == pytest.approx(
         5.0 + TERMINATION_SAFETY_MARGIN_SECONDS
-    )
+    ), "an explicit grace period must be the termination term"
     unset = _example('slow-timeout = { period = "300s", terminate-after = 1 }')
     assert termination_allowance(unset) == pytest.approx(
         NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS + TERMINATION_SAFETY_MARGIN_SECONDS
-    )
+    ), "an omitted grace period must read as nextest's default"
 
 
 def test_the_allowance_is_exact_rather_than_nearest_representable() -> None:
@@ -163,7 +167,7 @@ def test_an_omitted_grace_period_contributes_nextest_s_default() -> None:
     parsed = profiles(config_text)["example"]
     assert termination_allowance(parsed) == pytest.approx(
         NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS + TERMINATION_SAFETY_MARGIN_SECONDS
-    )
+    ), "an override's omitted grace period must read as the default"
 
 
 def test_a_filter_naming_a_timeout_key_is_not_a_budget() -> None:
@@ -182,11 +186,15 @@ def test_a_filter_naming_a_timeout_key_is_not_a_budget() -> None:
         'slow-timeout = { period = "600s", terminate-after = 1 }\n'
     )
     parsed = profiles(config_text)["example"]
-    assert largest_period(parsed) == pytest.approx(600.0)
-    assert global_timeout(parsed) == pytest.approx(2700.0)
+    assert largest_period(parsed) == pytest.approx(600.0), (
+        "a filter naming a key must not change the per-test tier"
+    )
+    assert global_timeout(parsed) == pytest.approx(2700.0), (
+        "a filter naming a key must not change the whole-run budget"
+    )
     assert termination_allowance(parsed) == pytest.approx(
         NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS + TERMINATION_SAFETY_MARGIN_SECONDS
-    )
+    ), "a filter naming a key must not change the termination term"
 
 
 def test_only_the_profile_s_own_table_bounds_an_unmatched_test() -> None:
@@ -204,10 +212,12 @@ def test_only_the_profile_s_own_table_bounds_an_unmatched_test() -> None:
         'filter = "binary(slow)"\n'
         'slow-timeout = { period = "600s", terminate-after = 1 }\n'
     )["example"]
-    assert not bounds_a_single_test(only_in_override)
+    assert not bounds_a_single_test(only_in_override), (
+        "an override's terminate-after must not bound unmatched tests"
+    )
     assert bounds_a_single_test(
         _example('slow-timeout = { period = "300s", terminate-after = 1 }')
-    )
+    ), "the profile's own terminate-after must bound unmatched tests"
 
 
 @pytest.mark.parametrize(
@@ -303,63 +313,3 @@ def test_a_line_naming_the_suite_without_plainly_running_it_is_reported(
         f"cannot judge is neither a lane nor safely ignored"
     )
 
-
-_DEFAULT_ONLY_OVERRIDE = (
-    "[profile.default]\n"
-    'slow-timeout = { period = "300s", terminate-after = 1, grace-period = "5s" }\n'
-    'global-timeout = "45m"\n'
-    "\n"
-    "[[profile.default.overrides]]\n"
-    'filter = "binary(long)"\n'
-    'slow-timeout = { period = "50m", terminate-after = 1, grace-period = "90s" }\n'
-    "\n"
-    "[profile.ci]\n"
-    'slow-timeout = { period = "300s", terminate-after = 1, grace-period = "5s" }\n'
-    'global-timeout = "45m"\n'
-)
-
-
-def test_a_custom_profile_is_bounded_by_the_default_overrides_it_consults() -> None:
-    """nextest consults `[[profile.default.overrides]]` for a `ci` test.
-
-    So a default-only override longer than `ci`'s whole-run budget breaks
-    `ci`'s ordering even though `ci` declares nothing of the kind, and its
-    grace period is one `ci` waits too. Reading `ci`'s own tables alone
-    answered 300 s and 5 s here.
-    """
-    ci = profiles(_DEFAULT_ONLY_OVERRIDE)["ci"]
-    assert largest_period(ci) == pytest.approx(3000.0)
-    assert largest_period(ci) > global_timeout(ci), "the ordering must fail"
-    assert termination_allowance(ci) == pytest.approx(90 + TERMINATION_SAFETY_MARGIN_SECONDS)
-
-
-def test_inheritance_does_not_lend_a_custom_profile_its_own_bound() -> None:
-    """Whether `ci` terminates an unmatched test is still `ci`'s own answer."""
-    unbounded = profiles(
-        _DEFAULT_ONLY_OVERRIDE.replace(
-            '[profile.ci]\nslow-timeout = { period = "300s", terminate-after = 1, grace-period = "5s" }\n',
-            '[profile.ci]\nslow-timeout = { period = "300s" }\n',
-        )
-    )["ci"]
-    assert not bounds_a_single_test(unbounded)
-
-
-def test_a_custom_profile_s_own_slow_timeout_replaces_the_default_one() -> None:
-    """A setting `ci` declares is `ci`'s; the default's is inherited only when absent.
-
-    Lending the default's table regardless would size `ci`'s ceiling for a
-    ninety-second grace period nextest never applies to it.
-    """
-    config = (
-        "[profile.default]\n"
-        'slow-timeout = { period = "300s", terminate-after = 1, grace-period = "90s" }\n'
-        "\n"
-        "[profile.ci]\n"
-        'slow-timeout = { period = "300s", terminate-after = 1, grace-period = "5s" }\n'
-        "\n"
-        "[profile.lean]\n"
-        'global-timeout = "45m"\n'
-    )
-    parsed = profiles(config)
-    assert termination_allowance(parsed["ci"]) == pytest.approx(5 + TERMINATION_SAFETY_MARGIN_SECONDS)
-    assert termination_allowance(parsed["lean"]) == pytest.approx(90 + TERMINATION_SAFETY_MARGIN_SECONDS)

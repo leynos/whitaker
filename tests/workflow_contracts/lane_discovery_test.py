@@ -146,6 +146,13 @@ def test_an_unreadable_workflow_fails_by_name(tmp_path: pathlib.Path) -> None:
         _workflow_documents(tmp_path)
 
 
+def test_an_undecodable_workflow_fails_by_name(tmp_path: pathlib.Path) -> None:
+    """Bytes that are not UTF-8 are a third arm, and fail by name too."""
+    (tmp_path / "latin1.yml").write_bytes(b"jobs: {}\n# \xff\n")
+    with pytest.raises(WorkflowLoadError, match=r"latin1\.yml"):
+        _workflow_documents(tmp_path)
+
+
 def test_a_directory_of_valid_workflows_reads_both_extensions(
     tmp_path: pathlib.Path,
 ) -> None:

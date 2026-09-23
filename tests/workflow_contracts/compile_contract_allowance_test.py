@@ -102,12 +102,13 @@ def _period(slow_timeout: object) -> str | None:
     >>> _period(None) is None
     True
     """
-    if isinstance(slow_timeout, str):
-        return slow_timeout
-    if isinstance(slow_timeout, dict):
-        period = slow_timeout.get("period")
-        return period if isinstance(period, str) else None
-    return None
+    match slow_timeout:
+        case str() as period:
+            return period
+        case {"period": str() as period}:
+            return period
+        case _:
+            return None
 
 
 def compile_contract_tests(

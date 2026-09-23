@@ -3609,11 +3609,13 @@ longer spellings; whitespace inside the number is ignored, so `1 0s` is ten
 seconds; and a bare `0` needs no unit at all. An earlier reader took a single
 pair from `ms`, `s`, `m` or `h` and would have refused configuration the runner
 accepts, which is a manufactured failure rather than a caught one. The grammar
-and the unit table live in `nextest_durations.py`, measured against humantime
-2.3.0, the version the lockfile of the pinned cargo-nextest release resolves,
-and `nextest_duration_test.py` pins every unit by name rather than sampling
-them, because one wrong entry would leave every ordering above comparing two
-plausible wrong numbers.
+and the arithmetic live in `nextest_durations.py`; the unit spellings, their
+scaling, and the exact values live in `nextest_units.py`, which
+`nextest_durations.py` imports and whose `UNIT_SECONDS` it re-exports for
+callers. Both are measured against humantime 2.3.0, the version the lockfile of
+the pinned cargo-nextest release resolves, and `nextest_duration_test.py` pins
+every unit by name rather than sampling them, because one wrong entry would
+leave every ordering above comparing two plausible wrong numbers.
 
 That arithmetic is bounded as well as exact. humantime accumulates in 64-bit
 unsigned integers and checks every multiplication and addition, so a duration
