@@ -15,12 +15,15 @@ keyed on the run identifier that serializes nothing.
 Run via ``make test-workflow-contracts``.
 """
 
+import pathlib
 import typing as typ
 
 import pytest
 from pr_concurrency_support import (
     CANCEL_IN_PROGRESS,
+    UnparsableWorkflowError,
     WorkflowShapeError,
+    _parse,
     concurrency_violations,
     is_pull_request_startable,
     pull_request_workflows,
@@ -195,3 +198,20 @@ def test_an_unreadable_trigger_value_is_a_shape_fault() -> None:
     """A trigger key of an unexpected type names the workflow, not Python."""
     with pytest.raises(WorkflowShapeError):
         is_pull_request_startable({"on": 42})
+
+
+def test_a_repeated_key_is_unparsable(tmp_path: pathlib.Path) -> None:
+    """A workflow declaring `concurrency` twice is refused, not half read.
+
+    PyYAML would keep the second block and discard the first, so the sweep
+    would judge a group GitHub may not use. The strict parser refuses it.
+    """
+    path = tmp_path / "twice.yml"
+    path.write_text(
+        "on: pull_request\n"
+        "concurrency:\n  group: a\n  cancel-in-progress: true\n"
+        "concurrency:\n  group: b\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(UnparsableWorkflowError):
+        _parse(path)

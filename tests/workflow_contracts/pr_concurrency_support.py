@@ -16,6 +16,7 @@ import typing as typ
 from pathlib import Path
 
 import yaml
+from ubicloud_workflow_support import parse_workflow
 
 ROOT: typ.Final = Path(__file__).resolve().parents[2]
 
@@ -263,12 +264,12 @@ def _parse(path: Path) -> dict[str, object]:
     Raises
     ------
     UnparsableWorkflowError
-        If the file is not parsable YAML.
+        If the file is not parsable YAML, or declares one mapping key twice.
     NotAMappingError
         If the document does not parse to a mapping.
     """
     try:
-        document = yaml.safe_load(path.read_text(encoding="utf-8"))
+        document = parse_workflow(path.read_text(encoding="utf-8"))
     except yaml.YAMLError as error:
         raise UnparsableWorkflowError(path.name) from error
     if not isinstance(document, dict):
