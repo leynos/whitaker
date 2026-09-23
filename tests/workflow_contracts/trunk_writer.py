@@ -14,7 +14,10 @@ Actions backend has exactly one trunk writer": a job that runs on a push to
 `main` and nothing broader, runs unconditionally there, selects the same
 backend, and runs every `make` or `cargo` command the lane runs, so the two
 compile the same shapes. The other half is that nothing else in those
-workflows runs on that push, so no second job writes the same scope.
+workflows runs on that push, so no second job writes the same scope. And
+nothing may cancel the writer: a cancelled trunk run leaves `main`'s scope
+cold with nothing in the run saying so, so the only cancellation accepted is
+the pull-request-only one, in a group no pull request shares with the push.
 
 A pull request cannot write `main`'s scope at all, which is the structural
 half of "pull-request lanes only read": its writes land in its own ref's
@@ -31,6 +34,7 @@ Run via ``make test-workflow-contracts``.
 import re
 import typing as typ
 
+from pr_concurrency_support import CANCEL_IN_PROGRESS, GROUP_EXPRESSION
 from pull_request_reach import declares_trigger
 
 #: The one branch filter a trunk writer's push trigger may carry.
@@ -225,3 +229,66 @@ def push_jobs(document: dict[str, typ.Any]) -> list[str]:
         return []
     jobs = document.get("jobs") or {}
     return sorted(name for name, job in jobs.items() if runs_on(job, "push"))
+
+
+def _concurrency_violations(scope: str, concurrency: object) -> list[str]:
+    """Return how one `concurrency` value could cancel a run on the push.
+
+    A string, or no value, names a group without cancelling. A mapping may
+    cancel only through `CANCEL_IN_PROGRESS`, which is false on a push, and
+    then only in `GROUP_EXPRESSION`, which keys a pull request's run on its
+    number and the push on `refs/heads/main`. A pull request's run starting
+    with cancellation on cancels the in-progress runs of its own group, so a
+    group the push could share would let a pull request cancel the writer.
+    """
+    if concurrency is None or isinstance(concurrency, str):
+        return []
+    if not isinstance(concurrency, dict):
+        return [f"the {scope} concurrency {concurrency!r} is not a readable shape"]
+    cancel = concurrency.get("cancel-in-progress", False)
+    if cancel is False:
+        return []
+    if cancel != CANCEL_IN_PROGRESS:
+        return [
+            (
+                f"the {scope} cancel-in-progress {cancel!r} can cancel the push "
+                f"run; only {CANCEL_IN_PROGRESS!r} is reviewed"
+            )
+        ]
+    group = concurrency.get("group")
+    if group != GROUP_EXPRESSION:
+        return [
+            (
+                f"the {scope} group {group!r} could put the push run beside a "
+                f"pull request's; only {GROUP_EXPRESSION!r} is reviewed"
+            )
+        ]
+    return []
+
+
+def cancellation_violations(
+    writer: dict[str, typ.Any], writer_workflow: dict[str, typ.Any]
+) -> list[str]:
+    """Return how the trunk writer's run on the push could be cancelled.
+
+    Parameters
+    ----------
+    writer : dict[str, typ.Any]
+        The trunk writer job.
+    writer_workflow : dict[str, typ.Any]
+        The workflow declaring it.
+
+    Returns
+    -------
+    list[str]
+        Empty when neither the workflow's nor the job's `concurrency` can
+        cancel a run on the push.
+
+    >>> cancellation_violations({}, {"concurrency": {
+    ...     "group": "ci", "cancel-in-progress": True}})[0][:40]
+    'the workflow cancel-in-progress True can'
+    """
+    return [
+        *_concurrency_violations("workflow", writer_workflow.get("concurrency")),
+        *_concurrency_violations("job", writer.get("concurrency")),
+    ]

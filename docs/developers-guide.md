@@ -803,6 +803,16 @@ push must be exactly the registered writers. Job conditions are matched against
 a table of reviewed spellings, and an unknown one fails the suite rather than
 being guessed at.
 
+Nothing may cancel a writer's run on the push either. A cancelled trunk run
+leaves `main`'s scope cold, and no failure reports it. The contract therefore
+accepts a workflow-level or job-level `concurrency` on a writer only when it
+cannot cancel: no `cancel-in-progress`, `false`, or the pull-request-only
+expression `${{ github.event_name == 'pull_request' }}`, which is false on the
+push. That expression must also come with `ci.yml`'s group, keyed on the pull
+request's number or else on `github.ref`. A pull request's run then never
+shares a group with the push run, because a run that starts with cancellation
+on cancels the in-progress runs of its own group.
+
 `windows-compat` has the same first-push cold start against GitHub's own cache,
 which is ref-scoped too. It is not addressed here: its saves still come only
 from a dispatch against `main`.

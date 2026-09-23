@@ -12,9 +12,11 @@ Run via ``make test-workflow-contracts``.
 import typing as typ
 
 import pytest
+from pr_concurrency_support import CANCEL_IN_PROGRESS, GROUP_EXPRESSION
 from pull_request_reach import declares_trigger
 from trunk_writer import (
     UnreviewedConditionError,
+    cancellation_violations,
     compiling_commands,
     push_jobs,
     runs_on,
@@ -238,3 +240,77 @@ def test_an_ungated_job_beside_the_writer_is_a_second_writer() -> None:
         "  pr-only:\n    if: github.event_name == 'pull_request'\n"
     )
     assert push_jobs(document) == ["windows", "writer"]
+
+
+@pytest.mark.parametrize("writer", sorted(set(TRUNK_WRITERS.values())))
+def test_nothing_can_cancel_a_writer_on_the_trunk_push(writer: str) -> None:
+    """A cancelled trunk writer leaves `main`'s scope cold, and says nothing."""
+    violations = cancellation_violations(
+        load_job(writer), load_workflow(UBICLOUD_JOBS[writer])
+    )
+    assert not violations, f"{writer}: {violations}"
+
+
+def _concurrency(group: str, cancel: object) -> dict[str, object]:
+    """Return a `concurrency` mapping with the supplied group and setting."""
+    return {"group": group, "cancel-in-progress": cancel}
+
+
+@pytest.mark.parametrize(
+    ("workflow", "job", "expected"),
+    [
+        pytest.param(
+            {"concurrency": _concurrency(GROUP_EXPRESSION, True)},
+            {},
+            "cancel-in-progress True",
+            id="a-literal-true",
+        ),
+        pytest.param(
+            {"concurrency": _concurrency(GROUP_EXPRESSION, "${{ always() }}")},
+            {},
+            "can cancel the push run",
+            id="an-unreviewed-expression",
+        ),
+        pytest.param(
+            {"concurrency": _concurrency("${{ github.workflow }}", CANCEL_IN_PROGRESS)},
+            {},
+            "beside a pull request's",
+            id="a-group-a-pull-request-shares",
+        ),
+        pytest.param(
+            {},
+            {"concurrency": _concurrency("writer", True)},
+            "the job cancel-in-progress",
+            id="a-job-level-cancel",
+        ),
+        pytest.param(
+            {"concurrency": ["ci"]},
+            {},
+            "not a readable shape",
+            id="an-unreadable-shape",
+        ),
+    ],
+)
+def test_a_cancellable_writer_is_refused(
+    workflow: dict[str, typ.Any], job: dict[str, typ.Any], expected: str
+) -> None:
+    """Each way the push run could be cancelled is caught."""
+    violations = cancellation_violations(job, workflow)
+    assert any(expected in violation for violation in violations), violations
+
+
+@pytest.mark.parametrize(
+    "concurrency",
+    [
+        pytest.param(None, id="none"),
+        pytest.param("ci-main", id="a-named-group"),
+        pytest.param(_concurrency("ci", False), id="cancellation-off"),
+        pytest.param(
+            _concurrency(GROUP_EXPRESSION, CANCEL_IN_PROGRESS), id="the-reviewed-pair"
+        ),
+    ],
+)
+def test_a_writer_the_push_cannot_cancel_is_accepted(concurrency: object) -> None:
+    """The narrow half: every shape that never cancels the push passes."""
+    workflow = {} if concurrency is None else {"concurrency": concurrency}
+    assert cancellation_violations({}, workflow) == []
