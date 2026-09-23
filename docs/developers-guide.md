@@ -221,6 +221,108 @@ either environment variable individually. Fixture workspaces that intentionally
 use the same package identity must still select their own nested `--target-dir`
 to avoid reusing one another's build-script output.
 
+#### Who may talk to CodeScene
+
+`coverage-main.yml` owns the CodeScene surface entirely. It runs on a push to
+the trunk, it uploads the report, and it is the only workflow here that may
+hold the CodeScene credential. No pull-request lane may invoke the CodeScene
+action, run a `cs-coverage` command, name the `codescene.io` host, or carry
+that credential, whether by name or through `secrets: inherit`, and
+`tests/workflow_contracts/coverage_boundary_test.py` enforces all of them over
+every workflow a pull request can reach.
+
+"Every workflow a pull request can reach" is a closure, not a trigger list.
+`tests/workflow_contracts/pull_request_reach.py` starts from the workflows
+declaring `pull_request`, `pull_request_target` or `workflow_run`, in any of
+the scalar, sequence or mapping forms `on:` accepts, and adds every workflow of
+this repository they call through a job-level `uses:`, transitively. A workflow
+declaring only `workflow_call` still runs on a pull request when one of those
+calls it, and `secrets: inherit` hands it the credential. A local call is
+recognized by its shape: the reference is read as a path and must name a file
+directly under `.github/workflows/`, so no list of spellings has to be kept.
+
+The publisher answers `workflow_dispatch` as well as a push to `main`, and a
+dispatch can name any branch, so the trigger filter does not confine the
+upload. The upload step's condition carries `github.ref == 'refs/heads/main'`
+and `env.CS_ACCESS_TOKEN != ''` as conjuncts, the second so that an absent
+secret skips the upload rather than failing the run.
+`tests/workflow_contracts/publisher_guard_test.py` requires both, reading the
+condition as a conjunction: it splits on `&&` and refuses any `||` outside a
+quoted string, because a trailing `|| github.event_name == 'workflow_dispatch'`
+would contain the ref test and make it optional. The credential test is only
+half of the arrangement, because GitHub evaluates a missing context property as
+an empty string: with the step's `env` binding deleted, the guard would read
+the same and the upload would skip on every run.
+`tests/workflow_contracts/publisher_credential_test.py` therefore requires the
+upload step to bind `CS_ACCESS_TOKEN` to `${{ secrets.CS_ACCESS_TOKEN }}` and
+to pass `${{ env.CS_ACCESS_TOKEN }}` as `access-token`, and refuses the binding
+in any other scope: the workflow's or a job's `env`, or another step. The guard
+contract also refuses a concurrency group that cancels a publisher run: a
+cancelled run abandons its upload and the cache state it writes, while
+overlapping runs that both finish leave the later push's state in place.
+
+Every workflow contract reads a workflow file through `parse_workflow` in
+`tests/workflow_contracts/ubicloud_workflow_support.py`, a `SafeLoader` that
+refuses a mapping declaring one key twice. PyYAML otherwise keeps the last
+value silently, so a contract reading a job that declares `runs-on` twice would
+judge a document with one of the two labels already discarded.
+
+The rule is CV-005, and the reason is that a step needing an external service
+and a secret turns an unrelated pull request red when the service is
+unavailable or the token has rotated. The changed-line gate that used to sit in
+`coverage-check` is what it removes, so a pull request no longer receives
+changed-line feedback. That is what the rule takes from every repository that
+adopts it, not something particular to this one.
+
+The credential's name does not appear in any pull-request workflow, not even in
+a comment. The contract reads the raw text as well as the parsed values,
+because a workflow that names it is a workflow somebody is about to wire it
+into.
+
+A pull-request workflow also may not publish the coverage report as an
+artefact. The contract judges an `actions/upload-artifact` step by whether its
+`path` *could* carry `lcov.info`, not by whether it names it, so it fails
+closed: a missing or blank `path`, `.` and `./`, anything containing `..`, any
+glob, any `$` expression or variable wherever it sits, a leading `~`, and any
+absolute path are all refused, and one such entry in a multi-line `path` is
+enough. Only a concrete relative path below the workspace that is not the
+report passes, which is the shape the `sccache-stats.json` uploads take. A lane
+that calls the shared `generate-coverage` action must pass
+`publish-artefact: 'false'`, because the action archives the report under a
+step of its own that the caller cannot see.
+
+`tests/workflow_contracts/shell_commands.py` decides whether a `run:` block is
+one command that must run, and the measuring lane's contract uses it to require
+`make coverage` in a step of its own with no `if:`. A substring test passes for
+`echo make coverage` or a comment, and a reader of simple commands still passes
+for `false && make coverage` or `make coverage &`, so the reader accepts only a
+script that is a single simple command with no list or pipeline operator. It is
+for requirements only. A prohibition, such as "no pull-request lane runs
+`cs-coverage`", stays a substring test, because there over-matching is the safe
+direction and the reader deliberately under-matches.
+
+##### The half of CV-005 that is deferred here
+
+CV-005 also asks a pull-request lane to call the shared `generate-coverage`
+action with `with-ratchet: true`, so that changed-line feedback comes from a
+baseline the trunk wrote rather than from CodeScene. This repository does not
+call that action on either lane. It runs `make coverage`, its own
+`cargo llvm-cov nextest` driver, for the reason given above: the driver reuses
+the exact crate selection and warning policy `make test` uses, and the shared
+action does not obviously reproduce that selection.
+
+So the ratchet half is deferred rather than adopted, and a pull request here
+gets no changed-line comparison at all. Adopting it means answering first
+whether `generate-coverage`'s inputs can reproduce `make coverage`'s selection
+exactly. If they can, the driver decision above is superseded and this section
+changes with it. If they cannot, the gap belongs on the programme desk rather
+than in a workaround here.
+
+The measuring lane is contracted to keep running `make coverage`. That is not
+belt and braces: this repository's coverage run *is* its test run, so a rule
+that only forbade the CodeScene step would also have been satisfied by deleting
+the coverage build, and with it the tests.
+
 The CI workflow is split by purpose rather than running the same stack on every
 operating system. `linux-full` is the authoritative gate for formatting,
 Mermaid/Nixie/Markdown validation, `make lint`, and `make publish-check`.

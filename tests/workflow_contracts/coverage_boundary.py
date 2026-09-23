@@ -1,0 +1,331 @@
+"""What a pull-request-reachable workflow may not touch.
+
+Pull-request CI here measures coverage and stops. `make coverage` writes
+`lcov.info`, nothing compares it with anything, and no changed-line gate runs:
+the ratchet half of CV-005 is deferred, for the reason the developers' guide
+gives under "The half of CV-005 that is deferred here". What the lane must not
+do is publish that report as an artefact, invoke the CodeScene coverage action,
+run a `cs-coverage` command, name CodeScene's host, or carry the credential any
+of those needs, whether by name or by `secrets: inherit`. Those belong to
+`coverage-main.yml`, which is the only writer of persistent coverage state.
+Which workflows a pull request reaches is `pull_request_reach`'s to say.
+
+`GENERATE_COVERAGE_ACTION` is named below even though no lane here calls it.
+The rule about declining its archive has to be in force before the first caller
+appears, not after, because a caller that reaches the action without the opt-out
+has already published the report.
+
+The coverage action archives the report it generated under a step of its own,
+so declining that archive is part of the same boundary: a caller that reaches
+the action without the opt-out has published the report whether or not the
+workflow declares an artefact step. That rule is checked here rather than in
+the workflow, because the action's own step is not the caller's to see.
+
+These readers take a parsed document and its raw text rather than reading
+files, so the contract beside them can drive shapes this repository does not
+have. Parameterized over this repository's own workflows alone, a reader that
+answered nothing would agree with a correct one exactly.
+
+Run via ``make test-workflow-contracts``.
+"""
+
+import collections.abc as cabc
+import pathlib
+import typing as typ
+
+
+#: The shared action that generates coverage. No lane in this repository calls
+#: it: `make coverage` is the driver here, and the guide records why. The
+#: constant exists so the rule about declining the action's own archive is in
+#: force for the first lane that does call it.
+GENERATE_COVERAGE_ACTION: typ.Final[str] = (
+    "leynos/shared-actions/.github/actions/generate-coverage"
+)
+
+#: The action that submits a report to CodeScene, in either of its modes.
+#: `main` owns this call.
+UPLOAD_COVERAGE_ACTION: typ.Final[str] = (
+    "leynos/shared-actions/.github/actions/upload-codescene-coverage"
+)
+
+#: The generic artefact action. A pull request must not carry the report to it
+#: under any step name.
+PUBLISH_ARTEFACT_ACTION: typ.Final[str] = "actions/upload-artifact"
+
+#: The input that suppresses the coverage action's own archive step, and the
+#: value that suppresses it. A pull-request-reachable caller must set both, or
+#: the action publishes the report this boundary exists to keep local.
+PUBLICATION_OPT_OUT_INPUT: typ.Final[str] = "publish-artefact"
+PUBLICATION_OPT_OUT_VALUE: typ.Final[str] = "false"
+
+#: The credential the CodeScene upload reads. It must not appear in a workflow
+#: a pull request can reach, in a parsed value or anywhere in the raw text.
+CREDENTIAL_ENVIRONMENT_KEY: typ.Final[str] = "CS_ACCESS_TOKEN"
+
+#: The command form of the same upload, which needs no action reference.
+COVERAGE_COMMAND: typ.Final[str] = "cs-coverage"
+
+#: The report the coverage action writes, and the one CodeScene is sent.
+COVERAGE_REPORT_PATH: typ.Final[str] = "lcov.info"
+
+#: CodeScene's host. A pull-request lane has no reason to name it, and a plain
+#: `curl` to it names neither the action nor the command above.
+CODESCENE_HOST: typ.Final[str] = "codescene.io"
+
+#: The forwarding form that hands a called workflow every secret the caller
+#: holds while naming none of them.
+INHERITED_SECRETS: typ.Final[str] = "inherit"
+
+def _steps_of(job: dict[str, typ.Any]) -> list[dict[str, typ.Any]]:
+    """Return a job's step list, or none when it declares an unusable shape."""
+    # A scan for prohibited references rather than an assertion about job
+    # shape, so a job without a step list contributes nothing instead of
+    # failing here and hiding the question that was being asked.
+    steps = job.get("steps")
+    return [step for step in steps if isinstance(step, dict)] if isinstance(steps, list) else []
+
+
+def action_of(step: dict[str, typ.Any]) -> str:
+    """Return a step's action reference without its version.
+
+    Parameters
+    ----------
+    step : dict[str, typ.Any]
+        One parsed workflow step.
+
+    Returns
+    -------
+    str
+        The reference with its `@version` removed, or the empty string when the
+        step runs a command rather than an action.
+    """
+    # Splitting on the version separator rather than matching a prefix keeps
+    # `upload-codescene-coverage-legacy` from reading as the real action.
+    uses = step.get("uses")
+    return uses.split("@", 1)[0] if isinstance(uses, str) else ""
+
+
+#: Characters that make a path a pattern rather than a name. A pattern may
+#: match the report however innocent it looks, so one is never cleared.
+_GLOB_CHARACTERS: typ.Final[frozenset[str]] = frozenset("*?[]!")
+
+#: The character that starts an expression or a variable. `${{ ... }}` and
+#: `$NAME` are decided at run time wherever they sit: `target/${{ x }}`
+#: reaches the workspace when `x` is `..`, and the reader does not resolve it.
+_EXPRESSION_MARKER: typ.Final[str] = "$"
+
+#: The home directory, which holds the workspace. Only a leading `~` expands.
+_HOME_MARKER: typ.Final[str] = "~"
+
+
+def _is_a_pattern_or_expression(entry: str) -> bool:
+    """Return whether an entry's meaning is decided by a glob or at run time."""
+    unresolved = _EXPRESSION_MARKER in entry or entry.startswith(_HOME_MARKER)
+    return unresolved or bool(_GLOB_CHARACTERS & set(entry))
+
+
+def _descends_from_the_workspace(entry: str) -> bool:
+    """Return whether an entry is a relative path below the workspace root."""
+    # `.` and `./` have no parts left once pathlib drops the `.` component, and
+    # an absolute path may be the workspace or one of its ancestors.
+    path = pathlib.PurePosixPath(entry)
+    return bool(path.parts) and not path.is_absolute() and ".." not in path.parts
+
+
+def _could_hold_the_report(entry: str) -> bool:
+    """Return whether one `path` entry could carry the coverage report."""
+    # Fails closed, because the question is whether the report *can* leave the
+    # runner, not whether this entry is spelt like it. A substring test for
+    # `lcov.info` clears `.`, `./`, `..`, the workspace under any other
+    # spelling, and every glob, each of which uploads the report while reading
+    # as innocent.
+    cleaned = entry.strip()
+    if not cleaned or COVERAGE_REPORT_PATH in cleaned:
+        return True
+    return _is_a_pattern_or_expression(cleaned) or not _descends_from_the_workspace(
+        cleaned
+    )
+
+
+def publishes_the_coverage_report(step: dict[str, typ.Any]) -> bool:
+    """Return whether a step publishes the coverage report as an artefact.
+
+    Parameters
+    ----------
+    step : dict[str, typ.Any]
+        One parsed workflow step.
+
+    Returns
+    -------
+    bool
+        True when the step uploads, or could upload, the report. A step of the
+        artefact action that names no path uploads the workspace, which holds
+        the generated report; so does a path of `.`, a path reaching upward
+        through `..`, or any glob. Each of those reads as True rather than as
+        an exemption.
+    """
+    if action_of(step) != PUBLISH_ARTEFACT_ACTION:
+        return False
+    with_ = step.get("with")
+    if not isinstance(with_, dict) or "path" not in with_:
+        return True
+    # `path` is newline-separated, and one unsafe entry publishes the report
+    # whatever the others name.
+    return any(
+        _could_hold_the_report(entry) for entry in str(with_["path"]).splitlines()
+    ) or not str(with_["path"]).strip()
+
+
+def declines_the_generated_report_archive(step: dict[str, typ.Any]) -> bool:
+    """Return whether a step tells the coverage action not to archive.
+
+    Parameters
+    ----------
+    step : dict[str, typ.Any]
+        One parsed workflow step.
+
+    Returns
+    -------
+    bool
+        True when the step invokes the coverage action and passes the
+        publication opt-out. The value is compared as the string the action
+        itself compares against, so `false`, not a falsy stand-in, suppresses
+        the upload.
+    """
+    if action_of(step) != GENERATE_COVERAGE_ACTION:
+        return False
+    with_ = step.get("with")
+    if not isinstance(with_, dict):
+        return False
+    # Compared as the string the action itself compares against, so `false`,
+    # not a falsy stand-in, is what suppresses the upload.
+    return with_.get(PUBLICATION_OPT_OUT_INPUT) == PUBLICATION_OPT_OUT_VALUE
+
+
+def _iter_strings(value: object) -> cabc.Iterator[str]:
+    """Yield every string nested anywhere in a parsed YAML value."""
+    match value:
+        case str():
+            yield value
+        case dict():
+            for key, item in value.items():
+                yield from _iter_strings(key)
+                yield from _iter_strings(item)
+        case list():
+            for item in value:
+                yield from _iter_strings(item)
+        case _:
+            return
+
+
+def _keeps_the_generated_archive(step: dict[str, typ.Any]) -> bool:
+    """Return whether a step calls the coverage action without the opt-out."""
+    return action_of(step) == GENERATE_COVERAGE_ACTION and not (
+        declines_the_generated_report_archive(step)
+    )
+
+
+def _runs_the_coverage_command(step: dict[str, typ.Any]) -> bool:
+    """Return whether a step's command names the CodeScene client."""
+    run = step.get("run")
+    return isinstance(run, str) and COVERAGE_COMMAND in run
+
+
+def _step_offences(where: str, step: dict[str, typ.Any]) -> list[str]:
+    """Return every prohibited reference one step makes."""
+    checks = (
+        (
+            publishes_the_coverage_report(step),
+            "publishes the coverage report as an artefact",
+        ),
+        (
+            _keeps_the_generated_archive(step),
+            "invokes the coverage action without declining its own archive "
+            f"({PUBLICATION_OPT_OUT_INPUT}: {PUBLICATION_OPT_OUT_VALUE})",
+        ),
+        (
+            action_of(step) == UPLOAD_COVERAGE_ACTION,
+            "invokes the CodeScene coverage action",
+        ),
+        (_runs_the_coverage_command(step), f"runs a {COVERAGE_COMMAND} command"),
+    )
+    return [f"{where} {message}" for found, message in checks if found]
+
+
+def _forwards_every_secret(job: dict[str, typ.Any]) -> bool:
+    """Return whether a job hands its callee every secret with `inherit`."""
+    # `secrets: inherit` names nothing, so a scan for the credential's name
+    # finds no mention of it while the called workflow receives it. Forwarding
+    # it by name is already caught, because the name is a parsed value.
+    forwarded = job.get("secrets")
+    return isinstance(forwarded, str) and forwarded.strip() == INHERITED_SECRETS
+
+
+def _job_offences(where: str, job: dict[str, typ.Any]) -> list[str]:
+    """Return every prohibited reference one job makes, its steps included."""
+    offences = (
+        [f"{where} forwards every secret with `secrets: {INHERITED_SECRETS}`"]
+        if _forwards_every_secret(job)
+        else []
+    )
+    for index, step in enumerate(_steps_of(job)):
+        offences.extend(_step_offences(f"{where}: step {index}", step))
+    return offences
+
+
+def _jobs_of(document: dict[str, typ.Any]) -> list[tuple[str, dict[str, typ.Any]]]:
+    """Return a workflow's jobs that declare a usable mapping, by name."""
+    declared = document.get("jobs")
+    jobs = declared.items() if isinstance(declared, dict) else ()
+    return [(name, job) for name, job in jobs if isinstance(job, dict)]
+
+
+def _text_offences(
+    name: str, document: dict[str, typ.Any], raw_text: str
+) -> list[str]:
+    """Return every credential or host mention, raw or parsed."""
+    # The raw text is read as well as the parsed values, so a reference inside
+    # a comment, or in a shape the parser flattened away, is still reported.
+    raw_mentions = (
+        (
+            CREDENTIAL_ENVIRONMENT_KEY in raw_text,
+            f"raw text references {CREDENTIAL_ENVIRONMENT_KEY}",
+        ),
+        (CODESCENE_HOST in raw_text.casefold(), f"raw text names {CODESCENE_HOST}"),
+    )
+    offences = [f"{name}: {message}" for found, message in raw_mentions if found]
+    offences.extend(
+        f"{name}: parsed value references {CREDENTIAL_ENVIRONMENT_KEY}"
+        for value in _iter_strings(document)
+        if CREDENTIAL_ENVIRONMENT_KEY in value
+    )
+    return offences
+
+
+def coverage_surface_offenders(
+    name: str, document: dict[str, typ.Any], raw_text: str
+) -> list[str]:
+    """Return every prohibited coverage-surface reference in one workflow.
+
+    Parameters
+    ----------
+    name : str
+        The workflow file's name, used in the failure messages.
+    document : dict[str, typ.Any]
+        The workflow's parsed document.
+    raw_text : str
+        The workflow's raw text. The credential is matched here as well as in
+        the parsed values, so a reference inside a comment or an unparsed shape
+        is still reported, and so is CodeScene's host in any letter case.
+
+    Returns
+    -------
+    list[str]
+        One description per violation, empty when the workflow is clean.
+    """
+    offenders = [
+        offence
+        for job_name, job in _jobs_of(document)
+        for offence in _job_offences(f"{name}:{job_name}", job)
+    ]
+    return offenders + _text_offences(name, document, raw_text)

@@ -97,13 +97,92 @@ CACHE_KEY_WRITERS: dict[str, str] = {
 }
 
 
+class DuplicateKeyError(yaml.constructor.ConstructorError):
+    """A workflow declares one mapping key twice."""
+
+
+class StrictSafeLoader(yaml.SafeLoader):
+    """A `SafeLoader` that refuses a mapping declaring one key twice.
+
+    PyYAML keeps the last value of a repeated key and says nothing, so a job
+    declaring `runs-on` twice parses into a document that has discarded the
+    first label. A contract reading that document judges a lane GitHub may not
+    run the way it reads, and passes on a file it never saw whole.
+    """
+
+    def construct_mapping(
+        self, node: yaml.MappingNode, deep: bool = False
+    ) -> dict[typ.Hashable, Any]:
+        """Build one mapping, refusing a key declared twice in it.
+
+        Parameters
+        ----------
+        node : yaml.MappingNode
+            The mapping node being constructed.
+        deep : bool, optional
+            Whether nested values are constructed now rather than lazily, as
+            PyYAML's own `construct_mapping` takes it.
+
+        Returns
+        -------
+        dict[typ.Hashable, Any]
+            The constructed mapping, built by PyYAML once no key repeats.
+
+        Raises
+        ------
+        DuplicateKeyError
+            When two keys of the mapping construct to the same value.
+        """
+        seen: set[typ.Hashable] = set()
+        for key_node, _ in node.value:
+            key = self.construct_object(key_node, deep=deep)
+            if key in seen:
+                raise DuplicateKeyError(
+                    "while constructing a mapping",
+                    node.start_mark,
+                    f"found duplicate key {key!r}",
+                    key_node.start_mark,
+                )
+            seen.add(key)
+        return super().construct_mapping(node, deep=deep)
+
+
+def parse_workflow(text: str) -> object:
+    """Parse workflow text strictly, refusing duplicate mapping keys.
+
+    Every contract that reads a workflow goes through this rather than
+    `yaml.safe_load`, so a repeated key fails the suite instead of silently
+    losing one of its values.
+
+    Parameters
+    ----------
+    text : str
+        A workflow file's text.
+
+    Returns
+    -------
+    object
+        The parsed document. A workflow parses to a mapping; the caller checks
+        that, because a malformed file may parse to anything.
+
+    Raises
+    ------
+    DuplicateKeyError
+        When any mapping in the document declares one key twice.
+
+    >>> parse_workflow("on: push\\njobs: {}\\n")
+    {True: 'push', 'jobs': {}}
+    """
+    return yaml.load(text, Loader=StrictSafeLoader)  # noqa: S506 - a SafeLoader subclass.
+
+
 def load_workflow(workflow_name: str) -> dict[str, Any]:
     """Return one checked-in workflow parsed as a mapping.
 
     For example, ``load_workflow("ci.yml")["jobs"]`` yields the CI job set.
     """
     workflow_path = WORKFLOWS_DIRECTORY / workflow_name
-    workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+    workflow = parse_workflow(workflow_path.read_text(encoding="utf-8"))
     assert isinstance(workflow, dict), f"{workflow_name} must parse to a mapping"
     return workflow
 

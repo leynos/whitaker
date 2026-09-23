@@ -3,14 +3,14 @@
 from pathlib import Path
 from typing import Any
 
-import yaml
+from ubicloud_workflow_support import parse_workflow
 
 WORKFLOW_PATH: Path = Path(__file__).resolve().parents[2] / ".github/workflows/ci.yml"
 
 
 def _load_workflow() -> dict[str, Any]:
     """Load the CI workflow as a mapping."""
-    loaded = yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8"))
+    loaded = parse_workflow(WORKFLOW_PATH.read_text(encoding="utf-8"))
     assert isinstance(loaded, dict), "CI workflow must parse to a mapping"
     return loaded
 
