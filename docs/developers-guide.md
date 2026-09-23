@@ -249,10 +249,17 @@ secret skips the upload rather than failing the run.
 `tests/workflow_contracts/publisher_guard_test.py` requires both, reading the
 condition as a conjunction: it splits on `&&` and refuses any `||` outside a
 quoted string, because a trailing `|| github.event_name == 'workflow_dispatch'`
-would contain the ref test and make it optional. The same contract refuses a
-concurrency group that cancels a publisher run: a cancelled run abandons its
-upload and the cache state it writes, while overlapping runs that both finish
-leave the later push's state in place.
+would contain the ref test and make it optional. The credential test is only
+half of the arrangement, because GitHub evaluates a missing context property as
+an empty string: with the step's `env` binding deleted, the guard would read
+the same and the upload would skip on every run.
+`tests/workflow_contracts/publisher_credential_test.py` therefore requires the
+upload step to bind `CS_ACCESS_TOKEN` to `${{ secrets.CS_ACCESS_TOKEN }}` and
+to pass `${{ env.CS_ACCESS_TOKEN }}` as `access-token`, and refuses the binding
+in any other scope: the workflow's or a job's `env`, or another step. The guard
+contract also refuses a concurrency group that cancels a publisher run: a
+cancelled run abandons its upload and the cache state it writes, while
+overlapping runs that both finish leave the later push's state in place.
 
 Every workflow contract reads a workflow file through `parse_workflow` in
 `tests/workflow_contracts/ubicloud_workflow_support.py`, a `SafeLoader` that
