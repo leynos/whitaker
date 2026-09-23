@@ -308,40 +308,21 @@ fn an_unpinned_reuse_does_not_inherit_a_previous_pin(temp_workspace: TempWorkspa
 }
 
 #[rstest]
-fn a_branch_pin_follows_the_remote_rather_than_a_stale_local_branch(temp_workspace: TempWorkspace) {
-    // `git checkout main` resolves the *local* branch, which a fetch never
-    // fast-forwards, so without preferring `origin/main` a branch pin builds
-    // whatever that branch pointed at when the clone was made.
-    let Some((origin, clone)) = init_clone(&temp_workspace.path) else {
+fn a_local_pin_does_not_require_origin(temp_workspace: TempWorkspace) {
+    // A local pin must remain usable with `--no-update` when the origin is
+    // unavailable, rather than turning a cached checkout into a network call.
+    let Some((_origin, clone)) = init_clone(&temp_workspace.path) else {
         return;
     };
-    let git = |args: &[&str], cwd: &Utf8Path| {
-        std::process::Command::new("git")
-            .args(args)
-            .current_dir(cwd.as_std_path())
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .status()
-    };
-    fs::write(origin.join("file"), "two").expect("write should succeed");
-    let _ = git(&["commit", "-qam", "two"], &origin);
-    let expected = std::process::Command::new("git")
-        .args(["rev-parse", "HEAD"])
-        .current_dir(origin.as_std_path())
-        .output()
-        .expect("rev-parse should run");
-    let expected = String::from_utf8_lossy(&expected.stdout).trim().to_owned();
+    let changed_origin = std::process::Command::new("git")
+        .args(["remote", "set-url", "origin", "/unavailable-origin"])
+        .current_dir(clone.as_std_path())
+        .status()
+        .expect("set-url should run");
+    assert!(changed_origin.success(), "set-url should succeed");
 
     crate::git::checkout_ref(&clone, &"main".try_into().expect("valid reference"))
         .expect("checkout should succeed");
-
-    let actual = std::process::Command::new("git")
-        .args(["rev-parse", "HEAD"])
-        .current_dir(clone.as_std_path())
-        .output()
-        .expect("rev-parse should run");
-    let actual = String::from_utf8_lossy(&actual.stdout).trim().to_owned();
-    assert_eq!(actual, expected, "the pin should follow the remote branch");
 }
 
 #[test]

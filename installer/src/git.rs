@@ -1,19 +1,23 @@
-//! Git operations for cloning and updating the Whitaker repository.
+//! Git operations for managed Whitaker clones.
 //!
-//! This module provides functions for managing the local Whitaker clone,
-//! including initial cloning and subsequent updates. Operations have a
-//! configurable timeout to prevent hangs on network issues.
+//! The workspace layer uses these helpers to clone and update the suite,
+//! resolve pinned references, detach at selected commits, and restore the
+//! remote default branch before later unpinned work. Every Git subprocess is
+//! bounded by a timeout to prevent network operations from hanging installs.
+
+#[path = "git/command.rs"]
+mod command;
+#[path = "git/commit_sha.rs"]
+mod commit_sha;
+
+pub use commit_sha::CommitSha;
 
 use crate::artefact::suite_ref::SuiteRef;
 use crate::error::{InstallerError, Result};
 use crate::workspace::WHITAKER_REPO_URL;
 use camino::Utf8Path;
-use std::process::{Command, Output, Stdio};
-use std::time::Duration;
-use wait_timeout::ChildExt;
-
-/// Default timeout for git operations (5 minutes).
-const GIT_TIMEOUT: Duration = Duration::from_secs(300);
+use command::run_git_with_timeout;
+use tracing::{debug, warn};
 
 /// Clones the Whitaker repository to the specified target directory.
 ///
@@ -95,6 +99,13 @@ pub fn is_detached_head(repo: &Utf8Path) -> Result<bool> {
 ///
 /// Returns `InstallerError::Git` if the default branch cannot be determined
 /// or checked out.
+#[tracing::instrument(
+    skip(repo),
+    fields(
+        operation = "restore_default_branch",
+        transition = "detached_to_default"
+    )
+)]
 pub fn restore_default_branch(repo: &Utf8Path) -> Result<()> {
     let head = run_git_with_timeout(
         &["symbolic-ref", "--short", "refs/remotes/origin/HEAD"],
@@ -102,6 +113,11 @@ pub fn restore_default_branch(repo: &Utf8Path) -> Result<()> {
         "head",
     )?;
     if !head.status.success() {
+        warn!(
+            operation = "restore_default_branch",
+            transition = "detached_to_default",
+            outcome = "failure"
+        );
         let stderr = String::from_utf8_lossy(&head.stderr);
         return Err(InstallerError::Git {
             operation: "head",
@@ -109,16 +125,20 @@ pub fn restore_default_branch(repo: &Utf8Path) -> Result<()> {
         });
     }
     let remote_branch = String::from_utf8_lossy(&head.stdout).trim().to_owned();
-    // `origin/main` names the remote-tracking ref; the local branch to return
-    // to is its last component.
+    // Remove only the remote name: default branches may themselves contain
+    // slashes, such as `release/stable`.
     let branch = remote_branch
-        .rsplit('/')
-        .next()
+        .strip_prefix("origin/")
         .unwrap_or(&remote_branch)
         .to_owned();
 
     let output = run_git_with_timeout(&["checkout", "--force", &branch], Some(repo), "checkout")?;
     if !output.status.success() {
+        warn!(
+            operation = "restore_default_branch",
+            transition = "detached_to_default",
+            outcome = "failure"
+        );
         let stderr = String::from_utf8_lossy(&output.stderr);
         return Err(InstallerError::Git {
             operation: "checkout",
@@ -159,11 +179,11 @@ fn resolve_commit(repo: &Utf8Path, reference: &SuiteRef) -> Result<Option<String
 
 /// Checks out a reference in an existing Whitaker clone.
 ///
-/// Fetches first, so a reference published after the clone was made is
-/// available, then resolves it preferring the remote's view and checks out
-/// the resulting commit detached. Detached because the checkout is a build
-/// input rather than somewhere work happens: landing on a local branch would
-/// let a later `pull` move the pinned suite underneath the caller.
+/// Resolves locally before fetching, so an existing pin can be checked out
+/// offline. On a local miss, it fetches and resolves the reference before
+/// checking out the resulting commit detached. Detached because the checkout
+/// is a build input rather than somewhere work happens: landing on a local
+/// branch would let a later `pull` move the pinned suite underneath the caller.
 ///
 /// A reference reachable from no branch and no tag, such as a commit on an
 /// unmerged branch, is fetched explicitly as a second attempt, because
@@ -178,162 +198,116 @@ fn resolve_commit(repo: &Utf8Path, reference: &SuiteRef) -> Result<Option<String
 /// Returns `InstallerError::Git` if a fetch or the checkout fails, if either
 /// times out, or if the reference cannot be resolved at all.
 pub fn checkout_ref(repo: &Utf8Path, reference: &SuiteRef) -> Result<()> {
+    let commit = match resolve_commit(repo, reference)? {
+        Some(commit) => {
+            debug!(
+                operation = "checkout_ref",
+                resolution_source = "local",
+                outcome = "resolved",
+                "resolved the requested suite reference locally"
+            );
+            commit
+        }
+        None => {
+            debug!(
+                operation = "checkout_ref",
+                resolution_source = "origin",
+                outcome = "fetch_fallback",
+                "requested suite reference was unavailable locally"
+            );
+            fetch_unavailable_ref(repo, reference)?
+        }
+    };
+
+    checkout_detached(repo, &commit)
+}
+
+/// Fetches a reference unavailable in the clone and selects its commit.
+fn fetch_unavailable_ref(repo: &Utf8Path, reference: &SuiteRef) -> Result<String> {
     let fetch = run_git_with_timeout(
         &["fetch", "--tags", "--force", "origin"],
         Some(repo),
         "fetch",
     )?;
     if !fetch.status.success() {
+        warn!(
+            operation = "checkout_ref",
+            resolution_source = "origin",
+            outcome = "failure",
+            "could not fetch suite references from origin"
+        );
         let stderr = String::from_utf8_lossy(&fetch.stderr);
         return Err(InstallerError::Git {
             operation: "fetch",
             message: stderr.trim().to_owned(),
         });
     }
+    if let Some(commit) = resolve_commit(repo, reference)? {
+        debug!(
+            operation = "checkout_ref",
+            resolution_source = "origin",
+            outcome = "resolved",
+            "resolved the requested suite reference after fetching origin"
+        );
+        return Ok(commit);
+    }
+    // Nothing local matches, so ask the remote for this reference by name.
+    // This reaches a commit no branch or tag contains, such as one on an
+    // unmerged branch.
+    let targeted = run_git_with_timeout(
+        &["fetch", "--force", "origin", reference.as_str()],
+        Some(repo),
+        "fetch",
+    )?;
+    if !targeted.status.success() {
+        warn!(
+            operation = "checkout_ref",
+            resolution_source = "targeted_origin",
+            outcome = "failure",
+            "could not fetch the requested suite reference from origin"
+        );
+        let stderr = String::from_utf8_lossy(&targeted.stderr);
+        return Err(InstallerError::Git {
+            operation: "fetch",
+            message: format!("could not fetch {reference}: {}", stderr.trim()),
+        });
+    }
+    debug!(
+        operation = "checkout_ref",
+        resolution_source = "targeted_origin",
+        outcome = "resolved",
+        "resolved the requested suite reference through FETCH_HEAD"
+    );
+    Ok("FETCH_HEAD".to_owned())
+}
 
-    let commit = match resolve_commit(repo, reference)? {
-        Some(commit) => commit,
-        None => {
-            // Nothing local matches, so ask the remote for this reference by
-            // name. This is what reaches a commit that no branch or tag
-            // contains, which a caller pinning an exact SHA may well name.
-            let targeted = run_git_with_timeout(
-                &["fetch", "--force", "origin", reference.as_str()],
-                Some(repo),
-                "fetch",
-            )?;
-            if !targeted.status.success() {
-                let stderr = String::from_utf8_lossy(&targeted.stderr);
-                return Err(InstallerError::Git {
-                    operation: "fetch",
-                    message: format!("could not fetch {reference}: {}", stderr.trim()),
-                });
-            }
-            "FETCH_HEAD".to_owned()
-        }
-    };
-
+/// Checks out `commit` detached, preserving the selected suite revision.
+#[tracing::instrument(
+    skip(repo, commit),
+    fields(operation = "checkout_detached", transition = "attached_to_detached")
+)]
+fn checkout_detached(repo: &Utf8Path, commit: &str) -> Result<()> {
     let output = run_git_with_timeout(
-        &["checkout", "--detach", "--force", &commit],
+        &["checkout", "--detach", "--force", commit],
         Some(repo),
         "checkout",
     )?;
 
     if !output.status.success() {
+        warn!(
+            operation = "checkout_detached",
+            transition = "attached_to_detached",
+            outcome = "failure"
+        );
         let stderr = String::from_utf8_lossy(&output.stderr);
         return Err(InstallerError::Git {
             operation: "checkout",
             message: stderr.trim().to_owned(),
         });
     }
-
     Ok(())
 }
 
-/// Runs a git command with a timeout.
-///
-/// Returns the command output if it completes within the timeout, or an error
-/// if the command times out or fails to start.
-///
-/// Spawns threads to read stdout and stderr concurrently to avoid potential
-/// deadlocks if the child process produces large output that fills OS buffers.
-fn run_git_with_timeout(
-    args: &[&str],
-    working_dir: Option<&Utf8Path>,
-    operation: &'static str,
-) -> Result<Output> {
-    let mut cmd = Command::new("git");
-    cmd.args(args).stdout(Stdio::piped()).stderr(Stdio::piped());
-
-    if let Some(dir) = working_dir {
-        cmd.current_dir(dir.as_std_path());
-    }
-
-    let mut child = cmd.spawn()?;
-
-    // Take ownership of pipes before spawning threads to avoid blocking.
-    // If either pipe is missing, use empty readers.
-    let stdout_pipe = child.stdout.take();
-    let stderr_pipe = child.stderr.take();
-
-    // Spawn threads to read pipes concurrently whilst the process runs.
-    let stdout_thread = std::thread::spawn(move || -> std::io::Result<String> {
-        stdout_pipe
-            .map(std::io::read_to_string)
-            .transpose()
-            .map(|opt| opt.unwrap_or_default())
-    });
-    let stderr_thread = std::thread::spawn(move || -> std::io::Result<String> {
-        stderr_pipe
-            .map(std::io::read_to_string)
-            .transpose()
-            .map(|opt| opt.unwrap_or_default())
-    });
-
-    match child.wait_timeout(GIT_TIMEOUT)? {
-        Some(status) => {
-            // Command completed within timeout - collect output from threads
-            let stdout = stdout_thread
-                .join()
-                .map_err(|_| InstallerError::Git {
-                    operation,
-                    message: "failed to read stdout".to_owned(),
-                })?
-                .unwrap_or_default();
-            let stderr = stderr_thread
-                .join()
-                .map_err(|_| InstallerError::Git {
-                    operation,
-                    message: "failed to read stderr".to_owned(),
-                })?
-                .unwrap_or_default();
-
-            Ok(Output {
-                status,
-                stdout: stdout.into_bytes(),
-                stderr: stderr.into_bytes(),
-            })
-        }
-        None => {
-            // Timeout - kill the process and wait for threads to finish
-            let _ = child.kill();
-            let _ = child.wait();
-            let _ = stdout_thread.join();
-            let _ = stderr_thread.join();
-            Err(InstallerError::Git {
-                operation,
-                message: format!(
-                    "operation timed out after {} seconds",
-                    GIT_TIMEOUT.as_secs()
-                ),
-            })
-        }
-    }
-}
-
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn clone_repository_error_includes_operation() {
-        let err = InstallerError::Git {
-            operation: "clone",
-            message: "test error".to_owned(),
-        };
-        let msg = err.to_string();
-        assert!(msg.contains("clone"));
-        assert!(msg.contains("test error"));
-    }
-
-    #[test]
-    fn update_repository_error_includes_operation() {
-        let err = InstallerError::Git {
-            operation: "pull",
-            message: "not a git repository".to_owned(),
-        };
-        let msg = err.to_string();
-        assert!(msg.contains("pull"));
-        assert!(msg.contains("not a git repository"));
-    }
-}
+#[path = "git_tests.rs"]
+mod tests;
