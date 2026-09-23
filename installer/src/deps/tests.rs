@@ -493,8 +493,9 @@ fn the_same_missing_archive_falls_back_without_the_policy() {
     let repository_installer = installer_missing_its_archive();
     let executor = StubExecutor::new(vec![
         binstall_version_check_with_result(Ok(success_output())),
-        binstall_install("cargo-dylint", Ok(success_output())),
-        cargo_dylint_check(),
+        binstall_install("cargo-dylint", Ok(success_output()))
+            .expect("cargo-dylint dependency version should resolve"),
+        cargo_dylint_check().expect("cargo-dylint dependency version should resolve"),
     ]);
     let mut stderr = Vec::new();
 

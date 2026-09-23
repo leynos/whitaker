@@ -15,8 +15,7 @@ use whitaker_installer::{
     },
     dependency_packaging::render_provenance_markdown,
     deps::{
-        DependencyInstallOptions, DylintToolStatus, SourcePolicy,
-        install_dylint_tools_with_options,
+        DependencyInstallOptions, DylintToolStatus, SourcePolicy, install_dylint_tools_with_options,
     },
     dirs::BaseDirs,
     installer_packaging::TargetTriple,
