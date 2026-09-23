@@ -90,7 +90,7 @@ impl LockModel {
         }
     }
 
-    fn acquire(&mut self, owner: Owner) {
+    const fn acquire(&mut self, owner: Owner) {
         if self.liveness_owner.is_none() && self.directory.is_none() {
             self.liveness_owner = Some(owner);
             self.directory = Some(Directory {
@@ -100,7 +100,7 @@ impl LockModel {
         }
     }
 
-    fn mark_stale(&mut self) {
+    const fn mark_stale(&mut self) {
         if let Some(directory) = &mut self.directory {
             directory.is_stale = true;
         }
@@ -117,13 +117,13 @@ impl LockModel {
         }
     }
 
-    fn replace_owner(&mut self, owner: Owner) {
+    const fn replace_owner(&mut self, owner: Owner) {
         if let Some(directory) = &mut self.directory {
             directory.owner = Some(owner);
         }
     }
 
-    fn remove_owner_metadata(&mut self) {
+    const fn remove_owner_metadata(&mut self) {
         if let Some(directory) = &mut self.directory {
             directory.owner = None;
         }
@@ -134,7 +134,9 @@ impl LockModel {
             return;
         }
 
-        self.cleanup_attempted[owner.index()] = true;
+        if let Some(attempted) = self.cleanup_attempted.get_mut(owner.index()) {
+            *attempted = true;
+        }
         if self
             .directory
             .as_ref()
@@ -144,7 +146,11 @@ impl LockModel {
             self.remove_directory(Some(owner));
         }
 
-        self.last_release_followed_cleanup = self.cleanup_attempted[owner.index()];
+        self.last_release_followed_cleanup = self
+            .cleanup_attempted
+            .get(owner.index())
+            .copied()
+            .unwrap_or(false);
         self.liveness_owner = None;
     }
 
@@ -164,13 +170,13 @@ impl LockModel {
             return;
         }
 
-        if let (Some(cleaner), Some(owner)) = (
+        if let (Some(cleaning_owner), Some(owner)) = (
             cleaner,
             self.directory
                 .as_ref()
                 .and_then(|directory| directory.owner),
         ) {
-            self.last_owner_aware_removal = Some((cleaner, owner));
+            self.last_owner_aware_removal = Some((cleaning_owner, owner));
         }
         self.directory = None;
     }

@@ -1,10 +1,14 @@
 //! Behaviour-driven coverage for LCOM4 cohesion analysis.
 
+use std::{
+    cell::{Cell, RefCell},
+    collections::BTreeSet,
+};
+
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
-use std::cell::{Cell, RefCell};
-use std::collections::BTreeSet;
 use whitaker_common::lcom4::{MethodInfo, cohesion_components};
+use whitaker_test_macros::allow_fixture_expansion_lints;
 
 #[derive(Debug, Default)]
 struct LcomWorld {
@@ -22,11 +26,12 @@ impl LcomWorld {
         self.result.set(Some(cohesion_components(&methods)));
     }
 
-    fn result(&self) -> Option<usize> {
+    const fn result(&self) -> Option<usize> {
         self.result.get()
     }
 }
 
+#[allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> LcomWorld {
     LcomWorld::default()
@@ -125,8 +130,12 @@ fn scenario_self_call(world: LcomWorld) {
 
 #[cfg(test)]
 mod parse_field_set_tests {
-    use super::parse_field_set;
+    //! Unit tests for `parse_field_set`, the comma-separated field parser used
+    //! by the LCOM4 behaviour steps.
+
     use std::collections::BTreeSet;
+
+    use super::parse_field_set;
 
     #[test]
     fn basic_comma_separated() {

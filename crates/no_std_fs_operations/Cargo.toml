@@ -36,6 +36,8 @@ whitaker = { workspace = true, features = ["dylint-driver"], optional = true }
 
 [dev-dependencies]
 anyhow = "1.0"
+camino = { workspace = true }
+cap-std = { workspace = true }
 cargo_metadata = { workspace = true }
 insta = { workspace = true }
 mockall = { workspace = true }

@@ -1,7 +1,8 @@
 //! Unit tests for snippet-based module doc detection.
 
-use super::{ModuleDocDisposition, detect_module_docs_from_snippet};
 use rstest::rstest;
+
+use super::{ModuleDocDisposition, detect_module_docs_from_snippet};
 
 #[rstest]
 #[case("\n  \n", ModuleDocDisposition::MissingDocs)]
@@ -58,7 +59,8 @@ fn rejects_mixed_case_doc_identifiers(#[case] snippet: &str) {
 fn accepts_nested_cfg_attr_doc() {
     assert_eq!(
         detect_module_docs_from_snippet(
-            "#![cfg_attr(feature = \"outer\", cfg_attr(feature = \"inner\", doc = \"Module docs\"))]"
+            "#![cfg_attr(feature = \"outer\", cfg_attr(feature = \"inner\", doc = \"Module \
+             docs\"))]"
                 .into()
         ),
         ModuleDocDisposition::HasLeadingDoc
