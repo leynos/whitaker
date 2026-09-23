@@ -22,9 +22,10 @@ name: Coverage (main)
 # `--workspace` build (eleven crates are excluded from CI test runs and the
 # dylint UI tests need per-target RUSTFLAGS).
 #
-# This is the only Whitaker job that runs automatically on the trusted
-# branch, so it is the writer for every coverage-lane cache key. `ci.yml`'s
-# `coverage-check` restores those keys and never saves.
+# This job is the writer for every coverage-lane cache key and for the
+# instrumented compiler-cache shape. `ci.yml`'s `coverage-check` restores
+# those keys and never saves. `ci.yml`'s `linux-full` also runs on push to
+# `main`, as the writer for the lint lane's keys and shapes.
 
 on:
   push:

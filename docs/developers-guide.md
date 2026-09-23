@@ -451,24 +451,27 @@ therefore reads the trusted generation without publishing a competing write and
 without the `Unable to reserve cache` noise that two racing lanes produce.
 
 The compiler cache is not one of these archives on the Linux lanes. It runs on
-the Actions backend against Ubicloud's cache proxy, which is not branch
-restricted, so every run both reads and writes it and a pull request warms the
-store for the next one. `rolling-release.yml` keeps a local directory and its
-own key families, and those follow the rule above.
+the Actions backend against Ubicloud's cache proxy, and every run both reads
+and writes it, but the proxy is ref-scoped in the same way. "Who writes the
+compiler cache" below explains what that means for a pull request's first push.
+`rolling-release.yml` keeps a local directory and its own key families, and
+those follow the rule above.
 
-`coverage-main.yml` is the only Whitaker job that runs automatically on the
-trunk, so it is the writer for the coverage-lane keys and for the shared Clippy
-mirror. `ci.yml` has no push trigger, so `linux-full` publishes the lint-lane
-keys when it is dispatched against `main`:
+`coverage-main.yml`'s `coverage-upload` is the writer for the coverage-lane
+keys and for the shared Clippy mirror. `ci.yml`'s `linux-full` runs on push to
+`main` as well as on pull requests, and on that push it publishes the lint-lane
+keys. A merge that `GITHUB_TOKEN` performs, as the Dependabot automerge does,
+starts no push-event workflow, so after one, or after changing a lint-lane tool
+pin, the pinned toolchain, or a cache generation, dispatch both writers against
+`main`:
 
 ```sh
 gh workflow run ci.yml --repo leynos/whitaker --ref main
+gh workflow run coverage-main.yml --repo leynos/whitaker --ref main
 ```
 
-Dispatch that run after changing a lint-lane tool pin, the pinned toolchain, or
-a cache generation, and before comparing warm pull requests. Until it runs, the
-lint lane restores the previous generation through its `restore-keys` prefix
-and reports the miss in the job summary.
+Until they run, each lane restores the previous generation through its
+`restore-keys` prefix and reports the miss in the job summary.
 
 An archive-based cache needs no empty-directory guard. A restore whose key
 misses creates nothing at all, so a script cannot mistake a materialized mount
@@ -609,12 +612,13 @@ workflow compiles on a billed `ubicloud-standard-2` and asserts, from both a
 `run:` step and a composite action step, that the bound endpoint is a private
 address literal and that the cleared v2 flag survived.
 
-What `gha` buys here is that every run reads and writes one store. The
-local-directory archive could only be written by a lane that runs on the trunk,
-so an ordinary pull request restored whatever the last `workflow_dispatch` run
-on `main` had saved, or nothing. `coverage-check` measured 3.3% Rust hits on
-run 35597917956 under that arrangement. Nothing about the backend is branch
-restricted, so a pull request warms the store for the next one.
+What `gha` buys here is that every run writes as it compiles, with no archive
+step to own. The local-directory archive could only be written by a lane that
+runs on the trunk, so an ordinary pull request restored whatever the last
+`workflow_dispatch` run on `main` had saved, or nothing. `coverage-check`
+measured 3.3% Rust hits on run 35597917956 under that arrangement. The proxy is
+still ref-scoped, so a pull request's first push reads only what `main`'s trunk
+writers compiled; see "Who writes the compiler cache" below.
 
 Switching back is one line in each of `ci.yml` and `coverage-main.yml`, plus
 restoring the `~/.cache/sccache` archive steps the contract then requires.
@@ -753,6 +757,56 @@ Table: Test profiles and typical usage.
 When working on `whitaker-installer` code, run the full suite locally before
 pushing to catch installer regressions early.
 
+#### Who writes the compiler cache
+
+Ubicloud's cache proxy is ref-scoped, as GitHub's own Actions cache is. A run
+can read its own ref's scope and the default branch's, and it writes only its
+own. So a pull request's first push is warm only for the shapes that a push to
+`main` compiles, and later pushes to the same pull request read what the
+earlier ones wrote. The repository's first `gha` evidence came from those later
+pushes, and it was read at the time as showing that the store was shared across
+branches. It was not.
+
+The measurements that showed it are these:
+
+- Run [35825720438][whitaker-run-35825720438], the first push of a fresh
+  branch cut from `main` just after the Linux lanes moved to the proxy. Its
+  `linux-full` read 0 of 1,077 compilations from the cache and took 29m07s,
+  against 11 to 14 minutes warm. Nothing in `main`'s scope had compiled its
+  shapes: `ci.yml` then ran only on `pull_request` and `workflow_dispatch`, and
+  `coverage-upload`, the only trunk job, builds the instrumented shape.
+- Run [35825656071][whitaker-run-35825656071], the first trunk run on the
+  proxy, which was cold as well. It spent 35m54s in `Generate coverage` and was
+  cancelled at the 40-minute limit before it reached its saves.
+- Run [35834924110][whitaker-run-35834924110], the next trunk run, which was
+  warm: 14m44s, with 1,452 Rust hits against 122 misses (92.2%).
+
+The rule is therefore that every pull-request lane on the Actions backend has
+exactly one trunk writer: a job that runs on a push to `main` and nothing
+broader, runs unconditionally there, and runs every `make` or `cargo` command
+the lane runs, so the two compile the same shapes. `coverage-upload` writes for
+`coverage-check`. `linux-full` writes for itself, because `ci.yml` runs it on
+the push. That makes its shapes the lane's by construction, where a separate
+job would be a copy that could drift, and the lane's non-compiling steps add
+under a minute to a warm run. No other job may run on that push, since each
+would be a second writer to `main`'s scope, so `windows-compat` is excluded
+from it and `coverage-check` already runs on pull requests alone. A pull
+request cannot write `main`'s scope at all. Its writes land in its own ref's
+scope, so the pull-request lanes only ever read the trunk's store.
+
+`tests/workflow_contracts/trunk_writer_contract_test.py` holds that shape. It
+requires each pull-request lane on the `gha` backend to be registered with a
+writer in `TRUNK_WRITERS`. Each writer's push trigger must be exactly
+`branches: [main]`, with no other filter. The writer must carry no job
+condition and run all of its reader's commands, and the jobs that run on the
+push must be exactly the registered writers. Job conditions are matched against
+a table of reviewed spellings, and an unknown one fails the suite rather than
+being guessed at.
+
+`windows-compat` has the same first-push cold start against GitHub's own cache,
+which is ref-scoped too. It is not addressed here: its saves still come only
+from a dispatch against `main`.
+
 ### One execution of the test suite per pull request
 
 A coverage job and a test-only job on the same platform bill twice for one
@@ -832,7 +886,8 @@ workflows and between pull requests. A key on `github.run_id`, `github.sha` or
 would let unrelated pull requests cancel each other. The `github.ref` fallback
 keys a manual dispatch on its branch. Cancellation is conditioned on the event
 rather than set to a literal `true`, so a dispatch that shares the group, or
-any push trigger added later, runs to completion.
+the push to `main` that makes `linux-full` the lint lane's cache writer, runs
+to completion.
 
 Only `pull_request` is in scope. `dependabot-automerge.yml` runs on
 `pull_request_target` and merges, so cancelling it mid-write is not a saving.
@@ -854,17 +909,17 @@ runs on GitHub-hosted runners.
 
 Table: Runner placement for repository-owned jobs.
 
-| Job                                               | Workflow                   | Runner                                                                      | Why                                    |
-| ------------------------------------------------- | -------------------------- | --------------------------------------------------------------------------- | -------------------------------------- |
-| `coverage-check`                                  | `ci.yml`                   | `ubicloud-standard-2-ubuntu-2404`                                           | Blocking Linux gate                    |
-| `linux-full`                                      | `ci.yml`                   | `ubicloud-standard-2-ubuntu-2404`                                           | Blocking Linux gate                    |
-| `coverage-upload`                                 | `coverage-main.yml`        | `ubicloud-standard-2-ubuntu-2404`                                           | Trunk Linux gate and cache writer      |
-| `windows-compat`                                  | `ci.yml`                   | `windows-latest`                                                            | Ubicloud has no Windows image          |
-| `mutation`                                        | `mutation-testing.yml`     | Reusable workflow's own choice                                              | Nightly, not blocking                  |
-| `automerge`                                       | `dependabot-automerge.yml` | Reusable workflow's own choice                                              | API-bound                              |
-| Linux legs of both `rolling-release.yml` matrices | `rolling-release.yml`      | `ubicloud-standard-2-ubuntu-2204` and `ubicloud-standard-2-arm-ubuntu-2404` | Rebuilt from cold on every merge       |
-| Their macOS and Windows legs                      | `rolling-release.yml`      | GitHub-hosted matrix                                                        | Ubicloud has no macOS or Windows image |
-| Other release jobs                                | `release.yml`              | GitHub-hosted matrices                                                      | Release boundaries                     |
+| Job                                               | Workflow                   | Runner                                                                      | Why                                     |
+| ------------------------------------------------- | -------------------------- | --------------------------------------------------------------------------- | --------------------------------------- |
+| `coverage-check`                                  | `ci.yml`                   | `ubicloud-standard-2-ubuntu-2404`                                           | Blocking Linux gate                     |
+| `linux-full`                                      | `ci.yml`                   | `ubicloud-standard-2-ubuntu-2404`                                           | Blocking Linux gate; trunk cache writer |
+| `coverage-upload`                                 | `coverage-main.yml`        | `ubicloud-standard-2-ubuntu-2404`                                           | Trunk Linux gate and cache writer       |
+| `windows-compat`                                  | `ci.yml`                   | `windows-latest`                                                            | Ubicloud has no Windows image           |
+| `mutation`                                        | `mutation-testing.yml`     | Reusable workflow's own choice                                              | Nightly, not blocking                   |
+| `automerge`                                       | `dependabot-automerge.yml` | Reusable workflow's own choice                                              | API-bound                               |
+| Linux legs of both `rolling-release.yml` matrices | `rolling-release.yml`      | `ubicloud-standard-2-ubuntu-2204` and `ubicloud-standard-2-arm-ubuntu-2404` | Rebuilt from cold on every merge        |
+| Their macOS and Windows legs                      | `rolling-release.yml`      | GitHub-hosted matrix                                                        | Ubicloud has no macOS or Windows image  |
+| Other release jobs                                | `release.yml`              | GitHub-hosted matrices                                                      | Release boundaries                      |
 
 Ubicloud publishes Ubuntu images only, on x64 and arm64, so Windows and macOS
 lanes have no Ubicloud counterpart and stay GitHub-hosted permanently. That is
@@ -3442,6 +3497,9 @@ of the test suite per pull request" above.
 [issue-180]: https://github.com/leynos/whitaker/issues/180
 [whitaker-run-33748602187]: https://github.com/leynos/whitaker/actions/runs/33748602187
 [whitaker-run-33756048103]: https://github.com/leynos/whitaker/actions/runs/33756048103
+[whitaker-run-35825720438]: https://github.com/leynos/whitaker/actions/runs/35825720438
+[whitaker-run-35825656071]: https://github.com/leynos/whitaker/actions/runs/35825656071
+[whitaker-run-35834924110]: https://github.com/leynos/whitaker/actions/runs/35834924110
 [whitaker-run-33410178021]: https://github.com/leynos/whitaker/actions/runs/33410178021
 [whitaker-run-33369228466]: https://github.com/leynos/whitaker/actions/runs/33369228466
 [whitaker-run-33345742967]: https://github.com/leynos/whitaker/actions/runs/33345742967

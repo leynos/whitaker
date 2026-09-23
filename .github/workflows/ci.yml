@@ -3,12 +3,21 @@ name: CI
 on:
   pull_request:
     types: [opened, synchronize, reopened]
+  # The push to `main` is not a gate; it is the compiler-cache writer.
+  # Ubicloud's cache proxy is ref-scoped like GitHub's own cache, so a pull
+  # request's first push can read only its own scope and `main`'s. Only
+  # `linux-full` runs on this event, so its shapes are compiled once in
+  # `main`'s scope and every new pull request starts warm. See "Who writes
+  # the compiler cache" in the developers' guide.
+  push:
+    branches: [main]
   workflow_dispatch:
 
 # A second push to a pull request supersedes the run already in flight, which
 # otherwise charges a full set of minutes for a result nobody reads. The guard
 # is on the event rather than a literal `true`: a manual dispatch shares the
-# group and must run to completion, and so must any push trigger added later.
+# group and must run to completion, and so must the push to `main` that
+# writes the compiler cache.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -447,9 +456,9 @@ jobs:
         run: bash scripts/record-cache-observations.sh headroom
 
       # Saves are restricted to the trusted branch, so a pull request reads the
-      # published generation without racing another lane for the same key. This
-      # workflow has no push trigger, so the lint lane's writer is a
-      # `workflow_dispatch` run on `main`; see the developers' guide.
+      # published generation without racing another lane for the same key. The
+      # push to `main` makes this job the lint lane's writer, for these archives
+      # and for its compiler cache alike; see the developers' guide.
       - name: Save Cargo registry
         if: github.ref == 'refs/heads/main' && steps.cargo-registry.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
@@ -481,6 +490,10 @@ jobs:
           key: ${{ steps.dylint-tools.outputs.cache-primary-key }}
 
   windows-compat:
+    # Not a trunk writer: the push to `main` exists for `linux-full`'s
+    # compiler cache, and a second job there would bill for a result nobody
+    # reads. Windows keeps its first-push cold start; see the developers' guide.
+    if: github.event_name != 'push'
     runs-on: windows-latest
     # This lane had no ceiling at all, so it inherited GitHub's six-hour
     # default: the outermost tier was missing on the one lane whose inner
