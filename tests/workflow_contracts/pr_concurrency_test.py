@@ -23,6 +23,7 @@ from pr_concurrency_support import (
     CANCEL_IN_PROGRESS,
     GROUP_EXPRESSION,
     UnparsableWorkflowError,
+    UnreadableWorkflowDirectoryError,
     UnreadableWorkflowError,
     WorkflowShapeError,
     workflow_documents,
@@ -232,8 +233,27 @@ def test_an_unreadable_workflow_is_named(tmp_path: pathlib.Path) -> None:
         workflow_documents(tmp_path)
 
 
+@pytest.mark.parametrize(
+    "is_a_file", [pytest.param(False, id="missing"), pytest.param(True, id="a-file")]
+)
+def test_a_directory_that_cannot_be_listed_is_named(
+    tmp_path: pathlib.Path, is_a_file: bool
+) -> None:
+    """A missing or unlistable tree raises; it never reads as no workflows.
+
+    `Path.glob` would have yielded nothing for both, and the sweep would have
+    had an empty mapping to report as conforming.
+    """
+    directory = tmp_path / "workflows"
+    if is_a_file:
+        directory.write_text("not a directory", encoding="utf-8")
+    with pytest.raises(UnreadableWorkflowDirectoryError, match="workflows"):
+        workflow_documents(directory)
+
+
 def test_the_loader_reads_the_directory_it_is_given(tmp_path: pathlib.Path) -> None:
     """The directory is injected, so the loader is not tied to this checkout."""
     (tmp_path / "ci.yml").write_text("on: pull_request\njobs: {}\n", encoding="utf-8")
+    (tmp_path / "RELEASE.YAML").write_text("on: push\njobs: {}\n", encoding="utf-8")
     (tmp_path / "notes.txt").write_text("not a workflow", encoding="utf-8")
-    assert list(workflow_documents(tmp_path)) == ["ci.yml"]
+    assert list(workflow_documents(tmp_path)) == ["RELEASE.YAML", "ci.yml"]

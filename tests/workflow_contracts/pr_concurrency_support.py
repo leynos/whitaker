@@ -101,6 +101,20 @@ class UnreadableWorkflowError(WorkflowShapeError):
         super().__init__(f"{name} could not be read")
 
 
+class UnreadableWorkflowDirectoryError(WorkflowShapeError):
+    """The workflow directory could not be listed."""
+
+    def __init__(self, directory: Path) -> None:
+        """Name the directory, so a missing tree is not read as an empty one.
+
+        Parameters
+        ----------
+        directory : Path
+            The directory that could not be listed.
+        """
+        super().__init__(f"{directory} could not be listed as a workflow directory")
+
+
 class UnparsableWorkflowError(WorkflowShapeError):
     """A workflow document is not parsable YAML."""
 
@@ -236,13 +250,22 @@ def workflow_documents(
     Raises
     ------
     WorkflowShapeError
-        A subclass naming the workflow, when one cannot be read, is not
-        parsable YAML, repeats a key, or does not parse to a mapping.
+        A subclass naming the directory when it cannot be listed, or the
+        workflow when one cannot be read, is not parsable YAML, repeats a
+        key, or does not parse to a mapping.
     """
-    paths = sorted(
-        path for suffix in WORKFLOW_SUFFIXES for path in directory.glob(f"*{suffix}")
-    )
-    return {path.name: _parse(path) for path in paths}
+    return {path.name: _parse(path) for path in _workflow_paths(directory)}
+
+
+def _workflow_paths(directory: Path) -> list[Path]:
+    """List a directory's workflow files, refusing to read a failure as empty."""
+    # `Path.glob` suppresses the `OSError` a missing or unlistable directory
+    # raises and yields nothing, which a sweep would read as "no workflows".
+    try:
+        entries = list(directory.iterdir())
+    except OSError as error:
+        raise UnreadableWorkflowDirectoryError(directory) from error
+    return sorted(path for path in entries if path.suffix.lower() in WORKFLOW_SUFFIXES)
 
 
 def _parse(path: Path) -> dict[str, object]:
