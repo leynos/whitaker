@@ -215,65 +215,70 @@ pub fn checkout_ref(repo: &Utf8Path, reference: &SuiteRef) -> Result<()> {
                 outcome = "fetch_fallback",
                 "requested suite reference was unavailable locally"
             );
-            let fetch = run_git_with_timeout(
-                &["fetch", "--tags", "--force", "origin"],
-                Some(repo),
-                "fetch",
-            )?;
-            if !fetch.status.success() {
-                warn!(
-                    operation = "checkout_ref",
-                    resolution_source = "origin",
-                    outcome = "failure",
-                    "could not fetch suite references from origin"
-                );
-                let stderr = String::from_utf8_lossy(&fetch.stderr);
-                return Err(InstallerError::Git {
-                    operation: "fetch",
-                    message: stderr.trim().to_owned(),
-                });
-            }
-            if let Some(commit) = resolve_commit(repo, reference)? {
-                debug!(
-                    operation = "checkout_ref",
-                    resolution_source = "origin",
-                    outcome = "resolved",
-                    "resolved the requested suite reference after fetching origin"
-                );
-                return checkout_detached(repo, &commit);
-            }
-            // Nothing local matches, so ask the remote for this reference by
-            // name. This is what reaches a commit that no branch or tag
-            // contains, which a caller pinning an exact SHA may well name.
-            let targeted = run_git_with_timeout(
-                &["fetch", "--force", "origin", reference.as_str()],
-                Some(repo),
-                "fetch",
-            )?;
-            if !targeted.status.success() {
-                warn!(
-                    operation = "checkout_ref",
-                    resolution_source = "targeted_origin",
-                    outcome = "failure",
-                    "could not fetch the requested suite reference from origin"
-                );
-                let stderr = String::from_utf8_lossy(&targeted.stderr);
-                return Err(InstallerError::Git {
-                    operation: "fetch",
-                    message: format!("could not fetch {reference}: {}", stderr.trim()),
-                });
-            }
-            debug!(
-                operation = "checkout_ref",
-                resolution_source = "targeted_origin",
-                outcome = "resolved",
-                "resolved the requested suite reference through FETCH_HEAD"
-            );
-            "FETCH_HEAD".to_owned()
+            fetch_unavailable_ref(repo, reference)?
         }
     };
 
     checkout_detached(repo, &commit)
+}
+
+/// Fetches a reference unavailable in the clone and selects its commit.
+fn fetch_unavailable_ref(repo: &Utf8Path, reference: &SuiteRef) -> Result<String> {
+    let fetch = run_git_with_timeout(
+        &["fetch", "--tags", "--force", "origin"],
+        Some(repo),
+        "fetch",
+    )?;
+    if !fetch.status.success() {
+        warn!(
+            operation = "checkout_ref",
+            resolution_source = "origin",
+            outcome = "failure",
+            "could not fetch suite references from origin"
+        );
+        let stderr = String::from_utf8_lossy(&fetch.stderr);
+        return Err(InstallerError::Git {
+            operation: "fetch",
+            message: stderr.trim().to_owned(),
+        });
+    }
+    if let Some(commit) = resolve_commit(repo, reference)? {
+        debug!(
+            operation = "checkout_ref",
+            resolution_source = "origin",
+            outcome = "resolved",
+            "resolved the requested suite reference after fetching origin"
+        );
+        return Ok(commit);
+    }
+    // Nothing local matches, so ask the remote for this reference by name.
+    // This reaches a commit no branch or tag contains, such as one on an
+    // unmerged branch.
+    let targeted = run_git_with_timeout(
+        &["fetch", "--force", "origin", reference.as_str()],
+        Some(repo),
+        "fetch",
+    )?;
+    if !targeted.status.success() {
+        warn!(
+            operation = "checkout_ref",
+            resolution_source = "targeted_origin",
+            outcome = "failure",
+            "could not fetch the requested suite reference from origin"
+        );
+        let stderr = String::from_utf8_lossy(&targeted.stderr);
+        return Err(InstallerError::Git {
+            operation: "fetch",
+            message: format!("could not fetch {reference}: {}", stderr.trim()),
+        });
+    }
+    debug!(
+        operation = "checkout_ref",
+        resolution_source = "targeted_origin",
+        outcome = "resolved",
+        "resolved the requested suite reference through FETCH_HEAD"
+    );
+    Ok("FETCH_HEAD".to_owned())
 }
 
 /// Checks out `commit` detached, preserving the selected suite revision.
