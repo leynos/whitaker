@@ -68,21 +68,35 @@ class Profile(typ.NamedTuple):
         allowance be deleted unnoticed.
     overrides : tuple[dict[str, object], ...]
         The profile's ``[[overrides]]`` entries, in file order.
+    inherited : tuple[dict[str, object], ...]
+        What a custom profile takes from ``[profile.default]``: each default
+        override, which nextest consults after the profile's own, and the
+        default table when the profile sets no ``slow-timeout`` of its own.
+        Empty for the default profile itself.
     """
 
     name: str
     own: dict[str, object]
     overrides: tuple[dict[str, object], ...]
+    inherited: tuple[dict[str, object], ...] = ()
 
     def tables(self) -> tuple[dict[str, object], ...]:
-        """Return every table the profile reads a budget from.
+        """Return every table the profile's tests can take a budget from.
 
         Returns
         -------
         tuple of dict
-            The profile's own table first, then each override.
+            The profile's own table, its overrides, then what it inherits.
         """
-        return (self.own, *self.overrides)
+        return (self.own, *self.overrides, *self.inherited)
+
+
+def _inherited_from(default: Profile | None, own: dict[str, object]) -> tuple[dict[str, object], ...]:
+    """Return what a custom profile takes from the default profile."""
+    if default is None:
+        return ()
+    base = () if "slow-timeout" in own else (default.own,)
+    return (*base, *default.overrides)
 
 
 def _table(value: object) -> dict[str, object]:
@@ -140,7 +154,17 @@ def profiles(config_text: str) -> dict[str, Profile]:
         )
         own = {key: value for key, value in table.items() if key != "overrides"}
         found[str(name)] = Profile(name=str(name), own=own, overrides=overrides)
-    return found
+    # A custom profile inherits the default's settings and consults its
+    # overrides, so a timeout-bearing default override bounds `ci`'s tests
+    # too. Reading only what `ci` declares let a longer default-only override
+    # pass the ordering while nextest applied it.
+    default = found.get("default")
+    return {
+        name: profile._replace(inherited=_inherited_from(default, profile.own))
+        if name != "default"
+        else profile
+        for name, profile in found.items()
+    }
 
 
 def _duration_at(table: dict[str, object], key: str) -> list[str]:

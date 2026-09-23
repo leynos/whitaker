@@ -3466,8 +3466,8 @@ Three of the four were absent or partial before this was written, and the gaps
 compounded rather than sitting apart.
 
 No profile set a base `slow-timeout`. nextest's own default reports a slow test
-without ever terminating it, so an ordinary hung test was reported slow for
-ever on every lane, and only the job timer could end it.
+without ever terminating it, so an ordinary hung test was reported slow forever
+on every lane, and only the job timer could end it.
 
 The named exceptions were bounded. A custom profile inherits
 `[profile.default]`, and when a custom profile is selected nextest still
@@ -3583,7 +3583,7 @@ touches no filesystem at all; the nextest arithmetic in `timeout_budgets.py`
 over the duration grammar in `nextest_durations.py`; the profile pins in
 `nextest_profile_test.py`; the lane discovery driven with supplied documents in
 `lane_discovery_test.py`; and the readings driven with controlled
-configurations in `timeout_reading_test.py`. Eleven details of its shape are
+configurations in `timeout_reading_test.py`. The details of its shape below are
 deliberate.
 
 It enumerates every suite-running step, including those in jobs that declare no
@@ -3619,13 +3619,13 @@ That arithmetic is bounded as well as exact. humantime accumulates in 64-bit
 unsigned integers and checks every multiplication and addition, so a duration
 can be refused for its size as readily as for its spelling, and the bound is
 not one number: `18446744073709551616s` is one step past the range, while
-`18446744073709551615ns 18446744073709551615ns` names only thirty-seven seconds
-and is refused all the same, because the second value overflows the nanosecond
-accumulator before it is carried into seconds. Python's integers have no such
-bound, so the reader carries humantime's checks explicitly. Without them it
-would report a budget for a configuration nextest refuses at startup, and every
-ordering asserted above it would be a comparison of a number nothing in the
-tree produced.
+`18446744073709551615ns 18446744073709551615ns` names about 1,169 years, far
+inside the seconds range, and is refused all the same, because the second value
+overflows the nanosecond accumulator before it is carried into seconds.
+Python's integers have no such bound, so the reader carries humantime's checks
+explicitly. Without them it would report a budget for a configuration nextest
+refuses at startup, and every ordering asserted above it would be a comparison
+of a number nothing in the tree produced.
 
 The carry is where that bound is easiest to get wrong, because one mechanism
 has to give two answers. humantime declines to normalize a nanosecond part of
@@ -3718,6 +3718,16 @@ module reads it at import. `rust_source_texts` in
 read, failing as `RustSourceError`, and the compile-contract discovery is a
 query over what it returns. `contract_inputs_test.py` drives both boundaries
 over inputs the tree does not have.
+
+The discovery in `rust_functions.py` attributes a `trybuild::TestCases` call to
+the function whose body holds it, found by balancing braces with comments and
+literals blanked, and a helper in the same file passes the call on to every
+`#[test]` that calls it, wherever the helper is declared. The ordering
+arithmetic reads a custom profile the way nextest does: `ci` consults every
+`[[profile.default.overrides]]` entry after its own and takes the default
+`slow-timeout` only when it declares none, so a longer default-only override
+fails `ci`'s ordering too. Whether a profile terminates a test no override
+matches is still read from its own table alone.
 
 It pins the values the tables above state as well as ordering them: the base
 `slow-timeout` on both profiles compared as a whole table, the 45 m whole-run

@@ -302,3 +302,64 @@ def test_a_line_naming_the_suite_without_plainly_running_it_is_reported(
         f"{run!r} must be reported as {expected!r}; a line this reading "
         f"cannot judge is neither a lane nor safely ignored"
     )
+
+
+_DEFAULT_ONLY_OVERRIDE = (
+    "[profile.default]\n"
+    'slow-timeout = { period = "300s", terminate-after = 1, grace-period = "5s" }\n'
+    'global-timeout = "45m"\n'
+    "\n"
+    "[[profile.default.overrides]]\n"
+    'filter = "binary(long)"\n'
+    'slow-timeout = { period = "50m", terminate-after = 1, grace-period = "90s" }\n'
+    "\n"
+    "[profile.ci]\n"
+    'slow-timeout = { period = "300s", terminate-after = 1, grace-period = "5s" }\n'
+    'global-timeout = "45m"\n'
+)
+
+
+def test_a_custom_profile_is_bounded_by_the_default_overrides_it_consults() -> None:
+    """nextest consults `[[profile.default.overrides]]` for a `ci` test.
+
+    So a default-only override longer than `ci`'s whole-run budget breaks
+    `ci`'s ordering even though `ci` declares nothing of the kind, and its
+    grace period is one `ci` waits too. Reading `ci`'s own tables alone
+    answered 300 s and 5 s here.
+    """
+    ci = profiles(_DEFAULT_ONLY_OVERRIDE)["ci"]
+    assert largest_period(ci) == pytest.approx(3000.0)
+    assert largest_period(ci) > global_timeout(ci), "the ordering must fail"
+    assert termination_allowance(ci) == pytest.approx(90 + TERMINATION_SAFETY_MARGIN_SECONDS)
+
+
+def test_inheritance_does_not_lend_a_custom_profile_its_own_bound() -> None:
+    """Whether `ci` terminates an unmatched test is still `ci`'s own answer."""
+    unbounded = profiles(
+        _DEFAULT_ONLY_OVERRIDE.replace(
+            '[profile.ci]\nslow-timeout = { period = "300s", terminate-after = 1, grace-period = "5s" }\n',
+            '[profile.ci]\nslow-timeout = { period = "300s" }\n',
+        )
+    )["ci"]
+    assert not bounds_a_single_test(unbounded)
+
+
+def test_a_custom_profile_s_own_slow_timeout_replaces_the_default_one() -> None:
+    """A setting `ci` declares is `ci`'s; the default's is inherited only when absent.
+
+    Lending the default's table regardless would size `ci`'s ceiling for a
+    ninety-second grace period nextest never applies to it.
+    """
+    config = (
+        "[profile.default]\n"
+        'slow-timeout = { period = "300s", terminate-after = 1, grace-period = "90s" }\n'
+        "\n"
+        "[profile.ci]\n"
+        'slow-timeout = { period = "300s", terminate-after = 1, grace-period = "5s" }\n'
+        "\n"
+        "[profile.lean]\n"
+        'global-timeout = "45m"\n'
+    )
+    parsed = profiles(config)
+    assert termination_allowance(parsed["ci"]) == pytest.approx(5 + TERMINATION_SAFETY_MARGIN_SECONDS)
+    assert termination_allowance(parsed["lean"]) == pytest.approx(90 + TERMINATION_SAFETY_MARGIN_SECONDS)

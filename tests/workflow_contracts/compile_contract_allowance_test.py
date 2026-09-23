@@ -18,28 +18,13 @@ from __future__ import annotations
 
 import collections.abc as cabc
 import pathlib
-import re
 import typing as typ
 
 import pytest
 from nextest_profile_test import REQUIRED_OVERRIDES
+from rust_functions import compile_contracts_in
 from nextest_config import load_nextest_config
 from ubicloud_workflow_support import REPOSITORY_ROOT
-
-
-#: The directory holding the crates a `trybuild::TestCases` may live in.
-#: Discovered rather than listed: a handwritten set stops recognizing a
-#: binary silently, and the binary then loses its allowance while every
-#: assertion over the set still passes.
-_TRYBUILD_CALL: typ.Final[re.Pattern[str]] = re.compile(r"trybuild::TestCases::new\(\)")
-
-#: The name a `#[test]` function declares. Applied to one function's
-#: own text, never to a window of fixed size: an earlier test's window
-#: reaches into the next function and claims its call.
-_TEST_FUNCTION: typ.Final[re.Pattern[str]] = re.compile(
-    r"^\s*(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?fn\s+(?P<name>\w+)\s*\(",
-    re.MULTILINE,
-)
 
 
 class RustSourceError(OSError):
@@ -96,22 +81,6 @@ def rust_source_texts(
     return texts
 
 
-def _named_compile_contracts(text: str) -> typ.Iterator[str]:
-    """Yield the name of each test in one file whose body drives `trybuild`.
-
-    Each `#[test]` attribute starts a region that ends where the next
-    one begins, and a call is attributed to the function whose region
-    holds it. A window of fixed size would reach into the next function
-    and claim its call.
-    """
-    for region in text.split("#[test]")[1:]:
-        if not _TRYBUILD_CALL.search(region):
-            continue
-        name = _TEST_FUNCTION.search(region)
-        if name is not None:
-            yield name["name"]
-
-
 def _period(slow_timeout: object) -> str | None:
     """Return the period a `slow-timeout` names, whatever shape it takes.
 
@@ -152,13 +121,15 @@ def compile_contract_tests(
     ran under the base allowance until it drifted past 300 s on the
     Windows lane and cancelled the run.
 
-    A call inside a helper rather than inside the test body would be
-    missed, which is why the assertion below treats an empty result as a
-    failure rather than as nothing to check.
+    A call is attributed through the function body that holds it, and a
+    helper in the same file passes it on to every test that calls it,
+    wherever the helper is declared. A helper in another file is not
+    followed, which is one reason the assertion below treats an empty
+    result as a failure rather than as nothing to check.
     """
     found: dict[str, pathlib.Path] = {}
     for path, text in sources.items():
-        found.update(dict.fromkeys(_named_compile_contracts(text), path))
+        found.update(dict.fromkeys(compile_contracts_in(text), path))
     return found
 
 

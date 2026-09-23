@@ -70,7 +70,7 @@ def test_a_missing_source_root_is_a_named_error(tmp_path: pathlib.Path) -> None:
 def test_an_undecodable_source_is_a_named_error(tmp_path: pathlib.Path) -> None:
     """One unreadable file means the discovery saw less than the tree holds."""
     (tmp_path / "bad.rs").write_bytes(b"fn \xff() {}\n")
-    with pytest.raises(RustSourceError, match="bad.rs"):
+    with pytest.raises(RustSourceError, match=r"bad\.rs"):
         rust_source_texts(tmp_path)
 
 
@@ -96,3 +96,50 @@ def test_the_discovery_attributes_each_call_to_its_own_test() -> None:
     )
     path = pathlib.Path("crate/tests/ui.rs")
     assert compile_contract_tests({path: source}) == {"compiles": path}
+
+
+#: A helper declared above the test that calls it, and one declared below.
+_HELPERS = """
+fn build_before() {
+    let t = trybuild::TestCases::new();
+}
+
+#[test]
+fn calls_the_earlier_helper() {
+    build_before();
+}
+
+#[test]
+fn plain() {
+    assert!(true);
+}
+
+#[test]
+fn calls_the_later_helper() {
+    build_after();
+}
+
+fn build_after() {
+    let t = trybuild::TestCases::new();
+}
+"""
+
+
+def test_a_helper_passes_its_call_to_the_test_that_calls_it() -> None:
+    """Wherever the helper sits, the test calling it is found and no other.
+
+    Splitting at `#[test]` credited `build_after`'s call to whichever test
+    preceded it, which is the caller here only by the order of the file, and
+    never found `calls_the_earlier_helper` at all.
+    """
+    path = pathlib.Path("crate/tests/ui.rs")
+    assert compile_contract_tests({path: _HELPERS}) == {
+        "calls_the_earlier_helper": path,
+        "calls_the_later_helper": path,
+    }
+
+
+def test_a_brace_in_a_literal_does_not_end_a_body() -> None:
+    """A literal `}` must not close the test before its call is read."""
+    source = '#[test]\nfn quoted() {\n    let s = "}";\n    trybuild::TestCases::new();\n}\n'
+    assert compile_contract_tests({pathlib.Path("t.rs"): source}) == {"quoted": pathlib.Path("t.rs")}
