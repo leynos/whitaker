@@ -1,17 +1,26 @@
-"""Read the commands a workflow `run:` block executes.
+"""Decide whether a workflow `run:` block is one unconditional command.
 
 A contract that requires a lane to *run* a command cannot match the command as
 a substring of the script: `echo make coverage` and `# make coverage` both
-contain it and run nothing. So a script is split into simple commands the way
-the shell would, and a command counts only when its words begin one of them.
+contain it and run nothing. Splitting the script into simple commands is not
+enough either, because a list decides whether its members run at all:
+`false && make coverage`, `true || make coverage`, `exit 0; make coverage` and
+`make coverage &` all contain the command as a simple command, and none runs it
+to completion.
+
+So the reader asks a narrower question with a certain answer: is the script
+exactly one simple command, with no list or pipeline operator anywhere, whose
+words begin with the required ones? A step written that way runs the command
+unconditionally under the step's own shell, and a lane requiring it has to give
+it a dedicated step.
 
 Scope and re-use: this is a reader for requirements ("the lane runs X"). A
 prohibition ("no lane mentions X") should stay a substring test, because there
 over-matching is the safe direction and this reader deliberately under-matches.
-It models lists (`;`, `&&`, `||`, `&`), pipelines, subshell parentheses, line
-continuations, comments and leading variable assignments; it does not model
-functions, `eval`, or command substitution, and a line it cannot tokenize
-contributes no command rather than a guessed one.
+It reads line continuations, comments (at the start of a word, as the shell
+does) and leading variable assignments; anything else, a subshell included, is
+refused rather than interpreted, and a line it cannot tokenize makes the whole
+script unreadable.
 
 Run via ``make test-workflow-contracts``.
 """
@@ -30,7 +39,7 @@ _ASSIGNMENT: typ.Final[re.Pattern[str]] = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*="
 
 
 def _is_operator(token: str) -> bool:
-    """Return whether a token separates one simple command from the next."""
+    """Return whether a token is a list, pipeline or subshell operator."""
     return bool(token) and set(token) <= set(_OPERATOR_CHARACTERS)
 
 
@@ -44,9 +53,9 @@ def _line_tokens(line: str) -> list[str]:
     try:
         tokens = list(lexer)
     except ValueError:
-        # An unbalanced quote: the line is not read as any command at all,
-        # which under-matches, the safe direction for a requirement.
-        return []
+        # An unbalanced quote. A lone operator stands in for the unreadable
+        # line, so the script is refused rather than read without it.
+        return [";"]
     cut = next(
         (index for index, token in enumerate(tokens) if token.startswith("#")),
         len(tokens),
@@ -54,43 +63,8 @@ def _line_tokens(line: str) -> list[str]:
     return tokens[:cut]
 
 
-def _split_on_operators(tokens: list[str]) -> list[list[str]]:
-    """Return the runs of words between operator tokens."""
-    return [
-        list(words)
-        for is_operator, words in itertools.groupby(tokens, key=_is_operator)
-        if not is_operator
-    ]
-
-
-def command_segments(script: str) -> list[list[str]]:
-    """Return each simple command in a script as its list of words.
-
-    Parameters
-    ----------
-    script : str
-        The body of a `run:` step.
-
-    Returns
-    -------
-    list[list[str]]
-        One word list per simple command, with any leading variable
-        assignments removed, in script order.
-
-    >>> command_segments("set -e; FOO=1 make coverage  # measure")
-    [['set', '-e'], ['make', 'coverage']]
-    """
-    joined = script.replace("\\\n", " ")
-    return [
-        command
-        for line in joined.splitlines()
-        for words in _split_on_operators(_line_tokens(line))
-        if (command := list(itertools.dropwhile(_ASSIGNMENT.match, words)))
-    ]
-
-
-def runs_command(script: str, command: str) -> bool:
-    """Return whether a script executes a command, not merely mentions it.
+def runs_unconditionally(script: str, command: str) -> bool:
+    """Return whether a script is exactly one command beginning as given.
 
     Parameters
     ----------
@@ -102,12 +76,19 @@ def runs_command(script: str, command: str) -> bool:
     Returns
     -------
     bool
-        True when some simple command in the script begins with those words.
+        True when the script, once comments and blank lines are removed, is a
+        single simple command with no operator, whose words after any leading
+        variable assignments begin with those of `command`.
 
-    >>> runs_command("make coverage", "make coverage")
+    >>> runs_unconditionally("RUSTFLAGS=-Dwarnings make coverage", "make coverage")
     True
-    >>> runs_command("echo make coverage", "make coverage")
+    >>> runs_unconditionally("false && make coverage", "make coverage")
     False
     """
-    words = command.split()
-    return any(segment[: len(words)] == words for segment in command_segments(script))
+    joined = script.replace("\\\n", " ")
+    lines = [tokens for line in joined.splitlines() if (tokens := _line_tokens(line))]
+    if len(lines) != 1 or any(_is_operator(token) for token in lines[0]):
+        return False
+    words = list(itertools.dropwhile(_ASSIGNMENT.match, lines[0]))
+    expected = command.split()
+    return words[: len(expected)] == expected

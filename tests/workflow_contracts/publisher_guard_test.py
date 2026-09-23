@@ -12,7 +12,14 @@ import typing as typ
 
 import pytest
 from coverage_boundary import UPLOAD_COVERAGE_ACTION, action_of
-from publisher_guard import cancelling_scopes, guard_conjuncts, is_confined_to_main
+from publisher_guard import (
+    CREDENTIAL_PRESENT_CONJUNCT,
+    MAIN_REF_CONJUNCT,
+    cancelling_scopes,
+    guard_conjuncts,
+    is_confined_to_main,
+    requires,
+)
 from ubicloud_workflow_support import job_steps, load_workflow
 
 #: The one workflow that uploads coverage to CodeScene.
@@ -51,6 +58,54 @@ def test_every_upload_is_confined_to_the_trunk() -> None:
         f"each upload must run only on refs/heads/main, including when "
         f"dispatched; these are not: {unguarded}"
     )
+
+
+@pytest.mark.parametrize(
+    "conjunct",
+    [
+        pytest.param(MAIN_REF_CONJUNCT, id="the-trunk"),
+        pytest.param(CREDENTIAL_PRESENT_CONJUNCT, id="the-credential"),
+    ],
+)
+def test_every_upload_guard_holds_both_conjuncts(conjunct: str) -> None:
+    """The whole guard, not only its ref half.
+
+    The ref test keeps a dispatch from another branch from uploading; the
+    credential test skips the upload where the secret is absent, as on a fork
+    or after a rotation, instead of failing the publisher. Each is required as
+    a conjunct, so neither can be dropped or made optional by an `||`.
+    """
+    uploads = _upload_steps()
+    assert uploads, f"{PUBLISHER_WORKFLOW} must carry the CodeScene upload"
+    missing = [
+        step.get("name") for step in uploads if not requires(step.get("if"), conjunct)
+    ]
+    assert not missing, f"each upload guard must require {conjunct!r}: {missing}"
+
+
+@pytest.mark.parametrize(
+    ("condition", "conjunct"),
+    [
+        pytest.param(
+            "github.ref == 'refs/heads/main'",
+            CREDENTIAL_PRESENT_CONJUNCT,
+            id="no-credential-test",
+        ),
+        pytest.param(
+            "env.CS_ACCESS_TOKEN == ''", CREDENTIAL_PRESENT_CONJUNCT, id="the-inverse"
+        ),
+        pytest.param(
+            f"{MAIN_REF_CONJUNCT} || {CREDENTIAL_PRESENT_CONJUNCT}",
+            CREDENTIAL_PRESENT_CONJUNCT,
+            id="an-optional-credential-test",
+        ),
+    ],
+)
+def test_a_guard_missing_a_required_conjunct_is_refused(
+    condition: str, conjunct: str
+) -> None:
+    """The negative half for the credential test, which the ref cases lack."""
+    assert not requires(condition, conjunct), f"{condition!r} lacks {conjunct!r}"
 
 
 def test_the_publisher_never_cancels_a_run() -> None:

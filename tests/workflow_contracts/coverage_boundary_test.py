@@ -34,7 +34,7 @@ from coverage_boundary import (
     publishes_the_coverage_report,
 )
 from pull_request_reach import pull_request_closure
-from shell_commands import runs_command
+from shell_commands import runs_unconditionally
 from ubicloud_workflow_support import (
     WORKFLOWS_DIRECTORY,
     job_steps,
@@ -149,13 +149,18 @@ def test_the_measuring_lane_still_runs_the_instrumented_suite() -> None:
     this contract asserts only that the lane still measures. See "The half of
     CV-005 that is deferred here" in the developers' guide.
     """
-    runs = [
-        str(step.get("run", "")) for step in job_steps(load_job(MEASURING_JOB))
+    # A dedicated step with no condition of its own, whose script is the
+    # command alone: `echo make coverage`, a comment, or `false && make
+    # coverage` all contain the words and none runs the suite.
+    measuring_steps = [
+        step
+        for step in job_steps(load_job(MEASURING_JOB))
+        if "if" not in step
+        and runs_unconditionally(str(step.get("run", "")), MEASURING_COMMAND)
     ]
-    # Executed, not mentioned: `echo make coverage` contains the words too.
-    assert any(runs_command(script, MEASURING_COMMAND) for script in runs), (
-        f"{MEASURING_JOB} must still run `{MEASURING_COMMAND}`; without it the "
-        f"pull-request lane runs no tests at all"
+    assert measuring_steps, (
+        f"{MEASURING_JOB} must still run `{MEASURING_COMMAND}` in a step of its "
+        f"own with no condition; without it the pull-request lane runs no tests"
     )
 
 

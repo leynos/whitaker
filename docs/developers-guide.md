@@ -244,7 +244,9 @@ directly under `.github/workflows/`, so no list of spellings has to be kept.
 The publisher answers `workflow_dispatch` as well as a push to `main`, and a
 dispatch can name any branch, so the trigger filter does not confine the
 upload. The upload step's condition carries `github.ref == 'refs/heads/main'`
-as a conjunct, and `tests/workflow_contracts/publisher_guard_test.py` reads the
+and `env.CS_ACCESS_TOKEN != ''` as conjuncts, the second so that an absent
+secret skips the upload rather than failing the run.
+`tests/workflow_contracts/publisher_guard_test.py` requires both, reading the
 condition as a conjunction: it splits on `&&` and refuses any `||` outside a
 quoted string, because a trailing `|| github.event_name == 'workflow_dispatch'`
 would contain the ref test and make it optional. The same contract refuses a
@@ -282,13 +284,15 @@ that calls the shared `generate-coverage` action must pass
 `publish-artefact: 'false'`, because the action archives the report under a
 step of its own that the caller cannot see.
 
-`tests/workflow_contracts/shell_commands.py` reads what a `run:` block
-executes, as opposed to what it mentions, and the measuring lane's contract
-uses it to require `make coverage`: `echo make coverage` or a comment contains
-the words and runs nothing. It is for requirements only. A prohibition, such as
-"no pull-request lane runs `cs-coverage`", stays a substring test, because
-there over-matching is the safe direction and the reader deliberately
-under-matches.
+`tests/workflow_contracts/shell_commands.py` decides whether a `run:` block is
+one command that must run, and the measuring lane's contract uses it to require
+`make coverage` in a step of its own with no `if:`. A substring test passes for
+`echo make coverage` or a comment, and a reader of simple commands still passes
+for `false && make coverage` or `make coverage &`, so the reader accepts only a
+script that is a single simple command with no list or pipeline operator. It is
+for requirements only. A prohibition, such as "no pull-request lane runs
+`cs-coverage`", stays a substring test, because there over-matching is the safe
+direction and the reader deliberately under-matches.
 
 ##### The half of CV-005 that is deferred here
 

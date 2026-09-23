@@ -22,6 +22,10 @@ import typing as typ
 #: The conjunct that confines a step to the trunk, in its canonical spelling.
 MAIN_REF_CONJUNCT: typ.Final[str] = "github.ref == 'refs/heads/main'"
 
+#: The conjunct that skips the upload when the credential is absent, as it is
+#: on a fork or after a rotation, rather than failing the publisher run.
+CREDENTIAL_PRESENT_CONJUNCT: typ.Final[str] = "env.CS_ACCESS_TOKEN != ''"
+
 #: A single-quoted expression string, which may itself contain `||` or `&&`.
 _QUOTED: typ.Final[re.Pattern[str]] = re.compile(r"'(?:[^']|'')*'")
 
@@ -75,6 +79,33 @@ def guard_conjuncts(condition: str) -> list[str] | None:
     return conjuncts
 
 
+def requires(condition: object, conjunct: str) -> bool:
+    """Return whether a step condition holds only when a conjunct holds.
+
+    Parameters
+    ----------
+    condition : object
+        A step's parsed `if:` value, which may be absent or not a string.
+    conjunct : str
+        The required test, in the canonical spelling `guard_conjuncts` yields.
+
+    Returns
+    -------
+    bool
+        True when the condition is a conjunction with `conjunct` as one of its
+        conjuncts, so the step cannot run while that test is false.
+
+    >>> requires("env.A != '' && github.ref  ==  'refs/heads/main'", MAIN_REF_CONJUNCT)
+    True
+    >>> requires(None, MAIN_REF_CONJUNCT)
+    False
+    """
+    if not isinstance(condition, str):
+        return False
+    conjuncts = guard_conjuncts(condition)
+    return conjuncts is not None and conjunct in conjuncts
+
+
 def is_confined_to_main(condition: object) -> bool:
     """Return whether a step condition runs the step only on the trunk.
 
@@ -86,18 +117,12 @@ def is_confined_to_main(condition: object) -> bool:
     Returns
     -------
     bool
-        True when the condition is a conjunction with the `main` ref test as
-        one of its conjuncts.
+        True when the `main` ref test is one of the condition's conjuncts.
 
     >>> is_confined_to_main("github.ref  ==  'refs/heads/main'")
     True
-    >>> is_confined_to_main(None)
-    False
     """
-    if not isinstance(condition, str):
-        return False
-    conjuncts = guard_conjuncts(condition)
-    return conjuncts is not None and MAIN_REF_CONJUNCT in conjuncts
+    return requires(condition, MAIN_REF_CONJUNCT)
 
 
 def _cancels(concurrency: object) -> bool:
