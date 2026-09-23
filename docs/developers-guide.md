@@ -964,6 +964,33 @@ value because `windows-latest` is a four-vCPU GitHub-hosted shape. No suite in
 this repository uses `pytest-xdist`; if one adopts it, give it an explicit
 worker count rather than `-n auto`.
 
+#### Coverage lane time limits
+
+`coverage-check` and `coverage-upload` are limited to 60 minutes, and the limit
+is set by a cold compiler cache, not a warm one. A cold cache is not rare:
+every change to the pinned toolchain or to a compiler flag invalidates all of
+it, and so did the move to Ubicloud's cache proxy.
+
+Table: Measured coverage-lane durations on `ubicloud-standard-2-ubuntu-2404`.
+
+| Run                                     | Lane              | Cache | `Generate coverage` | Doctests           | Job                              |
+| --------------------------------------- | ----------------- | ----- | ------------------- | ------------------ | -------------------------------- |
+| [35825720438][whitaker-run-35825720438] | `coverage-check`  | cold  | 34m26s              | 3m22s              | 38m45s                           |
+| [35825656071][whitaker-run-35825656071] | `coverage-upload` | cold  | 35m54s              | cancelled at 3m39s | cancelled at the 40-minute limit |
+| [35834924110][whitaker-run-35834924110] | `coverage-upload` | warm  | 10m34s              | 2m38s              | 14m44s                           |
+| [35831488853][whitaker-run-35831488853] | `coverage-check`  | warm  | 10m50s              | 1m05s              | 12m50s                           |
+
+The previous 40-minute limit left `coverage-check` 75 seconds of headroom over
+its cold run, and `coverage-upload`, which does more after the doctests (the
+CodeScene upload and three cache saves), could not finish cold at all. A
+cancelled writer keeps the compiler-cache entries it stored while it compiled,
+which is why the next trunk run was warm, but it loses its doctests, its
+CodeScene upload and its archive saves. Sixty minutes is about one and a half
+times the slowest cold job measured, leaves `coverage-upload` a quarter of an
+hour for its doctests, upload and saves after a cold `Generate coverage`, and
+matches `linux-full`'s limit. Re-measure the cold figure after a change that
+makes the suite materially larger, and keep the margin rather than the number.
+
 #### Placement inside a matrix
 
 `build-lints` and `build-dependency-binaries` are the jobs whose placement is
@@ -3500,6 +3527,7 @@ of the test suite per pull request" above.
 [whitaker-run-35825720438]: https://github.com/leynos/whitaker/actions/runs/35825720438
 [whitaker-run-35825656071]: https://github.com/leynos/whitaker/actions/runs/35825656071
 [whitaker-run-35834924110]: https://github.com/leynos/whitaker/actions/runs/35834924110
+[whitaker-run-35831488853]: https://github.com/leynos/whitaker/actions/runs/35831488853
 [whitaker-run-33410178021]: https://github.com/leynos/whitaker/actions/runs/33410178021
 [whitaker-run-33369228466]: https://github.com/leynos/whitaker/actions/runs/33369228466
 [whitaker-run-33345742967]: https://github.com/leynos/whitaker/actions/runs/33345742967
