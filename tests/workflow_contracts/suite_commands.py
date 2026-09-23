@@ -23,13 +23,16 @@ import typing as typ
 SUITE_COMMANDS: typ.Final[tuple[str, ...]] = ("make test", "make coverage")
 
 #: Commands that contain a suite command as a prefix but run something
-#: else entirely. `make test-doc` is doctests, outside nextest; the other
-#: two are checkers that happen to be named for what they check.
+#: else entirely. `make test-doc` is doctests, outside nextest; the others
+#: are checkers that happen to be named for what they check.
+#: `make test-sccache-health` runs the sccache health checker's own pytest
+#: suite on the gha lanes, not nextest.
 NOT_SUITE_COMMANDS: typ.Final[tuple[str, ...]] = (
     "make test-doc",
     "make test-glibc-baseline",
     "make test-workflow-contracts",
     "make test-markdown-format",
+    "make test-sccache-health",
 )
 
 #: Shapes that put a suite command on a line without running it as the
