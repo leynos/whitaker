@@ -788,7 +788,8 @@ The measurements that showed it are these:
 
 The rule is therefore that every pull-request lane on the Actions backend has
 exactly one trunk writer: a job that runs on a push to `main` and nothing
-broader, runs unconditionally there, and runs every `make` or `cargo` command
+broader, runs unconditionally there, selects the same compiler-cache backend,
+declares the same compile environment, and runs every `make` or `cargo` command
 the lane runs, so the two compile the same shapes. `coverage-upload` writes for
 `coverage-check`. `linux-full` writes for itself, because `ci.yml` runs it on
 the push. That makes its shapes the lane's by construction, where a separate
@@ -803,10 +804,19 @@ scope, so the pull-request lanes only ever read the trunk's store.
 requires each pull-request lane on the `gha` backend to be registered with a
 writer in `TRUNK_WRITERS`. Each writer's push trigger must be exactly
 `branches: [main]`, with no other filter. The writer must carry no job
-condition and run all of its reader's commands, and the jobs that run on the
-push must be exactly the registered writers. Job conditions are matched against
-a table of reviewed spellings, and an unknown one fails the suite rather than
-being guessed at.
+condition, select its reader's backend, and run all of its reader's commands,
+read line by line so a command beneath `set -euo pipefail` in a block script
+still counts. The jobs that run on the push must be exactly the registered
+writers. Job conditions are matched against a table of reviewed spellings, and
+an unknown one fails the suite rather than being guessed at.
+
+`tests/workflow_contracts/trunk_writer_environment_contract_test.py` holds the
+compile environment. A writer must declare each variable in
+`COMPILE_ENVIRONMENT` (`BUILD_PROFILE`, `CARGO_INCREMENTAL`, `RUSTDOCFLAGS` and
+`RUSTFLAGS`) with its reader's value, whether at workflow or job level. The
+`make` recipes set `RUSTFLAGS` themselves, but `make test-doc` takes
+`RUSTDOCFLAGS` from the environment, so `coverage-main.yml` declares both as
+`ci.yml` does, and `main`'s doctests deny the warnings a pull request's do.
 
 Nothing may cancel a writer's run on the push either. A cancelled trunk run
 leaves `main`'s scope cold, and no failure reports it. The contract therefore
@@ -1008,6 +1018,9 @@ times the slowest cold job measured, leaves `coverage-upload` a quarter of an
 hour for its doctests, upload and saves after a cold `Generate coverage`, and
 matches `linux-full`'s limit. Re-measure the cold figure after a change that
 makes the suite materially larger, and keep the margin rather than the number.
+`tests/workflow_contracts/coverage_time_limit_contract_test.py` asserts the
+limit on both lanes exactly, as `COLD_RUN_TIME_LIMIT_MINUTES`, because a broad
+bound would still pass with the old 40 restored.
 
 #### Placement inside a matrix
 

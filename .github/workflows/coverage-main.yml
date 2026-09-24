@@ -39,6 +39,13 @@ env:
   BUILD_PROFILE: debug
   CARGO_INCREMENTAL: 0
   CARGO_TERM_COLOR: always
+  # Keep in step with ci.yml, whose `coverage-check` this job writes for. The
+  # `make` recipes set RUSTFLAGS themselves, but `make test-doc` takes
+  # RUSTDOCFLAGS from here, so without it `main`'s doctests would tolerate
+  # warnings a pull request's reject. `trunk_writer_environment_contract_test`
+  # holds the two alike.
+  RUSTFLAGS: -D warnings
+  RUSTDOCFLAGS: -D warnings
   # Keep in step with ci.yml: one named constant for the Ubicloud shape.
   LINUX_RUNNER_VCPUS: '2'
   # One-line switch between the Actions cache backend and a cached local

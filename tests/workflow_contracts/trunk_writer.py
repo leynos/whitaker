@@ -12,9 +12,10 @@ on `pull_request` and `workflow_dispatch`.
 The rule this module reads is therefore "every pull-request lane on the
 Actions backend has exactly one trunk writer": a job that runs on a push to
 `main` and nothing broader, runs unconditionally there, selects the same
-backend, and runs every `make` or `cargo` command the lane runs, so the two
-compile the same shapes. The other half is that nothing else in those
-workflows runs on that push, so no second job writes the same scope. And
+backend and compile environment, and runs every `make` or `cargo` command the
+lane runs, so the two compile the same shapes. The other half is that nothing
+else in those workflows runs on that push, so no second job writes the same
+scope. And
 nothing may cancel the writer: a cancelled trunk run leaves `main`'s scope
 cold with nothing in the run saying so, so the only cancellation accepted is
 the pull-request-only one, in a group no pull request shares with the push.
@@ -37,6 +38,16 @@ import typing as typ
 from pr_concurrency_support import CANCEL_IN_PROGRESS, GROUP_EXPRESSION
 from pull_request_reach import declares_trigger
 
+#: Each pull-request lane on the Actions backend, mapped to the one job that
+#: compiles its shapes on a push to `main`. `linux-full` is its own writer:
+#: `ci.yml` runs it on that push, so its shapes are the lane's by construction
+#: rather than by a copy that could drift.
+TRUNK_WRITERS: typ.Final[dict[str, str]] = {
+    "coverage-check": "coverage-upload",
+    "linux-full": "linux-full",
+}
+
+
 #: The one branch filter a trunk writer's push trigger may carry.
 TRUNK_BRANCHES: typ.Final[tuple[str, ...]] = ("main",)
 
@@ -49,8 +60,24 @@ REVIEWED_CONDITIONS: typ.Final[dict[str, tuple[bool, frozenset[str]]]] = {
     "github.event_name != 'pull_request'": (False, frozenset({"pull_request"})),
 }
 
-#: A step whose script starts one of these compiles, or may compile, Rust.
-COMPILING_COMMANDS: typ.Final[re.Pattern[str]] = re.compile(r"^(make|cargo)\s")
+#: A script line starting with one of these compiles, or may compile, Rust.
+#: Read per line, so a block script that opens with `set -euo pipefail` still
+#: yields the commands beneath it.
+COMPILING_COMMANDS: typ.Final[re.Pattern[str]] = re.compile(
+    r"^[ \t]*((?:make|cargo)[ \t].*?)[ \t]*$", re.MULTILINE
+)
+
+#: Environment a reader and its writer must declare alike. The `make` recipes
+#: set `RUSTFLAGS` themselves, so today these reach the compiler only through
+#: a command that reads the variable, such as `RUSTDOCFLAGS` for doctests; a
+#: shared declaration keeps a later command from compiling a different shape
+#: on the trunk than on the pull request.
+COMPILE_ENVIRONMENT: typ.Final[tuple[str, ...]] = (
+    "BUILD_PROFILE",
+    "CARGO_INCREMENTAL",
+    "RUSTDOCFLAGS",
+    "RUSTFLAGS",
+)
 
 #: The `${{ ... }}` wrapper a condition may carry or omit.
 _WRAPPER: typ.Final[re.Pattern[str]] = re.compile(
@@ -169,20 +196,57 @@ def trunk_push_violations(document: dict[str, typ.Any]) -> list[str]:
 
 
 def compiling_commands(job: dict[str, typ.Any]) -> frozenset[str]:
-    """Return the scripts of a job's steps that start with `make` or `cargo`.
+    """Return the lines of a job's scripts that start with `make` or `cargo`.
 
     Over-inclusive on purpose: a `make` target that compiles nothing costs the
     writer seconds, while a missed one leaves a shape unwritten.
 
     >>> sorted(compiling_commands({"steps": [{"run": "make lint"}, {"uses": "x"}]}))
     ['make lint']
+    >>> sorted(compiling_commands({"steps": [{"run": "set -e\\ncargo build\\n"}]}))
+    ['cargo build']
     """
     steps = job.get("steps") or []
     return frozenset(
-        script
+        match.group(1)
         for step in steps
-        if COMPILING_COMMANDS.match(script := str(step.get("run", "")).strip())
+        for match in COMPILING_COMMANDS.finditer(str(step.get("run", "")))
     )
+
+
+def compile_environment(
+    job: dict[str, typ.Any], workflow: dict[str, typ.Any]
+) -> dict[str, str]:
+    """Return the `COMPILE_ENVIRONMENT` a job runs under, job level over workflow.
+
+    >>> compile_environment({"env": {"RUSTFLAGS": "-D warnings"}},
+    ...     {"env": {"RUSTFLAGS": "", "CARGO_INCREMENTAL": 0}})
+    {'CARGO_INCREMENTAL': '0', 'RUSTFLAGS': '-D warnings'}
+    """
+    declared = (workflow.get("env") or {}) | (job.get("env") or {})
+    return {
+        name: str(declared[name]) for name in COMPILE_ENVIRONMENT if name in declared
+    }
+
+
+def environment_violations(
+    reader_environment: dict[str, str], writer_environment: dict[str, str]
+) -> list[str]:
+    """Return each `COMPILE_ENVIRONMENT` entry the reader and writer differ on.
+
+    A variable one side declares and the other omits is a difference too.
+
+    >>> environment_violations({"RUSTDOCFLAGS": "-D warnings"}, {})
+    ["RUSTDOCFLAGS is '-D warnings' in the reader but None in the writer"]
+    """
+    return [
+        (
+            f"{name} is {reader_environment.get(name)!r} in the reader but "
+            f"{writer_environment.get(name)!r} in the writer"
+        )
+        for name in COMPILE_ENVIRONMENT
+        if reader_environment.get(name) != writer_environment.get(name)
+    ]
 
 
 def writer_violations(

@@ -15,6 +15,7 @@ import pytest
 from pr_concurrency_support import CANCEL_IN_PROGRESS, GROUP_EXPRESSION
 from pull_request_reach import declares_trigger
 from trunk_writer import (
+    TRUNK_WRITERS,
     UnreviewedConditionError,
     cancellation_violations,
     compiling_commands,
@@ -30,15 +31,6 @@ from ubicloud_workflow_support import (
     load_workflow,
     parse_workflow,
 )
-
-#: Each pull-request lane on the Actions backend, mapped to the one job that
-#: compiles its shapes on a push to `main`. `linux-full` is its own writer:
-#: `ci.yml` runs it on that push, so its shapes are the lane's by construction
-#: rather than by a copy that could drift.
-TRUNK_WRITERS: typ.Final[dict[str, str]] = {
-    "coverage-check": "coverage-upload",
-    "linux-full": "linux-full",
-}
 
 
 def _is_pull_request_lane_on_gha(
@@ -92,7 +84,10 @@ def test_only_jobs_a_pull_request_runs_on_gha_need_a_writer(
 ) -> None:
     """A job no pull request runs, or one on another backend, reads nothing."""
     workflow = parse_workflow(f"{triggers}jobs: {{}}\n")
-    assert _is_pull_request_lane_on_gha(job, workflow, backend) is expected
+    assert _is_pull_request_lane_on_gha(job, workflow, backend) is expected, (
+        f"expected {expected} for backend {backend!r}, triggers {triggers!r} "
+        f"and job {job!r}"
+    )
 
 
 @pytest.mark.parametrize(("reader", "writer"), sorted(TRUNK_WRITERS.items()))
@@ -175,7 +170,8 @@ def test_a_push_that_is_not_exactly_the_trunk_is_refused(
 )
 def test_a_push_to_main_alone_is_accepted(triggers: str) -> None:
     """The narrow half: every spelling of "push to main" passes."""
-    assert trunk_push_violations(parse_workflow(f"{triggers}jobs: {{}}\n")) == []
+    violations = trunk_push_violations(parse_workflow(f"{triggers}jobs: {{}}\n"))
+    assert violations == [], f"{triggers!r} was refused: {violations}"
 
 
 _READER: typ.Final = {"steps": [{"run": "make lint"}, {"run": "make publish-check"}]}
@@ -209,9 +205,17 @@ def test_a_writer_that_does_not_compile_the_readers_shapes_is_refused(
     assert any(expected in violation for violation in violations), violations
 
 
+def test_a_readers_command_inside_a_block_script_still_needs_a_writer() -> None:
+    """A command beneath `set -euo pipefail` is a shape the writer must compile."""
+    reader = {"steps": [{"run": "set -euo pipefail\ncargo build --workspace\n"}]}
+    violations = writer_violations(reader, {"steps": []}, parse_workflow(_TRUNK))
+    assert any("cargo build --workspace" in v for v in violations), violations
+
+
 def test_a_writer_running_the_readers_commands_is_accepted() -> None:
     """The narrow half: the same job as its own writer passes."""
-    assert writer_violations(_READER, _READER, parse_workflow(_TRUNK)) == []
+    violations = writer_violations(_READER, _READER, parse_workflow(_TRUNK))
+    assert violations == [], f"the reader as its own writer was refused: {violations}"
 
 
 def test_only_make_and_cargo_steps_count_as_compiling() -> None:
@@ -222,10 +226,13 @@ def test_only_make_and_cargo_steps_count_as_compiling() -> None:
             {"run": "cargo build --workspace"},
             {"run": "bash scripts/record-sccache-effectiveness.sh"},
             {"run": "echo make lint is next"},
+            {"run": "set -euo pipefail\n  make publish-check  \necho cargo\n"},
             {"uses": "actions/checkout@abc"},
         ]
     }
-    assert compiling_commands(job) == {"make lint", "cargo build --workspace"}
+    commands = compiling_commands(job)
+    expected = {"make lint", "cargo build --workspace", "make publish-check"}
+    assert commands == expected, f"compiling commands were {sorted(commands)}"
 
 
 @pytest.mark.parametrize(
@@ -255,7 +262,9 @@ def test_reviewed_conditions_admit_the_events_they_say(
 ) -> None:
     """Each reviewed spelling admits exactly the events it names."""
     job = {} if condition is None else {"if": condition}
-    assert runs_on(job, event) is expected
+    assert runs_on(job, event) is expected, (
+        f"{condition!r} should {'admit' if expected else 'refuse'} {event}"
+    )
 
 
 def test_an_unreviewed_condition_is_refused_rather_than_guessed() -> None:
@@ -270,7 +279,8 @@ def test_an_ungated_job_beside_the_writer_is_a_second_writer() -> None:
         f"{_TRUNK}jobs:\n  writer: {{}}\n  windows: {{}}\n"
         "  pr-only:\n    if: github.event_name == 'pull_request'\n"
     )
-    assert push_jobs(document) == ["windows", "writer"]
+    jobs = push_jobs(document)
+    assert jobs == ["windows", "writer"], f"push jobs were {jobs}"
 
 
 @pytest.mark.parametrize("writer", sorted(set(TRUNK_WRITERS.values())))
@@ -344,4 +354,5 @@ def test_a_cancellable_writer_is_refused(
 def test_a_writer_the_push_cannot_cancel_is_accepted(concurrency: object) -> None:
     """The narrow half: every shape that never cancels the push passes."""
     workflow = {} if concurrency is None else {"concurrency": concurrency}
-    assert cancellation_violations({}, workflow) == []
+    violations = cancellation_violations({}, workflow)
+    assert violations == [], f"{concurrency!r} was refused: {violations}"
