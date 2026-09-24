@@ -2195,6 +2195,17 @@ is missing the expected `.tgz` or `.zip` dependency archives. Leave it set to
 `false` for a manual republish that should leave the existing dependency
 archives exactly where they are.
 
+A forced manual rebuild now has a prepublication gate. Both five-target build
+matrices must finish successfully. The gate then requires each target's lint
+archive and manifest, and every dependency archive and matching SHA-256 sidecar
+declared by `installer/dependency-binaries.toml`. If a build, download, or
+checksum fails, the run fails before changing the `rolling` release or tag.
+This strict rule applies only to a manual run with the force input enabled;
+ordinary pushes retain the rolling release's documented partial-publication
+policy. `scripts/check-forced-rolling-assets.sh` owns this local preflight for
+the rolling workflow's publish job. It is not a tagged-release or consumer
+asset validator; those paths keep their own checks.
+
 Leaving them alone is the whole point, and it is why the publish no longer
 downloads them. The release is updated in place rather than deleted, so an
 archive that was not rebuilt is already published and needs no round trip.

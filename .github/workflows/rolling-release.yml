@@ -525,6 +525,16 @@ jobs:
           merge-multiple: true
           path: dist
 
+      # A manual force request is a recovery operation. Do not let a partial
+      # matrix or a tolerant download replace the published rolling assets.
+      - name: Check forced rebuild before publication
+        id: forced_rebuild
+        run: bash scripts/check-forced-rolling-assets.sh
+        env:
+          FORCE_DEPENDENCY_BINARY_REBUILD: ${{ github.event.inputs.force_dependency_binary_rebuild }}
+          LINT_BUILD_RESULT: ${{ needs.build-lints.result }}
+          DEPENDENCY_BUILD_RESULT: ${{ needs.build-dependency-binaries.result }}
+
       - name: List artefacts
         run: |
           if [[ ! -d dist ]]; then
@@ -569,7 +579,7 @@ jobs:
       # rolling tag, its release and every asset absent for six to seven
       # seconds on each publish, and a consumer landed in that gap.
       - name: Republish the rolling release in place
-        if: steps.assets.outputs.has_assets == 'true'
+        if: steps.assets.outputs.has_assets == 'true' && steps.forced_rebuild.outcome == 'success'
         run: |
           set -euo pipefail
           RELEASE_SHA=$(git rev-parse HEAD) \
