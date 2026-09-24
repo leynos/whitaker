@@ -212,7 +212,7 @@ test-glibc-baseline: ## Validate the Linux release glibc-baseline checker
 
 test-sccache-health: ## Validate the sccache health checker the gha lanes run
 	@$(UV_ENV) $(UV) run --no-project --python 3.14 \
-		--with pytest==9.0.2 \
+		--with pytest==9.0.2 --with hypothesis==6.151.9 \
 		python -m pytest scripts/tests/test_check_sccache_health.py -c /dev/null \
 		--rootdir=. -p no:cacheprovider --doctest-modules \
 		scripts/check_sccache_health.py

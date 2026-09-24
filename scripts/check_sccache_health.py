@@ -19,10 +19,17 @@ than a bad day:
 - every store attempt failed, or every read did, which is the signature of an
   endpoint the server cannot use (Whitaker's runs 33748602187 and 33756048103
   failed 3,788 of 3,788 stores against GitHub's v2 service);
-- write errors plus timeouts exceed `ERROR_RATE_LIMIT` of the store attempts,
-  or read errors exceed it of the reads, which is an endpoint failing often
-  enough that the lane is no longer cached in any useful sense, even though
-  some operations still succeed.
+- write errors exceed `ERROR_RATE_LIMIT` of the store attempts, or lookup
+  timeouts exceed it of the reads, which is an endpoint failing often enough
+  that the lane is no longer cached in any useful sense, even though some
+  operations still succeed.
+
+sccache records a timed-out lookup as a miss, so timeouts are judged against
+the reads, never the stores: a warm lane stores almost nothing, and one timeout
+beside one store would otherwise read as a 100% failure. Read errors have no
+rate of their own. sccache declares `cache_read_errors` but never increments
+it; a failed read lands in `cache_errors`, beside compile errors that say
+nothing about the cache, so no counter isolates it.
 
 Isolated read errors, write errors, timeouts and cache errors are reported as
 warnings. A proxy hiccup costs one compile, and turning it into a red pull
@@ -52,8 +59,8 @@ from pathlib import Path
 
 DEFAULT_STATISTICS = Path("sccache-stats.json")
 
-#: The share of store attempts (or of reads) that may fail before the lane
-#: fails. Exceeding it, not reaching it, fails. Ten per cent is two orders of
+#: The share of store attempts that may fail to write, or of reads that may
+#: time out, before the lane fails. Exceeding it, not reaching it, fails. Ten per cent is two orders of
 #: magnitude above the measured healthy rate of about 0.1%, so a noisy proxy
 #: still only warns, while a store that loses one compile in ten is reported as
 #: the broken integration it is.
@@ -113,26 +120,28 @@ def _error_rate_failures(stats: Mapping[str, object]) -> list[str]:
     """Return the failures for error rates above `ERROR_RATE_LIMIT`.
 
     A store attempt is a write or a write error. sccache counts a lookup that
-    timed out or failed to read as a miss, so the reads are the hits plus the
-    misses, and both error counters are already inside that total.
+    timed out as a miss, so the reads are the hits plus the misses and the
+    timeouts are already inside that total.
+
+    Example
+    -------
+        >>> _error_rate_failures({"cache_hits": 1000, "cache_misses": 1,
+        ...     "cache_timeouts": 1, "cache_writes": 1})
+        []
     """
     write_errors = _counted(stats.get("cache_write_errors"))
     timeouts = _counted(stats.get("cache_timeouts"))
-    read_errors = _counted(stats.get("cache_read_errors"))
     stores = _counted(stats.get("cache_writes")) + write_errors
     reads = _counted(stats.get("cache_hits")) + _counted(stats.get("cache_misses"))
     limit = f"{ERROR_RATE_LIMIT.numerator}/{ERROR_RATE_LIMIT.denominator}"
     checks = (
         (
-            _exceeds_limit(write_errors + timeouts, stores),
-            (
-                f"{write_errors} write errors and {timeouts} timeouts in {stores} "
-                f"store attempts exceed {limit}"
-            ),
+            _exceeds_limit(write_errors, stores),
+            f"{write_errors} write errors in {stores} store attempts exceed {limit}",
         ),
         (
-            _exceeds_limit(read_errors, reads),
-            f"{read_errors} read errors in {reads} reads exceed {limit}",
+            _exceeds_limit(timeouts, reads),
+            f"{timeouts} lookup timeouts in {reads} reads exceed {limit}",
         ),
     )
     return [message for failed, message in checks if failed]
