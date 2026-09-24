@@ -69,19 +69,27 @@ def rust_source_texts(
     if not root.is_dir():
         message = f"{root} is not a directory, so no Rust source was read"
         raise RustSourceError(message)
-    texts: dict[pathlib.Path, str] = {}
+    return {path: _read_rust_source(path) for path in sorted(_rust_source_paths(root))}
+
+
+def _rust_source_paths(root: pathlib.Path) -> cabc.Iterator[pathlib.Path]:
+    """Yield the tree's own Rust sources, never entering build output."""
     for directory, dirnames, filenames in root.walk():
         # Pruned in place, so the walk never enters build output or a
         # hidden directory, and judged by the directory's own name, so a
         # checkout that itself sits under a `target` directory is read.
-        dirnames[:] = [
-            name for name in dirnames if name != "target" and not name.startswith(".")
-        ]
-        for name in filenames:
-            if name.endswith(".rs") and not name.startswith("."):
-                path = directory / name
-                texts[path] = _read_rust_source(path)
-    return dict(sorted(texts.items()))
+        dirnames[:] = [name for name in dirnames if _is_source_directory(name)]
+        yield from (directory / name for name in filenames if _is_rust_source(name))
+
+
+def _is_source_directory(name: str) -> bool:
+    """Return whether a directory can hold the tree's own sources."""
+    return name != "target" and not name.startswith(".")
+
+
+def _is_rust_source(name: str) -> bool:
+    """Return whether a file name is a Rust source that is not hidden."""
+    return name.endswith(".rs") and not name.startswith(".")
 
 
 def _read_rust_source(path: pathlib.Path) -> str:
