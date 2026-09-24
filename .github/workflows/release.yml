@@ -444,3 +444,28 @@ jobs:
           cargo publish -p whitaker-installer
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+  verify-binstall:
+    # A published archive that `cargo binstall` cannot extract is invisible
+    # until a consumer notices it compiled from source: binstall skips every
+    # tar entry that is not a regular file or a directory, finds nothing, and
+    # falls back to `cargo install` (#461). Disabling the compile and
+    # third-party strategies makes that fallback a failure here, so the
+    # release's own archive is the only thing this step can install.
+    needs: publish
+    if: ${{ !cancelled() && needs.publish.result == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install cargo-binstall
+        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
+        with:
+          tool: cargo-binstall@1.16.6
+          fallback: none
+
+      - name: Install the released installer from its archive
+        run: >-
+          cargo binstall --no-confirm --disable-strategies compile,quick-install
+          "whitaker-installer@${RELEASE_TAG#v}"
+
+      - name: Run the installed installer
+        run: whitaker-installer --version

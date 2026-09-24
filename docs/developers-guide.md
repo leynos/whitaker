@@ -2071,6 +2071,35 @@ Workflow validation in `tests/workflows/` protects this contract from drift:
 When modifying release helpers, keep the workflow YAML, `installer/Cargo.toml`,
 and the metadata-based tests in lock-step.
 
+### Archive entries are regular files
+
+Every `tar::Builder` that produces a published archive calls
+`archive.sparse(false)`: `create_tgz_archive` in `installer_packaging.rs` and
+`dependency_packaging.rs`, and `create_archive` in `artefact/packaging.rs`. The
+`tar` crate stores a file with holes as a GNU sparse entry (typeflag `S`) by
+default, and a linked release binary often has holes on the build runner's
+filesystem. cargo-binstall's extractor unpacks only regular files and
+directories and skips anything else without an error, so it found no binary in
+the installer archive and fell back to compiling from source on every install (
+[issue #461][whitaker-issue-461]). GNU tar and the `tar` crate read a sparse
+entry correctly, so nothing but the entry type shows the defect.
+
+`installer/src/archive_entry_type_tests.rs` drives all three packagers over a
+file with a four-megabyte hole and requires every entry to be `Regular` or
+`Directory`. On Linux, where `tar` detects holes with `SEEK_HOLE`, it also
+proves that a default builder stores the same file as `GNUSparse`, so the
+fixture cannot pass by never producing the case. Any new packager that builds a
+tar archive must disable sparse entries and join that module.
+
+After a tagged release publishes, `release.yml`'s `verify-binstall` job
+installs the new version with
+`cargo binstall --disable-strategies compile,quick-install`, so an archive
+binstall cannot use fails the release run rather than compiling quietly.
+`tests/workflow_contracts/release_binstall_contract_test.py` holds that job's
+command, its pinned `cargo-binstall` and its condition.
+
+[whitaker-issue-461]: https://github.com/leynos/whitaker/issues/461
+
 ### Workflow test support and local runner configuration
 
 The rolling-release contract tests share YAML and shell-parsing helpers in

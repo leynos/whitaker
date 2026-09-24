@@ -231,6 +231,10 @@ fn create_tgz_archive(
     let output_file = fs::File::create(output_path)?;
     let gz_encoder = flate2::write::GzEncoder::new(output_file, flate2::Compression::default());
     let mut archive = tar::Builder::new(gz_encoder);
+    // cargo-binstall skips every entry that is not a regular file or a
+    // directory, and a linked binary often has holes; see
+    // `archive_entry_type_tests`.
+    archive.sparse(false);
 
     let archive_entry_path = format!("{inner_dir}/{bin_name}");
     archive.append_path_with_name(binary_path, &archive_entry_path)?;
