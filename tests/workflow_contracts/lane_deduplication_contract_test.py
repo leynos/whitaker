@@ -31,12 +31,14 @@ make test-workflow-contracts
 from __future__ import annotations
 
 import re
+import shlex
 import typing as typ
 
 from ubicloud_workflow_support import REPOSITORY_ROOT, all_jobs, load_job
 
 if typ.TYPE_CHECKING:  # pragma: no cover - typing only
     from collections.abc import Iterable
+    from pathlib import Path
 
 import pytest
 
@@ -107,7 +109,7 @@ def _make_recipe(target: str) -> str:
     permits a blank line inside one. A command placed after that line would
     then escape every assertion made about the recipe.
     """
-    lines = MAKEFILE.read_text(encoding="utf-8").splitlines()
+    lines = _makefile_text().splitlines()
     start = next(
         (index for index, line in enumerate(lines) if line.startswith(f"{target}:")),
         None,
@@ -121,9 +123,49 @@ def _make_recipe(target: str) -> str:
     return "\n".join(body)
 
 
+class MakefileReadError(OSError):
+    """Raised when the Makefile cannot be read, naming it."""
+
+
+def _makefile_text(path: Path = MAKEFILE) -> str:
+    """Return the Makefile's text, or raise `MakefileReadError` naming it.
+
+    The one read of the file, so a missing or undecodable Makefile fails
+    every reading with the same error rather than whichever exception the
+    failure happened to produce.
+    """
+    try:
+        return path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as error:
+        message = f"cannot read the Makefile {path}: {error}"
+        raise MakefileReadError(message) from error
+
+
+def _pytest_collects_doctests(recipe: str) -> bool:
+    r"""Return whether a pytest command in the recipe passes `--doctest-modules`.
+
+    Only the executable command counts. Each line is split as the shell
+    would split it, with comments dropped, so a recipe comment naming the
+    flag, or the flag on another command, does not satisfy this.
+
+    >>> _pytest_collects_doctests("\t$(UV) run pytest tests --doctest-modules\n")
+    True
+    >>> _pytest_collects_doctests("\t# --doctest-modules\n\t$(UV) run pytest tests\n")
+    False
+    """
+    for line in recipe.splitlines():
+        try:
+            words = shlex.split(line.strip().lstrip("@-+"), comments=True)
+        except ValueError:
+            continue
+        if "pytest" in words and "--doctest-modules" in words[words.index("pytest") :]:
+            return True
+    return False
+
+
 def _makefile_variable(name: str) -> str:
     """Return one Makefile variable's raw definition."""
-    text = MAKEFILE.read_text(encoding="utf-8")
+    text = _makefile_text()
     match = re.search(rf"^{re.escape(name)} \??= (.*)$", text, re.MULTILINE)
     assert match is not None, f"{name} must be defined in the Makefile"
     return match.group(1)
@@ -200,6 +242,67 @@ def test_the_doctest_lane_covers_the_whole_documented_surface() -> None:
     flags = _makefile_variable("DOCTEST_CARGO_FLAGS")
     for flag in ("--workspace", "--all-features"):
         assert flag in flags, f"DOCTEST_CARGO_FLAGS must keep {flag}; got {flags!r}"
+
+
+def test_the_contract_lane_collects_its_own_examples() -> None:
+    """A docstring example nothing runs is a claim, not a test.
+
+    The reader in this package carries worked examples of what a
+    duration converts to, and until this flag was added pytest collected
+    the test modules and skipped every example in the package: chutoro
+    #263 found one that had never been true. The recipe is matched
+    rather than any mention of the flag, so a comment naming it does not
+    satisfy this.
+    """
+    recipe = _make_recipe("test-workflow-contracts")
+    assert _pytest_collects_doctests(recipe), (
+        f"the workflow-contracts lane must collect docstring examples; got {recipe!r}"
+    )
+
+
+@pytest.mark.parametrize(
+    ("recipe", "expected"),
+    [
+        pytest.param(
+            "\t@$(UV) run --with 'pytest>=8' pytest tests --doctest-modules -q\n",
+            True,
+            id="the-flag-on-the-pytest-command",
+        ),
+        pytest.param(
+            "\t# --doctest-modules\n\t$(UV) run pytest tests -q\n",
+            False,
+            id="the-flag-in-a-recipe-comment",
+        ),
+        pytest.param(
+            "\t$(UV) run pytest tests -q # --doctest-modules\n",
+            False,
+            id="the-flag-in-a-trailing-comment",
+        ),
+        pytest.param(
+            "\techo --doctest-modules\n\t$(UV) run pytest tests -q\n",
+            False,
+            id="the-flag-on-another-command",
+        ),
+    ],
+)
+def test_only_the_pytest_command_carries_the_doctest_flag(
+    recipe: str, *, expected: bool
+) -> None:
+    """A comment or another command naming the flag collects nothing."""
+    assert _pytest_collects_doctests(recipe) is expected, (
+        f"{recipe!r} must read as {'collecting' if expected else 'not collecting'} "
+        f"docstring examples"
+    )
+
+
+def test_an_unreadable_makefile_names_itself(tmp_path: Path) -> None:
+    """A Makefile that cannot be read fails with the reader's own error."""
+    with pytest.raises(MakefileReadError, match=r"cannot read the Makefile"):
+        _makefile_text(tmp_path / "Makefile")
+    undecodable = tmp_path / "bad"
+    undecodable.write_bytes(b"test:\n\t\xff\n")
+    with pytest.raises(MakefileReadError, match=r"cannot read the Makefile"):
+        _makefile_text(undecodable)
 
 
 def test_publish_check_no_longer_executes_the_suite() -> None:
