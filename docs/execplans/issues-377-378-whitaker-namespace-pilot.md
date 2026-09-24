@@ -714,6 +714,35 @@ Evidence from the pull request's own warm run, 35815203116, read from the
 - [x] Decide the sccache A/B against Cuprum once both have warm evidence:
   decided for the Linux CI lanes, which move to the Actions backend.
 
+## Addendum (2026-09-24): the proxy is ref-scoped, so the trunk writes
+
+Nothing above is rewritten. The 2026-09-23 addendum read the warm run
+35815203116 as a store shared across branches. It was a later push of the same
+pull request reading its own ref's scope. Ubicloud's proxy is ref-scoped, as
+GitHub's cache is: a pull request's first push reads only its own scope and
+`main`'s. Run 35825720438, a fresh branch's first push, had `linux-full` at 0
+of 1,077 hits and 29m07s against 11 to 14 minutes warm, because nothing on
+`main` compiled that lane's shapes.
+
+- `ci.yml` now runs on push to `main`, where only `linux-full` runs, so that
+  lane is its own trunk writer. `coverage-upload` stays the writer for
+  `coverage-check`. The Outcomes sentence below naming `linux-full` as the sole
+  cache writer describes the Namespace pilot and is superseded.
+- A contract requires one registered trunk writer per pull-request lane on the
+  Actions backend, running on exactly `branches: [main]`, unconditionally, on
+  the same backend and compile environment, and running every compiling command
+  its reader runs. No other job runs on that push, and nothing can cancel the
+  writer: `ci.yml` cancels superseded runs on `pull_request` only.
+- The sccache health check also fails when write errors exceed 10% of store
+  attempts, or lookup timeouts exceed 10% of reads. The measured healthy rate
+  is about 0.1%.
+- The cold coverage runs (38m45s end to end, and 35m54s in `Generate coverage`
+  before cancellation at the old 40-minute limit) are recorded against the
+  80-minute suite ceiling that #421 set on both coverage lanes.
+
+"Who writes the compiler cache" and "Coverage lane time limits" in the
+developers' guide carry the figures.
+
 ## Outcomes & retrospective
 
 EP-M1 now declares Rust 1.85 in the installer manifest, enforces a real locked
@@ -778,7 +807,8 @@ changing the execution substrate. Both migrated jobs use Ubuntu 24.04, one
 shared 20-GB Namespace cache, checksum-verified prebuilt tools, and bounded
 nextest concurrency. Cache-hit output and sccache JSON make cold-versus-warm
 performance observable; pull requests are readers, while the main-branch
-`linux-full` job is the sole cache writer.
+`linux-full` job is the sole cache writer (superseded by the 2026-09-24
+addendum).
 
 The final tool-installation revision removes the last source-build exception.
 `mdtablefix` now follows the same trusted-binary policy as the other CI tools,

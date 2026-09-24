@@ -22,9 +22,10 @@ name: Coverage (main)
 # `--workspace` build (eleven crates are excluded from CI test runs and the
 # dylint UI tests need per-target RUSTFLAGS).
 #
-# This is the only Whitaker job that runs automatically on the trusted
-# branch, so it is the writer for every coverage-lane cache key. `ci.yml`'s
-# `coverage-check` restores those keys and never saves.
+# This job is the writer for every coverage-lane cache key and for the
+# instrumented compiler-cache shape. `ci.yml`'s `coverage-check` restores
+# those keys and never saves. `ci.yml`'s `linux-full` also runs on push to
+# `main`, as the writer for the lint lane's keys and shapes.
 
 on:
   push:
@@ -38,6 +39,13 @@ env:
   BUILD_PROFILE: debug
   CARGO_INCREMENTAL: 0
   CARGO_TERM_COLOR: always
+  # Keep in step with ci.yml, whose `coverage-check` this job writes for. The
+  # `make` recipes set RUSTFLAGS themselves, but `make test-doc` takes
+  # RUSTDOCFLAGS from here, so without it `main`'s doctests would tolerate
+  # warnings a pull request's reject. `trunk_writer_environment_contract_test`
+  # holds the two alike.
+  RUSTFLAGS: -D warnings
+  RUSTDOCFLAGS: -D warnings
   # Keep in step with ci.yml: one named constant for the Ubicloud shape.
   LINUX_RUNNER_VCPUS: '2'
   # One-line switch between the Actions cache backend and a cached local
