@@ -8,7 +8,8 @@ Whitaker itself. For using Whitaker lints in a project, see the
 
 - Rust nightly toolchain (version specified in `rust-toolchain.toml`)
 - `jq` for extracting package metadata in release dry runs
-- Python 3 for workflow tests and release checksum generation
+- Python 3.12 or newer for workflow tests, release checks, and safe extraction
+  in `installer-msrv-check`
 - `cargo-dylint` and `dylint-link` installed:
 
   ```sh
@@ -33,11 +34,18 @@ dependencies, or packaging:
 make installer-msrv-check
 ```
 
-The target packages `whitaker-installer` into an isolated temporary target
-directory, extracts the resulting `.crate`, then uses Rust 1.85 to install that
-package with `--locked` into a temporary root and run `--version`. It removes
-the temporary directory on exit. This checks the published package boundary; do
-not replace it with a workspace-path installation.
+The target copies the workspace into an ignored `target/` scratch directory,
+packages `whitaker-common` there, and uses a command-scoped Cargo patch to
+verify and install the packaged `whitaker-installer` with Rust 1.85. It
+extracts the installer outside both source and copied workspaces, checks that
+the normalized archive manifest contains only the registry version of
+`whitaker-common`, and runs the installed binary's `--version`. The scratch
+lockfile and patch are removed on exit; neither changes source manifests or
+enters the published archive. This keeps a lockstep version-bump pull request
+green before the common crate exists on crates.io while retaining a real
+packaged-source build. The script `scripts/check_installer_msrv.py` owns only
+this MSRV check; other release and registry publication checks remain in their
+existing targets.
 
 ### Linux release compatibility
 

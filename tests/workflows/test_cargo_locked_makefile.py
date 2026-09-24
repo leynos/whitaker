@@ -93,24 +93,10 @@ def test_recipe_cargo_calls_thread_cargo_locked(target: str) -> None:
 
 
 def test_installer_msrv_recipe_installs_the_packaged_crate() -> None:
-    """Require the MSRV target to install the packaged crate in an isolated root."""
+    """Require the MSRV target to call the checked staged-package gate."""
     recipe = "\n".join(_makefile_recipe_lines("installer-msrv-check"))
 
-    assert "$(CARGO) +1.85.0 package --locked -p whitaker-installer --allow-dirty" in recipe, (
-        "MSRV target must create the publishable installer crate"
-    )
-    assert "tar -xzf \"$$PACKAGE_ARCHIVE\" -C \"$$PACKAGE_SOURCE_DIR\"" in recipe, (
-        "MSRV target must extract the packaged crate before installing it"
-    )
-    assert "$(CARGO) +1.85.0 install --locked --path \"$$PACKAGE_ROOT\" --root" in recipe, (
-        "MSRV target must install the packaged crate with locked Rust 1.85.0 dependencies"
-    )
-    assert '"$$TMP_DIR/bin/whitaker-installer" --version' in recipe, (
-        "MSRV target must check the installed binary"
-    )
-    assert "rm -rf -- \"$$TMP_DIR\"" in recipe, (
-        "MSRV target must clean up its temporary root"
-    )
+    assert 'CARGO="$(CARGO)" python3 scripts/check_installer_msrv.py' in recipe
 
 
 def _write_stub(directory: Path, name: str, body: str) -> Path:
@@ -146,43 +132,6 @@ done
 touch "$output_dir/whitaker-installer.tgz"
 EOF
     chmod 755 "target/$target/release/whitaker-package-installer"
-    ;;
-esac''',
-    )
-
-
-def _write_msrv_check_cargo_stub(directory: Path) -> Path:
-    """Write a Cargo stand-in that packages and installs a minimal crate archive."""
-    return _write_stub(
-        directory,
-        "cargo",
-        '''echo "$@" >> "$CARGO_LOCKED_LOG"
-if [ "$1" = "+1.85.0" ]; then shift; fi
-case "$1" in
-package)
-    package_source="$CARGO_TARGET_DIR/package-source/whitaker-installer-0.2.5"
-    mkdir -p "$package_source" "$CARGO_TARGET_DIR/package"
-    printf '[package]\nname = "whitaker-installer"\nversion = "0.2.5"\n' \
-        > "$package_source/Cargo.toml"
-    tar -czf "$CARGO_TARGET_DIR/package/whitaker-installer-0.2.5.crate" \\
-        -C "${package_source%/*}" "${package_source##*/}"
-    ;;
-install)
-    root=""
-    path=""
-    previous=""
-    for argument in "$@"; do
-        if [ "$previous" = "--root" ]; then root="$argument"; fi
-        if [ "$previous" = "--path" ]; then path="$argument"; fi
-        previous="$argument"
-    done
-    test -f "$path/Cargo.toml"
-    grep -qx 'name = "whitaker-installer"' "$path/Cargo.toml"
-    mkdir -p "$root/bin"
-    printf '%s\\n' "$path" > "$root/.installed-from-packaged-crate"
-    printf '#!/bin/sh\\ntest -f "$(dirname "$0")/../.installed-from-packaged-crate"\\n' \
-        > "$root/bin/whitaker-installer"
-    chmod 755 "$root/bin/whitaker-installer"
     ;;
 esac''',
     )
@@ -235,6 +184,10 @@ def _run_make(
     # are inert for the other targets.
     shutil.copy2(REPO_ROOT / "rust-toolchain.toml", workspace / "rust-toolchain.toml")
     _write_stub(scripts_directory, "install-dylint-tools.sh", "exit 0")
+    if target == "lint":
+        # This contract tests Cargo flags, not the skill-manifest tools that
+        # now precede Clippy in the lint target.
+        _write_stub(environment.stub_dir, "uv", "exit 0")
 
     log = environment.stub_dir / f"{target}-{environment.locked or 'unlocked'}.log"
     process_env = os.environ | {
@@ -262,34 +215,6 @@ def _run_make(
         f"stdout: {result.stdout}\nstderr: {result.stderr}"
     )
     return log.read_text(encoding="utf-8").splitlines()
-
-
-def test_installer_msrv_check_runs_the_packaged_crate(tmp_path: Path) -> None:
-    """Run the MSRV target through packaging, installation, and binary verification."""
-    stub_dir = tmp_path / "bin"
-    stub_dir.mkdir()
-    cargo = _write_msrv_check_cargo_stub(stub_dir)
-
-    recorded = _run_make(
-        "installer-msrv-check",
-        MakeRunEnvironment(cargo=cargo, locked="", stub_dir=stub_dir),
-    )
-
-    assert recorded[0] == "+1.85.0 package --locked -p whitaker-installer --allow-dirty", (
-        f"MSRV target must package the installer before installing it: {recorded!r}"
-    )
-    assert len(recorded) == 2, (
-        f"MSRV target must run exactly package and install Cargo calls: {recorded!r}"
-    )
-    assert recorded[1].startswith("+1.85.0 install --locked --path "), (
-        f"MSRV target must install the extracted packaged crate: {recorded!r}"
-    )
-    assert "/package-source/whitaker-installer-0.2.5" in recorded[1], (
-        f"MSRV target must install the extracted archive source: {recorded!r}"
-    )
-    assert " --root " in recorded[1], (
-        f"MSRV target must install into an isolated root: {recorded!r}"
-    )
 
 
 def _write_tool_stubs(stub_dir: Path) -> None:
@@ -416,6 +341,38 @@ def test_publish_check_forwards_cargo_locked_to_every_invocation(
         assert _has_locked_flag(line) == bool(locked), (
             f"publish-check must use {locked or 'unlocked'} mode; invocation: {line!r}"
         )
+
+
+def test_publish_check_uses_staged_installer_gate(tmp_path: Path) -> None:
+    """Route installer packaging through the same checked MSRV boundary."""
+    stub_dir = tmp_path / "bin"
+    stub_dir.mkdir()
+    cargo = _write_publish_check_cargo_stub(stub_dir)
+    _write_tool_stubs(stub_dir)
+    _write_stub(
+        stub_dir,
+        "python3",
+        'printf "python3:%s:CARGO=%s\\n" "$*" "$CARGO" >> "$CARGO_LOCKED_LOG"',
+    )
+
+    recorded = _run_make(
+        "publish-check",
+        MakeRunEnvironment(cargo=cargo, locked="", stub_dir=stub_dir),
+        extra_make_args=[
+            "LINT_CRATES=bumpy_road_function",
+            "PUBLISH_PACKAGES=whitaker-installer",
+        ],
+    )
+
+    script_call = (
+        "python3:scripts/check_installer_msrv.py:"
+        f"CARGO={cargo}"
+    )
+    assert script_call in recorded, recorded
+    assert not any(
+        "package" in line and "-p whitaker-installer" in line
+        for line in recorded
+    ), recorded
 
 
 @pytest.fixture
