@@ -6,9 +6,10 @@ helper is declared. Splitting the source at each `#[test]` attribute instead
 credited a helper's call to whichever test happened to precede it and missed a
 test whose helper was declared above it.
 
-Bodies are found by balancing braces from each `fn` signature. String and
-character literals are blanked first so a brace inside one does not unbalance
-the count; comments are blanked for the same reason.
+Bodies are found by balancing braces from each `fn` signature. String
+literals, raw strings included, and character literals are blanked first so a
+brace inside one does not unbalance the count; comments are blanked for the
+same reason.
 
 Run via ``make test-workflow-contracts``.
 """
@@ -27,8 +28,15 @@ _SIGNATURE: typ.Final[re.Pattern[str]] = re.compile(
 )
 
 #: Comments and literals, which may hold braces that are not code.
+#:
+#: Raw strings come first. `r#"fn f() { let s = "{"; }"#` holds bare
+#: quotes, so the ordinary-string alternative would end at the first inner
+#: one and leave the brace between them to unbalance the count; a raw
+#: string instead ends only at a quote followed by as many hashes as it
+#: opened with.
 _NOT_CODE: typ.Final[re.Pattern[str]] = re.compile(
-    r"//[^\n]*|/\*.*?\*/|\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])'",
+    r"\bb?r(?P<hashes>#*)\".*?\"(?P=hashes)"
+    r"|//[^\n]*|/\*.*?\*/|\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])'",
     re.DOTALL,
 )
 
@@ -92,7 +100,9 @@ def _calls(body: str, name: str) -> bool:
 
 def _drivers(found: list[Function]) -> set[str]:
     """Return every function that drives `trybuild`, directly or through a call."""
-    drivers = {function.name for function in found if TRYBUILD_CALL.search(function.body)}
+    drivers = {
+        function.name for function in found if TRYBUILD_CALL.search(function.body)
+    }
     grown = True
     while grown:
         added = {

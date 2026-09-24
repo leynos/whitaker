@@ -328,7 +328,9 @@ def test_the_digit_join_removes_only_what_the_pattern_tolerated() -> None:
         "that a pattern which let one through refuses the duration "
         "rather than silently reading a different number"
     )
-    assert _digits("1 0") == "10"
+    assert _digits("1 0") == "10", (
+        "an ASCII space is whitespace and must be removed from the digits"
+    )
     assert _digits("1\u20080") == "10", (
         "a Unicode space humantime skips must be removed like any other"
     )
@@ -395,8 +397,12 @@ def test_the_display_helper_is_the_lossy_one_on_purpose() -> None:
     rather than receiving it by default, which is how the float got into
     the comparisons in the first place.
     """
-    assert display_seconds("45m") == 2700.0
-    assert isinstance(display_seconds("45m"), float)
+    assert display_seconds("45m") == 2700.0, (
+        "the display helper must still convert the duration it is given"
+    )
+    assert isinstance(display_seconds("45m"), float), (
+        "the display helper returns a float, which is what makes it lossy"
+    )
     assert display_seconds("18446744073709551614s") == display_seconds(
         "18446744073709551615s"
     ), "the display helper is lossy, which is why it is not the comparison"

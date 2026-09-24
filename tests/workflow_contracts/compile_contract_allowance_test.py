@@ -64,21 +64,33 @@ def rust_source_texts(
         If the root is not a directory, or a source cannot be read or is
         not UTF-8.
     """
-    # `rglob` yields nothing for a missing root, which would read as a
+    # A walk yields nothing for a missing root, which would read as a
     # tree without compile contracts rather than as no tree at all.
     if not root.is_dir():
         message = f"{root} is not a directory, so no Rust source was read"
         raise RustSourceError(message)
     texts: dict[pathlib.Path, str] = {}
-    for path in sorted(root.rglob("*.rs")):
-        if "target" in path.parts or path.name.startswith("."):
-            continue
-        try:
-            texts[path] = path.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError) as error:
-            message = f"cannot read the Rust source {path}: {error}"
-            raise RustSourceError(message) from error
-    return texts
+    for directory, dirnames, filenames in root.walk():
+        # Pruned in place, so the walk never enters build output or a
+        # hidden directory, and judged by the directory's own name, so a
+        # checkout that itself sits under a `target` directory is read.
+        dirnames[:] = [
+            name for name in dirnames if name != "target" and not name.startswith(".")
+        ]
+        for name in filenames:
+            if name.endswith(".rs") and not name.startswith("."):
+                path = directory / name
+                texts[path] = _read_rust_source(path)
+    return dict(sorted(texts.items()))
+
+
+def _read_rust_source(path: pathlib.Path) -> str:
+    """Return one Rust source's text, or raise `RustSourceError` naming it."""
+    try:
+        return path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as error:
+        message = f"cannot read the Rust source {path}: {error}"
+        raise RustSourceError(message) from error
 
 
 def _period(slow_timeout: object) -> str | None:

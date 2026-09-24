@@ -48,9 +48,10 @@ from timeout_budgets import (
 #: one of these is bound by both nextest tiers; a step running anything
 #: else is not, which is why the list is exact rather than a substring
 #: search for "test".
-from suite_commands import SUITE_COMMANDS, _disguised_suite_lines
+from suite_commands import SUITE_COMMANDS, _disguised_suite_lines, selected_profile
 from suite_lanes import (
     COVERAGE_ACTION,
+    _mapping,
     WATCHDOG_VARIABLE,
     _watchdog_offences,
     SuiteLane,
@@ -62,12 +63,12 @@ from suite_lanes import (
 
 @pytest.fixture(scope="module")
 def nextest_profiles() -> dict[str, Profile]:
-    """Return each nextest profile's text.
+    """Return each nextest profile, parsed.
 
     Returns
     -------
-    dict[str, str]
-        Profile name to its section and overrides.
+    dict[str, Profile]
+        Profile name to its parsed section and overrides.
     """
     return profiles(nextest_config_text())
 
@@ -178,10 +179,11 @@ def test_the_job_ceiling_covers_the_run_and_the_work_around_it(
     explained it.
     """
     for lane in suite_lanes:
-        # `make coverage` re-enters `make test` without a profile, so it
-        # runs under `default`; only an explicit `NEXTEST_PROFILE=ci` on
-        # the command line selects the other one.
-        profile = "ci" if "NEXTEST_PROFILE=ci" in lane.command else "default"
+        profile = selected_profile(lane.command)
+        assert profile in nextest_profiles, (
+            f"{lane} selects [profile.{profile}], which .config/nextest.toml "
+            f"does not declare, so no budget can be compared with its ceiling"
+        )
         parsed = nextest_profiles[profile]
         required = required_ceiling(parsed)
         assert lane.job_timeout is not None, str(lane)
@@ -321,9 +323,9 @@ def test_every_suite_lane_carries_the_documented_ceiling(
 
     The derivation asserts the ordering holds, and it holds for a range
     of ceilings, so a lane drifting to a value nobody chose still passes
-    it. This asserts the value the developers' guide states, which is
-    that requirement plus the fifteen minutes of slack the guide asks
-    for above it.
+    it. This asserts the 80 minutes the developers' guide pins: a policy
+    value above the derived requirement of 76 minutes 5 seconds, which
+    already carries the fifteen-minute margin.
     """
     wrong = {
         str(lane): lane.job_timeout
@@ -359,8 +361,8 @@ def test_no_step_disguises_a_suite_command() -> None:
     disguised = [
         f"{job.workflow}:{job.name}: {line!r}"
         for job in _declared_jobs(_workflow_documents())
-        for step in (job.body.get("steps") or [])
-        if isinstance(step, dict)
+        for raw_step in (job.body.get("steps") or [])
+        if (step := _mapping(raw_step)) is not None
         for line in _disguised_suite_lines(str(step.get("run", "")))
     ]
     assert not disguised, (

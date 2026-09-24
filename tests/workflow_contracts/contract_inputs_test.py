@@ -89,6 +89,24 @@ def test_build_output_and_hidden_files_are_not_sources(tmp_path: pathlib.Path) -
     )
 
 
+def test_a_checkout_under_a_target_directory_is_still_read(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Build output is pruned by its place in the tree, not in the path.
+
+    A checkout under any directory named `target` would otherwise read as
+    a tree with no sources at all, and a hidden directory's sources are
+    not the tree's own.
+    """
+    root = tmp_path / "target" / "checkout"
+    (root / ".hidden").mkdir(parents=True)
+    (root / ".hidden" / "cached.rs").write_text("fn a() {}\n", encoding="utf-8")
+    (root / "lib.rs").write_text("fn c() {}\n", encoding="utf-8")
+    assert rust_source_texts(root) == {root / "lib.rs": "fn c() {}\n"}, (
+        "the tree's own sources must be read wherever the tree sits"
+    )
+
+
 def test_the_discovery_attributes_each_call_to_its_own_test() -> None:
     """A query over the sources it is given, with no filesystem behind it.
 
@@ -155,3 +173,28 @@ def test_a_brace_in_a_literal_does_not_end_a_body() -> None:
     assert compile_contract_tests({pathlib.Path("t.rs"): source}) == {
         "quoted": pathlib.Path("t.rs")
     }, "a literal brace must not end the body"
+
+
+#: A raw string holding Rust source with bare quotes and an unmatched brace,
+#: then a test that drives `trybuild`. An ordinary-string reading ends the
+#: literal at the first inner quote and leaves the `{` as code, so the first
+#: test's body runs past its end and swallows the second.
+_RAW_STRING_THEN_CONTRACT = (
+    "#[test]\n"
+    "fn embeds_source() {\n"
+    '    let s = r#"fn f() { let t = "{"; "#;\n'
+    "    assert!(!s.is_empty());\n"
+    "}\n\n"
+    "#[test]\n"
+    "fn compiles() {\n"
+    "    trybuild::TestCases::new();\n"
+    "}\n"
+)
+
+
+def test_a_raw_string_does_not_hide_a_later_contract() -> None:
+    """A test after a raw string holding a brace and quotes is still found."""
+    path = pathlib.Path("t.rs")
+    assert compile_contract_tests({path: _RAW_STRING_THEN_CONTRACT}) == {
+        "compiles": path
+    }, "the raw string must be blanked whole, so the later test is found alone"

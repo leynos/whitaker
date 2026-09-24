@@ -18,6 +18,7 @@ arguments decide which budgets the lane runs under.
 
 from __future__ import annotations
 
+import re
 import typing as typ
 
 SUITE_COMMANDS: typ.Final[tuple[str, ...]] = ("make test", "make coverage")
@@ -44,14 +45,43 @@ NOT_SUITE_COMMANDS: typ.Final[tuple[str, ...]] = (
 #: would drop the lane from this contract silently, taking its ceiling
 #: with it. `make test || true` does run the suite but discards its
 #: verdict, so the lane's budgets are checked while its result is not.
+#: `make test &` backgrounds the suite, so the step's status never waits
+#: on its verdict; `&` also covers `&&`. It covers a redirection such as
+#: `2>&1` as well, which errs towards refusing a line rather than judging
+#: one that might discard the verdict.
 DISGUISES: typ.Final[tuple[str, ...]] = (
     "|| true",
     "|| :",
     "if ",
-    "&&",
+    "&",
     ";",
     "|",
 )
+
+#: A profile selection on a suite command line, with its value.
+_PROFILE_SELECTION: typ.Final[re.Pattern[str]] = re.compile(
+    r"(?:^|\s)NEXTEST_PROFILE=(?P<value>\S+)"
+)
+
+
+def selected_profile(command: str) -> str:
+    """Return the nextest profile a suite command line selects.
+
+    The value is read whole rather than tested for a prefix, so
+    `NEXTEST_PROFILE=ci-long` is not taken for `ci` and an undeclared
+    profile arrives under its own name for the caller to refuse. Make
+    honours the last assignment, so the last one is read. A line naming
+    none runs under `default`, which is what `make coverage` re-entering
+    `make test` without a profile does.
+
+    >>> selected_profile("make test NEXTEST_PROFILE=ci-long")
+    'ci-long'
+    >>> selected_profile("make coverage")
+    'default'
+    """
+    values = [match["value"] for match in _PROFILE_SELECTION.finditer(command)]
+    return values[-1].strip("'\"") if values else "default"
+
 
 def _logical_lines(run: str) -> list[str]:
     """Return a script's lines, with backslash continuations folded in."""

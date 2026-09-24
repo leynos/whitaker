@@ -17,7 +17,7 @@ off.
 import fractions
 
 import pytest
-from suite_commands import _disguised_suite_lines, _suite_commands
+from suite_commands import _disguised_suite_lines, _suite_commands, selected_profile
 from timeout_budgets import (
     NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS,
     Profile,
@@ -288,6 +288,7 @@ def test_every_suite_command_in_a_step_becomes_a_lane(
             ["make test || true"],
             id="a-verdict-discarded",
         ),
+        pytest.param("make test &", ["make test &"], id="a-backgrounded-suite"),
         pytest.param("make test-doc", [], id="a-plain-non-suite-command"),
         pytest.param(
             "make test-doc --nocapture",
@@ -313,3 +314,29 @@ def test_a_line_naming_the_suite_without_plainly_running_it_is_reported(
         f"cannot judge is neither a lane nor safely ignored"
     )
 
+
+@pytest.mark.parametrize(
+    ("command", "expected"),
+    [
+        pytest.param("make test NEXTEST_PROFILE=ci", "ci", id="ci"),
+        pytest.param(
+            "make test NEXTEST_PROFILE=ci-long", "ci-long", id="a-longer-name"
+        ),
+        pytest.param("NEXTEST_PROFILE='coverage' make test", "coverage", id="quoted"),
+        pytest.param(
+            "make test NEXTEST_PROFILE=ci NEXTEST_PROFILE=default",
+            "default",
+            id="the-last-assignment",
+        ),
+        pytest.param("make coverage", "default", id="none-named"),
+    ],
+)
+def test_the_selected_profile_is_read_whole(command: str, expected: str) -> None:
+    """A profile is its whole value, so a prefix of one is not another.
+
+    A substring test read `ci-long` as `ci` and any other profile as
+    `default`, comparing the lane with budgets it does not run under.
+    """
+    assert selected_profile(command) == expected, (
+        f"{command!r} selects [profile.{expected}]"
+    )

@@ -3518,20 +3518,23 @@ timeouts. That allowance is seconds rather than minutes, but it is not zero,
 and the contract reads it from the configuration so a profile that raised it
 raises the requirement too.
 
-So the ceiling is sized as the whole-run budget, plus the five-second grace
-period, plus a minute of margin, plus the build and the steps either side of
-the suite: 45 m + 5 s + 1 m + 15 m, which is a little over 61 minutes.
+So the requirement is the whole-run budget, plus the five-second grace period
+and a minute of margin for nextest to terminate the run, plus fifteen minutes
+for the build and the steps either side of the suite, plus a fifteen-minute
+margin above that sum. The margin is there because a ceiling equal to the sum
+it contains cancels the job at the moment the innermost timer would have
+reported the overrun, and the report is the only thing that makes an overrun
+actionable. That is 45 m + 65 s + 15 m + 15 m, or 76 minutes 5 seconds, which
+`required_ceiling` computes for both profiles.
 
-The ceiling is not that requirement. Every lane carries at least fifteen
-minutes above it, because a ceiling equal to the sum it contains cancels the
-job at the moment the innermost timer would have reported the overrun, and the
-report is the only thing that makes an overrun actionable. The ceiling is
-therefore 80.
+The ceiling is not that requirement. It is pinned separately at 80 minutes, a
+policy value above it: the derivation accepts any ceiling at or above the
+requirement, so the value is pinned as well, to stop a lane drifting to a
+number nobody chose.
 
-This section first said 70, which is 8.9 minutes above the requirement. That
-number was chosen before the fifteen-minute margin was written down, and it
-does not satisfy the rule this guide now states, so it has been corrected
-rather than kept as a special case.
+This section first said 70, which is below the requirement once the
+fifteen-minute margin is counted. That number was chosen before the margin was
+written down, so it has been corrected rather than kept as a special case.
 
 ### What the values are sized against
 
@@ -3743,7 +3746,9 @@ longer happens and a test being killed without it.
 
 It compares each job's ceiling against the profile that lane actually runs.
 `make coverage` re-enters `make test` without a profile, so it runs under
-`default`; only the Windows lane passes `NEXTEST_PROFILE=ci`.
+`default`; only the Windows lane passes `NEXTEST_PROFILE=ci`. The value is read
+whole, so `NEXTEST_PROFILE=ci-long` is not taken for `ci`, and a lane selecting
+a profile `.config/nextest.toml` does not declare fails the contract.
 
 That reading is complete only while the variable is never set another way, so
 `nextest_profile_test.py` sweeps all three `env` scopes, workflow, job and
