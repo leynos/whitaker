@@ -736,9 +736,9 @@ of 1,077 hits and 29m07s against 11 to 14 minutes warm, because nothing on
 - The sccache health check also fails when write errors exceed 10% of store
   attempts, or lookup timeouts exceed 10% of reads. The measured healthy rate
   is about 0.1%.
-- `coverage-check` and `coverage-upload` are limited to 60 minutes, sized from
-  the cold runs (38m45s end to end, and 35m54s in `Generate coverage` before
-  cancellation at the old 40-minute limit), and a contract asserts the value.
+- The cold coverage runs (38m45s end to end, and 35m54s in `Generate coverage`
+  before cancellation at the old 40-minute limit) are recorded against the
+  80-minute suite ceiling that #421 set on both coverage lanes.
 
 "Who writes the compiler cache" and "Coverage lane time limits" in the
 developers' guide carry the figures.

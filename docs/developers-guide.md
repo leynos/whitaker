@@ -994,10 +994,12 @@ worker count rather than `-n auto`.
 
 #### Coverage lane time limits
 
-`coverage-check` and `coverage-upload` are limited to 60 minutes, and the limit
-is set by a cold compiler cache, not a warm one. A cold cache is not rare:
-every change to the pinned toolchain or to a compiler flag invalidates all of
-it, and so did the move to Ubicloud's cache proxy.
+`coverage-check` and `coverage-upload` run under the 80-minute ceiling that
+"Test timeouts: four tiers, outermost last" derives from the suite's budgets,
+and that section's contract pins it. The ceiling must also hold a cold compiler
+cache, not only a warm one. A cold cache is not rare: every change to the
+pinned toolchain or to a compiler flag invalidates all of it, and so did the
+move to Ubicloud's cache proxy.
 
 Table: Measured coverage-lane durations on `ubicloud-standard-2-ubuntu-2404`.
 
@@ -1013,14 +1015,12 @@ its cold run, and `coverage-upload`, which does more after the doctests (the
 CodeScene upload and three cache saves), could not finish cold at all. A
 cancelled writer keeps the compiler-cache entries it stored while it compiled,
 which is why the next trunk run was warm, but it loses its doctests, its
-CodeScene upload and its archive saves. Sixty minutes is about one and a half
-times the slowest cold job measured, leaves `coverage-upload` a quarter of an
-hour for its doctests, upload and saves after a cold `Generate coverage`, and
-matches `linux-full`'s limit. Re-measure the cold figure after a change that
-makes the suite materially larger, and keep the margin rather than the number.
-`tests/workflow_contracts/coverage_time_limit_contract_test.py` asserts the
-limit on both lanes exactly, as `COLD_RUN_TIME_LIMIT_MINUTES`, because a broad
-bound would still pass with the old 40 restored.
+CodeScene upload and its archive saves. The slowest cold job measured, 38m45s,
+sits well inside the 80-minute ceiling, which leaves `coverage-upload` more
+than half an hour after a cold `Generate coverage` for its doctests, upload and
+saves. Re-measure the cold figure after a change that makes the suite
+materially larger; if it approaches the ceiling, the tier derivation is where
+to raise it, not a per-lane value.
 
 #### Placement inside a matrix
 
@@ -3805,8 +3805,11 @@ condition that quietly excluded the event the lane exists for. The conditions
 are pinned by value rather than tested for falsity, because YAML parses `false`
 to a boolean and enumerating falsy spellings would miss the plausible ones
 anyway. `coverage-check` legitimately runs on pull requests only, because
-`coverage-main.yml` covers the trunk. The lane coordinates are compared both
-ways, so a lane appearing without an entry fails too.
+`coverage-main.yml` covers the trunk. `windows-compat` skips only the push to
+`main`, which `ci.yml` runs for `linux-full`'s compiler cache alone (see "Who
+writes the compiler cache"), and still runs on every pull request and dispatch.
+The lane coordinates are compared both ways, so a lane appearing without an
+entry fails too.
 
 It pins each override's whole entry, not its budget alone. An override that
 raises a per-test allowance and names no `test-group` leaves the tests it
