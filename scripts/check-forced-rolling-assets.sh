@@ -51,13 +51,31 @@ for target in "${targets[@]}"; do
         extension=zip
     fi
     while IFS=$'\t' read -r package _binary version; do
-        archive="$dist/${package}-${target}-v${version}.${extension}"
+        archive_name="${package}-${target}-v${version}.${extension}"
+        archive="$dist/$archive_name"
         checksum="${archive}.sha256"
         require_asset "$archive"
         require_asset "$checksum"
-        # Compare the entire line. `sha256sum --check` follows the filename
-        # inside a sidecar, which could name a different file than this archive.
-        if [[ "$(cat "$checksum")" != "$(sha256sum "$archive")" ]]; then
+        mapfile -t checksum_lines < "$checksum"
+        sidecar_line_count=${#checksum_lines[@]}
+        if [[ "$sidecar_line_count" -ne 1 ]]; then
+            echo "::error::Checksum or filename does not match $archive." >&2
+            exit 1
+        fi
+
+        sidecar_digest=${checksum_lines[0]:0:64}
+        sidecar_separator=${checksum_lines[0]:64:2}
+        sidecar_path=${checksum_lines[0]:66}
+        expected_sidecar_path="dist/$archive_name"
+        actual_digest=$(sha256sum "$archive")
+        actual_digest=${actual_digest%% *}
+        sidecar_digest=${sidecar_digest,,}
+        # The sidecar chooses only GNU's text or binary marker. Its path must
+        # still name this release archive rather than another downloaded file.
+        if [[ ! "$sidecar_digest" =~ ^[[:xdigit:]]{64}$ ||
+              ( "$sidecar_separator" != '  ' && "$sidecar_separator" != ' *' ) ||
+              "$sidecar_path" != "$expected_sidecar_path" ||
+              "$sidecar_digest" != "$actual_digest" ]]; then
             echo "::error::Checksum or filename does not match $archive." >&2
             exit 1
         fi

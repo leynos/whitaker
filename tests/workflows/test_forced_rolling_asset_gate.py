@@ -39,6 +39,18 @@ def _dependencies() -> tuple[tuple[str, str], ...]:
     )
 
 
+ASSET_REMOVAL_CASES = (
+    *(("lint", target, None, None) for target in TARGETS),
+    *(("manifest", target, None, None) for target in TARGETS),
+    *(
+        (kind, target, package, version)
+        for target in TARGETS
+        for package, version in _dependencies()
+        for kind in ("archive", "checksum")
+    ),
+)
+
+
 def _run_gate(dist: Path, **overrides: str) -> subprocess.CompletedProcess[str]:
     """Run the real prepublication gate with controlled workflow inputs."""
     environment = os.environ.copy()
@@ -79,7 +91,7 @@ def complete_dist(tmp_path: Path) -> Path:
             archive.write_bytes(content)
             digest = hashlib.sha256(content).hexdigest()
             (dist / f"{archive.name}.sha256").write_text(
-                f"{digest}  {archive}\n", encoding="utf-8"
+                f"{digest}  dist/{archive.name}\n", encoding="utf-8"
             )
     return dist
 
@@ -90,32 +102,79 @@ def test_complete_forced_rebuild_passes(complete_dist: Path) -> None:
     assert result.returncode == 0, result.stderr
 
 
+def test_binary_checksum_marker_passes(complete_dist: Path) -> None:
+    """The Windows binary checksum marker approves its matching archive."""
+    package, version = _dependencies()[0]
+    archive = complete_dist / f"{package}-x86_64-pc-windows-msvc-v{version}.zip"
+    digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+    (complete_dist / f"{archive.name}.sha256").write_text(
+        f"{digest.upper()} *dist/{archive.name}\n", encoding="utf-8"
+    )
+    result = _run_gate(complete_dist)
+    assert result.returncode == 0, result.stderr
+
+
 @pytest.mark.parametrize("failed_matrix", ["LINT_BUILD_RESULT", "DEPENDENCY_BUILD_RESULT"])
 def test_failed_matrix_blocks_forced_publication(
     complete_dist: Path, failed_matrix: str
 ) -> None:
     """Either failed matrix prevents mutation even with complete artefacts."""
     result = _run_gate(complete_dist, **{failed_matrix: "failure"})
-    assert result.returncode != 0
-    assert "requires both complete build matrices" in result.stderr
+    assert result.returncode != 0, (
+        f"{failed_matrix} failure must block forced publication:\n{result.stderr}"
+    )
+    assert "requires both complete build matrices" in result.stderr, (
+        "the gate must identify an incomplete build matrix"
+    )
 
 
-@pytest.mark.parametrize("missing_kind", ["manifest", "archive", "checksum"])
+@pytest.mark.parametrize(
+    "case", ASSET_REMOVAL_CASES
+)
 def test_missing_forced_asset_blocks_publication(
-    complete_dist: Path, missing_kind: str
+    complete_dist: Path,
+    case: tuple[str, str, str | None, str | None],
 ) -> None:
-    """Missing lint metadata, dependency archive, or checksum each fail."""
-    package, version = _dependencies()[0]
-    archive = f"{package}-x86_64-unknown-linux-gnu-v{version}.tgz"
-    missing_name = {
-        "manifest": "manifest-x86_64-unknown-linux-gnu.json",
-        "archive": archive,
-        "checksum": f"{archive}.sha256",
-    }[missing_kind]
-    (complete_dist / missing_name).unlink()
+    """Every required target and dependency asset blocks forced publication."""
+    missing_kind, target, package, version = case
+    if missing_kind == "lint":
+        missing_path = next(complete_dist.glob(f"whitaker-lints-*-{target}.tar.zst"))
+    elif missing_kind == "manifest":
+        missing_path = complete_dist / f"manifest-{target}.json"
+    else:
+        assert package is not None and version is not None, (
+            "dependency asset cases require a package and version"
+        )
+        extension = "zip" if "windows" in target else "tgz"
+        archive_name = f"{package}-{target}-v{version}.{extension}"
+        if missing_kind == "archive":
+            missing_path = complete_dist / archive_name
+        else:
+            missing_path = complete_dist / f"{archive_name}.sha256"
+
+    missing_name = missing_path.name
+    missing_path.unlink()
     result = _run_gate(complete_dist)
-    assert result.returncode != 0
-    assert missing_name in result.stderr
+    assert result.returncode != 0, (
+        f"missing {missing_name} must block forced publication:\n{result.stderr}"
+    )
+    assert missing_name in result.stderr, (
+        "the gate must identify the missing asset"
+    )
+
+
+@pytest.mark.parametrize("target", TARGETS)
+def test_empty_lint_archive_blocks_forced_publication(
+    complete_dist: Path, target: str
+) -> None:
+    """An empty lint archive is not a complete forced-rebuild output."""
+    lint_archive = next(complete_dist.glob(f"whitaker-lints-*-{target}.tar.zst"))
+    lint_archive.write_bytes(b"")
+    result = _run_gate(complete_dist)
+    assert result.returncode != 0, (
+        f"empty {lint_archive.name} must block forced publication:\n{result.stderr}"
+    )
+    assert lint_archive.name in result.stderr, "the gate must identify the empty asset"
 
 
 def test_wrong_checksum_blocks_forced_publication(complete_dist: Path) -> None:
@@ -124,29 +183,58 @@ def test_wrong_checksum_blocks_forced_publication(complete_dist: Path) -> None:
     archive = complete_dist / f"{package}-x86_64-unknown-linux-gnu-v{version}.tgz"
     archive.write_bytes(b"changed")
     result = _run_gate(complete_dist)
-    assert result.returncode != 0
-    assert "Checksum or filename does not match" in result.stderr
+    assert result.returncode != 0, (
+        f"a mismatched checksum must block forced publication:\n{result.stderr}"
+    )
+    assert "Checksum or filename does not match" in result.stderr, (
+        "the gate must identify a mismatched checksum"
+    )
 
 
-def test_sidecar_cannot_verify_a_different_file(complete_dist: Path) -> None:
-    """A matching digest for another file does not approve the archive."""
+@pytest.mark.parametrize(
+    "sidecar_case", ["different_path", "malformed", "trailing_content"]
+)
+def test_invalid_sidecar_blocks_forced_publication(
+    complete_dist: Path, sidecar_case: str
+) -> None:
+    """A sidecar must be one GNU record for the expected archive path."""
     package, version = _dependencies()[0]
     archive = complete_dist / f"{package}-x86_64-unknown-linux-gnu-v{version}.tgz"
-    other = complete_dist / "unrelated"
-    other.write_bytes(b"unrelated")
-    digest = hashlib.sha256(other.read_bytes()).hexdigest()
+    digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+    if sidecar_case == "different_path":
+        other = complete_dist / "unrelated"
+        other.write_bytes(b"unrelated")
+        other_digest = hashlib.sha256(other.read_bytes()).hexdigest()
+        sidecar_contents = f"{other_digest}  dist/{other.name}\n"
+    elif sidecar_case == "malformed":
+        sidecar_contents = f"{digest} dist/{archive.name}\n"
+    else:
+        sidecar_contents = f"{digest}  dist/{archive.name}\nunexpected\n"
     (complete_dist / f"{archive.name}.sha256").write_text(
-        f"{digest}  {other}\n", encoding="utf-8"
+        sidecar_contents, encoding="utf-8"
     )
     result = _run_gate(complete_dist)
-    assert result.returncode != 0
-    assert archive.name in result.stderr
+    assert result.returncode != 0, (
+        f"a {sidecar_case} sidecar must block publication:\n{result.stderr}"
+    )
+    assert archive.name in result.stderr, "the gate must identify the expected archive"
 
 
 def test_push_keeps_partial_publication_policy(tmp_path: Path) -> None:
     """The push path does not demand complete forced-rebuild artefacts."""
     result = _run_gate(
         tmp_path / "missing", GITHUB_EVENT_NAME="push", LINT_BUILD_RESULT="failure"
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_unforced_dispatch_keeps_partial_publication_policy(tmp_path: Path) -> None:
+    """An unforced manual republish does not require complete rebuild outputs."""
+    result = _run_gate(
+        tmp_path / "missing",
+        FORCE_DEPENDENCY_BINARY_REBUILD="false",
+        LINT_BUILD_RESULT="failure",
+        DEPENDENCY_BUILD_RESULT="failure",
     )
     assert result.returncode == 0, result.stderr
 
@@ -158,18 +246,30 @@ def test_workflow_runs_gate_before_publisher(workflow_text: str) -> None:
     steps = publish["steps"]
     gate = _find_step_by_name(steps, "Check forced rebuild before publication")
     publisher = _find_step_by_name(steps, "Republish the rolling release in place")
-    assert gate is not None and publisher is not None
-    assert steps.index(gate) < steps.index(publisher)
-    assert gate["run"] == "bash scripts/check-forced-rolling-assets.sh"
-    assert gate["env"]["LINT_BUILD_RESULT"] == "${{ needs.build-lints.result }}"
-    assert gate["env"]["DEPENDENCY_BUILD_RESULT"] == "${{ needs.build-dependency-binaries.result }}"
+    assert gate is not None and publisher is not None, (
+        "publish must include the forced-rebuild gate and release step"
+    )
+    assert steps.index(gate) < steps.index(publisher), (
+        "the forced-rebuild gate must run before the publisher"
+    )
+    assert gate["run"] == "bash scripts/check-forced-rolling-assets.sh", (
+        "the workflow must invoke the forced-rebuild gate script"
+    )
+    assert gate["env"]["LINT_BUILD_RESULT"] == "${{ needs.build-lints.result }}", (
+        "the gate must receive the lint matrix result"
+    )
+    assert gate["env"]["DEPENDENCY_BUILD_RESULT"] == "${{ needs.build-dependency-binaries.result }}", (
+        "the gate must receive the dependency matrix result"
+    )
     assert gate["env"]["FORCE_DEPENDENCY_BINARY_REBUILD"] == (
         "${{ github.event.inputs.force_dependency_binary_rebuild }}"
     )
     assert _github_expression_mentions_operand(
         publisher["if"], "steps.forced_rebuild.outcome"
+    ), "the publisher must depend on the forced-rebuild gate"
+    assert "steps.forced_rebuild.outcome == 'success'" in publisher["if"], (
+        "the publisher must require a successful forced-rebuild gate"
     )
-    assert "steps.forced_rebuild.outcome == 'success'" in publisher["if"]
 
 
 def test_gate_covers_both_workflow_matrices(workflow_text: str) -> None:
