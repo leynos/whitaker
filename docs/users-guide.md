@@ -183,6 +183,12 @@ target-specific `cargo-dylint` archive may be missing from one rolling release
 even though other target archives were updated successfully. Do not assume that
 every supported target is present in every rolling release.
 
+This best-effort policy applies to ordinary pushes and unforced manual runs. A
+forced manual dependency-binary rebuild is a recovery operation: it republishes
+only after both five-target build matrices and all required lint, manifest,
+dependency, and checksum assets pass validation. If that check fails, the
+existing `rolling` release remains unchanged.
+
 Stable releases differ from `rolling`: a stable tag is expected to contain the
 complete artefact set for the release. For production installs, pin to a stable
 release tag rather than consuming `rolling`.

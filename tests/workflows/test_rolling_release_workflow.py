@@ -192,12 +192,12 @@ def test_publish_job_runs_even_if_build_lints_fails(workflow_text: str) -> None:
     )
 
 
-def _assert_step_guard_gated_on_assets_only(
+def _assert_step_guard_gated_on_assets_and_recovery(
     steps: list,
     step_name: str,
     action: str,
 ) -> None:
-    """Assert a publish-step guard depends only on collected assets."""
+    """Assert publication needs assets and a successful recovery preflight."""
     step = _find_step_by_name(steps, step_name)
     assert step is not None, (
         f"publish job must include {step_name!r} before rolling release {action}"
@@ -223,6 +223,10 @@ def _assert_step_guard_gated_on_assets_only(
         guard,
         "steps.assets.outputs.has_assets",
     ), f"rolling release {action} must not compare has_assets to false"
+    assert _github_expression_mentions_operand(
+        guard,
+        "steps.forced_rebuild.outcome",
+    ), f"rolling release {action} must require the recovery preflight"
     assert not _github_expression_mentions_operand(
         guard,
         "needs.build-dependency-binaries.result",
@@ -247,7 +251,7 @@ def test_publish_release_does_not_require_full_dependency_matrix_success(
         "publication waits for all successful dependency artefacts to be "
         "collected"
     )
-    _assert_step_guard_gated_on_assets_only(
+    _assert_step_guard_gated_on_assets_and_recovery(
         publish_job.get("steps"),
         "Republish the rolling release in place",
         "republish",
@@ -293,12 +297,12 @@ def test_the_publish_step_never_destroys_the_release(
     )
 
 
-def test_the_publish_step_is_gated_on_assets_only(workflow_text: str) -> None:
-    """The republish must run whenever assets exist, whatever else failed."""
+def test_the_publish_step_requires_assets_and_recovery_gate(workflow_text: str) -> None:
+    """Republishing needs assets and the forced-recovery preflight."""
     workflow_mapping = _load_workflow_mapping(workflow_text)
     jobs = _get_job_dict(workflow_mapping, "jobs")
     publish_job = _get_job_dict(jobs, "publish")
-    _assert_step_guard_gated_on_assets_only(
+    _assert_step_guard_gated_on_assets_and_recovery(
         publish_job.get("steps"), "Republish the rolling release in place", "republish"
     )
 
