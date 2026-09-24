@@ -45,7 +45,9 @@ enters the published archive. This keeps a lockstep version-bump pull request
 green before the common crate exists on crates.io while retaining a real
 packaged-source build. The script `scripts/check_installer_msrv.py` owns only
 this MSRV check; other release and registry publication checks remain in their
-existing targets.
+existing targets. Within that script, the manifest validator owns its
+package-override and local-root predicates; they compose only for the packaged
+installer archive and must not validate source manifests or Cargo configuration.
 
 ### Linux release compatibility
 

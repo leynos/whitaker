@@ -47,6 +47,7 @@ def test_registry_only_common_requirement_passes(tmp_path: Path) -> None:
     [
         ('version = "0.2.8"', ""),
         ('version = "0.2.9"\npath = "../common"', ""),
+        ('version = "0.2.9"\ngit = "https://example.invalid/common.git"', ""),
         (
             'version = "0.2.9"',
             '[patch.crates-io]\nwhitaker-common = { path = "../common" }\n',
@@ -56,7 +57,13 @@ def test_registry_only_common_requirement_passes(tmp_path: Path) -> None:
             '[replace]\n"whitaker-common:0.2.9" = { path = "../common" }\n',
         ),
     ],
-    ids=["wrong-version", "path-dependency", "patch-table", "replace-table"],
+    ids=[
+        "wrong-version",
+        "path-dependency",
+        "git-dependency",
+        "patch-table",
+        "replace-table",
+    ],
 )
 def test_local_override_or_wrong_version_fails(
     tmp_path: Path, dependency: str, addition: str

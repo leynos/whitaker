@@ -22,6 +22,16 @@ REPOSITORY = Path(__file__).resolve().parents[1]
 TOOLCHAIN = "+1.85.0"
 
 
+def _has_package_override(package: dict[str, object]) -> bool:
+    """Return whether package metadata declares a Cargo override table."""
+    return "patch" in package or "replace" in package
+
+
+def _contains_local_root(contents: str, roots: tuple[Path, ...]) -> bool:
+    """Return whether a manifest leaks an absolute local root."""
+    return any(str(root) in contents for root in roots)
+
+
 def _validate_packaged_manifest(manifest: Path, version: str, scratch: Path) -> None:
     """Reject a packaged installer whose common dependency leaks local policy.
 
@@ -37,12 +47,12 @@ def _validate_packaged_manifest(manifest: Path, version: str, scratch: Path) -> 
             "packaged whitaker-common dependency is not registry-only "
             f"{version}: {dependency!r}"
         )
+    if _has_package_override(package):
+        raise ValueError(
+            "packaged installer manifest contains a local dependency override"
+        )
     local_roots = (scratch, manifest.parent.parent)
-    if (
-        "patch" in package
-        or "replace" in package
-        or any(str(root) in contents for root in local_roots)
-    ):
+    if _contains_local_root(contents, local_roots):
         raise ValueError(
             "packaged installer manifest contains a local dependency override"
         )
