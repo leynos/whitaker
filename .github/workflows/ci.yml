@@ -336,8 +336,16 @@ jobs:
         with:
           toolchain: '1.85.0'
 
+      - name: Probe compiler statistics after toolchain setup
+        run: |
+          "$SCCACHE_PATH" --show-stats | grep -E '^(Compile requests|Cache hits|Cache misses|Cache write errors|Non-cacheable calls) ' || true
+
       - name: Installer MSRV check
         run: make installer-msrv-check
+
+      - name: Probe compiler statistics after the MSRV check
+        run: |
+          "$SCCACHE_PATH" --show-stats | grep -E '^(Compile requests|Cache hits|Cache misses|Cache write errors|Non-cacheable calls) ' || true
 
       - name: Install cargo-nextest
         uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
@@ -418,11 +426,23 @@ jobs:
       - name: Lint
         run: make lint
 
+      - name: Probe compiler statistics after lint
+        run: |
+          "$SCCACHE_PATH" --show-stats | grep -E '^(Compile requests|Cache hits|Cache misses|Cache write errors|Non-cacheable calls) ' || true
+
       - name: Workflow contract tests
         run: make test-workflow-contracts
 
+      - name: Probe compiler statistics after contracts
+        run: |
+          "$SCCACHE_PATH" --show-stats | grep -E '^(Compile requests|Cache hits|Cache misses|Cache write errors|Non-cacheable calls) ' || true
+
       - name: Publish dry run
         run: make publish-check PUBLISH_PACKAGES="whitaker-common whitaker-installer"
+
+      - name: Probe compiler statistics after the publish dry run
+        run: |
+          "$SCCACHE_PATH" --show-stats | grep -E '^(Compile requests|Cache hits|Cache misses|Cache write errors|Non-cacheable calls) ' || true
 
       - name: Discard the build target tree
         # The last consumer of `target` has run. No job caches a target tree,
