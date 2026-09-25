@@ -10,9 +10,10 @@ name: Coverage (main)
 # uploading coverage from main, and the upload step's ref test keeps a
 # dispatch from any other branch from uploading.
 #
-# No run here is cancelled: a cancelled run abandons its upload and the
-# cache state it writes. Runs queue on one group per ref instead (see the
-# concurrency block below), so they never overlap.
+# No in-progress run here is cancelled: a cancelled run abandons its upload
+# and the cache state it writes. Runs queue on one group per ref instead (see
+# the concurrency block below), so they never overlap; a newer trigger may
+# replace an older run that is still pending.
 #
 # Coverage is generated via `make coverage`, which reuses the `make test`
 # recipe (same crate-exclusion set and prefer-dynamic RUSTFLAGS) with a
