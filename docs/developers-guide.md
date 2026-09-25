@@ -33,11 +33,25 @@ dependencies, or packaging:
 make installer-msrv-check
 ```
 
-The target packages `whitaker-installer` into an isolated temporary target
+The target packages `whitaker-installer` into an isolated scratch target
 directory, extracts the resulting `.crate`, then uses Rust 1.85 to install that
-package with `--locked` into a temporary root and run `--version`. It removes
-the temporary directory on exit. This checks the published package boundary; do
-not replace it with a workspace-path installation.
+package with `--locked` into a scratch root and run `--version`. It clears the
+scratch directory before it starts and removes it on exit. This checks the
+published package boundary; do not replace it with a workspace-path
+installation.
+
+The scratch directory is `target/installer-msrv` (`INSTALLER_MSRV_DIR`), and
+`make publish-check` uses `target/publish-check` (`PUBLISH_CHECK_DIR`) in the
+same way. Both are fixed paths, not `mktemp` directories, because sccache keys
+a compilation on its absolute paths. When each run named a fresh directory,
+every compilation in these two targets missed on every run: a per-step probe of
+`linux-full` (run 36126452531) found 151 recurring Rust misses in the MSRV
+check and 189 in the publish check, all 340 that lane missed.
+`stable_build_dirs_contract_test` expands both recipes with `make -n` and
+refuses any scratch directory the shell would name afresh, or one outside the
+workspace's `target`. A consequence is that two concurrent runs of one of these
+targets in the same checkout would share a directory, so do not run them in
+parallel.
 
 ### Linux release compatibility
 
