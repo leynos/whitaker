@@ -23,8 +23,12 @@ import typing as typ
 MAIN_REF_CONJUNCT: typ.Final[str] = "github.ref == 'refs/heads/main'"
 
 #: The conjunct that skips the upload when the credential is absent, as it is
-#: on a fork or after a rotation, rather than failing the publisher run.
-CREDENTIAL_PRESENT_CONJUNCT: typ.Final[str] = "env.CS_ACCESS_TOKEN != ''"
+#: on a fork or after a rotation, rather than failing the publisher run. It
+#: reads the availability check's output, because the credential is in no
+#: `env` (see `publisher_credential`).
+CREDENTIAL_PRESENT_CONJUNCT: typ.Final[str] = (
+    "steps.codescene_token.outputs.available == 'true'"
+)
 
 #: A single-quoted expression string, which may itself contain `||` or `&&`.
 _QUOTED: typ.Final[re.Pattern[str]] = re.compile(r"'(?:[^']|'')*'")

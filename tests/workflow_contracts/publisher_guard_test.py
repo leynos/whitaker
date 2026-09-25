@@ -27,7 +27,8 @@ PUBLISHER_WORKFLOW: typ.Final[str] = "coverage-main.yml"
 
 #: The guard the publisher's upload step carries today.
 DEPLOYED_GUARD: typ.Final[str] = (
-    "env.CS_ACCESS_TOKEN != '' && github.ref == 'refs/heads/main'"
+    "steps.codescene_token.outputs.available == 'true' && "
+    "github.ref == 'refs/heads/main'"
 )
 
 
@@ -92,7 +93,9 @@ def test_every_upload_guard_holds_both_conjuncts(conjunct: str) -> None:
             id="no-credential-test",
         ),
         pytest.param(
-            "env.CS_ACCESS_TOKEN == ''", CREDENTIAL_PRESENT_CONJUNCT, id="the-inverse"
+            "steps.codescene_token.outputs.available == 'false'",
+            CREDENTIAL_PRESENT_CONJUNCT,
+            id="the-inverse",
         ),
         pytest.param(
             f"{MAIN_REF_CONJUNCT} || {CREDENTIAL_PRESENT_CONJUNCT}",
@@ -120,7 +123,8 @@ def test_the_publisher_never_cancels_a_run() -> None:
         pytest.param(DEPLOYED_GUARD, id="the-deployed-guard"),
         pytest.param(f"${{{{ {DEPLOYED_GUARD} }}}}", id="wrapped"),
         pytest.param(
-            "github.ref  ==  'refs/heads/main'  &&  env.CS_ACCESS_TOKEN != ''",
+            "github.ref  ==  'refs/heads/main'  &&  "
+            "steps.codescene_token.outputs.available == 'true'",
             id="reordered-and-spaced",
         ),
         pytest.param(
@@ -141,11 +145,12 @@ def test_a_conjunction_with_the_ref_test_is_confined(condition: str) -> None:
             id="a-trailing-disjunction",
         ),
         pytest.param(
-            "github.ref == 'refs/heads/main' && env.CS_ACCESS_TOKEN != '' "
+            "github.ref == 'refs/heads/main' && "
+            "steps.codescene_token.outputs.available == 'true' "
             "|| github.event_name == 'workflow_dispatch'",
             id="a-disjunction-after-the-ref-test",
         ),
-        pytest.param("env.CS_ACCESS_TOKEN != ''", id="no-ref-test"),
+        pytest.param(CREDENTIAL_PRESENT_CONJUNCT, id="no-ref-test"),
         pytest.param("github.ref != 'refs/heads/main'", id="the-negated-test"),
         pytest.param(
             "github.ref == 'refs/heads/main-backup'", id="a-longer-branch-name"
