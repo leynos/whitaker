@@ -83,8 +83,9 @@ handling, and install workflows. Its `tests/` tree contains larger behaviour
 suites, feature files, and workflow-oriented checks that exercise the installer
 as a product rather than only as a library. The crate declares Rust 1.85 as its
 minimum supported Rust version; the root `Makefile` target
-`installer-msrv-check` performs the canonical locked packaged-crate install and
-`--version` smoke check under that toolchain.
+`installer-msrv-check` calls `scripts/check_installer_msrv.py` for the locked
+staged-common packaged-crate install and `--version` smoke check under that
+toolchain.
 
 ### `src/` and `suite/`
 
