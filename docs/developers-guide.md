@@ -244,21 +244,34 @@ directly under `.github/workflows/`, so no list of spellings has to be kept.
 The publisher answers `workflow_dispatch` as well as a push to `main`, and a
 dispatch can name any branch, so the trigger filter does not confine the
 upload. The upload step's condition carries `github.ref == 'refs/heads/main'`
-and `env.CS_ACCESS_TOKEN != ''` as conjuncts, the second so that an absent
-secret skips the upload rather than failing the run.
+and `steps.codescene_token.outputs.available == 'true'` as conjuncts, the
+second so that an absent secret skips the upload rather than failing the run.
 `tests/workflow_contracts/publisher_guard_test.py` requires both, reading the
 condition as a conjunction: it splits on `&&` and refuses any `||` outside a
 quoted string, because a trailing `|| github.event_name == 'workflow_dispatch'`
-would contain the ref test and make it optional. The credential test is only
-half of the arrangement, because GitHub evaluates a missing context property as
-an empty string: with the step's `env` binding deleted, the guard would read
-the same and the upload would skip on every run.
-`tests/workflow_contracts/publisher_credential_test.py` therefore requires the
-upload step to bind `CS_ACCESS_TOKEN` to `${{ secrets.CS_ACCESS_TOKEN }}` and
-to pass `${{ env.CS_ACCESS_TOKEN }}` as `access-token`, and refuses the binding
-in any other scope: the workflow's or a job's `env`, or another step. The guard
-contract also refuses a concurrency group that cancels a publisher run: a
-cancelled run abandons its upload and the cache state it writes, while
+would contain the ref test and make it optional.
+
+The credential is in no `env` at all. The upload is a composite action, and a
+composite action's nested steps inherit the calling step's `env`, so a token
+bound there reached every one of them. A `Check CodeScene token availability`
+step (id `codescene_token`) runs exactly
+`echo "available=${{ secrets.CS_ACCESS_TOKEN != '' }}" >> "$GITHUB_OUTPUT"`,
+with no `if:` and no `env`; GitHub evaluates the expression before the shell
+starts, so the command writes a literal `true` or `false` and the token enters
+no process. The upload takes `access-token: ${{ secrets.CS_ACCESS_TOKEN }}`
+directly. `tests/workflow_contracts/publisher_credential_test.py` requires that
+check before each upload in its job and that input on the upload, refuses the
+credential in any workflow, job or step `env`, keys and values alike and case
+folded, and holds its mentions to exactly the check's command and the upload's
+input. The positive half is what a prohibition alone leaves out: deleting the
+credential would keep every `env` clean while the upload skipped on every run.
+A merge made by the Dependabot automerge workflow's `GITHUB_TOKEN` fires no
+push event, so it publishes nothing until a dispatch or the next push to
+`main`; that is a known exception (see
+[shared-actions issue 518](https://github.com/leynos/shared-actions/issues/518)).
+
+The guard contract also refuses a concurrency group that cancels a publisher
+run: a cancelled run abandons its upload and the cache state it writes, while
 overlapping runs that both finish leave the later push's state in place.
 
 Every workflow contract reads a workflow file through `parse_workflow` in
