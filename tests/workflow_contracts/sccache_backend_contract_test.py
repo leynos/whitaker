@@ -20,12 +20,10 @@ from __future__ import annotations
 
 import typing as typ
 
+from sccache_steps import ubicloud_jobs_on
 from ubicloud_workflow_support import (
     CACHE_KEY_WRITERS,
-    CREDENTIALS_ACTION_PATH,
-    CREDENTIALS_STEP,
     SCCACHE_DIRECTORY,
-    SETUP_RUST_ACTION,
     UBICLOUD_JOBS,
     all_jobs,
     backend_for,
@@ -37,8 +35,6 @@ from ubicloud_workflow_support import (
     restore_steps,
     save_steps,
     sccache_directory_steps,
-    step_names,
-    steps_by_name,
 )
 
 if typ.TYPE_CHECKING:  # pragma: no cover - typing only
@@ -48,10 +44,6 @@ if typ.TYPE_CHECKING:  # pragma: no cover - typing only
 #: typo the script rejects at the lane's first step.
 KNOWN_BACKENDS: frozenset[str] = frozenset({"gha", "local"})
 
-#: The shared Rust setup action, without its ref. It starts the sccache
-#: server, so it binds the backend in whatever environment it finds.
-SETUP_RUST_PATH: str = SETUP_RUST_ACTION.split("@", 1)[0]
-
 #: The workflows that declare the Ubicloud lanes, deduplicated.
 UBICLOUD_WORKFLOWS: frozenset[str] = frozenset(UBICLOUD_JOBS.values())
 
@@ -59,48 +51,6 @@ UBICLOUD_WORKFLOWS: frozenset[str] = frozenset(UBICLOUD_JOBS.values())
 def _workflow_env(workflow_name: str) -> dict[str, Any]:
     """Return one workflow's top-level environment mapping."""
     return load_workflow(workflow_name).get("env") or {}
-
-
-def _mentions_sccache(step: dict[str, Any]) -> bool:
-    """Return whether a step names, runs, invokes or starts sccache.
-
-    Deliberately generous. A false positive here only tightens the ordering
-    rule below, while a false negative would let a step that starts a server
-    sit ahead of the credentials export and go unnoticed, which is the whole
-    failure being guarded.
-
-    `Setup Rust` is the step that starts the server, and neither its name nor
-    its `uses:` says so. Reading only for the word let the export and the
-    selector move below it together and still pass, so the action is named.
-    """
-    haystack = " ".join(
-        str(step.get(field, "")) for field in ("name", "run", "uses")
-    ).lower()
-    starts_the_server = str(step.get("uses", "")).split("@", 1)[0] == SETUP_RUST_PATH
-    return starts_the_server or "sccache" in haystack
-
-
-def _sccache_step_indices(job: dict[str, Any]) -> list[tuple[int, str]]:
-    """Return the indexed names of every sccache-related step in a job."""
-    return [
-        (index, str(step.get("name", f"step {index}")))
-        for index, step in enumerate(job_steps(job))
-        if _mentions_sccache(step)
-    ]
-
-
-def _ubicloud_jobs_on(backend: str) -> list[tuple[str, str]]:
-    """Return the Ubicloud jobs whose workflow selects ``backend``.
-
-    For example, with both Linux workflows on the Actions backend,
-    ``_ubicloud_jobs_on("gha")`` yields `coverage-check`, `linux-full` and
-    `coverage-upload`, and never the rolling-release build lanes.
-    """
-    return [
-        (job_name, workflow_name)
-        for job_name, workflow_name in UBICLOUD_JOBS.items()
-        if backend_for(workflow_name) == backend
-    ]
 
 
 def test_every_ubicloud_workflow_names_a_backend_the_selector_understands() -> None:
@@ -128,55 +78,6 @@ def test_the_two_linux_workflows_select_the_same_backend() -> None:
     )
 
 
-def test_ghac_lanes_export_the_proxy_credentials_first() -> None:
-    """A server started before the export binds local disk for the whole job.
-
-    On Ubicloud the Actions cache service is a proxy on the runner's private
-    network, advertised to action steps alone. Until it is republished through
-    `GITHUB_ENV`, a `run:` step cannot see it, and sccache silently falls back
-    to a directory nothing archives.
-    """
-    lanes = _ubicloud_jobs_on("gha")
-    assert lanes, "no Ubicloud lane is on the Actions backend; this rule is dead"
-    for job_name, _ in lanes:
-        job = load_job(job_name)
-        names = step_names(job)
-        assert CREDENTIALS_STEP in names, (
-            f"{job_name} runs sccache on the Actions backend without "
-            f"{CREDENTIALS_STEP!r}, so its server would bind local disk"
-        )
-        # One export, or the index below and `steps_by_name` in the identity
-        # rule could each judge a different step of the same name.
-        assert names.count(CREDENTIALS_STEP) == 1, (
-            f"{job_name} must declare exactly one {CREDENTIALS_STEP!r} step"
-        )
-        credentials_index = names.index(CREDENTIALS_STEP)
-        for index, name in _sccache_step_indices(job):
-            assert credentials_index < index, (
-                f"{job_name}: {CREDENTIALS_STEP!r} must precede {name!r}, "
-                "because sccache binds its backend when its server starts"
-            )
-
-
-def test_the_credentials_step_uses_the_action_that_exports_them() -> None:
-    """A step carrying the name but not the action satisfies order and nothing else."""
-    for job_name, _ in _ubicloud_jobs_on("gha"):
-        step = steps_by_name(load_job(job_name)).get(CREDENTIALS_STEP)
-        assert step is not None, (
-            f"{job_name} has no {CREDENTIALS_STEP!r} step at all"
-        )
-        uses = str(step.get("uses", ""))
-        assert uses.startswith(f"{CREDENTIALS_ACTION_PATH}@"), (
-            f"{job_name}: {CREDENTIALS_STEP!r} must run "
-            f"{CREDENTIALS_ACTION_PATH}, not {uses!r}"
-        )
-        _, _, ref = uses.partition("@")
-        assert len(ref) == 40 and all(c in "0123456789abcdef" for c in ref), (
-            f"{job_name}: {CREDENTIALS_STEP!r} must pin a full commit SHA, "
-            f"not {ref!r}"
-        )
-
-
 def test_ghac_lanes_own_no_compiler_cache_directory() -> None:
     """Two configured backends make the reported hit rate unattributable.
 
@@ -184,7 +85,7 @@ def test_ghac_lanes_own_no_compiler_cache_directory() -> None:
     proxy pays for an archive nothing reads, and the next reviewer cannot tell
     from the hit rate which store produced it.
     """
-    for job_name, _ in _ubicloud_jobs_on("gha"):
+    for job_name, _ in ubicloud_jobs_on("gha"):
         owned = sccache_directory_steps(load_job(job_name))
         assert not owned, (
             f"{job_name} is on the Actions backend but still archives "
@@ -199,7 +100,7 @@ def test_local_backend_lanes_restore_the_directory_they_are_pointed_at() -> None
     satisfied everywhere by deleting every cache step in the repository and
     leaving every lane compiling from cold.
     """
-    lanes = _ubicloud_jobs_on("local")
+    lanes = ubicloud_jobs_on("local")
     assert lanes, (
         "no Ubicloud lane is on the local-directory backend; this rule is dead"
     )

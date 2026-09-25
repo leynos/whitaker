@@ -117,6 +117,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      - name: Export the Ubicloud cache credentials
+        # The Linux legs' cache archives would otherwise go to the wrong
+        # store. `setup-rust` runs `mozilla-actions/sccache-action`, which
+        # writes `ACTIONS_CACHE_SERVICE_V2=on` and GitHub's results address
+        # to `GITHUB_ENV`, and it puts back only a value that was set before
+        # it ran. Without this step the variable was unset, so every save
+        # after `Setup Rust` went to GitHub's v2 service while every restore
+        # before it read Ubicloud's proxy: each run restored nothing and
+        # saved an archive no restore could see. Clearing the flag here gives
+        # `setup-rust` a value to put back, so the saves reach the proxy too.
+        # Linux only, because the action fails closed on a GitHub-hosted
+        # runner, and the macOS and Windows legs are GitHub-hosted.
+        if: runner.os == 'Linux'
+        uses: leynos/shared-actions/.github/actions/export-ubicloud-cache-credentials@dbe2e22ceaf498d85512679ccded38be9dbe7777
+
       # Only the two Linux legs are on Ubicloud and only they cache. The
       # macOS and Windows legs keep the wiring they have always had, which is
       # whatever the shared action provides for them.
@@ -314,6 +329,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      - name: Export the Ubicloud cache credentials
+        # As in build-lints: without it every save after `Setup Rust` goes to
+        # GitHub's v2 service while every restore reads Ubicloud's proxy.
+        if: runner.os == 'Linux'
+        uses: leynos/shared-actions/.github/actions/export-ubicloud-cache-credentials@dbe2e22ceaf498d85512679ccded38be9dbe7777
 
       # As in build-lints: only the two Linux legs are on Ubicloud and only
       # they cache. This job installs every dependency crate from source with

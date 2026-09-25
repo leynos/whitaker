@@ -600,11 +600,28 @@ server comes up bound to the proxy.
 The ordering that mattered still matters. `sccache` binds its backend once,
 when the server starts, so the credentials export runs before the backend
 selector, and both run before `Setup Rust`, which is what starts the server.
-`sccache_backend_contract_test` enforces those positions, rejects a lane that
-installs or zeroes `sccache` itself, and rejects a step that carries the
-credentials step's name without running the action. The GitHub-hosted Windows
-lane needs no export, because there the variables are already visible to `run:`
-steps and the store is GitHub's own.
+`cache_credentials_contract_test` enforces those positions and rejects a step
+that carries the credentials step's name without running the action, and
+`sccache_backend_contract_test` rejects a lane that installs or zeroes
+`sccache` itself. The GitHub-hosted Windows lane needs no export, because there
+the variables are already visible to `run:` steps and the store is GitHub's own.
+
+The export is not only for the Actions backend. A Ubicloud job that saves an
+`actions/cache` archive needs it before `Setup Rust` too, whatever its backend.
+`mozilla-actions/sccache-action` writes `ACTIONS_CACHE_SERVICE_V2=on` and
+GitHub's results address to `GITHUB_ENV`, and `setup-rust` restores only a
+value that was set before it ran. Without the export the flag was unset, so
+nothing put it back: every restore before `Setup Rust` read Ubicloud's proxy
+and every save after it went to GitHub's v2 service. The rolling-release build
+jobs, which are on the local-directory backend, ran that way until the export
+was added to them. Each run restored nothing and saved an archive no restore
+could see, and GitHub's cache held 18 `sccache-rolling-v1-` entries of about
+190 MB each. Both jobs now run the export on their Linux legs, under the
+`runner.os == 'Linux'` guard their other cache steps use, because the action
+fails closed on the GitHub-hosted macOS and Windows legs. The contract covers
+every Ubicloud job with a save step, names the two rolling-release jobs so that
+it cannot shrink past them, and requires that guard exactly on a job with
+GitHub-hosted legs.
 
 `gha` is the deployed backend on the Linux lanes, and the record of how it got
 there is worth keeping, because the repository once concluded the opposite.
