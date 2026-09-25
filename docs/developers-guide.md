@@ -256,11 +256,12 @@ composite action's nested steps inherit the calling step's `env`, so a token
 bound there reached every one of them. A `Check CodeScene token availability`
 step (id `codescene_token`) runs exactly
 `echo "available=${{ secrets.CS_ACCESS_TOKEN != '' }}" >> "$GITHUB_OUTPUT"`,
-with no `if:` and no `env`; GitHub evaluates the expression before the shell
-starts, so the command writes a literal `true` or `false` and the token enters
-no process. The upload takes `access-token: ${{ secrets.CS_ACCESS_TOKEN }}`
-directly. `tests/workflow_contracts/publisher_credential_test.py` requires that
-check before each upload in its job and that input on the upload, refuses the
+with no `if:` and no `env`; GitHub evaluates the expression before it sends the
+command to the runner, so the check's shell receives only a literal `true` or
+`false`, and the upload alone receives the token. The upload takes
+`access-token: ${{ secrets.CS_ACCESS_TOKEN }}` directly.
+`tests/workflow_contracts/publisher_credential_test.py` requires that check
+before each upload in its job and that input on the upload, refuses the
 credential in any workflow, job or step `env`, keys and values alike and case
 folded, and holds its mentions to exactly the check's command and the upload's
 input. The positive half is what a prohibition alone leaves out: deleting the

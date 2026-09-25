@@ -17,8 +17,8 @@ from coverage_boundary import UPLOAD_COVERAGE_ACTION, action_of
 from publisher_credential import (
     CHECK_COMMAND,
     checks_availability,
-    credential_mentions,
     credential_scopes,
+    credential_sites,
     passes_the_credential,
 )
 from ubicloud_workflow_support import job_steps, load_workflow
@@ -69,10 +69,35 @@ def test_no_env_names_the_credential() -> None:
     assert not scopes, f"no env may name the credential: {scopes}"
 
 
+def _permitted_sites(document: dict[str, typ.Any]) -> list[str]:
+    """Return the paths where the credential may be named, sorted.
+
+    The command of each exact availability check and the `access-token` input
+    of each upload; the value at each is held by the tests above.
+    """
+    sites = []
+    for name, job in (document.get("jobs") or {}).items():
+        for index, step in enumerate(job_steps(job) if isinstance(job, dict) else ()):
+            at = f"jobs.{name}.steps[{index}]"
+            if checks_availability(step):
+                sites.append(f"{at}.run")
+            if _is_upload(step):
+                sites.append(f"{at}.with.access-token")
+    return sorted(sites)
+
+
 def test_the_credential_appears_exactly_where_it_is_used() -> None:
-    """Named in the check's command and the upload's input, and nowhere else."""
-    mentions = credential_mentions(load_workflow(PUBLISHER_WORKFLOW))
-    assert mentions == sorted([CHECK_COMMAND, PASSED]), mentions
+    """Named in the check's command and each upload's input, and nowhere else.
+
+    Compared by location rather than by value, so the right expression in the
+    wrong place is still refused, and each upload is counted where it sits.
+    """
+    document = load_workflow(PUBLISHER_WORKFLOW)
+    permitted = _permitted_sites(document)
+    assert any(site.endswith(".run") for site in permitted), (
+        f"{PUBLISHER_WORKFLOW} must carry the availability check"
+    )
+    assert credential_sites(document) == permitted, credential_sites(document)
 
 
 @pytest.mark.parametrize(

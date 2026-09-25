@@ -26,8 +26,9 @@ CREDENTIAL_KEY: typ.Final[str] = "CS_ACCESS_TOKEN"
 #: The id of the step that reports whether the credential exists.
 CHECK_ID: typ.Final[str] = "codescene_token"
 
-#: The check step's one command. The expression writes a literal `true` or
-#: `false`, so the credential enters no process.
+#: The check step's one command. GitHub evaluates the expression before it
+#: sends the command to the runner, so the check's shell receives only a
+#: literal `true` or `false`.
 CHECK_COMMAND: typ.Final[str] = (
     'echo "available=${{ secrets.CS_ACCESS_TOKEN != \'\' }}" >> "$GITHUB_OUTPUT"'
 )
@@ -181,8 +182,49 @@ def credential_scopes(document: dict[str, typ.Any]) -> list[str]:
     return scopes
 
 
-def credential_mentions(document: dict[str, typ.Any]) -> list[str]:
-    """Return every string in a workflow naming the credential, sorted.
+def _located_strings(value: object, path: str) -> cabc.Iterator[tuple[str, str]]:
+    """Yield every string in a parsed YAML value with the path that reached it.
+
+    A mapping key is reported at the path of the entry it names, so an `env`
+    entry named after the credential is found at that entry.
+
+    Parameters
+    ----------
+    value : object
+        A parsed workflow fragment.
+    path : str
+        The path taken to reach it.
+
+    Yields
+    ------
+    tuple[str, str]
+        The path and the string found there.
+
+    >>> list(_located_strings({"env": {"T": "x"}}, "job"))
+    [('job.env', 'env'), ('job.env.T', 'T'), ('job.env.T', 'x')]
+    """
+    match value:
+        case str():
+            yield path, value
+        case dict():
+            for key, item in value.items():
+                child = f"{path}.{key}" if path else str(key)
+                if isinstance(key, str):
+                    yield child, key
+                yield from _located_strings(item, child)
+        case list():
+            for index, item in enumerate(value):
+                yield from _located_strings(item, f"{path}[{index}]")
+        case _:
+            return
+
+
+def credential_sites(document: dict[str, typ.Any]) -> list[str]:
+    """Return the path of every string in a workflow naming the credential.
+
+    Locations rather than values, so a correct expression in the wrong place
+    is still found, and a spelling GitHub accepts in the right place is not
+    mistaken for a stray mention.
 
     Parameters
     ----------
@@ -192,12 +234,14 @@ def credential_mentions(document: dict[str, typ.Any]) -> list[str]:
     Returns
     -------
     list[str]
-        Each mention, stripped of surrounding whitespace.
+        Each path once, sorted, such as `jobs.up.steps[1].with.access-token`.
 
-    >>> credential_mentions({"with": {"access-token": "${{ secrets.CS_ACCESS_TOKEN }}"}})
-    ['${{ secrets.CS_ACCESS_TOKEN }}']
+    >>> credential_sites({"jobs": {"up": {"steps": [{"run": "${{ secrets.cs_access_token }}"}]}}})
+    ['jobs.up.steps[0].run']
     """
     folded = CREDENTIAL_KEY.casefold()
-    return sorted(
-        text.strip() for text in _strings(document) if folded in text.casefold()
-    )
+    return sorted({
+        path
+        for path, text in _located_strings(document, "")
+        if folded in text.casefold()
+    })
