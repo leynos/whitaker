@@ -111,6 +111,24 @@ def test_a_guard_missing_a_required_conjunct_is_refused(
     assert not requires(condition, conjunct), f"{condition!r} lacks {conjunct!r}"
 
 
+#: The publisher's one concurrency group: keyed on the ref alone, so a
+#: dispatch and a push on `main` share it and runs never overlap.
+PUBLISHER_GROUP: typ.Final[str] = "coverage-main-${{ github.ref }}"
+
+
+def test_the_publisher_queues_on_one_group_per_ref() -> None:
+    """Runs share one group per ref and never cancel one another.
+
+    Asserted whole: a group keyed on the event as well would let an earlier
+    dispatch finish after a newer push, and a missing group lets two runs
+    overlap, both racing to publish.
+    """
+    concurrency = load_workflow(PUBLISHER_WORKFLOW).get("concurrency")
+    assert concurrency == {"group": PUBLISHER_GROUP, "cancel-in-progress": False}, (
+        f"{PUBLISHER_WORKFLOW} must queue on {PUBLISHER_GROUP!r}: {concurrency!r}"
+    )
+
+
 def test_the_publisher_never_cancels_a_run() -> None:
     """A cancelled publisher abandons its upload and its cache writes."""
     scopes = cancelling_scopes(load_workflow(PUBLISHER_WORKFLOW))
