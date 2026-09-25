@@ -276,13 +276,12 @@ with `cancel-in-progress: false`, and the guard contract asserts that block
 whole (`test_the_publisher_queues_on_one_group_per_ref`). Runs in the group
 never overlap, and a newer trigger replaces an older pending run; GitHub does
 not promise to start runs in trigger order, so the workflow makes no
-commit-order promise. The coverage action saves the ratchet baseline only on a
-push, so a dispatch uploads coverage but leaves the baseline where the last
-completed push left it. A manual "Re-run jobs" keeps its run ID: it republishes
-that commit's coverage but replaces no baseline already saved under that run's
-key. The guard contract also refuses a concurrency group that cancels a
-publisher run anywhere: a cancelled run abandons its upload and the cache state
-it writes.
+commit-order promise. The publisher writes no ratchet baseline, because its
+coverage comes from `make coverage` rather than the shared action, so a
+dispatch on `main` only republishes coverage. A manual "Re-run jobs" keeps its
+run ID and republishes that commit's coverage until a newer run replaces it.
+The guard contract also refuses a concurrency group that cancels a publisher
+run anywhere: a cancelled run abandons its upload and the cache state it writes.
 
 Every workflow contract reads a workflow file through `parse_workflow` in
 `tests/workflow_contracts/ubicloud_workflow_support.py`, a `SafeLoader` that

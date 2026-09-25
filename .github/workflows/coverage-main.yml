@@ -37,11 +37,10 @@ permissions:
 
 # Publishers queue rather than race or cancel. Runs in the group never
 # overlap, and a newer trigger replaces an older pending run; nothing here
-# promises that runs start in commit order. The coverage action saves the
-# ratchet baseline only on a push, so a dispatch uploads coverage but leaves
-# the baseline where the last completed push left it. A manual "Re-run jobs"
-# keeps its run ID: it republishes that commit's coverage, but replaces no
-# baseline already saved under that run's key.
+# promises that runs start in commit order. This workflow writes no ratchet
+# baseline: coverage comes from `make coverage`, not the shared action, so a
+# dispatch on main only republishes coverage. A manual "Re-run jobs" keeps its
+# run ID and republishes that commit's coverage until a newer run replaces it.
 concurrency:
   group: coverage-main-${{ github.ref }}
   cancel-in-progress: false
