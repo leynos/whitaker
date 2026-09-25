@@ -81,6 +81,10 @@ env:
 jobs:
   coverage-upload:
     runs-on: ubicloud-standard-2-ubuntu-2404
+    # The CodeScene token lives in this environment, whose deployment policy
+    # admits `main` alone; the codescene environment contract holds it to
+    # this job.
+    environment: codescene
     # Above the 45 m nextest global timeout plus a cold build and the work
     # either side of the suite; kept in step with ci.yml's coverage lane.
     timeout-minutes: 80
