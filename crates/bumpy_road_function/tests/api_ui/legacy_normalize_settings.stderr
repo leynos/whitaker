@@ -1,0 +1,11 @@
+error[E0432]: unresolved import `bumpy_road_function::analysis::normalise_settings`
+ --> tests/api_ui/legacy_normalize_settings.rs:3:5
+  |
+3 | use bumpy_road_function::analysis::normalise_settings;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no `normalise_settings` in `analysis`
+  |
+help: a similar name exists in the module
+  |
+3 - use bumpy_road_function::analysis::normalise_settings;
+3 + use bumpy_road_function::analysis::normalize_settings;
+  |

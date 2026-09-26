@@ -26,6 +26,7 @@ unic-langid = { workspace = true }
 [dev-dependencies]
 cap-std = { workspace = true }
 whitaker_test_macros = { workspace = true }
+trybuild = { workspace = true }
 # Testing: Behavioural specs use rstest-bdd 0.5.x (workspace pin). Capture any
 # regressions with `make test` and coordinate with the maintainers per
 # `docs/rstest-bdd-users-guide.md` before gating behaviour tests or backporting

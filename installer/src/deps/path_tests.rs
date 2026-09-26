@@ -2,8 +2,9 @@
 
 // The cap-std imports are used only by the Unix executable-permission test;
 // gating them keeps Windows test builds free of unused-import warnings.
+use camino::Utf8Path;
 #[cfg(unix)]
-use cap_std::{ambient_authority, fs::Dir};
+use cap_std::{ambient_authority, fs_utf8::Dir};
 use temp_env::with_vars_unset;
 
 use super::*;
@@ -193,11 +194,14 @@ fn is_executable_file_matches_executable_permission(
     let binary_path = temp_dir.path().join("dylint-link");
     write_fake_binary(&binary_path, has_execute_permission)?;
 
-    let directory = Dir::open_ambient_dir(temp_dir.path(), ambient_authority())
-        .expect("open temp-dir capability");
+    let directory = Dir::open_ambient_dir(
+        Utf8Path::from_path(temp_dir.path()).expect("temp directory path should be UTF-8"),
+        ambient_authority(),
+    )
+    .expect("open temp-dir capability");
 
     assert_eq!(
-        is_executable_file(&directory, "dylint-link"),
+        is_executable_file(&directory, Utf8Path::new("dylint-link"), "dylint-link"),
         expected_is_executable,
     );
     Ok(())

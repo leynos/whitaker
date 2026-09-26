@@ -22,6 +22,7 @@ const MESSAGE_KEY: MessageKey<'static> = MessageKey::new(LINT_NAME);
 
 mod config;
 mod diagnostic;
+mod numeric;
 mod segment_builder;
 
 use self::config::load_configuration;
