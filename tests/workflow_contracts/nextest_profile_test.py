@@ -83,9 +83,10 @@ class Allowance(typ.NamedTuple):
 #: `ui` disjunction leaves the needle intact while the tests that clause
 #: named lose the ten-minute allowance and fall back to the base three
 #: hundred seconds. The two profiles genuinely differ here, the default one
-#: naming seven more `test(...)` clauses than `ci`: twelve against five,
-#: with `(binary(ui) & test(=ui))` shared and counted in neither. That
-#: divergence is exactly what a shared needle would have hidden.
+#: naming seven more `test(...)` clauses in its shared UI override than
+#: `ci`: twelve against five, with `(binary(ui) & test(=ui))` shared and
+#: counted in neither. The macro crate's compile contract has its own
+#: identical override in both profiles.
 REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
     "default": {
         ("binary(behaviour_toolchain)"): Allowance(
@@ -125,6 +126,14 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
             test_group="serial-dylint-ui",
             retries={"backoff": "exponential", "count": 2, "delay": "5s"},
         ),
+        "test(fixture_expansion_lint_attribute_contract)": Allowance(
+            slow_timeout={
+                "period": "10m",
+                "terminate-after": 1,
+                "grace-period": "5s",
+            },
+            test_group="serial-dylint-ui",
+        ),
     },
     "ci": {
         ("binary(behaviour_toolchain)"): Allowance(
@@ -143,6 +152,14 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
             "test(trybuild_fixtures_compile_without_diagnostics) | "
             "(binary(ui) & test(=ui))"
         ): Allowance(
+            slow_timeout={
+                "period": "10m",
+                "terminate-after": 1,
+                "grace-period": "5s",
+            },
+            test_group="serial-dylint-ui",
+        ),
+        "test(fixture_expansion_lint_attribute_contract)": Allowance(
             slow_timeout={
                 "period": "10m",
                 "terminate-after": 1,

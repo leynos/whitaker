@@ -83,8 +83,7 @@ fn workspace_root() -> anyhow::Result<Utf8PathBuf> {
         }
         candidate = candidate
             .parent()
-            .context("workspace root not found above CARGO_MANIFEST_DIR")?
-            .to_owned();
+            .context("workspace root not found above CARGO_MANIFEST_DIR")?;
     }
 }
 
