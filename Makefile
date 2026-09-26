@@ -49,8 +49,16 @@ RUST_FLAGS ?= -D warnings
 # under `mktemp`, because sccache keys a compilation on its absolute paths: a
 # directory named afresh on every run made every one of those compilations a
 # miss on every run, 340 Rust misses a run in `linux-full`.
-INSTALLER_MSRV_DIR ?= $(CURDIR)/target/installer-msrv
-PUBLISH_CHECK_DIR ?= $(CURDIR)/target/publish-check
+#
+# They stay outside the workspace, as the `mktemp` directories were: Cargo
+# walks up from a package it installs, and a packaged crate extracted under
+# this checkout finds the root `Cargo.toml` and refuses to build. The name
+# carries this checkout's path, so two checkouts on one host never share a
+# tree while one checkout gets the same tree on every run.
+SCRATCH_ROOT ?= $(or $(TMPDIR),/tmp)
+SCRATCH_SUFFIX := $(subst /,-,$(CURDIR))
+INSTALLER_MSRV_DIR ?= $(SCRATCH_ROOT)/whitaker-installer-msrv$(SCRATCH_SUFFIX)
+PUBLISH_CHECK_DIR ?= $(SCRATCH_ROOT)/whitaker-publish-check$(SCRATCH_SUFFIX)
 RUSTDOC_FLAGS ?= --cfg docsrs -D warnings
 MDLINT ?= $(shell command -v markdownlint-cli2 2>/dev/null || printf '%s' "$$HOME/.bun/bin/markdownlint-cli2")
 # `make fmt` and `make check-fmt` call mdtablefix directly. `--git` selects the

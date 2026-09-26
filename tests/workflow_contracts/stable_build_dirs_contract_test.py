@@ -5,9 +5,14 @@ afresh on every run makes every compilation in it a miss on every run. A
 per-step probe of `linux-full` (dispatch run 36126452531) attributed all 340 of
 its recurring Rust misses to the two recipes checked here: 151 to the installer
 MSRV check and 189 to the publish check, each of which built under a
-`mktemp -d` directory. The rule reads the recipes as Make would run them, so it
-judges the directory the shell is actually given rather than how the Makefile
-spells it.
+`mktemp -d` directory.
+
+A fixed path is not enough on its own. The trees must also stay outside the
+workspace: Cargo walks up from a package it installs, and a packaged crate
+extracted under the checkout finds the root `Cargo.toml` and refuses to build,
+which is how the first attempt at this fix failed. The rules read the recipes as
+Make would run them, so they judge the directory the shell is actually given
+rather than how the Makefile spells it.
 """
 
 from __future__ import annotations
@@ -15,15 +20,16 @@ from __future__ import annotations
 import re
 import subprocess
 import typing as typ
+from pathlib import PurePosixPath
 
 import pytest
 from ubicloud_workflow_support import REPOSITORY_ROOT
 
 #: The recipes `linux-full` runs that compile in a scratch tree, mapped to the
-#: directory each must use. Both sit under the workspace's own `target`.
+#: name each tree starts with.
 SCRATCH_BUILDS: typ.Final[dict[str, str]] = {
-    "installer-msrv-check": "target/installer-msrv",
-    "publish-check": "target/publish-check",
+    "installer-msrv-check": "whitaker-installer-msrv",
+    "publish-check": "whitaker-publish-check",
 }
 
 #: The scratch tree's assignment in the expanded recipe.
@@ -53,8 +59,8 @@ def _expanded_recipe(target: str) -> str:
 def scratch_directory(recipe: str) -> str:
     """Return the value a recipe assigns to its scratch tree, unquoted.
 
-    >>> scratch_directory('set -eu; TMP_DIR="/w/target/x"; mkdir -p "$TMP_DIR";')
-    '/w/target/x'
+    >>> scratch_directory('set -eu; TMP_DIR="/tmp/x"; mkdir -p "$TMP_DIR";')
+    '/tmp/x'
     >>> scratch_directory('TMP_DIR=$(mktemp -d); trap ...')
     '$(mktemp -d)'
     """
@@ -69,26 +75,52 @@ def is_stable_path(value: str) -> bool:
     Any `$` or backtick left after Make's expansion is shell expansion, such as
     `$(mktemp -d)` or a `$$` process identifier, and may differ run to run.
 
-    >>> is_stable_path("/w/target/publish-check")
+    >>> is_stable_path("/tmp/whitaker-publish-check-w")
     True
     >>> is_stable_path("$(mktemp -d)")
     False
-    >>> is_stable_path("/w/target/publish-check-$$")
+    >>> is_stable_path("/tmp/whitaker-publish-check-$$")
     False
     """
     return "$" not in value and "`" not in value
 
 
-@pytest.mark.parametrize(("target", "relative"), SCRATCH_BUILDS.items())
-def test_scratch_builds_use_a_fixed_directory_under_target(
-    target: str, relative: str
+def is_outside(directory: str, workspace: str) -> bool:
+    """Return whether an absolute directory lies outside a workspace.
+
+    >>> is_outside("/tmp/whitaker-installer-msrv-w", "/w")
+    True
+    >>> is_outside("/w/target/installer-msrv", "/w")
+    False
+    >>> is_outside("/w-other/x", "/w")
+    True
+    """
+    path, root = PurePosixPath(directory), PurePosixPath(workspace)
+    return path.is_absolute() and path != root and root not in path.parents
+
+
+@pytest.mark.parametrize(("target", "prefix"), SCRATCH_BUILDS.items())
+def test_scratch_builds_use_a_fixed_directory_outside_the_workspace(
+    target: str, prefix: str
 ) -> None:
-    """A scratch build tree must be the same absolute path on every run."""
+    """A scratch tree is one absolute path, outside the checkout, per checkout.
+
+    Stable so sccache hits, outside so Cargo does not adopt the extracted
+    package into the root workspace, and named after the checkout so two
+    checkouts on one host do not clear each other's tree.
+    """
     directory = scratch_directory(_expanded_recipe(target))
+    workspace = str(REPOSITORY_ROOT)
     assert is_stable_path(directory), (
         f"{target} builds in {directory!r}, which the shell names afresh on "
         "each run, so sccache misses every compilation in it"
     )
-    assert directory == str(REPOSITORY_ROOT / relative), (
-        f"{target} must build in {relative} under the workspace, not {directory!r}"
+    assert is_outside(directory, workspace), (
+        f"{target} builds in {directory!r}, inside the workspace, where Cargo "
+        "finds the root manifest and refuses the extracted package"
+    )
+    name = PurePosixPath(directory).name
+    assert name == prefix + workspace.replace("/", "-"), (
+        f"{target} must name its tree {prefix} plus this checkout's path, "
+        f"not {name!r}"
     )
