@@ -2355,13 +2355,28 @@ five small private helpers:
 
 - `find_binary_on_path(binary_name)` returns the first executable candidate so
   the installation check can validate the exact path it found.
-- `find_binary_in_directory(directory, binary_name)` performs the per-directory
-  search that `find_binary_on_path()` uses while walking `PATH`.
-- `binary_candidates(directory, binary_name)` builds the ordered set of
-  candidate paths that each directory contributes to the lookup.
-- `is_executable_file(path)` applies the platform-specific file test:
-  executable-bit plus regular-file checks on Unix, and `path.is_file()` on
-  non-Unix targets where the executable suffix carries the meaning.
+- `find_binary_in_directory(directory, binary_name)` converts each PATH entry
+  to `camino::Utf8Path`, opens it as a `cap_std::fs_utf8::Dir`, and checks
+  candidates relative to that directory capability. Non-UTF-8 entries and
+  directories that cannot be opened are skipped, preserving the search order.
+- `binary_candidates(binary_name: &str) -> Vec<String>` returns candidate
+  executable names in PATH-search order; on Windows it expands extensionless
+  names using `PATHEXT`.
+- `is_executable_file` has this signature:
+
+  ```rust
+  fn is_executable_file(
+      directory: &Dir,
+      candidate: &Utf8Path,
+      binary_name: &str,
+  ) -> bool
+  ```
+
+  It obtains metadata with `Dir::metadata`, requires a regular file and, on
+  Unix, at least one executable permission bit. Metadata errors return `false`.
+  Failure traces include the binary name and a bounded failure category, but
+  not the PATH entry or candidate path. The executable suffix carries the
+  meaning on non-Unix targets.
 - `windows_path_extensions()` normalizes `PATHEXT` on Windows so
   `binary_candidates()` can expand extensionless names the same way the shell
   does.

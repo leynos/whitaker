@@ -196,6 +196,7 @@ dependencies = [
  "serde",
  "tempfile",
  "toml 1.1.6+spec-1.1.0",
+ "trybuild",
  "whitaker",
  "whitaker-common",
  "whitaker_test_macros",
@@ -1706,6 +1707,7 @@ dependencies = [
  "tempfile",
  "whitaker",
  "whitaker-common",
+ "whitaker_test_macros",
 ]
 
 [[package]]
@@ -1790,6 +1792,7 @@ dependencies = [
  "toml 1.1.6+spec-1.1.0",
  "whitaker",
  "whitaker-common",
+ "whitaker_test_macros",
 ]
 
 [[package]]
@@ -2910,6 +2913,7 @@ dependencies = [
  "serde",
  "whitaker",
  "whitaker-common",
+ "whitaker_test_macros",
 ]
 
 [[package]]
@@ -3407,6 +3411,7 @@ dependencies = [
  "toml 1.1.6+spec-1.1.0",
  "whitaker-common",
  "whitaker-installer",
+ "whitaker_test_macros",
 ]
 
 [[package]]
@@ -3428,6 +3433,7 @@ dependencies = [
  "rstest-bdd-macros",
  "tempfile",
  "thiserror 2.0.20",
+ "trybuild",
  "unic-langid",
  "whitaker_test_macros",
 ]
@@ -3496,6 +3502,7 @@ name = "whitaker_sarif"
 version = "0.2.9"
 dependencies = [
  "camino",
+ "proptest",
  "rstest",
  "rstest-bdd",
  "rstest-bdd-macros",
@@ -3503,6 +3510,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror 2.0.20",
+ "trybuild",
  "whitaker_test_macros",
 ]
 

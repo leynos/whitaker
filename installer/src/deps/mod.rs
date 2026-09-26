@@ -10,11 +10,13 @@ use crate::dependency_binaries::{
 };
 use crate::dirs::{BaseDirs, SystemBaseDirs};
 use crate::error::{InstallerError, Result};
-use cap_std::{ambient_authority, fs::Dir};
+use camino::Utf8Path;
+use cap_std::{ambient_authority, fs_utf8::Dir};
 use std::io;
 use std::io::Write;
 use std::path::Path;
 use std::process::{Command, Output};
+use tracing::trace;
 
 mod install;
 use install::*;
@@ -62,6 +64,34 @@ const DYLINT_LINK_TOOL: DependencyTool = DependencyTool {
 };
 
 const DEPENDENCY_TOOLS: [DependencyTool; 2] = [CARGO_DYLINT_TOOL, DYLINT_LINK_TOOL];
+
+/// Stable, bounded failure labels emitted while checking a PATH entry.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PathScanFailureCategory {
+    NonUtf8Path,
+    DirectoryOpen,
+    Metadata,
+}
+
+impl PathScanFailureCategory {
+    /// Return the low-cardinality field value used by trace events.
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::NonUtf8Path => "non_utf8_path",
+            Self::DirectoryOpen => "directory_open",
+            Self::Metadata => "metadata",
+        }
+    }
+}
+
+/// Emit bounded failure context without recording the PATH entry itself.
+fn trace_path_scan_failure(binary_name: &str, category: PathScanFailureCategory) {
+    trace!(
+        binary_name,
+        failure_category = category.as_str(),
+        "skipping PATH scan candidate after lookup failure"
+    );
+}
 
 /// Status of Dylint tool availability.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -297,17 +327,39 @@ fn find_binary_on_path(binary_name: &str) -> Option<std::path::PathBuf> {
         .find_map(|directory| find_binary_in_directory(&directory, binary_name))
 }
 
+/// Find the first executable candidate relative to one UTF-8 PATH directory.
+///
+/// Non-UTF-8 entries and directories that cannot be opened are skipped so the
+/// caller can continue searching later PATH entries. Candidate metadata is
+/// inspected through the opened directory capability rather than ambient
+/// filesystem access. Lookup failures produce bounded trace fields containing
+/// the binary name and failure category, never the directory path.
 fn find_binary_in_directory(directory: &Path, binary_name: &str) -> Option<std::path::PathBuf> {
-    // `cap_std::fs::Dir` (not `fs_utf8`) keeps PATH entries that are not
-    // valid UTF-8 in the scan instead of silently dropping them.
-    let directory_capability = Dir::open_ambient_dir(directory, ambient_authority()).ok()?;
+    let Some(utf8_directory) = Utf8Path::from_path(directory) else {
+        trace_path_scan_failure(binary_name, PathScanFailureCategory::NonUtf8Path);
+        return None;
+    };
+    let directory_capability = match Dir::open_ambient_dir(utf8_directory, ambient_authority()) {
+        Ok(directory_capability) => directory_capability,
+        Err(_) => {
+            trace_path_scan_failure(binary_name, PathScanFailureCategory::DirectoryOpen);
+            return None;
+        }
+    };
 
     binary_candidates(binary_name)
         .into_iter()
-        .find(|candidate| is_executable_file(&directory_capability, candidate))
+        .find(|candidate| {
+            is_executable_file(&directory_capability, Utf8Path::new(candidate), binary_name)
+        })
         .map(|candidate| directory.join(candidate))
 }
 
+/// Return executable candidate names in their PATH-search order.
+///
+/// Unix returns the requested name unchanged. Windows expands extensionless
+/// names using `PATHEXT`; an existing extension is preserved as the sole
+/// candidate.
 fn binary_candidates(binary_name: &str) -> Vec<String> {
     #[cfg(windows)]
     let mut candidates = Vec::new();
@@ -330,6 +382,7 @@ fn binary_candidates(binary_name: &str) -> Vec<String> {
     candidates
 }
 
+/// Parse `PATHEXT` into suffixes used to probe Windows PATH entries.
 #[cfg(windows)]
 fn windows_path_extensions() -> Vec<String> {
     let path_ext = std::env::var_os("PATHEXT")
@@ -352,25 +405,60 @@ fn windows_path_extensions() -> Vec<String> {
         .collect()
 }
 
+/// Check a candidate through its containing directory capability.
+///
+/// Metadata failures are treated as non-executable and traced with a bounded
+/// failure category; a candidate must also be a regular file with an execute
+/// bit set for at least one Unix permission class. The trace records the
+/// binary name and `metadata` category without exposing the candidate path.
 #[cfg(unix)]
-fn is_executable_file(directory: &Dir, candidate: &str) -> bool {
+fn is_executable_file(directory: &Dir, candidate: &Utf8Path, binary_name: &str) -> bool {
     use cap_std::fs::PermissionsExt;
 
-    directory
-        .metadata(candidate)
-        .map(|metadata| metadata.is_file() && metadata.permissions().mode() & 0o111 != 0)
-        .unwrap_or(false)
+    match directory.metadata(candidate) {
+        Ok(metadata) => metadata.is_file() && metadata.permissions().mode() & 0o111 != 0,
+        Err(_) => {
+            trace_path_scan_failure(binary_name, PathScanFailureCategory::Metadata);
+            false
+        }
+    }
 }
 
+/// Check that a candidate is a regular file through its directory capability.
+///
+/// Metadata failures are treated as non-executable and traced with a bounded
+/// failure category. The trace records the binary name and `metadata` category
+/// without exposing the candidate path.
 #[cfg(not(unix))]
-fn is_executable_file(directory: &Dir, candidate: &str) -> bool {
-    directory
-        .metadata(candidate)
-        .map(|metadata| metadata.is_file())
-        .unwrap_or(false)
+fn is_executable_file(directory: &Dir, candidate: &Utf8Path, binary_name: &str) -> bool {
+    match directory.metadata(candidate) {
+        Ok(metadata) => metadata.is_file(),
+        Err(_) => {
+            trace_path_scan_failure(binary_name, PathScanFailureCategory::Metadata);
+            false
+        }
+    }
 }
 
 #[cfg(test)]
 mod path_tests;
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod path_scan_tests {
+    use super::PathScanFailureCategory;
+
+    #[test]
+    fn path_scan_failure_categories_are_stable_and_bounded() {
+        assert_eq!(
+            PathScanFailureCategory::NonUtf8Path.as_str(),
+            "non_utf8_path"
+        );
+        assert_eq!(
+            PathScanFailureCategory::DirectoryOpen.as_str(),
+            "directory_open"
+        );
+        assert_eq!(PathScanFailureCategory::Metadata.as_str(), "metadata");
+    }
+}

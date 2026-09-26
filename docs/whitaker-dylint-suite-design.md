@@ -731,10 +731,9 @@ qualified paths (`std::fs::read_to_string`) and items pulled in via
   into a `SimplePath` parser. A match requires the first two segments to equal
   `["std", "fs"]`. Re-exports remain covered because the resolved `DefId`
   points back to `std`.
-- Each finding produces a `StdFsUsage` struct containing the resolved operation
-  label (for diagnostics) and a category (`Import`, `Type`, or `Call`). The
-  category drives unit tests and future config knobs but diagnostics currently
-  emphasize the operation name only to keep translations succinct.
+- Each finding produces a `StdFsUsage` value that stores only the resolved
+  operation label. Classifiers return operation-only usage values, and
+  diagnostics use that label to keep translations succinct.
 - Diagnostics reuse Fluent bundles (`no_std_fs_operations.ftl`) with the
   operation label supplied via `{ $operation }`. The note explains why ambient
   access is disallowed and the help recommends `cap_std::fs` + `camino`.
@@ -813,8 +812,8 @@ sequenceDiagram
 
 - Unit tests cover the operation classifier, ensuring paths such as
   `std::fs::File::open`, `std::fs::remove_file`, bare module references, and
-  renamed imports all register as `StdFsUsage` while `cap_std::fs` remains
-  untouched.
+  renamed imports all produce operation-only usage values while `cap_std::fs`
+  remains untouched.
 - Behaviour-driven tests (via `rstest-bdd 0.5.0`) exercise localization, failure
   fallbacks, and the world state used to model capability hints. Scenarios
   cover en-GB, cy, and gd locales, as well as missing-message paths.

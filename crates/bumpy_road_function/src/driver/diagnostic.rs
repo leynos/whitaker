@@ -15,6 +15,7 @@ use whitaker_common::{
     Arguments, Localizer, MessageResolution, noop_reporter, safe_resolve_message_set,
 };
 
+use super::numeric::{saturating_diagnostic_integer, span_byte_offset};
 use super::{BUMPY_ROAD_FUNCTION, LINT_NAME, MESSAGE_KEY};
 
 /// Payload describing a lint diagnostic to emit.
@@ -27,6 +28,10 @@ pub(super) struct DiagnosticInput<'a> {
     pub(super) settings: &'a Settings,
 }
 
+/// Emit the localized lint message and labels for the two most severe bumps.
+///
+/// Missing source snippets omit the affected labels, and oversized numeric
+/// arguments are saturated before they are passed to Fluent.
 pub(super) fn emit_diagnostic(
     cx: &LateContext<'_>,
     input: DiagnosticInput<'_>,
@@ -36,7 +41,9 @@ pub(super) fn emit_diagnostic(
     args.insert(Cow::Borrowed("name"), FluentValue::from(input.name));
     args.insert(
         Cow::Borrowed("count"),
-        FluentValue::from(i64::try_from(input.bumps.len()).unwrap_or(i64::MAX)),
+        FluentValue::from(saturating_diagnostic_integer(
+            u64::try_from(input.bumps.len()).unwrap_or(u64::MAX),
+        )),
     );
     args.insert(
         Cow::Borrowed("threshold"),
@@ -68,8 +75,12 @@ pub(super) fn emit_diagnostic(
                 };
                 let label = resolve_bump_label(
                     localizer,
-                    i64::try_from(ordinal + 1).unwrap_or(i64::MAX),
-                    i64::try_from(interval.len()).unwrap_or(i64::MAX),
+                    saturating_diagnostic_integer(
+                        u64::try_from(ordinal).unwrap_or(u64::MAX).saturating_add(1),
+                    ),
+                    saturating_diagnostic_integer(
+                        u64::try_from(interval.len()).unwrap_or(u64::MAX),
+                    ),
                 );
                 lint.span_label(span, label);
             }
@@ -137,6 +148,10 @@ impl LineSpanMapper {
         }
     }
 
+    /// Map an inclusive source-line range into the snippet's source span.
+    ///
+    /// Returns `None` when the start line is outside the snippet, the range is
+    /// reversed, or a byte offset cannot fit the compiler's `u32` positions.
     fn span_for_range(&self, start_line: usize, end_line: usize) -> Option<Span> {
         if start_line < self.base_line || end_line < start_line {
             return None;
@@ -155,8 +170,8 @@ impl LineSpanMapper {
         let base = self.base_span.shrink_to_lo();
         // `BytePos` is `u32`-backed; offsets beyond 4 GiB cannot be represented
         // as spans, so such (pathological) snippets yield no span.
-        let lo = base.lo() + BytePos(u32::try_from(start_offset).ok()?);
-        let mut hi = base.lo() + BytePos(u32::try_from(end_offset).ok()?);
+        let lo = base.lo() + BytePos(span_byte_offset(u64::try_from(start_offset).ok()?)?);
+        let mut hi = base.lo() + BytePos(span_byte_offset(u64::try_from(end_offset).ok()?)?);
         if hi <= lo {
             hi = lo + BytePos(1);
         }

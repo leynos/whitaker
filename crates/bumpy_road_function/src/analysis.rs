@@ -89,6 +89,7 @@ impl Default for Settings {
 /// ```
 #[must_use]
 pub fn normalize_settings(settings: Settings) -> Settings {
+    /// Keep a finite non-negative weight; otherwise use its default.
     fn normalize_weight(candidate: f64, fallback: f64) -> f64 {
         if candidate.is_finite() && candidate >= 0.0 {
             candidate

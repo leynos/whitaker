@@ -100,7 +100,7 @@ WHITAKER_SCRIPT ?= $(HOME)/.local/bin/whitaker
 MD_FILES_FIND = find . \
 	\( -type d \( -name .git -o -name target -o -name .venv -o \
 	-name .uv-cache -o -name .uv-tools -o -name .pytest_cache -o \
-	-name .vtcode -o -name memories -o -name node_modules \) -prune \) -o \
+	-name .vtcode -o -name memories -o -name .memories -o -name node_modules \) -prune \) -o \
 	\( -type f -name '*.md' -print0 \)
 
 build: target/debug/$(APP) ## Build debug binary
@@ -272,7 +272,7 @@ check-fmt: ## Verify formatting
 	$(MDTABLEFIX) --check $(MDTABLEFIX_SELECT) $(MDTABLEFIX_RULES)
 
 markdownlint: spelling ## Lint Markdown files and enforce spelling
-	export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; $(MDLINT) '**/*.md' '!**/.uv-cache/**' '!**/.uv-tools/**'
+	export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; $(MD_FILES_FIND) | xargs -0 -r "$(MDLINT)"
 
 spelling: ## Enforce en-GB-oxendict in tracked text
 	$(TYPOS_CONFIG_BUILDER) gate --repository . --scope all

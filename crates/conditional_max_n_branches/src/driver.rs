@@ -21,6 +21,9 @@ use whitaker_common::{
     get_localizer_for_lint, noop_reporter, safe_resolve_message_set,
 };
 
+mod numeric;
+use self::numeric::saturating_diagnostic_integer;
+
 const LINT_NAME: &str = "conditional_max_n_branches";
 const MESSAGE_KEY: MessageKey<'static> = MessageKey::new(LINT_NAME);
 
@@ -196,6 +199,10 @@ impl ConditionKind {
     }
 }
 
+/// Count logical branches, treating `&&` and `||` as sums of their operands.
+///
+/// Negation, blocks, and `if` expressions are transparent; every other
+/// expression contributes one branch.
 fn count_branches(expr: &hir::Expr<'_>) -> usize {
     match expr.kind {
         ExprKind::Binary(op, lhs, rhs) if matches!(op.node, BinOpKind::And | BinOpKind::Or) => {
@@ -208,6 +215,10 @@ fn count_branches(expr: &hir::Expr<'_>) -> usize {
     }
 }
 
+/// Emit the localized branch-count diagnostic for one condition.
+///
+/// Counts are saturated to Fluent's signed 64-bit range, and missing
+/// translations fall back to the built-in English message set.
 fn emit_diagnostic(
     cx: &LateContext<'_>,
     metadata: &ConditionMetadata,
@@ -221,11 +232,15 @@ fn emit_diagnostic(
     );
     args.insert(
         Cow::Borrowed("branches"),
-        FluentValue::from(i64::try_from(metadata.branches).unwrap_or(i64::MAX)),
+        FluentValue::from(saturating_diagnostic_integer(
+            u64::try_from(metadata.branches).unwrap_or(u64::MAX),
+        )),
     );
     args.insert(
         Cow::Borrowed("limit"),
-        FluentValue::from(i64::try_from(limit).unwrap_or(i64::MAX)),
+        FluentValue::from(saturating_diagnostic_integer(
+            u64::try_from(limit).unwrap_or(u64::MAX),
+        )),
     );
     let branch_phrase_text = branch_phrase(localizer.locale(), metadata.branches);
     args.insert(
@@ -262,6 +277,10 @@ fn emit_diagnostic(
     );
 }
 
+/// Replace injected bidi isolates and replacement characters in diagnostics.
+///
+/// Each such character becomes a double quote; text without these characters
+/// is returned unchanged apart from allocating the owned result.
 fn normalize_isolation_marks(text: &str) -> String {
     if text
         .chars()
@@ -278,6 +297,10 @@ fn normalize_isolation_marks(text: &str) -> String {
     }
 }
 
+/// Build the built-in English diagnostic messages for a condition.
+///
+/// The branch and limit values are rendered as locale-aware English phrases
+/// when no translated message is available.
 fn fallback_messages(kind: ConditionKind, branches: usize, limit: usize) -> DiagnosticMessageSet {
     let branch_phrase_text = branch_phrase(FALLBACK_LOCALE, branches);
     let limit_phrase_text = branch_phrase(FALLBACK_LOCALE, limit);

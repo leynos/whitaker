@@ -1,0 +1,35 @@
+error[E0560]: struct `PhysicalLocation` has no field named `artifact_location`
+ --> tests/ui/legacy_sarif_fields.rs:7:9
+  |
+7 |         artifact_location: ArtefactLocation {
+  |         ^^^^^^^^^^^^^^^^^ unknown field
+  |
+help: a field with a similar name exists
+  |
+7 -         artifact_location: ArtefactLocation {
+7 +         artefact_location: ArtefactLocation {
+  |
+
+error[E0609]: no field `artifacts` on type `Run`
+  --> tests/ui/legacy_sarif_fields.rs:14:17
+   |
+14 |     let _ = run.artifacts;
+   |                 ^^^^^^^^^ unknown field
+   |
+help: a field with a similar name exists
+   |
+14 -     let _ = run.artifacts;
+14 +     let _ = run.artefacts;
+   |
+
+error[E0599]: no method named `with_artifact` found for struct `RunBuilder` in the current scope
+  --> tests/ui/legacy_sarif_fields.rs:15:50
+   |
+15 |     let _ = RunBuilder::new("whitaker", "0.3.0").with_artifact(Artefact {
+   |             -------------------------------------^^^^^^^^^^^^^
+   |
+help: there is a method `with_artefact` with a similar name
+   |
+15 -     let _ = RunBuilder::new("whitaker", "0.3.0").with_artifact(Artefact {
+15 +     let _ = RunBuilder::new("whitaker", "0.3.0").with_artefact(Artefact {
+   |
