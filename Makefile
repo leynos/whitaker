@@ -52,13 +52,18 @@ RUST_FLAGS ?= -D warnings
 #
 # They stay outside the workspace, as the `mktemp` directories were: Cargo
 # walks up from a package it installs, and a packaged crate extracted under
-# this checkout finds the root `Cargo.toml` and refuses to build. The name
-# carries this checkout's path, so two checkouts on one host never share a
-# tree while one checkout gets the same tree on every run.
-SCRATCH_ROOT ?= $(or $(TMPDIR),/tmp)
-SCRATCH_SUFFIX := $(subst /,-,$(CURDIR))
-INSTALLER_MSRV_DIR ?= $(SCRATCH_ROOT)/whitaker-installer-msrv$(SCRATCH_SUFFIX)
-PUBLISH_CHECK_DIR ?= $(SCRATCH_ROOT)/whitaker-publish-check$(SCRATCH_SUFFIX)
+# this checkout finds the root `Cargo.toml` and refuses to build.
+#
+# The root is the user's own cache directory rather than a shared temporary
+# directory, so no other user can pre-create or swap a tree these recipes
+# clear. Each name ends in the first 16 hex digits of the SHA-256 of this
+# checkout's path: two checkouts on one host never share a tree, however
+# their paths are spelled, one checkout gets the same tree on every run, and
+# the name stays short however deep the checkout sits.
+SCRATCH_ROOT ?= $(or $(XDG_CACHE_HOME),$(HOME)/.cache)/whitaker/scratch
+SCRATCH_ID := $(shell printf '%s' '$(CURDIR)' | { sha256sum 2>/dev/null || shasum -a 256; } | cut -c1-16)
+INSTALLER_MSRV_DIR ?= $(SCRATCH_ROOT)/installer-msrv-$(SCRATCH_ID)
+PUBLISH_CHECK_DIR ?= $(SCRATCH_ROOT)/publish-check-$(SCRATCH_ID)
 RUSTDOC_FLAGS ?= --cfg docsrs -D warnings
 MDLINT ?= $(shell command -v markdownlint-cli2 2>/dev/null || printf '%s' "$$HOME/.bun/bin/markdownlint-cli2")
 # `make fmt` and `make check-fmt` call mdtablefix directly. `--git` selects the
