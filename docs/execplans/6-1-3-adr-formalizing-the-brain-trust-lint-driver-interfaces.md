@@ -693,7 +693,7 @@ Upstream artefacts, at the revisions present on this branch (base commit
   governing standard for the deliverable's form.
 - `docs/whitaker-dylint-suite-design.md` and
   `docs/whitaker-clone-detector-design.md` §"SARIF schema and mapping".
-- SARIF 2.1.0 (OASIS, Errata 01) §3.4.3, §3.4.4, §3.14.14, §3.14.27, §3.30.6.
+- SARIF 2.1.0 (OASIS, Errata 01) §3.4.3, §3.4.4, §3.14.14, §3.14.27, §3.30.8.
 
 There is no Terms of Reference artefact; the roadmap item is the top of the
 chain. Trace links:
@@ -782,7 +782,7 @@ gap. Two obligations are dischargeable here.
 - Obligation: converting a compiler position to a SARIF region yields
   `startLine >= 1`, `startColumn >= 1` when present, an end position not before
   the start, columns counted in UTF-16 code units, and an `endColumn` that
-  denotes the column *following* the region per SARIF §3.30.6.
+  denotes the column *following* the region per SARIF §3.30.8.
 - Method: property test with `proptest` over generated source text containing
   astral-plane characters, combining characters, tabs, and CRLF line endings.
 - Rationale: the domain is unbounded, the failure is silent, and the two
@@ -800,12 +800,15 @@ gap. Two obligations are dischargeable here.
   classification shows zero such cases is a failure. Negative control: replace
   `encode_utf16().count()` with `chars().count()` and confirm the property
   fails.
-- **Open sub-question for Stage B**: the incumbent producer sets its end
-  position to the byte index of the *last* character
+- **Answered 2026-09-27**: the incumbent producer sets its end position to
+  the byte index of the *last* character
   (`crates/whitaker_clones_core/src/run0/span.rs:22-26`), which makes
-  `endColumn` the last character's own column rather than one past it. If that
-  is an off-by-one against SARIF §3.30.6, the ADR must not ratify it as
-  "matches the existing producer". Confirm before drafting.
+  `endColumn` the last character's own column rather than one past it. It is an
+  off-by-one against SARIF §3.30.8, which reads "one greater than the column
+  number of the last character in the region" and states that a region "does
+  not include the character specified by `endColumn`", so the ADR must not
+  ratify it as "matches the existing producer". Evidence and the reproduction
+  are in `Artefacts and notes`.
 - Status: **not discharged here, deliberately.**
 
 ### VP-4 — delegated: finalization is idempotent and emission is deterministic
@@ -910,7 +913,8 @@ The probe must answer eight questions:
    yields a one-based `Loc::line`, and both yield zero-based `CharPos`
    columns. Conflating them is a guaranteed off-by-one.
 6. Is the incumbent producer's `endColumn` inclusive or exclusive against SARIF
-   §3.30.6? See `VP-3`'s open sub-question.
+   §3.30.8? See `VP-3`'s open sub-question. **Answered 2026-09-27: it is
+   exclusive, so the incumbent is off by one — see `Artefacts and notes`.**
 7. Re-derive the supersession set by reading
    `6-5-1-collect-brain-trust-diagnostics-into-sarif-emitter.md` directly,
    without consulting this plan's prose, and list every place the two documents
@@ -1273,6 +1277,87 @@ validation), the second by the Q5 normalization rule above. The section's
 `BrainTrustSubject` shape is answered by `BTD-REQ-05` item 1 and by row C-19.
 No shape in that section lacks an answer, so `EP-M1` cannot close with a
 deferral left dangling.
+
+### Stage B, question 6 — answered, 2026-09-27
+
+**The incumbent producer's `endColumn` is inclusive, and SARIF §3.30.8 wants
+it exclusive.** This confirms `VP-3`'s open sub-question against the incumbent,
+so the ADR must not ratify the existing behaviour.
+
+The spec text, quoted from SARIF 2.1.0 Errata 01 §3.30.8: "`endColumn` whose
+value is an integer whose value is **one greater than the column number of the
+last character in the region**." The surrounding prose is unambiguous about the
+consequence: "A text region does not include the character specified by
+`endColumn`", illustrated by a worked example — `startColumn: 2, endColumn: 4`
+"specifies the range of characters `bc`".
+
+The incumbent does the opposite. `region_for_range`
+(`crates/whitaker_clones_core/src/run0/span.rs:7-35`) computes its end position
+as "the byte index of the last character" —
+
+```rust,ignore
+let end_position = prefix.char_indices().next_back().map_or(range.start, |(i, _)| i);
+```
+
+— and `line_and_column` (`:63-79`) then returns the *column of that offset*,
+which for a region ending at byte 8 of `fn a() {}` is column 8. SARIF wants 9.
+
+Evidence: a standalone replication of `line_starts`, `line_and_column`, and
+`region_for_range` (`/tmp/q6-probe.py`, scratch, not tracked) reproduces both
+golden tests in `crates/whitaker_clones_core/src/run0/tests.rs` exactly —
+`0..8` in `"fn a() {}\n"` yields `end_column: Some(8)` against the test's
+expected `Some(8)` at `:132`, and `13..27` in `"fn alpha() {\n    value();\n}\n"`
+yields `Some(1)` against `:149`. Because the replication matches the committed
+expectations, it is a faithful model of the incumbent, and its computed
+"exclusive" values (`9` and `2` respectively) are what the same inputs should
+produce under §3.30.8.
+
+Impact on the ADR and on `VP-3`: `VP-3`'s obligation already required an
+`endColumn` "that denotes the column *following* the region per SARIF
+§3.30.6", so the obligation stands and its target is now known to differ from
+the incumbent by one. The ADR must state the exclusive rule normatively and
+must not describe the incumbent as exemplifying it. Whether the fix belongs to
+the clone detector or only to the brain trust mapping is a cross-producer
+question the ADR should answer, since the clone detector is the only shipped
+producer and changing it changes existing output.
+
+### Citation defect found while answering question 6
+
+The plan cites SARIF **§3.30.6** for `endColumn` in seven places (including
+`VP-3`'s obligation and the `External references` list). §3.30.6 is
+`startColumn`; `endColumn` is **§3.30.8**. The two are adjacent, which is
+presumably how the slip happened, but a reader who follows the citation lands
+on the wrong rule and reads a requirement about the *start* of a region while
+checking its end. The corrected numbers, read from the spec's own section
+list:
+
+- §3.4.3 `uri` — correct as cited
+- §3.4.4 `uriBaseId` — correct as cited
+- §3.14.14 `originalUriBaseIds` — not re-verified here
+- §3.14.27 `columnKind` — correct as cited
+- §3.30.6 `startColumn` — **cited in error for `endColumn`**
+- §3.30.7 `endLine`
+- §3.30.8 `endColumn` — **the correct citation**
+
+Every `§3.30.6`-for-`endColumn` reference is corrected to §3.30.8 as part of
+this entry's commit.
+
+One further finding from the same read, which strengthens `BTD-REQ-01`'s
+`columnKind` decision: §3.14.27 does not merely permit the field, it **SHALL**s
+it. When a producer processes text artefacts and `Run.results` is non-empty,
+the run object **SHALL** contain a property named `columnKind`. The field is
+**MAY** only when `results` is empty, and **SHALL** be absent when the producer
+does not process text artefacts at all. The spec then fixes the permitted
+values, and `"utf16CodeUnits"` is one of exactly two: each UTF-16 code unit
+occupies one column, so a surrogate pair occupies two. (The spec writes the
+noun with an American spelling; this note uses the repository's.)
+
+The plan's decision to emit `columnKind` explicitly is therefore not a hedge
+against a contested default — it is a conformance requirement, and the clone
+detector's existing output is currently non-conformant for every run with a
+non-empty `results`. The ADR should say so in those terms, and should state the
+empty-`results` case too, since `Run` will gain the field and the choice of
+whether to omit it on a clean run is a real one.
 
 ### Stage B — answers still requiring a build
 
@@ -1791,7 +1876,8 @@ inherit the instruction.
 
 - Static Analysis Results Interchange Format (SARIF) Version 2.1.0 Plus
   Errata 01, OASIS: §3.4.3 `uri`, §3.4.4 `uriBaseId`, §3.14.14
-  `originalUriBaseIds`, §3.14.27 `columnKind`, §3.30.6 `endColumn`.
+  `originalUriBaseIds`, §3.14.27 `columnKind`, §3.30.8 `endColumn`
+  (the plan originally cited §3.30.6, which is `startColumn`).
   <https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/sarif-v2.1.0-errata01-os-complete.html>
 - GitHub code scanning SARIF support, §"Source file locations".
   <https://docs.github.com/en/code-security/reference/code-scanning/sarif-files/sarif-support>
