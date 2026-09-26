@@ -410,7 +410,7 @@ own registry cache. `release.yml` still calls the shared action with its default
 matrices, because nothing owns a cache for them; they no longer archive a
 `target` tree either. The Linux legs pass `external` and own a family pair each:
 `cargo-registry-rolling-v1-` and `sccache-rolling-v1-` for `build-lints`,
-which rebuilds ten lint crates from cold on every merge to `main`, and
+which rebuilds ten lint crates on every merge to `main`, and
 `cargo-registry-depbin-v1-` and `sccache-depbin-v1-` for
 `build-dependency-binaries`, which installs every dependency crate from source
 with `cargo install --locked`. The two jobs are keyed apart because their
@@ -600,11 +600,28 @@ server comes up bound to the proxy.
 The ordering that mattered still matters. `sccache` binds its backend once,
 when the server starts, so the credentials export runs before the backend
 selector, and both run before `Setup Rust`, which is what starts the server.
-`sccache_backend_contract_test` enforces those positions, rejects a lane that
-installs or zeroes `sccache` itself, and rejects a step that carries the
-credentials step's name without running the action. The GitHub-hosted Windows
-lane needs no export, because there the variables are already visible to `run:`
-steps and the store is GitHub's own.
+`cache_credentials_contract_test` enforces those positions and rejects a step
+that carries the credentials step's name without running the action, and
+`sccache_backend_contract_test` rejects a lane that installs or zeroes
+`sccache` itself. The GitHub-hosted Windows lane needs no export, because there
+the variables are already visible to `run:` steps and the store is GitHub's own.
+
+The export is not only for the Actions backend. A Ubicloud job that saves an
+`actions/cache` archive needs it before `Setup Rust` too, whatever its backend.
+`mozilla-actions/sccache-action` writes `ACTIONS_CACHE_SERVICE_V2=on` and
+GitHub's results address to `GITHUB_ENV`, and `setup-rust` restores only a
+value that was set before it ran. Without the export the flag was unset, so
+nothing put it back: every restore before `Setup Rust` read Ubicloud's proxy
+and every save after it went to GitHub's v2 service. The rolling-release build
+jobs, which are on the local-directory backend, ran that way until the export
+was added to them. Each run restored nothing and saved an archive no restore
+could see, and GitHub's cache held 18 `sccache-rolling-v1-` entries of about
+190 MB each. Both jobs now run the export on their Linux legs, under the
+`runner.os == 'Linux'` guard their other cache steps use, because the action
+fails closed on the GitHub-hosted macOS and Windows legs. The contract covers
+every Ubicloud job with a save step, names the two rolling-release jobs so that
+it cannot shrink past them, and requires that guard exactly on a job with
+GitHub-hosted legs.
 
 `gha` is the deployed backend on the Linux lanes, and the record of how it got
 there is worth keeping, because the repository once concluded the opposite.
@@ -967,7 +984,7 @@ Table: Runner placement for repository-owned jobs.
 | `windows-compat`                                  | `ci.yml`                   | `windows-latest`                                                            | Ubicloud has no Windows image           |
 | `mutation`                                        | `mutation-testing.yml`     | Reusable workflow's own choice                                              | Nightly, not blocking                   |
 | `automerge`                                       | `dependabot-automerge.yml` | Reusable workflow's own choice                                              | API-bound                               |
-| Linux legs of both `rolling-release.yml` matrices | `rolling-release.yml`      | `ubicloud-standard-2-ubuntu-2204` and `ubicloud-standard-2-arm-ubuntu-2404` | Rebuilt from cold on every merge        |
+| Linux legs of both `rolling-release.yml` matrices | `rolling-release.yml`      | `ubicloud-standard-2-ubuntu-2204` and `ubicloud-standard-2-arm-ubuntu-2404` | Rebuilt on every merge from own caches  |
 | Their macOS and Windows legs                      | `rolling-release.yml`      | GitHub-hosted matrix                                                        | Ubicloud has no macOS or Windows image  |
 | Other release jobs                                | `release.yml`              | GitHub-hosted matrices                                                      | Release boundaries                      |
 
