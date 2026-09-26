@@ -47,7 +47,7 @@ contract with the lint crates" and confirm every shape it defers is answered.
 Two things in this plan are judgement calls that the maintainer may reasonably
 overturn. Both are called out here so they are not buried.
 
-1. **The ADR supersedes the 6.5.1 execplan in five places.** A design review of
+1. **The ADR supersedes the 6.5.1 execplan in four places.** A design review of
    the first draft established that the interface shapes 6.5.1 proposes cannot
    compile: they form a Cargo dependency cycle, and one of the two edges also
    breaks `cargo publish -p whitaker-common`. Repairing that is not optional,
@@ -123,7 +123,7 @@ Thresholds that trigger escalation, not quality targets.
   `BLOCKED`, and ask whether the change belongs here or in the consuming item.
 - Dependencies: if `EP-M2`'s guard needs a crate not already in the hosting
   crate's dependency closure, stop and escalate rather than adding one.
-- Supersession: this plan supersedes the 6.5.1 execplan in five places, each
+- Supersession: this plan supersedes the 6.5.1 execplan in four places, each
   recorded in `Decision log` and destined for the ADR's "Known risks and
   limitations". A sixth supersession is an escalation, because at that point
   the honest remedy is to rework the 6.5.1 plan rather than annotate it.
@@ -191,7 +191,7 @@ Thresholds that trigger escalation, not quality targets.
   requirement goes under "Outstanding decisions".
 - Risk: this branch is based on
   `origin/6-5-1-collect-brain-trust-diagnostics-into-sarif-emitter`, which is
-  unmerged and which this ADR supersedes in five places.
+  unmerged and which this ADR supersedes in four places.
   Severity: medium. Likelihood: medium.
   Mitigation: the ADR cites the 6.5.1 *roadmap item* and the *decision*, never
   line numbers in that plan. Each supersession is stated as a decision the ADR
@@ -212,8 +212,11 @@ Thresholds that trigger escalation, not quality targets.
   panel. Fifteen findings folded in, four of them blocking. The panel's
   substantive results are recorded in `Surprises & discoveries` and
   `Decision log`.
-- [ ] EP-M0 Plan approved, including the two approver decisions in
-  `Purpose / big picture`.
+- [x] (2026-09-27) EP-M0 Plan approved, including the two approver decisions in
+  `Purpose / big picture`. Both confirmed by the maintainer: the narrow route
+  (the ADR decides the shape and 6.5.1 reconciles at its own Stage A), and both
+  separable milestones retained. The supersession count was corrected from five
+  to four during EP-M0 reconnaissance; see `Surprises & discoveries`.
 - [ ] EP-M1 `docs/adr-005-brain-trust-lint-driver-interfaces.md` written and
   registered in `docs/contents.md`.
 - [ ] EP-M2 Architecture-fitness guard added (separable).
@@ -316,6 +319,24 @@ Thresholds that trigger escalation, not quality targets.
   used only as an in-process deduplication key (`collector.rs:68-74`).
   Impact: there is no existing convention to preserve, so the ADR is free to
   choose the cheapest correct rule.
+- Correction: the fifth supersession does not exist. Reading the 6.5.1 execplan
+  against this plan's own claims falsifies one of the five, and a further marker
+  turns out to restate the first rather than add to it.
+  Evidence: this plan's `Decision log` claimed ordering was unaddressed because
+  6.5.1 "addresses ordering for `serde_json::Value` objects but not for the
+  typed map". The 6.5.1 plan changes `SarifResult::partial_fingerprints` from
+  `HashMap` to `BTreeMap` outright (`6-5-1-...md:302-312`, the change at
+  `:831-833`, the risk it discharges at `:139-145`). The two plans agree, so
+  there is nothing to supersede. Separately, the `**Supersedes the 6.5.1
+  execplan**` marker under `BTD-REQ-05` item 2 points at the same object as the
+  crate-placement decision — the mapping module's location — so a reader
+  tallying markers counts that decision twice.
+  Impact: the genuine count is four. That is what `Interfaces and dependencies`
+  already states independently, when it says Rule 2 supersedes 6.5.1 "in three
+  places" and `columnKind` is decided separately. The `Supersession` tolerance
+  fires at a *sixth* supersession, so a smaller true count moves further from
+  the trigger rather than closer to it. `Decision log` records the handling and
+  the count is corrected at every site that states it.
 
 ## Decision log
 
@@ -389,15 +410,56 @@ Thresholds that trigger escalation, not quality targets.
   supersedes the 6.5.1 execplan, which addresses ordering for
   `serde_json::Value` objects but not for the typed map.**
   Date/Author: 2026-08-21, planning agent, after design review.
+  **Withdrawn 2026-09-27**: this supersession does not exist. 6.5.1 already
+  changes `partial_fingerprints` to a `BTreeMap` (`6-5-1-...md:302-312`,
+  `:831-833`, `:139-145`), so the two plans agree and there is nothing to
+  override. The decision to require an ordered map stands; it is a
+  **confirmation** of 6.5.1, not a supersession of it. See
+  `Surprises & discoveries`.
 
 - Decision: do not revise `docs/execplans/6-5-1-...md` on this branch.
   Rationale: it belongs to an unmerged sibling branch, its Stage A already
   gates on reading and reconciling with this ADR, and its own text states that
   where the two disagree "the ADR wins" (`6-5-1-...md:1395-1398`). Editing a
   sibling's plan from here would create a merge conflict on a document neither
-  branch owns. The five supersessions are listed in the ADR so its implementer
+  branch owns. The supersessions are listed in the ADR so its implementer
   finds them. Rejected alternative: revise both, which is tidier on paper and
   worse in practice.
+
+- Decision: correct the supersession count from five to four, and require the
+  corrected set to be re-derived from the repository rather than from this
+  plan's own prose.
+  Rationale: the fifth supersession was asserted rather than verified, and
+  verification falsifies it — 6.5.1 already mandates `BTreeMap` for
+  `partial_fingerprints` (`6-5-1-...md:302-312`), so the two plans agree and
+  there is nothing to override. The corrected set is: (1) the crate-edge and
+  mapping-module placement, (2) `FileUri`'s home crate, (3) `span_to_region`'s
+  home crate, and (4) `columnKind`. The `BTD-REQ-05` item 2 marker is not a
+  fifth supersession; it restates (1) from the language-boundary side and is
+  reworded to cite it. **The ADR must state four**, and `Stage B` gains an
+  obligation to re-derive the list by reading 6.5.1 directly and to report any
+  candidate that survives as a new finding rather than promoting it silently.
+  Note this is a *plan-accuracy* correction, not an escalation trigger: the
+  `Supersession` tolerance fires at a sixth supersession, and the true count
+  moved down. It is recorded here rather than quietly edited because the
+  reviewer-verifiable claim in `Validation and acceptance` ("Search for
+  'supersede'. You find five entries.") changes with it.
+  Date/Author: 2026-09-27, implementation agent, correcting a planning claim.
+
+- Decision: keep supersession 1's rationale but add publishability and
+  enforceability, rather than replacing its dependency-direction framing.
+  Rationale: 6.5.1's own reasoning at `:291-301` is sound on its own terms — it
+  observes that `whitaker_sarif` "has no compiler dependency, so nothing about
+  the dependency direction is disturbed" — and that observation is correct.
+  What it omits is decisive, so the ADR states both halves: `whitaker-common`
+  is published (`release.yml:338`) while `whitaker_sarif` is
+  `publish = false` (`crates/whitaker_sarif/Cargo.toml:5`), so the
+  common-to-sarif edge breaks the release; and hosting the mapping beside
+  `common/src/i18n/` places it where the English-only rule of `BTD-REQ-05` has
+  no manifest check able to observe a violation. Rejected alternative: framing
+  supersession 1 as a bare dependency-direction disagreement, which would
+  misstate 6.5.1's position and make the ADR look like it had not read it.
+  Date/Author: 2026-09-27, implementation agent, correcting a planning claim.
   Date/Author: 2026-08-21, planning agent.
 
 - Decision: `resolve_subject_location` returns `Result<_, LocationUnavailable>`
@@ -617,7 +679,7 @@ Upstream artefacts, at the revisions present on this branch (base commit
   technical design the ADR must not contradict.
 - `docs/execplans/6-5-1-collect-brain-trust-diagnostics-into-sarif-emitter.md`
   §"Interfaces and dependencies" — a downstream plan that defers to this ADR
-  and which this ADR supersedes in five places.
+  and which this ADR supersedes in four places.
 - `docs/documentation-style-guide.md` §"Architectural decision records" — the
   governing standard for the deliverable's form.
 - `docs/whitaker-dylint-suite-design.md` and
@@ -821,7 +883,7 @@ Confirm, on `nightly-2026-05-28`, the interfaces and behaviours the ADR will
 assert. Run the probe in a **throwaway git worktree** so no tracked file is
 ever dirtied and "revert" cannot fail.
 
-The probe must answer six questions:
+The probe must answer eight questions:
 
 1. What does `span_to_filename` return for a workspace-local file under a real
    `cargo dylint` invocation — a relative path or an absolute one?
@@ -840,6 +902,21 @@ The probe must answer six questions:
    columns. Conflating them is a guaranteed off-by-one.
 6. Is the incumbent producer's `endColumn` inclusive or exclusive against SARIF
    §3.30.6? See `VP-3`'s open sub-question.
+7. Re-derive the supersession set by reading
+   `6-5-1-collect-brain-trust-diagnostics-into-sarif-emitter.md` directly,
+   without consulting this plan's prose, and list every place the two documents
+   genuinely disagree. The expected set is four — crate-edge and mapping-module
+   placement, `FileUri`'s home crate, `span_to_region`'s home crate, and
+   `columnKind`. This question exists because the original five were asserted
+   in one sitting and not all were verified: the fifth did not survive
+   checking. A candidate that survives goes into the ADR's "Known risks and
+   limitations"; a candidate that does not survive is reported as a withdrawal,
+   as the fifth one now is. If re-derivation yields a genuine fifth, that is
+   *not* the `Supersession` tolerance firing — that fires at a sixth — but it
+   is a large enough change to the ADR's content to warrant stopping and saying
+   so before drafting.
+8. Read `docs/execplans/6-5-1-...md` §"The contract with the lint crates" and
+   confirm every shape it defers has a normative answer in the draft ADR.
 
 Constraints on the probe:
 
@@ -856,7 +933,10 @@ Any interface the probe cannot confirm appears in the ADR as a described
 behaviour with the call left to the implementer, never as an invented
 signature.
 
-Stage B ends when the six answers are written into `Artefacts and notes` and
+Questions 1 to 6 are compiler probes. Questions 7 and 8 are documentary, and
+were added after the supersession count was corrected from five to four.
+
+Stage B ends when the eight answers are written into `Artefacts and notes` and
 the worktree is removed.
 
 ### Stage C — draft the ADR
@@ -866,7 +946,7 @@ template, including a real "Options considered" section covering the crate-edge
 decision, the capture strategy, and the emission lifecycle. Draft the normative
 content from `Interfaces and dependencies` below, corrected by Stage B. Add the
 layering diagram as Mermaid, with a screen-reader description above and a
-caption below. List all five supersessions of the 6.5.1 execplan under "Known
+caption below. List all four supersessions of the 6.5.1 execplan under "Known
 risks and limitations".
 
 Register the ADR in `docs/contents.md` §"Decision records", matching the
@@ -912,7 +992,7 @@ upstream assumption without that artefact being updated.
 - Red artefact: the `VP-2` checklist, written in Stage A with every row reading
   "not answered". Red by construction before drafting.
 - Acceptance evidence (`AC-1`): every row reads "answered" with a section
-  reference; all five supersessions appear under "Known risks and
+  reference; all four supersessions appear under "Known risks and
   limitations"; `make markdownlint` and `make nixie` pass.
 - Conformance check: the ADR contradicts nothing in
   `docs/brain-trust-lints-design.md`; every contradiction with the 6.5.1
@@ -1081,7 +1161,7 @@ reference before `EP-M1` closes.
   SARIF result and says how the drop is counted.
 - Search for "delayed". You find an explicit prohibition with the reason.
 - Search for "columnKind". You find a normative requirement to emit it.
-- Search for "supersede". You find five entries.
+- Search for "supersede". You find four entries.
 - Open `docs/contents.md` and confirm the new ADR appears under
   §"Decision records" in the same style as ADR 004.
 - Run `make markdownlint` and `make nixie`. Expect clean exits.
@@ -1519,7 +1599,9 @@ at finalization, for gated subjects only.**
    by accident. Placing the mapping inside `common/src/brain_trust_sarif/`, as
    the 6.5.1 execplan proposes, puts it in the same crate as
    `common/src/i18n/`, where no check can see a violation. **Supersedes the
-   6.5.1 execplan.** `VP-1` is the obligation this creates.
+   6.5.1 execplan's mapping-module placement** — the same decision recorded
+   under `The layering decision`, stated here from the language-boundary side.
+   `VP-1` is the obligation this creates.
 3. **Diagnostics are localized.** Compiler diagnostics resolve primary, note,
    and help text through `safe_resolve_message_set`, which falls back to a
    lint-supplied English `DiagnosticMessageSet` when a Fluent key is missing
@@ -1622,7 +1704,7 @@ Revised 2026-08-21 after a six-lens design review of the first draft.
 What changed. Four blocking findings reshaped the normative content. The first
 draft ratified interface shapes that form a Cargo dependency cycle and break
 `cargo publish -p whitaker-common`; the ADR now decides the crate-edge
-direction itself and supersedes the 6.5.1 execplan in five places. It specified
+direction itself and supersedes the 6.5.1 execplan in four places. It specified
 emission from `check_crate_post` through the ordinary path, which silently
 disables `#[allow]` on the offending item; emission is now `HirId`-aware. It
 cited a `span_delayed_bug` call site as the precedent for routine degradation,
