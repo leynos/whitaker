@@ -410,7 +410,7 @@ own registry cache. `release.yml` still calls the shared action with its default
 matrices, because nothing owns a cache for them; they no longer archive a
 `target` tree either. The Linux legs pass `external` and own a family pair each:
 `cargo-registry-rolling-v1-` and `sccache-rolling-v1-` for `build-lints`,
-which rebuilds ten lint crates from cold on every merge to `main`, and
+which rebuilds ten lint crates on every merge to `main`, and
 `cargo-registry-depbin-v1-` and `sccache-depbin-v1-` for
 `build-dependency-binaries`, which installs every dependency crate from source
 with `cargo install --locked`. The two jobs are keyed apart because their
@@ -984,7 +984,7 @@ Table: Runner placement for repository-owned jobs.
 | `windows-compat`                                  | `ci.yml`                   | `windows-latest`                                                            | Ubicloud has no Windows image           |
 | `mutation`                                        | `mutation-testing.yml`     | Reusable workflow's own choice                                              | Nightly, not blocking                   |
 | `automerge`                                       | `dependabot-automerge.yml` | Reusable workflow's own choice                                              | API-bound                               |
-| Linux legs of both `rolling-release.yml` matrices | `rolling-release.yml`      | `ubicloud-standard-2-ubuntu-2204` and `ubicloud-standard-2-arm-ubuntu-2404` | Rebuilt from cold on every merge        |
+| Linux legs of both `rolling-release.yml` matrices | `rolling-release.yml`      | `ubicloud-standard-2-ubuntu-2204` and `ubicloud-standard-2-arm-ubuntu-2404` | Rebuilt on every merge from own caches  |
 | Their macOS and Windows legs                      | `rolling-release.yml`      | GitHub-hosted matrix                                                        | Ubicloud has no macOS or Windows image  |
 | Other release jobs                                | `release.yml`              | GitHub-hosted matrices                                                      | Release boundaries                      |
 

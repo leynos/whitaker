@@ -15,6 +15,8 @@ every run restored nothing and saved an archive no restore could see.
 
 from __future__ import annotations
 
+import typing as typ
+
 from runner_lanes import GITHUB_HOSTED_LABELS, LINUX_LEG_GUARD, declared_labels
 from sccache_steps import sccache_step_indices, ubicloud_jobs_on
 from ubicloud_workflow_support import (
@@ -27,19 +29,58 @@ from ubicloud_workflow_support import (
     steps_by_name,
 )
 
+if typ.TYPE_CHECKING:  # pragma: no cover - typing only
+    from collections.abc import Callable, Mapping
+    from typing import Any
 
-def _ubicloud_jobs_that_save() -> list[tuple[str, str]]:
-    """Return the Ubicloud jobs that save a cache archive, whatever their backend.
 
-    For example, the two rolling-release build jobs are on the local-directory
-    backend, so `ubicloud_jobs_on("gha")` never yields them, but both save
-    their registry and compiler-cache archives on a push to `main`.
+def saving_jobs(
+    jobs: Mapping[str, str],
+    load: Callable[[str], dict[str, Any]],
+) -> list[tuple[str, str]]:
+    """Return the jobs that save a cache archive, whatever their backend.
+
+    The job loader is passed in, so the selection is a pure function over the
+    registry and the parsed jobs, and can be exercised without files. The two
+    rolling-release build jobs are on the local-directory backend, so
+    `ubicloud_jobs_on("gha")` never yields them, but both save their registry
+    and compiler-cache archives on a push to `main`.
+
+    Parameters
+    ----------
+    jobs : Mapping[str, str]
+        Job names mapped to the workflow file that declares each.
+    load : Callable[[str], dict[str, Any]]
+        Returns one parsed job by name.
+
+    Returns
+    -------
+    list[tuple[str, str]]
+        ``(job, workflow)`` pairs whose job has at least one save step, in the
+        registry's order.
+
+    >>> from ubicloud_workflow_support import SAVE_ACTION
+    >>> save = {"name": "Save", "uses": SAVE_ACTION}
+    >>> saving_jobs(
+    ...     {"lint": "ci.yml", "build": "release.yml"},
+    ...     {"lint": {"steps": []}, "build": {"steps": [save]}}.__getitem__,
+    ... )
+    [('build', 'release.yml')]
     """
     return [
         (job_name, workflow_name)
-        for job_name, workflow_name in UBICLOUD_JOBS.items()
-        if save_steps(load_job(job_name))
+        for job_name, workflow_name in jobs.items()
+        if save_steps(load(job_name))
     ]
+
+
+def _ubicloud_jobs_that_save() -> list[tuple[str, str]]:
+    """Return the checked-in Ubicloud jobs that save a cache archive.
+
+    The loading half of `saving_jobs`, over `UBICLOUD_JOBS` and the workflows
+    on disk.
+    """
+    return saving_jobs(UBICLOUD_JOBS, load_job)
 
 
 def _credential_lanes() -> list[tuple[str, str]]:
