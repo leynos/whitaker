@@ -112,7 +112,7 @@ jobs:
         # job and reports a plausible hit rate for a store nothing archives.
         # It must precede the selector and every later step, because sccache
         # binds its backend once, when its server starts.
-        uses: leynos/shared-actions/.github/actions/export-ubicloud-cache-credentials@dbe2e22ceaf498d85512679ccded38be9dbe7777
+        uses: leynos/shared-actions/.github/actions/export-ubicloud-cache-credentials@759da19f0379b6d2d7ddef93b7ad4c3b98154e41
 
       - name: Select the compiler cache backend
         run: bash scripts/select-sccache-backend.sh
@@ -174,18 +174,18 @@ jobs:
             "$HOME/.cache/whitaker-mirrors/rust-clippy.git"
 
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@7cb894fe62c40951cccf33819548095e64a1291e
+        uses: leynos/shared-actions/.github/actions/setup-rust@759da19f0379b6d2d7ddef93b7ad4c3b98154e41
         with:
           cache-provider: external
 
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
+        uses: taiki-e/install-action@9114bf4d891761788c546334fd37538eae1bf8b3  # v2.87.16
         with:
           tool: nextest@0.9.114
           fallback: none
 
       - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
+        uses: taiki-e/install-action@9114bf4d891761788c546334fd37538eae1bf8b3  # v2.87.16
         with:
           tool: cargo-llvm-cov@0.6.24
           fallback: none
@@ -236,7 +236,7 @@ jobs:
         # `workflow_dispatch` can name any branch, so the trigger filter does
         # not confine this upload to the trunk; the ref test here does.
         if: steps.codescene_token.outputs.available == 'true' && github.ref == 'refs/heads/main'
-        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@a5765019912a8ab6882b12db049c7cde635f3a85
+        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@759da19f0379b6d2d7ddef93b7ad4c3b98154e41
         with:
           format: lcov
           access-token: ${{ secrets.CS_ACCESS_TOKEN }}
