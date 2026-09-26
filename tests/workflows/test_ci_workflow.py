@@ -228,7 +228,9 @@ def _coverage_check_job(workflow: Mapping[str, Any]) -> dict[str, Any]:
         "Setup Rust",
         "Install cargo-nextest",
         "Install cargo-llvm-cov",
+        "Remove stale LCOV report",
         "Generate coverage",
+        "Verify LCOV report",
         "Discard the instrumented target tree",
         "Run doctests",
         "Record sccache effectiveness",
@@ -283,9 +285,25 @@ def _assert_coverage_tool_installation(coverage_job: Mapping[str, Any]) -> None:
         "coverage-check must install the estate-audited cargo-llvm-cov version"
     )
 
-    assert _find_step(coverage_job, "Generate coverage").get("run") == (
-        "make coverage"
-    ), "coverage-check must preserve Whitaker's crate exclusions and RUSTFLAGS"
+    generate_coverage = _find_step(coverage_job, "Generate coverage")
+    assert generate_coverage.get("env") == {"COVERAGE_OUTPUT": "lcov.info"}, (
+        "coverage-check must generate its report at the repository root"
+    )
+    assert generate_coverage.get("run") == "make coverage", (
+        "coverage-check must use Whitaker's CI-tested coverage target"
+    )
+    assert _find_step(coverage_job, "Remove stale LCOV report").get("run") == (
+        "rm -f lcov.info"
+    ), "coverage-check must remove stale output before using the coverage target"
+
+    verify_report = _find_step(coverage_job, "Verify LCOV report")
+    verify_script = verify_report.get("run", "")
+    assert "test -s lcov.info" in verify_script, (
+        "coverage-check must reject missing or empty LCOV output"
+    )
+    assert "^SF:.+" in verify_script and "^end_of_record$" in verify_script, (
+        "coverage-check must validate complete LCOV source records"
+    )
 
     assert _find_step(coverage_job, "Run doctests").get("run") == ("make test-doc"), (
         "coverage-check must execute the doctests nextest cannot reach"
