@@ -1208,10 +1208,101 @@ under `/tmp`.
 
 To be filled during execution. Required entries:
 
-- Stage B's six probe answers with captured output, including the `#[allow]`
+- Stage B's eight probe answers with captured output, including the `#[allow]`
   suppression comparison from question 4.
 - `VP-1`'s red transcript against the forbidden-dependency fixture.
 - `VP-1`'s renamed-dependency transcript.
+
+### Stage B, questions 5 and 8 — answered from rustc source, 2026-09-27
+
+The `rustc-src` component is installed at
+`$SYSROOT/lib/rustlib/rustc-src/rust/compiler/` for the pinned toolchain
+`nightly-2026-05-28` (`rustc 1.98.0-nightly (57d06900f 2026-05-27)`). Note the
+path: it is `rustlib/rustc-src/rust/compiler`, **not**
+`rustlib/src/rust/compiler`. The latter exists but carries only `library/` and
+`src/llvm-project`, so a reader who checks the obvious path concludes the
+sources are absent when they are not. Every answer below is quoted from that
+tree; none required a build.
+
+**Q5 — column and line bases.** The two APIs disagree, exactly as the plan
+warned, and the disagreement is now pinned to named fields.
+
+`SourceMap::lookup_char_pos(&self, pos: BytePos) -> Loc`
+(`rustc_span/src/source_map.rs:415`) yields a `Loc`
+(`rustc_span/src/lib.rs:2701-2710`) whose fields are documented in-source:
+
+- `line: usize` — "The (1-based) line number" (`:2704-2705`)
+- `col: CharPos` — "The (0-based) column offset" (`:2706-2707`)
+- `col_display: usize` — "The (0-based) column offset when displayed"
+  (`:2708-2709`)
+
+`SourceMap::span_to_lines(&self, sp: Span) -> FileLinesResult`
+(`rustc_span/src/source_map.rs:527`) yields `FileLines`
+(`rustc_span/src/lib.rs:2737-2740`) holding `Vec<LineInfo>`, and `LineInfo`
+(`rustc_span/src/lib.rs:2726-2735`) is:
+
+- `line_index: usize` — "Index of line, starting from 0" (`:2727-2728`)
+- `start_col: CharPos` — "Column in line where span begins, starting from 0"
+  (`:2730-2731`)
+- `end_col: CharPos` — "Column in line where span ends, starting from 0,
+  **exclusive**" (`:2733-2734`)
+
+`CharPos` is `pub struct CharPos(pub usize)`
+(`rustc_span/src/lib.rs:2668`). In-source confirmation that the two bases
+differ: `source_map.rs:544` comments "the line numbers in `Loc` are 1-based, so
+we subtract 1 to get 0-based", and `:548` "asserting that the line numbers here
+are all indeed 1-based".
+
+Answer: `span_to_lines` supplies **both** the file and the line indices, and
+needs no companion `lookup_char_pos` call. But the bases are opposite and must
+be normalized explicitly — `LineInfo::line_index` is 0-based while `Loc::line`
+is 1-based, and both column fields are 0-based. `SourceSpan`
+(`common/src/span.rs:12`, `:33`, `:38`) documents itself as one-based on both
+axes, so the resolver adds 1 to each. The plan's warning that "conflating them
+is a guaranteed off-by-one" is confirmed rather than corrected, and `end_col`
+being documented **exclusive** bears directly on `VP-3`'s open sub-question
+about `endColumn` — see Q6 below.
+
+**Q8 — every deferred shape has a normative answer.** Read
+`6-5-1-...md` §"The contract with the lint crates" (`:1388-1398`) against
+`Interfaces and dependencies` below. The section defers exactly two things: a
+repository-root-relative, forward-slashed path for `FileUri::try_from`, and a
+`SourceSpan` from the span's start and end line and column. Both are answered:
+the first by `BTD-REQ-01` (`docs/adr-005` will name the newtype and its
+validation), the second by the Q5 normalization rule above. The section's
+`BrainTrustSubject` shape is answered by `BTD-REQ-05` item 1 and by row C-19.
+No shape in that section lacks an answer, so `EP-M1` cannot close with a
+deferral left dangling.
+
+### Stage B — answers still requiring a build
+
+Questions 1, 2, 3, 4, 6, and 7 need a real `cargo dylint` invocation in a
+throwaway worktree. Source reading constrains what to expect but cannot
+substitute for observing the compiler's runtime behaviour, so these are not
+recorded as answered.
+
+Q1 is partially constrained already, and the constraint is itself a finding
+worth carrying into the ADR: `SourceMap::span_to_filename` (`:485-487`, all
+three methods live on `impl SourceMap` from `:206`) is a one-line wrapper over
+`self.lookup_char_pos(sp.lo()).file.name.clone()`, so
+it returns a `FileName` (`rustc_span/src/lib.rs:506-521`) — an enum whose
+`Real(_)` arm wraps `RealFileName`. `RealFileName` (`:303-309`) is **not**
+transparent: it holds `local: Option<InnerRealFileName>`,
+`maybe_remapped: InnerRealFileName`, and `scopes: RemapPathScopeComponents`,
+and retrieving a path requires `RealFileName::path(&self, scope)`
+(`:358`), which asserts that exactly one scope bit is passed. A caller cannot
+reach a usable path without choosing a `RemapPathScopeComponents` variant
+(`:238-253`: `MACRO`, `DIAGNOSTICS`, `DEBUGINFO`, `COVERAGE`, `DOCUMENTATION`,
+`OBJECT`). The ADR must therefore name the scope it wants, and `DIAGNOSTICS` is
+the natural candidate because the derived path is used for a diagnostic-adjacent
+identifier. This is a larger API surface than "`span_to_filename` returns a
+`PathBuf`" and the probe must confirm which arm the workspace's files take.
+
+The one in-tree caller (`crates/rstest_helper_should_be_fixture/src/visitor.rs:90`)
+passes the `FileName` straight into `CallSiteLocation` as an opaque field
+(`collector.rs:70`) and never extracts a path from it, so it settles nothing
+about the extraction and confirms the plan's "no existing convention to
+preserve" finding.
 
 ## Interfaces and dependencies
 
