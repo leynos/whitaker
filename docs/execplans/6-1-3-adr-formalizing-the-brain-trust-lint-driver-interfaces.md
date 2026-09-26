@@ -213,10 +213,19 @@ Thresholds that trigger escalation, not quality targets.
   substantive results are recorded in `Surprises & discoveries` and
   `Decision log`.
 - [x] (2026-09-27) EP-M0 Plan approved, including the two approver decisions in
-  `Purpose / big picture`. Both confirmed by the maintainer: the narrow route
-  (the ADR decides the shape and 6.5.1 reconciles at its own Stage A), and both
-  separable milestones retained. The supersession count was corrected from five
-  to four during EP-M0 reconnaissance; see `Surprises & discoveries`.
+  `Purpose / big picture`. The maintainer directed implementation of this plan
+  as written, so both decisions stand as recorded: the narrow route (the ADR
+  decides the shape and 6.5.1 reconciles at its own Stage A), and both
+  separable milestones retained. Neither was separately ruled on; if either is
+  overturned while the work is in progress, record it under `Decision log` and
+  adjust. The supersession count was corrected from five to four during EP-M0
+  reconnaissance; see `Surprises & discoveries`.
+- [x] (2026-09-27) Stage A checklist reconciled against its two sources:
+  `docs/roadmap.md:288-297`, whose five clauses map to `BTD-REQ-01` to
+  `BTD-REQ-05` and thence to rows C-1 to C-16, and the 6.5.1 deferral list
+  (`6-5-1-...md:69-77` and `:1395-1398`), which maps to rows C-17 to C-19.
+  Rows C-20 to C-26 trace to the first draft's design review. All 26 rows read
+  "not answered", as Stage A requires. No gap found and no new row added.
 - [ ] EP-M1 `docs/adr-005-brain-trust-lint-driver-interfaces.md` written and
   registered in `docs/contents.md`.
 - [ ] EP-M2 Architecture-fitness guard added (separable).
