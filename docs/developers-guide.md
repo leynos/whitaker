@@ -33,11 +33,36 @@ dependencies, or packaging:
 make installer-msrv-check
 ```
 
-The target packages `whitaker-installer` into an isolated temporary target
+The target packages `whitaker-installer` into an isolated scratch target
 directory, extracts the resulting `.crate`, then uses Rust 1.85 to install that
-package with `--locked` into a temporary root and run `--version`. It removes
-the temporary directory on exit. This checks the published package boundary; do
-not replace it with a workspace-path installation.
+package with `--locked` into a scratch root and run `--version`. It clears the
+scratch directory before it starts and removes it on exit. This checks the
+published package boundary; do not replace it with a workspace-path
+installation.
+
+The scratch directory is `INSTALLER_MSRV_DIR`, and `make publish-check` uses
+`PUBLISH_CHECK_DIR` in the same way. Both are fixed paths in the user's cache
+directory, `$XDG_CACHE_HOME/whitaker/scratch` (or `~/.cache/whitaker/scratch`),
+named after the target plus the first 16 hex digits of the SHA-256 of the
+checkout's path, for example `~/.cache/whitaker/scratch/installer-msrv-<id>`.
+
+- They are not `mktemp` directories, because sccache keys a compilation on its
+  absolute paths. When each run named a fresh directory, every compilation in
+  these two targets missed on every run: a per-step probe of `linux-full` (run
+  36126452531) found 151 recurring Rust misses in the MSRV check and 189 in the
+  publish check, all 340 that lane missed.
+- They are not under the workspace, because Cargo walks up from the extracted
+  package it installs, finds the root `Cargo.toml`, and refuses to build.
+- They are not in a shared temporary directory, because the recipes clear them
+  first, and another user could pre-create or swap a tree there.
+- The digest keeps the name short and distinct: two checkouts never share a
+  tree however their paths are spelled, while one checkout gets the same tree
+  on every run.
+
+`stable_build_dirs_contract_test` expands both recipes with `make -n` under a
+supplied `HOME` and `XDG_CACHE_HOME`, and refuses any other directory. Two
+concurrent runs of one of these targets in the same checkout would still share
+a tree, so do not run them in parallel.
 
 ### Linux release compatibility
 

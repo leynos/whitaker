@@ -44,6 +44,26 @@ COVERAGE_OUTPUT ?= lcov.info
 # Nextest argument, which Dylint's nested Cargo build cannot observe.
 COVERAGE_TARGET_DIR ?= $(CURDIR)/target/llvm-cov-target
 RUST_FLAGS ?= -D warnings
+# The installer MSRV check and the publish check each build in a scratch
+# tree they discard afterwards. The trees live at fixed paths rather than
+# under `mktemp`, because sccache keys a compilation on its absolute paths: a
+# directory named afresh on every run made every one of those compilations a
+# miss on every run, 340 Rust misses a run in `linux-full`.
+#
+# They stay outside the workspace, as the `mktemp` directories were: Cargo
+# walks up from a package it installs, and a packaged crate extracted under
+# this checkout finds the root `Cargo.toml` and refuses to build.
+#
+# The root is the user's own cache directory rather than a shared temporary
+# directory, so no other user can pre-create or swap a tree these recipes
+# clear. Each name ends in the first 16 hex digits of the SHA-256 of this
+# checkout's path: two checkouts on one host never share a tree, however
+# their paths are spelled, one checkout gets the same tree on every run, and
+# the name stays short however deep the checkout sits.
+SCRATCH_ROOT ?= $(or $(XDG_CACHE_HOME),$(HOME)/.cache)/whitaker/scratch
+SCRATCH_ID := $(shell printf '%s' '$(CURDIR)' | { sha256sum 2>/dev/null || shasum -a 256; } | cut -c1-16)
+INSTALLER_MSRV_DIR ?= $(SCRATCH_ROOT)/installer-msrv-$(SCRATCH_ID)
+PUBLISH_CHECK_DIR ?= $(SCRATCH_ROOT)/publish-check-$(SCRATCH_ID)
 RUSTDOC_FLAGS ?= --cfg docsrs -D warnings
 MDLINT ?= $(shell command -v markdownlint-cli2 2>/dev/null || printf '%s' "$$HOME/.bun/bin/markdownlint-cli2")
 # `make fmt` and `make check-fmt` call mdtablefix directly. `--git` selects the
@@ -313,7 +333,9 @@ install-smoke: ## Install whitaker-installer and verify basic functionality
 
 installer-msrv-check: ## Install whitaker-installer with its declared MSRV
 	set -eu; \
-	TMP_DIR=$$(mktemp -d "$${TMPDIR:-/tmp}/whitaker-installer-msrv.XXXXXX"); \
+	TMP_DIR="$(INSTALLER_MSRV_DIR)"; \
+	rm -rf -- "$$TMP_DIR"; \
+	mkdir -p "$$TMP_DIR"; \
 	trap 'rm -rf -- "$$TMP_DIR"' EXIT INT TERM HUP; \
 	CARGO_TARGET_DIR="$$TMP_DIR/target" $(CARGO) +1.85.0 package --locked -p whitaker-installer --allow-dirty; \
 	set -- "$$TMP_DIR"/target/package/whitaker-installer-*.crate; \
@@ -403,7 +425,9 @@ publish-check: ## Build and validate packages before publishing
 	ORIG_DIR="$(CURDIR)"; \
 	rustup component add --toolchain "$$TOOLCHAIN" rust-src rustc-dev llvm-tools-preview; \
 	RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) build $(CARGO_LOCKED) --workspace --all-features $(BUILD_JOBS); \
-	TMP_DIR=$$(mktemp -d); \
+	TMP_DIR="$(PUBLISH_CHECK_DIR)"; \
+	rm -rf -- "$$TMP_DIR"; \
+	mkdir -p "$$TMP_DIR"; \
 	trap 'rm -rf "$$TMP_DIR"' 0 INT TERM HUP; \
 	DYLINT_TOOLS_DIR="$(DYLINT_TOOLS_DIR)"; \
 	mkdir -p "$$DYLINT_TOOLS_DIR/bin"; \
