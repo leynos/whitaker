@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import typing as typ
 from pathlib import Path
 
 import pytest
@@ -89,53 +90,71 @@ def test_inactive_step_is_reported_rather_than_omitted(tmp_path: Path) -> None:
     )
 
 
-#: Each restore outcome the registry line must report, as the step outputs
-#: that produce it and the text the line must and must not carry. `None` leaves
-#: an output unset, which is how the runner presents a step that never ran.
-RESTORE_OUTCOMES: tuple[
-    tuple[str, str | None, str | None, tuple[str, ...], tuple[str, ...]], ...
-] = (
+class RestoreOutcome(typ.NamedTuple):
+    """One restore outcome and what the registry line must say about it.
+
+    Attributes
+    ----------
+    matched : str
+        The step's `cache-matched-key` output.
+    hit : str or None
+        The step's `cache-hit` output, or ``None`` to leave it unset, which is
+        how the runner presents a step that never ran.
+    present : tuple of str
+        Fragments the line must carry.
+    absent : tuple of str
+        Fragments the line must not carry.
+    """
+
+    matched: str
+    hit: str | None
+    present: tuple[str, ...]
+    absent: tuple[str, ...] = ()
+
+
+RESTORE_OUTCOMES: dict[str, RestoreOutcome] = {
     # A primary-key match is the only outcome called an exact hit.
-    ("exact-hit", REGISTRY_KEY, "true", ("exact hit", "cache-hit `true`"), ()),
+    "exact-hit": RestoreOutcome(
+        REGISTRY_KEY, "true", ("exact hit", "cache-hit `true`")
+    ),
     # A `restore-keys` restore reports the generation it actually loaded:
     # every warm restore of a run-keyed archive takes this path, because its
     # primary key ends with the current run identifier, so collapsing it into
     # `false` would misclassify each warm run as cold.
-    (
-        "prefix-restore",
+    "prefix-restore": RestoreOutcome(
         REGISTRY_PREFIX,
         "false",
         (f"prefix restore from `{REGISTRY_PREFIX}`", "cache-hit `false`"),
         ("miss",),
     ),
     # An empty matched key is the only outcome called a miss.
-    ("complete-miss", "", "", ("miss (cache-hit `unset`)",), ()),
+    "complete-miss": RestoreOutcome("", "", ("miss (cache-hit `unset`)",)),
     # An unset `cache-hit` is shown as unset, not as an observed `false`.
-    ("absent-hit-output", REGISTRY_KEY, None, ("exact hit", "cache-hit `unset`"), ()),
-)
+    "absent-hit-output": RestoreOutcome(
+        REGISTRY_KEY, None, ("exact hit", "cache-hit `unset`")
+    ),
+}
 
 
 @pytest.mark.parametrize(
-    ("matched", "hit", "present", "absent"),
-    [pytest.param(*case[1:], id=case[0]) for case in RESTORE_OUTCOMES],
+    "outcome", list(RESTORE_OUTCOMES.values()), ids=list(RESTORE_OUTCOMES)
 )
 def test_each_restore_outcome_is_reported_as_what_it_was(
-    tmp_path: Path,
-    matched: str,
-    hit: str | None,
-    present: tuple[str, ...],
-    absent: tuple[str, ...],
+    tmp_path: Path, outcome: RestoreOutcome
 ) -> None:
     """The registry line names the outcome the restore actually had."""
-    outputs = {"CARGO_REGISTRY_KEY": REGISTRY_KEY, "CARGO_REGISTRY_MATCHED": matched}
-    if hit is not None:
-        outputs["CARGO_REGISTRY_HIT"] = hit
+    outputs = {
+        "CARGO_REGISTRY_KEY": REGISTRY_KEY,
+        "CARGO_REGISTRY_MATCHED": outcome.matched,
+    }
+    if outcome.hit is not None:
+        outputs["CARGO_REGISTRY_HIT"] = outcome.hit
     _, summary = _run_observations(tmp_path, **outputs)
 
     line = _registry_line(summary)
-    for fragment in present:
+    for fragment in outcome.present:
         assert fragment in line, line
-    for fragment in absent:
+    for fragment in outcome.absent:
         assert fragment not in line, line
 
 
