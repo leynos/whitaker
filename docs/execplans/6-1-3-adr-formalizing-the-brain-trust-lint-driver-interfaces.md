@@ -3031,3 +3031,37 @@ Effect on remaining work. None on scope. `EP-M2` moves from 18 tests to 19 and
 from one file to two. `VP-1` gains one case from the ordering fix. Both
 documents are unchanged in their normative content apart from the three
 narrowings above.
+
+Revised 2026-09-27, sweeping the round-4 fail-closed fix into the fixture
+harness.
+
+What changed. The round-4 fix corrected the two real-manifest guards to read
+only `Absent` as a pass but left the fixture harness reading `is_found()`, so
+the same defect survived one layer down. It was live rather than theoretical: a
+fixture whose forbidden edge inherits `{ workspace = true }` with no workspace
+table behind it yields `Unresolved`, which `is_found()` scores as clean.
+Reverting the predicate to prove the new case discriminates fails exactly one
+test, `case::unreadable_inheritance`, and no other.
+
+The fixture cases now carry the workspace table their inherited entries resolve
+against, so each one tests the rule rather than the fallback;
+`unreadable_inheritance` is the single case that passes none, because it is
+*about* the fallback. Two predicates that were weaker than the rule allowed are
+tightened: the isolated-member assertion in
+`inherited_rename_is_resolved_through_the_workspace` now pins `Unresolved`, and
+`a_plain_key_is_never_resolved_through_the_workspace` now pins `Absent`, so
+each can discriminate rather than merely refuse to confirm a finding.
+
+Why this is the third instance of one defect class. The fail-closed rule has now
+been repaired at three levels — the scan (`round 4`), the real-manifest guards
+(`round 4`), and the fixture harness (here). Each repair was local to where the
+defect was noticed, and each left a sibling site reading the permissive
+predicate. The lesson recorded for the remaining work is that a predicate
+carrying a correctness rule should be introduced with a grep for its siblings,
+not fixed at the site that was reported.
+
+Effect on remaining work. None on scope. `EP-M2` moves from 19 tests to 20 and
+the two files are unchanged in size class: 399 and 344 lines, both inside the
+400-line rule. Two helpers moved to the toolkit to pay for the new coverage, and
+they are genuine deduplication rather than relocation — the workspace-table
+access had four copies and the non-vacuity floor had two.

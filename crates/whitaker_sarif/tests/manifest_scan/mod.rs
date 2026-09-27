@@ -181,6 +181,28 @@ pub(crate) fn dependency_tables(document: &toml::Table) -> Vec<DependencyTable> 
     tables
 }
 
+/// Asserts that scanning a manifest examined at least one dependency entry.
+///
+/// This is the non-vacuity floor. A path typo, a renamed table, or a
+/// restructure must not be able to make a guard pass by examining nothing.
+///
+/// # Panics
+///
+/// Panics when the manifest declares no dependency table, or no entry within
+/// one, which would make the calling guard vacuous.
+pub(crate) fn assert_non_vacuous(document: &toml::Table, crate_name: &str) {
+    let tables = dependency_tables(document);
+    let entries: usize = tables.iter().map(|(_, table)| table.len()).sum();
+    assert!(
+        !tables.is_empty(),
+        "{crate_name}/Cargo.toml declares no dependency table; the guard is vacuous"
+    );
+    assert!(
+        entries > 0,
+        "{crate_name}/Cargo.toml declares no dependency; the guard is vacuous"
+    );
+}
+
 /// Scans a manifest for a dependency, naming where it was found.
 ///
 /// A declaration outranks an unresolved entry: an explicit match certifies the
@@ -240,11 +262,7 @@ pub(crate) fn workspace_dependencies() -> Option<toml::Table> {
         return None;
     }
     let document = parse_manifest(&read_manifest(&root));
-    document
-        .get("workspace")?
-        .get("dependencies")?
-        .as_table()
-        .cloned()
+    workspace_table_of(&document)
 }
 
 /// Parses a manifest into a TOML table.
@@ -286,6 +304,24 @@ pub(crate) fn read_manifest(path: &Utf8Path) -> String {
         Ok(contents) => contents,
         Err(error) => panic!("manifest should be readable at {path}: {error}"),
     }
+}
+
+/// Returns the root workspace's `[workspace.dependencies]` table, given the
+/// root manifest that declares it.
+///
+/// This is the resolution step behind `workspace_dependencies`, split out so
+/// fixture tests can build a table from a literal instead of a file. A fixture
+/// that inherits through `{ workspace = true }` cannot be resolved without one.
+///
+/// Returns `None` when the document carries no such table, which leaves every
+/// inheriting entry unresolved — the fail-closed reading.
+#[must_use]
+pub(crate) fn workspace_table_of(document: &toml::Table) -> Option<toml::Table> {
+    document
+        .get("workspace")?
+        .get("dependencies")?
+        .as_table()
+        .cloned()
 }
 
 /// Locates a crate's manifest relative to this test crate, or reports absence.
