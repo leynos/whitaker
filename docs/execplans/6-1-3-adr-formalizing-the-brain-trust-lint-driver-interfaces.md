@@ -2963,3 +2963,32 @@ instead of reimplementing them.
 
 Effect on remaining work. None. No milestone, obligation, or normative rule
 changed; this is a citation-accuracy pass.
+
+Revised 2026-09-27 after the third CodeRabbit review round.
+
+What changed. Five findings, all verified before actioning. The substantive one
+moved a compiler type off the crate seam: the adapter's input is now
+`whitaker_common::paths::FindingLocation` — a `RepoRelativePath` and a
+`SourceSpan`, no compiler type — while `SubjectLocation` stays in the root
+`whitaker` crate and pairs it with the `HirId` that deferred emission resolves
+the lint level at. The guard gained `{ workspace = true }` resolution: an
+inherited rename is now read from the root `[workspace.dependencies]` table and
+fails closed when that declaration cannot be read, which closes a latent false
+negative where a member could inherit a forbidden edge invisibly. Three fixture
+tests cover the new shapes, taking the file from 15 tests to 18. Three sites
+claiming the language boundary "requires a visible, reviewable manifest edit"
+were corrected to say what is true: the re-exports are already reachable with no
+edit, so the rule buys an informative manifest rather than a capability gate.
+
+One correction was incomplete on its first pass and is recorded as an
+observation rather than quietly repaired. The seam fix swept the six sites that
+named `SubjectLocation` *as the adapter's input* and reported that count as a
+sweep for the type name. Five further sites in this plan named it instead to
+justify the mapping crate's `whitaker-common` edge, and so carried the same
+defect; they are corrected in the same pass, and the wrong count is corrected in
+place.
+
+Effect on remaining work. None on scope. `EP-M2`'s test count moves from 15 to
+18 and its gate list now names all six gates rather than four. The inheritance
+shapes are new coverage that `VP-1` did not require — they close a hole found by
+review rather than by the plan's own checklist.
