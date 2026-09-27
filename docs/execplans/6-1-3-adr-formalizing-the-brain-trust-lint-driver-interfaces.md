@@ -299,7 +299,7 @@ Thresholds that trigger escalation, not quality targets.
 - [x] (2026-09-27) EP-M1 `docs/adr-005-brain-trust-lint-driver-interfaces.md`
   written and registered in `docs/contents.md`.
 - [x] (2026-09-27) EP-M2 complete. `crates/whitaker_sarif/tests/architecture_boundary.rs`
-  added, 15 tests. It asserts both ADR 005 rules over dependency manifests:
+  added, 18 tests. It asserts both ADR 005 rules over dependency manifests:
   `whitaker_sarif` must not name `whitaker-common`, and
   `whitaker_brain_trust_sarif` must not name `fluent-templates` or
   `unic-langid`. The `whitaker_sarif` half runs against the **real** manifest, so
@@ -307,8 +307,12 @@ Thresholds that trigger escalation, not quality targets.
   plus a test that scans the real manifest *when the crate exists* and returns
   early until then. That test activates on its own when the crate lands, so the
   rule stops resting on fixtures alone without anyone having to remember to wire
-  it up. Red confirmed three times: before and after the
-  `cap_std` conversion, and again after the discovery helper was deduplicated.
+  it up. Red confirmed four times: before and after the
+  `cap_std` conversion, again after the discovery helper was deduplicated, and
+  again for the `{ workspace = true }` inheritance fix — the last against the
+  **real** manifests rather than a fixture, by injecting an inherited rename at
+  the workspace root and in `whitaker_sarif` and confirming the guard fails
+  naming `dependencies.wc_alias`; the injected manifests were then restored.
   With the forbidden edge present the guard fails naming the dependency *and*
   its location, `dependencies.whitaker-common` or
   `dependencies.fluent-templates`. All three non-vacuity checks from `VP-1` are
@@ -317,9 +321,25 @@ Thresholds that trigger escalation, not quality targets.
   dependency were examined. Two further shapes beyond the three required are
   covered: a `[target.'cfg(...)'.dependencies]` selector and a
   `[dev-dependencies]` entry, since a cycle is a cycle whichever table
-  carries it. Gates: `make check-fmt`, `make typecheck`, `make lint`,
-  `make test`.
-  See `Surprises & discoveries` for the two corrections this milestone needed.
+  carries it. Three more were added in response to round-3 review, taking the
+  file from 15 tests to 18: a member that inherits a rename through
+  `{ workspace = true }` is resolved against the root `[workspace.dependencies]`
+  (and shown to be invisible without it), an inherited entry the workspace does
+  not declare fails closed rather than reading as clean, and a local key that
+  merely *matches* a workspace key does not pick up the workspace's package
+  name. Gates: `make check-fmt`, `make markdownlint`, `make nixie`,
+  `make typecheck`, `make lint`, `make test`. `make lint` caught two
+  `clippy::shadow_reuse` errors in the new fixture tests: each resolved the
+  `[workspace.dependencies]` table through a closure parameter named
+  `workspace`, shadowing the outer binding of the same name. The lint is
+  denied workspace-wide at `Cargo.toml:149`, and `RUST_FLAGS ?= -D warnings`
+  promotes it to an error, so it fails the build rather than warning.
+  Reintroducing the shadow reproduced exactly the two errors the gate
+  reported, confirming the fix was not vacuous. `make test` alone would not
+  have caught this: the file compiles and all 18 tests pass either way,
+  because `shadow_reuse` is a Clippy lint and not a rustc one, so `make test`
+  is not a substitute for `make lint`.
+  See `Surprises & discoveries` for the corrections this milestone needed.
 - [x] (2026-09-27) EP-M3 complete. The six zero-column literals named in Stage E
   are now `1`: `common/src/span.rs:67`, `:96`, `:112`, `:129`, `:135`, and
   `common/src/diagnostics.rs:155`. `SourceLocation`'s prose already said
@@ -474,7 +494,7 @@ Thresholds that trigger escalation, not quality targets.
   Evidence: `VP-1` required that the mapping crate "does not depend on
   `whitaker-common`, and therefore cannot reach `whitaker_common::i18n`", while
   `Dependencies` and the layering diagram both require exactly that edge —
-  `SubjectLocation` carries `whitaker_common::paths::RepoRelativePath` and
+  `FindingLocation` carries `whitaker_common::paths::RepoRelativePath` and
   `whitaker_common::span::SourceSpan`. `common/src/lib.rs:14` is a bare
   `pub mod i18n;` with no `cfg` gate and `common/Cargo.toml:11-12` is
   `[features] default = []` with `fluent-templates` non-optional (`:17`), so
@@ -489,6 +509,40 @@ Thresholds that trigger escalation, not quality targets.
   `fluent-templates` or `unic-langid`. Rejected remedy: splitting `i18n` into
   its own crate, which changes the public API of a published crate and so
   trips the plan's `Interface` tolerance.
+- Observation: "grep for the type name" and "grep for the phrasing I had in
+  mind" are different searches, and only the first is a sweep.
+  Evidence: the round-3 fix for finding 3 replaced `SubjectLocation` with
+  `FindingLocation` at the six sites where it was named *as the adapter's
+  input*, and recorded that number as the result of "grepping the exact type
+  name across both documents". Reading the same grep output a second time
+  showed five further sites in this plan — in `Surprises & discoveries`,
+  `Decision log`, `VP-1`, `The layering decision`, and `BTD-REQ-05` — that
+  named the same type to justify the same dependency edge, and so carried the
+  same defect. The ADR was clean after the first pass; the plan was not.
+  Impact: the incomplete fix was reported to a reviewer as complete, which is
+  the failure mode that makes an unfixed defect expensive — it reaches the
+  next reader wearing a "verified" label. The five sites are now corrected and
+  the wrong count is corrected in place rather than quietly overwritten. The
+  generalization: after a type is relocated, the mirrors to sweep for are
+  every site that uses the type *to justify anything*, not merely every site
+  that mentions it in a role the finding happened to cite. A count produced by
+  a keyword search should be described as what the search actually matched.
+- Observation: `make test` passing is not evidence that `make lint` will pass,
+  and this milestone produced a case where the gap was the *only* thing
+  standing between the branch and a green commit gate.
+  Evidence: the three round-3 fixture tests were written with a closure
+  parameter `workspace` that shadowed an outer `let workspace`. The file
+  compiled, `make typecheck` passed, and all 18 tests passed under
+  `make test` — the scrutineer's report shows `make test` green in the same
+  run that recorded `make lint` red. The failure came from
+  `clippy::shadow_reuse`, denied at `Cargo.toml:149` and promoted to an error
+  by `RUST_FLAGS ?= -D warnings`. Impact: the two lints are checked by
+  different tools and a green `cargo test` says nothing about either. The
+  tempting read — "the tests pass, so the code is fine" — is exactly the read
+  that gets a broken branch pushed. Worth keeping in view when sequencing:
+  `make lint` is cheap relative to `make test` and catches a class of defect
+  the test run cannot see, so a gate order that runs `lint` last spends the
+  most expensive gate on a revision that may be about to change.
 - Observation: the plan used second-person pronouns in seven places, and
   CodeRabbit reported two.
   Evidence: `docs/documentation-style-guide.md:32` — "Avoid first and second
@@ -890,7 +944,7 @@ Thresholds that trigger escalation, not quality targets.
   localization dependencies rather than against `whitaker-common` as a whole.**
   Rationale: the `i18n` module is reachable from any `whitaker-common` dependent
   (`common/src/lib.rs:14`, no feature gate), and the mapping crate must depend on
-  `whitaker-common` because `SubjectLocation` carries `RepoRelativePath` and
+  `whitaker-common` because `FindingLocation` carries `RepoRelativePath` and
   `SourceSpan`. Three remedies were available. (i) *Rejected*: split `i18n` out
   of `whitaker-common` into its own crate. This would make the manifest edge
   meaningful, but it changes the public API of a published crate and so trips
@@ -904,11 +958,16 @@ Thresholds that trigger escalation, not quality targets.
   *Chosen*: forbid the two localization crate names in the mapping crate's
   manifest. This is decidable by inspecting one manifest, is total, and
   corresponds to the checkable half of the real invariant — the mapping
-  crate's own edges are kept informative, so reaching Fluent from the mapping
-  requires a visible manifest edit rather than being available by default.
-  (The other half — that the capability is unreachable at all — is
+  crate's own edges are kept informative, so the English-only rule is a
+  reviewable property of the manifest rather than a convention nothing
+  records. (The other half — that the capability is unreachable at all — is
   unachievable while the mapping depends on `whitaker-common`, as option (ii)'s
-  rejection above implies.) The layering itself is
+  rejection above implies. `whitaker-common` re-exports
+  `get_localizer_for_lint` and `Localizer` (`common/src/lib.rs:89-105`), so a
+  mapping that wanted to localize could call one of those with no manifest
+  edit whatsoever — which is exactly why the rule cannot be sold as a
+  capability gate, and must be stated as a fact about the manifest instead.)
+  The layering itself is
   unchanged, so supersession 1 is unaffected. **The ADR must state the
   language boundary in these terms**, and `BTD-REQ-05` item 2 is reworded
   accordingly.
@@ -1141,16 +1200,91 @@ Thresholds that trigger escalation, not quality targets.
   This is a caution about `# Panics` doc sections on test helpers: the
   documented panic is real, but the lint forbids writing it. The guard's
   behaviour was re-verified red-green after the refactor — a forbidden edge
-  still fails naming `dependencies.fluent-templates`, and green is 15 passed —
+  still fails naming `dependencies.fluent-templates`, and green is 18 passed —
   so the restructuring is behaviour-preserving.
   Date/Author: 2026-09-27, implementation agent, following the guard fix.
+
+- **Decision: give the seam a compiler-free location type, and keep `HirId`
+  above it.**
+  Rationale: round-3 finding 3, verified genuine and the most substantive of
+  the five. The ADR specified the adapter crate as depending on "nothing from
+  the compiler", and the ExecPlan repeated it, yet all three of the ADR's
+  justifications for the mapping crate's `whitaker-common` edge pointed at
+  `SubjectLocation` — a type declared in the root `whitaker` crate that carries
+  `rustc_hir::HirId`. The diagram (Figure 1) has no edge from the adapter to
+  the location resolver, so on the ADR's own picture the adapter could not name
+  the type the prose said it consumed. The fix adds
+  `whitaker_common::paths::FindingLocation` — `RepoRelativePath` plus
+  `SourceSpan`, no compiler type — as the value that actually crosses the seam,
+  and reduces `SubjectLocation` to that value paired with the `HirId`. The
+  `HirId` stays where it belongs, above the seam, because it exists for
+  deferred emission (lifecycle rule 1) and has no SARIF role. Both type
+  sketches were updated, in the ADR and in this plan, along with every prose
+  mirror that had named `SubjectLocation` as the adapter's input.
+  **Corrected 2026-09-27, second pass.** The first pass claimed to have found
+  every mirror "by grepping the exact type name across both documents" and
+  put the total at six. That claim was false: the same grep output, read
+  again, showed five further sites in this plan (`Surprises & discoveries`,
+  the layering decision's `Decision log` entry, `VP-1`, `The layering
+  decision`, and `BTD-REQ-05`) that justified the mapping crate's
+  `whitaker-common` edge by naming `SubjectLocation` — the type this round
+  moved *above* the seam. So the defect the fix removed from the ADR survived
+  in the plan, which is the document a future implementer reads. The first
+  pass had grepped for one *phrasing* (the type as the adapter's input) and
+  reported it as a search for the type name; matching a pattern is not the
+  same as sweeping for the concept. The lesson is recorded under `Surprises &
+  discoveries`. Finding 4 was verified the same
+  way: the finding cites the guard's `names_package` at lines 74-79, but the
+  real defect is a property of the predicate, not of a location, so it also had
+  to be resolved at the level of what the guard can see.
+  Date/Author: 2026-09-27, implementation agent, in response to round-3 review.
+
+- **Decision: resolve `{ workspace = true }` inheritance in the guard, and fail
+  closed when it cannot.**
+  Rationale: round-3 finding 4, verified genuine. `names_package` read the
+  dependency key and a local `package` field, so a member manifest inheriting a
+  rename — `loc = { workspace = true }`, with `package = "fluent-templates"`
+  living only in the root `[workspace.dependencies]` — was invisible to it. The
+  guard now resolves such entries against the root table, and the discovery of
+  that table is itself part of the fix: `workspace_dependencies()` walks two
+  levels up from `CARGO_MANIFEST_DIR` and returns `None` rather than panicking
+  when no root is present, so a fixture still exercises the local shapes. An
+  inherited entry whose declaration cannot be read resolves to *not found*
+  rather than being skipped, which is deliberate: the temptation is to return
+  `false` and treat the edge as clean, and that would convert an unreadable
+  declaration into a passing guard. Note the honest scope of the fix: the
+  workspace declares no renames today (`Cargo.toml` has no `package = "…"`
+  entry), so this closes a latent false negative rather than a live one. It was
+  red-verified against the *real* manifests, not only fixtures, by injecting an
+  inherited rename into the workspace root and `whitaker_sarif` and confirming
+  the guard fails naming `dependencies.wc_alias`; the pre-fix predicate was
+  re-evaluated on the same entry and returns `false`. The injected manifests
+  were then restored, and `git diff` confirms both are clean.
+  Date/Author: 2026-09-27, implementation agent, in response to round-3 review.
+
+- **Decision: state the language boundary as a manifest fact, not a capability
+  gate, and fix the mirrors that claimed a manifest edit was needed.**
+  Rationale: round-3 finding 5, whose cited lines (1370-1374) are the
+  `BTD-REQ-02`/`03` quotes and contain nothing relevant; the finding is
+  mislocated but not spurious. Its second clause is real and was verified:
+  `whitaker-common` re-exports `get_localizer_for_lint` and `Localizer`
+  (`common/src/lib.rs:89-105`), so a mapping that wanted to localize needs *no*
+  manifest edit — the capability is already reachable through the crate the
+  adapter must depend on. Three mirrors in this plan claimed otherwise, saying
+  such a use "requires a visible, reviewable manifest edit"; all three now say
+  what the rule actually buys. The ADR's rule 2 was already correct on this
+  point and needed only the explicit sentence that no edit is required. This is
+  the third round in which the same overclaim surfaced, each time at a
+  different site, which is the recorded lesson: a claim worth a finding is a
+  claim that is repeated, and grepping the phrase is part of actioning it.
+  Date/Author: 2026-09-27, implementation agent, in response to round-3 review.
 
 ## Outcomes & retrospective
 
 Completed 2026-09-27.
 
 **What was delivered.** `docs/adr-005-brain-trust-lint-driver-interfaces.md`
-(858 lines), accepted, answering all five `BTD-REQ` questions from
+(931 lines), accepted, answering all five `BTD-REQ` questions from
 `docs/roadmap.md:288-297`. It fixes the crate-edge decision (a third adapter
 crate, `whitaker_brain_trust_sarif`, rather than an edge between the two
 leaves), and states normative rules for location resolution (11), HIR capture
@@ -1163,7 +1297,7 @@ lifecycle (10 plus a callback table), and the language boundary (6).
   the existing design-document reference.
 - `docs/contents.md` — ADR 005 registered under §"Decision records" in the
   ADR 004 style.
-- `crates/whitaker_sarif/tests/architecture_boundary.rs` — new, 15 tests, the
+- `crates/whitaker_sarif/tests/architecture_boundary.rs` — new, 18 tests, the
   architecture-fitness guard for the seam. `whitaker_sarif`'s half runs against
   the real manifest; the mapping crate does not exist yet, so its half runs
   against fixtures and gains teeth when the crate lands.
@@ -1393,16 +1527,19 @@ gap. Two obligations are dischargeable here.
   the language boundary rather than silent on it. This is a claim about direct
   manifest edges, not a reachability proof: the mapping crate does depend on
   `whitaker-common`, and `i18n` cannot be gated out of that dependency, so a
-  future author holding that edge could still resolve a Fluent message. What
-  the rule buys is that such a use would require a visible, reviewable manifest
-  edit rather than being available by default.
+  future author holding that edge could resolve a Fluent message outright —
+  `whitaker-common` re-exports `get_localizer_for_lint` and `Localizer`
+  (`common/src/lib.rs:89-105`), and calling either needs no manifest edit at
+  all. What the rule buys is narrower than a capability gate: the manifest
+  records the intent, so a mapping that localizes is visibly at odds with a
+  declared edge rather than merely undetectable.
 - **Corrected 2026-09-27.** The first wording of this obligation read "does not
   depend on `whitaker-common`, and therefore cannot reach
   `whitaker_common::i18n`". That is unachievable and is withdrawn.
   `common/src/lib.rs:14` is a bare `pub mod i18n;` with no `cfg` gate, and
   `fluent-templates` is a non-optional dependency (`common/Cargo.toml:11-12`,
   `:17`), so *any* crate depending on `whitaker-common` reaches `i18n`
-  unconditionally. `SubjectLocation` carries `RepoRelativePath` and
+  unconditionally. `FindingLocation` carries `RepoRelativePath` and
   `SourceSpan`, so the mapping crate must depend on `whitaker-common`. The
   obligation is restated against the edges that are genuinely checkable and
   genuinely load-bearing. See `Decision log`.
@@ -1493,15 +1630,27 @@ gap. Two obligations are dischargeable here.
   are in `Artefacts and notes`.
 - Status: **not discharged here, deliberately.**
 
-### VP-4 — delegated: finalization is idempotent and emission is deterministic
+### VP-4 — delegated: emission is deterministic, and finalization is once-only
 
 - Obligation: a pass that collects across callbacks and finalizes once produces
   the same ordered finding sequence regardless of the compiler's item
-  visitation order, and finalizing twice changes nothing.
+  visitation order, and a consumed accumulator cannot be finalized a second
+  time.
 - Method: property test with `proptest` over permutations of a synthetic item
-  stream, plus an `rstest-bdd` behavioural test asserting diagnostic order.
+  stream, plus an `rstest-bdd` behavioural test asserting diagnostic order, plus
+  a compile-fail test showing the finalized type cannot be finalized again.
 - Rationale: SARIF output must be byte-stable for continuous-integration
   comparison. This is an invariant over orderings.
+
+  The second clause is not idempotence, and the distinction matters at the
+  type level. ADR 005's lifecycle rule 2 makes finalization *consume* the
+  accumulator and yield a distinct finalized type
+  (`docs/adr-005-brain-trust-lint-driver-interfaces.md:662-668`), so
+  "finalizing twice changes nothing" is not merely untested but
+  unrepresentable — there is no second call to make. The obligation is
+  therefore that the compiler rejects such a call, which a compile-fail test
+  can hold. An earlier wording asked for an idempotence test, which could not
+  have been written against that contract.
 - Domain: permutations of a fixed multiset of captured subjects.
 - Artefact: created by roadmap item 6.2.4 or 6.3.3.
 - Evidence: a passing permutation-invariance property.
@@ -2260,7 +2409,7 @@ Two rules, both load-bearing:
    model for no benefit. Wherever the two must meet, they meet in
    `crates/whitaker_brain_trust_sarif`, which mirrors the shape the repository
    already uses for `whitaker_clones_core`. The mapping crate depends on
-   `whitaker-common` — `SubjectLocation` carries `RepoRelativePath` and
+   `whitaker-common` — `FindingLocation` carries `RepoRelativePath` and
    `SourceSpan` — but must not depend on `fluent-templates` or `unic-langid`,
    which is the edge `VP-1` checks.
 
@@ -2299,24 +2448,26 @@ impl RepoRelativePath {
 ```rust,ignore
 // src/location/mod.rs in the root `whitaker` crate, behind `dylint-driver`.
 
-/// A resolved location for a lint subject.
+/// A resolved location for a lint subject, with the node to emit at.
+///
+/// The `HirId` stays here, above the seam: it exists for deferred emission,
+/// not for SARIF, and keeping it out of the value the adapter consumes is what
+/// lets that crate stay compiler-free. The compiler-free half is
+/// `whitaker_common::paths::FindingLocation`, declared in the ADR.
 #[derive(Clone, Debug)]
 pub struct SubjectLocation {
-    file: whitaker_common::paths::RepoRelativePath,
-    span: whitaker_common::span::SourceSpan,
+    location: whitaker_common::paths::FindingLocation,
     hir_id: rustc_hir::HirId,
 }
 
-/// Why a subject's location could not be resolved.
-#[non_exhaustive]
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum LocationUnavailable {
-    /// The span has no real backing file.
-    NotRealFile,
-    /// The source map could not resolve the span.
-    Unresolvable,
-    /// The path resolved outwith the repository root.
-    OutwithRepositoryRoot { path: camino::Utf8PathBuf },
+impl SubjectLocation {
+    /// Returns the compiler-free location the SARIF adapter consumes.
+    #[must_use]
+    pub fn location(&self) -> &whitaker_common::paths::FindingLocation { todo!() }
+
+    /// Returns the node whose lint level governs emission.
+    #[must_use]
+    pub fn hir_id(&self) -> rustc_hir::HirId { todo!() }
 }
 
 /// Resolves a compiler span to a repository-relative location.
@@ -2324,7 +2475,7 @@ pub fn resolve_subject_location(
     cx: &rustc_lint::LateContext<'_>,
     span: rustc_span::Span,
     hir_id: rustc_hir::HirId,
-) -> Result<SubjectLocation, LocationUnavailable> { todo!() }
+) -> Result<SubjectLocation, whitaker_common::paths::LocationUnavailable> { todo!() }
 ```
 
 Normative rules:
@@ -2615,14 +2766,15 @@ at finalization, for gated subjects only.**
    manifest.** The SARIF mapping lives in `crates/whitaker_brain_trust_sarif`,
    whose manifest does not name `fluent-templates` or `unic-langid`. That is a
    statement about direct dependency edges, and it is the accurate one. The
-   crate does depend on `whitaker-common` — `SubjectLocation` carries
+   crate does depend on `whitaker-common` — `FindingLocation` carries
    `RepoRelativePath` and `SourceSpan` — so the boundary is drawn on the
    localization dependency names rather than on the whole crate;
    `common/src/lib.rs:14` is a bare `pub mod i18n;` with no feature gate, so no
-   manifest edge can make the `i18n` module itself unreachable, and a future
-   author holding the `whitaker-common` edge could resolve a Fluent message
-   after one visible manifest edit. What the rule buys is that the edit is
-   visible and reviewable. Placing the mapping inside
+   manifest edge can make the `i18n` module itself unreachable, and
+   `whitaker-common` re-exports `get_localizer_for_lint` and `Localizer`
+   (`common/src/lib.rs:89-105`), so a mapping that localizes needs no manifest
+   edit at all. What the rule buys is that the manifest states the intent, so
+   such a mapping is visibly at odds with a declared edge. Placing the mapping inside
    `common/src/brain_trust_sarif/`, as the 6.5.1 execplan proposes, would
    surrender that property: it would put the mapping in a crate whose manifest
    declares `fluent-templates` outright, so no check could distinguish a
