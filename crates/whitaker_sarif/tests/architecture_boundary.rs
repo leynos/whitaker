@@ -26,12 +26,13 @@ mod manifest_scan;
 
 use manifest_scan::{
     ScanOutcome,
-    dependency_tables,
+    assert_non_vacuous,
     manifest_if_present,
     parse_manifest,
     read_manifest,
     scan_for,
     workspace_dependencies,
+    workspace_table_of,
 };
 use rstest::rstest;
 
@@ -57,20 +58,7 @@ fn sarif_crate_does_not_depend_on_whitaker_common() {
     let manifest = manifest_if_present(SARIF_CRATE)
         .expect("whitaker_sarif is a sibling of the test crate that must find it");
     let document = parse_manifest(&read_manifest(&manifest));
-
-    let tables = dependency_tables(&document);
-    let entries: usize = tables.iter().map(|(_, table)| table.len()).sum();
-
-    // Non-vacuity floor: a path typo, a renamed table, or a restructure must
-    // not be able to make this guard pass by examining nothing.
-    assert!(
-        !tables.is_empty(),
-        "no dependency table found in {SARIF_CRATE}/Cargo.toml; the guard is vacuous"
-    );
-    assert!(
-        entries > 0,
-        "no dependency examined in {SARIF_CRATE}/Cargo.toml; the guard is vacuous"
-    );
+    assert_non_vacuous(&document, SARIF_CRATE);
 
     // The workspace table is resolved too, so a member that inherited the
     // forbidden edge through `{ workspace = true }` is still caught.
@@ -109,6 +97,24 @@ const MAPPING_CLEAN: &str = concat!(
     "whitaker_sarif = { workspace = true }\n",
 );
 
+/// The workspace table the inheriting fixtures are resolved against.
+///
+/// A fixture models a member manifest, and a member always has a root. Leaving
+/// its `{ workspace = true }` entries unreadable would fail each case for the
+/// fallback rather than the rule, so every inherited key is declared here.
+const FIXTURE_WORKSPACE: &str = concat!(
+    "[workspace.dependencies]\n",
+    "whitaker-common = { path = \"crates/whitaker-common\" }\n",
+    "whitaker_sarif = { path = \"crates/whitaker_sarif\" }\n",
+    "fluent-templates = { path = \"vendor/fluent-templates\" }\n",
+    "unic-langid = { path = \"vendor/unic-langid\" }\n",
+);
+
+/// A fixture inheriting an entry no workspace declaration resolves, which is the
+/// fail-closed case at fixture level: the key might name either package, so
+/// neither is certified absent and the fixture must not read as clean.
+const MAPPING_UNREADABLE: &str = concat!("[dependencies]\n", "loc = { workspace = true }\n",);
+
 /// The forbidden shape: the localization stack named outright.
 const MAPPING_DIRECT: &str = concat!(
     "[dependencies]\n",
@@ -141,20 +147,35 @@ const MAPPING_WORKSPACE_INLINE: &str = concat!(
 );
 
 #[rstest]
-#[case::clean(MAPPING_CLEAN, None)]
-#[case::direct(MAPPING_DIRECT, Some("fluent-templates"))]
-#[case::renamed(MAPPING_RENAMED, Some("fluent-templates"))]
-#[case::target_gated(MAPPING_TARGET_GATED, Some("unic-langid"))]
-#[case::dev_dependency(MAPPING_DEV_DEPENDENCY, Some("fluent-templates"))]
-#[case::workspace_inline(MAPPING_WORKSPACE_INLINE, Some("unic-langid"))]
+#[case::clean(MAPPING_CLEAN, Some(FIXTURE_WORKSPACE), None)]
+#[case::direct(MAPPING_DIRECT, Some(FIXTURE_WORKSPACE), Some("fluent-templates"))]
+#[case::renamed(MAPPING_RENAMED, Some(FIXTURE_WORKSPACE), Some("fluent-templates"))]
+#[case::target_gated(MAPPING_TARGET_GATED, Some(FIXTURE_WORKSPACE), Some("unic-langid"))]
+#[case::dev_dependency(
+    MAPPING_DEV_DEPENDENCY,
+    Some(FIXTURE_WORKSPACE),
+    Some("fluent-templates")
+)]
+#[case::workspace_inline(MAPPING_WORKSPACE_INLINE, Some(FIXTURE_WORKSPACE), Some("unic-langid"))]
+// The one case that passes no workspace: `unreadable_inheritance` is *about*
+// the fallback rather than about the rule.
+#[case::unreadable_inheritance(MAPPING_UNREADABLE, None, Some("fluent-templates"))]
 fn mapping_crate_must_not_name_the_localization_stack(
     #[case] manifest: &str,
+    #[case] workspace: Option<&str>,
     #[case] expected: Option<&str>,
 ) {
     let document = parse_manifest(manifest);
+    let root = workspace.map(parse_manifest);
+    let dependencies = root.as_ref().and_then(workspace_table_of);
+
+    // Fail-closed here too, and for the same reason as the real guards: only a
+    // package the scan could *read* and found counts as a finding, and an entry
+    // that could not be read must not be read as clean. `is_found()` alone
+    // would report `Unresolved` as clean, which is the gap this closes.
     let found = LOCALIZATION_STACK
         .iter()
-        .find(|package| scan_for(&document, package, None).is_found())
+        .find(|package| !scan_for(&document, package, dependencies.as_ref()).is_absent())
         .copied();
 
     assert_eq!(
@@ -224,27 +245,21 @@ const WORKSPACE_WITH_RENAME: &str = concat!(
 #[rstest]
 fn inherited_rename_is_resolved_through_the_workspace() {
     let document = parse_manifest(INHERITED_RENAME);
-    let workspace = parse_manifest(WORKSPACE_WITH_RENAME);
-    let dependencies = workspace
-        .get("workspace")
-        .and_then(|workspace_table| workspace_table.get("dependencies"))
-        .and_then(toml::Value::as_table);
-
-    assert!(
-        dependencies.is_some(),
-        "the fixture must declare a workspace dependency table"
-    );
+    let dependencies = workspace_table_of(&parse_manifest(WORKSPACE_WITH_RENAME));
 
     // Read in isolation the edge is invisible, which is what makes this case
     // worth pinning: the local manifest names no forbidden package anywhere.
-    assert!(
-        !scan_for(&document, "fluent-templates", None).is_found(),
+    // It is unresolved rather than absent — the key inherits, and there is no
+    // workspace table here to resolve it against.
+    assert_eq!(
+        scan_for(&document, "fluent-templates", None),
+        ScanOutcome::Unresolved("dependencies.loc".to_owned()),
         "the member manifest alone cannot resolve an inherited rename"
     );
 
     // With the workspace table the effective name is recovered.
     assert_eq!(
-        scan_for(&document, "fluent-templates", dependencies),
+        scan_for(&document, "fluent-templates", dependencies.as_ref()),
         ScanOutcome::Found("dependencies.loc".to_owned()),
         "an inherited rename must resolve to the package the workspace declares"
     );
@@ -257,13 +272,12 @@ fn inherited_entry_without_a_workspace_declaration_is_not_treated_as_clean() {
     // unreadable declaration read as a missing dependency, and the guard would
     // pass while blind to whatever that entry's name actually is.
     let document = parse_manifest("[dependencies]\nloc = { workspace = true }\n");
-    let empty = parse_manifest("[workspace.dependencies]\nserde = \"1\"\n");
-    let dependencies = empty
-        .get("workspace")
-        .and_then(|workspace| workspace.get("dependencies"))
-        .and_then(toml::Value::as_table);
+    // A workspace table that declares some *other* key, so the inheriting entry
+    // resolves to nothing and the scan cannot read its name.
+    let dependencies =
+        workspace_table_of(&parse_manifest("[workspace.dependencies]\nserde = \"1\"\n"));
 
-    let outcome = scan_for(&document, "fluent-templates", dependencies);
+    let outcome = scan_for(&document, "fluent-templates", dependencies.as_ref());
     assert_eq!(
         outcome,
         ScanOutcome::Unresolved("dependencies.loc".to_owned()),
@@ -279,7 +293,7 @@ fn inherited_entry_without_a_workspace_declaration_is_not_treated_as_clean() {
     // can certify an absence while it is unreadable. The result is a failure
     // rather than a pass, which is the point of the rule.
     assert_eq!(
-        scan_for(&document, "serde", dependencies),
+        scan_for(&document, "serde", dependencies.as_ref()),
         ScanOutcome::Unresolved("dependencies.loc".to_owned()),
         "an unreadable entry leaves every package unproven, not only its own"
     );
@@ -288,7 +302,7 @@ fn inherited_entry_without_a_workspace_declaration_is_not_treated_as_clean() {
     // genuine absence still reports as one.
     let plain = parse_manifest("[dependencies]\nserde = \"1\"\n");
     assert_eq!(
-        scan_for(&plain, "fluent-templates", dependencies),
+        scan_for(&plain, "fluent-templates", dependencies.as_ref()),
         ScanOutcome::Absent,
         "without an unreadable entry, absence is certified as absence"
     );
@@ -309,15 +323,12 @@ fn an_unresolved_entry_does_not_mask_a_declared_one() {
         "aaa = { workspace = true }\n",
         "fluent-templates = { workspace = true }\n",
     ));
-    let empty = parse_manifest("[workspace.dependencies]\nserde = \"1\"\n");
-    let dependencies = empty
-        .get("workspace")
-        .and_then(|workspace| workspace.get("dependencies"))
-        .and_then(toml::Value::as_table);
+    let dependencies =
+        workspace_table_of(&parse_manifest("[workspace.dependencies]\nserde = \"1\"\n"));
     // Neither key is declared by the workspace, so the declared entry is found
     // on its own key, not by any workspace resolution.
     assert_eq!(
-        scan_for(&document, "fluent-templates", dependencies),
+        scan_for(&document, "fluent-templates", dependencies.as_ref()),
         ScanOutcome::Found("dependencies.fluent-templates".to_owned()),
         "a declared entry must be reported even beside an unresolvable one"
     );
@@ -329,14 +340,14 @@ fn a_plain_key_is_never_resolved_through_the_workspace() {
     // local key that happens to match a workspace key with a different package
     // must not pick up the workspace's name.
     let document = parse_manifest("[dependencies]\nloc = \"1\"\n");
-    let workspace = parse_manifest(WORKSPACE_WITH_RENAME);
-    let dependencies = workspace
-        .get("workspace")
-        .and_then(|workspace_table| workspace_table.get("dependencies"))
-        .and_then(toml::Value::as_table);
+    let dependencies = workspace_table_of(&parse_manifest(WORKSPACE_WITH_RENAME));
 
-    assert!(
-        !scan_for(&document, "fluent-templates", dependencies).is_found(),
+    // The local entry does not inherit, so the workspace's name for `loc` is
+    // irrelevant to it. A scan that consulted the workspace anyway would find
+    // `fluent-templates` here and report a false positive.
+    assert_eq!(
+        scan_for(&document, "fluent-templates", dependencies.as_ref()),
+        ScanOutcome::Absent,
         "a non-inherited entry keeps its own name"
     );
 }
@@ -354,22 +365,10 @@ fn mapping_crate_manifest_is_bound_when_it_exists() {
 
     let document = parse_manifest(&read_manifest(&path));
 
-    // Once the crate exists the guard must not be able to pass by examining
-    // nothing: a manifest with no dependency table at all cannot evidence the
-    // absence of an edge, so report that as a failure rather than a pass.
-    let tables = dependency_tables(&document);
-    assert!(
-        !tables.is_empty(),
-        "{MAPPING_CRATE}/Cargo.toml declares no dependency table; the guard is vacuous"
-    );
-    let entries: usize = tables.iter().map(|(_, table)| table.len()).sum();
-    assert!(
-        entries > 0,
-        "{MAPPING_CRATE}/Cargo.toml declares no dependency; the guard is vacuous"
-    );
+    // A manifest with no dependency table cannot evidence the absence of an
+    // edge, so the non-vacuity floor applies here too.
+    assert_non_vacuous(&document, MAPPING_CRATE);
 
-    // The workspace table is resolved here too, so the mapping crate cannot
-    // inherit the localization stack through `{ workspace = true }`.
     let workspace = workspace_dependencies();
     for package in LOCALIZATION_STACK {
         let outcome = scan_for(&document, package, workspace.as_ref());
