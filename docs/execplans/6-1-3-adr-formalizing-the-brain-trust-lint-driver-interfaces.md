@@ -514,6 +514,51 @@ Thresholds that trigger escalation, not quality targets.
   the numbered-list spans in `Known risks` carry apostrophes and backticks, and
   one span in `Suggestion rendering` runs across a line break.
 
+- Observation: `VP-1`'s stated method names two crates that are not in this
+  workspace, so the guard cannot be written as written.
+  Evidence: `VP-1` (`:1043-1044`) specifies "a parameterized unit test with
+  `rstest`, using `googletest` matchers and `pretty_assertions`. Neither
+  `googletest` nor `pretty_assertions` appears anywhere in `Cargo.toml`,
+  `Cargo.lock`, or any tracked `*.toml` or `*.rs` file — a repository-wide grep
+  returns nothing. Adding either would breach `Constraints` (`:104-105`): "No
+  new external crate dependency. `EP-M2`'s guard must be written against crates
+  already resolvable for the crate that hosts it." The plan also assumes the
+  guard hosts in `crates/whitaker_sarif/tests/` or the mapping crate's `tests/`;
+  the mapping crate is forbidden here (`:70-74`), so `whitaker_sarif` is the
+  only legal host, and its dev-dependencies are exactly `whitaker_test_macros`,
+  `rstest`, `rstest-bdd`, `rstest-bdd-macros`, and `tempfile` — no matcher crate
+  and no TOML parser.
+  Impact: the constraint and the method contradict each other, and the
+  constraint is the load-bearing one — it is a hard invariant, whereas the
+  method is illustrative. Resolution recorded in `Decision log`: use `rstest`
+  with plain `assert!` and `panic!`, which are already in scope with no
+  dependency at all, and add `toml` to `whitaker_sarif`'s dev-dependencies.
+  `toml` is not a new external dependency in the sense the constraint means: it
+  is already a `[workspace.dependencies]` entry (`Cargo.toml:30`) and already in
+  `Cargo.lock` at `1.1.3+spec-1.1.0`, and four other crates in the tree already
+  take it as a dependency or build-dependency, including
+  `crates/whitaker_clones_core/Cargo.toml:34` and `:39`. The guard therefore
+  adds a lockfile entry already present and resolves offline.
+
+- Observation: the repository already parses `Cargo.toml` in tests, and the
+  precedent shows the exact shape the guard needs.
+  Evidence: `crates/whitaker_clones_core/build_support.rs:13-29` parses a
+  manifest with `manifest.parse::<toml::Table>()`, walks
+  `["workspace"]["dependencies"]`, and handles both the inline-string and
+  table forms of a dependency requirement — the same two shapes the guard must
+  read, because `whitaker-common = { workspace = true }` and
+  `loc = { package = "whitaker-common" }` are both tables whose forbidden name
+  sits under a different key. `crates/whitaker_clones_core/tests/build_script_parsing.rs`
+  (208 lines) is the matching test file, and `CARGO_MANIFEST_DIR` is the
+  established way to locate a manifest from a test
+  (`crates/whitaker_clones_core/tests/ast_boundary.rs:32`,
+  `common/tests/i18n_packaging.rs:49`).
+  Impact: the guard has a proven in-tree pattern to follow at both ends — the
+  parse and the test harness — so `EP-M2` needs no invention. The `package`
+  rename case that `VP-1`'s second non-vacuity check demands is precisely why
+  the scan must read the table's `package` key rather than only the dependency
+  key.
+
 ## Decision log
 
 - Decision: write one ADR covering all five questions rather than five small
@@ -798,6 +843,22 @@ Thresholds that trigger escalation, not quality targets.
   the once-per-site conclusion, with a pointer to the subsection.
   Date/Author: 2026-09-27, implementation agent.
 
+- **Decision: write the `VP-1` guard with `rstest` and plain assertions, and
+  host it in `crates/whitaker_sarif/tests/` with `toml` as a dev-dependency.**
+  Rationale: `VP-1`'s stated method names `googletest` and `pretty_assertions`,
+  neither of which is in this workspace, and adding them would breach the
+  `Constraints` ban on new external dependencies. The ban wins: it is a hard
+  invariant, and the method clause is illustrative. `rstest` is already a
+  dev-dependency of the hosting crate, and `assert!` and `panic!` need no crate
+  at all, so the guard's only added manifest line is `toml` — which is already a
+  `[workspace.dependencies]` entry (`Cargo.toml:30`) and already in
+  `Cargo.lock`, so no new external crate enters the tree and the build still
+  resolves offline. `whitaker_sarif` is the only legal host: the mapping crate
+  is forbidden by `Constraints` (`:70-74`), so its `tests/` cannot be used.
+  `crates/whitaker_clones_core/build_support.rs:13-29` and its
+  `tests/build_script_parsing.rs` supply the parse-and-test pattern.
+  Date/Author: 2026-09-27, implementation agent, during `EP-M2` reconnaissance.
+
 ## Outcomes & retrospective
 
 To be completed at `EP-M4`. Before setting this plan to `COMPLETE`, reconcile
@@ -995,8 +1056,13 @@ gap. Two obligations are dischargeable here.
   `SourceSpan`, so the mapping crate must depend on `whitaker-common`. The
   obligation is restated against the edges that are genuinely checkable and
   genuinely load-bearing. See `Decision log`.
-- Method: parameterized unit test with `rstest`, using `googletest` matchers
-  and `pretty_assertions`, asserting over the manifest's dependency tables.
+- Method: parameterized unit test with `rstest` and plain `assert!`, asserting
+  over the manifest's dependency tables. **Corrected 2026-09-27**: the first
+  wording named `googletest` matchers and `pretty_assertions`, neither of which
+  is resolvable in this workspace, and adding them would breach the
+  `Constraints` ban on new external dependencies. Manifests are parsed with
+  `toml`, which is already a workspace dependency and already in `Cargo.lock`.
+  See `Decision log` and `Surprises & discoveries`.
 - Rationale: this is a structural property decidable by inspecting one
   manifest. A property test would generate nothing meaningful. The correct
   rigour is a cheap, total check on every `make test`.
