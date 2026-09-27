@@ -64,6 +64,10 @@ impl<'tcx> LateLintPass<'tcx> for NoStdFsOperations {
         }
     }
 
+    /// Classify resolved imports and emit diagnostics for `std::fs` usages.
+    ///
+    /// Excluded crates are skipped, as are non-`use` items; each resolved item
+    /// in a use tree is classified at the import's span.
     fn check_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx hir::Item<'tcx>) {
         if self.should_skip() {
             return;
@@ -80,6 +84,11 @@ impl<'tcx> LateLintPass<'tcx> for NoStdFsOperations {
         }
     }
 
+    /// Classify path, struct-construction, and method-call expressions.
+    ///
+    /// Excluded crates and unrelated expression kinds are ignored. Method
+    /// calls use their resolved definition first, then inspect the receiver
+    /// type when resolution did not identify a `std::fs` operation.
     fn check_expr(&mut self, cx: &LateContext<'tcx>, expr: &'tcx hir::Expr<'tcx>) {
         if self.should_skip() {
             return;
@@ -113,6 +122,9 @@ impl<'tcx> LateLintPass<'tcx> for NoStdFsOperations {
         }
     }
 
+    /// Classify path types and emit a diagnostic for a resolved `std::fs` use.
+    ///
+    /// Excluded crates and non-path type expressions are ignored.
     fn check_ty(&mut self, cx: &LateContext<'tcx>, ty: &'tcx hir::Ty<'tcx, AmbigArg>) {
         if self.should_skip() {
             return;
@@ -179,6 +191,10 @@ impl NoStdFsOperations {
         emit_diagnostic(cx, span, usage, &self.localizer);
     }
 
+    /// Infer a filesystem operation from a method receiver's standard type.
+    ///
+    /// Returns `None` for non-ADT receivers, types outside `std`, or standard
+    /// types outside `std::fs`; otherwise returns the qualified operation label.
     fn receiver_usage_for_method(
         &self,
         cx: &LateContext<'_>,

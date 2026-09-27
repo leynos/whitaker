@@ -77,6 +77,10 @@ impl<'tcx> LateLintPass<'tcx> for NoUnwrapOrElsePanic {
         self.localizer = get_localizer_for_lint(LINT_NAME, shared_config.locale());
     }
 
+    /// Diagnose `unwrap_or_else` when an `Option`/`Result` fallback can panic.
+    ///
+    /// Calls with another method name or receiver type, a missing/non-closure
+    /// fallback, or a context accepted by the configured policy are ignored.
     fn check_expr(&mut self, cx: &LateContext<'tcx>, expr: &'tcx hir::Expr<'tcx>) {
         let ExprKind::MethodCall(segment, receiver, args, _) = expr.kind else {
             return;

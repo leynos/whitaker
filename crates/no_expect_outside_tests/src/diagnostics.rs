@@ -218,6 +218,10 @@ fn localized_messages(
     resolve_message_set(lookup, MESSAGE_KEY, &args)
 }
 
+/// Build the English diagnostic set used when localized resolution fails.
+///
+/// The receiver and context labels identify the `expect` call and its enclosing
+/// scope; the category selects the matching recovery guidance.
 fn fallback_messages(
     receiver: &ReceiverLabel,
     context: &ContextLabel,
