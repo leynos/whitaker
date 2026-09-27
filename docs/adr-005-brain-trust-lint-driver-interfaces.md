@@ -29,11 +29,11 @@ None of that is a single consumer's business. Roadmap item 6.2.4 builds
 SARIF, and 6.6.2 and 6.6.3 localize the diagnostics. Six roadmap items would
 otherwise each decide for themselves how a `rustc_span::Span` becomes a file
 identifier, which HIR callbacks capture what, when a suggestion is computed,
-how a finding reaches the compiler, and which text is translated. Those
-choices interlock: the location rule determines which `#[allow]` attribute
-works, the capture rule determines whether the lightweight threshold can see a
-complete method set, and the emission rule determines whether a reader can
-suppress the lint at all.
+how a finding reaches the compiler, and which text is translated. Those choices
+interlock: the location rule determines which `#[allow]` attribute works, the
+capture rule determines whether the lightweight threshold can see a complete
+method set, and the emission rule determines whether a reader can suppress the
+lint at all.
 
 The question is therefore not what the lints should measure — the design
 document settles that — but where the seam lies between compiler-facing code
@@ -42,9 +42,9 @@ and the pure domain, and what crosses it.
 Two constraints make the seam non-obvious.
 
 The first is a dependency cycle. `whitaker-common` holds the domain: metric
-builders, evaluation, decomposition advice, spans, and the localization
-helpers. `whitaker_sarif` holds the SARIF 2.1.0 model. The mapping from a
-finding to a SARIF result needs both, because a `FindingLocation` carries a
+builders, evaluation, decomposition advice, spans, and the localization helpers.
+`whitaker_sarif` holds the SARIF 2.1.0 model. The mapping from a finding to a
+SARIF result needs both, because a `FindingLocation` carries a
 `RepoRelativePath` and a `SourceSpan` from the domain while a `Run` is a wire
 type. If either crate depends on the other, the other's reason for existing is
 undermined: `whitaker-common` is published
@@ -93,14 +93,19 @@ merged.
 - `BTD-REQ-05`: the boundary between English SARIF text and localized
   diagnostics must be stated.
 
-Requirement identifiers quote `docs/roadmap.md:288-297`, where item 6.1.3
-names this ADR as its deliverable.
+Requirement identifiers quote `docs/roadmap.md:288-297`, where item 6.1.3 names
+this ADR as its deliverable.
 
 ### Technical requirements
 
 - No rule may require a change to an existing public signature in either leaf
   crate, since `whitaker-common` is published.
-- No new dependency may be introduced into either leaf crate.
+- No new production dependency may be introduced into either leaf crate.
+  Development dependencies are exempt: `whitaker_sarif` already carries `toml`
+  and `cap-std` for the architecture-fitness guard in
+  `tests/architecture_boundary.rs`, and `whitaker-common` carries `proptest`,
+  `regex`, and `logtest`. A dev-dependency reaches no published artefact, so it
+  cannot break the publish contract this rule exists to protect.
 - Output must be byte-stable across runs and across compilation units.
 - The SARIF output must conform to SARIF 2.1.0, including its column and
   end-column conventions.
@@ -113,16 +118,16 @@ strategy and the emission lifecycle are compared after it.
 
 ### Option A: `whitaker-common` depends on `whitaker_sarif`
 
-The domain would own the SARIF mapping by depending on the wire model. This
-is the smallest change in file terms, and it puts the mapping next to the
-metrics it reads.
+The domain would own the SARIF mapping by depending on the wire model. This is
+the smallest change in file terms, and it puts the mapping next to the metrics
+it reads.
 
 It is rejected on two counts. It breaks `cargo publish -p whitaker-common`:
 `whitaker-common` is published while `whitaker_sarif` carries
 `publish = false`, so the packaged manifest would carry an unresolvable
-registry requirement. And it inverts the dependency that the layering exists
-to preserve — a pure domain would depend on a wire format, so every consumer
-of the metrics would also acquire the SARIF model.
+registry requirement. And it inverts the dependency that the layering exists to
+preserve — a pure domain would depend on a wire format, so every consumer of
+the metrics would also acquire the SARIF model.
 
 ### Option B: `whitaker_sarif` depends on `whitaker-common`
 
@@ -132,9 +137,9 @@ in one crate.
 
 It is rejected because it drags the localization stack into every consumer of
 the SARIF model. `whitaker_sarif`'s only current consumer is the clone
-detector, which has no use for Fluent bundles, and `common/src/lib.rs:14`
-makes `i18n` unreachable-by-cfg from any dependent. It also leaves the mapping
-inside `whitaker-common`'s orbit if that is where the module is placed, beside
+detector, which has no use for Fluent bundles, and `common/src/lib.rs:14` makes
+`i18n` unreachable-by-cfg from any dependent. It also leaves the mapping inside
+`whitaker-common`'s orbit if that is where the module is placed, beside
 `common/src/i18n/`, where no manifest check can distinguish a mapping that
 writes English text from one that resolves a Fluent key.
 
@@ -149,14 +154,14 @@ This mirrors the shape the repository already uses for the clone detector:
 depending on no compiler crate. The adapter is the only crate that must know
 both vocabularies, and it is the only crate that needs to.
 
-| Topic                                            | Option A                              | Option B                        | Option C                                    |
-| ------------------------------------------------ | ------------------------------------- | ------------------------------- | ------------------------------------------- |
-| Cycle                                            | Broken                                | Broken                          | Broken                                      |
-| `whitaker-common` publishable                    | No: unresolvable registry requirement | Yes                             | Yes                                         |
-| `whitaker_sarif` a pure model                    | Yes                                   | No: gains the domain and Fluent | Yes                                         |
-| Mapping crate's manifest names the Fluent stack  | n/a                                   | Yes                             | No: its absence is checkable                |
-| Existing precedent                               | None                                  | None                            | `whitaker_clones_core`                      |
-| New crates                                       | 0                                     | 0                               | 1                                           |
+| Topic                                           | Option A                              | Option B                        | Option C                     |
+| ----------------------------------------------- | ------------------------------------- | ------------------------------- | ---------------------------- |
+| Cycle                                           | Broken                                | Broken                          | Broken                       |
+| `whitaker-common` publishable                   | No: unresolvable registry requirement | Yes                             | Yes                          |
+| `whitaker_sarif` a pure model                   | Yes                                   | No: gains the domain and Fluent | Yes                          |
+| Mapping crate's manifest names the Fluent stack | n/a                                   | Yes                             | No: its absence is checkable |
+| Existing precedent                              | None                                  | None                            | `whitaker_clones_core`       |
+| New crates                                      | 0                                     | 0                               | 1                            |
 
 _Table 1: Comparison of crate-edge options._
 
@@ -167,8 +172,8 @@ property that makes the rule enforceable at all.
 
 ### Capture strategy: single-phase fan-out against two-phase capture
 
-The first draft of this decision required a single traversal that fanned out
-to all four metric sinks as it went. That makes the traversal itself the deep
+The first draft of this decision required a single traversal that fanned out to
+all four metric sinks as it went. That makes the traversal itself the deep
 analysis, so the lightweight threshold can only gate the clustering step, and
 it forces the pass to retain six string collections per method for every type
 in the crate until the crate has been fully visited.
@@ -181,19 +186,17 @@ bodies re-fetched through the typing context and walked deeply.
 
 This satisfies both halves of a requirement that a single phase cannot: the
 design document states that deep analysis runs only after lightweight
-thresholds are crossed
-(`docs/brain-trust-lints-design.md:361-365`), and the gate must see a complete
-method count to be meaningful. `BodyId` is `Copy` and carries no lifetime, so
-phase one can live on a pass struct that is not parameterized by the compiler's
-lifetime — which every shipped driver's is not
+thresholds are crossed (`docs/brain-trust-lints-design.md:361-365`), and the
+gate must see a complete method count to be meaningful. `BodyId` is `Copy` and
+carries no lifetime, so phase one can live on a pass struct that is not
+parameterized by the compiler's lifetime — which every shipped driver's is not
 (`crates/bumpy_road_function/src/driver/mod.rs:75`).
 
 ### Emission lifecycle: emit during traversal against defer to crate-post
 
 Emitting during traversal is what nine of the ten shipped lint crates do, by
 calling `cx.emit_span_lint`. For a per-item lint that is correct, because the
-context's notion of "the item currently being linted" is the item just
-visited.
+context's notion of "the item currently being linted" is the item just visited.
 
 It is rejected here because the deferred lifecycle is the one both lints need,
 and because deferral changes which suppression attributes work. The two lints
@@ -206,17 +209,16 @@ anything, and the gate cannot run until the crate has been fully visited.
 
 `brain_trait` is not. Its unit of analysis is a single trait definition
 (`docs/brain-trust-lints-design.md:60-64`), and every item it measures — a
-required method, a default method body, an associated type, an associated
-const — lives inside the one `ItemKind::Trait` item. `TraitMetricsBuilder`
-reflects that shape: it is constructed with a trait name and accepts only trait
-items (`common/src/brain_trait_metrics/metrics.rs:120-235`), so it needs no
-data from any other item. A trait's `check_item` callback has therefore seen
-everything the lint needs, and emitting there would be correct on its own
-terms. This is not a hypothetical:
-`crates/bumpy_road_function/src/driver/mod.rs:99-100` reaches a trait default
-body's `BodyId` synchronously from `check_trait_item` — the same data
-`brain_trait` would need — so an immediate-emission path is demonstrably
-available.
+required method, a default method body, an associated type, an associated const
+— lives inside the one `ItemKind::Trait` item. `TraitMetricsBuilder` reflects
+that shape: it is constructed with a trait name and accepts only trait items
+(`common/src/brain_trait_metrics/metrics.rs:120-235`), so it needs no data from
+any other item. A trait's `check_item` callback has therefore seen everything
+the lint needs, and emitting there would be correct on its own terms. This is
+not a hypothetical: `crates/bumpy_road_function/src/driver/mod.rs:99-100`
+reaches a trait default body's `BodyId` synchronously from `check_trait_item` —
+the same data `brain_trait` would need — so an immediate-emission path is
+demonstrably available.
 
 `brain_trait` is nonetheless deferred. The reason is uniformity of the seam,
 not a constraint that forced the choice. Both lints share this ADR, and a
@@ -229,8 +231,8 @@ need.
 
 Deferral changes which suppression attributes work.
 `LateContext::opt_span_lint` resolves the lint level at
-`self.last_node_with_lint_attrs` (`rustc_lint/src/context.rs:600-615`, field
-at `:500`), which at crate-post time is the crate root. The ordinary
+`self.last_node_with_lint_attrs` (`rustc_lint/src/context.rs:600-615`, field at
+`:500`), which at crate-post time is the crate root. The ordinary
 `cx.emit_span_lint` path would therefore silently ignore an
 `#[allow(brain_trait)]` on the trait and ship an unsuppressable lint — and it
 is precisely because `brain_trait` could otherwise emit immediately that the
@@ -310,8 +312,8 @@ callers must percent-encode before building a SARIF URI. The second declares
 the compiler-free location value that crosses the seam, also in
 `whitaker-common`, bundling that path with a source span and carrying the
 reason a location may be unavailable. The third declares, in the root
-`whitaker` crate, the resolving function that takes a late context, a span,
-and an `HirId`, and the type it returns: the domain location paired with the
+`whitaker` crate, the resolving function that takes a late context, a span, and
+an `HirId`, and the type it returns: the domain location paired with the
 `HirId` the lint driver needs to emit at the right node.
 
 ```rust,ignore
@@ -419,19 +421,20 @@ The normative rules are these.
 
 1. **Home, and where the seam falls.** `RepoRelativePath` and
    `FindingLocation` live in `whitaker-common`, whose invariant is a
-   repository-path invariant rather than a SARIF one. `resolve_subject_location`
-   lives in the root `whitaker` crate at `src/location/mod.rs` behind
-   `dylint-driver` — the established home for shared compiler-facing helpers
-   (`src/lib.rs:13-25`), already depended on by every lint crate with that
-   feature, and not in the publish set. A new module rather than `src/hir/`,
-   which is 374 lines against the 400-line cap in `AGENTS.md:31`.
+   repository-path invariant rather than a SARIF one.
+   `resolve_subject_location` lives in the root `whitaker` crate at
+   `src/location/mod.rs` behind `dylint-driver` — the established home for
+   shared compiler-facing helpers (`src/lib.rs:13-25`), already depended on by
+   every lint crate with that feature, and not in the publish set. A new module
+   rather than `src/hir/`, which is 374 lines against the 400-line cap in
+   `AGENTS.md:31`.
 2. **Path source.** The file is obtained from the session's source map. A path
    the compiler reports as relative is used unchanged; an absolute path has the
    compiler's working directory stripped. Under Cargo the relative case is the
    live one: `cargo` sets the compiler's working directory to the workspace
    root and hands rustc a workspace-root-relative source path, so the stripping
-   branch is a fallback for the non-Cargo case. This was confirmed by
-   probe — see `docs/execplans/6-1-3-...md` `Artefacts and notes`.
+   branch is a fallback for the non-Cargo case. This was confirmed by probe —
+   see `docs/execplans/6-1-3-...md` `Artefacts and notes`.
 3. **Normalization, and encoding at the URI boundary.** Forward slashes on every
    platform, no leading `./`, no leading slash, no `..` component, per SARIF
    2.1.0 §3.4.3, which requires a relative-path reference under RFC 3986 §4.2.
@@ -440,14 +443,15 @@ The normative rules are these.
    output artefact directory, not source URIs.
 
    Normalization is not encoding, and the two must not be conflated.
-   `RepoRelativePath::as_str` yields the decoded repository path — the characters
-   a reader sees in a diagnostic — and it is **not** percent-encoded. Encoding is
-   the SARIF boundary's job rather than the path type's, because the same value
-   feeds compiler diagnostics and fingerprints, where percent-encoding would be
-   wrong, and `artifactLocation.uri`, where it is required. A path containing a
-   space or a `#` must therefore be percent-encoded when the mapping builds
-   `artifactLocation.uri`, or the result is not a valid URI reference. This is a
-   live case rather than a hypothetical: the repository tracks
+   `RepoRelativePath::as_str` yields the decoded repository path — the
+   characters a reader sees in a diagnostic — and it is **not**
+   percent-encoded. Encoding is the SARIF boundary's job rather than the path
+   type's, because the same value feeds compiler diagnostics and fingerprints,
+   where percent-encoding would be wrong, and `artifactLocation.uri`, where it
+   is required. A path containing a space or a `#` must therefore be
+   percent-encoded when the mapping builds `artifactLocation.uri`, or the
+   result is not a valid URI reference. This is a live case rather than a
+   hypothetical: the repository tracks
    `docs/execplans/3.4.6. Record download-versus-build rates.md`, whose name
    contains spaces.
 
@@ -457,19 +461,19 @@ The normative rules are these.
    (`crates/whitaker_clones_core/src/run0/tests.rs:192`). Its paths happen to
    contain no reserved characters, so the defect is latent rather than
    observable, and no percent-encoder exists anywhere in the tree today. The
-   mapping crate is where the encoder belongs, and this rule makes writing one a
-   requirement rather than a judgement call. **Recorded as follow-up work**: the
-   clone detector shares the defect, and no existing verification property
+   mapping crate is where the encoder belongs, and this rule makes writing one
+   a requirement rather than a judgement call. **Recorded as follow-up work**:
+   the clone detector shares the defect, and no existing verification property
    covers it, because the properties are over region coordinates rather than
    over URI text.
 4. **Column convention.** Lines and columns are one-based, and columns count
    UTF-16 code units, satisfying `RegionBuilder::build`, which rejects a zero
    column (`crates/whitaker_sarif/src/builders/location_builder.rs:91`) and
    matching the unit the repository's only existing SARIF producer counts
-   (`crates/whitaker_clones_core/src/run0/span.rs:78-79`, which converts
-   through `line_slice.encode_utf16().count()`). The compiler reports
-   zero-based `CharPos` columns in Unicode scalar values, and its two line
-   accessors differ: `span_to_lines` yields a zero-based `line_index` while
+   (`crates/whitaker_clones_core/src/run0/span.rs:78-79`, which converts through
+   `line_slice.encode_utf16().count()`). The compiler reports zero-based
+   `CharPos` columns in Unicode scalar values, and its two line accessors
+   differ: `span_to_lines` yields a zero-based `line_index` while
    `lookup_char_pos` yields a one-based `Loc::line`. The conversion is
    therefore stated per accessor, adding one to each axis.
 
@@ -483,9 +487,9 @@ The normative rules are these.
    `endLine: 3` with the column _past_ that character, which on a single-line
    region is one more than `startColumn` plus the character count. Setting
    `endColumn` to the last included character's own column is an off-by-one,
-   and it is the error the incumbent producer makes — see `Goals and
-   non-goals` and `Known risks`. `span_to_region` is the only place the rule
-   is enforced, and `VP-3` is the obligation that tests it.
+   and it is the error the incumbent producer makes — see `Goals and non-goals`
+   and `Known risks`. `span_to_region` is the only place the rule is enforced,
+   and `VP-3` is the obligation that tests it.
 5. **Enforcement point.** `SourceLocation::new` is an infallible `const fn`
    and does not enforce the convention (`common/src/span.rs:31`). The single
    enforcement point is `span_to_region`, which **rejects** a zero line or
@@ -493,12 +497,12 @@ The normative rules are these.
    into a valid-but-wrong region that no gate can catch. Where a column
    genuinely cannot be determined — a span starting mid-grapheme, a
    tab-indented line under an ambiguous width rule — `startColumn` is omitted
-   entirely, which `Region.start_column: Option<usize>` already permits,
-   rather than fabricating `1`.
+   entirely, which `Region.start_column: Option<usize>` already permits, rather
+   than fabricating `1`.
 6. **No real file.** Macro expansions, command-line inputs, doctests, and any
    non-real `FileName` yield `Err(NotRealFile)`. The lint still emits its
-   compiler diagnostic, because rustc renders such spans correctly. The
-   finding is excluded from SARIF and counted.
+   compiler diagnostic, because rustc renders such spans correctly. The finding
+   is excluded from SARIF and counted.
 7. **Outwith the repository.** A path escaping the repository root yields
    `Err(OutwithRepositoryRoot)`, with the same consequence as rule 6.
 8. **Never a bug channel.** `resolve_subject_location` must not call
@@ -511,14 +515,13 @@ The normative rules are these.
    precedent to follow is `crates/module_max_lines/src/driver.rs:86-93`, which
    logs and returns. **Known limitation**: four existing call sites carry this
    hazard today — `crates/bumpy_road_function/src/driver/mod.rs:224` and
-   `:235`, and `segment_builder.rs:164` and `:186` — recorded here as
-   follow-up work.
+   `:235`, and `segment_builder.rs:164` and `:186` — recorded here as follow-up
+   work.
 9. **Observability.** Every drop emits one `log::debug!` naming the subject
    and the reason, matching the discipline in
    `crates/rstest_helper_should_be_fixture/src/collector.rs:140-144`. The
-   emitted run carries an unresolved-subject count per reason **even when it
-   is zero**, so that "clean" is falsifiably different from "resolution
-   broken".
+   emitted run carries an unresolved-subject count per reason **even when it is
+   zero**, so that "clean" is falsifiably different from "resolution broken".
 10. **`uriBaseId`.** Brain trust results emit `artifactLocation.uri` as the
     repository-relative path with `uriBaseId` absent. SARIF §3.4.4 permits
     this, and GitHub code scanning documents a repository-root-relative path
@@ -539,8 +542,8 @@ The normative rules are these.
 
 ## HIR capture
 
-The contract is **two-phase capture**: cheap scalars during the callbacks,
-deep capture at finalization for gated subjects only.
+The contract is **two-phase capture**: cheap scalars during the callbacks, deep
+capture at finalization for gated subjects only.
 
 1. **Callbacks.** `brain_type` captures from `check_item` for
    `ItemKind::Impl`, and from `check_item` for `ItemKind::Struct`,
@@ -569,9 +572,9 @@ deep capture at finalization for gated subjects only.
    threshold is evaluated on the _complete_ accumulated method count, and only
    then is each surviving subject's bodies re-fetched through the typing
    context and walked deeply. This satisfies both
-   `docs/brain-trust-lints-design.md:361-365` ("deep analysis is only
-   performed after lightweight thresholds are crossed") and the requirement
-   that the gate see a complete method count.
+   `docs/brain-trust-lints-design.md:361-365` ("deep analysis is only performed
+   after lightweight thresholds are crossed") and the requirement that the gate
+   see a complete method count.
 4. **Phase two fans out from one walk.** For a gated subject, each method body
    is visited once and dispatched to all four sinks —
    `CognitiveComplexityBuilder`, `MethodInfoBuilder`, `MethodProfileBuilder`,
@@ -582,11 +585,11 @@ deep capture at finalization for gated subjects only.
    rather than one per sink, so that a contributor cannot feed three sinks and
    forget the fourth.
 5. **Nesting balance is structural, not disciplinary.**
-   `CognitiveComplexityBuilder::build` panics on an unbalanced nesting stack
-   and `pop_nesting` panics on an empty one
-   (`docs/brain-trust-lints-design.md:257-259`). Because nesting is entered
-   and left across separate visitor callbacks, the pairing is enforced by a
-   scope guard whose `Drop` pops, not by matching call sites.
+   `CognitiveComplexityBuilder::build` panics on an unbalanced nesting stack and
+   `pop_nesting` panics on an empty one
+   (`docs/brain-trust-lints-design.md:257-259`). Because nesting is entered and
+   left across separate visitor callbacks, the pairing is enforced by a scope
+   guard whose `Drop` pops, not by matching call sites.
 6. **Macro filtering happens once, in the driver.** The driver computes
    `span.from_expansion()` per HIR node and passes the boolean to every builder
    that accepts one. The domain never sees a `Span`. This extends the
@@ -600,8 +603,8 @@ deep capture at finalization for gated subjects only.
    subject yielding neither is skipped, with the stated consequence that
    blanket implementations, implementations on primitives, references, slices,
    tuples, function pointers, and `dyn Trait`, and implementations on foreign
-   types, contribute to no brain type. References are peeled before the test,
-   so `impl Trait for &Foo` merges into `Foo`. Multiple instantiations of one
+   types, contribute to no brain type. References are peeled before the test, so
+   `impl Trait for &Foo` merges into `Foo`. Multiple instantiations of one
    source `impl` merge into one subject, and a method is counted **once per
    source definition site**: `impl<T> Foo<T> { fn bar }` is one `impl` item and
    contributes once, while `impl Foo<u8> { fn bar }` and
@@ -616,17 +619,16 @@ deep capture at finalization for gated subjects only.
    (`common/src/decomposition_advice/note.rs:14-15`) bound the _output_, not
    the input. A configurable `max_methods_for_advice` above which clustering is
    skipped and the note omitted, with the omission reported, is therefore
-   normative here rather than left for 6.2.4 and 6.3.3 to invent
-   independently.
+   normative here rather than left for 6.2.4 and 6.3.3 to invent independently.
 
 ### Counting a method once
 
 The design document's subject boundary reads "the type definition and all
 inherent `impl` blocks; all trait implementation methods for that type in the
-crate", followed by "each method contributes to complexity and cohesion
-metrics" (`docs/brain-trust-lints-design.md:51-58`). Read against the capture
-rule above, this yields one contribution per source definition site, and that
-is the rule.
+crate", followed by "each method contributes to complexity and cohesion metrics"
+(`docs/brain-trust-lints-design.md:51-58`). Read against the capture rule
+above, this yields one contribution per source definition site, and that is the
+rule.
 
 Per-instantiation duplication cannot arise under this contract, because the
 capture is HIR-based and rustc's HIR holds one `ImplItem` per source `impl`
@@ -636,13 +638,13 @@ code does — every method-bearing construct in the tree is reached through HIR
 callbacks — and which this ADR does not mandate.
 
 That two entries may share a name is expected rather than exceptional, and the
-shipped cohesion code already accommodates it.
-`build_method_index` is documented as a "method-name-to-indices map,
-preserving duplicate names" (`common/src/lcom4/mod.rs:235-242`), and
-`union_by_method_calls` states the reason: "when multiple methods share a name
-(e.g. trait impl methods on the same type), the caller is unioned with every
-matching callee" (`:244-248`). A driver that deduplicated by name would defeat
-that design, and would silently discard one body's measured complexity.
+shipped cohesion code already accommodates it. `build_method_index` is
+documented as a "method-name-to-indices map, preserving duplicate names"
+(`common/src/lcom4/mod.rs:235-242`), and `union_by_method_calls` states the
+reason: "when multiple methods share a name (e.g. trait impl methods on the
+same type), the caller is unioned with every matching callee" (`:244-248`). A
+driver that deduplicated by name would defeat that design, and would silently
+discard one body's measured complexity.
 
 `TypeMetricsBuilder::add_method` takes only a name, a cognitive-complexity
 value, and a line count, and pushes unconditionally
@@ -654,8 +656,7 @@ number of source definitions the driver feeds it.
 
 1. **Computation.** `suggest_decomposition` is called once per gated subject
    at finalization, on the complete method set. Calling it per callback would
-   cluster a partial set and produce advice that changes with visitation
-   order.
+   cluster a partial set and produce advice that changes with visitation order.
 2. **Diagnostic path.** The shipped `format_decomposition_note` renders the
    note, and the result is attached as a `note`. That renderer is English-only
    today by an explicit earlier decision
@@ -674,8 +675,8 @@ number of source definitions the driver feeds it.
    re-cluster or re-order. The display caps of three suggestions and three
    methods each are _presentation_ limits; where SARIF inherits them it must
    also emit an omitted-count, mirroring the `brainMethodsOmitted` shape the
-   6.5.1 execplan already uses for methods, so that a machine consumer can
-   tell truncation from absence.
+   6.5.1 execplan already uses for methods, so that a machine consumer can tell
+   truncation from absence.
 5. **The property bag needs a schema statement.** `WhitakerProperties` has no
    version field, no `#[serde(default)]`, and no `deny_unknown_fields`
    (`crates/whitaker_sarif/src/whitaker_properties.rs:37-52`), so every
@@ -690,16 +691,15 @@ number of source definitions the driver feeds it.
    enum's `rename_all` renames _variants_, not the variants' fields, so each
    payload struct must carry its own.
 6. **Outstanding**: adding per-method spans to `DecompositionSuggestion` would
-   allow true related locations. That is a domain-type change for a future
-   item.
+   allow true related locations. That is a domain-type change for a future item.
 
 ## Lint-pass lifecycle
 
-| Callback                                                          | Responsibility                                                                                                                                                                    |
-| ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `check_crate`                                                     | Clear all accumulated state unconditionally, then load configuration, build the `Localizer`, and resolve the SARIF mode.                                                          |
-| `check_item`, `check_impl_item`, `check_trait_item`               | Capture scalars only. Never evaluate, never emit, never build a string set.                                                                                                       |
-| `check_crate_post`                                                | Finalize once; gate; deep-capture surviving subjects; evaluate; build findings; emit through an `HirId`-aware path in a deterministic order; hand the run to the artefact writer. |
+| Callback                                            | Responsibility                                                                                                                                                                    |
+| --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `check_crate`                                       | Clear all accumulated state unconditionally, then load configuration, build the `Localizer`, and resolve the SARIF mode.                                                          |
+| `check_item`, `check_impl_item`, `check_trait_item` | Capture scalars only. Never evaluate, never emit, never build a string set.                                                                                                       |
+| `check_crate_post`                                  | Finalize once; gate; deep-capture surviving subjects; evaluate; build findings; emit through an `HirId`-aware path in a deterministic order; hand the run to the artefact writer. |
 
 _Table 2: Responsibilities of each lint-pass callback._
 
@@ -711,10 +711,10 @@ _Table 2: Responsibilities of each lint-pass callback._
    an unsuppressable lint. Deferred emission must therefore capture the
    subject's `HirId` and emit through `TyCtxt::emit_node_span_lint`
    (`rustc_middle/src/ty/context.rs:2461-2470`), which resolves the level at
-   the supplied node. The lint crates gain `rustc_middle` under
-   `dylint-driver` for this; `crates/clippy_utils` is a local stub carrying
-   only `macros::is_panic` (`crates/clippy_utils/src/lib.rs:1-12`) and
-   provides no alternative.
+   the supplied node. The lint crates gain `rustc_middle` under `dylint-driver`
+   for this; `crates/clippy_utils` is a local stub carrying only
+   `macros::is_panic` (`crates/clippy_utils/src/lib.rs:1-12`) and provides no
+   alternative.
 2. **Finalize once, by construction.** The accumulator is consumed by
    finalization and yields a distinct finalized type, so reading unfinalized
    state is unrepresentable rather than merely discouraged. The nearest
@@ -727,11 +727,10 @@ _Table 2: Responsibilities of each lint-pass callback._
    subject name, file identifier, start line, start column)_. Definition path
    leads because it is globally unique and always available, whereas the file
    identifier is absent for any subject whose location did not resolve — and
-   those subjects are still diagnosed. A location-led key also collides for
-   two `impl` blocks on one line, for macro-generated types sharing an
-   expansion span, and for the same subject compiled for the library and test
-   targets. Every accumulator is an ordered container, so order never depends
-   on hashing.
+   those subjects are still diagnosed. A location-led key also collides for two
+   `impl` blocks on one line, for macro-generated types sharing an expansion
+   span, and for the same subject compiled for the library and test targets.
+   Every accumulator is an ordered container, so order never depends on hashing.
 4. **Reset unconditionally.** State is cleared as the first statement of
    `check_crate`, _before and independent of_ the configuration path. In the
    closest precedent the reset sits inside the configuration routine
@@ -742,20 +741,20 @@ _Table 2: Responsibilities of each lint-pass callback._
    implementable on its own. One artefact is written per _compilation unit_,
    under `target/whitaker/` following the existing layout convention
    (`crates/whitaker_sarif/src/paths.rs:10-39`), with a name derived from the
-   package, crate, and target kind. It is written to a unique temporary file
-   in the same directory and then renamed, never appended: `cargo dylint` runs
-   one rustc process per crate _and per target_, concurrently, so an
-   unsynchronized append interleaves and corrupts the file — which is what the
-   only in-tree precedent does today
-   (`crates/rstest_helper_should_be_fixture/src/driver.rs:325-328`). A
-   separate merge step reduces the per-unit runs through the shipped
-   `merge_runs` and `deduplicate_results`, and that step — not the lint — owns
-   the final artefact.
+   package, crate, and target kind. It is written to a unique temporary file in
+   the same directory and then renamed, never appended: `cargo dylint` runs one
+   rustc process per crate _and per target_, concurrently, so an unsynchronized
+   append interleaves and corrupts the file — which is what the only in-tree
+   precedent does today
+   (`crates/rstest_helper_should_be_fixture/src/driver.rs:325-328`). A separate
+   merge step reduces the per-unit runs through the shipped `merge_runs` and
+   `deduplicate_results`, and that step — not the lint — owns the final
+   artefact.
 6. **Per-target duplication.** The same source file is compiled for the
-   library target and the test target, and the test target sees
-   `#[cfg(test)]` methods, so one subject at one location yields different
-   metrics under an otherwise identical key. The merge step either states
-   which target's result wins or keys the subject by target as well.
+   library target and the test target, and the test target sees `#[cfg(test)]`
+   methods, so one subject at one location yields different metrics under an
+   otherwise identical key. The merge step either states which target's result
+   wins or keys the subject by target as well.
 7. **Incremental builds.** Cargo skips rustc for unchanged crates, so a brain
    trust artefact for an unchanged crate is stale-but-valid. That is stated
    explicitly so that a continuous-integration recipe can choose between
@@ -789,33 +788,35 @@ _Table 2: Responsibilities of each lint-pass callback._
 2. **SARIF is English-only, and the mapping crate does not declare the
    localization stack.** The SARIF mapping lives in
    `crates/whitaker_brain_trust_sarif`, which does not depend on
-   `fluent-templates` or `unic-langid`. That is a claim about the crate's _direct
-   manifest edges_, and the narrower claim is the accurate one: the crate does
-   depend on `whitaker-common`, because the `FindingLocation` that crosses the
-   seam carries a `RepoRelativePath` and a `SourceSpan`. It does not depend on
-   a compiler crate, because `SubjectLocation` — which adds the `HirId` that
-   deferred emission resolves the lint level at — stays in the root `whitaker`
-   crate and is destructured before the adapter is called. `whitaker-common`
-   re-exports `get_localizer_for_lint` and `Localizer`, and `Localizer` exposes
-   `message`, `message_with_args`, `attribute`, and `attribute_with_args`
-   (`common/src/lib.rs:89-105`, `common/src/i18n/loader.rs:101-136`). A future
-   author holding that edge could therefore resolve a Fluent message, and would
-   need no manifest edit to do it: the re-export is already reachable from the
-   crate the mapping depends on. The rule is not a reachability proof, and
-   `EP-M2`'s fitness guard checks dependency names rather than claiming one. The
-   rule binds by construction instead: a finding holds values, not prose (rule
-   1), and the mapping renders those values through English static metadata.
+   `fluent-templates` or `unic-langid`. That is a claim about the crate's
+   _direct manifest edges_, and the narrower claim is the accurate one: the
+   crate does depend on `whitaker-common`, because the `FindingLocation` that
+   crosses the seam carries a `RepoRelativePath` and a `SourceSpan`. It does
+   not depend on a compiler crate, because `SubjectLocation` — which adds the
+   `HirId` that deferred emission resolves the lint level at — stays in the root
+   `whitaker` crate and is destructured before the adapter is called.
+   `whitaker-common` re-exports `get_localizer_for_lint` and `Localizer`, and
+   `Localizer` exposes `message`, `message_with_args`, `attribute`, and
+   `attribute_with_args` (`common/src/lib.rs:89-105`,
+   `common/src/i18n/loader.rs:101-136`). A future author holding that edge
+   could therefore resolve a Fluent message, and would need no manifest edit to
+   do it: the re-export is already reachable from the crate the mapping depends
+   on. The rule is not a reachability proof, and `EP-M2`'s fitness guard checks
+   dependency names rather than claiming one. The rule binds by construction
+   instead: a finding holds values, not prose (rule 1), and the mapping renders
+   those values through English static metadata.
 
-   What the dependency-name rule buys is an _informative_ manifest, which is the
-   property Option B and the 6.5.1 placement both surrender.
+   What the dependency-name rule buys is an _informative_ manifest, which is
+   the property Option B and the 6.5.1 placement both surrender.
    `whitaker-common`'s manifest declares `fluent-templates` and `unic-langid`
-   outright (`common/Cargo.toml:17`), and must, for its own localization work; a
-   mapping nested at `common/src/brain_trust_sarif/` would sit in a crate whose
-   manifest says nothing about the mapping's own dependencies, and whose Fluent
-   edges cannot be removed to make it say something. `whitaker_brain_trust_sarif`
-   is the one crate that can reach `whitaker-common` _and_ still be checked for
-   the absence of a localization edge, so the absence is a deliberate,
-   reviewable constraint rather than an accident of cohabitation.
+   outright (`common/Cargo.toml:17`), and must, for its own localization work;
+   a mapping nested at `common/src/brain_trust_sarif/` would sit in a crate
+   whose manifest says nothing about the mapping's own dependencies, and whose
+   Fluent edges cannot be removed to make it say something.
+   `whitaker_brain_trust_sarif` is the one crate that can reach
+   `whitaker-common` _and_ still be checked for the absence of a localization
+   edge, so the absence is a deliberate, reviewable constraint rather than an
+   accident of cohabitation.
 
    The `i18n` module itself cannot be gated, which is why the rule is stated on
    the dependency names rather than on the crate: `common/src/lib.rs:14` is a
@@ -834,8 +835,8 @@ _Table 2: Responsibilities of each lint-pass callback._
    identifiers are allocated sequentially and never reused; roadmap item 3.6.1
    remains free to assign its own selector codes.
 5. **Measured values are not translated.** Numbers, type names, method names,
-   and extraction kinds appear verbatim in both renderings. Only the
-   connecting prose differs.
+   and extraction kinds appear verbatim in both renderings. Only the connecting
+   prose differs.
 6. **Consequence to accept.** A localized diagnostic and its SARIF counterpart
    will not be string-equal, and no test should assert that they are. The
    invariant worth asserting, and which roadmap item 6.6.3's user-interface
@@ -861,8 +862,8 @@ _Table 2: Responsibilities of each lint-pass callback._
 ## Known risks and limitations
 
 - **This ADR supersedes the 6.5.1 execplan in four places.** Each is a
-  deliberate divergence, not an oversight, and the 6.5.1 plan states that
-  where the two disagree "the ADR wins" (`6-5-1-...md:1395-1398`):
+  deliberate divergence, not an oversight, and the 6.5.1 plan states that where
+  the two disagree "the ADR wins" (`6-5-1-...md:1395-1398`):
   1. _The crate edge and the mapping module's placement._ The 6.5.1 plan
      places the mapping at `common/src/brain_trust_sarif/`; this ADR places it
      in `crates/whitaker_brain_trust_sarif`. The rationale is publishability
@@ -888,11 +889,12 @@ _Table 2: Responsibilities of each lint-pass callback._
   `segment_builder.rs:164` and `:186`. Recorded as follow-up work; this ADR
   does not fix them.
 - **The mapping crate does not exist yet**, so the architecture-fitness guard
-  in roadmap item 6.1.3's execplan (`EP-M2`) carries a dormant half: a test that
-  scans the mapping crate's real manifest _when one exists_ and returns early
-  otherwise, alongside fixture cases that verify the rule in the meantime. The
-  dormant test activates on its own when the crate lands, so the rule stops
-  resting on fixtures alone without anyone having to remember to wire it up.
+  in roadmap item 6.1.3's execplan (`EP-M2`) carries a dormant half: a test
+  that scans the mapping crate's real manifest _when one exists_ and returns
+  early otherwise, alongside fixture cases that verify the rule in the
+  meantime. The dormant test activates on its own when the crate lands, so the
+  rule stops resting on fixtures alone without anyone having to remember to
+  wire it up.
 - **`SourceLocation` does not enforce its own convention.**
   `SourceLocation::new` is an infallible `const fn`; the single enforcement
   point is `span_to_region`. A consumer constructing a `SourceLocation`
@@ -927,5 +929,5 @@ milestone closes.
 - **Whether the four delayed-bug call sites should be repaired** in this
   series or tracked separately (location rule 8).
 - **Whether per-method spans should be added to `DecompositionSuggestion`**, to
-  enable true SARIF related locations rather than property-bag data
-  (suggestion rule 6).
+  enable true SARIF related locations rather than property-bag data (suggestion
+  rule 6).
