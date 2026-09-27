@@ -31,8 +31,12 @@ mod table_discovery;
 /// Behavioural tests for the workspace-inheritance resolution path.
 mod workspace_inheritance;
 
-use camino::{Utf8Path, Utf8PathBuf};
+/// Finding a crate's manifest on disk.
+mod path_discovery;
+
+use camino::Utf8Path;
 use cap_std::{ambient_authority, fs_utf8::Dir};
+pub(crate) use path_discovery::{manifest_if_present, workspace_dependencies};
 
 /// The dependency tables a guard inspects.
 ///
@@ -292,31 +296,6 @@ pub(crate) fn scan_for(
     unresolved.map_or(ScanOutcome::Absent, ScanOutcome::Unresolved)
 }
 
-/// Returns the root workspace's `[workspace.dependencies]` table.
-///
-/// A member manifest may inherit a dependency — and its rename — through
-/// `{ workspace = true }`, in which case the package name lives only in the
-/// root manifest. Resolving that is what stops an inherited rename from being
-/// an invisible edge.
-///
-/// Returns `None` when no root is reachable, which is the correct answer for a
-/// fixture and a fail-closed one for a real manifest: an inherited entry whose
-/// declaration cannot be read is not treated as clean.
-///
-/// # Panics
-///
-/// Panics when a root manifest is found but cannot be parsed, which means the
-/// workspace this guard navigates has changed shape.
-pub(crate) fn workspace_dependencies() -> Option<toml::Table> {
-    let manifest_dir = Utf8Path::new(env!("CARGO_MANIFEST_DIR"));
-    let root = manifest_dir.parent()?.parent()?.join("Cargo.toml");
-    if !root.is_file() {
-        return None;
-    }
-    let document = parse_manifest(&read_manifest(&root));
-    workspace_table_of(&document)
-}
-
 /// Parses a manifest into a TOML table.
 ///
 /// # Panics
@@ -374,23 +353,4 @@ pub(crate) fn workspace_table_of(document: &toml::Table) -> Option<toml::Table> 
         .get("dependencies")?
         .as_table()
         .cloned()
-}
-
-/// Locates a crate's manifest relative to this test crate, or reports absence.
-///
-/// The workspace lays its crates out as `<root>/crates/<crate>/Cargo.toml`, and
-/// this test lives in `crates/whitaker_sarif`, so the current crate is found at
-/// `CARGO_MANIFEST_DIR` and a sibling beside it.
-///
-/// Returning an `Option` rather than panicking is what lets the mapping-crate
-/// half of the guard stay dormant until ADR 005's mapping crate is created.
-pub(crate) fn manifest_if_present(crate_name: &str) -> Option<Utf8PathBuf> {
-    let manifest_dir = Utf8Path::new(env!("CARGO_MANIFEST_DIR"));
-    if manifest_dir.file_name() == Some(crate_name) {
-        return Some(manifest_dir.join("Cargo.toml"));
-    }
-    let candidate = manifest_dir
-        .parent()
-        .map(|parent| parent.join(crate_name).join("Cargo.toml"))?;
-    candidate.is_file().then_some(candidate)
 }
