@@ -149,14 +149,14 @@ This mirrors the shape the repository already uses for the clone detector:
 depending on no compiler crate. The adapter is the only crate that must know
 both vocabularies, and it is the only crate that needs to.
 
-| Topic                                         | Option A                              | Option B                         | Option C                         |
-| --------------------------------------------- | ------------------------------------- | -------------------------------- | -------------------------------- |
-| Cycle                                         | Broken                                | Broken                           | Broken                           |
-| `whitaker-common` publishable                 | No: unresolvable registry requirement | Yes                              | Yes                              |
-| `whitaker_sarif` a pure model                 | Yes                                   | No: gains the domain and Fluent  | Yes                              |
-| Localization stack reachable from the mapping | No                                    | Yes                              | No: the manifest cannot name it  |
-| Existing precedent                            | None                                  | None                             | `whitaker_clones_core`           |
-| New crates                                    | 0                                     | 0                                | 1                                |
+| Topic                                            | Option A                              | Option B                        | Option C                                    |
+| ------------------------------------------------ | ------------------------------------- | ------------------------------- | ------------------------------------------- |
+| Cycle                                            | Broken                                | Broken                          | Broken                                      |
+| `whitaker-common` publishable                    | No: unresolvable registry requirement | Yes                             | Yes                                         |
+| `whitaker_sarif` a pure model                    | Yes                                   | No: gains the domain and Fluent | Yes                                         |
+| Mapping crate's manifest names the Fluent stack  | n/a                                   | Yes                             | No: its absence is checkable                |
+| Existing precedent                               | None                                  | None                            | `whitaker_clones_core`                      |
+| New crates                                       | 0                                     | 0                               | 1                                           |
 
 _Table 1: Comparison of crate-edge options._
 
@@ -195,15 +195,46 @@ calling `cx.emit_span_lint`. For a per-item lint that is correct, because the
 context's notion of "the item currently being linted" is the item just
 visited.
 
-It is rejected here because both brain trust lints are whole-crate lints. A
-type's methods are spread across arbitrarily many `impl` items, so no single
-callback has seen enough to decide anything. Emission must therefore be
-deferred to crate-post, and deferral changes which suppression attributes
-work: `LateContext::opt_span_lint` resolves the lint level at
+It is rejected here because the deferred lifecycle is the one both lints need,
+and because deferral changes which suppression attributes work. The two lints
+reach that requirement by different routes, which is worth stating plainly
+rather than papering over.
+
+`brain_type` is whole-crate by necessity. A type's methods are spread across
+arbitrarily many `impl` items, so no single callback has seen enough to decide
+anything, and the gate cannot run until the crate has been fully visited.
+
+`brain_trait` is not. Its unit of analysis is a single trait definition
+(`docs/brain-trust-lints-design.md:60-64`), and every item it measures — a
+required method, a default method body, an associated type, an associated
+const — lives inside the one `ItemKind::Trait` item. `TraitMetricsBuilder`
+reflects that shape: it is constructed with a trait name and accepts only trait
+items (`common/src/brain_trait_metrics/metrics.rs:120-235`), so it needs no
+data from any other item. A trait's `check_item` callback has therefore seen
+everything the lint needs, and emitting there would be correct on its own
+terms. This is not a hypothetical:
+`crates/bumpy_road_function/src/driver/mod.rs:99-100` reaches a trait default
+body's `BodyId` synchronously from `check_trait_item` — the same data
+`brain_trait` would need — so an immediate-emission path is demonstrably
+available.
+
+`brain_trait` is nonetheless deferred. The reason is uniformity of the seam,
+not a constraint that forced the choice. Both lints share this ADR, and a
+future contributor reading one lifecycle contract with a single carve-out is
+more likely to reintroduce the suppression bug below in the lint that has the
+exception than to reproduce the exception faithfully. Deferral also gives the
+two lints one deterministic-order guarantee and one artefact handoff instead of
+two. The cost is real and is accepted: `brain_trait` pays a deferral it did not
+need.
+
+Deferral changes which suppression attributes work.
+`LateContext::opt_span_lint` resolves the lint level at
 `self.last_node_with_lint_attrs` (`rustc_lint/src/context.rs:600-615`, field
 at `:500`), which at crate-post time is the crate root. The ordinary
 `cx.emit_span_lint` path would therefore silently ignore an
-`#[allow(brain_type)]` on the offending type and ship an unsuppressable lint.
+`#[allow(brain_trait)]` on the trait and ship an unsuppressable lint — and it
+is precisely because `brain_trait` could otherwise emit immediately that the
+hazard is worth stating for it explicitly.
 
 The chosen lifecycle is deferred emission through a path that takes the
 subject's `HirId` explicitly, so the level is resolved at the offending item.
@@ -345,21 +376,60 @@ The normative rules are these.
    root and hands rustc a workspace-root-relative source path, so the stripping
    branch is a fallback for the non-Cargo case. This was confirmed by
    probe — see `docs/execplans/6-1-3-...md` `Artefacts and notes`.
-3. **Normalization.** Forward slashes on every platform, no leading `./`, no
-   leading slash, no `..` component, per SARIF 2.1.0 §3.4.3, which requires a
-   relative-path reference under RFC 3986 §4.2. No source-path normalization
-   exists in the tree today; the forward-slash intent documented at
-   `crates/whitaker_sarif/src/paths.rs:24-25` concerns the output artefact
-   directory, not source URIs.
+3. **Normalization, and encoding at the URI boundary.** Forward slashes on every
+   platform, no leading `./`, no leading slash, no `..` component, per SARIF
+   2.1.0 §3.4.3, which requires a relative-path reference under RFC 3986 §4.2.
+   No source-path normalization exists in the tree today; the forward-slash
+   intent documented at `crates/whitaker_sarif/src/paths.rs:24-25` concerns the
+   output artefact directory, not source URIs.
+
+   Normalization is not encoding, and the two must not be conflated.
+   `RepoRelativePath::as_str` yields the decoded repository path — the characters
+   a reader sees in a diagnostic — and it is **not** percent-encoded. Encoding is
+   the SARIF boundary's job rather than the path type's, because the same value
+   feeds compiler diagnostics and fingerprints, where percent-encoding would be
+   wrong, and `artifactLocation.uri`, where it is required. A path containing a
+   space or a `#` must therefore be percent-encoded when the mapping builds
+   `artifactLocation.uri`, or the result is not a valid URI reference. This is a
+   live case rather than a hypothetical: the repository tracks
+   `docs/execplans/3.4.6. Record download-versus-build rates.md`, whose name
+   contains spaces.
+
+   The incumbent producer does **not** do this. It copies its file path into
+   `artefact_location.uri` with no encoding, which is why the clone detector's
+   goldens read `"src/a.rs"` verbatim
+   (`crates/whitaker_clones_core/src/run0/tests.rs:192`). Its paths happen to
+   contain no reserved characters, so the defect is latent rather than
+   observable, and no percent-encoder exists anywhere in the tree today. The
+   mapping crate is where the encoder belongs, and this rule makes writing one a
+   requirement rather than a judgement call. **Recorded as follow-up work**: the
+   clone detector shares the defect, and no existing verification property
+   covers it, because the properties are over region coordinates rather than
+   over URI text.
 4. **Column convention.** Lines and columns are one-based, and columns count
-   UTF-16 code units, matching the repository's only existing SARIF producer
-   (`crates/whitaker_clones_core/src/run0/span.rs:78-79`) and satisfying
-   `RegionBuilder::build`, which rejects a zero column
-   (`crates/whitaker_sarif/src/builders/location_builder.rs:91`). The compiler
-   reports zero-based `CharPos` columns, and its two line accessors differ:
-   `span_to_lines` yields a zero-based `line_index` while `lookup_char_pos`
-   yields a one-based `Loc::line`. The conversion is therefore stated per
-   accessor, adding one to each axis.
+   UTF-16 code units, satisfying `RegionBuilder::build`, which rejects a zero
+   column (`crates/whitaker_sarif/src/builders/location_builder.rs:91`) and
+   matching the unit the repository's only existing SARIF producer counts
+   (`crates/whitaker_clones_core/src/run0/span.rs:78-79`, which converts
+   through `line_slice.encode_utf16().count()`). The compiler reports
+   zero-based `CharPos` columns in Unicode scalar values, and its two line
+   accessors differ: `span_to_lines` yields a zero-based `line_index` while
+   `lookup_char_pos` yields a one-based `Loc::line`. The conversion is
+   therefore stated per accessor, adding one to each axis.
+
+   The two axes do not terminate alike, and the difference is normative rather
+   than cosmetic. `endLine` is **inclusive** — it names the last line the
+   region occupies. `endColumn` is **exclusive** — per SARIF 2.1.0 Errata 01
+   §3.30.8 it is "one greater than the column number of the last character in
+   the region", and "a text region does not include the character specified by
+   `endColumn`", so `startColumn: 2, endColumn: 4` spans the two characters
+   `bc`. A region ending at the final character of line 3 therefore pairs
+   `endLine: 3` with the column _past_ that character, which on a single-line
+   region is one more than `startColumn` plus the character count. Setting
+   `endColumn` to the last included character's own column is an off-by-one,
+   and it is the error the incumbent producer makes — see `Goals and
+   non-goals` and `Known risks`. `span_to_region` is the only place the rule
+   is enforced, and `VP-3` is the obligation that tests it.
 5. **Enforcement point.** `SourceLocation::new` is an infallible `const fn`
    and does not enforce the convention (`common/src/span.rs:31`). The single
    enforcement point is `span_to_region`, which **rejects** a zero line or
@@ -649,22 +719,39 @@ _Table 2: Responsibilities of each lint-pass callback._
    rendered message. This is what lets a localized diagnostic and an English
    SARIF result stay semantically identical without either being a translation
    of the other.
-2. **SARIF is English-only, and the localization stack is kept out of reach.**
-   The SARIF mapping lives in `crates/whitaker_brain_trust_sarif`, which does
-   not depend on `fluent-templates` or `unic-langid` and therefore cannot load
-   a Fluent bundle or resolve a message. The crate does depend on
-   `whitaker-common`, because `SubjectLocation` carries a `RepoRelativePath`
-   and a `SourceSpan`, so the boundary is drawn on the localization
-   dependencies rather than on the whole crate. It cannot be drawn on the
-   crate, because `common/src/lib.rs:14` is a bare `pub mod i18n;` with no
-   feature gate, so no manifest edge can make the `i18n` module itself
-   unreachable. Placing the mapping inside `common/src/brain_trust_sarif/`, as
-   the 6.5.1 execplan proposes, would put it in a crate whose manifest
-   declares `fluent-templates` outright, so no check could distinguish a
-   mapping that renders English text from one that resolves a Fluent key.
-   **This supersedes the 6.5.1 execplan's mapping-module placement** — the same
-   decision recorded under `Decision outcome`, stated here from the
-   language-boundary side.
+2. **SARIF is English-only, and the mapping crate does not declare the
+   localization stack.** The SARIF mapping lives in
+   `crates/whitaker_brain_trust_sarif`, which does not depend on
+   `fluent-templates` or `unic-langid`. That is a claim about the crate's _direct
+   manifest edges_, and the narrower claim is the accurate one: the crate does
+   depend on `whitaker-common`, because `SubjectLocation` carries a
+   `RepoRelativePath` and a `SourceSpan`. `whitaker-common` re-exports
+   `get_localizer_for_lint` and `Localizer`, and `Localizer` exposes `message`,
+   `message_with_args`, `attribute`, and `attribute_with_args`
+   (`common/src/lib.rs:89-105`, `common/src/i18n/loader.rs:101-136`). A future
+   author holding that edge could therefore resolve a Fluent message; the rule
+   is not a reachability proof, and `EP-M2`'s fitness guard checks dependency
+   names rather than claiming one. The rule binds by construction instead: a
+   finding holds values, not prose (rule 1), and the mapping renders those
+   values through English static metadata.
+
+   What the dependency-name rule buys is an _informative_ manifest, which is the
+   property Option B and the 6.5.1 placement both surrender.
+   `whitaker-common`'s manifest declares `fluent-templates` and `unic-langid`
+   outright (`common/Cargo.toml:17`), and must, for its own localization work; a
+   mapping nested at `common/src/brain_trust_sarif/` would sit in a crate whose
+   manifest says nothing about the mapping's own dependencies, and whose Fluent
+   edges cannot be removed to make it say something. `whitaker_brain_trust_sarif`
+   is the one crate that can reach `whitaker-common` _and_ still be checked for
+   the absence of a localization edge, so the absence is a deliberate,
+   reviewable constraint rather than an accident of cohabitation.
+
+   The `i18n` module itself cannot be gated, which is why the rule is stated on
+   the dependency names rather than on the crate: `common/src/lib.rs:14` is a
+   bare `pub mod i18n;` with no feature gate, so no manifest edge can make it
+   unreachable for any dependent. **This supersedes the 6.5.1 execplan's
+   mapping-module placement** — the same decision recorded under
+   `Decision outcome`, stated here from the language-boundary side.
 3. **Diagnostics are localized.** Compiler diagnostics resolve primary, note,
    and help text through `safe_resolve_message_set`, which falls back to a
    lint-supplied English `DiagnosticMessageSet` when a Fluent key is missing

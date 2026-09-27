@@ -283,8 +283,8 @@ Thresholds that trigger escalation, not quality targets.
   repository rather than escalated; see `Surprises & discoveries`. Every `VP-2`
   checklist row reads "answered" against a named rule. `make markdownlint`
   (0 errors / 79 files) and `make nixie` both pass.
-- [ ] EP-M1 `docs/adr-005-brain-trust-lint-driver-interfaces.md` written and
-  registered in `docs/contents.md`.
+- [x] (2026-09-27) EP-M1 `docs/adr-005-brain-trust-lint-driver-interfaces.md`
+  written and registered in `docs/contents.md`.
 - [x] (2026-09-27) EP-M2 complete. `crates/whitaker_sarif/tests/architecture_boundary.rs`
   added, 12 tests. It asserts both ADR 005 rules over dependency manifests:
   `whitaker_sarif` must not name `whitaker-common`, and
@@ -297,9 +297,10 @@ Thresholds that trigger escalation, not quality targets.
   non-vacuity checks from `VP-1` are permanent assertions — the direct fixture,
   the renamed fixture (`loc = { package = ... }`), and a floor asserting at least
   one table and one dependency were examined. Two further shapes beyond the
-  three required are covered: a `[target.'cfg(...)'.dependencies]` selector and a
-  `[dev-dependencies]` entry, since a cycle is a cycle whichever table carries
-  it. Gates: `make check-fmt`, `make typecheck`, `make lint`, `make test`.
+  three required are covered: a `[target.'cfg(...)'.dependencies]` selector and
+  a `[dev-dependencies]` entry, since a cycle is a cycle whichever table
+  carries it. Gates: `make check-fmt`, `make typecheck`, `make lint`,
+  `make test`.
   See `Surprises & discoveries` for the two corrections this milestone needed.
 - [x] (2026-09-27) EP-M3 complete. The six zero-column literals named in Stage E
   are now `1`: `common/src/span.rs:67`, `:96`, `:112`, `:129`, `:135`, and
@@ -510,10 +511,16 @@ Thresholds that trigger escalation, not quality targets.
   (`common/src/brain_type_metrics/mod.rs:295-306`) takes a name and pushes
   unconditionally, confirming it is not a deduplicating API. Q4 (`brain_trait`
   from `check_item` against a deferred emission) — `ItemKind::Trait` is
-  self-contained and `bumpy_road_function:150-157` reads trait default bodies
-  synchronously from `check_trait_item`, so the immediate path is available;
-  the deferred lifecycle is nonetheless adopted for uniformity, and the ADR
-  states that reason rather than implying a constraint.
+  self-contained and
+  `crates/bumpy_road_function/src/driver/mod.rs:99-100` reads trait default
+  bodies synchronously from `check_trait_item`, so the immediate path is
+  available; the deferred lifecycle is nonetheless adopted for uniformity.
+  **Corrected 2026-09-27**: this entry originally asserted that "the ADR states
+  that reason". It did not — `Emission lifecycle` justified deferral by calling
+  both lints "whole-crate lints", which is false for `brain_trait`, and never
+  named uniformity. A CodeRabbit finding on the stale `Open questions` entry
+  led back to the gap. The ADR section now states the route each lint takes and
+  the cost `brain_trait` pays, so the claim this entry makes is true.
   Impact: the `Ambiguity` tolerance triggers only where "the design documents
   support two readings of a metric's subject boundary and the choice changes
   what implementers build". Q3's two readings were an artefact of an unverified
@@ -612,7 +619,7 @@ Thresholds that trigger escalation, not quality targets.
   that tripped it was unnecessary.
   Evidence: `cargo nextest` reported `error[E0658]: use of unstable library
   feature str_as_str` at `&key.as_str()`, where `key: String`. The pinned
-  compiler is `nightly-2026-05-28`, whose `rustc` predates the stabilisation;
+  compiler is `nightly-2026-05-28`, whose `rustc` predates the stabilization;
   the full message notes "this compiler was built on 2026-05-27". The annotation
   was also redundant, because `DEPENDENCY_TABLES` is `[&str; 3]` and can be
   compared against `&String` directly.
@@ -628,8 +635,8 @@ Thresholds that trigger escalation, not quality targets.
   `common/src/diagnostics.rs:155` — and nothing else. Stage E also expected the
   change to be doc-comment only, which holds for five of the six: `:129` is
   inside `mod tests` rather than a doc comment, and it is the
-  `SpanError::StartAfterEnd` case. It was checked individually because flipping a
-  column in an ordering-violation fixture could in principle have removed the
+  `SpanError::StartAfterEnd` case. It was checked individually because flipping
+  a column in an ordering-violation fixture could in principle have removed the
   violation it exists to produce; the assertion survives, because the violation
   is carried by the line number alone (`3` against `2`), so the column is
   irrelevant to it. The plan's claim of "no signature, no behaviour, no public
@@ -762,8 +769,8 @@ Thresholds that trigger escalation, not quality targets.
   no manifest check able to observe a violation. Rejected alternative: framing
   supersession 1 as a bare dependency-direction disagreement, which would
   misstate 6.5.1's position and make the ADR look like it had not read it.
-  Date/Author: 2026-09-27, implementation agent, correcting a planning claim.
-  Date/Author: 2026-08-21, planning agent.
+  Date/Author: 2026-09-27, implementation agent, extending the planning agent's
+  2026-08-21 entry.
 
 - Decision: `resolve_subject_location` returns `Result<_, LocationUnavailable>`
   rather than `Option`.
@@ -938,6 +945,58 @@ Thresholds that trigger escalation, not quality targets.
   `crates/whitaker_clones_core/build_support.rs:13-29` and its
   `tests/build_script_parsing.rs` supply the parse-and-test pattern.
   Date/Author: 2026-09-27, implementation agent, during `EP-M2` reconnaissance.
+
+- **Decision: act on four of the seven Stage C CodeRabbit findings, correct the
+  fifth as a clarity regression, and reject two as spurious.**
+  Rationale: the review produced four genuine defects, one judgement call, and
+  two findings that dissolve under verification. The genuine four, in the order
+  actioned:
+  1. *`endColumn` exclusivity was unstated.* `Location resolution` rule 4 fixed
+     the one-based, UTF-16 convention but never said which axis end is
+     inclusive. SARIF 2.1.0 Errata 01 §3.30.8 makes `endColumn` exclusive and
+     `endLine` inclusive, and `VP-3`'s property test depends on the reader
+     inferring a convention the rule did not state. Rule 4 now states both, with
+     the spec's own worked example.
+  2. *The `EP-M1` checkbox was unticked* while its milestone was complete. It is
+     ticked, and the three `Open questions` subject-boundary readings the
+     `Ambiguity` tolerance requires to be settled are now each marked answered.
+  3. *`Language boundary` rule 2 overclaimed.* It said the mapping crate
+     "cannot load a Fluent bundle or resolve a message"; the crate depends on
+     `whitaker-common`, which publicly re-exports `get_localizer_for_lint` and a
+     `Localizer` with four message accessors, so the capability is reachable.
+     The rule now claims only the *direct* dependency absence, and explains what
+     that buys — an informative manifest — rather than an unreachability proof.
+     `Options considered`' table row was realigned with it.
+  4. *`RepoRelativePath::as_str` did not say whether its output must be encoded.*
+     It returns a decoded path, not a URI. Rule 3 now states that encoding
+     belongs to the SARIF boundary, notes the live spaced path
+     (`docs/execplans/3.4.6. Record download-versus-build rates.md`), and
+     records that the incumbent producer shares the latent defect.
+  Rejected: a claimed "behavioural" respelling (the text is already en-GB; a
+  20-word US-spelling sweep found zero hits) and a "four versus six roadmap
+  items" count (a deliberate grouping, not a contradiction).
+  Date/Author: 2026-09-27, implementation agent, clearing the Stage C review.
+
+- **Decision: settle `Open questions` 4 by stating `brain_trait`'s deferral as
+  a uniformity choice, and record that the ADR had claimed otherwise.**
+  Rationale: acting on finding 2 required ticking `EP-M1`, and the plan's
+  `Ambiguity` tolerance requires each `Open questions` reading to be resolved or
+  deferred in the ADR first. Questions 1, 2, and 3 were already settled — 2 by a
+  `TraitMetricsBuilder` argument showing impl blocks are structurally out of
+  scope. Question 4 was not, and tracing it found a defect the review had not
+  flagged: `Emission lifecycle` justified deferral by calling both brain trust
+  lints "whole-crate lints", which is false for `brain_trait`. Its unit of
+  analysis is one trait definition, every item it measures lives inside that one
+  `ItemKind::Trait`, and `TraitMetricsBuilder` accepts nothing else
+  (`common/src/brain_trait_metrics/metrics.rs:120-235`); an immediate-emission
+  path is demonstrably available, since
+  `crates/bumpy_road_function/src/driver/mod.rs:99-100` already reaches a trait
+  default body's `BodyId` from `check_trait_item`. The ADR now states each
+  lint's actual route and names the cost `brain_trait` accepts. The
+  corresponding `Surprises & discoveries` entry had asserted that "the ADR
+  states that reason" when it did not; it is corrected in place rather than
+  quietly edited.
+  Date/Author: 2026-09-27, implementation agent, tracing finding 2 to its root.
 
 ## Outcomes & retrospective
 
@@ -2195,10 +2254,11 @@ at finalization, for gated subjects only.**
    tuples, function pointers, and `dyn Trait`, and implementations on foreign
    types, contribute to no brain type. References are peeled before the test,
    so `impl Trait for &Foo` merges into `Foo`. Multiple generic instantiations
-   — `impl Foo<u8>` and `impl Foo<String>` — merge into one subject, and the
-   ADR must state whether a method appearing in both counts once or twice,
-   because `TypeMetricsBuilder::add_method` deduplicates nothing
-   (`common/src/brain_type_metrics/mod.rs:295-306`). See `Open questions`.
+   — `impl Foo<u8>` and `impl Foo<String>` — merge into one subject, and each
+   source definition counts once, because `TypeMetricsBuilder::add_method`
+   deduplicates nothing (`common/src/brain_type_metrics/mod.rs:295-306`) and is
+   not meant to. Settled by `Counting a method once` in ADR 005; the reasoning
+   is recorded under `Open questions` question 3.
 8. **Bound the clustering input.** `suggest_decomposition` builds a similarity
    edge for every method pair
    (`common/src/decomposition_advice/community.rs:40-68`) and runs label
@@ -2383,22 +2443,54 @@ at finalization, for gated subjects only.**
    declared in one file and implemented across three others? This determines
    the SARIF `physicalLocation` and, via `BTD-REQ-04` rule 1, which `#[allow]`
    site works. Nothing in `docs/brain-trust-lints-design.md:373-384` answers
-   it.
+   it. **Answered**: the declaration span, from the `ItemKind::Struct` /
+   `Enum` / `Union` item captured by `BTD-REQ-02` rule 1 and by `HIR capture`
+   rule 1 in ADR 005. The design document is silent; the capture contract
+   settles it, because that callback is also what supplies the `HirId` the
+   deferred emission resolves the lint level at.
 2. If a blanket implementation is skipped for `brain_type` per `BTD-REQ-02`
    rule 7, do its default method bodies count toward `brain_trait` for the
    implemented trait? Under rule 1 they do not, so blanket-implementation
-   complexity is invisible to both lints. Is that intended?
+   complexity is invisible to both lints. Is that intended? **Answered**: it is
+   intended, and the question rests on a false premise. `brain_trait`'s unit of
+   analysis is a single trait *definition*
+   (`docs/brain-trust-lints-design.md:60-64`), and `TraitMetricsBuilder`
+   structurally cannot receive impl data — there is no input channel, and
+   `TraitItemKind` (`common/src/brain_trait_metrics/item.rs:14-23`) has no
+   `ImplMethod` variant. Impl blocks are out of scope for `brain_trait` by
+   construction, so nothing is "invisible to both lints": each lint sees
+   exactly the source construct it is defined over.
 3. Does a method defined in a trait implementation count once toward a type's
    WMC, or once per generic instantiation?
    `docs/brain-trust-lints-design.md:51-56` reads "once", but
-   `TypeMetricsBuilder::add_method` deduplicates nothing. This is an
-   `Ambiguity` tolerance trigger and must be answered before `EP-M1` closes.
+   `TypeMetricsBuilder::add_method` deduplicates nothing. This was an
+   `Ambiguity` tolerance trigger. **Answered**: once per source definition site,
+   by `Counting a method once` in ADR 005, which is the subsection following
+   `HIR capture` rule 7. Per-instantiation duplication cannot arise under an
+   HIR-based capture, because rustc's HIR holds one `ImplItem` per source `impl`
+   block regardless of its generic parameters. The two entries a trait impl and
+   an inherent impl may contribute under the same name are not a defect of the
+   count: `build_method_index` preserves duplicate names
+   (`common/src/lcom4/mod.rs:235-242`) precisely so that `union_by_method_calls`
+   can union a caller with every matching callee (`:244-248`), and
+   `TypeMetricsBuilder::add_method` pushes unconditionally
+   (`common/src/brain_type_metrics/mod.rs:295-306`), so it is not a deduplicating
+   API. A driver that deduplicated by name would defeat the cohesion design and
+   silently discard one body's measured complexity.
 4. Should `brain_trait` emit from `check_item` instead of deferring, given that
    `ItemKind::Trait` is self-contained? Deferring is what makes `BTD-REQ-04`
-   rule 1 necessary for it at all. The ADR must either accept the asymmetry or
-   justify uniformity with a stronger argument than shared lifecycle — the two
-   lints are separate passes with separate runs, so there is no cross-lint
-   ordering to unify.
+   rule 1 necessary for it at all. **Answered**: it defers anyway, and the
+   asymmetry is accepted rather than argued away. `brain_trait` genuinely does
+   not need deferral — `TraitMetricsBuilder` accepts only trait items
+   (`common/src/brain_trait_metrics/metrics.rs:120-235`), and
+   `crates/bumpy_road_function/src/driver/mod.rs:99-100` already reaches a trait
+   default body's `BodyId` synchronously, so the immediate path is available.
+   The reason adopted is uniformity of the seam: one lifecycle contract with a
+   single carve-out invites a future contributor to reintroduce the
+   unsuppressable-lint bug in the lint that has the exception. `Emission
+   lifecycle` in ADR 005 now states this plainly and names the cost, rather
+   than resting on the claim that both lints are whole-crate lints — which was
+   false for `brain_trait`.
 
 ### Dependencies
 
