@@ -326,3 +326,76 @@ fn scan_reports_absence_without_claiming_a_location() {
         "an absent dependency must not be reported as declared"
     );
 }
+
+// -- The rule, over the mapping crate's real manifest once it exists --------
+
+/// Locates a sibling crate's manifest, or reports that it does not exist yet.
+///
+/// This is [`manifest_for`] without the panic, for a crate that ADR 005
+/// schedules but no milestone has created. The rule is verified against
+/// fixtures until the crate lands; from then on this test scans the real
+/// manifest, so the fixtures stop being the only thing standing between the
+/// rule and a silent reintroduction.
+fn manifest_if_present(crate_name: &str) -> Option<Utf8PathBuf> {
+    let manifest_dir = Utf8Path::new(env!("CARGO_MANIFEST_DIR"));
+    if manifest_dir.file_name() == Some(crate_name) {
+        return Some(manifest_dir.join("Cargo.toml"));
+    }
+    let candidate = manifest_dir
+        .parent()
+        .map(|parent| parent.join(crate_name).join("Cargo.toml"))?;
+    candidate.is_file().then_some(candidate)
+}
+
+#[rstest]
+fn mapping_crate_manifest_is_bound_when_it_exists() {
+    let Some(path) = manifest_if_present(MAPPING_CRATE) else {
+        // Not yet created. ADR 005 records the interface before any consumer
+        // exists, so this is the expected state until the mapping crate lands;
+        // the fixture tests above are what verify the rule in the meantime.
+        return;
+    };
+
+    let document = parse_manifest(&read_manifest(&path));
+
+    // Once the crate exists the guard must not be able to pass by examining
+    // nothing: a manifest with no dependency table at all cannot evidence the
+    // absence of an edge, so report that as a failure rather than a pass.
+    let tables = dependency_tables(&document);
+    assert!(
+        !tables.is_empty(),
+        "{MAPPING_CRATE}/Cargo.toml declares no dependency table; the guard is vacuous"
+    );
+    let entries: usize = tables.iter().map(|(_, table)| table.len()).sum();
+    assert!(
+        entries > 0,
+        "{MAPPING_CRATE}/Cargo.toml declares no dependency; the guard is vacuous"
+    );
+
+    for package in LOCALIZATION_STACK {
+        let outcome = scan_for(&document, package);
+        assert!(
+            !outcome.is_found(),
+            "{MAPPING_CRATE} must not name {package}, but declares it at {}",
+            outcome.location()
+        );
+    }
+}
+
+/// The discovery path above must not be able to silently skip the guard.
+///
+/// `mapping_crate_manifest_is_bound_when_it_exists` returns early today, so its
+/// own body cannot show that discovery works. These two cases pin both branches
+/// against crates that are present and absent *now*, so a later regression in
+/// `manifest_if_present` cannot make the guard quietly vacuous once the mapping
+/// crate lands.
+#[rstest]
+#[case::present("whitaker_clones_core", true)]
+#[case::absent("whitaker_no_such_crate", false)]
+fn manifest_discovery_finds_siblings_that_exist(#[case] crate_name: &str, #[case] expected: bool) {
+    assert_eq!(
+        manifest_if_present(crate_name).is_some(),
+        expected,
+        "discovery of {crate_name} disagrees with the filesystem"
+    );
+}
