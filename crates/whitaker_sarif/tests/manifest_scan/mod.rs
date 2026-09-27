@@ -21,6 +21,12 @@
 //! Precedent: `crates/whitaker_clones_core/build_support.rs` parses a manifest
 //! with `toml::Table` and walks its dependency tables.
 
+/// Behavioural tests for the workspace-inheritance resolution path.
+///
+/// A `mod` inside a test binary compiles unconditionally, so this pulls the
+/// tests in whenever the toolkit is used — which is what makes them run.
+mod workspace_inheritance;
+
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 
@@ -103,12 +109,13 @@ fn names_package(
     package: &str,
     workspace_dependencies: Option<&toml::Table>,
 ) -> EntryVerdict {
-    if key == package
-        || value
-            .get("package")
-            .and_then(toml::Value::as_str)
-            .is_some_and(|named| named == package)
-    {
+    // The key is the *local* name, not the package: Cargo resolves an entry by
+    // its `package` override when one is written and by the key only when none
+    // is. So `whitaker-common = { package = "serde" }` depends on `serde`, and
+    // reading the key as the identity would report a forbidden edge that is not
+    // there. The override is consulted first for that reason.
+    let named_locally = value.get("package").and_then(toml::Value::as_str);
+    if named_locally.unwrap_or(key) == package {
         return EntryVerdict::Names;
     }
 
@@ -156,21 +163,36 @@ pub(crate) fn join_path(prefix: &str, key: &str) -> String {
     }
 }
 
+/// Returns whether a dependency table may legally sit directly under `path`.
+///
+/// Cargo reads dependencies in exactly three places: at the manifest's top
+/// level, under a `[target.<cfg>]` selector, and — in a root manifest — under
+/// `[workspace]`. Recursing only into those keeps the scan on Cargo's grammar,
+/// so a `[package.metadata.tool.dependencies]` table is not mistaken for a
+/// dependency table. Cargo never resolves that metadata, and harvesting it
+/// would fail the guard on a manifest that declares no forbidden edge at all.
+fn is_dependency_scope(path: &str) -> bool {
+    path.is_empty() || path == "workspace" || path == "target" || path.starts_with("target.")
+}
+
 /// Recursively harvests dependency tables, tracking the path that reached each.
 ///
 /// Recursion is required rather than a top-level scan: a `[target.'cfg(…)'…]`
 /// selector nests its dependency tables one or more levels down, and an edge can
-/// hide there.
+/// hide there. Recursion descends only where a dependency table may live, per
+/// `is_dependency_scope`.
 pub(crate) fn collect_tables(node: &toml::Table, prefix: &str, into: &mut Vec<DependencyTable>) {
     for (key, value) in node {
         let Some(table) = value.as_table() else {
             continue;
         };
         let path = join_path(prefix, key);
-        if DEPENDENCY_TABLES.iter().any(|name| name == key) {
+        if is_dependency_scope(prefix) && DEPENDENCY_TABLES.iter().any(|name| name == key) {
             into.push((path.clone(), table.clone()));
         }
-        collect_tables(table, &path, into);
+        if is_dependency_scope(&path) {
+            collect_tables(table, &path, into);
+        }
     }
 }
 

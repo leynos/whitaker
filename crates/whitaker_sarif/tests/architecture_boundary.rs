@@ -212,6 +212,68 @@ fn scan_reports_the_declaring_key() {
 }
 
 #[rstest]
+fn a_package_override_displaces_the_key_as_the_identity() {
+    // `whitaker-common = { package = "serde" }` depends on `serde`; Cargo
+    // resolves the `package` field when one is written and the key only when
+    // none is. Verified against `cargo metadata`, which reports `name: serde`
+    // with `rename: whitaker-common` for exactly this shape.
+    //
+    // So this manifest declares no `whitaker-common` edge, and a scan reading
+    // the key as the identity would fail the guard on a clean manifest. The
+    // mirror of `MAPPING_RENAMED`, which hides a forbidden edge behind an
+    // innocuous key; this one hides an innocuous package behind a forbidden
+    // key, and the two together are what pin the resolution order.
+    let document = parse_manifest(
+        "[dependencies]\nwhitaker-common = { package = \"serde\", version = \"1\" }\n",
+    );
+    assert_eq!(
+        scan_for(&document, FORBIDDEN_IN_SARIF, None),
+        ScanOutcome::Absent,
+        "the `package` field, not the key, is the dependency's identity"
+    );
+
+    // The override is not a blanket exemption: when it *does* name the
+    // forbidden package the edge is found, which is what `sarif_rule_rejects_
+    // both_dependency_shapes` covers under `case::renamed`.
+    assert_eq!(
+        scan_for(&document, "serde", None),
+        ScanOutcome::Found("dependencies.whitaker-common".to_owned()),
+        "an override that names another package makes that package the edge"
+    );
+}
+
+#[rstest]
+fn metadata_tables_are_not_dependency_tables() {
+    // Cargo reads dependencies only at the manifest top level, under a
+    // `[target.<cfg>]` selector, and under `[workspace]`. It never resolves
+    // `package.metadata`, so a `dependencies` key there is arbitrary data a
+    // tool chose to store — not an edge. Harvesting it would fail the guard on
+    // a manifest that declares no forbidden dependency at all.
+    let document = parse_manifest(concat!(
+        "[package]\n",
+        "name = \"whitaker_sarif\"\n",
+        "\n",
+        "[dependencies]\n",
+        "serde = \"1\"\n",
+        "\n",
+        "[package.metadata.tool.dependencies]\n",
+        "fluent-templates = { version = \"0.15\" }\n",
+    ));
+    assert_eq!(
+        scan_for(&document, "fluent-templates", None),
+        ScanOutcome::Absent,
+        "a metadata table is not a Cargo dependency table"
+    );
+
+    // The genuine table in the same manifest is still read, so this is a
+    // scoping fix rather than a disabled scan.
+    assert!(
+        scan_for(&document, "serde", None).is_found(),
+        "the real `[dependencies]` table must still be scanned"
+    );
+}
+
+#[rstest]
 fn scan_reports_absence_without_claiming_a_location() {
     let document = parse_manifest("[dependencies]\nserde = \"1\"\n");
     assert_eq!(
@@ -221,136 +283,8 @@ fn scan_reports_absence_without_claiming_a_location() {
     );
 }
 
-// -- Non-vacuity: an inherited rename is resolved through the workspace -----
-
-/// A member manifest that inherits a rename without naming the package.
-///
-/// This is the shape `names_package` cannot resolve from the member alone: the
-/// key is `loc`, there is no local `package`, and the real name lives only in
-/// the root workspace's entry for `loc`.
-const INHERITED_RENAME: &str = concat!(
-    "[package]\n",
-    "name = \"whitaker_brain_trust_sarif\"\n",
-    "\n",
-    "[dependencies]\n",
-    "loc = { workspace = true }\n",
-);
-
-/// The root table that makes `INHERITED_RENAME` name `fluent-templates`.
-const WORKSPACE_WITH_RENAME: &str = concat!(
-    "[workspace.dependencies]\n",
-    "loc = { package = \"fluent-templates\", version = \"0.15\" }\n",
-);
-
-#[rstest]
-fn inherited_rename_is_resolved_through_the_workspace() {
-    let document = parse_manifest(INHERITED_RENAME);
-    let dependencies = workspace_table_of(&parse_manifest(WORKSPACE_WITH_RENAME));
-
-    // Read in isolation the edge is invisible, which is what makes this case
-    // worth pinning: the local manifest names no forbidden package anywhere.
-    // It is unresolved rather than absent — the key inherits, and there is no
-    // workspace table here to resolve it against.
-    assert_eq!(
-        scan_for(&document, "fluent-templates", None),
-        ScanOutcome::Unresolved("dependencies.loc".to_owned()),
-        "the member manifest alone cannot resolve an inherited rename"
-    );
-
-    // With the workspace table the effective name is recovered.
-    assert_eq!(
-        scan_for(&document, "fluent-templates", dependencies.as_ref()),
-        ScanOutcome::Found("dependencies.loc".to_owned()),
-        "an inherited rename must resolve to the package the workspace declares"
-    );
-}
-
-#[rstest]
-fn inherited_entry_without_a_workspace_declaration_is_not_treated_as_clean() {
-    // A member that inherits a key the workspace does not declare cannot be
-    // resolved. Failing closed is the point: an `Absent` here would let an
-    // unreadable declaration read as a missing dependency, and the guard would
-    // pass while blind to whatever that entry's name actually is.
-    let document = parse_manifest("[dependencies]\nloc = { workspace = true }\n");
-    // A workspace table that declares some *other* key, so the inheriting entry
-    // resolves to nothing and the scan cannot read its name.
-    let dependencies =
-        workspace_table_of(&parse_manifest("[workspace.dependencies]\nserde = \"1\"\n"));
-
-    let outcome = scan_for(&document, "fluent-templates", dependencies.as_ref());
-    assert_eq!(
-        outcome,
-        ScanOutcome::Unresolved("dependencies.loc".to_owned()),
-        "an unresolvable inherited entry must be reported, not read as absent"
-    );
-    assert!(
-        !outcome.is_absent(),
-        "an unresolved scan must fail the guard rather than certify absence"
-    );
-
-    // The unresolved entry taints every package scanned, not only the one it
-    // happens to name. `loc` could carry any name, so no scan of this manifest
-    // can certify an absence while it is unreadable. The result is a failure
-    // rather than a pass, which is the point of the rule.
-    assert_eq!(
-        scan_for(&document, "serde", dependencies.as_ref()),
-        ScanOutcome::Unresolved("dependencies.loc".to_owned()),
-        "an unreadable entry leaves every package unproven, not only its own"
-    );
-
-    // A manifest with no inheriting entry is scanned to completion, so a
-    // genuine absence still reports as one.
-    let plain = parse_manifest("[dependencies]\nserde = \"1\"\n");
-    assert_eq!(
-        scan_for(&plain, "fluent-templates", dependencies.as_ref()),
-        ScanOutcome::Absent,
-        "without an unreadable entry, absence is certified as absence"
-    );
-}
-
-#[rstest]
-fn an_unresolved_entry_does_not_mask_a_declared_one() {
-    // The fail-closed rule must not turn a genuine finding into a failure to
-    // resolve: an explicit declaration outranks an unrelated unreadable entry,
-    // so the guard still names the edge it found.
-    //
-    // The unreadable key sorts *before* the declaring one, so a scan that
-    // returned on the first unresolved entry would report `Unresolved` here.
-    // `toml::Table` iterates in key order, so the ordering is deliberately
-    // adversarial rather than incidental.
-    let document = parse_manifest(concat!(
-        "[dependencies]\n",
-        "aaa = { workspace = true }\n",
-        "fluent-templates = { workspace = true }\n",
-    ));
-    let dependencies =
-        workspace_table_of(&parse_manifest("[workspace.dependencies]\nserde = \"1\"\n"));
-    // Neither key is declared by the workspace, so the declared entry is found
-    // on its own key, not by any workspace resolution.
-    assert_eq!(
-        scan_for(&document, "fluent-templates", dependencies.as_ref()),
-        ScanOutcome::Found("dependencies.fluent-templates".to_owned()),
-        "a declared entry must be reported even beside an unresolvable one"
-    );
-}
-
-#[rstest]
-fn a_plain_key_is_never_resolved_through_the_workspace() {
-    // The workspace lookup applies only to `{ workspace = true }` entries. A
-    // local key that happens to match a workspace key with a different package
-    // must not pick up the workspace's name.
-    let document = parse_manifest("[dependencies]\nloc = \"1\"\n");
-    let dependencies = workspace_table_of(&parse_manifest(WORKSPACE_WITH_RENAME));
-
-    // The local entry does not inherit, so the workspace's name for `loc` is
-    // irrelevant to it. A scan that consulted the workspace anyway would find
-    // `fluent-templates` here and report a false positive.
-    assert_eq!(
-        scan_for(&document, "fluent-templates", dependencies.as_ref()),
-        ScanOutcome::Absent,
-        "a non-inherited entry keeps its own name"
-    );
-}
+// Workspace-inheritance behaviour is tested in
+// `manifest_scan/workspace_inheritance.rs`, beside the scanner it exercises.
 
 // -- The rule, over the mapping crate's real manifest once it exists --------
 
