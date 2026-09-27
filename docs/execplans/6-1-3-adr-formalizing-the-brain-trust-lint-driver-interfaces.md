@@ -1871,16 +1871,20 @@ upstream assumption without that artefact being updated.
   break the layering — if `whitaker_sarif` acquires `whitaker-common`, or if
   the SARIF mapping crate acquires the localization stack.
 - Requirements: `BTD-REQ-05`, and the layering rule of `The layering decision`.
-- Changes: two test files — the rule in `tests/architecture_boundary.rs` and its
-  machinery in `tests/manifest_scan/mod.rs` — plus fixture manifests. The split
-  is forced by the 400-line rule and follows the existing
+- Changes: the rule in `tests/architecture_boundary.rs`, its machinery in
+  `tests/manifest_scan/mod.rs`, and three behavioural module files beside that
+  machinery (`workspace_inheritance.rs`, `table_discovery.rs`), plus fixture
+  manifests. The splits are forced by the 400-line rule and follow the existing
   `tests/support/mod.rs` precedent; a module *directory* is used because Cargo
-  does not discover `tests/<dir>/mod.rs` as its own target.
+  does not discover `tests/<dir>/mod.rs` as its own target. At the round-6
+  revision this is 25 tests in four files of 318, 396, 130, and 195 lines.
 - Red artefact: the guard run against a fixture manifest declaring the
   forbidden dependency, which must fail naming it.
 - Acceptance evidence (`AC-2`): the three non-vacuity checks in `VP-1` all
   behave as specified; `make check-fmt`, `make typecheck`, `make lint`, and
-  `make test` pass.
+  `make test` pass; and `make test NEXTEST_PROFILE=ci` passes, because
+  `profile.default` filters the two `installer/tests/behaviour_*` binaries that
+  are also inside this branch's change surface.
 - Conformance check: no production code changed; no dependency added; the test
   asserts a rule the ADR states.
 - Recovery: delete the file. `EP-M1`, `EP-M3`, and `EP-M4` remain coherent.
