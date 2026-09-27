@@ -3249,20 +3249,33 @@ that has to be right about a prefix — this is the second time a correctness ru
 expressed as a string test has been the defect, and the structural form removes
 the class. `is_dependency_scope` and `collect_tables` are gone.
 
-Tests that were asserting against Cargo. Three existing cases were found to rely
-on shapes Cargo rejects or ignores; each was rebuilt rather than deleted, and
-each rebuild *weakened* the suite's independence from the bug. Two assert a
-local `package` beside `workspace = true`: that a local override wins
-(`case::workspace_inline`, and the `||`-form fix of round 5 that the case was
-written for), and that an inherited entry resolves to its own key
-(`an_unresolved_entry_does_not_mask_a_declared_one`, whose fixture — an
-inheriting entry beside an undeclared one — Cargo would fail to load).
+Tests that were asserting against Cargo. Four existing cases were found to rely
+on shapes Cargo rejects or ignores. Three were rebuilt rather than deleted, and
+each rebuild *weakened* the suite's independence from the bug.
+
+Two assert a local `package` beside `workspace = true`, which Cargo discards:
+the `case::workspace_inline` of `sarif_rule_rejects_both_dependency_shapes`, and
+the fixture of `an_unresolved_entry_does_not_mask_a_declared_one` — a member
+that inherits a key its root does not declare, which Cargo refuses to load. The
+first was replaced by `case::inherited_rename`, which is the same shape read
+correctly: the identity comes from the root, and the member's key is only a
+local name.
+
 `case::direct` passed only because the pre-inheritance key check short-circuited
-before the workspace was consulted; with the true order it is correctly
-`Unresolved`, so the case now carries a root that declares its key. This is the
-same defect class as rounds 4 and 5 — a test that agreed with the code rather
-than with the world — and it is the first time a *round 5 fix* turned out to
-have been aimed at the wrong shape.
+before the workspace was consulted; under the true order it is correctly
+`Unresolved`, so the case now carries a root that declares its key.
+
+The fourth was **not** rebuilt, because it was never coupled to a bug:
+`mapping_crate_must_not_name_the_localization_stack::case_6_workspace_inline`
+(spelled the same as the case above, describing a different thing) inherits with
+no local `package` at all, so it read `Names` from its key both before and after
+round 5. It is a legitimate shape and it passes unchanged.
+
+This is the same defect class as rounds 4 and 5 — a test that agreed with the
+code rather than with the world. Its converse is worth recording too: the
+round-5 F1 fix corrected the *resolution* order but left the *precedence* rule
+inverted, because the fixture it was validated against was itself Cargo-illegal.
+A fix aimed through a bad fixture inherits that fixture's defect.
 
 Discrimination evidence. Each fix was spliced back to its exact HEAD form and
 the suite re-run, with the probe asserting a non-vacuous run before reading any
