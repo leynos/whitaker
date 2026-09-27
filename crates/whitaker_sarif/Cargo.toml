@@ -24,6 +24,14 @@ rstest = { workspace = true }
 rstest-bdd = { workspace = true }
 rstest-bdd-macros = { workspace = true }
 tempfile = { workspace = true }
+# Parses manifests for the architecture-fitness guard in
+# `tests/architecture_boundary.rs`. Already a workspace dependency and already
+# in `Cargo.lock`, so this adds no new external crate to the build.
+toml = { workspace = true }
+# The guard reads manifests through a capability-scoped handle rather than
+# ambient `std::fs`, per the `no_std_fs_operations` lint. As with `toml` above,
+# this is already a workspace dependency and already in `Cargo.lock`.
+cap-std = { workspace = true }
 
 [lints]
 workspace = true
