@@ -6,9 +6,10 @@
 //! declares, and decides whether one entry names a given package.
 //!
 //! A dependency's effective name is not always written in the manifest that
-//! declares it. A member may rename an edge locally (`loc = { package = …
-//! }`) or inherit a rename from the workspace (`loc = { workspace = true }`),
-//! and all three shapes are resolved. The inherited one needs the root
+//! declares it. A member may rename an edge locally (`loc = { package = … }`)
+//! or inherit an entire identity from the workspace (`loc = { workspace =
+//! true }`), and both shapes are resolved, in Cargo's order: inheritance first,
+//! then the local entry. The inherited shape needs the root
 //! `[workspace.dependencies]` table, which is read alongside every real
 //! manifest.
 //!
@@ -21,10 +22,13 @@
 //! Precedent: `crates/whitaker_clones_core/build_support.rs` parses a manifest
 //! with `toml::Table` and walks its dependency tables.
 
-/// Behavioural tests for the workspace-inheritance resolution path.
+/// Behavioural tests for which tables the scan treats as dependency tables.
 ///
-/// A `mod` inside a test binary compiles unconditionally, so this pulls the
+/// A `mod` inside a test binary compiles unconditionally, so these pull the
 /// tests in whenever the toolkit is used — which is what makes them run.
+mod table_discovery;
+
+/// Behavioural tests for the workspace-inheritance resolution path.
 mod workspace_inheritance;
 
 use camino::{Utf8Path, Utf8PathBuf};
@@ -85,30 +89,53 @@ impl ScanOutcome {
 
 /// Returns whether a dependency entry's effective name is `package`.
 ///
-/// An entry can name its package in three places, and all three are read.
+/// An entry names its package in one of two shapes, and the order they are
+/// tried in is Cargo's own resolution order, not a preference:
 ///
-/// 1. The key: `whitaker-common = ...`.
-/// 2. A local `package` field under a rename: `loc = { package = "whitaker-common" }` declares the
-///    same forbidden edge as the key form while leaving the key innocuous, so a key-only scan would
-///    pass it.
-/// 3. The workspace's own declaration, reached through `{ workspace = true }`. A member may inherit
-///    a rename without writing `package` locally — `loc = { workspace = true }` — and the name then
-///    lives only in the root `[workspace.dependencies]` entry for `loc`, under a `package` field
-///    or, absent one, in the key itself. This is the one shape a member manifest cannot be read in
-///    isolation to resolve.
+/// 1. **Inheritance.** `loc = { workspace = true }` takes its whole identity from the root
+///    `[workspace.dependencies]` entry for `loc`. This is the one shape a member manifest cannot be
+///    read in isolation to resolve.
+/// 2. **The local entry.** `loc = { package = "serde" }` depends on `serde`, and `loc = "1"`
+///    depends on `loc`.
+///
+/// Inheritance is tried first because Cargo resolves it first, and the
+/// difference is observable in both directions. A member may inherit a rename
+/// it cannot see — `loc = { workspace = true }` resolving to `serde` — and a
+/// member that *does* write a local `package` beside `workspace = true` is
+/// writing a key Cargo discards with `unused manifest key: …package`; the
+/// inherited identity wins outright.
 ///
 /// `workspace_dependencies` is the root workspace's `[workspace.dependencies]`
 /// table, or `None` when the manifest under scan *is* that root, which has no
-/// parent to inherit from. Every other `None` — and an inheritance with no
-/// readable declaration behind it — reports `Unresolved` rather than `Absent`,
-/// so the guard fails closed: an entry whose name cannot be read is not
-/// evidence that the package is missing.
+/// parent to inherit from. An inheritance with no readable declaration behind
+/// it reports `Unresolved` rather than `Absent`, so the guard fails closed: an
+/// entry whose name cannot be read is not evidence that the package is missing.
 fn names_package(
     key: &str,
     value: &toml::Value,
     package: &str,
     workspace_dependencies: Option<&toml::Table>,
 ) -> EntryVerdict {
+    let inherits = value
+        .get("workspace")
+        .and_then(toml::Value::as_bool)
+        .is_some_and(|flag| flag);
+    if inherits {
+        let Some(declaration) = workspace_dependencies.and_then(|table| table.get(key)) else {
+            return EntryVerdict::Unresolved;
+        };
+        return if declaration
+            .get("package")
+            .and_then(toml::Value::as_str)
+            .unwrap_or(key)
+            == package
+        {
+            EntryVerdict::Names
+        } else {
+            EntryVerdict::Other
+        };
+    }
+
     // The key is the *local* name, not the package: Cargo resolves an entry by
     // its `package` override when one is written and by the key only when none
     // is. So `whitaker-common = { package = "serde" }` depends on `serde`, and
@@ -119,27 +146,7 @@ fn names_package(
         return EntryVerdict::Names;
     }
 
-    let inherits = value
-        .get("workspace")
-        .and_then(toml::Value::as_bool)
-        .is_some_and(|flag| flag);
-    if !inherits {
-        return EntryVerdict::Other;
-    }
-
-    let Some(declaration) = workspace_dependencies.and_then(|table| table.get(key)) else {
-        return EntryVerdict::Unresolved;
-    };
-    if declaration
-        .get("package")
-        .and_then(toml::Value::as_str)
-        .unwrap_or(key)
-        == package
-    {
-        EntryVerdict::Names
-    } else {
-        EntryVerdict::Other
-    }
+    EntryVerdict::Other
 }
 
 /// What reading one dependency entry established about the package under scan.
@@ -163,43 +170,66 @@ pub(crate) fn join_path(prefix: &str, key: &str) -> String {
     }
 }
 
-/// Returns whether a dependency table may legally sit directly under `path`.
+/// Harvests the dependency tables `scope` may declare directly.
 ///
-/// Cargo reads dependencies in exactly three places: at the manifest's top
-/// level, under a `[target.<cfg>]` selector, and — in a root manifest — under
-/// `[workspace]`. Recursing only into those keeps the scan on Cargo's grammar,
-/// so a `[package.metadata.tool.dependencies]` table is not mistaken for a
-/// dependency table. Cargo never resolves that metadata, and harvesting it
-/// would fail the guard on a manifest that declares no forbidden edge at all.
-fn is_dependency_scope(path: &str) -> bool {
-    path.is_empty() || path == "workspace" || path == "target" || path.starts_with("target.")
-}
-
-/// Recursively harvests dependency tables, tracking the path that reached each.
-///
-/// Recursion is required rather than a top-level scan: a `[target.'cfg(…)'…]`
-/// selector nests its dependency tables one or more levels down, and an edge can
-/// hide there. Recursion descends only where a dependency table may live, per
-/// `is_dependency_scope`.
-pub(crate) fn collect_tables(node: &toml::Table, prefix: &str, into: &mut Vec<DependencyTable>) {
-    for (key, value) in node {
-        let Some(table) = value.as_table() else {
-            continue;
-        };
-        let path = join_path(prefix, key);
-        if is_dependency_scope(prefix) && DEPENDENCY_TABLES.iter().any(|name| name == key) {
-            into.push((path.clone(), table.clone()));
-        }
-        if is_dependency_scope(&path) {
-            collect_tables(table, &path, into);
+/// Every name in `DEPENDENCY_TABLES` is harvested under `prefix`, and nothing
+/// deeper: a dependency table is read only where Cargo reads it, which is
+/// always as a direct child of the scope this is called on.
+fn harvest_under(scope: &toml::Table, prefix: &str, into: &mut Vec<DependencyTable>) {
+    for name in DEPENDENCY_TABLES {
+        if let Some(table) = scope.get(name).and_then(toml::Value::as_table) {
+            into.push((join_path(prefix, name), table.clone()));
         }
     }
 }
 
 /// Collects every dependency table a manifest declares.
+///
+/// Cargo reads dependencies in exactly three places, and this visits each by
+/// name rather than by recursing on the key `dependencies`:
+///
+/// 1. the manifest's own top level, including `dev-` and `build-dependencies`;
+/// 2. a root manifest's `[workspace.dependencies]`, which every member inheriting `{ workspace =
+///    true }` resolves against;
+/// 3. the body of a `[target.<selector>]` table.
+///
+/// A `dependencies` key anywhere else is not an edge. Cargo never resolves
+/// `[package.metadata.tool.dependencies]`, and it *silently ignores* any table
+/// below a target selector: neither
+/// `[target.'cfg(unix)'.metadata.dependencies]` nor `[target.a.b.dependencies]`
+/// resolves anything. A walk matching on the table name alone, or descending on
+/// a `target.` prefix, would report edges Cargo does not have. Visiting the
+/// three places explicitly keeps the scan on Cargo's grammar by construction.
 pub(crate) fn dependency_tables(document: &toml::Table) -> Vec<DependencyTable> {
     let mut tables = Vec::new();
-    collect_tables(document, "", &mut tables);
+
+    harvest_under(document, "", &mut tables);
+
+    // Named on its own rather than harvested beside the other workspace tables:
+    // Cargo accepts `[workspace.dev-dependencies]` and
+    // `[workspace.build-dependencies]`, silently ignores both, and rejects a
+    // member that inherits from one. `workspace.dependencies` is the whole of
+    // the workspace's contribution, so it is the only one read.
+    if let Some(table) = document
+        .get("workspace")
+        .and_then(toml::Value::as_table)
+        .and_then(|workspace| workspace.get("dependencies"))
+        .and_then(toml::Value::as_table)
+    {
+        tables.push(("workspace.dependencies".to_owned(), table.clone()));
+    }
+
+    // Exactly one selector level, never more: the dependency tables are
+    // `target`'s grandchildren, and a `[target.<selector>]` body is also where
+    // the `dev-` and `build-` forms may appear.
+    if let Some(targets) = document.get("target").and_then(toml::Value::as_table) {
+        for (selector, value) in targets {
+            if let Some(body) = value.as_table() {
+                harvest_under(body, &join_path("target", selector), &mut tables);
+            }
+        }
+    }
+
     tables
 }
 

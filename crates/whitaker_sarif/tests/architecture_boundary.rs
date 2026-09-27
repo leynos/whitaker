@@ -186,15 +186,28 @@ fn mapping_crate_must_not_name_the_localization_stack(
 
 // -- Non-vacuity: the scan reads renames, not only keys ---------------------
 
+// Each inherited case needs a root that declares its key: Cargo errors on an
+// inheriting entry the workspace does not declare, so a shape written without
+// one could never be loaded. `direct` resolves to the key, `inherited_rename` to
+// a package the key does not name.
 #[rstest]
-#[case::direct("[dependencies]\nwhitaker-common = { workspace = true }\n")]
-#[case::renamed("[dependencies]\nloc = { package = \"whitaker-common\" }\n")]
-#[case::workspace_inline(
-    "[dependencies]\nloc = { workspace = true, package = \"whitaker-common\" }\n"
+#[case::direct(
+    "[dependencies]\nwhitaker-common = { workspace = true }\n",
+    Some("[workspace.dependencies]\nwhitaker-common = { path = \"crates/whitaker-common\" }\n")
 )]
-fn sarif_rule_rejects_both_dependency_shapes(#[case] manifest: &str) {
+#[case::renamed("[dependencies]\nloc = { package = \"whitaker-common\" }\n", None)]
+#[case::inherited_rename(
+    "[dependencies]\nloc = { workspace = true }\n",
+    Some("[workspace.dependencies]\nloc = { package = \"whitaker-common\" }\n")
+)]
+fn sarif_rule_rejects_both_dependency_shapes(
+    #[case] manifest: &str,
+    #[case] workspace: Option<&str>,
+) {
     let document = parse_manifest(manifest);
-    let outcome = scan_for(&document, FORBIDDEN_IN_SARIF, None);
+    let root = workspace.map(parse_manifest);
+    let dependencies = root.as_ref().and_then(workspace_table_of);
+    let outcome = scan_for(&document, FORBIDDEN_IN_SARIF, dependencies.as_ref());
     assert!(
         outcome.is_found(),
         "a {FORBIDDEN_IN_SARIF} edge must be rejected in every shape"
@@ -242,60 +255,8 @@ fn a_package_override_displaces_the_key_as_the_identity() {
     );
 }
 
-#[rstest]
-fn metadata_tables_are_not_dependency_tables() {
-    // Cargo reads dependencies only at the manifest top level, under a
-    // `[target.<cfg>]` selector, and under `[workspace]`. It never resolves
-    // `package.metadata`, so a `dependencies` key there is arbitrary data a
-    // tool chose to store — not an edge. Harvesting it would fail the guard on
-    // a manifest that declares no forbidden dependency at all.
-    let document = parse_manifest(concat!(
-        "[package]\n",
-        "name = \"whitaker_sarif\"\n",
-        "\n",
-        "[dependencies]\n",
-        "serde = \"1\"\n",
-        "\n",
-        "[package.metadata.tool.dependencies]\n",
-        "fluent-templates = { version = \"0.15\" }\n",
-    ));
-    assert_eq!(
-        scan_for(&document, "fluent-templates", None),
-        ScanOutcome::Absent,
-        "a metadata table is not a Cargo dependency table"
-    );
-
-    // The genuine table in the same manifest is still read, so this is a
-    // scoping fix rather than a disabled scan.
-    assert!(
-        scan_for(&document, "serde", None).is_found(),
-        "the real `[dependencies]` table must still be scanned"
-    );
-}
-
-#[rstest]
-fn workspace_dependencies_table_is_scanned_too() {
-    // `[workspace.dependencies]` is the third place Cargo reads dependencies,
-    // and it is a real declaration rather than metadata: an entry there is what
-    // every member inheriting `{ workspace = true }` resolves against. A scan
-    // that read only the top level and `[target]` would miss a forbidden edge
-    // declared at the root and shared by every member.
-    //
-    // Without this case the `workspace` clause of `is_dependency_scope` is
-    // unreachable: every other test passes the workspace table as the
-    // *resolution* argument to `scan_for`, never as the document under scan.
-    // Dropping the clause left all 105 tests passing, which is what makes this
-    // case load-bearing rather than decorative.
-    let document = parse_manifest(concat!(
-        "[workspace.dependencies]\n",
-        "fluent-templates = { version = \"0.15\" }\n",
-    ));
-    assert_eq!(
-        scan_for(&document, "fluent-templates", None),
-        ScanOutcome::Found("workspace.dependencies.fluent-templates".to_owned()),
-        "a root workspace declaration is a dependency the guard must read"
-    );
-}
+// Which tables count as dependency tables is tested in
+// `manifest_scan/table_discovery.rs`, beside the walk it exercises.
 
 #[rstest]
 fn scan_reports_absence_without_claiming_a_location() {

@@ -297,7 +297,7 @@ Thresholds that trigger escalation, not quality targets.
       `crates/whitaker_sarif/tests/architecture_boundary.rs`,
       `crates/whitaker_sarif/tests/manifest_scan/mod.rs`, and
       `crates/whitaker_sarif/tests/manifest_scan/workspace_inheritance.rs`
-  added, 22 tests. The rule lives in the first file, the manifest-scanning
+  added, 23 tests. The rule lives in the first file, the manifest-scanning
   toolkit it is asserted through in the second, and the scanner's own
   workspace-inheritance behaviour in the third. They were split twice against
   AGENTS.md's 400-line budget: once when the single file passed it, and again
@@ -3145,8 +3145,9 @@ The seam is "does this test state ADR 005's rule, or the scanner's behaviour?"
 they are scanner statements and the rule file is now purely rule statements. A
 `mod` inside a test binary compiles unconditionally, so the tests still run
 whenever the toolkit is used; the count was confirmed unchanged at 22 by
-`cargo nextest list`, and all four appear under the new path. Sizes: 333, 366,
-144 lines.
+`cargo nextest list`, and all four appear under the new path. Sizes at this
+revision: 333, 366, 144 lines. (The rule file grew to 357 when the
+workspace-scope coverage gap was closed below.)
 
 Effect on remaining work. None on scope. `EP-M2` moves from 20 tests to 22 in
 three files, all inside the 400-line rule. The F3 sketch fix is in this plan
@@ -3163,11 +3164,119 @@ Two traps in the probe itself are worth recording, because the first produced a
 confident false clean. nextest's `-E 'test(name)'` predicate matches a **test
 name**, not a binary, so scoping the probe to `architecture_boundary` that way
 ran **zero** tests and reported zero failures — indistinguishable from a pass.
-`profile.default` compounds this: its filter excludes the binary regardless. A
-third trap is that nextest colorizes, so the count does not parse without
+A second trap is that nextest colorizes, so the count does not parse without
 stripping ANSI. The probe now asserts it ran the expected 105 tests before its
-verdict is read; the baseline run is what caught the second and third. Also,
-reverting a fix can leave it uncompilable — removing the `is_dependency_scope`
-calls makes the helper dead, and `-D warnings` promotes that to an error — so
-the second fix was probed by neutering the predicate while keeping its callers,
-rather than by removing the calls.
+verdict is read; the baseline run is what caught the second. Also, reverting a
+fix can leave it uncompilable — removing the `is_dependency_scope` calls makes
+the helper dead, and `-D warnings` promotes that to an error — so the second fix
+was probed by neutering the predicate while keeping its callers, rather than by
+removing the calls.
+
+Correction, recorded 2026-09-27. The note above first claimed that
+`profile.default` "excludes the binary regardless", and an earlier round
+reported that `make test` did not run `architecture_boundary`. Both were wrong,
+and the round-6 gate run settles it: `make test` **does** run all 23
+`architecture_boundary` tests, and the run's own summary says exactly what is
+filtered — `5 tests and 11 binaries skipped, including 11 binaries via
+profile.default.default-filter`, which excludes `behaviour_cli`,
+`behaviour_toolchain`, and `kind(example)` only. The zero-test probe was
+therefore caused by the `-E` predicate alone, and the profile's filter had
+nothing to do with it. The distinction matters because the two failures have
+different fixes: an `-E` filter is removed, whereas a profile filter means the
+gate itself is not running a test file at all.
+
+A fourth finding, from turning the same probe on the fix itself.
+`is_dependency_scope` admits three places Cargo reads dependencies, but the
+`workspace` clause was **unreachable by the suite**: every other test passed
+the workspace table to `scan_for` as the *resolution* argument, never as the
+document under scan. Dropping the clause outright left all 105 tests passing.
+The clause is load-bearing, not decorative — `[workspace.dependencies]` is a
+real declaration, and an entry there is what every member inheriting
+`{ workspace = true }` resolves against, so a scan skipping it would miss an
+edge declared at the root and shared by every member.
+`workspace_dependencies_table_is_scanned_too` now scans such a document
+directly and pins the `workspace.dependencies.<key>` path; dropping the clause
+now fails exactly that test and nothing else, 106 ran and 105 passed. This is
+the same defect class as the fail-closed one — an assertion that could not fail
+— reached through a path the previous three rounds did not touch, which is why
+reversion probing the fix rather than only the test is worth the effort.
+
+Effect on remaining work. `EP-M2` moves from 22 tests to 23.
+
+### Round 6 — the scan follows Cargo's resolution order, 2026-09-27
+
+CodeRabbit round 6 raised three findings, all in `manifest_scan/mod.rs`: two
+duplicates of one claim at lines 117–120 and one at lines 174–176. Both were
+verified against `cargo metadata` before any code was touched, because the
+findings point at *regions* and the region need not contain the defect.
+
+What the probes established, in a scratch workspace under `/tmp`. The
+findings' premise check out, and **both are wider than reported**:
+
+1. A root `[workspace.dependencies]` entry may rename the package —
+   `whitaker-common = { package = "pkg_a", path = … }` — and a member inheriting
+   it by that key resolves to `pkg_a`. Cargo reports
+   `name: pkg_a | rename: whitaker-common`. The key is not the identity. The
+   scan consulted the key first, so it reported a forbidden `whitaker-common`
+   edge on a manifest that declares none.
+2. The mirror case is worse than a missed reorder. For
+   `whitaker-common = { workspace = true, package = "pkg_b" }` Cargo resolves
+   the **root's** package and warns `unused manifest key:
+   dependencies.whitaker-common.package`. The local `package` is discarded
+   outright, so the branch was reading a key Cargo ignores — and reading it
+   *first*. An entry could therefore hide a forbidden edge behind a permissible
+   root declaration, or the reverse.
+3. `[workspace.dev-dependencies]` and `[workspace.build-dependencies]` are
+   accepted by Cargo, silently ignored, and are not inheritance sources: a
+   member inheriting from one **fails to load**. `[workspace.dependencies]` is
+   the whole of the workspace's contribution.
+4. Cargo reads a target dependency from `[target.<selector>]` directly and
+   nowhere deeper. Each of `[target.'cfg(unix)'.metadata.dependencies]`,
+   `[target.'cfg(unix)'.foo.dependencies]` and `[target.a.b.dependencies]`
+   resolves nothing, *silently, with no warning* — so a scan descending on a
+   `target.` prefix invents an edge. Confirmed narrower than the finding's
+   wording, which suggested only `metadata` was the problem.
+
+What changed. `names_package` now tries inheritance first and the local entry
+second, which is Cargo's own order rather than a preference. The recursive walk
+was replaced by an explicit visit to the three places Cargo reads dependencies,
+so the scan follows the grammar **by construction** instead of by a predicate
+that has to be right about a prefix — this is the second time a correctness rule
+expressed as a string test has been the defect, and the structural form removes
+the class. `is_dependency_scope` and `collect_tables` are gone.
+
+Tests that were asserting against Cargo. Three existing cases were found to rely
+on shapes Cargo rejects or ignores; each was rebuilt rather than deleted, and
+each rebuild *weakened* the suite's independence from the bug. Two assert a
+local `package` beside `workspace = true`: that a local override wins
+(`case::workspace_inline`, and the `||`-form fix of round 5 that the case was
+written for), and that an inherited entry resolves to its own key
+(`an_unresolved_entry_does_not_mask_a_declared_one`, whose fixture — an
+inheriting entry beside an undeclared one — Cargo would fail to load).
+`case::direct` passed only because the pre-inheritance key check short-circuited
+before the workspace was consulted; with the true order it is correctly
+`Unresolved`, so the case now carries a root that declares its key. This is the
+same defect class as rounds 4 and 5 — a test that agreed with the code rather
+than with the world — and it is the first time a *round 5 fix* turned out to
+have been aimed at the wrong shape.
+
+Discrimination evidence. Each fix was spliced back to its exact HEAD form and
+the suite re-run, with the probe asserting a non-vacuous run before reading any
+verdict (108 ran, 0 passed-reduction to nothing). Inheritance-first reverted
+fails `an_inheriting_entry_is_named_by_the_root_not_by_its_key` and nothing
+else; the recursive walk restored fails
+`target_tables_are_read_only_at_the_dependency_depth` and nothing else. Both
+restored byte-identical.
+
+Why the file layout changed again. The three new table-discovery tests pushed
+`architecture_boundary.rs` to 431 lines, over the 400-line rule. They are
+statements about which tables the walk reads, not about ADR 005's rule, so they
+moved to `manifest_scan/table_discovery.rs` — the same seam used in round 5, and
+now covering a second concern. Sizes at this revision: 318, 396, 130, 195 lines,
+all inside the rule. `mod.rs` sits at 396 with little headroom, which is worth
+watching: a further behavioural test there may need its own module rather than
+more lines.
+
+Effect on remaining work. `EP-M2` moves from 23 tests to 25 in four files.
+Nothing outside the guard's toolkit and its tests changed: no production source,
+no manifest, and no ADR text.
