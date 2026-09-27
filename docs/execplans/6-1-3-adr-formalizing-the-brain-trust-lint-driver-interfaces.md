@@ -1121,6 +1121,25 @@ Thresholds that trigger escalation, not quality targets.
   recorded as ratification.
   Date/Author: 2026-09-27, implementation agent, clearing the re-review.
 
+- **Decision: eliminate the duplicated manifest-discovery helper rather than
+  leave two copies of the same rule.**
+  Rationale: fixing finding 2 added `manifest_if_present` beside the existing
+  `manifest_for`, which was the same discovery logic written twice with only
+  the failure mode differing — the drift risk that would let the two halves of
+  the guard disagree about where a manifest lives. Folding one onto the other
+  surfaced a constraint worth recording for anyone editing this file: the
+  repository denies both `unwrap_or_else`-with-a-panicking-closure
+  (`no_unwrap_or_else_panic`) and `expect()` outside a test body, so a plain
+  helper cannot panic at all. The resolution therefore moved to its single call
+  site, inside the `#[rstest]` that needs it.
+
+  This is a caution about `# Panics` doc sections on test helpers: the
+  documented panic is real, but the lint forbids writing it. The guard's
+  behaviour was re-verified red-green after the refactor — a forbidden edge
+  still fails naming `dependencies.fluent-templates`, and green is 15 passed —
+  so the restructuring is behaviour-preserving.
+  Date/Author: 2026-09-27, implementation agent, following the guard fix.
+
 ## Outcomes & retrospective
 
 Completed 2026-09-27.
