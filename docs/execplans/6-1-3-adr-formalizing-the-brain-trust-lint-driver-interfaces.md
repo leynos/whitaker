@@ -335,6 +335,16 @@ Thresholds that trigger escalation, not quality targets.
   names was confirmed present in the ADR. `Outcomes & retrospective` records
   every amended artefact and all four supersessions; the status is `COMPLETE`.
   Gates: `make markdownlint`, `make nixie`.
+- [x] (2026-09-27) Post-completion verification. The CodeRabbit retry was
+  refused with `rate_limit`, so no reviewer verdict exists for the current tip
+  (`1a26053`). Instead of treating the earlier clearance as covering the text
+  as it now stands, every load-bearing claim in the ADR was re-derived from
+  source. All held; nothing changed. The `endColumn` off-by-one was confirmed
+  by arithmetic against the committed goldens, which is the claim that most
+  needed it, since it asks future authors to diverge from working code. Twelve
+  of the ADR's file:line citations were spot-checked against the files they
+  name, and the document's quantitative claims (858 lines; rule counts
+  11/8/6/10/6) were checked against the document itself. See `Decision log`.
 
 ## Surprises & discoveries
 
@@ -1016,6 +1026,50 @@ Thresholds that trigger escalation, not quality targets.
   states that reason" when it did not; it is corrected in place rather than
   quietly edited.
   Date/Author: 2026-09-27, implementation agent, tracing finding 2 to its root.
+
+- **Decision: re-derive the ADR's load-bearing claims from source rather than
+  trusting the clearance recorded above, and change nothing.**
+  Rationale: a `coderabbit review --agent` retry was refused with an explicit
+  `rate_limit` error (`{"errorType":"rate_limit","recoverable":true,
+  "metadata":{"waitTime":"3 minutes"}}`), so no reviewer verdict exists for
+  the current tip. Rather than treat the earlier clearance as covering the
+  text as it now stands, each factual claim was re-checked independently. All
+  held, so this entry records verification rather than a change.
+
+  The claim most worth re-deriving was the `endColumn` off-by-one, because the
+  ADR asks future authors to diverge from working code. It is confirmed by the
+  arithmetic and not merely by prose: `region_for_range` passes
+  `prefix.char_indices().next_back()` to `line_and_column`
+  (`crates/whitaker_clones_core/src/run0/span.rs:20-26`), which yields the
+  **last character's own index** and adds one. For `"fn a() {}\n"` over
+  `0..8` that is column 8, while Errata 01 §3.30.8 requires 9 — and the
+  committed golden asserts `end_column: Some(8)`
+  (`crates/whitaker_clones_core/src/run0/tests.rs:123-136`). The multi-line
+  golden corroborates it the same way (`end_column: Some(1)` where the region
+  ends on `}` at line 3 column 1, so §3.30.8 requires 2). The defect is real,
+  repeatable, and correctly stated.
+
+  Also re-verified, unchanged: the `pub mod i18n` edge is ungated
+  (`common/src/lib.rs:14`, no cfg); `validate_column_bounds` rejects zero
+  columns and is invoked from `build`
+  (`crates/whitaker_sarif/src/builders/location_builder.rs:91`, `:108-122`);
+  the incumbent counts UTF-16 (`.../run0/span.rs:78`); and
+  `check_trait_item` reaches a trait default body synchronously
+  (`crates/bumpy_road_function/src/driver/mod.rs:99`), which is what makes
+  `brain_trait`'s deferral a choice rather than a constraint.
+
+  The document's own quantitative claims were checked against itself: 858
+  lines, rule counts 11 / 8 / 6 / 10 / 6, and all five `Outstanding decisions`
+  entries present with in-range rule citations (location 10, location 5,
+  location 8, lifecycle 6, suggestion 6). All five items the `Outcomes`
+  section calls "deferred, deliberately" are among them.
+
+  An earlier observation is upgraded to a confirmed root cause: the retry
+  could not run because the review quota was already exhausted by the earlier
+  runs in this session, not because of anything on the branch. A read-only
+  probe showed 1 of 10 available again within minutes.
+  Date/Author: 2026-09-27, implementation agent, after the retry was
+  rate-limited.
 
 ## Outcomes & retrospective
 
