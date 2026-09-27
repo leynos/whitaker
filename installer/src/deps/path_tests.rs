@@ -261,46 +261,26 @@ fn path_scan_classifies_invalid_entries_and_continues_to_a_later_binary() -> std
     Ok(())
 }
 
-/// Verify missing candidates are quiet and later PATH entries are searched.
+/// Verify missing candidates are quiet and the first executable wins.
 ///
 /// # Errors
 ///
 /// Returns an I/O error if the temporary PATH fixtures cannot be created.
 #[test]
-fn path_scan_skips_missing_candidates_and_continues_to_a_later_binary() -> std::io::Result<()> {
+fn path_scan_skips_missing_candidates_and_returns_the_first_binary() -> std::io::Result<()> {
     let empty_directory = tempfile::tempdir()?;
-    let valid_directory = tempfile::tempdir()?;
+    let first_binary_directory = tempfile::tempdir()?;
+    let later_binary_directory = tempfile::tempdir()?;
     let binary_name = "dylint-link.exe";
-    let expected_binary = valid_directory.path().join(binary_name);
+    let expected_binary = first_binary_directory.path().join(binary_name);
     write_fake_binary(&expected_binary, true)?;
+    write_fake_binary(&later_binary_directory.path().join(binary_name), true)?;
 
     let scan = scan_path_directories(
         vec![
             empty_directory.path().to_path_buf(),
-            valid_directory.path().to_path_buf(),
-        ],
-        binary_name,
-    );
-
-    assert_eq!(scan.binary, Some(expected_binary));
-    assert!(scan.failures.is_empty());
-    Ok(())
-}
-
-/// Verify a PATH scan selects its first executable and ignores later entries.
-#[test]
-fn path_scan_returns_the_first_executable_match() -> std::io::Result<()> {
-    let first_directory = tempfile::tempdir()?;
-    let later_directory = tempfile::tempdir()?;
-    let binary_name = "probe.exe";
-    let expected_binary = first_directory.path().join(binary_name);
-    write_fake_binary(&expected_binary, true)?;
-    write_fake_binary(&later_directory.path().join(binary_name), true)?;
-
-    let scan = scan_path_directories(
-        vec![
-            first_directory.path().to_path_buf(),
-            later_directory.path().to_path_buf(),
+            first_binary_directory.path().to_path_buf(),
+            later_binary_directory.path().to_path_buf(),
         ],
         binary_name,
     );
