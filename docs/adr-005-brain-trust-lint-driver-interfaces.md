@@ -707,14 +707,19 @@ _Table 2: Responsibilities of each lint-pass callback._
    the level at `self.last_node_with_lint_attrs`
    (`rustc_lint/src/context.rs:600-615`), which at crate-post time is the crate
    root — so the ordinary `cx.emit_span_lint` path silently ignores
-   `#[allow(brain_type)]` and `#[expect(...)]` on the type or `impl`, leaving
+   `#[allow(brain_type)]` and `#[expect(...)]` on the subject entirely, leaving
    an unsuppressable lint. Deferred emission must therefore capture the
    subject's `HirId` and emit through `TyCtxt::emit_node_span_lint`
    (`rustc_middle/src/ty/context.rs:2461-2470`), which resolves the level at
-   the supplied node. The lint crates gain `rustc_middle` under `dylint-driver`
-   for this; `crates/clippy_utils` is a local stub carrying only
-   `macros::is_panic` (`crates/clippy_utils/src/lib.rs:1-12`) and provides no
-   alternative.
+   the supplied node. The suppression sites are that node and the modules
+   enclosing it — for `brain_type`, the type's own declaration, which is the
+   item capture rule 1 takes the `HirId` from, and any module around it. An
+   `impl` block is not a site: the captured `HirId` belongs to the declaration,
+   and the ancestor chain it resolves along does not pass through the `impl`, so
+   `#[allow(brain_type)]` written there is ignored even on the emitting path.
+   The lint crates gain `rustc_middle` under `dylint-driver` for this;
+   `crates/clippy_utils` is a local stub carrying only `macros::is_panic`
+   (`crates/clippy_utils/src/lib.rs:1-12`) and provides no alternative.
 2. **Finalize once, by construction.** The accumulator is consumed by
    finalization and yields a distinct finalized type, so reading unfinalized
    state is unrepresentable rather than merely discouraged. The nearest
