@@ -36,11 +36,11 @@ the compiler diagnostic and the SARIF result; the exact lint-pass lifecycle for
 collecting and finalizing findings; and where the line falls between English
 SARIF text and localized diagnostics.
 
-You can observe success without running the tool. Open
-`docs/adr-005-brain-trust-lint-driver-interfaces.md`, take any one of the five
-questions above, and find a normative answer with a named type, a named
-function, and a stated failure mode. Then open the 6.5.1 execplan §"The
-contract with the lint crates" and confirm every shape it defers is answered.
+Success is observable without running the tool. Opening
+`docs/adr-005-brain-trust-lint-driver-interfaces.md` and taking any one of the
+five questions above yields a normative answer with a named type, a named
+function, and a stated failure mode. The 6.5.1 execplan §"The contract with the
+lint crates" then confirms every shape it defers is answered.
 
 ### What the approver must decide
 
@@ -255,6 +255,19 @@ Thresholds that trigger escalation, not quality targets.
   attributes, making `emit_node_span_lint` a correctness requirement rather
   than a preference. The supersession set was re-derived from 6-5-1 alone and
   confirmed at four, with no fifth. See `Artefacts and notes`.
+- [x] (2026-09-27) Stage B CodeRabbit review completed via `scrutineer`, with
+  three findings and no rate limit. All three verified genuine and fixed:
+  `VP-1` demanded the mapping crate not depend on `whitaker-common` while
+  `Dependencies` and the layering diagram required it — the obligation was
+  unachievable as written, because `common/src/lib.rs:14` is a bare
+  `pub mod i18n;` with no feature gate, so any dependent reaches `i18n`;
+  `BTD-REQ-04` rule 8 still carried the fifth supersession marker that
+  `Decision log` had withdrawn; and the plan used second-person pronouns in
+  seven places against `docs/documentation-style-guide.md:32`. Two further
+  defects found independently were also fixed: a "ten lint crates" count that
+  contradicts the adjacent "nine emitting" clause, and a "seven places"
+  citation count that is five. `make markdownlint` (0 errors / 78 files) and
+  `make nixie` both pass. See `Surprises & discoveries`.
 - [ ] EP-M1 `docs/adr-005-brain-trust-lint-driver-interfaces.md` written and
   registered in `docs/contents.md`.
 - [ ] EP-M2 Architecture-fitness guard added (separable).
@@ -360,6 +373,10 @@ Thresholds that trigger escalation, not quality targets.
 - Correction: the fifth supersession does not exist. Reading the 6.5.1 execplan
   against this plan's own claims falsifies one of the five, and a further marker
   turns out to restate the first rather than add to it.
+  **This withdrawal had been applied to `Decision log` but not to `BTD-REQ-04`
+  rule 8**, which still read "Supersedes the 6.5.1 execplan". CodeRabbit caught
+  the inconsistency on 2026-09-27; the marker is now recast as a confirmation,
+  matching the `Decision log` entry.
   Evidence: this plan's `Decision log` claimed ordering was unaddressed because
   6.5.1 "addresses ordering for `serde_json::Value` objects but not for the
   typed map". The 6.5.1 plan changes `SarifResult::partial_fingerprints` from
@@ -375,6 +392,57 @@ Thresholds that trigger escalation, not quality targets.
   fires at a *sixth* supersession, so a smaller true count moves further from
   the trigger rather than closer to it. `Decision log` records the handling and
   the count is corrected at every site that states it.
+
+- Observation: the layering decision's stated benefit was overstated, and the
+  `VP-1` obligation derived from it was unachievable.
+  Evidence: `VP-1` required that the mapping crate "does not depend on
+  `whitaker-common`, and therefore cannot reach `whitaker_common::i18n`", while
+  `Dependencies` and the layering diagram both require exactly that edge —
+  `SubjectLocation` carries `whitaker_common::paths::RepoRelativePath` and
+  `whitaker_common::span::SourceSpan`. `common/src/lib.rs:14` is a bare
+  `pub mod i18n;` with no `cfg` gate and `common/Cargo.toml:11-12` is
+  `[features] default = []` with `fluent-templates` non-optional (`:17`), so
+  *any* crate depending on `whitaker-common` reaches `i18n` unconditionally.
+  Impact: found by CodeRabbit on 2026-09-27 and verified here. The split is
+  still correct — it keeps `whitaker_sarif` a leaf, keeps `whitaker-common`
+  publishable, and breaks the cycle — but what it buys is narrower than
+  claimed: the *localization dependencies* are absent from the mapping crate's
+  manifest, not the `whitaker-common` crate as a whole. `VP-1` is restated
+  against the two edges that are genuinely checkable: `whitaker_sarif` must
+  not depend on `whitaker-common`, and the mapping crate must not depend on
+  `fluent-templates` or `unic-langid`. Rejected remedy: splitting `i18n` into
+  its own crate, which changes the public API of a published crate and so
+  trips the plan's `Interface` tolerance.
+- Observation: the plan used second-person pronouns in seven places, and
+  CodeRabbit reported two.
+  Evidence: `docs/documentation-style-guide.md:32` — "Avoid first and second
+  person personal pronouns outside the `README.md` file" — with no execplan
+  exemption. The seven sites were `:39`, `:484`, `:592`, `:1213`, `:1217`,
+  `:1218`, and `:1219`. CodeRabbit anchored on `:39` and reported "both cited
+  locations".
+  Impact: swept all seven rather than applying a two-site partial fix, which
+  would have left the file internally inconsistent. Note the sibling
+  `docs/execplans/6-5-1-...md` carries the same pattern three times; it is not
+  revised here, because this plan's `Decision log` records that editing the
+  sibling's plan from this branch is rejected.
+- Observation: `make fmt` rewrites this plan, and running it here would breach
+  this plan's own Decision log.
+  Evidence: `Makefile:187-189` — `fmt` runs `cargo fmt --all`, then
+  `mdformat-all`, a wrapper (`~/.local/bin/mdformat-all`) that pipes every
+  discovered `*.md` through `mdtablefix --in-place`. Four of the 78 Markdown
+  files in this worktree deviate from `mdtablefix` output at `HEAD`:
+  `docs/developers-guide.md`, `docs/roadmap.md`,
+  `docs/execplans/6-5-1-...md`, and this plan. The three table hunks `mdtablefix`
+  wants in this plan are present byte-for-byte at `HEAD` as well, so the edits
+  made on 2026-09-27 introduce no new deviation. No gate enforces the
+  formatter: `check-fmt` is `cargo fmt --all -- --check` only
+  (`Makefile:191-192`), and the CI workflows invoke `check-fmt` but never
+  `mdformat-all` or `mdtablefix`.
+  Impact: the formatter has not been run on this plan, deliberately. The
+  deviation is repository-wide and pre-existing, so reformatting it here would
+  bury a doc-only ADR diff under unrelated rewrapping of three files, one of
+  which this branch is forbidden to touch. `make markdownlint` and `make nixie`
+  — the gates that actually run — both pass on the file as committed.
 
 ## Decision log
 
@@ -405,8 +473,10 @@ Thresholds that trigger escalation, not quality targets.
   the other; a new `crates/whitaker_brain_trust_sarif` (`publish = false`)
   depends on both and owns the mapping. This mirrors the shape the repository
   already uses for `whitaker_clones_core`, keeps `whitaker-common` publishable,
-  keeps `whitaker_sarif` a pure model, and turns the English-only rule into a
-  manifest fact. **This supersedes the 6.5.1 execplan's placement of
+  keeps `whitaker_sarif` a pure model, and makes the localization stack a
+  manifest fact: the mapping crate's manifest cannot name `fluent-templates` or
+  `unic-langid`, so the English-only rule is checkable in a way it is not
+  inside `whitaker-common`. **This supersedes the 6.5.1 execplan's placement of
   `common/src/brain_trust_sarif/`.**
   Date/Author: 2026-08-21, planning agent, after design review.
 
@@ -480,8 +550,8 @@ Thresholds that trigger escalation, not quality targets.
   Note this is a *plan-accuracy* correction, not an escalation trigger: the
   `Supersession` tolerance fires at a sixth supersession, and the true count
   moved down. It is recorded here rather than quietly edited because the
-  reviewer-verifiable claim in `Validation and acceptance` ("Search for
-  'supersede'. You find five entries.") changes with it.
+  reviewer-verifiable claim in `Validation and acceptance` (a search for
+  "supersede" that found five entries) changes with it.
   Date/Author: 2026-09-27, implementation agent, correcting a planning claim.
 
 - Decision: keep supersession 1's rationale but add publishability and
@@ -551,13 +621,21 @@ Thresholds that trigger escalation, not quality targets.
   boundary to the mapping-crate-has-no-localization boundary.
   Rationale: the original target is dormant. `whitaker-common` has never had a
   compiler dependency, and acquiring one would break `cargo publish` loudly and
-  immediately. The boundary the ADR actually puts at risk is the English-only
-  rule, and decision three above moves the mapping into its own crate precisely
-  so that rule becomes a manifest fact. A guard on a manifest edge is also
-  robust in a way a source substring scan is not: six files under `common/src/`
-  mention `rustc_` in prose today, so the original guard would have needed a
-  six-entry exception list that nobody would maintain.
+  immediately. The boundary the ADR actually puts at risk is the layering rule:
+  decision three above moves the mapping into its own crate precisely so that
+  the two leaf crates stay independent and the localization stack stays out of
+  the mapping crate's manifest. A guard on a manifest edge is also robust in a
+  way a source substring scan is not: six files under `common/src/` mention
+  `rustc_` in prose today, so the original guard would have needed a six-entry
+  exception list that nobody would maintain.
   Date/Author: 2026-08-21, planning agent, after design review.
+  **Corrected 2026-09-27**: the original rationale claimed the crate split
+  makes the English-only rule "a manifest fact". It does not, and cannot, for
+  the whole `whitaker-common` crate: `common/src/lib.rs:14` is a bare
+  `pub mod i18n;` with no feature gate, so any dependent reaches `i18n`. What
+  the split genuinely buys is that the *localization dependencies* are
+  absent from the mapping crate's manifest, which is a narrower but real and
+  checkable claim. See `VP-1`.
 
 - Decision: the ADR's Rust blocks are `rust,ignore`, not `no_run`.
   Rationale: `no_run` compiles, and a bodiless `pub fn` outside a trait is not
@@ -572,12 +650,53 @@ Thresholds that trigger escalation, not quality targets.
   of truth that will drift.
   Date/Author: 2026-08-21, planning agent.
 
+- **Decision: keep the layering as designed, and restate `VP-1` against the
+  localization dependencies rather than against `whitaker-common` as a whole.**
+  Rationale: the `i18n` module is reachable from any `whitaker-common` dependent
+  (`common/src/lib.rs:14`, no feature gate), and the mapping crate must depend on
+  `whitaker-common` because `SubjectLocation` carries `RepoRelativePath` and
+  `SourceSpan`. Three remedies were available. (i) *Rejected*: split `i18n` out
+  of `whitaker-common` into its own crate. This would make the manifest edge
+  meaningful, but it changes the public API of a published crate and so trips
+  the plan's `Interface` tolerance, which requires stopping rather than
+  proceeding. It is also disproportionate: it restructures a published crate to
+  make one convenience check sharper. (ii) *Rejected*: narrow `VP-1` to forbid
+  the *reachability* of `whitaker_common::i18n` by source inspection. That is a
+  substring scan over a dependency tree, which the plan already rejected for
+  `EP-M2` on the grounds that six files under `common/src/` mention `rustc_` in
+  prose and the guard would need an unmaintainable exception list. (iii)
+  *Chosen*: forbid the two localization crate names in the mapping crate's
+  manifest. This is decidable by inspecting one manifest, is total, and
+  corresponds to the real invariant — a crate that cannot name
+  `fluent-templates` cannot load a Fluent bundle. The layering itself is
+  unchanged, so supersession 1 is unaffected. **The ADR must state the
+  language boundary in these terms**, and `BTD-REQ-05` item 2 is reworded
+  accordingly.
+  Date/Author: 2026-09-27, implementation agent, after CodeRabbit review.
+
 - Decision: the ADR carries a real "Options considered" section.
   Rationale: the first draft was almost entirely normative rules — the *what*
   with no *why*. For a document gating six roadmap items, that is the one thing
   an ADR exists to prevent. The section is conditional in the house template
   (`docs/documentation-style-guide.md:386-387`), but the condition is met here.
   Date/Author: 2026-08-21, planning agent, after design review.
+
+- Decision: do not run `make fmt`, and do not hand-apply `mdtablefix` to this
+  plan.
+  Rationale: `fmt` runs `mdformat-all` (`Makefile:187-189`), which reformats
+  every Markdown file in the tree with `mdtablefix --in-place`. Four of the 78
+  files currently deviate from that formatter's output, three of them untouched
+  by this branch: `docs/developers-guide.md`, `docs/roadmap.md`, and
+  `docs/execplans/6-5-1-...md`. Letting the formatter loose would rewrite all
+  four, burying a doc-only ADR diff under unrelated rewrapping and editing a
+  sibling branch's plan, which the preceding entry forbids. Nothing is lost by
+  declining: no gate runs the formatter — `check-fmt` is `cargo fmt --all --
+  --check` alone (`Makefile:191-192`), and no CI workflow invokes `mdformat-all`
+  or `mdtablefix`. The gates that do run are `make markdownlint` and
+  `make nixie`, and both pass on the file as committed. The deviation this plan
+  carries is identical at `HEAD` and after the 2026-09-27 edits, so the
+  formatter was never satisfied here and this change does not regress it.
+  Date/Author: 2026-09-27, implementation agent, on finding the deviation.
 
 ## Outcomes & retrospective
 
@@ -589,7 +708,7 @@ ADR's "Known risks and limitations" and in `Decision log` above.
 
 ## Context and orientation
 
-Read this section if you have never opened this repository.
+Read this section on first contact with the repository.
 
 ### What Whitaker is
 
@@ -758,33 +877,51 @@ discharged by the consuming items, and each is named below with the harness the
 ADR must mandate, so a future implementer inherits an instruction rather than a
 gap. Two obligations are dischargeable here.
 
-### VP-1 — the SARIF mapping crate cannot reach the localization surface
+### VP-1 — the two leaf crates stay independent
 
-- Obligation: the crate that maps brain trust findings to SARIF does not depend
-  on `whitaker-common`, and therefore cannot reach
-  `whitaker_common::i18n`. Equivalently: the English-only rule is a manifest
-  fact, not a convention.
+- Obligation: neither leaf crate depends on the other. `whitaker_sarif` must
+  not depend on `whitaker-common`, and `whitaker_brain_trust_sarif` must not
+  depend on the localization stack (`fluent-templates`, `unic-langid`).
+  Equivalently: the dependency cycle this ADR exists to break cannot be
+  reintroduced, and the SARIF mapping crate cannot load a Fluent bundle or
+  resolve a message on its own.
+- **Corrected 2026-09-27.** The first wording of this obligation read "does not
+  depend on `whitaker-common`, and therefore cannot reach
+  `whitaker_common::i18n`". That is unachievable and is withdrawn.
+  `common/src/lib.rs:14` is a bare `pub mod i18n;` with no `cfg` gate, and
+  `fluent-templates` is a non-optional dependency (`common/Cargo.toml:11-12`,
+  `:17`), so *any* crate depending on `whitaker-common` reaches `i18n`
+  unconditionally. `SubjectLocation` carries `RepoRelativePath` and
+  `SourceSpan`, so the mapping crate must depend on `whitaker-common`. The
+  obligation is restated against the edges that are genuinely checkable and
+  genuinely load-bearing. See `Decision log`.
 - Method: parameterized unit test with `rstest`, using `googletest` matchers
   and `pretty_assertions`, asserting over the manifest's dependency tables.
 - Rationale: this is a structural property decidable by inspecting one
   manifest. A property test would generate nothing meaningful. The correct
   rigour is a cheap, total check on every `make test`.
-- Domain: every dependency table in the mapping crate's manifest —
+- Domain: every dependency table in both leaf manifests —
   `[dependencies]`, `[dev-dependencies]`, `[build-dependencies]`, and any
   `[target.'cfg(...)'.dependencies]` — checking both the key and any
-  `package` rename.
-- Artefact: a test under `common/tests/` or the hosting crate's `tests/`,
-  named in Stage D once the ADR fixes the crate name.
+  `package` rename. Two forbidden names in the leaf manifests:
+  `whitaker-common` in `whitaker_sarif`, and either `fluent-templates` or
+  `unic-langid` in `whitaker_brain_trust_sarif`. The mapping crate's own
+  `whitaker-common` edge is *required*, not forbidden.
+- Artefact: a test under `crates/whitaker_sarif/tests/` or the mapping crate's
+  `tests/`, named in Stage D once the ADR fixes the crate name. The hosting
+  crate is the one that can already resolve its dev-dependencies, which keeps
+  the plan's no-new-dependency constraint satisfied.
 - Evidence: `cargo nextest run architecture_boundary`. Red first: assert
   against a manifest fixture that *does* declare the forbidden dependency and
   observe the failure name it.
 - Non-vacuity: three checks, all permanent assertions in the test rather than
   one-time manual rituals. First, a fixture manifest declaring
-  `whitaker-common = { workspace = true }` must fail. Second, a fixture
-  declaring it under a rename (`loc = { package = "whitaker-common" }`) must
-  also fail — a key-only scan passes this and is wrong. Third, the test asserts
-  a floor: at least one dependency table was found and at least one dependency
-  was examined, so a path typo or a restructure cannot make it pass vacuously.
+  `whitaker-common = { workspace = true }` in `whitaker_sarif` must fail.
+  Second, a fixture declaring it under a rename
+  (`loc = { package = "whitaker-common" }`) must also fail — a key-only scan
+  passes this and is wrong. Third, the test asserts a floor: at least one
+  dependency table was found and at least one dependency was examined, so a
+  path typo or a restructure cannot make it pass vacuously.
 - Status: **deferred to `EP-M2`, and dependent on the ADR naming the crate.**
   Until the crate exists the test runs against fixture manifests only, which is
   honest: it verifies the *rule*, and gains teeth when the crate lands.
@@ -1057,11 +1194,12 @@ upstream assumption without that artefact being updated.
 - Remaining gaps: no consumer exists; `VP-3`, `VP-4`, and `VP-5` are delegated.
 - Compatibility decision: none required.
 
-### EP-M2 — the language boundary is a manifest fact (separable)
+### EP-M2 — the leaf crates stay independent (separable)
 
-- Outcome: a test fails if the SARIF mapping crate acquires a dependency that
-  would let it reach the localization surface.
-- Requirements: `BTD-REQ-05`.
+- Outcome: a test fails if either leaf crate acquires a dependency that would
+  break the layering — if `whitaker_sarif` acquires `whitaker-common`, or if
+  the SARIF mapping crate acquires the localization stack.
+- Requirements: `BTD-REQ-05`, and the layering rule of `The layering decision`.
 - Changes: one test file, plus fixture manifests.
 - Red artefact: the guard run against a fixture manifest declaring the
   forbidden dependency, which must fail naming it.
@@ -1075,8 +1213,9 @@ upstream assumption without that artefact being updated.
   manifests, verifying the rule rather than the repository. Stated in the
   test's module documentation.
 - Compatibility decision: none required; test-only surface.
-- **What is lost if struck**: the English-only rule stays a convention rather
-  than a checked fact, and `VP-1` becomes an accepted residual gap.
+- **What is lost if struck**: the layering rule stays a convention rather than
+  a checked fact, the cycle this ADR exists to break can be reintroduced
+  silently, and `VP-1` becomes an accepted residual gap.
 
 ### EP-M3 — the column convention stops contradicting itself (separable)
 
@@ -1210,15 +1349,15 @@ reference before `EP-M1` closes.
 
 ### Behaviour a reviewer can verify
 
-- Open the ADR and search for "outwith the repository". You find a stated rule
-  for a span resolving beneath neither the workspace root nor a relatively
-  reported path, and that rule distinguishes the compiler diagnostic from the
-  SARIF result and says how the drop is counted.
-- Search for "delayed". You find an explicit prohibition with the reason.
-- Search for "columnKind". You find a normative requirement to emit it.
-- Search for "supersede". You find four entries.
-- Open `docs/contents.md` and confirm the new ADR appears under
-  §"Decision records" in the same style as ADR 004.
+- Searching the ADR for "outwith the repository" finds a stated rule for a span
+  resolving beneath neither the workspace root nor a relatively reported path,
+  and that rule distinguishes the compiler diagnostic from the SARIF result and
+  says how the drop is counted.
+- Searching for "delayed" finds an explicit prohibition with the reason.
+- Searching for "columnKind" finds a normative requirement to emit it.
+- Searching for "supersede" finds four entries.
+- `docs/contents.md` lists the new ADR under §"Decision records" in the same
+  style as ADR 004.
 - Run `make markdownlint` and `make nixie`. Expect clean exits.
 - Run `cargo nextest run architecture_boundary`. Expect all tests to pass, then
   flip the clean fixture manifest to declare the forbidden dependency and
@@ -1365,7 +1504,7 @@ producer and changing it changes existing output.
 
 ### Citation defect found while answering question 6
 
-The plan cites SARIF **§3.30.6** for `endColumn` in seven places (including
+The plan cites SARIF **§3.30.6** for `endColumn` in five places (including
 `VP-3`'s obligation and the `External references` list). §3.30.6 is
 `startColumn`; `endColumn` is **§3.30.8**. The two are adjacent, which is
 presumably how the slip happened, but a reader who follows the citation lands
@@ -1523,8 +1662,10 @@ Supporting finding: **no in-tree Whitaker lint currently emits from
 `check_crate_post`.** The only in-tree user of that hook is
 `rstest_helper_should_be_fixture` (`crates/rstest_helper_should_be_fixture/src/driver.rs:244`),
 which finalizes a collector and writes a summary file — it never emits a
-diagnostic. Every one of the ten lint crates emits through `cx.emit_span_lint`
-during traversal. So the deferred-emission pattern is genuinely new, and the
+diagnostic. Every one of the nine emitting lint crates calls
+`cx.emit_span_lint` during traversal; the tenth lint crate,
+`rstest_helper_should_be_fixture`, has no emit site at all. So the
+deferred-emission pattern is genuinely new, and the
 probe's fixture is the first place the level-resolution difference is
 observable in this codebase's terms.
 
@@ -1599,11 +1740,13 @@ Two rules, both load-bearing:
    (`.github/workflows/release.yml:338`) and `whitaker_sarif` is
    `publish = false` (`crates/whitaker_sarif/Cargo.toml:5`), so the
    common-to-sarif edge breaks the release; and the sarif-to-common edge, while
-   publishable, drags the localization stack into the clone detector and leaves
-   the mapping module inside the same crate as `common/src/i18n/`, where the
-   English-only rule cannot be checked. Wherever the two must meet, they meet
-   in `crates/whitaker_brain_trust_sarif`, which mirrors the shape the
-   repository already uses for `whitaker_clones_core`.
+   publishable, drags the localization stack into every consumer of the SARIF
+   model for no benefit. Wherever the two must meet, they meet in
+   `crates/whitaker_brain_trust_sarif`, which mirrors the shape the repository
+   already uses for `whitaker_clones_core`. The mapping crate depends on
+   `whitaker-common` — `SubjectLocation` carries `RepoRelativePath` and
+   `SourceSpan` — but must not depend on `fluent-templates` or `unic-langid`,
+   which is the edge `VP-1` checks.
 
 Rule 2 supersedes the 6.5.1 execplan in three places, listed under
 "Known risks and limitations".
@@ -1935,8 +2078,9 @@ at finalization, for gated subjects only.**
    ordered map. It is a `HashMap` today
    (`crates/whitaker_sarif/src/model/result.rs:107-108`), serialized in
    randomized order, which defeats the byte-stability the merge and comparison
-   workflow depends on. **Supersedes the 6.5.1 execplan**, which addresses
-   ordering for untyped JSON objects but not for this typed map.
+   workflow depends on. **Confirms the 6.5.1 execplan**, which already changes
+   this field to a `BTreeMap` with no compatibility shim
+   (`6-5-1-...md:302-312`); this is not a supersession. See `Decision log`.
 9. **Zero cost when disabled.** With SARIF disabled, no finding is converted
    and no artefact is written. Note that the *analysis* cost is bounded by the
    gate in `BTD-REQ-02` rule 3, not by the SARIF mode; the two are separate
@@ -1950,15 +2094,22 @@ at finalization, for gated subjects only.**
    rendered message. This is what lets a localized diagnostic and an English
    SARIF result stay semantically identical without either being a translation
    of the other.
-2. **SARIF is English-only, and that is a manifest fact.** The SARIF mapping
-   lives in `crates/whitaker_brain_trust_sarif`, which does **not** depend on
-   `whitaker-common`, and therefore cannot reach `whitaker_common::i18n` even
-   by accident. Placing the mapping inside `common/src/brain_trust_sarif/`, as
-   the 6.5.1 execplan proposes, puts it in the same crate as
-   `common/src/i18n/`, where no check can see a violation. **Supersedes the
-   6.5.1 execplan's mapping-module placement** — the same decision recorded
-   under `The layering decision`, stated here from the language-boundary side.
-   `VP-1` is the obligation this creates.
+2. **SARIF is English-only, and the localization stack is kept out of reach.**
+   The SARIF mapping lives in `crates/whitaker_brain_trust_sarif`, which does
+   not depend on `fluent-templates` or `unic-langid` and therefore cannot load
+   a Fluent bundle or resolve a message. The crate does depend on
+   `whitaker-common` — `SubjectLocation` carries `RepoRelativePath` and
+   `SourceSpan` — so the boundary is drawn on the localization dependencies
+   rather than on the whole crate; `common/src/lib.rs:14` is a bare
+   `pub mod i18n;` with no feature gate, so no manifest edge can make the
+   `i18n` module itself unreachable. Placing the mapping inside
+   `common/src/brain_trust_sarif/`, as the 6.5.1 execplan proposes, would put
+   it in a crate whose manifest declares `fluent-templates` outright, so no
+   check could distinguish a mapping that renders English text from one that
+   resolves a Fluent key. **Supersedes the 6.5.1 execplan's mapping-module
+   placement** — the same decision recorded under `The layering decision`,
+   stated here from the language-boundary side. `VP-1` is the obligation this
+   creates.
 3. **Diagnostics are localized.** Compiler diagnostics resolve primary, note,
    and help text through `safe_resolve_message_set`, which falls back to a
    lint-supplied English `DiagnosticMessageSet` when a Fluent key is missing
