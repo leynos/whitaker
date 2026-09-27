@@ -3,13 +3,19 @@
 //! ADR 005 (`docs/adr-005-brain-trust-lint-driver-interfaces.md`) fixes the
 //! dependency direction across the brain trust lint driver seam: `whitaker_sarif`
 //! stays a pure SARIF model and must not acquire `whitaker-common`, and the
-//! SARIF mapping crate must not acquire the localization stack.
+//! SARIF mapping crate must not name the localization stack.
 //!
-//! The mapping crate does not exist yet — ADR 005 records the interface
-//! *before* any consumer is implemented — so that half of the rule runs against
-//! fixture manifests. It verifies the rule and gains teeth when the crate lands.
-//! The `whitaker_sarif` half runs against the real manifest, so a reintroduced
-//! `whitaker-common` edge fails today.
+//! Both halves of the rule are enforced against a real manifest whenever one
+//! exists. The `whitaker_sarif` half always does, so a reintroduced
+//! `whitaker-common` edge fails today. The mapping crate does not exist yet —
+//! ADR 005 records the interface *before* any consumer is implemented — so that
+//! half carries a dormant test that activates the moment the crate lands, and
+//! fixture cases that verify the rule in the meantime.
+//!
+//! The rule is stated over direct dependency names rather than over
+//! reachability: the mapping crate legitimately depends on `whitaker-common`,
+//! whose `i18n` module cannot be feature-gated out, so what the guard can
+//! enforce is that the mapping crate's own manifest stays informative.
 //!
 //! Precedent: `crates/whitaker_clones_core/build_support.rs` parses a manifest
 //! with `toml::Table` and walks its dependency tables.
