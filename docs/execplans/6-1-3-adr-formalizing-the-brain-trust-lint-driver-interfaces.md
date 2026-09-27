@@ -159,15 +159,33 @@ Thresholds that trigger escalation, not quality targets.
   and `segment_builder.rs:164`, `:186` carry the hazard today.
 - Risk: findings are emitted where `#[allow]` cannot reach them.
   `LateContext::opt_span_lint` resolves the level at
-  `self.last_node_with_lint_attrs` (`rustc_lint/src/context.rs:588`), which in
-  `check_crate_post` is the crate root. Deferred emission through the ordinary
-  `cx.emit_span_lint` path therefore ignores `#[allow(brain_type)]` on a type
-  or `impl`, leaving users an unsuppressable lint.
-  Severity: high. Likelihood: high if unaddressed — all eight shipped lints use
-  `cx.emit_span_lint`, so it is the obvious thing to copy.
+  `self.last_node_with_lint_attrs` (`rustc_lint/src/context.rs:600-615`), which
+  in `check_crate_post` is the crate root — that callback is dispatched inside
+  `with_lint_attrs(hir::CRATE_HIR_ID)` (`rustc_lint/src/late.rs:393-404`).
+  Deferred emission through the ordinary `cx.emit_span_lint` path therefore
+  ignores `#[allow(brain_type)]` on a type or `impl`, leaving users an
+  unsuppressable lint.
+  Severity: high. Likelihood: high if unaddressed — all nine emitting lint
+  crates use `cx.emit_span_lint`, so it is the obvious thing to copy.
+  Status: **confirmed by probe, 2026-09-27, and sharper than stated.** The
+  probe's three-way fixture showed the span-only path from `check_crate_post`
+  emitting a finding on an item carrying `#[allow]`, while the same path from
+  `check_item` (where the context node *is* the item) suppressed it, and
+  `emit_node_span_lint` from `check_crate_post` also suppressed it. The
+  span-only path does not merely "not resolve the level"; it silently discards
+  every `#[allow]` on the subject item and on every module between it and the
+  crate root. A crate-level `#![allow]` still applies to all paths, so the
+  residual limitation is item- and module-level attributes only. No in-tree
+  lint emits from `check_crate_post` today — the sole user of that hook,
+  `crates/rstest_helper_should_be_fixture/src/driver.rs:244`, writes a summary
+  file and emits nothing — so this is a new pattern with no in-tree precedent
+  to copy. See `Artefacts and notes`.
   Mitigation: the ADR requires the subject's `HirId` to be captured and
   emission to go through `TyCtxt::emit_node_span_lint`
-  (`rustc_middle/src/ty/context.rs:2495`), which takes an explicit `HirId`.
+  (`rustc_middle/src/ty/context.rs:2461-2470`), which takes an explicit
+  `HirId`. Confirmed to compile on the pinned toolchain under `-D warnings`,
+  accepting the same `rustc_lint::errors::DiagDecorator` the shipped lints
+  already use.
 - Risk: the seam silently stops producing SARIF and nobody notices, because a
   clean report and a broken resolver look identical.
   Severity: high. Likelihood: medium.
@@ -226,6 +244,17 @@ Thresholds that trigger escalation, not quality targets.
   (`6-5-1-...md:69-77` and `:1395-1398`), which maps to rows C-17 to C-19.
   Rows C-20 to C-26 trace to the first draft's design review. All 26 rows read
   "not answered", as Stage A requires. No gap found and no new row added.
+- [x] (2026-09-27) Stage B complete. All eight probe questions answered; six by
+  a purpose-built probe lint in a throwaway worktree (since removed) under the
+  Makefile's mandatory flags, and two by direct source reading. Four findings
+  corrected the plan's assumptions: `span_to_filename` is already
+  workspace-root-relative and needs no stripping; `cargo` refuses out-of-root
+  workspace members, so `..` cannot arise from the layout; the incumbent
+  `endColumn` is off by one against SARIF §3.30.8; and `cx.emit_span_lint` from
+  `check_crate_post` silently discards item- and module-level `#[allow]`
+  attributes, making `emit_node_span_lint` a correctness requirement rather
+  than a preference. The supersession set was re-derived from 6-5-1 alone and
+  confirmed at four, with no fifth. See `Artefacts and notes`.
 - [ ] EP-M1 `docs/adr-005-brain-trust-lint-driver-interfaces.md` written and
   registered in `docs/contents.md`.
 - [ ] EP-M2 Architecture-fitness guard added (separable).
@@ -262,14 +291,14 @@ Thresholds that trigger escalation, not quality targets.
 - Observation: emitting a lint from `check_crate_post` silently disables
   `#[allow]` and `#[expect]` on the offending item.
   Evidence: `LateContext::opt_span_lint` resolves the level at
-  `self.last_node_with_lint_attrs` (`rustc_lint/src/context.rs:588`, `:597`),
-  which at crate-post time is the crate root. All eight shipped lints emit
-  through `cx.emit_span_lint`, for example
+  `self.last_node_with_lint_attrs` (`rustc_lint/src/context.rs:600-615`, field
+  at `:500`), which at crate-post time is the crate root. All nine emitting
+  lint crates call `cx.emit_span_lint`, for example
   `crates/module_max_lines/src/driver.rs:193`.
   Impact: deferred emission is still the right lifecycle, but it requires
-  `TyCtxt::emit_node_span_lint` (`rustc_middle/src/ty/context.rs:2495`) and a
-  captured `HirId`. Without a normative rule the first implementer copies the
-  eight existing call sites and ships an unsuppressable lint.
+  `TyCtxt::emit_node_span_lint` (`rustc_middle/src/ty/context.rs:2461-2470`)
+  and a captured `HirId`. Without a normative rule the first implementer
+  copies the nine existing call sites and ships an unsuppressable lint.
 - Observation: `span_delayed_bug` aborts compilation rather than degrading.
   Evidence: `rustc_errors/src/lib.rs:1480-1486` in the `rustc-src` component —
   when no real error was emitted the delayed bugs are re-emitted as internal
@@ -869,8 +898,10 @@ Assumptions the reasoning depends on, not verified here:
   (`crates/bumpy_road_function/src/driver/segment_builder.rs:223-238`,
   `crates/rstest_helper_should_be_fixture/src/visitor.rs:90-96`).
 - `TyCtxt::emit_node_span_lint` resolves the lint level at the supplied
-  `HirId`. Read from `rustc_middle/src/ty/context.rs:2495` in the `rustc-src`
-  component; Stage B confirms it compiles on the pinned toolchain.
+  `HirId`. Read from `rustc_middle/src/ty/context.rs:2461-2470` in the
+  `rustc-src` component; Stage B confirms it compiles on the pinned toolchain.
+  **Confirmed 2026-09-27, together with the `#[allow]` behaviour it exists
+  for — see `Artefacts and notes`.**
 - `serde_json` serializes the `whitaker_sarif` model to conforming SARIF
   2.1.0. This is the clone detector's existing assumption.
 - SARIF consumers resolve a relative `artifactLocation.uri` against the
@@ -899,14 +930,22 @@ The probe must answer eight questions:
 
 1. What does `span_to_filename` return for a workspace-local file under a real
    `cargo dylint` invocation — a relative path or an absolute one?
+   **Answered 2026-09-27: relative to the workspace root — see `Artefacts and
+   notes`.**
 2. What does the compiler report as its working directory, and does stripping
    it from an absolute path yield a repository-relative result?
+   **Answered 2026-09-27: the workspace root, and there is nothing to strip —
+   the path is already relative — see `Artefacts and notes`.**
 3. What happens for a path dependency located outwith the workspace? This is
    the case that produces `..` components, which the ADR's normalization rule
-   forbids.
+   forbids. **Answered 2026-09-27: it is passed as an absolute path, and
+   out-of-root members are refused by `cargo`, so `..` cannot arise from the
+   layout — see `Artefacts and notes`.**
 4. Does `cx.tcx.emit_node_span_lint(lint, hir_id, span, decorator)` compile,
    and does `#[allow]` on the item suppress a finding emitted from
    `check_crate_post` through it, where `cx.emit_span_lint` does not?
+   **Answered 2026-09-27: it compiles and it is the only path that honours an
+   item-level `#[allow]` at crate-post — see `Artefacts and notes`.**
 5. Is `span_to_lines` sufficient for both the file and the line indices, or
    does the column conversion need `lookup_char_pos`? State the base of each:
    `span_to_lines` yields a zero-based `line_index`, whereas `lookup_char_pos`
@@ -927,7 +966,8 @@ The probe must answer eight questions:
    as the fifth one now is. If re-derivation yields a genuine fifth, that is
    *not* the `Supersession` tolerance firing — that fires at a sixth — but it
    is a large enough change to the ADR's content to warrant stopping and saying
-   so before drafting.
+   so before drafting. **Answered 2026-09-27: four, confirmed; no fifth
+   survives — see `Artefacts and notes`.**
 8. Read `docs/execplans/6-5-1-...md` §"The contract with the lint crates" and
    confirm every shape it defers has a normative answer in the draft ADR.
 
@@ -950,7 +990,9 @@ Questions 1 to 6 are compiler probes. Questions 7 and 8 are documentary, and
 were added after the supersession count was corrected from five to four.
 
 Stage B ends when the eight answers are written into `Artefacts and notes` and
-the worktree is removed.
+the worktree is removed. **Both conditions are met as of 2026-09-27: all eight
+answers are recorded above, and the throwaway worktree `/tmp/probe-wt-6-1-3`
+was removed with `git worktree remove --force`.**
 
 ### Stage C — draft the ADR
 
@@ -1359,35 +1401,161 @@ non-empty `results`. The ADR should say so in those terms, and should state the
 empty-`results` case too, since `Run` will gain the field and the choice of
 whether to omit it on a clean run is a real one.
 
-### Stage B — answers still requiring a build
+### Stage B, questions 1 to 4 and 7 — answered by probe, 2026-09-27
 
-Questions 1, 2, 3, 4, 6, and 7 need a real `cargo dylint` invocation in a
-throwaway worktree. Source reading constrains what to expect but cannot
-substitute for observing the compiler's runtime behaviour, so these are not
-recorded as answered.
+Run in a throwaway worktree (`/tmp/probe-wt-6-1-3`, removed afterwards) with a
+purpose-built probe lint, `crates/q4_probe`, built under the Makefile's
+mandatory flags (`RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked
+-D warnings"`) and loaded through a real `cargo +nightly-2026-05-28 dylint
+--all` invocation. All six probe answers were recorded before the worktree was
+removed. The probe emitted no `dbg!`; every observation below is a rendered
+diagnostic or a captured `cargo` argument vector.
 
-Q1 is partially constrained already, and the constraint is itself a finding
-worth carrying into the ADR: `SourceMap::span_to_filename` (`:485-487`, all
-three methods live on `impl SourceMap` from `:206`) is a one-line wrapper over
-`self.lookup_char_pos(sp.lo()).file.name.clone()`, so
-it returns a `FileName` (`rustc_span/src/lib.rs:506-521`) — an enum whose
-`Real(_)` arm wraps `RealFileName`. `RealFileName` (`:303-309`) is **not**
-transparent: it holds `local: Option<InnerRealFileName>`,
-`maybe_remapped: InnerRealFileName`, and `scopes: RemapPathScopeComponents`,
-and retrieving a path requires `RealFileName::path(&self, scope)`
-(`:358`), which asserts that exactly one scope bit is passed. A caller cannot
-reach a usable path without choosing a `RemapPathScopeComponents` variant
-(`:238-253`: `MACRO`, `DIAGNOSTICS`, `DEBUGINFO`, `COVERAGE`, `DOCUMENTATION`,
-`OBJECT`). The ADR must therefore name the scope it wants, and `DIAGNOSTICS` is
-the natural candidate because the derived path is used for a diagnostic-adjacent
-identifier. This is a larger API surface than "`span_to_filename` returns a
-`PathBuf`" and the probe must confirm which arm the workspace's files take.
+**Q1 — `span_to_filename` returns a workspace-root-relative path.**
+`SourceMap::span_to_filename` (`:485-487`, all three methods live on
+`impl SourceMap` from `:206`) is a one-line wrapper over
+`self.lookup_char_pos(sp.lo()).file.name.clone()`, so it returns a `FileName`
+(`rustc_span/src/lib.rs:506-521`) — an enum whose `Real(_)` arm wraps
+`RealFileName`. `RealFileName` (`:303-309`) is **not** transparent: it holds
+`local: Option<InnerRealFileName>`, `maybe_remapped: InnerRealFileName`, and
+`scopes: RemapPathScopeComponents`, and retrieving a path requires
+`RealFileName::path(&self, scope)` (`:358`), which asserts that exactly one
+scope bit is passed. A caller cannot reach a usable path without choosing a
+`RemapPathScopeComponents` variant (`:238-253`: `MACRO`, `DIAGNOSTICS`,
+`DEBUGINFO`, `COVERAGE`, `DOCUMENTATION`, `OBJECT`). The ADR must therefore
+name the scope it wants, and `DIAGNOSTICS` is the natural candidate because the
+derived path is used for a diagnostic-adjacent identifier.
 
-The one in-tree caller (`crates/rstest_helper_should_be_fixture/src/visitor.rs:90`)
-passes the `FileName` straight into `CallSiteLocation` as an opaque field
+The probe confirms the workspace's files take the `Real` arm, and that
+`local_path()` and `path(RemapPathScopeComponents::DIAGNOSTICS)` agree. Under a
+real `cargo dylint` run against this repository the value is a
+**repository-root-relative** path with no leading `./`. Observed for
+`-p whitaker-common`: `common/src/lib.rs`,
+`common/src/attributes/mod.rs`, `common/src/attributes/attribute.rs`. In a
+two-member scratch workspace it is `app/src/lib.rs` (the member directory is
+*not* stripped — the path is relative to the workspace root, not to the
+member). In a single-package fixture with no `[workspace]` table it is
+`src/lib.rs`, because there the package root *is* the workspace root.
+
+The one in-tree caller
+(`crates/rstest_helper_should_be_fixture/src/visitor.rs:90`) passes the
+`FileName` straight into `CallSiteLocation` as an opaque field
 (`collector.rs:70`) and never extracts a path from it, so it settles nothing
 about the extraction and confirms the plan's "no existing convention to
 preserve" finding.
+
+**Q2 — there is nothing to strip; the path is already relative.**
+`cargo` sets the compiler's working directory to the **workspace root**, and
+does so independently of the shell's directory: invoking
+`cargo check --manifest-path /tmp/probe-6-1-3/ws/Cargo.toml` from `/tmp` still
+produced `CWD=/tmp/probe-6-1-3/ws` for the workspace member. The same
+workspace-root cwd was observed for this repository's own members. That is
+consistent with `SourceSessionSourceMap::current_directory` being
+`std::env::current_dir()` (`rustc_span/src/source_map.rs:162-163`), and with
+the source argument `cargo` hands rustc for a member being plain
+`app/src/lib.rs`, not an absolute path.
+
+So the repository-relative identifier the ADR needs is **already what
+`span_to_filename` returns**; no stripping step is required, and a stripping
+step written against an assumed absolute path would be dead code guarded by a
+branch that never fires in the workspace case. The ADR should say the
+identifier is used as returned, and that any normalization is a *validation*
+step (rejecting the shapes the schema forbids) rather than a prefix removal.
+
+**Q3 — a `..` component cannot arise from workspace membership.**
+Two independent results. First, `cargo` refuses an out-of-root workspace
+member outright: declaring `members = ["app", "../outdep"]` fails with
+"workspace member `/tmp/probe-6-1-3/outdep/Cargo.toml` is not hierarchically
+below the workspace root". So the only way a source file can sit outside the
+workspace root is a **non-member path dependency**, and for that case `cargo`
+hands rustc an **absolute** path (`/tmp/probe-6-1-3/outdep/src/lib.rs`), not a
+`..`-relative one. A `..` in the identifier therefore cannot be produced by the
+workspace layout at all; it could only be produced by a *remapping* that
+introduced one, or by a caller passing a path through some other route.
+
+The second result bounds the risk further: such a crate is a dependency, and
+`cargo dylint` sets `DYLINT_NO_DEPS="0"` by default, so it is not linted. The
+ADR's "no `.` or `..` component" rule is still right as a **validation** rule
+on the final identifier — cheap, total, and guarding against remapping — but it
+should be stated as a guard, not as the resolution of a case the layout
+produces.
+
+**Q4 — confirmed, and it is a correctness requirement, not a preference.**
+`emit_node_span_lint` compiles on the pinned toolchain under `-D warnings`. Its
+signature is `emit_node_span_lint(self, lint: &'static Lint, hir_id: HirId,
+span: impl Into<MultiSpan>, decorator: impl for<'a> Diagnostic<'a, ()>)`
+(`rustc_middle/src/ty/context.rs:2461-2470`), and `DiagDecorator` implements
+`Diagnostic<'a, ()>` (`rustc_errors/src/diagnostic.rs:135-141`) — the same
+decorator every in-tree lint already passes to `cx.emit_span_lint`, so it is a
+drop-in argument, not a new vocabulary.
+
+The probe ran one lint over a two-item fixture with `#[allow(q4_probe)]` on the
+first item only, emitting through three paths. The result is asymmetric and
+unambiguous:
+
+| Emission path | `allowed_item` | `plain_item` |
+| --- | --- | --- |
+| `emit_node_span_lint(lint, item_hir_id, ..)` from `check_crate_post` | suppressed | emitted |
+| `cx.emit_span_lint(..)` from `check_item` (context node *is* the item) | suppressed | emitted |
+| `cx.emit_span_lint(..)` from `check_crate_post` | **emitted** | emitted |
+
+A crate-level `#![allow(q4_probe)]` suppressed all three. The mechanism is in
+the source: `LateContext::opt_span_lint`
+(`rustc_lint/src/context.rs:600-615`) resolves the level at
+`self.last_node_with_lint_attrs`, whereas `emit_node_span_lint` resolves it at
+the `HirId` it is handed (`rustc_middle/src/lint.rs:248-252`, walking parents
+via `hir_parent_id_iter`, `rustc_middle/src/hir/map.rs:525-527`).
+`check_crate_post` is dispatched inside
+`with_lint_attrs(hir::CRATE_HIR_ID)` (`rustc_lint/src/late.rs:393-404`), so at
+that point `last_node_with_lint_attrs` **is the crate root** — item- and
+module-level attributes are invisible to the span-only path, and only
+crate-level attributes still apply.
+
+The consequence for the ADR is stronger than the plan assumed. Deferring a
+finding to `check_crate_post` and emitting it through `cx.emit_span_lint` does
+not merely "silently disable" the lint level in the abstract: it silently
+discards every `#[allow]` written on the subject item or any module between it
+and the crate root, which is a user-visible false positive on code the user
+explicitly silenced. The ADR must require the `HirId`-aware path for deferred
+emission, and state the crate-level-only residual as a limitation.
+
+Supporting finding: **no in-tree Whitaker lint currently emits from
+`check_crate_post`.** The only in-tree user of that hook is
+`rstest_helper_should_be_fixture` (`crates/rstest_helper_should_be_fixture/src/driver.rs:244`),
+which finalizes a collector and writes a summary file — it never emits a
+diagnostic. Every one of the ten lint crates emits through `cx.emit_span_lint`
+during traversal. So the deferred-emission pattern is genuinely new, and the
+probe's fixture is the first place the level-resolution difference is
+observable in this codebase's terms.
+
+**Q7 — re-derived from 6-5-1 alone: four, confirmed.**
+Reading `6-5-1-collect-brain-trust-diagnostics-into-sarif-emitter.md` directly,
+without consulting this plan's prose, the two documents genuinely disagree in
+exactly four places:
+
+1. *Crate edge and mapping-module placement.* 6-5-1 `:291-301` puts the
+   brain-trust emitter in `common/src/brain_trust_sarif/`; the ADR puts the
+   mapping in a separate `publish = false` crate so the published
+   `whitaker-common` does not acquire the dependency.
+2. *`FileUri`'s home crate.* 6-5-1 `:886`, `:1266-1268`, and `:1326` place
+   `FileUri` in `whitaker_sarif`; the ADR places it where the published
+   `whitaker-common` can reach it while `whitaker_sarif` stays
+   `publish = false`.
+3. *`span_to_region`'s home crate.* 6-5-1 `:892` moves `region_for_range` into
+   `whitaker_sarif` and adds `span_to_region` beside it; the ADR's layering
+   decision relocates both.
+4. *`columnKind`.* 6-5-1 `:246` treats the clone detector's convention as
+   already matching SARIF's default and relies on that; the ADR makes it
+   normative — and Q6 established that the incumbent `endColumn` is off by one
+   against §3.30.8, so the reliance is not merely unstated but currently wrong.
+
+No genuine fifth survived. The withdrawn candidate (that 6-5-1 "addresses
+ordering for `serde_json::Value` objects but not for the typed map") fails
+because 6-5-1 `:302-312` already mandates `BTreeMap` for `partial_fingerprints`
+with no shim, and `:831-833` and `:139-145` carry the same decision into the
+milestone and risk sections. Re-derivation therefore confirms the corrected
+count of four and does **not** trip the `Supersession` tolerance, which fires
+at a sixth.
 
 ## Interfaces and dependencies
 
@@ -1512,7 +1680,11 @@ Normative rules:
 2. **Path source.** Obtain the file from the session's `SourceMap`. A path the
    compiler reports as relative is used unchanged; an absolute path has the
    compiler's working directory stripped. Stage B confirms which case occurs
-   under Cargo.
+   under Cargo — **and it confirms the relative case: `cargo` sets the
+   compiler's working directory to the workspace root and hands rustc a
+   workspace-root-relative source path, so the stripping branch is a
+   fallback for the non-Cargo case rather than the live path.** See
+   `Artefacts and notes`.
 3. **Normalization.** Forward slashes on every platform, no leading `./`, no
    leading slash, no `..` component, per SARIF 2.1.0 §3.4.3, which requires a
    relative-path reference under RFC 3986 §4.2. Note that no source-path
@@ -1703,12 +1875,12 @@ at finalization, for gated subjects only.**
 
 1. **Emission must be `HirId`-aware.** `LateContext::opt_span_lint` resolves
    the level at `self.last_node_with_lint_attrs`
-   (`rustc_lint/src/context.rs:588`), which at crate-post time is the crate
+   (`rustc_lint/src/context.rs:600-615`), which at crate-post time is the crate
    root — so the ordinary `cx.emit_span_lint` path silently ignores
    `#[allow(brain_type)]` and `#[expect(...)]` on the type or `impl`, leaving
    an unsuppressable lint. Deferred emission must therefore capture the
    subject's `HirId` and emit through `TyCtxt::emit_node_span_lint`
-   (`rustc_middle/src/ty/context.rs:2495`), which resolves the level at the
+   (`rustc_middle/src/ty/context.rs:2461-2470`), which resolves the level at the
    supplied node. The lint crates gain `rustc_middle` under `dylint-driver` for
    this; note that `crates/clippy_utils` is a stub carrying only
    `macros::is_panic` (`crates/clippy_utils/src/lib.rs:1-12`) and provides no
