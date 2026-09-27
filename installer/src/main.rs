@@ -17,6 +17,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use clap::Parser;
 use std::io::Write;
 use std::time::Instant;
+use tracing::Level;
 use whitaker_installer::cli::{Cli, Command, InstallArgs};
 use whitaker_installer::crate_name::CrateName;
 use whitaker_installer::deps::{SourcePolicy, SystemCommandExecutor};
@@ -34,6 +35,7 @@ use whitaker_installer::wrapper::{generate_wrapper_scripts, path_instructions};
 
 fn main() {
     let cli = Cli::parse();
+    configure_tracing(cli.install_args());
     let mut stdout = std::io::stdout();
     let mut stderr = std::io::stderr();
     let run_result = run(&cli, &mut stdout, &mut stderr);
@@ -41,6 +43,25 @@ fn main() {
     if exit_code != 0 {
         std::process::exit(exit_code);
     }
+}
+
+/// Enable bounded stderr diagnostics according to install verbosity flags.
+///
+/// Quiet mode leaves only error-level events enabled; default mode enables
+/// warnings, while `-v` also exposes debug diagnostics. Formatting omits ANSI
+/// escapes for predictable redirected output.
+fn configure_tracing(args: &InstallArgs) {
+    let max_level = if args.quiet {
+        Level::ERROR
+    } else if args.verbosity > 0 {
+        Level::DEBUG
+    } else {
+        Level::WARN
+    };
+    let _ = tracing_subscriber::fmt()
+        .with_ansi(false)
+        .with_max_level(max_level)
+        .try_init();
 }
 
 /// Routes CLI commands to their respective handlers.

@@ -16,7 +16,7 @@ use std::io;
 use std::io::Write;
 use std::path::Path;
 use std::process::{Command, Output};
-use tracing::trace;
+use tracing::debug;
 
 mod install;
 use install::*;
@@ -97,9 +97,14 @@ struct PathScanResult<'binary> {
     failures: Vec<PathScanFailure<'binary>>,
 }
 
+/// Classify metadata errors, omitting the ordinary miss for an absent candidate.
+fn metadata_failure_category(kind: io::ErrorKind) -> Option<PathScanFailureCategory> {
+    (kind != io::ErrorKind::NotFound).then_some(PathScanFailureCategory::Metadata)
+}
+
 /// Emit bounded failure context without recording the PATH entry itself.
-fn trace_path_scan_failure(binary_name: &str, category: PathScanFailureCategory) {
-    trace!(
+fn debug_path_scan_failure(binary_name: &str, category: PathScanFailureCategory) {
+    debug!(
         binary_name,
         failure_category = category.as_str(),
         "skipping PATH scan candidate after lookup failure"
@@ -235,6 +240,11 @@ pub fn install_dylint_tools_with_options(
 /// Arguments used to query Cargo's registry of installed binaries.
 const CARGO_INSTALL_LIST_ARGS: [&str; 2] = ["install", "--list"];
 
+/// Check whether a dependency tool is installed at its manifest version.
+///
+/// Dylint-link is checked through PATH and Cargo's install list because the
+/// wrapper cannot reliably report its own version. If embedded version lookup
+/// fails, other tools fall back to a success-only command probe.
 fn is_tool_installed(executor: &dyn CommandExecutor, tool: &DependencyTool) -> bool {
     // The manifest is embedded in the binary, so a lookup failure is
     // effectively unreachable. Should it ever occur, degrade to the previous
@@ -264,7 +274,7 @@ fn is_dylint_link_installed(
     // subcommand, so it is never executed to prove it works.
     let path_scan = find_binary_on_path(DYLINT_LINK_TOOL.command);
     for failure in &path_scan.failures {
-        trace_path_scan_failure(failure.binary_name, failure.category);
+        debug_path_scan_failure(failure.binary_name, failure.category);
     }
     if path_scan.binary.is_none() {
         return false;
@@ -281,6 +291,11 @@ fn is_dylint_link_installed(
         .is_some_and(|version| version == expected_version)
 }
 
+/// Probe a tool and, when available, compare its reported version.
+///
+/// Without an expected version, command success alone means installed. With
+/// one, the command must succeed and stdout's first `MAJOR.MINOR.PATCH`-shaped
+/// token must exactly match it; command errors or mismatches return `false`.
 fn is_versioned_tool_installed(
     executor: &dyn CommandExecutor,
     tool: &DependencyTool,
@@ -333,6 +348,9 @@ fn first_semver_token(text: &str) -> Option<&str> {
     })
 }
 
+/// Return whether `cargo binstall --version` exits successfully.
+///
+/// This checks command availability only; it does not compare a version.
 fn is_binstall_available(executor: &dyn CommandExecutor) -> bool {
     command_succeeds(executor, "cargo", &["binstall", "--version"])
 }
@@ -480,9 +498,10 @@ fn windows_path_extensions() -> Vec<String> {
 
 /// Classify a candidate through its containing directory capability.
 ///
-/// Return whether the candidate is a regular file with at least one Unix
-/// executable permission bit. Metadata failures add the bounded `Metadata`
-/// category for the caller and return `false`.
+/// Return whether the candidate is a regular file with an executable bit.
+///
+/// Missing candidates return `false` without a failure category; other
+/// metadata errors add the bounded `Metadata` category and also return `false`.
 #[cfg(unix)]
 fn is_executable_file(
     directory: &Dir,
@@ -493,8 +512,10 @@ fn is_executable_file(
 
     match directory.metadata(candidate) {
         Ok(metadata) => metadata.is_file() && metadata.permissions().mode() & 0o111 != 0,
-        Err(_) => {
-            failures.push(PathScanFailureCategory::Metadata);
+        Err(error) => {
+            if let Some(category) = metadata_failure_category(error.kind()) {
+                failures.push(category);
+            }
             false
         }
     }
@@ -502,8 +523,9 @@ fn is_executable_file(
 
 /// Classify a candidate as a regular file through its directory capability.
 ///
-/// Metadata failures add the bounded `Metadata` category for the caller and
-/// return `false`; otherwise, return whether the candidate is a regular file.
+/// Missing candidates return `false` without a failure category; other
+/// metadata errors add the bounded `Metadata` category. Otherwise, return
+/// whether the candidate is a regular file.
 #[cfg(not(unix))]
 fn is_executable_file(
     directory: &Dir,
@@ -512,8 +534,10 @@ fn is_executable_file(
 ) -> bool {
     match directory.metadata(candidate) {
         Ok(metadata) => metadata.is_file(),
-        Err(_) => {
-            failures.push(PathScanFailureCategory::Metadata);
+        Err(error) => {
+            if let Some(category) = metadata_failure_category(error.kind()) {
+                failures.push(category);
+            }
             false
         }
     }
@@ -528,7 +552,20 @@ mod tests;
 mod path_scan_tests {
     //! Verify that PATH scan failure categories remain stable and bounded.
 
-    use super::PathScanFailureCategory;
+    use super::{PathScanFailureCategory, metadata_failure_category};
+
+    /// Treat an absent PATH candidate as routine while preserving other failures.
+    #[test]
+    fn metadata_failures_exclude_missing_candidates() {
+        assert_eq!(
+            metadata_failure_category(std::io::ErrorKind::NotFound),
+            None
+        );
+        assert_eq!(
+            metadata_failure_category(std::io::ErrorKind::PermissionDenied),
+            Some(PathScanFailureCategory::Metadata)
+        );
+    }
 
     #[test]
     fn path_scan_failure_categories_are_stable_and_bounded() {

@@ -261,13 +261,13 @@ fn path_scan_classifies_invalid_entries_and_continues_to_a_later_binary() -> std
     Ok(())
 }
 
-/// Verify a missing candidate is classified and later PATH entries are searched.
+/// Verify missing candidates are quiet and later PATH entries are searched.
 ///
 /// # Errors
 ///
 /// Returns an I/O error if the temporary PATH fixtures cannot be created.
 #[test]
-fn path_scan_classifies_missing_metadata_and_continues_to_a_later_binary() -> std::io::Result<()> {
+fn path_scan_skips_missing_candidates_and_continues_to_a_later_binary() -> std::io::Result<()> {
     let empty_directory = tempfile::tempdir()?;
     let valid_directory = tempfile::tempdir()?;
     let binary_name = "dylint-link.exe";
@@ -283,14 +283,91 @@ fn path_scan_classifies_missing_metadata_and_continues_to_a_later_binary() -> st
     );
 
     assert_eq!(scan.binary, Some(expected_binary));
-    assert_eq!(
-        scan.failures,
-        vec![PathScanFailure {
-            binary_name,
-            category: PathScanFailureCategory::Metadata,
-        }]
-    );
+    assert!(scan.failures.is_empty());
     Ok(())
+}
+
+/// Verify a PATH scan selects its first executable and ignores later entries.
+#[test]
+fn path_scan_returns_the_first_executable_match() -> std::io::Result<()> {
+    let first_directory = tempfile::tempdir()?;
+    let later_directory = tempfile::tempdir()?;
+    let binary_name = "probe.exe";
+    let expected_binary = first_directory.path().join(binary_name);
+    write_fake_binary(&expected_binary, true)?;
+    write_fake_binary(&later_directory.path().join(binary_name), true)?;
+
+    let scan = scan_path_directories(
+        vec![
+            first_directory.path().to_path_buf(),
+            later_directory.path().to_path_buf(),
+        ],
+        binary_name,
+    );
+
+    assert_eq!(scan.binary, Some(expected_binary));
+    assert!(scan.failures.is_empty());
+    Ok(())
+}
+
+/// Check first-match and stop-after-match behaviour for bounded PATH patterns.
+#[test]
+fn path_scan_ordering_holds_for_bounded_match_patterns() {
+    use proptest::prelude::*;
+
+    let mut runner = proptest::test_runner::TestRunner::new(proptest::test_runner::Config {
+        failure_persistence: None,
+        rng_seed: proptest::test_runner::RngSeed::Fixed(0x51_7a_00),
+        ..proptest::test_runner::Config::default()
+    });
+    runner
+        .run(&prop::collection::vec(0_u8..3, 1..=5), |entry_kinds| {
+            let mut roots = Vec::new();
+            let directories = entry_kinds
+                .iter()
+                .map(|entry_kind| {
+                    let directory = tempfile::tempdir().expect("create PATH fixture directory");
+                    let entry = if *entry_kind == 0 {
+                        directory.path().to_path_buf()
+                    } else if *entry_kind == 1 {
+                        let file = directory.path().join("not-a-directory");
+                        std::fs::write(&file, b"not a directory")
+                            .expect("create non-directory PATH entry");
+                        file
+                    } else {
+                        write_fake_binary(&directory.path().join("probe.exe"), true)
+                            .expect("create executable PATH fixture");
+                        directory.path().to_path_buf()
+                    };
+                    roots.push(directory);
+                    entry
+                })
+                .collect::<Vec<_>>();
+            let expected_binary =
+                directories
+                    .iter()
+                    .zip(&entry_kinds)
+                    .find_map(|(directory, entry_kind)| {
+                        (*entry_kind == 2).then(|| directory.join("probe.exe"))
+                    });
+            let expected_failures = entry_kinds
+                .iter()
+                .take_while(|entry_kind| **entry_kind != 2)
+                .filter(|entry_kind| **entry_kind == 1)
+                .map(|_| PathScanFailure {
+                    binary_name: "probe.exe",
+                    category: PathScanFailureCategory::DirectoryOpen,
+                })
+                .collect::<Vec<_>>();
+
+            let scan = scan_path_directories(directories, "probe.exe");
+
+            prop_assert_eq!(scan.binary, expected_binary);
+            prop_assert_eq!(scan.failures, expected_failures);
+            drop(roots);
+            Ok(())
+        })
+        .expect("ordered PATH scan invariant should hold for generated layouts");
 }
 
 #[cfg(windows)]

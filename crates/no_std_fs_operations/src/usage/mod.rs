@@ -117,6 +117,10 @@ pub fn classify_def_id(cx: &LateContext<'_>, def_id: DefId) -> Option<StdFsUsage
     label_is_std_fs(&label).then(|| StdFsUsage::new(label))
 }
 
+/// Return whether a parsed path is rooted at `std::fs`.
+///
+/// The first two segments must be exactly `std` and `fs`; deeper segments are
+/// allowed, while shorter or differently rooted paths return `false`.
 fn is_std_fs_path(path: &SimplePath) -> bool {
     let segments = path.segments();
     segments.len() >= 2 && segments[0] == "std" && segments[1] == "fs"
@@ -127,6 +131,10 @@ fn is_invalid_label_char(ch: char) -> bool {
     ch.is_whitespace() || matches!(ch, '(' | ')')
 }
 
+/// Validate a resolved definition label as `std::fs` or one of its children.
+///
+/// Leading/trailing whitespace, empty labels, whitespace or parentheses
+/// within the label, and partial-prefix matches are rejected.
 pub(crate) fn label_is_std_fs(label: &str) -> bool {
     if label != label.trim() {
         return false;

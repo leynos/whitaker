@@ -25,6 +25,7 @@ fn assert_run_wire_keys(json: &Value) {
     assert!(json.get("artefacts").is_none());
 }
 
+/// Verify populated locations use the SARIF key and decode canonical JSON.
 #[test]
 fn populated_physical_location_uses_the_canonical_sarif_property() -> Result<(), serde_json::Error>
 {
@@ -68,6 +69,7 @@ fn populated_physical_location_uses_the_canonical_sarif_property() -> Result<(),
     Ok(())
 }
 
+/// Verify the public run builder and model retain the canonical `artifacts` key.
 #[test]
 fn populated_run_builder_preserves_the_canonical_sarif_property() -> Result<(), serde_json::Error> {
     let artefact = Artefact {
