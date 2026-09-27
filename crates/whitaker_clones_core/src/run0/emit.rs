@@ -109,6 +109,11 @@ pub fn emit_run0(
     Ok(run.build())
 }
 
+/// Build one SARIF result for an accepted pair of clone fragments.
+///
+/// The primary fragment becomes the result location and the peer becomes a
+/// related location. Fingerprint, region, score-conversion, or property-build
+/// failures are returned to the caller rather than emitting a partial result.
 fn build_result(
     primary: &TokenFragment,
     peer: &TokenFragment,

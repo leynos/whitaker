@@ -52,6 +52,10 @@ impl Default for BumpyRoadFunction {
 }
 
 impl<'tcx> LateLintPass<'tcx> for BumpyRoadFunction {
+    /// Load normalized lint settings and the locale-specific message resolver.
+    ///
+    /// This runs once before HIR traversal so every analysed body uses the same
+    /// configuration and localization context.
     fn check_crate(&mut self, _cx: &LateContext<'tcx>) {
         self.settings = normalize_settings(load_configuration().into_settings());
         let shared_config = SharedConfig::load();
@@ -171,6 +175,11 @@ struct AnalysisTarget {
     body_id: hir::BodyId,
 }
 
+/// Build the complexity signal for one body and report separated bumps.
+///
+/// Macro-expanded bodies, bodies without source line information, and bodies
+/// with fewer than two detected bumps produce no diagnostic. Rasterization or
+/// smoothing failures are reported as delayed compiler bugs and stop analysis.
 fn analyse_body(
     cx: &LateContext<'_>,
     target: AnalysisTarget,

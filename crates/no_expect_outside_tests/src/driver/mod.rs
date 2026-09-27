@@ -103,6 +103,11 @@ impl<'tcx> LateLintPass<'tcx> for NoExpectOutsideTests {
         self.localizer = get_localizer_for_lint("no_expect_outside_tests", shared_config.locale());
     }
 
+    /// Diagnose `expect` calls on `Option` or `Result` outside test contexts.
+    ///
+    /// Doctests, recognized test contexts, and harness-detected test functions
+    /// are skipped; other method calls and non-`Option`/`Result` receivers are
+    /// ignored.
     fn check_expr(&mut self, cx: &LateContext<'tcx>, expr: &'tcx hir::Expr<'tcx>) {
         if self.is_doctest {
             return;
