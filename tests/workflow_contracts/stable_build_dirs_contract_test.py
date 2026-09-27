@@ -261,3 +261,47 @@ def test_the_root_check_refuses_a_root_others_can_write(
     assert (result.returncode == 0) is accepted, (
         f"mode {mode:o}: exit {result.returncode}, {result.stderr!r}"
     )
+
+
+#: What each recipe must build inside its scratch tree, as the expanded recipe
+#: spells it. A fixed, private tree helps only if the build output lands in it.
+SCRATCH_CONSUMERS: typ.Final[dict[str, tuple[str, ...]]] = {
+    "installer-msrv-check": ('CARGO_TARGET_DIR="$TMP_DIR/target"', '--root "$TMP_DIR"'),
+    "publish-check": ('TARGET_DIR="$TMP_DIR/target"', '"$TMP_DIR/whitaker-src"'),
+}
+
+#: The cleanup each recipe must register: removal of the tree on exit and on
+#: the signals a cancelled job delivers.
+CLEANUP_TRAP: typ.Final = re.compile(
+    r"trap '[^']*rm -rf[^']*\$TMP_DIR[^']*' (?:EXIT|0) INT TERM HUP"
+)
+
+
+@pytest.mark.parametrize("target", SCRATCH_BUILDS)
+def test_each_recipe_clears_recreates_uses_and_cleans_its_tree(target: str) -> None:
+    """The tree is emptied and recreated before use, used, and removed after.
+
+    A fixed path is reused across runs, so a recipe that skipped the clear
+    would build over the last run's leftovers, one that skipped the recreate
+    would fail on a cold host, and one that dropped the trap would leave a
+    tree behind every cancelled job. The consumers are checked after the
+    recreate, because output written before it would be cleared away.
+    """
+    recipe = _expanded_recipe(target, None)
+    assign = recipe.index("TMP_DIR=")
+    clear = recipe.find('rm -rf -- "$TMP_DIR"', assign)
+    recreate = recipe.find('mkdir -p "$TMP_DIR"', assign)
+    assert 0 <= clear < recreate, (
+        f"{target} must clear its tree and then recreate it, found "
+        f"clear={clear} recreate={recreate}"
+    )
+    trap = CLEANUP_TRAP.search(recipe, recreate)
+    assert trap is not None, (
+        f"{target} must remove its tree on exit and on INT, TERM and HUP"
+    )
+    for consumer in SCRATCH_CONSUMERS[target]:
+        at = recipe.find(consumer, recreate)
+        assert at > trap.start(), (
+            f"{target} must build into its scratch tree, after the trap: "
+            f"{consumer!r} not found in order"
+        )
