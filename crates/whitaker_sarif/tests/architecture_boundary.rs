@@ -166,35 +166,35 @@ fn read_manifest(path: &Utf8Path) -> String {
     }
 }
 
-/// Locates a crate's manifest relative to this test crate.
+/// Locates a crate's manifest relative to this test crate, or reports absence.
 ///
 /// The workspace lays its crates out as `<root>/crates/<crate>/Cargo.toml`, and
 /// this test lives in `crates/whitaker_sarif`, so the current crate is found at
 /// `CARGO_MANIFEST_DIR` and a sibling beside it.
 ///
-/// # Panics
-///
-/// Panics when neither the current crate nor a sibling matches `crate_name`.
-fn manifest_for(crate_name: &str) -> Utf8PathBuf {
+/// Returning an `Option` rather than panicking is what lets the mapping-crate
+/// half of the guard stay dormant until ADR 005's mapping crate is created.
+fn manifest_if_present(crate_name: &str) -> Option<Utf8PathBuf> {
     let manifest_dir = Utf8Path::new(env!("CARGO_MANIFEST_DIR"));
-    let current = manifest_dir.file_name();
-    if current == Some(crate_name) {
-        return manifest_dir.join("Cargo.toml");
+    if manifest_dir.file_name() == Some(crate_name) {
+        return Some(manifest_dir.join("Cargo.toml"));
     }
-    if let Some(parent) = manifest_dir.parent() {
-        let candidate = parent.join(crate_name).join("Cargo.toml");
-        if candidate.is_file() {
-            return candidate;
-        }
-    }
-    panic!("no manifest found for {crate_name} relative to {manifest_dir}");
+    let candidate = manifest_dir
+        .parent()
+        .map(|parent| parent.join(crate_name).join("Cargo.toml"))?;
+    candidate.is_file().then_some(candidate)
 }
 
 // -- The rule, over the real manifest ---------------------------------------
 
 #[rstest]
 fn sarif_crate_does_not_depend_on_whitaker_common() {
-    let document = parse_manifest(&read_manifest(&manifest_for(SARIF_CRATE)));
+    // Resolved here rather than in a helper: `whitaker_sarif` is this test
+    // crate's sibling by construction, and the repo denies `expect()` outside
+    // a test body, so the failure belongs at the call site it can be read at.
+    let manifest = manifest_if_present(SARIF_CRATE)
+        .expect("whitaker_sarif is a sibling of the test crate that must find it");
+    let document = parse_manifest(&read_manifest(&manifest));
 
     let tables = dependency_tables(&document);
     let entries: usize = tables.iter().map(|(_, table)| table.len()).sum();
@@ -328,24 +328,6 @@ fn scan_reports_absence_without_claiming_a_location() {
 }
 
 // -- The rule, over the mapping crate's real manifest once it exists --------
-
-/// Locates a sibling crate's manifest, or reports that it does not exist yet.
-///
-/// This is [`manifest_for`] without the panic, for a crate that ADR 005
-/// schedules but no milestone has created. The rule is verified against
-/// fixtures until the crate lands; from then on this test scans the real
-/// manifest, so the fixtures stop being the only thing standing between the
-/// rule and a silent reintroduction.
-fn manifest_if_present(crate_name: &str) -> Option<Utf8PathBuf> {
-    let manifest_dir = Utf8Path::new(env!("CARGO_MANIFEST_DIR"));
-    if manifest_dir.file_name() == Some(crate_name) {
-        return Some(manifest_dir.join("Cargo.toml"));
-    }
-    let candidate = manifest_dir
-        .parent()
-        .map(|parent| parent.join(crate_name).join("Cargo.toml"))?;
-    candidate.is_file().then_some(candidate)
-}
 
 #[rstest]
 fn mapping_crate_manifest_is_bound_when_it_exists() {
