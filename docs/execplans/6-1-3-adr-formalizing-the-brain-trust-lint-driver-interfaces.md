@@ -1959,10 +1959,20 @@ git branch --show-current
 Stage B's probe, in a throwaway worktree so the tracked tree is never dirtied:
 
 ```bash
-git worktree add /tmp/probe-6-1-3 HEAD
-# edit and build inside /tmp/probe-6-1-3 only
-git worktree remove --force /tmp/probe-6-1-3
+git worktree add "$PROBE_DIR" HEAD
+# edit and build inside "$PROBE_DIR" only
+git worktree remove --force "$PROBE_DIR"
 ```
+
+Set `PROBE_DIR` somewhere **outside `/tmp`**. A workspace build in this
+repository is tens of gigabytes, and `/tmp` is reserved for log output and
+scratch files, not build targets. A worktree created under `/tmp` and then
+built will fill it.
+
+The precedent this plan's own probes followed edits in place against a backup
+copy and restores it afterwards — see the round-7 probe script — which avoids
+the second checkout entirely. Either is acceptable; building under `/tmp` is
+not.
 
 Documentation gates, after Stage C:
 
@@ -1995,7 +2005,15 @@ a bounded report:
 
 ```bash
 make check-fmt && make typecheck && make lint && make test
+make test NEXTEST_PROFILE=ci
 ```
+
+Both test targets are required for this branch. `profile.default` filters the
+`installer/tests/behaviour_cli` and `behaviour_toolchain` binaries, which are
+inside this branch's change surface: the default profile runs 1679 tests and
+the `ci` profile 1692, and the 13-test delta is exactly those two binaries.
+Running only the first would leave those tests unexecuted while reporting a
+clean suite.
 
 Do not run gates in parallel; the build cache is shared.
 
@@ -3458,5 +3476,29 @@ veracity. A documented command is unfalsifiable by construction unless
 someone runs it. Every command this plan now cites as evidence has been
 executed at least once during this work; the two places where a *bare-word*
 form remains are explanatory prose describing the trap, not instructions.
+
+**Two further defects in this plan's own gate recipe, found while auditing
+every command it cites.** Neither was raised by CodeRabbit; both were found by
+reading the commands against the environment they run in.
+
+1. **Stage B's probe built under `/tmp`.** The block read
+   `git worktree add /tmp/probe-6-1-3 HEAD` followed by "edit and build inside"
+   it. A full build in this repository is tens of gigabytes — measured at 33 GB
+   for `target/` — and the standing constraint reserves `/tmp` (32 GB) for log
+   output and scratch, never build targets. Following the recipe as written
+   would have filled `/tmp`. The path is now a `PROBE_DIR` variable with an
+   explicit warning. The precedent this plan actually followed on this branch
+   is better still: the round-7 probe edits in place against a backup and
+   restores it byte-exact, which needs no second checkout at all.
+2. **The full-gate recipe omitted `NEXTEST_PROFILE=ci`.** It listed
+   `make check-fmt && make typecheck && make lint && make test`, but `EP-M2`'s
+   own acceptance evidence requires the `ci` profile too, because
+   `profile.default` filters the two installer behaviour binaries that are in
+   this branch's change surface. 1679 tests run by default and 1692 under `ci`;
+   the 13-test delta is exactly those two binaries. The recipe would have
+   reported a clean suite while leaving 13 in-scope tests unexecuted.
+
+Both are the same defect class as the finding above: a documented command that
+cannot fail, in a place no gate can reach.
 
 Nothing outside this plan changed. No code, no manifest, no ADR text.
