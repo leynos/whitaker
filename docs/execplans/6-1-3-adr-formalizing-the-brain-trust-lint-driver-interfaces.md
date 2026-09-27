@@ -1575,10 +1575,11 @@ gap. Two obligations are dischargeable here.
   the plan's no-new-dependency constraint satisfied.
 - Evidence: `cargo nextest run -p whitaker_sarif --test architecture_boundary`.
   Scoped by `--test`, not by a positional argument: nextest reads a bare
-  argument as a *test-name filter*, so `cargo nextest run architecture_boundary`
-  selects none of these tests and reports zero failures — indistinguishable
-  from a pass. Red first: assert against a manifest fixture that *does* declare
-  the forbidden dependency and observe the failure name it.
+  argument as a *test-name filter*, so
+  `cargo nextest run architecture_boundary` selects none of these tests and
+  reports zero failures — indistinguishable from a pass. Red first: assert
+  against a manifest fixture that *does* declare the forbidden dependency and
+  observe the failure name it.
 - Non-vacuity: three checks, all permanent assertions in the test rather than
   one-time manual rituals. First, a fixture manifest declaring
   `whitaker-common = { workspace = true }` in `whitaker_sarif` must fail.
@@ -2010,8 +2011,8 @@ make test NEXTEST_PROFILE=ci
 
 Both test targets are required for this branch. `profile.default` filters the
 `installer/tests/behaviour_cli` and `behaviour_toolchain` binaries, which are
-inside this branch's change surface: the default profile runs 1679 tests and
-the `ci` profile 1692, and the 13-test delta is exactly those two binaries.
+inside this branch's change surface: the default profile runs 1679 tests and the
+`ci` profile 1692, and the 13-test delta is exactly those two binaries.
 Running only the first would leave those tests unexecuted while reporting a
 clean suite.
 
@@ -3457,9 +3458,9 @@ $ cargo nextest list -p whitaker_sarif --test architecture_boundary
 **This was a stale mirror of a lesson this very plan already recorded.** The
 Round 5 section documents the same trap at length — the `-E 'test(name)'`
 predicate matches a test name, so the probe ran zero tests and reported zero
-failures. The finding is the same defect in the *instructions* rather than in
-a probe, which is a sharper instance: a reader following this plan would have
-run a command that always passes and concluded the guard was verified. The
+failures. The finding is the same defect in the *instructions* rather than in a
+probe, which is a sharper instance: a reader following this plan would have run
+a command that always passes and concluded the guard was verified. The
 `4 tests run` sample output beneath it was stale for the same reason, having
 predated the file's growth to 27 tests.
 
@@ -3472,10 +3473,10 @@ and produced exactly that line.
 **A note on how this survived seven rounds.** The three command sites are in
 the plan's evidence and acceptance sections, not in code, so no gate could
 reach them — `check-fmt` is Rust-only and `markdownlint` checks style, not
-veracity. A documented command is unfalsifiable by construction unless
-someone runs it. Every command this plan now cites as evidence has been
-executed at least once during this work; the two places where a *bare-word*
-form remains are explanatory prose describing the trap, not instructions.
+veracity. A documented command is unfalsifiable by construction unless someone
+runs it. Every command this plan now cites as evidence has been executed at
+least once during this work; the two places where a *bare-word* form remains
+are explanatory prose describing the trap, not instructions.
 
 **Two further defects in this plan's own gate recipe, found while auditing
 every command it cites.** Neither was raised by CodeRabbit; both were found by
@@ -3500,5 +3501,50 @@ reading the commands against the environment they run in.
 
 Both are the same defect class as the finding above: a documented command that
 cannot fail, in a place no gate can reach.
+
+Nothing outside this plan changed. No code, no manifest, no ADR text.
+
+### Round 9 — this plan's own reflow, and a formatter that reports a false clean, 2026-09-27
+
+Resolving the question left open at the end of Round 8 — whether the Markdown
+reflow `make fmt` wanted on `docs/developers-guide.md` had to be committed —
+turned up a defect in **this plan file** instead.
+
+**The revert question is answered: the churn was never this branch's to
+commit.** Formatting the base branch's own copy of `docs/developers-guide.md`
+with the wrapper's exact flag set produces a byte-identical result to
+formatting the working-tree copy. The three files `make fmt` wanted to rewrite
+(`developers-guide.md`, the `6-5-1` plan, `roadmap.md`) are non-canonical **on
+the base branch**, so the reflow is pre-existing state that arrives with the
+merge rather than anything this branch introduced. Reverting it remains
+correct, and the `behaviour_docs` smoking test this round was going to run is
+unnecessary: there is no reflow of that file to commit, so its extraction
+cannot be affected either way.
+
+**The defect this uncovered: this plan file was not in the canonical Markdown
+form.** `mdtablefix` wanted `+14 -13` across four paragraphs — the prose added
+in Rounds 8 and 9. Hand-wrapped prose does not match what `--wrap` computes, so
+each handwritten paragraph can differ from canonical by a line break or two,
+and **no gate catches it**: `make check-fmt` is Rust-only
+(`cargo fmt --all -- --check`), and `markdownlint` checks style rather than
+wrapping. The file is now formatted with the repository's own tool.
+
+**The trap that nearly hid this: `mdtablefix --check` reports a *false clean*
+unless it is given the wrapper's flag set.** The first check run this round was
+bare `mdtablefix --check --git`, which reported **`79 files left unchanged`** —
+including the three non-canonical files above and this plan file. It is
+measuring a different mode. Repeating the identical check with the six flags
+the repository actually uses gave
+`4 files would be reformatted, 75 files left unchanged`, which is the truth.
+The command that answers "is this file canonical?" is:
+
+```plaintext
+mdtablefix --wrap --renumber --breaks --ellipsis --fences --check <file>
+```
+
+This is the same defect class as Round 7 and Round 8 — a check that cannot fail
+— and it is worth stating plainly because the bare form *looks* like the
+authoritative one: it scans the whole tree, prints a reassuring count, and is
+wrong. Verified by comparing the two runs against the same file set.
 
 Nothing outside this plan changed. No code, no manifest, no ADR text.
