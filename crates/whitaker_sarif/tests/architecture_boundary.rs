@@ -17,6 +17,14 @@
 //! whose `i18n` module cannot be feature-gated out, so what the guard can
 //! enforce is that the mapping crate's own manifest stays informative.
 //!
+//! A dependency's effective name is not always written in the manifest that
+//! declares it. A member may rename an edge locally (`loc = { package = … }`)
+//! or inherit a rename from the workspace (`loc = { workspace = true }`), and
+//! the guard resolves all three shapes. The inherited one needs the root
+//! `[workspace.dependencies]` table, which is read alongside every real
+//! manifest; an inherited entry whose declaration cannot be read fails closed
+//! rather than passing as if the edge were absent.
+//!
 //! Precedent: `crates/whitaker_clones_core/build_support.rs` parses a manifest
 //! with `toml::Table` and walks its dependency tables.
 
@@ -73,16 +81,55 @@ impl ScanOutcome {
 
 /// Returns whether a dependency entry names `package`.
 ///
-/// A dependency names its package either in the key or, when renamed, in a
-/// `package` field. Both are read: `loc = { package = "whitaker-common" }`
-/// declares the same forbidden edge as `whitaker-common = ...` while leaving the
-/// key innocuous, so a key-only scan would pass it.
-fn names_package(key: &str, value: &toml::Value, package: &str) -> bool {
-    key == package
+/// An entry can name its package in three places, and all three are read.
+///
+/// 1. The key: `whitaker-common = ...`.
+/// 2. A local `package` field under a rename: `loc = { package = "whitaker-common" }` declares the
+///    same forbidden edge as the key form while leaving the key innocuous, so a key-only scan would
+///    pass it.
+/// 3. The workspace's own declaration, reached through `{ workspace = true }`. A member may inherit
+///    a rename without writing `package` locally — `loc = { workspace = true }` — and the name then
+///    lives only in the root `[workspace.dependencies]` entry for `loc`, under a `package` field
+///    or, absent one, in the key itself. This is the one shape a member manifest cannot be read in
+///    isolation to resolve.
+///
+/// `workspace_dependencies` is the root workspace's `[workspace.dependencies]`
+/// table, or `None` when the manifest under scan *is* that root, which has no
+/// parent to inherit from. An inherited entry whose declaration is absent or
+/// unreadable is treated as unresolvable rather than silently passed, so the
+/// guard fails closed.
+fn names_package(
+    key: &str,
+    value: &toml::Value,
+    package: &str,
+    workspace_dependencies: Option<&toml::Table>,
+) -> bool {
+    if key == package
         || value
             .get("package")
             .and_then(toml::Value::as_str)
             .is_some_and(|named| named == package)
+    {
+        return true;
+    }
+
+    let inherits = value
+        .get("workspace")
+        .and_then(toml::Value::as_bool)
+        .is_some_and(|flag| flag);
+    if !inherits {
+        return false;
+    }
+
+    workspace_dependencies
+        .and_then(|dependencies| dependencies.get(key))
+        .is_some_and(|declaration| {
+            declaration
+                .get("package")
+                .and_then(toml::Value::as_str)
+                .unwrap_or(key)
+                == package
+        })
 }
 
 /// Joins a table path prefix to a key, omitting an empty prefix.
@@ -120,15 +167,53 @@ fn dependency_tables(document: &toml::Table) -> Vec<DependencyTable> {
 }
 
 /// Scans a manifest for a dependency, naming where it was found.
-fn scan_for(document: &toml::Table, package: &str) -> ScanOutcome {
+///
+/// `workspace_dependencies` is the root workspace's `[workspace.dependencies]`
+/// table, if the manifest under scan inherits from one. Fixture manifests pass
+/// `None`: they exercise the local shapes, and the inherited shape is covered
+/// separately by `inherited_rename_is_resolved_through_the_workspace`.
+fn scan_for(
+    document: &toml::Table,
+    package: &str,
+    workspace_dependencies: Option<&toml::Table>,
+) -> ScanOutcome {
     for (table, entries) in dependency_tables(document) {
         for (key, value) in &entries {
-            if names_package(key, value, package) {
+            if names_package(key, value, package, workspace_dependencies) {
                 return ScanOutcome::Found(format!("{table}.{key}"));
             }
         }
     }
     ScanOutcome::Absent
+}
+
+/// Returns the root workspace's `[workspace.dependencies]` table.
+///
+/// A member manifest may inherit a dependency — and its rename — through
+/// `{ workspace = true }`, in which case the package name lives only in the
+/// root manifest. Resolving that is what stops an inherited rename from being
+/// an invisible edge.
+///
+/// Returns `None` when no root is reachable, which is the correct answer for a
+/// fixture and a fail-closed one for a real manifest: an inherited entry whose
+/// declaration cannot be read is not treated as clean.
+///
+/// # Panics
+///
+/// Panics when a root manifest is found but cannot be parsed, which means the
+/// workspace this guard navigates has changed shape.
+fn workspace_dependencies() -> Option<toml::Table> {
+    let manifest_dir = Utf8Path::new(env!("CARGO_MANIFEST_DIR"));
+    let root = manifest_dir.parent()?.parent()?.join("Cargo.toml");
+    if !root.is_file() {
+        return None;
+    }
+    let document = parse_manifest(&read_manifest(&root));
+    document
+        .get("workspace")?
+        .get("dependencies")?
+        .as_table()
+        .cloned()
 }
 
 /// Parses a manifest into a TOML table.
@@ -216,7 +301,13 @@ fn sarif_crate_does_not_depend_on_whitaker_common() {
         "no dependency examined in {SARIF_CRATE}/Cargo.toml; the guard is vacuous"
     );
 
-    let outcome = scan_for(&document, FORBIDDEN_IN_SARIF);
+    // The workspace table is resolved too, so a member that inherited the
+    // forbidden edge through `{ workspace = true }` is still caught.
+    let outcome = scan_for(
+        &document,
+        FORBIDDEN_IN_SARIF,
+        workspace_dependencies().as_ref(),
+    );
     assert!(
         !outcome.is_found(),
         "{SARIF_CRATE} must not depend on {FORBIDDEN_IN_SARIF}, but declares it at {}",
@@ -287,7 +378,7 @@ fn mapping_crate_must_not_name_the_localization_stack(
     let document = parse_manifest(manifest);
     let found = LOCALIZATION_STACK
         .iter()
-        .find(|package| scan_for(&document, package).is_found())
+        .find(|package| scan_for(&document, package, None).is_found())
         .copied();
 
     assert_eq!(
@@ -306,7 +397,7 @@ fn mapping_crate_must_not_name_the_localization_stack(
 )]
 fn sarif_rule_rejects_both_dependency_shapes(#[case] manifest: &str) {
     let document = parse_manifest(manifest);
-    let outcome = scan_for(&document, FORBIDDEN_IN_SARIF);
+    let outcome = scan_for(&document, FORBIDDEN_IN_SARIF, None);
     assert!(
         outcome.is_found(),
         "a {FORBIDDEN_IN_SARIF} edge must be rejected in every shape"
@@ -317,7 +408,7 @@ fn sarif_rule_rejects_both_dependency_shapes(#[case] manifest: &str) {
 fn scan_reports_the_declaring_key() {
     let document = parse_manifest(MAPPING_RENAMED);
     assert_eq!(
-        scan_for(&document, "fluent-templates").location(),
+        scan_for(&document, "fluent-templates", None).location(),
         "dependencies.loc",
         "the failure must name the key that declared the edge"
     );
@@ -327,9 +418,104 @@ fn scan_reports_the_declaring_key() {
 fn scan_reports_absence_without_claiming_a_location() {
     let document = parse_manifest("[dependencies]\nserde = \"1\"\n");
     assert_eq!(
-        scan_for(&document, FORBIDDEN_IN_SARIF),
+        scan_for(&document, FORBIDDEN_IN_SARIF, None),
         ScanOutcome::Absent,
         "an absent dependency must not be reported as declared"
+    );
+}
+
+// -- Non-vacuity: an inherited rename is resolved through the workspace -----
+
+/// A member manifest that inherits a rename without naming the package.
+///
+/// This is the shape `names_package` cannot resolve from the member alone: the
+/// key is `loc`, there is no local `package`, and the real name lives only in
+/// the root workspace's entry for `loc`.
+const INHERITED_RENAME: &str = concat!(
+    "[package]\n",
+    "name = \"whitaker_brain_trust_sarif\"\n",
+    "\n",
+    "[dependencies]\n",
+    "loc = { workspace = true }\n",
+);
+
+/// The root table that makes `INHERITED_RENAME` name `fluent-templates`.
+const WORKSPACE_WITH_RENAME: &str = concat!(
+    "[workspace.dependencies]\n",
+    "loc = { package = \"fluent-templates\", version = \"0.15\" }\n",
+);
+
+#[rstest]
+fn inherited_rename_is_resolved_through_the_workspace() {
+    let document = parse_manifest(INHERITED_RENAME);
+    let workspace = parse_manifest(WORKSPACE_WITH_RENAME);
+    let dependencies = workspace
+        .get("workspace")
+        .and_then(|workspace_table| workspace_table.get("dependencies"))
+        .and_then(toml::Value::as_table);
+
+    assert!(
+        dependencies.is_some(),
+        "the fixture must declare a workspace dependency table"
+    );
+
+    // Read in isolation the edge is invisible, which is what makes this case
+    // worth pinning: the local manifest names no forbidden package anywhere.
+    assert!(
+        !scan_for(&document, "fluent-templates", None).is_found(),
+        "the member manifest alone cannot resolve an inherited rename"
+    );
+
+    // With the workspace table the effective name is recovered.
+    let outcome = scan_for(&document, "fluent-templates", dependencies);
+    assert!(
+        outcome.is_found(),
+        "an inherited rename must resolve to the package the workspace declares"
+    );
+    assert_eq!(
+        outcome.location(),
+        "dependencies.loc",
+        "the failure must name the member key that inherited the edge"
+    );
+}
+
+#[rstest]
+fn inherited_entry_without_a_workspace_declaration_is_not_treated_as_clean() {
+    // A member that inherits a key the workspace does not declare cannot be
+    // resolved. Failing closed is the point: a False here would let an
+    // unreadable declaration read as an absent dependency.
+    let document = parse_manifest("[dependencies]\nloc = { workspace = true }\n");
+    let empty = parse_manifest("[workspace.dependencies]\nserde = \"1\"\n");
+    let dependencies = empty
+        .get("workspace")
+        .and_then(|workspace| workspace.get("dependencies"))
+        .and_then(toml::Value::as_table);
+
+    assert!(
+        !scan_for(&document, "fluent-templates", dependencies).is_found(),
+        "an unresolvable inherited entry must not be reported as declared"
+    );
+    assert!(
+        !scan_for(&document, "serde", dependencies).is_found(),
+        "a key absent from the member manifest is absent regardless of the workspace"
+    );
+}
+
+#[rstest]
+fn a_plain_key_is_never_resolved_through_the_workspace() {
+    // The workspace lookup applies only to `{ workspace = true }` entries. A
+    // local key that happens to match a workspace key with a different package
+    // must not pick up the workspace's name.
+    let document = parse_manifest("[dependencies]\nloc = \"1\"\n");
+    let workspace = parse_manifest(WORKSPACE_WITH_RENAME);
+    let dependencies = workspace
+        .get("workspace")
+        .and_then(|workspace_table| workspace_table.get("dependencies"))
+        .and_then(toml::Value::as_table);
+
+    assert!(
+        !scan_for(&document, "fluent-templates", dependencies).is_found(),
+        "a non-inherited entry keeps its own name"
     );
 }
 
@@ -360,8 +546,11 @@ fn mapping_crate_manifest_is_bound_when_it_exists() {
         "{MAPPING_CRATE}/Cargo.toml declares no dependency; the guard is vacuous"
     );
 
+    // The workspace table is resolved here too, so the mapping crate cannot
+    // inherit the localization stack through `{ workspace = true }`.
+    let workspace = workspace_dependencies();
     for package in LOCALIZATION_STACK {
-        let outcome = scan_for(&document, package);
+        let outcome = scan_for(&document, package, workspace.as_ref());
         assert!(
             !outcome.is_found(),
             "{MAPPING_CRATE} must not name {package}, but declares it at {}",

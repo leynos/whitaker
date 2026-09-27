@@ -44,7 +44,7 @@ Two constraints make the seam non-obvious.
 The first is a dependency cycle. `whitaker-common` holds the domain: metric
 builders, evaluation, decomposition advice, spans, and the localization
 helpers. `whitaker_sarif` holds the SARIF 2.1.0 model. The mapping from a
-finding to a SARIF result needs both, because a `SubjectLocation` carries a
+finding to a SARIF result needs both, because a `FindingLocation` carries a
 `RepoRelativePath` and a `SourceSpan` from the domain while a `Run` is a wire
 type. If either crate depends on the other, the other's reason for existing is
 undermined: `whitaker-common` is published
@@ -287,10 +287,14 @@ Two rules follow from the diagram, and both are load-bearing.
    each other.** Wherever the two must meet, they meet in
    `whitaker_brain_trust_sarif`.
 
-The mapping crate depends on `whitaker-common`, because `SubjectLocation`
-carries a `RepoRelativePath` and a `SourceSpan`. It must not depend on
-`fluent-templates` or `unic-langid`, which is the edge that makes the
-English-only rule checkable.
+The mapping crate depends on `whitaker-common`, because the value crossing the
+seam — a `FindingLocation`, carrying a `RepoRelativePath` and a `SourceSpan` —
+is a domain type. It must not depend on `fluent-templates` or `unic-langid`,
+which is the edge that makes the English-only rule checkable. It must not
+depend on a compiler crate either: `SubjectLocation` pairs that domain value
+with the `HirId` that deferred emission needs, and it stays in the root
+`whitaker` crate, above the seam. The adapter consumes the domain half and
+never sees the compiler half.
 
 ## Location resolution
 
@@ -298,13 +302,17 @@ The domain has no file identity today: `SourceSpan` holds only start and end
 line and column (`common/src/span.rs:50-53`). A sibling type is added rather
 than growing it.
 
-Screen-reader description: the first of the following two code blocks declares
-a validated repository-relative path type in `whitaker-common`. It has a
-constructing function that validates and normalizes, and an accessor returning
-the forward-slashed form used in diagnostics, fingerprints, and SARIF URIs.
-The second declares the resolved-location type and its failure enumeration in
-the root `whitaker` crate, together with the resolving function that takes a
-late context, a span, and an `HirId`.
+Screen-reader description: the first of the following three code blocks
+declares a validated repository-relative path type in `whitaker-common`. It has
+a constructing function that validates and normalizes, and an accessor
+returning the forward-slashed form used in diagnostics and fingerprints, which
+callers must percent-encode before building a SARIF URI. The second declares
+the compiler-free location value that crosses the seam, also in
+`whitaker-common`, bundling that path with a source span and carrying the
+reason a location may be unavailable. The third declares, in the root
+`whitaker` crate, the resolving function that takes a late context, a span,
+and an `HirId`, and the type it returns: the domain location paired with the
+`HirId` the lint driver needs to emit at the right node.
 
 ```rust,ignore
 // common/src/paths.rs — no rustc_private, built on camino.
@@ -322,22 +330,43 @@ impl RepoRelativePath {
     /// component, carries a drive prefix, or is empty.
     pub fn new(candidate: &Utf8Path) -> Result<Self, PathError> { todo!() }
 
-    /// Returns the forward-slashed representation used in diagnostics,
-    /// fingerprints, and `artifactLocation.uri`.
+    /// Returns the decoded, forward-slashed path, for diagnostics and
+    /// fingerprints.
+    ///
+    /// This is **not** a SARIF URI reference and is **not** percent-encoded.
+    /// A caller building `artifactLocation.uri` must percent-encode the result
+    /// first, or a path containing a space or a `#` will not be a valid URI
+    /// reference. See the encoding rule in `Location resolution`.
     #[must_use]
     pub fn as_str(&self) -> &str { todo!() }
 }
 ```
 
 ```rust,ignore
-// src/location/mod.rs in the root `whitaker` crate, behind `dylint-driver`.
+// common/src/paths.rs, continued — still camino only, still no rustc_private.
 
-/// A resolved location for a lint subject.
-#[derive(Clone, Debug)]
-pub struct SubjectLocation {
-    file: whitaker_common::paths::RepoRelativePath,
-    span: whitaker_common::span::SourceSpan,
-    hir_id: rustc_hir::HirId,
+/// A subject's location as the domain sees it.
+///
+/// This is the value that crosses the seam. It carries no compiler type, so
+/// the SARIF adapter can name it without gaining a rustc dependency.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FindingLocation {
+    file: RepoRelativePath,
+    span: SourceSpan,
+}
+
+impl FindingLocation {
+    /// Constructs a location from a validated path and a span.
+    #[must_use]
+    pub fn new(file: RepoRelativePath, span: SourceSpan) -> Self { todo!() }
+
+    /// Returns the repository-relative file.
+    #[must_use]
+    pub fn file(&self) -> &RepoRelativePath { todo!() }
+
+    /// Returns the span within that file.
+    #[must_use]
+    pub fn span(&self) -> SourceSpan { todo!() }
 }
 
 /// Why a subject's location could not be resolved.
@@ -349,7 +378,33 @@ pub enum LocationUnavailable {
     /// The source map could not resolve the span.
     Unresolvable,
     /// The path resolved outwith the repository root.
-    OutwithRepositoryRoot { path: camino::Utf8PathBuf },
+    OutwithRepositoryRoot { path: Utf8PathBuf },
+}
+```
+
+```rust,ignore
+// src/location/mod.rs in the root `whitaker` crate, behind `dylint-driver`.
+
+/// A resolved location for a lint subject, with the node to emit at.
+///
+/// This is the driver's type, not the adapter's: it pairs the domain's
+/// `FindingLocation` with the `HirId` that deferred emission resolves the lint
+/// level at (lifecycle rule 1). The `HirId` stays here, above the seam, so the
+/// adapter never needs a compiler crate.
+#[derive(Clone, Debug)]
+pub struct SubjectLocation {
+    location: whitaker_common::paths::FindingLocation,
+    hir_id: rustc_hir::HirId,
+}
+
+impl SubjectLocation {
+    /// Returns the compiler-free location the SARIF adapter consumes.
+    #[must_use]
+    pub fn location(&self) -> &whitaker_common::paths::FindingLocation { todo!() }
+
+    /// Returns the node whose lint level governs emission.
+    #[must_use]
+    pub fn hir_id(&self) -> rustc_hir::HirId { todo!() }
 }
 
 /// Resolves a compiler span to a repository-relative location.
@@ -357,13 +412,14 @@ pub fn resolve_subject_location(
     cx: &rustc_lint::LateContext<'_>,
     span: rustc_span::Span,
     hir_id: rustc_hir::HirId,
-) -> Result<SubjectLocation, LocationUnavailable> { todo!() }
+) -> Result<SubjectLocation, whitaker_common::paths::LocationUnavailable> { todo!() }
 ```
 
 The normative rules are these.
 
-1. **Home.** `RepoRelativePath` lives in `whitaker-common`, whose invariant is
-   a repository-path invariant rather than a SARIF one. `resolve_subject_location`
+1. **Home, and where the seam falls.** `RepoRelativePath` and
+   `FindingLocation` live in `whitaker-common`, whose invariant is a
+   repository-path invariant rather than a SARIF one. `resolve_subject_location`
    lives in the root `whitaker` crate at `src/location/mod.rs` behind
    `dylint-driver` — the established home for shared compiler-facing helpers
    (`src/lib.rs:13-25`), already depended on by every lint crate with that
@@ -735,16 +791,20 @@ _Table 2: Responsibilities of each lint-pass callback._
    `crates/whitaker_brain_trust_sarif`, which does not depend on
    `fluent-templates` or `unic-langid`. That is a claim about the crate's _direct
    manifest edges_, and the narrower claim is the accurate one: the crate does
-   depend on `whitaker-common`, because `SubjectLocation` carries a
-   `RepoRelativePath` and a `SourceSpan`. `whitaker-common` re-exports
-   `get_localizer_for_lint` and `Localizer`, and `Localizer` exposes `message`,
-   `message_with_args`, `attribute`, and `attribute_with_args`
+   depend on `whitaker-common`, because the `FindingLocation` that crosses the
+   seam carries a `RepoRelativePath` and a `SourceSpan`. It does not depend on
+   a compiler crate, because `SubjectLocation` — which adds the `HirId` that
+   deferred emission resolves the lint level at — stays in the root `whitaker`
+   crate and is destructured before the adapter is called. `whitaker-common`
+   re-exports `get_localizer_for_lint` and `Localizer`, and `Localizer` exposes
+   `message`, `message_with_args`, `attribute`, and `attribute_with_args`
    (`common/src/lib.rs:89-105`, `common/src/i18n/loader.rs:101-136`). A future
-   author holding that edge could therefore resolve a Fluent message; the rule
-   is not a reachability proof, and `EP-M2`'s fitness guard checks dependency
-   names rather than claiming one. The rule binds by construction instead: a
-   finding holds values, not prose (rule 1), and the mapping renders those
-   values through English static metadata.
+   author holding that edge could therefore resolve a Fluent message, and would
+   need no manifest edit to do it: the re-export is already reachable from the
+   crate the mapping depends on. The rule is not a reachability proof, and
+   `EP-M2`'s fitness guard checks dependency names rather than claiming one. The
+   rule binds by construction instead: a finding holds values, not prose (rule
+   1), and the mapping renders those values through English static metadata.
 
    What the dependency-name rule buys is an _informative_ manifest, which is the
    property Option B and the 6.5.1 placement both surrender.
