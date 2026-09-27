@@ -1,9 +1,9 @@
 # Record an ADR formalizing the brain trust lint driver interfaces (6.1.3)
 
-This ExecPlan (execution plan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & discoveries`,
-`Decision log`, `Outcomes & retrospective`, `Conformance basis`, and
-`Verification plan` must be kept up to date as work proceeds.
+This ExecPlan (execution plan) is a living document. The sections `Constraints`,
+`Tolerances`, `Risks`, `Progress`, `Surprises & discoveries`, `Decision log`,
+`Outcomes & retrospective`, `Conformance basis`, and `Verification plan` must
+be kept up to date as work proceeds.
 
 Status: COMPLETE (2026-09-27)
 
@@ -138,11 +138,10 @@ Thresholds that trigger escalation, not quality targets.
 
 - Risk: the ADR specifies a `rustc_*` interface that does not exist or does not
   behave as described under the pinned toolchain, `nightly-2026-05-28`.
-  Severity: high. Likelihood: medium.
-  Mitigation: only interfaces proven to compile on the pinned toolchain, or
-  already called from a shipped lint crate, may appear in a normative
-  signature. Stage B's probe is the proving step. Note that
-  `crates/clippy_utils` is a **stub** carrying only `macros::is_panic`
+  Severity: high. Likelihood: medium. Mitigation: only interfaces proven to
+  compile on the pinned toolchain, or already called from a shipped lint crate,
+  may appear in a normative signature. Stage B's probe is the proving step.
+  Note that `crates/clippy_utils` is a **stub** carrying only `macros::is_panic`
   (`crates/clippy_utils/src/lib.rs:1-12`), not the upstream crate; nothing in
   the ADR may assume an upstream Clippy helper exists.
 - Risk: an implementer follows the ADR and internal compiler errors (ICEs) the
@@ -151,9 +150,8 @@ Thresholds that trigger escalation, not quality targets.
   though delayed bugs were created" and re-emits every delayed bug as an ICE
   (verified at `rustc_errors/src/lib.rs:1480-1486` in the `rustc-src`
   component). A warn-only lint never emits a real error, so every delayed bug
-  it creates becomes an ICE.
-  Severity: high. Likelihood: high if unaddressed — the first draft cited a
-  delayed-bug call site as the precedent to follow.
+  it creates becomes an ICE. Severity: high. Likelihood: high if unaddressed —
+  the first draft cited a delayed-bug call site as the precedent to follow.
   Mitigation: the ADR prohibits the call outright on any data-dependent path,
   and records that `crates/bumpy_road_function/src/driver/mod.rs:224`, `:235`,
   and `segment_builder.rs:164`, `:186` carry the hazard today.
@@ -164,56 +162,52 @@ Thresholds that trigger escalation, not quality targets.
   `with_lint_attrs(hir::CRATE_HIR_ID)` (`rustc_lint/src/late.rs:393-404`).
   Deferred emission through the ordinary `cx.emit_span_lint` path therefore
   ignores `#[allow(brain_type)]` on a type or `impl`, leaving users an
-  unsuppressable lint.
-  Severity: high. Likelihood: high if unaddressed — all nine emitting lint
-  crates use `cx.emit_span_lint`, so it is the obvious thing to copy.
-  Status: **confirmed by probe, 2026-09-27, and sharper than stated.** The
-  probe's three-way fixture showed the span-only path from `check_crate_post`
-  emitting a finding on an item carrying `#[allow]`, while the same path from
-  `check_item` (where the context node *is* the item) suppressed it, and
-  `emit_node_span_lint` from `check_crate_post` also suppressed it. The
-  span-only path does not merely "not resolve the level"; it silently discards
-  every `#[allow]` on the subject item and on every module between it and the
-  crate root. A crate-level `#![allow]` still applies to all paths, so the
-  residual limitation is item- and module-level attributes only. No in-tree
-  lint emits from `check_crate_post` today — the sole user of that hook,
-  `crates/rstest_helper_should_be_fixture/src/driver.rs:244`, writes a summary
-  file and emits nothing — so this is a new pattern with no in-tree precedent
-  to copy. See `Artefacts and notes`.
-  Mitigation: the ADR requires the subject's `HirId` to be captured and
-  emission to go through `TyCtxt::emit_node_span_lint`
-  (`rustc_middle/src/ty/context.rs:2461-2470`), which takes an explicit
-  `HirId`. Confirmed to compile on the pinned toolchain under `-D warnings`,
-  accepting the same `rustc_lint::errors::DiagDecorator` the shipped lints
-  already use.
+  unsuppressable lint. Severity: high. Likelihood: high if unaddressed — all
+  nine emitting lint crates use `cx.emit_span_lint`, so it is the obvious thing
+  to copy. Status: **confirmed by probe, 2026-09-27, and sharper than stated.**
+  The probe's three-way fixture showed the span-only path from
+  `check_crate_post` emitting a finding on an item carrying `#[allow]`, while
+  the same path from `check_item` (where the context node *is* the item)
+  suppressed it, and `emit_node_span_lint` from `check_crate_post` also
+  suppressed it. The span-only path does not merely "not resolve the level"; it
+  silently discards every `#[allow]` on the subject item and on every module
+  between it and the crate root. A crate-level `#![allow]` still applies to all
+  paths, so the residual limitation is item- and module-level attributes only.
+  No in-tree lint emits from `check_crate_post` today — the sole user of that
+  hook, `crates/rstest_helper_should_be_fixture/src/driver.rs:244`, writes a
+  summary file and emits nothing — so this is a new pattern with no in-tree
+  precedent to copy. See `Artefacts and notes`. Mitigation: the ADR requires
+  the subject's `HirId` to be captured and emission to go through
+  `TyCtxt::emit_node_span_lint` (`rustc_middle/src/ty/context.rs:2461-2470`),
+  which takes an explicit `HirId`. Confirmed to compile on the pinned toolchain
+  under `-D warnings`, accepting the same `rustc_lint::errors::DiagDecorator`
+  the shipped lints already use.
 - Risk: the seam silently stops producing SARIF and nobody notices, because a
-  clean report and a broken resolver look identical.
-  Severity: high. Likelihood: medium.
-  Mitigation: resolution returns a typed reason rather than `Option`, every
-  drop is logged, and the run carries an unresolved-subject count even when it
-  is zero. Recorded as `VP-5`.
+  clean report and a broken resolver look identical. Severity: high.
+  Likelihood: medium. Mitigation: resolution returns a typed reason rather than
+  `Option`, every drop is logged, and the run carries an unresolved-subject
+  count even when it is zero. Recorded as `VP-5`.
 - Risk: whole-crate accumulation exhausts memory on a large crate. Retaining
   `MethodInfo` (two string sets, `common/src/lcom4/mod.rs:45`) plus
   `MethodProfile` (four string sets,
   `common/src/decomposition_advice/profile.rs:94`) for every method of every
   type is six string collections per method held until `check_crate_post`.
-  Severity: medium. Likelihood: high on a large crate.
-  Mitigation: the ADR mandates two-phase capture — cheap scalars during the
-  callbacks, deep capture at finalization only for subjects past the gate.
+  Severity: medium. Likelihood: high on a large crate. Mitigation: the ADR
+  mandates two-phase capture — cheap scalars during the callbacks, deep capture
+  at finalization only for subjects past the gate.
 - Risk: the ADR over-specifies, freezing a detail the first consumer must then
-  fight.
-  Severity: medium. Likelihood: medium.
-  Mitigation: the ADR states contracts — inputs, outputs, ordering, failure
-  modes — and names crate and module paths, but leaves internal data structures
-  to the consumer. Anything it cannot justify from a precedent or a stated
-  requirement goes under "Outstanding decisions".
+  fight. Severity: medium. Likelihood: medium. Mitigation: the ADR states
+  contracts — inputs, outputs, ordering, failure modes — and names crate and
+  module paths, but leaves internal data structures to the consumer. Anything
+  it cannot justify from a precedent or a stated requirement goes under
+  "Outstanding decisions".
 - Risk: this branch is based on
   `origin/6-5-1-collect-brain-trust-diagnostics-into-sarif-emitter`, which is
-  unmerged and which this ADR supersedes in four places.
-  Severity: medium. Likelihood: medium.
-  Mitigation: the ADR cites the 6.5.1 *roadmap item* and the *decision*, never
-  line numbers in that plan. Each supersession is stated as a decision the ADR
-  makes, so it reads correctly whether or not the sibling plan is revised.
+  unmerged and which this ADR supersedes in four places. Severity: medium.
+  Likelihood: medium. Mitigation: the ADR cites the 6.5.1 *roadmap item* and
+  the *decision*, never line numbers in that plan. Each supersession is stated
+  as a decision the ADR makes, so it reads correctly whether or not the sibling
+  plan is revised.
 
 ## Progress
 
@@ -241,9 +235,9 @@ Thresholds that trigger escalation, not quality targets.
 - [x] (2026-09-27) Stage A checklist reconciled against its two sources:
   `docs/roadmap.md:288-297`, whose five clauses map to `BTD-REQ-01` to
   `BTD-REQ-05` and thence to rows C-1 to C-16, and the 6.5.1 deferral list
-  (`6-5-1-...md:69-77` and `:1395-1398`), which maps to rows C-17 to C-19.
-  Rows C-20 to C-26 trace to the first draft's design review. All 26 rows read
-  "not answered", as Stage A requires. No gap found and no new row added.
+  (`6-5-1-...md:69-77` and `:1395-1398`), which maps to rows C-17 to C-19. Rows
+  C-20 to C-26 trace to the first draft's design review. All 26 rows read "not
+  answered", as Stage A requires. No gap found and no new row added.
 - [x] (2026-09-27) Stage B complete. All eight probe questions answered; six by
   a purpose-built probe lint in a throwaway worktree (since removed) under the
   Makefile's mandatory flags, and two by direct source reading. Four findings
@@ -270,44 +264,46 @@ Thresholds that trigger escalation, not quality targets.
   `make nixie` both pass. See `Surprises & discoveries`.
 - [x] (2026-09-27) Stage C CodeRabbit review cleared via `scrutineer`, seven
   findings, no rate limit. Four actioned (`endColumn` exclusivity unstated in
-  `Location resolution` rule 4; the unticked `EP-M1` checkbox; `Language
-  boundary` rule 2's overclaimed "cannot resolve a message"; and
+  `Location resolution` rule 4; the unticked `EP-M1` checkbox;
+  `Language boundary` rule 2's overclaimed "cannot resolve a message"; and
   `RepoRelativePath::as_str`'s unstated encoding contract). Two rejected as
-  spurious — a "behavioural" respelling the text does not contain, and a
-  "four versus six roadmap items" count that is a deliberate grouping. Tracing
-  the fourth found a defect the review had not flagged: `Emission lifecycle`
-  justified deferral by calling both lints whole-crate lints, which is false
-  for `brain_trait`, and the ADR never named the uniformity reason a Surprises
-  entry claimed it did. Both are now corrected. `make markdownlint`
-  (0 errors / 79 files) and `make nixie` both pass. See `Decision log` and
+  spurious — a "behavioural" respelling the text does not contain, and a "four
+  versus six roadmap items" count that is a deliberate grouping. Tracing the
+  fourth found a defect the review had not flagged: `Emission lifecycle`
+  justified deferral by calling both lints whole-crate lints, which is false for
+  `brain_trait`, and the ADR never named the uniformity reason a Surprises
+  entry claimed it did. Both are now corrected. `make markdownlint` (0 errors /
+  79 files) and `make nixie` both pass. See `Decision log` and
   `Surprises & discoveries`.
-- [x] (2026-09-27) Stage C complete. `docs/adr-005-brain-trust-lint-driver-interfaces.md`
+- [x] (2026-09-27) Stage C complete.
+      `docs/adr-005-brain-trust-lint-driver-interfaces.md`
   written against the house template — Status, Date, Context, Decision drivers,
   Requirements, Options considered (three crate-edge options plus the capture
   and emission axes), Decision outcome with the Y-statement, and the normative
   sections `Location resolution` (11 rules), `HIR capture` (8 rules plus
-  `Counting a method once`), `Suggestion rendering` (6 rules), `Lint-pass
-  lifecycle` (Table 2 plus 10 rules), and `Language boundary` (6 rules), then
-  `Goals and non-goals`, `Known risks and limitations` (naming all four
-  supersessions of 6.5.1), and `Outstanding decisions` (5 items). The layering
-  diagram is a Mermaid `flowchart TD` with a screen-reader description above
-  and `Figure 1` below. Registered in `docs/contents.md` §"Decision records" in
-  the ADR 004 style. All four open questions from Stage A resolved from the
-  repository rather than escalated; see `Surprises & discoveries`. Every `VP-2`
-  checklist row reads "answered" against a named rule. `make markdownlint`
-  (0 errors / 79 files) and `make nixie` both pass.
+  `Counting a method once`), `Suggestion rendering` (6 rules),
+  `Lint-pass lifecycle` (Table 2 plus 10 rules), and `Language boundary` (6
+  rules), then `Goals and non-goals`, `Known risks and limitations` (naming all
+  four supersessions of 6.5.1), and `Outstanding decisions` (5 items). The
+  layering diagram is a Mermaid `flowchart TD` with a screen-reader description
+  above and `Figure 1` below. Registered in `docs/contents.md` §"Decision
+  records" in the ADR 004 style. All four open questions from Stage A resolved
+  from the repository rather than escalated; see `Surprises & discoveries`.
+  Every `VP-2` checklist row reads "answered" against a named rule.
+  `make markdownlint` (0 errors / 79 files) and `make nixie` both pass.
 - [x] (2026-09-27) EP-M1 `docs/adr-005-brain-trust-lint-driver-interfaces.md`
   written and registered in `docs/contents.md`.
-- [x] (2026-09-27) EP-M2 complete. `crates/whitaker_sarif/tests/architecture_boundary.rs`
+- [x] (2026-09-27) EP-M2 complete.
+      `crates/whitaker_sarif/tests/architecture_boundary.rs`
   added, 18 tests. It asserts both ADR 005 rules over dependency manifests:
   `whitaker_sarif` must not name `whitaker-common`, and
   `whitaker_brain_trust_sarif` must not name `fluent-templates` or
-  `unic-langid`. The `whitaker_sarif` half runs against the **real** manifest, so
-  a reintroduced edge fails today; the mapping-crate half carries fixture cases
-  plus a test that scans the real manifest *when the crate exists* and returns
-  early until then. That test activates on its own when the crate lands, so the
-  rule stops resting on fixtures alone without anyone having to remember to wire
-  it up. Red confirmed four times: before and after the
+  `unic-langid`. The `whitaker_sarif` half runs against the **real** manifest,
+  so a reintroduced edge fails today; the mapping-crate half carries fixture
+  cases plus a test that scans the real manifest *when the crate exists* and
+  returns early until then. That test activates on its own when the crate
+  lands, so the rule stops resting on fixtures alone without anyone having to
+  remember to wire it up. Red confirmed four times: before and after the
   `cap_std` conversion, again after the discovery helper was deduplicated, and
   again for the `{ workspace = true }` inheritance fix — the last against the
   **real** manifests rather than a fixture, by injecting an inherited rename at
@@ -320,31 +316,31 @@ Thresholds that trigger escalation, not quality targets.
   (`loc = { package = ... }`), and a floor asserting at least one table and one
   dependency were examined. Two further shapes beyond the three required are
   covered: a `[target.'cfg(...)'.dependencies]` selector and a
-  `[dev-dependencies]` entry, since a cycle is a cycle whichever table
-  carries it. Three more were added in response to round-3 review, taking the
-  file from 15 tests to 18: a member that inherits a rename through
-  `{ workspace = true }` is resolved against the root `[workspace.dependencies]`
-  (and shown to be invisible without it), an inherited entry the workspace does
-  not declare fails closed rather than reading as clean, and a local key that
-  merely *matches* a workspace key does not pick up the workspace's package
-  name. Gates: `make check-fmt`, `make markdownlint`, `make nixie`,
-  `make typecheck`, `make lint`, `make test`. `make lint` caught two
-  `clippy::shadow_reuse` errors in the new fixture tests: each resolved the
-  `[workspace.dependencies]` table through a closure parameter named
-  `workspace`, shadowing the outer binding of the same name. The lint is
-  denied workspace-wide at `Cargo.toml:149`, and `RUST_FLAGS ?= -D warnings`
-  promotes it to an error, so it fails the build rather than warning.
-  Reintroducing the shadow reproduced exactly the two errors the gate
-  reported, confirming the fix was not vacuous. `make test` alone would not
-  have caught this: the file compiles and all 18 tests pass either way,
-  because `shadow_reuse` is a Clippy lint and not a rustc one, so `make test`
-  is not a substitute for `make lint`.
-  See `Surprises & discoveries` for the corrections this milestone needed.
+  `[dev-dependencies]` entry, since a cycle is a cycle whichever table carries
+  it. Three more were added in response to round-3 review, taking the file from
+  15 tests to 18: a member that inherits a rename through
+  `{ workspace = true }` is resolved against the root
+  `[workspace.dependencies]` (and shown to be invisible without it), an
+  inherited entry the workspace does not declare fails closed rather than
+  reading as clean, and a local key that merely *matches* a workspace key does
+  not pick up the workspace's package name. Gates: `make check-fmt`,
+  `make markdownlint`, `make nixie`, `make typecheck`, `make lint`, `make test`.
+  `make lint` caught two `clippy::shadow_reuse` errors in the new fixture
+  tests: each resolved the `[workspace.dependencies]` table through a closure
+  parameter named `workspace`, shadowing the outer binding of the same name.
+  The lint is denied workspace-wide at `Cargo.toml:149`, and
+  `RUST_FLAGS ?= -D warnings` promotes it to an error, so it fails the build
+  rather than warning. Reintroducing the shadow reproduced exactly the two
+  errors the gate reported, confirming the fix was not vacuous. `make test`
+  alone would not have caught this: the file compiles and all 18 tests pass
+  either way, because `shadow_reuse` is a Clippy lint and not a rustc one, so
+  `make test` is not a substitute for `make lint`. See
+  `Surprises & discoveries` for the corrections this milestone needed.
 - [x] (2026-09-27) EP-M3 complete. The six zero-column literals named in Stage E
   are now `1`: `common/src/span.rs:67`, `:96`, `:112`, `:129`, `:135`, and
   `common/src/diagnostics.rs:155`. `SourceLocation`'s prose already said
-  one-based in all three places (`:12`, `:33`, `:37`); the rendered examples were
-  the only contradiction, and they now agree. A repository-wide grep for
+  one-based in all three places (`:12`, `:33`, `:37`); the rendered examples
+  were the only contradiction, and they now agree. A repository-wide grep for
   `SourceLocation::new(_, 0)` across `common/`, `src/`, and `crates/` returns
   nothing, so no unlisted site was missed. `:129` needed care and was checked
   individually: it is the `SpanError::StartAfterEnd` case, and changing its end
@@ -374,8 +370,8 @@ Thresholds that trigger escalation, not quality targets.
 ## Surprises & discoveries
 
 - Observation: the interface shapes the 6.5.1 execplan defers to this ADR
-  cannot compile. They form a Cargo dependency cycle.
-  Evidence: `whitaker_sarif::span_to_region(span: SourceSpan) -> Region`
+  cannot compile. They form a Cargo dependency cycle. Evidence:
+  `whitaker_sarif::span_to_region(span: SourceSpan) -> Region`
   (`6-5-1-...md:1270-1272`) requires `whitaker_sarif` to depend on
   `whitaker-common`; `BrainTrustSubject { file_uri: whitaker_sarif::FileUri,`
   `span: whitaker_common::span::SourceSpan }` in
@@ -383,118 +379,116 @@ Thresholds that trigger escalation, not quality targets.
   the reverse. Neither edge exists today
   (`crates/whitaker_sarif/Cargo.toml:15-19`, `common/Cargo.toml:15-24`).
   Impact: this is the single most consequential thing the ADR must decide, and
-  the 6.5.1 plan decides it two incompatible ways. Resolved in
-  `Decision log` and specified in `Interfaces and dependencies`.
+  the 6.5.1 plan decides it two incompatible ways. Resolved in `Decision log`
+  and specified in `Interfaces and dependencies`.
 - Observation: the common-to-sarif edge would also break the release.
-  Evidence: `whitaker-common` is published
-  (`.github/workflows/release.yml:338`, `.github/workflows/ci.yml:160`) and has
-  no `publish = false`, while `crates/whitaker_sarif/Cargo.toml:5` does.
-  `Cargo.toml:50` declares `whitaker_sarif` with a version, so the packaged
-  manifest would carry an unresolvable registry requirement. The workspace
-  already knows this hazard: `Cargo.toml:51-54` documents keeping
-  `whitaker_test_macros` path-only and dev-only for exactly this reason.
-  Impact: confirms the edge direction independently of the cycle. The existing
-  tree gets this right — `whitaker_sarif`'s only consumer is
-  `whitaker_clones_core`, itself `publish = false`
-  (`crates/whitaker_clones_core/Cargo.toml:5,21`).
+  Evidence: `whitaker-common` is published (`.github/workflows/release.yml:338`,
+  `.github/workflows/ci.yml:160`) and has no `publish = false`, while
+  `crates/whitaker_sarif/Cargo.toml:5` does. `Cargo.toml:50` declares
+  `whitaker_sarif` with a version, so the packaged manifest would carry an
+  unresolvable registry requirement. The workspace already knows this hazard:
+  `Cargo.toml:51-54` documents keeping `whitaker_test_macros` path-only and
+  dev-only for exactly this reason. Impact: confirms the edge direction
+  independently of the cycle. The existing tree gets this right —
+  `whitaker_sarif`'s only consumer is `whitaker_clones_core`, itself
+  `publish = false` (`crates/whitaker_clones_core/Cargo.toml:5,21`).
 - Observation: emitting a lint from `check_crate_post` silently disables
-  `#[allow]` and `#[expect]` on the offending item.
-  Evidence: `LateContext::opt_span_lint` resolves the level at
+  `#[allow]` and `#[expect]` on the offending item. Evidence:
+  `LateContext::opt_span_lint` resolves the level at
   `self.last_node_with_lint_attrs` (`rustc_lint/src/context.rs:600-615`, field
   at `:500`), which at crate-post time is the crate root. All nine emitting
   lint crates call `cx.emit_span_lint`, for example
-  `crates/module_max_lines/src/driver.rs:193`.
-  Impact: deferred emission is still the right lifecycle, but it requires
-  `TyCtxt::emit_node_span_lint` (`rustc_middle/src/ty/context.rs:2461-2470`)
-  and a captured `HirId`. Without a normative rule the first implementer
-  copies the nine existing call sites and ships an unsuppressable lint.
+  `crates/module_max_lines/src/driver.rs:193`. Impact: deferred emission is
+  still the right lifecycle, but it requires `TyCtxt::emit_node_span_lint`
+  (`rustc_middle/src/ty/context.rs:2461-2470`) and a captured `HirId`. Without
+  a normative rule the first implementer copies the nine existing call sites
+  and ships an unsuppressable lint.
 - Observation: `span_delayed_bug` aborts compilation rather than degrading.
   Evidence: `rustc_errors/src/lib.rs:1480-1486` in the `rustc-src` component —
   when no real error was emitted the delayed bugs are re-emitted as internal
-  compiler errors. A warn-only lint never emits a real error.
-  Impact: the first draft cited a delayed-bug call site as the precedent for
-  routine degradation. It is the opposite: an assertion channel. The ADR
-  prohibits it and records the four existing call sites as follow-up work.
+  compiler errors. A warn-only lint never emits a real error. Impact: the first
+  draft cited a delayed-bug call site as the precedent for routine degradation.
+  It is the opposite: an assertion channel. The ADR prohibits it and records
+  the four existing call sites as follow-up work.
 - Observation: `LateLintPass::check_crate_post` has no return channel.
   Evidence: the signature returns `()` and rustc owns and drops the pass. The
   only in-tree precedent writes a file directly from `check_crate_post`
   (`crates/rstest_helper_should_be_fixture/src/driver.rs:262`), in append mode
-  with no locking and no atomic rename (`:325-328`).
-  Impact: "the pass produces a `Run` value and nothing more" is unimplementable
-  as stated. The ADR must name the handoff mechanism and its concurrency
-  discipline, because `cargo dylint` runs one rustc process per crate *and per
-  target*, in parallel.
+  with no locking and no atomic rename (`:325-328`). Impact: "the pass produces
+  a `Run` value and nothing more" is unimplementable as stated. The ADR must
+  name the handoff mechanism and its concurrency discipline, because
+  `cargo dylint` runs one rustc process per crate *and per target*, in parallel.
 - Observation: `whitaker_common::span::SourceSpan` documents its columns as
   one-based, but its own examples construct `SourceLocation::new(1, 0)`.
   Evidence: `common/src/span.rs:12` says "one-based line and column numbers";
   `common/src/span.rs:67`, `:96`, `:112`, `:129`, `:135`, and
-  `common/src/diagnostics.rs:155` all pass `0`.
-  Impact: the ADR is about to cite this type as normative, and rendered
-  rustdoc is the contract a consumer reads. `EP-M3` corrects the literals.
+  `common/src/diagnostics.rs:155` all pass `0`. Impact: the ADR is about to
+  cite this type as normative, and rendered rustdoc is the contract a consumer
+  reads. `EP-M3` corrects the literals.
 - Observation: the SARIF model has no `columnKind` field.
   Evidence: `crates/whitaker_sarif/src/model/run.rs:36-54` lists `tool`,
   `invocations`, `results`, and `artefacts` only. SARIF 2.1.0 §3.14.27 defines
-  `columnKind` with values `utf16CodeUnits` and `unicodeCodePoints`.
-  Impact: the repository's only SARIF producer counts UTF-16 code units
+  `columnKind` with values `utf16CodeUnits` and `unicodeCodePoints`. Impact:
+  the repository's only SARIF producer counts UTF-16 code units
   (`crates/whitaker_clones_core/src/run0/span.rs:78-79`) but never says so on
   the wire, so consumers must infer it from a contested default. The ADR
   requires the field to be emitted explicitly rather than relying on the
   default.
 - Observation: `SarifResult::partial_fingerprints` is a `HashMap`.
   Evidence: `crates/whitaker_sarif/src/model/result.rs:107-108`, serialized in
-  iteration order.
-  Impact: byte-stable output is a stated goal, and a `HashMap` with more than
-  one key defeats it. One key exists today, so it does not bite yet.
+  iteration order. Impact: byte-stable output is a stated goal, and a `HashMap`
+  with more than one key defeats it. One key exists today, so it does not bite
+  yet.
 - Observation: `crates/clippy_utils` is a local stub, not upstream Clippy.
   Evidence: `crates/clippy_utils/src/lib.rs:1-12` — "Minimal `clippy_utils`
   stub exposing panic detection helpers", providing only `macros::is_panic`.
-  Impact: no ADR rule may reach for an upstream Clippy diagnostic helper such
-  as `span_lint_hir`. The `rustc_middle` route is the only one available.
+  Impact: no ADR rule may reach for an upstream Clippy diagnostic helper such as
+  `span_lint_hir`. The `rustc_middle` route is the only one available.
 - Observation: six files under `common/src/` mention `rustc_` in prose.
   Evidence: `common/src/lcom4/mod.rs:11`, `common/src/lcom4/extract.rs:11`,
   `common/src/decomposition_advice/mod.rs:8`,
   `common/src/brain_trait_metrics/mod.rs:15`,
   `common/src/brain_type_metrics/mod.rs:7`,
   `common/src/brain_type_metrics/cognitive_complexity.rs:7`, plus the genuine
-  macro-body references in `common/src/dylint_entry.rs:19-42`.
-  Impact: a substring scan is the wrong shape for an architecture guard. It
-  contributed to retargeting `EP-M2` — see `Decision log`.
+  macro-body references in `common/src/dylint_entry.rs:19-42`. Impact: a
+  substring scan is the wrong shape for an architecture guard. It contributed
+  to retargeting `EP-M2` — see `Decision log`.
 - Observation: the seam is entirely greenfield. Nothing in the tree converts a
-  `Span` into a path string, relative or otherwise.
-  Evidence: `span_to_filename` is called once, in
+  `Span` into a path string, relative or otherwise. Evidence:
+  `span_to_filename` is called once, in
   `crates/rstest_helper_should_be_fixture/src/visitor.rs:90`, and its result is
-  used only as an in-process deduplication key (`collector.rs:68-74`).
-  Impact: there is no existing convention to preserve, so the ADR is free to
-  choose the cheapest correct rule.
+  used only as an in-process deduplication key (`collector.rs:68-74`). Impact:
+  there is no existing convention to preserve, so the ADR is free to choose the
+  cheapest correct rule.
 - Correction: the fifth supersession does not exist. Reading the 6.5.1 execplan
-  against this plan's own claims falsifies one of the five, and a further marker
-  turns out to restate the first rather than add to it.
-  **This withdrawal had been applied to `Decision log` but not to `BTD-REQ-04`
-  rule 8**, which still read "Supersedes the 6.5.1 execplan". CodeRabbit caught
-  the inconsistency on 2026-09-27; the marker is now recast as a confirmation,
-  matching the `Decision log` entry.
-  Evidence: this plan's `Decision log` claimed ordering was unaddressed because
-  6.5.1 "addresses ordering for `serde_json::Value` objects but not for the
-  typed map". The 6.5.1 plan changes `SarifResult::partial_fingerprints` from
-  `HashMap` to `BTreeMap` outright (`6-5-1-...md:302-312`, the change at
-  `:831-833`, the risk it discharges at `:139-145`). The two plans agree, so
-  there is nothing to supersede. Separately, the `**Supersedes the 6.5.1
-  execplan**` marker under `BTD-REQ-05` item 2 points at the same object as the
-  crate-placement decision — the mapping module's location — so a reader
-  tallying markers counts that decision twice.
-  Impact: the genuine count is four. That is what `Interfaces and dependencies`
-  already states independently, when it says Rule 2 supersedes 6.5.1 "in three
-  places" and `columnKind` is decided separately. The `Supersession` tolerance
-  fires at a *sixth* supersession, so a smaller true count moves further from
-  the trigger rather than closer to it. `Decision log` records the handling and
-  the count is corrected at every site that states it.
+  against this plan's own claims falsifies one of the five, and a further
+  marker turns out to restate the first rather than add to it. **This
+  withdrawal had been applied to `Decision log` but not to `BTD-REQ-04` rule
+  8**, which still read "Supersedes the 6.5.1 execplan". CodeRabbit caught the
+  inconsistency on 2026-09-27; the marker is now recast as a confirmation,
+  matching the `Decision log` entry. Evidence: this plan's `Decision log`
+  claimed ordering was unaddressed because 6.5.1 "addresses ordering for
+  `serde_json::Value` objects but not for the typed map". The 6.5.1 plan changes
+  `SarifResult::partial_fingerprints` from `HashMap` to `BTreeMap` outright
+  (`6-5-1-...md:302-312`, the change at `:831-833`, the risk it discharges at
+  `:139-145`). The two plans agree, so there is nothing to supersede.
+  Separately, the `**Supersedes the 6.5.1 execplan**` marker under `BTD-REQ-05`
+  item 2 points at the same object as the crate-placement decision — the
+  mapping module's location — so a reader tallying markers counts that decision
+  twice. Impact: the genuine count is four. That is what
+  `Interfaces and dependencies` already states independently, when it says Rule
+  2 supersedes 6.5.1 "in three places" and `columnKind` is decided separately.
+  The `Supersession` tolerance fires at a *sixth* supersession, so a smaller
+  true count moves further from the trigger rather than closer to it.
+  `Decision log` records the handling and the count is corrected at every site
+  that states it.
 
 - Observation: the layering decision's stated benefit was overstated, and the
-  `VP-1` obligation derived from it was unachievable.
-  Evidence: `VP-1` required that the mapping crate "does not depend on
-  `whitaker-common`, and therefore cannot reach `whitaker_common::i18n`", while
-  `Dependencies` and the layering diagram both require exactly that edge —
-  `FindingLocation` carries `whitaker_common::paths::RepoRelativePath` and
+  `VP-1` obligation derived from it was unachievable. Evidence: `VP-1` required
+  that the mapping crate "does not depend on `whitaker-common`, and therefore
+  cannot reach `whitaker_common::i18n`", while `Dependencies` and the layering
+  diagram both require exactly that edge — `FindingLocation` carries
+  `whitaker_common::paths::RepoRelativePath` and
   `whitaker_common::span::SourceSpan`. `common/src/lib.rs:14` is a bare
   `pub mod i18n;` with no `cfg` gate and `common/Cargo.toml:11-12` is
   `[features] default = []` with `fluent-templates` non-optional (`:17`), so
@@ -504,94 +498,90 @@ Thresholds that trigger escalation, not quality targets.
   publishable, and breaks the cycle — but what it buys is narrower than
   claimed: the *localization dependencies* are absent from the mapping crate's
   manifest, not the `whitaker-common` crate as a whole. `VP-1` is restated
-  against the two edges that are genuinely checkable: `whitaker_sarif` must
-  not depend on `whitaker-common`, and the mapping crate must not depend on
+  against the two edges that are genuinely checkable: `whitaker_sarif` must not
+  depend on `whitaker-common`, and the mapping crate must not depend on
   `fluent-templates` or `unic-langid`. Rejected remedy: splitting `i18n` into
-  its own crate, which changes the public API of a published crate and so
-  trips the plan's `Interface` tolerance.
+  its own crate, which changes the public API of a published crate and so trips
+  the plan's `Interface` tolerance.
 - Observation: "grep for the type name" and "grep for the phrasing I had in
-  mind" are different searches, and only the first is a sweep.
-  Evidence: the round-3 fix for finding 3 replaced `SubjectLocation` with
-  `FindingLocation` at the six sites where it was named *as the adapter's
-  input*, and recorded that number as the result of "grepping the exact type
-  name across both documents". Reading the same grep output a second time
-  showed five further sites in this plan — in `Surprises & discoveries`,
-  `Decision log`, `VP-1`, `The layering decision`, and `BTD-REQ-05` — that
-  named the same type to justify the same dependency edge, and so carried the
-  same defect. The ADR was clean after the first pass; the plan was not.
-  Impact: the incomplete fix was reported to a reviewer as complete, which is
-  the failure mode that makes an unfixed defect expensive — it reaches the
-  next reader wearing a "verified" label. The five sites are now corrected and
-  the wrong count is corrected in place rather than quietly overwritten. The
-  generalization: after a type is relocated, the mirrors to sweep for are
-  every site that uses the type *to justify anything*, not merely every site
-  that mentions it in a role the finding happened to cite. A count produced by
-  a keyword search should be described as what the search actually matched.
+  mind" are different searches, and only the first is a sweep. Evidence: the
+  round-3 fix for finding 3 replaced `SubjectLocation` with `FindingLocation`
+  at the six sites where it was named *as the adapter's input*, and recorded
+  that number as the result of "grepping the exact type name across both
+  documents". Reading the same grep output a second time showed five further
+  sites in this plan — in `Surprises & discoveries`, `Decision log`, `VP-1`,
+  `The layering decision`, and `BTD-REQ-05` — that named the same type to
+  justify the same dependency edge, and so carried the same defect. The ADR was
+  clean after the first pass; the plan was not. Impact: the incomplete fix was
+  reported to a reviewer as complete, which is the failure mode that makes an
+  unfixed defect expensive — it reaches the next reader wearing a "verified"
+  label. The five sites are now corrected and the wrong count is corrected in
+  place rather than quietly overwritten. The generalization: after a type is
+  relocated, the mirrors to sweep for are every site that uses the type *to
+  justify anything*, not merely every site that mentions it in a role the
+  finding happened to cite. A count produced by a keyword search should be
+  described as what the search actually matched.
 - Observation: `make test` passing is not evidence that `make lint` will pass,
   and this milestone produced a case where the gap was the *only* thing
-  standing between the branch and a green commit gate.
-  Evidence: the three round-3 fixture tests were written with a closure
-  parameter `workspace` that shadowed an outer `let workspace`. The file
-  compiled, `make typecheck` passed, and all 18 tests passed under
-  `make test` — the scrutineer's report shows `make test` green in the same
-  run that recorded `make lint` red. The failure came from
-  `clippy::shadow_reuse`, denied at `Cargo.toml:149` and promoted to an error
-  by `RUST_FLAGS ?= -D warnings`. Impact: the two lints are checked by
-  different tools and a green `cargo test` says nothing about either. The
-  tempting read — "the tests pass, so the code is fine" — is exactly the read
-  that gets a broken branch pushed. Worth keeping in view when sequencing:
-  `make lint` is cheap relative to `make test` and catches a class of defect
-  the test run cannot see, so a gate order that runs `lint` last spends the
-  most expensive gate on a revision that may be about to change.
+  standing between the branch and a green commit gate. Evidence: the three
+  round-3 fixture tests were written with a closure parameter `workspace` that
+  shadowed an outer `let workspace`. The file compiled, `make typecheck`
+  passed, and all 18 tests passed under `make test` — the scrutineer's report
+  shows `make test` green in the same run that recorded `make lint` red. The
+  failure came from `clippy::shadow_reuse`, denied at `Cargo.toml:149` and
+  promoted to an error by `RUST_FLAGS ?= -D warnings`. Impact: the two lints
+  are checked by different tools and a green `cargo test` says nothing about
+  either. The tempting read — "the tests pass, so the code is fine" — is
+  exactly the read that gets a broken branch pushed. Worth keeping in view when
+  sequencing: `make lint` is cheap relative to `make test` and catches a class
+  of defect the test run cannot see, so a gate order that runs `lint` last
+  spends the most expensive gate on a revision that may be about to change.
 - Observation: the plan used second-person pronouns in seven places, and
-  CodeRabbit reported two.
-  Evidence: `docs/documentation-style-guide.md:32` — "Avoid first and second
-  person personal pronouns outside the `README.md` file" — with no execplan
-  exemption. The seven sites were `:39`, `:484`, `:592`, `:1213`, `:1217`,
-  `:1218`, and `:1219`. CodeRabbit anchored on `:39` and reported "both cited
-  locations".
-  Impact: swept all seven rather than applying a two-site partial fix, which
-  would have left the file internally inconsistent. Note the sibling
-  `docs/execplans/6-5-1-...md` carries the same pattern three times; it is not
-  revised here, because this plan's `Decision log` records that editing the
-  sibling's plan from this branch is rejected.
+  CodeRabbit reported two. Evidence: `docs/documentation-style-guide.md:32` —
+  "Avoid first and second person personal pronouns outside the `README.md`
+  file" — with no execplan exemption. The seven sites were `:39`, `:484`,
+  `:592`, `:1213`, `:1217`, `:1218`, and `:1219`. CodeRabbit anchored on `:39`
+  and reported "both cited locations". Impact: swept all seven rather than
+  applying a two-site partial fix, which would have left the file internally
+  inconsistent. Note the sibling `docs/execplans/6-5-1-...md` carries the same
+  pattern three times; it is not revised here, because this plan's
+  `Decision log` records that editing the sibling's plan from this branch is
+  rejected.
 - Observation: `make fmt` rewrites this plan, and running it here would breach
-  this plan's own Decision log.
-  Evidence: `Makefile:187-189` — `fmt` runs `cargo fmt --all`, then
-  `mdformat-all`, a wrapper (`~/.local/bin/mdformat-all`) that pipes every
-  discovered `*.md` through `mdtablefix --in-place`. Four of the 78 Markdown
-  files in this worktree deviate from `mdtablefix` output at `HEAD`:
-  `docs/developers-guide.md`, `docs/roadmap.md`,
-  `docs/execplans/6-5-1-...md`, and this plan. The three table hunks `mdtablefix`
-  wants in this plan are present byte-for-byte at `HEAD` as well, so the edits
-  made on 2026-09-27 introduce no new deviation. No gate enforces the
-  formatter: `check-fmt` is `cargo fmt --all -- --check` only
-  (`Makefile:191-192`), and the CI workflows invoke `check-fmt` but never
-  `mdformat-all` or `mdtablefix`.
-  Impact: the formatter has not been run on this plan, deliberately. The
-  deviation is repository-wide and pre-existing, so reformatting it here would
-  bury a doc-only ADR diff under unrelated rewrapping of three files, one of
-  which this branch is forbidden to touch. `make markdownlint` and `make nixie`
-  — the gates that actually run — both pass on the file as committed.
+  this plan's own Decision log. Evidence: `Makefile:187-189` — `fmt` runs
+  `cargo fmt --all`, then `mdformat-all`, a wrapper
+  (`~/.local/bin/mdformat-all`) that pipes every discovered `*.md` through
+  `mdtablefix --in-place`. Four of the 78 Markdown files in this worktree
+  deviate from `mdtablefix` output at `HEAD`: `docs/developers-guide.md`,
+  `docs/roadmap.md`, `docs/execplans/6-5-1-...md`, and this plan. The three
+  table hunks `mdtablefix` wants in this plan are present byte-for-byte at
+  `HEAD` as well, so the edits made on 2026-09-27 introduce no new deviation.
+  No gate enforces the formatter: `check-fmt` is `cargo fmt --all -- --check`
+  only (`Makefile:191-192`), and the CI workflows invoke `check-fmt` but never
+  `mdformat-all` or `mdtablefix`. Impact: the formatter has not been run on
+  this plan, deliberately. The deviation is repository-wide and pre-existing,
+  so reformatting it here would bury a doc-only ADR diff under unrelated
+  rewrapping of three files, one of which this branch is forbidden to touch.
+  `make markdownlint` and `make nixie` — the gates that actually run — both
+  pass on the file as committed.
 
 - Observation: all four open questions left by Stage A were resolved from the
-  repository, and only one was a genuine two-reading conflict.
-  Evidence: Q1 (which span the `brain_type` diagnostic points at) — the design
-  document is silent, but `BTD-REQ-02` rule 1 names the `ItemKind::Struct` /
-  `Enum` / `Union` *declaration* item, so the declaration span is the answered
-  reading. Q2 (do blanket-impl bodies count toward `brain_trait`) — the design
-  document says the unit is "a single trait definition", and
-  `TraitMetricsBuilder` structurally cannot receive impl data: there is no
-  input channel, and `TraitItemKind`
-  (`common/src/brain_trait_metrics/item.rs:14-23`) has no `ImplMethod` variant.
-  Impl blocks are out of scope. Q3 (count a method once, or once per generic
-  instantiation) — the only question that appeared to support two readings.
-  `common/src/lcom4/mod.rs:235-248` settles it: `build_method_index` is
-  documented to build a "method-name-to-indices map, preserving duplicate
-  names", and `union_by_method_calls` states why — "when multiple methods share
-  a name (e.g. trait impl methods on the same type)". The premise that
-  one source `impl` contributes several entries is therefore false: the HIR
-  walk visits one `ItemKind::Impl` per source block, so
+  repository, and only one was a genuine two-reading conflict. Evidence: Q1
+  (which span the `brain_type` diagnostic points at) — the design document is
+  silent, but `BTD-REQ-02` rule 1 names the `ItemKind::Struct` / `Enum` /
+  `Union` *declaration* item, so the declaration span is the answered reading.
+  Q2 (do blanket-impl bodies count toward `brain_trait`) — the design document
+  says the unit is "a single trait definition", and `TraitMetricsBuilder`
+  structurally cannot receive impl data: there is no input channel, and
+  `TraitItemKind` (`common/src/brain_trait_metrics/item.rs:14-23`) has no
+  `ImplMethod` variant. Impl blocks are out of scope. Q3 (count a method once,
+  or once per generic instantiation) — the only question that appeared to
+  support two readings. `common/src/lcom4/mod.rs:235-248` settles it:
+  `build_method_index` is documented to build a "method-name-to-indices map,
+  preserving duplicate names", and `union_by_method_calls` states why — "when
+  multiple methods share a name (e.g. trait impl methods on the same type)".
+  The premise that one source `impl` contributes several entries is therefore
+  false: the HIR walk visits one `ItemKind::Impl` per source block, so
   `impl<T> Foo<T> { fn bar }` contributes once, and two entries sharing a name
   arise only from two genuinely distinct source methods, which is exactly what
   the shipped cohesion code exists to preserve. The rule adopted is therefore
@@ -599,127 +589,126 @@ Thresholds that trigger escalation, not quality targets.
   (`common/src/brain_type_metrics/mod.rs:295-306`) takes a name and pushes
   unconditionally, confirming it is not a deduplicating API. Q4 (`brain_trait`
   from `check_item` against a deferred emission) — `ItemKind::Trait` is
-  self-contained and
-  `crates/bumpy_road_function/src/driver/mod.rs:99-100` reads trait default
-  bodies synchronously from `check_trait_item`, so the immediate path is
-  available; the deferred lifecycle is nonetheless adopted for uniformity.
-  **Corrected 2026-09-27**: this entry originally asserted that "the ADR states
-  that reason". It did not — `Emission lifecycle` justified deferral by calling
-  both lints "whole-crate lints", which is false for `brain_trait`, and never
-  named uniformity. A CodeRabbit finding on the stale `Open questions` entry
-  led back to the gap. The ADR section now states the route each lint takes and
-  the cost `brain_trait` pays, so the claim this entry makes is true.
-  Impact: the `Ambiguity` tolerance triggers only where "the design documents
-  support two readings of a metric's subject boundary and the choice changes
-  what implementers build". Q3's two readings were an artefact of an unverified
-  assumption about rustc's HIR, not of the documents; resolving it against
-  `lcom4` falsified the premise, so the trigger is not met and no escalation
-  was raised. All four resolutions are recorded in the ADR as normative rules,
-  with Q3 given its own subsection (`Counting a method once`) so that a future
-  reader can see the reasoning rather than only the conclusion.
+  self-contained and `crates/bumpy_road_function/src/driver/mod.rs:99-100`
+  reads trait default bodies synchronously from `check_trait_item`, so the
+  immediate path is available; the deferred lifecycle is nonetheless adopted
+  for uniformity. **Corrected 2026-09-27**: this entry originally asserted that
+  "the ADR states that reason". It did not — `Emission lifecycle` justified
+  deferral by calling both lints "whole-crate lints", which is false for
+  `brain_trait`, and never named uniformity. A CodeRabbit finding on the stale
+  `Open questions` entry led back to the gap. The ADR section now states the
+  route each lint takes and the cost `brain_trait` pays, so the claim this
+  entry makes is true. Impact: the `Ambiguity` tolerance triggers only where
+  "the design documents support two readings of a metric's subject boundary and
+  the choice changes what implementers build". Q3's two readings were an
+  artefact of an unverified assumption about rustc's HIR, not of the documents;
+  resolving it against `lcom4` falsified the premise, so the trigger is not met
+  and no escalation was raised. All four resolutions are recorded in the ADR as
+  normative rules, with Q3 given its own subsection (`Counting a method once`)
+  so that a future reader can see the reasoning rather than only the conclusion.
 
 - Observation: `make markdownlint` first failed on the new ADR with 43 errors,
-  splitting 32 × MD049 against 11 × MD060.
-  Evidence: MD049 defaults to "consistent" mode and is unconfigured in
-  `.markdownlint-cli2.jsonc`, so the *first* emphasis marker in a file fixes the
-  style for the whole file. The ADR opened with underscore captions of the form
-  `_Table 1: ..._` and then used single-asterisk emphasis in fifteen spans, so
-  every one of those asterisk spans reported. MD060 flagged both tables as
-  misaligned against their header rows under the "aligned" style.
-  Impact: the ADR now uses underscore emphasis throughout, matching ADR 004,
-  which uses zero asterisks. Both tables were realigned by padding every cell to
-  its column's maximum width. Re-run: 0 errors across 79 files. The rule is
-  recorded in the agent memory index as `MD049 vs house caption style`, and the
-  same trap will recur in any file that mixes asterisk emphasis with an
-  underscore caption. Two of the fixes needed care rather than a substitution:
-  the numbered-list spans in `Known risks` carry apostrophes and backticks, and
-  one span in `Suggestion rendering` runs across a line break.
+  splitting 32 × MD049 against 11 × MD060. Evidence: MD049 defaults to
+  "consistent" mode and is unconfigured in `.markdownlint-cli2.jsonc`, so the
+  *first* emphasis marker in a file fixes the style for the whole file. The ADR
+  opened with underscore captions of the form `_Table 1: ..._` and then used
+  single-asterisk emphasis in fifteen spans, so every one of those asterisk
+  spans reported. MD060 flagged both tables as misaligned against their header
+  rows under the "aligned" style. Impact: the ADR now uses underscore emphasis
+  throughout, matching ADR 004, which uses zero asterisks. Both tables were
+  realigned by padding every cell to its column's maximum width. Re-run: 0
+  errors across 79 files. The rule is recorded in the agent memory index as
+  `MD049 vs house caption style`, and the same trap will recur in any file that
+  mixes asterisk emphasis with an underscore caption. Two of the fixes needed
+  care rather than a substitution: the numbered-list spans in `Known risks`
+  carry apostrophes and backticks, and one span in `Suggestion rendering` runs
+  across a line break.
 
 - Observation: `VP-1`'s stated method names two crates that are not in this
-  workspace, so the guard cannot be written as written.
-  Evidence: `VP-1` (`:1043-1044`) specifies "a parameterized unit test with
-  `rstest`, using `googletest` matchers and `pretty_assertions`. Neither
-  `googletest` nor `pretty_assertions` appears anywhere in `Cargo.toml`,
-  `Cargo.lock`, or any tracked `*.toml` or `*.rs` file — a repository-wide grep
-  returns nothing. Adding either would breach `Constraints` (`:104-105`): "No
-  new external crate dependency. `EP-M2`'s guard must be written against crates
-  already resolvable for the crate that hosts it." The plan also assumes the
-  guard hosts in `crates/whitaker_sarif/tests/` or the mapping crate's `tests/`;
-  the mapping crate is forbidden here (`:70-74`), so `whitaker_sarif` is the
-  only legal host, and its dev-dependencies are exactly `whitaker_test_macros`,
-  `rstest`, `rstest-bdd`, `rstest-bdd-macros`, and `tempfile` — no matcher crate
-  and no TOML parser.
-  Impact: the constraint and the method contradict each other, and the
-  constraint is the load-bearing one — it is a hard invariant, whereas the
+  workspace, so the guard cannot be written as written. Evidence: `VP-1`
+  (`:1043-1044`) specifies "a parameterized unit test with `rstest`, using
+  `googletest` matchers and `pretty_assertions`. Neither `googletest` nor
+  `pretty_assertions` appears anywhere in `Cargo.toml`, `Cargo.lock`, or any
+  tracked `*.toml` or `*.rs` file — a repository-wide grep returns nothing.
+  Adding either would breach `Constraints` (`:104-105`): "No new external crate
+  dependency. `EP-M2`'s guard must be written against crates already resolvable
+  for the crate that hosts it." The plan also assumes the guard hosts in
+  `crates/whitaker_sarif/tests/` or the mapping crate's `tests/`; the mapping
+  crate is forbidden here (`:70-74`), so `whitaker_sarif` is the only legal
+  host, and its dev-dependencies are exactly `whitaker_test_macros`, `rstest`,
+  `rstest-bdd`, `rstest-bdd-macros`, and `tempfile` — no matcher crate and no
+  TOML parser. Impact: the constraint and the method contradict each other, and
+  the constraint is the load-bearing one — it is a hard invariant, whereas the
   method is illustrative. Resolution recorded in `Decision log`: use `rstest`
   with plain `assert!` and `panic!`, which are already in scope with no
   dependency at all, and add `toml` to `whitaker_sarif`'s dev-dependencies.
   `toml` is not a new external dependency in the sense the constraint means: it
   is already a `[workspace.dependencies]` entry (`Cargo.toml:30`) and already in
-  `Cargo.lock` at `1.1.3+spec-1.1.0`, and four other crates in the tree already
-  take it as a dependency or build-dependency, including
+  `Cargo.lock` at `1.1.3+spec-1.1.0`, and four other crates in the tree
+  already take it as a dependency or build-dependency, including
   `crates/whitaker_clones_core/Cargo.toml:34` and `:39`. The guard therefore
   adds a lockfile entry already present and resolves offline.
 
 - Observation: the repository already parses `Cargo.toml` in tests, and the
-  precedent shows the exact shape the guard needs.
-  Evidence: `crates/whitaker_clones_core/build_support.rs:13-29` parses a
-  manifest with `manifest.parse::<toml::Table>()`, walks
-  `["workspace"]["dependencies"]`, and handles both the inline-string and
-  table forms of a dependency requirement — the same two shapes the guard must
-  read, because `whitaker-common = { workspace = true }` and
+  precedent shows the exact shape the guard needs. Evidence:
+  `crates/whitaker_clones_core/build_support.rs:13-29` parses a manifest with
+  `manifest.parse::<toml::Table>()`, walks `["workspace"]["dependencies"]`, and
+  handles both the inline-string and table forms of a dependency requirement —
+  the same two shapes the guard must read, because
+  `whitaker-common = { workspace = true }` and
   `loc = { package = "whitaker-common" }` are both tables whose forbidden name
-  sits under a different key. `crates/whitaker_clones_core/tests/build_script_parsing.rs`
-  (208 lines) is the matching test file, and `CARGO_MANIFEST_DIR` is the
-  established way to locate a manifest from a test
+  sits under a different key.
+  `crates/whitaker_clones_core/tests/build_script_parsing.rs` (208 lines) is
+  the matching test file, and `CARGO_MANIFEST_DIR` is the established way to
+  locate a manifest from a test
   (`crates/whitaker_clones_core/tests/ast_boundary.rs:32`,
-  `common/tests/i18n_packaging.rs:49`).
-  Impact: the guard has a proven in-tree pattern to follow at both ends — the
-  parse and the test harness — so `EP-M2` needs no invention. The `package`
-  rename case that `VP-1`'s second non-vacuity check demands is precisely why
-  the scan must read the table's `package` key rather than only the dependency
-  key.
+  `common/tests/i18n_packaging.rs:49`). Impact: the guard has a proven in-tree
+  pattern to follow at both ends — the parse and the test harness — so `EP-M2`
+  needs no invention. The `package` rename case that `VP-1`'s second
+  non-vacuity check demands is precisely why the scan must read the table's
+  `package` key rather than only the dependency key.
 
 - Observation: the new guard's first draft failed `make lint`, because
   Whitaker's own `no_std_fs_operations` dylint rejects ambient `std::fs`.
-  Evidence: `make lint` reported `error: std::fs operation
-  std::fs::read_to_string bypasses the capability-based filesystem policy` at
-  `crates/whitaker_sarif/tests/architecture_boundary.rs:149`, with
+  Evidence: `make lint` reported
+  `error: std::fs operation
+  std::fs::read_to_string bypasses the capability-based filesystem policy`
+  at `crates/whitaker_sarif/tests/architecture_boundary.rs:149`, with
   `#[deny(no_std_fs_operations)]` on by default. The lint's exclusion list
   (`dylint.toml`) covers sixteen crates and this test is not among them — and
   the list's own comment states the governing principle: "Integration-test
-  targets compile as their own crates named after the test file, so they are not
-  covered by the `whitaker_common` entry above." Adding the guard to that list
-  would have been the easy wrong answer, since the guard has no genuine need for
-  ambient access: it opens one already-known file.
-  Impact: the guard reads manifests through `cap_std::fs_utf8::Dir`, opening a
-  handle over the manifest's own parent directory and reading by file name,
-  exactly as `crates/whitaker_clones_core/build_support.rs:72-85` does. The
-  capability granted is no wider than the single file read. This is a real win
-  from the lint, not a compliance ritual: it is the third correction this
-  milestone needed, after `googletest`/`pretty_assertions` and the unstable
+  targets compile as their own crates named after the test file, so they are
+  not covered by the `whitaker_common` entry above." Adding the guard to that
+  list would have been the easy wrong answer, since the guard has no genuine
+  need for ambient access: it opens one already-known file. Impact: the guard
+  reads manifests through `cap_std::fs_utf8::Dir`, opening a handle over the
+  manifest's own parent directory and reading by file name, exactly as
+  `crates/whitaker_clones_core/build_support.rs:72-85` does. The capability
+  granted is no wider than the single file read. This is a real win from the
+  lint, not a compliance ritual: it is the third correction this milestone
+  needed, after `googletest`/`pretty_assertions` and the unstable
   `str::as_str`. Note that `cap-std` joins `toml` as an added dev-dependency of
   `whitaker_sarif`, and it too is already a `[workspace.dependencies]` entry
   already present in `Cargo.lock`, so the plan's no-new-external-dependency
   constraint still holds.
 
 - Observation: `str::as_str` is unstable on this pinned toolchain, and the call
-  that tripped it was unnecessary.
-  Evidence: `cargo nextest` reported `error[E0658]: use of unstable library
-  feature str_as_str` at `&key.as_str()`, where `key: String`. The pinned
-  compiler is `nightly-2026-05-28`, whose `rustc` predates the stabilization;
-  the full message notes "this compiler was built on 2026-05-27". The annotation
-  was also redundant, because `DEPENDENCY_TABLES` is `[&str; 3]` and can be
-  compared against `&String` directly.
-  Impact: replaced with `DEPENDENCY_TABLES.iter().any(|name| name == key)`.
-  Recorded because a `nightly` toolchain invites the assumption that recent
-  library features are available, and this one is pinned to a specific date.
+  that tripped it was unnecessary. Evidence: `cargo nextest` reported
+  `error[E0658]: use of unstable library feature str_as_str` at
+  `&key.as_str()`, where `key: String`. The pinned compiler is
+  `nightly-2026-05-28`, whose `rustc` predates the stabilization; the full
+  message notes "this compiler was built on 2026-05-27". The annotation was
+  also redundant, because `DEPENDENCY_TABLES` is `[&str; 3]` and can be
+  compared against `&String` directly. Impact: replaced with
+  `DEPENDENCY_TABLES.iter().any(|name| name == key)`. Recorded because a
+  `nightly` toolchain invites the assumption that recent library features are
+  available, and this one is pinned to a specific date.
 
 - Observation: the zero-column literals Stage E lists are exactly the complete
-  set, with no unlisted site and no listed site that should have been left alone.
-  Evidence: a repository-wide grep for `SourceLocation::new([0-9]*, 0)` across
-  `common/`, `src/`, and `crates/` returns precisely the six cited sites —
-  `common/src/span.rs:67`, `:96`, `:112`, `:129`, `:135`, and
+  set, with no unlisted site and no listed site that should have been left
+  alone. Evidence: a repository-wide grep for `SourceLocation::new([0-9]*, 0)`
+  across `common/`, `src/`, and `crates/` returns precisely the six cited sites
+  — `common/src/span.rs:67`, `:96`, `:112`, `:129`, `:135`, and
   `common/src/diagnostics.rs:155` — and nothing else. Stage E also expected the
   change to be doc-comment only, which holds for five of the six: `:129` is
   inside `mod tests` rather than a doc comment, and it is the
@@ -729,19 +718,16 @@ Thresholds that trigger escalation, not quality targets.
   is carried by the line number alone (`3` against `2`), so the column is
   irrelevant to it. The plan's claim of "no signature, no behaviour, no public
   API change" is therefore accurate, but `:129` is a test-body literal rather
-  than documentation.
-  Impact: Stage E's scope is confirmed rather than merely assumed, and the `:129`
-  nuance is recorded so that a future reader does not read "doc-comment only" as
-  covering all six.
+  than documentation. Impact: Stage E's scope is confirmed rather than merely
+  assumed, and the `:129` nuance is recorded so that a future reader does not
+  read "doc-comment only" as covering all six.
 
 ## Decision log
 
 - Decision: write one ADR covering all five questions rather than five small
-  ones.
-  Rationale: the roadmap names a single deliverable, the five questions share
-  one layering decision, and splitting them would force a reader of 6.2.4 to
-  assemble five documents.
-  Date/Author: 2026-08-21, planning agent.
+  ones. Rationale: the roadmap names a single deliverable, the five questions
+  share one layering decision, and splitting them would force a reader of 6.2.4
+  to assemble five documents. Date/Author: 2026-08-21, planning agent.
 
 - Decision: number the ADR 005.
   Rationale: `adr-001` through `adr-004` exist and no remote branch introduces
@@ -751,43 +737,41 @@ Thresholds that trigger escalation, not quality targets.
 
 - **Decision: break the dependency cycle by keeping both `whitaker-common` and
   `whitaker_sarif` as dependency-free leaves, and introducing a third crate
-  that depends on both.**
-  Rationale: three shapes were considered. (i) `whitaker-common` depends on
-  `whitaker_sarif` — rejected: it breaks `cargo publish -p whitaker-common`,
-  and it makes the pure domain depend on a wire format. (ii) `whitaker_sarif`
-  depends on `whitaker-common` — publishable and acyclic, but it drags
-  `fluent-templates` and `unic-langid` into the clone detector for no benefit,
-  and it still leaves the SARIF mapping module inside `whitaker-common`,
-  adjacent to `common/src/i18n/`, where the ADR's English-only rule becomes
-  unenforceable by any manifest check. (iii) *Chosen*: neither leaf depends on
-  the other; a new `crates/whitaker_brain_trust_sarif` (`publish = false`)
-  depends on both and owns the mapping. This mirrors the shape the repository
-  already uses for `whitaker_clones_core`, keeps `whitaker-common` publishable,
-  keeps `whitaker_sarif` a pure model, and makes the localization stack a
-  manifest fact: the mapping crate's manifest cannot name `fluent-templates` or
-  `unic-langid`, so the English-only rule is checkable in a way it is not
-  inside `whitaker-common`. **This supersedes the 6.5.1 execplan's placement of
-  `common/src/brain_trust_sarif/`.**
-  Date/Author: 2026-08-21, planning agent, after design review.
+  that depends on both.** Rationale: three shapes were considered. (i)
+  `whitaker-common` depends on `whitaker_sarif` — rejected: it breaks
+  `cargo publish -p whitaker-common`, and it makes the pure domain depend on a
+  wire format. (ii) `whitaker_sarif` depends on `whitaker-common` — publishable
+  and acyclic, but it drags `fluent-templates` and `unic-langid` into the clone
+  detector for no benefit, and it still leaves the SARIF mapping module inside
+  `whitaker-common`, adjacent to `common/src/i18n/`, where the ADR's
+  English-only rule becomes unenforceable by any manifest check. (iii)
+  *Chosen*: neither leaf depends on the other; a new
+  `crates/whitaker_brain_trust_sarif` (`publish = false`) depends on both and
+  owns the mapping. This mirrors the shape the repository already uses for
+  `whitaker_clones_core`, keeps `whitaker-common` publishable, keeps
+  `whitaker_sarif` a pure model, and makes the localization stack a manifest
+  fact: the mapping crate's manifest cannot name `fluent-templates` or
+  `unic-langid`, so the English-only rule is checkable in a way it is not inside
+  `whitaker-common`. **This supersedes the 6.5.1 execplan's placement of
+  `common/src/brain_trust_sarif/`.** Date/Author: 2026-08-21, planning agent,
+  after design review.
 
 - **Decision: the repository-relative path newtype lives in `whitaker-common`,
-  not in `whitaker_sarif`.**
-  Rationale: its invariant — repository-root-relative, forward-slashed, no
-  `..`, no drive letter — is a repository-path invariant, not a SARIF one.
-  SARIF is one consumer; the localized compiler diagnostic and the fingerprint
-  components are others. `whitaker-common` already depends on `camino`
-  (`common/Cargo.toml:16`), which is exactly the UTF-8 path vocabulary
-  required. **This supersedes the 6.5.1 execplan's placement of `FileUri` in
-  `whitaker_sarif::model::location`.**
+  not in `whitaker_sarif`.** Rationale: its invariant —
+  repository-root-relative, forward-slashed, no `..`, no drive letter — is a
+  repository-path invariant, not a SARIF one. SARIF is one consumer; the
+  localized compiler diagnostic and the fingerprint components are others.
+  `whitaker-common` already depends on `camino` (`common/Cargo.toml:16`), which
+  is exactly the UTF-8 path vocabulary required. **This supersedes the 6.5.1
+  execplan's placement of `FileUri` in `whitaker_sarif::model::location`.**
   Date/Author: 2026-08-21, planning agent, after design review.
 
 - **Decision: `span_to_region` lives in the mapping crate, not in
-  `whitaker_sarif`.**
-  Rationale: it is the only function in the 6.5.1 shape that forces
-  `whitaker_sarif` to know about `whitaker-common`. Moving it into the crate
-  that already depends on both leaves `whitaker_sarif` a leaf.
-  **This supersedes the 6.5.1 execplan.**
-  Date/Author: 2026-08-21, planning agent, after design review.
+  `whitaker_sarif`.** Rationale: it is the only function in the 6.5.1 shape
+  that forces `whitaker_sarif` to know about `whitaker-common`. Moving it into
+  the crate that already depends on both leaves `whitaker_sarif` a leaf. **This
+  supersedes the 6.5.1 execplan.** Date/Author: 2026-08-21, planning agent,
+  after design review.
 
 - **Decision: every Whitaker SARIF run must state `columnKind` explicitly.**
   Rationale: the repository's producer counts UTF-16 code units
@@ -797,22 +781,20 @@ Thresholds that trigger escalation, not quality targets.
   relying on it is unsafe regardless of which reading is right. Emitting the
   field removes the question. **This supersedes the 6.5.1 execplan's
   observation that the clone detector "already matches SARIF's default
-  `columnKind`".**
-  Date/Author: 2026-08-21, planning agent, after design review.
+  `columnKind`".** Date/Author: 2026-08-21, planning agent, after design review.
 
 - **Decision: `partialFingerprints` must be an ordered map.**
   Rationale: byte-stable output is a stated goal for continuous-integration
   comparison, and `HashMap` serializes in randomized iteration order
   (`crates/whitaker_sarif/src/model/result.rs:107-108`). One key exists today,
-  and the 6.5.1 plan's versioned-key convention invites more. **This
-  supersedes the 6.5.1 execplan, which addresses ordering for
-  `serde_json::Value` objects but not for the typed map.**
-  Date/Author: 2026-08-21, planning agent, after design review.
-  **Withdrawn 2026-09-27**: this supersession does not exist. 6.5.1 already
-  changes `partial_fingerprints` to a `BTreeMap` (`6-5-1-...md:302-312`,
-  `:831-833`, `:139-145`), so the two plans agree and there is nothing to
-  override. The decision to require an ordered map stands; it is a
-  **confirmation** of 6.5.1, not a supersession of it. See
+  and the 6.5.1 plan's versioned-key convention invites more. **This supersedes
+  the 6.5.1 execplan, which addresses ordering for `serde_json::Value` objects
+  but not for the typed map.** Date/Author: 2026-08-21, planning agent, after
+  design review. **Withdrawn 2026-09-27**: this supersession does not exist.
+  6.5.1 already changes `partial_fingerprints` to a `BTreeMap`
+  (`6-5-1-...md:302-312`, `:831-833`, `:139-145`), so the two plans agree and
+  there is nothing to override. The decision to require an ordered map stands;
+  it is a **confirmation** of 6.5.1, not a supersession of it. See
   `Surprises & discoveries`.
 
 - Decision: do not revise `docs/execplans/6-5-1-...md` on this branch.
@@ -820,29 +802,29 @@ Thresholds that trigger escalation, not quality targets.
   gates on reading and reconciling with this ADR, and its own text states that
   where the two disagree "the ADR wins" (`6-5-1-...md:1395-1398`). Editing a
   sibling's plan from here would create a merge conflict on a document neither
-  branch owns. The supersessions are listed in the ADR so its implementer
-  finds them. Rejected alternative: revise both, which is tidier on paper and
-  worse in practice.
+  branch owns. The supersessions are listed in the ADR so its implementer finds
+  them. Rejected alternative: revise both, which is tidier on paper and worse
+  in practice.
 
 - Decision: correct the supersession count from five to four, and require the
   corrected set to be re-derived from the repository rather than from this
-  plan's own prose.
-  Rationale: the fifth supersession was asserted rather than verified, and
-  verification falsifies it — 6.5.1 already mandates `BTreeMap` for
-  `partial_fingerprints` (`6-5-1-...md:302-312`), so the two plans agree and
-  there is nothing to override. The corrected set is: (1) the crate-edge and
-  mapping-module placement, (2) `FileUri`'s home crate, (3) `span_to_region`'s
-  home crate, and (4) `columnKind`. The `BTD-REQ-05` item 2 marker is not a
-  fifth supersession; it restates (1) from the language-boundary side and is
-  reworded to cite it. **The ADR must state four**, and `Stage B` gains an
-  obligation to re-derive the list by reading 6.5.1 directly and to report any
-  candidate that survives as a new finding rather than promoting it silently.
-  Note this is a *plan-accuracy* correction, not an escalation trigger: the
-  `Supersession` tolerance fires at a sixth supersession, and the true count
-  moved down. It is recorded here rather than quietly edited because the
-  reviewer-verifiable claim in `Validation and acceptance` (a search for
-  "supersede" that found five entries) changes with it.
-  Date/Author: 2026-09-27, implementation agent, correcting a planning claim.
+  plan's own prose. Rationale: the fifth supersession was asserted rather than
+  verified, and verification falsifies it — 6.5.1 already mandates `BTreeMap`
+  for `partial_fingerprints` (`6-5-1-...md:302-312`), so the two plans agree
+  and there is nothing to override. The corrected set is: (1) the crate-edge
+  and mapping-module placement, (2) `FileUri`'s home crate, (3)
+  `span_to_region`'s home crate, and (4) `columnKind`. The `BTD-REQ-05` item 2
+  marker is not a fifth supersession; it restates (1) from the
+  language-boundary side and is reworded to cite it. **The ADR must state
+  four**, and `Stage B` gains an obligation to re-derive the list by reading
+  6.5.1 directly and to report any candidate that survives as a new finding
+  rather than promoting it silently. Note this is a *plan-accuracy* correction,
+  not an escalation trigger: the `Supersession` tolerance fires at a sixth
+  supersession, and the true count moved down. It is recorded here rather than
+  quietly edited because the reviewer-verifiable claim in
+  `Validation and acceptance` (a search for "supersede" that found five
+  entries) changes with it. Date/Author: 2026-09-27, implementation agent,
+  correcting a planning claim.
 
 - Decision: keep supersession 1's rationale but add publishability and
   enforceability, rather than replacing its dependency-direction framing.
@@ -850,26 +832,24 @@ Thresholds that trigger escalation, not quality targets.
   observes that `whitaker_sarif` "has no compiler dependency, so nothing about
   the dependency direction is disturbed" — and that observation is correct.
   What it omits is decisive, so the ADR states both halves: `whitaker-common`
-  is published (`release.yml:338`) while `whitaker_sarif` is
-  `publish = false` (`crates/whitaker_sarif/Cargo.toml:5`), so the
-  common-to-sarif edge breaks the release; and hosting the mapping beside
-  `common/src/i18n/` places it where the English-only rule of `BTD-REQ-05` has
-  no manifest check able to observe a violation. Rejected alternative: framing
-  supersession 1 as a bare dependency-direction disagreement, which would
-  misstate 6.5.1's position and make the ADR look like it had not read it.
-  Date/Author: 2026-09-27, implementation agent, extending the planning agent's
-  2026-08-21 entry.
+  is published (`release.yml:338`) while `whitaker_sarif` is `publish = false`
+  (`crates/whitaker_sarif/Cargo.toml:5`), so the common-to-sarif edge breaks
+  the release; and hosting the mapping beside `common/src/i18n/` places it
+  where the English-only rule of `BTD-REQ-05` has no manifest check able to
+  observe a violation. Rejected alternative: framing supersession 1 as a bare
+  dependency-direction disagreement, which would misstate 6.5.1's position and
+  make the ADR look like it had not read it. Date/Author: 2026-09-27,
+  implementation agent, extending the planning agent's 2026-08-21 entry.
 
 - Decision: `resolve_subject_location` returns `Result<_, LocationUnavailable>`
-  rather than `Option`.
-  Rationale: four distinct failure modes collapse into one `None`, and the
-  operationally important one — the resolver is misconfigured and *every*
-  subject is dropped — is then indistinguishable from a clean crate. Widening
-  `Option` to `Result` later breaks every call site; adding a variant to a
-  `#[non_exhaustive]` enum does not. The 6.5.1 plan applies exactly this
-  reasoning one layer up, keeping `Ok(None)` for "disabled" and
-  `Ok(Some(empty))` for "clean" (`6-5-1-...md:1384-1386`).
-  Date/Author: 2026-08-21, planning agent, after design review.
+  rather than `Option`. Rationale: four distinct failure modes collapse into one
+  `None`, and the operationally important one — the resolver is misconfigured
+  and *every* subject is dropped — is then indistinguishable from a clean
+  crate. Widening `Option` to `Result` later breaks every call site; adding a
+  variant to a `#[non_exhaustive]` enum does not. The 6.5.1 plan applies
+  exactly this reasoning one layer up, keeping `Ok(None)` for "disabled" and
+  `Ok(Some(empty))` for "clean" (`6-5-1-...md:1384-1386`). Date/Author:
+  2026-08-21, planning agent, after design review.
 
 - Decision: `resolve_subject_location` lives in the root `whitaker` crate at
   `src/location/mod.rs`, behind the existing `dylint-driver` feature.
@@ -880,21 +860,21 @@ Thresholds that trigger escalation, not quality targets.
   lines against the 400-line cap in `AGENTS.md:31`. Rejected: duplication in
   each lint crate, which guarantees the two copies drift; and a new
   `crates/whitaker_lint_support`, which duplicates what `whitaker` plus
-  `dylint-driver` already is.
-  Date/Author: 2026-08-21, planning agent, after design review.
+  `dylint-driver` already is. Date/Author: 2026-08-21, planning agent, after
+  design review.
 
 - Decision: mandate two-phase capture — scalars in the callbacks, deep capture
-  at finalization for gated subjects only.
-  Rationale: the first draft required single-traversal fan-out to all four
-  builders *and* moved the cheap gate to finalization. Together those force
-  retention of six string collections per method for every type in the crate,
-  and leave the gate guarding only the clustering step — inverting the
-  performance rule at `docs/brain-trust-lints-design.md:361-365` that the rule
-  cited as its justification. Two-phase capture satisfies both: the gate sees a
-  complete method count, and only subjects past it pay for deep analysis. HIR
-  is fully available in `check_crate_post`, and `BodyId` is `Copy`, so it can
-  be held on a pass struct that is not parameterized by `'tcx`.
-  Date/Author: 2026-08-21, planning agent, after design review.
+  at finalization for gated subjects only. Rationale: the first draft required
+  single-traversal fan-out to all four builders *and* moved the cheap gate to
+  finalization. Together those force retention of six string collections per
+  method for every type in the crate, and leave the gate guarding only the
+  clustering step — inverting the performance rule at
+  `docs/brain-trust-lints-design.md:361-365` that the rule cited as its
+  justification. Two-phase capture satisfies both: the gate sees a complete
+  method count, and only subjects past it pay for deep analysis. HIR is fully
+  available in `check_crate_post`, and `BodyId` is `Copy`, so it can be held on
+  a pass struct that is not parameterized by `'tcx`. Date/Author: 2026-08-21,
+  planning agent, after design review.
 
 - Decision: order findings by definition path first, location second.
   Rationale: the first draft's key began with the file identifier, which is
@@ -904,47 +884,45 @@ Thresholds that trigger escalation, not quality targets.
   same subject compiled for the lib and test targets. `def_path_str` is
   globally unique and stable, and the only in-tree precedent already keys on a
   definition path (`crates/rstest_helper_should_be_fixture/src/`
-  `collector.rs:62`).
-  Date/Author: 2026-08-21, planning agent, after design review.
+  `collector.rs:62`). Date/Author: 2026-08-21, planning agent, after design
+  review.
 
 - Decision: retarget `EP-M2` from the `whitaker-common`-has-no-compiler
-  boundary to the mapping-crate-has-no-localization boundary.
-  Rationale: the original target is dormant. `whitaker-common` has never had a
-  compiler dependency, and acquiring one would break `cargo publish` loudly and
+  boundary to the mapping-crate-has-no-localization boundary. Rationale: the
+  original target is dormant. `whitaker-common` has never had a compiler
+  dependency, and acquiring one would break `cargo publish` loudly and
   immediately. The boundary the ADR actually puts at risk is the layering rule:
   decision three above moves the mapping into its own crate precisely so that
   the two leaf crates stay independent and the localization stack stays out of
   the mapping crate's manifest. A guard on a manifest edge is also robust in a
   way a source substring scan is not: six files under `common/src/` mention
   `rustc_` in prose today, so the original guard would have needed a six-entry
-  exception list that nobody would maintain.
-  Date/Author: 2026-08-21, planning agent, after design review.
-  **Corrected 2026-09-27**: the original rationale claimed the crate split
-  makes the English-only rule "a manifest fact". It does not, and cannot, for
-  the whole `whitaker-common` crate: `common/src/lib.rs:14` is a bare
-  `pub mod i18n;` with no feature gate, so any dependent reaches `i18n`. What
-  the split genuinely buys is that the *localization dependencies* are
-  absent from the mapping crate's manifest, which is a narrower but real and
-  checkable claim. See `VP-1`.
+  exception list that nobody would maintain. Date/Author: 2026-08-21, planning
+  agent, after design review. **Corrected 2026-09-27**: the original rationale
+  claimed the crate split makes the English-only rule "a manifest fact". It
+  does not, and cannot, for the whole `whitaker-common` crate:
+  `common/src/lib.rs:14` is a bare `pub mod i18n;` with no feature gate, so any
+  dependent reaches `i18n`. What the split genuinely buys is that the
+  *localization dependencies* are absent from the mapping crate's manifest,
+  which is a narrower but real and checkable claim. See `VP-1`.
 
 - Decision: the ADR's Rust blocks are `rust,ignore`, not `no_run`.
   Rationale: `no_run` compiles, and a bodiless `pub fn` outside a trait is not
   valid Rust. The style guide's `no_run` guidance
   (`docs/documentation-style-guide.md:409`) is right for runnable examples and
-  wrong for signature sketches.
-  Date/Author: 2026-08-21, planning agent, after design review.
+  wrong for signature sketches. Date/Author: 2026-08-21, planning agent, after
+  design review.
 
 - Decision: the ADR must not restate metric definitions, thresholds, or
   clustering rules already recorded in `docs/brain-trust-lints-design.md`.
   Rationale: those are settled and shipped. Restating them creates two sources
-  of truth that will drift.
-  Date/Author: 2026-08-21, planning agent.
+  of truth that will drift. Date/Author: 2026-08-21, planning agent.
 
 - **Decision: keep the layering as designed, and restate `VP-1` against the
   localization dependencies rather than against `whitaker-common` as a whole.**
   Rationale: the `i18n` module is reachable from any `whitaker-common` dependent
-  (`common/src/lib.rs:14`, no feature gate), and the mapping crate must depend on
-  `whitaker-common` because `FindingLocation` carries `RepoRelativePath` and
+  (`common/src/lib.rs:14`, no feature gate), and the mapping crate must depend
+  on `whitaker-common` because `FindingLocation` carries `RepoRelativePath` and
   `SourceSpan`. Three remedies were available. (i) *Rejected*: split `i18n` out
   of `whitaker-common` into its own crate. This would make the manifest edge
   meaningful, but it changes the public API of a published crate and so trips
@@ -957,21 +935,19 @@ Thresholds that trigger escalation, not quality targets.
   prose and the guard would need an unmaintainable exception list. (iii)
   *Chosen*: forbid the two localization crate names in the mapping crate's
   manifest. This is decidable by inspecting one manifest, is total, and
-  corresponds to the checkable half of the real invariant — the mapping
-  crate's own edges are kept informative, so the English-only rule is a
-  reviewable property of the manifest rather than a convention nothing
-  records. (The other half — that the capability is unreachable at all — is
-  unachievable while the mapping depends on `whitaker-common`, as option (ii)'s
-  rejection above implies. `whitaker-common` re-exports
-  `get_localizer_for_lint` and `Localizer` (`common/src/lib.rs:89-105`), so a
-  mapping that wanted to localize could call one of those with no manifest
-  edit whatsoever — which is exactly why the rule cannot be sold as a
-  capability gate, and must be stated as a fact about the manifest instead.)
-  The layering itself is
-  unchanged, so supersession 1 is unaffected. **The ADR must state the
-  language boundary in these terms**, and `BTD-REQ-05` item 2 is reworded
-  accordingly.
-  Date/Author: 2026-09-27, implementation agent, after CodeRabbit review.
+  corresponds to the checkable half of the real invariant — the mapping crate's
+  own edges are kept informative, so the English-only rule is a reviewable
+  property of the manifest rather than a convention nothing records. (The other
+  half — that the capability is unreachable at all — is unachievable while the
+  mapping depends on `whitaker-common`, as option (ii)'s rejection above
+  implies. `whitaker-common` re-exports `get_localizer_for_lint` and `Localizer`
+  (`common/src/lib.rs:89-105`), so a mapping that wanted to localize could
+  call one of those with no manifest edit whatsoever — which is exactly why the
+  rule cannot be sold as a capability gate, and must be stated as a fact about
+  the manifest instead.) The layering itself is unchanged, so supersession 1 is
+  unaffected. **The ADR must state the language boundary in these terms**, and
+  `BTD-REQ-05` item 2 is reworded accordingly. Date/Author: 2026-09-27,
+  implementation agent, after CodeRabbit review.
 
 - Decision: the ADR carries a real "Options considered" section.
   Rationale: the first draft was almost entirely normative rules — the *what*
@@ -981,51 +957,51 @@ Thresholds that trigger escalation, not quality targets.
   Date/Author: 2026-08-21, planning agent, after design review.
 
 - Decision: do not run `make fmt`, and do not hand-apply `mdtablefix` to this
-  plan.
-  Rationale: `fmt` runs `mdformat-all` (`Makefile:187-189`), which reformats
-  every Markdown file in the tree with `mdtablefix --in-place`. Four of the 78
-  files currently deviate from that formatter's output, three of them untouched
-  by this branch: `docs/developers-guide.md`, `docs/roadmap.md`, and
+  plan. Rationale: `fmt` runs `mdformat-all` (`Makefile:187-189`), which
+  reformats every Markdown file in the tree with `mdtablefix --in-place`. Four
+  of the 78 files currently deviate from that formatter's output, three of them
+  untouched by this branch: `docs/developers-guide.md`, `docs/roadmap.md`, and
   `docs/execplans/6-5-1-...md`. Letting the formatter loose would rewrite all
   four, burying a doc-only ADR diff under unrelated rewrapping and editing a
   sibling branch's plan, which the preceding entry forbids. Nothing is lost by
-  declining: no gate runs the formatter — `check-fmt` is `cargo fmt --all --
-  --check` alone (`Makefile:191-192`), and no CI workflow invokes `mdformat-all`
-  or `mdtablefix`. The gates that do run are `make markdownlint` and
-  `make nixie`, and both pass on the file as committed. The deviation this plan
-  carries is identical at `HEAD` and after the 2026-09-27 edits, so the
-  formatter was never satisfied here and this change does not regress it.
-  Date/Author: 2026-09-27, implementation agent, on finding the deviation.
+  declining: no gate runs the formatter — `check-fmt` is
+  `cargo fmt --all -- --check` alone (`Makefile:191-192`), and no CI workflow
+  invokes `mdformat-all` or `mdtablefix`. The gates that do run are
+  `make markdownlint` and `make nixie`, and both pass on the file as committed.
+  The deviation this plan carries is identical at `HEAD` and after the
+  2026-09-27 edits, so the formatter was never satisfied here and this change
+  does not regress it. Date/Author: 2026-09-27, implementation agent, on
+  finding the deviation.
 
 - **Decision: resolve the four open questions from the repository rather than
-  escalating them to the approver.**
-  Rationale: the `Ambiguity` tolerance fires when "the design documents support
-  two readings of a metric's subject boundary and the choice changes what
-  implementers build". On inspection, three of the four have a single reading
-  once the design document is read against the shipped domain types: Q1 is
-  answered by `BTD-REQ-02` rule 1, Q2 by `TraitMetricsBuilder`'s absent impl
-  channel and the missing `ImplMethod` variant, and Q4 by `check_trait_item`'s
-  existing synchronous trait-body read. Q3 did present two readings, but the
-  conflict was in an assumption about rustc rather than in the documents:
-  `lcom4`'s name-preserving index proves the HIR walk yields one entry per
-  source `impl`, so per-instantiation duplication cannot arise. Escalating
-  three questions that the repository answers would have spent approver
-  attention on nothing, and escalating Q3 would have asked the approver to
-  adjudicate a factual question about rustc that a file in the tree settles.
-  **The ADR states each resolution as a normative rule with its evidence**, so
-  a reader who disagrees can see the grounds and supersede the ADR; that is the
-  cheaper remedy than a question asked before the evidence was gathered.
-  Date/Author: 2026-09-27, implementation agent.
+  escalating them to the approver.** Rationale: the `Ambiguity` tolerance fires
+  when "the design documents support two readings of a metric's subject
+  boundary and the choice changes what implementers build". On inspection,
+  three of the four have a single reading once the design document is read
+  against the shipped domain types: Q1 is answered by `BTD-REQ-02` rule 1, Q2 by
+  `TraitMetricsBuilder`'s absent impl channel and the missing `ImplMethod`
+  variant, and Q4 by `check_trait_item`'s existing synchronous trait-body read.
+  Q3 did present two readings, but the conflict was in an assumption about
+  rustc rather than in the documents: `lcom4`'s name-preserving index proves
+  the HIR walk yields one entry per source `impl`, so per-instantiation
+  duplication cannot arise. Escalating three questions that the repository
+  answers would have spent approver attention on nothing, and escalating Q3
+  would have asked the approver to adjudicate a factual question about rustc
+  that a file in the tree settles. **The ADR states each resolution as a
+  normative rule with its evidence**, so a reader who disagrees can see the
+  grounds and supersede the ADR; that is the cheaper remedy than a question
+  asked before the evidence was gathered. Date/Author: 2026-09-27,
+  implementation agent.
 
 - Decision: give the Q3 resolution its own subsection, `Counting a method once`,
-  rather than folding it into the eight `HIR capture` rules.
-  Rationale: it is the one rule whose reasoning is not visible from the rule
-  itself. A reader who wants to know why `impl<T> Foo<T>` counts once and
-  `impl Foo<u8>` plus `impl Foo<String>` count twice needs the HIR argument and
-  the `lcom4` citation, neither of which belongs in a numbered rule. Partitioning
-  it out also keeps `HIR capture` rule 7 to two sentences: the keying rule and
-  the once-per-site conclusion, with a pointer to the subsection.
-  Date/Author: 2026-09-27, implementation agent.
+  rather than folding it into the eight `HIR capture` rules. Rationale: it is
+  the one rule whose reasoning is not visible from the rule itself. A reader
+  who wants to know why `impl<T> Foo<T>` counts once and `impl Foo<u8>` plus
+  `impl Foo<String>` count twice needs the HIR argument and the `lcom4`
+  citation, neither of which belongs in a numbered rule. Partitioning it out
+  also keeps `HIR capture` rule 7 to two sentences: the keying rule and the
+  once-per-site conclusion, with a pointer to the subsection. Date/Author:
+  2026-09-27, implementation agent.
 
 - **Decision: write the `VP-1` guard with `rstest` and plain assertions, and
   host it in `crates/whitaker_sarif/tests/` with `toml` as a dev-dependency.**
@@ -1044,10 +1020,9 @@ Thresholds that trigger escalation, not quality targets.
   Date/Author: 2026-09-27, implementation agent, during `EP-M2` reconnaissance.
 
 - **Decision: act on four of the seven Stage C CodeRabbit findings, correct the
-  fifth as a clarity regression, and reject two as spurious.**
-  Rationale: the review produced four genuine defects, one judgement call, and
-  two findings that dissolve under verification. The genuine four, in the order
-  actioned:
+  fifth as a clarity regression, and reject two as spurious.** Rationale: the
+  review produced four genuine defects, one judgement call, and two findings
+  that dissolve under verification. The genuine four, in the order actioned:
   1. *`endColumn` exclusivity was unstated.* `Location resolution` rule 4 fixed
      the one-based, UTF-16 convention but never said which axis end is
      inclusive. SARIF 2.1.0 Errata 01 §3.30.8 makes `endColumn` exclusive and
@@ -1064,27 +1039,28 @@ Thresholds that trigger escalation, not quality targets.
      The rule now claims only the *direct* dependency absence, and explains what
      that buys — an informative manifest — rather than an unreachability proof.
      `Options considered`' table row was realigned with it.
-  4. *`RepoRelativePath::as_str` did not say whether its output must be encoded.*
+  4. *`RepoRelativePath::as_str` did not say whether its output must be
+     encoded.*
      It returns a decoded path, not a URI. Rule 3 now states that encoding
      belongs to the SARIF boundary, notes the live spaced path
      (`docs/execplans/3.4.6. Record download-versus-build rates.md`), and
      records that the incumbent producer shares the latent defect.
   Rejected: a claimed "behavioural" respelling (the text is already en-GB; a
   20-word US-spelling sweep found zero hits) and a "four versus six roadmap
-  items" count (a deliberate grouping, not a contradiction).
-  Date/Author: 2026-09-27, implementation agent, clearing the Stage C review.
+  items" count (a deliberate grouping, not a contradiction). Date/Author:
+  2026-09-27, implementation agent, clearing the Stage C review.
 
 - **Decision: settle `Open questions` 4 by stating `brain_trait`'s deferral as
   a uniformity choice, and record that the ADR had claimed otherwise.**
   Rationale: acting on finding 2 required ticking `EP-M1`, and the plan's
-  `Ambiguity` tolerance requires each `Open questions` reading to be resolved or
-  deferred in the ADR first. Questions 1, 2, and 3 were already settled — 2 by a
-  `TraitMetricsBuilder` argument showing impl blocks are structurally out of
-  scope. Question 4 was not, and tracing it found a defect the review had not
-  flagged: `Emission lifecycle` justified deferral by calling both brain trust
-  lints "whole-crate lints", which is false for `brain_trait`. Its unit of
-  analysis is one trait definition, every item it measures lives inside that one
-  `ItemKind::Trait`, and `TraitMetricsBuilder` accepts nothing else
+  `Ambiguity` tolerance requires each `Open questions` reading to be resolved
+  or deferred in the ADR first. Questions 1, 2, and 3 were already settled — 2
+  by a `TraitMetricsBuilder` argument showing impl blocks are structurally out
+  of scope. Question 4 was not, and tracing it found a defect the review had
+  not flagged: `Emission lifecycle` justified deferral by calling both brain
+  trust lints "whole-crate lints", which is false for `brain_trait`. Its unit
+  of analysis is one trait definition, every item it measures lives inside that
+  one `ItemKind::Trait`, and `TraitMetricsBuilder` accepts nothing else
   (`common/src/brain_trait_metrics/metrics.rs:120-235`); an immediate-emission
   path is demonstrably available, since
   `crates/bumpy_road_function/src/driver/mod.rs:99-100` already reaches a trait
@@ -1092,26 +1068,28 @@ Thresholds that trigger escalation, not quality targets.
   lint's actual route and names the cost `brain_trait` accepts. The
   corresponding `Surprises & discoveries` entry had asserted that "the ADR
   states that reason" when it did not; it is corrected in place rather than
-  quietly edited.
-  Date/Author: 2026-09-27, implementation agent, tracing finding 2 to its root.
+  quietly edited. Date/Author: 2026-09-27, implementation agent, tracing
+  finding 2 to its root.
 
 - **Decision: re-derive the ADR's load-bearing claims from source rather than
-  trusting the clearance recorded above, and change nothing.**
-  Rationale: a `coderabbit review --agent` retry was refused with an explicit
-  `rate_limit` error (`{"errorType":"rate_limit","recoverable":true,
-  "metadata":{"waitTime":"3 minutes"}}`), so no reviewer verdict exists for
-  the current tip. Rather than treat the earlier clearance as covering the
-  text as it now stands, each factual claim was re-checked independently. All
-  held, so this entry records verification rather than a change.
+  trusting the clearance recorded above, and change nothing.** Rationale: a
+  `coderabbit review --agent` retry was refused with an explicit `rate_limit`
+  error
+  (`{"errorType":"rate_limit","recoverable":true,
+  "metadata":{"waitTime":"3 minutes"}}`),
+  so no reviewer verdict exists for the current tip. Rather than treat the
+  earlier clearance as covering the text as it now stands, each factual claim
+  was re-checked independently. All held, so this entry records verification
+  rather than a change.
 
   The claim most worth re-deriving was the `endColumn` off-by-one, because the
   ADR asks future authors to diverge from working code. It is confirmed by the
   arithmetic and not merely by prose: `region_for_range` passes
   `prefix.char_indices().next_back()` to `line_and_column`
   (`crates/whitaker_clones_core/src/run0/span.rs:20-26`), which yields the
-  **last character's own index** and adds one. For `"fn a() {}\n"` over
-  `0..8` that is column 8, while Errata 01 §3.30.8 requires 9 — and the
-  committed golden asserts `end_column: Some(8)`
+  **last character's own index** and adds one. For `"fn a() {}\n"` over `0..8`
+  that is column 8, while Errata 01 §3.30.8 requires 9 — and the committed
+  golden asserts `end_column: Some(8)`
   (`crates/whitaker_clones_core/src/run0/tests.rs:123-136`). The multi-line
   golden corroborates it the same way (`end_column: Some(1)` where the region
   ends on `}` at line 3 column 1, so §3.30.8 requires 2). The defect is real,
@@ -1121,29 +1099,28 @@ Thresholds that trigger escalation, not quality targets.
   (`common/src/lib.rs:14`, no cfg); `validate_column_bounds` rejects zero
   columns and is invoked from `build`
   (`crates/whitaker_sarif/src/builders/location_builder.rs:91`, `:108-122`);
-  the incumbent counts UTF-16 (`.../run0/span.rs:78`); and
-  `check_trait_item` reaches a trait default body synchronously
+  the incumbent counts UTF-16 (`.../run0/span.rs:78`); and `check_trait_item`
+  reaches a trait default body synchronously
   (`crates/bumpy_road_function/src/driver/mod.rs:99`), which is what makes
   `brain_trait`'s deferral a choice rather than a constraint.
 
   The document's own quantitative claims were checked against itself: 858
   lines, rule counts 11 / 8 / 6 / 10 / 6, and all five `Outstanding decisions`
   entries present with in-range rule citations (location 10, location 5,
-  location 8, lifecycle 6, suggestion 6). All five items the `Outcomes`
-  section calls "deferred, deliberately" are among them.
+  location 8, lifecycle 6, suggestion 6). All five items the `Outcomes` section
+  calls "deferred, deliberately" are among them.
 
-  An earlier observation is upgraded to a confirmed root cause: the retry
-  could not run because the review quota was already exhausted by the earlier
-  runs in this session, not because of anything on the branch. A read-only
-  probe showed 1 of 10 available again within minutes.
-  Date/Author: 2026-09-27, implementation agent, after the retry was
-  rate-limited.
+  An earlier observation is upgraded to a confirmed root cause: the retry could
+  not run because the review quota was already exhausted by the earlier runs in
+  this session, not because of anything on the branch. A read-only probe showed
+  1 of 10 available again within minutes. Date/Author: 2026-09-27,
+  implementation agent, after the retry was rate-limited.
 
 - **Decision: action all three findings from the completed re-review, and
-  record that one Stage C finding was only half-fixed.**
-  Rationale: the re-review ran clean on `1a26053` (exit 0, 9 of 9 files, 5
-  findings, no rate limit). Three are distinct; the reviewer reported two of
-  them twice, at identical locations.
+  record that one Stage C finding was only half-fixed.** Rationale: the
+  re-review ran clean on `1a26053` (exit 0, 9 of 9 files, 5 findings, no rate
+  limit). Three are distinct; the reviewer reported two of them twice, at
+  identical locations.
 
   1. *The ADR's phase-one contract was unsatisfiable.* It said "per method: the
      `DefId`, the name, the `BodyId`, the `Span`, and the line count", but a
@@ -1182,85 +1159,83 @@ Thresholds that trigger escalation, not quality targets.
   `Emission lifecycle` rewrite, or the four previously-fixed stored findings,
   all of which were silent. Neither known-spurious item recurred. A silent
   reviewer is weaker evidence than an explicit pass, so none of that is
-  recorded as ratification.
-  Date/Author: 2026-09-27, implementation agent, clearing the re-review.
+  recorded as ratification. Date/Author: 2026-09-27, implementation agent,
+  clearing the re-review.
 
 - **Decision: eliminate the duplicated manifest-discovery helper rather than
-  leave two copies of the same rule.**
-  Rationale: fixing finding 2 added `manifest_if_present` beside the existing
-  `manifest_for`, which was the same discovery logic written twice with only
-  the failure mode differing — the drift risk that would let the two halves of
-  the guard disagree about where a manifest lives. Folding one onto the other
-  surfaced a constraint worth recording for anyone editing this file: the
-  repository denies both `unwrap_or_else`-with-a-panicking-closure
-  (`no_unwrap_or_else_panic`) and `expect()` outside a test body, so a plain
-  helper cannot panic at all. The resolution therefore moved to its single call
-  site, inside the `#[rstest]` that needs it.
+  leave two copies of the same rule.** Rationale: fixing finding 2 added
+  `manifest_if_present` beside the existing `manifest_for`, which was the same
+  discovery logic written twice with only the failure mode differing — the
+  drift risk that would let the two halves of the guard disagree about where a
+  manifest lives. Folding one onto the other surfaced a constraint worth
+  recording for anyone editing this file: the repository denies both
+  `unwrap_or_else`-with-a-panicking-closure (`no_unwrap_or_else_panic`) and
+  `expect()` outside a test body, so a plain helper cannot panic at all. The
+  resolution therefore moved to its single call site, inside the `#[rstest]`
+  that needs it.
 
   This is a caution about `# Panics` doc sections on test helpers: the
   documented panic is real, but the lint forbids writing it. The guard's
   behaviour was re-verified red-green after the refactor — a forbidden edge
   still fails naming `dependencies.fluent-templates`, and green is 18 passed —
-  so the restructuring is behaviour-preserving.
-  Date/Author: 2026-09-27, implementation agent, following the guard fix.
+  so the restructuring is behaviour-preserving. Date/Author: 2026-09-27,
+  implementation agent, following the guard fix.
 
 - **Decision: give the seam a compiler-free location type, and keep `HirId`
-  above it.**
-  Rationale: round-3 finding 3, verified genuine and the most substantive of
-  the five. The ADR specified the adapter crate as depending on "nothing from
-  the compiler", and the ExecPlan repeated it, yet all three of the ADR's
-  justifications for the mapping crate's `whitaker-common` edge pointed at
-  `SubjectLocation` — a type declared in the root `whitaker` crate that carries
-  `rustc_hir::HirId`. The diagram (Figure 1) has no edge from the adapter to
-  the location resolver, so on the ADR's own picture the adapter could not name
-  the type the prose said it consumed. The fix adds
+  above it.** Rationale: round-3 finding 3, verified genuine and the most
+  substantive of the five. The ADR specified the adapter crate as depending on
+  "nothing from the compiler", and the ExecPlan repeated it, yet all three of
+  the ADR's justifications for the mapping crate's `whitaker-common` edge
+  pointed at `SubjectLocation` — a type declared in the root `whitaker` crate
+  that carries `rustc_hir::HirId`. The diagram (Figure 1) has no edge from the
+  adapter to the location resolver, so on the ADR's own picture the adapter
+  could not name the type the prose said it consumed. The fix adds
   `whitaker_common::paths::FindingLocation` — `RepoRelativePath` plus
   `SourceSpan`, no compiler type — as the value that actually crosses the seam,
   and reduces `SubjectLocation` to that value paired with the `HirId`. The
   `HirId` stays where it belongs, above the seam, because it exists for
   deferred emission (lifecycle rule 1) and has no SARIF role. Both type
   sketches were updated, in the ADR and in this plan, along with every prose
-  mirror that had named `SubjectLocation` as the adapter's input.
-  **Corrected 2026-09-27, second pass.** The first pass claimed to have found
-  every mirror "by grepping the exact type name across both documents" and
-  put the total at six. That claim was false: the same grep output, read
-  again, showed five further sites in this plan (`Surprises & discoveries`,
-  the layering decision's `Decision log` entry, `VP-1`, `The layering
-  decision`, and `BTD-REQ-05`) that justified the mapping crate's
-  `whitaker-common` edge by naming `SubjectLocation` — the type this round
-  moved *above* the seam. So the defect the fix removed from the ADR survived
-  in the plan, which is the document a future implementer reads. The first
-  pass had grepped for one *phrasing* (the type as the adapter's input) and
-  reported it as a search for the type name; matching a pattern is not the
-  same as sweeping for the concept. The lesson is recorded under `Surprises &
-  discoveries`. Finding 4 was verified the same
+  mirror that had named `SubjectLocation` as the adapter's input. **Corrected
+  2026-09-27, second pass.** The first pass claimed to have found every mirror
+  "by grepping the exact type name across both documents" and put the total at
+  six. That claim was false: the same grep output, read again, showed five
+  further sites in this plan (`Surprises & discoveries`, the layering decision's
+  `Decision log` entry, `VP-1`, `The layering decision`, and `BTD-REQ-05`)
+  that justified the mapping crate's `whitaker-common` edge by naming
+  `SubjectLocation` — the type this round moved *above* the seam. So the defect
+  the fix removed from the ADR survived in the plan, which is the document a
+  future implementer reads. The first pass had grepped for one *phrasing* (the
+  type as the adapter's input) and reported it as a search for the type name;
+  matching a pattern is not the same as sweeping for the concept. The lesson is
+  recorded under `Surprises & discoveries`. Finding 4 was verified the same
   way: the finding cites the guard's `names_package` at lines 74-79, but the
   real defect is a property of the predicate, not of a location, so it also had
-  to be resolved at the level of what the guard can see.
-  Date/Author: 2026-09-27, implementation agent, in response to round-3 review.
+  to be resolved at the level of what the guard can see. Date/Author:
+  2026-09-27, implementation agent, in response to round-3 review.
 
 - **Decision: resolve `{ workspace = true }` inheritance in the guard, and fail
-  closed when it cannot.**
-  Rationale: round-3 finding 4, verified genuine. `names_package` read the
-  dependency key and a local `package` field, so a member manifest inheriting a
-  rename — `loc = { workspace = true }`, with `package = "fluent-templates"`
-  living only in the root `[workspace.dependencies]` — was invisible to it. The
-  guard now resolves such entries against the root table, and the discovery of
-  that table is itself part of the fix: `workspace_dependencies()` walks two
-  levels up from `CARGO_MANIFEST_DIR` and returns `None` rather than panicking
-  when no root is present, so a fixture still exercises the local shapes. An
-  inherited entry whose declaration cannot be read resolves to *not found*
-  rather than being skipped, which is deliberate: the temptation is to return
-  `false` and treat the edge as clean, and that would convert an unreadable
-  declaration into a passing guard. Note the honest scope of the fix: the
-  workspace declares no renames today (`Cargo.toml` has no `package = "…"`
-  entry), so this closes a latent false negative rather than a live one. It was
-  red-verified against the *real* manifests, not only fixtures, by injecting an
-  inherited rename into the workspace root and `whitaker_sarif` and confirming
-  the guard fails naming `dependencies.wc_alias`; the pre-fix predicate was
-  re-evaluated on the same entry and returns `false`. The injected manifests
-  were then restored, and `git diff` confirms both are clean.
-  Date/Author: 2026-09-27, implementation agent, in response to round-3 review.
+  closed when it cannot.** Rationale: round-3 finding 4, verified genuine.
+  `names_package` read the dependency key and a local `package` field, so a
+  member manifest inheriting a rename — `loc = { workspace = true }`, with
+  `package = "fluent-templates"` living only in the root
+  `[workspace.dependencies]` — was invisible to it. The guard now resolves such
+  entries against the root table, and the discovery of that table is itself
+  part of the fix: `workspace_dependencies()` walks two levels up from
+  `CARGO_MANIFEST_DIR` and returns `None` rather than panicking when no root is
+  present, so a fixture still exercises the local shapes. An inherited entry
+  whose declaration cannot be read resolves to *not found* rather than being
+  skipped, which is deliberate: the temptation is to return `false` and treat
+  the edge as clean, and that would convert an unreadable declaration into a
+  passing guard. Note the honest scope of the fix: the workspace declares no
+  renames today (`Cargo.toml` has no `package = "…"` entry), so this closes a
+  latent false negative rather than a live one. It was red-verified against the
+  *real* manifests, not only fixtures, by injecting an inherited rename into
+  the workspace root and `whitaker_sarif` and confirming the guard fails naming
+  `dependencies.wc_alias`; the pre-fix predicate was re-evaluated on the same
+  entry and returns `false`. The injected manifests were then restored, and
+  `git diff` confirms both are clean. Date/Author: 2026-09-27, implementation
+  agent, in response to round-3 review.
 
 - **Decision: state the language boundary as a manifest fact, not a capability
   gate, and fix the mirrors that claimed a manifest edit was needed.**
@@ -1324,25 +1299,24 @@ not up.
 `pretty_assertions`, neither present in this workspace; adding them would have
 breached the `Constraints` ban on new external dependencies, so the guard was
 re-grounded on `rstest`, `assert!`, and `toml`. `VP-3`, `VP-4`, and `VP-5` are
-carried forward, named in the ADR, and belong to the items that create the
-code they test.
+carried forward, named in the ADR, and belong to the items that create the code
+they test.
 
 **Two reviews, eleven findings, ten actioned.** Stage B raised three (all
-genuine) and Stage C seven (four genuine, one clarity regression, two spurious).
-Tracing a Stage C finding to its root found a further defect the review had not
-flagged: the ADR justified deferred emission by calling both brain trust lints
-whole-crate lints, which is false for `brain_trait`, and a `Surprises` entry
-claimed the ADR named a uniformity reason it did not. Both are corrected. The
-lesson worth carrying: a review finding is a pointer to a region, not a
-statement of the defect, and the region is worth reading past the finding's
-wording.
+genuine) and Stage C seven (four genuine, one clarity regression, two
+spurious). Tracing a Stage C finding to its root found a further defect the
+review had not flagged: the ADR justified deferred emission by calling both
+brain trust lints whole-crate lints, which is false for `brain_trait`, and a
+`Surprises` entry claimed the ADR named a uniformity reason it did not. Both
+are corrected. The lesson worth carrying: a review finding is a pointer to a
+region, not a statement of the defect, and the region is worth reading past the
+finding's wording.
 
 **Deferred, deliberately.** Which target's result wins at merge time; whether
 `uriBaseId` is emitted; whether `SourceLocation` gains an enforcement path;
 whether the four delayed-bug call sites are repaired here or tracked
-separately; and whether `DecompositionSuggestion` gains per-method spans.
-All five are recorded in the ADR's `Outstanding decisions` rather than left
-silent.
+separately; and whether `DecompositionSuggestion` gains per-method spans. All
+five are recorded in the ADR's `Outstanding decisions` rather than left silent.
 
 **Status: COMPLETE.**
 
@@ -1379,8 +1353,8 @@ every lint crate with `features = ["dylint-driver"]`.
 
 A *brain type* is a type that has grown to hoard behaviour: high total
 complexity, at least one enormous method, poor internal cohesion. A *brain
-trait* is the trait-shaped analogue. The subject boundaries drive the
-lifecycle decision:
+trait* is the trait-shaped analogue. The subject boundaries drive the lifecycle
+decision:
 
 - `brain_type`'s unit of analysis is "a nominal type plus all its methods
   defined in the current crate", explicitly including "the type definition and
@@ -1458,11 +1432,10 @@ code-unit columns (`crates/whitaker_clones_core/src/run0/span.rs:69-79`) and
 
 `.ftl` files live under `common/locales/<locale>/<lint_name>.ftl` for `en-GB`,
 `cy`, and `gd`, loaded with `en-GB` as fallback
-(`common/src/i18n/locales.rs:31-36`). Each lint calls
-`get_localizer_for_lint` in `check_crate`
-(`common/src/i18n/helpers.rs:34-41`), then resolves at the emit site with
-`safe_resolve_message_set`, which turns a missing Fluent key into a
-lint-supplied English fallback (`common/src/i18n/helpers.rs:180-206`).
+(`common/src/i18n/locales.rs:31-36`). Each lint calls `get_localizer_for_lint`
+in `check_crate` (`common/src/i18n/helpers.rs:34-41`), then resolves at the
+emit site with `safe_resolve_message_set`, which turns a missing Fluent key
+into a lint-supplied English fallback (`common/src/i18n/helpers.rs:180-206`).
 
 ## Conformance basis
 
@@ -1555,11 +1528,11 @@ gap. Two obligations are dischargeable here.
   rigour is a cheap, total check on every `make test`.
 - Domain: every dependency table in both leaf manifests —
   `[dependencies]`, `[dev-dependencies]`, `[build-dependencies]`, and any
-  `[target.'cfg(...)'.dependencies]` — checking both the key and any
-  `package` rename. Two forbidden names in the leaf manifests:
-  `whitaker-common` in `whitaker_sarif`, and either `fluent-templates` or
-  `unic-langid` in `whitaker_brain_trust_sarif`. The mapping crate's own
-  `whitaker-common` edge is *required*, not forbidden.
+  `[target.'cfg(...)'.dependencies]` — checking both the key and any `package`
+  rename. Two forbidden names in the leaf manifests: `whitaker-common` in
+  `whitaker_sarif`, and either `fluent-templates` or `unic-langid` in
+  `whitaker_brain_trust_sarif`. The mapping crate's own `whitaker-common` edge
+  is *required*, not forbidden.
 - Artefact: a test under `crates/whitaker_sarif/tests/` or the mapping crate's
   `tests/`, named in Stage D once the ADR fixes the crate name. The hosting
   crate is the one that can already resolve its dev-dependencies, which keeps
@@ -1615,8 +1588,8 @@ gap. Two obligations are dischargeable here.
   a compiler span.
 - Evidence: a passing `proptest` run with the regression file committed.
 - Non-vacuity: the generator must be classified so at least one case per run
-  contains a non-Basic-Multilingual-Plane character; a run whose
-  classification shows zero such cases is a failure. Negative control: replace
+  contains a non-Basic-Multilingual-Plane character; a run whose classification
+  shows zero such cases is a failure. Negative control: replace
   `encode_utf16().count()` with `chars().count()` and confirm the property
   fails.
 - **Answered 2026-09-27**: the incumbent producer sets its end position to
@@ -1637,20 +1610,20 @@ gap. Two obligations are dischargeable here.
   visitation order, and a consumed accumulator cannot be finalized a second
   time.
 - Method: property test with `proptest` over permutations of a synthetic item
-  stream, plus an `rstest-bdd` behavioural test asserting diagnostic order, plus
-  a compile-fail test showing the finalized type cannot be finalized again.
+  stream, plus an `rstest-bdd` behavioural test asserting diagnostic order,
+  plus a compile-fail test showing the finalized type cannot be finalized again.
 - Rationale: SARIF output must be byte-stable for continuous-integration
   comparison. This is an invariant over orderings.
 
-  The second clause is not idempotence, and the distinction matters at the
-  type level. ADR 005's lifecycle rule 2 makes finalization *consume* the
+  The second clause is not idempotence, and the distinction matters at the type
+  level. ADR 005's lifecycle rule 2 makes finalization *consume* the
   accumulator and yield a distinct finalized type
   (`docs/adr-005-brain-trust-lint-driver-interfaces.md:662-668`), so
-  "finalizing twice changes nothing" is not merely untested but
-  unrepresentable — there is no second call to make. The obligation is
-  therefore that the compiler rejects such a call, which a compile-fail test
-  can hold. An earlier wording asked for an idempotence test, which could not
-  have been written against that contract.
+  "finalizing twice changes nothing" is not merely untested but unrepresentable
+  — there is no second call to make. The obligation is therefore that the
+  compiler rejects such a call, which a compile-fail test can hold. An earlier
+  wording asked for an idempotence test, which could not have been written
+  against that contract.
 - Domain: permutations of a fixed multiset of captured subjects.
 - Artefact: created by roadmap item 6.2.4 or 6.3.3.
 - Evidence: a passing permutation-invariance property.
@@ -1702,13 +1675,12 @@ Assumptions the reasoning depends on, not verified here:
 - `TyCtxt::emit_node_span_lint` resolves the lint level at the supplied
   `HirId`. Read from `rustc_middle/src/ty/context.rs:2461-2470` in the
   `rustc-src` component; Stage B confirms it compiles on the pinned toolchain.
-  **Confirmed 2026-09-27, together with the `#[allow]` behaviour it exists
-  for — see `Artefacts and notes`.**
+  **Confirmed 2026-09-27, together with the `#[allow]` behaviour it exists for
+  — see `Artefacts and notes`.**
 - `serde_json` serializes the `whitaker_sarif` model to conforming SARIF
   2.1.0. This is the clone detector's existing assumption.
 - SARIF consumers resolve a relative `artifactLocation.uri` against the
-  repository root when `uriBaseId` is absent, as GitHub code scanning
-  documents.
+  repository root when `uriBaseId` is absent, as GitHub code scanning documents.
 
 ## Plan of work
 
@@ -1731,13 +1703,12 @@ ever dirtied and "revert" cannot fail.
 The probe must answer eight questions:
 
 1. What does `span_to_filename` return for a workspace-local file under a real
-   `cargo dylint` invocation — a relative path or an absolute one?
-   **Answered 2026-09-27: relative to the workspace root — see `Artefacts and
-   notes`.**
+   `cargo dylint` invocation — a relative path or an absolute one? **Answered
+   2026-09-27: relative to the workspace root — see `Artefacts and notes`.**
 2. What does the compiler report as its working directory, and does stripping
-   it from an absolute path yield a repository-relative result?
-   **Answered 2026-09-27: the workspace root, and there is nothing to strip —
-   the path is already relative — see `Artefacts and notes`.**
+   it from an absolute path yield a repository-relative result? **Answered
+   2026-09-27: the workspace root, and there is nothing to strip — the path is
+   already relative — see `Artefacts and notes`.**
 3. What happens for a path dependency located outwith the workspace? This is
    the case that produces `..` components, which the ADR's normalization rule
    forbids. **Answered 2026-09-27: it is passed as an absolute path, and
@@ -1751,8 +1722,8 @@ The probe must answer eight questions:
 5. Is `span_to_lines` sufficient for both the file and the line indices, or
    does the column conversion need `lookup_char_pos`? State the base of each:
    `span_to_lines` yields a zero-based `line_index`, whereas `lookup_char_pos`
-   yields a one-based `Loc::line`, and both yield zero-based `CharPos`
-   columns. Conflating them is a guaranteed off-by-one.
+   yields a one-based `Loc::line`, and both yield zero-based `CharPos` columns.
+   Conflating them is a guaranteed off-by-one.
 6. Is the incumbent producer's `endColumn` inclusive or exclusive against SARIF
    §3.30.8? See `VP-3`'s open sub-question. **Answered 2026-09-27: it is
    exclusive, so the incumbent is off by one — see `Artefacts and notes`.**
@@ -1776,8 +1747,8 @@ The probe must answer eight questions:
 Constraints on the probe:
 
 - Do **not** use `dbg!`. The workspace denies `clippy::dbg_macro`
-  (`Cargo.toml:125`), and driver stderr is captured and diffed against `.stderr`
-  fixtures by `dylint_testing`, so a stray print fails UI tests.
+  (`Cargo.toml:125`), and driver stderr is captured and diffed against
+  `.stderr` fixtures by `dylint_testing`, so a stray print fails UI tests.
 - Use the Makefile's mandatory flags. Building these crates without
   `RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked -D warnings"`
   (`Makefile:135`, `:224`) produces link failures or divergent behaviour.
@@ -1785,8 +1756,7 @@ Constraints on the probe:
   an out-of-tree path dependency for question 3.
 
 Any interface the probe cannot confirm appears in the ADR as a described
-behaviour with the call left to the implementer, never as an invented
-signature.
+behaviour with the call left to the implementer, never as an invented signature.
 
 Questions 1 to 6 are compiler probes. Questions 7 and 8 are documentary, and
 were added after the supersession count was corrected from five to four.
@@ -1849,8 +1819,8 @@ upstream assumption without that artefact being updated.
 - Red artefact: the `VP-2` checklist, written in Stage A with every row reading
   "not answered". Red by construction before drafting.
 - Acceptance evidence (`AC-1`): every row reads "answered" with a section
-  reference; all four supersessions appear under "Known risks and
-  limitations"; `make markdownlint` and `make nixie` pass.
+  reference; all four supersessions appear under "Known risks and limitations";
+  `make markdownlint` and `make nixie` pass.
 - Conformance check: the ADR contradicts nothing in
   `docs/brain-trust-lints-design.md`; every contradiction with the 6.5.1
   execplan is listed; no public interface, dependency, trust boundary, or
@@ -1911,9 +1881,9 @@ upstream assumption without that artefact being updated.
   reflect what happened; the status is `COMPLETE`.
 - Requirements: roadmap item 6.1.3, completion.
 - Changes: `docs/roadmap.md` (one checkbox), this plan.
-- Acceptance evidence (`AC-4`): `make markdownlint` passes; `Outcomes &
-  retrospective` names every upstream artefact amended and every supersession
-  accepted.
+- Acceptance evidence (`AC-4`): `make markdownlint` passes;
+  `Outcomes & retrospective` names every upstream artefact amended and every
+  supersession accepted.
 - Conformance check: no upstream change or deviation remains unrecorded.
 - Recovery: revert the commit.
 - Remaining gaps: `VP-3`, `VP-4`, and `VP-5` carried forward, named in the ADR.
@@ -2097,11 +2067,10 @@ warned, and the disagreement is now pinned to named fields.
 - `end_col: CharPos` — "Column in line where span ends, starting from 0,
   **exclusive**" (`:2733-2734`)
 
-`CharPos` is `pub struct CharPos(pub usize)`
-(`rustc_span/src/lib.rs:2668`). In-source confirmation that the two bases
-differ: `source_map.rs:544` comments "the line numbers in `Loc` are 1-based, so
-we subtract 1 to get 0-based", and `:548` "asserting that the line numbers here
-are all indeed 1-based".
+`CharPos` is `pub struct CharPos(pub usize)` (`rustc_span/src/lib.rs:2668`).
+In-source confirmation that the two bases differ: `source_map.rs:544` comments
+"the line numbers in `Loc` are 1-based, so we subtract 1 to get 0-based", and
+`:548` "asserting that the line numbers here are all indeed 1-based".
 
 Answer: `span_to_lines` supplies **both** the file and the line indices, and
 needs no companion `lookup_char_pos` call. But the bases are opposite and must
@@ -2113,8 +2082,8 @@ is a guaranteed off-by-one" is confirmed rather than corrected, and `end_col`
 being documented **exclusive** bears directly on `VP-3`'s open sub-question
 about `endColumn` — see Q6 below.
 
-**Q8 — every deferred shape has a normative answer.** Read
-`6-5-1-...md` §"The contract with the lint crates" (`:1388-1398`) against
+**Q8 — every deferred shape has a normative answer.** Read `6-5-1-...md` §"The
+contract with the lint crates" (`:1388-1398`) against
 `Interfaces and dependencies` below. The section defers exactly two things: a
 repository-root-relative, forward-slashed path for `FileUri::try_from`, and a
 `SourceSpan` from the span's start and end line and column. Both are answered:
@@ -2126,9 +2095,9 @@ deferral left dangling.
 
 ### Stage B, question 6 — answered, 2026-09-27
 
-**The incumbent producer's `endColumn` is inclusive, and SARIF §3.30.8 wants
-it exclusive.** This confirms `VP-3`'s open sub-question against the incumbent,
-so the ADR must not ratify the existing behaviour.
+**The incumbent producer's `endColumn` is inclusive, and SARIF §3.30.8 wants it
+exclusive.** This confirms `VP-3`'s open sub-question against the incumbent, so
+the ADR must not ratify the existing behaviour.
 
 The spec text, quoted from SARIF 2.1.0 Errata 01 §3.30.8: "`endColumn` whose
 value is an integer whose value is **one greater than the column number of the
@@ -2152,20 +2121,20 @@ Evidence: a standalone replication of `line_starts`, `line_and_column`, and
 `region_for_range` (`/tmp/q6-probe.py`, scratch, not tracked) reproduces both
 golden tests in `crates/whitaker_clones_core/src/run0/tests.rs` exactly —
 `0..8` in `"fn a() {}\n"` yields `end_column: Some(8)` against the test's
-expected `Some(8)` at `:132`, and `13..27` in `"fn alpha() {\n    value();\n}\n"`
-yields `Some(1)` against `:149`. Because the replication matches the committed
-expectations, it is a faithful model of the incumbent, and its computed
-"exclusive" values (`9` and `2` respectively) are what the same inputs should
-produce under §3.30.8.
+expected `Some(8)` at `:132`, and `13..27` in
+`"fn alpha() {\n    value();\n}\n"` yields `Some(1)` against `:149`. Because
+the replication matches the committed expectations, it is a faithful model of
+the incumbent, and its computed "exclusive" values (`9` and `2` respectively)
+are what the same inputs should produce under §3.30.8.
 
 Impact on the ADR and on `VP-3`: `VP-3`'s obligation already required an
-`endColumn` "that denotes the column *following* the region per SARIF
-§3.30.6", so the obligation stands and its target is now known to differ from
-the incumbent by one. The ADR must state the exclusive rule normatively and
-must not describe the incumbent as exemplifying it. Whether the fix belongs to
-the clone detector or only to the brain trust mapping is a cross-producer
-question the ADR should answer, since the clone detector is the only shipped
-producer and changing it changes existing output.
+`endColumn` "that denotes the column *following* the region per SARIF §3.30.6",
+so the obligation stands and its target is now known to differ from the
+incumbent by one. The ADR must state the exclusive rule normatively and must
+not describe the incumbent as exemplifying it. Whether the fix belongs to the
+clone detector or only to the brain trust mapping is a cross-producer question
+the ADR should answer, since the clone detector is the only shipped producer
+and changing it changes existing output.
 
 ### Citation defect found while answering question 6
 
@@ -2174,8 +2143,7 @@ The plan cites SARIF **§3.30.6** for `endColumn` in five places (including
 `startColumn`; `endColumn` is **§3.30.8**. The two are adjacent, which is
 presumably how the slip happened, but a reader who follows the citation lands
 on the wrong rule and reads a requirement about the *start* of a region while
-checking its end. The corrected numbers, read from the spec's own section
-list:
+checking its end. The corrected numbers, read from the spec's own section list:
 
 - §3.4.3 `uri` — correct as cited
 - §3.4.4 `uriBaseId` — correct as cited
@@ -2209,11 +2177,12 @@ whether to omit it on a clean run is a real one.
 
 Run in a throwaway worktree (`/tmp/probe-wt-6-1-3`, removed afterwards) with a
 purpose-built probe lint, `crates/q4_probe`, built under the Makefile's
-mandatory flags (`RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked
--D warnings"`) and loaded through a real `cargo +nightly-2026-05-28 dylint
---all` invocation. All six probe answers were recorded before the worktree was
-removed. The probe emitted no `dbg!`; every observation below is a rendered
-diagnostic or a captured `cargo` argument vector.
+mandatory flags
+(`RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked -D warnings"`) and
+loaded through a real `cargo +nightly-2026-05-28 dylint --all` invocation. All
+six probe answers were recorded before the worktree was removed. The probe
+emitted no `dbg!`; every observation below is a rendered diagnostic or a
+captured `cargo` argument vector.
 
 **Q1 — `span_to_filename` returns a workspace-root-relative path.**
 `SourceMap::span_to_filename` (`:485-487`, all three methods live on
@@ -2234,12 +2203,12 @@ The probe confirms the workspace's files take the `Real` arm, and that
 `local_path()` and `path(RemapPathScopeComponents::DIAGNOSTICS)` agree. Under a
 real `cargo dylint` run against this repository the value is a
 **repository-root-relative** path with no leading `./`. Observed for
-`-p whitaker-common`: `common/src/lib.rs`,
-`common/src/attributes/mod.rs`, `common/src/attributes/attribute.rs`. In a
-two-member scratch workspace it is `app/src/lib.rs` (the member directory is
-*not* stripped — the path is relative to the workspace root, not to the
-member). In a single-package fixture with no `[workspace]` table it is
-`src/lib.rs`, because there the package root *is* the workspace root.
+`-p whitaker-common`: `common/src/lib.rs`, `common/src/attributes/mod.rs`,
+`common/src/attributes/attribute.rs`. In a two-member scratch workspace it is
+`app/src/lib.rs` (the member directory is *not* stripped — the path is relative
+to the workspace root, not to the member). In a single-package fixture with no
+`[workspace]` table it is `src/lib.rs`, because there the package root *is* the
+workspace root.
 
 The one in-tree caller
 (`crates/rstest_helper_should_be_fixture/src/visitor.rs:90`) passes the
@@ -2248,9 +2217,9 @@ The one in-tree caller
 about the extraction and confirms the plan's "no existing convention to
 preserve" finding.
 
-**Q2 — there is nothing to strip; the path is already relative.**
-`cargo` sets the compiler's working directory to the **workspace root**, and
-does so independently of the shell's directory: invoking
+**Q2 — there is nothing to strip; the path is already relative.** `cargo` sets
+the compiler's working directory to the **workspace root**, and does so
+independently of the shell's directory: invoking
 `cargo check --manifest-path /tmp/probe-6-1-3/ws/Cargo.toml` from `/tmp` still
 produced `CWD=/tmp/probe-6-1-3/ws` for the workspace member. The same
 workspace-root cwd was observed for this repository's own members. That is
@@ -2266,13 +2235,13 @@ branch that never fires in the workspace case. The ADR should say the
 identifier is used as returned, and that any normalization is a *validation*
 step (rejecting the shapes the schema forbids) rather than a prefix removal.
 
-**Q3 — a `..` component cannot arise from workspace membership.**
-Two independent results. First, `cargo` refuses an out-of-root workspace
-member outright: declaring `members = ["app", "../outdep"]` fails with
-"workspace member `/tmp/probe-6-1-3/outdep/Cargo.toml` is not hierarchically
-below the workspace root". So the only way a source file can sit outside the
-workspace root is a **non-member path dependency**, and for that case `cargo`
-hands rustc an **absolute** path (`/tmp/probe-6-1-3/outdep/src/lib.rs`), not a
+**Q3 — a `..` component cannot arise from workspace membership.** Two
+independent results. First, `cargo` refuses an out-of-root workspace member
+outright: declaring `members = ["app", "../outdep"]` fails with "workspace
+member `/tmp/probe-6-1-3/outdep/Cargo.toml` is not hierarchically below the
+workspace root". So the only way a source file can sit outside the workspace
+root is a **non-member path dependency**, and for that case `cargo` hands rustc
+an **absolute** path (`/tmp/probe-6-1-3/outdep/src/lib.rs`), not a
 `..`-relative one. A `..` in the identifier therefore cannot be produced by the
 workspace layout at all; it could only be produced by a *remapping* that
 introduced one, or by a caller passing a path through some other route.
@@ -2286,7 +2255,8 @@ produces.
 
 **Q4 — confirmed, and it is a correctness requirement, not a preference.**
 `emit_node_span_lint` compiles on the pinned toolchain under `-D warnings`. Its
-signature is `emit_node_span_lint(self, lint: &'static Lint, hir_id: HirId,
+signature is
+`emit_node_span_lint(self, lint: &'static Lint, hir_id: HirId,
 span: impl Into<MultiSpan>, decorator: impl for<'a> Diagnostic<'a, ()>)`
 (`rustc_middle/src/ty/context.rs:2461-2470`), and `DiagDecorator` implements
 `Diagnostic<'a, ()>` (`rustc_errors/src/diagnostic.rs:135-141`) — the same
@@ -2297,19 +2267,18 @@ The probe ran one lint over a two-item fixture with `#[allow(q4_probe)]` on the
 first item only, emitting through three paths. The result is asymmetric and
 unambiguous:
 
-| Emission path | `allowed_item` | `plain_item` |
-| --- | --- | --- |
-| `emit_node_span_lint(lint, item_hir_id, ..)` from `check_crate_post` | suppressed | emitted |
-| `cx.emit_span_lint(..)` from `check_item` (context node *is* the item) | suppressed | emitted |
-| `cx.emit_span_lint(..)` from `check_crate_post` | **emitted** | emitted |
+| Emission path                                                          | `allowed_item` | `plain_item` |
+| ---------------------------------------------------------------------- | -------------- | ------------ |
+| `emit_node_span_lint(lint, item_hir_id, ..)` from `check_crate_post`   | suppressed     | emitted      |
+| `cx.emit_span_lint(..)` from `check_item` (context node *is* the item) | suppressed     | emitted      |
+| `cx.emit_span_lint(..)` from `check_crate_post`                        | **emitted**    | emitted      |
 
 A crate-level `#![allow(q4_probe)]` suppressed all three. The mechanism is in
-the source: `LateContext::opt_span_lint`
-(`rustc_lint/src/context.rs:600-615`) resolves the level at
-`self.last_node_with_lint_attrs`, whereas `emit_node_span_lint` resolves it at
-the `HirId` it is handed (`rustc_middle/src/lint.rs:248-252`, walking parents
-via `hir_parent_id_iter`, `rustc_middle/src/hir/map.rs:525-527`).
-`check_crate_post` is dispatched inside
+the source: `LateContext::opt_span_lint` (`rustc_lint/src/context.rs:600-615`)
+resolves the level at `self.last_node_with_lint_attrs`, whereas
+`emit_node_span_lint` resolves it at the `HirId` it is handed
+(`rustc_middle/src/lint.rs:248-252`, walking parents via `hir_parent_id_iter`,
+`rustc_middle/src/hir/map.rs:525-527`). `check_crate_post` is dispatched inside
 `with_lint_attrs(hir::CRATE_HIR_ID)` (`rustc_lint/src/late.rs:393-404`), so at
 that point `last_node_with_lint_attrs` **is the crate root** — item- and
 module-level attributes are invisible to the span-only path, and only
@@ -2325,19 +2294,19 @@ emission, and state the crate-level-only residual as a limitation.
 
 Supporting finding: **no in-tree Whitaker lint currently emits from
 `check_crate_post`.** The only in-tree user of that hook is
-`rstest_helper_should_be_fixture` (`crates/rstest_helper_should_be_fixture/src/driver.rs:244`),
-which finalizes a collector and writes a summary file — it never emits a
-diagnostic. Every one of the nine emitting lint crates calls
-`cx.emit_span_lint` during traversal; the tenth lint crate,
-`rstest_helper_should_be_fixture`, has no emit site at all. So the
-deferred-emission pattern is genuinely new, and the
-probe's fixture is the first place the level-resolution difference is
-observable in this codebase's terms.
+`rstest_helper_should_be_fixture`
+(`crates/rstest_helper_should_be_fixture/src/driver.rs:244`), which finalizes a
+collector and writes a summary file — it never emits a diagnostic. Every one of
+the nine emitting lint crates calls `cx.emit_span_lint` during traversal; the
+tenth lint crate, `rstest_helper_should_be_fixture`, has no emit site at all.
+So the deferred-emission pattern is genuinely new, and the probe's fixture is
+the first place the level-resolution difference is observable in this
+codebase's terms.
 
-**Q7 — re-derived from 6-5-1 alone: four, confirmed.**
-Reading `6-5-1-collect-brain-trust-diagnostics-into-sarif-emitter.md` directly,
-without consulting this plan's prose, the two documents genuinely disagree in
-exactly four places:
+**Q7 — re-derived from 6-5-1 alone: four, confirmed.** Reading
+`6-5-1-collect-brain-trust-diagnostics-into-sarif-emitter.md` directly, without
+consulting this plan's prose, the two documents genuinely disagree in exactly
+four places:
 
 1. *Crate edge and mapping-module placement.* 6-5-1 `:291-301` puts the
    brain-trust emitter in `common/src/brain_trust_sarif/`; the ADR puts the
@@ -2413,8 +2382,8 @@ Two rules, both load-bearing:
    `SourceSpan` — but must not depend on `fluent-templates` or `unic-langid`,
    which is the edge `VP-1` checks.
 
-Rule 2 supersedes the 6.5.1 execplan in three places, listed under
-"Known risks and limitations".
+Rule 2 supersedes the 6.5.1 execplan in three places, listed under "Known risks
+and limitations".
 
 ### BTD-REQ-01 — location resolution
 
@@ -2482,8 +2451,8 @@ Normative rules:
 
 1. **Home.** `RepoRelativePath` lives in `whitaker-common`, whose invariant is a
    repository-path invariant, not a SARIF one. `resolve_subject_location` lives
-   in the root `whitaker` crate at `src/location/mod.rs` behind `dylint-driver`
-   — the established home for shared rustc-facing helpers
+   in the root `whitaker` crate at `src/location/mod.rs` behind
+   `dylint-driver` — the established home for shared rustc-facing helpers
    (`src/lib.rs:13-25`), already depended on by every lint crate with that
    feature, and not in the publish set. A new module rather than `src/hir/`,
    which is 374 lines against the 400-line cap in `AGENTS.md:31`.
@@ -2492,8 +2461,8 @@ Normative rules:
    compiler's working directory stripped. Stage B confirms which case occurs
    under Cargo — **and it confirms the relative case: `cargo` sets the
    compiler's working directory to the workspace root and hands rustc a
-   workspace-root-relative source path, so the stripping branch is a
-   fallback for the non-Cargo case rather than the live path.** See
+   workspace-root-relative source path, so the stripping branch is a fallback
+   for the non-Cargo case rather than the live path.** See
    `Artefacts and notes`.
 3. **Normalization.** Forward slashes on every platform, no leading `./`, no
    leading slash, no `..` component, per SARIF 2.1.0 §3.4.3, which requires a
@@ -2517,8 +2486,8 @@ Normative rules:
    valid-but-wrong region that no gate can catch. Where a column genuinely
    cannot be determined — a span starting mid-grapheme, a tab-indented line
    under an ambiguous width rule — omit `startColumn` entirely, which
-   `Region.start_column: Option<usize>` already permits, rather than
-   fabricating `1`.
+   `Region.start_column: Option<usize>` already permits, rather than fabricating
+   `1`.
 6. **No real file.** Macro expansions, command-line inputs, doctests, and any
    non-real `FileName` yield `Err(NotRealFile)`. The lint still emits its
    compiler diagnostic, because rustc renders such spans correctly; the finding
@@ -2534,15 +2503,14 @@ Normative rules:
    input is reported through `log::debug!` and the run's counters. The
    precedent to follow is `crates/module_max_lines/src/driver.rs:86-93`, which
    logs and returns. **Known limitation**: four existing call sites carry this
-   hazard today —
-   `crates/bumpy_road_function/src/driver/mod.rs:224` and `:235`, and
-   `segment_builder.rs:164` and `:186` — recorded as follow-up work.
+   hazard today — `crates/bumpy_road_function/src/driver/mod.rs:224` and
+   `:235`, and `segment_builder.rs:164` and `:186` — recorded as follow-up work.
 9. **Observability.** Every drop emits one `log::debug!` naming the subject and
    the reason, matching the discipline in
    `crates/rstest_helper_should_be_fixture/src/collector.rs:140-144`. The
    emitted run carries an unresolved-subject count per reason **even when it is
-   zero**, so "clean" is falsifiably different from "resolution broken".
-   `VP-5` is the obligation this creates.
+   zero**, so "clean" is falsifiably different from "resolution broken". `VP-5`
+   is the obligation this creates.
 10. **`uriBaseId`.** Brain trust results emit `artifactLocation.uri` as the
     repository-relative path with `uriBaseId` absent. SARIF §3.4.4 permits
     this, and GitHub code scanning documents a repository-root-relative path as
@@ -2570,31 +2538,37 @@ at finalization, for gated subjects only.**
    `Union` — the latter is what supplies the subject's *declaration* span and
    `HirId`, without which the diagnostic has nowhere to point. `brain_trait`
    captures from `check_item` for `ItemKind::Trait`. No capture callback emits.
-2. **Phase one records scalars only.** Per method: the `DefId`, the name, the
-   `BodyId`, the `Span`, and the line count. `BodyId` is `Copy` and carries no
-   lifetime, so it can live on a pass struct that is not parameterized by
-   `'tcx` — which every shipped driver's is not
-   (`crates/bumpy_road_function/src/driver/mod.rs:75`). Phase one must not
+2. **Phase one records scalars only, and only the scalars an item has.** For a
+   method *with a body* — an inherent or trait-impl method, or a trait default
+   method — phase one records the `DefId`, the name, the `BodyId`, the `Span`,
+   and the line count. `BodyId` is `Copy` and carries no lifetime, so it can
+   live on a pass struct that is not parameterized by `'tcx` — which every
+   shipped driver's is not (`crates/bumpy_road_function/src/driver/mod.rs:75`).
+   For the other items the trait metrics count — required methods, associated
+   types, and associated constants — phase one records only the name and the
+   `Span`, because a required method is a declaration with no body and so has no
+   `BodyId`. The builder reflects that asymmetry: only `add_default_method`
+   takes a complexity value
+   (`common/src/brain_trait_metrics/metrics.rs:168-235`). Phase one must not
    build `MethodInfo`, `MethodProfile`, or any string set.
 3. **The gate runs between the phases.** At finalization, evaluate the
    lightweight threshold on the *complete* accumulated method count, then
    re-fetch each surviving subject's bodies through `cx.tcx` and perform the
-   deep walk. This satisfies both
-   `docs/brain-trust-lints-design.md:361-365` ("deep analysis is only performed
-   after lightweight thresholds are crossed") and the requirement that the gate
-   see a complete method count. A single-phase fan-out cannot satisfy both: it
-   makes the traversal itself the deep analysis, so the gate guards only the
-   clustering step, and it retains six string collections per method for every
-   type in the crate until crate-post.
+   deep walk. This satisfies both `docs/brain-trust-lints-design.md:361-365`
+   ("deep analysis is only performed after lightweight thresholds are crossed")
+   and the requirement that the gate see a complete method count. A
+   single-phase fan-out cannot satisfy both: it makes the traversal itself the
+   deep analysis, so the gate guards only the clustering step, and it retains
+   six string collections per method for every type in the crate until
+   crate-post.
 4. **Phase two fans out from one walk.** For a gated subject, visit each method
-   body once and dispatch to all four sinks —
-   `CognitiveComplexityBuilder`, `MethodInfoBuilder`, `MethodProfileBuilder`,
-   and `ForeignReferenceSet`. This resolves the divergence between
-   `lcom4::MethodInfo` and `decomposition_advice::MethodProfile` at the driver
-   without changing either domain type. The ADR names the dispatch surface
-   explicitly: a single visitor type owning all four builders, exposing one
-   method per HIR event rather than one per sink, so a contributor cannot feed
-   three sinks and forget the fourth.
+   body once and dispatch to all four sinks — `CognitiveComplexityBuilder`,
+   `MethodInfoBuilder`, `MethodProfileBuilder`, and `ForeignReferenceSet`. This
+   resolves the divergence between `lcom4::MethodInfo` and
+   `decomposition_advice::MethodProfile` at the driver without changing either
+   domain type. The ADR names the dispatch surface explicitly: a single visitor
+   type owning all four builders, exposing one method per HIR event rather than
+   one per sink, so a contributor cannot feed three sinks and forget the fourth.
 5. **Nesting balance is structural, not disciplinary.**
    `CognitiveComplexityBuilder::build` panics on an unbalanced nesting stack and
    `pop_nesting` panics on an empty one
@@ -2614,9 +2588,9 @@ at finalization, for gated subjects only.**
    subject that yields neither is skipped, with the stated consequence that
    blanket implementations, implementations on primitives, references, slices,
    tuples, function pointers, and `dyn Trait`, and implementations on foreign
-   types, contribute to no brain type. References are peeled before the test,
-   so `impl Trait for &Foo` merges into `Foo`. Multiple generic instantiations
-   — `impl Foo<u8>` and `impl Foo<String>` — merge into one subject, and each
+   types, contribute to no brain type. References are peeled before the test, so
+   `impl Trait for &Foo` merges into `Foo`. Multiple generic instantiations —
+   `impl Foo<u8>` and `impl Foo<String>` — merge into one subject, and each
    source definition counts once, because `TypeMetricsBuilder::add_method`
    deduplicates nothing (`common/src/brain_type_metrics/mod.rs:295-306`) and is
    not meant to. Settled by `Counting a method once` in ADR 005; the reasoning
@@ -2666,8 +2640,8 @@ at finalization, for gated subjects only.**
    `target/whitaker/` — which `merge_runs` re-reads
    (`crates/whitaker_sarif/src/merge.rs:104-145`). The ADR requires: one
    versioning convention rather than two, a transitional read rule for the
-   absent tag, and a normative statement that consumers ignore unknown keys.
-   It also records the `rename_all` trap — an internally tagged enum's
+   absent tag, and a normative statement that consumers ignore unknown keys. It
+   also records the `rename_all` trap — an internally tagged enum's
    `rename_all` renames *variants*, not the variants' fields, so each payload
    struct must carry its own.
 6. **Outstanding decision**: adding per-method spans to
@@ -2676,11 +2650,11 @@ at finalization, for gated subjects only.**
 
 ### BTD-REQ-04 — the lint-pass lifecycle
 
-| Callback | Responsibility |
-| -------- | -------------- |
-| `check_crate` | Clear all accumulated state unconditionally, then load configuration, build the `Localizer`, and resolve the SARIF mode. |
-| `check_item`, `check_impl_item`, `check_trait_item` | Capture scalars only. Never evaluate, never emit, never build a string set. |
-| `check_crate_post` | Finalize once; gate; deep-capture surviving subjects; evaluate; build findings; emit through a `HirId`-aware path in a deterministic order; hand the run to the artefact writer. |
+| Callback                                            | Responsibility                                                                                                                                                                   |
+| --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `check_crate`                                       | Clear all accumulated state unconditionally, then load configuration, build the `Localizer`, and resolve the SARIF mode.                                                         |
+| `check_item`, `check_impl_item`, `check_trait_item` | Capture scalars only. Never evaluate, never emit, never build a string set.                                                                                                      |
+| `check_crate_post`                                  | Finalize once; gate; deep-capture surviving subjects; evaluate; build findings; emit through a `HirId`-aware path in a deterministic order; hand the run to the artefact writer. |
 
 *Table 2: Responsibilities of each lint-pass callback.*
 
@@ -2691,9 +2665,9 @@ at finalization, for gated subjects only.**
    `#[allow(brain_type)]` and `#[expect(...)]` on the type or `impl`, leaving
    an unsuppressable lint. Deferred emission must therefore capture the
    subject's `HirId` and emit through `TyCtxt::emit_node_span_lint`
-   (`rustc_middle/src/ty/context.rs:2461-2470`), which resolves the level at the
-   supplied node. The lint crates gain `rustc_middle` under `dylint-driver` for
-   this; note that `crates/clippy_utils` is a stub carrying only
+   (`rustc_middle/src/ty/context.rs:2461-2470`), which resolves the level at
+   the supplied node. The lint crates gain `rustc_middle` under `dylint-driver`
+   for this; note that `crates/clippy_utils` is a stub carrying only
    `macros::is_panic` (`crates/clippy_utils/src/lib.rs:1-12`) and provides no
    alternative.
 2. **Finalize once, by construction.** The accumulator is consumed by
@@ -2736,8 +2710,10 @@ at finalization, for gated subjects only.**
 6. **Per-target duplication.** The same source file is compiled for the lib
    target and the test target, and the test target sees `#[cfg(test)]` methods,
    so one subject at one location yields different metrics under an otherwise
-   identical key. The ADR states which target's result wins at merge time, or
-   keys the subject by target as well.
+   identical key. The ADR states the duplication and **defers the resolution**
+   to the merge step, which does not exist yet: whether a winning target is
+   chosen or the subject is keyed by target as well is listed under
+   `Outstanding decisions`, not selected.
 7. **Incremental builds.** Cargo skips rustc for unchanged crates, so a brain
    trust artefact for an unchanged crate is stale-but-valid. The ADR states
    that explicitly so a continuous-integration recipe can choose between
@@ -2774,15 +2750,14 @@ at finalization, for gated subjects only.**
    `whitaker-common` re-exports `get_localizer_for_lint` and `Localizer`
    (`common/src/lib.rs:89-105`), so a mapping that localizes needs no manifest
    edit at all. What the rule buys is that the manifest states the intent, so
-   such a mapping is visibly at odds with a declared edge. Placing the mapping inside
-   `common/src/brain_trust_sarif/`, as the 6.5.1 execplan proposes, would
-   surrender that property: it would put the mapping in a crate whose manifest
-   declares `fluent-templates` outright, so no check could distinguish a
-   mapping that renders English text from one that resolves a Fluent key.
-   **Supersedes the 6.5.1 execplan's mapping-module
-   placement** — the same decision recorded under `The layering decision`,
-   stated here from the language-boundary side. `VP-1` is the obligation this
-   creates.
+   such a mapping is visibly at odds with a declared edge. Placing the mapping
+   inside `common/src/brain_trust_sarif/`, as the 6.5.1 execplan proposes,
+   would surrender that property: it would put the mapping in a crate whose
+   manifest declares `fluent-templates` outright, so no check could distinguish
+   a mapping that renders English text from one that resolves a Fluent key.
+   **Supersedes the 6.5.1 execplan's mapping-module placement** — the same
+   decision recorded under `The layering decision`, stated here from the
+   language-boundary side. `VP-1` is the obligation this creates.
 3. **Diagnostics are localized.** Compiler diagnostics resolve primary, note,
    and help text through `safe_resolve_message_set`, which falls back to a
    lint-supplied English `DiagnosticMessageSet` when a Fluent key is missing
@@ -2810,11 +2785,11 @@ at finalization, for gated subjects only.**
    declared in one file and implemented across three others? This determines
    the SARIF `physicalLocation` and, via `BTD-REQ-04` rule 1, which `#[allow]`
    site works. Nothing in `docs/brain-trust-lints-design.md:373-384` answers
-   it. **Answered**: the declaration span, from the `ItemKind::Struct` /
-   `Enum` / `Union` item captured by `BTD-REQ-02` rule 1 and by `HIR capture`
-   rule 1 in ADR 005. The design document is silent; the capture contract
-   settles it, because that callback is also what supplies the `HirId` the
-   deferred emission resolves the lint level at.
+   it. **Answered**: the declaration span, from the `ItemKind::Struct` / `Enum`
+   / `Union` item captured by `BTD-REQ-02` rule 1 and by `HIR capture` rule 1
+   in ADR 005. The design document is silent; the capture contract settles it,
+   because that callback is also what supplies the `HirId` the deferred
+   emission resolves the lint level at.
 2. If a blanket implementation is skipped for `brain_type` per `BTD-REQ-02`
    rule 7, do its default method bodies count toward `brain_trait` for the
    implemented trait? Under rule 1 they do not, so blanket-implementation
@@ -2831,33 +2806,33 @@ at finalization, for gated subjects only.**
    WMC, or once per generic instantiation?
    `docs/brain-trust-lints-design.md:51-56` reads "once", but
    `TypeMetricsBuilder::add_method` deduplicates nothing. This was an
-   `Ambiguity` tolerance trigger. **Answered**: once per source definition site,
-   by `Counting a method once` in ADR 005, which is the subsection following
-   `HIR capture` rule 7. Per-instantiation duplication cannot arise under an
-   HIR-based capture, because rustc's HIR holds one `ImplItem` per source `impl`
-   block regardless of its generic parameters. The two entries a trait impl and
-   an inherent impl may contribute under the same name are not a defect of the
-   count: `build_method_index` preserves duplicate names
-   (`common/src/lcom4/mod.rs:235-242`) precisely so that `union_by_method_calls`
-   can union a caller with every matching callee (`:244-248`), and
-   `TypeMetricsBuilder::add_method` pushes unconditionally
-   (`common/src/brain_type_metrics/mod.rs:295-306`), so it is not a deduplicating
-   API. A driver that deduplicated by name would defeat the cohesion design and
-   silently discard one body's measured complexity.
+   `Ambiguity` tolerance trigger. **Answered**: once per source definition
+   site, by `Counting a method once` in ADR 005, which is the subsection
+   following `HIR capture` rule 7. Per-instantiation duplication cannot arise
+   under an HIR-based capture, because rustc's HIR holds one `ImplItem` per
+   source `impl` block regardless of its generic parameters. The two entries a
+   trait impl and an inherent impl may contribute under the same name are not a
+   defect of the count: `build_method_index` preserves duplicate names
+   (`common/src/lcom4/mod.rs:235-242`) precisely so that
+   `union_by_method_calls` can union a caller with every matching callee
+   (`:244-248`), and `TypeMetricsBuilder::add_method` pushes unconditionally
+   (`common/src/brain_type_metrics/mod.rs:295-306`), so it is not a
+   deduplicating API. A driver that deduplicated by name would defeat the
+   cohesion design and silently discard one body's measured complexity.
 4. Should `brain_trait` emit from `check_item` instead of deferring, given that
    `ItemKind::Trait` is self-contained? Deferring is what makes `BTD-REQ-04`
    rule 1 necessary for it at all. **Answered**: it defers anyway, and the
    asymmetry is accepted rather than argued away. `brain_trait` genuinely does
    not need deferral — `TraitMetricsBuilder` accepts only trait items
    (`common/src/brain_trait_metrics/metrics.rs:120-235`), and
-   `crates/bumpy_road_function/src/driver/mod.rs:99-100` already reaches a trait
-   default body's `BodyId` synchronously, so the immediate path is available.
-   The reason adopted is uniformity of the seam: one lifecycle contract with a
-   single carve-out invites a future contributor to reintroduce the
-   unsuppressable-lint bug in the lint that has the exception. `Emission
-   lifecycle` in ADR 005 now states this plainly and names the cost, rather
-   than resting on the claim that both lints are whole-crate lints — which was
-   false for `brain_trait`.
+   `crates/bumpy_road_function/src/driver/mod.rs:99-100` already reaches a
+   trait default body's `BodyId` synchronously, so the immediate path is
+   available. The reason adopted is uniformity of the seam: one lifecycle
+   contract with a single carve-out invites a future contributor to reintroduce
+   the unsuppressable-lint bug in the lint that has the exception.
+   `Emission lifecycle` in ADR 005 now states this plainly and names the cost,
+   rather than resting on the claim that both lints are whole-crate lints —
+   which was false for `brain_trait`.
 
 ### Dependencies
 
@@ -2904,8 +2879,8 @@ inherit the instruction.
 
 - Static Analysis Results Interchange Format (SARIF) Version 2.1.0 Plus
   Errata 01, OASIS: §3.4.3 `uri`, §3.4.4 `uriBaseId`, §3.14.14
-  `originalUriBaseIds`, §3.14.27 `columnKind`, §3.30.8 `endColumn`
-  (the plan originally cited §3.30.6, which is `startColumn`).
+  `originalUriBaseIds`, §3.14.27 `columnKind`, §3.30.8 `endColumn` (the plan
+  originally cited §3.30.6, which is `startColumn`).
   <https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/sarif-v2.1.0-errata01-os-complete.html>
 - GitHub code scanning SARIF support, §"Source file locations".
   <https://docs.github.com/en/code-security/reference/code-scanning/sarif-files/sarif-support>
@@ -2948,9 +2923,9 @@ What changed. The base branch was rewritten, moving the tree this plan's
 factual claims are anchored to from `f03d3e7` to `f259e45`. Every cited file
 and line was re-verified against the new base. All load-bearing claims still
 hold; nine citations shifted and were corrected. Substantively:
-`SarifResult::partial_fingerprints` is still a `HashMap`, so the
-byte-stability supersession stands; `Run` still has no `columnKind` field, so
-that supersession stands; `ArtefactLocation` and the mandatory
+`SarifResult::partial_fingerprints` is still a `HashMap`, so the byte-stability
+supersession stands; `Run` still has no `columnKind` field, so that
+supersession stands; `ArtefactLocation` and the mandatory
 `RelatedLocation::physical_location` are unchanged, so the property-bag
 reasoning in `BTD-REQ-03` stands; and the clone detector still emits
 `uri_base_id: None`, so the outstanding `uriBaseId` decision stands.
@@ -2977,18 +2952,18 @@ fails closed when that declaration cannot be read, which closes a latent false
 negative where a member could inherit a forbidden edge invisibly. Three fixture
 tests cover the new shapes, taking the file from 15 tests to 18. Three sites
 claiming the language boundary "requires a visible, reviewable manifest edit"
-were corrected to say what is true: the re-exports are already reachable with no
-edit, so the rule buys an informative manifest rather than a capability gate.
+were corrected to say what is true: the re-exports are already reachable with
+no edit, so the rule buys an informative manifest rather than a capability gate.
 
 One correction was incomplete on its first pass and is recorded as an
 observation rather than quietly repaired. The seam fix swept the six sites that
 named `SubjectLocation` *as the adapter's input* and reported that count as a
 sweep for the type name. Five further sites in this plan named it instead to
 justify the mapping crate's `whitaker-common` edge, and so carried the same
-defect; they are corrected in the same pass, and the wrong count is corrected in
-place.
+defect; they are corrected in the same pass, and the wrong count is corrected
+in place.
 
 Effect on remaining work. None on scope. `EP-M2`'s test count moves from 15 to
 18 and its gate list now names all six gates rather than four. The inheritance
-shapes are new coverage that `VP-1` did not require — they close a hole found by
-review rather than by the plan's own checklist.
+shapes are new coverage that `VP-1` did not require — they close a hole found
+by review rather than by the plan's own checklist.
