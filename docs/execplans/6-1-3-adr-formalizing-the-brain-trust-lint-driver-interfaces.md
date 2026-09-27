@@ -294,26 +294,29 @@ Thresholds that trigger escalation, not quality targets.
 - [x] (2026-09-27) EP-M1 `docs/adr-005-brain-trust-lint-driver-interfaces.md`
   written and registered in `docs/contents.md`.
 - [x] (2026-09-27) EP-M2 complete.
-      `crates/whitaker_sarif/tests/architecture_boundary.rs` and
-      `crates/whitaker_sarif/tests/manifest_scan/mod.rs`
-  added, 19 tests. The rule lives in the first file and the manifest-scanning
-  toolkit it is asserted through in the second; they were split when the single
-  file passed AGENTS.md's 400-line budget. It asserts both ADR 005 rules over
-  dependency manifests: `whitaker_sarif` must not name `whitaker-common`, and
-  `whitaker_brain_trust_sarif` must not name `fluent-templates` or
-  `unic-langid`. The `whitaker_sarif` half runs against the **real** manifest,
-  so a reintroduced edge fails today; the mapping-crate half carries fixture
-  cases plus a test that scans the real manifest *when the crate exists* and
-  returns early until then. That test activates on its own when the crate
-  lands, so the rule stops resting on fixtures alone without anyone having to
-  remember to wire it up. Red confirmed four times: before and after the
-  `cap_std` conversion, again after the discovery helper was deduplicated, and
-  again for the `{ workspace = true }` inheritance fix — the last against the
-  **real** manifests rather than a fixture, by injecting an inherited rename at
-  the workspace root and in `whitaker_sarif` and confirming the guard fails
-  naming `dependencies.wc_alias`; the injected manifests were then restored.
-  With the forbidden edge present the guard fails naming the dependency *and*
-  its location, `dependencies.whitaker-common` or
+      `crates/whitaker_sarif/tests/architecture_boundary.rs`,
+      `crates/whitaker_sarif/tests/manifest_scan/mod.rs`, and
+      `crates/whitaker_sarif/tests/manifest_scan/workspace_inheritance.rs`
+  added, 22 tests. The rule lives in the first file, the manifest-scanning
+  toolkit it is asserted through in the second, and the scanner's own
+  workspace-inheritance behaviour in the third. They were split twice against
+  AGENTS.md's 400-line budget: once when the single file passed it, and again
+  when round-5 coverage pushed the rule file back over. It asserts both ADR 005
+  rules over dependency manifests: `whitaker_sarif` must not name
+  `whitaker-common`, and `whitaker_brain_trust_sarif` must not name
+  `fluent-templates` or `unic-langid`. The `whitaker_sarif` half runs against
+  the **real** manifest, so a reintroduced edge fails today; the mapping-crate
+  half carries fixture cases plus a test that scans the real manifest *when the
+  crate exists* and returns early until then. That test activates on its own
+  when the crate lands, so the rule stops resting on fixtures alone without
+  anyone having to remember to wire it up. Red confirmed four times: before and
+  after the `cap_std` conversion, again after the discovery helper was
+  deduplicated, and again for the `{ workspace = true }` inheritance fix — the
+  last against the **real** manifests rather than a fixture, by injecting an
+  inherited rename at the workspace root and in `whitaker_sarif` and confirming
+  the guard fails naming `dependencies.wc_alias`; the injected manifests were
+  then restored. With the forbidden edge present the guard fails naming the
+  dependency *and* its location, `dependencies.whitaker-common` or
   `dependencies.fluent-templates`. All three non-vacuity checks from `VP-1` are
   permanent assertions — the direct fixture, the renamed fixture
   (`loc = { package = ... }`), and a floor asserting at least one table and one
@@ -1757,8 +1760,9 @@ The probe must answer eight questions:
    yields a one-based `Loc::line`, and both yield zero-based `CharPos` columns.
    Conflating them is a guaranteed off-by-one.
 6. Is the incumbent producer's `endColumn` inclusive or exclusive against SARIF
-   §3.30.8? See `VP-3`'s open sub-question. **Answered 2026-09-27: it is
-   exclusive, so the incumbent is off by one — see `Artefacts and notes`.**
+   §3.30.8? See `VP-3`'s open sub-question. **Answered 2026-09-27: the
+   incumbent's is inclusive where the spec requires exclusive, so the incumbent
+   is off by one — see `Artefacts and notes`.**
 7. Re-derive the supersession set by reading
    `6-5-1-collect-brain-trust-diagnostics-into-sarif-emitter.md` directly,
    without consulting this plan's prose, and list every place the two documents
@@ -1869,9 +1873,9 @@ upstream assumption without that artefact being updated.
 - Requirements: `BTD-REQ-05`, and the layering rule of `The layering decision`.
 - Changes: two test files — the rule in `tests/architecture_boundary.rs` and its
   machinery in `tests/manifest_scan/mod.rs` — plus fixture manifests. The split
-  is forced by the 400-line rule and follows the existing `tests/support/mod.rs`
-  precedent; a module *directory* is used because Cargo does not discover
-  `tests/<dir>/mod.rs` as its own target.
+  is forced by the 400-line rule and follows the existing
+  `tests/support/mod.rs` precedent; a module *directory* is used because Cargo
+  does not discover `tests/<dir>/mod.rs` as its own target.
 - Red artefact: the guard run against a fixture manifest declaring the
   forbidden dependency, which must fail naming it.
 - Acceptance evidence (`AC-2`): the three non-vacuity checks in `VP-1` all
@@ -2443,8 +2447,13 @@ impl RepoRelativePath {
     /// component, carries a drive prefix, or is empty.
     pub fn new(candidate: &Utf8Path) -> Result<Self, PathError> { todo!() }
 
-    /// Returns the forward-slashed representation used in diagnostics,
-    /// fingerprints, and `artifactLocation.uri`.
+    /// Returns the forward-slashed, **decoded** repository path.
+    ///
+    /// This is not a SARIF URI reference and is **not** percent-encoded, per
+    /// `Location resolution` rule 3: the same value feeds compiler diagnostics
+    /// and fingerprints, where percent-encoding would be wrong. A caller
+    /// building `artifactLocation.uri` must percent-encode the result first, or
+    /// a path containing a space or a `#` will not be a valid URI reference.
     #[must_use]
     pub fn as_str(&self) -> &str { todo!() }
 }
@@ -3056,28 +3065,89 @@ tightened: the isolated-member assertion in
 `a_plain_key_is_never_resolved_through_the_workspace` now pins `Absent`, so
 each can discriminate rather than merely refuse to confirm a finding.
 
-Why this is the third instance of one defect class. The fail-closed rule has now
-been repaired at three levels — the scan (`round 4`), the real-manifest guards
-(`round 4`), and the fixture harness (here). Each repair was local to where the
-defect was noticed, and each left a sibling site reading the permissive
-predicate. The lesson recorded for the remaining work is that a predicate
-carrying a correctness rule should be introduced with a grep for its siblings,
-not fixed at the site that was reported.
+Why this is the third instance of one defect class. The fail-closed rule has
+now been repaired at three levels — the scan (`round 4`), the real-manifest
+guards (`round 4`), and the fixture harness (here). Each repair was local to
+where the defect was noticed, and each left a sibling site reading the
+permissive predicate. The lesson recorded for the remaining work is that a
+predicate carrying a correctness rule should be introduced with a grep for its
+siblings, not fixed at the site that was reported.
 
 Observation, recorded 2026-09-27: hosted CI does not run on this PR's new
-commits, and the cause is a frozen test-merge ref rather than anything about the
-change. `refs/pull/358/merge` still points at a merge built 2026-08-21 from the
-base `f03d3e7`, so `pull_request` workflows have not fired since; only
-`pull_request_target` (which uses the base's default branch) keeps firing, which
-makes the branch look wired up when it is not. Draft status was checked and
-refuted as the cause: across all open PRs, 14 of 14 drafts and 10 of 10 ready PRs
-receive `pull_request` CI. `gh workflow run ci.yml --ref <branch>` is the working
-workaround and was used for `d129df5`. This is a repository/CI condition, not a
-defect in this change, and it is recorded here because it will otherwise be
-re-diagnosed from scratch on the next push.
+commits, and the cause is a frozen test-merge ref rather than anything about
+the change. `refs/pull/358/merge` still points at a merge built 2026-08-21 from
+the base `f03d3e7`, so `pull_request` workflows have not fired since; only
+`pull_request_target` (which uses the base's default branch) keeps firing,
+which makes the branch look wired up when it is not. Draft status was checked
+and refuted as the cause: across all open PRs, 14 of 14 drafts and 10 of 10
+ready PRs receive `pull_request` CI. `gh workflow run ci.yml --ref <branch>` is
+the working workaround and was used for `d129df5`. This is a repository/CI
+condition, not a defect in this change, and it is recorded here because it will
+otherwise be re-diagnosed from scratch on the next push.
 
 Effect on remaining work. None on scope. `EP-M2` moves from 19 tests to 20 and
 the two files are unchanged in size class: 399 and 344 lines, both inside the
-400-line rule. Two helpers moved to the toolkit to pay for the new coverage, and
-they are genuine deduplication rather than relocation — the workspace-table
+400-line rule. Two helpers moved to the toolkit to pay for the new coverage,
+and they are genuine deduplication rather than relocation — the workspace-table
 access had four copies and the non-vacuity floor had two.
+
+Revised 2026-09-27, clearing round-5 review.
+
+What changed. Two of the four findings were defects in the scan, and both were
+confirmed against Cargo's real behaviour rather than reasoned about:
+
+1. *A `package` override was read as an addition rather than a displacement.*
+   `names_package` tested the key and the override with `||`, so
+   `whitaker-common = { package = "serde" }` was reported as a
+   `whitaker-common` edge when Cargo resolves exactly one identity for that
+   entry, and it is `serde`. Verified by probe: `cargo metadata` reports
+   `name: serde` with `rename: whitaker-common` for that manifest, so the
+   override is the identity and the key is a local alias. The fix consults the
+   override first and falls back to the key only when no override is written.
+   This is the mirror of the defect `MAPPING_RENAMED` covers — that fixture
+   hides a forbidden package behind an innocuous key, this one hides an
+   innocuous package behind a forbidden key, and the two together are what pin
+   the resolution order rather than one direction of it.
+2. *`package.metadata` sub-tables were harvested as dependency tables.* The
+   recursion descended everywhere a `dependencies` key appeared, so a
+   `[package.metadata.tool.dependencies]` table — arbitrary data a tool chose
+   to store, which Cargo never resolves — failed the guard on a manifest
+   declaring no forbidden dependency. Confirmed by scanning every real
+   `Cargo.toml` in the tree for such a table before fixing.
+   `is_dependency_scope` now confines descent to Cargo's own grammar: the
+   manifest top level, `[target.<cfg>]`, and `[workspace]`.
+
+Each fix carries a discriminating test, added to `architecture_boundary.rs`.
+Both were verified by reverting the fix and confirming exactly the intended
+test fails and no other.
+
+1. *The `RepoRelativePath::as_str` sketch in this plan contradicted
+   `Location resolution` rule 3.* The doc comment listed `artifactLocation.uri`
+   among its direct consumers, but the ADR's rule 3 — written in round 4, after
+   the sketch — states that `as_str` returns the **decoded** path and that
+   percent-encoding belongs to the SARIF boundary. The sketch predated the rule
+   and was never swept. It now carries the ADR's wording, including the
+   consequence for a path containing a space or a `#`.
+2. *Question 6's answer in `Stage B` read as self-contradictory.* It said "it is
+   exclusive, so the incumbent is off by one", where "it" has no coherent
+   antecedent: read as the incumbent's `endColumn` it denies the off-by-one in
+   the same sentence. The substance was consistent everywhere else — line 1630,
+   line 2134, and the ADR all say the incumbent is **inclusive** while §3.30.8
+   requires exclusive — so this was an editorial defect in one sentence rather
+   than a substantive one. Reworded to name the subject. The ADR's own
+   statements were audited and are unambiguous in all five places.
+
+Why the file count changed again. The two new tests pushed
+`architecture_boundary.rs` to 461 lines against the 400-line rule, so the four
+workspace-inheritance tests moved to `manifest_scan/workspace_inheritance.rs`.
+The seam is "does this test state ADR 005's rule, or the scanner's behaviour?"
+— the four moved tests touch no rule constant and carry their own fixtures, so
+they are scanner statements and the rule file is now purely rule statements. A
+`mod` inside a test binary compiles unconditionally, so the tests still run
+whenever the toolkit is used; the count was confirmed unchanged at 22 by
+`cargo nextest list`, and all four appear under the new path. Sizes: 333, 366,
+144 lines.
+
+Effect on remaining work. None on scope. `EP-M2` moves from 20 tests to 22 in
+three files, all inside the 400-line rule. The F3 sketch fix is in this plan
+only; the ADR is unchanged, and its normative content is untouched by round 5.
