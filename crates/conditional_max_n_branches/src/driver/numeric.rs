@@ -7,8 +7,11 @@ pub(super) fn saturating_diagnostic_integer(value: u64) -> i64 {
 
 #[cfg(test)]
 mod tests {
+    //! Verify diagnostic integer conversion at Fluent's signed limit.
+
     use super::saturating_diagnostic_integer;
 
+    /// Verify values beyond Fluent's signed limit clamp without wrapping.
     #[test]
     fn diagnostic_integers_saturate_at_the_signed_boundary() {
         let maximum = i64::MAX.unsigned_abs();

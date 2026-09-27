@@ -2351,7 +2351,7 @@ executable file and comparing the version Cargo recorded for it, which needs no
 execution either.
 
 The `dylint-link` verification in `installer/src/deps/mod.rs` is implemented by
-five small private helpers:
+six small private helpers:
 
 - `find_binary_on_path(binary_name)` returns the first executable candidate so
   the installation check can validate the exact path it found.
@@ -2360,26 +2360,34 @@ five small private helpers:
   candidates relative to that directory capability. Non-UTF-8 entries and
   directories that cannot be opened are skipped, preserving the search order.
 - `binary_candidates(binary_name: &str) -> Vec<String>` returns candidate
-  executable names in PATH-search order; on Windows it expands extensionless
-  names using `PATHEXT`.
+  executable names in probe order. Unix returns the requested name unchanged.
+  Windows preserves a name with an extension as its sole candidate; otherwise,
+  it appends the `PATHEXT` suffixes in configured order, skipping suffixes
+  already present at the end of the name, case-insensitively.
 - `is_executable_file` has this signature:
 
   ```rust
   fn is_executable_file(
       directory: &Dir,
       candidate: &Utf8Path,
-      binary_name: &str,
+      failures: &mut Vec<PathScanFailureCategory>,
   ) -> bool
   ```
 
-  It obtains metadata with `Dir::metadata`, requires a regular file and, on
-  Unix, at least one executable permission bit. Metadata errors return `false`.
-  Failure traces include the binary name and a bounded failure category, but
-  not the PATH entry or candidate path. The executable suffix carries the
-  meaning on non-Unix targets.
+  It obtains metadata with `Dir::metadata` and returns `false` if the lookup
+  fails. A candidate must be a regular file and, on Unix, have at least one
+  executable permission bit. Lookup failures add the bounded `metadata`
+  category to the caller-provided list.
 - `windows_path_extensions()` normalizes `PATHEXT` on Windows so
   `binary_candidates()` can expand extensionless names the same way the shell
   does.
+
+`PathScanResult` is a narrowly scoped report for this PATH scan: it carries the
+first matching path and the bounded categories encountered while checking
+earlier entries. It is not a reusable filesystem abstraction. The scan helpers
+return these classifications without logging; `is_dylint_link_installed()`
+emits trace events at the installer boundary with the binary name and failure
+category, without recording PATH entries or candidate paths.
 
 These key helpers are covered by direct unit tests in
 `installer/src/deps/path_tests.rs` for missing PATH values, empty PATH values,

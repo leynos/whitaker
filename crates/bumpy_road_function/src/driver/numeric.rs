@@ -18,8 +18,11 @@ pub(super) fn span_byte_offset(offset: u64) -> Option<u32> {
 
 #[cfg(test)]
 mod tests {
+    //! Verify conversion behaviour at diagnostic and compiler integer limits.
+
     use super::{saturating_branch_count, saturating_diagnostic_integer, span_byte_offset};
 
+    /// Verify values beyond Fluent's signed limit clamp without wrapping.
     #[test]
     fn diagnostic_integers_saturate_at_the_signed_boundary() {
         let maximum = i64::MAX.unsigned_abs();
@@ -28,6 +31,7 @@ mod tests {
         assert_eq!(saturating_diagnostic_integer(maximum + 1), i64::MAX);
     }
 
+    /// Verify branch counts beyond the segment-weight limit clamp to `u32::MAX`.
     #[test]
     fn branch_counts_saturate_at_the_unsigned_boundary() {
         let maximum = u64::from(u32::MAX);
@@ -36,6 +40,7 @@ mod tests {
         assert_eq!(saturating_branch_count(maximum + 1), u32::MAX);
     }
 
+    /// Verify compiler span offsets accept `u32::MAX` and reject larger values.
     #[test]
     fn span_offsets_reject_values_above_the_compiler_boundary() {
         let maximum = u64::from(u32::MAX);

@@ -115,8 +115,14 @@ fn run_server(
     }
 }
 
-/// Read one request, record its path, and write the matching canned response
-/// (or a 404). `Connection: close` lets the client frame the response end.
+/// Read one request, record its path, and write its canned response or a 404.
+///
+/// Bound socket reads and writes with five-second timeouts. Drop the connection
+/// without responding if socket setup or cloning fails, or if no request line
+/// can be read. A header read failure ends header draining but still uses the
+/// parsed request path. `Connection: close` frames the response; write or flush
+/// failures, including a client disconnect, are not retried and drop the
+/// connection on return.
 fn serve_connection(
     mut stream: TcpStream,
     routes: &HashMap<String, CannedResponse>,

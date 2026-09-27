@@ -183,6 +183,11 @@ fn is_binary_on_path_checks_multiple_directories() -> std::io::Result<()> {
     Ok(())
 }
 
+/// Verify executable permission bits determine Unix candidate classification.
+///
+/// # Errors
+///
+/// Returns an I/O error if the temporary candidate cannot be created.
 #[cfg(unix)]
 #[rstest::rstest]
 #[case::non_executable(false, false)]
@@ -202,8 +207,88 @@ fn is_executable_file_matches_executable_permission(
     .expect("open temp-dir capability");
 
     assert_eq!(
-        is_executable_file(&directory, Utf8Path::new("dylint-link"), "dylint-link"),
+        is_executable_file(&directory, Utf8Path::new("dylint-link"), &mut Vec::new(),),
         expected_is_executable,
+    );
+    Ok(())
+}
+
+/// Verify skipped invalid entries are classified and do not stop later searches.
+///
+/// # Errors
+///
+/// Returns an I/O error if the temporary PATH fixtures cannot be created.
+#[cfg(unix)]
+#[test]
+fn path_scan_classifies_invalid_entries_and_continues_to_a_later_binary() -> std::io::Result<()> {
+    use std::os::unix::ffi::{OsStrExt, OsStringExt};
+
+    let temp_dir = tempfile::tempdir()?;
+    let mut invalid_path_bytes = temp_dir.path().as_os_str().as_bytes().to_vec();
+    invalid_path_bytes.push(0xff);
+    let non_utf8_entry = std::path::PathBuf::from(std::ffi::OsString::from_vec(invalid_path_bytes));
+
+    let not_a_directory = temp_dir.path().join("not-a-directory");
+    std::fs::write(&not_a_directory, b"not a directory")?;
+
+    let valid_directory = tempfile::tempdir()?;
+    let expected_binary = valid_directory.path().join("dylint-link");
+    write_fake_binary(&expected_binary, true)?;
+
+    let scan = scan_path_directories(
+        vec![
+            non_utf8_entry,
+            not_a_directory,
+            valid_directory.path().to_path_buf(),
+        ],
+        "dylint-link",
+    );
+
+    assert_eq!(scan.binary, Some(expected_binary));
+    assert_eq!(
+        scan.failures,
+        vec![
+            PathScanFailure {
+                binary_name: "dylint-link",
+                category: PathScanFailureCategory::NonUtf8Path,
+            },
+            PathScanFailure {
+                binary_name: "dylint-link",
+                category: PathScanFailureCategory::DirectoryOpen,
+            },
+        ]
+    );
+    Ok(())
+}
+
+/// Verify a missing candidate is classified and later PATH entries are searched.
+///
+/// # Errors
+///
+/// Returns an I/O error if the temporary PATH fixtures cannot be created.
+#[test]
+fn path_scan_classifies_missing_metadata_and_continues_to_a_later_binary() -> std::io::Result<()> {
+    let empty_directory = tempfile::tempdir()?;
+    let valid_directory = tempfile::tempdir()?;
+    let binary_name = "dylint-link.exe";
+    let expected_binary = valid_directory.path().join(binary_name);
+    write_fake_binary(&expected_binary, true)?;
+
+    let scan = scan_path_directories(
+        vec![
+            empty_directory.path().to_path_buf(),
+            valid_directory.path().to_path_buf(),
+        ],
+        binary_name,
+    );
+
+    assert_eq!(scan.binary, Some(expected_binary));
+    assert_eq!(
+        scan.failures,
+        vec![PathScanFailure {
+            binary_name,
+            category: PathScanFailureCategory::Metadata,
+        }]
     );
     Ok(())
 }

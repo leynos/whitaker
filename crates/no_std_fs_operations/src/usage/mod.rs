@@ -14,7 +14,9 @@ pub struct StdFsUsage {
 }
 
 impl StdFsUsage {
-    /// Construct a new usage instance.
+    /// Store the resolved operation label used by diagnostics.
+    ///
+    /// No usage category is retained; diagnostics are based on this label.
     #[must_use]
     ///
     /// # Examples
@@ -43,7 +45,10 @@ impl StdFsUsage {
     }
 }
 
-/// Classify a resolved path (expression, type, import) into a usage record.
+/// Classify a resolved path (expression, type, or import) into a usage record.
+///
+/// Return `None` when HIR resolution has no definition or the resolved item is
+/// not a `std::fs` path.
 #[must_use]
 ///
 /// # Examples
@@ -66,6 +71,9 @@ pub fn classify_qpath(
 }
 
 /// Classify using a `Res` obtained from HIR traversal.
+///
+/// Return `None` when the resolution has no `DefId` or does not identify a
+/// `std::fs` item.
 #[must_use]
 ///
 /// # Examples
@@ -84,6 +92,9 @@ pub fn classify_res(cx: &LateContext<'_>, res: Res) -> Option<StdFsUsage> {
 }
 
 /// Classify a `DefId` by inspecting its fully qualified path.
+///
+/// Return `None` when the definition belongs to a crate other than `std` or
+/// its fully qualified path is outside `std::fs`.
 #[must_use]
 ///
 /// # Examples
