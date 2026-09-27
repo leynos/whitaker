@@ -268,6 +268,19 @@ Thresholds that trigger escalation, not quality targets.
   contradicts the adjacent "nine emitting" clause, and a "seven places"
   citation count that is five. `make markdownlint` (0 errors / 78 files) and
   `make nixie` both pass. See `Surprises & discoveries`.
+- [x] (2026-09-27) Stage C CodeRabbit review cleared via `scrutineer`, seven
+  findings, no rate limit. Four actioned (`endColumn` exclusivity unstated in
+  `Location resolution` rule 4; the unticked `EP-M1` checkbox; `Language
+  boundary` rule 2's overclaimed "cannot resolve a message"; and
+  `RepoRelativePath::as_str`'s unstated encoding contract). Two rejected as
+  spurious — a "behavioural" respelling the text does not contain, and a
+  "four versus six roadmap items" count that is a deliberate grouping. Tracing
+  the fourth found a defect the review had not flagged: `Emission lifecycle`
+  justified deferral by calling both lints whole-crate lints, which is false
+  for `brain_trait`, and the ADR never named the uniformity reason a Surprises
+  entry claimed it did. Both are now corrected. `make markdownlint`
+  (0 errors / 79 files) and `make nixie` both pass. See `Decision log` and
+  `Surprises & discoveries`.
 - [x] (2026-09-27) Stage C complete. `docs/adr-005-brain-trust-lint-driver-interfaces.md`
   written against the house template — Status, Date, Context, Decision drivers,
   Requirements, Options considered (three crate-edge options plus the capture
