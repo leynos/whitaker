@@ -828,9 +828,11 @@ _Table 2: Responsibilities of each lint-pass callback._
   `segment_builder.rs:164` and `:186`. Recorded as follow-up work; this ADR
   does not fix them.
 - **The mapping crate does not exist yet**, so the architecture-fitness guard
-  in roadmap item 6.1.3's execplan (`EP-M2`) verifies the rule against fixture
-  manifests rather than against the repository. It gains teeth when the crate
-  lands.
+  in roadmap item 6.1.3's execplan (`EP-M2`) carries a dormant half: a test that
+  scans the mapping crate's real manifest _when one exists_ and returns early
+  otherwise, alongside fixture cases that verify the rule in the meantime. The
+  dormant test activates on its own when the crate lands, so the rule stops
+  resting on fixtures alone without anyone having to remember to wire it up.
 - **`SourceLocation` does not enforce its own convention.**
   `SourceLocation::new` is an infallible `const fn`; the single enforcement
   point is `span_to_region`. A consumer constructing a `SourceLocation`
