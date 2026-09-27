@@ -285,7 +285,22 @@ Thresholds that trigger escalation, not quality targets.
   (0 errors / 79 files) and `make nixie` both pass.
 - [ ] EP-M1 `docs/adr-005-brain-trust-lint-driver-interfaces.md` written and
   registered in `docs/contents.md`.
-- [ ] EP-M2 Architecture-fitness guard added (separable).
+- [x] (2026-09-27) EP-M2 complete. `crates/whitaker_sarif/tests/architecture_boundary.rs`
+  added, 12 tests. It asserts both ADR 005 rules over dependency manifests:
+  `whitaker_sarif` must not name `whitaker-common`, and
+  `whitaker_brain_trust_sarif` must not name `fluent-templates` or
+  `unic-langid`. The `whitaker_sarif` half runs against the **real** manifest, so
+  a reintroduced edge fails today; the mapping-crate half runs against fixtures,
+  because that crate is forbidden here. Red confirmed twice, before and after the
+  `cap_std` conversion: with the forbidden edge present the guard fails naming
+  the dependency *and* its location, `dependencies.whitaker-common`. All three
+  non-vacuity checks from `VP-1` are permanent assertions — the direct fixture,
+  the renamed fixture (`loc = { package = ... }`), and a floor asserting at least
+  one table and one dependency were examined. Two further shapes beyond the
+  three required are covered: a `[target.'cfg(...)'.dependencies]` selector and a
+  `[dev-dependencies]` entry, since a cycle is a cycle whichever table carries
+  it. Gates: `make check-fmt`, `make typecheck`, `make lint`, `make test`.
+  See `Surprises & discoveries` for the two corrections this milestone needed.
 - [ ] EP-M3 `common/src/span.rs` column-convention doc examples corrected
   (separable).
 - [ ] EP-M4 Roadmap item 6.1.3 marked done; living sections reconciled.
@@ -558,6 +573,41 @@ Thresholds that trigger escalation, not quality targets.
   rename case that `VP-1`'s second non-vacuity check demands is precisely why
   the scan must read the table's `package` key rather than only the dependency
   key.
+
+- Observation: the new guard's first draft failed `make lint`, because
+  Whitaker's own `no_std_fs_operations` dylint rejects ambient `std::fs`.
+  Evidence: `make lint` reported `error: std::fs operation
+  std::fs::read_to_string bypasses the capability-based filesystem policy` at
+  `crates/whitaker_sarif/tests/architecture_boundary.rs:149`, with
+  `#[deny(no_std_fs_operations)]` on by default. The lint's exclusion list
+  (`dylint.toml`) covers sixteen crates and this test is not among them — and
+  the list's own comment states the governing principle: "Integration-test
+  targets compile as their own crates named after the test file, so they are not
+  covered by the `whitaker_common` entry above." Adding the guard to that list
+  would have been the easy wrong answer, since the guard has no genuine need for
+  ambient access: it opens one already-known file.
+  Impact: the guard reads manifests through `cap_std::fs_utf8::Dir`, opening a
+  handle over the manifest's own parent directory and reading by file name,
+  exactly as `crates/whitaker_clones_core/build_support.rs:72-85` does. The
+  capability granted is no wider than the single file read. This is a real win
+  from the lint, not a compliance ritual: it is the third correction this
+  milestone needed, after `googletest`/`pretty_assertions` and the unstable
+  `str::as_str`. Note that `cap-std` joins `toml` as an added dev-dependency of
+  `whitaker_sarif`, and it too is already a `[workspace.dependencies]` entry
+  already present in `Cargo.lock`, so the plan's no-new-external-dependency
+  constraint still holds.
+
+- Observation: `str::as_str` is unstable on this pinned toolchain, and the call
+  that tripped it was unnecessary.
+  Evidence: `cargo nextest` reported `error[E0658]: use of unstable library
+  feature str_as_str` at `&key.as_str()`, where `key: String`. The pinned
+  compiler is `nightly-2026-05-28`, whose `rustc` predates the stabilisation;
+  the full message notes "this compiler was built on 2026-05-27". The annotation
+  was also redundant, because `DEPENDENCY_TABLES` is `[&str; 3]` and can be
+  compared against `&String` directly.
+  Impact: replaced with `DEPENDENCY_TABLES.iter().any(|name| name == key)`.
+  Recorded because a `nightly` toolchain invites the assumption that recent
+  library features are available, and this one is pinned to a specific date.
 
 ## Decision log
 
