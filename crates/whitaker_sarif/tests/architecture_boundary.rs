@@ -39,6 +39,19 @@ use rstest::rstest;
 /// The crate that must not acquire `whitaker-common`.
 const SARIF_CRATE: &str = "whitaker_sarif";
 
+/// The other leaf, which must not acquire `whitaker_sarif`.
+///
+/// ADR 005's second rule is symmetric — the two leaves "must not depend on each
+/// other" — so the forbidden edge is asserted in both directions. This half is
+/// the one that cannot be inferred from the other: a crate that declines to
+/// depend on its sibling says nothing about whether the sibling depends on it.
+///
+/// It is also the half that needs `manifest_if_present` to read a declared path
+/// rather than a directory name. This crate lives at `<root>/common`, so a
+/// name-based lookup finds nothing and the guard would pass without opening a
+/// file.
+const COMMON_CRATE: &str = "whitaker-common";
+
 /// The crate that must not acquire the localization stack.
 const MAPPING_CRATE: &str = "whitaker_brain_trust_sarif";
 
@@ -72,6 +85,30 @@ fn sarif_crate_does_not_depend_on_whitaker_common() {
     assert!(
         outcome.is_absent(),
         "{SARIF_CRATE} must not depend on {FORBIDDEN_IN_SARIF}, but {}",
+        outcome.finding()
+    );
+}
+
+#[rstest]
+fn whitaker_common_does_not_depend_on_the_sarif_crate() {
+    // ADR 005 rule 2 is bidirectional, so the reverse edge is asserted rather
+    // than assumed. The edge is absent today, which is what makes this test a
+    // regression guard rather than a description of a defect.
+    //
+    // Found through the root manifest's `path = "common"` declaration: the
+    // crate's directory matches neither its package name nor its dependency key,
+    // so resolving by name alone would leave this assertion reading no file.
+    let manifest = manifest_if_present(COMMON_CRATE)
+        .expect("whitaker-common is declared in the root manifest's path dependency table");
+    let document = parse_manifest(&read_manifest(&manifest));
+    assert_non_vacuous(&document, COMMON_CRATE);
+
+    // `common/` inherits its dependencies from the root, so an edge acquired
+    // through `{ workspace = true }` is only visible with the workspace table.
+    let outcome = scan_for(&document, SARIF_CRATE, workspace_dependencies().as_ref());
+    assert!(
+        outcome.is_absent(),
+        "{COMMON_CRATE} must not depend on {SARIF_CRATE}, but {}",
         outcome.finding()
     );
 }
@@ -302,14 +339,25 @@ fn mapping_crate_manifest_is_bound_when_it_exists() {
 /// The discovery path above must not be able to silently skip the guard.
 ///
 /// `mapping_crate_manifest_is_bound_when_it_exists` returns early today, so its
-/// own body cannot show that discovery works. These two cases pin both branches
-/// against crates that are present and absent *now*, so a later regression in
-/// `manifest_if_present` cannot make the guard quietly vacuous once the mapping
-/// crate lands.
+/// own body cannot show that discovery works. These cases pin every branch of
+/// the lookup against crates that are present and absent *now*, so a later
+/// regression in `manifest_if_present` cannot make the guard quietly vacuous
+/// once the mapping crate lands.
+///
+/// The `declared_path` case is the one that matters most, because it is the
+/// branch the reverse-direction guard depends on and the branch a name-based
+/// lookup cannot serve: `whitaker-common` lives at `common/`, and before the
+/// root declaration was consulted this case resolved to `None`. A guard reading
+/// a manifest that was never found reports the same clean result as one that
+/// read it and found nothing, so the failure mode is silent by construction.
 #[rstest]
-#[case::present("whitaker_clones_core", true)]
+#[case::sibling("whitaker_clones_core", true)]
+#[case::declared_path("whitaker-common", true)]
 #[case::absent("whitaker_no_such_crate", false)]
-fn manifest_discovery_finds_siblings_that_exist(#[case] crate_name: &str, #[case] expected: bool) {
+fn manifest_discovery_finds_declared_and_sibling_crates(
+    #[case] crate_name: &str,
+    #[case] expected: bool,
+) {
     assert_eq!(
         manifest_if_present(crate_name).is_some(),
         expected,

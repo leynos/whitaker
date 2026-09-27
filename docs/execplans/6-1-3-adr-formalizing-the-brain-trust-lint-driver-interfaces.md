@@ -161,23 +161,24 @@ Thresholds that trigger escalation, not quality targets.
   in `check_crate_post` is the crate root — that callback is dispatched inside
   `with_lint_attrs(hir::CRATE_HIR_ID)` (`rustc_lint/src/late.rs:393-404`).
   Deferred emission through the ordinary `cx.emit_span_lint` path therefore
-  ignores `#[allow(brain_type)]` on a type or `impl`, leaving users an
-  unsuppressable lint. Severity: high. Likelihood: high if unaddressed — all
-  nine emitting lint crates use `cx.emit_span_lint`, so it is the obvious thing
-  to copy. Status: **confirmed by probe, 2026-09-27, and sharper than stated.**
-  The probe's three-way fixture showed the span-only path from
-  `check_crate_post` emitting a finding on an item carrying `#[allow]`, while
-  the same path from `check_item` (where the context node *is* the item)
-  suppressed it, and `emit_node_span_lint` from `check_crate_post` also
-  suppressed it. The span-only path does not merely "not resolve the level"; it
-  silently discards every `#[allow]` on the subject item and on every module
-  between it and the crate root. A crate-level `#![allow]` still applies to all
-  paths, so the residual limitation is item- and module-level attributes only.
-  No in-tree lint emits from `check_crate_post` today — the sole user of that
-  hook, `crates/rstest_helper_should_be_fixture/src/driver.rs:244`, writes a
-  summary file and emits nothing — so this is a new pattern with no in-tree
-  precedent to copy. See `Artefacts and notes`. Mitigation: the ADR requires
-  the subject's `HirId` to be captured and emission to go through
+  ignores `#[allow(brain_type)]` on the subject and on every module around it,
+  leaving users an unsuppressable lint. Severity: high. Likelihood: high if
+  unaddressed — all nine emitting lint crates use `cx.emit_span_lint`, so it is
+  the obvious thing to copy. Status: **confirmed by probe, 2026-09-27, and
+  sharper than stated.** The probe's three-way fixture showed the span-only
+  path from `check_crate_post` emitting a finding on an item carrying
+  `#[allow]`, while the same path from `check_item` (where the context node
+  *is* the item) suppressed it, and `emit_node_span_lint` from
+  `check_crate_post` also suppressed it. The span-only path does not merely
+  "not resolve the level"; it silently discards every `#[allow]` on the subject
+  item and on every module between it and the crate root. A crate-level
+  `#![allow]` still applies to all paths, so the residual limitation is item-
+  and module-level attributes only. No in-tree lint emits from
+  `check_crate_post` today — the sole user of that hook,
+  `crates/rstest_helper_should_be_fixture/src/driver.rs:244`, writes a summary
+  file and emits nothing — so this is a new pattern with no in-tree precedent
+  to copy. See `Artefacts and notes`. Mitigation: the ADR requires the subject's
+  `HirId` to be captured and emission to go through
   `TyCtxt::emit_node_span_lint` (`rustc_middle/src/ty/context.rs:2461-2470`),
   which takes an explicit `HirId`. Confirmed to compile on the pinned toolchain
   under `-D warnings`, accepting the same `rustc_lint::errors::DiagDecorator`
@@ -1868,16 +1869,19 @@ upstream assumption without that artefact being updated.
 ### EP-M2 — the leaf crates stay independent (separable)
 
 - Outcome: a test fails if either leaf crate acquires a dependency that would
-  break the layering — if `whitaker_sarif` acquires `whitaker-common`, or if
-  the SARIF mapping crate acquires the localization stack.
+  break the layering — if `whitaker_sarif` acquires `whitaker-common`, if
+  `whitaker-common` acquires `whitaker_sarif`, or if the SARIF mapping crate
+  acquires the localization stack. ADR 005's leaf rule is bidirectional, so
+  both directions of each leaf edge are asserted.
 - Requirements: `BTD-REQ-05`, and the layering rule of `The layering decision`.
 - Changes: the rule in `tests/architecture_boundary.rs`, its machinery in
-  `tests/manifest_scan/mod.rs`, and three behavioural module files beside that
-  machinery (`workspace_inheritance.rs`, `table_discovery.rs`), plus fixture
-  manifests. The splits are forced by the 400-line rule and follow the existing
-  `tests/support/mod.rs` precedent; a module *directory* is used because Cargo
-  does not discover `tests/<dir>/mod.rs` as its own target. At the round-6
-  revision this is 25 tests in four files of 318, 396, 130, and 195 lines.
+  `tests/manifest_scan/mod.rs`, three behavioural module files beside that
+  machinery (`workspace_inheritance.rs`, `table_discovery.rs`,
+  `path_discovery.rs`), plus fixture manifests. The splits are forced by the
+  400-line rule and follow the existing `tests/support/mod.rs` precedent; a
+  module *directory* is used because Cargo does not discover
+  `tests/<dir>/mod.rs` as its own target. At the round-7 revision this is 27
+  tests in five files of 370, 358, 195, 130, and 101 lines.
 - Red artefact: the guard run against a fixture manifest declaring the
   forbidden dependency, which must fail naming it.
 - Acceptance evidence (`AC-2`): the three non-vacuity checks in `VP-1` all
@@ -2711,14 +2715,19 @@ at finalization, for gated subjects only.**
    the level at `self.last_node_with_lint_attrs`
    (`rustc_lint/src/context.rs:600-615`), which at crate-post time is the crate
    root — so the ordinary `cx.emit_span_lint` path silently ignores
-   `#[allow(brain_type)]` and `#[expect(...)]` on the type or `impl`, leaving
+   `#[allow(brain_type)]` and `#[expect(...)]` on the subject entirely, leaving
    an unsuppressable lint. Deferred emission must therefore capture the
    subject's `HirId` and emit through `TyCtxt::emit_node_span_lint`
    (`rustc_middle/src/ty/context.rs:2461-2470`), which resolves the level at
-   the supplied node. The lint crates gain `rustc_middle` under `dylint-driver`
-   for this; note that `crates/clippy_utils` is a stub carrying only
-   `macros::is_panic` (`crates/clippy_utils/src/lib.rs:1-12`) and provides no
-   alternative.
+   the supplied node. The suppression sites are that node and the modules
+   enclosing it — for `brain_type`, the type's own declaration, which is the
+   item capture rule 1 takes the `HirId` from, and any module around it. An
+   `impl` block is not a site: the captured `HirId` belongs to the declaration,
+   and the ancestor chain it resolves along does not pass through the `impl`, so
+   `#[allow(brain_type)]` written there is ignored even on the emitting path.
+   The lint crates gain `rustc_middle` under `dylint-driver` for this; note that
+   `crates/clippy_utils` is a stub carrying only `macros::is_panic`
+   (`crates/clippy_utils/src/lib.rs:1-12`) and provides no alternative.
 2. **Finalize once, by construction.** The accumulator is consumed by
    finalization and yields a distinct finalized type, so reading unfinalized
    state is unrepresentable rather than merely discouraged. The nearest
@@ -3172,22 +3181,23 @@ A second trap is that nextest colorizes, so the count does not parse without
 stripping ANSI. The probe now asserts it ran the expected 105 tests before its
 verdict is read; the baseline run is what caught the second. Also, reverting a
 fix can leave it uncompilable — removing the `is_dependency_scope` calls makes
-the helper dead, and `-D warnings` promotes that to an error — so the second fix
-was probed by neutering the predicate while keeping its callers, rather than by
-removing the calls.
+the helper dead, and `-D warnings` promotes that to an error — so the second
+fix was probed by neutering the predicate while keeping its callers, rather
+than by removing the calls.
 
 Correction, recorded 2026-09-27. The note above first claimed that
 `profile.default` "excludes the binary regardless", and an earlier round
 reported that `make test` did not run `architecture_boundary`. Both were wrong,
 and the round-6 gate run settles it: `make test` **does** run all 23
 `architecture_boundary` tests, and the run's own summary says exactly what is
-filtered — `5 tests and 11 binaries skipped, including 11 binaries via
-profile.default.default-filter`, which excludes `behaviour_cli`,
-`behaviour_toolchain`, and `kind(example)` only. The zero-test probe was
-therefore caused by the `-E` predicate alone, and the profile's filter had
-nothing to do with it. The distinction matters because the two failures have
-different fixes: an `-E` filter is removed, whereas a profile filter means the
-gate itself is not running a test file at all.
+filtered —
+`5 tests and 11 binaries skipped, including 11 binaries via
+profile.default.default-filter`,
+which excludes `behaviour_cli`, `behaviour_toolchain`, and `kind(example)`
+only. The zero-test probe was therefore caused by the `-E` predicate alone, and
+the profile's filter had nothing to do with it. The distinction matters because
+the two failures have different fixes: an `-E` filter is removed, whereas a
+profile filter means the gate itself is not running a test file at all.
 
 A fourth finding, from turning the same probe on the fix itself.
 `is_dependency_scope` admits three places Cargo reads dependencies, but the
@@ -3214,22 +3224,22 @@ duplicates of one claim at lines 117–120 and one at lines 174–176. Both were
 verified against `cargo metadata` before any code was touched, because the
 findings point at *regions* and the region need not contain the defect.
 
-What the probes established, in a scratch workspace under `/tmp`. The
-findings' premise check out, and **both are wider than reported**:
+What the probes established, in a scratch workspace under `/tmp`. The findings'
+premise check out, and **both are wider than reported**:
 
 1. A root `[workspace.dependencies]` entry may rename the package —
-   `whitaker-common = { package = "pkg_a", path = … }` — and a member inheriting
-   it by that key resolves to `pkg_a`. Cargo reports
+   `whitaker-common = { package = "pkg_a", path = … }` — and a member
+   inheriting it by that key resolves to `pkg_a`. Cargo reports
    `name: pkg_a | rename: whitaker-common`. The key is not the identity. The
    scan consulted the key first, so it reported a forbidden `whitaker-common`
    edge on a manifest that declares none.
 2. The mirror case is worse than a missed reorder. For
    `whitaker-common = { workspace = true, package = "pkg_b" }` Cargo resolves
-   the **root's** package and warns `unused manifest key:
-   dependencies.whitaker-common.package`. The local `package` is discarded
-   outright, so the branch was reading a key Cargo ignores — and reading it
-   *first*. An entry could therefore hide a forbidden edge behind a permissible
-   root declaration, or the reverse.
+   the **root's** package and warns
+   `unused manifest key: dependencies.whitaker-common.package`. The local
+   `package` is discarded outright, so the branch was reading a key Cargo
+   ignores — and reading it *first*. An entry could therefore hide a forbidden
+   edge behind a permissible root declaration, or the reverse.
 3. `[workspace.dev-dependencies]` and `[workspace.build-dependencies]` are
    accepted by Cargo, silently ignored, and are not inheritance sources: a
    member inheriting from one **fails to load**. `[workspace.dependencies]` is
@@ -3245,37 +3255,37 @@ What changed. `names_package` now tries inheritance first and the local entry
 second, which is Cargo's own order rather than a preference. The recursive walk
 was replaced by an explicit visit to the three places Cargo reads dependencies,
 so the scan follows the grammar **by construction** instead of by a predicate
-that has to be right about a prefix — this is the second time a correctness rule
-expressed as a string test has been the defect, and the structural form removes
-the class. `is_dependency_scope` and `collect_tables` are gone.
+that has to be right about a prefix — this is the second time a correctness
+rule expressed as a string test has been the defect, and the structural form
+removes the class. `is_dependency_scope` and `collect_tables` are gone.
 
 Tests that were asserting against Cargo. Four existing cases were found to rely
 on shapes Cargo rejects or ignores. Three were rebuilt rather than deleted, and
 each rebuild *weakened* the suite's independence from the bug.
 
 Two assert a local `package` beside `workspace = true`, which Cargo discards:
-the `case::workspace_inline` of `sarif_rule_rejects_both_dependency_shapes`, and
-the fixture of `an_unresolved_entry_does_not_mask_a_declared_one` — a member
-that inherits a key its root does not declare, which Cargo refuses to load. The
-first was replaced by `case::inherited_rename`, which is the same shape read
-correctly: the identity comes from the root, and the member's key is only a
-local name.
+the `case::workspace_inline` of `sarif_rule_rejects_both_dependency_shapes`,
+and the fixture of `an_unresolved_entry_does_not_mask_a_declared_one` — a
+member that inherits a key its root does not declare, which Cargo refuses to
+load. The first was replaced by `case::inherited_rename`, which is the same
+shape read correctly: the identity comes from the root, and the member's key is
+only a local name.
 
-`case::direct` passed only because the pre-inheritance key check short-circuited
-before the workspace was consulted; under the true order it is correctly
-`Unresolved`, so the case now carries a root that declares its key.
+`case::direct` passed only because the pre-inheritance key check
+short-circuited before the workspace was consulted; under the true order it is
+correctly `Unresolved`, so the case now carries a root that declares its key.
 
 The fourth was **not** rebuilt, because it was never coupled to a bug:
 `mapping_crate_must_not_name_the_localization_stack::case_6_workspace_inline`
-(spelled the same as the case above, describing a different thing) inherits with
-no local `package` at all, so it read `Names` from its key both before and after
-round 5. It is a legitimate shape and it passes unchanged.
+(spelled the same as the case above, describing a different thing) inherits
+with no local `package` at all, so it read `Names` from its key both before and
+after round 5. It is a legitimate shape and it passes unchanged.
 
 This is the same defect class as rounds 4 and 5 — a test that agreed with the
 code rather than with the world. Its converse is worth recording too: the
 round-5 F1 fix corrected the *resolution* order but left the *precedence* rule
-inverted, because the fixture it was validated against was itself Cargo-illegal.
-A fix aimed through a bad fixture inherits that fixture's defect.
+inverted, because the fixture it was validated against was itself
+Cargo-illegal. A fix aimed through a bad fixture inherits that fixture's defect.
 
 Discrimination evidence. Each fix was spliced back to its exact HEAD form and
 the suite re-run, with the probe asserting a non-vacuous run before reading any
@@ -3288,12 +3298,112 @@ restored byte-identical.
 Why the file layout changed again. The three new table-discovery tests pushed
 `architecture_boundary.rs` to 431 lines, over the 400-line rule. They are
 statements about which tables the walk reads, not about ADR 005's rule, so they
-moved to `manifest_scan/table_discovery.rs` — the same seam used in round 5, and
-now covering a second concern. Sizes at this revision: 318, 396, 130, 195 lines,
-all inside the rule. `mod.rs` sits at 396 with little headroom, which is worth
-watching: a further behavioural test there may need its own module rather than
-more lines.
+moved to `manifest_scan/table_discovery.rs` — the same seam used in round 5,
+and now covering a second concern. Sizes at this revision: 318, 396, 130, 195
+lines, all inside the rule. `mod.rs` sits at 396 with little headroom, which is
+worth watching: a further behavioural test there may need its own module rather
+than more lines.
 
 Effect on remaining work. `EP-M2` moves from 23 tests to 25 in four files.
-Nothing outside the guard's toolkit and its tests changed: no production source,
-no manifest, and no ADR text.
+Nothing outside the guard's toolkit and its tests changed: no production
+source, no manifest, and no ADR text.
+
+### Round 7 — the reverse edge, and a probe trap of its own, 2026-09-27
+
+CodeRabbit round 7 (exit 0, 194 s, 12 files, no rate limit) raised three
+findings and supplied no suggested-fix diff for any of them. Round 6's two
+findings were **not re-raised**; the agent independently confirmed the
+inheritance-first order and that no `starts_with("target` occurrence remains.
+
+**Finding 2/3 (major, duplicate) — the seam rule is bidirectional, the guard
+was not.** ADR 005 rule 2
+(`docs/adr-005-brain-trust-lint-driver-interfaces.md:288`) reads "_
+`whitaker-common` and `whitaker_sarif` are leaves and must not depend on each
+other_", and the guard asserted only one direction. The finding is correct: a
+crate that declines to depend on its sibling says nothing about whether the
+sibling depends on it. `common/Cargo.toml` is clean today, so the gap was a
+missing regression guard rather than a live defect.
+
+The finding's suggested fix — "reuse the existing helpers" — would have been
+**silently dormant**, which is the exact failure mode this guard has already
+had twice. `manifest_if_present("whitaker-common")` returned `None`, because
+the crate lives at `common/`: its directory matches neither its package name
+nor its dependency key, so a name-based lookup found nothing and the guard
+would have passed without opening a file. Verified before writing the test:
+
+```plaintext
+manifest_if_present("whitaker-common")
+  candidate: .../crates/whitaker-common/Cargo.toml   is_file: False
+```
+
+The root manifest already records the truth, though. `Cargo.toml:13` declares
+`whitaker-common = { path = "common", version = "0.2.7" }` and `:50` declares
+`whitaker_sarif = { path = "crates/whitaker_sarif", … }`, so discovery now
+consults the **declaration first** and keeps the `<root>/crates/<crate>`
+convention as the fallback for a crate the root does not declare. That order is
+the one Cargo itself resolves, and it makes the guard independent of a
+directory-naming convention that `common/` already violates.
+
+**Finding 1 (minor) — the ADR named a suppression site that does not exist.**
+Lines 710–711 read "*silently ignores `#[allow(brain_type)]` and
+`#[expect(...)]` on the type or `impl`*". The `impl` half is wrong twice over:
+capture rule 1 takes the `HirId` from the *declaration* item (`Struct` / `Enum`
+/ `Union`) and records method data from `ItemKind::Impl` with no `HirId`, so an
+attribute on an `impl` cannot be honoured even on the emitting path — the
+ancestor chain the level resolves along does not pass through it. The ADR's own
+rule 1 says the declaration `HirId` is "the site at which the lint can be
+suppressed", so the sentence contradicted the rule it introduces. Corrected in
+the ADR and in the two execplan mirrors of the same text.
+
+What changed:
+
+| File                              | Change                                                                                                                       |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `manifest_scan/path_discovery.rs` | New. `manifest_if_present`, `workspace_dependencies`, `declared_path`, `root_manifest_dir` — 101 lines, extracted byte-exact |
+| `manifest_scan/mod.rs`            | Declares the new module and re-exports the two public helpers; `workspace_dependencies` no longer hard-codes "two levels up" |
+| `tests/architecture_boundary.rs`  | New `whitaker_common_does_not_depend_on_the_sarif_crate`; discovery test gains `case_2_declared_path`                        |
+| `docs/adr-005-…md`                | Rule 1's suppression sites: the subject's declaration node and its enclosing modules, not an `impl`                          |
+| `docs/execplans/6-1-3-….md`       | The same correction in two mirrors; this section                                                                             |
+
+The path helpers moved to their own module because `mod.rs` reached 436 lines
+against the 400-line rule — a splice, not a retype, so the moved text is
+byte-identical.
+
+Discrimination evidence, `/tmp/rev7/probe.sh`, baseline 110/110:
+
+- **Probe A — the declared-path branch is never taken** (neutered, not
+  deleted, so `-D warnings` cannot turn the dead helper into a build failure).
+  Fails **two** tests: `case_2_declared_path` and
+  `whitaker_common_does_not_depend_on_the_sarif_crate`. The second failure is
+  the load-bearing one: it shows the reverse guard genuinely depends on the new
+  resolution rather than merely asserting alongside it.
+- **Probe B — `common/` acquires a real `whitaker_sarif` edge.** Fails exactly
+  `whitaker_common_does_not_depend_on_the_sarif_crate`, and fails it at
+  `absent` rather than `unresolved`, which is what distinguishes this probe
+  from A.
+- Both restore byte-identical; `Cargo.lock` clean afterwards.
+
+**A new probe trap, found by the probe's own guard.** The first run of Probe A
+was read as "one failure", and that reading was wrong twice:
+
+1. nextest's summary prints `101/110 tests run` when fail-fast cancels tests.
+   The unanchored regex `[0-9]+ tests run` matched the **M**, so a partial run
+   parsed as `ran=110` — a false clean manufactured by the very regex meant to
+   detect one. Anchoring on `Summary` and taking the numerator fixed it.
+2. Without `--no-fail-fast`, a failure **cancels** the tests after it by
+   scheduling. The reverse guard was never executed in that run, which is why
+   Probe A appeared to discriminate one test instead of two. Both probes now
+   run with `--no-fail-fast`.
+
+The tenacity lesson generalises the round-6 trap: a discrimination probe is a
+measurement, and every part of it — the filter, the summary parse, the failure
+enumeration, and the scheduling — can manufacture the verdict it is supposed to
+report. The probe now asserts its own non-vacuity *and* was self-tested with a
+deliberately impossible floor to confirm the guard can actually fail.
+
+Effect on remaining work. `EP-M2` moves from 25 tests to 27 across five files
+(`architecture_boundary.rs` 370, `manifest_scan/mod.rs` 358,
+`path_discovery.rs` 101, `table_discovery.rs` 130, `workspace_inheritance.rs`
+195 — all inside the 400-line rule, and `mod.rs` now has the headroom its
+round-6 note asked for). No production source and no manifest changed; the ADR
+text changed in one sentence, to say what its own rule 1 already required.
