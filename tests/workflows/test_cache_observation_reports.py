@@ -79,11 +79,13 @@ def test_inactive_step_is_reported_rather_than_omitted(tmp_path: Path) -> None:
     result, summary = _run_observations(tmp_path)
 
     assert result.returncode == 0, result.stderr
-    assert summary.count(": inactive in this job") == 5, (
+    assert summary.count(": inactive in this job") == 4, (
         f"every unused cache step must be named as inactive, got {summary!r}"
     )
-    assert "- Compiler cache backend: `unset`" in summary, (
-        f"the selected backend must be recorded, got {summary!r}"
+    # The backend is `setup-rust`'s to choose once it starts the server, which
+    # is after these restores, so it is reported with the statistics instead.
+    assert "Compiler cache backend" not in summary, (
+        f"the restore observations cannot know the backend yet, got {summary!r}"
     )
 
 
@@ -91,7 +93,6 @@ def test_exact_match_is_reported_as_a_hit(tmp_path: Path) -> None:
     """A primary-key match is the only outcome called an exact hit."""
     _, summary = _run_observations(
         tmp_path,
-        SCCACHE_BACKEND="local",
         CARGO_REGISTRY_KEY=REGISTRY_KEY,
         CARGO_REGISTRY_MATCHED=REGISTRY_KEY,
         CARGO_REGISTRY_HIT="true",
@@ -100,15 +101,14 @@ def test_exact_match_is_reported_as_a_hit(tmp_path: Path) -> None:
     line = _registry_line(summary)
     assert "exact hit" in line, line
     assert "cache-hit `true`" in line, line
-    assert "- Compiler cache backend: `local`" in summary, summary
 
 
 def test_prefix_restore_is_not_reported_as_a_miss(tmp_path: Path) -> None:
     """A `restore-keys` restore reports the generation it actually loaded.
 
-    Every warm compiler-cache restore takes this path, because its primary
-    key ends with the current run identifier, so collapsing it into `false`
-    would misclassify each warm run as cold.
+    Every warm restore of a run-keyed archive takes this path, because its
+    primary key ends with the current run identifier, so collapsing it into
+    `false` would misclassify each warm run as cold.
     """
     _, summary = _run_observations(
         tmp_path,

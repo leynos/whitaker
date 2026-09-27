@@ -25,8 +25,8 @@ from trunk_writer import (
     writer_violations,
 )
 from ubicloud_workflow_support import (
+    SUITE_JOBS,
     UBICLOUD_JOBS,
-    backend_for,
     load_job,
     load_workflow,
     parse_workflow,
@@ -34,11 +34,13 @@ from ubicloud_workflow_support import (
 
 
 def _is_pull_request_lane_on_gha(
-    job: dict[str, typ.Any], workflow: dict[str, typ.Any], backend: str
+    job: dict[str, typ.Any], workflow: dict[str, typ.Any]
 ) -> bool:
-    """Return whether a pull request runs this job on the Actions backend."""
-    if backend != "gha":
-        return False
+    """Return whether a pull request runs this job.
+
+    Every Ubicloud job reaches the cache proxy through `setup-rust`, so the
+    question is only whether a pull request runs it.
+    """
     if not declares_trigger(workflow, "pull_request"):
         return False
     return runs_on(job, "pull_request")
@@ -49,9 +51,7 @@ def _pull_request_lanes_on_gha() -> set[str]:
     return {
         job_name
         for job_name, workflow_name in UBICLOUD_JOBS.items()
-        if _is_pull_request_lane_on_gha(
-            load_job(job_name), load_workflow(workflow_name), backend_for(workflow_name)
-        )
+        if _is_pull_request_lane_on_gha(load_job(job_name), load_workflow(workflow_name))
     }
 
 
@@ -65,28 +65,25 @@ def test_every_pull_request_lane_on_gha_has_a_registered_writer() -> None:
 
 
 @pytest.mark.parametrize(
-    ("job", "triggers", "backend", "expected"),
+    ("job", "triggers", "expected"),
     [
-        pytest.param({}, "on: pull_request\n", "gha", True, id="a-lane"),
-        pytest.param({}, "on: pull_request\n", "local", False, id="another-backend"),
-        pytest.param({}, "on:\n  push:\n", "gha", False, id="a-push-workflow"),
+        pytest.param({}, "on: pull_request\n", True, id="a-lane"),
+        pytest.param({}, "on:\n  push:\n", False, id="a-push-workflow"),
         pytest.param(
             {"if": "github.event_name != 'pull_request'"},
             "on: [push, pull_request]\n",
-            "gha",
             False,
             id="a-job-kept-off-pull-requests",
         ),
     ],
 )
-def test_only_jobs_a_pull_request_runs_on_gha_need_a_writer(
-    job: dict[str, typ.Any], triggers: str, backend: str, expected: bool
+def test_only_jobs_a_pull_request_runs_need_a_writer(
+    job: dict[str, typ.Any], triggers: str, expected: bool
 ) -> None:
-    """A job no pull request runs, or one on another backend, reads nothing."""
+    """A job no pull request runs reads nothing from `main`'s scope."""
     workflow = parse_workflow(f"{triggers}jobs: {{}}\n")
-    assert _is_pull_request_lane_on_gha(job, workflow, backend) is expected, (
-        f"expected {expected} for backend {backend!r}, triggers {triggers!r} "
-        f"and job {job!r}"
+    assert _is_pull_request_lane_on_gha(job, workflow) is expected, (
+        f"expected {expected} for triggers {triggers!r} and job {job!r}"
     )
 
 
@@ -100,20 +97,18 @@ def test_each_writer_compiles_its_readers_shapes_on_the_trunk(
         load_job(reader), load_job(writer), load_workflow(writer_workflow)
     )
     assert not violations, f"{writer} as {reader}'s trunk writer: {violations}"
-    assert backend_for(writer_workflow) == backend_for(UBICLOUD_JOBS[reader]), (
-        f"{writer} must write the backend {reader} reads"
-    )
 
 
 def test_only_the_registered_writers_run_on_the_trunk_push() -> None:
     """No second job writes `main`'s scope, and no writer is missing from it.
 
-    Read over every workflow on the Actions backend, so a job added to either
+    Read over the workflows the suite jobs live in, so a job added to either
     one, or a lane whose event guard is dropped, shows up here.
+    `rolling-release.yml` also runs on a push to `main` and writes `main`'s
+    scope, but it compiles only release shapes that no pull-request lane
+    compiles, so it is a writer nothing reads rather than a second writer.
     """
-    gha_workflows = sorted(
-        {name for name in UBICLOUD_JOBS.values() if backend_for(name) == "gha"}
-    )
+    gha_workflows = sorted(set(SUITE_JOBS.values()))
     running = {job for name in gha_workflows for job in push_jobs(load_workflow(name))}
     assert running == set(TRUNK_WRITERS.values()), (
         f"the jobs that run on a push to main are {sorted(running)}, but only "

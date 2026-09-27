@@ -159,12 +159,12 @@ def test_ci_enables_sccache_and_debug_target_cache_scope(
         "expand to the entire target tree"
     )
     assert "SCCACHE_GHA_ENABLED" not in env, (
-        "the backend selector, not the workflow, exports the sccache backend "
-        "variables so only one backend is ever configured"
+        "setup-rust, not the workflow, selects the sccache backend from the "
+        "runner, and a workflow-level switch would override its choice"
     )
-    assert env.get("SCCACHE_BACKEND") in {"gha", "local"}, (
-        "CI must declare the compiler-cache backend in one switchable place, "
-        "naming a backend the selector script understands"
+    assert "SCCACHE_BACKEND" not in env, (
+        "the retired backend selector's switch must not return; setup-rust "
+        "selects the backend from the runner"
     )
     assert str(env.get("LINUX_RUNNER_VCPUS")) == "2", (
         "CI must derive its concurrency bounds from the Ubicloud shape"

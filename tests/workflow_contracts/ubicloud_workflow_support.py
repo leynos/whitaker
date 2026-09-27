@@ -28,24 +28,21 @@ CACHE_ACTION_SHA = "55cc8345863c7cc4c66a329aec7e433d2d1c52a9"
 RESTORE_ACTION = f"actions/cache/restore@{CACHE_ACTION_SHA}"
 SAVE_ACTION = f"actions/cache/save@{CACHE_ACTION_SHA}"
 INSTALL_ACTION = "taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68"
-#: shared-actions `main` at the merge of #458. It keeps the rule that its
-#: built-in `github` cache provider does not archive `target/<profile>`, so no
-#: shared action can become the second owner of compiler output that `sccache`
-#: already owns, and it adds two things the previous pin lacked: it restores
-#: the caller's Actions cache-service selection, and it starts the `sccache`
-#: server from a `run:` step after those exports, which is what makes the
-#: shared action's own compiler-cache arm work on Ubicloud.
-#:
-#: Every caller in this repository pins this one revision again. The lanes were
-#: split while the release boundaries waited for evidence, and the evidence
-#: arrived from the rolling release rather than from a tag: whitaker publishes
-#: on every merge to `main`, so those lanes run on every merge and had already
-#: been exercising the newer wiring by the time the split was written.
+#: shared-actions `main` at the merge of #523 (ADR 0005 there). From this
+#: revision `setup-rust` owns sccache outright: it selects the backend from the
+#: runner, and on Ubicloud it exports the cache-proxy credentials, clears the
+#: v2 cache-service flag the proxy does not serve, and carries that cleared
+#: value past `mozilla-actions/sccache-action`, which sets it again. That is
+#: what retired the credentials step, the backend selector and the
+#: rolling-release local directory this repository used to wire by hand. It
+#: keeps the rules the previous pin (#458) brought: the built-in `github`
+#: provider archives no `target/<profile>`, and the server starts from a `run:`
+#: step after the exports.
 #:
 #: Asserted by value rather than by shape, so a bump has to update this
 #: constant and someone has to confirm the new revision still leaves this
 #: repository the sole owner of its caches.
-SHARED_ACTIONS_REF: Final[str] = "7cb894fe62c40951cccf33819548095e64a1291e"
+SHARED_ACTIONS_REF: Final[str] = "4fb8eb7ad52454678a0662865d81d3cd17aa6e0e"
 
 SETUP_RUST_ACTION = f"leynos/shared-actions/.github/actions/setup-rust@{SHARED_ACTIONS_REF}"
 
@@ -87,16 +84,14 @@ CACHE_KEY_WRITERS: dict[str, str] = {
     "tools-lint-v1-": "linux-full",
     "dylint-tools-v1-": "linux-full",
     "clippy-mirror-v1-": "coverage-upload",
-    # The `sccache-coverage-v1-` and `sccache-lint-v1-` families are gone, not
-    # merely unlisted. Both Linux workflows run sccache on the `gha` backend
-    # against Ubicloud's cache proxy, so no lane archives `~/.cache/sccache`
-    # and there is no directory for a family to name. The rolling-release
-    # lanes below stay on the local-directory backend and keep theirs.
+    # No `sccache-*` family is listed, and none may be. `setup-rust` points
+    # every Ubicloud lane's sccache at Ubicloud's cache proxy, so no lane
+    # archives `~/.cache/sccache` and there is no directory for a family to
+    # name. The rolling-release lanes' `sccache-rolling-v1-` and
+    # `sccache-depbin-v1-` families went with the local-directory backend.
     "cargo-registry-windows-v1-": "windows-compat",
     "cargo-registry-rolling-v1-": "build-lints",
-    "sccache-rolling-v1-": "build-lints",
     "cargo-registry-depbin-v1-": "build-dependency-binaries",
-    "sccache-depbin-v1-": "build-dependency-binaries",
 }
 
 
@@ -311,51 +306,9 @@ def run_scripts(job: dict[str, Any]) -> str:
     return "\n".join(str(step.get("run", "")) for step in job_steps(job))
 
 
-#: The directory the local-disk sccache backend writes to, as every cache step
-#: that has ever owned it spells it.
+#: The directory the retired local-disk sccache backend wrote to, as every
+#: cache step that ever owned it spelled it. No step may own it now.
 SCCACHE_DIRECTORY: Final[str] = "~/.cache/sccache"
-
-#: The step that republishes Ubicloud's cache-proxy credentials through
-#: `GITHUB_ENV`. Asserted by name because the ordering rules are about where it
-#: sits in the step list, and by action because a step that merely carries the
-#: name would satisfy the ordering while exporting nothing.
-CREDENTIALS_STEP: Final[str] = "Export the Ubicloud cache credentials"
-CREDENTIALS_ACTION_PATH: Final[str] = (
-    "leynos/shared-actions/.github/actions/export-ubicloud-cache-credentials"
-)
-
-#: What `scripts/select-sccache-backend.sh` assumes when `SCCACHE_BACKEND` is
-#: unset or empty, kept here so the contract reads the same default the lanes
-#: would actually run under rather than treating an omission as a failure.
-DEFAULT_BACKEND: Final[str] = "gha"
-
-
-def backend_for(workflow_name: str) -> str:
-    """Return the compiler-cache backend one workflow selects.
-
-    The workflows declare `SCCACHE_BACKEND` once, at workflow level, and
-    `scripts/select-sccache-backend.sh` translates it into exactly one set of
-    sccache variables. The value is returned as declared, not stripped: the
-    selector matches it verbatim, so `' gha '` fails there and must fail the
-    contract too rather than reading as `gha`.
-
-    Parameters
-    ----------
-    workflow_name : str
-        The workflow file to read, such as ``"ci.yml"``.
-
-    Returns
-    -------
-    str
-        The declared `SCCACHE_BACKEND`, or `DEFAULT_BACKEND` when the workflow
-        leaves it unset or empty, as the selector does.
-
-    For example, ``backend_for("ci.yml")`` returns ``"gha"``.
-    """
-    env = load_workflow(workflow_name).get("env", {})
-    declared = str(env.get("SCCACHE_BACKEND", ""))
-    return declared or DEFAULT_BACKEND
-
 
 def sccache_directory_steps(job: dict[str, Any]) -> list[dict[str, Any]]:
     """Return the job's cache steps that own the local sccache directory.

@@ -1,10 +1,9 @@
 """Recognize the steps that start or feed sccache in a workflow job.
 
-Two contract modules ask the same questions of a job: which steps start the
-sccache server or talk to it, and which Ubicloud jobs sit on a given backend.
-`sccache_backend_contract_test` asks them about the backend each lane reaches,
-and `cache_credentials_contract_test` about where the proxy credentials must
-sit. The answers live here so the two cannot drift apart.
+`setup_rust_sccache_contract_test` asks of every Ubicloud job which steps
+start the sccache server or talk to it, so that nothing but `setup-rust` does.
+The recognizers live here, apart from the rules, so a later contract asking
+the same question reads jobs the same way.
 """
 
 from __future__ import annotations
@@ -13,13 +12,10 @@ import typing as typ
 
 from ubicloud_workflow_support import (
     SETUP_RUST_ACTION,
-    UBICLOUD_JOBS,
-    backend_for,
     job_steps,
 )
 
 if typ.TYPE_CHECKING:  # pragma: no cover - typing only
-    from collections.abc import Callable, Mapping
     from typing import Any
 
 #: The shared Rust setup action, without its ref. It starts the sccache
@@ -86,64 +82,3 @@ def sccache_step_indices(job: dict[str, Any]) -> list[tuple[int, str]]:
         for index, step in enumerate(job_steps(job))
         if mentions_sccache(step)
     ]
-
-
-def jobs_on_backend(
-    jobs: Mapping[str, str],
-    backend_of: Callable[[str], str],
-    backend: str,
-) -> list[tuple[str, str]]:
-    """Return the jobs whose workflow selects ``backend``, reading nothing.
-
-    The workflow lookup is passed in, so the selection itself is a pure
-    function over the job registry and can be exercised without files.
-
-    Parameters
-    ----------
-    jobs : Mapping[str, str]
-        Job names mapped to the workflow file that declares each.
-    backend_of : Callable[[str], str]
-        Returns the backend a workflow file selects.
-    backend : str
-        The backend to select for, such as ``"gha"`` or ``"local"``.
-
-    Returns
-    -------
-    list[tuple[str, str]]
-        ``(job, workflow)`` pairs whose workflow selects ``backend``, in the
-        registry's order.
-
-    >>> jobs_on_backend(
-    ...     {"lint": "ci.yml", "build": "release.yml"},
-    ...     {"ci.yml": "gha", "release.yml": "local"}.__getitem__,
-    ...     "local",
-    ... )
-    [('build', 'release.yml')]
-    """
-    return [
-        (job_name, workflow_name)
-        for job_name, workflow_name in jobs.items()
-        if backend_of(workflow_name) == backend
-    ]
-
-
-def ubicloud_jobs_on(backend: str) -> list[tuple[str, str]]:
-    """Return the checked-in Ubicloud jobs whose workflow selects ``backend``.
-
-    The loading half of `jobs_on_backend`: it supplies the reviewed registry
-    and reads each workflow's declaration from disk. With both Linux
-    workflows on the Actions backend, ``ubicloud_jobs_on("gha")`` yields
-    `coverage-check`, `linux-full` and `coverage-upload`, and never the
-    rolling-release build lanes.
-
-    Parameters
-    ----------
-    backend : str
-        The backend to select for, such as ``"gha"`` or ``"local"``.
-
-    Returns
-    -------
-    list[tuple[str, str]]
-        ``(job, workflow)`` pairs from `UBICLOUD_JOBS`.
-    """
-    return jobs_on_backend(UBICLOUD_JOBS, backend_for, backend)

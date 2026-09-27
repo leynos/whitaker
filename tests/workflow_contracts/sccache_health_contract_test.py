@@ -20,7 +20,7 @@ import typing as typ
 
 import pytest
 from shell_commands import runs_unconditionally
-from ubicloud_workflow_support import UBICLOUD_JOBS, backend_for, job_steps, load_job
+from ubicloud_workflow_support import SUITE_JOBS, job_steps, load_job
 
 #: The command each gha lane runs, as its step's whole script.
 HEALTH_COMMAND: typ.Final[str] = (
@@ -89,10 +89,14 @@ def health_violations(job: dict[str, typ.Any]) -> list[str]:
 
 
 def _gha_lanes() -> list[str]:
-    """Return the Ubicloud jobs whose workflow selects the Actions backend."""
-    return sorted(
-        job for job, workflow in UBICLOUD_JOBS.items() if backend_for(workflow) == "gha"
-    )
+    """Return the suite jobs, whose sccache runs on Ubicloud's cache proxy.
+
+    Every Ubicloud job reaches the proxy now, through `setup-rust`, but only
+    the jobs that run this repository's gates record the evidence and check
+    its health; the rolling-release build jobs report their statistics and
+    stop there.
+    """
+    return sorted(SUITE_JOBS)
 
 
 def test_there_are_gha_lanes_to_hold() -> None:

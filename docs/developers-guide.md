@@ -396,9 +396,9 @@ when a caller has already set the variable. A workflow-level
 `RUSTC_WRAPPER=sccache` would therefore leave every lane wrapped by whichever
 `sccache` happened to be on `PATH` rather than the one the action provisioned,
 which is reported as `metric setup-rust.sccache.wrapper=caller-set`. Cache
-storage is job-specific. The Linux lanes read one workflow-level
-`SCCACHE_BACKEND` switch, while `windows-compat` sets
-`SCCACHE_GHA_ENABLED=true` in its own job environment because it is
+storage is job-specific. The Linux lanes leave the backend to `setup-rust`,
+which selects Ubicloud's cache proxy from the runner, while `windows-compat`
+sets `SCCACHE_GHA_ENABLED=true` in its own job environment because it is
 GitHub-hosted and shares none of the Ubicloud constants.
 
 ### CI build caching
@@ -437,20 +437,22 @@ archiving exactly that until it moved to the external provider and gained its
 own registry cache. `release.yml` still calls the shared action with its default
 `github` provider, as do the non-Linux legs of the two rolling-release
 matrices, because nothing owns a cache for them; they no longer archive a
-`target` tree either. The Linux legs pass `external` and own a family pair each:
-`cargo-registry-rolling-v1-` and `sccache-rolling-v1-` for `build-lints`,
-which rebuilds ten lint crates on every merge to `main`, and
-`cargo-registry-depbin-v1-` and `sccache-depbin-v1-` for
+`target` tree either. The Linux legs pass `external` and own one registry
+family each: `cargo-registry-rolling-v1-` for `build-lints`, which rebuilds ten
+lint crates on every merge to `main`, and `cargo-registry-depbin-v1-` for
 `build-dependency-binaries`, which installs every dependency crate from source
 with `cargo install --locked`. The two jobs are keyed apart because their
 registries hold different crate sets and their keys hash different manifests.
+Their compiler cache is not an archive at all: like every Ubicloud job's, it
+reads and writes Ubicloud's cache proxy through `setup-rust`.
 
-Every caller pins one revision, `7cb894fe62c40951cccf33819548095e64a1291e`. It
-keeps the rule that the built-in provider does not archive `target/<profile>`,
-and adds two things the previous pin lacked: it restores the caller's Actions
-cache-service selection, and it starts the `sccache` server from a `run:` step
-after those exports. Expect one cold Cargo cache on a lane the first time it
-moves because the key no longer carries the build profile.
+Every caller pins one revision, `4fb8eb7ad52454678a0662865d81d3cd17aa6e0e`, the
+merge of leynos/shared-actions#523. From it `setup-rust` selects sccache's
+backend from the runner (ADR 0005 there); the `sccache` paragraphs below say
+what that retired here. It keeps the rules the previous pin brought: the
+built-in provider does not archive `target/<profile>`, the caller's Actions
+cache-service selection is restored after `mozilla-actions/sccache-action`
+runs, and the `sccache` server starts from a `run:` step after those exports.
 
 The lanes were briefly split, with the release boundaries held back until "a
 tag has run on the newer wiring". That exit condition was the wrong one for
@@ -470,21 +472,18 @@ has exactly one job permitted to write it.
 
 Table: Cache ownership for the Ubicloud Linux lanes.
 
-| Key family                    | Cached paths                                                                    | Writer                      | Restore-only lanes             |
-| ----------------------------- | ------------------------------------------------------------------------------- | --------------------------- | ------------------------------ |
-| `cargo-registry-coverage-v1-` | `~/.cargo/registry`, `~/.cargo/git`                                             | `coverage-upload`           | `coverage-check`               |
-| `cargo-registry-lint-v1-`     | `~/.cargo/registry`, `~/.cargo/git`                                             | `linux-full`                | `linux-full`                   |
-| `tools-coverage-v1-`          | `~/.rustup`, `~/.cargo/bin`, `~/.local/bin`, `~/.cache/uv`, `~/.local/share/uv` | `coverage-upload`           | `coverage-check`               |
-| `tools-lint-v1-`              | the same paths plus `~/.bun/install/cache` and `~/.cache/merman`                | `linux-full`                | `linux-full`                   |
-| `dylint-tools-v1-`            | `~/.cache/whitaker-dylint-tools`                                                | `linux-full`                | `linux-full`                   |
-| `clippy-mirror-v1-`           | `~/.cache/whitaker-mirrors`                                                     | `coverage-upload`           | `linux-full`, `coverage-check` |
-| `sccache-rolling-v1-`         | `~/.cache/sccache`                                                              | `build-lints`               | `build-lints`                  |
-| `sccache-depbin-v1-`          | `~/.cache/sccache`                                                              | `build-dependency-binaries` | `build-dependency-binaries`    |
+| Key family                    | Cached paths                                                                    | Writer            | Restore-only lanes             |
+| ----------------------------- | ------------------------------------------------------------------------------- | ----------------- | ------------------------------ |
+| `cargo-registry-coverage-v1-` | `~/.cargo/registry`, `~/.cargo/git`                                             | `coverage-upload` | `coverage-check`               |
+| `cargo-registry-lint-v1-`     | `~/.cargo/registry`, `~/.cargo/git`                                             | `linux-full`      | `linux-full`                   |
+| `tools-coverage-v1-`          | `~/.rustup`, `~/.cargo/bin`, `~/.local/bin`, `~/.cache/uv`, `~/.local/share/uv` | `coverage-upload` | `coverage-check`               |
+| `tools-lint-v1-`              | the same paths plus `~/.bun/install/cache` and `~/.cache/merman`                | `linux-full`      | `linux-full`                   |
+| `dylint-tools-v1-`            | `~/.cache/whitaker-dylint-tools`                                                | `linux-full`      | `linux-full`                   |
+| `clippy-mirror-v1-`           | `~/.cache/whitaker-mirrors`                                                     | `coverage-upload` | `linux-full`, `coverage-check` |
 
-`coverage-check`, `linux-full` and `coverage-upload` archive no compiler cache.
-Their sccache runs on the `gha` backend and reads and writes Ubicloud's cache
-proxy directly, so the two `sccache-*` rows belong to the rolling-release lanes
-alone, which stay on the local-directory backend.
+No lane archives a compiler cache, and no `sccache-*` family may appear in the
+table. Every Ubicloud job's sccache reads and writes Ubicloud's cache proxy
+directly, through `setup-rust`.
 
 Each key carries an explicit `v1` schema generation so the whole family can be
 invalidated deliberately. Registry keys hash `rust-toolchain.toml` and
@@ -605,52 +604,46 @@ The shared compiler cache is intentionally scoped to debug builds:
 - `RUSTFLAGS=-D warnings` and `RUSTDOCFLAGS=-D warnings` preserve the
   warnings-as-errors contract even when builds are routed through `sccache`.
 
-`sccache` is configured in exactly one place. The workflows declare
-`SCCACHE_BACKEND`, and `scripts/select-sccache-backend.sh` translates that
-single value into the backend's environment before any Cargo invocation.
-`local` exports `SCCACHE_DIR` and `SCCACHE_CACHE_SIZE`, and the lane must then
-own a `~/.cache/sccache` archive; `gha` exports `SCCACHE_GHA_ENABLED`, and the
-lane must then own no such archive. The two backends are never configured
-together: `sccache` would then report a plausible hit rate while writing to a
-store nobody owns.
+`sccache` is configured in exactly one place: the shared `setup-rust` action,
+at the pin above. It names the wrapper, starts and zeroes the server, and
+selects the backend from the runner the job landed on (ADR 0005 in
+leynos/shared-actions). On an Ubicloud runner `ACTIONS_CACHE_URL` names a proxy
+on the private network, which stores objects in Ubicloud's own cache. The
+action republishes that address and the runtime token through `GITHUB_ENV`,
+because the runner hands them to action steps alone; clears
+`ACTIONS_CACHE_SERVICE_V2`, because `sccache` prefers GitHub's v2 results
+service whenever that flag is set and the proxy serves v1; and carries the
+cleared value past `mozilla-actions/sccache-action`, which sets it again as its
+last act. The server then comes up bound to the proxy, and every later
+`actions/cache/save` in the job reaches the proxy too. Its `cache-backend`
+output names the choice, and `scripts/record-sccache-effectiveness.sh` prints
+it above the statistics as `SETUP_RUST_CACHE_BACKEND`, because `Cache location`
+reads `ghac` for the proxy and GitHub's own service alike.
 
-The GitHub Actions backend needs the cache service's address and a runtime
-token, and GitHub exposes both to action steps rather than to `run:` steps. On
-an Ubicloud runner that address is not GitHub's: `ACTIONS_CACHE_URL` names a
-proxy on the runner's private network, which stores objects in Ubicloud's own
-cache. `Export the Ubicloud cache credentials` republishes it through
-`GITHUB_ENV` and clears `ACTIONS_CACHE_SERVICE_V2`, because `sccache` prefers
-GitHub's v2 results service whenever that flag is set and the proxy serves v1.
-The shared Rust setup action then records those values before
-`mozilla-actions/sccache-action` overwrites them and restores them afterwards,
-and starts the server from a `run:` step positioned after the restore, so the
-server comes up bound to the proxy.
+The Linux jobs pass `expect-cache: ubicloud`, so a missing proxy fails the job
+rather than letting it compile against local disk unnoticed. The two
+rolling-release matrices pass `any`, because their macOS and Windows legs are
+GitHub-hosted, where the action keeps sccache on local disk it caches itself.
 
-The ordering that mattered still matters. `sccache` binds its backend once,
-when the server starts, so the credentials export runs before the backend
-selector, and both run before `Setup Rust`, which is what starts the server.
-`cache_credentials_contract_test` enforces those positions and rejects a step
-that carries the credentials step's name without running the action, and
-`sccache_backend_contract_test` rejects a lane that installs or zeroes
-`sccache` itself. The GitHub-hosted Windows lane needs no export, because there
-the variables are already visible to `run:` steps and the store is GitHub's own.
-
-The export is not only for the Actions backend. A Ubicloud job that saves an
-`actions/cache` archive needs it before `Setup Rust` too, whatever its backend.
-`mozilla-actions/sccache-action` writes `ACTIONS_CACHE_SERVICE_V2=on` and
-GitHub's results address to `GITHUB_ENV`, and `setup-rust` restores only a
-value that was set before it ran. Without the export the flag was unset, so
-nothing put it back: every restore before `Setup Rust` read Ubicloud's proxy
-and every save after it went to GitHub's v2 service. The rolling-release build
-jobs, which are on the local-directory backend, ran that way until the export
-was added to them. Each run restored nothing and saved an archive no restore
-could see, and GitHub's cache held 18 `sccache-rolling-v1-` entries of about
-190 MB each. Both jobs now run the export on their Linux legs, under the
-`runner.os == 'Linux'` guard their other cache steps use, because the action
-fails closed on the GitHub-hosted macOS and Windows legs. The contract covers
-every Ubicloud job with a save step, names the two rolling-release jobs so that
-it cannot shrink past them, and requires that guard exactly on a job with
-GitHub-hosted legs.
+This retired three hand-rolled pieces, each of which would now override the
+action's choice without a word. An `Export the Ubicloud cache credentials` step
+ran the shared `export-ubicloud-cache-credentials` action. A workflow-level
+`SCCACHE_BACKEND` switch was translated by `scripts/select-sccache-backend.sh`
+into either the Actions backend or a local directory. The rolling-release lanes
+used that local directory, archived under the `sccache-rolling-v1-` and
+`sccache-depbin-v1-` families, and it went wrong silently: its restores ran
+before `Setup Rust` and read the proxy, its saves ran after it and went to
+GitHub's v2 service, so every run started cold, and GitHub's cache held 18
+`sccache-rolling-v1-` entries of about 190 MB each until an interim export on
+those legs put the saves back on the proxy.
+`tests/workflow_contracts/setup_rust_sccache_contract_test.py` holds the
+arrangement for every Ubicloud job: one reviewed `setup-rust` call with sccache
+on, the id `setup-rust` and the `expect-cache` its placement allows; no retired
+variable, step or `~/.cache/sccache` archive; nothing touching sccache before
+`Setup Rust` starts it; and the statistics naming the backend. Fixtures prove
+the retired-piece reader catches each form and leaves the statistics report and
+the Cargo registry cache alone. The GitHub-hosted Windows lane keeps its own
+switch, because there the store is GitHub's own.
 
 `gha` is the deployed backend on the Linux lanes, and the record of how it got
 there is worth keeping, because the repository once concluded the opposite.
@@ -688,24 +681,11 @@ measured 3.3% Rust hits on run 35597917956 under that arrangement. The proxy is
 still ref-scoped, so a pull request's first push reads only what `main`'s trunk
 writers compiled; see "Who writes the compiler cache" below.
 
-Switching back is one line in each of `ci.yml` and `coverage-main.yml`, plus
-restoring the `~/.cache/sccache` archive steps the contract then requires.
-`rolling-release.yml` stays on `local` and owns its own key families; the
-contract permits the two to differ, because the rule that matters is that a
-lane's reader and its writer agree, not that the whole repository does. The
-health check below fails a lane whose write errors exceed 10% of its store
-attempts, or whose lookup timeouts exceed 10% of its reads. Treat a rate well
-under that but persistently above the measured 0.1%, or an Ubicloud cache
-listing with no `sccache` entries for Whitaker, as the signal to look again.
-
-The local-directory backend that `rolling-release.yml` still uses has known
-trade-offs. Its archive grows with every new compilation unit until
-`SCCACHE_CACHE_SIZE` trims it, so a warm run restores and re-saves the whole
-directory even when only a few objects changed. That is why its key carries the
-run identifier with a `restore-keys` prefix, and why its save is restricted to
-the lane's single writer. The cap defaults to 4 GB rather than 2 GB because the
-store holds two build shapes, the ordinary debug objects and the instrumented
-coverage objects; a one-shape cap would evict each shape in turn.
+There is no switch back any more. The health check below fails a lane whose
+write errors exceed 10% of its store attempts, or whose lookup timeouts exceed
+10% of its reads. Treat a rate well under that but persistently above the
+measured 0.1%, or an Ubicloud cache listing with no `sccache` entries for
+Whitaker, as the signal to look again.
 
 Each build lane starts from zeroed `sccache` counters and then runs
 `scripts/record-sccache-effectiveness.sh`, which appends the human-readable
@@ -856,27 +836,29 @@ The measurements that showed it are these:
 
 The rule is therefore that every pull-request lane on the Actions backend has
 exactly one trunk writer: a job that runs on a push to `main` and nothing
-broader, runs unconditionally there, selects the same compiler-cache backend,
-declares the same compile environment, and runs every `make` or `cargo` command
-the lane runs, so the two compile the same shapes. `coverage-upload` writes for
-`coverage-check`. `linux-full` writes for itself, because `ci.yml` runs it on
-the push. That makes its shapes the lane's by construction, where a separate
-job would be a copy that could drift, and the lane's non-compiling steps add
-under a minute to a warm run. No other job may run on that push, since each
-would be a second writer to `main`'s scope, so `windows-compat` is excluded
-from it and `coverage-check` already runs on pull requests alone. A pull
-request cannot write `main`'s scope at all. Its writes land in its own ref's
-scope, so the pull-request lanes only ever read the trunk's store.
+broader, runs unconditionally there, declares the same compile environment, and
+runs every `make` or `cargo` command the lane runs, so the two compile the same
+shapes. `coverage-upload` writes for `coverage-check`. `linux-full` writes for
+itself, because `ci.yml` runs it on the push. That makes its shapes the lane's
+by construction, where a separate job would be a copy that could drift, and the
+lane's non-compiling steps add under a minute to a warm run. No other job may
+run on that push, since each would be a second writer to `main`'s scope, so
+`windows-compat` is excluded from it and `coverage-check` already runs on pull
+requests alone. A pull request cannot write `main`'s scope at all. Its writes
+land in its own ref's scope, so the pull-request lanes only ever read the
+trunk's store.
 
 `tests/workflow_contracts/trunk_writer_contract_test.py` holds that shape. It
-requires each pull-request lane on the `gha` backend to be registered with a
-writer in `TRUNK_WRITERS`. Each writer's push trigger must be exactly
-`branches: [main]`, with no other filter. The writer must carry no job
-condition, select its reader's backend, and run all of its reader's commands,
-read line by line so a command beneath `set -euo pipefail` in a block script
-still counts. The jobs that run on the push must be exactly the registered
-writers. Job conditions are matched against a table of reviewed spellings, and
-an unknown one fails the suite rather than being guessed at.
+requires each pull-request lane to be registered with a writer in
+`TRUNK_WRITERS`. Each writer's push trigger must be exactly `branches: [main]`,
+with no other filter. The writer must carry no job condition, and run all of
+its reader's commands, read line by line so a command beneath
+`set -euo pipefail` in a block script still counts. The jobs that run on the
+push must be exactly the registered writers, read over `ci.yml` and
+`coverage-main.yml`; `rolling-release.yml` also runs on the push and writes
+`main`'s scope, but compiles only release shapes no pull-request lane compiles.
+Job conditions are matched against a table of reviewed spellings, and an
+unknown one fails the suite rather than being guessed at.
 
 `tests/workflow_contracts/trunk_writer_environment_contract_test.py` holds the
 compile environment. A writer must declare each variable in
