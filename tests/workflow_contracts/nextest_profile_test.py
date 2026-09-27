@@ -84,7 +84,7 @@ class Allowance(typ.NamedTuple):
 #: named lose the ten-minute allowance and fall back to the base three
 #: hundred seconds. The two profiles genuinely differ here, the default one
 #: naming seven more `test(...)` clauses in its shared UI override than
-#: `ci`: twelve against five, with `(binary(ui) & test(=ui))` shared and
+#: `ci`: fifteen against eight, with `(binary(ui) & test(=ui))` shared and
 #: counted in neither. The macro crate's compile contract has its own
 #: identical override in both profiles.
 REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
@@ -107,6 +107,12 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
             "test(example_compiles_without_diagnostics) | "
             "test(example_harness_collects_call_site_evidence) | "
             "test(trybuild_fixtures_compile_without_diagnostics) | "
+            "test(normalize_settings_is_public_and_the_legacy_name_stays_"
+            "removed) | "
+            "test(renamed_common_apis_are_public_and_legacy_names_stay_"
+            "removed) | "
+            "test(renamed_sarif_api_is_public_and_legacy_names_stay_"
+            "removed) | "
             "test(ui::example_compiles_under_test_harness) | "
             "test(ui::hand_written_test_companion_does_not_exempt_parent_"
             "function) | "
@@ -150,6 +156,12 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
             "test(ui::ui) | "
             "test(sha2_0_11_pre_migration_patterns_fail_to_compile) | "
             "test(trybuild_fixtures_compile_without_diagnostics) | "
+            "test(normalize_settings_is_public_and_the_legacy_name_stays_"
+            "removed) | "
+            "test(renamed_common_apis_are_public_and_legacy_names_stay_"
+            "removed) | "
+            "test(renamed_sarif_api_is_public_and_legacy_names_stay_"
+            "removed) | "
             "(binary(ui) & test(=ui))"
         ): Allowance(
             slow_timeout={
