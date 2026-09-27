@@ -3395,7 +3395,7 @@ was read as "one failure", and that reading was wrong twice:
    Probe A appeared to discriminate one test instead of two. Both probes now
    run with `--no-fail-fast`.
 
-The tenacity lesson generalises the round-6 trap: a discrimination probe is a
+The tenacity lesson generalizes the round-6 trap: a discrimination probe is a
 measurement, and every part of it — the filter, the summary parse, the failure
 enumeration, and the scheduling — can manufacture the verdict it is supposed to
 report. The probe now asserts its own non-vacuity *and* was self-tested with a
