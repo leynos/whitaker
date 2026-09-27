@@ -493,10 +493,21 @@ deep capture at finalization for gated subjects only.
    nowhere to point and, per the lifecycle rules below, no site at which the
    lint can be suppressed. `brain_trait` captures from `check_item` for
    `ItemKind::Trait`. No capture callback emits.
-2. **Phase one records scalars only.** Per method: the `DefId`, the name, the
-   `BodyId`, the `Span`, and the line count. `BodyId` is `Copy` and carries no
-   lifetime, so it can live on a pass struct that is not parameterized by the
-   compiler's lifetime. Phase one must not build `MethodInfo`,
+2. **Phase one records scalars only, and only the scalars an item has.** For a
+   method _with a body_ — an inherent or trait-impl method, or a trait default
+   method — phase one records the `DefId`, the name, the `BodyId`, the `Span`,
+   and the line count. `BodyId` is `Copy` and carries no lifetime, so it can
+   live on a pass struct that is not parameterized by the compiler's lifetime.
+   For everything else the trait metrics count — required methods, associated
+   types, and associated constants — phase one records the name and the `Span`
+   and nothing further, because those are the only scalars such an item has. A
+   required method is a declaration with no body, so it has no `BodyId`; the
+   builder reflects that asymmetry exactly, since `add_required_method`,
+   `add_associated_type`, and `add_associated_const` each take a name and
+   nothing more, while only `add_default_method` takes a complexity value
+   (`common/src/brain_trait_metrics/metrics.rs:168-235`). Recording a `BodyId`
+   per _method_ without that qualification would be unsatisfiable for a
+   `brain_trait` subject. Phase one must not build `MethodInfo`,
    `MethodProfile`, or any string set.
 3. **The gate runs between the phases.** At finalization, the lightweight
    threshold is evaluated on the _complete_ accumulated method count, and only

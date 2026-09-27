@@ -898,8 +898,12 @@ Thresholds that trigger escalation, not quality targets.
   prose and the guard would need an unmaintainable exception list. (iii)
   *Chosen*: forbid the two localization crate names in the mapping crate's
   manifest. This is decidable by inspecting one manifest, is total, and
-  corresponds to the real invariant — a crate that cannot name
-  `fluent-templates` cannot load a Fluent bundle. The layering itself is
+  corresponds to the checkable half of the real invariant — the mapping
+  crate's own edges are kept informative, so reaching Fluent from the mapping
+  requires a visible manifest edit rather than being available by default.
+  (The other half — that the capability is unreachable at all — is
+  unachievable while the mapping depends on `whitaker-common`, as option (ii)'s
+  rejection above implies.) The layering itself is
   unchanged, so supersession 1 is unaffected. **The ADR must state the
   language boundary in these terms**, and `BTD-REQ-05` item 2 is reworded
   accordingly.
@@ -1070,6 +1074,52 @@ Thresholds that trigger escalation, not quality targets.
   probe showed 1 of 10 available again within minutes.
   Date/Author: 2026-09-27, implementation agent, after the retry was
   rate-limited.
+
+- **Decision: action all three findings from the completed re-review, and
+  record that one Stage C finding was only half-fixed.**
+  Rationale: the re-review ran clean on `1a26053` (exit 0, 9 of 9 files, 5
+  findings, no rate limit). Three are distinct; the reviewer reported two of
+  them twice, at identical locations.
+
+  1. *The ADR's phase-one contract was unsatisfiable.* It said "per method: the
+     `DefId`, the name, the `BodyId`, the `Span`, and the line count", but a
+     `brain_trait` subject includes required methods, associated types, and
+     associated constants, none of which has a body. Rule 2 now states the
+     contract per item kind: full scalars for an item with a body, name and
+     `Span` alone for the rest. The builder corroborates the asymmetry —
+     `add_required_method`, `add_associated_type`, and `add_associated_const`
+     take a name; only `add_default_method` takes a complexity value
+     (`common/src/brain_trait_metrics/metrics.rs:168-235`). This is the one
+     finding that changes a normative contract rather than prose.
+  2. *The guard never scanned the mapping crate's real manifest.* Confirmed by
+     reading the file: the only real-manifest call was
+     `manifest_for(SARIF_CRATE)`, for the other rule, so the localization rule
+     stood on fixtures alone. A `manifest_if_present` helper and a
+     `mapping_crate_manifest_is_bound_when_it_exists` test now scan the real
+     manifest once the crate exists, with two non-vacuity floors and a
+     discovery test that pins both branches of the helper. Red verified in
+     three states against a throwaway sibling crate: a forbidden edge fails and
+     names `dependencies.fluent-templates`; a manifest with no dependency table
+     fails as vacuous; a clean manifest passes. The throwaway crate was
+     removed, and `Cargo.lock` was hash-compared to prove it left no trace.
+  3. *The ExecPlan still carried the overclaim that the ADR had already
+     dropped.* Stage C finding 1 was recorded as actioned, and the ADR half
+     was: `grep -c "cannot load"` on the ADR returns zero. But the same
+     sentence survived in the ExecPlan's mirrors, including one three lines
+     above the note explaining why it was wrong. Four sites are corrected —
+     `VP-1`'s obligation, the `BTD-REQ-05` rationale, and two decision
+     narratives — to claim only what the guard checks: direct manifest edges,
+     which are informative, rather than unreachability, which is unachievable
+     while the mapping crate depends on `whitaker-common`. The lesson is that a
+     finding marked "actioned" must be verified across *every* mirror of the
+     claim, not just the first one found.
+
+  The reviewer said nothing about the `endColumn` exclusivity rule, the
+  `Emission lifecycle` rewrite, or the four previously-fixed stored findings,
+  all of which were silent. Neither known-spurious item recurred. A silent
+  reviewer is weaker evidence than an explicit pass, so none of that is
+  recorded as ratification.
+  Date/Author: 2026-09-27, implementation agent, clearing the re-review.
 
 ## Outcomes & retrospective
 
@@ -1313,10 +1363,15 @@ gap. Two obligations are dischargeable here.
 
 - Obligation: neither leaf crate depends on the other. `whitaker_sarif` must
   not depend on `whitaker-common`, and `whitaker_brain_trust_sarif` must not
-  depend on the localization stack (`fluent-templates`, `unic-langid`).
-  Equivalently: the dependency cycle this ADR exists to break cannot be
-  reintroduced, and the SARIF mapping crate cannot load a Fluent bundle or
-  resolve a message on its own.
+  name the localization stack (`fluent-templates`, `unic-langid`) in its
+  manifest. Equivalently: the dependency cycle this ADR exists to break cannot
+  be reintroduced, and the mapping crate's own manifest is informative about
+  the language boundary rather than silent on it. This is a claim about direct
+  manifest edges, not a reachability proof: the mapping crate does depend on
+  `whitaker-common`, and `i18n` cannot be gated out of that dependency, so a
+  future author holding that edge could still resolve a Fluent message. What
+  the rule buys is that such a use would require a visible, reviewable manifest
+  edit rather than being available by default.
 - **Corrected 2026-09-27.** The first wording of this obligation read "does not
   depend on `whitaker-common`, and therefore cannot reach
   `whitaker_common::i18n`". That is unachievable and is withdrawn.
@@ -2532,19 +2587,23 @@ at finalization, for gated subjects only.**
    rendered message. This is what lets a localized diagnostic and an English
    SARIF result stay semantically identical without either being a translation
    of the other.
-2. **SARIF is English-only, and the localization stack is kept out of reach.**
-   The SARIF mapping lives in `crates/whitaker_brain_trust_sarif`, which does
-   not depend on `fluent-templates` or `unic-langid` and therefore cannot load
-   a Fluent bundle or resolve a message. The crate does depend on
-   `whitaker-common` — `SubjectLocation` carries `RepoRelativePath` and
-   `SourceSpan` — so the boundary is drawn on the localization dependencies
-   rather than on the whole crate; `common/src/lib.rs:14` is a bare
-   `pub mod i18n;` with no feature gate, so no manifest edge can make the
-   `i18n` module itself unreachable. Placing the mapping inside
-   `common/src/brain_trust_sarif/`, as the 6.5.1 execplan proposes, would put
-   it in a crate whose manifest declares `fluent-templates` outright, so no
-   check could distinguish a mapping that renders English text from one that
-   resolves a Fluent key. **Supersedes the 6.5.1 execplan's mapping-module
+2. **SARIF is English-only, and the localization stack is kept off the
+   manifest.** The SARIF mapping lives in `crates/whitaker_brain_trust_sarif`,
+   whose manifest does not name `fluent-templates` or `unic-langid`. That is a
+   statement about direct dependency edges, and it is the accurate one. The
+   crate does depend on `whitaker-common` — `SubjectLocation` carries
+   `RepoRelativePath` and `SourceSpan` — so the boundary is drawn on the
+   localization dependency names rather than on the whole crate;
+   `common/src/lib.rs:14` is a bare `pub mod i18n;` with no feature gate, so no
+   manifest edge can make the `i18n` module itself unreachable, and a future
+   author holding the `whitaker-common` edge could resolve a Fluent message
+   after one visible manifest edit. What the rule buys is that the edit is
+   visible and reviewable. Placing the mapping inside
+   `common/src/brain_trust_sarif/`, as the 6.5.1 execplan proposes, would
+   surrender that property: it would put the mapping in a crate whose manifest
+   declares `fluent-templates` outright, so no check could distinguish a
+   mapping that renders English text from one that resolves a Fluent key.
+   **Supersedes the 6.5.1 execplan's mapping-module
    placement** — the same decision recorded under `The layering decision`,
    stated here from the language-boundary side. `VP-1` is the obligation this
    creates.
