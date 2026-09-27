@@ -83,6 +83,10 @@
   contract](adr-004-pin-only-mutation-testing-contract.md) records why the
   shared mutation workflow tests its declared configuration without claiming
   parity with the continuous integration test baseline.
+- [Architectural decision record (ADR) 005: brain trust lint driver
+  interfaces](adr-005-brain-trust-lint-driver-interfaces.md) records why the
+  finding-to-SARIF mapping lives in a third adapter crate rather than in the
+  dependency edge of either leaf.
 
 ## Requests for comments
 

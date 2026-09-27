@@ -268,6 +268,21 @@ Thresholds that trigger escalation, not quality targets.
   contradicts the adjacent "nine emitting" clause, and a "seven places"
   citation count that is five. `make markdownlint` (0 errors / 78 files) and
   `make nixie` both pass. See `Surprises & discoveries`.
+- [x] (2026-09-27) Stage C complete. `docs/adr-005-brain-trust-lint-driver-interfaces.md`
+  written against the house template — Status, Date, Context, Decision drivers,
+  Requirements, Options considered (three crate-edge options plus the capture
+  and emission axes), Decision outcome with the Y-statement, and the normative
+  sections `Location resolution` (11 rules), `HIR capture` (8 rules plus
+  `Counting a method once`), `Suggestion rendering` (6 rules), `Lint-pass
+  lifecycle` (Table 2 plus 10 rules), and `Language boundary` (6 rules), then
+  `Goals and non-goals`, `Known risks and limitations` (naming all four
+  supersessions of 6.5.1), and `Outstanding decisions` (5 items). The layering
+  diagram is a Mermaid `flowchart TD` with a screen-reader description above
+  and `Figure 1` below. Registered in `docs/contents.md` §"Decision records" in
+  the ADR 004 style. All four open questions from Stage A resolved from the
+  repository rather than escalated; see `Surprises & discoveries`. Every `VP-2`
+  checklist row reads "answered" against a named rule. `make markdownlint`
+  (0 errors / 79 files) and `make nixie` both pass.
 - [ ] EP-M1 `docs/adr-005-brain-trust-lint-driver-interfaces.md` written and
   registered in `docs/contents.md`.
 - [ ] EP-M2 Architecture-fitness guard added (separable).
@@ -443,6 +458,61 @@ Thresholds that trigger escalation, not quality targets.
   bury a doc-only ADR diff under unrelated rewrapping of three files, one of
   which this branch is forbidden to touch. `make markdownlint` and `make nixie`
   — the gates that actually run — both pass on the file as committed.
+
+- Observation: all four open questions left by Stage A were resolved from the
+  repository, and only one was a genuine two-reading conflict.
+  Evidence: Q1 (which span the `brain_type` diagnostic points at) — the design
+  document is silent, but `BTD-REQ-02` rule 1 names the `ItemKind::Struct` /
+  `Enum` / `Union` *declaration* item, so the declaration span is the answered
+  reading. Q2 (do blanket-impl bodies count toward `brain_trait`) — the design
+  document says the unit is "a single trait definition", and
+  `TraitMetricsBuilder` structurally cannot receive impl data: there is no
+  input channel, and `TraitItemKind`
+  (`common/src/brain_trait_metrics/item.rs:14-23`) has no `ImplMethod` variant.
+  Impl blocks are out of scope. Q3 (count a method once, or once per generic
+  instantiation) — the only question that appeared to support two readings.
+  `common/src/lcom4/mod.rs:235-248` settles it: `build_method_index` is
+  documented to build a "method-name-to-indices map, preserving duplicate
+  names", and `union_by_method_calls` states why — "when multiple methods share
+  a name (e.g. trait impl methods on the same type)". The premise that
+  one source `impl` contributes several entries is therefore false: the HIR
+  walk visits one `ItemKind::Impl` per source block, so
+  `impl<T> Foo<T> { fn bar }` contributes once, and two entries sharing a name
+  arise only from two genuinely distinct source methods, which is exactly what
+  the shipped cohesion code exists to preserve. The rule adopted is therefore
+  **once per source definition site**. `TypeMetricsBuilder::add_method`
+  (`common/src/brain_type_metrics/mod.rs:295-306`) takes a name and pushes
+  unconditionally, confirming it is not a deduplicating API. Q4 (`brain_trait`
+  from `check_item` against a deferred emission) — `ItemKind::Trait` is
+  self-contained and `bumpy_road_function:150-157` reads trait default bodies
+  synchronously from `check_trait_item`, so the immediate path is available;
+  the deferred lifecycle is nonetheless adopted for uniformity, and the ADR
+  states that reason rather than implying a constraint.
+  Impact: the `Ambiguity` tolerance triggers only where "the design documents
+  support two readings of a metric's subject boundary and the choice changes
+  what implementers build". Q3's two readings were an artefact of an unverified
+  assumption about rustc's HIR, not of the documents; resolving it against
+  `lcom4` falsified the premise, so the trigger is not met and no escalation
+  was raised. All four resolutions are recorded in the ADR as normative rules,
+  with Q3 given its own subsection (`Counting a method once`) so that a future
+  reader can see the reasoning rather than only the conclusion.
+
+- Observation: `make markdownlint` first failed on the new ADR with 43 errors,
+  splitting 32 × MD049 against 11 × MD060.
+  Evidence: MD049 defaults to "consistent" mode and is unconfigured in
+  `.markdownlint-cli2.jsonc`, so the *first* emphasis marker in a file fixes the
+  style for the whole file. The ADR opened with underscore captions of the form
+  `_Table 1: ..._` and then used single-asterisk emphasis in fifteen spans, so
+  every one of those asterisk spans reported. MD060 flagged both tables as
+  misaligned against their header rows under the "aligned" style.
+  Impact: the ADR now uses underscore emphasis throughout, matching ADR 004,
+  which uses zero asterisks. Both tables were realigned by padding every cell to
+  its column's maximum width. Re-run: 0 errors across 79 files. The rule is
+  recorded in the agent memory index as `MD049 vs house caption style`, and the
+  same trap will recur in any file that mixes asterisk emphasis with an
+  underscore caption. Two of the fixes needed care rather than a substitution:
+  the numbered-list spans in `Known risks` carry apostrophes and backticks, and
+  one span in `Suggestion rendering` runs across a line break.
 
 ## Decision log
 
@@ -697,6 +767,36 @@ Thresholds that trigger escalation, not quality targets.
   carries is identical at `HEAD` and after the 2026-09-27 edits, so the
   formatter was never satisfied here and this change does not regress it.
   Date/Author: 2026-09-27, implementation agent, on finding the deviation.
+
+- **Decision: resolve the four open questions from the repository rather than
+  escalating them to the approver.**
+  Rationale: the `Ambiguity` tolerance fires when "the design documents support
+  two readings of a metric's subject boundary and the choice changes what
+  implementers build". On inspection, three of the four have a single reading
+  once the design document is read against the shipped domain types: Q1 is
+  answered by `BTD-REQ-02` rule 1, Q2 by `TraitMetricsBuilder`'s absent impl
+  channel and the missing `ImplMethod` variant, and Q4 by `check_trait_item`'s
+  existing synchronous trait-body read. Q3 did present two readings, but the
+  conflict was in an assumption about rustc rather than in the documents:
+  `lcom4`'s name-preserving index proves the HIR walk yields one entry per
+  source `impl`, so per-instantiation duplication cannot arise. Escalating
+  three questions that the repository answers would have spent approver
+  attention on nothing, and escalating Q3 would have asked the approver to
+  adjudicate a factual question about rustc that a file in the tree settles.
+  **The ADR states each resolution as a normative rule with its evidence**, so
+  a reader who disagrees can see the grounds and supersede the ADR; that is the
+  cheaper remedy than a question asked before the evidence was gathered.
+  Date/Author: 2026-09-27, implementation agent.
+
+- Decision: give the Q3 resolution its own subsection, `Counting a method once`,
+  rather than folding it into the eight `HIR capture` rules.
+  Rationale: it is the one rule whose reasoning is not visible from the rule
+  itself. A reader who wants to know why `impl<T> Foo<T>` counts once and
+  `impl Foo<u8>` plus `impl Foo<String>` count twice needs the HIR argument and
+  the `lcom4` citation, neither of which belongs in a numbered rule. Partitioning
+  it out also keeps `HIR capture` rule 7 to two sentences: the keying rule and
+  the once-per-site conclusion, with a pointer to the subsection.
+  Date/Author: 2026-09-27, implementation agent.
 
 ## Outcomes & retrospective
 
@@ -1316,34 +1416,34 @@ Written in Stage A, before the ADR is drafted. Rows C-20 to C-26 were added by
 design review of the first draft. Every row must read "answered" with a section
 reference before `EP-M1` closes.
 
-| Row | Contract to answer | Source | Status |
-| --- | ------------------ | ------ | ------ |
-| C-1 | `Span` plus `TyCtxt` to a repository-root-relative file identifier | `BTD-REQ-01` | not answered |
-| C-2 | `Span` to a `SourceSpan`, including the column convention and its base | `BTD-REQ-01` | not answered |
-| C-3 | Behaviour when a span has no real file (macro, `<anon>`, doctest) | `BTD-REQ-01` | not answered |
-| C-4 | Behaviour when a resolved path lies outwith the repository root | `BTD-REQ-01` | not answered |
-| C-5 | Which HIR callbacks capture data, and what each captures | `BTD-REQ-02` | not answered |
-| C-6 | The dispatch surface a single traversal presents to the four builders | `BTD-REQ-02` | not answered |
-| C-7 | How a type's methods are gathered across separate `impl` items | `BTD-REQ-02` | not answered |
-| C-8 | Where macro-expansion filtering is decided, and only there | `BTD-REQ-02` | not answered |
-| C-9 | When `suggest_decomposition` runs, and on what input | `BTD-REQ-03` | not answered |
-| C-10 | How a suggestion reaches the compiler diagnostic | `BTD-REQ-03` | not answered |
-| C-11 | How a suggestion reaches a SARIF result | `BTD-REQ-03` | not answered |
-| C-12 | The lifecycle: what happens in each callback | `BTD-REQ-04` | not answered |
-| C-13 | Finalization: when, once, and with what ordering guarantee | `BTD-REQ-04` | not answered |
-| C-14 | Which side owns input and output, and which owns pure data | `BTD-REQ-04` | not answered |
-| C-15 | Which strings are localized and which are English-only | `BTD-REQ-05` | not answered |
-| C-16 | What a finding carries so both renderers agree | `BTD-REQ-05` | not answered |
-| C-17 | Where the repository-relative path newtype lives, and its validation | 6.5.1 deferral | not answered |
-| C-18 | Where `span_to_region` lives, and its zero-column policy | 6.5.1 deferral | not answered |
-| C-19 | The subject type carried into SARIF mapping | 6.5.1 deferral | not answered |
-| C-20 | The crate-edge direction, and why it is publishable | design review | not answered |
-| C-21 | The emission API, and how `#[allow]` on the item keeps working | design review | not answered |
-| C-22 | The prohibition on `span_delayed_bug`, and what replaces it | design review | not answered |
-| C-23 | The artefact handoff out of the pass, and its concurrency discipline | design review | not answered |
-| C-24 | `columnKind`, and the bound on clustering input | design review | not answered |
-| C-25 | The property-bag key set, its versioning, and omitted-item counts | design review | not answered |
-| C-26 | Rule identifier allocation for the two lints | design review | not answered |
+| Row  | Contract to answer                                                     | Source         | Status   | ADR section                                                   |
+| ---- | ---------------------------------------------------------------------- | -------------- | -------- | ------------------------------------------------------------- |
+| C-1  | `Span` plus `TyCtxt` to a repository-root-relative file identifier     | `BTD-REQ-01`   | answered | `Location resolution` rules 1-2                               |
+| C-2  | `Span` to a `SourceSpan`, including the column convention and its base | `BTD-REQ-01`   | answered | `Location resolution` rule 4                                  |
+| C-3  | Behaviour when a span has no real file (macro, `<anon>`, doctest)      | `BTD-REQ-01`   | answered | `Location resolution` rule 6                                  |
+| C-4  | Behaviour when a resolved path lies outwith the repository root        | `BTD-REQ-01`   | answered | `Location resolution` rule 7                                  |
+| C-5  | Which HIR callbacks capture data, and what each captures               | `BTD-REQ-02`   | answered | `HIR capture` rules 1-2                                       |
+| C-6  | The dispatch surface a single traversal presents to the four builders  | `BTD-REQ-02`   | answered | `HIR capture` rule 4                                          |
+| C-7  | How a type's methods are gathered across separate `impl` items         | `BTD-REQ-02`   | answered | `HIR capture` rule 7; `Counting a method once`                |
+| C-8  | Where macro-expansion filtering is decided, and only there             | `BTD-REQ-02`   | answered | `HIR capture` rule 6                                          |
+| C-9  | When `suggest_decomposition` runs, and on what input                   | `BTD-REQ-03`   | answered | `Suggestion rendering` rule 1; `HIR capture` rule 3           |
+| C-10 | How a suggestion reaches the compiler diagnostic                       | `BTD-REQ-03`   | answered | `Suggestion rendering` rule 2                                 |
+| C-11 | How a suggestion reaches a SARIF result                                | `BTD-REQ-03`   | answered | `Suggestion rendering` rules 3-4                              |
+| C-12 | The lifecycle: what happens in each callback                           | `BTD-REQ-04`   | answered | `Lint-pass lifecycle` Table 2, rules 1 and 4                  |
+| C-13 | Finalization: when, once, and with what ordering guarantee             | `BTD-REQ-04`   | answered | `Lint-pass lifecycle` rules 2-3                               |
+| C-14 | Which side owns input and output, and which owns pure data             | `BTD-REQ-04`   | answered | `Language boundary` rules 1-2; `Lint-pass lifecycle` rule 9   |
+| C-15 | Which strings are localized and which are English-only                 | `BTD-REQ-05`   | answered | `Language boundary` rules 2-4                                 |
+| C-16 | What a finding carries so both renderers agree                         | `BTD-REQ-05`   | answered | `Language boundary` rules 1 and 6                             |
+| C-17 | Where the repository-relative path newtype lives, and its validation   | 6.5.1 deferral | answered | `Location resolution` rules 1 and 3                           |
+| C-18 | Where `span_to_region` lives, and its zero-column policy               | 6.5.1 deferral | answered | `Known risks` supersession 3; `Location resolution` rule 5    |
+| C-19 | The subject type carried into SARIF mapping                            | 6.5.1 deferral | answered | `Location resolution` rule 1; `Language boundary` rule 1      |
+| C-20 | The crate-edge direction, and why it is publishable                    | design review  | answered | `Options considered`; `Decision outcome / proposed direction` |
+| C-21 | The emission API, and how `#[allow]` on the item keeps working         | design review  | answered | `Lint-pass lifecycle` rule 1                                  |
+| C-22 | The prohibition on `span_delayed_bug`, and what replaces it            | design review  | answered | `Location resolution` rule 8                                  |
+| C-23 | The artefact handoff out of the pass, and its concurrency discipline   | design review  | answered | `Lint-pass lifecycle` rule 5                                  |
+| C-24 | `columnKind`, and the bound on clustering input                        | design review  | answered | `Location resolution` rule 11; `HIR capture` rule 8           |
+| C-25 | The property-bag key set, its versioning, and omitted-item counts      | design review  | answered | `Suggestion rendering` rules 4-5                              |
+| C-26 | Rule identifier allocation for the two lints                           | design review  | answered | `Lint-pass lifecycle` rule 10                                 |
 
 *Table 1: The completeness checklist for ADR 005, written before drafting.*
 
