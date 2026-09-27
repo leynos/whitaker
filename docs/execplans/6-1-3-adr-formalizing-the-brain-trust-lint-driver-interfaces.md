@@ -1573,9 +1573,12 @@ gap. Two obligations are dischargeable here.
   `tests/`, named in Stage D once the ADR fixes the crate name. The hosting
   crate is the one that can already resolve its dev-dependencies, which keeps
   the plan's no-new-dependency constraint satisfied.
-- Evidence: `cargo nextest run architecture_boundary`. Red first: assert
-  against a manifest fixture that *does* declare the forbidden dependency and
-  observe the failure name it.
+- Evidence: `cargo nextest run -p whitaker_sarif --test architecture_boundary`.
+  Scoped by `--test`, not by a positional argument: nextest reads a bare
+  argument as a *test-name filter*, so `cargo nextest run architecture_boundary`
+  selects none of these tests and reports zero failures — indistinguishable
+  from a pass. Red first: assert against a manifest fixture that *does* declare
+  the forbidden dependency and observe the failure name it.
 - Non-vacuity: three checks, all permanent assertions in the test rather than
   one-time manual rituals. First, a fixture manifest declaring
   `whitaker-common = { workspace = true }` in `whitaker_sarif` must fail.
@@ -1973,13 +1976,18 @@ make nixie 2>&1 \
 The focused test, after Stage D:
 
 ```bash
-cargo nextest run architecture_boundary 2>&1 \
+cargo nextest run -p whitaker_sarif --test architecture_boundary 2>&1 \
   | tee /tmp/focused-whitaker-$(git branch --show-current).out
 ```
 
 ```plaintext
-    Summary [   0.0xxs] 4 tests run: 4 passed, 0 skipped
+    Summary [   0.0xxs] 27 tests run: 27 passed, 0 skipped
 ```
+
+The `-p` and `--test` scoping is not decoration. nextest treats a positional
+argument as a test-name filter, so an unscoped or bare-word command can run
+zero tests and still exit 0 — the failure mode is a green run that proves
+nothing.
 
 Full gates, sequentially, before each commit that touches code. Delegate to the
 `scrutineer` subagent, which captures each gate's log under `/tmp` and returns
@@ -2042,9 +2050,9 @@ reference before `EP-M1` closes.
 - `docs/contents.md` lists the new ADR under §"Decision records" in the same
   style as ADR 004.
 - Run `make markdownlint` and `make nixie`. Expect clean exits.
-- Run `cargo nextest run architecture_boundary`. Expect all tests to pass, then
-  flip the clean fixture manifest to declare the forbidden dependency and
-  re-run: expect a failure naming it.
+- Run `cargo nextest run -p whitaker_sarif --test architecture_boundary`. Expect
+  all tests to pass, then flip the clean fixture manifest to declare the
+  forbidden dependency and re-run: expect a failure naming it.
 
 Quality criteria:
 
@@ -3407,3 +3415,48 @@ Effect on remaining work. `EP-M2` moves from 25 tests to 27 across five files
 195 — all inside the 400-line rule, and `mod.rs` now has the headroom its
 round-6 note asked for). No production source and no manifest changed; the ADR
 text changed in one sentence, to say what its own rule 1 already required.
+
+### Round 8 — the documented command that selected nothing, 2026-09-27
+
+CodeRabbit round 8 (exit 0, 191 s, 13 files reviewed, no rate limit) raised
+**one** finding, `major`, and it was the round's only issue. Round 7's three
+findings were not re-raised, and `path_discovery.rs` appears in the reviewed
+file list, so the review saw the new module.
+
+**The finding.** Three places in this plan documented the focused-test command
+as `cargo nextest run architecture_boundary`. nextest reads a positional
+argument as a **test-name filter**, not a package or target selector, so that
+command selects none of the 27 tests in the file — and exits 0. Reproduced
+directly:
+
+```plaintext
+$ cargo nextest list -p whitaker_sarif --all-features architecture_boundary
+  -> exit 0, 0 tests
+$ cargo nextest list -p whitaker_sarif --test architecture_boundary
+  -> exit 0, 27 tests
+```
+
+**This was a stale mirror of a lesson this very plan already recorded.** The
+Round 5 section documents the same trap at length — the `-E 'test(name)'`
+predicate matches a test name, so the probe ran zero tests and reported zero
+failures. The finding is the same defect in the *instructions* rather than in
+a probe, which is a sharper instance: a reader following this plan would have
+run a command that always passes and concluded the guard was verified. The
+`4 tests run` sample output beneath it was stale for the same reason, having
+predated the file's growth to 27 tests.
+
+The fix uses `-p whitaker_sarif --test architecture_boundary`, which is the
+form the repository already documents elsewhere
+(`docs/developers-guide.md:89`), and the sample output is refreshed to the
+measured `27 tests run: 27 passed`. The corrected invocation was run verbatim
+and produced exactly that line.
+
+**A note on how this survived seven rounds.** The three command sites are in
+the plan's evidence and acceptance sections, not in code, so no gate could
+reach them — `check-fmt` is Rust-only and `markdownlint` checks style, not
+veracity. A documented command is unfalsifiable by construction unless
+someone runs it. Every command this plan now cites as evidence has been
+executed at least once during this work; the two places where a *bare-word*
+form remains are explanatory prose describing the trap, not instructions.
+
+Nothing outside this plan changed. No code, no manifest, no ADR text.
