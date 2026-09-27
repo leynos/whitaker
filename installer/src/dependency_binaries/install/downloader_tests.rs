@@ -72,8 +72,8 @@ fn open_destination_dir_writes_into_the_destination_parent_not_the_cwd() {
     // An independent capability for the destination's directory, used to
     // confirm the archive actually lands there rather than trusting the
     // directory handle returned by the code under test.
-    let destination_dir = Dir::open_ambient_dir(temp_dir, ambient_authority())
-        .expect("open destination capability");
+    let destination_dir =
+        Dir::open_ambient_dir(temp_dir, ambient_authority()).expect("open destination capability");
 
     let (dir, archive_name) = open_destination_dir(&destination).expect("open destination dir");
     assert_eq!(archive_name, archive_file.as_str());
