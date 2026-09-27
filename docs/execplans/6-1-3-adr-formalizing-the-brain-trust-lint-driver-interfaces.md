@@ -1867,7 +1867,11 @@ upstream assumption without that artefact being updated.
   break the layering — if `whitaker_sarif` acquires `whitaker-common`, or if
   the SARIF mapping crate acquires the localization stack.
 - Requirements: `BTD-REQ-05`, and the layering rule of `The layering decision`.
-- Changes: one test file, plus fixture manifests.
+- Changes: two test files — the rule in `tests/architecture_boundary.rs` and its
+  machinery in `tests/manifest_scan/mod.rs` — plus fixture manifests. The split
+  is forced by the 400-line rule and follows the existing `tests/support/mod.rs`
+  precedent; a module *directory* is used because Cargo does not discover
+  `tests/<dir>/mod.rs` as its own target.
 - Red artefact: the guard run against a fixture manifest declaring the
   forbidden dependency, which must fail naming it.
 - Acceptance evidence (`AC-2`): the three non-vacuity checks in `VP-1` all
@@ -3059,6 +3063,18 @@ defect was noticed, and each left a sibling site reading the permissive
 predicate. The lesson recorded for the remaining work is that a predicate
 carrying a correctness rule should be introduced with a grep for its siblings,
 not fixed at the site that was reported.
+
+Observation, recorded 2026-09-27: hosted CI does not run on this PR's new
+commits, and the cause is a frozen test-merge ref rather than anything about the
+change. `refs/pull/358/merge` still points at a merge built 2026-08-21 from the
+base `f03d3e7`, so `pull_request` workflows have not fired since; only
+`pull_request_target` (which uses the base's default branch) keeps firing, which
+makes the branch look wired up when it is not. Draft status was checked and
+refuted as the cause: across all open PRs, 14 of 14 drafts and 10 of 10 ready PRs
+receive `pull_request` CI. `gh workflow run ci.yml --ref <branch>` is the working
+workaround and was used for `d129df5`. This is a repository/CI condition, not a
+defect in this change, and it is recorded here because it will otherwise be
+re-diagnosed from scratch on the next push.
 
 Effect on remaining work. None on scope. `EP-M2` moves from 19 tests to 20 and
 the two files are unchanged in size class: 399 and 344 lines, both inside the
