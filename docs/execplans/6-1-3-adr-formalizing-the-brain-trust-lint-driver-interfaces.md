@@ -299,19 +299,24 @@ Thresholds that trigger escalation, not quality targets.
 - [x] (2026-09-27) EP-M1 `docs/adr-005-brain-trust-lint-driver-interfaces.md`
   written and registered in `docs/contents.md`.
 - [x] (2026-09-27) EP-M2 complete. `crates/whitaker_sarif/tests/architecture_boundary.rs`
-  added, 12 tests. It asserts both ADR 005 rules over dependency manifests:
+  added, 15 tests. It asserts both ADR 005 rules over dependency manifests:
   `whitaker_sarif` must not name `whitaker-common`, and
   `whitaker_brain_trust_sarif` must not name `fluent-templates` or
   `unic-langid`. The `whitaker_sarif` half runs against the **real** manifest, so
-  a reintroduced edge fails today; the mapping-crate half runs against fixtures,
-  because that crate is forbidden here. Red confirmed twice, before and after the
-  `cap_std` conversion: with the forbidden edge present the guard fails naming
-  the dependency *and* its location, `dependencies.whitaker-common`. All three
-  non-vacuity checks from `VP-1` are permanent assertions — the direct fixture,
-  the renamed fixture (`loc = { package = ... }`), and a floor asserting at least
-  one table and one dependency were examined. Two further shapes beyond the
-  three required are covered: a `[target.'cfg(...)'.dependencies]` selector and
-  a `[dev-dependencies]` entry, since a cycle is a cycle whichever table
+  a reintroduced edge fails today; the mapping-crate half carries fixture cases
+  plus a test that scans the real manifest *when the crate exists* and returns
+  early until then. That test activates on its own when the crate lands, so the
+  rule stops resting on fixtures alone without anyone having to remember to wire
+  it up. Red confirmed three times: before and after the
+  `cap_std` conversion, and again after the discovery helper was deduplicated.
+  With the forbidden edge present the guard fails naming the dependency *and*
+  its location, `dependencies.whitaker-common` or
+  `dependencies.fluent-templates`. All three non-vacuity checks from `VP-1` are
+  permanent assertions — the direct fixture, the renamed fixture
+  (`loc = { package = ... }`), and a floor asserting at least one table and one
+  dependency were examined. Two further shapes beyond the three required are
+  covered: a `[target.'cfg(...)'.dependencies]` selector and a
+  `[dev-dependencies]` entry, since a cycle is a cycle whichever table
   carries it. Gates: `make check-fmt`, `make typecheck`, `make lint`,
   `make test`.
   See `Surprises & discoveries` for the two corrections this milestone needed.
@@ -1158,7 +1163,7 @@ lifecycle (10 plus a callback table), and the language boundary (6).
   the existing design-document reference.
 - `docs/contents.md` — ADR 005 registered under §"Decision records" in the
   ADR 004 style.
-- `crates/whitaker_sarif/tests/architecture_boundary.rs` — new, 12 tests, the
+- `crates/whitaker_sarif/tests/architecture_boundary.rs` — new, 15 tests, the
   architecture-fitness guard for the seam. `whitaker_sarif`'s half runs against
   the real manifest; the mapping crate does not exist yet, so its half runs
   against fixtures and gains teeth when the crate lands.
