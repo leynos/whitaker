@@ -90,6 +90,7 @@ extend-ignore-re = [
     "How to organise your Rust tests",
     "\\b(?:background|theme)_color\\b",
     "\\b(?:carousel|dropdown|footer|indicator|items|navbar|toast)-center\\b",
+    "\\b(?:normalise_locale|rasterise_signal|normalise_settings|Artifact|ArtifactLocation|with_artifact|artifact_location|artifactLocation|artifacts)\\b",
     "\\bAppFactory<Ser\\b",
     "\\bartifact-(?:name|server-path)\\b",
     "\\bcolor-(?:mix|contrast)\\b",

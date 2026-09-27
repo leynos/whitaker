@@ -477,7 +477,7 @@ detached, `git -C ~/.local/share/whitaker checkout main` restores it by hand.
 If a gate fails mid-commit, fix and re-run the gate; never commit over a red
 gate.
 
-## Artifacts and notes
+## Artefacts and notes
 
 Red/Green evidence (gate logs under `/tmp/*-whitaker-issue-271*.out`):
 

@@ -56,7 +56,6 @@ ignore = [
   "(?m)^## Tha `expect` toirmisgte taobh a\\-muigh deuchainnean\\.$",
   "(?m)^#\\. Air a shealltainn ann an breithneachaidhean nuair a tha e a’ toirt iomradh air am buadh roimhe\\.$",
   "(?m)^\\- Lexical segment matching can mis\\-handle renamed imports, glob imports, or$",
-  "(?m)^\\- \\*\\*Checkboxes:\\*\\* Precede task and sub\\-task items with a GitHub Flavored$",
   "(?m)^\\- `\\-\\-artifact\\-server\\-path <dir>`: export uploaded artefacts to a host$",
   "(?m)^bumpy_road_function = Tha iomadh cruinneachadh de loidsig chumhachail neadaichte ann an `\\{ \\$name \\}`\\.$",
   "(?m)^careful setup before a test can execute and, sometimes, teardown afterward\\.$",
@@ -65,6 +64,9 @@ ignore = [
   "(?m)^error: Tha gnìomh std::fs `std::fs::read` a’ seachnadh a’ phoileasaidh comasan airson an t\\-siostaim fhaidhlichean\\.$",
   "(?m)^module_max_lines = Tha mòideal \\{ \\$module \\} a’ leudachadh gu \\{ \\$lines \\} loidhnichean agus a’ briseadh an crìoch \\{ \\$limit \\}\\.$",
   "(?m)^no_std_fs_operations = Tha gnìomh std::fs `\\{ \\$operation \\}` a’ seachnadh a’ phoileasaidh comasan airson an t\\-siostaim fhaidhlichean\\.$",
+  # Legacy public names remain only in compile-fail contracts; SARIF wire keys
+  # retain the schema's spelling.
+  "\\b(?:normalise_locale|rasterise_signal|normalise_settings|Artifact|ArtifactLocation|with_artifact|artifact_location|artifactLocation|artifacts)\\b",
   # Inline code spans are masked; the shared dictionary does not mask them yet.
   '`[^`\n]+`',
 ]
