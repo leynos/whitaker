@@ -274,6 +274,30 @@ fn metadata_tables_are_not_dependency_tables() {
 }
 
 #[rstest]
+fn workspace_dependencies_table_is_scanned_too() {
+    // `[workspace.dependencies]` is the third place Cargo reads dependencies,
+    // and it is a real declaration rather than metadata: an entry there is what
+    // every member inheriting `{ workspace = true }` resolves against. A scan
+    // that read only the top level and `[target]` would miss a forbidden edge
+    // declared at the root and shared by every member.
+    //
+    // Without this case the `workspace` clause of `is_dependency_scope` is
+    // unreachable: every other test passes the workspace table as the
+    // *resolution* argument to `scan_for`, never as the document under scan.
+    // Dropping the clause left all 105 tests passing, which is what makes this
+    // case load-bearing rather than decorative.
+    let document = parse_manifest(concat!(
+        "[workspace.dependencies]\n",
+        "fluent-templates = { version = \"0.15\" }\n",
+    ));
+    assert_eq!(
+        scan_for(&document, "fluent-templates", None),
+        ScanOutcome::Found("workspace.dependencies.fluent-templates".to_owned()),
+        "a root workspace declaration is a dependency the guard must read"
+    );
+}
+
+#[rstest]
 fn scan_reports_absence_without_claiming_a_location() {
     let document = parse_manifest("[dependencies]\nserde = \"1\"\n");
     assert_eq!(
