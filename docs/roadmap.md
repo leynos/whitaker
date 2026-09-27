@@ -285,7 +285,7 @@
   calls, including macro-span filtering. See
   [brain trust lints design](brain-trust-lints-design.md) §Cohesion analysis
   (LCOM4) and §Implementation approach. Requires 6.1.1.
-- [ ] 6.1.3. Record an architectural decision record (ADR) formalizing the
+- [x] 6.1.3. Record an architectural decision record (ADR) formalizing the
   brain trust lint driver interfaces before any consumer is implemented: how a
   `rustc_span::Span` and `TyCtxt` yield a repository-root-relative file
   identifier and a `SourceSpan`; how HIR traversal populates
@@ -294,7 +294,8 @@
   collecting and finalizing findings; and the boundary between English SARIF
   text and localized diagnostics. See
   [brain trust lints design](brain-trust-lints-design.md) §Implementation
-  approach. Requires 6.1.2, 6.2.2, 6.3.2, and 6.4.2.
+  approach, and [ADR 005](adr-005-brain-trust-lint-driver-interfaces.md) for
+  the decisions themselves. Requires 6.1.2, 6.2.2, 6.3.2, and 6.4.2.
 
 ### 6.2. `brain_type` lint
 

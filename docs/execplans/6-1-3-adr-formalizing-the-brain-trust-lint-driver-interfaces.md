@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision log`, `Outcomes & retrospective`, `Conformance basis`, and
 `Verification plan` must be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: COMPLETE (2026-09-27)
 
 ## Purpose / big picture
 
@@ -328,7 +328,13 @@ Thresholds that trigger escalation, not quality targets.
   Doc-comment and doc-example literals only; no signature, behaviour, or public
   API changed. Gates: `cargo test --doc -p whitaker-common` (184 passed), then
   `make check-fmt`, `make typecheck`, `make lint`, `make test`.
-- [ ] EP-M4 Roadmap item 6.1.3 marked done; living sections reconciled.
+- [x] (2026-09-27) EP-M4 complete. `docs/roadmap.md` item 6.1.3 reads `- [x]`
+  with a link to ADR 005 beside the existing design-document reference. All
+  four prerequisites named by the item (6.1.2, 6.2.2, 6.3.2, 6.4.2) were
+  verified `- [x]` before the checkbox was flipped, and each question the item
+  names was confirmed present in the ADR. `Outcomes & retrospective` records
+  every amended artefact and all four supersessions; the status is `COMPLETE`.
+  Gates: `make markdownlint`, `make nixie`.
 
 ## Surprises & discoveries
 
@@ -1013,11 +1019,70 @@ Thresholds that trigger escalation, not quality targets.
 
 ## Outcomes & retrospective
 
-To be completed at `EP-M4`. Before setting this plan to `COMPLETE`, reconcile
-every discovery against the artefacts named in `Conformance basis`: if drafting
-the ADR falsified an assumption in `docs/brain-trust-lints-design.md`, amend
-that document; confirm every supersession of the 6.5.1 execplan appears in the
-ADR's "Known risks and limitations" and in `Decision log` above.
+Completed 2026-09-27.
+
+**What was delivered.** `docs/adr-005-brain-trust-lint-driver-interfaces.md`
+(858 lines), accepted, answering all five `BTD-REQ` questions from
+`docs/roadmap.md:288-297`. It fixes the crate-edge decision (a third adapter
+crate, `whitaker_brain_trust_sarif`, rather than an edge between the two
+leaves), and states normative rules for location resolution (11), HIR capture
+(8 plus `Counting a method once`), suggestion rendering (6), lint-pass
+lifecycle (10 plus a callback table), and the language boundary (6).
+
+**Artefacts amended.** In reverse-dependency order:
+
+- `docs/roadmap.md` — item 6.1.3 ticked, with a link to ADR 005 added beside
+  the existing design-document reference.
+- `docs/contents.md` — ADR 005 registered under §"Decision records" in the
+  ADR 004 style.
+- `crates/whitaker_sarif/tests/architecture_boundary.rs` — new, 12 tests, the
+  architecture-fitness guard for the seam. `whitaker_sarif`'s half runs against
+  the real manifest; the mapping crate does not exist yet, so its half runs
+  against fixtures and gains teeth when the crate lands.
+- `crates/whitaker_sarif/Cargo.toml` — two dev-dependencies (`toml`,
+  `cap-std`), both already workspace dependencies and already in `Cargo.lock`.
+- `common/src/span.rs` and `common/src/diagnostics.rs` — six zero-column
+  literals that contradicted `SourceLocation`'s own one-based prose, now `1`.
+
+`docs/brain-trust-lints-design.md` needed no amendment. Drafting the ADR
+falsified no assumption in it; the two places the ADR is more specific than the
+design document — the subject boundary for `brain_trait`, and the declaration
+span for `brain_type` — are questions the design document leaves open rather
+than answers differently.
+
+**Supersessions of the 6.5.1 execplan.** Four, each recorded in `Decision log`
+above and in the ADR's `Known risks and limitations`: the crate edge and the
+mapping module's placement; `FileUri`'s home crate; `span_to_region`'s home
+crate; and `columnKind`. A fifth candidate — `partial_fingerprints` ordering —
+was withdrawn during Stage B after verification showed 6.5.1 already mandates
+`BTreeMap`. The `Supersession` tolerance fires at six, so the count moved down,
+not up.
+
+**Deviations accepted.** `VP-1`'s stated method named `googletest` and
+`pretty_assertions`, neither present in this workspace; adding them would have
+breached the `Constraints` ban on new external dependencies, so the guard was
+re-grounded on `rstest`, `assert!`, and `toml`. `VP-3`, `VP-4`, and `VP-5` are
+carried forward, named in the ADR, and belong to the items that create the
+code they test.
+
+**Two reviews, eleven findings, ten actioned.** Stage B raised three (all
+genuine) and Stage C seven (four genuine, one clarity regression, two spurious).
+Tracing a Stage C finding to its root found a further defect the review had not
+flagged: the ADR justified deferred emission by calling both brain trust lints
+whole-crate lints, which is false for `brain_trait`, and a `Surprises` entry
+claimed the ADR named a uniformity reason it did not. Both are corrected. The
+lesson worth carrying: a review finding is a pointer to a region, not a
+statement of the defect, and the region is worth reading past the finding's
+wording.
+
+**Deferred, deliberately.** Which target's result wins at merge time; whether
+`uriBaseId` is emitted; whether `SourceLocation` gains an enforcement path;
+whether the four delayed-bug call sites are repaired here or tracked
+separately; and whether `DecompositionSuggestion` gains per-method spans.
+All five are recorded in the ADR's `Outstanding decisions` rather than left
+silent.
+
+**Status: COMPLETE.**
 
 ## Context and orientation
 
