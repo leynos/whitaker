@@ -64,6 +64,15 @@ SCRATCH_ROOT ?= $(or $(XDG_CACHE_HOME),$(HOME)/.cache)/whitaker/scratch
 SCRATCH_ID := $(shell printf '%s' '$(CURDIR)' | { sha256sum 2>/dev/null || shasum -a 256; } | cut -c1-16)
 INSTALLER_MSRV_DIR ?= $(SCRATCH_ROOT)/installer-msrv-$(SCRATCH_ID)
 PUBLISH_CHECK_DIR ?= $(SCRATCH_ROOT)/publish-check-$(SCRATCH_ID)
+# Run before either recipe clears its tree. `XDG_CACHE_HOME` can point
+# anywhere, so the root's location alone proves nothing: it is created
+# private, and then it must belong to this user and be writable by nobody
+# else, or the recipe stops before `rm -rf` touches anything.
+SCRATCH_ROOT_CHECK = mkdir -p -m 700 "$(SCRATCH_ROOT)"; \
+	if [ -z "$$(find "$(SCRATCH_ROOT)" -maxdepth 0 -user "$$(id -u)" ! -perm -g=w ! -perm -o=w)" ]; then \
+		echo "$(SCRATCH_ROOT) must belong to $$(id -un) and be writable by no one else" >&2; \
+		exit 1; \
+	fi
 RUSTDOC_FLAGS ?= --cfg docsrs -D warnings
 MDLINT ?= $(shell command -v markdownlint-cli2 2>/dev/null || printf '%s' "$$HOME/.bun/bin/markdownlint-cli2")
 # `make fmt` and `make check-fmt` call mdtablefix directly. `--git` selects the
@@ -333,6 +342,7 @@ install-smoke: ## Install whitaker-installer and verify basic functionality
 
 installer-msrv-check: ## Install whitaker-installer with its declared MSRV
 	set -eu; \
+	$(SCRATCH_ROOT_CHECK); \
 	TMP_DIR="$(INSTALLER_MSRV_DIR)"; \
 	rm -rf -- "$$TMP_DIR"; \
 	mkdir -p "$$TMP_DIR"; \
@@ -425,6 +435,7 @@ publish-check: ## Build and validate packages before publishing
 	ORIG_DIR="$(CURDIR)"; \
 	rustup component add --toolchain "$$TOOLCHAIN" rust-src rustc-dev llvm-tools-preview; \
 	RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) build $(CARGO_LOCKED) --workspace --all-features $(BUILD_JOBS); \
+	$(SCRATCH_ROOT_CHECK); \
 	TMP_DIR="$(PUBLISH_CHECK_DIR)"; \
 	rm -rf -- "$$TMP_DIR"; \
 	mkdir -p "$$TMP_DIR"; \

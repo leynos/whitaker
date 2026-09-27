@@ -26,9 +26,10 @@ from __future__ import annotations
 import hashlib
 import os
 import re
+import stat
 import subprocess
 import typing as typ
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 
 import pytest
 from ubicloud_workflow_support import REPOSITORY_ROOT
@@ -196,4 +197,67 @@ def test_scratch_builds_use_a_fixed_private_directory(
     assert directory == expected, (
         f"{target} must build in the user's cache directory under a name "
         f"carrying the checkout's digest, {expected!r}, not {directory!r}"
+    )
+
+
+#: The check both recipes run on the scratch root, as the expanded recipe
+#: spells its first command.
+ROOT_CHECK_MARKER: typ.Final[str] = "mkdir -p -m 700"
+
+
+@pytest.mark.parametrize("target", SCRATCH_BUILDS)
+def test_the_root_is_checked_before_anything_is_cleared(target: str) -> None:
+    """The ownership check must run before the recipe's first `rm -rf`."""
+    recipe = _expanded_recipe(target, None)
+    assert ROOT_CHECK_MARKER in recipe, f"{target} must check its scratch root"
+    assert recipe.index(ROOT_CHECK_MARKER) < recipe.index("rm -rf"), (
+        f"{target} clears its tree before checking who owns the root"
+    )
+
+
+def _run_root_check(root: Path) -> subprocess.CompletedProcess[str]:
+    """Run the Makefile's scratch-root check against ``root``."""
+    return subprocess.run(
+        [
+            "make",
+            "--no-print-directory",
+            "--eval",
+            "probe-scratch-root: ; @$(SCRATCH_ROOT_CHECK)",
+            "probe-scratch-root",
+            f"SCRATCH_ROOT={root}",
+        ],
+        cwd=REPOSITORY_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def test_the_root_check_creates_a_missing_root_private(tmp_path: Path) -> None:
+    """A root that does not exist yet is created readable by its owner alone."""
+    root = tmp_path / "scratch"
+    result = _run_root_check(root)
+    assert result.returncode == 0, result.stderr
+    assert stat.S_IMODE(root.stat().st_mode) == 0o700
+
+
+@pytest.mark.parametrize(
+    ("mode", "accepted"),
+    [
+        pytest.param(0o700, True, id="private"),
+        pytest.param(0o755, True, id="world-readable"),
+        pytest.param(0o775, False, id="group-writable"),
+        pytest.param(0o757, False, id="world-writable"),
+    ],
+)
+def test_the_root_check_refuses_a_root_others_can_write(
+    tmp_path: Path, mode: int, accepted: bool
+) -> None:
+    """Another user able to write the root could swap a tree it clears."""
+    root = tmp_path / "scratch"
+    root.mkdir()
+    root.chmod(mode)
+    result = _run_root_check(root)
+    assert (result.returncode == 0) is accepted, (
+        f"mode {mode:o}: exit {result.returncode}, {result.stderr!r}"
     )

@@ -55,6 +55,10 @@ checkout's path, for example `~/.cache/whitaker/scratch/installer-msrv-<id>`.
   package it installs, finds the root `Cargo.toml`, and refuses to build.
 - They are not in a shared temporary directory, because the recipes clear them
   first, and another user could pre-create or swap a tree there.
+- Before either recipe clears anything, it creates the root with mode `700` if
+  it is missing, and stops unless the root belongs to the current user and no
+  one else can write to it. `XDG_CACHE_HOME` can point anywhere, so the
+  location alone proves nothing.
 - The digest keeps the name short and distinct: two checkouts never share a
   tree however their paths are spelled, while one checkout gets the same tree
   on every run.
