@@ -294,9 +294,12 @@ Thresholds that trigger escalation, not quality targets.
 - [x] (2026-09-27) EP-M1 `docs/adr-005-brain-trust-lint-driver-interfaces.md`
   written and registered in `docs/contents.md`.
 - [x] (2026-09-27) EP-M2 complete.
-      `crates/whitaker_sarif/tests/architecture_boundary.rs`
-  added, 18 tests. It asserts both ADR 005 rules over dependency manifests:
-  `whitaker_sarif` must not name `whitaker-common`, and
+      `crates/whitaker_sarif/tests/architecture_boundary.rs` and
+      `crates/whitaker_sarif/tests/manifest_scan/mod.rs`
+  added, 19 tests. The rule lives in the first file and the manifest-scanning
+  toolkit it is asserted through in the second; they were split when the single
+  file passed AGENTS.md's 400-line budget. It asserts both ADR 005 rules over
+  dependency manifests: `whitaker_sarif` must not name `whitaker-common`, and
   `whitaker_brain_trust_sarif` must not name `fluent-templates` or
   `unic-langid`. The `whitaker_sarif` half runs against the **real** manifest,
   so a reintroduced edge fails today; the mapping-crate half carries fixture
@@ -721,6 +724,35 @@ Thresholds that trigger escalation, not quality targets.
   than documentation. Impact: Stage E's scope is confirmed rather than merely
   assumed, and the `:129` nuance is recorded so that a future reader does not
   read "doc-comment only" as covering all six.
+- Observation: the guard documented fail-closed behaviour it did not have, and
+  its own test locked the gap in. Evidence: the module comment claimed an
+  inherited entry whose workspace declaration cannot be read "fails closed
+  rather than passing as if the edge were absent"
+  (`architecture_boundary.rs:24-26` at `e201660`), while `names_package` folded
+  `workspace_dependencies.and_then(..).is_some_and(..)` into a `bool`, so an
+  entry inheriting an undeclared workspace key returned `false` and the scan
+  reported `ScanOutcome::Absent`. The matching test asserted `!…is_found()` —
+  the permissive outcome — so the assertion and the comment contradicted each
+  other, and the test enforced the wrong one. Impact: found by CodeRabbit
+  review, not by any gate; the guard was green throughout. The lesson is that a
+  test named for a guarantee can entrench the opposite of what its name claims,
+  and that a claim of failing closed is worth checking against the predicate
+  rather than the comment. The fix returns a three-way `EntryVerdict` from
+  `names_package` and reports a third `ScanOutcome::Unresolved`; both
+  real-manifest guards now assert `is_absent()` rather than `!is_found()`.
+  Non-vacuity was proven by restoring the old permissive branch and watching
+  the corrected test fail.
+- Observation: the guard grew past the repository's file-size rule before
+  anyone measured it. Evidence: `AGENTS.md:31` caps a source file at 400 lines;
+  `architecture_boundary.rs` reached 578. Impact: `module_max_lines` does not
+  catch this, because `check_item` matches only `hir::ItemKind::Mod`
+  (`crates/module_max_lines/src/driver.rs:80-93`) and an integration test file
+  is not a module — so the one lint that owns the rule cannot fire on the file
+  most likely to break it. The file is now split into
+  `tests/architecture_boundary.rs` (395 lines, the rule) and
+  `tests/manifest_scan/mod.rs` (308 lines, the toolkit). The module is a
+  directory rather than a sibling `.rs` file so Cargo does not discover it as a
+  fourth test target, matching the `tests/support/mod.rs` precedent.
 
 ## Decision log
 
@@ -2967,3 +2999,35 @@ Effect on remaining work. None on scope. `EP-M2`'s test count moves from 15 to
 18 and its gate list now names all six gates rather than four. The inheritance
 shapes are new coverage that `VP-1` did not require — they close a hole found
 by review rather than by the plan's own checklist.
+
+Revised 2026-09-27 after the fourth CodeRabbit review round.
+
+What changed. Nine findings, of which five are unique: findings 3 and 6 are the
+same 400-line split reported twice at one location, and findings 2 and 7 are
+the same fail-closed predicate reported twice. All five unique findings were
+verified before actioning, and all five were genuine. Three were documents: the
+ADR's publish-contract rule is now scoped to production dependencies, with the
+dev-dependency exemption stated and justified; and two ExecPlan rules were
+narrowed to what the ADR actually supports — the phase-one rule records only
+the scalars an item has, since a required method has no `BodyId`, and the
+per-target rule now defers the resolution to the `Outstanding decisions` entry
+rather than naming one.
+
+Two were the guard. The fail-closed claim is now true of the code: the scan
+reports `Unresolved` instead of `Absent` when an entry's effective name cannot
+be read, and both real-manifest guards assert `is_absent()` rather than
+`!is_found()`. A declaration still outranks an unreadable entry, and the scan
+visits every entry so the verdict does not rest on `toml::Table`'s key
+ordering. The file was also split at its natural seam, the rule from the
+toolkit, taking it from 578 lines to 395 and 308 — both inside the 400-line
+rule, which the Dylint lint that owns it cannot enforce here.
+
+Why the split was not merely cosmetic. `AGENTS.md:31` states the limit and
+names the remedy: group by feature and colocate. The split follows that, the
+rule file keeping the assertions and the toolkit keeping the machinery, and it
+matches the existing `tests/support/mod.rs` precedent for a shared test module.
+
+Effect on remaining work. None on scope. `EP-M2` moves from 18 tests to 19 and
+from one file to two. `VP-1` gains one case from the ordering fix. Both
+documents are unchanged in their normative content apart from the three
+narrowings above.
