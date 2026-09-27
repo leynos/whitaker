@@ -152,7 +152,7 @@ impl DiagnosticBuilder {
 ///     span::{SourceLocation, SourceSpan},
 /// };
 ///
-/// let span = SourceSpan::new(SourceLocation::new(1, 0), SourceLocation::new(1, 4))
+/// let span = SourceSpan::new(SourceLocation::new(1, 1), SourceLocation::new(1, 4))
 ///     .expect("valid span for example");
 /// let diagnostic = span_lint("demo", "Example", span)
 ///     .help("Consider refactoring")
