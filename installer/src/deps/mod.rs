@@ -65,7 +65,7 @@ const DYLINT_LINK_TOOL: DependencyTool = DependencyTool {
 
 const DEPENDENCY_TOOLS: [DependencyTool; 2] = [CARGO_DYLINT_TOOL, DYLINT_LINK_TOOL];
 
-/// Stable, bounded failure labels emitted while checking a PATH entry.
+/// Stable, bounded failure labels returned while checking a PATH entry.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum PathScanFailureCategory {
     NonUtf8Path,
@@ -82,6 +82,19 @@ impl PathScanFailureCategory {
             Self::Metadata => "metadata",
         }
     }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct PathScanFailure<'binary> {
+    binary_name: &'binary str,
+    category: PathScanFailureCategory,
+}
+
+/// Collect the first match and classified failures for one PATH scan.
+#[derive(Debug, Default)]
+struct PathScanResult<'binary> {
+    binary: Option<std::path::PathBuf>,
+    failures: Vec<PathScanFailure<'binary>>,
 }
 
 /// Emit bounded failure context without recording the PATH entry itself.
@@ -237,6 +250,11 @@ fn is_tool_installed(executor: &dyn CommandExecutor, tool: &DependencyTool) -> b
     is_versioned_tool_installed(executor, tool, expected_version)
 }
 
+/// Verify `dylint-link` presence and, when known, its Cargo-recorded version.
+///
+/// Presence is established by finding an executable on PATH without running
+/// the linker wrapper. An expected version is compared with Cargo's install
+/// list; skipped-entry classifications are traced here, without logging paths.
 fn is_dylint_link_installed(
     executor: &dyn CommandExecutor,
     expected_version: Option<&str>,
@@ -244,7 +262,11 @@ fn is_dylint_link_installed(
     // Presence is established by resolving an executable file on PATH.
     // `dylint-link` is a linker wrapper with no reliable self-reporting
     // subcommand, so it is never executed to prove it works.
-    if find_binary_on_path(DYLINT_LINK_TOOL.command).is_none() {
+    let path_scan = find_binary_on_path(DYLINT_LINK_TOOL.command);
+    for failure in &path_scan.failures {
+        trace_path_scan_failure(failure.binary_name, failure.category);
+    }
+    if path_scan.binary.is_none() {
         return false;
     }
     let Some(expected_version) = expected_version else {
@@ -315,16 +337,44 @@ fn is_binstall_available(executor: &dyn CommandExecutor) -> bool {
     command_succeeds(executor, "cargo", &["binstall", "--version"])
 }
 
+/// Check whether a named executable resolves to a file on the current PATH.
+///
+/// This test helper reports presence only; it does not verify an installed
+/// package version.
 #[cfg(test)]
 fn is_binary_on_path(binary_name: &str) -> bool {
-    find_binary_on_path(binary_name).is_some()
+    find_binary_on_path(binary_name).binary.is_some()
 }
 
-fn find_binary_on_path(binary_name: &str) -> Option<std::path::PathBuf> {
-    let path_var = std::env::var_os("PATH")?;
+/// Find the first executable match while retaining skipped-entry classifications.
+///
+/// Return an empty report when PATH is unset. Otherwise, scan entries in their
+/// configured order and return the classifications without emitting logs.
+fn find_binary_on_path<'binary>(binary_name: &'binary str) -> PathScanResult<'binary> {
+    let Some(path_var) = std::env::var_os("PATH") else {
+        return PathScanResult::default();
+    };
 
-    std::env::split_paths(&path_var)
-        .find_map(|directory| find_binary_in_directory(&directory, binary_name))
+    scan_path_directories(std::env::split_paths(&path_var), binary_name)
+}
+
+/// Scan ordered PATH entries and retain classified failures for the caller.
+///
+/// The report preserves every skipped-entry category before the first match so
+/// the installer boundary can emit bounded diagnostics without coupling the
+/// filesystem query helpers to tracing.
+fn scan_path_directories<'binary>(
+    directories: impl IntoIterator<Item = std::path::PathBuf>,
+    binary_name: &'binary str,
+) -> PathScanResult<'binary> {
+    let mut result = PathScanResult::default();
+    for directory in directories {
+        result.binary = find_binary_in_directory(&directory, binary_name, &mut result.failures);
+        if result.binary.is_some() {
+            break;
+        }
+    }
+    result
 }
 
 /// Find the first executable candidate relative to one UTF-8 PATH directory.
@@ -332,27 +382,50 @@ fn find_binary_on_path(binary_name: &str) -> Option<std::path::PathBuf> {
 /// Non-UTF-8 entries and directories that cannot be opened are skipped so the
 /// caller can continue searching later PATH entries. Candidate metadata is
 /// inspected through the opened directory capability rather than ambient
-/// filesystem access. Lookup failures produce bounded trace fields containing
-/// the binary name and failure category, never the directory path.
-fn find_binary_in_directory(directory: &Path, binary_name: &str) -> Option<std::path::PathBuf> {
+/// filesystem access. Failures are returned as categories without retaining
+/// the directory path.
+fn find_binary_in_directory<'binary>(
+    directory: &Path,
+    binary_name: &'binary str,
+    failures: &mut Vec<PathScanFailure<'binary>>,
+) -> Option<std::path::PathBuf> {
     let Some(utf8_directory) = Utf8Path::from_path(directory) else {
-        trace_path_scan_failure(binary_name, PathScanFailureCategory::NonUtf8Path);
+        failures.push(PathScanFailure {
+            binary_name,
+            category: PathScanFailureCategory::NonUtf8Path,
+        });
         return None;
     };
     let directory_capability = match Dir::open_ambient_dir(utf8_directory, ambient_authority()) {
         Ok(directory_capability) => directory_capability,
         Err(_) => {
-            trace_path_scan_failure(binary_name, PathScanFailureCategory::DirectoryOpen);
+            failures.push(PathScanFailure {
+                binary_name,
+                category: PathScanFailureCategory::DirectoryOpen,
+            });
             return None;
         }
     };
 
-    binary_candidates(binary_name)
+    let mut failure_categories = Vec::new();
+    let candidate = binary_candidates(binary_name)
         .into_iter()
         .find(|candidate| {
-            is_executable_file(&directory_capability, Utf8Path::new(candidate), binary_name)
-        })
-        .map(|candidate| directory.join(candidate))
+            is_executable_file(
+                &directory_capability,
+                Utf8Path::new(candidate),
+                &mut failure_categories,
+            )
+        });
+    failures.extend(
+        failure_categories
+            .into_iter()
+            .map(|category| PathScanFailure {
+                binary_name,
+                category,
+            }),
+    );
+    candidate.map(|candidate| directory.join(candidate))
 }
 
 /// Return executable candidate names in their PATH-search order.
@@ -405,36 +478,42 @@ fn windows_path_extensions() -> Vec<String> {
         .collect()
 }
 
-/// Check a candidate through its containing directory capability.
+/// Classify a candidate through its containing directory capability.
 ///
-/// Metadata failures are treated as non-executable and traced with a bounded
-/// failure category; a candidate must also be a regular file with an execute
-/// bit set for at least one Unix permission class. The trace records the
-/// binary name and `metadata` category without exposing the candidate path.
+/// Return whether the candidate is a regular file with at least one Unix
+/// executable permission bit. Metadata failures add the bounded `Metadata`
+/// category for the caller and return `false`.
 #[cfg(unix)]
-fn is_executable_file(directory: &Dir, candidate: &Utf8Path, binary_name: &str) -> bool {
+fn is_executable_file(
+    directory: &Dir,
+    candidate: &Utf8Path,
+    failures: &mut Vec<PathScanFailureCategory>,
+) -> bool {
     use cap_std::fs::PermissionsExt;
 
     match directory.metadata(candidate) {
         Ok(metadata) => metadata.is_file() && metadata.permissions().mode() & 0o111 != 0,
         Err(_) => {
-            trace_path_scan_failure(binary_name, PathScanFailureCategory::Metadata);
+            failures.push(PathScanFailureCategory::Metadata);
             false
         }
     }
 }
 
-/// Check that a candidate is a regular file through its directory capability.
+/// Classify a candidate as a regular file through its directory capability.
 ///
-/// Metadata failures are treated as non-executable and traced with a bounded
-/// failure category. The trace records the binary name and `metadata` category
-/// without exposing the candidate path.
+/// Metadata failures add the bounded `Metadata` category for the caller and
+/// return `false`; otherwise, return whether the candidate is a regular file.
 #[cfg(not(unix))]
-fn is_executable_file(directory: &Dir, candidate: &Utf8Path, binary_name: &str) -> bool {
+fn is_executable_file(
+    directory: &Dir,
+    candidate: &Utf8Path,
+    failures: &mut Vec<PathScanFailureCategory>,
+) -> bool {
     match directory.metadata(candidate) {
         Ok(metadata) => metadata.is_file(),
         Err(_) => {
-            trace_path_scan_failure(binary_name, PathScanFailureCategory::Metadata);
+            failures.push(PathScanFailureCategory::Metadata);
             false
         }
     }
@@ -447,6 +526,8 @@ mod tests;
 
 #[cfg(test)]
 mod path_scan_tests {
+    //! Verify that PATH scan failure categories remain stable and bounded.
+
     use super::PathScanFailureCategory;
 
     #[test]

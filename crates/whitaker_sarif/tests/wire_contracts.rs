@@ -109,6 +109,8 @@ fn populated_run_builder_preserves_the_canonical_sarif_property() -> Result<(), 
 }
 
 proptest! {
+    /// Check varied URIs, optional base IDs, and optional regions retain the
+    /// canonical location key and survive JSON round-trips.
     #[test]
     fn generated_physical_locations_keep_the_canonical_wire_key(
         uri in uri_strategy(),
@@ -143,6 +145,8 @@ proptest! {
         prop_assert_eq!(round_trip, serialized);
     }
 
+    /// Check non-empty artefact lists with optional base IDs and MIME types
+    /// retain the canonical run key and survive JSON round-trips.
     #[test]
     fn generated_runs_keep_the_canonical_wire_key_and_round_trip(
         artefacts in prop::collection::vec(
