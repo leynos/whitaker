@@ -109,15 +109,21 @@ fn an_unresolved_entry_does_not_mask_a_declared_one() {
     // returned on the first unresolved entry would report `Unresolved` here.
     // `toml::Table` iterates in key order, so the ordering is deliberately
     // adversarial rather than incidental.
+    //
+    // The declaring key is written plainly rather than inherited: Cargo *errors*
+    // on an inheriting entry the root does not declare, so a member written as
+    // `fluent-templates = { workspace = true }` beside an undeclared `aaa`
+    // could never be loaded. The unresolvable entry and the resolvable one have
+    // to come from different shapes for this manifest to be one Cargo accepts.
     let document = parse_manifest(concat!(
         "[dependencies]\n",
         "aaa = { workspace = true }\n",
-        "fluent-templates = { workspace = true }\n",
+        "fluent-templates = \"0.15\"\n",
     ));
     let dependencies =
         workspace_table_of(&parse_manifest("[workspace.dependencies]\nserde = \"1\"\n"));
-    // Neither key is declared by the workspace, so the declared entry is found
-    // on its own key, not by any workspace resolution.
+    // The workspace declares neither key, so the found entry is named by its own
+    // key and owes nothing to the workspace resolution.
     assert_eq!(
         scan_for(&document, "fluent-templates", dependencies.as_ref()),
         ScanOutcome::Found("dependencies.fluent-templates".to_owned()),
@@ -140,5 +146,50 @@ fn a_plain_key_is_never_resolved_through_the_workspace() {
         scan_for(&document, "fluent-templates", dependencies.as_ref()),
         ScanOutcome::Absent,
         "a non-inherited entry keeps its own name"
+    );
+}
+
+#[rstest]
+fn an_inheriting_entry_is_named_by_the_root_not_by_its_key() {
+    // The member's key is the *local* name; an inheriting entry's identity is
+    // the root declaration's. Cargo proves the order is inheritance-first in
+    // both directions, so both are pinned here.
+    //
+    // Verified against `cargo metadata`: with a root of
+    // `whitaker-common = { package = "pkg_a", path = "…" }` and a member
+    // declaring `whitaker-common = { workspace = true }`, Cargo reports
+    // `name: pkg_a | rename: whitaker-common` — the key is not the package.
+    // A scan that matched the key first would fail the guard on that manifest
+    // for an edge Cargo does not have.
+    let document = parse_manifest("[dependencies]\nwhitaker-common = { workspace = true }\n");
+    let dependencies = workspace_table_of(&parse_manifest(concat!(
+        "[workspace.dependencies]\n",
+        "whitaker-common = { package = \"serde\", version = \"1\" }\n",
+    )));
+
+    assert_eq!(
+        scan_for(&document, "serde", dependencies.as_ref()),
+        ScanOutcome::Found("dependencies.whitaker-common".to_owned()),
+        "an inherited entry is the package the root declares, under a local key"
+    );
+    assert_eq!(
+        scan_for(&document, "whitaker-common", dependencies.as_ref()),
+        ScanOutcome::Absent,
+        "the local key is not the inherited entry's identity"
+    );
+
+    // A local `package` written beside `workspace = true` does not override the
+    // inherited identity. Cargo resolves the root's package and warns
+    // `unused manifest key: dependencies.<key>.package`; the member's own value
+    // is discarded outright. Reading it would let a member hide a forbidden
+    // edge behind a permissible root declaration, or the reverse.
+    let shadowed = parse_manifest(concat!(
+        "[dependencies]\n",
+        "whitaker-common = { workspace = true, package = \"serde\" }\n",
+    ));
+    assert_eq!(
+        scan_for(&shadowed, "whitaker-common", dependencies.as_ref()),
+        ScanOutcome::Absent,
+        "a discarded local `package` must not be read as the identity"
     );
 }
