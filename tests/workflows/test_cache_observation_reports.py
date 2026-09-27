@@ -89,64 +89,54 @@ def test_inactive_step_is_reported_rather_than_omitted(tmp_path: Path) -> None:
     )
 
 
-def test_exact_match_is_reported_as_a_hit(tmp_path: Path) -> None:
-    """A primary-key match is the only outcome called an exact hit."""
-    _, summary = _run_observations(
-        tmp_path,
-        CARGO_REGISTRY_KEY=REGISTRY_KEY,
-        CARGO_REGISTRY_MATCHED=REGISTRY_KEY,
-        CARGO_REGISTRY_HIT="true",
-    )
+#: Each restore outcome the registry line must report, as the step outputs
+#: that produce it and the text the line must and must not carry. `None` leaves
+#: an output unset, which is how the runner presents a step that never ran.
+RESTORE_OUTCOMES: tuple[
+    tuple[str, str | None, str | None, tuple[str, ...], tuple[str, ...]], ...
+] = (
+    # A primary-key match is the only outcome called an exact hit.
+    ("exact-hit", REGISTRY_KEY, "true", ("exact hit", "cache-hit `true`"), ()),
+    # A `restore-keys` restore reports the generation it actually loaded:
+    # every warm restore of a run-keyed archive takes this path, because its
+    # primary key ends with the current run identifier, so collapsing it into
+    # `false` would misclassify each warm run as cold.
+    (
+        "prefix-restore",
+        REGISTRY_PREFIX,
+        "false",
+        (f"prefix restore from `{REGISTRY_PREFIX}`", "cache-hit `false`"),
+        ("miss",),
+    ),
+    # An empty matched key is the only outcome called a miss.
+    ("complete-miss", "", "", ("miss (cache-hit `unset`)",), ()),
+    # An unset `cache-hit` is shown as unset, not as an observed `false`.
+    ("absent-hit-output", REGISTRY_KEY, None, ("exact hit", "cache-hit `unset`"), ()),
+)
+
+
+@pytest.mark.parametrize(
+    ("matched", "hit", "present", "absent"),
+    [pytest.param(*case[1:], id=case[0]) for case in RESTORE_OUTCOMES],
+)
+def test_each_restore_outcome_is_reported_as_what_it_was(
+    tmp_path: Path,
+    matched: str,
+    hit: str | None,
+    present: tuple[str, ...],
+    absent: tuple[str, ...],
+) -> None:
+    """The registry line names the outcome the restore actually had."""
+    outputs = {"CARGO_REGISTRY_KEY": REGISTRY_KEY, "CARGO_REGISTRY_MATCHED": matched}
+    if hit is not None:
+        outputs["CARGO_REGISTRY_HIT"] = hit
+    _, summary = _run_observations(tmp_path, **outputs)
 
     line = _registry_line(summary)
-    assert "exact hit" in line, line
-    assert "cache-hit `true`" in line, line
-
-
-def test_prefix_restore_is_not_reported_as_a_miss(tmp_path: Path) -> None:
-    """A `restore-keys` restore reports the generation it actually loaded.
-
-    Every warm restore of a run-keyed archive takes this path, because its
-    primary key ends with the current run identifier, so collapsing it into
-    `false` would misclassify each warm run as cold.
-    """
-    _, summary = _run_observations(
-        tmp_path,
-        CARGO_REGISTRY_KEY=REGISTRY_KEY,
-        CARGO_REGISTRY_MATCHED=REGISTRY_PREFIX,
-        CARGO_REGISTRY_HIT="false",
-    )
-
-    line = _registry_line(summary)
-    assert f"prefix restore from `{REGISTRY_PREFIX}`" in line, line
-    assert "miss" not in line, line
-    assert "cache-hit `false`" in line, line
-
-
-def test_complete_miss_is_reported_as_a_miss(tmp_path: Path) -> None:
-    """An empty matched key is the only outcome called a miss."""
-    _, summary = _run_observations(
-        tmp_path,
-        CARGO_REGISTRY_KEY=REGISTRY_KEY,
-        CARGO_REGISTRY_MATCHED="",
-        CARGO_REGISTRY_HIT="",
-    )
-
-    line = _registry_line(summary)
-    assert line.endswith("miss (cache-hit `unset`)"), line
-
-
-def test_absent_hit_output_is_not_coerced_to_false(tmp_path: Path) -> None:
-    """An unset `cache-hit` is shown as unset, not as an observed `false`."""
-    _, summary = _run_observations(
-        tmp_path,
-        CARGO_REGISTRY_KEY=REGISTRY_KEY,
-        CARGO_REGISTRY_MATCHED=REGISTRY_KEY,
-    )
-
-    line = _registry_line(summary)
-    assert "cache-hit `unset`" in line, line
-    assert "exact hit" in line, line
+    for fragment in present:
+        assert fragment in line, line
+    for fragment in absent:
+        assert fragment not in line, line
 
 
 def test_headroom_is_reported_before_the_build(tmp_path: Path) -> None:
