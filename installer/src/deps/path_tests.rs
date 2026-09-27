@@ -1,7 +1,8 @@
 //! Tests for PATH-based dependency-binary discovery helpers.
 
-// The cap-std imports are used only by the Unix executable-permission test;
-// gating them keeps Windows test builds free of unused-import warnings.
+// These imports are used only by the Unix executable-permission test; gating
+// them keeps Windows test builds free of unused-import warnings.
+#[cfg(unix)]
 use camino::Utf8Path;
 #[cfg(unix)]
 use cap_std::{ambient_authority, fs_utf8::Dir};
