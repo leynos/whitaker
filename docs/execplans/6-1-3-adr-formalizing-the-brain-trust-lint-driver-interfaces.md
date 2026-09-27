@@ -301,8 +301,19 @@ Thresholds that trigger escalation, not quality targets.
   `[dev-dependencies]` entry, since a cycle is a cycle whichever table carries
   it. Gates: `make check-fmt`, `make typecheck`, `make lint`, `make test`.
   See `Surprises & discoveries` for the two corrections this milestone needed.
-- [ ] EP-M3 `common/src/span.rs` column-convention doc examples corrected
-  (separable).
+- [x] (2026-09-27) EP-M3 complete. The six zero-column literals named in Stage E
+  are now `1`: `common/src/span.rs:67`, `:96`, `:112`, `:129`, `:135`, and
+  `common/src/diagnostics.rs:155`. `SourceLocation`'s prose already said
+  one-based in all three places (`:12`, `:33`, `:37`); the rendered examples were
+  the only contradiction, and they now agree. A repository-wide grep for
+  `SourceLocation::new(_, 0)` across `common/`, `src/`, and `crates/` returns
+  nothing, so no unlisted site was missed. `:129` needed care and was checked
+  individually: it is the `SpanError::StartAfterEnd` case, and changing its end
+  column from `0` to `1` leaves the assertion intact, because the ordering
+  violation is carried by the line number (`3` against `2`) and not the column.
+  Doc-comment and doc-example literals only; no signature, behaviour, or public
+  API changed. Gates: `cargo test --doc -p whitaker-common` (184 passed), then
+  `make check-fmt`, `make typecheck`, `make lint`, `make test`.
 - [ ] EP-M4 Roadmap item 6.1.3 marked done; living sections reconciled.
 
 ## Surprises & discoveries
@@ -608,6 +619,25 @@ Thresholds that trigger escalation, not quality targets.
   Impact: replaced with `DEPENDENCY_TABLES.iter().any(|name| name == key)`.
   Recorded because a `nightly` toolchain invites the assumption that recent
   library features are available, and this one is pinned to a specific date.
+
+- Observation: the zero-column literals Stage E lists are exactly the complete
+  set, with no unlisted site and no listed site that should have been left alone.
+  Evidence: a repository-wide grep for `SourceLocation::new([0-9]*, 0)` across
+  `common/`, `src/`, and `crates/` returns precisely the six cited sites —
+  `common/src/span.rs:67`, `:96`, `:112`, `:129`, `:135`, and
+  `common/src/diagnostics.rs:155` — and nothing else. Stage E also expected the
+  change to be doc-comment only, which holds for five of the six: `:129` is
+  inside `mod tests` rather than a doc comment, and it is the
+  `SpanError::StartAfterEnd` case. It was checked individually because flipping a
+  column in an ordering-violation fixture could in principle have removed the
+  violation it exists to produce; the assertion survives, because the violation
+  is carried by the line number alone (`3` against `2`), so the column is
+  irrelevant to it. The plan's claim of "no signature, no behaviour, no public
+  API change" is therefore accurate, but `:129` is a test-body literal rather
+  than documentation.
+  Impact: Stage E's scope is confirmed rather than merely assumed, and the `:129`
+  nuance is recorded so that a future reader does not read "doc-comment only" as
+  covering all six.
 
 ## Decision log
 
