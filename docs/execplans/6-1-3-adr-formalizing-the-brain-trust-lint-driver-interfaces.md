@@ -3151,3 +3151,23 @@ whenever the toolkit is used; the count was confirmed unchanged at 22 by
 Effect on remaining work. None on scope. `EP-M2` moves from 20 tests to 22 in
 three files, all inside the 400-line rule. The F3 sketch fix is in this plan
 only; the ADR is unchanged, and its normative content is untouched by round 5.
+
+Discrimination evidence, obtained after the commit. Both fixes were reverted
+one at a time and the suite re-run. Restoring the `||` in `names_package` fails
+`a_package_override_displaces_the_key_as_the_identity` and nothing else;
+neutering `is_dependency_scope` to `true` — which is the old unrestricted
+descent — fails `metadata_tables_are_not_dependency_tables` and nothing else,
+105 ran and 104 passed. Both were then restored byte-identical.
+
+Two traps in the probe itself are worth recording, because the first produced a
+confident false clean. nextest's `-E 'test(name)'` predicate matches a **test
+name**, not a binary, so scoping the probe to `architecture_boundary` that way
+ran **zero** tests and reported zero failures — indistinguishable from a pass.
+`profile.default` compounds this: its filter excludes the binary regardless. A
+third trap is that nextest colorizes, so the count does not parse without
+stripping ANSI. The probe now asserts it ran the expected 105 tests before its
+verdict is read; the baseline run is what caught the second and third. Also,
+reverting a fix can leave it uncompilable — removing the `is_dependency_scope`
+calls makes the helper dead, and `-D warnings` promotes that to an error — so
+the second fix was probed by neutering the predicate while keeping its callers,
+rather than by removing the calls.
