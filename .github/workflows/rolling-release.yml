@@ -139,9 +139,11 @@ jobs:
         id: setup-rust
         uses: leynos/shared-actions/.github/actions/setup-rust@4fb8eb7ad52454678a0662865d81d3cd17aa6e0e
         with:
-          # `any`: the macOS and Windows legs are GitHub-hosted, where
-          # setup-rust keeps sccache on local disk it caches itself.
-          expect-cache: any
+          # The Linux legs are all Ubicloud, so they demand the cache proxy
+          # and fail rather than fall back; the macOS and Windows legs are
+          # GitHub-hosted, where setup-rust keeps sccache on local disk it
+          # caches itself.
+          expect-cache: ${{ runner.os == 'Linux' && 'ubicloud' || 'any' }}
           cache-provider: ${{ runner.os == 'Linux' && 'external' || 'github' }}
 
       - name: Read pinned toolchain
@@ -313,9 +315,11 @@ jobs:
         id: setup-rust
         uses: leynos/shared-actions/.github/actions/setup-rust@4fb8eb7ad52454678a0662865d81d3cd17aa6e0e
         with:
-          # `any`: the macOS and Windows legs are GitHub-hosted, where
-          # setup-rust keeps sccache on local disk it caches itself.
-          expect-cache: any
+          # The Linux legs are all Ubicloud, so they demand the cache proxy
+          # and fail rather than fall back; the macOS and Windows legs are
+          # GitHub-hosted, where setup-rust keeps sccache on local disk it
+          # caches itself.
+          expect-cache: ${{ runner.os == 'Linux' && 'ubicloud' || 'any' }}
           cache-provider: ${{ runner.os == 'Linux' && 'external' || 'github' }}
 
       - name: Add target

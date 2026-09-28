@@ -481,9 +481,14 @@ Table: Cache ownership for the Ubicloud Linux lanes.
 | `dylint-tools-v1-`            | `~/.cache/whitaker-dylint-tools`                                                | `linux-full`      | `linux-full`                   |
 | `clippy-mirror-v1-`           | `~/.cache/whitaker-mirrors`                                                     | `coverage-upload` | `linux-full`, `coverage-check` |
 
-No lane archives a compiler cache, and no `sccache-*` family may appear in the
-table. Every Ubicloud job's sccache reads and writes Ubicloud's cache proxy
-directly, through `setup-rust`.
+No Ubicloud leg archives a compiler cache, and no `sccache-*` family may appear
+in the table. Every Ubicloud job's sccache reads and writes Ubicloud's cache
+proxy directly, through `setup-rust`. The GitHub-hosted macOS and Windows legs
+of the two rolling-release matrices are different: there `setup-rust` keeps
+sccache on a local directory and, because those legs pass
+`cache-provider: github`, archives that directory itself under its own keys,
+saving only on a push to `main`. Those entries belong to the action, not to
+this table.
 
 Each key carries an explicit `v1` schema generation so the whole family can be
 invalidated deliberately. Registry keys hash `rust-toolchain.toml` and
@@ -504,8 +509,8 @@ The compiler cache is not one of these archives on the Linux lanes. It runs on
 the Actions backend against Ubicloud's cache proxy, and every run both reads
 and writes it, but the proxy is ref-scoped in the same way. "Who writes the
 compiler cache" below explains what that means for a pull request's first push.
-`rolling-release.yml` keeps a local directory and its own key families, and
-those follow the rule above.
+`rolling-release.yml`'s Linux legs reach the same proxy through `setup-rust`;
+only its registry families are archives, and those follow the rule above.
 
 `coverage-main.yml`'s `coverage-upload` is the writer for the coverage-lane
 keys and for the shared Clippy mirror. `ci.yml`'s `linux-full` runs on push to
@@ -622,8 +627,11 @@ reads `ghac` for the proxy and GitHub's own service alike.
 
 The Linux jobs pass `expect-cache: ubicloud`, so a missing proxy fails the job
 rather than letting it compile against local disk unnoticed. The two
-rolling-release matrices pass `any`, because their macOS and Windows legs are
-GitHub-hosted, where the action keeps sccache on local disk it caches itself.
+rolling-release matrices pass
+`${{ runner.os == 'Linux' && 'ubicloud' || 'any' }}`: their Linux legs are all
+Ubicloud and demand the proxy just as strictly, while their macOS and Windows
+legs are GitHub-hosted, where the action keeps sccache on local disk it caches
+itself.
 
 This retired three hand-rolled pieces, each of which would now override the
 action's choice without a word. An `Export the Ubicloud cache credentials` step
@@ -770,14 +778,15 @@ cannot be added without the headroom that makes it survivable.
 The matched key, not `cache-hit`, is what classifies a restore. The cache
 action reports `cache-hit: true` only for an exact primary-key match, so a
 successful `restore-keys` restore and a complete miss both surface as a falsy
-value. Every warm compiler-cache restore takes the prefix path because that key
-ends with the current `github.run_id` and can never match exactly. The summary
-therefore reports `exact hit`, `prefix restore from <key>`, or `miss`, and
-prints the raw `cache-hit` value verbatim beside it, showing an absent value as
-`unset` rather than coercing it to `false`. Restore and save byte counts and
-durations are not step outputs; read the cache action's own `Cache Size` and
-transfer lines from the job log, and confirm an entry exists on Ubicloud's side
-with the cache-entries API rather than assuming a save succeeded.
+value. A warm restore of a run-keyed archive takes the prefix path, because its
+key ends with the current `github.run_id` and can never match exactly. The
+summary therefore reports `exact hit`, `prefix restore from <key>`, or `miss`,
+and prints the raw `cache-hit` value verbatim beside it, showing an absent
+value as `unset` rather than coercing it to `false`. Restore and save byte
+counts and durations are not step outputs; read the cache action's own
+`Cache Size` and transfer lines from the job log, and confirm an entry exists
+on Ubicloud's side with the cache-entries API rather than assuming a save
+succeeded.
 
 Tool setup must not compile tools from source. `taiki-e/install-action` calls
 pin a release whose catalogue contains each requested tool, disable fallbacks,

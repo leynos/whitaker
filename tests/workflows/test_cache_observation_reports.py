@@ -12,7 +12,7 @@ Covered behaviour:
 - an exact match, a `restore-keys` prefix restore, and a complete miss are
   reported as three distinct outcomes;
 - the raw `cache-hit` value is preserved verbatim, including when absent;
-- the selected compiler-cache backend is named in the summary;
+- the backend `setup-rust` selected heads the sccache statistics, or `unset`;
 - free disk is reported before the build and again before the saves, and an
   unrecognized mode is a usage error;
 - the sccache reporter writes both artefact formats and echoes the stats
@@ -223,6 +223,7 @@ def _write_sccache_stub(tmp_path: Path, requests: str) -> Path:
 def _run_effectiveness(
     tmp_path: Path,
     requests: str,
+    **overrides: str,
 ) -> tuple[subprocess.CompletedProcess[str], str]:
     """Run the sccache reporter against a stub and return the summary."""
     stub_dir = _write_sccache_stub(tmp_path, requests)
@@ -240,9 +241,36 @@ def _run_effectiveness(
             "PATH": f"{stub_dir}:/usr/bin:/bin",
             "HOME": str(tmp_path),
             "GITHUB_STEP_SUMMARY": str(summary),
+            **overrides,
         },
     )
     return result, summary.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    ("overrides", "expected"),
+    [
+        pytest.param(
+            {"SETUP_RUST_CACHE_BACKEND": "ubicloud"},
+            "- Compiler cache backend: `ubicloud`",
+            id="backend-handed-over",
+        ),
+        pytest.param({}, "- Compiler cache backend: `unset`", id="backend-unset"),
+    ],
+)
+def test_the_statistics_name_the_selected_backend(
+    tmp_path: Path, overrides: dict[str, str], expected: str
+) -> None:
+    """The report heads the statistics with the backend `setup-rust` chose.
+
+    `Cache location` reads `ghac` for Ubicloud's proxy and GitHub's own
+    service alike, so the backend line is what makes the numbers readable,
+    and an unset value is shown as unset rather than guessed.
+    """
+    result, summary = _run_effectiveness(tmp_path, "412", **overrides)
+
+    assert result.returncode == 0, result.stderr
+    assert expected in summary, summary
 
 
 def test_sccache_stats_are_published_in_both_formats(tmp_path: Path) -> None:

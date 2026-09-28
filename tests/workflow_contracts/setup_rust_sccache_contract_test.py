@@ -30,7 +30,7 @@ from __future__ import annotations
 import typing as typ
 
 import pytest
-from runner_lanes import GITHUB_HOSTED_LABELS, declared_labels
+from runner_lanes import GITHUB_HOSTED_LABELS, LINUX_ARM_TEMPLATE, declared_labels
 from sccache_steps import mentions_sccache
 from ubicloud_workflow_support import (
     SCCACHE_DIRECTORY,
@@ -56,6 +56,7 @@ RETIRED_VARIABLES: typ.Final[tuple[str, ...]] = (
     "SCCACHE_DIR",
     "SCCACHE_CACHE_SIZE",
     "SCCACHE_GHA_ENABLED",
+    "SCCACHE_GHA_VERSION",
 )
 
 #: The retired steps, by the action or script each ran.
@@ -134,8 +135,20 @@ def retired_findings(
     return findings
 
 
+#: What a matrix job with GitHub-hosted legs must pass: `ubicloud` to its
+#: Linux legs, which are all Ubicloud, and `any` to the rest.
+MIXED_MATRIX_EXPECT_CACHE: typ.Final[str] = LINUX_ARM_TEMPLATE.replace(
+    "{linux}", "ubicloud"
+).replace("{other}", "any")
+
+
 def expected_expect_cache(labels: typ.Iterable[str]) -> str:
     """Return the `expect-cache` value a job's placement calls for.
+
+    A job on Ubicloud alone demands the proxy. A job that also has
+    GitHub-hosted legs demands it on its Linux legs, which are its Ubicloud
+    legs, and accepts any backend on the others; a flat `any` would let a
+    Linux leg that lost the proxy compile against local disk nothing caches.
 
     Parameters
     ----------
@@ -145,15 +158,17 @@ def expected_expect_cache(labels: typ.Iterable[str]) -> str:
     Returns
     -------
     str
-        ``"any"`` when a GitHub-hosted label is among them, else
-        ``"ubicloud"``.
+        The leg-conditional expression when a GitHub-hosted label is among
+        them, else ``"ubicloud"``.
 
     >>> expected_expect_cache(["ubicloud-standard-2-ubuntu-2404", "windows-latest"])
-    'any'
+    "${{ runner.os == 'Linux' && 'ubicloud' || 'any' }}"
     >>> expected_expect_cache(["ubicloud-standard-2-ubuntu-2404"])
     'ubicloud'
     """
-    return "any" if set(labels) & GITHUB_HOSTED_LABELS else "ubicloud"
+    if set(labels) & GITHUB_HOSTED_LABELS:
+        return MIXED_MATRIX_EXPECT_CACHE
+    return "ubicloud"
 
 
 def _setup_rust(job_name: str) -> dict[str, typ.Any]:
@@ -198,11 +213,12 @@ def test_setup_rust_owns_the_compiler_cache(job_name: str) -> None:
 
 @pytest.mark.parametrize("job_name", JOBS)
 def test_each_job_demands_the_backend_its_placement_allows(job_name: str) -> None:
-    """`ubicloud` fails a proxy-less job loudly; `any` spares a hosted leg.
+    """`ubicloud` fails a proxy-less Ubicloud leg loudly; `any` spares a hosted one.
 
-    A matrix with GitHub-hosted legs would fail every such leg under
-    `ubicloud`; a job only on Ubicloud would compile against local disk
-    unnoticed under `any` whenever the proxy went missing.
+    A matrix with GitHub-hosted legs would fail every such leg under a flat
+    `ubicloud`, and under a flat `any` its Linux legs would compile against
+    local disk unnoticed whenever the proxy went missing, so it passes the
+    leg-conditional form.
     """
     expected = expected_expect_cache(declared_labels(load_job(job_name)))
     inputs = _setup_rust(job_name).get("with") or {}
