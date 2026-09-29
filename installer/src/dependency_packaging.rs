@@ -143,6 +143,9 @@ fn create_tgz_archive(
     let gz_encoder = flate2::write::GzEncoder::new(output_file, flate2::Compression::default());
     let mut archive = tar::Builder::new(gz_encoder);
     archive.mode(tar::HeaderMode::Deterministic);
+    // Regular entries only, as in `installer_packaging`: see
+    // `archive_entry_type_tests`.
+    archive.sparse(false);
     archive.append_path_with_name(binary_path, format!("{inner_dir}/{binary_name}"))?;
     let gz_encoder = archive.into_inner()?;
     gz_encoder.finish()?;

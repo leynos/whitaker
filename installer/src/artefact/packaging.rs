@@ -111,6 +111,9 @@ pub fn create_archive(
     let output_file = fs::File::create(output_path)?;
     let zstd_encoder = zstd::Encoder::new(output_file, 0)?.auto_finish();
     let mut archive = tar::Builder::new(zstd_encoder);
+    // Regular entries only, so any extractor can read the published archive;
+    // see `archive_entry_type_tests`.
+    archive.sparse(false);
 
     for (source_path, archive_name) in files {
         archive.append_path_with_name(source_path, archive_name)?;

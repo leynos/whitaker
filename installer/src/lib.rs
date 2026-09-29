@@ -72,6 +72,8 @@ pub mod workspace;
 pub mod wrapper;
 
 #[cfg(test)]
+mod archive_entry_type_tests;
+#[cfg(test)]
 mod dependency_packaging_tests;
 #[cfg(test)]
 mod install_metrics_tests;
