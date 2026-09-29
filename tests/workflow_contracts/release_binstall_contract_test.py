@@ -41,20 +41,19 @@ def _verify_job(workflow: dict[str, typ.Any]) -> dict[str, typ.Any]:
     return jobs["verify-binstall"]
 
 
-def binstall_violations(job: dict[str, typ.Any]) -> list[str]:
-    """Return why a job does not prove the published archive installs.
-
-    >>> binstall_violations({"needs": "publish", "if": VERIFY_CONDITION,
-    ...     "steps": [{"uses": "x", "with": {"tool": BINSTALL_TOOL}},
-    ...               {"run": BINSTALL_COMMAND}]})
-    []
-    """
+def _header_violations(job: dict[str, typ.Any]) -> list[str]:
+    """Return why a job would not run after, and only after, a publish."""
     violations: list[str] = []
     if job.get("needs") != "publish":
         violations.append(f"the job must need publish, not {job.get('needs')!r}")
     if job.get("if") != VERIFY_CONDITION:
         violations.append(f"the job condition must be {VERIFY_CONDITION!r}")
-    steps = job.get("steps") or []
+    return violations
+
+
+def _install_violations(steps: list[dict[str, typ.Any]]) -> list[str]:
+    """Return why the steps do not install binstall and run the one command."""
+    violations: list[str] = []
     tools = [(step.get("with") or {}).get("tool") for step in steps]
     if BINSTALL_TOOL not in tools:
         violations.append(f"no step installs {BINSTALL_TOOL}")
@@ -71,6 +70,17 @@ def binstall_violations(job: dict[str, typ.Any]) -> list[str]:
         if "if" in step
     )
     return violations
+
+
+def binstall_violations(job: dict[str, typ.Any]) -> list[str]:
+    """Return why a job does not prove the published archive installs.
+
+    >>> binstall_violations({"needs": "publish", "if": VERIFY_CONDITION,
+    ...     "steps": [{"uses": "x", "with": {"tool": BINSTALL_TOOL}},
+    ...               {"run": BINSTALL_COMMAND}]})
+    []
+    """
+    return _header_violations(job) + _install_violations(job.get("steps") or [])
 
 
 def test_the_release_verifies_its_archive_with_binstall() -> None:

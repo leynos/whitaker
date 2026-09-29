@@ -2080,9 +2080,9 @@ Every `tar::Builder` that produces a published archive calls
 default, and a linked release binary often has holes on the build runner's
 filesystem. cargo-binstall's extractor unpacks only regular files and
 directories and skips anything else without an error, so it found no binary in
-the installer archive and fell back to compiling from source on every install (
-[issue #461][whitaker-issue-461]). GNU tar and the `tar` crate read a sparse
-entry correctly, so nothing but the entry type shows the defect.
+the installer archive and fell back to compiling from source on every install,
+as [issue #461][whitaker-issue-461] reported. GNU tar and the `tar` crate read
+a sparse entry correctly, so nothing but the entry type shows the defect.
 
 `installer/src/archive_entry_type_tests.rs` drives all three packagers over a
 file with a four-megabyte hole and requires every entry to be `Regular` or

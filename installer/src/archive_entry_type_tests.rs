@@ -32,6 +32,18 @@ struct HoleyBinary {
     path: PathBuf,
 }
 
+impl HoleyBinary {
+    /// Report whether the filesystem allocated fewer blocks than the file's length.
+    #[cfg(target_os = "linux")]
+    fn has_allocated_hole(&self) -> bool {
+        use std::os::unix::fs::MetadataExt;
+
+        let metadata = fs::metadata(&self.path).expect("fixture metadata");
+        // `blocks` counts 512-byte units regardless of the filesystem's block size.
+        metadata.blocks() * 512 < metadata.len()
+    }
+}
+
 /// Write a file of `HOLE_BYTES` with data only at each end.
 #[fixture]
 fn holey_binary() -> HoleyBinary {
@@ -85,6 +97,13 @@ fn the_fixture_is_stored_sparse_by_a_default_builder(holey_binary: HoleyBinary) 
         .append_path_with_name(&holey_binary.path, "binary")
         .expect("append");
     let bytes = builder.into_inner().expect("finish archive");
+    // A filesystem that stores the hole as zeroes (some FUSE and network
+    // mounts) legitimately yields a regular entry, so there is no sparse case
+    // to prove on that host. Every filesystem CI runs on keeps the hole.
+    if !holey_binary.has_allocated_hole() {
+        eprintln!("skipping the sparse proof: the filesystem does not preserve holes");
+        return;
+    }
     let entries = entry_types(bytes.as_slice());
     assert_eq!(
         entries,
