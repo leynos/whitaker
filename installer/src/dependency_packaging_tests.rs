@@ -1,14 +1,19 @@
 //! Unit tests for dependency-binary packaging helpers.
 
-use crate::dependency_binaries::find_dependency_binary;
-use crate::dependency_packaging::{
-    ArchiveFormat, DependencyPackageParams, DependencyPackagingError, archive_format,
-    inner_dir_name, package_dependency_binary, render_provenance_markdown,
-    write_provenance_markdown,
-};
-use crate::installer_packaging::TargetTriple;
-use rstest::{fixture, rstest};
 use std::fs;
+
+use rstest::{fixture, rstest};
+
+use crate::{
+    artefact::error::ArtefactError,
+    dependency_binaries::find_dependency_binary,
+    dependency_packaging::{
+        ArchiveFormat, DependencyPackageParams, DependencyPackagingError, archive_format,
+        inner_dir_name, package_dependency_binary, render_provenance_markdown,
+        write_provenance_markdown,
+    },
+    installer_packaging::TargetTriple,
+};
 
 struct PackagingCase<'a> {
     package: &'a str,
@@ -17,19 +22,16 @@ struct PackagingCase<'a> {
     should_expect_success: bool,
 }
 
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
-fn linux_target() -> TargetTriple {
-    TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid target")
+fn linux_target() -> std::result::Result<TargetTriple, ArtefactError> {
+    TargetTriple::try_from("x86_64-unknown-linux-gnu")
 }
 
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
-fn windows_target() -> TargetTriple {
-    TargetTriple::try_from("x86_64-pc-windows-msvc").expect("valid target")
-}
-
-#[fixture]
-fn temp_dir() -> tempfile::TempDir {
-    tempfile::tempdir().expect("temp dir")
+fn temp_dir() -> std::io::Result<tempfile::TempDir> {
+    tempfile::tempdir()
 }
 
 #[test]
@@ -68,10 +70,13 @@ fn inner_dir_name_uses_dependency_version() {
     should_expect_success: true,
 })]
 fn package_dependency_binary_handles_binary_presence(
-    linux_target: TargetTriple,
-    temp_dir: tempfile::TempDir,
+    #[from(linux_target)] linux_target_res: std::result::Result<TargetTriple, ArtefactError>,
+    #[from(temp_dir)] temp_dir_res: std::io::Result<tempfile::TempDir>,
     #[case] case: PackagingCase<'_>,
 ) {
+    let linux_target = linux_target_res.expect("linux target triple should validate");
+    let temp_dir = temp_dir_res.expect("temporary directory should be created");
+
     let dependency = find_dependency_binary(case.package)
         .expect("dependency manifest should load")
         .expect("dependency should exist");
@@ -147,7 +152,7 @@ fn write_provenance_markdown_writes_expected_file() {
             .expect("dependency should exist")
             .clone(),
     ];
-    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let temp_dir = tempfile::tempdir().expect("temporary directory should be created");
 
     let path = write_provenance_markdown(temp_dir.path(), &dependencies)
         .expect("provenance file should be written");

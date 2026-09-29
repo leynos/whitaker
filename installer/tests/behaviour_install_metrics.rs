@@ -1,19 +1,22 @@
 //! Behaviour tests for installer metrics recording.
 
+use std::{path::PathBuf, time::Duration};
+
+use cap_std::{ambient_authority, fs::Dir};
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
-use std::path::PathBuf;
-use std::time::Duration;
 use tempfile::TempDir;
 use whitaker_installer::install_metrics::{
     InstallMetrics, InstallMode, RecordOutcome, record_install_at_path,
 };
 
+/// Tolerance for comparing floating-point install rates.
 const FLOAT_RATE_TOLERANCE: f64 = 1e-6;
 
 #[derive(Default)]
 struct InstallMetricsWorld {
-    _temp_dir: Option<TempDir>,
+    /// Owns the scenario's temporary metrics directory so it outlives the run.
+    temp_dir: Option<TempDir>,
     metrics_path: Option<PathBuf>,
     outcome: Option<RecordOutcome>,
     last_error: Option<String>,
@@ -21,13 +24,57 @@ struct InstallMetricsWorld {
     summary_line: Option<String>,
 }
 
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> InstallMetricsWorld {
     InstallMetricsWorld::default()
 }
 
-fn record_mode(world: &mut InstallMetricsWorld, mode: InstallMode, millis: u64) {
-    let path = world.metrics_path.as_deref().expect("metrics path set");
+/// Compare two values for equality, reporting a mismatch as an error.
+fn ensure_eq<T, U>(actual: &T, expected: &U, context: &str) -> Result<(), String>
+where
+    T: PartialEq<U> + std::fmt::Debug + ?Sized,
+    U: std::fmt::Debug + ?Sized,
+{
+    if actual == expected {
+        Ok(())
+    } else {
+        Err(format!("{context}: expected {expected:?}, got {actual:?}"))
+    }
+}
+
+/// Borrow the configured metrics path, failing when no Given step has run.
+fn metrics_path(world: &InstallMetricsWorld) -> Result<&std::path::Path, String> {
+    world
+        .metrics_path
+        .as_deref()
+        .ok_or_else(|| String::from("metrics path set"))
+}
+
+/// Opens the temporary fixture root through a capability-scoped handle.
+fn metrics_directory(world: &InstallMetricsWorld) -> Result<Dir, String> {
+    let temp_dir = world
+        .temp_dir
+        .as_ref()
+        .ok_or_else(|| String::from("metrics temp dir set"))?;
+    Dir::open_ambient_dir(temp_dir.path(), ambient_authority())
+        .map_err(|error| format!("open metrics fixture directory: {error}"))
+}
+
+/// Borrow the aggregated metrics, failing when nothing has been recorded.
+fn metrics(world: &InstallMetricsWorld) -> Result<&InstallMetrics, String> {
+    world
+        .in_memory_metrics
+        .as_ref()
+        .ok_or_else(|| String::from("metrics available"))
+}
+
+fn record_mode(
+    world: &mut InstallMetricsWorld,
+    mode: InstallMode,
+    millis: u64,
+) -> Result<(), String> {
+    let path = metrics_path(world)?;
     let result = record_install_at_path(path, mode, Duration::from_millis(millis));
     match result {
         Ok(outcome) => {
@@ -44,37 +91,44 @@ fn record_mode(world: &mut InstallMetricsWorld, mode: InstallMode, millis: u64) 
             world.in_memory_metrics = None;
         }
     }
+    Ok(())
 }
 
 #[given("an empty install metrics store")]
-fn given_empty_store(world: &mut InstallMetricsWorld) {
-    let temp_dir = tempfile::tempdir().expect("create temp dir");
+fn given_empty_store(world: &mut InstallMetricsWorld) -> Result<(), String> {
+    let temp_dir = tempfile::tempdir().map_err(|error| format!("create temp dir: {error}"))?;
     world.metrics_path = Some(temp_dir.path().join("metrics").join("install_metrics.json"));
-    world._temp_dir = Some(temp_dir);
+    world.temp_dir = Some(temp_dir);
     world.outcome = None;
     world.last_error = None;
     world.in_memory_metrics = None;
     world.summary_line = None;
+    Ok(())
 }
 
 #[given("a corrupt install metrics store")]
-fn given_corrupt_store(world: &mut InstallMetricsWorld) {
-    given_empty_store(world);
-    let path = world.metrics_path.as_deref().expect("metrics path set");
-    std::fs::create_dir_all(path.parent().expect("metrics parent exists")).expect("create parent");
-    std::fs::write(path, "{not valid json").expect("write corrupt file");
+fn given_corrupt_store(world: &mut InstallMetricsWorld) -> Result<(), String> {
+    given_empty_store(world)?;
+    let directory = metrics_directory(world)?;
+    directory
+        .create_dir_all("metrics")
+        .map_err(|error| format!("create parent: {error}"))?;
+    directory
+        .write("metrics/install_metrics.json", "{not valid json")
+        .map_err(|error| format!("write corrupt file: {error}"))
 }
 
 #[given("a blocked install metrics path")]
-fn given_blocked_path(world: &mut InstallMetricsWorld) {
-    given_empty_store(world);
-    let path = world.metrics_path.as_deref().expect("metrics path set");
-    std::fs::create_dir_all(path).expect("create blocking directory");
+fn given_blocked_path(world: &mut InstallMetricsWorld) -> Result<(), String> {
+    given_empty_store(world)?;
+    metrics_directory(world)?
+        .create_dir_all("metrics/install_metrics.json")
+        .map_err(|error| format!("create blocking directory: {error}"))
 }
 
 #[given("a download install of {millis:u64} milliseconds is recorded")]
-fn given_download_recorded(world: &mut InstallMetricsWorld, millis: u64) {
-    record_mode(world, InstallMode::Download, millis);
+fn given_download_recorded(world: &mut InstallMetricsWorld, millis: u64) -> Result<(), String> {
+    record_mode(world, InstallMode::Download, millis)
 }
 
 #[given("an in-memory zero metrics aggregate")]
@@ -83,13 +137,13 @@ fn given_zero_metrics(world: &mut InstallMetricsWorld) {
 }
 
 #[when("a download install of {millis:u64} milliseconds is recorded")]
-fn when_download_recorded(world: &mut InstallMetricsWorld, millis: u64) {
-    record_mode(world, InstallMode::Download, millis);
+fn when_download_recorded(world: &mut InstallMetricsWorld, millis: u64) -> Result<(), String> {
+    record_mode(world, InstallMode::Download, millis)
 }
 
 #[when("a build install of {millis:u64} milliseconds is recorded")]
-fn when_build_recorded(world: &mut InstallMetricsWorld, millis: u64) {
-    record_mode(world, InstallMode::Build, millis);
+fn when_build_recorded(world: &mut InstallMetricsWorld, millis: u64) -> Result<(), String> {
+    record_mode(world, InstallMode::Build, millis)
 }
 
 #[when("download and build rates are calculated")]
@@ -98,91 +152,124 @@ fn when_rates_calculated(world: &mut InstallMetricsWorld) {
 }
 
 #[then("total installs is {expected:u64}")]
-fn then_total_installs(world: &mut InstallMetricsWorld, expected: u64) {
-    let metrics = world.in_memory_metrics.as_ref().expect("metrics available");
-    assert_eq!(metrics.total_installs(), expected);
+fn then_total_installs(world: &mut InstallMetricsWorld, expected: u64) -> Result<(), String> {
+    ensure_eq(
+        &metrics(world)?.total_installs(),
+        &expected,
+        "total installs",
+    )
 }
 
 #[then("download installs is {expected:u64}")]
-fn then_download_installs(world: &mut InstallMetricsWorld, expected: u64) {
-    let metrics = world.in_memory_metrics.as_ref().expect("metrics available");
-    assert_eq!(metrics.download_installs(), expected);
+fn then_download_installs(world: &mut InstallMetricsWorld, expected: u64) -> Result<(), String> {
+    ensure_eq(
+        &metrics(world)?.download_installs(),
+        &expected,
+        "download installs",
+    )
 }
 
 #[then("build installs is {expected:u64}")]
-fn then_build_installs(world: &mut InstallMetricsWorld, expected: u64) {
-    let metrics = world.in_memory_metrics.as_ref().expect("metrics available");
-    assert_eq!(metrics.build_installs(), expected);
+fn then_build_installs(world: &mut InstallMetricsWorld, expected: u64) -> Result<(), String> {
+    ensure_eq(
+        &metrics(world)?.build_installs(),
+        &expected,
+        "build installs",
+    )
+}
+
+/// Compares a floating-point rate against its expected value with tolerance.
+fn ensure_rate(actual: f64, expected: f64, context: &str) -> Result<(), String> {
+    if (actual - expected).abs() < FLOAT_RATE_TOLERANCE {
+        Ok(())
+    } else {
+        Err(format!("{context}: expected {expected}, got {actual}"))
+    }
 }
 
 #[then("download rate is {expected:f64}")]
-fn then_download_rate(world: &mut InstallMetricsWorld, expected: f64) {
-    let metrics = world.in_memory_metrics.as_ref().expect("metrics available");
-    assert!(
-        (metrics.download_rate() - expected).abs() < FLOAT_RATE_TOLERANCE,
-        "expected {}, got {}",
-        expected,
-        metrics.download_rate()
-    );
+fn then_download_rate(world: &mut InstallMetricsWorld, expected: f64) -> Result<(), String> {
+    ensure_rate(metrics(world)?.download_rate(), expected, "download rate")
 }
 
 #[then("build rate is {expected:f64}")]
-fn then_build_rate(world: &mut InstallMetricsWorld, expected: f64) {
-    let metrics = world.in_memory_metrics.as_ref().expect("metrics available");
-    assert!(
-        (metrics.build_rate() - expected).abs() < FLOAT_RATE_TOLERANCE,
-        "expected {}, got {}",
-        expected,
-        metrics.build_rate()
-    );
+fn then_build_rate(world: &mut InstallMetricsWorld, expected: f64) -> Result<(), String> {
+    ensure_rate(metrics(world)?.build_rate(), expected, "build rate")
 }
 
 #[then("total installation time is {expected:u64} milliseconds")]
-fn then_total_installation_time(world: &mut InstallMetricsWorld, expected: u64) {
-    let metrics = world.in_memory_metrics.as_ref().expect("metrics available");
-    assert_eq!(
-        metrics.total_install_duration(),
-        Duration::from_millis(expected)
-    );
+fn then_total_installation_time(
+    world: &mut InstallMetricsWorld,
+    expected: u64,
+) -> Result<(), String> {
+    ensure_eq(
+        &metrics(world)?.total_install_duration(),
+        &Duration::from_millis(expected),
+        "total installation time",
+    )
 }
 
 #[then("metrics recovery from corrupt file is true")]
-fn then_recovered(world: &mut InstallMetricsWorld) {
-    let outcome = world.outcome.as_ref().expect("recording outcome available");
-    assert!(outcome.recovered_from_corrupt_file());
+fn then_recovered(world: &mut InstallMetricsWorld) -> Result<(), String> {
+    let outcome = world
+        .outcome
+        .as_ref()
+        .ok_or_else(|| String::from("recording outcome available"))?;
+    if outcome.recovered_from_corrupt_file() {
+        Ok(())
+    } else {
+        Err(String::from(
+            "expected recovery from a corrupt metrics file",
+        ))
+    }
 }
 
 #[then("metrics recording fails")]
-fn then_recording_fails(world: &mut InstallMetricsWorld) {
-    assert!(
-        world.last_error.is_some(),
-        "expected recording to fail, got success outcome"
-    );
+fn then_recording_fails(world: &mut InstallMetricsWorld) -> Result<(), String> {
+    if world.last_error.is_some() {
+        Ok(())
+    } else {
+        Err(String::from(
+            "expected recording to fail, got success outcome",
+        ))
+    }
 }
 
 #[then("summary line contains \"{expected}\"")]
-fn then_summary_line_contains(world: &mut InstallMetricsWorld, expected: String) {
+fn then_summary_line_contains(
+    world: &mut InstallMetricsWorld,
+    expected: String,
+) -> Result<(), String> {
     let summary = world
         .summary_line
         .as_deref()
-        .expect("summary line is available");
-    assert!(
-        summary.contains(&expected),
-        "expected summary line to contain {expected:?}, got {summary:?}"
-    );
+        .ok_or_else(|| String::from("summary line is available"))?;
+    if summary.contains(&expected) {
+        Ok(())
+    } else {
+        Err(format!(
+            "expected summary line to contain {expected:?}, got {summary:?}"
+        ))
+    }
 }
 
 #[then("warning text contains \"{expected}\"")]
-fn then_warning_text_contains(world: &mut InstallMetricsWorld, expected: String) {
+fn then_warning_text_contains(
+    world: &mut InstallMetricsWorld,
+    expected: String,
+) -> Result<(), String> {
     let error = world
         .last_error
         .as_deref()
-        .expect("metrics recording error should be available");
+        .ok_or_else(|| String::from("metrics recording error should be available"))?;
     let warning_text = format!("Warning: could not record install metrics: {error}");
-    assert!(
-        warning_text.contains(&expected),
-        "expected warning text to contain {expected:?}, got {warning_text:?}"
-    );
+    if warning_text.contains(&expected) {
+        Ok(())
+    } else {
+        Err(format!(
+            "expected warning text to contain {expected:?}, got {warning_text:?}"
+        ))
+    }
 }
 
 #[scenario(

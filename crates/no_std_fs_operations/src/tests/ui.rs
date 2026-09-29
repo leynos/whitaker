@@ -1,7 +1,7 @@
 //! UI regression tests for the `no_std_fs_operations` lint.
 
 use serial_test::serial;
-use whitaker_common::test_support::LocaleOverride;
+use whitaker_common::test_support::with_locale;
 
 #[test]
 #[serial]
@@ -28,6 +28,7 @@ fn ui_runs_in_fallback_locale() {
 }
 
 fn run_with_locale(directory: &str, locale: Option<&str>) {
-    let _locale_guard = locale.map(LocaleOverride::set);
-    whitaker::run_ui_tests!(directory).expect("UI tests should execute without diffs");
+    with_locale(locale, || {
+        whitaker::run_ui_tests!(directory).expect("UI tests should execute without diffs");
+    });
 }
