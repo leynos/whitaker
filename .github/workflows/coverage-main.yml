@@ -151,7 +151,7 @@ jobs:
 
       - name: Setup Rust
         id: setup-rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@4fb8eb7ad52454678a0662865d81d3cd17aa6e0e
+        uses: leynos/shared-actions/.github/actions/setup-rust@14c325b60788814cd50298eb8060228daee3b842
         with:
           # Ubicloud only, so a missing cache proxy fails the job rather than
           # letting sccache compile against local disk unnoticed.
@@ -159,13 +159,13 @@ jobs:
           cache-provider: external
 
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
+        uses: taiki-e/install-action@dfae9bf3d6f6c6f20ef4ebb3486c01a51341ff12  # v2.87.18
         with:
           tool: nextest@0.9.114
           fallback: none
 
       - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
+        uses: taiki-e/install-action@dfae9bf3d6f6c6f20ef4ebb3486c01a51341ff12  # v2.87.18
         with:
           tool: cargo-llvm-cov@0.6.24
           fallback: none
@@ -218,7 +218,7 @@ jobs:
         # `workflow_dispatch` can name any branch, so the trigger filter does
         # not confine this upload to the trunk; the ref test here does.
         if: steps.codescene_token.outputs.available == 'true' && github.ref == 'refs/heads/main'
-        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@a5765019912a8ab6882b12db049c7cde635f3a85
+        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@14c325b60788814cd50298eb8060228daee3b842
         with:
           format: lcov
           access-token: ${{ secrets.CS_ACCESS_TOKEN }}

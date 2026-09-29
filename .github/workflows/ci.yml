@@ -142,7 +142,7 @@ jobs:
 
       - name: Setup Rust
         id: setup-rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@4fb8eb7ad52454678a0662865d81d3cd17aa6e0e
+        uses: leynos/shared-actions/.github/actions/setup-rust@14c325b60788814cd50298eb8060228daee3b842
         with:
           # Ubicloud only, so a missing cache proxy fails the job rather than
           # letting sccache compile against local disk unnoticed.
@@ -150,13 +150,13 @@ jobs:
           cache-provider: external
 
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
+        uses: taiki-e/install-action@dfae9bf3d6f6c6f20ef4ebb3486c01a51341ff12  # v2.87.18
         with:
           tool: nextest@0.9.114
           fallback: none
 
       - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
+        uses: taiki-e/install-action@dfae9bf3d6f6c6f20ef4ebb3486c01a51341ff12  # v2.87.18
         with:
           tool: cargo-llvm-cov@0.6.24
           fallback: none
@@ -287,7 +287,7 @@ jobs:
 
       - name: Setup Rust
         id: setup-rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@4fb8eb7ad52454678a0662865d81d3cd17aa6e0e
+        uses: leynos/shared-actions/.github/actions/setup-rust@14c325b60788814cd50298eb8060228daee3b842
         with:
           # Ubicloud only, so a missing cache proxy fails the job rather than
           # letting sccache compile against local disk unnoticed.
@@ -295,7 +295,7 @@ jobs:
           cache-provider: external
 
       - name: Setup Rust for installer MSRV
-        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772  # master
+        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de  # master
         with:
           toolchain: '1.85.0'
 
@@ -303,7 +303,7 @@ jobs:
         run: make installer-msrv-check
 
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
+        uses: taiki-e/install-action@dfae9bf3d6f6c6f20ef4ebb3486c01a51341ff12  # v2.87.18
         with:
           tool: nextest@0.9.114
           fallback: none
@@ -350,7 +350,7 @@ jobs:
           mmdc --version
 
       - name: Setup uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d  # v10.0.1
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0
         with:
           version: '0.11.19'
 
@@ -361,7 +361,7 @@ jobs:
         run: make test-sccache-health
 
       - name: Install Nixie
-        uses: leynos/shared-actions/.github/actions/install-nixie@7cb894fe62c40951cccf33819548095e64a1291e
+        uses: leynos/shared-actions/.github/actions/install-nixie@14c325b60788814cd50298eb8060228daee3b842
         with:
           nixie-version: '1.1.0'
           merman-version: '0.7.0'
@@ -509,12 +509,12 @@ jobs:
         # This lane keeps the shared action's sccache setup, which installs
         # the binary and exports the Actions cache credentials that a
         # GitHub-hosted `run:` step can already see anyway.
-        uses: leynos/shared-actions/.github/actions/setup-rust@4fb8eb7ad52454678a0662865d81d3cd17aa6e0e
+        uses: leynos/shared-actions/.github/actions/setup-rust@14c325b60788814cd50298eb8060228daee3b842
         with:
           cache-provider: external
 
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
+        uses: taiki-e/install-action@dfae9bf3d6f6c6f20ef4ebb3486c01a51341ff12  # v2.87.18
         with:
           tool: nextest@0.9.114
           fallback: none

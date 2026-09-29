@@ -45,7 +45,7 @@ jobs:
           ref: ${{ env.RELEASE_TAG }}
 
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@4fb8eb7ad52454678a0662865d81d3cd17aa6e0e
+        uses: leynos/shared-actions/.github/actions/setup-rust@14c325b60788814cd50298eb8060228daee3b842
 
       - name: Add target
         run: rustup target add "${{ matrix.target }}"
@@ -151,7 +151,7 @@ jobs:
           ref: ${{ env.RELEASE_TAG }}
 
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@4fb8eb7ad52454678a0662865d81d3cd17aa6e0e
+        uses: leynos/shared-actions/.github/actions/setup-rust@14c325b60788814cd50298eb8060228daee3b842
 
       - name: Add target
         run: rustup target add "${{ matrix.target }}"
@@ -251,7 +251,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@4fb8eb7ad52454678a0662865d81d3cd17aa6e0e
+        uses: leynos/shared-actions/.github/actions/setup-rust@14c325b60788814cd50298eb8060228daee3b842
 
       - name: Read pinned toolchain
         id: toolchain
@@ -338,7 +338,7 @@ jobs:
           ref: ${{ env.RELEASE_TAG }}
 
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@4fb8eb7ad52454678a0662865d81d3cd17aa6e0e
+        uses: leynos/shared-actions/.github/actions/setup-rust@14c325b60788814cd50298eb8060228daee3b842
 
       - name: Build dependency packaging tool
         run: cargo build --release -p whitaker-installer --bin whitaker-package-dependency-binary
@@ -457,7 +457,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Install cargo-binstall
-        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
+        uses: taiki-e/install-action@dfae9bf3d6f6c6f20ef4ebb3486c01a51341ff12  # v2.87.18
         with:
           tool: cargo-binstall@1.16.6
           fallback: none
