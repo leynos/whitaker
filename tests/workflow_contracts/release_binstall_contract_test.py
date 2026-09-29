@@ -24,6 +24,9 @@ BINSTALL_COMMAND: typ.Final[str] = (
     "whitaker-installer@${RELEASE_TAG#v}"
 )
 
+#: The step that proves the extracted binary runs, not merely that it exists.
+VERSION_COMMAND: typ.Final[str] = "whitaker-installer --version"
+
 #: The exact cargo-binstall release the job installs, so a new binstall
 #: cannot change what the check means without a reviewed edit here.
 BINSTALL_TOOL: typ.Final[str] = "cargo-binstall@1.16.6"
@@ -72,21 +75,23 @@ def _tool_violations(steps: list[dict[str, typ.Any]]) -> list[str]:
     ]
     if installers and all(_is_pinned_installer(step) for step in installers):
         return []
-    return [f"no step installs {BINSTALL_TOOL} with the pinned action and fallback none"]
+    return [
+        f"no step installs {BINSTALL_TOOL} with the pinned action and fallback none"
+    ]
 
 
-def _command_violations(steps: list[dict[str, typ.Any]]) -> list[str]:
-    """Return why no unconditional step runs the one install command."""
-    installs = [
+def _command_violations(steps: list[dict[str, typ.Any]], command: str) -> list[str]:
+    """Return why no unconditional step runs `command` as its sole command."""
+    runs = [
         step
         for step in steps
-        if runs_unconditionally(str(step.get("run", "")), BINSTALL_COMMAND)
+        if runs_unconditionally(str(step.get("run", "")), command)
     ]
-    if not installs:
-        return [f"no step runs {BINSTALL_COMMAND!r} as its sole command"]
+    if not runs:
+        return [f"no step runs {command!r} as its sole command"]
     return [
-        f"the install step is conditional: {step['if']!r}"
-        for step in installs
+        f"the {command!r} step is conditional: {step['if']!r}"
+        for step in runs
         if "if" in step
     ]
 
@@ -110,11 +115,17 @@ def binstall_violations(job: dict[str, typ.Any]) -> list[str]:
     >>> binstall_violations({"needs": "publish", "if": VERIFY_CONDITION,
     ...     "steps": [{"uses": BINSTALL_ACTION,
     ...                "with": {"tool": BINSTALL_TOOL, "fallback": "none"}},
-    ...               {"run": BINSTALL_COMMAND}]})
+    ...               {"run": BINSTALL_COMMAND},
+    ...               {"run": VERSION_COMMAND}]})
     []
     """
     steps = job.get("steps") or []
-    return _header_violations(job) + _tool_violations(steps) + _command_violations(steps)
+    return (
+        _header_violations(job)
+        + _tool_violations(steps)
+        + _command_violations(steps, BINSTALL_COMMAND)
+        + _command_violations(steps, VERSION_COMMAND)
+    )
 
 
 def test_the_release_verifies_its_archive_with_binstall() -> None:
@@ -132,6 +143,7 @@ _GOOD: typ.Final = {
             "with": {"tool": BINSTALL_TOOL, "fallback": "none"},
         },
         {"run": BINSTALL_COMMAND},
+        {"run": VERSION_COMMAND},
     ],
 }
 
@@ -199,6 +211,17 @@ _GOOD: typ.Final = {
             _GOOD | {"needs": "build-installer"},
             "must need publish",
             id="runs-before-publish",
+        ),
+        pytest.param(
+            _GOOD | {"steps": _GOOD["steps"][:2]},
+            "whitaker-installer --version",
+            id="the-installed-binary-is-never-run",
+        ),
+        pytest.param(
+            _GOOD
+            | {"steps": [*_GOOD["steps"][:2], {"if": "false", "run": VERSION_COMMAND}]},
+            "conditional",
+            id="a-conditional-version-check",
         ),
         pytest.param(_GOOD | {"if": "false"}, "condition must be", id="never-runs"),
     ],
