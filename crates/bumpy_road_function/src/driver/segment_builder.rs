@@ -13,6 +13,8 @@ use rustc_span::source_map::SourceMap;
 use rustc_span::{DesugaringKind, Span};
 use whitaker_common::complexity_signal::LineSegment;
 
+use super::numeric::saturating_branch_count;
+
 pub(super) struct SegmentBuilder<'a, 'tcx> {
     cx: &'a LateContext<'tcx>,
     settings: &'a Settings,
@@ -134,12 +136,18 @@ impl<'a, 'tcx> SegmentBuilder<'a, 'tcx> {
         self.push_segment(span, self.settings.weights.flow);
     }
 
+    /// Add a predicate-weighted segment unless the condition is a `let` test.
+    ///
+    /// Branch counts above `u32::MAX` are saturated before conversion to the
+    /// floating-point weight; spans rejected by `push_segment` are omitted.
     fn push_predicate_segment(&mut self, expr: &'tcx hir::Expr<'tcx>) {
         if matches!(expr.kind, ExprKind::Let(..)) {
             return;
         }
 
-        let branches = count_branches(expr) as f64;
+        let branches = f64::from(saturating_branch_count(
+            u64::try_from(count_branches(expr)).unwrap_or(u64::MAX),
+        ));
         let value = branches * self.settings.weights.predicate;
         self.push_segment(expr.span, value);
     }
@@ -206,22 +214,26 @@ fn extract_while_components<'hir>(
     }
 }
 
+/// Count logical branches, treating `&&` and `||` as sums of their operands.
+///
+/// Negation, blocks, and `if` expressions are transparent; every other
+/// expression contributes one branch.
 fn count_branches(expr: &hir::Expr<'_>) -> usize {
     match expr.kind {
         ExprKind::Binary(op, lhs, rhs) if matches!(op.node, BinOpKind::And | BinOpKind::Or) => {
             count_branches(lhs) + count_branches(rhs)
         }
-        ExprKind::Unary(UnOp::Not, inner) => count_branches(inner),
-        ExprKind::DropTemps(inner) => count_branches(inner),
-        ExprKind::Block(block, _) => match block.expr {
-            Some(inner) => count_branches(inner),
-            None => 1,
-        },
+        ExprKind::Unary(UnOp::Not, inner) | ExprKind::DropTemps(inner) => count_branches(inner),
+        ExprKind::Block(block, _) => block.expr.map_or(1, count_branches),
         ExprKind::If(cond, ..) => count_branches(cond),
         _ => 1,
     }
 }
 
+/// Return the contiguous 1-based source-line range covered by a compiler span.
+///
+/// Returns `None` when the span cannot be mapped to source lines or maps to a
+/// non-contiguous set of lines.
 pub(super) fn span_line_range(source_map: &SourceMap, span: Span) -> Option<RangeInclusive<usize>> {
     let info = source_map.span_to_lines(span).ok()?;
     let first = info.lines.first()?;
@@ -229,8 +241,9 @@ pub(super) fn span_line_range(source_map: &SourceMap, span: Span) -> Option<Rang
 
     let contiguous = info
         .lines
-        .windows(2)
-        .all(|pair| pair[1].line_index == pair[0].line_index + 1);
+        .iter()
+        .zip(info.lines.iter().skip(1))
+        .all(|(previous, next)| next.line_index == previous.line_index + 1);
     if !contiguous {
         return None;
     }

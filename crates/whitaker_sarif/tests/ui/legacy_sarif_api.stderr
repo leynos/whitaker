@@ -1,0 +1,30 @@
+error[E0432]: unresolved imports `whitaker_sarif::Artifact`, `whitaker_sarif::ArtifactLocation`
+ --> tests/ui/legacy_sarif_api.rs:3:22
+  |
+3 | use whitaker_sarif::{Artifact, ArtifactLocation, RunBuilder};
+  |                      ^^^^^^^^  ^^^^^^^^^^^^^^^^ no `ArtifactLocation` in the root
+  |                      |
+  |                      no `Artifact` in the root
+  |
+help: a similar name exists in the module
+  |
+3 - use whitaker_sarif::{Artifact, ArtifactLocation, RunBuilder};
+3 + use whitaker_sarif::{Artefact, ArtifactLocation, RunBuilder};
+  |
+help: a similar name exists in the module
+  |
+3 - use whitaker_sarif::{Artifact, ArtifactLocation, RunBuilder};
+3 + use whitaker_sarif::{Artifact, ArtefactLocation, RunBuilder};
+  |
+
+error[E0599]: no method named `with_artifact` found for struct `RunBuilder` in the current scope
+ --> tests/ui/legacy_sarif_api.rs:6:50
+  |
+6 |     let _ = RunBuilder::new("whitaker", "0.3.0").with_artifact(Artifact {
+  |             -------------------------------------^^^^^^^^^^^^^
+  |
+help: there is a method `with_artefact` with a similar name
+  |
+6 -     let _ = RunBuilder::new("whitaker", "0.3.0").with_artifact(Artifact {
+6 +     let _ = RunBuilder::new("whitaker", "0.3.0").with_artefact(Artifact {
+  |

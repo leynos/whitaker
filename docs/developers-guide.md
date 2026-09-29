@@ -2325,7 +2325,7 @@ no longer implements `io::Write`, so neither `format!("{:x}", digest)` nor
 shared by `downloader.rs`, `artefact/packaging.rs`, and the `sha256_hex` test
 helper.
 
-`installer/src/deps.rs` drives the high-level fallback order:
+`installer/src/deps/mod.rs` drives the high-level fallback order:
 
 1. Attempt the repository-hosted dependency archive for the current target.
 2. Verify the installed tool is now usable. `cargo-dylint` is checked by
@@ -2399,21 +2399,57 @@ A Cargo-managed `dylint-link` already on `PATH` is checked by resolving an
 executable file and comparing the version Cargo recorded for it, which needs no
 execution either.
 
-The `dylint-link` verification in `installer/src/deps.rs` is implemented by
-five small private helpers:
+The `dylint-link` verification in `installer/src/deps/mod.rs` is implemented by
+six small private helpers:
 
 - `find_binary_on_path(binary_name)` returns the first executable candidate so
   the installation check can validate the exact path it found.
-- `find_binary_in_directory(directory, binary_name)` performs the per-directory
-  search that `find_binary_on_path()` uses while walking `PATH`.
-- `binary_candidates(directory, binary_name)` builds the ordered set of
-  candidate paths that each directory contributes to the lookup.
-- `is_executable_file(path)` applies the platform-specific file test:
-  executable-bit plus regular-file checks on Unix, and `path.is_file()` on
-  non-Unix targets where the executable suffix carries the meaning.
+- `find_binary_in_directory` checks candidates relative to one PATH entry and
+  returns the first match joined to the original directory. Its inputs make the
+  path, binary name, and failure accumulator explicit:
+
+  ```rust
+  fn find_binary_in_directory<'binary>(
+      directory: &Path,
+      binary_name: &'binary str,
+      failures: &mut Vec<PathScanFailure<'binary>>,
+  ) -> Option<std::path::PathBuf>
+  ```
+
+  It converts the entry to `camino::Utf8Path`, opens a `cap_std::fs_utf8::Dir`,
+  and checks candidate names relative to that capability. Non-UTF-8 entries and
+  directories that cannot be opened are skipped; classified failures are
+  appended without retaining the path.
+- `binary_candidates(binary_name: &str) -> Vec<String>` returns candidate
+  executable names in probe order. Unix returns the requested name unchanged.
+  Windows preserves a name with an extension as its sole candidate; otherwise,
+  it appends the `PATHEXT` suffixes in configured order, skipping suffixes
+  already present at the end of the name, case-insensitively.
+- `is_executable_file` has this signature:
+
+  ```rust
+  fn is_executable_file(
+      directory: &Dir,
+      candidate: &Utf8Path,
+      failures: &mut Vec<PathScanFailureCategory>,
+  ) -> bool
+  ```
+
+  It obtains metadata with `Dir::metadata`, requires a regular file and, on
+  Unix, at least one executable permission bit. Metadata errors always return
+  `false`; ordinary `NotFound` misses add no failure category, while other
+  metadata errors add the bounded `metadata` category to the caller-provided
+  list.
 - `windows_path_extensions()` normalizes `PATHEXT` on Windows so
   `binary_candidates()` can expand extensionless names the same way the shell
   does.
+
+`PathScanResult` is a narrowly scoped report for this PATH scan: it carries the
+first matching path and the bounded categories encountered while checking
+entries. It is not a reusable filesystem abstraction. The scan helpers return
+these classifications without logging. At verbose level, the installer CLI
+emits structured debug events with `binary_name` and `failure_category`; it
+does not record PATH values or candidate paths.
 
 These key helpers are covered by direct unit tests in
 `installer/src/deps/path_tests.rs` for missing PATH values, empty PATH values,
@@ -2806,7 +2842,7 @@ context by combining a HIR ancestry walk with attribute-shape matching.
 `ContextEntry` items for modules, functions, impls, and blocks, and carries a
 boolean `has_test_context_ancestry` alongside that list. On each step,
 `has_test_ancestry` updates that boolean so the test-only decision can
-propagate from outer ancestors into nested helper code. `summarise_context`
+propagate from outer ancestors into nested helper code. `summarize_context`
 then combines the accumulated entries, the propagated boolean, and
 `in_test_like_context_with(additional_test_attributes)` to produce the final
 `ContextSummary.is_test` result. This pattern matters because user-configured
@@ -2820,7 +2856,7 @@ not just the immediately enclosing function.
     `is_cfg_test_attribute`
   - the current ancestor is a function item whose attributes match Whitaker's
     built-in test list or `additional_test_attributes`
-- `summarise_context` merges that ancestry flag with the collected
+- `summarize_context` merges that ancestry flag with the collected
   `ContextEntry` values to derive the final `ContextSummary.is_test` decision.
 
 Real `rstest` case expansion adds a second `--test` harness shape that the

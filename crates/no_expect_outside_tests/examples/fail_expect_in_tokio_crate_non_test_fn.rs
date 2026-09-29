@@ -1,7 +1,7 @@
 //! Negative regression ensuring Tokio-specific test configuration does not
 //! leak into ordinary code.
 //!
-//! The fixture config recognises `#[tokio::test]`, but `parse_config` remains
+//! The fixture config recognizes `#[tokio::test]`, but `parse_config` remains
 //! production code and must still trigger the lint even in the same crate.
 
 fn parse_config() {

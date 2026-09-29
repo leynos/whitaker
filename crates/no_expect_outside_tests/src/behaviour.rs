@@ -1,7 +1,7 @@
 //! Behaviour-driven tests covering context summarization for the lint's context
 //! world and BDD steps.
 
-use crate::context::{ContextSummary, summarise_context};
+use crate::context::{ContextSummary, summarize_context};
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use std::cell::RefCell;
@@ -55,7 +55,7 @@ impl ContextWorld {
 
     fn evaluate(&self) {
         let entries = self.entries.borrow();
-        let summary = summarise_context(
+        let summary = summarize_context(
             entries.as_slice(),
             *self.cfg_test.borrow(),
             self.additional.borrow().as_slice(),
@@ -115,8 +115,8 @@ fn given_doctest(world: &ContextWorld) {
     world.mark_doctest();
 }
 
-#[when("I summarise the context")]
-fn when_summarise(world: &ContextWorld) {
+#[when("I summarize the context")]
+fn when_summarize(world: &ContextWorld) {
     world.evaluate();
 }
 

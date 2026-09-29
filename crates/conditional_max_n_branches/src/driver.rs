@@ -21,6 +21,9 @@ use whitaker_common::{
     get_localizer_for_lint, noop_reporter, safe_resolve_message_set,
 };
 
+mod numeric;
+use self::numeric::saturating_diagnostic_integer;
+
 const LINT_NAME: &str = "conditional_max_n_branches";
 const MESSAGE_KEY: MessageKey<'static> = MessageKey::new(LINT_NAME);
 
@@ -60,12 +63,26 @@ impl Default for ConditionalMaxNBranches {
     }
 }
 
-dylint_linting::impl_late_lint! {
-    pub CONDITIONAL_MAX_N_BRANCHES,
-    Warn,
-    "complex conditionals should be decomposed when they exceed the configured branch limit",
-    ConditionalMaxNBranches::default()
+mod registration {
+    //! Provides the public Dylint registration for this lint.
+    //!
+    //! The `dylint_linting::impl_late_lint!` macro generates undocumented
+    //! public registration items, so its expansion is scoped to this private
+    //! module and only the documented lint static is re-exported.
+
+    use super::ConditionalMaxNBranches;
+
+    dylint_linting::impl_late_lint! {
+        /// Lint flagging conditionals whose predicate exceeds the configured
+        /// number of short-circuit branches.
+        pub CONDITIONAL_MAX_N_BRANCHES,
+        Warn,
+        "complex conditionals should be decomposed when they exceed the configured branch limit",
+        ConditionalMaxNBranches::default()
+    }
 }
+
+pub use registration::CONDITIONAL_MAX_N_BRANCHES;
 
 impl<'tcx> LateLintPass<'tcx> for ConditionalMaxNBranches {
     fn check_crate(&mut self, _cx: &LateContext<'tcx>) {
@@ -182,22 +199,26 @@ impl ConditionKind {
     }
 }
 
+/// Count logical branches, treating `&&` and `||` as sums of their operands.
+///
+/// Negation, blocks, and `if` expressions are transparent; every other
+/// expression contributes one branch.
 fn count_branches(expr: &hir::Expr<'_>) -> usize {
     match expr.kind {
         ExprKind::Binary(op, lhs, rhs) if matches!(op.node, BinOpKind::And | BinOpKind::Or) => {
             count_branches(lhs) + count_branches(rhs)
         }
-        ExprKind::Unary(UnOp::Not, inner) => count_branches(inner),
-        ExprKind::DropTemps(inner) => count_branches(inner),
-        ExprKind::Block(block, _) => match block.expr {
-            Some(inner) => count_branches(inner),
-            None => 1,
-        },
+        ExprKind::Unary(UnOp::Not, inner) | ExprKind::DropTemps(inner) => count_branches(inner),
+        ExprKind::Block(block, _) => block.expr.map_or(1, count_branches),
         ExprKind::If(cond, ..) => count_branches(cond),
         _ => 1,
     }
 }
 
+/// Emit the localized branch-count diagnostic for one condition.
+///
+/// Counts are saturated to Fluent's signed 64-bit range, and missing
+/// translations fall back to the built-in English message set.
 fn emit_diagnostic(
     cx: &LateContext<'_>,
     metadata: &ConditionMetadata,
@@ -211,9 +232,16 @@ fn emit_diagnostic(
     );
     args.insert(
         Cow::Borrowed("branches"),
-        FluentValue::from(metadata.branches as i64),
+        FluentValue::from(saturating_diagnostic_integer(
+            u64::try_from(metadata.branches).unwrap_or(u64::MAX),
+        )),
     );
-    args.insert(Cow::Borrowed("limit"), FluentValue::from(limit as i64));
+    args.insert(
+        Cow::Borrowed("limit"),
+        FluentValue::from(saturating_diagnostic_integer(
+            u64::try_from(limit).unwrap_or(u64::MAX),
+        )),
+    );
     let branch_phrase_text = branch_phrase(localizer.locale(), metadata.branches);
     args.insert(
         Cow::Borrowed("branch_phrase"),
@@ -234,9 +262,9 @@ fn emit_diagnostic(
         fallback_messages(metadata.kind, metadata.branches, limit)
     });
 
-    let primary = normalise_isolation_marks(messages.primary());
-    let note = normalise_isolation_marks(messages.note());
-    let help = normalise_isolation_marks(messages.help());
+    let primary = normalize_isolation_marks(messages.primary());
+    let note = normalize_isolation_marks(messages.note());
+    let help = normalize_isolation_marks(messages.help());
 
     cx.emit_span_lint(
         CONDITIONAL_MAX_N_BRANCHES,
@@ -249,7 +277,11 @@ fn emit_diagnostic(
     );
 }
 
-fn normalise_isolation_marks(text: &str) -> String {
+/// Replace injected bidi isolates and replacement characters in diagnostics.
+///
+/// Each such character becomes a double quote; text without these characters
+/// is returned unchanged apart from allocating the owned result.
+fn normalize_isolation_marks(text: &str) -> String {
     if text
         .chars()
         .any(|character| matches!(character, '\u{2068}' | '\u{2069}' | '\u{FFFD}'))
@@ -265,6 +297,10 @@ fn normalise_isolation_marks(text: &str) -> String {
     }
 }
 
+/// Build the built-in English diagnostic messages for a condition.
+///
+/// The branch and limit values are rendered as locale-aware English phrases
+/// when no translated message is available.
 fn fallback_messages(kind: ConditionKind, branches: usize, limit: usize) -> DiagnosticMessageSet {
     let branch_phrase_text = branch_phrase(FALLBACK_LOCALE, branches);
     let limit_phrase_text = branch_phrase(FALLBACK_LOCALE, limit);

@@ -31,6 +31,7 @@ flate2 = "1.1"
 serde_json = "1.0.149"
 toml = "1.1.2"
 tracing = { version = "0.1.44", default-features = false, features = ["attributes", "std"] }
+tracing-subscriber = "0.3.20"
 thiserror = "2"
 trybuild = "1.0.116"
 log = "0.4.28"
@@ -109,6 +110,7 @@ rstest = { workspace = true }
 rstest-bdd = { workspace = true }
 rstest-bdd-macros = { workspace = true }
 dylint_testing = { workspace = true }
+whitaker_test_macros = { workspace = true }
 
 [lints.clippy]
 pedantic = { level = "warn", priority = -1 }

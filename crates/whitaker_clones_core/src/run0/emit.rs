@@ -109,6 +109,11 @@ pub fn emit_run0(
     Ok(run.build())
 }
 
+/// Build one SARIF result for an accepted pair of clone fragments.
+///
+/// The primary fragment becomes the result location and the peer becomes a
+/// related location. Fingerprint, region, score-conversion, or property-build
+/// failures are returned to the caller rather than emitting a partial result.
 fn build_result(
     primary: &TokenFragment,
     peer: &TokenFragment,
@@ -160,7 +165,7 @@ fn build_result(
                 text: format!("Peer clone fragment: {}", peer.id().as_str()),
             }),
             physical_location: whitaker_sarif::PhysicalLocation {
-                artifact_location: whitaker_sarif::ArtifactLocation {
+                artefact_location: whitaker_sarif::ArtefactLocation {
                     uri: peer.file_uri().to_owned(),
                     uri_base_id: None,
                 },

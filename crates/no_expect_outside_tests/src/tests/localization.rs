@@ -13,7 +13,7 @@ use whitaker_common::i18n::{BundleLookup, testing::FailingLookup};
 
 use super::{
     I18nError, Localizer, MESSAGE_KEY, NoExpectMessages, ReceiverCategory, ReceiverLabel,
-    context_label, fallback_messages, localised_messages,
+    context_label, fallback_messages, localized_messages,
 };
 use crate::context::ContextSummary;
 
@@ -267,7 +267,7 @@ fn execute_localization(
 ) -> Result<NoExpectMessages, I18nError> {
     let context = context_label(summary);
     let category = ReceiverCategory::for_label(receiver);
-    localised_messages(lookup, receiver, &context, category)
+    localized_messages(lookup, receiver, &context, category)
 }
 
 fn failing_lookup() -> FailingLookup {
