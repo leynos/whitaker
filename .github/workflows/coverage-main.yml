@@ -59,17 +59,6 @@ env:
   RUSTDOCFLAGS: -D warnings
   # Keep in step with ci.yml: one named constant for the Ubicloud shape.
   LINUX_RUNNER_VCPUS: '2'
-  # One-line switch between the Actions cache backend and a cached local
-  # directory. `gha` is deployed. It reaches Ubicloud's own cache proxy rather
-  # than GitHub's cache service, because "Export the Ubicloud cache
-  # credentials" below publishes the proxy address and clears the v2
-  # cache-service flag the proxy does not serve. The earlier `gha` attempt
-  # that failed every store attempt lacked that step; see the longer note in
-  # ci.yml, scripts/select-sccache-backend.sh and the developers' guide. Keep
-  # in step with ci.yml: this lane writes the compiler cache the pull-request
-  # lanes read, so a split between the two files would leave each reading a
-  # store the other never wrote.
-  SCCACHE_BACKEND: gha
   # RUSTC_WRAPPER is deliberately absent. The shared Rust setup action now
   # exports it as the absolute path of the sccache it installed, and stands
   # aside when a caller has already set the variable, so a value here would
@@ -103,19 +92,6 @@ jobs:
             printf 'CARGO_BUILD_JOBS=%s\n' "${LINUX_RUNNER_VCPUS}"
             printf 'NEXTEST_TEST_THREADS=%s\n' "${LINUX_RUNNER_VCPUS}"
           } >> "$GITHUB_ENV"
-
-      - name: Export the Ubicloud cache credentials
-        # The runner hands `ACTIONS_CACHE_URL` and `ACTIONS_RUNTIME_TOKEN` to
-        # action steps, and this republishes them through `GITHUB_ENV` with the
-        # v2 cache-service flag cleared, because Ubicloud's proxy serves v1. An
-        # sccache server started without them binds local disk for the whole
-        # job and reports a plausible hit rate for a store nothing archives.
-        # It must precede the selector and every later step, because sccache
-        # binds its backend once, when its server starts.
-        uses: leynos/shared-actions/.github/actions/export-ubicloud-cache-credentials@dbe2e22ceaf498d85512679ccded38be9dbe7777
-
-      - name: Select the compiler cache backend
-        run: bash scripts/select-sccache-backend.sh
 
       - name: Restore Cargo registry
         id: cargo-registry
@@ -174,8 +150,12 @@ jobs:
             "$HOME/.cache/whitaker-mirrors/rust-clippy.git"
 
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@7cb894fe62c40951cccf33819548095e64a1291e
+        id: setup-rust
+        uses: leynos/shared-actions/.github/actions/setup-rust@4fb8eb7ad52454678a0662865d81d3cd17aa6e0e
         with:
+          # Ubicloud only, so a missing cache proxy fails the job rather than
+          # letting sccache compile against local disk unnoticed.
+          expect-cache: ubicloud
           cache-provider: external
 
       - name: Install cargo-nextest
@@ -210,6 +190,8 @@ jobs:
 
       - name: Record sccache effectiveness
         if: always()
+        env:
+          SETUP_RUST_CACHE_BACKEND: ${{ steps.setup-rust.outputs.cache-backend }}
         run: bash scripts/record-sccache-effectiveness.sh
 
       - name: Upload sccache statistics

@@ -159,12 +159,12 @@ def test_ci_enables_sccache_and_debug_target_cache_scope(
         "expand to the entire target tree"
     )
     assert "SCCACHE_GHA_ENABLED" not in env, (
-        "the backend selector, not the workflow, exports the sccache backend "
-        "variables so only one backend is ever configured"
+        "setup-rust, not the workflow, selects the sccache backend from the "
+        "runner, and a workflow-level switch would override its choice"
     )
-    assert env.get("SCCACHE_BACKEND") in {"gha", "local"}, (
-        "CI must declare the compiler-cache backend in one switchable place, "
-        "naming a backend the selector script understands"
+    assert "SCCACHE_BACKEND" not in env, (
+        "the retired backend selector's switch must not return; setup-rust "
+        "selects the backend from the runner"
     )
     assert str(env.get("LINUX_RUNNER_VCPUS")) == "2", (
         "CI must derive its concurrency bounds from the Ubicloud shape"
@@ -182,6 +182,34 @@ def test_ci_enables_sccache_and_debug_target_cache_scope(
     )
     assert env.get("RUSTDOCFLAGS") == "-D warnings", (
         "CI must treat all rustdoc warnings as errors via RUSTDOCFLAGS"
+    )
+
+
+@pytest.mark.parametrize("job_name", ["coverage-check", "linux-full"])
+def test_the_linux_lanes_hand_sccache_to_setup_rust(
+    workflow: Mapping[str, Any], job_name: str
+) -> None:
+    """Each Linux lane leaves sccache to the runner-aware `setup-rust`.
+
+    The credentials export and the backend selector are gone, and the one
+    `Setup Rust` step demands Ubicloud's cache proxy, so a missing proxy fails
+    the lane rather than letting it compile against local disk.
+    """
+    jobs = _get_mapping_item(workflow, "jobs", parent_name="CI workflow")
+    job = _get_mapping_item(jobs, job_name, parent_name="jobs")
+    names = [step.get("name") for step in job["steps"]]
+    for retired in (
+        "Export the Ubicloud cache credentials",
+        "Select the compiler cache backend",
+    ):
+        assert retired not in names, f"{job_name} must not run {retired!r}"
+    setup = _find_step(job, "Setup Rust")
+    assert str(setup.get("uses", "")).startswith(
+        "leynos/shared-actions/.github/actions/setup-rust@4fb8eb7a"
+    ), f"{job_name} must pin setup-rust at #523's merge"
+    assert setup.get("id") == "setup-rust", f"{job_name} must name its setup step"
+    assert setup["with"].get("expect-cache") == "ubicloud", (
+        f"{job_name} must demand Ubicloud's cache proxy"
     )
 
 

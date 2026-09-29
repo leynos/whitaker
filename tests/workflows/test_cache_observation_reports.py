@@ -12,7 +12,7 @@ Covered behaviour:
 - an exact match, a `restore-keys` prefix restore, and a complete miss are
   reported as three distinct outcomes;
 - the raw `cache-hit` value is preserved verbatim, including when absent;
-- the selected compiler-cache backend is named in the summary;
+- the backend `setup-rust` selected heads the sccache statistics, or `unset`;
 - free disk is reported before the build and again before the saves, and an
   unrecognized mode is a usage error;
 - the sccache reporter writes both artefact formats and echoes the stats
@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import typing as typ
 from pathlib import Path
 
 import pytest
@@ -79,74 +80,82 @@ def test_inactive_step_is_reported_rather_than_omitted(tmp_path: Path) -> None:
     result, summary = _run_observations(tmp_path)
 
     assert result.returncode == 0, result.stderr
-    assert summary.count(": inactive in this job") == 5, (
+    assert summary.count(": inactive in this job") == 4, (
         f"every unused cache step must be named as inactive, got {summary!r}"
     )
-    assert "- Compiler cache backend: `unset`" in summary, (
-        f"the selected backend must be recorded, got {summary!r}"
+    # The backend is `setup-rust`'s to choose once it starts the server, which
+    # is after these restores, so it is reported with the statistics instead.
+    assert "Compiler cache backend" not in summary, (
+        f"the restore observations cannot know the backend yet, got {summary!r}"
     )
 
 
-def test_exact_match_is_reported_as_a_hit(tmp_path: Path) -> None:
-    """A primary-key match is the only outcome called an exact hit."""
-    _, summary = _run_observations(
-        tmp_path,
-        SCCACHE_BACKEND="local",
-        CARGO_REGISTRY_KEY=REGISTRY_KEY,
-        CARGO_REGISTRY_MATCHED=REGISTRY_KEY,
-        CARGO_REGISTRY_HIT="true",
-    )
+class RestoreOutcome(typ.NamedTuple):
+    """One restore outcome and what the registry line must say about it.
 
-    line = _registry_line(summary)
-    assert "exact hit" in line, line
-    assert "cache-hit `true`" in line, line
-    assert "- Compiler cache backend: `local`" in summary, summary
-
-
-def test_prefix_restore_is_not_reported_as_a_miss(tmp_path: Path) -> None:
-    """A `restore-keys` restore reports the generation it actually loaded.
-
-    Every warm compiler-cache restore takes this path, because its primary
-    key ends with the current run identifier, so collapsing it into `false`
-    would misclassify each warm run as cold.
+    Attributes
+    ----------
+    matched : str
+        The step's `cache-matched-key` output.
+    hit : str or None
+        The step's `cache-hit` output, or ``None`` to leave it unset, which is
+        how the runner presents a step that never ran.
+    present : tuple of str
+        Fragments the line must carry.
+    absent : tuple of str
+        Fragments the line must not carry.
     """
-    _, summary = _run_observations(
-        tmp_path,
-        CARGO_REGISTRY_KEY=REGISTRY_KEY,
-        CARGO_REGISTRY_MATCHED=REGISTRY_PREFIX,
-        CARGO_REGISTRY_HIT="false",
-    )
+
+    matched: str
+    hit: str | None
+    present: tuple[str, ...]
+    absent: tuple[str, ...] = ()
+
+
+RESTORE_OUTCOMES: dict[str, RestoreOutcome] = {
+    # A primary-key match is the only outcome called an exact hit.
+    "exact-hit": RestoreOutcome(
+        REGISTRY_KEY, "true", ("exact hit", "cache-hit `true`")
+    ),
+    # A `restore-keys` restore reports the generation it actually loaded:
+    # every warm restore of a run-keyed archive takes this path, because its
+    # primary key ends with the current run identifier, so collapsing it into
+    # `false` would misclassify each warm run as cold.
+    "prefix-restore": RestoreOutcome(
+        REGISTRY_PREFIX,
+        "false",
+        (f"prefix restore from `{REGISTRY_PREFIX}`", "cache-hit `false`"),
+        ("miss",),
+    ),
+    # An empty matched key is the only outcome called a miss.
+    "complete-miss": RestoreOutcome("", "", ("miss (cache-hit `unset`)",)),
+    # An unset `cache-hit` is shown as unset, not as an observed `false`.
+    "absent-hit-output": RestoreOutcome(
+        REGISTRY_KEY, None, ("exact hit", "cache-hit `unset`")
+    ),
+}
+
+
+@pytest.mark.parametrize(
+    "outcome", list(RESTORE_OUTCOMES.values()), ids=list(RESTORE_OUTCOMES)
+)
+def test_each_restore_outcome_is_reported_as_what_it_was(
+    tmp_path: Path, outcome: RestoreOutcome
+) -> None:
+    """The registry line names the outcome the restore actually had."""
+    outputs = {
+        "CARGO_REGISTRY_KEY": REGISTRY_KEY,
+        "CARGO_REGISTRY_MATCHED": outcome.matched,
+    }
+    if outcome.hit is not None:
+        outputs["CARGO_REGISTRY_HIT"] = outcome.hit
+    _, summary = _run_observations(tmp_path, **outputs)
 
     line = _registry_line(summary)
-    assert f"prefix restore from `{REGISTRY_PREFIX}`" in line, line
-    assert "miss" not in line, line
-    assert "cache-hit `false`" in line, line
-
-
-def test_complete_miss_is_reported_as_a_miss(tmp_path: Path) -> None:
-    """An empty matched key is the only outcome called a miss."""
-    _, summary = _run_observations(
-        tmp_path,
-        CARGO_REGISTRY_KEY=REGISTRY_KEY,
-        CARGO_REGISTRY_MATCHED="",
-        CARGO_REGISTRY_HIT="",
-    )
-
-    line = _registry_line(summary)
-    assert line.endswith("miss (cache-hit `unset`)"), line
-
-
-def test_absent_hit_output_is_not_coerced_to_false(tmp_path: Path) -> None:
-    """An unset `cache-hit` is shown as unset, not as an observed `false`."""
-    _, summary = _run_observations(
-        tmp_path,
-        CARGO_REGISTRY_KEY=REGISTRY_KEY,
-        CARGO_REGISTRY_MATCHED=REGISTRY_KEY,
-    )
-
-    line = _registry_line(summary)
-    assert "cache-hit `unset`" in line, line
-    assert "exact hit" in line, line
+    for fragment in outcome.present:
+        assert fragment in line, line
+    for fragment in outcome.absent:
+        assert fragment not in line, line
 
 
 def test_headroom_is_reported_before_the_build(tmp_path: Path) -> None:
@@ -214,6 +223,7 @@ def _write_sccache_stub(tmp_path: Path, requests: str) -> Path:
 def _run_effectiveness(
     tmp_path: Path,
     requests: str,
+    **overrides: str,
 ) -> tuple[subprocess.CompletedProcess[str], str]:
     """Run the sccache reporter against a stub and return the summary."""
     stub_dir = _write_sccache_stub(tmp_path, requests)
@@ -231,9 +241,36 @@ def _run_effectiveness(
             "PATH": f"{stub_dir}:/usr/bin:/bin",
             "HOME": str(tmp_path),
             "GITHUB_STEP_SUMMARY": str(summary),
+            **overrides,
         },
     )
     return result, summary.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    ("overrides", "expected"),
+    [
+        pytest.param(
+            {"SETUP_RUST_CACHE_BACKEND": "ubicloud"},
+            "- Compiler cache backend: `ubicloud`",
+            id="backend-handed-over",
+        ),
+        pytest.param({}, "- Compiler cache backend: `unset`", id="backend-unset"),
+    ],
+)
+def test_the_statistics_name_the_selected_backend(
+    tmp_path: Path, overrides: dict[str, str], expected: str
+) -> None:
+    """The report heads the statistics with the backend `setup-rust` chose.
+
+    `Cache location` reads `ghac` for Ubicloud's proxy and GitHub's own
+    service alike, so the backend line is what makes the numbers readable,
+    and an unset value is shown as unset rather than guessed.
+    """
+    result, summary = _run_effectiveness(tmp_path, "412", **overrides)
+
+    assert result.returncode == 0, result.stderr
+    assert expected in summary, summary
 
 
 def test_sccache_stats_are_published_in_both_formats(tmp_path: Path) -> None:

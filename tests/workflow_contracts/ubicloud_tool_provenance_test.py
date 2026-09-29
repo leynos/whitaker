@@ -82,9 +82,10 @@ def test_setup_rust_delegates_cache_and_compiler_cache_ownership() -> None:
             f"{job_name} must use the reviewed shared Rust setup pin"
         )
         declared = setup["with"]
-        assert set(declared) == {"cache-provider"}, (
+        assert set(declared) == {"cache-provider", "expect-cache"}, (
             f"{job_name} must pass the shared action nothing but the cache "
-            "provider; `use-sccache: false` would disable the compiler-cache arm"
+            "provider and the backend it expects; `use-sccache: false` would "
+            "disable the compiler-cache arm"
         )
         assert linux_arm(declared["cache-provider"]) == "external", (
             f"{job_name} must own its Cargo cache on its Ubicloud legs rather "
@@ -133,23 +134,15 @@ def test_no_workflow_requests_unbounded_pytest_parallelism() -> None:
             )
 
 
-def test_compiler_cache_uses_exactly_one_selected_backend() -> None:
-    """Two configured backends make the reported hit rate unattributable.
+def test_the_shared_action_alone_configures_the_compiler_cache() -> None:
+    """A second configurer makes the reported hit rate unattributable.
 
-    Which backend each workflow selects, and what that selection obliges the
-    lane to carry, live in `sccache_backend_contract_test`. What is asserted
-    here is narrower and belongs with tool provenance: whatever the selection,
-    the selector script is the only thing that acts on it.
+    Which backend `setup-rust` may select, and which retired pieces must stay
+    gone, live in `setup_rust_sccache_contract_test`. What is asserted here is
+    narrower and belongs with tool provenance: no workflow names the wrapper
+    or a backend switch, and no job installs or starts a compiler cache of
+    its own.
     """
-    declared = {
-        workflow_name: load_workflow(workflow_name)["env"]["SCCACHE_BACKEND"]
-        for workflow_name in set(UBICLOUD_JOBS.values())
-    }
-    assert set(declared.values()) <= {"gha", "local"}, (
-        "SCCACHE_BACKEND must name a backend scripts/select-sccache-backend.sh "
-        f"understands, not {sorted(set(declared.values()))}"
-    )
-
     for workflow_name in set(UBICLOUD_JOBS.values()):
         workflow = load_workflow(workflow_name)
         # The shared action exports the wrapper as the absolute path of the
@@ -161,18 +154,13 @@ def test_compiler_cache_uses_exactly_one_selected_backend() -> None:
             "for the sccache it installed"
         )
         assert "SCCACHE_GHA_ENABLED" not in workflow["env"], (
-            f"{workflow_name} must let the selector export the backend variables"
+            f"{workflow_name} must let the shared action select the backend"
         )
 
     for job_name in UBICLOUD_JOBS:
-        job = load_job(job_name)
-        names = step_names(job)
-        selector = steps_by_name(job)["Select the compiler cache backend"]
-        assert "scripts/select-sccache-backend.sh" in str(selector["run"])
-        assert names.index("Select the compiler cache backend") < names.index(
-            "Setup Rust"
-        ), f"{job_name} must choose a backend before any Cargo invocation"
-        _assert_the_shared_action_owns_the_compiler_cache(job_name, names)
+        _assert_the_shared_action_owns_the_compiler_cache(
+            job_name, step_names(load_job(job_name))
+        )
 
 
 def _assert_the_shared_action_owns_the_compiler_cache(
@@ -189,15 +177,8 @@ def _assert_the_shared_action_owns_the_compiler_cache(
             f"{job_name} must not run its own {bespoke!r}; the shared action "
             "installs sccache, starts the server and zeroes the counters"
         )
-    # Only the local-directory lanes have a directory to restore. Whether a
-    # lane should have one at all is `sccache_backend_contract_test`'s to say;
-    # this only places the restore correctly when one exists.
-    if "Restore the compiler cache directory" in names:
-        restore_index = names.index("Restore the compiler cache directory")
-        assert restore_index < names.index("Setup Rust"), (
-            f"{job_name} must restore the compiler cache directory before the "
-            "shared action starts the server, which binds the directory once"
-        )
+    # No job restores a compiler cache directory any more; that it has none
+    # is `setup_rust_sccache_contract_test`'s to say.
 
 
 def test_compiler_cache_effectiveness_is_always_recorded() -> None:

@@ -46,7 +46,6 @@ CACHE_STEPS=(
     'Rust toolchain and installed tools:RUST_TOOLS'
     'Dylint host tools:DYLINT_TOOLS'
     'Clippy source mirror:CLIPPY_MIRROR'
-    'Compiler cache directory:SCCACHE_DIR'
 )
 
 summary=${GITHUB_STEP_SUMMARY:-/dev/stdout}
@@ -103,9 +102,6 @@ case "${mode}" in
     observations)
         {
             printf '### Cache observations\n\n'
-            # shellcheck disable=SC2016  # Backticks are Markdown, not a subshell.
-            printf -- '- Compiler cache backend: `%s`\n' \
-                "${SCCACHE_BACKEND:-unset}"
             for entry in "${CACHE_STEPS[@]}"; do
                 emit_observation "${entry%%:*}" "${entry##*:}"
             done
