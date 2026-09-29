@@ -65,29 +65,30 @@ def _is_pinned_installer(step: dict[str, typ.Any]) -> bool:
     )
 
 
-def _install_violations(steps: list[dict[str, typ.Any]]) -> list[str]:
-    """Return why the steps do not install binstall and run the one command."""
-    violations: list[str] = []
+def _tool_violations(steps: list[dict[str, typ.Any]]) -> list[str]:
+    """Return why no step installs binstall with the pinned action."""
     installers = [
         step for step in steps if (step.get("with") or {}).get("tool") == BINSTALL_TOOL
     ]
-    if not installers or any(not _is_pinned_installer(step) for step in installers):
-        violations.append(
-            f"no step installs {BINSTALL_TOOL} with the pinned action and fallback none"
-        )
+    if installers and all(_is_pinned_installer(step) for step in installers):
+        return []
+    return [f"no step installs {BINSTALL_TOOL} with the pinned action and fallback none"]
+
+
+def _command_violations(steps: list[dict[str, typ.Any]]) -> list[str]:
+    """Return why no unconditional step runs the one install command."""
     installs = [
         step
         for step in steps
         if runs_unconditionally(str(step.get("run", "")), BINSTALL_COMMAND)
     ]
     if not installs:
-        violations.append(f"no step runs {BINSTALL_COMMAND!r} as its sole command")
-    violations.extend(
+        return [f"no step runs {BINSTALL_COMMAND!r} as its sole command"]
+    return [
         f"the install step is conditional: {step['if']!r}"
         for step in installs
         if "if" in step
-    )
-    return violations
+    ]
 
 
 def binstall_violations(job: dict[str, typ.Any]) -> list[str]:
@@ -112,7 +113,8 @@ def binstall_violations(job: dict[str, typ.Any]) -> list[str]:
     ...               {"run": BINSTALL_COMMAND}]})
     []
     """
-    return _header_violations(job) + _install_violations(job.get("steps") or [])
+    steps = job.get("steps") or []
+    return _header_violations(job) + _tool_violations(steps) + _command_violations(steps)
 
 
 def test_the_release_verifies_its_archive_with_binstall() -> None:
