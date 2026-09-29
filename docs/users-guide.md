@@ -65,6 +65,20 @@ This:
 After installation, run `whitaker --all` in any Rust project to lint it. Use
 `whitaker-ls` to list the installed Whitaker suite libraries.
 
+The installer's own release archives are also usable by `cargo binstall`:
+
+```sh
+cargo binstall whitaker-installer
+```
+
+Every published archive stores its files as regular entries, which is the only
+kind cargo-binstall extracts. Archives built before that change stored the
+binary as a GNU sparse entry, which binstall skips without an error, so it
+found no binary and compiled the installer from source instead
+([#461](https://github.com/leynos/whitaker/issues/461)). From the next
+installer release, `cargo binstall` installs the prebuilt binary, and each
+release verifies that by installing it with source builds disabled.
+
 On Windows, the installer's `PATH` check honours `PATHEXT` and falls back to
 the usual executable suffixes when `PATHEXT` is unset, so a normal
 Cargo-installed executable such as `dylint-link.exe` in
