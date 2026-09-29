@@ -28,6 +28,12 @@ BINSTALL_COMMAND: typ.Final[str] = (
 #: cannot change what the check means without a reviewed edit here.
 BINSTALL_TOOL: typ.Final[str] = "cargo-binstall@1.16.6"
 
+#: The reviewed, SHA-pinned action that installs binstall. An unrelated action
+#: naming the same tool would satisfy a check on the tool alone.
+BINSTALL_ACTION: typ.Final[str] = (
+    "taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68"
+)
+
 #: The job's condition: after a successful publish, and not after a cancel.
 VERIFY_CONDITION: typ.Final[str] = (
     "${{ !cancelled() && needs.publish.result == 'success' }}"
@@ -51,12 +57,24 @@ def _header_violations(job: dict[str, typ.Any]) -> list[str]:
     return violations
 
 
+def _is_pinned_installer(step: dict[str, typ.Any]) -> bool:
+    """Report whether a step uses the pinned action with the fallback disabled."""
+    return (
+        step.get("uses") == BINSTALL_ACTION
+        and (step.get("with") or {}).get("fallback") == "none"
+    )
+
+
 def _install_violations(steps: list[dict[str, typ.Any]]) -> list[str]:
     """Return why the steps do not install binstall and run the one command."""
     violations: list[str] = []
-    tools = [(step.get("with") or {}).get("tool") for step in steps]
-    if BINSTALL_TOOL not in tools:
-        violations.append(f"no step installs {BINSTALL_TOOL}")
+    installers = [
+        step for step in steps if (step.get("with") or {}).get("tool") == BINSTALL_TOOL
+    ]
+    if not installers or any(not _is_pinned_installer(step) for step in installers):
+        violations.append(
+            f"no step installs {BINSTALL_TOOL} with the pinned action and fallback none"
+        )
     installs = [
         step
         for step in steps
@@ -75,8 +93,22 @@ def _install_violations(steps: list[dict[str, typ.Any]]) -> list[str]:
 def binstall_violations(job: dict[str, typ.Any]) -> list[str]:
     """Return why a job does not prove the published archive installs.
 
+    Parameters
+    ----------
+    job
+        A workflow job mapping, as loaded from `release.yml`.
+
+    Returns
+    -------
+    list[str]
+        One message per way the job fails to install from the archive; empty
+        when the job has the reviewed shape.
+
+    Examples
+    --------
     >>> binstall_violations({"needs": "publish", "if": VERIFY_CONDITION,
-    ...     "steps": [{"uses": "x", "with": {"tool": BINSTALL_TOOL}},
+    ...     "steps": [{"uses": BINSTALL_ACTION,
+    ...                "with": {"tool": BINSTALL_TOOL, "fallback": "none"}},
     ...               {"run": BINSTALL_COMMAND}]})
     []
     """
@@ -93,7 +125,10 @@ _GOOD: typ.Final = {
     "needs": "publish",
     "if": VERIFY_CONDITION,
     "steps": [
-        {"uses": "taiki-e/install-action", "with": {"tool": BINSTALL_TOOL}},
+        {
+            "uses": BINSTALL_ACTION,
+            "with": {"tool": BINSTALL_TOOL, "fallback": "none"},
+        },
         {"run": BINSTALL_COMMAND},
     ],
 }
@@ -134,6 +169,29 @@ _GOOD: typ.Final = {
             | {"steps": [{"with": {"tool": "cargo-binstall"}}, _GOOD["steps"][1]]},
             "no step installs",
             id="an-unpinned-binstall",
+        ),
+        pytest.param(
+            _GOOD
+            | {
+                "steps": [
+                    _GOOD["steps"][0] | {"uses": "someone/else@v1"},
+                    _GOOD["steps"][1],
+                ]
+            },
+            "pinned action",
+            id="an-unrelated-action",
+        ),
+        pytest.param(
+            _GOOD
+            | {
+                "steps": [
+                    _GOOD["steps"][0]
+                    | {"with": {"tool": BINSTALL_TOOL, "fallback": "cargo-install"}},
+                    _GOOD["steps"][1],
+                ]
+            },
+            "fallback none",
+            id="a-fallback-left-enabled",
         ),
         pytest.param(
             _GOOD | {"needs": "build-installer"},
