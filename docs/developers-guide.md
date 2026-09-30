@@ -1684,6 +1684,10 @@ pinned `typos-config-builder gate` command regenerates `typos.toml`, runs the
 Typos binary it pins over the whole tracked tree, and enforces the shared
 phrase corrections Typos cannot express. `make markdownlint` runs the same gate.
 
+`TYPOS_CONFIG_BUILDER_VERSION` in the `Makefile` pins the
+`typos-config-builder` release the gate runs (currently `v0.1.3`). Raise it
+together with the regenerated `typos.toml`, never on its own.
+
 `typos.toml` is regenerated on every run from the live shared dictionary and
 the narrow `typos.local.toml` overlay. Add narrow repository-specific
 terminology to the overlay; because the dictionary is live, `typos.toml` must
