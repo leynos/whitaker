@@ -335,13 +335,22 @@ project:
 - Use GitHub-flavoured Markdown footnotes (`[^1]`) for references and
   footnotes.
 
-## Spelling policy
+<!-- typos-config-builder:agents-md:start -->
 
-- Enforce en-GB-oxendict spelling with `make spelling`. `make markdownlint`
-  runs the same gate.
-- `typos.toml` is regenerated on every run from the live shared dictionary and
-  the `typos.local.toml` overlay. Never edit generated entries by hand; add
-  narrow repository-specific entries to `typos.local.toml` instead.
+## Spelling
+
+- `make spelling` runs the pinned `typos-config-builder gate`, which
+  regenerates `typos.toml` from the shared en-GB-oxendict dictionary and
+  `typos.local.toml`, then checks spelling and the shared phrase corrections.
+- `typos.toml` is generated: never edit it by hand. Put narrow
+  repository-specific exceptions in `typos.local.toml`, as exact or full-line
+  patterns rather than bare accepted words.
+- When `make spelling` changes `typos.toml`, commit the regenerated file. If
+  the change is unrelated to your work, commit it in a separate base pull
+  request and stack your branch on it, so each review diff stays focused.
+
+<!-- typos-config-builder:agents-md:end -->
+
 - The gate refreshes the untracked shared dictionary cache only when the
   authoritative copy is newer, so a valid cache remains usable offline.
 - Preserve external APIs, identifiers, fixtures, snapshots, formal names and
