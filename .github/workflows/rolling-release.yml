@@ -239,7 +239,7 @@ jobs:
         run: rm -rf target
 
       - name: Record sccache effectiveness
-        if: always() && runner.os == 'Linux'
+        if: always() && runner.os == 'Linux' && steps.setup-rust.outputs.sccache-status != 'fallback'
         env:
           SETUP_RUST_CACHE_BACKEND: ${{ steps.setup-rust.outputs.cache-backend }}
         run: bash scripts/record-sccache-effectiveness.sh
@@ -421,7 +421,7 @@ jobs:
         run: rm -rf target dependency-root
 
       - name: Record sccache effectiveness
-        if: always() && runner.os == 'Linux'
+        if: always() && runner.os == 'Linux' && steps.setup-rust.outputs.sccache-status != 'fallback'
         env:
           SETUP_RUST_CACHE_BACKEND: ${{ steps.setup-rust.outputs.cache-backend }}
         run: bash scripts/record-sccache-effectiveness.sh

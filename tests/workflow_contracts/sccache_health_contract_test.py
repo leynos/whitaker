@@ -29,6 +29,23 @@ HEALTH_COMMAND: typ.Final[str] = (
 RECORD_SCRIPT: typ.Final[str] = "scripts/record-sccache-effectiveness.sh"
 STATISTICS_FILE: typ.Final[str] = "sccache-stats.json"
 UPLOAD_ACTION: typ.Final[str] = "actions/upload-artifact"
+#: The skip every sccache evidence step carries. `setup-rust` reports `fallback`
+#: when sccache's server would not start and the job compiles uncached
+#: (shared-actions #546); a dead server has no statistics, and asking for them
+#: would start it again, so the steps that read them stand down rather than turn
+#: a documented fail-open into a red job.
+NOT_FALLBACK: typ.Final[str] = "steps.setup-rust.outputs.sccache-status!='fallback'"
+
+
+def _condition(step: dict[str, typ.Any]) -> str:
+    """Return a step's `if` with whitespace and expression braces removed."""
+    text = str(step.get("if", "")).replace(" ", "")
+    return text.removeprefix("${{").removesuffix("}}")
+
+
+def _skips_a_fallback(step: dict[str, typ.Any]) -> bool:
+    """Return whether a step's whole condition ends in the fallback skip."""
+    return _condition(step).endswith(NOT_FALLBACK)
 
 
 def _index(
@@ -39,8 +56,8 @@ def _index(
 
 
 def _records(step: dict[str, typ.Any]) -> bool:
-    """Return whether a step records the sccache statistics."""
-    return RECORD_SCRIPT in str(step.get("run", ""))
+    """Return whether a step records the sccache statistics, past a fallback."""
+    return RECORD_SCRIPT in str(step.get("run", "")) and _skips_a_fallback(step)
 
 
 def _uploads_the_statistics(step: dict[str, typ.Any]) -> bool:
@@ -50,13 +67,13 @@ def _uploads_the_statistics(step: dict[str, typ.Any]) -> bool:
         str(step.get("uses", "")).split("@", 1)[0] == UPLOAD_ACTION
         and str(inputs.get("path", "")).strip() == STATISTICS_FILE
         and inputs.get("if-no-files-found") == "error"
-        and str(step.get("if", "")).replace(" ", "") in ("always()", "${{always()}}")
+        and _condition(step) == f"always()&&{NOT_FALLBACK}"
     )
 
 
 def _checks_health(step: dict[str, typ.Any]) -> bool:
-    """Return whether a step runs the health check, and only it, unconditionally."""
-    return "if" not in step and runs_unconditionally(
+    """Return whether a step runs the health check, and only it, past a fallback."""
+    return _condition(step) == NOT_FALLBACK and runs_unconditionally(
         str(step.get("run", "")), HEALTH_COMMAND
     )
 
@@ -75,8 +92,8 @@ def health_violations(job: dict[str, typ.Any]) -> list[str]:
     }
     missing = {
         "record": "no step records the sccache statistics",
-        "upload": f"no step uploads {STATISTICS_FILE} under if: always() with if-no-files-found: error",
-        "health": f"no step of its own runs `{HEALTH_COMMAND}` with no condition",
+        "upload": f"no step uploads {STATISTICS_FILE} under if: always() with if-no-files-found: error and skipping a fallback",
+        "health": f"no step of its own runs `{HEALTH_COMMAND}` skipping only a fallback",
     }
     violations = [missing[name] for name, index in positions.items() if index is None]
     if violations:
@@ -111,13 +128,17 @@ def test_every_gha_lane_keeps_its_evidence_and_checks_its_health(job_name: str) 
     assert not violations, f"{job_name}: {violations}"
 
 
-_RECORD: typ.Final = {"if": "always()", "run": f"bash {RECORD_SCRIPT}"}
+_GUARD: typ.Final = "steps.setup-rust.outputs.sccache-status != 'fallback'"
+_RECORD: typ.Final = {
+    "if": f"always() && {_GUARD}",
+    "run": f"bash {RECORD_SCRIPT}",
+}
 _UPLOAD: typ.Final = {
-    "if": "always()",
+    "if": f"always() && {_GUARD}",
     "uses": f"{UPLOAD_ACTION}@abc",
     "with": {"name": "s", "path": STATISTICS_FILE, "if-no-files-found": "error"},
 }
-_HEALTH: typ.Final = {"run": f"{HEALTH_COMMAND} {STATISTICS_FILE}"}
+_HEALTH: typ.Final = {"if": _GUARD, "run": f"{HEALTH_COMMAND} {STATISTICS_FILE}"}
 
 
 @pytest.mark.parametrize(
@@ -143,6 +164,21 @@ _HEALTH: typ.Final = {"run": f"{HEALTH_COMMAND} {STATISTICS_FILE}"}
             [_RECORD, _UPLOAD, _HEALTH | {"if": "false"}],
             "runs `python3",
             id="a-conditional-check",
+        ),
+        pytest.param(
+            [_RECORD, _UPLOAD, {"run": _HEALTH["run"]}],
+            "runs `python3",
+            id="a-check-that-ignores-a-fallback",
+        ),
+        pytest.param(
+            [_RECORD | {"if": "always()"}, _UPLOAD, _HEALTH],
+            "records",
+            id="a-record-that-ignores-a-fallback",
+        ),
+        pytest.param(
+            [_RECORD, _UPLOAD | {"if": "always()"}, _HEALTH],
+            "uploads",
+            id="an-upload-that-ignores-a-fallback",
         ),
         pytest.param(
             [_RECORD, _UPLOAD, {"run": f"true || {HEALTH_COMMAND}"}],

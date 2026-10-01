@@ -179,13 +179,13 @@ jobs:
         run: make test-doc
 
       - name: Record sccache effectiveness
-        if: always()
+        if: always() && steps.setup-rust.outputs.sccache-status != 'fallback'
         env:
           SETUP_RUST_CACHE_BACKEND: ${{ steps.setup-rust.outputs.cache-backend }}
         run: bash scripts/record-sccache-effectiveness.sh
 
       - name: Upload sccache statistics
-        if: always()
+        if: always() && steps.setup-rust.outputs.sccache-status != 'fallback'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
         with:
           name: sccache-stats-coverage-check
@@ -194,6 +194,7 @@ jobs:
           retention-days: 14
 
       - name: Check sccache health
+        if: steps.setup-rust.outputs.sccache-status != 'fallback'
         # The statistics are uploaded first, so the evidence survives a
         # failure here. Fails on a broken integration (wrong backend, nothing
         # wrapped, every store or read failing, or errors above 10% of stores
@@ -395,13 +396,13 @@ jobs:
         run: rm -rf target
 
       - name: Record sccache effectiveness
-        if: always()
+        if: always() && steps.setup-rust.outputs.sccache-status != 'fallback'
         env:
           SETUP_RUST_CACHE_BACKEND: ${{ steps.setup-rust.outputs.cache-backend }}
         run: bash scripts/record-sccache-effectiveness.sh
 
       - name: Upload sccache statistics
-        if: always()
+        if: always() && steps.setup-rust.outputs.sccache-status != 'fallback'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
         with:
           name: sccache-stats-linux-full
@@ -410,6 +411,7 @@ jobs:
           retention-days: 14
 
       - name: Check sccache health
+        if: steps.setup-rust.outputs.sccache-status != 'fallback'
         # The statistics are uploaded first, so the evidence survives a
         # failure here. Fails on a broken integration (wrong backend, nothing
         # wrapped, every store or read failing, or errors above 10% of stores
@@ -539,13 +541,13 @@ jobs:
         run: rm -rf target
 
       - name: Record sccache effectiveness
-        if: ${{ always() }}
+        if: always() && steps.setup-rust.outputs.sccache-status != 'fallback'
         env:
           SETUP_RUST_CACHE_BACKEND: ${{ steps.setup-rust.outputs.cache-backend }}
         run: bash scripts/record-sccache-effectiveness.sh
 
       - name: Upload sccache statistics
-        if: always()
+        if: always() && steps.setup-rust.outputs.sccache-status != 'fallback'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
         with:
           name: sccache-stats-windows-compat

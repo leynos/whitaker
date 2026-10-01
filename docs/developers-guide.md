@@ -446,13 +446,19 @@ registries hold different crate sets and their keys hash different manifests.
 Their compiler cache is not an archive at all: like every Ubicloud job's, it
 reads and writes Ubicloud's cache proxy through `setup-rust`.
 
-Every caller pins one revision, `4fb8eb7ad52454678a0662865d81d3cd17aa6e0e`, the
-merge of leynos/shared-actions#523. From it `setup-rust` selects sccache's
-backend from the runner (ADR 0005 there); the `sccache` paragraphs below say
-what that retired here. It keeps the rules the previous pin brought: the
-built-in provider does not archive `target/<profile>`, the caller's Actions
-cache-service selection is restored after `mozilla-actions/sccache-action`
-runs, and the `sccache` server starts from a `run:` step after those exports.
+Every caller pins one revision, `6cec89bac47a21cf756d68d638a9a510998e57f8`, the
+merge of leynos/shared-actions#546, which sits on #523. From #523 `setup-rust`
+selects sccache's backend from the runner (ADR 0005 there); the `sccache`
+paragraphs below say what that retired here. It keeps the rules the previous
+pin brought: the built-in provider does not archive `target/<profile>`, the
+caller's Actions cache-service selection is restored after
+`mozilla-actions/sccache-action` runs, and the `sccache` server starts from a
+`run:` step after those exports. #546 adds a 60 s server startup timeout, where
+sccache's own is a fixed 10 s that Ubicloud's cache proxy intermittently
+outlasts, and makes a start that still fails fall back to an uncached build
+instead of failing the job: a `sccache-fallback` warning annotation, the line
+`sccache: FALLBACK (cache disabled for this job)` in the job summary, and
+`sccache-status` on the action's outputs (`fallback`, or `started`).
 
 The lanes were briefly split, with the release boundaries held back until "a
 tag has run on the newer wiring". That exit condition was the wrong one for
@@ -709,6 +715,14 @@ result. That failure mode is not hypothetical: `mozilla-actions/sccache-action`
 exports only `SCCACHE_PATH` and does not set `RUSTC_WRAPPER`, so before a
 wrapper was exported no Cargo invocation in `coverage-main.yml` was wrapped at
 all.
+
+A fallback must not turn red later. A server that never started has no
+statistics, and `sccache --show-stats` would try to start it again, so every
+step that reads them (the record and upload steps in every job, and the health
+check) carries `steps.setup-rust.outputs.sccache-status != 'fallback'` in its
+condition. A fallback run therefore ends green, with the warning and the
+summary line as its evidence. `sccache_health_contract_test.py` holds that
+guard on each step and refuses each one that omits it.
 
 On the three lanes that use the `gha` backend, `coverage-check`, `linux-full`
 and `coverage-upload`, the statistics are uploaded as a `sccache-stats-<job>`

@@ -190,7 +190,12 @@ def test_compiler_cache_effectiveness_is_always_recorded() -> None:
             "Record sccache effectiveness"
         ), f"{job_name} must zero the counters before the build"
         record = steps_by_name(job)["Record sccache effectiveness"]
-        assert runs_even_when_the_job_fails(record.get("if")), (
+        # The fallback skip is `sccache_health_contract_test`'s to hold; here
+        # only the "even when the job fails" half is read.
+        condition = str(record.get("if")).replace(
+            " && steps.setup-rust.outputs.sccache-status != 'fallback'", ""
+        )
+        assert runs_even_when_the_job_fails(condition), (
             f"{job_name} must publish sccache statistics even when the build fails"
         )
         assert "scripts/record-sccache-effectiveness.sh" in str(record["run"])
