@@ -28,8 +28,10 @@ CACHE_ACTION_SHA = "55cc8345863c7cc4c66a329aec7e433d2d1c52a9"
 RESTORE_ACTION = f"actions/cache/restore@{CACHE_ACTION_SHA}"
 SAVE_ACTION = f"actions/cache/save@{CACHE_ACTION_SHA}"
 INSTALL_ACTION = "taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68"
-#: shared-actions `main` at the merge of #523 (ADR 0005 there). From this
-#: revision `setup-rust` owns sccache outright: it selects the backend from the
+#: shared-actions `main` at the merge of #546, which sits on #523 (ADR 0005
+#: there) and adds a 60 s sccache startup timeout with a fail-open start (a
+#: `sccache-fallback` warning, a summary line and an `sccache-status` output
+#: instead of a failed job). From #523 `setup-rust` owns sccache outright: it selects the backend from the
 #: runner, and on Ubicloud it exports the cache-proxy credentials, clears the
 #: v2 cache-service flag the proxy does not serve, and carries that cleared
 #: value past `mozilla-actions/sccache-action`, which sets it again. That is
@@ -42,7 +44,7 @@ INSTALL_ACTION = "taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce6
 #: Asserted by value rather than by shape, so a bump has to update this
 #: constant and someone has to confirm the new revision still leaves this
 #: repository the sole owner of its caches.
-SHARED_ACTIONS_REF: Final[str] = "4fb8eb7ad52454678a0662865d81d3cd17aa6e0e"
+SHARED_ACTIONS_REF: Final[str] = "6cec89bac47a21cf756d68d638a9a510998e57f8"
 
 SETUP_RUST_ACTION = f"leynos/shared-actions/.github/actions/setup-rust@{SHARED_ACTIONS_REF}"
 

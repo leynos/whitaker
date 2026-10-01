@@ -205,8 +205,8 @@ def test_the_linux_lanes_hand_sccache_to_setup_rust(
         assert retired not in names, f"{job_name} must not run {retired!r}"
     setup = _find_step(job, "Setup Rust")
     assert str(setup.get("uses", "")).startswith(
-        "leynos/shared-actions/.github/actions/setup-rust@4fb8eb7a"
-    ), f"{job_name} must pin setup-rust at #523's merge"
+        "leynos/shared-actions/.github/actions/setup-rust@6cec89ba"
+    ), f"{job_name} must pin setup-rust at #546's merge"
     assert setup.get("id") == "setup-rust", f"{job_name} must name its setup step"
     assert setup["with"].get("expect-cache") == "ubicloud", (
         f"{job_name} must demand Ubicloud's cache proxy"
