@@ -137,7 +137,7 @@ jobs:
       # because nothing here owns one for them.
       - name: Setup Rust
         id: setup-rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@4fb8eb7ad52454678a0662865d81d3cd17aa6e0e
+        uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
         with:
           # The Linux legs are all Ubicloud, so they demand the cache proxy
           # and fail rather than fall back; the macOS and Windows legs are
@@ -239,7 +239,7 @@ jobs:
         run: rm -rf target
 
       - name: Record sccache effectiveness
-        if: always() && runner.os == 'Linux'
+        if: always() && runner.os == 'Linux' && steps.setup-rust.outputs.sccache-status != 'fallback'
         env:
           SETUP_RUST_CACHE_BACKEND: ${{ steps.setup-rust.outputs.cache-backend }}
         run: bash scripts/record-sccache-effectiveness.sh
@@ -313,7 +313,7 @@ jobs:
 
       - name: Setup Rust
         id: setup-rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@4fb8eb7ad52454678a0662865d81d3cd17aa6e0e
+        uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
         with:
           # The Linux legs are all Ubicloud, so they demand the cache proxy
           # and fail rather than fall back; the macOS and Windows legs are
@@ -421,7 +421,7 @@ jobs:
         run: rm -rf target dependency-root
 
       - name: Record sccache effectiveness
-        if: always() && runner.os == 'Linux'
+        if: always() && runner.os == 'Linux' && steps.setup-rust.outputs.sccache-status != 'fallback'
         env:
           SETUP_RUST_CACHE_BACKEND: ${{ steps.setup-rust.outputs.cache-backend }}
         run: bash scripts/record-sccache-effectiveness.sh
@@ -453,7 +453,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@4fb8eb7ad52454678a0662865d81d3cd17aa6e0e
+        uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
 
       - name: Build dependency packaging tool
         run: cargo build --release -p whitaker-installer --bin whitaker-package-dependency-binary

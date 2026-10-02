@@ -82,3 +82,38 @@ def sccache_step_indices(job: dict[str, Any]) -> list[tuple[int, str]]:
         for index, step in enumerate(job_steps(job))
         if mentions_sccache(step)
     ]
+
+
+#: The skip every sccache evidence step carries, whitespace removed. `setup-rust`
+#: reports `fallback` when sccache's server would not start and the job compiles
+#: uncached (shared-actions #546). A job with no server has no statistics, and
+#: `sccache --show-stats` prints empty defaults for it, so a step that records,
+#: uploads or health-checks them stands down rather than publish a table of
+#: zeros that reads as a broken integration.
+NOT_FALLBACK: str = "steps.setup-rust.outputs.sccache-status!='fallback'"
+
+
+def normalized_condition(step: dict[str, Any]) -> str:
+    """Return a step's `if` with whitespace and expression braces removed."""
+    text = str(step.get("if", "")).replace(" ", "")
+    return text.removeprefix("${{").removesuffix("}}")
+
+
+def guards_against_fallback(condition: str) -> bool:
+    """Return whether a normalized condition stands down on a fallback.
+
+    The guard must be one conjunct of a pure conjunction. A disjunction
+    anywhere voids it, because `always()||guard` and `x||y&&guard` both still
+    run against a dead server through the other arm, and an inverted or negated
+    comparison is a different conjunct, so it does not match.
+
+    >>> guards_against_fallback(f"always()&&{NOT_FALLBACK}")
+    True
+    >>> guards_against_fallback(f"always()||{NOT_FALLBACK}")
+    False
+    >>> guards_against_fallback("always()")
+    False
+    """
+    if "||" in condition:
+        return False
+    return NOT_FALLBACK in condition.split("&&")

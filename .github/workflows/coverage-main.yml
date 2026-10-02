@@ -151,7 +151,7 @@ jobs:
 
       - name: Setup Rust
         id: setup-rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@4fb8eb7ad52454678a0662865d81d3cd17aa6e0e
+        uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
         with:
           # Ubicloud only, so a missing cache proxy fails the job rather than
           # letting sccache compile against local disk unnoticed.
@@ -189,13 +189,13 @@ jobs:
         run: make test-doc
 
       - name: Record sccache effectiveness
-        if: always()
+        if: always() && steps.setup-rust.outputs.sccache-status != 'fallback'
         env:
           SETUP_RUST_CACHE_BACKEND: ${{ steps.setup-rust.outputs.cache-backend }}
         run: bash scripts/record-sccache-effectiveness.sh
 
       - name: Upload sccache statistics
-        if: always()
+        if: always() && steps.setup-rust.outputs.sccache-status != 'fallback'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
         with:
           name: sccache-stats-coverage-upload
@@ -259,6 +259,7 @@ jobs:
           key: ${{ steps.clippy-mirror-cache.outputs.cache-primary-key }}
 
       - name: Check sccache health
+        if: steps.setup-rust.outputs.sccache-status != 'fallback'
         # Last, so a failure here cannot cost the job its cache saves; the
         # statistics were uploaded earlier either way.
         run: python3 scripts/check_sccache_health.py --expect-location ghac sccache-stats.json
