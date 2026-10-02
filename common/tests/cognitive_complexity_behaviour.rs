@@ -1,9 +1,11 @@
 //! Behaviour-driven coverage for cognitive complexity computation.
 
+use std::cell::{Cell, RefCell};
+
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
-use std::cell::{Cell, RefCell};
 use whitaker_common::brain_type_metrics::cognitive_complexity::CognitiveComplexityBuilder;
+use whitaker_test_macros::allow_fixture_expansion_lints;
 
 #[derive(Debug)]
 struct CcWorld {
@@ -20,6 +22,7 @@ impl Default for CcWorld {
     }
 }
 
+#[allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> CcWorld {
     CcWorld::default()
@@ -28,11 +31,16 @@ fn world() -> CcWorld {
 // --- Helpers ---
 
 /// Borrows the builder mutably and applies a closure to it.
-fn with_builder(world: &CcWorld, f: impl FnOnce(&mut CognitiveComplexityBuilder)) {
+fn with_builder(
+    world: &CcWorld,
+    f: impl FnOnce(&mut CognitiveComplexityBuilder),
+) -> Result<(), String> {
     let mut slot = world.builder.borrow_mut();
-    f(slot
+    let builder = slot
         .as_mut()
-        .unwrap_or_else(|| panic!("builder already consumed")));
+        .ok_or_else(|| String::from("builder already consumed"))?;
+    f(builder);
+    Ok(())
 }
 
 // --- Given steps ---
@@ -44,55 +52,59 @@ fn given_new_builder(world: &CcWorld) {
 }
 
 #[given("a structural increment not from expansion")]
-fn given_structural_not_expanded(world: &CcWorld) {
-    with_builder(world, |b| b.record_structural_increment(false));
+fn given_structural_not_expanded(world: &CcWorld) -> Result<(), String> {
+    with_builder(world, |b| b.record_structural_increment(false))
 }
 
 #[given("a structural increment from expansion")]
-fn given_structural_expanded(world: &CcWorld) {
-    with_builder(world, |b| b.record_structural_increment(true));
+fn given_structural_expanded(world: &CcWorld) -> Result<(), String> {
+    with_builder(world, |b| b.record_structural_increment(true))
 }
 
 #[given("a nesting increment not from expansion")]
-fn given_nesting_not_expanded(world: &CcWorld) {
-    with_builder(world, |b| b.record_nesting_increment(false));
+fn given_nesting_not_expanded(world: &CcWorld) -> Result<(), String> {
+    with_builder(world, |b| b.record_nesting_increment(false))
 }
 
 #[given("a fundamental increment not from expansion")]
-fn given_fundamental_not_expanded(world: &CcWorld) {
-    with_builder(world, |b| b.record_fundamental_increment(false));
+fn given_fundamental_not_expanded(world: &CcWorld) -> Result<(), String> {
+    with_builder(world, |b| b.record_fundamental_increment(false))
 }
 
 #[given("a fundamental increment from expansion")]
-fn given_fundamental_expanded(world: &CcWorld) {
-    with_builder(world, |b| b.record_fundamental_increment(true));
+fn given_fundamental_expanded(world: &CcWorld) -> Result<(), String> {
+    with_builder(world, |b| b.record_fundamental_increment(true))
 }
 
 #[given("nesting is pushed not from expansion")]
-fn given_push_nesting_not_expanded(world: &CcWorld) {
-    with_builder(world, |b| b.push_nesting(false));
+fn given_push_nesting_not_expanded(world: &CcWorld) -> Result<(), String> {
+    with_builder(world, |b| b.push_nesting(false))
 }
 
 #[given("nesting is pushed from expansion")]
-fn given_push_nesting_expanded(world: &CcWorld) {
-    with_builder(world, |b| b.push_nesting(true));
+fn given_push_nesting_expanded(world: &CcWorld) -> Result<(), String> {
+    with_builder(world, |b| b.push_nesting(true))
 }
 
 #[given("nesting is popped")]
-fn given_pop_nesting(world: &CcWorld) {
-    with_builder(world, |b| b.pop_nesting());
+fn given_pop_nesting(world: &CcWorld) -> Result<(), String> {
+    with_builder(
+        world,
+        whitaker_common::CognitiveComplexityBuilder::pop_nesting,
+    )
 }
 
 // --- When steps ---
 
-#[when("the complexity is finalised")]
-fn when_finalised(world: &CcWorld) {
+#[when("the complexity is finalized")]
+fn when_finalized(world: &CcWorld) -> Result<(), String> {
     let builder = world
         .builder
         .borrow_mut()
         .take()
-        .unwrap_or_else(|| panic!("builder already consumed"));
+        .ok_or_else(|| String::from("builder already consumed"))?;
     world.score_result.set(Some(builder.build()));
+    Ok(())
 }
 
 // --- Then steps ---

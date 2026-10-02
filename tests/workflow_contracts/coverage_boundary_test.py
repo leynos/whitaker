@@ -164,6 +164,41 @@ def test_the_measuring_lane_still_runs_the_instrumented_suite() -> None:
     )
 
 
+@pytest.mark.parametrize("job_name", ("coverage-check", "coverage-upload"))
+def test_coverage_lanes_verify_fresh_lcov_before_continuing(job_name: str) -> None:
+    """Require each coverage lane to reject stale or malformed root LCOV."""
+    steps = job_steps(load_job(job_name))
+    generate_index = next(
+        index for index, step in enumerate(steps) if step.get("name") == "Generate coverage"
+    )
+    generate = steps[generate_index]
+    remove_stale = steps[generate_index - 1]
+    verify = steps[generate_index + 1]
+
+    assert generate.get("env") == {"COVERAGE_OUTPUT": "lcov.info"}, (
+        f"{job_name} must generate its report at the repository root"
+    )
+    assert generate.get("run") == "make coverage", (
+        f"{job_name} must use Whitaker's CI-tested coverage target"
+    )
+    assert remove_stale.get("name") == "Remove stale LCOV report", (
+        f"{job_name} must remove stale LCOV before generating a fresh report"
+    )
+    assert remove_stale.get("run") == "rm -f lcov.info", (
+        f"{job_name} must remove the root report before coverage generation"
+    )
+    assert verify.get("name") == "Verify LCOV report", (
+        f"{job_name} must verify the report immediately after generation"
+    )
+    verify_script = verify.get("run", "")
+    assert "test -s lcov.info" in verify_script, (
+        f"{job_name} must fail when root lcov.info is missing or empty"
+    )
+    assert "^SF:.+" in verify_script and "^end_of_record$" in verify_script, (
+        f"{job_name} must require a complete LCOV source record"
+    )
+
+
 def test_the_publisher_keeps_the_upload_this_boundary_moved_to_it() -> None:
     """A rule that only forbids the upload elsewhere is satisfied by deleting it.
 
@@ -190,6 +225,16 @@ def test_the_publisher_keeps_the_upload_this_boundary_moved_to_it() -> None:
     assert uploads, (
         f"{PUBLISHER_WORKFLOW} must keep the CodeScene upload; without it "
         f"nothing publishes coverage and every rule above is vacuous"
+    )
+    assert len(uploads) == 1, (
+        f"{PUBLISHER_WORKFLOW} must retain exactly one CodeScene uploader"
+    )
+    upload_inputs = uploads[0].get("with", {})
+    assert upload_inputs.get("path") == "lcov.info", (
+        "the main publisher must name the repository-root LCOV report explicitly"
+    )
+    assert upload_inputs.get("mode") == "upload", (
+        "the main publisher must remain in CodeScene upload mode"
     )
 
 

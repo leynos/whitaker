@@ -1,13 +1,17 @@
 //! Behaviour-driven coverage for brain type threshold evaluation.
 
+use std::cell::{Cell, RefCell};
+
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
-use std::cell::{Cell, RefCell};
-use whitaker_common::brain_type_metrics::evaluation::{
-    BrainTypeDiagnostic, BrainTypeDisposition, BrainTypeThresholds, BrainTypeThresholdsBuilder,
-    evaluate_brain_type, format_primary_message,
+use whitaker_common::brain_type_metrics::{
+    MethodMetrics, TypeMetrics, TypeMetricsBuilder,
+    evaluation::{
+        BrainTypeDiagnostic, BrainTypeDisposition, BrainTypeThresholds, BrainTypeThresholdsBuilder,
+        evaluate_brain_type, format_primary_message,
+    },
 };
-use whitaker_common::brain_type_metrics::{MethodMetrics, TypeMetrics, TypeMetricsBuilder};
+use whitaker_test_macros::allow_fixture_expansion_lints;
 
 #[derive(Debug)]
 struct EvaluationWorld {
@@ -85,6 +89,7 @@ impl EvaluationWorld {
     }
 }
 
+#[allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> EvaluationWorld {
     EvaluationWorld::default()
@@ -184,13 +189,13 @@ fn then_disposition_deny(world: &EvaluationWorld) {
     reason = "primary message is required for this behaviour test"
 )]
 fn then_primary_message_contains(world: &EvaluationWorld, text: String) {
-    let msg = world.primary_message.borrow();
-    let msg = msg
+    let message_ref = world.primary_message.borrow();
+    let message = message_ref
         .as_deref()
         .expect("primary message must be formatted first");
     assert!(
-        msg.contains(&text),
-        "expected primary message to contain '{text}', got: {msg}"
+        message.contains(&text),
+        "expected primary message to contain '{text}', got: {message}"
     );
 }
 

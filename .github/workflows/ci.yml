@@ -161,8 +161,43 @@ jobs:
           tool: cargo-llvm-cov@0.6.24
           fallback: none
 
+      - name: Remove stale LCOV report
+        run: rm -f lcov.info
+
       - name: Generate coverage
+        env:
+          COVERAGE_OUTPUT: lcov.info
         run: make coverage
+
+      - name: Verify LCOV report
+        run: |
+          test -s lcov.info || {
+            echo "LCOV report lcov.info is missing or empty" >&2
+            exit 1
+          }
+          awk '
+            /^TN:/ && !in_record { next }
+            /^SF:.+/ {
+              if (in_record) invalid = 1
+              in_record = 1
+              sources++
+              next
+            }
+            /^end_of_record$/ {
+              if (!in_record) invalid = 1
+              else records++
+              in_record = 0
+              next
+            }
+            /^[[:space:]]*$/ { next }
+            !in_record { invalid = 1 }
+            END {
+              if (invalid || in_record || sources == 0 || records == 0) exit 1
+            }
+          ' lcov.info || {
+            echo "LCOV report lcov.info has no valid, terminated SF: records" >&2
+            exit 1
+          }
 
       - name: Discard the instrumented target tree
         # `cargo llvm-cov` has already written lcov.info, and no job caches a

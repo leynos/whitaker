@@ -1,5 +1,6 @@
 //! Observable label-propagation seams for decomposition advice tests.
 
+use super::adjacency::{AdjacencyError, EdgeInput, validate_edges};
 use crate::decomposition_advice::{
     MethodProfileBuilder, build_feature_vector,
     community::{
@@ -8,16 +9,12 @@ use crate::decomposition_advice::{
     },
 };
 
-use super::adjacency::{AdjacencyError, EdgeInput, validate_edges};
-
 /// Observable label-propagation results for declarative graph input.
 ///
 /// # Examples
 ///
 /// ```rust
-/// use whitaker_common::test_support::decomposition::{
-///     EdgeInput, label_propagation_report,
-/// };
+/// use whitaker_common::test_support::decomposition::{EdgeInput, label_propagation_report};
 ///
 /// let report = label_propagation_report(
 ///     &["gamma", "alpha", "beta"],
@@ -54,13 +51,13 @@ impl LabelPropagationReport {
 
     /// Returns the number of propagation passes performed.
     #[must_use]
-    pub fn iteration_count(&self) -> usize {
+    pub const fn iteration_count(&self) -> usize {
         self.runtime.iteration_count
     }
 
     /// Returns `true` when the graph contains at least one active node.
     #[must_use]
-    pub fn has_active_nodes(&self) -> bool {
+    pub const fn has_active_nodes(&self) -> bool {
         self.has_active_nodes
     }
 

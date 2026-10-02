@@ -2,23 +2,15 @@
 //! `conditional_max_n_branches` lint. These tests ensure curated fixtures execute without
 //! diffs and provide coverage for the fixture discovery helpers.
 
+use std::path::Path;
+
 use camino::Utf8Path;
 use dylint_testing::ui::Test;
-use std::path::Path;
 use whitaker_common::test_support::{prepare_fixture, run_fixtures_with, run_test_runner};
 
 #[test]
 fn ui() {
-    let crate_name = env!("CARGO_PKG_NAME");
-    let directory = "ui";
-    whitaker::testing::ui::run_with_runner(crate_name, directory, |crate_name, dir| {
-        run_fixtures(crate_name, dir)
-    })
-    .unwrap_or_else(|error| {
-        panic!(
-            "UI tests should execute without diffs: RunnerFailure {{ crate_name: \"{crate_name}\", directory: \"{directory}\", message: {error} }}"
-        )
-    });
+    whitaker::testing::ui::run_ui_test(env!("CARGO_PKG_NAME"), "ui", run_fixtures);
 }
 
 fn run_fixtures(crate_name: &str, directory: &Utf8Path) -> Result<(), String> {

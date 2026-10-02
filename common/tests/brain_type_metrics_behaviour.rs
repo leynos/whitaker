@@ -1,12 +1,14 @@
 //! Behaviour-driven coverage for brain type metric collection.
 
+use std::cell::{Cell, RefCell};
+
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
-use std::cell::{Cell, RefCell};
 use whitaker_common::brain_type_metrics::{
     ForeignReferenceSet, MethodMetrics, TypeMetricsBuilder, brain_methods, foreign_reach_count,
     weighted_methods_count,
 };
+use whitaker_test_macros::allow_fixture_expansion_lints;
 
 #[derive(Debug)]
 struct MetricsWorld {
@@ -47,6 +49,7 @@ impl Default for MetricsWorld {
     }
 }
 
+#[allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> MetricsWorld {
     MetricsWorld::default()
@@ -66,7 +69,11 @@ fn record_foreign_ref(world: &MetricsWorld, path: &str, is_from_expansion: bool)
 }
 
 fn assert_brain_count(world: &MetricsWorld, n: usize) {
-    assert_eq!(world.type_metrics_brain_count.get(), Some(n));
+    assert_eq!(
+        world.type_metrics_brain_count.get(),
+        Some(n),
+        "expected {n} brain methods to be recorded"
+    );
 }
 
 // --- Given steps ---

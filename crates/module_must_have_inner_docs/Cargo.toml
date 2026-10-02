@@ -34,6 +34,7 @@ whitaker = { workspace = true, features = ["dylint-driver"], optional = true }
 newt-hype = "0.2"
 
 [dev-dependencies]
+whitaker_test_macros = { workspace = true }
 rstest = { workspace = true }
 rstest-bdd = { workspace = true }
 rstest-bdd-macros = { workspace = true }

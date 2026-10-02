@@ -1,20 +1,21 @@
-//! BDD-style localization tests for no_expect_outside_tests diagnostic
+//! BDD-style localization tests for `no_expect_outside_tests` diagnostic
 //! messages.
 //!
 //! Exercises localization scenarios including locale selection, receiver type
 //! handling, context label generation, and error paths using `rstest-bdd` and a
 //! `FailingLookup` test double.
 
+use std::cell::{Cell, Ref, RefCell};
+
+use rstest::fixture;
+use rstest_bdd_macros::{given, scenario, then, when};
+use whitaker_common::i18n::{BundleLookup, testing::FailingLookup};
+
 use super::{
     I18nError, Localizer, MESSAGE_KEY, NoExpectMessages, ReceiverCategory, ReceiverLabel,
     context_label, fallback_messages, localised_messages,
 };
 use crate::context::ContextSummary;
-use rstest::fixture;
-use rstest_bdd_macros::{given, scenario, then, when};
-use std::cell::{Cell, Ref, RefCell};
-use whitaker_common::i18n::BundleLookup;
-use whitaker_common::i18n::testing::FailingLookup;
 
 fn unquote(value: &str) -> &str {
     value
@@ -25,7 +26,7 @@ fn unquote(value: &str) -> &str {
 
 fn format_receiver(receiver: &str) -> String {
     if receiver.is_empty() || receiver.starts_with('`') {
-        receiver.to_string()
+        receiver.to_owned()
     } else {
         format!("`{receiver}`")
     }
@@ -65,7 +66,7 @@ impl LocalizationWorld {
 
     fn set_function(&self, name: Option<&str>) {
         let mut summary = self.summary.borrow_mut();
-        summary.function_name = name.map(ToString::to_string);
+        summary.function_name = name.map(str::to_owned);
     }
 
     fn record_result(&self, value: Result<NoExpectMessages, I18nError>) {
@@ -91,6 +92,7 @@ impl LocalizationWorld {
     }
 }
 
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> LocalizationWorld {
     LocalizationWorld::default()
@@ -108,8 +110,12 @@ fn given_receiver(world: &LocalizationWorld, receiver: String) {
 
 #[given("the function context is {name}")]
 fn given_function(world: &LocalizationWorld, name: String) {
-    let name = unquote(&name);
-    let value = if name.is_empty() { None } else { Some(name) };
+    let function_name = unquote(&name);
+    let value = if function_name.is_empty() {
+        None
+    } else {
+        Some(function_name)
+    };
     world.set_function(value);
 }
 
@@ -138,7 +144,7 @@ fn given_failure(world: &LocalizationWorld) {
     world.failing.set(true);
 }
 
-#[when("I localise the expect diagnostic")]
+#[when("I localize the expect diagnostic")]
 fn when_localize(world: &LocalizationWorld) {
     let receiver = world.receiver.borrow().clone();
     let summary = world.summary.borrow().clone();
@@ -155,31 +161,31 @@ fn when_localize(world: &LocalizationWorld) {
 
 #[then("the diagnostic mentions {snippet}")]
 fn then_primary(world: &LocalizationWorld, snippet: String) {
-    let snippet = normalize_for_assertion(unquote(&snippet));
+    let expected = normalize_for_assertion(unquote(&snippet));
     let primary = normalize_for_assertion(world.messages().primary());
     assert!(
-        primary.contains(&snippet),
-        "primary message `{primary}` did not contain `{snippet}`"
+        primary.contains(&expected),
+        "primary message `{primary}` did not contain `{expected}`"
     );
 }
 
 #[then("the note references {snippet}")]
 fn then_note(world: &LocalizationWorld, snippet: String) {
-    let snippet = normalize_for_assertion(unquote(&snippet));
+    let expected = normalize_for_assertion(unquote(&snippet));
     let note = normalize_for_assertion(world.messages().note());
     assert!(
-        note.contains(&snippet),
-        "note `{note}` did not contain `{snippet}`"
+        note.contains(&expected),
+        "note `{note}` did not contain `{expected}`"
     );
 }
 
 #[then("the help references {snippet}")]
 fn then_help(world: &LocalizationWorld, snippet: String) {
-    let snippet = normalize_for_assertion(unquote(&snippet));
+    let expected = normalize_for_assertion(unquote(&snippet));
     let help = normalize_for_assertion(world.messages().help());
     assert!(
-        help.contains(&snippet),
-        "help `{help}` did not contain `{snippet}`"
+        help.contains(&expected),
+        "help `{help}` did not contain `{expected}`"
     );
 }
 
@@ -194,10 +200,13 @@ fn then_receiver_type_edge_cases_are_handled(world: &LocalizationWorld) {
 
 #[then("localization fails for {key}")]
 fn then_failure(world: &LocalizationWorld, key: String) {
-    let key = unquote(&key);
+    let expected_key = unquote(&key);
     let error = world.error();
     match &*error {
-        I18nError::MissingMessage { key: missing, .. } => assert_eq!(missing, key),
+        I18nError::MissingMessage { key: missing, .. } => assert_eq!(
+            missing, &expected_key,
+            "localization should fail for the requested key"
+        ),
     }
 }
 
@@ -238,7 +247,7 @@ fn scenario_failure(world: LocalizationWorld) {
 
 #[then("the fallback help mentions {snippet}")]
 fn then_fallback(world: &LocalizationWorld, snippet: String) {
-    let snippet = normalize_for_assertion(unquote(&snippet));
+    let expected = normalize_for_assertion(unquote(&snippet));
     let summary = world.summary.borrow().clone();
     let context = context_label(&summary);
     let receiver = world.receiver.borrow().clone();
@@ -246,8 +255,8 @@ fn then_fallback(world: &LocalizationWorld, snippet: String) {
     let fallback = fallback_messages(&receiver, &context, category);
     let help = normalize_for_assertion(fallback.help());
     assert!(
-        help.contains(&snippet),
-        "fallback help `{help}` did not contain `{snippet}`"
+        help.contains(&expected),
+        "fallback help `{help}` did not contain `{expected}`"
     );
 }
 

@@ -1,16 +1,17 @@
 //! Behaviour-driven coverage for decomposition diagnostic-note rendering.
 
+use std::{cell::RefCell, collections::BTreeMap};
+
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
-use std::cell::RefCell;
-use std::collections::BTreeMap;
-use whitaker_common::decomposition_advice::{
-    DecompositionContext, MethodProfileBuilder, SubjectKind, format_diagnostic_note,
-    suggest_decomposition,
+use whitaker_common::{
+    decomposition_advice::{
+        DecompositionContext, MethodProfileBuilder, SubjectKind, format_diagnostic_note,
+        suggest_decomposition,
+    },
+    test_support::decomposition::{parser_serde_fs_fixture, transport_trait_fixture},
 };
-use whitaker_common::test_support::decomposition::{
-    parser_serde_fs_fixture, transport_trait_fixture,
-};
+use whitaker_test_macros::allow_fixture_expansion_lints;
 
 #[derive(Debug, Clone)]
 struct CsvList(Vec<String>);
@@ -62,12 +63,13 @@ struct DiagnosticNoteWorld {
     rendered_note: RefCell<Option<String>>,
 }
 
+#[allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> DiagnosticNoteWorld {
     DiagnosticNoteWorld::default()
 }
 
-fn create_method_builder(world: &DiagnosticNoteWorld, method_name: &str) {
+fn create_method_builder(world: &DiagnosticNoteWorld, method_name: &str) -> usize {
     let mut next_method_id = world.next_method_id.borrow_mut();
     let method_id = *next_method_id;
     *next_method_id += 1;
@@ -82,37 +84,33 @@ fn create_method_builder(world: &DiagnosticNoteWorld, method_name: &str) {
         .entry(method_name.to_owned())
         .or_default()
         .push(method_id);
+    method_id
+}
+
+/// Returns the identifier of the most recently created builder for
+/// `method_name`, if any.
+fn lookup_method_id(world: &DiagnosticNoteWorld, method_name: &str) -> Option<usize> {
+    world
+        .method_ids_by_name
+        .borrow()
+        .get(method_name)
+        .and_then(|ids| ids.last().copied())
 }
 
 fn with_method_builder(
     world: &DiagnosticNoteWorld,
     method_name: &str,
     update: impl FnOnce(&mut MethodProfileBuilder),
-) {
-    let method_id = world
-        .method_ids_by_name
-        .borrow()
-        .get(method_name)
-        .and_then(|ids| ids.last().copied());
-
-    let method_id = match method_id {
-        Some(method_id) => method_id,
-        None => {
-            create_method_builder(world, method_name);
-            world
-                .method_ids_by_name
-                .borrow()
-                .get(method_name)
-                .and_then(|ids| ids.last().copied())
-                .unwrap_or_else(|| panic!("method id must exist after creation"))
-        }
-    };
+) -> Result<(), String> {
+    let method_id = lookup_method_id(world, method_name)
+        .unwrap_or_else(|| create_method_builder(world, method_name));
 
     let mut methods = world.methods.borrow_mut();
     let builder = methods
         .get_mut(&method_id)
-        .unwrap_or_else(|| panic!("method id {method_id} must exist while applying updates"));
+        .ok_or_else(|| format!("method id {method_id} must exist while applying updates"))?;
     update(builder);
+    Ok(())
 }
 
 fn with_rendered_note(
@@ -181,23 +179,27 @@ fn given_transport_fixture(world: &DiagnosticNoteWorld) {
 }
 
 #[given("method {name} accesses fields {fields}")]
-fn given_fields(world: &DiagnosticNoteWorld, name: String, fields: CsvList) {
+fn given_fields(world: &DiagnosticNoteWorld, name: String, fields: CsvList) -> Result<(), String> {
     let parsed_fields = fields.into_vec();
     with_method_builder(world, &name, |builder| {
         for field in &parsed_fields {
             builder.record_accessed_field(field.as_str());
         }
-    });
+    })
 }
 
 #[given("method {name} uses external domains {domains}")]
-fn given_external_domains(world: &DiagnosticNoteWorld, name: String, domains: CsvList) {
+fn given_external_domains(
+    world: &DiagnosticNoteWorld,
+    name: String,
+    domains: CsvList,
+) -> Result<(), String> {
     let parsed_domains = domains.into_vec();
     with_method_builder(world, &name, |builder| {
         for domain in &parsed_domains {
             builder.record_external_domain(domain.as_str());
         }
-    });
+    })
 }
 
 #[when("the decomposition diagnostic note is rendered")]
@@ -228,24 +230,25 @@ fn then_note_is_present(world: &DiagnosticNoteWorld) -> Result<(), String> {
 
 #[then("there is no note")]
 fn then_there_is_no_note(world: &DiagnosticNoteWorld) -> Result<(), String> {
-    with_rendered_note(world, |rendered_note| match rendered_note {
-        Some(note) => Err(format!("expected no note but found:\n{note}")),
-        None => Ok(()),
+    with_rendered_note(world, |rendered_note| {
+        rendered_note.as_ref().map_or(Ok(()), |note| {
+            Err(format!("expected no note but found:\n{note}"))
+        })
     })
 }
 
 #[then("the note contains line {line}")]
 fn then_note_contains_line(world: &DiagnosticNoteWorld, line: QuotedString) -> Result<(), String> {
-    let line = line.into_inner();
+    let expected_line = line.into_inner();
     with_rendered_note(world, |rendered_note| {
         let note = rendered_note
             .as_ref()
             .ok_or_else(|| String::from("expected a rendered note but found none"))?;
-        if note.lines().any(|candidate| candidate == line) {
+        if note.lines().any(|candidate| candidate == expected_line) {
             Ok(())
         } else {
             Err(format!(
-                "expected note to contain line `{line}` but found:\n{note}"
+                "expected note to contain line `{expected_line}` but found:\n{note}"
             ))
         }
     })
@@ -256,14 +259,14 @@ fn then_note_does_not_contain(
     world: &DiagnosticNoteWorld,
     fragment: QuotedString,
 ) -> Result<(), String> {
-    let fragment = fragment.into_inner();
+    let unexpected_fragment = fragment.into_inner();
     with_rendered_note(world, |rendered_note| {
         let note = rendered_note
             .as_ref()
             .ok_or_else(|| String::from("expected a rendered note but found none"))?;
-        if note.contains(&fragment) {
+        if note.contains(&unexpected_fragment) {
             Err(format!(
-                "expected note not to contain `{fragment}` but found:\n{note}"
+                "expected note not to contain `{unexpected_fragment}` but found:\n{note}"
             ))
         } else {
             Ok(())

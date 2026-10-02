@@ -18,7 +18,7 @@
 use std::process::Command;
 
 use anyhow::Context as _;
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use serde_json::Value;
 use tempfile::TempDir;
@@ -51,44 +51,49 @@ fn crate_builds_without_dylint_driver_feature() -> anyhow::Result<()> {
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        output.status.success(),
-        "`cargo check --no-default-features --lib` for `{CRATE}` failed \
-         (it must compile without the `dylint-driver` feature now that the \
-         no-driver stub is gone):\n{stderr}"
-    );
+    if !output.status.success() {
+        anyhow::bail!(
+            "`cargo check --no-default-features --lib` for `{CRATE}` failed (it must compile \
+             without the `dylint-driver` feature now that the no-driver stub is gone):\n{stderr}"
+        );
+    }
 
     let diagnostics = stdout
         .lines()
         .filter_map(|line| serde_json::from_str::<Value>(line).ok())
         .filter(|message| message["reason"] == "compiler-message")
         .collect::<Vec<_>>();
-    assert!(
-        diagnostics.is_empty(),
-        "`cargo check --no-default-features --lib` for `{CRATE}` emitted \
-         compiler diagnostics under `-D warnings`: {diagnostics:#?}"
-    );
+    if !diagnostics.is_empty() {
+        anyhow::bail!(
+            "`cargo check --no-default-features --lib` for `{CRATE}` emitted compiler diagnostics \
+             under `-D warnings`: {diagnostics:#?}"
+        );
+    }
 
     Ok(())
 }
 
 /// Returns the workspace root containing this crate's manifest.
 fn workspace_root() -> anyhow::Result<Utf8PathBuf> {
-    let mut candidate = Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let manifest_dir = Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let mut candidate = manifest_dir.as_path();
     loop {
-        if candidate.join("Cargo.toml").is_file() {
-            let directory = Dir::open_ambient_dir(&candidate, ambient_authority())
-                .context("failed to open candidate workspace directory")?;
-            let workspace = directory
-                .read_to_string("Cargo.toml")
-                .context("failed to read candidate workspace Cargo.toml")?;
-            if workspace.contains("[workspace]") {
-                return Ok(candidate);
-            }
+        if is_workspace_root(candidate) {
+            return Ok(candidate.to_path_buf());
         }
         candidate = candidate
             .parent()
-            .context("workspace root not found above CARGO_MANIFEST_DIR")?
-            .to_owned();
+            .context("workspace root not found above CARGO_MANIFEST_DIR")?;
     }
+}
+
+/// Returns whether `candidate` contains a workspace manifest.
+fn is_workspace_root(candidate: &Utf8Path) -> bool {
+    let Ok(directory) = Dir::open_ambient_dir(candidate, ambient_authority()) else {
+        return false;
+    };
+    let Ok(manifest) = directory.read_to_string("Cargo.toml") else {
+        return false;
+    };
+    manifest.contains("[workspace]")
 }

@@ -13,7 +13,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 mod toolchain;
 
 use self::toolchain::{CrateName, ensure_toolchain_library};
-use whitaker_common::test_support::env_test_guard;
+use whitaker_common::test_support::{EnvTestGuard, env_test_guard};
 
 /// Errors produced when preparing or executing Dylint UI tests.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -174,6 +174,35 @@ pub fn run_with_runner(
     }
 }
 
+/// Runs a UI test and reports runner failures using the standard panic format.
+///
+/// Use this at a UI-test entry point that only needs the usual failure
+/// behaviour. Call [`run_with_runner`] instead when the caller must handle a
+/// [`HarnessError`] itself.
+///
+/// # Panics
+///
+/// Panics when [`run_with_runner`] returns a harness or runner error. The
+/// panic preserves crate and UI-directory context while using
+/// [`HarnessError`]'s display implementation for the precise error details.
+///
+/// # Examples
+///
+/// ```no_run
+/// use whitaker::testing::ui::run_ui_test;
+///
+/// run_ui_test("example_lint", "ui", |_, _| Ok(()));
+/// ```
+pub fn run_ui_test(
+    crate_name: &str,
+    ui_directory: impl Into<Utf8PathBuf>,
+    runner: impl Fn(&str, &Utf8Path) -> Result<(), String>,
+) {
+    let directory = ui_directory.into();
+    run_with_runner(crate_name, directory.clone(), runner).unwrap_or_else(|error| {
+        panic!("UI tests should execute without diffs for {crate_name} in {directory}: {error}")
+    });
+}
 /// Serializes environment mutations required by `run_with_runner`.
 ///
 /// `RUSTC_WRAPPER` must be cleared on every platform when set (for example to
@@ -187,11 +216,11 @@ pub fn run_with_runner(
 /// - `VCPKG_ROOT`: must be set to `C:\vcpkg` when that directory exists and the
 ///   variable is otherwise absent, so downstream `cargo` invocations resolve vcpkg.
 ///
-/// Each mutation and restoration step acquires `env_test_guard()` only for the
-/// environment write itself. The guard deliberately does not hold that mutex
-/// across the UI runner callback, because runner closures can perform their
-/// own environment-guarded setup.
+/// The guard is retained for the complete runner callback and restoration
+/// path. It is reentrant, so runner closures may acquire [`env_test_guard`]
+/// when they need further scoped environment setup.
 struct RunnerEnvGuard {
+    _env_guard: EnvTestGuard,
     #[cfg(windows)]
     vcpkg_root_was_absent: bool,
     rustc_wrapper_previous: Option<std::ffi::OsString>,
@@ -199,9 +228,7 @@ struct RunnerEnvGuard {
 
 impl Drop for RunnerEnvGuard {
     fn drop(&mut self) {
-        let _env_guard = env_test_guard();
-
-        // SAFETY: `env_test_guard` serializes the restoration writes below.
+        // SAFETY: the retained `env_test_guard` serializes these restoration writes.
         #[cfg(windows)]
         {
             if self.vcpkg_root_was_absent {
@@ -218,13 +245,17 @@ impl Drop for RunnerEnvGuard {
     }
 }
 
+/// Prepares runner-specific environment overrides when the current process needs them.
+///
+/// The returned guard holds the shared protocol until it restores every value;
+/// `None` means no mutation was necessary.
 fn runner_env_guard() -> Option<RunnerEnvGuard> {
     #[cfg(windows)]
     let vcpkg_candidate = Utf8Path::new(r"C:\vcpkg");
     #[cfg(windows)]
     let vcpkg_applicable = vcpkg_candidate.is_dir();
 
-    let _env_guard = env_test_guard();
+    let env_guard = env_test_guard();
     let has_rustc_wrapper = env::var_os("RUSTC_WRAPPER").is_some();
 
     #[cfg(windows)]
@@ -254,6 +285,7 @@ fn runner_env_guard() -> Option<RunnerEnvGuard> {
             env::remove_var("RUSTC_WRAPPER");
         }
     });
+
     #[cfg(windows)]
     if !vcpkg_root_was_absent && rustc_wrapper_previous.is_none() {
         // Nothing was mutated; release the guard early.
@@ -261,6 +293,7 @@ fn runner_env_guard() -> Option<RunnerEnvGuard> {
     }
 
     Some(RunnerEnvGuard {
+        _env_guard: env_guard,
         #[cfg(windows)]
         vcpkg_root_was_absent,
         rustc_wrapper_previous,
