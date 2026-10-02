@@ -361,7 +361,7 @@ jobs:
         run: make test-sccache-health
 
       - name: Install Nixie
-        uses: leynos/shared-actions/.github/actions/install-nixie@7cb894fe62c40951cccf33819548095e64a1291e
+        uses: leynos/shared-actions/.github/actions/install-nixie@ff1dd759dfffc0db3459e30e833f52437ee62b57
         with:
           nixie-version: '1.1.0'
           merman-version: '0.7.0'
