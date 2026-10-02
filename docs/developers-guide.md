@@ -716,13 +716,17 @@ exports only `SCCACHE_PATH` and does not set `RUSTC_WRAPPER`, so before a
 wrapper was exported no Cargo invocation in `coverage-main.yml` was wrapped at
 all.
 
-A fallback must not turn red later. A server that never started has no
-statistics, and `sccache --show-stats` would try to start it again, so every
-step that reads them (the record and upload steps in every job, and the health
-check) carries `steps.setup-rust.outputs.sccache-status != 'fallback'` in its
-condition. A fallback run therefore ends green, with the warning and the
-summary line as its evidence. `sccache_health_contract_test.py` holds that
-guard on each step and refuses each one that omits it.
+A fallback must not publish empty evidence. A server that never started has no
+statistics; `sccache --show-stats` prints empty defaults for it rather than
+starting one, which would read as a broken integration. Every step that reads
+them (the record and upload steps in every job, and the health check) therefore
+carries `steps.setup-rust.outputs.sccache-status != 'fallback'` as one conjunct
+of its condition. A fallback run ends green, with the warning and the summary
+line as its evidence. `sccache_health_contract_test.py` holds the guard on the
+suite lanes' steps and their order; `sccache_fallback_guard_test.py` finds
+every step that records, uploads or health-checks the statistics by the command
+it runs, in any job, and refuses one whose condition omits, inverts, negates or
+`||`-composes the guard.
 
 On the three lanes that use the `gha` backend, `coverage-check`, `linux-full`
 and `coverage-upload`, the statistics are uploaded as a `sccache-stats-<job>`

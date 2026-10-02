@@ -19,6 +19,11 @@ from __future__ import annotations
 import typing as typ
 
 import pytest
+from sccache_steps import (
+    NOT_FALLBACK,
+    guards_against_fallback,
+    normalized_condition,
+)
 from shell_commands import runs_unconditionally
 from ubicloud_workflow_support import SUITE_JOBS, job_steps, load_job
 
@@ -29,23 +34,11 @@ HEALTH_COMMAND: typ.Final[str] = (
 RECORD_SCRIPT: typ.Final[str] = "scripts/record-sccache-effectiveness.sh"
 STATISTICS_FILE: typ.Final[str] = "sccache-stats.json"
 UPLOAD_ACTION: typ.Final[str] = "actions/upload-artifact"
-#: The skip every sccache evidence step carries. `setup-rust` reports `fallback`
-#: when sccache's server would not start and the job compiles uncached
-#: (shared-actions #546); a dead server has no statistics, and asking for them
-#: would start it again, so the steps that read them stand down rather than turn
-#: a documented fail-open into a red job.
-NOT_FALLBACK: typ.Final[str] = "steps.setup-rust.outputs.sccache-status!='fallback'"
-
-
-def _condition(step: dict[str, typ.Any]) -> str:
-    """Return a step's `if` with whitespace and expression braces removed."""
-    text = str(step.get("if", "")).replace(" ", "")
-    return text.removeprefix("${{").removesuffix("}}")
 
 
 def _skips_a_fallback(step: dict[str, typ.Any]) -> bool:
-    """Return whether a step's whole condition ends in the fallback skip."""
-    return _condition(step).endswith(NOT_FALLBACK)
+    """Return whether a step's condition is a conjunction holding the fallback skip."""
+    return guards_against_fallback(normalized_condition(step))
 
 
 def _index(
@@ -67,13 +60,13 @@ def _uploads_the_statistics(step: dict[str, typ.Any]) -> bool:
         str(step.get("uses", "")).split("@", 1)[0] == UPLOAD_ACTION
         and str(inputs.get("path", "")).strip() == STATISTICS_FILE
         and inputs.get("if-no-files-found") == "error"
-        and _condition(step) == f"always()&&{NOT_FALLBACK}"
+        and normalized_condition(step) == f"always()&&{NOT_FALLBACK}"
     )
 
 
 def _checks_health(step: dict[str, typ.Any]) -> bool:
     """Return whether a step runs the health check, and only it, past a fallback."""
-    return _condition(step) == NOT_FALLBACK and runs_unconditionally(
+    return normalized_condition(step) == NOT_FALLBACK and runs_unconditionally(
         str(step.get("run", "")), HEALTH_COMMAND
     )
 
@@ -174,6 +167,23 @@ _HEALTH: typ.Final = {"if": _GUARD, "run": f"{HEALTH_COMMAND} {STATISTICS_FILE}"
             [_RECORD | {"if": "always()"}, _UPLOAD, _HEALTH],
             "records",
             id="a-record-that-ignores-a-fallback",
+        ),
+        pytest.param(
+            [_RECORD | {"if": f"always() || {_GUARD}"}, _UPLOAD, _HEALTH],
+            "records",
+            id="a-record-whose-guard-is-one-arm-of-a-disjunction",
+        ),
+        pytest.param(
+            [
+                _RECORD
+                | {
+                    "if": "always() && steps.setup-rust.outputs.sccache-status == 'fallback'"
+                },
+                _UPLOAD,
+                _HEALTH,
+            ],
+            "records",
+            id="a-record-with-an-inverted-guard",
         ),
         pytest.param(
             [_RECORD, _UPLOAD | {"if": "always()"}, _HEALTH],
