@@ -705,16 +705,26 @@ Each build lane starts from zeroed `sccache` counters and then runs
 `scripts/record-sccache-effectiveness.sh`, which appends the human-readable
 statistics to the job summary, retains the JSON statistics, and warns when
 `sccache` reports zero compile requests. On the Linux lanes the zeroing is done
-by the shared action's server start, which reports
-`metric setup-rust.sccache.server=started` or `started-stats-not-zeroed` so a
-failed zero is visible rather than inferred; `windows-compat` still zeroes
-explicitly. A run with no compile requests paid the compiler cache's setup cost
-while `RUSTC_WRAPPER` never reached a single `rustc` invocation, so treat zero
-compile requests as a failed cache integration, not as a clean zero-miss
-result. That failure mode is not hypothetical: `mozilla-actions/sccache-action`
-exports only `SCCACHE_PATH` and does not set `RUSTC_WRAPPER`, so before a
-wrapper was exported no Cargo invocation in `coverage-main.yml` was wrapped at
-all.
+by the shared action's server start, which reports one bounded line,
+`metric setup-rust.sccache.server=<state>`, over `started`,
+`started-stats-not-zeroed` (a failed zero is visible rather than inferred),
+`start-failed` (the fallback), `caller-set` and `missing-sccache-path`;
+`windows-compat` still zeroes explicitly. A run with no compile requests paid
+the compiler cache's setup cost while `RUSTC_WRAPPER` never reached a single
+`rustc` invocation, so treat zero compile requests as a failed cache
+integration, not as a clean zero-miss result. That failure mode is not
+hypothetical: `mozilla-actions/sccache-action` exports only `SCCACHE_PATH` and
+does not set `RUSTC_WRAPPER`, so before a wrapper was exported no Cargo
+invocation in `coverage-main.yml` was wrapped at all.
+
+The fallback is also countable. A start that fails writes
+`metric setup-rust.sccache.server=start-failed` to the job log, a closed value
+set with no run identifier or path, so the frequency over a period is a count
+of that line per job, and the estate's daily `sccache-fallbacks.py` detector
+counts the `sccache-fallback` annotation. The warning annotation, the run-page
+line and the `sccache-status` output stay as the per-run signals. This
+repository adds no metric of its own, because the pinned action already emits
+the bounded one.
 
 A fallback must not publish empty evidence. A server that never started has no
 statistics; `sccache --show-stats` prints empty defaults for it rather than

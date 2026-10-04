@@ -32,10 +32,13 @@ def _reads_the_statistics(step: dict[str, typ.Any]) -> bool:
     """Return whether a step records, uploads or health-checks the statistics."""
     script = str(step.get("run", ""))
     inputs = step.get("with") if isinstance(step.get("with"), dict) else {}
+    # `actions/upload-artifact` takes several newline-separated paths, so the
+    # statistics file may be one line of a multi-line input.
+    paths = str(inputs.get("path", "")).splitlines()
     return (
         RECORD_SCRIPT in script
         or HEALTH_SCRIPT in script
-        or str(inputs.get("path", "")).strip() == STATISTICS_FILE
+        or any(path.strip() == STATISTICS_FILE for path in paths)
     )
 
 
@@ -115,3 +118,31 @@ def test_the_guard_predicate_accepts_only_a_conjunction(
 ) -> None:
     """The narrow half: an omitted, inverted, negated or `||` guard is refused."""
     assert guards_against_fallback(condition) is expected
+
+
+@pytest.mark.parametrize(
+    ("step", "expected"),
+    [
+        pytest.param({"with": {"path": STATISTICS_FILE}}, True, id="scalar-path"),
+        pytest.param(
+            {"with": {"path": f"other.txt\n  {STATISTICS_FILE}\n"}},
+            True,
+            id="statistics-file-among-several-paths",
+        ),
+        pytest.param(
+            {"with": {"path": "other.txt\nmore.txt"}}, False, id="other-paths-only"
+        ),
+        pytest.param({"with": {"path": f"x/{STATISTICS_FILE}"}}, False, id="subpath"),
+        pytest.param({"run": f"bash {RECORD_SCRIPT}"}, True, id="record-script"),
+        pytest.param({}, False, id="nothing"),
+    ],
+)
+def test_a_statistics_step_is_recognized_by_what_it_runs_or_uploads(
+    step: dict[str, typ.Any], *, expected: bool
+) -> None:
+    """The recognizer reads each line of a multi-line upload path.
+
+    A single-line comparison would miss the statistics file listed beside
+    another artefact, leaving that upload outside the rule.
+    """
+    assert _reads_the_statistics(step) is expected, f"{step!r} must be {expected}"
