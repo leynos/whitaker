@@ -12,11 +12,13 @@
 //! These tests are marked `#[ignore]` by default because they require external
 //! dependencies. Run with `--ignored` to execute.
 
-use std::env;
-use std::io::Cursor;
-use std::path::{Path, PathBuf};
-use std::process::Command;
-use std::sync::OnceLock;
+use std::{
+    env,
+    io::Cursor,
+    path::{Path, PathBuf},
+    process::Command,
+    sync::OnceLock,
+};
 
 use anyhow::Context as _;
 use cargo_metadata::{Message, Metadata, MetadataCommand};
@@ -24,6 +26,8 @@ use insta::assert_json_snapshot;
 use rstest::rstest;
 use serial_test::serial;
 
+#[path = "integration_exclusion/assertions.rs"]
+mod assertions;
 mod test_support;
 
 use test_support::{FixtureKind, create_fixture_project};
@@ -124,8 +128,8 @@ fn find_cdylib_in_artefacts(
     stdout: &[u8],
     package_id: &cargo_metadata::PackageId,
 ) -> anyhow::Result<PathBuf> {
-    for message in Message::parse_stream(Cursor::new(stdout)) {
-        let message = message.context("failed to parse cargo build JSON output")?;
+    for parsed in Message::parse_stream(Cursor::new(stdout)) {
+        let message = parsed.context("failed to parse cargo build JSON output")?;
         let Message::CompilerArtifact(artefact) = message else {
             continue;
         };
@@ -198,7 +202,7 @@ fn diagnostic_count(output: &[u8]) -> Result<usize, anyhow::Error> {
     Ok(messages
         .into_iter()
         .filter_map(|message| match message {
-            Message::CompilerMessage(message) => Some(message.message),
+            Message::CompilerMessage(compiler_message) => Some(compiler_message.message),
             _ => None,
         })
         .filter(|diagnostic| {
@@ -219,12 +223,12 @@ fn redact_path_prefix(value: serde_json::Value, prefix: &str) -> serde_json::Val
         }
         serde_json::Value::Array(arr) => serde_json::Value::Array(
             arr.into_iter()
-                .map(|value| redact_path_prefix(value, prefix))
+                .map(|element| redact_path_prefix(element, prefix))
                 .collect(),
         ),
         serde_json::Value::Object(map) => serde_json::Value::Object(
             map.into_iter()
-                .map(|(key, value)| (key, redact_path_prefix(value, prefix)))
+                .map(|(key, entry)| (key, redact_path_prefix(entry, prefix)))
                 .collect(),
         ),
         other => other,
@@ -234,7 +238,8 @@ fn redact_path_prefix(value: serde_json::Value, prefix: &str) -> serde_json::Val
 #[expect(
     clippy::useless_asref,
     clippy::redundant_closure,
-    reason = "anyhow::Error is not Clone, so .as_ref().map(Clone::clone) is necessary to convert &Result<PathBuf, Error> into Result<PathBuf, Error>"
+    reason = "anyhow::Error is not Clone, so .as_ref().map(Clone::clone) is necessary to convert \
+              &Result<PathBuf, Error> into Result<PathBuf, Error>"
 )]
 fn lint_library_path() -> anyhow::Result<PathBuf> {
     static LINT_LIBRARY_PATH: OnceLock<anyhow::Result<PathBuf>> = OnceLock::new();
@@ -246,6 +251,7 @@ fn lint_library_path() -> anyhow::Result<PathBuf> {
         .map_err(|e| anyhow::anyhow!("{e:#}"))
 }
 
+#[derive(Clone, Copy)]
 struct Expectation {
     should_emit_diagnostics: bool,
     should_succeed: bool,
@@ -264,7 +270,12 @@ fn run_fixture_exclusion_test(
     let lint_library_path = lint_library_path().context("failed to build lint library")?;
     let fixture = create_fixture_project(crate_name, kind, is_excluded)
         .with_context(|| format!("failed to create {} fixture project", kind.label()))?;
-    assert_fixture_behaviour(fixture.root(), &lint_library_path, crate_name, expectation)
+    assertions::assert_fixture_behaviour(
+        fixture.root(),
+        &lint_library_path,
+        crate_name,
+        expectation,
+    )
 }
 
 #[rstest]
@@ -329,111 +340,4 @@ fn exclusion_paths_behaviour_test(
         expected,
         FixtureKind::PathExclusion,
     )
-}
-
-/// Runs `cargo dylint` against the fixture and counts diagnostics.
-fn evaluate_fixture(
-    fixture_dir: &Path,
-    lint_library_path: &Path,
-    crate_name: &str,
-) -> anyhow::Result<(bool, usize)> {
-    let result = run_cargo_dylint(fixture_dir, lint_library_path)?;
-    let count = diagnostic_count(&result.stdout).with_context(|| {
-        format!(
-            "crate `{crate_name}` produced malformed cargo output\nstderr:\n{}",
-            result.stderr
-        )
-    })?;
-    Ok((result.is_success, count))
-}
-
-fn assert_fixture_behaviour(
-    fixture_dir: &Path,
-    lint_library_path: &Path,
-    crate_name: &str,
-    expectation: Expectation,
-) -> anyhow::Result<()> {
-    let (is_success, count) = evaluate_fixture(fixture_dir, lint_library_path, crate_name)?;
-
-    assert!(
-        is_success == expectation.should_succeed,
-        "crate `{crate_name}` should return success={}",
-        expectation.should_succeed
-    );
-
-    if expectation.should_emit_diagnostics {
-        assert!(
-            count > 0,
-            "crate `{crate_name}` should emit `no_std_fs_operations` diagnostics"
-        );
-    } else {
-        assert!(
-            count == 0,
-            "crate `{crate_name}` should emit zero `no_std_fs_operations` diagnostics"
-        );
-    }
-
-    Ok(())
-}
-
-/// Snapshot test: verifies the structured JSON diagnostic output emitted by
-/// `cargo dylint` for a non-excluded crate.
-///
-/// Non-deterministic fields (absolute fixture paths) are redacted to
-/// `[FIXTURE_ROOT]` before the snapshot is taken.
-#[test]
-#[ignore = "requires cargo-dylint and built lint library"]
-#[serial]
-fn non_excluded_crate_diagnostics_match_snapshot() -> anyhow::Result<()> {
-    let lint_library_path = lint_library_path().context("failed to build lint library")?;
-    let fixture = create_fixture_project(
-        "non_excluded_crate_snap",
-        FixtureKind::CrateExclusion,
-        false,
-    )
-    .context("failed to create fixture project")?;
-
-    let result = run_cargo_dylint(fixture.root(), &lint_library_path)
-        .context("failed to run cargo dylint")?;
-
-    let messages = Message::parse_stream(Cursor::new(&result.stdout))
-        .collect::<Result<Vec<_>, _>>()
-        .with_context(|| {
-            format!(
-                "non_excluded_crate_diagnostics_match_snapshot produced malformed cargo output\nstderr:\n{}",
-                result.stderr
-            )
-        })?;
-
-    let diagnostics: Vec<serde_json::Value> = messages
-        .into_iter()
-        .filter_map(|message| match message {
-            Message::CompilerMessage(message)
-                if message
-                    .message
-                    .code
-                    .as_ref()
-                    .is_some_and(|code| code.code == LINT_CRATE_NAME) =>
-            {
-                Some(
-                    serde_json::to_value(message.message)
-                        .context("failed to serialise diagnostic for snapshot"),
-                )
-            }
-            _ => None,
-        })
-        .collect::<anyhow::Result<Vec<_>>>()?;
-
-    let prefix = fixture
-        .root()
-        .to_str()
-        .context("fixture root should be valid UTF-8")?;
-
-    let redacted: Vec<serde_json::Value> = diagnostics
-        .into_iter()
-        .map(|value| redact_path_prefix(value, prefix))
-        .collect();
-
-    assert_json_snapshot!("non_excluded_crate_diagnostics", redacted);
-    Ok(())
 }

@@ -6,20 +6,29 @@
 //!
 //! ## Available helpers
 //!
-//! - [`fixtures`]: Copies UI fixtures (source files, `.stderr` expectations and
-//!   support directories) into isolated workspaces for dylint UI harnesses.
-//! - [`decomposition`]: Reusable decomposition-advice fixtures for unit and
-//!   behaviour tests.
-//! - [`env_test_guard`]: Serializes tests that temporarily mutate process-wide
-//!   environment variables.
-//! - [`ui`]: Discovers fixtures, prepares isolated workspaces, and runs dylint
-//!   UI tests with consistent panic handling.
-//! - [`LocaleOverride`]: Temporarily mutates `DYLINT_LOCALE` so locale-sensitive
-//!   tests can execute without leaking global state between cases.
+//! - [`fixtures`]: Copies UI fixtures (source files, `.stderr` expectations and support
+//!   directories) into isolated workspaces for dylint UI harnesses.
+//! - [`decomposition`]: Reusable decomposition-advice fixtures for unit and behaviour tests.
+//! - [`env_test_guard`]: Serializes tests that temporarily mutate process-wide environment
+//!   variables.
+//! - [`ui`]: Discovers fixtures, prepares isolated workspaces, and runs dylint UI tests with
+//!   consistent panic handling.
+//! - [`EnvVarGuard`]: Sets or removes one environment variable and restores
+//!   its prior state on drop.
+//! - [`with_locale`], [`with_env_var`], and [`with_env_var_removed`]: Scope temporary environment
+//!   mutations (such as `DYLINT_LOCALE` overrides) to a callback so tests cannot leak global state
+//!   between cases.
 
 pub mod decomposition;
 pub mod fixtures;
 pub mod ui;
+
+use std::{
+    ffi::{OsStr, OsString},
+    sync::OnceLock,
+};
+
+use parking_lot::{ReentrantMutex, ReentrantMutexGuard};
 
 pub use fixtures::{copy_directory, copy_fixture};
 pub use ui::{
@@ -27,33 +36,43 @@ pub use ui::{
     read_fixture_config, resolve_fixture_config, run_fixtures_with, run_test_runner,
 };
 
-use std::ffi::{OsStr, OsString};
-use std::sync::{Mutex, MutexGuard, OnceLock};
+/// Held while serializing process-wide environment mutations in tests.
+///
+/// This alias keeps callers coupled to the shared test-support contract rather
+/// than its lock implementation.
+pub type EnvTestGuard = ReentrantMutexGuard<'static, ()>;
 
 /// Serializes tests that mutate process-wide environment variables.
 ///
-/// Use this guard around helpers such as `temp_env::with_var` or
-/// `temp_env::with_vars_unset` when the test would otherwise race with other
-/// cases changing the same global process state.
-pub fn env_test_guard() -> MutexGuard<'static, ()> {
-    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-    LOCK.get_or_init(|| Mutex::new(()))
-        .lock()
-        .unwrap_or_else(|error| panic!("expected environment test lock: {error}"))
+/// Use this guard around environment mutations when the test would otherwise
+/// race with other cases changing the same global process state.
+///
+/// The lock is reentrant so a callback that already holds the shared
+/// serialization token can safely call another shared environment helper.
+/// This permits scoped overrides to wrap UI runners, which guard their own
+/// setup and restoration. The guarded value is `()`, so no mutable state can
+/// be accessed through the guard.
+pub fn env_test_guard() -> EnvTestGuard {
+    static LOCK: OnceLock<ReentrantMutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| ReentrantMutex::new(())).lock()
 }
 
 /// Guard that sets one environment variable and restores its prior state.
 ///
-/// The guard acquires [`env_test_guard`] only while mutating the process
-/// environment during construction and drop. It deliberately does not hold the
-/// mutex for the full guard lifetime, so callers can execute callbacks that
-/// perform their own guarded environment setup without deadlocking. Use this
-/// as the shared environment-mutation helper for tests that need temporary
-/// global environment changes with `env_test_guard`-serialized setup and
-/// teardown semantics.
+/// The guard retains [`env_test_guard`] from construction until after it
+/// restores the prior value in [`Drop`]. This prevents another thread from
+/// observing or restoring an interleaved environment value. The shared lock is
+/// reentrant, so callers can still nest helpers that acquire it on the same
+/// thread.
 pub struct EnvVarGuard {
-    key: &'static str,
+    _env_guard: EnvTestGuard,
+    key: String,
     previous: Option<OsString>,
+}
+
+enum EnvVarMutation<'a> {
+    Set(&'a OsStr),
+    Remove,
 }
 
 impl EnvVarGuard {
@@ -73,13 +92,38 @@ impl EnvVarGuard {
     /// ```
     #[must_use]
     pub fn set(key: &'static str, value: impl AsRef<OsStr>) -> Self {
-        let _env_guard = env_test_guard();
+        Self::set_scoped(key, value)
+    }
+
+    /// Sets a callback-supplied key while retaining the shared guard.
+    fn set_scoped(key: &str, value: impl AsRef<OsStr>) -> Self {
+        Self::mutate_scoped(key, EnvVarMutation::Set(value.as_ref()))
+    }
+
+    /// Removes a callback-supplied key while retaining the shared guard.
+    fn remove_scoped(key: &str) -> Self {
+        Self::mutate_scoped(key, EnvVarMutation::Remove)
+    }
+
+    /// Applies `mutation` while retaining the shared guard until restoration.
+    ///
+    /// Keeping this guard in the returned value serializes construction, use,
+    /// and [`Drop`] as one process-environment transaction.
+    fn mutate_scoped(key: &str, mutation: EnvVarMutation<'_>) -> Self {
+        let env_guard = env_test_guard();
         let previous = std::env::var_os(key);
         // SAFETY: `env_test_guard` serializes this environment mutation.
         unsafe {
-            std::env::set_var(key, value);
+            match mutation {
+                EnvVarMutation::Set(value) => std::env::set_var(key, value),
+                EnvVarMutation::Remove => std::env::remove_var(key),
+            }
         }
-        Self { key, previous }
+        Self {
+            _env_guard: env_guard,
+            key: key.to_owned(),
+            previous,
+        }
     }
 
     /// Removes `key`, returning a guard that restores the previous value when
@@ -95,129 +139,100 @@ impl EnvVarGuard {
     /// ```
     #[must_use]
     pub fn remove(key: &'static str) -> Self {
-        let _env_guard = env_test_guard();
-        let previous = std::env::var_os(key);
-        // SAFETY: `env_test_guard` serializes this environment mutation.
-        unsafe {
-            std::env::remove_var(key);
-        }
-        Self { key, previous }
+        Self::remove_scoped(key)
     }
 }
 
 impl Drop for EnvVarGuard {
     fn drop(&mut self) {
-        let _env_guard = env_test_guard();
         match &self.previous {
             Some(previous) => {
-                // SAFETY: `env_test_guard` serializes this environment mutation.
+                // SAFETY: the retained `env_test_guard` serializes this restoration.
                 unsafe {
-                    std::env::set_var(self.key, previous);
+                    std::env::set_var(&self.key, previous);
                 }
             }
             None => {
-                // SAFETY: `env_test_guard` serializes this environment mutation.
+                // SAFETY: the retained `env_test_guard` serializes this restoration.
                 unsafe {
-                    std::env::remove_var(self.key);
+                    std::env::remove_var(&self.key);
                 }
             }
         }
     }
 }
-/// Guard that overrides `DYLINT_LOCALE` for the lifetime of the instance.
+
+/// Runs `callback` with one environment variable temporarily set.
 ///
-/// The guard captures any existing value and restores it when dropped. The
-/// mutation itself must be executed under a serialized test harness (for
-/// example via the `serial_test::serial` attribute) to ensure the unsafe
-/// environment access remains race-free.
+/// The mutation is scoped to the callback and the prior value is restored
+/// afterwards, even on panic. The callback holds [`env_test_guard`], so its
+/// mutation and restoration cannot interleave with [`EnvVarGuard`] or manually
+/// guarded environment mutations.
 ///
 /// # Examples
 ///
-/// ```ignore
-/// use whitaker_common::test_support::LocaleOverride;
-/// use serial_test::serial;
+/// ```rust
+/// use whitaker_common::test_support::with_env_var;
 ///
-/// #[test]
-/// #[serial]
-/// fn ui_runs_in_welsh_locale() {
-///     let _guard = LocaleOverride::set("cy");
-///     // Execute lint UI harness here.
-/// }
+/// with_env_var("WHITAKER_TEST_ENV_VAR", "enabled", || {
+///     assert_eq!(
+///         std::env::var("WHITAKER_TEST_ENV_VAR").expect("test env var should be set"),
+///         "enabled",
+///     );
+/// });
 /// ```
-pub struct LocaleOverride {
-    previous: Option<OsString>,
+pub fn with_env_var<R>(key: &str, value: impl AsRef<OsStr>, callback: impl FnOnce() -> R) -> R {
+    let _env_guard = env_test_guard();
+    let _variable_guard = EnvVarGuard::set_scoped(key, value);
+    callback()
 }
 
-impl LocaleOverride {
-    /// Sets `DYLINT_LOCALE` to `locale`, returning a guard that will restore
-    /// the prior value (if any) when dropped.
-    pub fn set(locale: &str) -> Self {
-        let previous = std::env::var_os("DYLINT_LOCALE");
-        // SAFETY: Callers must serialize the surrounding test using a
-        // synchronization primitive such as the `serial_test::serial`
-        // attribute. The guard is thread-local and dropped before another
-        // serialized test begins, so no two threads mutate the environment
-        // concurrently.
-        unsafe {
-            std::env::set_var("DYLINT_LOCALE", locale);
-        }
-        Self { previous }
-    }
+/// Runs `callback` with one environment variable temporarily removed.
+///
+/// The prior value (if any) is restored after the callback completes or
+/// panics. The callback holds [`env_test_guard`] so its mutation and
+/// restoration cannot interleave with other shared environment helpers.
+///
+/// # Examples
+///
+/// ```rust
+/// use whitaker_common::test_support::with_env_var_removed;
+///
+/// with_env_var_removed("WHITAKER_REMOVED_TEST_ENV_VAR", || {
+///     assert!(std::env::var_os("WHITAKER_REMOVED_TEST_ENV_VAR").is_none());
+/// });
+/// ```
+pub fn with_env_var_removed<R>(key: &str, callback: impl FnOnce() -> R) -> R {
+    let _env_guard = env_test_guard();
+    let _variable_guard = EnvVarGuard::remove_scoped(key);
+    callback()
+}
 
-    /// Removes `DYLINT_LOCALE`, returning a guard that reinstates the prior
-    /// value (if any) when dropped.
-    ///
-    /// # Examples
-    ///
-    /// ```ignore
-    /// use whitaker_common::test_support::LocaleOverride;
-    /// use serial_test::serial;
-    /// use std::ffi::OsString;
-    ///
-    /// #[test]
-    /// #[serial]
-    /// fn clears_then_restores_locale() {
-    ///     unsafe {
-    ///         std::env::set_var("DYLINT_LOCALE", "cy");
-    ///     }
-    ///     {
-    ///         let _guard = LocaleOverride::clear();
-    ///         assert!(std::env::var_os("DYLINT_LOCALE").is_none());
-    ///     }
-    ///     assert_eq!(
-    ///         std::env::var_os("DYLINT_LOCALE"),
-    ///         Some(OsString::from("cy"))
-    ///     );
-    /// }
-    /// ```
-    pub fn clear() -> Self {
-        let previous = std::env::var_os("DYLINT_LOCALE");
-        // SAFETY: Callers must serialize the surrounding test using a
-        // synchronization primitive such as the `serial_test::serial`
-        // attribute. Clearing the environment therefore cannot race with other
-        // threads.
-        unsafe {
-            std::env::remove_var("DYLINT_LOCALE");
-        }
-        Self { previous }
+/// Runs `callback` with `DYLINT_LOCALE` overridden.
+///
+/// `Some(locale)` sets the variable for the duration of the callback;
+/// `None` removes it. Any prior value is restored afterwards, so
+/// locale-sensitive tests cannot leak global state between cases. The callback
+/// remains within the shared reentrant environment-mutation protocol.
+///
+/// # Examples
+///
+/// ```rust
+/// use whitaker_common::test_support::with_locale;
+///
+/// with_locale(Some("cy"), || {
+///     assert_eq!(
+///         std::env::var("DYLINT_LOCALE").expect("locale should be set"),
+///         "cy",
+///     );
+/// });
+/// ```
+pub fn with_locale<R>(locale: Option<&str>, callback: impl FnOnce() -> R) -> R {
+    match locale {
+        Some(locale_value) => with_env_var("DYLINT_LOCALE", locale_value, callback),
+        None => with_env_var_removed("DYLINT_LOCALE", callback),
     }
 }
 
-impl Drop for LocaleOverride {
-    fn drop(&mut self) {
-        if let Some(value) = &self.previous {
-            // SAFETY: By construction the guard only lives within a serialized
-            // test, so restoring the prior value cannot race with another
-            // thread mutating the environment.
-            unsafe {
-                std::env::set_var("DYLINT_LOCALE", value);
-            }
-        } else {
-            // SAFETY: Serialized execution also guarantees removal has no
-            // concurrent callers.
-            unsafe {
-                std::env::remove_var("DYLINT_LOCALE");
-            }
-        }
-    }
-}
+#[cfg(test)]
+mod env_tests;

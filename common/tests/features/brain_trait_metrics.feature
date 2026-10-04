@@ -52,7 +52,7 @@ Feature: Brain trait metric collection
     Given a trait named Transformer
     And a required method parse
     And a required method validate
-    And a default method normalise with CC 7
+    And a default method normalize with CC 7
     And an associated const VERSION
     When trait metrics are built
     Then total trait items is 4

@@ -1,12 +1,13 @@
 //! Behaviour-driven coverage for the decomposition cosine threshold.
 
+use std::{cell::RefCell, collections::BTreeMap, str::FromStr};
+
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
-use std::cell::RefCell;
-use std::collections::BTreeMap;
-use std::str::FromStr;
-use whitaker_common::MethodProfileBuilder;
-use whitaker_common::test_support::decomposition::methods_meet_cosine_threshold;
+use whitaker_common::{
+    MethodProfileBuilder, test_support::decomposition::methods_meet_cosine_threshold,
+};
+use whitaker_test_macros::allow_fixture_expansion_lints;
 
 #[derive(Clone, Copy, Debug)]
 enum MethodSide {
@@ -15,7 +16,7 @@ enum MethodSide {
 }
 
 impl MethodSide {
-    fn key(self) -> &'static str {
+    const fn key(self) -> &'static str {
         match self {
             Self::Left => "left",
             Self::Right => "right",
@@ -64,6 +65,7 @@ struct CosineThresholdWorld {
     threshold_met: RefCell<Option<bool>>,
 }
 
+#[allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> CosineThresholdWorld {
     CosineThresholdWorld::default()

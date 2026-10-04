@@ -114,7 +114,7 @@ impl ParsingWorld {
             .borrow()
             .as_ref()
             .cloned()
-            .expect("Fluent source should be initialised");
+            .expect("Fluent source should be initialized");
         let result = match FluentResource::try_new(source) {
             Ok(resource) => bundle_duplicate_result(resource),
             Err((resource, errors)) => {
