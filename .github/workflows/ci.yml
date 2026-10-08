@@ -54,10 +54,9 @@ env:
 # credential: a lane a pull request can start is the wrong place for one, and
 # an outage there reddened pull requests that had touched nothing.
 #
-# The credential's name is deliberately absent from this file. The contract
-# in `tests/workflow_contracts/coverage_boundary_test.py` reads the raw text
-# as well as the parsed values, so a mention in a comment counts: a workflow
-# that names it is a workflow somebody is about to wire it into.
+# The credential's name is deliberately absent from this file. The shared
+# CV-005 checker (`make test-workflow-contracts`) refuses it in any parsed key
+# or value of a workflow a pull request can reach.
 #
 # Runner policy: Linux developer-blocking jobs run on Ubicloud; Windows stays
 # GitHub-hosted because Ubicloud offers Linux images only. Cache policy: every

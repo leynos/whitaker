@@ -257,28 +257,43 @@ the trunk, it uploads the report, and it is the only workflow here that may
 hold the CodeScene credential. No pull-request lane may invoke the CodeScene
 action, run a `cs-coverage` command, name the `codescene.io` host, or carry
 that credential, whether by name or through `secrets: inherit`, and
-`tests/workflow_contracts/coverage_boundary_test.py` enforces all of them over
-every workflow a pull request can reach.
+`make test-workflow-contracts` enforces all of them over every workflow a pull
+request can reach. It runs `cv005-contracts check`, the shared contract library
+in `leynos/shared-actions` (`packages/cv005-contracts`), from the full commit
+named by `CV005_CONTRACTS_REF` in the Makefile, then the pytest contracts in
+`tests/workflow_contracts/`. A fix to a rule reaches this repository as a pin
+bump. The target needs `uv`, which fetches the Python 3.13 the library runs
+under. `.github/cv005.toml` holds the repository's parameters and three
+exceptions on the record, all under ruling leynos/whitaker#444: coverage comes
+from `make coverage`, not `generate-coverage`, so the publisher-wiring,
+selection-parity and pull-request-lane clauses are waived, and each exception
+requires the publisher to run `make coverage`.
+`tests/workflow_contracts/cv005_wiring_test.py` fails if the pin is not a full
+commit, the target stops running the pinned checker, the repository parameter
+is wrong, or CI stops running the target. The decision is recorded in
+[ADR 005](adr-005-adopt-the-shared-cv005-contract-library.md).
 
-"Every workflow a pull request can reach" is a closure, not a trigger list.
-`tests/workflow_contracts/pull_request_reach.py` starts from the workflows
-declaring `pull_request`, `pull_request_target` or `workflow_run`, in any of
-the scalar, sequence or mapping forms `on:` accepts, and adds every workflow of
-this repository they call through a job-level `uses:`, transitively. A workflow
-declaring only `workflow_call` still runs on a pull request when one of those
-calls it, and `secrets: inherit` hands it the credential. A local call is
-recognized by its shape: the reference is read as a path and must name a file
-directly under `.github/workflows/`, so no list of spellings has to be kept.
+"Every workflow a pull request can reach" is a closure, not a trigger list. The
+shared checker follows the same closure.
+`tests/workflow_contracts/pull_request_reach.py` keeps a copy for the
+trunk-writer contract, and starts from the workflows declaring `pull_request`,
+`pull_request_target` or `workflow_run`, in any of the scalar, sequence or
+mapping forms `on:` accepts, and adds every workflow of this repository they
+call through a job-level `uses:`, transitively. A workflow declaring only
+`workflow_call` still runs on a pull request when one of those calls it, and
+`secrets: inherit` hands it the credential. A local call is recognized by its
+shape: the reference is read as a path and must name a file directly under
+`.github/workflows/`, so no list of spellings has to be kept.
 
 The publisher answers `workflow_dispatch` as well as a push to `main`, and a
 dispatch can name any branch, so the trigger filter does not confine the
 upload. The upload step's condition carries `github.ref == 'refs/heads/main'`
 and `steps.codescene_token.outputs.available == 'true'` as conjuncts, the
 second so that an absent secret skips the upload rather than failing the run.
-`tests/workflow_contracts/publisher_guard_test.py` requires both, reading the
-condition as a conjunction: it splits on `&&` and refuses any `||` outside a
-quoted string, because a trailing `|| github.event_name == 'workflow_dispatch'`
-would contain the ref test and make it optional.
+The shared checker requires both, reading the condition as a conjunction: it
+splits on `&&` and refuses any `||` outside a quoted string, because a trailing
+`|| github.event_name == 'workflow_dispatch'` would contain the ref test and
+make it optional.
 
 The credential is in no `env` at all. The upload is a composite action, and a
 composite action's nested steps inherit the calling step's `env`, so a token
@@ -288,29 +303,28 @@ step (id `codescene_token`) runs exactly
 with no `if:` and no `env`; GitHub evaluates the expression before it sends the
 command to the runner, so the check's shell receives only a literal `true` or
 `false`, and the upload alone receives the token. The upload takes
-`access-token: ${{ secrets.CS_ACCESS_TOKEN }}` directly.
-`tests/workflow_contracts/publisher_credential_test.py` requires that check
-before each upload in its job and that input on the upload, refuses the
-credential in any workflow, job or step `env`, keys and values alike and case
-folded, and holds its mentions to exactly the check's command and the upload's
-input. The positive half is what a prohibition alone leaves out: deleting the
-credential would keep every `env` clean while the upload skipped on every run.
-A merge made by the Dependabot automerge workflow's `GITHUB_TOKEN` fires no
-push event, so it publishes nothing until a dispatch or the next push to
-`main`; that is a known exception (see
+`access-token: ${{ secrets.CS_ACCESS_TOKEN }}` directly. The shared checker
+requires that check before each upload in its job and that input on the upload,
+refuses the credential in any workflow, job or step `env`, keys and values
+alike and case folded, and holds its mentions to exactly the check's command
+and the upload's input. The positive half is what a prohibition alone leaves
+out: deleting the credential would keep every `env` clean while the upload
+skipped on every run. A merge made by the Dependabot automerge workflow's
+`GITHUB_TOKEN` fires no push event, so it publishes nothing until a dispatch or
+the next push to `main`; that is a known exception (see
 [shared-actions issue 518](https://github.com/leynos/shared-actions/issues/518)).
 
 The publisher queues on the concurrency group `coverage-main-${{ github.ref }}`
-with `cancel-in-progress: false`, and the guard contract asserts that block
-whole (`test_the_publisher_queues_on_one_group_per_ref`). Runs in the group
-never overlap, and a newer trigger replaces an older pending run; GitHub does
-not promise to start runs in trigger order, so the workflow makes no
-commit-order promise. The publisher writes no ratchet baseline, because its
-coverage comes from `make coverage` rather than the shared action, so a
-dispatch on `main` only republishes coverage. A manual "Re-run jobs" keeps its
-run ID and republishes that commit's coverage until a newer run replaces it.
-The guard contract also refuses a concurrency group that cancels a publisher
-run anywhere: a cancelled run abandons its upload and the cache state it writes.
+with `cancel-in-progress: false`, and the shared checker asserts that block
+whole. Runs in the group never overlap, and a newer trigger replaces an older
+pending run; GitHub does not promise to start runs in trigger order, so the
+workflow makes no commit-order promise. The publisher writes no ratchet
+baseline, because its coverage comes from `make coverage` rather than the
+shared action, so a dispatch on `main` only republishes coverage. A manual
+"Re-run jobs" keeps its run ID and republishes that commit's coverage until a
+newer run replaces it. The guard contract also refuses a concurrency group that
+cancels a publisher run anywhere: a cancelled run abandons its upload and the
+cache state it writes.
 
 Every workflow contract reads a workflow file through `parse_workflow` in
 `tests/workflow_contracts/ubicloud_workflow_support.py`, a `SafeLoader` that

@@ -1,0 +1,24 @@
+repository = "leynos/whitaker"
+
+# whitaker measures coverage with `make coverage`, which reuses the `make test`
+# recipe (its crate-exclusion set and prefer-dynamic RUSTFLAGS) under
+# `cargo llvm-cov nextest`. The shared `generate-coverage` action hard-codes
+# `cargo llvm-cov --workspace` and cannot exclude crates, so it is not used.
+# The pull-request ratchet is deferred for the same reason.
+[[exception]]
+clause = "publisher.wiring"
+ruling = "leynos/whitaker#444"
+reason = "Coverage comes from `make coverage`, not generate-coverage."
+requires = "make coverage"
+
+[[exception]]
+clause = "coverage.selection-parity"
+ruling = "leynos/whitaker#444"
+reason = "Coverage comes from `make coverage`, not generate-coverage."
+requires = "make coverage"
+
+[[exception]]
+clause = "coverage.pull-request-lane"
+ruling = "leynos/whitaker#444"
+reason = "Coverage comes from `make coverage`, not generate-coverage."
+requires = "make coverage"
