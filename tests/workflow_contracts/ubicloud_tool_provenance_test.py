@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from runner_lanes import linux_arm, runs_even_when_the_job_fails
 from ubicloud_workflow_support import (
     INSTALL_ACTION,
@@ -62,12 +64,15 @@ def test_no_ubicloud_job_compiles_a_tool_from_source() -> None:
                 )
 
 
-def test_mdtablefix_is_installed_from_a_checksum_verified_release() -> None:
+def test_mdtablefix_is_installed_by_the_shared_action() -> None:
     """The Markdown formatter defines canonical output, so its build must match."""
-    script = str(steps_by_name(load_job("linux-full"))["Install mdtablefix"]["run"])
-    assert "releases/download/v${MDTABLEFIX_VERSION}/mdtablefix-linux-x86_64" in script
-    assert "sha256sum --check --status" in script
-    assert "cargo install" not in script
+    step = steps_by_name(load_job("linux-full"))["Install mdtablefix"]
+    assert re.fullmatch(
+        r"leynos/shared-actions/\.github/actions/install-mdtablefix@[0-9a-f]{40}",
+        str(step.get("uses", "")),
+    ), "mdtablefix must install through the shared action at a full commit SHA"
+    assert step["with"]["version"] == "${{ env.MDTABLEFIX_VERSION }}"
+    assert "run" not in step, "mdtablefix must not be downloaded by a script"
 
 
 def test_setup_rust_delegates_cache_and_compiler_cache_ownership() -> None:

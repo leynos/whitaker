@@ -1,5 +1,6 @@
 """Validate CI provisioning for the canonical Markdown formatter."""
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -18,12 +19,13 @@ def _load_workflow() -> dict[str, Any]:
 def test_linux_full_provisions_pinned_markdown_tools_before_checking() -> None:
     """Require verified Markdown tool installations before the format gate."""
     workflow = _load_workflow()
-    assert workflow["env"]["MDTABLEFIX_VERSION"] == "0.6.0", (
+    assert workflow["env"]["MDTABLEFIX_VERSION"] == "0.6.1", (
         "CI must pin the mdtablefix release version"
     )
-    assert workflow["env"]["MDTABLEFIX_LINUX_X64_SHA256"] == (
-        "b78b2ac9b396b71073ff0485d9d37717cdcd82893b660b7146ba6d3f70d43ba0"
-    ), "CI must pin the verified mdtablefix Linux x86_64 checksum"
+    assert "MDTABLEFIX_LINUX_X64_SHA256" not in workflow["env"], (
+        "the shared install-mdtablefix action verifies the release, so CI carries "
+        "no checksum of its own"
+    )
     # Markdown linting runs through the pinned markdownlint-cli2 action, as
     # the estate's markdown-formatting-baseline rule requires, so CI carries
     # no shell install of the linter.
@@ -48,26 +50,18 @@ def test_linux_full_provisions_pinned_markdown_tools_before_checking() -> None:
     assert cache_step["uses"] == (
         "actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9"
     )
-    # The verified mdtablefix release lands in `~/.cargo/bin`, and the bun
+    # The shared action installs mdtablefix under `~/.local/bin`, and the bun
     # global install for markdownlint-cli2 reuses `~/.bun/install/cache`.
-    assert "~/.cargo/bin" in cache_step["with"]["path"]
+    assert "~/.local/bin" in cache_step["with"]["path"]
     assert "~/.bun/install/cache" in cache_step["with"]["path"]
     assert "~/.cache/mdtablefix-build" not in cache_step["with"]["path"]
 
-    install_script = steps_by_name["Install mdtablefix"]["run"]
-    assert 'expected_mdtablefix_version="mdtablefix ${MDTABLEFIX_VERSION}"' in (
-        install_script
+    install_step = steps_by_name["Install mdtablefix"]
+    assert re.fullmatch(
+        r"leynos/shared-actions/\.github/actions/install-mdtablefix@[0-9a-f]{40}",
+        install_step["uses"],
+    ), "mdtablefix must install through the shared action at a full commit SHA"
+    assert install_step["with"]["version"] == "${{ env.MDTABLEFIX_VERSION }}", (
+        "the action must install the workflow-level pin"
     )
-    assert "releases/download/v${MDTABLEFIX_VERSION}/mdtablefix-linux-x86_64" in (
-        install_script
-    )
-    assert "${MDTABLEFIX_LINUX_X64_SHA256}" in install_script
-    assert "sha256sum --check --status" in install_script
-    assert 'install -m 0755 "${download}" "${destination}.new"' in install_script
-    assert 'mv "${destination}.new" "${destination}"' in install_script
-    assert "cargo binstall" not in install_script
-    assert "cargo install" not in install_script
-    assert "mdtablefix --version 2>/dev/null" in install_script
-    assert "installed_mdtablefix_version=\"$(mdtablefix --version | tr -d '\\r')\"" in (
-        install_script
-    )
+    assert "run" not in install_step, "mdtablefix must not be installed by a script"

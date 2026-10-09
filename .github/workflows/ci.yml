@@ -42,8 +42,7 @@ env:
   # release used to normalize the checked-in documentation; 0.6.0 is the
   # first release with `--check` and `--git`. Markdown linting runs through
   # the pinned markdownlint-cli2 action rather than a shell install.
-  MDTABLEFIX_VERSION: '0.6.0'
-  MDTABLEFIX_LINUX_X64_SHA256: b78b2ac9b396b71073ff0485d9d37717cdcd82893b660b7146ba6d3f70d43ba0
+  MDTABLEFIX_VERSION: '0.6.1'
   RUSTFLAGS: -D warnings
   RUSTDOCFLAGS: -D warnings
 # CodeScene coverage: `coverage-main.yml` owns it entirely. It uploads
@@ -315,29 +314,12 @@ jobs:
 
       - name: Install mdtablefix
         # `make check-fmt` needs the exact release that defines the repository's
-        # canonical Markdown output, even when the cache restores an older binary.
-        run: |
-          expected_mdtablefix_version="mdtablefix ${MDTABLEFIX_VERSION}"
-          installed_mdtablefix_version=""
-          if command -v mdtablefix >/dev/null 2>&1; then
-            installed_mdtablefix_version="$(mdtablefix --version 2>/dev/null | tr -d '\r')"
-          fi
-          if [[ "${installed_mdtablefix_version}" != "${expected_mdtablefix_version}" ]]; then
-            download="${RUNNER_TEMP}/mdtablefix-linux-x86_64"
-            destination="${HOME}/.cargo/bin/mdtablefix"
-            url="https://github.com/leynos/mdtablefix/releases/download/v${MDTABLEFIX_VERSION}/mdtablefix-linux-x86_64"
-            curl --fail --location --proto '=https' --tlsv1.2 "${url}" -o "${download}"
-            echo "${MDTABLEFIX_LINUX_X64_SHA256}  ${download}" \
-              | sha256sum --check --status
-            mkdir -p "$(dirname "${destination}")"
-            install -m 0755 "${download}" "${destination}.new"
-            mv "${destination}.new" "${destination}"
-          fi
-          installed_mdtablefix_version="$(mdtablefix --version | tr -d '\r')"
-          if [[ "${installed_mdtablefix_version}" != "${expected_mdtablefix_version}" ]]; then
-            echo "expected ${expected_mdtablefix_version}, got ${installed_mdtablefix_version}" >&2
-            exit 1
-          fi
+        # canonical Markdown output, even when the cache restores an older
+        # binary; the shared action installs the pinned release and puts it on
+        # PATH.
+        uses: leynos/shared-actions/.github/actions/install-mdtablefix@0606ca899ce2995a0c4bc78e660e80832e6e8855
+        with:
+          version: ${{ env.MDTABLEFIX_VERSION }}
 
       - name: Check formatting
         run: make check-fmt

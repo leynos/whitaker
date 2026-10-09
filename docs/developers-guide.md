@@ -833,16 +833,16 @@ succeeded.
 
 Tool setup must not compile tools from source. `taiki-e/install-action` calls
 pin a release whose catalogue contains each requested tool, disable fallbacks,
-and use checksum-verified release artefacts. `mdtablefix` 0.5.0 is installed
-from its official Linux x86_64 release asset after checking the SHA-256 pinned
-in the workflow. The tools cache retains the installed executable under
-`~/.cargo/bin`; a cold cache downloads it, while a warm cache verifies and
-reuses it without invoking Cargo. The SHA-pinned shared `install-nixie` action
-at `7cb894fe62c40951cccf33819548095e64a1291e` (shared-actions PR #423, repinned
-to `main`) owns Nixie 1.1.0 and Merman 0.7.0 setup. It verifies Merman's
-official release archive and cached executable against pinned SHA-256 digests,
-reconciles the uv-managed Nixie installation, and never falls back to a source
-build.
+and use checksum-verified release artefacts. `mdtablefix` 0.6.1 is installed by
+the SHA-pinned shared `install-mdtablefix` action at the version pinned in the
+workflow's `MDTABLEFIX_VERSION`. The tools cache retains the installed
+executable under `~/.local/bin`; the action reinstalls it whenever the cached
+version differs, without invoking Cargo. The SHA-pinned shared `install-nixie`
+action at `7cb894fe62c40951cccf33819548095e64a1291e` (shared-actions PR #423,
+repinned to `main`) owns Nixie 1.1.0 and Merman 0.7.0 setup. It verifies
+Merman's official release archive and cached executable against pinned SHA-256
+digests, reconciles the uv-managed Nixie installation, and never falls back to
+a source build.
 
 The uv cache contract includes downloads under `~/.cache/uv`, installed tool
 environments under `~/.local/share/uv`, and their executable shims under
@@ -1369,9 +1369,9 @@ identical, and removes the temporary directory on exit. It never formats or
 rewrites a working-tree file. `mdtablefix` remains the owner of table padding
 and paragraph wrapping; `markdownlint-cli2` remains the owner of Markdown lint
 rules and its fixing pass. The `linux-full` CI job installs both pinned tools
-before running `make check-fmt`; it caches `mdtablefix` but verifies its
-workflow-level version pin. This makes a cold runner and a stale cache produce
-the same canonical output.
+before running `make check-fmt`; it caches `mdtablefix` but the shared action
+verifies its workflow-level version pin. This makes a cold runner and a stale
+cache produce the same canonical output.
 
 Keep the script scoped to `make check-fmt` and its focused process tests. Reuse
 it when another repository-owned gate needs to verify this exact Markdown
