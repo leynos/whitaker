@@ -274,16 +274,18 @@ is wrong, or CI stops running the target. The decision is recorded in
 [ADR 005](adr-005-adopt-the-shared-cv005-contract-library.md).
 
 "Every workflow a pull request can reach" is a closure, not a trigger list. The
-shared checker follows the same closure.
-`tests/workflow_contracts/pull_request_reach.py` keeps a copy for the
-trunk-writer contract, and starts from the workflows declaring `pull_request`,
-`pull_request_target` or `workflow_run`, in any of the scalar, sequence or
-mapping forms `on:` accepts, and adds every workflow of this repository they
-call through a job-level `uses:`, transitively. A workflow declaring only
-`workflow_call` still runs on a pull request when one of those calls it, and
-`secrets: inherit` hands it the credential. A local call is recognized by its
-shape: the reference is read as a path and must name a file directly under
-`.github/workflows/`, so no list of spellings has to be kept.
+shared checker computes its own, wider closure: it also follows local composite
+actions and seeds every event outside a short list of non-pull-request events.
+`tests/workflow_contracts/pull_request_reach.py` keeps a narrower local copy
+for the trunk-writer contract, which only needs called workflows, and starts
+from the workflows declaring `pull_request`, `pull_request_target` or
+`workflow_run`, in any of the scalar, sequence or mapping forms `on:` accepts,
+and adds every workflow of this repository they call through a job-level
+`uses:`, transitively. A workflow declaring only `workflow_call` still runs on
+a pull request when one of those calls it, and `secrets: inherit` hands it the
+credential. A local call is recognized by its shape: the reference is read as a
+path and must name a file directly under `.github/workflows/`, so no list of
+spellings has to be kept.
 
 The publisher answers `workflow_dispatch` as well as a push to `main`, and a
 dispatch can name any branch, so the trigger filter does not confine the

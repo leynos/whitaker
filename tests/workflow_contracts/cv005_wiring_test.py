@@ -113,3 +113,8 @@ def test_ci_runs_the_target_unconditionally() -> None:
     assert holders, f"ci.yml must run `make {TARGET}` in a step"
     assert all("if" not in step for _, step in holders), holders
     assert all("if" not in job for job, _ in holders), holders
+    assert all("continue-on-error" not in step for _, step in holders), holders
+    assert all("continue-on-error" not in job for job, _ in holders), holders
+    assert all(
+        str(step.get("run", "")).strip() == f"make {TARGET}" for _, step in holders
+    ), holders
