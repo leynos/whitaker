@@ -71,7 +71,9 @@ def test_mdtablefix_is_installed_by_the_shared_action() -> None:
         r"leynos/shared-actions/\.github/actions/install-mdtablefix@[0-9a-f]{40}",
         str(step.get("uses", "")),
     ), "mdtablefix must install through the shared action at a full commit SHA"
-    assert step["with"]["version"] == "${{ env.MDTABLEFIX_VERSION }}"
+    assert step["with"]["version"] == "${{ env.MDTABLEFIX_VERSION }}", (
+        "install-mdtablefix must take its version from the workflow-level pin"
+    )
     assert "run" not in step, "mdtablefix must not be downloaded by a script"
 
 
