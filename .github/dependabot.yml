@@ -60,6 +60,7 @@ updates:
     labels:
       - "dependencies"
       - "python"
+      - "pip"
     schedule:
       interval: "daily"
     cooldown:
