@@ -835,14 +835,17 @@ Tool setup must not compile tools from source. `taiki-e/install-action` calls
 pin a release whose catalogue contains each requested tool, disable fallbacks,
 and use checksum-verified release artefacts. `mdtablefix` 0.6.1 is installed by
 the SHA-pinned shared `install-mdtablefix` action at the version pinned in the
-workflow's `MDTABLEFIX_VERSION`. The tools cache retains the installed
-executable under `~/.local/bin`; the action reinstalls it whenever the cached
-version differs, without invoking Cargo. The SHA-pinned shared `install-nixie`
-action at `7cb894fe62c40951cccf33819548095e64a1291e` (shared-actions PR #423,
-repinned to `main`) owns Nixie 1.1.0 and Merman 0.7.0 setup. It verifies
-Merman's official release archive and cached executable against pinned SHA-256
-digests, reconciles the uv-managed Nixie installation, and never falls back to
-a source build.
+workflow's `MDTABLEFIX_VERSION`, and the action verifies the installed
+executable against the SHA-256 pinned in `MDTABLEFIX_LINUX_X64_SHA256` (taken
+from the release's `mdtablefix-linux-x86_64.sha256`), so a replaced release
+fails the job. Update both together when the version moves. The tools cache
+retains the installed executable under `~/.local/bin`; the action reinstalls it
+whenever the cached version differs, without invoking Cargo. The SHA-pinned
+shared `install-nixie` action at `7cb894fe62c40951cccf33819548095e64a1291e`
+(shared-actions PR #423, repinned to `main`) owns Nixie 1.1.0 and Merman 0.7.0
+setup. It verifies Merman's official release archive and cached executable
+against pinned SHA-256 digests, reconciles the uv-managed Nixie installation,
+and never falls back to a source build.
 
 The uv cache contract includes downloads under `~/.cache/uv`, installed tool
 environments under `~/.local/share/uv`, and their executable shims under

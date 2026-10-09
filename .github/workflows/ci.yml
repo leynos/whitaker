@@ -43,6 +43,10 @@ env:
   # first release with `--check` and `--git`. Markdown linting runs through
   # the pinned markdownlint-cli2 action rather than a shell install.
   MDTABLEFIX_VERSION: '0.6.1'
+  # SHA-256 of the mdtablefix 0.6.1 Linux x86_64 executable, as published in the
+  # release's mdtablefix-linux-x86_64.sha256. The shared action verifies the
+  # installed executable against it, so a replaced release cannot pass.
+  MDTABLEFIX_LINUX_X64_SHA256: e166e2daecd8b8820a521840ee363acfd38af7c53968ec9e65d2223aa0c272e1
   RUSTFLAGS: -D warnings
   RUSTDOCFLAGS: -D warnings
 # CodeScene coverage: `coverage-main.yml` owns it entirely. It uploads
@@ -317,9 +321,10 @@ jobs:
         # canonical Markdown output, even when the cache restores an older
         # binary; the shared action installs the pinned release and puts it on
         # PATH.
-        uses: leynos/shared-actions/.github/actions/install-mdtablefix@0606ca899ce2995a0c4bc78e660e80832e6e8855
+        uses: leynos/shared-actions/.github/actions/install-mdtablefix@d0c2585d9e144775e4ec9fe26e7eeb03c14844dd
         with:
           version: ${{ env.MDTABLEFIX_VERSION }}
+          sha256: ${{ env.MDTABLEFIX_LINUX_X64_SHA256 }}
 
       - name: Check formatting
         run: make check-fmt

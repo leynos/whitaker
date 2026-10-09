@@ -74,6 +74,9 @@ def test_mdtablefix_is_installed_by_the_shared_action() -> None:
     assert step["with"]["version"] == "${{ env.MDTABLEFIX_VERSION }}", (
         "install-mdtablefix must take its version from the workflow-level pin"
     )
+    assert step["with"]["sha256"] == "${{ env.MDTABLEFIX_LINUX_X64_SHA256 }}", (
+        "the executable must be verified against the pinned digest"
+    )
     assert "run" not in step, "mdtablefix must not be downloaded by a script"
 
 

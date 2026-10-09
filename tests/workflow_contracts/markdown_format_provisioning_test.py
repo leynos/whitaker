@@ -22,10 +22,9 @@ def test_linux_full_provisions_pinned_markdown_tools_before_checking() -> None:
     assert workflow["env"]["MDTABLEFIX_VERSION"] == "0.6.1", (
         "CI must pin the mdtablefix release version"
     )
-    assert "MDTABLEFIX_LINUX_X64_SHA256" not in workflow["env"], (
-        "the shared install-mdtablefix action verifies the release, so CI carries "
-        "no checksum of its own"
-    )
+    assert workflow["env"]["MDTABLEFIX_LINUX_X64_SHA256"] == (
+        "e166e2daecd8b8820a521840ee363acfd38af7c53968ec9e65d2223aa0c272e1"
+    ), "CI must pin the verified mdtablefix Linux x86_64 checksum"
     # Markdown linting runs through the pinned markdownlint-cli2 action, as
     # the estate's markdown-formatting-baseline rule requires, so CI carries
     # no shell install of the linter.
@@ -63,5 +62,8 @@ def test_linux_full_provisions_pinned_markdown_tools_before_checking() -> None:
     ), "mdtablefix must install through the shared action at a full commit SHA"
     assert install_step["with"]["version"] == "${{ env.MDTABLEFIX_VERSION }}", (
         "the action must install the workflow-level pin"
+    )
+    assert install_step["with"]["sha256"] == "${{ env.MDTABLEFIX_LINUX_X64_SHA256 }}", (
+        "the action must verify the executable against the workflow-level digest"
     )
     assert "run" not in install_step, "mdtablefix must not be installed by a script"
