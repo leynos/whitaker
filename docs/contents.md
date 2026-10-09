@@ -89,6 +89,9 @@
   contract](adr-004-pin-only-mutation-testing-contract.md) records why the
   shared mutation workflow tests its declared configuration without claiming
   parity with the continuous integration test baseline.
+- [Architectural decision record (ADR) 005: adopt the shared CV-005 contract
+  library](adr-005-adopt-the-shared-cv005-contract-library.md) records the move
+  from a local copy of the CV-005 contract to the pinned shared check.
 
 ## Requests for comments
 

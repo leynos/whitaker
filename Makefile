@@ -89,6 +89,14 @@ WHITAKER_REV ?= HEAD
 PUBLISH_PACKAGES ?=
 UV ?= uv
 UV_ENV = UV_CACHE_DIR=.uv-cache UV_TOOL_DIR=.uv-tools
+
+# The CV-005 CodeScene contracts live in shared-actions and run from a full
+# commit, so a fix is a pin bump. `.github/cv005.toml` holds this repository's
+# only parameters.
+CV005_CONTRACTS_REF ?= 88977798a5c3bae1549afb99642529488c665276
+CV005_CONTRACTS = $(UV_ENV) $(UV) tool run --python 3.13 \
+	--from 'git+https://github.com/leynos/shared-actions@$(CV005_CONTRACTS_REF)\#subdirectory=packages/cv005-contracts' \
+	cv005-contracts
 TYPOS_CONFIG_BUILDER_VERSION ?= v0.1.3
 TYPOS_CONFIG_BUILDER = $(UV_ENV) $(UV) tool run --python 3.14 --from \
 	"git+https://github.com/leynos/typos-config-builder.git@$(TYPOS_CONFIG_BUILDER_VERSION)" \
@@ -223,8 +231,9 @@ workflow-test: workflow-test-deps ## Run opt-in GitHub workflow smoke tests with
 	}
 	@ACT_WORKFLOW_TESTS=1 $(WORKFLOW_TEST_VENV)/bin/python -m pytest tests/workflows
 
-test-workflow-contracts: ## Validate the mutation-testing caller contract
+test-workflow-contracts: ## Validate the CV-005 CodeScene contracts and the workflow caller contracts
 	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v $(UV) >/dev/null || { echo "uv is required for workflow contract tests"; exit 1; }
+	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; $(CV005_CONTRACTS) check --repository .
 	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; $(UV) run --with 'pytest>=8' --with 'pyyaml>=6' --with 'hypothesis>=6' pytest tests/workflow_contracts --doctest-modules -q
 
 test-markdown-format: ## Validate the Markdown formatter checker

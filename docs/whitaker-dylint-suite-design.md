@@ -1034,8 +1034,8 @@ declare_combined_late_lint_pass!(SuitePass => [
     NoStdFsOperations,
 ]);
 
-#[no_mangle]
-pub extern "C" fn register_lints(sess: &Session, store: &mut LintStore) {
+#[no_mangle] pub extern "C" fn register_lints(sess: &Session, store: &mut
+LintStore) {
     dylint_linting::init_config(sess);
     store.register_lints(&[
         function_attrs_follow_docs::FUNCTION_ATTRS_FOLLOW_DOCS,
