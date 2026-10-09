@@ -341,10 +341,9 @@ unavailable or the token has rotated. The changed-line gate that used to sit in
 changed-line feedback. That is what the rule takes from every repository that
 adopts it, not something particular to this one.
 
-The credential's name does not appear in any pull-request workflow, not even in
-a comment. The contract reads the raw text as well as the parsed values,
-because a workflow that names it is a workflow somebody is about to wire it
-into.
+The shared CV-005 checker rejects the credential's name in parsed keys and
+scalar values of workflows reachable by a pull request. It does not scan raw
+workflow text, so YAML comments do not count.
 
 A pull-request workflow also may not publish the coverage report as an
 artefact. The contract judges an `actions/upload-artifact` step by whether its
