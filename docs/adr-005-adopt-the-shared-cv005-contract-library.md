@@ -48,17 +48,16 @@ Accepted.
 `make test-workflow-contracts` runs `cv005-contracts check --repository .`
 through `uv tool run`, from the full commit named by `CV005_CONTRACTS_REF` in
 the `Makefile`. `.github/cv005.toml` holds this repository's parameters. CI
-runs the target in its own step and `make all` includes it.
+runs the target in its own step.
 `tests/workflow_contracts/cv005_wiring_test.py` holds the local wiring: it
 fails if the pin is not a full commit, if the target stops running the pinned
 checker with `check --repository .` under Python 3.13, if the repository
-parameter is wrong, if `make all` drops the target, or if CI stops running it.
-The waived clauses are declared as three `[[exception]]` tables under ruling
-leynos/whitaker#444, each requiring the publisher to run `make coverage`.
-`make all` builds the release binary only, so the target is not wired into it;
-CI runs the target and `tests/workflow_contracts/cv005_wiring_test.py` holds
-that. The cache-scope trunk-writer contract and its copy of the pull-request
-closure (`pull_request_reach.py`) stay local.
+parameter is wrong, or if CI stops running it. The waived clauses are declared
+as three `[[exception]]` tables under ruling leynos/whitaker#444, each
+requiring the publisher to run `make coverage`. `make all` builds the release
+binary only, so the target is not wired into it; CI runs the target and the
+wiring test holds that. The cache-scope trunk-writer contract and its copy of
+the pull-request closure (`pull_request_reach.py`) stay local.
 
 ## Known risks and limitations
 
