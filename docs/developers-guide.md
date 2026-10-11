@@ -1872,8 +1872,11 @@ pinned nightly to be at most 56 days old and moved by Dependabot's
 the vendored `clippy_utils`, which track `rustc_private` APIs of one specific
 nightly. A bare date bump breaks both, so the pin moves only through the
 runbooks below, never through an automated bump or to satisfy the freshness
-window. The same coupling means no stable toolchain builds the crates, so there
-is no stable MSRV for RT-025 to ask for.
+window. The same coupling means no stable toolchain builds the Dylint lint
+crates and the root `whitaker` crate, so there is no stable MSRV for RT-025 to
+ask for of them. The exception does not cover the published installer:
+`installer/Cargo.toml` declares `rust-version = "1.85"` and the installer
+compatibility checks above keep validating it on that release.
 
 This section names the pinned channel on purpose. The rule treats an exception
 as current only while it names the channel in `rust-toolchain.toml`, so every
