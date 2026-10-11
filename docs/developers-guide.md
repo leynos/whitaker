@@ -1865,14 +1865,15 @@ parser APIs, snapshots, and proof tooling.
 
 ### Toolchain policy exception
 
-The estate's `rust-toolchain-policy` rule (RT-023, RT-024) expects a pinned
-nightly to be at most 56 days old and moved by Dependabot's `rust-toolchain`
-entry. Whitaker is the recorded exception: the pinned channel,
+The estate's `rust-toolchain-policy` rule (RT-023, RT-024, RT-025) expects a
+pinned nightly to be at most 56 days old and moved by Dependabot's
+`rust-toolchain` entry. Whitaker is the recorded exception: the pinned channel,
 `nightly-2026-05-28`, is coupled to the `ra_ap_syntax` parser snapshot and to
 the vendored `clippy_utils`, which track `rustc_private` APIs of one specific
 nightly. A bare date bump breaks both, so the pin moves only through the
 runbooks below, never through an automated bump or to satisfy the freshness
-window.
+window. The same coupling means no stable toolchain builds the crates, so there
+is no stable MSRV for RT-025 to ask for.
 
 This section names the pinned channel on purpose. The rule treats an exception
 as current only while it names the channel in `rust-toolchain.toml`, so every
