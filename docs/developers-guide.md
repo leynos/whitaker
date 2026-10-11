@@ -1863,6 +1863,26 @@ Use these runbooks when the Rust nightly or `ra_ap_syntax` parser snapshot must
 move. They are intentionally procedural because both changes affect Dylint,
 parser APIs, snapshots, and proof tooling.
 
+### Toolchain policy exception
+
+The estate's `rust-toolchain-policy` rule (RT-023, RT-024, RT-025) expects a
+pinned nightly to be at most 56 days old and moved by Dependabot's
+`rust-toolchain` entry. Whitaker is the recorded exception: the pinned channel,
+`nightly-2026-05-28`, is coupled to the `ra_ap_syntax` parser snapshot and to
+the vendored `clippy_utils`, which track `rustc_private` APIs of one specific
+nightly. A bare date bump breaks both, so the pin moves only through the
+runbooks below, never through an automated bump or to satisfy the freshness
+window. The same coupling means no stable toolchain builds the Dylint lint
+crates and the root `whitaker` crate, so there is no stable MSRV for RT-025 to
+ask for of them. The exception does not cover the published installer:
+`installer/Cargo.toml` declares `rust-version = "1.85"` and the installer
+compatibility checks above keep validating it on that release.
+
+This section names the pinned channel on purpose. The rule treats an exception
+as current only while it names the channel in `rust-toolchain.toml`, so every
+toolchain bump must update the channel written here as part of the runbook
+(step 6 below). A stale exception stops exempting anything.
+
 ### Rust toolchain bump runbook
 
 1. Change `rust-toolchain.toml` to the target pinned nightly channel.
@@ -1878,7 +1898,8 @@ parser APIs, snapshots, and proof tooling.
    to review, not as an automatic blessing.
 6. Update load-bearing toolchain references, including installer package
    scripts, release workflow strings, ADR-001 notes, and any design or roadmap
-   text that names the old channel.
+   text that names the old channel, and the channel named in the "Toolchain
+   policy exception" section above.
 7. Run the normal gates in order: `make check-fmt`, `make lint`, `make test`,
    and `make markdownlint`. Run relevant proof targets if the bump touches
    clone-detector or decomposition proof surfaces.
