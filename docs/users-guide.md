@@ -564,6 +564,15 @@ Whitaker recognizes `#[test]`, prelude-qualified `#[test]` forms,
 setting extends that matching list with project-specific markers, so the lint
 treats those annotated functions as tests too.
 
+Code that is compiled only under `#[cfg(test)]` is test-only as well. A helper
+or fixture in a `#[cfg(test)] mod tests;` companion module, whether the module
+is inline or file-backed, may call `.expect()`, and so may nested modules, free
+functions, inherent and trait methods, and impl blocks that carry
+`#[cfg(test)]`. A module that is merely named `tests` but is not gated on
+`cfg(test)` is ordinary code, and `.expect()` in it is still reported. A
+`cfg(not(test))` item is production code, and `any(test, ..)` counts only when
+every alternative requires `cfg(test)`.
+
 <!-- markdownlint-disable-next-line MD024 -->
 #### Configuration
 

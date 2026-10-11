@@ -10,6 +10,8 @@ use rstest::rstest;
 #[cfg(feature = "dylint-driver")]
 use rustc_ast::ast::{DelimArgs, MetaItem, MetaItemInner, MetaItemKind, Path, PathSegment, Safety};
 #[cfg(feature = "dylint-driver")]
+use rustc_ast::attr::data_structures::CfgEntry;
+#[cfg(feature = "dylint-driver")]
 use rustc_ast::token::{Delimiter, IdentIsRaw, TokenKind};
 #[cfg(feature = "dylint-driver")]
 use rustc_ast::tokenstream::{DelimSpan, TokenStream, TokenTree};
@@ -473,4 +475,75 @@ fn is_cfg_test_attribute_handles_parsed_must_use() {
 
     // Should return false (not a cfg(test) attribute) without panicking.
     assert!(!is_cfg_test_attribute(&parsed_attr));
+}
+
+/// Build the parsed `cfg_trace` attribute rustc leaves for an evaluated `cfg`.
+///
+/// Must be called within `create_default_session_globals_then`.
+#[cfg(feature = "dylint-driver")]
+fn cfg_trace_attribute(entry: CfgEntry) -> hir::Attribute {
+    let mut entries = thin_vec::ThinVec::new();
+    entries.push((entry, DUMMY_SP));
+    hir::Attribute::Parsed(HirAttributeKind::CfgTrace(entries))
+}
+
+/// Build a bare `cfg` name predicate such as `test`.
+#[cfg(feature = "dylint-driver")]
+fn cfg_name(name: &str) -> CfgEntry {
+    CfgEntry::NameValue {
+        name: rustc_span::Symbol::intern(name),
+        value: None,
+        span: DUMMY_SP,
+    }
+}
+
+/// Collect predicates into the list an `all` or `any` combinator holds.
+#[cfg(feature = "dylint-driver")]
+fn cfg_list(entries: &[CfgEntry]) -> thin_vec::ThinVec<CfgEntry> {
+    entries.iter().cloned().collect()
+}
+
+/// Verify that the parsed `cfg_trace` marker of an evaluated `cfg(..)` counts as
+/// test-only evidence exactly when its predicate can hold only under `cfg(test)`.
+///
+/// rustc replaces a true `#[cfg(test)]` with this marker, so a file-backed
+/// `#[cfg(test)] mod tests;` is recognized through it (leynos/whitaker#311).
+#[cfg(feature = "dylint-driver")]
+#[rstest]
+#[case::test("test", true)]
+#[case::doctest("doctest", true)]
+#[case::feature_gate("unix", false)]
+#[case::not_test_name("tests", false)]
+fn cfg_trace_of_a_single_name_is_test_only_for_test(#[case] name: &str, #[case] expected: bool) {
+    create_default_session_globals_then(|| {
+        assert_eq!(
+            is_cfg_test_attribute(&cfg_trace_attribute(cfg_name(name))),
+            expected
+        );
+    });
+}
+
+/// Verify that `all`, `any`, `not` and boolean predicates keep their polarity.
+#[cfg(feature = "dylint-driver")]
+#[test]
+fn cfg_trace_combinators_follow_their_polarity() {
+    create_default_session_globals_then(|| {
+        let test = cfg_name("test");
+        let unix = cfg_name("unix");
+        let all = |entries: &[CfgEntry]| CfgEntry::All(cfg_list(entries), DUMMY_SP);
+        let any = |entries: &[CfgEntry]| CfgEntry::Any(cfg_list(entries), DUMMY_SP);
+        let not = |entry: CfgEntry| CfgEntry::Not(Box::new(entry), DUMMY_SP);
+        let marks = |entry: CfgEntry| is_cfg_test_attribute(&cfg_trace_attribute(entry));
+
+        assert!(marks(all(&[test.clone(), unix.clone()])), "all(test, ..)");
+        assert!(!marks(all(std::slice::from_ref(&unix))), "all(unix)");
+        assert!(marks(any(&[test.clone(), test.clone()])), "any(test, test)");
+        assert!(
+            !marks(any(&[test.clone(), unix.clone()])),
+            "any(test, unix)"
+        );
+        assert!(!marks(any(&[])), "any()");
+        assert!(!marks(not(test.clone())), "not(test) is production code");
+        assert!(!marks(CfgEntry::Bool(true, DUMMY_SP)), "cfg(true)");
+    });
 }

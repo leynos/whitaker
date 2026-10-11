@@ -4,6 +4,7 @@
 
 use rustc_ast::AttrStyle;
 use rustc_ast::ast::{MetaItem, MetaItemInner};
+use rustc_ast::attr::data_structures::CfgEntry;
 use rustc_hir as hir;
 use rustc_hir::Node;
 use rustc_hir::attrs::AttributeKind as HirAttributeKind;
@@ -246,8 +247,17 @@ where
 /// }
 /// ```
 pub(crate) fn is_cfg_test_attribute(attr: &hir::Attribute) -> bool {
-    // Parsed attributes (like #[must_use]) are not cfg-related; skip them to
-    // avoid panics when calling path() on arbitrary parsed attributes.
+    // rustc replaces an evaluated `#[cfg(..)]` with a parsed `cfg_trace` marker
+    // that records the predicate that held, so an item that was compiled in
+    // only because `cfg(test)` is active carries it rather than `cfg(test)`.
+    if let hir::Attribute::Parsed(HirAttributeKind::CfgTrace(entries)) = attr {
+        return entries
+            .iter()
+            .any(|(entry, _)| cfg_entry_requires_test(entry));
+    }
+
+    // Other parsed attributes (like #[must_use]) are not cfg-related; skip them
+    // to avoid panics when calling path() on arbitrary parsed attributes.
     let hir::Attribute::Unparsed(_) = attr else {
         return false;
     };
@@ -271,6 +281,27 @@ pub(crate) fn is_cfg_test_attribute(attr: &hir::Attribute) -> bool {
     attr.meta_item_list()
         .map(check_cfg_attr_for_test)
         .unwrap_or(false)
+}
+
+/// Report whether an evaluated `cfg` predicate can hold only under `cfg(test)`.
+///
+/// `All` requires one test-only operand, `Any` requires every alternative to be
+/// test-only, and `Not` is never treated as test-only so `cfg(not(test))`
+/// production code keeps linting.
+fn cfg_entry_requires_test(entry: &CfgEntry) -> bool {
+    match entry {
+        CfgEntry::NameValue {
+            name, value: None, ..
+        } => *name == sym::test || *name == sym::doctest,
+        CfgEntry::All(entries, _) => entries.iter().any(cfg_entry_requires_test),
+        CfgEntry::Any(entries, _) => {
+            !entries.is_empty() && entries.iter().all(cfg_entry_requires_test)
+        }
+        CfgEntry::Not(..)
+        | CfgEntry::Bool(..)
+        | CfgEntry::NameValue { .. }
+        | CfgEntry::Version(..) => false,
+    }
 }
 
 fn meta_item_inner_contains_test(item: MetaItemInner) -> bool {

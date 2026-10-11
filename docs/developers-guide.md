@@ -2807,6 +2807,24 @@ not just the immediately enclosing function.
 - `summarise_context` merges that ancestry flag with the collected
   `ContextEntry` values to derive the final `ContextSummary.is_test` decision.
 
+rustc removes an evaluated `#[cfg(test)]` from the item and leaves a parsed
+`cfg_trace` marker (`HirAttributeKind::CfgTrace`, a list of the predicates that
+held), so a `#[cfg(test)] mod tests;` declared in another file reaches HIR with
+that marker and no unparsed `cfg` attribute. `is_cfg_test_attribute` therefore
+reads both forms. `cfg_entry_requires_test` treats a `CfgEntry` as test-only
+when it can hold only under `cfg(test)`: the name `test` or `doctest`; an `all`
+with such an operand; an `any` whose alternatives all are. `not`, booleans and
+other names are not. `is_in_cfg_test_module` in `driver/mod.rs` applies that
+check to each module ancestor, which is how helpers and rstest fixtures in a
+companion module are recognized without any path-based exemption.
+`pass_expect_in_cfg_test_items` keeps `cfg(test)` functions, impls and trait
+items recognized as well. The UI fixtures
+`pass_expect_in_file_backed_test_helper` and `pass_expect_in_cfg_test_items`
+run under the `--test` harness for this reason: without it the `cfg(test)`
+items are not compiled at all. The negative example
+`fail_expect_in_non_test_module_named_tests` keeps a module merely named
+`tests` linting.
+
 Real `rstest` case expansion adds a second `--test` harness shape that the
 attribute and direct sibling-descriptor paths do not see. For parameterized
 cases, `rustc` lowers the user-written function into ordinary HIR and emits a

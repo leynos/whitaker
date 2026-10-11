@@ -9,6 +9,9 @@
 #![cfg_attr(feature = "dylint-driver", feature(rustc_private))]
 
 #[cfg(all(feature = "dylint-driver", test))]
+extern crate thin_vec;
+
+#[cfg(all(feature = "dylint-driver", test))]
 mod behaviour;
 #[cfg(feature = "dylint-driver")]
 mod context;
