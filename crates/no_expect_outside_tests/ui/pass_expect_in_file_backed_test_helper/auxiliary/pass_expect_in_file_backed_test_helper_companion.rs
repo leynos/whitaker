@@ -8,6 +8,9 @@ fn parse_fixture_value() -> u32 {
 
 /// A helper reached through a nested module of the companion.
 mod nested {
+    //! A nested module of the companion, also test-only.
+
+    /// Return the first item, calling `expect`.
     pub(super) fn first_item() -> &'static str {
         ["a"].first()
             .copied()
@@ -15,6 +18,7 @@ mod nested {
     }
 }
 
+/// Use both helpers so neither is dead code.
 #[test]
 fn helpers_are_used_by_a_test() {
     assert_eq!(parse_fixture_value(), 7);

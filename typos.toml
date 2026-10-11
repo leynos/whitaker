@@ -178,6 +178,7 @@ extend-ignore-re = [
     "(?m)^   = note: The call originates within function `fail_result` which is not recognised as a test\\.$",
     "(?m)^   = note: The call originates within function `handler` which is not recognised as a test\\.$",
     "(?m)^   = note: The call originates within function `helper` which is not recognised as a test\\.$",
+    "(?m)^   = note: The call originates within function `load` which is not recognised as a test\\.$",
     "(?m)^   = note: The call originates within function `main` which is not recognised as a test\\.$",
     "(?m)^   = note: The call originates within function `parse_config` which is not recognised as a test\\.$",
     "(?m)^   = note: The call originates within function `parse` which is not recognised as a test\\.$",

@@ -283,7 +283,7 @@ pub(crate) fn is_cfg_test_attribute(attr: &hir::Attribute) -> bool {
         .unwrap_or(false)
 }
 
-/// Returns whether an evaluated `cfg` predicate can hold only under `cfg(test)`.
+/// Report whether an evaluated `cfg` predicate can hold only under `cfg(test)`.
 ///
 /// `All` requires one test-only operand, `Any` requires every alternative to be
 /// test-only, and `Not` is never treated as test-only so `cfg(not(test))`

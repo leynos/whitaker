@@ -323,6 +323,12 @@ fn example_compiles_under_test_harness(#[case] name: &str, #[case] label: &str) 
     "File-backed cfg(test) helper",
     &[],
 )]
+#[case(
+    "ui",
+    "pass_expect_in_cfg_test_items",
+    "cfg(test) function, impl and trait items",
+    &[],
+)]
 fn fixture_compiles_under_test_harness(
     #[case] directory: &str,
     #[case] fixture_name: &str,

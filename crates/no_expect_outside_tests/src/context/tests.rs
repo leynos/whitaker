@@ -477,7 +477,7 @@ fn is_cfg_test_attribute_handles_parsed_must_use() {
     assert!(!is_cfg_test_attribute(&parsed_attr));
 }
 
-/// Builds the parsed `cfg_trace` attribute rustc leaves for an evaluated `cfg`.
+/// Build the parsed `cfg_trace` attribute rustc leaves for an evaluated `cfg`.
 ///
 /// Must be called within `create_default_session_globals_then`.
 #[cfg(feature = "dylint-driver")]
@@ -487,6 +487,7 @@ fn cfg_trace_attribute(entry: CfgEntry) -> hir::Attribute {
     hir::Attribute::Parsed(HirAttributeKind::CfgTrace(entries))
 }
 
+/// Build a bare `cfg` name predicate such as `test`.
 #[cfg(feature = "dylint-driver")]
 fn cfg_name(name: &str) -> CfgEntry {
     CfgEntry::NameValue {
@@ -496,6 +497,7 @@ fn cfg_name(name: &str) -> CfgEntry {
     }
 }
 
+/// Collect predicates into the list an `all` or `any` combinator holds.
 #[cfg(feature = "dylint-driver")]
 fn cfg_list(entries: &[CfgEntry]) -> thin_vec::ThinVec<CfgEntry> {
     entries.iter().cloned().collect()
@@ -521,6 +523,7 @@ fn cfg_trace_of_a_single_name_is_test_only_for_test(#[case] name: &str, #[case] 
     });
 }
 
+/// Verify that `all`, `any`, `not` and boolean predicates keep their polarity.
 #[cfg(feature = "dylint-driver")]
 #[test]
 fn cfg_trace_combinators_follow_their_polarity() {

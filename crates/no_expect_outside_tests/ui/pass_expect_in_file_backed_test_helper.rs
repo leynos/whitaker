@@ -9,4 +9,5 @@
 #[path = "pass_expect_in_file_backed_test_helper/auxiliary/pass_expect_in_file_backed_test_helper_companion.rs"]
 mod companion;
 
+/// The crate's entry point, which the harness does not run.
 fn main() {}
