@@ -153,7 +153,11 @@ guarantee a pin buys is reproducibility, not speed.
 
 With `--no-update`, an already-local `--suite-version` reference resolves
 without network access. A later unpinned update reattaches a detached managed
-clone to its default branch before pulling.
+clone to its default branch, then fetches `origin`, refreshes the remote's
+default branch and hard-resets the clone to it. The managed clone is a build
+input, so the reset discards local edits to tracked files and overwrites
+untracked files that the suite now tracks, which a cache restored from an older
+run can carry; do not keep work in it.
 
 **A pin cannot be applied from inside a Whitaker checkout.** Checking out a
 reference there would move the working tree, so the installer refuses and says

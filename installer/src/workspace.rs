@@ -137,7 +137,7 @@ impl WorkspacePlan {
 ///
 /// If the current directory is already a Whitaker workspace, returns its path.
 /// Otherwise, clones or updates the repository in the platform-specific data
-/// directory. Set `should_update` to `true` to run `git pull` on existing
+/// directory. Set `should_update` to `true` to fetch and hard-reset existing
 /// clones.
 ///
 /// When the plan carries a suite reference, the clone is fetched and that
