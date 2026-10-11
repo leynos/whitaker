@@ -317,6 +317,12 @@ fn example_compiles_under_test_harness(#[case] name: &str, #[case] label: &str) 
     "File-backed cfg(test)",
     &[],
 )]
+#[case(
+    "ui",
+    "pass_expect_in_file_backed_test_helper",
+    "File-backed cfg(test) helper",
+    &[],
+)]
 fn fixture_compiles_under_test_harness(
     #[case] directory: &str,
     #[case] fixture_name: &str,
@@ -338,6 +344,15 @@ fn rstest_expect_outside_tests_still_fails_in_non_harness_code() {
     run_example_under_test_harness(&ExampleHarnessRun::with_flags(
         "fail_expect_in_rstest_non_test_module",
         "rstest non-harness",
+        &["--test", "-D", "no_expect_outside_tests"],
+    ));
+}
+
+#[test]
+fn module_named_tests_without_cfg_test_still_fails() {
+    run_example_under_test_harness(&ExampleHarnessRun::with_flags(
+        "fail_expect_in_non_test_module_named_tests",
+        "non-test module named tests",
         &["--test", "-D", "no_expect_outside_tests"],
     ));
 }

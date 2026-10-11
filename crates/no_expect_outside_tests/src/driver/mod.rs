@@ -234,18 +234,22 @@ fn is_likely_test_function<'tcx>(
 }
 
 fn is_in_cfg_test_module<'tcx>(cx: &LateContext<'tcx>, hir_id: hir::HirId) -> bool {
-    cx.tcx.hir_parent_iter(hir_id).any(|(ancestor_id, node)| {
-        let hir::Node::Item(item) = node else {
-            return false;
-        };
-        if !matches!(item.kind, hir::ItemKind::Mod { .. }) {
-            return false;
-        }
-        cx.tcx
-            .hir_attrs(ancestor_id)
-            .iter()
-            .any(is_cfg_test_attribute)
-    })
+    cx.tcx
+        .hir_parent_iter(hir_id)
+        .any(|(ancestor_id, node)| is_item_like(node) && has_cfg_test_attribute(cx, ancestor_id))
+}
+
+/// Reports whether a HIR node is an item whose attributes can gate it on
+/// `cfg(test)`: a module, function, impl or trait block, or an associated item.
+fn is_item_like(node: hir::Node<'_>) -> bool {
+    matches!(
+        node,
+        hir::Node::Item(_) | hir::Node::ImplItem(_) | hir::Node::TraitItem(_)
+    )
+}
+
+fn has_cfg_test_attribute<'tcx>(cx: &LateContext<'tcx>, hir_id: hir::HirId) -> bool {
+    cx.tcx.hir_attrs(hir_id).iter().any(is_cfg_test_attribute)
 }
 
 fn extract_function_item(node: hir::Node<'_>) -> Option<&hir::Item<'_>> {
