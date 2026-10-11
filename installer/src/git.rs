@@ -52,30 +52,39 @@ pub fn clone_repository(target: &Utf8Path) -> Result<()> {
 
 /// Brings an existing Whitaker clone level with the remote's default branch.
 ///
-/// Fetches `origin` and hard-resets to the remote default branch, which comes
-/// from `origin/HEAD` rather than being assumed to be `main`. The clone is a
-/// build input the installer manages, not somewhere work happens, so it must
-/// not be able to stop an update. A plain `git pull` did: a clone restored from
-/// an older CI cache can carry untracked files that the suite has since started
-/// to track, and `pull` aborts on them with "untracked working tree files would
-/// be overwritten by merge". `reset --hard` overwrites such files, discards any
-/// local edit to a tracked file, and leaves the checked-out branch at the
-/// remote tip. Each Git subprocess has a 5-minute timeout to prevent
-/// indefinite hangs on network issues.
+/// Fetches `origin`, refreshes the cached `refs/remotes/origin/HEAD` with
+/// `git remote set-head origin --auto`, and hard-resets to it. The refresh
+/// matters because a fetch never retargets `origin/HEAD`: a clone that predates
+/// an upstream default-branch rename would otherwise keep resetting to the old
+/// branch. The branch comes from the remote rather than being assumed to be
+/// `main`.
+///
+/// The clone is a build input the installer manages, not somewhere work
+/// happens, so it must not be able to stop an update. A plain `git pull` did: a
+/// clone restored from an older CI cache can carry untracked files that the
+/// suite has since started to track, and `pull` aborts on them with "untracked
+/// working tree files would be overwritten by merge". `reset --hard` overwrites
+/// such files, discards any local edit to a tracked file, and leaves the
+/// checked-out branch at the remote tip. Each Git subprocess has a 5-minute
+/// timeout to prevent indefinite hangs on network issues.
 ///
 /// # Errors
 ///
-/// Returns `InstallerError::Git` if the fetch, the default-branch lookup or the
-/// reset fails or times out.
+/// Returns `InstallerError::Git`, naming the failed step (`fetch`, `set-head`
+/// or `reset`) and carrying Git's trimmed diagnostic, if a step fails or times
+/// out.
 pub fn update_repository(repo: &Utf8Path) -> Result<()> {
     run_git_checked(&["fetch", "origin"], repo, "fetch")?;
-    let head = run_git_checked(
-        &["symbolic-ref", "--short", "refs/remotes/origin/HEAD"],
+    run_git_checked(
+        &["remote", "set-head", "origin", "--auto"],
         repo,
-        "head",
+        "set-head",
     )?;
-    let remote_branch = String::from_utf8_lossy(&head.stdout).trim().to_owned();
-    run_git_checked(&["reset", "--hard", &remote_branch], repo, "reset")?;
+    run_git_checked(
+        &["reset", "--hard", "refs/remotes/origin/HEAD"],
+        repo,
+        "reset",
+    )?;
     Ok(())
 }
 

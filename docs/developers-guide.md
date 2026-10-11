@@ -3288,11 +3288,26 @@ pub fn ensure_workspace(
 
 When a plan reuses an existing managed clone, an unpinned update or reuse first
 checks for a detached `HEAD`. If the previous pinned checkout left it detached,
-`restore_default_branch` reattaches the branch named by `origin/HEAD` before a
-pull or unpinned reuse. A pinned plan leaves the managed clone detached after
+`restore_default_branch` reattaches the branch named by `origin/HEAD` before an
+update or unpinned reuse. A pinned plan leaves the managed clone detached after
 checking out its requested reference. A pin is refused when the current
 directory is itself a Whitaker workspace, because that would mutate the user's
 working tree.
+
+`update_repository` brings an unpinned managed clone level with the remote. It
+runs `git fetch origin`, refreshes the cached `refs/remotes/origin/HEAD` with
+`git remote set-head origin --auto` (a fetch never retargets it, so a clone
+made before an upstream default-branch rename would otherwise keep resetting to
+the old branch), and runs `git reset --hard refs/remotes/origin/HEAD`. It
+replaced `git pull` because a clone restored from an older CI cache can carry
+untracked files that the suite has since started to track, and `pull` aborts on
+them with "untracked working tree files would be overwritten by merge". The
+clone is a build input, not a workspace, so discarding tracked edits and
+overwriting conflicting untracked files is the intended behaviour. Each step is
+a separate `InstallerError::Git` with the operation named `fetch`, `set-head` or
+`reset` and Git's trimmed diagnostic. `git_tests.rs` covers the stale
+untracked file, a discarded local edit, a default branch containing a slash, a
+renamed default branch, and a failure of each step.
 
 #### `resolve_additional_components`
 

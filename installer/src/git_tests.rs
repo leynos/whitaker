@@ -5,9 +5,15 @@ use camino::Utf8PathBuf;
 use cap_std::ambient_authority;
 use cap_std::fs_utf8::Dir;
 use std::process::{Command, Stdio};
+use std::sync::MutexGuard;
 use tempfile::TempDir;
 
+use crate::test_support::env_test_guard;
+
 struct GitFixture {
+    /// Serializes the test with those that change `PATH` or `HOME`, because
+    /// every Git subprocess here inherits the process environment.
+    _env: MutexGuard<'static, ()>,
     _temp: TempDir,
     origin: Utf8PathBuf,
     clone: Utf8PathBuf,
@@ -42,6 +48,7 @@ fn git_stdout(args: &[&str], cwd: &Utf8Path) -> String {
 }
 
 fn git_fixture(default_branch: &str) -> GitFixture {
+    let env = env_test_guard();
     let temp = TempDir::new().expect("temporary directory should be created");
     let root =
         Utf8PathBuf::try_from(temp.path().to_owned()).expect("temporary path should be UTF-8");
@@ -66,6 +73,7 @@ fn git_fixture(default_branch: &str) -> GitFixture {
     git(&["clone", "-q", origin.as_str(), clone.as_str()], &root);
 
     GitFixture {
+        _env: env,
         _temp: temp,
         origin,
         clone,
@@ -81,17 +89,6 @@ fn clone_repository_error_includes_operation() {
     let msg = err.to_string();
     assert!(msg.contains("clone"));
     assert!(msg.contains("test error"));
-}
-
-#[test]
-fn update_repository_error_includes_operation() {
-    let err = InstallerError::Git {
-        operation: "pull",
-        message: "not a git repository".to_owned(),
-    };
-    let msg = err.to_string();
-    assert!(msg.contains("pull"));
-    assert!(msg.contains("not a git repository"));
 }
 
 #[test]
@@ -156,6 +153,93 @@ fn update_repository_discards_local_edits_and_follows_the_default_branch() {
         git_stdout(&["symbolic-ref", "--short", "HEAD"], &fixture.clone),
         "release/stable"
     );
+}
+
+#[test]
+fn update_repository_follows_a_renamed_default_branch() {
+    // A fetch never retargets origin/HEAD, so a clone made before the remote
+    // renamed its default branch would keep resetting to the old name.
+    let fixture = git_fixture("main");
+    git(&["branch", "-m", "main", "trunk"], &fixture.origin);
+    let origin_dir = Dir::open_ambient_dir(&fixture.origin, ambient_authority())
+        .expect("origin should be accessible");
+    origin_dir
+        .write("suite.txt", "after the rename")
+        .expect("updated fixture source should be written");
+    git(&["commit", "-qam", "advance trunk"], &fixture.origin);
+
+    update_repository(&fixture.clone).expect("update should follow the rename");
+
+    let clone_dir = Dir::open_ambient_dir(&fixture.clone, ambient_authority())
+        .expect("clone should be accessible");
+    assert_eq!(
+        clone_dir
+            .read_to_string("suite.txt")
+            .expect("updated file should be readable"),
+        "after the rename"
+    );
+    assert_eq!(
+        git_stdout(&["rev-parse", "HEAD"], &fixture.clone),
+        git_stdout(&["rev-parse", "trunk"], &fixture.origin)
+    );
+}
+
+fn expect_git_failure(result: Result<()>, expected_operation: &str) -> String {
+    match result {
+        Err(InstallerError::Git { operation, message }) => {
+            assert_eq!(operation, expected_operation);
+            assert!(!message.is_empty(), "Git's diagnostic should be carried");
+            message
+        }
+        other => panic!("expected a {expected_operation} failure, got {other:?}"),
+    }
+}
+
+#[test]
+fn update_repository_names_the_fetch_when_the_remote_is_unreachable() {
+    let fixture = git_fixture("main");
+    git(
+        &[
+            "remote",
+            "set-url",
+            "origin",
+            "/nonexistent/whitaker-origin",
+        ],
+        &fixture.clone,
+    );
+
+    let message = expect_git_failure(update_repository(&fixture.clone), "fetch");
+
+    assert!(message.contains("nonexistent"), "diagnostic: {message}");
+}
+
+#[test]
+fn update_repository_names_set_head_when_the_remote_has_no_default_branch() {
+    // The remote's HEAD names a branch that does not exist, so the default
+    // branch cannot be determined.
+    let fixture = git_fixture("main");
+    git(
+        &["symbolic-ref", "HEAD", "refs/heads/nonexistent"],
+        &fixture.origin,
+    );
+
+    let message = expect_git_failure(update_repository(&fixture.clone), "set-head");
+
+    assert!(message.contains("HEAD"), "diagnostic: {message}");
+}
+
+#[test]
+fn update_repository_names_the_reset_when_the_index_is_locked() {
+    let fixture = git_fixture("main");
+    let clone_dir = Dir::open_ambient_dir(&fixture.clone, ambient_authority())
+        .expect("clone should be accessible");
+    clone_dir
+        .write(".git/index.lock", "")
+        .expect("lock file should be written");
+
+    let message = expect_git_failure(update_repository(&fixture.clone), "reset");
+
+    assert!(message.contains("index.lock"), "diagnostic: {message}");
 }
 
 #[test]
