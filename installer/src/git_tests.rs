@@ -95,6 +95,70 @@ fn update_repository_error_includes_operation() {
 }
 
 #[test]
+fn update_repository_overwrites_untracked_files_that_upstream_now_tracks() {
+    // A cached clone restored from an older run can carry untracked files that
+    // the suite has since started to track. `git pull` aborts on them with
+    // "untracked working tree files would be overwritten by merge".
+    let fixture = git_fixture("main");
+    let origin_dir = Dir::open_ambient_dir(&fixture.origin, ambient_authority())
+        .expect("origin should be accessible");
+    origin_dir
+        .write("added.toml", "tracked upstream")
+        .expect("new upstream file should be written");
+    git(&["add", "added.toml"], &fixture.origin);
+    git(&["commit", "-qm", "track a new file"], &fixture.origin);
+    let clone_dir = Dir::open_ambient_dir(&fixture.clone, ambient_authority())
+        .expect("clone should be accessible");
+    clone_dir
+        .write("added.toml", "stale untracked copy")
+        .expect("stale untracked file should be written");
+
+    update_repository(&fixture.clone).expect("update should replace the untracked file");
+
+    assert_eq!(
+        clone_dir
+            .read_to_string("added.toml")
+            .expect("updated file should be readable"),
+        "tracked upstream"
+    );
+    assert_eq!(
+        git_stdout(&["rev-parse", "HEAD"], &fixture.clone),
+        git_stdout(&["rev-parse", "HEAD"], &fixture.origin)
+    );
+}
+
+#[test]
+fn update_repository_discards_local_edits_and_follows_the_default_branch() {
+    // The managed clone is a build input, so a stale edit to a tracked file or a
+    // default branch whose name contains a slash must not stop the update.
+    let fixture = git_fixture("release/stable");
+    let origin_dir = Dir::open_ambient_dir(&fixture.origin, ambient_authority())
+        .expect("origin should be accessible");
+    origin_dir
+        .write("suite.txt", "two")
+        .expect("updated fixture source should be written");
+    git(&["commit", "-qam", "advance origin"], &fixture.origin);
+    let clone_dir = Dir::open_ambient_dir(&fixture.clone, ambient_authority())
+        .expect("clone should be accessible");
+    clone_dir
+        .write("suite.txt", "local edit")
+        .expect("local edit should be written");
+
+    update_repository(&fixture.clone).expect("update should discard the edit");
+
+    assert_eq!(
+        clone_dir
+            .read_to_string("suite.txt")
+            .expect("updated file should be readable"),
+        "two"
+    );
+    assert_eq!(
+        git_stdout(&["symbolic-ref", "--short", "HEAD"], &fixture.clone),
+        "release/stable"
+    );
+}
+
+#[test]
 fn checkout_ref_prefers_the_current_remote_tracking_branch() {
     let fixture = git_fixture("main");
     let origin_dir = Dir::open_ambient_dir(&fixture.origin, ambient_authority())

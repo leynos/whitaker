@@ -50,26 +50,55 @@ pub fn clone_repository(target: &Utf8Path) -> Result<()> {
     Ok(())
 }
 
-/// Updates an existing Whitaker repository by pulling the latest changes.
+/// Brings an existing Whitaker clone level with the remote's default branch.
 ///
-/// Runs `git pull` in the specified repository directory. The operation has
-/// a 5-minute timeout to prevent indefinite hangs on network issues.
+/// Fetches `origin` and hard-resets to the remote default branch, which comes
+/// from `origin/HEAD` rather than being assumed to be `main`. The clone is a
+/// build input the installer manages, not somewhere work happens, so it must
+/// not be able to stop an update. A plain `git pull` did: a clone restored from
+/// an older CI cache can carry untracked files that the suite has since started
+/// to track, and `pull` aborts on them with "untracked working tree files would
+/// be overwritten by merge". `reset --hard` overwrites such files, discards any
+/// local edit to a tracked file, and leaves the checked-out branch at the
+/// remote tip. Each Git subprocess has a 5-minute timeout to prevent
+/// indefinite hangs on network issues.
 ///
 /// # Errors
 ///
-/// Returns `InstallerError::Git` if the pull fails or times out.
+/// Returns `InstallerError::Git` if the fetch, the default-branch lookup or the
+/// reset fails or times out.
 pub fn update_repository(repo: &Utf8Path) -> Result<()> {
-    let output = run_git_with_timeout(&["pull"], Some(repo), "pull")?;
+    run_git_checked(&["fetch", "origin"], repo, "fetch")?;
+    let head = run_git_checked(
+        &["symbolic-ref", "--short", "refs/remotes/origin/HEAD"],
+        repo,
+        "head",
+    )?;
+    let remote_branch = String::from_utf8_lossy(&head.stdout).trim().to_owned();
+    run_git_checked(&["reset", "--hard", &remote_branch], repo, "reset")?;
+    Ok(())
+}
 
+/// Runs one Git operation in `repo`, mapping a non-zero exit to an error.
+///
+/// # Errors
+///
+/// Returns `InstallerError::Git` if git cannot be run, times out, or exits
+/// unsuccessfully, carrying the trimmed standard error.
+fn run_git_checked(
+    args: &[&str],
+    repo: &Utf8Path,
+    operation: &'static str,
+) -> Result<std::process::Output> {
+    let output = run_git_with_timeout(args, Some(repo), operation)?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         return Err(InstallerError::Git {
-            operation: "pull",
+            operation,
             message: stderr.trim().to_owned(),
         });
     }
-
-    Ok(())
+    Ok(output)
 }
 
 /// Returns whether the clone's `HEAD` is detached.
