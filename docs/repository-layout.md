@@ -93,6 +93,12 @@ The repository root `src/` directory holds the top-level library entry points
 and shared lint-registration glue. The `suite/` crate packages the lint set as
 an integrated suite and carries its own source and tests.
 
+### `vendor/`
+
+The `vendor/` directory contains the local `dylint_testing` 6.0.1 patch. Its
+example-target parser recognizes compiler commands with Cargo wrappers, so UI
+tests can preserve configured wrappers and compiler admission.
+
 ## Testing and verification assets
 
 - `tests/` holds workspace-level integration tests, behaviour-driven tests,

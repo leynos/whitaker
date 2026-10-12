@@ -62,3 +62,13 @@ The targeted case then passed with `RUSTC_WRAPPER=sccache`. The repository
 formatting, lint, typecheck, test, Markdown, and Mermaid gates passed. Finally,
 `RUSTC_WRAPPER=sccache make coverage` passed all 1,475 executed tests and wrote
 the LCOV report.
+
+## Follow-up: preserve configured compiler wrappers
+
+The wrapper-clearing workaround above was superseded on 2026-10-12. The
+workspace can also receive the wrapper through Cargo configuration, which
+process-environment removal does not override; clearing an environment wrapper
+also bypasses compiler admission for nested Cargo builds. Whitaker now patches
+`dylint_testing` 6.0.1 to find the `rustc` executable after Cargo's wrapper
+argument, and UI helpers preserve compiler-wrapper variables. This keeps
+compiler admission active while example tests recover the flags they need.
