@@ -9,7 +9,6 @@ use std::{
 use camino::Utf8Path;
 use dylint_testing::ui::Test;
 use rstest::rstest;
-use temp_env::with_vars_unset;
 use whitaker_common::test_support::{env_test_guard, prepare_fixture, run_test_runner};
 
 /// Describes a single example-based regression to run under the test harness.
@@ -87,18 +86,9 @@ fn run_example_under_test_harness(spec: &ExampleHarnessRun<'_>) {
     whitaker::testing::ui::run_with_runner(crate_name, directory, |_, _| {
         run_test_runner(spec.name, || {
             let _guard = env_test_guard();
-            with_vars_unset(
-                [
-                    "RUSTC_WRAPPER",
-                    "RUSTC_WORKSPACE_WRAPPER",
-                    "CARGO_BUILD_RUSTC_WRAPPER",
-                ],
-                || {
-                    let mut test = Test::example(crate_name, spec.name);
-                    test.rustc_flags(spec.rustc_flags);
-                    test.run();
-                },
-            );
+            let mut test = Test::example(crate_name, spec.name);
+            test.rustc_flags(spec.rustc_flags);
+            test.run();
         })
     })
     .unwrap_or_else(|error| {
@@ -128,21 +118,12 @@ fn run_fixture_under_test_harness(
 
     run_test_runner(spec.fixture_name, || {
         let _guard = env_test_guard();
-        with_vars_unset(
-            [
-                "RUSTC_WRAPPER",
-                "RUSTC_WORKSPACE_WRAPPER",
-                "CARGO_BUILD_RUSTC_WRAPPER",
-            ],
-            || {
-                let mut test = Test::src_base(spec.crate_name, env.workdir());
-                if let Some(config) = env.take_config() {
-                    test.dylint_toml(config);
-                }
-                test.rustc_flags(harness_flag_refs.as_slice());
-                test.run();
-            },
-        );
+        let mut test = Test::src_base(spec.crate_name, env.workdir());
+        if let Some(config) = env.take_config() {
+            test.dylint_toml(config);
+        }
+        test.rustc_flags(harness_flag_refs.as_slice());
+        test.run();
     })
 }
 

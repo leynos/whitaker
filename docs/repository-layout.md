@@ -29,6 +29,7 @@ formal verification helpers.
 | `src/`       | Root library code that assembles shared lint registration and workspace-facing APIs.                                                  |
 | `suite/`     | The suite crate used to package and expose the lint set coherently.                                                                   |
 | `tests/`     | Workspace-level integration, behaviour, UI harness, and workflow tests.                                                               |
+| `vendor/`    | Small source overrides for third-party Cargo crates where Whitaker needs a maintained compatibility fix.                              |
 | `verus/`     | Verus proof sidecars and formal verification experiments.                                                                             |
 
 _Table 1: Top-level repository layout._
@@ -88,6 +89,12 @@ as a product rather than only as a library.
 The repository root `src/` directory holds the top-level library entry points
 and shared lint-registration glue. The `suite/` crate packages the lint set as
 an integrated suite and carries its own source and tests.
+
+### `vendor/`
+
+The `vendor/` directory contains the local `dylint_testing` 6.0.1 patch. Its
+example-target parser recognizes compiler commands with Cargo wrappers, so UI
+tests can preserve configured wrappers and compiler admission.
 
 ## Testing and verification assets
 

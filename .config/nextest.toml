@@ -42,8 +42,10 @@ serial-toolchain-installs = { max-threads = 1 }
 # clauses match nothing.  The `rstest-bdd-macros` dev-dependency proc-macro
 # hangs during cargo's dev-dependency resolution on Windows CI regardless of
 # whether any example source uses rstest, so all Dylint example compilation for
-# that crate is compiled away on Windows.
-filter = "test(driver::ui::) | test(tests::ui::) | test(ui::ui) | test(ui::example_compiles_under_test_harness) | test(ui::rstest_unwrap_outside_tests_still_fails_in_non_harness_code) | test(ui::rstest_empty_companion_does_not_exempt_parent_function) | (binary(ui) & test(=ui))"
+# that crate is compiled away on Windows. The rstest helper UI tests also invoke
+# nested Cargo builds and must share this group to avoid races with other UI
+# harnesses using the workspace target directory.
+filter = "test(driver::ui::) | test(tests::ui::) | test(ui::ui) | test(ui::example_compiles_under_test_harness) | test(ui::rstest_unwrap_outside_tests_still_fails_in_non_harness_code) | test(ui::rstest_empty_companion_does_not_exempt_parent_function) | (binary(ui) & test(=ui)) | (binary(ui) & test(example_compiles_without_diagnostics)) | (binary(ui) & test(trybuild_fixtures_compile_without_diagnostics)) | (binary(ui) & test(example_harness_collects_call_site_evidence))"
 test-group = "serial-dylint-ui"
 retries = { backoff = "exponential", count = 2, delay = "5s" }
 slow-timeout = { period = "10m", terminate-after = 1 }

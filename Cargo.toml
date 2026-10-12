@@ -2,6 +2,11 @@
 members = ["common", "crates/*", "installer", "suite"]
 resolver = "2"
 
+# Dylint 6.0.1 must recognize rustc commands prefixed by Cargo's compiler
+# wrapper so UI tests can retain compiler admission.
+[patch.crates-io]
+dylint_testing = { path = "vendor/dylint_testing" }
+
 [workspace.package]
 license = "ISC"
 repository = "https://github.com/leynos/whitaker"

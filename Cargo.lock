@@ -780,8 +780,6 @@ dependencies = [
 [[package]]
 name = "dylint_testing"
 version = "6.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4f5f50ee06be9ebfb5b9538ba0d7bb08adc33e8f31c901e7d398de2a9b1ae290"
 dependencies = [
  "anyhow",
  "cargo_metadata",
@@ -1885,7 +1883,6 @@ dependencies = [
  "rustc_session",
  "rustc_span",
  "serde",
- "temp-env",
  "tokio",
  "whitaker",
  "whitaker-common",

@@ -13,8 +13,6 @@ use camino::{Utf8Path, Utf8PathBuf};
 mod toolchain;
 
 use self::toolchain::{CrateName, ensure_toolchain_library};
-use whitaker_common::test_support::with_env_var_removed;
-
 /// Errors produced when preparing or executing Dylint UI tests.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum HarnessError {
@@ -177,12 +175,6 @@ pub fn run_with_runner(
 
 /// Runs `callback` with the environment `run_with_runner` requires.
 ///
-/// `RUSTC_WRAPPER` must be cleared on every platform when set (for example to
-/// `sccache`), because `dylint_testing::Test::example` scans
-/// `cargo build --message-format=json` output for bare `rustc` invocations.
-/// When a wrapper is active, Cargo invokes `<wrapper> rustc ...` instead, and
-/// `dylint_testing` finds zero invocations, causing a panic.
-///
 /// On Windows, one additional environment variable needs temporary adjustment:
 ///
 /// - `VCPKG_ROOT`: must be set to `C:\vcpkg` when that directory exists and the
@@ -193,7 +185,7 @@ pub fn run_with_runner(
 /// without deadlocking, and every prior value is restored when the callback
 /// returns or panics.
 fn with_runner_env<R>(callback: impl FnOnce() -> R) -> R {
-    with_vcpkg_root(|| with_env_var_removed("RUSTC_WRAPPER", callback))
+    with_vcpkg_root(callback)
 }
 
 #[cfg(windows)]

@@ -469,16 +469,20 @@ is exactly `doc` (including those injected via `cfg_attr`) mark the module as
 documented. The attribute parser tolerates spacing after the `#!` marker and
 traces the first-level `cfg_attr` meta list to find `doc` entries, which avoids
 substring-based false positives such as `#![allow(undocumented_unsafe_blocks)]`
-and misclassifying `documentation = "…"`. If the snippet starts with an inner
-attribute marker (`#`) before any doc, the lint emits `FirstInnerIsNotDoc` and
-highlights the offending token when a later inner doc exists; if no inner doc
-appears at all (including a lone inner attribute), it falls back to
-`MissingDocs` so the diagnostic targets the module start. A doc-less `cfg_attr`
-wrapper also maps to `MissingDocs`. The shared span helpers from
-`whitaker::hir` supply consistent ranges for inline and file modules. Localized
-strings pull from `common/locales/*/module_must_have_inner_docs.ftl`, passing
-the module name via the Fluent argument map, and fall back to a deterministic
-English message whenever localization fails.
+and misclassifying `documentation = "…"`. A crate-private meta-list walker
+handles nested parentheses and quoted string literals, including escapes and
+raw strings; callers supply the identifier predicate for doc recognition or
+case-mismatch detection. Reuse stays within this lint's `driver` parser and
+does not extend to general Rust tokenization. If the snippet starts with an
+inner attribute marker (`#`) before any doc, the lint emits
+`FirstInnerIsNotDoc` and highlights the offending token when a later inner doc
+exists; if no inner doc appears at all (including a lone inner attribute), it
+falls back to `MissingDocs` so the diagnostic targets the module start. A
+doc-less `cfg_attr` wrapper also maps to `MissingDocs`. The shared span helpers
+from `whitaker::hir` supply consistent ranges for inline and file modules.
+Localized strings pull from `common/locales/*/module_must_have_inner_docs.ftl`,
+passing the module name via the Fluent argument map, and fall back to a
+deterministic English message whenever localization fails.
 
 **Testing.** Unit tests (rstest) and `rstest-bdd` scenarios exercise the
 snippet classifier, covering happy paths, missing docs, inner attributes that
@@ -1034,8 +1038,8 @@ declare_combined_late_lint_pass!(SuitePass => [
     NoStdFsOperations,
 ]);
 
-#[no_mangle]
-pub extern "C" fn register_lints(sess: &Session, store: &mut LintStore) {
+#[no_mangle] pub extern "C" fn register_lints(sess: &Session, store: &mut
+LintStore) {
     dylint_linting::init_config(sess);
     store.register_lints(&[
         function_attrs_follow_docs::FUNCTION_ATTRS_FOLLOW_DOCS,
