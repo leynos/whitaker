@@ -3848,12 +3848,12 @@ of the rule lives in the `generate-coverage` README in
 this repository sets, what each value is sized against, and where the third
 tier went.
 
-| Tier                     | What it bounds                     | Where it is set                             | Current value                                                                                      |
-| ------------------------ | ---------------------------------- | ------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`, both profiles       | 300 s default; 10 m for the dylint UI harnesses, 30 m for the toolchain-installing behaviour tests |
-| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, both profiles       | 45 m                                                                                               |
-| Cargo watchdog           | one `cargo` invocation, wall clock | not used here, see below                    | absent                                                                                             |
-| Job `timeout-minutes`    | the whole job                      | `ci.yml` and `coverage-main.yml`, job level | 80 m for every lane that runs the suite                                                            |
+| Tier                     | What it bounds                     | Where it is set                             | Current value                                                                                                                         |
+| ------------------------ | ---------------------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`, both profiles       | 300 s default; 10 m for the dylint UI harnesses and parser-pin nested Cargo checks, 30 m for the toolchain-installing behaviour tests |
+| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, both profiles       | 45 m                                                                                                                                  |
+| Cargo watchdog           | one `cargo` invocation, wall clock | not used here, see below                    | absent                                                                                                                                |
+| Job `timeout-minutes`    | the whole job                      | `ci.yml` and `coverage-main.yml`, job level | 80 m for every lane that runs the suite                                                                                               |
 
 *Table: the timers that can end a run, innermost first.*
 
@@ -3885,8 +3885,9 @@ have discarded the log.
 ### Both profiles state their own budgets
 
 Each profile now declares its own base `slow-timeout` and `global-timeout`, and
-`ci` restates the toolchain and dylint allowances as its own overrides. None of
-that is required for the run to be bounded: `ci` would inherit all of it.
+`ci` restates the toolchain, dylint, and parser-pin build-script allowances as
+its own overrides. None of that is required for the run to be bounded: `ci`
+would inherit all of it.
 
 It is repository policy, for two reasons. `ci` is the profile that includes the
 toolchain-installing behaviour tests the default profile excludes, so it is the
@@ -3894,6 +3895,11 @@ profile with the longest tests, and the budgets that govern the lane belong
 where a reader of that profile will find them. Restating them also makes a
 later divergence between the two profiles explicit rather than silent, since a
 changed default would otherwise change CI without touching the `ci` section.
+
+The parser-pin build-script tests each create an isolated nested Cargo
+workspace with its own target directory. Their 10 m allowance accommodates cold
+builds queued for compiler admission after one exceeded the 300 s base timeout;
+it does not serialize the tests.
 
 The contract holds that policy, and its failure messages say so rather than
 claiming nextest requires it.

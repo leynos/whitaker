@@ -3373,7 +3373,7 @@ name = "whitaker-common"
 version = "0.2.9"
 dependencies = [
  "camino",
- "cap-std 4.0.3",
+ "cap-std",
  "fluent-templates",
  "glob",
  "log",

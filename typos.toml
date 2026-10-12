@@ -282,7 +282,7 @@ extend-ignore-re = [
     "(?m)^use whitaker_common::i18n::\\{LocaleSelection, LocaleSource, normalise_locale, resolve_localizer\\};$",
     "(?m)^use whitaker_common::i18n::normalise_locale;$",
     "(?s)```.*?```",
-    "--[a-zA-Z0-9-]*color[a-zA-Z0-9*-]*",
+    "--[A-Za-z0-9_-]*color(?:ed|s|ing|ize[ds]?|izing)?(?:\\b|_)",
     "Azure\\s+Architecture\\s+Center\\s*\\|\\s*Microsoft\\s+Learn\\b",
     "GitHub\\s+Flavored\\s+Markdown\\b(?:\\s\\(GFM\\))?",
     "HashiCorp",

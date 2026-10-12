@@ -205,6 +205,31 @@ fn approx_vector_rejects_infinite_value_for_finite_expectation() {
     assert_vec_approx_eq(&[f64::INFINITY], &[f64::MAX]);
 }
 
+/// Rejects NaN inputs regardless of their payload bits.
+#[test]
+fn ulp_distance_rejects_nan_inputs() {
+    let left_nan = f64::from_bits(0x7ff0_0000_0000_0001);
+    let right_nan = f64::from_bits(0xfff8_0000_0000_0042);
+
+    assert_eq!(ulp_distance(left_nan, f64::MAX), None);
+    assert_eq!(ulp_distance(f64::MAX, left_nan), None);
+    assert_eq!(ulp_distance(right_nan, f64::MAX), None);
+}
+
+/// Rejects a NaN actual value instead of treating it as a close match.
+#[test]
+#[should_panic(expected = "ULP distance None")]
+fn approx_vector_rejects_nan_actual_value() {
+    assert_vec_approx_eq(&[f64::NAN], &[0.0]);
+}
+
+/// Rejects a NaN expected value instead of treating it as a close match.
+#[test]
+#[should_panic(expected = "ULP distance None")]
+fn approx_vector_rejects_nan_expected_value() {
+    assert_vec_approx_eq(&[0.0], &[f64::NAN]);
+}
+
 proptest! {
     #[test]
     fn monotonic_bits_preserve_finite_numeric_order(
@@ -230,6 +255,20 @@ proptest! {
 
         prop_assert_eq!(ulp_distance(left, left), Some(0));
         prop_assert_eq!(ulp_distance(left, right), ulp_distance(right, left));
+    }
+
+    /// Preserves the undefined-distance contract for arbitrary NaN payloads.
+    #[test]
+    fn ulp_distance_is_undefined_when_either_value_is_nan(
+        nan_payload in any::<u64>(),
+        finite_bits in any::<u64>(),
+    ) {
+        let nan = f64::from_bits(0x7ff0_0000_0000_0001 | (nan_payload & 0x000f_ffff_ffff_ffff));
+        let finite = f64::from_bits(finite_bits);
+        prop_assume!(finite.is_finite());
+
+        prop_assert_eq!(ulp_distance(nan, finite), None);
+        prop_assert_eq!(ulp_distance(finite, nan), None);
     }
 
     #[test]

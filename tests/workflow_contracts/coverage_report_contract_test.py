@@ -1,4 +1,4 @@
-"""Protect the freshness and ownership contract for workflow LCOV reports."""
+"""Enforce fresh-report and ownership contracts for workflow LCOV reports."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from ruamel.yaml import YAML
+import yaml
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_NAMES = ("ci.yml", "coverage-main.yml")
@@ -19,11 +19,10 @@ CODESCENE_UPLOAD_ACTION = (
 @pytest.fixture(scope="module")
 def workflows() -> dict[str, dict[str, Any]]:
     """Load the pull-request and main-branch coverage workflow documents."""
-    yaml = YAML(typ="safe")
     parsed_workflows: dict[str, dict[str, Any]] = {}
     for workflow_name in WORKFLOW_NAMES:
         workflow_path = REPOSITORY_ROOT / ".github/workflows" / workflow_name
-        parsed = yaml.load(workflow_path.read_text(encoding="utf-8"))
+        parsed = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
         assert isinstance(parsed, dict), f"{workflow_path} must contain a mapping"
         parsed_workflows[workflow_name] = parsed
     return parsed_workflows

@@ -296,10 +296,10 @@ fn non_import_text_does_not_trigger_the_boundary_guard(#[case] source: &str) {
 
 #[test]
 fn non_comment_tokens_discard_comments_and_strings_but_keep_paths() {
-    let tokens = non_comment_tokens(
-        "// hidden_comment\nconst HIDDEN: &str = \"hidden string\";\nuse \
-         crate::ast::tree::ByteSpan;",
-    );
+    let tokens = non_comment_tokens(concat!(
+        "// hidden_comment\nconst HIDDEN: &str = \"hidden string\";\nuse ",
+        "crate::ast::tree::ByteSpan;"
+    ));
 
     assert!(!tokens.iter().any(|token| token.contains("hidden_comment")));
     assert!(!tokens.iter().any(|token| token.contains("hidden string")));

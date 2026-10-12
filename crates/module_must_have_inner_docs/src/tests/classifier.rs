@@ -59,9 +59,11 @@ fn rejects_mixed_case_doc_identifiers(#[case] snippet: &str) {
 fn accepts_nested_cfg_attr_doc() {
     assert_eq!(
         detect_module_docs_from_snippet(
-            "#![cfg_attr(feature = \"outer\", cfg_attr(feature = \"inner\", doc = \"Module \
-             docs\"))]"
-                .into()
+            concat!(
+                "#![cfg_attr(feature = \"outer\", cfg_attr(feature = \"inner\", doc = \"Module ",
+                "docs\"))]"
+            )
+            .into()
         ),
         ModuleDocDisposition::HasLeadingDoc
     );

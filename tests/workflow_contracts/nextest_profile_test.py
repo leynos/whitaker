@@ -85,8 +85,8 @@ class Allowance(typ.NamedTuple):
 #: hundred seconds. The two profiles genuinely differ here, the default one
 #: naming seven more `test(...)` clauses in its shared UI override than
 #: `ci`: twelve against five, with `(binary(ui) & test(=ui))` shared and
-#: counted in neither. The macro crate's compile contract has its own
-#: identical override in both profiles.
+#: counted in neither. The macro crate's compile contract and parser-pin
+#: nested Cargo checks have their own identical allowances in both profiles.
 REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
     "default": {
         ("binary(behaviour_toolchain)"): Allowance(
@@ -134,6 +134,14 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
             },
             test_group="serial-dylint-ui",
         ),
+        "test(build_script_integration::)": Allowance(
+            slow_timeout={
+                "period": "10m",
+                "terminate-after": 1,
+                "grace-period": "5s",
+            },
+            test_group=None,
+        ),
     },
     "ci": {
         ("binary(behaviour_toolchain)"): Allowance(
@@ -166,6 +174,14 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
                 "grace-period": "5s",
             },
             test_group="serial-dylint-ui",
+        ),
+        "test(build_script_integration::)": Allowance(
+            slow_timeout={
+                "period": "10m",
+                "terminate-after": 1,
+                "grace-period": "5s",
+            },
+            test_group=None,
         ),
     },
 }
