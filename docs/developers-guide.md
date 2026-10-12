@@ -294,26 +294,27 @@ make fmt        # Apply formatting
 ## Mutation-testing workflow contract tests
 
 Whitaker runs scheduled, informational mutation testing through a thin caller
-workflow, [`.github/workflows/mutation-testing.yml`](../.github/workflows/mutation-testing.yml),
+workflow,
+[`.github/workflows/mutation-testing.yml`](../.github/workflows/mutation-testing.yml),
 which delegates to the shared reusable workflow
-`leynos/shared-actions/.github/workflows/mutation-cargo.yml`. The heavy
-lifting — running `cargo-mutants`, sharding, and summarizing survivors — lives
-in `shared-actions`; this repository carries only declarative configuration.
-The run is **informational only**: it never gates a pull request. Survivors
-are reported through the job summary and downloadable artefacts so they can be
+`leynos/shared-actions/.github/workflows/mutation-cargo.yml`. The heavy lifting
+— running `cargo-mutants`, sharding, and summarizing survivors — lives in
+`shared-actions`; this repository carries only declarative configuration. The
+run is **informational only**: it never gates a pull request. Survivors are
+reported through the job summary and downloadable artefacts so they can be
 triaged into tests, not enforced as a blocking check.
 
 The workflow runs in two modes. A **daily schedule** (04:50 UTC) fires a
 change-scoped run that mutates only the source files touched within the
 detection window, so quiet days are cheap no-ops. A **manual dispatch** (the
-Actions "Run workflow" control) mutates the whole workspace; select a branch
-in that control to exercise a feature branch.
+Actions "Run workflow" control) mutates the whole workspace; select a branch in
+that control to exercise a feature branch.
 
 The caller passes a small set of configuration inputs, each carrying intent:
 
 - `paths` — `src/,common/,crates/,installer/,suite/`, the workspace member
-  prefixes rooted at the repository root; there are no top-level `examples/`
-  or `benches/` directories to add.
+  prefixes rooted at the repository root; there are no top-level `examples/` or
+  `benches/` directories to add.
 - `exclude-globs` — scaffolding whose surviving mutants would be noise rather
   than genuine test gaps: the `rustc_*` proxy crates and the `clippy_utils`
   stub (both re-export compiler internals), each lint's `ui/` and `examples/`
@@ -332,16 +333,16 @@ excluded). Those crates enable `feature(rustc_private)` under the
 (`-C prefer-dynamic -Z force-unstable-if-unmarked`) that the `test` and
 `typecheck` Makefile targets inject per invocation — see the note in
 [`.cargo/config.toml`](../.cargo/config.toml), which deliberately keeps that
-flag out of workspace-wide configuration because it would break `cargo
-install` for `whitaker-installer`. The shared mutation workflow has no
-equivalent per-crate RUSTFLAGS step, so it cannot reproduce
-`TEST_CARGO_FLAGS` faithfully across the whole workspace. Consequently this
-adoption is **pin-only**: the caller declares the best approximation of the CI
-scope it safely can, rather than a `--test-workspace` run that mirrors
-`make test` crate-for-crate, and the contract test asserts only that this
-declared configuration holds — not that a full workspace mutation baseline
-passes. [ADR 004](adr-004-pin-only-mutation-testing-contract.md) records this
-decision, its alternatives, and the accepted limitations.
+flag out of workspace-wide configuration because it would break `cargo install`
+for `whitaker-installer`. The shared mutation workflow has no equivalent
+per-crate RUSTFLAGS step, so it cannot reproduce `TEST_CARGO_FLAGS` faithfully
+across the whole workspace. Consequently this adoption is **pin-only**: the
+caller declares the best approximation of the CI scope it safely can, rather
+than a `--test-workspace` run that mirrors `make test` crate-for-crate, and the
+contract test asserts only that this declared configuration holds — not that a
+full workspace mutation baseline passes.
+[ADR 004](adr-004-pin-only-mutation-testing-contract.md) records this decision,
+its alternatives, and the accepted limitations.
 
 The `uses:` reference pins the shared workflow to a full 40-character commit
 SHA rather than a branch or tag, so a force-push upstream cannot silently
@@ -353,17 +354,19 @@ without any accompanying test edit.
 
 Because the caller is configuration rather than code, a contract test suite,
 [`tests/workflow_contracts/mutation_testing_test.py`](../tests/workflow_contracts/mutation_testing_test.py),
-pins the shape it must uphold, failing the pull request when the caller
-drifts — repointing the pin at a branch, widening the token scope, or
-dropping a configuration input — rather than letting the breakage surface
-only in a scheduled run. Run it locally with:
+pins the shape it must uphold, failing the pull request when the caller drifts
+— repointing the pin at a branch, widening the token scope, or dropping a
+configuration input — rather than letting the breakage surface only in a
+scheduled run. Run it locally with:
 
 ```sh
 make test-workflow-contracts
 ```
 
-which wraps `uv run --with 'pytest>=8' --with 'pyyaml>=6' pytest
-tests/workflow_contracts -q`. The suite validates:
+which wraps
+`uv run --with 'pytest>=8' --with 'pyyaml>=6' pytest
+tests/workflow_contracts -q`.
+The suite validates:
 
 - the `uses:` reference targets `mutation-cargo.yml` pinned to a full commit
   SHA;
@@ -1747,24 +1750,23 @@ the regression suite: `temp-env` provides scoped environment overrides,
 `tempfile` provides isolated target directories, and `rstest` powers the
 fixture-based test setup used by the staged-suite coverage.
 
-
 #### Shared UI harness environment overrides
 
-Workspace-level UI harness tests that mutate process-wide environment
-variables must use the scoped helpers in `whitaker_common::test_support`:
-`with_env_var` installs a temporary value, `with_env_var_removed` makes a
-variable absent, and `with_locale` overrides (or clears) `DYLINT_LOCALE` for
-the duration of a callback. The helpers delegate to `temp_env`, whose
-re-entrant global lock serializes scoped mutations while permitting nesting
-from the same thread, and every prior value is restored when the callback
-returns or panics. The workspace forbids `unsafe` code, so tests must never
-call `std::env::set_var`/`remove_var` directly.
+Workspace-level UI harness tests that mutate process-wide environment variables
+must use the scoped helpers in `whitaker_common::test_support`: `with_env_var`
+installs a temporary value, `with_env_var_removed` makes a variable absent, and
+`with_locale` overrides (or clears) `DYLINT_LOCALE` for the duration of a
+callback. The helpers delegate to `temp_env`, whose re-entrant global lock
+serializes scoped mutations while permitting nesting from the same thread, and
+every prior value is restored when the callback returns or panics. The
+workspace forbids `unsafe` code, so tests must never call
+`std::env::set_var`/`remove_var` directly.
 
-`whitaker::testing::ui::run_with_runner` wraps the Dylint UI runner in the
-same scoped helpers. On every platform it clears `RUSTC_WRAPPER` while the
-runner needs bare `rustc` invocations for `dylint_testing::Test::example`. On
-Windows it also sets `VCPKG_ROOT` to `C:\vcpkg` when that directory exists
-and the variable is otherwise absent.
+`whitaker::testing::ui::run_with_runner` wraps the Dylint UI runner in the same
+scoped helpers. On every platform it clears `RUSTC_WRAPPER` while the runner
+needs bare `rustc` invocations for `dylint_testing::Test::example`. On Windows
+it also sets `VCPKG_ROOT` to `C:\vcpkg` when that directory exists and the
+variable is otherwise absent.
 
 Example-based UI tests in `rstest_helper_should_be_fixture` also use a
 cross-process directory lock under the system temporary directory. `nextest`
@@ -2089,17 +2091,16 @@ It can be promoted to standard by:
    `suite/Cargo.toml`
 3. Updating documentation to reflect the change
 
-
 ### Suite entry point
 
-Dylint resolves a library's lints through an exported `register_lints`
-symbol, which requires `#[unsafe(no_mangle)]`. The workspace forbids in-crate
-`unsafe` code, so the suite declares its entry point through
+Dylint resolves a library's lints through an exported `register_lints` symbol,
+which requires `#[unsafe(no_mangle)]`. The workspace forbids in-crate `unsafe`
+code, so the suite declares its entry point through
 `whitaker_common::declare_dylint_register_entry!`, which expands the unsafe
 attribute from an external macro — the same escape hatch
 `dylint_linting::impl_late_lint!` relies on for single-lint crates. The macro
-is reserved for Dylint driver crates; it must not be used for any other
-symbol export.
+is reserved for Dylint driver crates; it must not be used for any other symbol
+export.
 
 ## Creating a New Lint
 
