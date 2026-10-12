@@ -18,56 +18,71 @@ use crate::{
     span::{SourceLocation, SourceSpan},
 };
 
-fn outer(path: &str) -> Attribute {
-    Attribute::new(AttributePath::from(path), AttributeKind::Outer)
+/// Builds an outer attribute from its typed path.
+fn outer(path: AttributePath) -> Attribute {
+    Attribute::new(path, AttributeKind::Outer)
 }
 
-fn provider_parameter(path: &str) -> RstestParameter {
+/// Builds a parameter carrying the supplied provider attribute path.
+fn provider_parameter(path: AttributePath) -> RstestParameter {
     RstestParameter::new(
         ParameterBinding::Ident("value".to_owned()),
         vec![outer(path)],
     )
 }
 
+/// Classifies known `rstest` test attributes without accepting unrelated ones.
 #[rstest]
-#[case::rstest("rstest", true)]
-#[case::qualified("rstest::rstest", true)]
-#[case::plain_test("test", false)]
-#[case::tokio("tokio::test", false)]
-#[case::case("case", false)]
-#[case::fixture("rstest::fixture", false)]
-fn detects_strict_rstest_tests(#[case] path: &str, #[case] expected: bool) {
+#[case::rstest(AttributePath::from("rstest"), true)]
+#[case::qualified(AttributePath::from("rstest::rstest"), true)]
+#[case::plain_test(AttributePath::from("test"), false)]
+#[case::tokio(AttributePath::from("tokio::test"), false)]
+#[case::case(AttributePath::from("case"), false)]
+#[case::fixture(AttributePath::from("rstest::fixture"), false)]
+fn detects_strict_rstest_tests(#[case] path: AttributePath, #[case] expected: bool) {
     assert_eq!(is_rstest_test(&[outer(path)]), expected);
 }
 
+/// Classifies `rstest` tests when unrelated attributes appear in any order.
 #[rstest]
-#[case::rstest("rstest", true)]
-#[case::qualified("rstest::rstest", true)]
-#[case::plain_test("test", false)]
-#[case::tokio("tokio::test", false)]
-#[case::case("case", false)]
-#[case::fixture("rstest::fixture", false)]
+#[case::rstest(AttributePath::from("rstest"), true)]
+#[case::qualified(AttributePath::from("rstest::rstest"), true)]
+#[case::plain_test(AttributePath::from("test"), false)]
+#[case::tokio(AttributePath::from("tokio::test"), false)]
+#[case::case(AttributePath::from("case"), false)]
+#[case::fixture(AttributePath::from("rstest::fixture"), false)]
 fn detects_strict_rstest_tests_with_multiple_attributes(
-    #[case] path: &str,
+    #[case] path: AttributePath,
     #[case] expected: bool,
 ) {
     // non-rstest attribute preceding the rstest-related attribute
-    assert_eq!(is_rstest_test(&[outer("allow"), outer(path)]), expected);
+    assert_eq!(
+        is_rstest_test(&[outer(AttributePath::from("allow")), outer(path.clone())]),
+        expected
+    );
     // non-rstest attribute following the rstest-related attribute
-    assert_eq!(is_rstest_test(&[outer(path), outer("allow")]), expected);
+    assert_eq!(
+        is_rstest_test(&[outer(path.clone()), outer(AttributePath::from("allow"))]),
+        expected
+    );
     // multiple non-rstest attributes surrounding the rstest-related attribute
     assert_eq!(
-        is_rstest_test(&[outer("allow"), outer(path), outer("warn")]),
+        is_rstest_test(&[
+            outer(AttributePath::from("allow")),
+            outer(path),
+            outer(AttributePath::from("warn")),
+        ]),
         expected
     );
 }
 
+/// Classifies fixture attributes without treating tests or other paths as fixtures.
 #[rstest]
-#[case::fixture("fixture", true)]
-#[case::qualified("rstest::fixture", true)]
-#[case::rstest("rstest", false)]
-#[case::other("allow", false)]
-fn detects_strict_rstest_fixtures(#[case] path: &str, #[case] expected: bool) {
+#[case::fixture(AttributePath::from("fixture"), true)]
+#[case::qualified(AttributePath::from("rstest::fixture"), true)]
+#[case::rstest(AttributePath::from("rstest"), false)]
+#[case::other(AttributePath::from("allow"), false)]
+fn detects_strict_rstest_fixtures(#[case] path: AttributePath, #[case] expected: bool) {
     assert_eq!(is_rstest_fixture(&[outer(path)]), expected);
 }
 
@@ -83,18 +98,19 @@ fn classifies_identifier_parameters_as_fixture_locals() {
     );
 }
 
+/// Recognizes the built-in provider attributes accepted by `rstest`.
 #[rstest]
-#[case("case")]
-#[case("rstest::case")]
-#[case("values")]
-#[case("rstest::values")]
-#[case("files")]
-#[case("rstest::files")]
-#[case("future")]
-#[case("rstest::future")]
-#[case("context")]
-#[case("rstest::context")]
-fn classifies_provider_parameters(#[case] path: &str) {
+#[case(AttributePath::from("case"))]
+#[case(AttributePath::from("rstest::case"))]
+#[case(AttributePath::from("values"))]
+#[case(AttributePath::from("rstest::values"))]
+#[case(AttributePath::from("files"))]
+#[case(AttributePath::from("rstest::files"))]
+#[case(AttributePath::from("future"))]
+#[case(AttributePath::from("rstest::future"))]
+#[case(AttributePath::from("context"))]
+#[case(AttributePath::from("rstest::context"))]
+fn classifies_provider_parameters(#[case] path: AttributePath) {
     let parameter = provider_parameter(path);
 
     assert_eq!(
@@ -103,9 +119,10 @@ fn classifies_provider_parameters(#[case] path: &str) {
     );
 }
 
+/// Recognizes explicitly configured provider paths.
 #[rstest]
 fn classifies_custom_provider_parameters() {
-    let parameter = provider_parameter("custom::provider");
+    let parameter = provider_parameter(AttributePath::from("custom::provider"));
     let options = RstestDetectionOptions::new(
         vec![
             AttributePath::from("custom::provider"),
@@ -120,9 +137,10 @@ fn classifies_custom_provider_parameters() {
     );
 }
 
+/// Treats unknown custom provider paths as fixture-local parameters.
 #[rstest]
 fn rejects_unknown_custom_provider_parameters() {
-    let parameter = provider_parameter("unknown::provider");
+    let parameter = provider_parameter(AttributePath::from("unknown::provider"));
     let options = RstestDetectionOptions::new(vec![AttributePath::from("custom::provider")], false);
 
     // Should classify as fixture local since it's not in the custom provider list
@@ -144,12 +162,13 @@ fn rejects_unsupported_parameter_patterns() {
     );
 }
 
+/// Ignores expansion traces when fallback detection is disabled.
 #[rstest]
 fn ignores_trace_when_fallback_is_disabled() {
     let trace = ExpansionTrace::new([AttributePath::from("rstest")]);
 
     assert!(!is_rstest_test_with(
-        &[outer("allow")],
+        &[outer(AttributePath::from("allow"))],
         Some(&trace),
         &RstestDetectionOptions::default(),
     ));
@@ -158,42 +177,53 @@ fn ignores_trace_when_fallback_is_disabled() {
 type TraceFallbackDetect =
     fn(&[Attribute], Option<&ExpansionTrace>, &RstestDetectionOptions) -> bool;
 
+/// Uses expansion traces to recognize test-like attributes through macros.
 #[rstest]
 #[case::single_frame_test(
     is_rstest_test_with as TraceFallbackDetect,
-    &["rstest"] as &[&str]
+    vec![AttributePath::from("rstest")]
 )]
 #[case::multi_frame_test(
     is_rstest_test_with as TraceFallbackDetect,
-    &["outer_macro", "rstest"]
+    vec![AttributePath::from("outer_macro"), AttributePath::from("rstest")]
 )]
 #[case::deeply_nested_test(
     is_rstest_test_with as TraceFallbackDetect,
-    &["macro_a", "macro_b", "macro_c", "rstest::rstest"]
+    vec![
+        AttributePath::from("macro_a"),
+        AttributePath::from("macro_b"),
+        AttributePath::from("macro_c"),
+        AttributePath::from("rstest::rstest"),
+    ]
 )]
 #[case::single_frame_fixture(
     is_rstest_fixture_with as TraceFallbackDetect,
-    &["fixture"]
+    vec![AttributePath::from("fixture")]
 )]
 #[case::multi_frame_fixture(
     is_rstest_fixture_with as TraceFallbackDetect,
-    &["outer_macro", "fixture"]
+    vec![AttributePath::from("outer_macro"), AttributePath::from("fixture")]
 )]
 fn honours_trace_when_fallback_is_enabled(
     #[case] detect: TraceFallbackDetect,
-    #[case] frame_paths: &[&str],
+    #[case] frame_paths: Vec<AttributePath>,
 ) {
-    let trace = ExpansionTrace::new(frame_paths.iter().copied().map(AttributePath::from));
+    let trace = ExpansionTrace::new(frame_paths);
     let options = RstestDetectionOptions::new(Vec::new(), true);
 
-    assert!(detect(&[outer("allow")], Some(&trace), &options));
+    assert!(detect(
+        &[outer(AttributePath::from("allow"))],
+        Some(&trace),
+        &options
+    ));
 }
 
+/// Preserves the first occurrence of each supported fixture-local name.
 #[rstest]
 fn collects_supported_fixture_local_names_in_order() {
     let parameters = vec![
         RstestParameter::ident("db"),
-        provider_parameter("case"),
+        provider_parameter(AttributePath::from("case")),
         RstestParameter::unsupported(),
         RstestParameter::ident("clock"),
         RstestParameter::ident("db"),
