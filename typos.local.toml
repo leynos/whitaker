@@ -45,6 +45,8 @@ ignore = [
   "(?m)^    pub fn categorise\\(input: i32\\) \\-> &'static str \\{$",
   "(?m)^    types: \\[opened, reopened, synchronize, labeled, ready_for_review\\]$",
   "(?m)^   = help: Cuir seachad `cap_std::fs::Dir` agus paramadairean `camino::Utf8Path`/`Utf8PathBuf` tron API seach std::fs a ghairm gu dìreach\\.$",
+  # Dylint inherits Cargo's external environment name with its fixed US spelling.
+  "(?m)^            \\.env_remove\\(env::CARGO_TERM_COLOR\\)$",
   "(?m)^  CARGO_TERM_COLOR: always$",
   "(?m)^  `download\\-artifact` merge step would clobber all but the last\\.$",
   "(?m)^# Borrowed English nouns typically pluralize with \\-iau \\(Modern Welsh, Gareth$",

@@ -34,6 +34,7 @@ extend-exclude = [
 [default]
 locale = "en-gb"
 extend-ignore-re = [
+    "(?m)^            \\.env_remove\\(env::CARGO_TERM_COLOR\\)$",
     "(?m)^        \"\\-\\-artifact\\-server\\-path\",$",
     "(?m)^        let Message::CompilerArtifact\\(artefact\\) = message else \\{$",
     "(?m)^        let Ok\\(Message::CompilerArtifact\\(artefact\\)\\) = message else \\{$",
