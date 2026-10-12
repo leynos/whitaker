@@ -21,11 +21,14 @@ use super::{
 };
 use crate::hex::to_lower_hex;
 
-/// A short-timeout agent fixture for driving the local server.
+/// A bounded-timeout agent fixture for driving the local server.
+///
+/// The finite deadline allows for loaded Windows CI runners while still
+/// ensuring that a stalled loopback server cannot hang the test indefinitely.
 #[fixture]
 fn agent() -> ureq::Agent {
     let config = ureq::Agent::config_builder()
-        .timeout_global(Some(Duration::from_secs(5)))
+        .timeout_global(Some(Duration::from_secs(30)))
         .build();
     ureq::Agent::new_with_config(config)
 }

@@ -146,6 +146,9 @@ pub struct Artifact {
 
 #[cfg(test)]
 mod tests {
+    //! Test Run and Artefact round trips and empty collection omission with
+    //! shared JSON assertion helpers.
+
     use super::*;
     use crate::model::location::ArtifactLocation;
     use crate::test_support::{assert_json_round_trip, assert_serialized_json};

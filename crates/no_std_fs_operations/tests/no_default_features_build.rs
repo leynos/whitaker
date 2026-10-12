@@ -96,7 +96,10 @@ fn workspace_root() -> anyhow::Result<Utf8PathBuf> {
     }
 }
 
-/// Check whether `candidate` contains a workspace manifest.
+/// Check whether `candidate` contains a readable workspace manifest.
+///
+/// Return `false` if the directory cannot be opened or its `Cargo.toml` cannot
+/// be read.
 fn is_workspace_root(candidate: &Utf8Path) -> bool {
     let Ok(directory) = Dir::open_ambient_dir(candidate, ambient_authority()) else {
         return false;

@@ -46,6 +46,11 @@ pub(super) fn get_output(world: &ToolchainWorld) -> Result<std::cell::Ref<'_, Ou
         .map_err(|_| String::from("CLI output not set; run the installer step first"))
 }
 
+/// Combine the captured CLI stdout and stderr into a lossy UTF-8 string.
+///
+/// # Errors
+///
+/// Return an error if the CLI output has not been recorded.
 pub(super) fn get_combined_output_string(world: &ToolchainWorld) -> Result<String, String> {
     let output = get_output(world)?;
     Ok(format!(
@@ -55,6 +60,11 @@ pub(super) fn get_combined_output_string(world: &ToolchainWorld) -> Result<Strin
     ))
 }
 
+/// Return the captured CLI stderr as a lossy UTF-8 string.
+///
+/// # Errors
+///
+/// Return an error if the CLI output has not been recorded.
 pub(super) fn get_stderr_string(world: &ToolchainWorld) -> Result<String, String> {
     let output = get_output(world)?;
     Ok(String::from_utf8_lossy(&output.stderr).to_string())
@@ -66,6 +76,7 @@ fn report_skip(reason: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Skip the scenario when its requested toolchain is not installed.
 fn skip_scenario_when_toolchain_missing(
     world: &ToolchainWorld,
     channel: &str,
@@ -80,6 +91,11 @@ fn skip_scenario_when_toolchain_missing(
     Ok(())
 }
 
+/// Create and retain a temporary target directory for the scenario.
+///
+/// # Errors
+///
+/// Return an error if the temporary directory cannot be created.
 fn setup_temp_dir(world: &ToolchainWorld) -> Result<String, String> {
     let temp_dir = TempDir::new().map_err(|error| format!("failed to create temp dir: {error}"))?;
     let target_dir = temp_dir.path().to_string_lossy().to_string();
@@ -87,6 +103,12 @@ fn setup_temp_dir(world: &ToolchainWorld) -> Result<String, String> {
     Ok(target_dir)
 }
 
+/// Prepare a dry-run scenario with the pinned toolchain and target directory.
+///
+/// # Errors
+///
+/// Return an error if the pinned channel cannot be resolved or the target
+/// directory cannot be created.
 pub(super) fn setup_dry_run_scenario(
     world: &ToolchainWorld,
     extra_args: &[&str],
@@ -121,6 +143,12 @@ pub fn setup_install_scenario(world: &ToolchainWorld, extra_args: &[&str]) -> Re
     Ok(())
 }
 
+/// Prepare an isolated install scenario using a deliberately missing channel.
+///
+/// # Errors
+///
+/// Return an error if the isolated environment or target directory cannot be
+/// created.
 pub(super) fn setup_failure_scenario(
     world: &ToolchainWorld,
     extra_args: &[&str],
@@ -149,6 +177,12 @@ pub(super) fn setup_failure_scenario(
     Ok(())
 }
 
+/// Verify that the pinned toolchain is installed in the isolated environment.
+///
+/// # Errors
+///
+/// Return an error if the environment is not configured, the pinned channel
+/// cannot be resolved, or the toolchain is not installed there.
 pub(super) fn ensure_toolchain_installed_in_isolated_env(
     world: &ToolchainWorld,
 ) -> Result<(), String> {
@@ -169,6 +203,12 @@ pub(super) fn ensure_toolchain_installed_in_isolated_env(
     }
 }
 
+/// Prepare the isolated environment and arguments for an auto-install scenario.
+///
+/// # Errors
+///
+/// Return an error if the isolated environment, pinned channel, or target
+/// directory cannot be prepared.
 pub(super) fn setup_auto_install_scenario(world: &ToolchainWorld) -> Result<(), String> {
     // Skip auto-install tests on Windows - toolchain downloads are extremely slow
     // due to Windows Defender scanning and larger binaries. The code path is

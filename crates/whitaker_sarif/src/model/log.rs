@@ -54,6 +54,9 @@ impl Default for SarifLog {
 
 #[cfg(test)]
 mod tests {
+    //! Test SarifLog defaults, schema fields and empty runs with shared JSON
+    //! assertion helpers.
+
     use super::*;
     use crate::test_support::{assert_json_round_trip, assert_serialized_json};
 

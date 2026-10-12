@@ -128,6 +128,9 @@ pub struct RelatedLocation {
 
 #[cfg(test)]
 mod tests {
+    //! Test SARIF regions, locations and related locations with shared JSON
+    //! assertion helpers.
+
     use super::*;
     use crate::test_support::{assert_json_round_trip, assert_serialized_json};
 

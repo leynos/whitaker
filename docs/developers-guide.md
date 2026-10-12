@@ -239,9 +239,10 @@ stable path ordering when timestamps tie before emitting the `--extern` flag.
 
 Standard UI-test entry points should use
 `whitaker::testing::ui::run_ui_test(crate_name, directory, runner)`. This
-helper owns the common runner error handling and panics with the standard
-`RunnerFailure` formatting. Entry points that need custom result handling
-should continue to use `run_with_runner` instead.
+helper owns the common runner error handling and panics with crate and
+UI-directory context; it formats the underlying `HarnessError` through its
+`Display` implementation. Entry points that need custom result handling should
+continue to use `run_with_runner` instead.
 
 This split keeps ordinary UI fixtures simple while still letting regression
 tests cover `rustc --test`, file-backed modules, per-case configuration, and

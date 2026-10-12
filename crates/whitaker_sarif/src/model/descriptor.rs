@@ -60,6 +60,9 @@ pub struct MultiformatMessageString {
 
 #[cfg(test)]
 mod tests {
+    //! Test ReportingDescriptor round trips and field serialization with the
+    //! shared JSON assertion helpers.
+
     use super::*;
     use crate::test_support::{assert_json_round_trip, assert_serialized_json};
 

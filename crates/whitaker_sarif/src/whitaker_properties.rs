@@ -219,6 +219,9 @@ impl WhitakerPropertiesBuilder {
 
 #[cfg(test)]
 mod tests {
+    //! Test Whitaker property building, validation and value conversion, including
+    //! a round trip through the shared JSON assertion helper.
+
     use super::*;
 
     #[test]
