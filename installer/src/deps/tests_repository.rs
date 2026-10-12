@@ -1,8 +1,27 @@
 //! Repository-release installation tests for the Dylint dependency tools.
 //!
-//! These exercise the `install_tool` / `repository_install_context` path and
-//! the helpers only it needs, split from `tests.rs` to keep each file inside
-//! the repository's 400-line module limit.
+//! These exercise `install_tool` and `repository_install_context` with a
+//! mocked repository installer. Split from `tests.rs` to keep each file
+//! inside the repository's 400-line module limit.
+
+use std::path::PathBuf;
+
+use super::{
+    DependencyBinaryInstaller, DependencyTool, DylintToolStatus,
+    install::{InstallContext, InstallMode, install_tool, repository_install_context},
+    install_dylint_tools_with_options, install_options,
+};
+use crate::dependency_binaries::{DependencyBinaryInstallError, MockDependencyBinaryInstaller};
+use crate::error::InstallerError;
+use crate::installer_packaging::TargetTriple;
+use crate::test_utils::{
+    StubDirs, StubExecutor,
+    dependency_binary_helpers::{
+        binstall_install, binstall_version_check_with_result, dylint_link_install_list_check,
+        with_fake_binary_on_path,
+    },
+    success_output,
+};
 
 /// Writes a fake `dylint-link` into a temporary directory and returns the
 /// directory guard alongside the binary path.
@@ -101,7 +120,6 @@ fn install_dylint_tools_falls_back_when_repository_dylint_link_install_fails() {
     executor.assert_finished();
 }
 
-
 #[test]
 fn install_tool_errors_when_dependency_manifest_entry_is_missing() {
     let missing_tool = DependencyTool {
@@ -130,6 +148,7 @@ fn install_tool_errors_when_dependency_manifest_entry_is_missing() {
             ),
             cargo_fallback_mode: InstallMode::Binstall,
             quiet: false,
+            no_source_fallback: false,
         },
     )
     .expect_err("missing dependency manifest entry should be an install error");
