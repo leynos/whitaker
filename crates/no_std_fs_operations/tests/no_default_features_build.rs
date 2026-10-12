@@ -26,12 +26,17 @@ use tempfile::TempDir;
 /// Top-level name of the package under test.
 const CRATE: &str = "no_std_fs_operations";
 
-/// Runs `cargo check --no-default-features --lib` for this crate and asserts
+/// Run `cargo check --no-default-features --lib` for this crate and assert
 /// that the build succeeds with warnings denied (via inherited `RUSTFLAGS`).
 ///
 /// The workspace manifest is located by walking up from this test crate's
 /// manifest directory, mirroring `integration_exclusion.rs`, so the nested
 /// invocation resolves the same workspace this test builds under.
+///
+/// # Errors
+///
+/// Return an error if the workspace cannot be located, the nested Cargo command
+/// fails, or it emits compiler diagnostics.
 #[test]
 fn crate_builds_without_dylint_driver_feature() -> anyhow::Result<()> {
     let workspace_root = workspace_root()?;
@@ -73,7 +78,11 @@ fn crate_builds_without_dylint_driver_feature() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Returns the workspace root containing this crate's manifest.
+/// Find the workspace root containing this crate's manifest.
+///
+/// # Errors
+///
+/// Return an error when no workspace manifest exists above `CARGO_MANIFEST_DIR`.
 fn workspace_root() -> anyhow::Result<Utf8PathBuf> {
     let manifest_dir = Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let mut candidate = manifest_dir.as_path();
@@ -87,7 +96,7 @@ fn workspace_root() -> anyhow::Result<Utf8PathBuf> {
     }
 }
 
-/// Returns whether `candidate` contains a workspace manifest.
+/// Check whether `candidate` contains a workspace manifest.
 fn is_workspace_root(candidate: &Utf8Path) -> bool {
     let Ok(directory) = Dir::open_ambient_dir(candidate, ambient_authority()) else {
         return false;

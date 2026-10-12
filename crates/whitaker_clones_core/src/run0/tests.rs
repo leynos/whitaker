@@ -12,6 +12,11 @@ use super::{
     test_helpers::{FragmentInput, config, fragment, pair},
 };
 
+/// Build two fragments and accept their candidate pair under `cfg`.
+///
+/// # Errors
+///
+/// Return the typed acceptance error when the candidate pair is invalid.
 fn build_pair_and_accept(
     left: FragmentInput<'_>,
     right: FragmentInput<'_>,
@@ -21,6 +26,7 @@ fn build_pair_and_accept(
     accept_candidate_pairs(&fragments, &[pair("alpha", "beta")], cfg)
 }
 
+/// Assert that exactly one accepted pair has the expected profile and score.
 fn assert_single_accepted(
     accepted: &[AcceptedPair],
     expected_profile: NormProfile,
@@ -31,7 +37,11 @@ fn assert_single_accepted(
     assert_eq!(accepted[0].score(), expected_score);
 }
 
-/// Resolves the region for `range`, panicking with context on failure.
+/// Resolve the region for `range`, panicking with context on failure.
+///
+/// This helper keeps range failures visible in tests that expect valid fixture
+/// spans; invalid ranges and UTF-8 boundaries are covered through the typed
+/// error-returning API instead.
 fn resolved_region(id: &str, source: &str, range: std::ops::Range<usize>) -> Region {
     match region_for_range(id, source, range) {
         Ok(region) => region,

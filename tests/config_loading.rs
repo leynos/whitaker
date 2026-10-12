@@ -14,16 +14,19 @@ use support::locale::StepLocale;
 use whitaker::SharedConfig;
 use whitaker_common::i18n::normalise_locale;
 
+/// Create empty configuration source state for one scenario.
 #[fixture]
 fn config_source() -> RefCell<Option<String>> {
     RefCell::new(None)
 }
 
+/// Create empty shared-configuration result state for one scenario.
 #[fixture]
 fn load_result() -> RefCell<Option<Result<SharedConfig, String>>> {
     RefCell::new(None)
 }
 
+/// Extract a readable message from a caught panic payload.
 fn panic_message(payload: Box<dyn Any + Send>) -> String {
     match payload.downcast::<String>() {
         Ok(message) => *message,
@@ -34,12 +37,14 @@ fn panic_message(payload: Box<dyn Any + Send>) -> String {
     }
 }
 
+/// Hold feature-provided text used to match part of a configuration error.
 #[derive(Debug)]
 struct ErrorSnippet(String);
 
 impl FromStr for ErrorSnippet {
     type Err = Infallible;
 
+    /// Trim whitespace and optional quotation marks from an error snippet.
     fn from_str(input: &str) -> Result<Self, Self::Err> {
         let trimmed = input
             .trim()
@@ -50,17 +55,20 @@ impl FromStr for ErrorSnippet {
 }
 
 impl AsRef<str> for ErrorSnippet {
+    /// Borrow the snippet as a string slice.
     fn as_ref(&self) -> &str {
         self.0.as_str()
     }
 }
 
 impl ErrorSnippet {
+    /// Consume the wrapper and return its inner string.
     fn into_inner(self) -> String {
         self.0
     }
 }
 
+/// Clear stored source and load results before a scenario.
 #[given("no configuration state has been prepared")]
 fn reset_state(
     config_source: &RefCell<Option<String>>,
@@ -70,11 +78,13 @@ fn reset_state(
     load_result.borrow_mut().take();
 }
 
+/// Clear any configured workspace override.
 #[given("no workspace configuration overrides are provided")]
 fn no_overrides(config_source: &RefCell<Option<String>>) {
     config_source.borrow_mut().take();
 }
 
+/// Configure a workspace override for the module line limit.
 #[given("the workspace config sets the module max line limit to {value}")]
 fn override_max_lines(config_source: &RefCell<Option<String>>, value: usize) {
     config_source
@@ -82,6 +92,7 @@ fn override_max_lines(config_source: &RefCell<Option<String>>, value: usize) {
         .replace(format!("[module_max_lines]\nmax_lines = {value}\n"));
 }
 
+/// Configure an invalid workspace override for the module line limit.
 #[given("the workspace config sets the module max line limit to an invalid value")]
 fn invalid_override(config_source: &RefCell<Option<String>>) {
     config_source.borrow_mut().replace(String::from(
@@ -89,6 +100,7 @@ fn invalid_override(config_source: &RefCell<Option<String>>) {
     ));
 }
 
+/// Configure the workspace locale from the feature step.
 #[given("the workspace config sets the locale to {value}")]
 fn override_locale(config_source: &RefCell<Option<String>>, value: StepLocale) {
     let locale = value.into_inner();
@@ -97,6 +109,7 @@ fn override_locale(config_source: &RefCell<Option<String>>, value: StepLocale) {
         .replace(format!("locale = \"{locale}\"\n"));
 }
 
+/// Configure an override containing an unknown field.
 #[given("the workspace config includes unknown fields")]
 fn unknown_fields(config_source: &RefCell<Option<String>>) {
     config_source.borrow_mut().replace(
@@ -109,6 +122,7 @@ fn unknown_fields(config_source: &RefCell<Option<String>>) {
     );
 }
 
+/// Load shared configuration and record either its value or panic message.
 #[when("the shared configuration is loaded")]
 #[expect(
     clippy::expect_used,
@@ -136,9 +150,11 @@ fn load_config(
         .replace(outcome.map_err(panic_message));
 }
 
-/// Clones the successfully loaded configuration from the step state.
+/// Clone the successfully loaded configuration from the step state.
 ///
-/// Returns an error when loading has not run yet or reported a failure.
+/// # Errors
+///
+/// Return an error when loading has not run yet or reported a failure.
 fn loaded_config(
     load_result: &RefCell<Option<Result<SharedConfig, String>>>,
 ) -> Result<SharedConfig, String> {
@@ -151,9 +167,11 @@ fn loaded_config(
     }
 }
 
-/// Clones the loading error from the step state.
+/// Clone the loading error from the step state.
 ///
-/// Returns an error when loading has not run yet or unexpectedly succeeded.
+/// # Errors
+///
+/// Return an error when loading has not run yet or unexpectedly succeeded.
 fn load_error(
     load_result: &RefCell<Option<Result<SharedConfig, String>>>,
 ) -> Result<String, String> {
@@ -166,6 +184,7 @@ fn load_error(
     }
 }
 
+/// Assert that the loaded configuration has the expected line limit.
 #[then("the module max line limit is {expected}")]
 fn assert_max_lines(load_result: &RefCell<Option<Result<SharedConfig, String>>>, expected: usize) {
     let config = match loaded_config(load_result) {
@@ -176,6 +195,7 @@ fn assert_max_lines(load_result: &RefCell<Option<Result<SharedConfig, String>>>,
     assert_eq!(config.module_max_lines.max_lines, expected);
 }
 
+/// Assert that the loaded configuration has the expected locale.
 #[then("the locale override is {expected}")]
 fn assert_locale(
     load_result: &RefCell<Option<Result<SharedConfig, String>>>,
@@ -193,6 +213,7 @@ fn assert_locale(
     assert_eq!(config.locale(), Some(expected_value));
 }
 
+/// Assert that the loaded configuration has no locale override.
 #[then("no locale override is configured")]
 fn assert_no_locale(load_result: &RefCell<Option<Result<SharedConfig, String>>>) {
     let config = match loaded_config(load_result) {
@@ -207,6 +228,7 @@ fn assert_no_locale(load_result: &RefCell<Option<Result<SharedConfig, String>>>)
     );
 }
 
+/// Assert that loading recorded a configuration error.
 #[then("a configuration error is reported")]
 fn assert_error(load_result: &RefCell<Option<Result<SharedConfig, String>>>) {
     if let Err(message) = load_error(load_result) {
@@ -214,6 +236,7 @@ fn assert_error(load_result: &RefCell<Option<Result<SharedConfig, String>>>) {
     }
 }
 
+/// Assert that the recorded configuration error contains the requested text.
 #[then("a configuration error mentioning {snippet} is reported")]
 fn assert_error_with_snippet(
     load_result: &RefCell<Option<Result<SharedConfig, String>>>,
@@ -231,6 +254,7 @@ fn assert_error_with_snippet(
     );
 }
 
+/// Exercise default shared-configuration loading through the feature scenario.
 #[scenario("tests/features/config_loading.feature", index = 0)]
 fn scenario_defaults(
     config_source: RefCell<Option<String>>,
@@ -239,6 +263,7 @@ fn scenario_defaults(
     let _ = (config_source, load_result);
 }
 
+/// Exercise workspace configuration overrides through the feature scenario.
 #[scenario("tests/features/config_loading.feature", index = 1)]
 fn scenario_override(
     config_source: RefCell<Option<String>>,
@@ -247,6 +272,7 @@ fn scenario_override(
     let _ = (config_source, load_result);
 }
 
+/// Exercise shared-configuration errors through the feature scenario.
 #[scenario("tests/features/config_loading.feature", index = 2)]
 fn scenario_errors(
     config_source: RefCell<Option<String>>,
@@ -255,6 +281,7 @@ fn scenario_errors(
     let _ = (config_source, load_result);
 }
 
+/// Exercise unknown-field handling through the feature scenario.
 #[scenario("tests/features/config_loading.feature", index = 3)]
 fn scenario_unknown_fields(
     config_source: RefCell<Option<String>>,
@@ -263,6 +290,7 @@ fn scenario_unknown_fields(
     let _ = (config_source, load_result);
 }
 
+/// Exercise locale overrides through the feature scenario.
 #[scenario("tests/features/config_loading.feature", index = 4)]
 fn scenario_locale_override(
     config_source: RefCell<Option<String>>,

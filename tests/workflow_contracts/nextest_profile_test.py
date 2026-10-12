@@ -134,7 +134,7 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
             },
             test_group="serial-dylint-ui",
         ),
-        "test(build_script_integration::)": Allowance(
+        "binary(build_script_integration)": Allowance(
             slow_timeout={
                 "period": "10m",
                 "terminate-after": 1,
@@ -175,7 +175,7 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
             },
             test_group="serial-dylint-ui",
         ),
-        "test(build_script_integration::)": Allowance(
+        "binary(build_script_integration)": Allowance(
             slow_timeout={
                 "period": "10m",
                 "terminate-after": 1,

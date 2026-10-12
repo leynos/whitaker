@@ -61,7 +61,7 @@ test-group = "serial-dylint-ui"
 [[profile.ci.overrides]]
 # These parser-pin integration cases run nested Cargo checks in isolated
 # workspaces; a cold build may queue behind other admitted compiler work.
-filter = "test(build_script_integration::)"
+filter = "binary(build_script_integration)"
 slow-timeout = { period = "10m", terminate-after = 1, grace-period = "5s" }
 
 # Serialise dylint UI tests that build lint libraries and use
@@ -120,7 +120,7 @@ test-group = "serial-dylint-ui"
 [[profile.default.overrides]]
 # These parser-pin integration cases run nested Cargo checks in isolated
 # workspaces; a cold build may queue behind other admitted compiler work.
-filter = "test(build_script_integration::)"
+filter = "binary(build_script_integration)"
 slow-timeout = { period = "10m", terminate-after = 1, grace-period = "5s" }
 
 [[profile.default.overrides]]

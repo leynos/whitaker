@@ -2,7 +2,11 @@
 
 use super::*;
 
-/// Runs `cargo dylint` against the fixture and counts diagnostics.
+/// Run `cargo dylint` against the fixture and count its diagnostics.
+///
+/// # Errors
+///
+/// Return an error if the command fails to run or its output cannot be parsed.
 fn evaluate_fixture(
     fixture_dir: &Path,
     lint_library_path: &Path,
@@ -18,6 +22,12 @@ fn evaluate_fixture(
     Ok((result.is_success, count))
 }
 
+/// Assert that a fixture's exit status and diagnostic count match expectations.
+///
+/// # Errors
+///
+/// Return an error when the command fails, its output is malformed, or either
+/// expectation is not met.
 pub(super) fn assert_fixture_behaviour(
     fixture_dir: &Path,
     lint_library_path: &Path,

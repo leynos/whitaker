@@ -18,7 +18,13 @@ CODESCENE_UPLOAD_ACTION = (
 
 @pytest.fixture(scope="module")
 def workflows() -> dict[str, dict[str, Any]]:
-    """Load the pull-request and main-branch coverage workflow documents."""
+    """Load the pull-request and main-branch coverage workflow documents.
+
+    Returns
+    -------
+    dict[str, dict[str, Any]]
+        Parsed workflow mappings keyed by workflow filename.
+    """
     parsed_workflows: dict[str, dict[str, Any]] = {}
     for workflow_name in WORKFLOW_NAMES:
         workflow_path = REPOSITORY_ROOT / ".github/workflows" / workflow_name
@@ -62,7 +68,17 @@ def test_coverage_lanes_validate_a_fresh_root_lcov_report(
     workflow_name: str,
     job_name: str,
 ) -> None:
-    """Require both lanes to discard stale output and validate new LCOV."""
+    """Require both lanes to discard stale output and validate new LCOV.
+
+    Parameters
+    ----------
+    workflows
+        Workflow mappings keyed by filename.
+    workflow_name
+        Filename of the workflow whose coverage lane is checked.
+    job_name
+        Name of the coverage job within the selected workflow.
+    """
     steps = _job_steps(workflows[workflow_name], job_name)
     generate_index = _named_step_index(steps, "Generate coverage")
     assert generate_index > 0, f"{job_name} must clear stale LCOV before generation"
@@ -90,7 +106,13 @@ def test_coverage_lanes_validate_a_fresh_root_lcov_report(
 def test_only_main_uploads_the_explicit_root_lcov_report(
     workflows: Mapping[str, Mapping[str, Any]],
 ) -> None:
-    """Keep PR validation read-only and bind main upload to fresh root LCOV."""
+    """Keep PR validation read-only and bind main upload to fresh root LCOV.
+
+    Parameters
+    ----------
+    workflows
+        Workflow mappings keyed by filename.
+    """
     pull_request_steps = _job_steps(workflows["ci.yml"], "coverage-check")
     main_steps = _job_steps(workflows["coverage-main.yml"], "coverage-upload")
     pull_request_uploads = [

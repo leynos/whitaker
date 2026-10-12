@@ -15,15 +15,27 @@ use crate::{
     canonical_hash, kind_counts, lower_span, production_multiset,
 };
 
+/// Format a parser kind identifier for snapshot assertions.
 fn kind_name(kind: KindId) -> String {
     let parser_kind = ra_ap_syntax::SyntaxKind::from(kind.get());
     format!("{parser_kind:?}")
 }
 
+/// Convert a byte offset to the span type's `u32` representation.
+///
+/// # Errors
+///
+/// Return [`AstError::OffsetTooLarge`] when the offset exceeds `u32::MAX`.
 fn offset_u32(offset: usize) -> AstResult<u32> {
     u32::try_from(offset).map_err(|_| AstError::OffsetTooLarge(offset))
 }
 
+/// Create a span covering the entire source string.
+///
+/// # Errors
+///
+/// Return an offset or span validation error when the source length cannot be
+/// represented or does not form a valid span.
 fn whole_span(source: &str) -> AstResult<ByteSpan> {
     ByteSpan::new(source, 0, offset_u32(source.len())?)
 }
@@ -198,6 +210,12 @@ fn error_subtree_is_rejected() {
     );
 }
 
+/// Lower the first occurrence of `needle` within `source`.
+///
+/// # Errors
+///
+/// Return an unparsable-span error when `needle` is absent, an offset or span
+/// error when its byte range is invalid, or a lowering error for invalid syntax.
 fn lower_span_for(source: &str, needle: &str) -> Result<NormalizedTree, AstError> {
     let start = source
         .find(needle)
@@ -209,6 +227,7 @@ fn lower_span_for(source: &str, needle: &str) -> Result<NormalizedTree, AstError
     )
 }
 
+/// Check whether `node` or any descendant has the requested leaf class.
 fn contains_leaf_class(node: &NormalizedNode, leaf_class: LeafClass) -> bool {
     node.leaf() == Some(leaf_class)
         || node
@@ -278,6 +297,7 @@ fn parser_schema_version_snapshot() {
     );
 }
 
+/// Format a production's kinds for snapshot assertions.
 fn production_name(production: Production) -> String {
     match production {
         Production::Bigram(parent, child) => {
