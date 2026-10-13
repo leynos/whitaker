@@ -99,6 +99,26 @@ stop at.
 - [ ] `EP-M3` — binstall metadata and crates.io name reservation.
 - [ ] `EP-M4` — ADR `docs/adr-005-whitaker-cli-boundary.md` and documentation.
 
+Rebase maintenance, 2026-10-13: PR #356 still targets `harden-lint-config`. The
+parent branch's reflog establishes `9b758d1` as the last inherited commit; the
+five following commits were replayed onto remote target `afb1e4a` without
+conflicts. `git range-diff` reports every replayed patch unchanged, and all
+nine target-only paths remain byte-identical. Global Weave selection was
+bypassed with command-scoped Git settings, retaining `zdiff3`. The lockfile was
+regenerated from the target's version with offline Cargo metadata. Formatting
+passed, but the CI-profile test gate failed: 1,641 tests passed, five example
+capture tests failed, and 20 tests were not run after cancellation. The
+feature-free core tests and doctests were not reached. Dylint 6.0.4's example
+capture parser accepts only commands beginning with bare `rustc`, while the
+host's Cargo configuration retains `build-limits-rustc` after the harness
+removes `RUSTC_WRAPPER`. Upstream tracks this wrapper incompatibility as issue
+1696[^dylint-wrapper]. Bypassing compiler admission is prohibited. Typecheck
+and lint subsequently passed, including rustdoc, Clippy, and Whitaker. The
+documentation-only maintenance record is validated separately before
+publication of the requested rebase; full local test validation remains
+blocked. No source changes or test exclusions were added during this rebase.
+`EP-M2` through `EP-M4` are still outstanding.
+
 Record an ISO-8601 UTC timestamp against each item as it completes, for
 example `- [x] (2026-08-21T14:05Z) EP-M0 …`. Split any partially completed
 item into "done" and "remaining" rather than leaving it ambiguous.
@@ -1497,6 +1517,9 @@ forwarding is a public behaviour carrying a compatibility commitment. Do not
 mark the plan `COMPLETE` while any upstream change or deviation is unrecorded.
 
 ## Revision note
+
+[^dylint-wrapper]:
+    [Dylint issue #1696](https://github.com/trailofbits/dylint/issues/1696)
 
 **Revision 3, 2026-08-24.** Implementation started after the requester
 approved this plan. The baseline packaging failure and dependency-tree count
