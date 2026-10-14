@@ -52,6 +52,7 @@ pub(super) struct LocalServer {
 }
 
 impl LocalServer {
+    /// Start a loopback HTTP server for the supplied canned routes.
     pub(super) fn start(routes: HashMap<String, CannedResponse>) -> Self {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback listener");
         let port = listener.local_addr().expect("resolve local addr").port();
@@ -85,6 +86,7 @@ impl LocalServer {
 }
 
 impl Drop for LocalServer {
+    /// Stop the server loop and wait for its thread to exit.
     fn drop(&mut self) {
         self.stop.store(true, Ordering::Relaxed);
         if let Some(handle) = self.handle.take()
@@ -132,14 +134,11 @@ fn serve_connection(
     // (the listener is non-blocking only so the accept loop can poll for
     // shutdown). `try_clone` shares the socket, so `peer` inherits these.
     // Drop the connection if the socket cannot be configured.
-    if stream.set_nonblocking(false).is_err()
-        || stream
-            .set_read_timeout(Some(Duration::from_secs(5)))
-            .is_err()
-        || stream
-            .set_write_timeout(Some(Duration::from_secs(5)))
-            .is_err()
-    {
+    let setup_result = stream
+        .set_nonblocking(false)
+        .and_then(|()| stream.set_read_timeout(Some(Duration::from_secs(5))))
+        .and_then(|()| stream.set_write_timeout(Some(Duration::from_secs(5))));
+    if setup_result.is_err() {
         return;
     }
     let Ok(peer) = stream.try_clone() else {
@@ -159,7 +158,7 @@ fn serve_connection(
     loop {
         let mut line = String::new();
         let bytes_read = reader.read_line(&mut line).unwrap_or(0);
-        if bytes_read == 0 || line == "\r\n" || line == "\n" {
+        if matches!((bytes_read, line.as_str()), (0, _) | (_, "\r\n" | "\n")) {
             break;
         }
     }

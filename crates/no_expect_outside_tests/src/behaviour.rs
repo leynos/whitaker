@@ -53,6 +53,7 @@ impl ContextWorld {
         *self.is_doctest.borrow_mut() = true;
     }
 
+    /// Classify accumulated context and record whether linting should be skipped.
     fn evaluate(&self) {
         let entries = self.entries.borrow();
         let summary = summarize_context(

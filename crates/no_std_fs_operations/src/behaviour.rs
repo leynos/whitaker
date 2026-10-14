@@ -28,6 +28,7 @@ impl LocalizationWorld {
         self.failing = true;
     }
 
+    /// Resolve localized messages with the selected locale or configured failure.
     fn resolve(&mut self) {
         let op = self.operation.clone();
         let result = if self.failing {

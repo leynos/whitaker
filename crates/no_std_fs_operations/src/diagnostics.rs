@@ -74,6 +74,7 @@ fn sanitize_message(text: String) -> String {
         .collect()
 }
 
+/// Build localized diagnostics for the supplied filesystem operation.
 #[cfg(test)]
 pub(crate) fn localized_messages(
     lookup: &impl BundleLookup,

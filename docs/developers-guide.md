@@ -3366,6 +3366,13 @@ Whitaker data directory keyed by toolchain and target:
 - Windows:
   `%LOCALAPPDATA%\whitaker\lints\<toolchain>\<target>\lib`
 
+The private `installer/src/tracing_config.rs` formatter belongs only to CLI
+startup and its colocated tests; other modules must emit events rather than
+reuse or initialize this subscriber. It sends diagnostics to stderr, enables
+errors in quiet mode, warnings by default, and debug events when verbosity is
+positive, with ANSI escapes disabled. Tests capture formatted events with a
+thread-scoped subscriber and verify stderr routing in an isolated subprocess.
+
 ### Configuration options
 
 - `-t, --target-dir DIR` — Staging directory for built libraries

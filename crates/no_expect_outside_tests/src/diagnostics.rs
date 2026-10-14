@@ -194,6 +194,7 @@ const MESSAGE_KEY: MessageKey<'static> = MessageKey::new("no_expect_outside_test
 
 type NoExpectMessages = DiagnosticMessageSet;
 
+/// Build localized diagnostics for the supplied receiver and context.
 #[cfg(test)]
 fn localized_messages(
     lookup: &impl BundleLookup,

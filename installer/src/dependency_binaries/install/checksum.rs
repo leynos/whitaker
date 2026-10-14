@@ -253,6 +253,7 @@ mod tests {
     }
 
     impl Read for ChunkedReader<'_> {
+        /// Read at most the configured chunk size and record each call.
         fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
             self.reads += 1;
             if self.pending_interrupts > 0 {
