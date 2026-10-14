@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-import yaml
+from ruamel.yaml import YAML
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_NAMES = ("ci.yml", "coverage-main.yml")
@@ -28,7 +28,7 @@ def workflows() -> dict[str, dict[str, Any]]:
     parsed_workflows: dict[str, dict[str, Any]] = {}
     for workflow_name in WORKFLOW_NAMES:
         workflow_path = REPOSITORY_ROOT / ".github/workflows" / workflow_name
-        parsed = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+        parsed = YAML(typ="safe").load(workflow_path.read_text(encoding="utf-8"))
         assert isinstance(parsed, dict), f"{workflow_path} must contain a mapping"
         parsed_workflows[workflow_name] = parsed
     return parsed_workflows
@@ -100,6 +100,9 @@ def test_coverage_lanes_validate_a_fresh_root_lcov_report(
     assert "test -s lcov.info" in script, f"{job_name} must reject absent or empty LCOV"
     assert "^SF:.+" in script and "^end_of_record$" in script, (
         f"{job_name} must require complete LCOV source records"
+    )
+    assert "^DA:" in script and "measurements == 0" in script, (
+        f"{job_name} must require at least one LCOV line measurement"
     )
 
 

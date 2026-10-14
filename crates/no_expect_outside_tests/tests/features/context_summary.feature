@@ -1,4 +1,4 @@
-Feature: Summarize traversal context for `.expect(..)` linting
+Feature: Summarise traversal context for `.expect(..)` linting
 
   Scenario: Plain function without test attributes
     Given a non-test function named handler

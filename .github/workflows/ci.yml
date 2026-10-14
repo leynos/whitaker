@@ -185,6 +185,22 @@ jobs:
               sources++
               next
             }
+            /^DA:/ {
+              if (!in_record) {
+                invalid = 1
+              } else {
+                field_count = split(substr($0, 4), fields, ",")
+                if ((field_count != 2 && field_count != 3) ||
+                    fields[1] !~ /^[1-9][0-9]*$/ ||
+                    fields[2] !~ /^[0-9]+$/ ||
+                    (field_count == 3 && fields[3] == "")) {
+                  invalid = 1
+                } else {
+                  measurements++
+                }
+              }
+              next
+            }
             /^end_of_record$/ {
               if (!in_record) invalid = 1
               else records++
@@ -194,10 +210,10 @@ jobs:
             /^[[:space:]]*$/ { next }
             !in_record { invalid = 1 }
             END {
-              if (invalid || in_record || sources == 0 || records == 0) exit 1
+              if (invalid || in_record || sources == 0 || records == 0 || measurements == 0) exit 1
             }
           ' lcov.info || {
-            echo "LCOV report lcov.info has no valid, terminated SF: records" >&2
+            echo "LCOV report lcov.info has no valid, terminated source records with line measurements" >&2
             exit 1
           }
 

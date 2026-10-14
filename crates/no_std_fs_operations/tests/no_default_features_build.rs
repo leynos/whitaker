@@ -82,12 +82,13 @@ fn crate_builds_without_dylint_driver_feature() -> anyhow::Result<()> {
 ///
 /// # Errors
 ///
-/// Return an error when no workspace manifest exists above `CARGO_MANIFEST_DIR`.
+/// Return an error when no workspace manifest exists above `CARGO_MANIFEST_DIR`
+/// or a candidate directory or manifest cannot be read.
 fn workspace_root() -> anyhow::Result<Utf8PathBuf> {
     let manifest_dir = Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let mut candidate = manifest_dir.as_path();
     loop {
-        if is_workspace_root(candidate) {
+        if is_workspace_root(candidate)? {
             return Ok(candidate.to_path_buf());
         }
         candidate = candidate
@@ -96,16 +97,125 @@ fn workspace_root() -> anyhow::Result<Utf8PathBuf> {
     }
 }
 
-/// Check whether `candidate` contains a readable workspace manifest.
+/// Check whether `candidate` contains a workspace manifest.
 ///
-/// Return `false` if the directory cannot be opened or its `Cargo.toml` cannot
-/// be read.
-fn is_workspace_root(candidate: &Utf8Path) -> bool {
-    let Ok(directory) = Dir::open_ambient_dir(candidate, ambient_authority()) else {
-        return false;
+/// # Errors
+///
+/// Return an error when the directory cannot be opened or its manifest exists
+/// but cannot be read. Return `false` only when `Cargo.toml` is absent or does
+/// not declare a workspace.
+fn is_workspace_root(candidate: &Utf8Path) -> anyhow::Result<bool> {
+    let directory = Dir::open_ambient_dir(candidate, ambient_authority())
+        .with_context(|| format!("failed to open candidate directory `{candidate}`"))?;
+    let manifest = match directory.read_to_string("Cargo.toml") {
+        Ok(manifest) => manifest,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(error) => {
+            return Err(error)
+                .with_context(|| format!("failed to read workspace manifest in `{candidate}`"));
+        }
     };
-    let Ok(manifest) = directory.read_to_string("Cargo.toml") else {
-        return false;
-    };
-    manifest.contains("[workspace]")
+    Ok(manifest.contains("[workspace]"))
+}
+
+#[cfg(test)]
+mod tests {
+    //! Check workspace discovery's distinction between absence and I/O failure.
+
+    use cap_std::{ambient_authority, fs_utf8::Dir};
+    use rstest::rstest;
+    use tempfile::TempDir;
+
+    use super::is_workspace_root;
+
+    /// Return a UTF-8 path for a temporary directory.
+    ///
+    /// # Errors
+    ///
+    /// Return an error if the temporary directory cannot be created or its path
+    /// cannot be represented as UTF-8.
+    fn temporary_directory() -> anyhow::Result<(TempDir, camino::Utf8PathBuf)> {
+        let temporary_directory = TempDir::new()?;
+        let path = camino::Utf8PathBuf::from_path_buf(temporary_directory.path().to_path_buf())
+            .map_err(|path| anyhow::anyhow!("temporary path is not UTF-8: {}", path.display()))?;
+        Ok((temporary_directory, path))
+    }
+
+    /// Recognize a readable manifest that declares a workspace.
+    ///
+    /// # Errors
+    ///
+    /// Return an error if fixture setup fails or workspace discovery reports an
+    /// I/O failure.
+    #[rstest]
+    fn readable_workspace_manifest_is_recognized() -> anyhow::Result<()> {
+        let (_temporary_directory, path) = temporary_directory()?;
+        let directory = Dir::open_ambient_dir(&path, ambient_authority())?;
+        directory.write("Cargo.toml", "[workspace]\nmembers = []\n")?;
+
+        assert!(is_workspace_root(&path)?);
+        Ok(())
+    }
+
+    /// Treat a missing or non-workspace manifest as an ordinary non-match.
+    ///
+    /// # Errors
+    ///
+    /// Return an error if fixture setup fails or workspace discovery reports an
+    /// I/O failure.
+    #[rstest]
+    fn absent_or_non_workspace_manifest_is_not_a_root() -> anyhow::Result<()> {
+        let (_temporary_directory, path) = temporary_directory()?;
+        assert!(!is_workspace_root(&path)?);
+
+        let directory = Dir::open_ambient_dir(&path, ambient_authority())?;
+        directory.write("Cargo.toml", "[package]\nname = \"fixture\"\n")?;
+        assert!(!is_workspace_root(&path)?);
+        Ok(())
+    }
+
+    /// Propagate failure to open a candidate path as a directory.
+    ///
+    /// # Errors
+    ///
+    /// Return an error if fixture setup fails or the expected I/O failure is not
+    /// reported.
+    #[rstest]
+    fn directory_open_failure_is_reported() -> anyhow::Result<()> {
+        let (_temporary_directory, path) = temporary_directory()?;
+        let directory = Dir::open_ambient_dir(&path, ambient_authority())?;
+        directory.write("not-a-directory", "fixture")?;
+        let candidate = path.join("not-a-directory");
+
+        let error = is_workspace_root(&candidate)
+            .expect_err("opening a regular file as a directory should fail");
+        assert!(
+            error
+                .to_string()
+                .contains("failed to open candidate directory")
+        );
+        Ok(())
+    }
+
+    /// Propagate failure to read a manifest path that is a directory.
+    ///
+    /// # Errors
+    ///
+    /// Return an error if fixture setup fails or the expected I/O failure is not
+    /// reported.
+    #[rstest]
+    fn unreadable_manifest_is_reported() -> anyhow::Result<()> {
+        let (_temporary_directory, path) = temporary_directory()?;
+        let directory = Dir::open_ambient_dir(&path, ambient_authority())?;
+        directory.create_dir("Cargo.toml")?;
+
+        let error =
+            is_workspace_root(&path).expect_err("reading a directory as a manifest should fail");
+        assert!(
+            error
+                .to_string()
+                .contains("failed to read workspace manifest")
+        );
+        Ok(())
+    }
 }

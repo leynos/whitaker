@@ -317,6 +317,12 @@ either environment variable individually. Fixture workspaces that intentionally
 use the same package identity must still select their own nested `--target-dir`
 to avoid reusing one another's build-script output.
 
+Both coverage workflows remove a stale root `lcov.info`, run `make coverage`
+with `COVERAGE_OUTPUT=lcov.info`, and validate the newly generated report. The
+validation requires at least one complete `SF:` source record and at least one
+valid `DA:` line measurement. Only `coverage-main.yml` uploads `lcov.info` to
+CodeScene, and its upload is restricted to `main`.
+
 #### Who may talk to CodeScene
 
 `coverage-main.yml` owns the CodeScene surface entirely. It runs on a push to
@@ -2644,8 +2650,10 @@ across the project's behavioural tests.
 
 - Feature file:
   `installer/tests/features/dependency_binaries.feature`
-- Step definitions and scenario bindings:
+- Step definitions:
   `installer/tests/behaviour_dependency_binaries.rs`
+- Scenario bindings:
+  `installer/tests/behaviour_dependency_binaries/scenarios.rs`
 - Test helpers:
   `installer/src/test_utils/dependency_binary_helpers.rs`
 - Shared test utilities:
@@ -2658,11 +2666,11 @@ To add a new scenario:
 1. Append the scenario to the `.feature` file using existing Given/When/Then
    step vocabulary.
 2. If the scenario requires new steps, add step functions annotated with
-   `#[given(...)]`, `#[when(...)]`, or `#[then(...)]` in the behaviour test
-   file.
-3. Add a `#[scenario(path = "...", index = N)]` binding function at the
-   bottom of the behaviour test file, where `N` is the zero-based scenario
-   index.
+   `#[given(...)]`, `#[when(...)]`, or `#[then(...)]` in
+   `behaviour_dependency_binaries.rs`.
+3. Add a `#[scenario(path = "...", index = N)]` binding in
+   `behaviour_dependency_binaries/scenarios.rs`, where `N` is the zero-based
+   scenario index.
 4. Update `dependency_binary_helpers.rs` if the scenario introduces new
    expected command sequences.
 
@@ -2671,13 +2679,31 @@ To add a new scenario:
 - **`StubExecutor`** records expected command invocations in sequence and
   returns predefined `Output` values. Call `assert_finished()` after the test
   body to verify all expected commands were consumed.
-- **`ExpectedCallConfig`** drives `expected_calls()` to generate the full
-  expected command sequence for a given tool and fallback configuration.
+- **`RepositoryVerification`** selects whether repository-install verification
+  is skipped, succeeds, or fails. `ExpectedCallConfig` combines that outcome
+  with the fallback configuration.
+- **`expected_calls()`** returns a `Result` because expected-command generation
+  can fail, for example when a tool is unknown or absent from the dependency
+  manifest. Propagate that error from the scenario setup rather than silently
+  accepting an incomplete command sequence.
 - **`StubDirs`** provides a minimal `BaseDirs` implementation that returns
   a configurable bin directory.
 - **`StubRepositoryInstaller`** (in the behaviour test) implements
   `DependencyBinaryInstaller` with configurable success or failure behaviour
   for scenario isolation.
+- **Fake-binary helpers** write successful or chosen-exit-status executables
+  and can temporarily put fake directories on `PATH`. Their platform-aware
+  paths and guarded environment update let scenarios exercise executable
+  discovery without relying on installed tools.
+
+### Shared SARIF test JSON helpers
+
+Unit and integration tests share JSON assertions from
+`crates/whitaker_sarif/src/test_support.rs`. Use `assert_json_round_trip()` to
+check that a value survives JSON serialization and deserialization unchanged;
+it fails if deserialization changes the value. Use `assert_serialized_json()`
+when a test needs to inspect the serialized JSON string directly. These helpers
+are test support, not part of the public API.
 
 ## Shared span recovery helpers
 

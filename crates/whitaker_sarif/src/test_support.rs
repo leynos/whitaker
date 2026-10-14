@@ -68,3 +68,59 @@ pub fn make_keyed_result(rule: &str, file: &str, line: usize, fp: &str) -> Sarif
         Err(e) => panic!("failed to build keyed result: {e}"),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    //! Verify the shared JSON assertions against successful and failing cases.
+
+    use core::cell::Cell;
+
+    use serde::{Deserialize, Serialize};
+
+    use super::{assert_json_round_trip, assert_serialized_json};
+
+    #[derive(Debug, PartialEq, Serialize, Deserialize)]
+    struct Sample {
+        count: u8,
+    }
+
+    #[derive(Debug, PartialEq, Serialize)]
+    struct ChangesOnRead(u8);
+
+    impl<'de> Deserialize<'de> for ChangesOnRead {
+        /// Parse the value and substitute zero to exercise the equality check.
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: serde::Deserializer<'de>,
+        {
+            let _serialized_value = u8::deserialize(deserializer)?;
+            Ok(Self(0))
+        }
+    }
+
+    /// Check that a JSON round trip preserves a representative value.
+    #[test]
+    fn json_round_trip_accepts_equal_values() {
+        let sample = Sample { count: 3 };
+        assert_json_round_trip(&sample);
+    }
+
+    /// Check that a changed value makes the JSON round-trip assertion fail.
+    #[test]
+    #[should_panic(expected = "JSON round trip changed")]
+    fn json_round_trip_rejects_changed_values() {
+        assert_json_round_trip(&ChangesOnRead(3));
+    }
+
+    /// Check the serialized payload and verify that the callback runs.
+    #[test]
+    fn serialized_json_is_passed_to_the_callback() {
+        let callback_was_called = Cell::new(false);
+        assert_serialized_json(&Sample { count: 3 }, |json| {
+            assert_eq!(json, r#"{"count":3}"#);
+            callback_was_called.set(true);
+        });
+
+        assert!(callback_was_called.get());
+    }
+}

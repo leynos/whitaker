@@ -5,7 +5,6 @@
 
 use std::{
     cell::{Cell, RefCell},
-    io::Write as _,
     path::{Path, PathBuf},
     process::{Command, Output},
 };
@@ -62,10 +61,10 @@ fn is_toolchain_installed(channel: &str) -> bool {
         .is_ok_and(|o| o.status.success())
 }
 
-/// Reports a skipped scenario on stderr without tripping `print_stderr`.
+/// Reports a skipped workflow scenario through the test tracing stream.
 fn report_skip(reason: &str) -> Result<(), String> {
-    writeln!(std::io::stderr(), "{reason}")
-        .map_err(|error| format!("failed to report skipped scenario: {error}"))
+    tracing::info!(%reason, "skipping workflow scenario");
+    Ok(())
 }
 
 fn skip_scenario_when_toolchain_missing(
