@@ -14,7 +14,7 @@ use std::{
 
 use crate::{run_tests, snake_case, ui};
 
-static LINKING_FLAGS: once_cell::sync::OnceCell<Vec<String>> = once_cell::sync::OnceCell::new();
+static UI_TEST_FLAGS: once_cell::sync::OnceCell<Vec<String>> = once_cell::sync::OnceCell::new();
 
 /// Find the example target named `example` in `package`.
 pub fn example_target(package: &Package, example: &str) -> Result<Target> {
@@ -61,7 +61,7 @@ pub fn run_example_test(context: ExampleTestContext<'_>) -> Result<()> {
         target,
         config,
     } = context;
-    let linking_flags = linking_flags(metadata, package, target)?;
+    let ui_test_flags = ui_test_flags(metadata, package, target)?;
     let file_name = target
         .src_path
         .file_name()
@@ -85,37 +85,49 @@ pub fn run_example_test(context: ExampleTestContext<'_>) -> Result<()> {
     }
 
     let mut config = config.clone();
-    config.rustc_flags.extend(linking_flags.iter().cloned());
+    config.rustc_flags.extend(ui_test_flags.iter().cloned());
 
     run_tests(driver, src_base, &config);
 
     Ok(())
 }
 
-fn linking_flags(
+fn ui_test_flags(
     metadata: &Metadata,
     package: &Package,
     target: &Target,
 ) -> Result<&'static [String]> {
-    LINKING_FLAGS
+    UI_TEST_FLAGS
         .get_or_try_init(|| {
             let rustc_flags = rustc_flags(metadata, package, target)?;
-
-            let mut linking_flags = Vec::new();
-
-            let mut iter = rustc_flags.into_iter();
-            while let Some(flag) = iter.next() {
-                if flag.starts_with("--edition=") {
-                    linking_flags.push(flag);
-                } else if flag == "--extern" || flag == "-L" {
-                    let arg = next(&flag, &mut iter)?;
-                    linking_flags.extend([flag, arg]);
-                }
-            }
-
-            Ok(linking_flags)
+            select_ui_test_flags(rustc_flags)
         })
         .map(Vec::as_slice)
+}
+
+/// Retain the Cargo flags needed to compile UI tests without forwarding linker paths.
+///
+/// `compiletest` flattens its rustc flags into a space-delimited string. Native
+/// linker paths are not needed for metadata-only UI tests and can contain spaces
+/// on Windows, where flattening would split them into multiple arguments.
+///
+/// # Errors
+///
+/// Returns an error if a value-taking compiler flag is missing its value.
+fn select_ui_test_flags(rustc_flags: Vec<String>) -> Result<Vec<String>> {
+    let mut ui_test_flags = Vec::new();
+    let mut iter = rustc_flags.into_iter();
+    while let Some(flag) = iter.next() {
+        if flag.starts_with("--edition=") {
+            ui_test_flags.push(flag);
+        } else if flag == "--extern" || flag == "-L" {
+            let argument = next(&flag, &mut iter)?;
+            if flag != "-L" || !argument.starts_with("native=") {
+                ui_test_flags.extend([flag, argument]);
+            }
+        }
+    }
+    Ok(ui_test_flags)
 }
 
 // smoelius: We need to recover the `rustc` flags used to build a target. I can see four options:
@@ -250,7 +262,7 @@ fn copy_with_extension<P: AsRef<Path>, Q: AsRef<Path>>(
 
 #[cfg(test)]
 mod tests {
-    use super::rustc_invocation;
+    use super::{rustc_invocation, select_ui_test_flags};
     use rstest::rstest;
 
     /// Extract the rustc arguments after unwrapped and wrapped compiler commands.
@@ -304,6 +316,32 @@ mod tests {
                 "--crate-name".to_owned(),
                 "target".to_owned(),
             ])
+        );
+    }
+
+    /// Preserve dependency flags while omitting a spaced Windows linker path.
+    #[test]
+    fn omits_native_search_paths_from_metadata_only_ui_flags() {
+        let flags = select_ui_test_flags(vec![
+            "--edition=2024".to_owned(),
+            "--extern".to_owned(),
+            "dependency=target/debug/deps/libdependency.rlib".to_owned(),
+            "-L".to_owned(),
+            "dependency=target/debug/deps".to_owned(),
+            "-L".to_owned(),
+            r"native=C:\Program Files\Microsoft Visual Studio\VC\Tools\MSVC\lib\x64".to_owned(),
+        ])
+        .expect("complete Cargo flags should be selected");
+
+        assert_eq!(
+            flags,
+            [
+                "--edition=2024",
+                "--extern",
+                "dependency=target/debug/deps/libdependency.rlib",
+                "-L",
+                "dependency=target/debug/deps",
+            ]
         );
     }
 }
