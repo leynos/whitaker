@@ -686,7 +686,9 @@ dependencies = [
  "env_logger",
  "once_cell",
  "regex",
+ "rstest",
  "serde_json",
+ "shlex",
  "tempfile",
 ]
 

@@ -16,7 +16,8 @@ use crate::{run_tests, snake_case, ui};
 
 static LINKING_FLAGS: once_cell::sync::OnceCell<Vec<String>> = once_cell::sync::OnceCell::new();
 
-pub(crate) fn example_target(package: &Package, example: &str) -> Result<Target> {
+/// Find the example target named `example` in `package`.
+pub fn example_target(package: &Package, example: &str) -> Result<Target> {
     package
         .targets
         .iter()
@@ -25,8 +26,9 @@ pub(crate) fn example_target(package: &Package, example: &str) -> Result<Target>
         .ok_or_else(|| anyhow!("Could not find example `{example}`"))
 }
 
+/// Return every example target in `package`.
 #[allow(clippy::unnecessary_wraps)]
-pub(crate) fn example_targets(package: &Package) -> Result<Vec<Target>> {
+pub fn example_targets(package: &Package) -> Result<Vec<Target>> {
     Ok(package
         .targets
         .iter()
@@ -35,13 +37,30 @@ pub(crate) fn example_targets(package: &Package) -> Result<Vec<Target>> {
         .collect())
 }
 
-pub(crate) fn run_example_test(
-    driver: &Path,
-    metadata: &Metadata,
-    package: &Package,
-    target: &Target,
-    config: &ui::Config,
-) -> Result<()> {
+/// Context for running a UI test against one Cargo example target.
+#[derive(Clone, Copy)]
+pub struct ExampleTestContext<'a> {
+    /// Dylint driver used to execute compiler tests.
+    pub driver: &'a Path,
+    /// Cargo metadata for the workspace under test.
+    pub metadata: &'a Metadata,
+    /// Package that owns the selected example target.
+    pub package: &'a Package,
+    /// Example target whose compiler flags are reused.
+    pub target: &'a Target,
+    /// Configuration applied to the UI test.
+    pub config: &'a ui::Config,
+}
+
+/// Run a UI test using compiler flags from the selected example target.
+pub fn run_example_test(context: ExampleTestContext<'_>) -> Result<()> {
+    let ExampleTestContext {
+        driver,
+        metadata,
+        package,
+        target,
+        config,
+    } = context;
     let linking_flags = linking_flags(metadata, package, target)?;
     let file_name = target
         .src_path
@@ -90,7 +109,7 @@ fn linking_flags(
                     linking_flags.push(flag);
                 } else if flag == "--extern" || flag == "-L" {
                     let arg = next(&flag, &mut iter)?;
-                    linking_flags.extend([flag, arg.trim_matches('\'').to_owned()]);
+                    linking_flags.extend([flag, arg]);
                 }
             }
 
@@ -152,25 +171,7 @@ fn rustc_flags(metadata: &Metadata, package: &Package, target: &Target) -> Resul
         .map(|line| {
             let line =
                 line.with_context(|| format!("Could not read from `{}`", package.manifest_path))?;
-            Ok((*RE).captures(&line).and_then(|captures| {
-                let args = captures[1]
-                    .split(' ')
-                    .map(ToOwned::to_owned)
-                    .collect::<Vec<_>>();
-                // Cargo prints `<wrapper> <rustc> ...` when a compiler wrapper
-                // is configured. This parser only recovers flags, so locate
-                // the rustc executable anywhere in the logged command.
-                if args.iter().any(is_rustc)
-                    && args
-                        .as_slice()
-                        .windows(2)
-                        .any(|window| window == ["--crate-name", &snake_case(&target.name)])
-                {
-                    Some(args)
-                } else {
-                    None
-                }
-            }))
+            Ok(rustc_invocation(&line, &snake_case(&target.name)))
         })
         .collect::<Result<Vec<Option<Vec<_>>>>>()?;
 
@@ -183,6 +184,27 @@ fn rustc_flags(metadata: &Metadata, package: &Package, target: &Target) -> Resul
     matches
         .pop()
         .ok_or_else(|| anyhow!("Found no `rustc` invocations for `{}`", target.name))
+}
+
+/// Extract the requested compiler arguments from Cargo's rendered command line.
+///
+/// Cargo may prefix the compiler with one or more configured wrappers. Parse
+/// the displayed quoting, then return only the argument tail after the actual
+/// `rustc` executable. For example, a wrapped `rustc --crate-name demo` command
+/// yields `--crate-name demo`, without the wrapper arguments.
+fn rustc_invocation(line: &str, target_crate: &str) -> Option<Vec<String>> {
+    let command = RE.captures(line)?.get(1)?.as_str();
+    let arguments = shlex::split(command)?;
+    let rustc_index = arguments.iter().position(is_rustc)?;
+    let rustc_arguments = arguments
+        .into_iter()
+        .skip(rustc_index + 1)
+        .collect::<Vec<_>>();
+
+    rustc_arguments
+        .windows(2)
+        .any(|window| window[0] == "--crate-name" && window[1] == target_crate)
+        .then_some(rustc_arguments)
 }
 
 fn remove_example(metadata: &Metadata, _package: &Package, target: &Target) -> Result<()> {
@@ -224,4 +246,64 @@ fn copy_with_extension<P: AsRef<Path>, Q: AsRef<Path>>(
     let from = from.as_ref().with_extension(extension);
     let to = to.as_ref().with_extension(extension);
     copy(from, to).map_err(Into::into)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::rustc_invocation;
+    use rstest::rstest;
+
+    /// Extract the rustc arguments after unwrapped and wrapped compiler commands.
+    #[rstest]
+    #[case::unwrapped(
+        r"Running `/toolchain/bin/rustc --crate-name target --edition=2024`",
+        &["--crate-name", "target", "--edition=2024"],
+    )]
+    #[case::single_wrapper(
+        r"Running `/cache/build-limits-rustc /toolchain/bin/rustc --crate-name target --edition=2024`",
+        &["--crate-name", "target", "--edition=2024"],
+    )]
+    #[case::nested_wrappers(
+        r"Running `/cache/sccache /cache/build-limits-rustc /toolchain/bin/rustc --crate-name target --edition=2024`",
+        &["--crate-name", "target", "--edition=2024"],
+    )]
+    #[case::quoted_paths(
+        r#"Running `"/tool chain/build-limits-rustc" "/tool chain/bin/rustc" --crate-name target --extern "dependency=/build tree/libdependency.rlib"`"#,
+        &["--crate-name", "target", "--extern", "dependency=/build tree/libdependency.rlib"],
+    )]
+    fn parses_rustc_arguments_after_wrappers(#[case] line: &str, #[case] expected: &[&str]) {
+        let parsed = rustc_invocation(line, "target");
+        let expected = expected
+            .iter()
+            .map(|argument| (*argument).to_owned())
+            .collect::<Vec<_>>();
+
+        assert_eq!(parsed, Some(expected));
+    }
+
+    /// Ignore unrelated Cargo output and commands for other compiler targets.
+    #[rstest]
+    #[case::not_a_cargo_command("Compiling target v0.1.0")]
+    #[case::not_a_compiler(r"Running `/toolchain/bin/cargo --crate-name target`")]
+    #[case::wrong_crate(r"Running `/toolchain/bin/rustc --crate-name another`")]
+    #[case::malformed_quotes(r#"Running `wrapper "/toolchain/bin/rustc --crate-name target`"#)]
+    fn ignores_commands_without_the_requested_rustc_invocation(#[case] line: &str) {
+        assert_eq!(rustc_invocation(line, "target"), None);
+    }
+
+    /// Preserve backslashes while splitting quoted Windows executable paths.
+    #[test]
+    fn splits_windows_paths_without_losing_backslashes() {
+        assert_eq!(
+            shlex::split(
+                r#""C:\Program Files\wrapper.exe" "C:\toolchain\bin\rustc.exe" --crate-name target"#
+            ),
+            Some(vec![
+                r"C:\Program Files\wrapper.exe".to_owned(),
+                r"C:\toolchain\bin\rustc.exe".to_owned(),
+                "--crate-name".to_owned(),
+                "target".to_owned(),
+            ])
+        );
+    }
 }

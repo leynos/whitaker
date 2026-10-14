@@ -58,11 +58,17 @@ version = "1.21"
 [dependencies.regex]
 version = "1.12"
 
+[dependencies.shlex]
+workspace = true
+
 [dependencies.serde_json]
 version = "1.0"
 
 [dependencies.tempfile]
 version = "3.27"
+
+[dev-dependencies.rstest]
+workspace = true
 
 [lints.clippy]
 missing-errors-doc = "allow"
@@ -89,5 +95,3 @@ check-cfg = [
     "cfg(__cargo_cli)",
     "cfg(__library_packages)",
 ]
-
-[workspace]

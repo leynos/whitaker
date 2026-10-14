@@ -3066,11 +3066,22 @@ guarded environment setup.
 `whitaker::testing::ui::run_with_runner` applies a specialized guard before
 invoking the Dylint UI runner. It preserves `RUSTC_WRAPPER` so nested Cargo
 builds retain compiler admission; the workspace's patched `dylint_testing`
-recognizes wrapper-prefixed `rustc` commands when recovering example flags. On
-Windows the guard also sets `VCPKG_ROOT` to `C:\vcpkg` when that directory
-exists and the variable is otherwise absent. Restoration uses the same shared
-environment mutex, but the runner callback itself executes without holding that
-mutex to avoid nested-lock deadlocks.
+recognizes wrapped `rustc` commands when recovering example flags. The vendored
+crate is a workspace member so Clippy checks its parser, but its
+`deny_warnings` feature changes UI fixture diagnostics and must not be enabled
+for the ordinary all-features test run. `make test` therefore excludes it from
+Nextest and runs its command-decoding unit tests separately with default
+features disabled. The decoder parses Cargo's quoted command line and selects
+the compiler arguments after any wrapper chain; do not clear the configured
+wrappers. On Windows the guard also sets `VCPKG_ROOT` to `C:\vcpkg` when that
+directory exists and the variable is otherwise absent. Restoration uses the
+same shared environment mutex, but the runner callback itself executes without
+holding that mutex to avoid nested-lock deadlocks.
+
+Any UI test that holds `env_test_guard()` while invoking Dylint must use
+`run_test_runner_with_env_guard()`. It catches a runner panic before releasing
+the mutex, so a failed example cannot poison environment synchronization for
+subsequent tests.
 
 Example-based UI tests in `rstest_helper_should_be_fixture` also use a
 cross-process directory lock under the system temporary directory. `nextest`

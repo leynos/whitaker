@@ -1,5 +1,5 @@
 use crate::{
-    example::{example_target, example_targets, run_example_test},
+    example::{ExampleTestContext, example_target, example_targets, run_example_test},
     initialize, run_tests,
 };
 use std::{
@@ -96,7 +96,14 @@ impl Test {
                     dylint_internal::cargo::package_with_root(&metadata, &current_dir).unwrap();
                 let target = example_target(&package, example).unwrap();
 
-                run_example_test(driver, &metadata, &package, &target, &self.config).unwrap();
+                run_example_test(ExampleTestContext {
+                    driver,
+                    metadata: &metadata,
+                    package: &package,
+                    target: &target,
+                    config: &self.config,
+                })
+                .unwrap();
             }
             Target::Examples => {
                 let metadata = dylint_internal::cargo::current_metadata().unwrap();
@@ -106,7 +113,14 @@ impl Test {
                 let targets = example_targets(&package).unwrap();
 
                 for target in targets {
-                    run_example_test(driver, &metadata, &package, &target, &self.config).unwrap();
+                    run_example_test(ExampleTestContext {
+                        driver,
+                        metadata: &metadata,
+                        package: &package,
+                        target: &target,
+                        config: &self.config,
+                    })
+                    .unwrap();
                 }
             }
         }

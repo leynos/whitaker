@@ -8,9 +8,9 @@ use std::path::Path;
 use std::{fs, io};
 #[cfg(not(windows))]
 use temp_env::with_vars_unset;
-#[cfg(not(windows))]
-use whitaker_common::test_support::env_test_guard;
-use whitaker_common::test_support::{prepare_fixture, run_fixtures_with, run_test_runner};
+use whitaker_common::test_support::{
+    prepare_fixture, run_fixtures_with, run_test_runner, run_test_runner_with_env_guard,
+};
 
 /// Describes a single example-based regression to run under the test harness.
 ///
@@ -72,8 +72,7 @@ fn run_example_under_test_harness(spec: &ExampleHarnessRun<'_>) {
     let crate_name = env!("CARGO_PKG_NAME");
     let directory = "examples";
     whitaker::testing::ui::run_with_runner(crate_name, directory, |crate_name, _| {
-        run_test_runner(spec.name, || {
-            let _guard = env_test_guard();
+        run_test_runner_with_env_guard(spec.name, || {
             with_vars_unset(
                 ["SCCACHE_GHA_ENABLED", "SCCACHE_PATH", "SCCACHE_ERROR_LOG"],
                 || {

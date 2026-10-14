@@ -6,7 +6,7 @@ use dylint_testing::ui::Test;
 use rstest::rstest;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
-use whitaker_common::test_support::{env_test_guard, prepare_fixture, run_test_runner};
+use whitaker_common::test_support::{prepare_fixture, run_test_runner_with_env_guard};
 
 /// Describes a single example-based regression to run under the test harness.
 ///
@@ -81,8 +81,7 @@ fn run_example_under_test_harness(spec: &ExampleHarnessRun<'_>) {
     let crate_name = env!("CARGO_PKG_NAME");
     let directory = "examples";
     whitaker::testing::ui::run_with_runner(crate_name, directory, |crate_name, _| {
-        run_test_runner(spec.name, || {
-            let _guard = env_test_guard();
+        run_test_runner_with_env_guard(spec.name, || {
             let mut test = Test::example(crate_name, spec.name);
             test.rustc_flags(spec.rustc_flags);
             test.run();
@@ -112,8 +111,7 @@ fn run_fixture_under_test_harness(
     let harness_flags = test_harness_flags(spec.rustc_flags, spec.extern_crates)?;
     let harness_flag_refs: Vec<_> = harness_flags.iter().map(String::as_str).collect();
 
-    run_test_runner(spec.fixture_name, || {
-        let _guard = env_test_guard();
+    run_test_runner_with_env_guard(spec.fixture_name, || {
         let mut test = Test::src_base(spec.crate_name, env.workdir());
         if let Some(config) = env.take_config() {
             test.dylint_toml(config);
