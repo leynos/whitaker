@@ -112,8 +112,12 @@ YAMLLINT_VERSION ?= 1.38.0
 PYYAML_VERSION ?= 6.0.2
 SKILLS_REF_COMMIT := 69ef37e9424c0a7ea9dd2293b559e43ec8176379
 SKILLS_REF_SOURCE := git+https://github.com/agentskills/agentskills.git@$(SKILLS_REF_COMMIT)\#subdirectory=skills-ref
+SKILLS_REF_PATH := $(shell printf '%s' '$(PATH)' | tr ':' '\n' | awk -v lody='$(HOME)/.lody' '$$0 != lody && index($$0, lody "/") != 1 { printf "%s%s", separator, $$0; separator = ":" }')
 YAMLLINT := $(UV_ENV) $(UV) tool run yamllint@$(YAMLLINT_VERSION)
-SKILLS_REF := $(UV_ENV) $(UV) tool run --python 3.14 \
+# Lody's session environment can inject GitHub URL rewrites, PATH shims, and a
+# custom Git exec path. This public, pinned validator uses standard Git.
+SKILLS_REF := env -u GIT_CONFIG_COUNT -u GIT_EXEC_PATH PATH="$(SKILLS_REF_PATH)" \
+	$(UV_ENV) $(UV) tool run --python 3.14 \
 	--from "$(SKILLS_REF_SOURCE)" skills-ref
 # A manifest `description` is legitimately one long line, so the default
 # `line-length` rule is disabled rather than wrapping the frontmatter.

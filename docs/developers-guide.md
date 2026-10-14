@@ -1099,7 +1099,7 @@ worker count rather than `-n auto`.
 
 #### Coverage lane time limits
 
-`coverage-check` and `coverage-upload` run under the 80-minute ceiling that
+`coverage-check` and `coverage-upload` run under the 100-minute ceiling that
 "Test timeouts: four tiers, outermost last" derives from the suite's budgets,
 and that section's contract pins it. The ceiling must also hold a cold compiler
 cache, not only a warm one. A cold cache is not rare: every change to the
@@ -1121,11 +1121,11 @@ CodeScene upload and three cache saves), could not finish cold at all. A
 cancelled writer keeps the compiler-cache entries it stored while it compiled,
 which is why the next trunk run was warm, but it loses its doctests, its
 CodeScene upload and its archive saves. The slowest cold job measured, 38m45s,
-sits well inside the 80-minute ceiling, which leaves `coverage-upload` more
-than half an hour after a cold `Generate coverage` for its doctests, upload and
-saves. Re-measure the cold figure after a change that makes the suite
-materially larger; if it approaches the ceiling, the tier derivation is where
-to raise it, not a per-lane value.
+sits well inside the 100-minute ceiling, which leaves `coverage-upload` about
+an hour after a cold `Generate coverage` for its doctests, upload and saves.
+Re-measure the cold figure after a change that makes the suite materially
+larger; if it approaches the ceiling, the tier derivation is where to raise it,
+not a per-lane value.
 
 #### Placement inside a matrix
 
@@ -1670,6 +1670,24 @@ parent-child and parent-child-grandchild production counts, and
 `canonical_hash` emits an `AstHash` seeded with `PARSER_SCHEMA_VERSION`.
 Changing the parser pin, normalization rules, hash algorithm, or schema string
 must produce a reviewable snapshot change.
+
+#### AST operational metrics
+
+The parser-agnostic `ast::metrics` module owns metric names and the bounded
+`AstError` outcome mapping. The public `lower_span` boundary emits one latency
+sample and one categorized outcome per call, plus a separate parser-recovery
+counter when recovery occurred. Metric labels must not include nodes, spans,
+paths, offsets, or source text. This telemetry is an intentional side effect of
+the public lowering boundary; the private lowering helper retains the
+transformation and parser work.
+
+Describe metrics through the active recorder when recording them. A process-
+wide `Once` can send descriptions to a no-op or test-local recorder and leave a
+later production recorder without metadata. The library emits metrics but never
+installs a recorder; applications should initialize their recorder before
+calling `lower_span`. Feature-vector emission metrics belong to the 7.3.2
+scoring and SARIF Run 1 consumer, and count vectors only when that consumer
+uses them.
 
 `ra_ap_syntax` is exact-pinned in `Cargo.toml` because its parser vocabulary
 and MSRV move with `0.0.x` snapshots. The dependency is behind the default
@@ -3046,12 +3064,13 @@ mutex while a runner callback executes, because the callback may need its own
 guarded environment setup.
 
 `whitaker::testing::ui::run_with_runner` applies a specialized guard before
-invoking the Dylint UI runner. On every platform it clears `RUSTC_WRAPPER` only
-while the runner needs bare `rustc` invocations for
-`dylint_testing::Test::example`. On Windows it also sets `VCPKG_ROOT` to
-`C:\vcpkg` when that directory exists and the variable is otherwise absent.
-Restoration uses the same shared environment mutex, but the runner callback
-itself executes without holding that mutex to avoid nested-lock deadlocks.
+invoking the Dylint UI runner. It preserves `RUSTC_WRAPPER` so nested Cargo
+builds retain compiler admission; the workspace's patched `dylint_testing`
+recognizes wrapper-prefixed `rustc` commands when recovering example flags. On
+Windows the guard also sets `VCPKG_ROOT` to `C:\vcpkg` when that directory
+exists and the variable is otherwise absent. Restoration uses the same shared
+environment mutex, but the runner callback itself executes without holding that
+mutex to avoid nested-lock deadlocks.
 
 Example-based UI tests in `rstest_helper_should_be_fixture` also use a
 cross-process directory lock under the system temporary directory. `nextest`
@@ -3768,12 +3787,12 @@ of the rule lives in the `generate-coverage` README in
 this repository sets, what each value is sized against, and where the third
 tier went.
 
-| Tier                     | What it bounds                     | Where it is set                             | Current value                                                                                      |
-| ------------------------ | ---------------------------------- | ------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`, both profiles       | 300 s default; 10 m for the dylint UI harnesses, 30 m for the toolchain-installing behaviour tests |
-| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, both profiles       | 45 m                                                                                               |
-| Cargo watchdog           | one `cargo` invocation, wall clock | not used here, see below                    | absent                                                                                             |
-| Job `timeout-minutes`    | the whole job                      | `ci.yml` and `coverage-main.yml`, job level | 80 m for every lane that runs the suite                                                            |
+| Tier                     | What it bounds                     | Where it is set                             | Current value                                                                                                                                             |
+| ------------------------ | ---------------------------------- | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`, both profiles       | 300 s default; 20 m for serialized Dylint/trybuild UI harnesses; 30 m for serialized nested-Cargo fixtures; 30 m for toolchain-installing behaviour tests |
+| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, both profiles       | 60 m                                                                                                                                                      |
+| Cargo watchdog           | one `cargo` invocation, wall clock | not used here, see below                    | absent                                                                                                                                                    |
+| Job `timeout-minutes`    | the whole job                      | `ci.yml` and `coverage-main.yml`, job level | 100 m for every lane that runs the suite                                                                                                                  |
 
 *Table: the timers that can end a run, innermost first.*
 
@@ -3792,7 +3811,7 @@ The named exceptions were bounded. A custom profile inherits
 `[profile.default]`, and when a custom profile is selected nextest still
 consults `[[profile.default.overrides]]`, applying a matching default override
 ahead of the selected profile's own scalar setting. So the 30 m toolchain and
-10 m dylint allowances did reach the `ci` profile, which is what the Windows
+20 m Dylint allowances did reach the `ci` profile, which is what the Windows
 lane runs. What nothing bounded was every test those two overrides do not name.
 
 Neither profile set a `global-timeout`, so nothing bounded the whole run.
@@ -3817,6 +3836,21 @@ changed default would otherwise change CI without touching the `ci` section.
 
 The contract holds that policy, and its failure messages say so rather than
 claiming nextest requires it.
+
+The serial UI group has a 20-minute bound. A full workspace run reached 9m56 in
+the nested trybuild harness while compiler admission queued; the wider
+allowance lets a contended compile finish while still terminating a stalled
+test.
+
+The three parser-pin build-script integration cases also receive a 30-minute
+allowance and run in a dedicated serial test group. Each case invokes nested
+Cargo against a fresh temporary target directory, so it rebuilds the fixture's
+build dependencies. The exact-pin case performs both `cargo check` and
+`cargo run`; a traced run completed in 591 seconds after waiting on the shared
+package-cache lock. The loose-pin case was still compiling when its 15-minute
+allowance expired under shared compiler admission. The 30-minute allowance
+leaves room for that queue without changing the whole-suite budget. Serializing
+these cases keeps their Cargo invocations from queueing against one another.
 
 ### The clocks do not start together
 
@@ -3843,10 +3877,10 @@ for the build and the steps either side of the suite, plus a fifteen-minute
 margin above that sum. The margin is there because a ceiling equal to the sum
 it contains cancels the job at the moment the innermost timer would have
 reported the overrun, and the report is the only thing that makes an overrun
-actionable. That is 45 m + 65 s + 15 m + 15 m, or 76 minutes 5 seconds, which
+actionable. That is 60 m + 65 s + 15 m + 15 m, or 91 minutes 5 seconds, which
 `required_ceiling` computes for both profiles.
 
-The ceiling is not that requirement. It is pinned separately at 80 minutes, a
+The ceiling is not that requirement. It is pinned separately at 100 minutes, a
 policy value above it: the derivation accepts any ceiling at or above the
 requirement, so the value is pinned as well, to stop a lane drifting to a
 number nobody chose.
@@ -3857,10 +3891,11 @@ written down, so it has been corrected rather than kept as a special case.
 
 ### What the values are sized against
 
-The 45 m whole-run budget is not a measurement, it is a bound. It has to exceed
-the 30 m a single toolchain-installing test may legitimately spend, and it does
-so with 15 m to spare, which is comfortably more than any observed whole run
-has needed.
+The 60 m whole-run budget is a bound with headroom for the complete workspace
+suite. A recent full run reached the previous 45 m limit with 1,759 of 1,762
+tests completed while the final nested trybuild compile was still progressing.
+The additional 15 m leaves time for that compile and normal variation without
+weakening the 30 m per-test ceiling.
 
 The 15 m allowance for work outside nextest's window is measured, from the
 worst of several runs rather than one:
@@ -3889,7 +3924,7 @@ and this suite cannot run a bare `--workspace` build. Coverage runs through
 
 That absence is asserted rather than assumed. A lane that adopted the action
 without setting `RUN_RUST_CARGO_WAIT_TIMEOUT` would inherit the 1,800 s default
-underneath a 45 m nextest budget, which is exactly the inversion the canonical
+underneath a 60 m nextest budget, which is exactly the inversion the canonical
 section exists to prevent, and it would do so silently. The contract therefore
 fails if either the action appears or the variable is set, so adopting it needs
 this section updated in the same change.
@@ -4057,9 +4092,9 @@ fails `ci`'s ordering too. Whether a profile terminates a test no override
 matches is still read from its own table alone.
 
 It pins the values the tables above state as well as ordering them: the base
-`slow-timeout` on both profiles compared as a whole table, the 45 m whole-run
+`slow-timeout` on both profiles compared as a whole table, the 60 m whole-run
 budget, both overrides' whole `slow-timeout` including the grace period, and
-the 80-minute ceiling on every suite lane. The ordering assertions hold for a
+the 100-minute ceiling on every suite lane. The ordering assertions hold for a
 range of values, so on their own they would let any of these drift to a number
 nobody chose while still passing. The grace period is pinned for the same
 reason it is read: the watchdog and the ceiling above it are sized to cover

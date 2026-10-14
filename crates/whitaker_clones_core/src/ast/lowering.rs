@@ -70,68 +70,64 @@ pub fn lower_span(file_text: &str, span: ByteSpan) -> AstResult<NormalizedTree> 
 }
 
 fn lower_span_inner(file_text: &str, span: ByteSpan) -> (AstResult<NormalizedTree>, bool) {
-    let span = match ByteSpan::new(file_text, span.start(), span.end()).map_err(|error| {
-        trace_ast_error(
-            error,
-            "AST span lies outside the supplied source text",
-            "AST span validation failed",
-        )
-    }) {
-        Ok(span) => span,
-        Err(error) => return (Err(error), false),
-    };
-    let parse = SourceFile::parse(file_text, Edition::CURRENT);
-    let parse_errors = parse.errors();
-    let recovered = !parse_errors.is_empty();
-    if recovered {
-        // This is the designated logging boundary for parser recovery in this
-        // adapter; the lowered AST domain remains parser-agnostic.
-        warn!(
-            start = span.start(),
-            end = span.end(),
-            errors = parse_errors.len(),
-            "lowered AST span from source with parser recovery errors"
+    let mut recovered = false;
+    let result = (|| -> AstResult<NormalizedTree> {
+        let span = ByteSpan::new(file_text, span.start(), span.end()).map_err(|error| {
+            trace_ast_error(
+                error,
+                "AST span lies outside the supplied source text",
+                "AST span validation failed",
+            )
+        })?;
+        let parse = SourceFile::parse(file_text, Edition::CURRENT);
+        let parse_errors = parse.errors();
+        recovered = !parse_errors.is_empty();
+        if recovered {
+            // This is the designated logging boundary for parser recovery in
+            // this adapter; the lowered AST domain remains parser-agnostic.
+            warn!(
+                start = span.start(),
+                end = span.end(),
+                errors = parse_errors.len(),
+                "lowered AST span from source with parser recovery errors"
+            );
+        }
+        let root = parse.tree().syntax().clone();
+        let target_range = text_range(span);
+        let selected = select_covering_node(&root, span).map_err(|error| {
+            trace_ast_error(
+                error,
+                "no AST syntax node covers the requested span",
+                "AST covering-node selection failed",
+            )
+        })?;
+        debug!(
+            kind = ?selected.kind(),
+            span_width = u32::from(selected.text_range().len()),
+            "selected AST covering node"
         );
-    }
-    let root = parse.tree().syntax().clone();
-    let target_range = text_range(span);
-    let selected = match select_covering_node(&root, span).map_err(|error| {
-        trace_ast_error(
-            error,
-            "no AST syntax node covers the requested span",
-            "AST covering-node selection failed",
-        )
-    }) {
-        Ok(selected) => selected,
-        Err(error) => return (Err(error), recovered),
-    };
-    debug!(
-        kind = ?selected.kind(),
-        span_width = u32::from(selected.text_range().len()),
-        "selected AST covering node"
-    );
 
-    // Lowering doubles as parser-error detection: a single descent both builds
-    // the normalized subtree and rejects any `ERROR` node or token, so the
-    // selected span is never walked twice.
-    let lowered = match LoweringLimits::new(span)
-        .lower(&selected, 0)
-        .map_err(|error| {
-            if matches!(error, AstError::UnparsableSpan { .. }) {
-                error!(
-                    start = span.start(),
-                    end = span.end(),
-                    "selected AST span contains parser error elements"
-                );
-            }
-            error
-        }) {
-        Ok(lowered) => lowered,
-        Err(error) => return (Err(error), recovered),
-    };
+        // Lowering doubles as parser-error detection: a single descent both
+        // builds the normalized subtree and rejects any `ERROR` node or token,
+        // so the selected span is never walked twice.
+        let lowered = LoweringLimits::new(span)
+            .lower(&selected, 0)
+            .map_err(|error| {
+                if matches!(error, AstError::UnparsableSpan { .. }) {
+                    error!(
+                        start = span.start(),
+                        end = span.end(),
+                        "selected AST span contains parser error elements"
+                    );
+                }
+                error
+            })?;
 
-    debug_assert!(selected.text_range().contains_range(target_range));
-    (Ok(NormalizedTree::new(lowered, span)), recovered)
+        debug_assert!(selected.text_range().contains_range(target_range));
+        Ok(NormalizedTree::new(lowered, span))
+    })();
+
+    (result, recovered)
 }
 
 fn validate_covering_node_budget(span: ByteSpan, depth: usize, node_count: usize) -> AstResult<()> {

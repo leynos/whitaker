@@ -283,9 +283,9 @@ that boundary rather than emitting duplicate lowering observations.
 
 The outcome label is limited to `success`, `invalid_span`, `unparsable_span`,
 `node_budget_exhausted`, `depth_budget_exhausted` and `parser_unavailable`.
-Metrics must not label individual nodes, spans, paths or raw source text.
+Metrics must not label individual nodes, spans, paths, or raw source text.
 Feature-vector emission remains owned by the 7.3.2 scoring and SARIF Run 1
-consumer so a vector is counted only when that boundary consumes it.
+consumer, so a vector is counted only when that boundary consumes it.
 
 ### Scoring and acceptance (Type-3)
 

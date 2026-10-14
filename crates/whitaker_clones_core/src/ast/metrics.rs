@@ -1,6 +1,6 @@
 //! Bounded operational metrics for AST lowering.
 
-use std::{sync::Once, time::Duration};
+use std::time::Duration;
 
 use super::{AstError, AstResult, NormalizedTree};
 
@@ -16,8 +16,6 @@ pub(crate) const OUTCOME_UNPARSABLE_SPAN: &str = "unparsable_span";
 pub(crate) const OUTCOME_NODE_BUDGET_EXHAUSTED: &str = "node_budget_exhausted";
 pub(crate) const OUTCOME_DEPTH_BUDGET_EXHAUSTED: &str = "depth_budget_exhausted";
 pub(crate) const OUTCOME_PARSER_UNAVAILABLE: &str = "parser_unavailable";
-
-static DESCRIBE_METRICS: Once = Once::new();
 
 pub(crate) fn outcome_label(result: &AstResult<NormalizedTree>) -> &'static str {
     match result {
@@ -50,27 +48,30 @@ pub(crate) fn record_lower_span_metrics(
 }
 
 fn describe_metrics() {
-    DESCRIBE_METRICS.call_once(|| {
-        metrics::describe_histogram!(
-            LOWER_SPAN_DURATION_SECONDS,
-            metrics::Unit::Seconds,
-            "Elapsed time spent validating, parsing, and lowering an AST span"
-        );
-        metrics::describe_counter!(
-            LOWER_SPAN_TOTAL,
-            "AST span lowering attempts categorized by bounded outcome"
-        );
-        metrics::describe_counter!(
-            LOWER_SPAN_PARSER_RECOVERY_TOTAL,
-            "AST span lowering attempts whose source required parser recovery"
-        );
-    });
+    // Descriptions belong to the active recorder; a process-wide guard could
+    // register them only with a no-op or test-local recorder.
+    metrics::describe_histogram!(
+        LOWER_SPAN_DURATION_SECONDS,
+        metrics::Unit::Seconds,
+        "Elapsed time spent validating, parsing, and lowering an AST span"
+    );
+    metrics::describe_counter!(
+        LOWER_SPAN_TOTAL,
+        "AST span lowering attempts categorized by bounded outcome"
+    );
+    metrics::describe_counter!(
+        LOWER_SPAN_PARSER_RECOVERY_TOTAL,
+        "AST span lowering attempts whose source required parser recovery"
+    );
 }
 
 #[cfg(test)]
 mod tests {
+    //! Tests for bounded AST metric labels and active-recorder emission.
+
     #[cfg(not(feature = "parser"))]
-    use metrics_util::debugging::{DebugValue, DebuggingRecorder};
+    use metrics_util::debugging::DebugValue;
+    use metrics_util::debugging::DebuggingRecorder;
     use rstest::rstest;
 
     use super::*;
@@ -118,6 +119,64 @@ mod tests {
         #[case] expected: &'static str,
     ) {
         assert_eq!(outcome_label(&result), expected);
+    }
+
+    type MetricSnapshotEntry = (
+        metrics_util::CompositeKey,
+        Option<metrics::Unit>,
+        Option<metrics::SharedString>,
+        metrics_util::debugging::DebugValue,
+    );
+
+    fn snapshot_has_description(
+        snapshot: &[MetricSnapshotEntry],
+        name: &str,
+        expected_unit: Option<metrics::Unit>,
+        expected_description: &str,
+    ) -> bool {
+        snapshot.iter().any(|(key, unit, description, _)| {
+            key.key().name() == name
+                && *unit == expected_unit
+                && description.as_deref() == Some(expected_description)
+        })
+    }
+
+    #[test]
+    fn each_active_recorder_receives_metric_descriptions() {
+        let result = successful_result();
+        let first_recorder = DebuggingRecorder::new();
+        let first_snapshotter = first_recorder.snapshotter();
+        metrics::with_local_recorder(&first_recorder, || {
+            record_lower_span_metrics(&result, Duration::from_millis(1), true);
+        });
+
+        let second_recorder = DebuggingRecorder::new();
+        let second_snapshotter = second_recorder.snapshotter();
+        metrics::with_local_recorder(&second_recorder, || {
+            record_lower_span_metrics(&result, Duration::from_millis(1), true);
+        });
+
+        for snapshotter in [first_snapshotter, second_snapshotter] {
+            let snapshot = snapshotter.snapshot().into_vec();
+            assert!(snapshot_has_description(
+                &snapshot,
+                LOWER_SPAN_DURATION_SECONDS,
+                Some(metrics::Unit::Seconds),
+                "Elapsed time spent validating, parsing, and lowering an AST span",
+            ));
+            assert!(snapshot_has_description(
+                &snapshot,
+                LOWER_SPAN_TOTAL,
+                None,
+                "AST span lowering attempts categorized by bounded outcome",
+            ));
+            assert!(snapshot_has_description(
+                &snapshot,
+                LOWER_SPAN_PARSER_RECOVERY_TOTAL,
+                None,
+                "AST span lowering attempts whose source required parser recovery",
+            ));
+        }
     }
 
     #[cfg(not(feature = "parser"))]
