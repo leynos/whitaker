@@ -104,6 +104,36 @@ make test
 This executes unit, behaviour, and UI harness tests. The shared target enables
 `rstest` fixtures and `rstest-bdd` scenarios.
 
+### Fixture expansion lint macro
+
+The workspace-owned `whitaker_test_macros` crate provides
+`allow_fixture_expansion_lints` for one narrow test-support case: an
+`#[rstest::fixture]` declaration whose macro expansion triggers the
+`unused_braces` lint. Apply the attribute only to that fixture declaration. It
+must not be used on test functions, production code, or as a general mechanism
+for suppressing unrelated lints.
+
+The crate is a non-publishable, path-only workspace dependency. It is available
+to workspace test-support code, but is not a public distribution or runtime
+dependency.
+
+Reuse the shared macro rather than adding crate-local equivalents. Compose it
+with `#[fixture]` by placing it immediately before that attribute:
+
+```rust
+use rstest::fixture;
+use whitaker_test_macros::allow_fixture_expansion_lints;
+
+#[allow_fixture_expansion_lints]
+#[fixture]
+fn world() -> World {
+    World::default()
+}
+```
+
+The macro owns only the narrowly scoped expansion-lint allowance; fixture
+definition and expansion remain the responsibility of `rstest`.
+
 ### Integration tests for lint exclusion behaviour
 
 The `no_std_fs_operations` crate includes end-to-end behavioural coverage for
@@ -207,9 +237,46 @@ the artefact from the dependency directory next to the current test binary.
 most recently modified artefact from the current build, and falls back to a
 stable path ordering when timestamps tie before emitting the `--extern` flag.
 
+Standard UI-test entry points should use
+`whitaker::testing::ui::run_ui_test(crate_name, directory, runner)`. This
+helper owns the common runner error handling and panics with crate and
+UI-directory context; it formats the underlying `HarnessError` through its
+`Display` implementation. Entry points that need custom result handling should
+continue to use `run_with_runner` instead.
+
 This split keeps ordinary UI fixtures simple while still letting regression
 tests cover `rustc --test`, file-backed modules, per-case configuration, and
 real proc-macro crates where needed.
+
+### Installer toolchain scenarios
+
+The installer toolchain scenarios in `installer/tests/behaviour_toolchain.rs`
+share their step implementations from `installer/tests/toolchain_steps`. The
+`ToolchainWorld` state is populated in scenario order: a `given` setup step
+records CLI arguments and its temporary target directory, install-oriented
+setup also records the pinned channel and isolated `RUSTUP_HOME` and
+`CARGO_HOME`, the `when` step captures command output, and `then` steps inspect
+that output and the resulting installation. Step authors must preserve this
+`given` → `when` → `then` order because each phase consumes state established
+by the preceding phase.
+
+Use the feature-specific setup helpers rather than assembling this state in a
+scenario binding. `setup_dry_run_scenario` prepares detection cases,
+`setup_install_scenario` creates isolated rustup and Cargo homes for an install,
+`setup_failure_scenario` selects the synthetic `FAKE_TOOLCHAIN`, and
+`setup_auto_install_scenario` adds the auto-install options used by the success
+cases. These helpers allocate a temporary target directory and the command
+runner removes `RUSTUP_TOOLCHAIN` and sets `RUSTUP_AUTO_INSTALL=0`, so host
+toolchain settings cannot affect a scenario. Install cases also use
+`--skip-wrapper` where applicable to avoid writing to the developer's wrapper
+directory.
+
+Scenarios that require the pinned toolchain skip when it is not installed.
+Auto-install scenarios skip on Windows because downloads are too slow for the
+behaviour suite. A skip sets `ToolchainWorld::should_skip_assertions`, allowing
+later assertion steps to return without inspecting missing output, and is
+reported through `rstest_bdd::skip!`. Keep these skip rules in the shared setup
+helpers so all scenario variants retain the same isolation and lifecycle.
 
 ### Test profiles
 
@@ -249,6 +316,12 @@ When isolating a coverage run, override `COVERAGE_TARGET_DIR` rather than
 either environment variable individually. Fixture workspaces that intentionally
 use the same package identity must still select their own nested `--target-dir`
 to avoid reusing one another's build-script output.
+
+Both coverage workflows remove a stale root `lcov.info`, run `make coverage`
+with `COVERAGE_OUTPUT=lcov.info`, and validate the newly generated report. The
+validation requires at least one complete `SF:` source record and at least one
+valid `DA:` line measurement. Only `coverage-main.yml` uploads `lcov.info` to
+CodeScene, and its upload is restricted to `main`.
 
 #### Who may talk to CodeScene
 
@@ -2595,8 +2668,10 @@ across the project's behavioural tests.
 
 - Feature file:
   `installer/tests/features/dependency_binaries.feature`
-- Step definitions and scenario bindings:
+- Step definitions:
   `installer/tests/behaviour_dependency_binaries.rs`
+- Scenario bindings:
+  `installer/tests/behaviour_dependency_binaries/scenarios.rs`
 - Test helpers:
   `installer/src/test_utils/dependency_binary_helpers.rs`
 - Shared test utilities:
@@ -2609,11 +2684,11 @@ To add a new scenario:
 1. Append the scenario to the `.feature` file using existing Given/When/Then
    step vocabulary.
 2. If the scenario requires new steps, add step functions annotated with
-   `#[given(...)]`, `#[when(...)]`, or `#[then(...)]` in the behaviour test
-   file.
-3. Add a `#[scenario(path = "...", index = N)]` binding function at the
-   bottom of the behaviour test file, where `N` is the zero-based scenario
-   index.
+   `#[given(...)]`, `#[when(...)]`, or `#[then(...)]` in
+   `behaviour_dependency_binaries.rs`.
+3. Add a `#[scenario(path = "...", index = N)]` binding in
+   `behaviour_dependency_binaries/scenarios.rs`, where `N` is the zero-based
+   scenario index.
 4. Update `dependency_binary_helpers.rs` if the scenario introduces new
    expected command sequences.
 
@@ -2622,13 +2697,31 @@ To add a new scenario:
 - **`StubExecutor`** records expected command invocations in sequence and
   returns predefined `Output` values. Call `assert_finished()` after the test
   body to verify all expected commands were consumed.
-- **`ExpectedCallConfig`** drives `expected_calls()` to generate the full
-  expected command sequence for a given tool and fallback configuration.
+- **`RepositoryVerification`** selects whether repository-install verification
+  is skipped, succeeds, or fails. `ExpectedCallConfig` combines that outcome
+  with the fallback configuration.
+- **`expected_calls()`** returns a `Result` because expected-command generation
+  can fail, for example when a tool is unknown or absent from the dependency
+  manifest. Propagate that error from the scenario setup rather than silently
+  accepting an incomplete command sequence.
 - **`StubDirs`** provides a minimal `BaseDirs` implementation that returns
   a configurable bin directory.
 - **`StubRepositoryInstaller`** (in the behaviour test) implements
   `DependencyBinaryInstaller` with configurable success or failure behaviour
   for scenario isolation.
+- **Fake-binary helpers** write successful or chosen-exit-status executables
+  and can temporarily put fake directories on `PATH`. Their platform-aware
+  paths and guarded environment update let scenarios exercise executable
+  discovery without relying on installed tools.
+
+### Shared SARIF test JSON helpers
+
+Unit and integration tests share JSON assertions from
+`crates/whitaker_sarif/src/test_support.rs`. Use `assert_json_round_trip()` to
+check that a value survives JSON serialization and deserialization unchanged;
+it fails if deserialization changes the value. Use `assert_serialized_json()`
+when a test needs to inspect the serialized JSON string directly. These helpers
+are test support, not part of the public API.
 
 ## Shared span recovery helpers
 
@@ -3031,13 +3124,26 @@ exercise the real build or download paths.
 Installer regression helpers that mutate process-wide environment variables
 must coordinate through `installer/src/test_support.rs`.
 
-- `env_test_guard()` acquires a shared `Mutex` before any test calls
+- `env_test_guard()` acquires the shared re-entrant guard before any test calls
   `temp_env::with_var` or `temp_env::with_var_unset`.
-- Hold that guard for the full lifetime of the test setup so no parallel case
-  can observe a half-applied environment change.
+- Hold that guard for the full lifetime of the environment mutation, including
+  restoration, so no parallel case can observe a half-applied environment
+  change.
 - `installer/src/staged_suite.rs` shows the intended pattern: acquire the
   guard, create the temporary target directory, then run the env-mutating test
   body.
+
+For a single variable or locale override, prefer
+`whitaker_common::test_support::{with_env_var, with_env_var_removed,
+with_locale}`.
+Each helper holds the shared guard for its complete callback, including
+restoration, so it also coordinates with `EnvVarGuard`. Do not acquire a
+separate mutex around those helpers. `env_test_guard()` is the sole shared
+synchronization mechanism and is reentrant: a callback may safely call a UI
+runner or another helper that acquires it for nested setup. The common
+test-support module owns this lock; callers must reuse it rather than adding
+crate-local environment locks. `EnvTestGuard` is the corresponding façade type
+when a test fixture must retain the guard beyond local scope.
 
 For example:
 
@@ -3058,10 +3164,11 @@ fixture-based test setup used by the staged-suite coverage.
 Workspace-level UI harness tests that mutate process-wide environment variables
 must use `whitaker_common::test_support::EnvVarGuard`. Use `EnvVarGuard::set`
 to install a temporary value and `EnvVarGuard::remove` to make a variable
-absent for the duration of a test. The guard acquires `env_test_guard()` only
-while it captures, mutates, or restores the variable; it must not hold that
-mutex while a runner callback executes, because the callback may need its own
-guarded environment setup.
+absent for the duration of a test. The guard retains `env_test_guard()` from
+construction through restoration in `Drop`, preventing another thread from
+interleaving a mutation or restoring stale state. Because this guard is
+re-entrant, code on the same thread may still use nested helpers that acquire
+the shared protocol.
 
 `whitaker::testing::ui::run_with_runner` applies a specialized guard before
 invoking the Dylint UI runner. It preserves `RUSTC_WRAPPER` so nested Cargo
@@ -3835,8 +3942,9 @@ have discarded the log.
 ### Both profiles state their own budgets
 
 Each profile now declares its own base `slow-timeout` and `global-timeout`, and
-`ci` restates the toolchain and dylint allowances as its own overrides. None of
-that is required for the run to be bounded: `ci` would inherit all of it.
+`ci` restates the toolchain, dylint, and parser-pin build-script allowances as
+its own overrides. None of that is required for the run to be bounded: `ci`
+would inherit all of it.
 
 It is repository policy, for two reasons. `ci` is the profile that includes the
 toolchain-installing behaviour tests the default profile excludes, so it is the
@@ -3844,6 +3952,11 @@ profile with the longest tests, and the budgets that govern the lane belong
 where a reader of that profile will find them. Restating them also makes a
 later divergence between the two profiles explicit rather than silent, since a
 changed default would otherwise change CI without touching the `ci` section.
+
+The parser-pin build-script tests each create an isolated nested Cargo
+workspace with its own target directory. Their 10 m allowance accommodates cold
+builds queued for compiler admission after one exceeded the 300 s base timeout;
+it does not serialize the tests.
 
 The contract holds that policy, and its failure messages say so rather than
 claiming nextest requires it.

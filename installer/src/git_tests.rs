@@ -5,15 +5,14 @@ use camino::Utf8PathBuf;
 use cap_std::ambient_authority;
 use cap_std::fs_utf8::Dir;
 use std::process::{Command, Stdio};
-use std::sync::MutexGuard;
 use tempfile::TempDir;
 
-use crate::test_support::env_test_guard;
+use crate::test_support::{EnvTestGuard, env_test_guard};
 
 struct GitFixture {
     /// Serializes the test with those that change `PATH` or `HOME`, because
     /// every Git subprocess here inherits the process environment.
-    _env: MutexGuard<'static, ()>,
+    _env: EnvTestGuard,
     _temp: TempDir,
     origin: Utf8PathBuf,
     clone: Utf8PathBuf,

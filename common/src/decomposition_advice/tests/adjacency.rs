@@ -27,9 +27,9 @@ fn single_edge_inserted_in_both_directions() {
     let adjacency = build_adjacency(3, &[edge(0, 2, 10)]);
 
     assert_eq!(adjacency.len(), 3);
-    assert_eq!(adjacency[0], vec![(2, 10)]);
-    assert!(adjacency[1].is_empty());
-    assert_eq!(adjacency[2], vec![(0, 10)]);
+    assert_eq!(adjacency.first(), Some(&vec![(2, 10)]));
+    assert_eq!(adjacency.get(1), Some(&Vec::new()));
+    assert_eq!(adjacency.get(2), Some(&vec![(0, 10)]));
 }
 
 #[test]
@@ -39,7 +39,7 @@ fn multiple_edges_produce_sorted_neighbour_lists() {
     let adjacency = build_adjacency(4, &edges);
 
     // Node 1's neighbours should be sorted by neighbour index.
-    assert_eq!(adjacency[1], vec![(0, 5), (2, 8), (3, 3)]);
+    assert_eq!(adjacency.get(1), Some(&vec![(0, 5), (2, 8), (3, 3)]));
 }
 
 #[test]
@@ -48,10 +48,10 @@ fn sparse_graph_preserves_isolated_nodes() {
     let adjacency = build_adjacency(4, &[edge(0, 2, 7)]);
 
     assert_eq!(adjacency.len(), 4);
-    assert_eq!(adjacency[0], vec![(2, 7)]);
-    assert!(adjacency[1].is_empty());
-    assert_eq!(adjacency[2], vec![(0, 7)]);
-    assert!(adjacency[3].is_empty());
+    assert_eq!(adjacency.first(), Some(&vec![(2, 7)]));
+    assert_eq!(adjacency.get(1), Some(&Vec::new()));
+    assert_eq!(adjacency.get(2), Some(&vec![(0, 7)]));
+    assert_eq!(adjacency.get(3), Some(&Vec::new()));
 }
 
 #[test]
@@ -62,8 +62,11 @@ fn multi_edge_graph_is_symmetric() {
     // Every (node -> neighbour, weight) pair has its mirror.
     for (node, bucket) in adjacency.iter().enumerate() {
         for &(neighbour, weight) in bucket {
+            let mirror_bucket = adjacency
+                .get(neighbour)
+                .expect("neighbour index should be within adjacency bounds");
             assert!(
-                adjacency[neighbour]
+                mirror_bucket
                     .iter()
                     .any(|&(mirror, mirror_weight)| mirror == node && mirror_weight == weight),
                 "missing mirror for ({node} -> {neighbour}, weight {weight})",

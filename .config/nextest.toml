@@ -55,11 +55,16 @@ slow-timeout = { period = "20m", terminate-after = 1, grace-period = "5s" }
 test-group = "serial-dylint-ui"
 
 [[profile.ci.overrides]]
-# These tests run nested Cargo commands against fresh target directories.
-# The exact-pin case passed in 591 seconds after a package-cache wait. The
-# loose-pin case was still compiling at the 15-minute timeout under shared
-# compiler admission, so allow 30 minutes and serialize the fixture builds.
-filter = "test(build_script_accepts_an_exact_workspace_parser_pin) | test(build_script_rejects_a_loose_workspace_parser_pin) | test(build_script_rejects_a_missing_workspace_parser_pin)"
+# The macro crate's trybuild contract builds fixture crates too, so it needs a
+# build-sized timeout and the same serial target-directory protection.
+filter = "test(fixture_expansion_lint_attribute_contract)"
+slow-timeout = { period = "20m", terminate-after = 1, grace-period = "5s" }
+test-group = "serial-dylint-ui"
+
+[[profile.ci.overrides]]
+# The parser-pin cases run nested Cargo checks in isolated workspaces and need
+# the longer allowance while compiler admission queues.
+filter = "binary(build_script_integration)"
 slow-timeout = { period = "30m", terminate-after = 1, grace-period = "5s" }
 test-group = "serial-build-script-integration"
 
@@ -113,6 +118,20 @@ retries = { backoff = "exponential", count = 2, delay = "5s" }
 slow-timeout = { period = "20m", terminate-after = 1, grace-period = "5s" }
 
 [[profile.default.overrides]]
+# The macro crate's trybuild contract builds fixture crates too, so it needs a
+# build-sized timeout and the same serial target-directory protection.
+filter = "test(fixture_expansion_lint_attribute_contract)"
+slow-timeout = { period = "20m", terminate-after = 1, grace-period = "5s" }
+test-group = "serial-dylint-ui"
+
+[[profile.default.overrides]]
+# These parser-pin integration cases run nested Cargo checks in isolated
+# workspaces; a cold build may queue behind other admitted compiler work.
+filter = "binary(build_script_integration)"
+slow-timeout = { period = "30m", terminate-after = 1, grace-period = "5s" }
+test-group = "serial-build-script-integration"
+
+[[profile.default.overrides]]
 # Serialise ignored exclusion integration tests when they are explicitly run.
 # They build and stage the lint library before invoking `cargo dylint`, so they
 # share the same target-directory race risk as the UI harnesses above.
@@ -130,12 +149,3 @@ slow-timeout = { period = "30m", terminate-after = 1, grace-period = "5s" }
 [[profile.default.overrides]]
 filter = "binary(behaviour_toolchain) & (test(scenario_auto_detect_toolchain_install) | test(scenario_auto_install_success_emits_message) | test(scenario_auto_install_success_quiet_mode))"
 test-group = "serial-toolchain-installs"
-
-[[profile.default.overrides]]
-# The build-script integration fixtures create fresh temporary workspaces and
-# run nested Cargo commands. The exact-pin case passed in 591 seconds after a
-# package-cache wait. The loose-pin case was still compiling at the 15-minute
-# timeout under shared compiler admission, so allow 30 minutes.
-filter = "test(build_script_accepts_an_exact_workspace_parser_pin) | test(build_script_rejects_a_loose_workspace_parser_pin) | test(build_script_rejects_a_missing_workspace_parser_pin)"
-slow-timeout = { period = "30m", terminate-after = 1, grace-period = "5s" }
-test-group = "serial-build-script-integration"

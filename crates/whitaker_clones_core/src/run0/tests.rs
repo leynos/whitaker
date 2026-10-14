@@ -12,6 +12,11 @@ use super::{
     test_helpers::{FragmentInput, config, fragment, pair},
 };
 
+/// Build two fragments and accept their candidate pair under `cfg`.
+///
+/// # Errors
+///
+/// Return the typed acceptance error when the candidate pair is invalid.
 fn build_pair_and_accept(
     left: FragmentInput<'_>,
     right: FragmentInput<'_>,
@@ -21,6 +26,7 @@ fn build_pair_and_accept(
     accept_candidate_pairs(&fragments, &[pair("alpha", "beta")], cfg)
 }
 
+/// Assert that exactly one accepted pair has the expected profile and score.
 fn assert_single_accepted(
     accepted: &[AcceptedPair],
     expected_profile: NormProfile,
@@ -31,10 +37,16 @@ fn assert_single_accepted(
     assert_eq!(accepted[0].score(), expected_score);
 }
 
-fn assert_region(id: &str, source: &str, range: std::ops::Range<usize>, expected: Region) {
-    let region = region_for_range(id, source, range)
-        .unwrap_or_else(|error| panic!("unexpected region error: {error}"));
-    assert_eq!(region, expected);
+/// Resolve the region for `range`, panicking with context on failure.
+///
+/// This helper keeps range failures visible in tests that expect valid fixture
+/// spans; invalid ranges and UTF-8 boundaries are covered through the typed
+/// error-returning API instead.
+fn resolved_region(id: &str, source: &str, range: std::ops::Range<usize>) -> Region {
+    match region_for_range(id, source, range) {
+        Ok(region) => region,
+        Err(error) => panic!("unexpected region error for fragment '{id}': {error}"),
+    }
 }
 
 #[test]
@@ -115,10 +127,9 @@ fn just_below_threshold_is_rejected() {
 
 #[test]
 fn single_line_region_uses_one_based_columns() {
-    assert_region(
-        "alpha",
-        "fn a() {}\n",
-        0..8,
+    let region = resolved_region("alpha", "fn a() {}\n", 0..8);
+    assert_eq!(
+        region,
         Region {
             start_line: 1,
             start_column: Some(1),
@@ -132,10 +143,9 @@ fn single_line_region_uses_one_based_columns() {
 
 #[test]
 fn multi_line_region_tracks_trailing_newline() {
-    assert_region(
-        "alpha",
-        "fn alpha() {\n    value();\n}\n",
-        13..27,
+    let region = resolved_region("alpha", "fn alpha() {\n    value();\n}\n", 13..27);
+    assert_eq!(
+        region,
         Region {
             start_line: 2,
             start_column: Some(1),

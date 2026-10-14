@@ -1,11 +1,13 @@
 //! Behaviour-driven coverage for per-line complexity signal building and smoothing.
 
-use rstest::fixture;
-use rstest_bdd_macros::{given, scenario, then, when};
 use std::cell::{Cell, RefCell};
+
+use proptest::prelude::*;
+use rstest::fixture;
 use whitaker_common::complexity_signal::{
     LineSegment, SignalBuildError, SmoothingError, rasterize_signal, smooth_moving_average,
 };
+use whitaker_test_macros::allow_fixture_expansion_lints;
 
 #[derive(Debug, Default)]
 struct SignalWorld {
@@ -19,23 +21,30 @@ struct SignalWorld {
 }
 
 impl SignalWorld {
+    /// Set the inclusive line range covered by the function under test.
     fn set_function_range(&self, start: usize, end: usize) {
         self.function_start.set(Some(start));
         self.function_end.set(Some(end));
     }
 
+    /// Add a line segment to the scenario state.
     fn push_segment(&self, segment: LineSegment) {
         self.segments.borrow_mut().push(segment);
     }
 
+    /// Store the raw signal used by the smoothing step.
     fn set_raw_signal(&self, signal: Vec<f64>) {
         self.raw_signal.replace(Some(signal));
     }
 
+    /// Store the moving-average window used by the smoothing step.
     fn set_smoothing_window(&self, window: usize) {
         self.smoothing_window.set(Some(window));
     }
 
+    /// Rasterize the configured line range and segments into the saved result.
+    ///
+    /// Panics if the scenario has not configured both range endpoints.
     #[expect(
         clippy::expect_used,
         reason = "fixture configuration is required for this behaviour test"
@@ -54,6 +63,9 @@ impl SignalWorld {
             .replace(Some(rasterize_signal(start..=end, segments.as_slice())));
     }
 
+    /// Smooth the configured raw signal and save the result.
+    ///
+    /// Panics if the scenario has not configured a window and raw signal.
     #[expect(
         clippy::expect_used,
         reason = "fixture configuration is required for this behaviour test"
@@ -72,6 +84,9 @@ impl SignalWorld {
             .replace(Some(smooth_moving_average(&raw_signal, window)));
     }
 
+    /// Clone the result recorded by the signal-building step.
+    ///
+    /// Panics if the signal-building step has not run.
     #[expect(
         clippy::expect_used,
         reason = "fixture configuration is required for this behaviour test"
@@ -84,6 +99,9 @@ impl SignalWorld {
             .expect("built signal must be recorded")
     }
 
+    /// Clone the result recorded by the smoothing step.
+    ///
+    /// Panics if the smoothing step has not run.
     #[expect(
         clippy::expect_used,
         reason = "fixture configuration is required for this behaviour test"
@@ -97,16 +115,22 @@ impl SignalWorld {
     }
 }
 
+/// Create fresh state for one complexity-signal scenario.
+#[allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> SignalWorld {
     SignalWorld::default()
 }
 
-/// Parses a comma-separated list of floating-point values.
+/// Parse a comma-separated list of floating-point values.
 ///
 /// The feature text uses values like `0.0, 1.0, 2.0`. Whitespace is ignored and
 /// empty segments are skipped.
-fn parse_f64_list(values: &str) -> Vec<f64> {
+///
+/// # Errors
+///
+/// Return a description of the first segment that is not a valid `f64`.
+fn parse_f64_list(values: &str) -> Result<Vec<f64>, String> {
     values
         .split(',')
         .map(str::trim)
@@ -114,15 +138,51 @@ fn parse_f64_list(values: &str) -> Vec<f64> {
         .map(|chunk| {
             chunk
                 .parse::<f64>()
-                .unwrap_or_else(|error| panic!("failed to parse `{chunk}` as f64: {error}"))
+                .map_err(|error| format!("failed to parse `{chunk}` as f64: {error}"))
         })
         .collect()
 }
 
-/// Asserts that two floating-point vectors are equal within a tiny tolerance.
+/// Maximum permitted distance between two floats in units of least precision.
+const MAX_ULP_DISTANCE: u64 = 4;
+
+/// Map a float to a monotonically ordered integer for ULP comparison.
+///
+/// Negative values have their bits inverted and non-negative values have the
+/// sign bit set, so the resulting integers order the same way as the floats.
+const fn monotonic_bits(value: f64) -> u64 {
+    let bits = value.to_bits();
+    if (bits & (1 << 63)) != 0 {
+        !bits
+    } else {
+        bits | (1 << 63)
+    }
+}
+
+/// Return the distance between two floats in units of least precision, or
+/// `None` when either value is NaN.
+const fn ulp_distance(left: f64, right: f64) -> Option<u64> {
+    if left.is_nan() || right.is_nan() {
+        return None;
+    }
+    Some(monotonic_bits(left).abs_diff(monotonic_bits(right)))
+}
+
+/// Reconstruct a float from the ordering representation used for ULP tests.
+const fn f64_from_monotonic_bits(bits: u64) -> f64 {
+    let raw_bits = if (bits & (1 << 63)) == 0 {
+        !bits
+    } else {
+        bits & !(1 << 63)
+    };
+    f64::from_bits(raw_bits)
+}
+
+/// Assert that two floating-point vectors are equal within a tiny tolerance.
 ///
 /// This helper is intended for deterministic test values that may experience
-/// insignificant rounding differences.
+/// insignificant rounding differences. Comparison uses units of least
+/// precision (ULPs), which avoids floating-point arithmetic in the test.
 fn assert_vec_approx_eq(actual: &[f64], expected: &[f64]) {
     assert_eq!(
         actual.len(),
@@ -132,96 +192,124 @@ fn assert_vec_approx_eq(actual: &[f64], expected: &[f64]) {
         actual_len = actual.len()
     );
 
-    for (idx, (actual, expected)) in actual.iter().zip(expected.iter()).enumerate() {
-        let delta = (actual - expected).abs();
+    for (idx, (actual_value, expected_value)) in actual.iter().zip(expected.iter()).enumerate() {
+        if actual_value.is_infinite() || expected_value.is_infinite() {
+            assert_eq!(
+                actual_value, expected_value,
+                "expected element {idx} to be {expected_value}, got {actual_value}"
+            );
+            continue;
+        }
+        let distance = ulp_distance(*actual_value, *expected_value);
         assert!(
-            delta <= 1e-12,
-            "expected element {idx} to be {expected}, got {actual} (delta {delta})",
+            distance.is_some_and(|ulps| ulps <= MAX_ULP_DISTANCE),
+            "expected element {idx} to be {expected_value}, got {actual_value} (ULP distance \
+             {distance:?})",
         );
     }
 }
 
-#[given("a function spanning lines {start} to {end}")]
-fn given_function_range(world: &SignalWorld, start: usize, end: usize) {
-    world.set_function_range(start, end);
+#[test]
+#[should_panic(expected = "expected element 0 to be inf, got")]
+fn approx_vector_rejects_finite_value_for_infinite_expectation() {
+    assert_vec_approx_eq(&[f64::MAX], &[f64::INFINITY]);
 }
 
-#[given("a segment from line {start} to {end} with value {value}")]
-fn given_segment(world: &SignalWorld, start: usize, end: usize, value: f64) {
-    let segment = LineSegment::new(start, end, value)
-        .unwrap_or_else(|error| panic!("segment inputs should be valid: {error}"));
-    world.push_segment(segment);
+#[test]
+#[should_panic(expected = "expected element 0 to be")]
+fn approx_vector_rejects_infinite_value_for_finite_expectation() {
+    assert_vec_approx_eq(&[f64::INFINITY], &[f64::MAX]);
 }
 
-#[given("the raw signal is {values}")]
-fn given_raw_signal(world: &SignalWorld, values: String) {
-    world.set_raw_signal(parse_f64_list(&values));
+/// Rejects NaN inputs regardless of their payload bits.
+#[test]
+fn ulp_distance_rejects_nan_inputs() {
+    let left_nan = f64::from_bits(0x7ff0_0000_0000_0001);
+    let right_nan = f64::from_bits(0xfff8_0000_0000_0042);
+
+    assert_eq!(ulp_distance(left_nan, f64::MAX), None);
+    assert_eq!(ulp_distance(f64::MAX, left_nan), None);
+    assert_eq!(ulp_distance(right_nan, f64::MAX), None);
 }
 
-#[given("the smoothing window is {window}")]
-fn given_window(world: &SignalWorld, window: usize) {
-    world.set_smoothing_window(window);
+/// Rejects a NaN actual value instead of treating it as a close match.
+#[test]
+#[should_panic(expected = "ULP distance None")]
+fn approx_vector_rejects_nan_actual_value() {
+    assert_vec_approx_eq(&[f64::NAN], &[0.0]);
 }
 
-#[when("I build the per-line signal")]
-fn when_build(world: &SignalWorld) {
-    world.build_signal();
+/// Rejects a NaN expected value instead of treating it as a close match.
+#[test]
+#[should_panic(expected = "ULP distance None")]
+fn approx_vector_rejects_nan_expected_value() {
+    assert_vec_approx_eq(&[0.0], &[f64::NAN]);
 }
 
-#[when("I smooth the signal")]
-fn when_smooth(world: &SignalWorld) {
-    world.smooth();
+proptest! {
+    #[test]
+    fn monotonic_bits_preserve_finite_numeric_order(
+        left_bits in any::<u64>(),
+        right_bits in any::<u64>(),
+    ) {
+        let left = f64::from_bits(left_bits);
+        let right = f64::from_bits(right_bits);
+        prop_assume!(left.is_finite() && right.is_finite() && left != right);
+
+        prop_assert_eq!(left < right, monotonic_bits(left) < monotonic_bits(right));
+        prop_assert_eq!(left > right, monotonic_bits(left) > monotonic_bits(right));
+    }
+
+    #[test]
+    fn ulp_distance_is_identity_and_symmetric_for_finite_values(
+        left_bits in any::<u64>(),
+        right_bits in any::<u64>(),
+    ) {
+        let left = f64::from_bits(left_bits);
+        let right = f64::from_bits(right_bits);
+        prop_assume!(left.is_finite() && right.is_finite());
+
+        prop_assert_eq!(ulp_distance(left, left), Some(0));
+        prop_assert_eq!(ulp_distance(left, right), ulp_distance(right, left));
+    }
+
+    /// Preserves the undefined-distance contract for arbitrary NaN payloads.
+    #[test]
+    fn ulp_distance_is_undefined_when_either_value_is_nan(
+        nan_payload in any::<u64>(),
+        finite_bits in any::<u64>(),
+    ) {
+        let nan = f64::from_bits(0x7ff0_0000_0000_0001 | (nan_payload & 0x000f_ffff_ffff_ffff));
+        let finite = f64::from_bits(finite_bits);
+        prop_assume!(finite.is_finite());
+
+        prop_assert_eq!(ulp_distance(nan, finite), None);
+        prop_assert_eq!(ulp_distance(finite, nan), None);
+    }
+
+    #[test]
+    fn adjacent_finite_representations_are_one_ulp_apart(bits in 0_u64..u64::MAX) {
+        let left = f64::from_bits(bits);
+        let right = f64::from_bits(bits + 1);
+        prop_assume!(left.is_finite() && right.is_finite());
+
+        prop_assert_eq!(ulp_distance(left, right), Some(1));
+    }
+
+    #[test]
+    fn vector_approximation_accepts_finite_values_within_the_ulp_tolerance(
+        ordered_bits in any::<u64>(),
+        distance in 0_u64..=MAX_ULP_DISTANCE,
+    ) {
+        prop_assume!(ordered_bits <= u64::MAX - distance);
+        let expected_bits = ordered_bits + distance;
+        let actual = f64_from_monotonic_bits(ordered_bits);
+        let expected = f64_from_monotonic_bits(expected_bits);
+        prop_assume!(actual.is_finite() && expected.is_finite());
+
+        assert_vec_approx_eq(&[actual], &[expected]);
+    }
 }
 
-#[then("the built signal equals {expected}")]
-fn then_built_signal(world: &SignalWorld, expected: String) {
-    let actual = world
-        .built_signal()
-        .unwrap_or_else(|error| panic!("signal build should succeed: {error}"));
-    let expected = parse_f64_list(&expected);
-    assert_vec_approx_eq(&actual, &expected);
-}
-
-#[then("signal building fails")]
-fn then_build_fails(world: &SignalWorld) {
-    assert!(world.built_signal().is_err());
-}
-
-#[then("the smoothed signal equals {expected}")]
-fn then_smoothed_signal(world: &SignalWorld, expected: String) {
-    let actual = world
-        .smoothed_signal()
-        .unwrap_or_else(|error| panic!("smoothing should succeed: {error}"));
-    let expected = parse_f64_list(&expected);
-    assert_vec_approx_eq(&actual, &expected);
-}
-
-#[then("smoothing fails")]
-fn then_smoothing_fails(world: &SignalWorld) {
-    assert!(world.smoothed_signal().is_err());
-}
-
-#[scenario(path = "tests/features/complexity_signal.feature", index = 0)]
-fn scenario_overlapping_segments(world: SignalWorld) {
-    let _ = world;
-}
-
-#[scenario(path = "tests/features/complexity_signal.feature", index = 1)]
-fn scenario_out_of_range_segments(world: SignalWorld) {
-    let _ = world;
-}
-
-#[scenario(path = "tests/features/complexity_signal.feature", index = 2)]
-fn scenario_smoothing_happy_path(world: SignalWorld) {
-    let _ = world;
-}
-
-#[scenario(path = "tests/features/complexity_signal.feature", index = 3)]
-fn scenario_smoothing_even_window(world: SignalWorld) {
-    let _ = world;
-}
-
-#[scenario(path = "tests/features/complexity_signal.feature", index = 4)]
-fn scenario_smoothing_zero_window(world: SignalWorld) {
-    let _ = world;
-}
+#[path = "complexity_signal_behaviour/steps.rs"]
+mod steps;

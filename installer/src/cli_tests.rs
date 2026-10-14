@@ -1,26 +1,85 @@
 //! Tests for installer CLI parsing and default behaviours.
 
-use super::*;
+use std::ffi::OsString;
+
 use rstest::rstest;
+
+use super::*;
+
+macro_rules! cli_args {
+    ($($argument:expr),* $(,)?) => {
+        vec![$(OsString::from($argument)),*]
+    };
+}
+
+#[derive(Clone, Copy, Debug)]
+enum DefaultCondition {
+    TargetDirectory,
+    Lint,
+    IndividualLints,
+    Experimental,
+    Cranelift,
+    DryRun,
+    Verbosity,
+    Quiet,
+    SkipDependencies,
+    SkipWrapper,
+    NoUpdate,
+    BuildOnly,
+}
 
 #[test]
 fn cli_parses_defaults() {
     let cli = Cli::parse_from(["whitaker-installer"]);
     assert!(cli.command.is_none());
-    assert!(cli.install.target_dir.is_none());
-    assert!(cli.install.lint.is_empty());
-    assert!(!cli.install.individual_lints);
-    assert!(!cli.install.experimental);
-    assert!(!cli.install.cranelift);
-    assert!(!cli.install.dry_run);
-    assert_eq!(cli.install.verbosity, 0);
-    assert!(!cli.install.quiet);
-    assert!(!cli.install.skip_deps);
-    assert!(!cli.install.skip_wrapper);
-    assert!(!cli.install.no_update);
-    assert!(!cli.install.is_build_only);
+    assert_default_lint_selection(&cli);
+    assert_default_execution_options(&cli);
+    assert_default_skip_flags(&cli);
 }
 
+/// Assert each named condition holds, reporting the first field that differs
+/// from its documented default.
+fn assert_default_conditions(conditions: &[(DefaultCondition, bool)]) {
+    for &(name, condition) in conditions {
+        assert!(condition, "{name:?} must have its default value");
+    }
+}
+
+/// Assert that no target directory or lint selection is present by default.
+fn assert_default_lint_selection(cli: &Cli) {
+    assert_default_conditions(&[
+        (
+            DefaultCondition::TargetDirectory,
+            cli.install.target_dir.is_none(),
+        ),
+        (DefaultCondition::Lint, cli.install.lint.is_empty()),
+        (
+            DefaultCondition::IndividualLints,
+            !cli.install.individual_lints,
+        ),
+        (DefaultCondition::Experimental, !cli.install.experimental),
+    ]);
+}
+
+/// Assert that execution options default to a full, non-quiet build.
+fn assert_default_execution_options(cli: &Cli) {
+    assert_default_conditions(&[
+        (DefaultCondition::Cranelift, !cli.install.cranelift),
+        (DefaultCondition::DryRun, !cli.install.dry_run),
+        (DefaultCondition::Verbosity, cli.install.verbosity == 0),
+        (DefaultCondition::Quiet, !cli.install.quiet),
+    ]);
+}
+
+/// Assert that no pipeline steps are skipped by default.
+fn assert_default_skip_flags(cli: &Cli) {
+    assert_default_conditions(&[
+        (DefaultCondition::SkipDependencies, !cli.install.skip_deps),
+        (DefaultCondition::SkipWrapper, !cli.install.skip_wrapper),
+        (DefaultCondition::NoUpdate, !cli.install.no_update),
+        (DefaultCondition::BuildOnly, !cli.install.is_build_only),
+    ]);
+}
 #[test]
 fn cli_parses_target_dir() {
     let cli = Cli::parse_from(["whitaker-installer", "-t", "/tmp/dylint"]);
@@ -152,17 +211,17 @@ fn should_attempt_prebuilt_true_for_stable_bumpy_road_requests() {
 
 /// Parameterized tests for boolean CLI flags (backwards compatibility).
 #[rstest]
-#[case::individual_lints(&["whitaker-installer", "--individual-lints"], |cli: &Cli| cli.install.individual_lints)]
-#[case::experimental(&["whitaker-installer", "--experimental"], |cli: &Cli| cli.install.experimental)]
-#[case::cranelift(&["whitaker-installer", "--cranelift"], |cli: &Cli| cli.install.cranelift)]
-#[case::dry_run(&["whitaker-installer", "--dry-run"], |cli: &Cli| cli.install.dry_run)]
-#[case::verbose(&["whitaker-installer", "-v"], |cli: &Cli| cli.install.verbosity > 0)]
-#[case::quiet(&["whitaker-installer", "-q"], |cli: &Cli| cli.install.quiet)]
-#[case::skip_deps(&["whitaker-installer", "--skip-deps"], |cli: &Cli| cli.install.skip_deps)]
-#[case::skip_wrapper(&["whitaker-installer", "--skip-wrapper"], |cli: &Cli| cli.install.skip_wrapper)]
-#[case::no_update(&["whitaker-installer", "--no-update"], |cli: &Cli| cli.install.no_update)]
-#[case::build_only(&["whitaker-installer", "--build-only"], |cli: &Cli| cli.install.is_build_only)]
-fn cli_parses_boolean_flags(#[case] args: &[&str], #[case] check: fn(&Cli) -> bool) {
+#[case::individual_lints(cli_args!("whitaker-installer", "--individual-lints"), |cli: &Cli| cli.install.individual_lints)]
+#[case::experimental(cli_args!("whitaker-installer", "--experimental"), |cli: &Cli| cli.install.experimental)]
+#[case::cranelift(cli_args!("whitaker-installer", "--cranelift"), |cli: &Cli| cli.install.cranelift)]
+#[case::dry_run(cli_args!("whitaker-installer", "--dry-run"), |cli: &Cli| cli.install.dry_run)]
+#[case::verbose(cli_args!("whitaker-installer", "-v"), |cli: &Cli| cli.install.verbosity > 0)]
+#[case::quiet(cli_args!("whitaker-installer", "-q"), |cli: &Cli| cli.install.quiet)]
+#[case::skip_deps(cli_args!("whitaker-installer", "--skip-deps"), |cli: &Cli| cli.install.skip_deps)]
+#[case::skip_wrapper(cli_args!("whitaker-installer", "--skip-wrapper"), |cli: &Cli| cli.install.skip_wrapper)]
+#[case::no_update(cli_args!("whitaker-installer", "--no-update"), |cli: &Cli| cli.install.no_update)]
+#[case::build_only(cli_args!("whitaker-installer", "--build-only"), |cli: &Cli| cli.install.is_build_only)]
+fn cli_parses_boolean_flags(#[case] args: Vec<OsString>, #[case] check: fn(&Cli) -> bool) {
     let cli = Cli::parse_from(args);
     assert!(check(&cli));
 }
@@ -170,15 +229,15 @@ fn cli_parses_boolean_flags(#[case] args: &[&str], #[case] check: fn(&Cli) -> bo
 /// The suite pin is the one flag whose value reaches a `git` command line,
 /// so both the accepted spellings and the refusals are held here.
 #[rstest]
-#[case::tag(&["whitaker-installer", "--suite-version", "v0.2.7"], "v0.2.7")]
-#[case::equals_form(&["whitaker-installer", "--suite-version=v0.2.7"], "v0.2.7")]
-#[case::alias(&["whitaker-installer", "--suite-ref", "main"], "main")]
-#[case::commit(&["whitaker-installer", "--suite-version", "2bc0c3f"], "2bc0c3f")]
-fn cli_parses_the_suite_pin(#[case] args: &[&str], #[case] expected: &str) {
+#[case::tag(cli_args!("whitaker-installer", "--suite-version", "v0.2.7"), SuiteRef::try_from("v0.2.7").expect("valid suite reference"))]
+#[case::equals_form(cli_args!("whitaker-installer", "--suite-version=v0.2.7"), SuiteRef::try_from("v0.2.7").expect("valid suite reference"))]
+#[case::alias(cli_args!("whitaker-installer", "--suite-ref", "main"), SuiteRef::try_from("main").expect("valid suite reference"))]
+#[case::commit(cli_args!("whitaker-installer", "--suite-version", "2bc0c3f"), SuiteRef::try_from("2bc0c3f").expect("valid suite reference"))]
+fn cli_parses_the_suite_pin(#[case] args: Vec<OsString>, #[case] expected: SuiteRef) {
     let cli = Cli::parse_from(args);
 
     let reference = cli.install.suite_version.expect("pin should have parsed");
-    assert_eq!(reference.as_str(), expected);
+    assert_eq!(reference, expected);
 }
 
 #[rstest]
@@ -191,34 +250,35 @@ fn cli_leaves_the_suite_unpinned_by_default() {
 }
 
 #[rstest]
-#[case::option_injection(&["whitaker-installer", "--suite-version=--upload-pack=touch /tmp/x"])]
-#[case::traversal(&["whitaker-installer", "--suite-version=v1..v2"])]
-#[case::reflog(&["whitaker-installer", "--suite-version=main@{yesterday}"])]
-#[case::space(&["whitaker-installer", "--suite-version=my branch"])]
-#[case::empty(&["whitaker-installer", "--suite-version="])]
-fn cli_refuses_a_reference_git_would_not_take(#[case] args: &[&str]) {
+#[case::option_injection(cli_args!("whitaker-installer", "--suite-version=--upload-pack=touch /tmp/x"))]
+#[case::traversal(cli_args!("whitaker-installer", "--suite-version=v1..v2"))]
+#[case::reflog(cli_args!("whitaker-installer", "--suite-version=main@{yesterday}"))]
+#[case::space(cli_args!("whitaker-installer", "--suite-version=my branch"))]
+#[case::empty(cli_args!("whitaker-installer", "--suite-version="))]
+fn cli_refuses_a_reference_git_would_not_take(#[case] args: Vec<OsString>) {
     // Refused at the boundary rather than passed to git and explained after a
     // clone has already been paid for.
-    let result = Cli::try_parse_from(args);
+    let result = Cli::try_parse_from(args.iter().cloned());
 
     assert!(result.is_err(), "{args:?} should have been rejected");
 }
 
 /// Parameterized tests for repeatable verbosity flags.
 #[rstest]
-#[case::double_short(&["whitaker-installer", "-vv"], 2)]
-#[case::triple_short(&["whitaker-installer", "-vvv"], 3)]
-#[case::double_long(&["whitaker-installer", "--verbose", "--verbose"], 2)]
-#[case::double_alias(&["whitaker-installer", "--verbosity", "--verbosity"], 2)]
-fn cli_parses_repeatable_verbosity_flags(#[case] args: &[&str], #[case] expected: u8) {
+#[case::double_short(cli_args!("whitaker-installer", "-vv"), 2)]
+#[case::triple_short(cli_args!("whitaker-installer", "-vvv"), 3)]
+#[case::double_long(cli_args!("whitaker-installer", "--verbose", "--verbose"), 2)]
+#[case::double_alias(cli_args!("whitaker-installer", "--verbosity", "--verbosity"), 2)]
+fn cli_parses_repeatable_verbosity_flags(#[case] args: Vec<OsString>, #[case] expected: u8) {
     let cli = Cli::parse_from(args);
     assert_eq!(cli.install.verbosity, expected);
 }
 
+/// Rejects flag combinations that cannot be used together.
 #[rstest]
-#[case::individual_lints_with_lint(&["whitaker-installer", "--individual-lints", "--lint", "module_max_lines"])]
-#[case::verbose_with_quiet(&["whitaker-installer", "--verbose", "--quiet"])]
-fn cli_rejects_conflicting_flags(#[case] args: &[&str]) {
+#[case::individual_lints_with_lint(cli_args!("whitaker-installer", "--individual-lints", "--lint", "module_max_lines"))]
+#[case::verbose_with_quiet(cli_args!("whitaker-installer", "--verbose", "--quiet"))]
+fn cli_rejects_conflicting_flags(#[case] args: Vec<OsString>) {
     Cli::try_parse_from(args).expect_err("expected clap to reject conflicting flags");
 }
 
@@ -226,10 +286,12 @@ fn cli_rejects_conflicting_flags(#[case] args: &[&str]) {
 #[test]
 fn install_args_default_is_valid() {
     let args = InstallArgs::default();
-    assert!(!args.individual_lints);
-    assert!(!args.experimental);
-    assert!(!args.cranelift);
-    assert!(!args.skip_deps);
+    assert_default_conditions(&[
+        (DefaultCondition::IndividualLints, !args.individual_lints),
+        (DefaultCondition::Experimental, !args.experimental),
+        (DefaultCondition::Cranelift, !args.cranelift),
+        (DefaultCondition::SkipDependencies, !args.skip_deps),
+    ]);
 }
 
 #[test]

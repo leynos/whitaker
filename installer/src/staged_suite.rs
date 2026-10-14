@@ -62,10 +62,10 @@ mod tests {
     use rstest::{fixture, rstest};
     use temp_env::{with_var, with_var_unset};
     use tempfile::TempDir;
-    use whitaker_installer::test_support::env_test_guard;
+    use whitaker_installer::test_support::{EnvTestGuard, env_test_guard};
 
     struct StagedSuiteSetup {
-        _guard: std::sync::MutexGuard<'static, ()>,
+        _guard: EnvTestGuard,
         _temp_dir: TempDir,
         toolchain: Toolchain,
         target_dir: Utf8PathBuf,

@@ -4,8 +4,9 @@
 //! the `[package.metadata.binstall]` section matches the specification in
 //! the design document (§ Installer release artefacts).
 
-use super::*;
 use rstest::rstest;
+
+use super::*;
 
 #[rstest]
 fn pkg_url_matches_design_document() {

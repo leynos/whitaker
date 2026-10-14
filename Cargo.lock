@@ -198,6 +198,7 @@ dependencies = [
  "toml 1.1.6+spec-1.1.0",
  "whitaker",
  "whitaker-common",
+ "whitaker_test_macros",
 ]
 
 [[package]]
@@ -393,6 +394,7 @@ dependencies = [
  "tempfile",
  "whitaker",
  "whitaker-common",
+ "whitaker_test_macros",
 ]
 
 [[package]]
@@ -948,6 +950,7 @@ dependencies = [
  "serial_test",
  "whitaker",
  "whitaker-common",
+ "whitaker_test_macros",
 ]
 
 [[package]]
@@ -1742,6 +1745,7 @@ dependencies = [
  "serial_test",
  "whitaker",
  "whitaker-common",
+ "whitaker_test_macros",
 ]
 
 [[package]]
@@ -1777,9 +1781,11 @@ dependencies = [
  "rustc_session",
  "rustc_span",
  "serde",
+ "temp-env",
  "tokio",
  "whitaker",
  "whitaker-common",
+ "whitaker_test_macros",
 ]
 
 [[package]]
@@ -1834,6 +1840,7 @@ dependencies = [
  "temp-env",
  "whitaker",
  "whitaker-common",
+ "whitaker_test_macros",
 ]
 
 [[package]]
@@ -3554,11 +3561,13 @@ name = "whitaker-common"
 version = "0.2.9"
 dependencies = [
  "camino",
+ "cap-std",
  "fluent-templates",
  "glob",
  "log",
  "logtest",
  "once_cell",
+ "parking_lot",
  "proptest",
  "regex",
  "rstest",
@@ -3567,6 +3576,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.21",
  "unic-langid",
+ "whitaker_test_macros",
 ]
 
 [[package]]
@@ -3582,6 +3592,7 @@ dependencies = [
  "libc",
  "log",
  "mockall",
+ "parking_lot",
  "rstest",
  "rstest-bdd",
  "rstest-bdd-macros",
@@ -3599,6 +3610,7 @@ dependencies = [
  "wait-timeout",
  "whitaker-common",
  "whitaker-installer",
+ "whitaker_test_macros",
  "zip",
  "zstd",
 ]
@@ -3625,6 +3637,7 @@ dependencies = [
  "toml 1.1.6+spec-1.1.0",
  "tracing",
  "whitaker_sarif",
+ "whitaker_test_macros",
 ]
 
 [[package]]
@@ -3639,6 +3652,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror 2.0.21",
+ "whitaker_test_macros",
 ]
 
 [[package]]
@@ -3663,6 +3677,17 @@ dependencies = [
  "rustc_session",
  "rustc_span",
  "test_must_not_have_example",
+ "whitaker_test_macros",
+]
+
+[[package]]
+name = "whitaker_test_macros"
+version = "0.2.7"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+ "trybuild",
 ]
 
 [[package]]

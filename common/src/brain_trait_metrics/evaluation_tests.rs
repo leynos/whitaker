@@ -1,8 +1,9 @@
 //! Unit tests for brain trait threshold evaluation.
 
+use rstest::rstest;
+
 use super::*;
 use crate::brain_trait_metrics::TraitMetricsBuilder;
-use rstest::rstest;
 
 // ---------------------------------------------------------------------------
 // Helper: build TraitMetrics with the desired shape
@@ -116,7 +117,7 @@ fn builder_default_trait_matches_new() {
 #[case("high CC but few methods", 3, 2, 10)]
 #[case("at methods_warn but CC below threshold", 15, 5, 1)]
 fn evaluate_pass_cases(
-    #[case] _label: &str,
+    #[case] label: &str,
     #[case] required: usize,
     #[case] default: usize,
     #[case] cc_per_default: usize,
@@ -125,7 +126,8 @@ fn evaluate_pass_cases(
     let thresholds = BrainTraitThresholdsBuilder::new().build();
     assert_eq!(
         evaluate_brain_trait(&metrics, &thresholds),
-        BrainTraitDisposition::Pass
+        BrainTraitDisposition::Pass,
+        "case: {label}"
     );
 }
 
@@ -149,7 +151,7 @@ fn pass_when_at_methods_warn_but_cc_one_below() {
 #[case("above warn below deny", 15, 10, 6)]
 #[case("just below methods_deny", 19, 10, 4)]
 fn evaluate_warn_cases(
-    #[case] _label: &str,
+    #[case] label: &str,
     #[case] required: usize,
     #[case] default: usize,
     #[case] cc_per_default: usize,
@@ -158,7 +160,8 @@ fn evaluate_warn_cases(
     let thresholds = BrainTraitThresholdsBuilder::new().build();
     assert_eq!(
         evaluate_brain_trait(&metrics, &thresholds),
-        BrainTraitDisposition::Warn
+        BrainTraitDisposition::Warn,
+        "case: {label}"
     );
 }
 
@@ -171,7 +174,7 @@ fn evaluate_warn_cases(
 #[case("method count above deny", 25, 10, 0)]
 #[case("deny supersedes warn", 20, 10, 5)]
 fn evaluate_deny_cases(
-    #[case] _label: &str,
+    #[case] label: &str,
     #[case] required: usize,
     #[case] default: usize,
     #[case] cc_per_default: usize,
@@ -180,7 +183,8 @@ fn evaluate_deny_cases(
     let thresholds = BrainTraitThresholdsBuilder::new().build();
     assert_eq!(
         evaluate_brain_trait(&metrics, &thresholds),
-        BrainTraitDisposition::Deny
+        BrainTraitDisposition::Deny,
+        "case: {label}"
     );
 }
 
@@ -208,14 +212,18 @@ fn evaluate_deny_cases(
     BrainTraitDisposition::Warn
 )]
 fn custom_threshold_overrides(
-    #[case] _label: &str,
+    #[case] label: &str,
     #[case] shape: (usize, usize, usize),
     #[case] thresholds: BrainTraitThresholds,
     #[case] expected: BrainTraitDisposition,
 ) {
     let (required, default, cc_per_default) = shape;
     let metrics = build_trait_metrics("Custom", required, default, cc_per_default);
-    assert_eq!(evaluate_brain_trait(&metrics, &thresholds), expected);
+    assert_eq!(
+        evaluate_brain_trait(&metrics, &thresholds),
+        expected,
+        "case: {label}"
+    );
 }
 
 // ---------------------------------------------------------------------------

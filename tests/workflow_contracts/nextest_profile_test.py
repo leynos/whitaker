@@ -43,12 +43,9 @@ BASE_SLOW_TIMEOUT: typ.Final[dict[str, object]] = {
 #: The whole-run budget both profiles must declare.
 REQUIRED_GLOBAL_TIMEOUT: typ.Final[str] = "60m"
 
-# Parser-pin integration fixtures invoke Cargo in isolated target directories.
-BUILD_SCRIPT_FIXTURE_FILTER: typ.Final[str] = (
-    "test(build_script_accepts_an_exact_workspace_parser_pin) | "
-    "test(build_script_rejects_a_loose_workspace_parser_pin) | "
-    "test(build_script_rejects_a_missing_workspace_parser_pin)"
-)
+# Parser-pin fixtures share one integration binary, target directory and Cargo
+# package cache, so the allowance must cover that whole binary and serialize it.
+BUILD_SCRIPT_INTEGRATION_FILTER: typ.Final[str] = "binary(build_script_integration)"
 
 
 class Allowance(typ.NamedTuple):
@@ -90,12 +87,13 @@ class Allowance(typ.NamedTuple):
 #: `ui` disjunction leaves the needle intact while the tests that clause
 #: named lose the ten-minute allowance and fall back to the base three
 #: hundred seconds. The two profiles genuinely differ here, the default one
-#: naming seven more `test(...)` clauses than `ci`: twelve against five,
-#: with `(binary(ui) & test(=ui))` shared and counted in neither. That
-#: divergence is exactly what a shared needle would have hidden.
+#: naming seven more `test(...)` clauses in its shared UI override than
+#: `ci`: twelve against five, with `(binary(ui) & test(=ui))` shared and
+#: counted in neither. The macro crate's compile contract and parser-pin
+#: nested Cargo checks have their own identical allowances in both profiles.
 REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
     "default": {
-        BUILD_SCRIPT_FIXTURE_FILTER: Allowance(
+        BUILD_SCRIPT_INTEGRATION_FILTER: Allowance(
             slow_timeout={
                 "period": "30m",
                 "terminate-after": 1,
@@ -140,9 +138,17 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
             test_group="serial-dylint-ui",
             retries={"backoff": "exponential", "count": 2, "delay": "5s"},
         ),
+        "test(fixture_expansion_lint_attribute_contract)": Allowance(
+            slow_timeout={
+                "period": "20m",
+                "terminate-after": 1,
+                "grace-period": "5s",
+            },
+            test_group="serial-dylint-ui",
+        ),
     },
     "ci": {
-        BUILD_SCRIPT_FIXTURE_FILTER: Allowance(
+        BUILD_SCRIPT_INTEGRATION_FILTER: Allowance(
             slow_timeout={
                 "period": "30m",
                 "terminate-after": 1,
@@ -166,6 +172,14 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
             "test(trybuild_fixtures_compile_without_diagnostics) | "
             "(binary(ui) & test(=ui))"
         ): Allowance(
+            slow_timeout={
+                "period": "20m",
+                "terminate-after": 1,
+                "grace-period": "5s",
+            },
+            test_group="serial-dylint-ui",
+        ),
+        "test(fixture_expansion_lint_attribute_contract)": Allowance(
             slow_timeout={
                 "period": "20m",
                 "terminate-after": 1,
