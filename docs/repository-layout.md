@@ -29,6 +29,7 @@ formal verification helpers.
 | `src/`       | Root library code that assembles shared lint registration and workspace-facing APIs.                                                                                                                              |
 | `suite/`     | The suite crate used to package and expose the lint set coherently.                                                                                                                                               |
 | `tests/`     | Workspace-level integration, behaviour, UI harness, and workflow tests.                                                                                                                                           |
+| `vendor/`    | Locally patched third-party crates whose tests and linting are part of the workspace gates.                                                                                                                       |
 | `verus/`     | Verus proof sidecars and formal verification experiments.                                                                                                                                                         |
 
 *Table 1: Top-level repository layout.*

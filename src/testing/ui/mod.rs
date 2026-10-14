@@ -6,13 +6,16 @@
 //! This module centralizes input validation so lint crates can depend on a
 //! small helper rather than repeat the same checks.
 
-use std::{env, fmt};
+#[cfg(windows)]
+use std::env;
+use std::fmt;
 
 use camino::{Utf8Path, Utf8PathBuf};
 
 mod toolchain;
 
 use self::toolchain::{CrateName, ensure_toolchain_library};
+#[cfg(windows)]
 use whitaker_common::test_support::env_test_guard;
 
 /// Errors produced when preparing or executing Dylint UI tests.
@@ -176,12 +179,6 @@ pub fn run_with_runner(
 
 /// Serializes environment mutations required by `run_with_runner`.
 ///
-/// `RUSTC_WRAPPER` must be cleared on every platform when set (for example to
-/// `sccache`), because `dylint_testing::Test::example` scans
-/// `cargo build --message-format=json` output for bare `rustc` invocations.
-/// When a wrapper is active, Cargo invokes `<wrapper> rustc ...` instead, and
-/// `dylint_testing` finds zero invocations, causing a panic.
-///
 /// On Windows, one additional environment variable needs temporary adjustment:
 ///
 /// - `VCPKG_ROOT`: must be set to `C:\vcpkg` when that directory exists and the
@@ -194,77 +191,51 @@ pub fn run_with_runner(
 struct RunnerEnvGuard {
     #[cfg(windows)]
     vcpkg_root_was_absent: bool,
-    rustc_wrapper_previous: Option<std::ffi::OsString>,
 }
 
 impl Drop for RunnerEnvGuard {
+    /// Restore temporary environment changes when the runner finishes.
     fn drop(&mut self) {
-        let _env_guard = env_test_guard();
-
-        // SAFETY: `env_test_guard` serializes the restoration writes below.
         #[cfg(windows)]
         {
+            let _env_guard = env_test_guard();
+
+            // SAFETY: `env_test_guard` serializes the restoration write below.
             if self.vcpkg_root_was_absent {
                 unsafe {
                     env::remove_var("VCPKG_ROOT");
                 }
             }
         }
-        if let Some(prev) = &self.rustc_wrapper_previous {
-            unsafe {
-                env::set_var("RUSTC_WRAPPER", prev);
-            }
-        }
     }
 }
 
+/// Prepare any platform-specific environment required by the UI runner.
+#[cfg(windows)]
 fn runner_env_guard() -> Option<RunnerEnvGuard> {
-    #[cfg(windows)]
     let vcpkg_candidate = Utf8Path::new(r"C:\vcpkg");
-    #[cfg(windows)]
     let vcpkg_applicable = vcpkg_candidate.is_dir();
 
+    if !vcpkg_applicable {
+        return None;
+    }
     let _env_guard = env_test_guard();
-    let has_rustc_wrapper = env::var_os("RUSTC_WRAPPER").is_some();
-
-    #[cfg(windows)]
-    if !vcpkg_applicable && !has_rustc_wrapper {
+    if env::var_os("VCPKG_ROOT").is_some() {
         return None;
     }
-    #[cfg(not(windows))]
-    if !has_rustc_wrapper {
-        return None;
+    // SAFETY: `_env_guard` serializes concurrent environment mutations.
+    unsafe {
+        env::set_var("VCPKG_ROOT", vcpkg_candidate.as_std_path());
     }
-
-    // All environment reads and writes below are serialized by `_env_guard`.
-    #[cfg(windows)]
-    let vcpkg_root_was_absent = if vcpkg_applicable && env::var_os("VCPKG_ROOT").is_none() {
-        // SAFETY: `_env_guard` serializes concurrent environment mutations.
-        unsafe {
-            env::set_var("VCPKG_ROOT", vcpkg_candidate.as_std_path());
-        }
-        true
-    } else {
-        false
-    };
-
-    let rustc_wrapper_previous = env::var_os("RUSTC_WRAPPER").inspect(|_| {
-        // SAFETY: `_env_guard` serializes concurrent environment mutations.
-        unsafe {
-            env::remove_var("RUSTC_WRAPPER");
-        }
-    });
-    #[cfg(windows)]
-    if !vcpkg_root_was_absent && rustc_wrapper_previous.is_none() {
-        // Nothing was mutated; release the guard early.
-        return None;
-    }
-
     Some(RunnerEnvGuard {
-        #[cfg(windows)]
-        vcpkg_root_was_absent,
-        rustc_wrapper_previous,
+        vcpkg_root_was_absent: true,
     })
+}
+
+/// Prepare any platform-specific environment required by the UI runner.
+#[cfg(not(windows))]
+const fn runner_env_guard() -> Option<RunnerEnvGuard> {
+    None
 }
 
 fn directory_is_rooted(path: &Utf8Path) -> bool {

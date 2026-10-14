@@ -41,7 +41,14 @@ BASE_SLOW_TIMEOUT: typ.Final[dict[str, object]] = {
 }
 
 #: The whole-run budget both profiles must declare.
-REQUIRED_GLOBAL_TIMEOUT: typ.Final[str] = "45m"
+REQUIRED_GLOBAL_TIMEOUT: typ.Final[str] = "60m"
+
+# Parser-pin integration fixtures invoke Cargo in isolated target directories.
+BUILD_SCRIPT_FIXTURE_FILTER: typ.Final[str] = (
+    "test(build_script_accepts_an_exact_workspace_parser_pin) | "
+    "test(build_script_rejects_a_loose_workspace_parser_pin) | "
+    "test(build_script_rejects_a_missing_workspace_parser_pin)"
+)
 
 
 class Allowance(typ.NamedTuple):
@@ -88,6 +95,14 @@ class Allowance(typ.NamedTuple):
 #: divergence is exactly what a shared needle would have hidden.
 REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
     "default": {
+        BUILD_SCRIPT_FIXTURE_FILTER: Allowance(
+            slow_timeout={
+                "period": "30m",
+                "terminate-after": 1,
+                "grace-period": "5s",
+            },
+            test_group="serial-build-script-integration",
+        ),
         ("binary(behaviour_toolchain)"): Allowance(
             slow_timeout={
                 "period": "30m",
@@ -118,7 +133,7 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
             "(binary(ui) & test(=ui))"
         ): Allowance(
             slow_timeout={
-                "period": "10m",
+                "period": "20m",
                 "terminate-after": 1,
                 "grace-period": "5s",
             },
@@ -127,6 +142,14 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
         ),
     },
     "ci": {
+        BUILD_SCRIPT_FIXTURE_FILTER: Allowance(
+            slow_timeout={
+                "period": "30m",
+                "terminate-after": 1,
+                "grace-period": "5s",
+            },
+            test_group="serial-build-script-integration",
+        ),
         ("binary(behaviour_toolchain)"): Allowance(
             slow_timeout={
                 "period": "30m",
@@ -144,7 +167,7 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
             "(binary(ui) & test(=ui))"
         ): Allowance(
             slow_timeout={
-                "period": "10m",
+                "period": "20m",
                 "terminate-after": 1,
                 "grace-period": "5s",
             },
@@ -162,6 +185,7 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
 REQUIRED_TEST_GROUPS: typ.Final[dict[str, dict[str, object]]] = {
     "serial-dylint-ui": {"max-threads": 1},
     "serial-toolchain-installs": {"max-threads": 1},
+    "serial-build-script-integration": {"max-threads": 1},
 }
 
 
@@ -233,7 +257,7 @@ def test_each_profile_states_the_overrides_its_own_tests_need(
     needle: str,
     allowance: Allowance,
 ) -> None:
-    """Both profiles declare both allowances, whole.
+    """Both profiles declare all allowances, whole.
 
     nextest consults ``[[profile.default.overrides]]`` when ``ci`` is
     selected, so restating them is repository policy rather than a

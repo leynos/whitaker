@@ -95,15 +95,15 @@ fn propagates_runner_failures() {
 }
 
 #[test]
-fn runner_env_guard_clears_and_restores_rustc_wrapper() {
+fn runner_env_guard_preserves_rustc_wrapper() {
     let _serial_guard = runner_env_guard_test_lock();
     let _guard = EnvVarGuard::set("RUSTC_WRAPPER", "sccache");
 
     run_with_runner("lint", "ui", |_, _| {
-        assert_eq!(env::var_os("RUSTC_WRAPPER"), None);
+        assert_eq!(env::var_os("RUSTC_WRAPPER"), Some("sccache".into()));
         Ok(())
     })
-    .expect("runner should execute with RUSTC_WRAPPER cleared");
+    .expect("runner should execute with RUSTC_WRAPPER preserved");
 
     assert_eq!(env::var_os("RUSTC_WRAPPER"), Some("sccache".into()));
 }
