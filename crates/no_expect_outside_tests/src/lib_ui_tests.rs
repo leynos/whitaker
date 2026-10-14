@@ -10,7 +10,7 @@ use camino::Utf8Path;
 use dylint_testing::ui::Test;
 use rstest::rstest;
 use temp_env::with_vars_unset;
-use whitaker_common::test_support::{env_test_guard, prepare_fixture, run_test_runner};
+use whitaker_common::test_support::{prepare_fixture, run_test_runner_with_env_guard};
 
 /// Describes a single example-based regression to run under the test harness.
 ///
@@ -84,15 +84,10 @@ struct DependencyRlib {
 fn run_example_under_test_harness(spec: &ExampleHarnessRun<'_>) {
     let crate_name = env!("CARGO_PKG_NAME");
     let directory = "examples";
-    whitaker::testing::ui::run_with_runner(crate_name, directory, |_, _| {
-        run_test_runner(spec.name, || {
-            let _guard = env_test_guard();
+    whitaker::testing::ui::run_with_runner(crate_name, directory, |crate_name, _| {
+        run_test_runner_with_env_guard(spec.name, || {
             with_vars_unset(
-                [
-                    "RUSTC_WRAPPER",
-                    "RUSTC_WORKSPACE_WRAPPER",
-                    "CARGO_BUILD_RUSTC_WRAPPER",
-                ],
+                ["SCCACHE_GHA_ENABLED", "SCCACHE_PATH", "SCCACHE_ERROR_LOG"],
                 || {
                     let mut test = Test::example(crate_name, spec.name);
                     test.rustc_flags(spec.rustc_flags);
@@ -126,23 +121,13 @@ fn run_fixture_under_test_harness(
     let harness_flags = test_harness_flags(spec.rustc_flags, spec.extern_crates)?;
     let harness_flag_refs: Vec<_> = harness_flags.iter().map(String::as_str).collect();
 
-    run_test_runner(spec.fixture_name, || {
-        let _guard = env_test_guard();
-        with_vars_unset(
-            [
-                "RUSTC_WRAPPER",
-                "RUSTC_WORKSPACE_WRAPPER",
-                "CARGO_BUILD_RUSTC_WRAPPER",
-            ],
-            || {
-                let mut test = Test::src_base(spec.crate_name, env.workdir());
-                if let Some(config) = env.take_config() {
-                    test.dylint_toml(config);
-                }
-                test.rustc_flags(harness_flag_refs.as_slice());
-                test.run();
-            },
-        );
+    run_test_runner_with_env_guard(spec.fixture_name, || {
+        let mut test = Test::src_base(spec.crate_name, env.workdir());
+        if let Some(config) = env.take_config() {
+            test.dylint_toml(config);
+        }
+        test.rustc_flags(harness_flag_refs.as_slice());
+        test.run();
     })
 }
 

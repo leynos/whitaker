@@ -12,6 +12,7 @@ accepted = []
 
 [patterns]
 ignore = [
+  "(?m)^            \\.env_remove\\(env::CARGO_TERM_COLOR\\)$",
   "(?m)^                        \\.context\\(\"failed to serialise diagnostic for snapshot\"\\),$",
   "(?m)^                Ok\\(parsed\\) => assert_eq!\\(artifact, parsed\\),$",
   "(?m)^                \\.artifact_location$",

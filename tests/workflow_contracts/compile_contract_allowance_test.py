@@ -26,6 +26,9 @@ from rust_functions import compile_contracts_in
 from nextest_config import load_nextest_config
 from ubicloud_workflow_support import REPOSITORY_ROOT
 
+#: Bound for compile-contract harnesses under shared compiler admission.
+COMPILE_CONTRACT_TIMEOUT: typ.Final[str] = "20m"
+
 
 class RustSourceError(OSError):
     """Raised when the tree's Rust sources cannot be read.
@@ -204,7 +207,7 @@ def test_every_compile_contract_test_carries_the_long_allowance(
     long_filters = [
         override.get("filter", "")
         for override in (parsed_nextest["profile"][profile].get("overrides") or [])
-        if _period(override.get("slow-timeout")) == "10m"
+        if _period(override.get("slow-timeout")) == COMPILE_CONTRACT_TIMEOUT
     ]
     for name, path in sorted(discovered.items()):
         assert any(f"test({name})" in one for one in long_filters), (

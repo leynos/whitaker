@@ -4,16 +4,14 @@
 //! clone them into an isolated workspace, and execute each case via
 //! `dylint_testing` while capturing panics into deterministic error messages.
 
+use crate::test_support::{copy_fixture, env_test_guard};
+use camino::Utf8Path;
+use glob::glob;
 use std::{
     fs, io,
     path::{Path, PathBuf},
 };
-
-use camino::Utf8Path;
-use glob::glob;
 use tempfile::{TempDir, tempdir};
-
-use crate::test_support::copy_fixture;
 
 /// Temporary workspace prepared for a single UI fixture run.
 pub struct FixtureEnvironment {
@@ -119,6 +117,30 @@ fn panic_message(payload: Box<dyn std::any::Any + Send>) -> String {
             |message| (*message).to_owned(),
         ),
     }
+}
+
+/// Run an environment-sensitive UI runner while containing panics under the shared guard.
+///
+/// Catching a runner panic before releasing `env_test_guard` prevents a failed
+/// Dylint invocation from poisoning the mutex used by later tests.
+///
+/// # Errors
+///
+/// Returns the fixture-labelled panic message when `runner` panics.
+///
+/// # Examples
+///
+/// ```
+/// use whitaker_common::test_support::run_test_runner_with_env_guard;
+///
+/// run_test_runner_with_env_guard("example", || {}).expect("runner should succeed");
+/// ```
+pub fn run_test_runner_with_env_guard<F>(fixture_name: &str, runner: F) -> Result<(), String>
+where
+    F: FnOnce(),
+{
+    let _guard = env_test_guard();
+    run_test_runner(fixture_name, runner)
 }
 
 /// Resolves the configuration content for `source`, preferring per-fixture files.
@@ -275,5 +297,20 @@ mod tests {
 
         let contents = resolve_fixture_config(&directory, &fixture).expect("config contents");
         assert_eq!(contents.as_deref(), Some("fixture = true"));
+    }
+
+    /// Keep a caught runner panic from poisoning the shared environment lock.
+    #[test]
+    fn guarded_runner_contains_panics_before_releasing_environment_lock() {
+        let failure = run_test_runner_with_env_guard("example", || {
+            panic!("controlled runner failure");
+        });
+
+        assert_eq!(
+            failure,
+            Err("example: controlled runner failure".to_owned())
+        );
+        run_test_runner_with_env_guard("next example", || {})
+            .expect("a later runner should acquire the environment lock");
     }
 }

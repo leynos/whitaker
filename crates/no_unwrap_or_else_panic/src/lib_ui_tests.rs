@@ -9,7 +9,7 @@ use rstest::rstest;
 #[cfg(not(windows))]
 use temp_env::with_vars_unset;
 #[cfg(not(windows))]
-use whitaker_common::test_support::env_test_guard;
+use whitaker_common::test_support::run_test_runner_with_env_guard;
 use whitaker_common::test_support::{prepare_fixture, run_fixtures_with, run_test_runner};
 
 /// Describes a single example-based regression to run under the test harness.
@@ -62,18 +62,10 @@ fn ui() {
 fn run_example_under_test_harness(spec: &ExampleHarnessRun<'_>) {
     let crate_name = env!("CARGO_PKG_NAME");
     let directory = "examples";
-    whitaker::testing::ui::run_with_runner(crate_name, directory, |_, _| {
-        run_test_runner(spec.name, || {
-            let _guard = env_test_guard();
+    whitaker::testing::ui::run_with_runner(crate_name, directory, |crate_name, _| {
+        run_test_runner_with_env_guard(spec.name, || {
             with_vars_unset(
-                [
-                    "RUSTC_WRAPPER",
-                    "RUSTC_WORKSPACE_WRAPPER",
-                    "CARGO_BUILD_RUSTC_WRAPPER",
-                    "SCCACHE_GHA_ENABLED",
-                    "SCCACHE_PATH",
-                    "SCCACHE_ERROR_LOG",
-                ],
+                ["SCCACHE_GHA_ENABLED", "SCCACHE_PATH", "SCCACHE_ERROR_LOG"],
                 || {
                     let mut test = Test::example(crate_name, spec.name);
                     test.rustc_flags(spec.rustc_flags);

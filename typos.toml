@@ -44,6 +44,7 @@ extend-ignore-re = [
     "(?m)^                format!\\(\"bumpy\\-road signal rasterisation failed: \\{error\\}\"\\),$",
     "(?m)^            Ok\\(json\\) => match serde_json::from_str::<Artifact>\\(&json\\) \\{$",
     "(?m)^            \\.artifact_location$",
+    "(?m)^            \\.env_remove\\(env::CARGO_TERM_COLOR\\)$",
     "(?m)^            \\.expect\\(\"Fluent source should be initialised\"\\);$",
     "(?m)^            \\.unwrap_or_else\\(\\|\\| panic!\\(\"localizer should be initialised\"\\)\\)$",
     "(?m)^            artifacts: Vec::new\\(\\),$",

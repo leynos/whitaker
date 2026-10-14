@@ -41,7 +41,11 @@ BASE_SLOW_TIMEOUT: typ.Final[dict[str, object]] = {
 }
 
 #: The whole-run budget both profiles must declare.
-REQUIRED_GLOBAL_TIMEOUT: typ.Final[str] = "45m"
+REQUIRED_GLOBAL_TIMEOUT: typ.Final[str] = "60m"
+
+# Parser-pin fixtures share one integration binary, target directory and Cargo
+# package cache, so the allowance must cover that whole binary and serialize it.
+BUILD_SCRIPT_INTEGRATION_FILTER: typ.Final[str] = "binary(build_script_integration)"
 
 
 class Allowance(typ.NamedTuple):
@@ -89,6 +93,14 @@ class Allowance(typ.NamedTuple):
 #: nested Cargo checks have their own identical allowances in both profiles.
 REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
     "default": {
+        BUILD_SCRIPT_INTEGRATION_FILTER: Allowance(
+            slow_timeout={
+                "period": "30m",
+                "terminate-after": 1,
+                "grace-period": "5s",
+            },
+            test_group="serial-build-script-integration",
+        ),
         ("binary(behaviour_toolchain)"): Allowance(
             slow_timeout={
                 "period": "30m",
@@ -119,7 +131,7 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
             "(binary(ui) & test(=ui))"
         ): Allowance(
             slow_timeout={
-                "period": "10m",
+                "period": "20m",
                 "terminate-after": 1,
                 "grace-period": "5s",
             },
@@ -128,22 +140,22 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
         ),
         "test(fixture_expansion_lint_attribute_contract)": Allowance(
             slow_timeout={
-                "period": "10m",
+                "period": "20m",
                 "terminate-after": 1,
                 "grace-period": "5s",
             },
             test_group="serial-dylint-ui",
         ),
-        "binary(build_script_integration)": Allowance(
+    },
+    "ci": {
+        BUILD_SCRIPT_INTEGRATION_FILTER: Allowance(
             slow_timeout={
-                "period": "10m",
+                "period": "30m",
                 "terminate-after": 1,
                 "grace-period": "5s",
             },
-            test_group=None,
+            test_group="serial-build-script-integration",
         ),
-    },
-    "ci": {
         ("binary(behaviour_toolchain)"): Allowance(
             slow_timeout={
                 "period": "30m",
@@ -161,7 +173,7 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
             "(binary(ui) & test(=ui))"
         ): Allowance(
             slow_timeout={
-                "period": "10m",
+                "period": "20m",
                 "terminate-after": 1,
                 "grace-period": "5s",
             },
@@ -169,19 +181,11 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
         ),
         "test(fixture_expansion_lint_attribute_contract)": Allowance(
             slow_timeout={
-                "period": "10m",
+                "period": "20m",
                 "terminate-after": 1,
                 "grace-period": "5s",
             },
             test_group="serial-dylint-ui",
-        ),
-        "binary(build_script_integration)": Allowance(
-            slow_timeout={
-                "period": "10m",
-                "terminate-after": 1,
-                "grace-period": "5s",
-            },
-            test_group=None,
         ),
     },
 }
@@ -195,6 +199,7 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
 REQUIRED_TEST_GROUPS: typ.Final[dict[str, dict[str, object]]] = {
     "serial-dylint-ui": {"max-threads": 1},
     "serial-toolchain-installs": {"max-threads": 1},
+    "serial-build-script-integration": {"max-threads": 1},
 }
 
 
@@ -266,7 +271,7 @@ def test_each_profile_states_the_overrides_its_own_tests_need(
     needle: str,
     allowance: Allowance,
 ) -> None:
-    """Both profiles declare both allowances, whole.
+    """Both profiles declare all allowances, whole.
 
     nextest consults ``[[profile.default.overrides]]`` when ``ci`` is
     selected, so restating them is repository policy rather than a

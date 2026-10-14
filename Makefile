@@ -16,7 +16,13 @@ CARGO ?= $(or $(shell command -v cargo 2>/dev/null),$(shell [ -x "$(HOME)/.cargo
 CARGO_LOCKED ?=
 BUILD_JOBS ?=
 CARGO_FLAGS ?= --workspace --all-targets --all-features
-TEST_EXCLUDES ?= --exclude rustc_ast --exclude rustc_attr_data_structures --exclude rustc_hir --exclude rustc_lint --exclude rustc_middle --exclude rustc_session --exclude rustc_span --exclude whitaker --exclude function_attrs_follow_docs --exclude module_max_lines --exclude no_expect_outside_tests
+# The patched UI helper has a `deny_warnings` feature that changes fixture
+# diagnostics, so exercise its parser tests separately without all features.
+TEST_EXCLUDES ?= --exclude rustc_ast --exclude rustc_attr_data_structures \
+	--exclude rustc_hir --exclude rustc_lint --exclude rustc_middle \
+	--exclude rustc_session --exclude rustc_span --exclude whitaker \
+	--exclude function_attrs_follow_docs --exclude module_max_lines \
+	--exclude no_expect_outside_tests --exclude dylint_testing
 TEST_CARGO_FLAGS ?= $(CARGO_FLAGS) $(TEST_EXCLUDES)
 # Doctests cannot run for a crate that links `rustc_private`. A doctest is
 # compiled as its own crate without `#![feature(rustc_private)]`, so every
@@ -112,8 +118,12 @@ YAMLLINT_VERSION ?= 1.38.0
 PYYAML_VERSION ?= 6.0.2
 SKILLS_REF_COMMIT := 69ef37e9424c0a7ea9dd2293b559e43ec8176379
 SKILLS_REF_SOURCE := git+https://github.com/agentskills/agentskills.git@$(SKILLS_REF_COMMIT)\#subdirectory=skills-ref
+SKILLS_REF_PATH := $(shell printf '%s' '$(PATH)' | tr ':' '\n' | awk -v lody='$(HOME)/.lody' '$$0 != lody && index($$0, lody "/") != 1 { printf "%s%s", separator, $$0; separator = ":" }')
 YAMLLINT := $(UV_ENV) $(UV) tool run yamllint@$(YAMLLINT_VERSION)
-SKILLS_REF := $(UV_ENV) $(UV) tool run --python 3.14 \
+# Lody's session environment can inject GitHub URL rewrites, PATH shims, and a
+# custom Git exec path. This public, pinned validator uses standard Git.
+SKILLS_REF := env -u GIT_CONFIG_COUNT -u GIT_EXEC_PATH PATH="$(SKILLS_REF_PATH)" \
+	$(UV_ENV) $(UV) tool run --python 3.14 \
 	--from "$(SKILLS_REF_SOURCE)" skills-ref
 # A manifest `description` is legitimately one long line, so the default
 # `line-length` rule is disabled rather than wrapping the frontmatter.
@@ -193,6 +203,7 @@ test: ## Run tests with warnings treated as errors
 		WHITAKER_BACKUP=""; \
 	fi; \
 	RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS)" $(CARGO) $(TEST_RUNNER) $(CARGO_LOCKED) $(TEST_CARGO_FLAGS) $(BUILD_JOBS) $(if $(NEXTEST_PROFILE),--profile $(NEXTEST_PROFILE)); \
+	RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS)" $(CARGO) test $(CARGO_LOCKED) -p dylint_testing --lib --no-default-features $(BUILD_JOBS); \
 	if [ "$${ACT_WORKFLOW_TESTS:-0}" = "1" ]; then \
 		$(MAKE) workflow-test; \
 	fi
