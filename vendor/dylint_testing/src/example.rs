@@ -207,16 +207,16 @@ fn rustc_flags(metadata: &Metadata, package: &Package, target: &Target) -> Resul
 fn rustc_invocation(line: &str, target_crate: &str) -> Option<Vec<String>> {
     let command = RE.captures(line)?.get(1)?.as_str();
     let arguments = shlex::split(command)?;
-    let rustc_index = arguments.iter().position(is_rustc)?;
+    let crate_name_index = arguments
+        .windows(2)
+        .position(|window| window[0] == "--crate-name" && window[1] == target_crate)?;
+    let rustc_index = arguments[..crate_name_index].iter().rposition(is_rustc)?;
     let rustc_arguments = arguments
         .into_iter()
         .skip(rustc_index + 1)
         .collect::<Vec<_>>();
 
-    rustc_arguments
-        .windows(2)
-        .any(|window| window[0] == "--crate-name" && window[1] == target_crate)
-        .then_some(rustc_arguments)
+    Some(rustc_arguments)
 }
 
 fn remove_example(metadata: &Metadata, _package: &Package, target: &Target) -> Result<()> {
@@ -277,6 +277,10 @@ mod tests {
     )]
     #[case::nested_wrappers(
         r"Running `/cache/sccache /cache/build-limits-rustc /toolchain/bin/rustc --crate-name target --edition=2024`",
+        &["--crate-name", "target", "--edition=2024"],
+    )]
+    #[case::wrapper_named_rustc(
+        r"Running `/cache/rustc /toolchain/bin/rustc --crate-name target --edition=2024`",
         &["--crate-name", "target", "--edition=2024"],
     )]
     #[case::quoted_paths(

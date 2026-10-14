@@ -1681,8 +1681,8 @@ paths, offsets, or source text. This telemetry is an intentional side effect of
 the public lowering boundary; the private lowering helper retains the
 transformation and parser work.
 
-Describe metrics through the active recorder when recording them. A process-
-wide `Once` can send descriptions to a no-op or test-local recorder and leave a
+Describe metrics through the active recorder when recording them. A process-wide
+`Once` can send descriptions to a no-op or test-local recorder and leave a
 later production recorder without metadata. The library emits metrics but never
 installs a recorder; applications should initialize their recorder before
 calling `lower_span`. Feature-vector emission metrics belong to the 7.3.2

@@ -69,6 +69,7 @@ pub fn lower_span(file_text: &str, span: ByteSpan) -> AstResult<NormalizedTree> 
     result
 }
 
+/// Lower the span and report whether parsing recovered.
 fn lower_span_inner(file_text: &str, span: ByteSpan) -> (AstResult<NormalizedTree>, bool) {
     let mut recovered = false;
     let result = (|| -> AstResult<NormalizedTree> {

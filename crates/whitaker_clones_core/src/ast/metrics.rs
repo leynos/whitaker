@@ -17,6 +17,7 @@ pub(crate) const OUTCOME_NODE_BUDGET_EXHAUSTED: &str = "node_budget_exhausted";
 pub(crate) const OUTCOME_DEPTH_BUDGET_EXHAUSTED: &str = "depth_budget_exhausted";
 pub(crate) const OUTCOME_PARSER_UNAVAILABLE: &str = "parser_unavailable";
 
+/// Map an AST lowering result to its bounded metric outcome label.
 pub(crate) fn outcome_label(result: &AstResult<NormalizedTree>) -> &'static str {
     match result {
         Ok(_) => OUTCOME_SUCCESS,
@@ -34,6 +35,7 @@ pub(crate) fn outcome_label(result: &AstResult<NormalizedTree>) -> &'static str 
     }
 }
 
+/// Record lowering latency and bounded outcome metrics.
 pub(crate) fn record_lower_span_metrics(
     result: &AstResult<NormalizedTree>,
     duration: Duration,
@@ -47,6 +49,7 @@ pub(crate) fn record_lower_span_metrics(
     }
 }
 
+/// Describe lowering metrics to the active recorder.
 fn describe_metrics() {
     // Descriptions belong to the active recorder; a process-wide guard could
     // register them only with a no-op or test-local recorder.
