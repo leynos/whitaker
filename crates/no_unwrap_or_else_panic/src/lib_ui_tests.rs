@@ -8,9 +8,9 @@ use std::path::Path;
 use std::{fs, io};
 #[cfg(not(windows))]
 use temp_env::with_vars_unset;
-use whitaker_common::test_support::{
-    prepare_fixture, run_fixtures_with, run_test_runner, run_test_runner_with_env_guard,
-};
+#[cfg(not(windows))]
+use whitaker_common::test_support::run_test_runner_with_env_guard;
+use whitaker_common::test_support::{prepare_fixture, run_fixtures_with, run_test_runner};
 
 /// Describes a single example-based regression to run under the test harness.
 ///
