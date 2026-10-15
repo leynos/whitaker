@@ -1409,20 +1409,20 @@ make fmt        # Apply formatting
 ### The 400-line module budget
 
 `AGENTS.md` states that no single code file may be longer than 400 lines. The
-budget is enforced mechanically by `module_max_lines`, one of Whitaker's own
-dylint lints, which measures the number of source lines occupied by a module
-and warns when the count exceeds a configurable `max_lines` threshold. That
-threshold defaults to 400, and the canonical configuration documented in
-[`docs/whitaker-cli-design.md`](./whitaker-cli-design.md) states it explicitly:
-
-```toml
-[module_max_lines]
-max_lines = 400
-```
+limit has a machine implementation — `module_max_lines`, one of Whitaker's own
+dylint lints, measures the source lines occupied by a module and warns when the
+count exceeds a configurable `max_lines` threshold, which defaults to 400 — but
+that implementation does not yet run against this repository. See
+[Where the budget is checked](#where-the-budget-is-checked) for what does and
+does not execute.
 
 The budget is a readability rule. A module of that length has stopped being
 reviewable in one sitting, so growth past the limit is answered by decomposing
 the module, not by raising the threshold.
+
+The reasoning behind the layout rules below, including the alternatives that
+were rejected, is recorded in
+[ADR 006](./adr-006-directory-based-module-layout.md).
 
 ### Directory modules
 
@@ -1492,13 +1492,39 @@ already restricts it to test builds.
 The convention is repository-wide rather than installer-only: 65 tracked `.rs`
 files contain a `#[path = "` anchor.
 
-### Where the budget is enforced
+### Where the budget is checked
+
+Be precise about this, because the current answer is narrower than it looks.
 
 `make lint` runs
-`cargo clippy --workspace --all-targets --all-features -- -D warnings`. The
-`module_max_lines` lint is one of Whitaker's own dylint lints, wired in through
-the workspace's lint configuration. It is not a rustc or Clippy built-in, so
-the threshold is set as TOML under `[module_max_lines]`, not by a compiler flag.
+`cargo clippy --workspace --all-targets --all-features -- -D warnings`,
+preceded by a `cargo doc` pass. Neither runs the 400-line budget. The budget is
+implemented by `module_max_lines`, one of Whitaker's own dylint lints, and a
+dylint lint is not a rustc or Clippy built-in: it is a separate compiler plugin
+that runs only when a workspace loads it deliberately. This workspace does not.
+`rg 'dylint run' Makefile scripts/` finds nothing, the root `dylint.toml`
+configures `[no_std_fs_operations]` alone, and there is no `[workspace.lints]`
+table in `Cargo.toml`. CI's one use of the dylint host tools is the
+`make publish-check` step, whose single `dylint` invocation is
+`dylint list --no-metadata --no-build` — it enumerates built libraries to
+verify packaging, and lints nothing.
+
+So the budget is **not** currently enforced automatically against this
+repository's own source. The lint itself is real and tested — its UI fixtures
+under `crates/module_max_lines/ui/` pin both the failing and passing cases —
+but nothing runs it over these crates. Running Whitaker's lints over Whitaker
+is the final layer of the lint-hardening stack, and it has not landed yet.
+
+Until it does, the budget is held by review. That is a weaker guarantee than a
+gate, and the difference matters: a module that drifts past 400 lines will not
+turn a check red.
+
+The threshold, when self-linting arrives, is set as TOML under
+`[module_max_lines]`, not by a compiler flag. The shape is documented in
+[`docs/whitaker-cli-design.md`](./whitaker-cli-design.md).
+
+The layout convention itself is recorded in
+[ADR 006](./adr-006-directory-based-module-layout.md).
 
 ## Python script interpreter convention
 
