@@ -43,12 +43,15 @@ mod tests {
 
     use std::io::{Read, Seek};
 
+    #[cfg(unix)]
     use clap::Parser;
     use rstest::rstest;
+    #[cfg(unix)]
     use whitaker_installer::cli::Cli;
 
     use super::*;
 
+    #[cfg(unix)]
     const PATH_SCAN_PROBE_ENV: &str = "WHITAKER_TRACING_PATH_SCAN_PROBE";
 
     /// Verify CLI flags filter the real PATH-scan diagnostic in a child process.
