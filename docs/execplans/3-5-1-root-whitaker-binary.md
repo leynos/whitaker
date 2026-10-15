@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision log`, `Outcomes & retrospective`, `Conformance basis`, and
 `Verification plan` must be kept up to date as work proceeds.
 
-Status: IN PROGRESS
+Status: BLOCKED
 
 ## Purpose / big picture
 
@@ -133,6 +133,15 @@ Compiler admission was not bypassed, and no source changes or test exclusions
 were made to conceal the failures. The implementation remains at `EP-M0` and
 `EP-M1`; `EP-M2` through `EP-M4` are still required before roadmap item 3.5.1
 can be checked complete.
+
+Scope review, 2026-10-15T16:36Z: `git diff --shortstat
+origin/harden-lint-config...HEAD` reports 80 changed files, exceeding the
+70-file scope tolerance. The same diff contains 3,027 insertions and 650
+deletions (2,377 net added lines), below the separate 2,500-line threshold;
+the file-count limit is independently sufficient to trigger escalation. The
+root `src/main.rs` binary is absent, and `EP-M2` through `EP-M4` are not
+complete. Per the tolerance, implementation is paused pending explicit user
+acceptance of a revised scope. Roadmap item 3.5.1 remains unchecked.
 
 Record an ISO-8601 UTC timestamp against each item as it completes, for
 example `- [x] (2026-08-21T14:05Z) EP-M0 …`. Split any partially completed
