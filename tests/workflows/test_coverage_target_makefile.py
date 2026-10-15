@@ -16,8 +16,10 @@ def _write_executable(path: Path, body: str) -> None:
     path.chmod(0o755)
 
 
-def test_coverage_shares_its_target_with_nested_cargo(tmp_path: Path) -> None:
-    """Require coverage and nested Cargo to inherit one absolute target."""
+def test_coverage_shares_target_and_profile_policy_with_nested_cargo(
+    tmp_path: Path,
+) -> None:
+    """Require coverage and nested Cargo to inherit the shared policy."""
     workspace = tmp_path / "workspace"
     bin_directory = tmp_path / "bin"
     workspace.mkdir()
@@ -29,12 +31,14 @@ def test_coverage_shares_its_target_with_nested_cargo(tmp_path: Path) -> None:
         cargo,
         'case "$1" in\n'
         '    llvm-cov)\n'
-        '        printf "outer|%s|%s\\n" "$CARGO_LLVM_COV_TARGET_DIR" "$CARGO_TARGET_DIR" '
+        '        printf "outer|%s|%s|%s\\n" "$CARGO_LLVM_COV_TARGET_DIR" "$CARGO_TARGET_DIR" '
+        '"$LLVM_PROFILE_FILE_NAME" '
         '>> "$COVERAGE_ENV_LOG"\n'
         '        "$0" nested-cargo\n'
         '        ;;\n'
         '    nested-cargo)\n'
-        '        printf "nested|%s|%s\\n" "$CARGO_LLVM_COV_TARGET_DIR" "$CARGO_TARGET_DIR" '
+        '        printf "nested|%s|%s|%s\\n" "$CARGO_LLVM_COV_TARGET_DIR" "$CARGO_TARGET_DIR" '
+        '"$LLVM_PROFILE_FILE_NAME" '
         '>> "$COVERAGE_ENV_LOG"\n'
         '        ;;\n'
         'esac',
@@ -64,6 +68,6 @@ def test_coverage_shares_its_target_with_nested_cargo(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
     expected_target = workspace / "target" / "llvm-cov-target"
     assert environment_log.read_text(encoding="utf-8").splitlines() == [
-        f"outer|{expected_target}|{expected_target}",
-        f"nested|{expected_target}|{expected_target}",
-    ], "coverage and nested Cargo must use the same absolute target directory"
+        f"outer|{expected_target}|{expected_target}|whitaker-%m.profraw",
+        f"nested|{expected_target}|{expected_target}|whitaker-%m.profraw",
+    ], "coverage and nested Cargo must share the target and profile policy"

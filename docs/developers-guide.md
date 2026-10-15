@@ -308,7 +308,9 @@ are never silently skipped in the pipeline.
 `make test`, but runs it through `cargo llvm-cov nextest`. The Makefile assigns
 the absolute `COVERAGE_TARGET_DIR` (by default,
 `$(CURDIR)/target/llvm-cov-target`) to both `CARGO_LLVM_COV_TARGET_DIR` and
-`CARGO_TARGET_DIR`.
+`CARGO_TARGET_DIR`. It also sets `LLVM_PROFILE_FILE_NAME` to
+`whitaker-%m.profraw`, so LLVM merges each instrumented binary's counters
+online instead of retaining a separate raw profile for every Nextest process.
 
 The first variable makes `cargo-llvm-cov` instrument its output in that
 directory. The second is inherited by nested Cargo commands that Dylint UI

@@ -49,6 +49,10 @@ COVERAGE_OUTPUT ?= lcov.info
 # exact directory. cargo-llvm-cov otherwise passes its target only as a
 # Nextest argument, which Dylint's nested Cargo build cannot observe.
 COVERAGE_TARGET_DIR ?= $(CURDIR)/target/llvm-cov-target
+# Nextest runs each test case in a separate process. Keep one online-merged
+# profile per instrumented binary instead of one raw profile per process, as
+# cargo-llvm-cov's default `%p` pattern does.
+COVERAGE_PROFILE_FILE_NAME ?= whitaker-%m.profraw
 RUST_FLAGS ?= -D warnings
 # The installer MSRV check and the publish check each build in a scratch
 # tree they discard afterwards. The trees live at fixed paths rather than
@@ -224,6 +228,7 @@ coverage: ## Generate LCOV coverage over the CI-tested crate subset
 	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v cargo-llvm-cov >/dev/null || { echo "Install cargo-llvm-cov (cargo install cargo-llvm-cov)"; exit 1; }
 	@CARGO_LLVM_COV_TARGET_DIR="$(COVERAGE_TARGET_DIR)" \
 		CARGO_TARGET_DIR="$(COVERAGE_TARGET_DIR)" \
+		LLVM_PROFILE_FILE_NAME="$(COVERAGE_PROFILE_FILE_NAME)" \
 		CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 \
 		$(MAKE) test TEST_RUNNER="llvm-cov nextest --lcov --output-path $(COVERAGE_OUTPUT)"
 
