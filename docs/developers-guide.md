@@ -2503,8 +2503,11 @@ execution either.
 The `dylint-link` verification in `installer/src/deps/mod.rs` is implemented by
 six small private helpers:
 
-- `find_binary_on_path(binary_name)` returns the first executable candidate so
-  the installation check can validate the exact path it found.
+- `find_binary_on_path(binary_name)` returns a `PathScanResult` containing the
+  first executable path and classified failures encountered during the scan.
+- `scan_path_directories(directories, binary_name)` scans the supplied ordered
+  `PathBuf` entries and returns a `PathScanResult` with the first match and
+  failures from entries checked before that match.
 - `find_binary_in_directory` checks candidates relative to one PATH entry and
   returns the first match joined to the original directory. Its inputs make the
   path, binary name, and failure accumulator explicit:
