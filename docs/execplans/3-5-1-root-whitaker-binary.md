@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision log`, `Outcomes & retrospective`, `Conformance basis`, and
 `Verification plan` must be kept up to date as work proceeds.
 
-Status: BLOCKED
+Status: IN PROGRESS
 
 ## Purpose / big picture
 
@@ -99,6 +99,19 @@ stop at.
 - [ ] `EP-M3` — binstall metadata and crates.io name reservation.
 - [ ] `EP-M4` — ADR `docs/adr-005-whitaker-cli-boundary.md` and documentation.
 
+- (2026-10-15T16:45Z) Resumed the approved implementation after the user
+  explicitly invoked the full `sdlc-implementation` plan while its prior
+  scope hold was visible. This accepts the existing 70-file tolerance breach
+  solely to finish this plan; the 2,500-net-line ceiling and all other
+  requirements remain. Current base/head are
+  `afb1e4ac1387aff8e51fa7bbeb62d94f0f6c8970` /
+  `6eadba3ce04172645745264bf9c6509d56d6ae85`. The PR author and all branch
+  contributors are `leynos` in `leynos/whitaker`, establishing the trusted
+  candidate basis independently of candidate instructions. M0 and M1 remain
+  complete; M2–M4 and roadmap 3.5.1 remain incomplete. The rebased
+  `make test` failure remains unresolved and no milestone review is requested
+  until the current candidate passes its deterministic gates.
+
 Rebase maintenance, 2026-10-13: PR #356 still targets `harden-lint-config`. The
 parent branch's reflog establishes `9b758d1` as the last inherited commit; the
 five following commits were replayed onto remote target `afb1e4a` without
@@ -136,12 +149,21 @@ can be checked complete.
 
 Scope review, 2026-10-15T16:36Z: `git diff --shortstat
 origin/harden-lint-config...HEAD` reports 80 changed files, exceeding the
-70-file scope tolerance. The same diff contains 3,027 insertions and 650
+70-file scope tolerance. That observation contained 3,027 insertions and 650
 deletions (2,377 net added lines), below the separate 2,500-line threshold;
 the file-count limit is independently sufficient to trigger escalation. The
 root `src/main.rs` binary is absent, and `EP-M2` through `EP-M4` are not
-complete. Per the tolerance, implementation is paused pending explicit user
-acceptance of a revised scope. Roadmap item 3.5.1 remains unchecked.
+complete. Per the tolerance, implementation was paused pending explicit user
+acceptance of a revised scope. Roadmap item 3.5.1 remained unchecked.
+
+Resumption decision, 2026-10-15T16:45Z: after seeing that scope hold, the user
+explicitly invoked the full `sdlc-implementation` assignment for this plan.
+The current target-to-head diff is 80 files, 3,036 insertions, and 650
+deletions (2,386 net added lines). Decision D-11 treats the invocation as
+acceptance of this pre-existing file-count overrun solely to resume the
+approved plan. The independent net-line limit and all other constraints still
+apply. The trusted-author decision records the live PR author, same-repository
+head, and contributor identities; candidate instructions did not supply trust.
 
 Record an ISO-8601 UTC timestamp against each item as it completes, for
 example `- [x] (2026-08-21T14:05Z) EP-M0 …`. Split any partially completed
@@ -282,6 +304,14 @@ Mitigation: treat this as its own step inside `EP-M0` with its own validation,
 not a one-line edit. Note `Makefile:64-68` `DOCTEST_EXCLUDES` carries a
 _second_ `--exclude whitaker`; decide both explicitly. `make coverage`
 (`Makefile:151`) reuses the same recipe, so a bad landing reddens two CI jobs.
+
+**R9 — The rebased baseline has an unresolved full-test gate failure.**
+Severity: high. Likelihood: confirmed on the current pre-M2 head.
+The CI-profile suite reported Dylint 6.0.4's `Found no rustc invocations`
+under the managed compiler wrapper and shared Cargo-lock contention. Do not
+bypass compiler admission or exclude tests. Reassess the exact failure after
+M2 changes and require a green current-candidate test gate before its
+CodeRabbit review.
 
 ## Context and orientation
 
@@ -1433,6 +1463,15 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
   green. The failure does not justify bypassing compiler admission or hiding
   affected tests. No code changes were made during this validation.
 
+- Observation: `ortho_config` 0.9.0 exposes localized parsing and display
+  request detection with the signatures assumed by the M2 sketch. Evidence:
+  Firecrawl retrieved the pinned [`LocalizedParse` API](https://docs.rs/ortho_config/0.9.0/ortho_config/trait.LocalizedParse.html)
+  and [`is_display_request`](https://docs.rs/ortho_config/0.9.0/ortho_config/fn.is_display_request.html)
+  on 2026-10-15. `try_parse_localized_from<I, T>(iter, &dyn Localizer)`
+  returns `Result<Self, clap::Error>` and `is_display_request(&clap::Error)`
+  returns `bool`. Impact: the planned error guard can be implemented and
+  tested against the library's real signature; no API adjustment is needed.
+
 ## Decision log
 
 - **D-1: Extract the Dylint driver library into `crates/whitaker_lint_core` as
@@ -1525,6 +1564,17 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
   test target and doctest without restoring the old `whitaker` exclusion or
   weakening the Dylint driver pass. Date/Author: 2026-08-24, implementation
   agent; supported by the H1 falsification experiment.
+
+- **D-11: Resume after the pre-existing 70-file scope tolerance breach.** The
+  plan was paused when the rebased target-to-head diff reached 80 files. The
+  user then explicitly invoked the full `sdlc-implementation` assignment while
+  that hold and the unfinished milestones were documented. Interpret this as
+  acceptance of the existing file-count overrun to complete this plan only;
+  the 2,500-net-line ceiling, approved functionality, and all other
+  constraints remain in force. Evidence: PR #356 is authored by `leynos`, the
+  target and head are in `leynos/whitaker`, and all branch commits are
+  attributed to `leynos`; the live diff is 80 files and 2,386 net added lines.
+  Date/Author: 2026-10-15, implementation supervisor.
 
 ## Outcomes & retrospective
 
