@@ -94,6 +94,10 @@
 - [Architectural decision record (ADR) 005: adopt the shared CV-005 contract
   library](adr-005-adopt-the-shared-cv005-contract-library.md) records the move
   from a local copy of the CV-005 contract to the pinned shared check.
+- [Architectural decision record (ADR) 006: directory-based module
+  layout](adr-006-directory-based-module-layout.md) records the `mod.rs` module
+  convention and the extraction of oversized test modules into sibling files,
+  and states plainly that the 400-line budget is not yet machine-enforced here.
 
 ## Requests for comments
 
