@@ -119,6 +119,21 @@ publication of the requested rebase; full local test validation remains
 blocked. No source changes or test exclusions were added during this rebase.
 `EP-M2` through `EP-M4` are still outstanding.
 
+Rebase verification follow-up, 2026-10-15T16:23Z: the live PR still targets
+`harden-lint-config` at `afb1e4a`, which is already an ancestor of branch
+head `04f6fc4`. No commits needed replaying and no conflicts were encountered.
+The explicit `--force-with-lease` push was an up-to-date no-op; local HEAD,
+the remote-tracking ref, and GitHub's branch head all read back as `04f6fc4`.
+The worktree is clean. `make check-fmt`, `make typecheck`, and `make lint`
+passed. `make test` did not pass: 1,627 tests passed, five failed, one timed
+out, five were skipped, and 20 did not run after cancellation. The failures
+include Dylint 6.0.4 reporting `Found no rustc invocations` under the managed
+compiler wrapper (upstream issue 1696) and UI-harness Cargo lock contention.
+Compiler admission was not bypassed, and no source changes or test exclusions
+were made to conceal the failures. The implementation remains at `EP-M0` and
+`EP-M1`; `EP-M2` through `EP-M4` are still required before roadmap item 3.5.1
+can be checked complete.
+
 Record an ISO-8601 UTC timestamp against each item as it completes, for
 example `- [x] (2026-08-21T14:05Z) EP-M0 …`. Split any partially completed
 item into "done" and "remaining" rather than leaving it ambiguous.
@@ -1398,6 +1413,17 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
   Evidence: `googletest` 0.14.3 documentation.
   Impact: recorded as a convention for `docs/developers-guide.md`.
 
+- Observation: the post-rebase repository test gate is still blocked by the
+  managed compiler wrapper and shared Cargo lock contention. Evidence: the
+  2026-10-15 `make test` run completed 1,633 of 1,653 tests, with five failures
+  and one timeout. Dylint 6.0.4 reported `Found no rustc invocations` for UI
+  fixtures while using the managed `build-limits-rustc` wrapper; another UI
+  build timed out after waiting for shared Cargo locks. See
+  `/tmp/test-0c485c79-c21a-486e-b126-29c3ef23084f-3-5-1-root-whitaker-binary.out`.
+  Impact: formatting, typecheck, and lint passed, but the full test gate is not
+  green. The failure does not justify bypassing compiler admission or hiding
+  affected tests. No code changes were made during this validation.
+
 ## Decision log
 
 - **D-1: Extract the Dylint driver library into `crates/whitaker_lint_core` as
@@ -1508,6 +1534,16 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
   installer integration tests remain unmodified, and a normalized dry-run
   snapshot protects its public output. The milestone is contained in the next
   commit and can be reverted as one unit.
+
+- **Rebase verification, 2026-10-15.** The branch already contained the live
+  PR target, so this verification required no additional replay or conflict
+  resolution. The lease push confirmed the remote branch still matched the
+  validated head. Formatting, typecheck, and lint passed; the full test gate
+  retained the Dylint-wrapper and Cargo-lock failures described above. The
+  branch is clean and implementation remains incomplete: the root binary,
+  binstall metadata, ADR, and final user/developer documentation from `EP-M2`
+  through `EP-M4` are not yet present. Roadmap item 3.5.1 must remain open
+  until those acceptance criteria are met.
 
 To be completed at each milestone boundary and at completion. Before setting
 this plan to `COMPLETE`, reconcile every entry in `Surprises & discoveries`
