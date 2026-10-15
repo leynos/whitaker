@@ -278,6 +278,11 @@ later assertion steps to return without inspecting missing output, and is
 reported through `rstest_bdd::skip!`. Keep these skip rules in the shared setup
 helpers so all scenario variants retain the same isolation and lifecycle.
 
+The PATH-scan tracing test in `installer/src/tracing_config.rs` re-executes its
+test binary in a child process to exercise the real CLI flags and diagnostic.
+Its probe helper belongs only to that test; the child boundary keeps tracing
+subscriber setup and the test `PATH` isolated from the parent process.
+
 ### Test profiles
 
 By default, `make test` excludes slow installer integration tests

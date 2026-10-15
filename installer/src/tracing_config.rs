@@ -49,23 +49,14 @@ mod tests {
 
     use super::*;
 
+    const PATH_SCAN_PROBE_ENV: &str = "WHITAKER_TRACING_PATH_SCAN_PROBE";
+
     /// Verify CLI flags filter the real PATH-scan diagnostic in a child process.
     #[cfg(unix)]
     #[test]
     fn cli_flags_filter_path_scan_diagnostics_on_stderr() {
-        const PROBE_ENV: &str = "WHITAKER_TRACING_PATH_SCAN_PROBE";
-        if let Some(mode) = std::env::var_os(PROBE_ENV) {
-            let arguments = match mode.to_str() {
-                Some("verbose") => vec!["whitaker-installer", "-v"],
-                Some("quiet") => vec!["whitaker-installer", "-q"],
-                _ => vec!["whitaker-installer"],
-            };
-            let cli = Cli::try_parse_from(arguments)
-                .expect("probe arguments must match the installer CLI");
-            configure_tracing(cli.install_args());
-            let _ = whitaker_installer::deps::check_dylint_tools(
-                &whitaker_installer::deps::SystemCommandExecutor,
-            );
+        if std::env::var_os(PATH_SCAN_PROBE_ENV).is_some() {
+            run_path_scan_probe();
             return;
         }
 
@@ -108,7 +99,7 @@ mod tests {
                 "tracing_config::tests::cli_flags_filter_path_scan_diagnostics_on_stderr",
                 "--nocapture",
             ])
-            .env(PROBE_ENV, mode)
+            .env(PATH_SCAN_PROBE_ENV, mode)
             .env("PATH", &path)
             .output()
             .expect("isolated CLI tracing probe must run");
@@ -119,20 +110,35 @@ mod tests {
             let stderr = String::from_utf8(output.stderr).expect("stderr must be UTF-8");
             let stdout = String::from_utf8(output.stdout).expect("stdout must be UTF-8");
             let has_path_diagnostic = stderr.contains("skipping PATH scan candidate");
+            let is_verbose = mode == "verbose";
+            assert_eq!(has_path_diagnostic, is_verbose);
+            assert_eq!(stderr.contains("binary_name=\"dylint-link\""), is_verbose);
             assert_eq!(
-                has_path_diagnostic,
-                mode == "verbose",
-                "{mode} output: {stderr}"
+                stderr.contains("failure_category=\"directory_open\""),
+                is_verbose
             );
-            if has_path_diagnostic {
-                assert!(stderr.contains("binary_name=\"dylint-link\""));
-                assert!(stderr.contains("failure_category=\"directory_open\""));
-                assert!(!stderr.contains(invalid_entry.to_string_lossy().as_ref()));
-                assert!(!stderr.contains(binary_directory.to_string_lossy().as_ref()));
-            }
+            assert!(!stderr.contains(invalid_entry.to_string_lossy().as_ref()));
+            assert!(!stderr.contains(binary_directory.to_string_lossy().as_ref()));
             assert!(!stdout.contains("skipping PATH scan candidate"));
             assert!(!stderr.contains('\u{1b}'), "stderr must omit ANSI escapes");
         }
+    }
+
+    /// Run the child-only probe that exercises the production PATH scan event.
+    #[cfg(unix)]
+    fn run_path_scan_probe() {
+        let mode = std::env::var(PATH_SCAN_PROBE_ENV);
+        let flags: &[&str] = match mode.as_deref() {
+            Ok("verbose") => &["-v"],
+            Ok("quiet") => &["-q"],
+            _ => &[],
+        };
+        let arguments = std::iter::once("whitaker-installer").chain(flags.iter().copied());
+        let cli = Cli::try_parse_from(arguments).expect("probe arguments must match the CLI");
+        configure_tracing(cli.install_args());
+        let _ = whitaker_installer::deps::check_dylint_tools(
+            &whitaker_installer::deps::SystemCommandExecutor,
+        );
     }
 
     /// Verify CLI initialization sends diagnostics to stderr in its own process.
