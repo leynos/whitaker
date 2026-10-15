@@ -1502,10 +1502,12 @@ preceded by a `cargo doc` pass. Neither runs the 400-line budget. The budget is
 implemented by `module_max_lines`, one of Whitaker's own dylint lints, and a
 dylint lint is not a rustc or Clippy built-in: it is a separate compiler plugin
 that runs only when a workspace loads it deliberately. This workspace does not.
-`rg 'dylint run' Makefile scripts/` finds nothing, the root `dylint.toml`
-configures `[no_std_fs_operations]` alone, and there is no `[workspace.lints]`
-table in `Cargo.toml`. CI's one use of the dylint host tools is the
-`make publish-check` step, whose single `dylint` invocation is
+`rg 'dylint run' Makefile scripts/` finds nothing, and the root `dylint.toml`
+configures `[no_std_fs_operations]` alone. The `[workspace.lints.rust]` and
+`[workspace.lints.rustdoc]` tables in `Cargo.toml` do not change this: they
+configure rustc and rustdoc lints, and neither names `module_max_lines`. Within
+the CI workflow the dylint host tools are restored for the `make publish-check`
+step alone, and that step's single dylint invocation is
 `dylint list --no-metadata --no-build` — it enumerates built libraries to
 verify packaging, and lints nothing.
 
