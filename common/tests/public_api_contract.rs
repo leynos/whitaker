@@ -1,5 +1,6 @@
 //! Compile-time contracts for common public APIs changed to Oxford spelling.
 
+/// Verify that renamed common APIs compile and their legacy names remain removed.
 #[test]
 fn renamed_common_apis_are_public_and_legacy_names_stay_removed() {
     let cases = trybuild::TestCases::new();

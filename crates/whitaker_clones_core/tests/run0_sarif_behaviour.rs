@@ -304,6 +304,7 @@ fn then_primary_region_is(world: &Run0World, region: String) {
     });
 }
 
+/// Check that the emitted primary location uses the expected file URI.
 #[then("the primary file is {file_uri}")]
 fn then_primary_file_is(world: &Run0World, file_uri: String) {
     with_results(world, |results| {

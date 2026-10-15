@@ -3,6 +3,7 @@
 use whitaker_common::complexity_signal::rasterise_signal;
 use whitaker_common::normalise_locale;
 
+/// Exercise removed common API names in the compile-fail fixture.
 fn main() {
     let _ = normalise_locale(Some("en-GB"));
     let _ = rasterise_signal(1..=1, &[]);

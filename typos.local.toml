@@ -22,9 +22,11 @@ ignore = [
   "(?m)^                !json\\.contains\\(\"\\\\\"artifacts\\\\\"\"\\),$",
   "(?m)^                json\\.contains\\(\"\\\\\"artifacts\\\\\"\"\\),$",
   "(?m)^                json\\.contains\\(\"\\\\\"artifactLocation\\\\\"\"\\),$",
-  # Keep schema keys exempt only when they appear as quoted wire values; keep
-  # the removed field spelling only in its compile-fail regression fixture.
-  "(?m)^.*\\\"(?:artifactLocation|artifacts)\\\".*$",
+  # Keep schema keys exempt only in JSON fields, lookups and index expressions.
+  # Keep the removed field spelling only in its compile-fail regression fixture.
+  '"(?:artifactLocation|artifacts)"[ \t]*:',
+  '\["(?:artifactLocation|artifacts)"\]',
+  '\w+\.get\("(?:artifactLocation|artifacts)"\)',
   "(?m)^.*run\\.artifacts;.*$",
   "(?m)^        \"\\-\\-artifact\\-server\\-path\",$",
   "(?m)^        let Message::CompilerArtifact\\(artefact\\) = message else \\{$",

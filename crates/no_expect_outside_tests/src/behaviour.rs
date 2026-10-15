@@ -116,6 +116,7 @@ fn given_doctest(world: &ContextWorld) {
     world.mark_doctest();
 }
 
+/// Evaluate the current context and store its summary.
 #[when("I summarize the context")]
 fn when_summarize(world: &ContextWorld) {
     world.evaluate();

@@ -1,5 +1,6 @@
 //! Compile-time contracts for the public settings-normalization API.
 
+/// Verify that the renamed settings API is public and its legacy name is removed.
 #[test]
 fn normalize_settings_is_public_and_the_legacy_name_stays_removed() {
     let cases = trybuild::TestCases::new();

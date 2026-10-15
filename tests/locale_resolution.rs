@@ -18,6 +18,7 @@ struct LocaleWorld {
     resolution: RefCell<Option<LocaleSelection>>,
 }
 
+/// Create the default locale-resolution test world.
 #[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> LocaleWorld {
@@ -102,6 +103,7 @@ fn assert_source(world: &LocaleWorld, source: StepSource) {
     assert_eq!(resolution.source(), source.into_inner());
 }
 
+/// Check that locale resolution matches the scenario value.
 #[then("the resolved locale is {value}")]
 fn assert_locale(world: &LocaleWorld, value: StepLocale) {
     let resolution = resolved(world);

@@ -157,6 +157,7 @@ fn multi_line_region_tracks_trailing_newline() {
     );
 }
 
+/// Verify that run0 emits primary and related SARIF locations.
 #[test]
 fn emit_run0_uses_primary_and_related_locations() {
     let fragments = vec![

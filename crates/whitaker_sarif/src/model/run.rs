@@ -156,6 +156,7 @@ mod tests {
     use crate::model::location::ArtefactLocation;
     use crate::test_support::{assert_json_round_trip, assert_serialized_json};
 
+    /// Check that a run survives JSON serialization and deserialization.
     #[test]
     fn run_round_trip() {
         let run = Run {
@@ -177,6 +178,7 @@ mod tests {
         assert_json_round_trip(&run);
     }
 
+    /// Check that empty run collections are omitted from serialized JSON.
     #[test]
     fn empty_collections_omitted_from_run() {
         let run = Run {
@@ -209,6 +211,7 @@ mod tests {
         });
     }
 
+    /// Check that an artefact survives JSON serialization and deserialization.
     #[test]
     fn artefact_round_trip() {
         let artefact = Artefact {

@@ -18,6 +18,7 @@ fn test_attribute() -> Attribute {
     Attribute::new(AttributePath::from("test"), AttributeKind::Outer)
 }
 
+/// Check that a plain function context is not classified as test code.
 #[rstest]
 fn summarizes_plain_context() {
     let entries = vec![function_entry("handler", Vec::new())];
@@ -27,6 +28,7 @@ fn summarizes_plain_context() {
     assert_eq!(summary.function_name.as_deref(), Some("handler"));
 }
 
+/// Check that the standard test attribute marks a function as test code.
 #[rstest]
 fn recognizes_test_attribute() {
     let entries = vec![function_entry("test_case", vec![test_attribute()])];
@@ -36,6 +38,7 @@ fn recognizes_test_attribute() {
     assert_eq!(summary.function_name.as_deref(), Some("test_case"));
 }
 
+/// Check that a `cfg(test)` module is classified as test code.
 #[rstest]
 fn honours_cfg_test() {
     let entries = vec![module_entry("tests", Vec::new())];
@@ -45,6 +48,7 @@ fn honours_cfg_test() {
     assert_eq!(summary.function_name, None);
 }
 
+/// Check that configured test attributes mark a function as test code.
 #[rstest]
 fn honours_additional_attributes() {
     let entries = vec![function_entry(

@@ -112,6 +112,18 @@ environment-variable workaround.
   [Pinning the lint suite](#pinning-the-lint-suite)
 - `--no-source-fallback` — Fail rather than build from source when a published
   artefact is absent. See [Refusing a source build](#refusing-a-source-build)
+- `-v`, `--verbose` — Include debug diagnostics, including bounded reasons why
+  a `PATH` candidate was skipped. The candidate path is not printed.
+- `-q`, `--quiet` — Suppress progress output and show only errors.
+
+Installer diagnostics are written to standard error without ANSI formatting.
+The default verbosity shows warnings and errors; `-v` enables debug events, and
+`-q` limits tracing output to errors.
+
+The installer scans `PATH` entries in order and uses the first regular
+executable candidate for `dylint-link`. It skips missing candidates and entries
+that cannot be represented as UTF-8 or opened, then continues searching later
+entries.
 
 ### Adding Whitaker to a project
 

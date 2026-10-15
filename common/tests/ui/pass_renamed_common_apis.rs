@@ -3,6 +3,7 @@
 use whitaker_common::complexity_signal::{LineSegment, rasterize_signal};
 use whitaker_common::normalize_locale;
 
+/// Exercise the renamed common APIs in the compile-pass fixture.
 fn main() {
     let locale = normalize_locale(Some(" en-GB "));
     let segments: Vec<_> = LineSegment::new(1, 1, 1.0).into_iter().collect();

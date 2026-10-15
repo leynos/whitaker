@@ -170,6 +170,7 @@ mod tests {
         });
     }
 
+    /// Check that a location survives JSON serialization and deserialization.
     #[test]
     fn location_round_trip() {
         let loc = Location {
@@ -191,6 +192,7 @@ mod tests {
         assert_json_round_trip(&loc);
     }
 
+    /// Check that a related location survives a JSON round trip.
     #[test]
     fn related_location_round_trip() {
         let rl = RelatedLocation {

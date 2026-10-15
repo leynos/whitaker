@@ -58,6 +58,7 @@ use rstest_bdd_macros::{given, scenario, then, when};
     },
     Settings::default(),
 )]
+/// Check that invalid settings values fall back to their defaults.
 fn normalize_settings_falls_back_to_defaults(
     #[case] settings: Settings,
     #[case] expected: Settings,
@@ -171,6 +172,7 @@ fn when_set_threshold(world: &World, threshold: f64) {
     world.settings.borrow_mut().threshold = threshold;
 }
 
+/// Normalize the configured settings and save the result for assertions.
 #[when("I normalize the settings")]
 fn when_normalize(world: &World) {
     let settings = *world.settings.borrow();

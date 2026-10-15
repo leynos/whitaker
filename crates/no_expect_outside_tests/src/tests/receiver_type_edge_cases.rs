@@ -6,6 +6,7 @@ use super::{
     ContextLabel, Localizer, NoExpectMessages, ReceiverCategory, ReceiverLabel, localized_messages,
 };
 
+/// Check that unusual receiver labels still produce useful messages.
 #[rstest]
 #[case("", "the surrounding scope", |messages: &NoExpectMessages| !messages.primary().is_empty())]
 #[case(

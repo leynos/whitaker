@@ -260,6 +260,10 @@ fn then_fallback(world: &LocalizationWorld, snippet: String) {
     );
 }
 
+/// Return localized messages for the receiver and summarized context.
+///
+/// # Errors
+/// Returns the lookup error when localization fails.
 fn execute_localization(
     lookup: &impl BundleLookup,
     receiver: &ReceiverLabel,

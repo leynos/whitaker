@@ -117,6 +117,7 @@ mod tests {
     use rstest::rstest;
     use std::path::PathBuf;
 
+    /// Extract a real archive and verify that its file is written.
     #[test]
     fn extract_real_archive() {
         // Create a temp archive with a single file, then extract it.
@@ -173,6 +174,7 @@ mod tests {
         assert!(matches!(result, Err(ExtractionError::PathTraversal { .. })));
     }
 
+    /// Reject an archive that contains no entries.
     #[test]
     fn extract_empty_archive() {
         let temp_dir = tempfile::tempdir().expect("temp dir");

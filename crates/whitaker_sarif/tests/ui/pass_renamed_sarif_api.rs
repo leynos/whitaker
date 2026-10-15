@@ -2,6 +2,7 @@
 
 use whitaker_sarif::{Artefact, ArtefactLocation, PhysicalLocation, RunBuilder};
 
+/// Exercise the renamed SARIF API in the compile-pass fixture.
 fn main() {
     let artefact = Artefact {
         location: ArtefactLocation {

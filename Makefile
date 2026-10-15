@@ -80,6 +80,8 @@ SCRATCH_ROOT_CHECK = mkdir -p -m 700 "$(SCRATCH_ROOT)"; \
 		exit 1; \
 	fi
 RUSTDOC_FLAGS ?= --cfg docsrs -D warnings
+# `markdownlint` passes MDLINT to xargs as one command word, so overrides must
+# name a single executable path rather than include command-line arguments.
 MDLINT ?= $(shell command -v markdownlint-cli2 2>/dev/null || printf '%s' "$$HOME/.bun/bin/markdownlint-cli2")
 # `make fmt` and `make check-fmt` call mdtablefix directly. `--git` selects the
 # Markdown files Git tracks and `--include-untracked` adds the untracked files

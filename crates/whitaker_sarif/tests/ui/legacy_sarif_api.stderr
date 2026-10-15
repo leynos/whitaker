@@ -18,13 +18,13 @@ help: a similar name exists in the module
   |
 
 error[E0599]: no method named `with_artifact` found for struct `RunBuilder` in the current scope
- --> tests/ui/legacy_sarif_api.rs:6:50
+ --> tests/ui/legacy_sarif_api.rs:7:50
   |
-6 |     let _ = RunBuilder::new("whitaker", "0.3.0").with_artifact(Artifact {
+7 |     let _ = RunBuilder::new("whitaker", "0.3.0").with_artifact(Artifact {
   |             -------------------------------------^^^^^^^^^^^^^
   |
 help: there is a method `with_artefact` with a similar name
   |
-6 -     let _ = RunBuilder::new("whitaker", "0.3.0").with_artifact(Artifact {
-6 +     let _ = RunBuilder::new("whitaker", "0.3.0").with_artefact(Artifact {
+7 -     let _ = RunBuilder::new("whitaker", "0.3.0").with_artifact(Artifact {
+7 +     let _ = RunBuilder::new("whitaker", "0.3.0").with_artefact(Artifact {
   |

@@ -252,6 +252,7 @@ mod tests {
         }
     }
 
+    /// Build a location with only its required artefact URI.
     #[test]
     fn location_builder_minimal() {
         let loc = LocationBuilder::new("src/main.rs").build();
@@ -274,6 +275,7 @@ mod tests {
         }
     }
 
+    /// Build a location with a URI base identifier.
     #[test]
     fn location_builder_with_base_id() {
         let loc = LocationBuilder::new("src/lib.rs")

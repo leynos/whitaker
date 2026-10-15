@@ -43,9 +43,97 @@ mod tests {
 
     use std::io::{Read, Seek};
 
+    use clap::Parser;
     use rstest::rstest;
+    use whitaker_installer::cli::Cli;
 
     use super::*;
+
+    /// Verify CLI flags filter the real PATH-scan diagnostic in a child process.
+    #[cfg(unix)]
+    #[test]
+    fn cli_flags_filter_path_scan_diagnostics_on_stderr() {
+        const PROBE_ENV: &str = "WHITAKER_TRACING_PATH_SCAN_PROBE";
+        if let Some(mode) = std::env::var_os(PROBE_ENV) {
+            let arguments = match mode.to_str() {
+                Some("verbose") => vec!["whitaker-installer", "-v"],
+                Some("quiet") => vec!["whitaker-installer", "-q"],
+                _ => vec!["whitaker-installer"],
+            };
+            let cli = Cli::try_parse_from(arguments)
+                .expect("probe arguments must match the installer CLI");
+            configure_tracing(cli.install_args());
+            let _ = whitaker_installer::deps::check_dylint_tools(
+                &whitaker_installer::deps::SystemCommandExecutor,
+            );
+            return;
+        }
+
+        use camino::Utf8Path;
+        use cap_std::{ambient_authority, fs_utf8::Dir};
+
+        let fixture = tempfile::tempdir().expect("PATH fixture directory must be created");
+        let invalid_entry = fixture.path().join("not-a-directory");
+        let fixture_path =
+            Utf8Path::from_path(fixture.path()).expect("temporary directory path must be UTF-8");
+        let fixture_dir = Dir::open_ambient_dir(fixture_path, ambient_authority())
+            .expect("temporary directory must open as a capability");
+        fixture_dir
+            .write("not-a-directory", b"file entry")
+            .expect("invalid PATH entry must be created");
+        fixture_dir
+            .create_dir("bin")
+            .expect("binary directory must be created");
+        let binary_directory = fixture.path().join("bin");
+        let fake_linker = binary_directory.join("dylint-link");
+        whitaker_installer::test_utils::dependency_binary_helpers::write_fake_binary(
+            &fake_linker,
+            true,
+        )
+        .expect("fake linker must be executable");
+
+        let original_path = std::env::var_os("PATH").unwrap_or_default();
+        let original_paths = std::env::split_paths(&original_path);
+        let path_entries = std::iter::once(invalid_entry.clone())
+            .chain(std::iter::once(binary_directory.clone()))
+            .chain(original_paths);
+        let path = std::env::join_paths(path_entries).expect("fixture PATH must be valid");
+
+        for mode in ["default", "verbose", "quiet"] {
+            let output = std::process::Command::new(
+                std::env::current_exe().expect("test executable must be discoverable"),
+            )
+            .args([
+                "--exact",
+                "tracing_config::tests::cli_flags_filter_path_scan_diagnostics_on_stderr",
+                "--nocapture",
+            ])
+            .env(PROBE_ENV, mode)
+            .env("PATH", &path)
+            .output()
+            .expect("isolated CLI tracing probe must run");
+            assert!(
+                output.status.success(),
+                "{mode} tracing probe must succeed: {output:?}"
+            );
+            let stderr = String::from_utf8(output.stderr).expect("stderr must be UTF-8");
+            let stdout = String::from_utf8(output.stdout).expect("stdout must be UTF-8");
+            let has_path_diagnostic = stderr.contains("skipping PATH scan candidate");
+            assert_eq!(
+                has_path_diagnostic,
+                mode == "verbose",
+                "{mode} output: {stderr}"
+            );
+            if has_path_diagnostic {
+                assert!(stderr.contains("binary_name=\"dylint-link\""));
+                assert!(stderr.contains("failure_category=\"directory_open\""));
+                assert!(!stderr.contains(invalid_entry.to_string_lossy().as_ref()));
+                assert!(!stderr.contains(binary_directory.to_string_lossy().as_ref()));
+            }
+            assert!(!stdout.contains("skipping PATH scan candidate"));
+            assert!(!stderr.contains('\u{1b}'), "stderr must omit ANSI escapes");
+        }
+    }
 
     /// Verify CLI initialization sends diagnostics to stderr in its own process.
     #[test]

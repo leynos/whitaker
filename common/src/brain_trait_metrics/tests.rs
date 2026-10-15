@@ -91,6 +91,7 @@ fn default_method_count_excludes_required_and_associated_items() {
     assert_eq!(default_method_count(&mixed_items()), 1);
 }
 
+/// Verify that the complexity sum includes only default methods.
 #[rstest]
 fn default_method_cc_sum_aggregates_only_default_methods() {
     let items = vec![
@@ -186,6 +187,7 @@ fn builder_filters_macro_expanded_default_methods() {
     );
 }
 
+/// Check that implementor burden equals the number of required methods.
 #[rstest]
 fn implementor_burden_equals_required_method_count() {
     let mut builder = TraitMetricsBuilder::new("Transformer");

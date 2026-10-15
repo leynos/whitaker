@@ -132,6 +132,7 @@ mod tests {
         assert!(config.locale().is_none());
     }
 
+    /// Check that TOML configuration overrides are deserialized.
     #[rstest]
     fn deserializes_overrides_from_toml() {
         let source = "[module_max_lines]\nmax_lines = 120\n";
@@ -143,6 +144,7 @@ mod tests {
         assert_eq!(config.module_max_lines.max_lines, 120);
     }
 
+    /// Check that a locale override is deserialized.
     #[rstest]
     fn deserializes_locale_override() {
         let source = "locale = \"cy\"\n";
@@ -163,6 +165,7 @@ mod tests {
         assert!(config.locale().is_none());
     }
 
+    /// Check that invalid configuration values return a deserialization error.
     #[rstest]
     fn propagates_deserialization_failures() {
         let source = "[module_max_lines]\nmax_lines = \"a lot\"\n";

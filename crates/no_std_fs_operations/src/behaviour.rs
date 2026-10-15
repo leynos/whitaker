@@ -84,6 +84,7 @@ fn given_failure(world: &WorldCell) {
     world.borrow_mut().mark_failure();
 }
 
+/// Resolve the current standard-filesystem diagnostic messages.
 #[when("I localize the std::fs diagnostic")]
 fn when_localize(world: &WorldCell) {
     world.borrow_mut().resolve();

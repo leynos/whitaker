@@ -221,6 +221,7 @@ mod tests {
         assert!(display.contains("PowerShell"));
     }
 
+    /// Check that success messages use singular or plural labels as needed.
     #[rstest]
     #[case::singular(1, "1 lint library")]
     #[case::plural(5, "5 lint libraries")]

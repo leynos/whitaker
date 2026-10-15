@@ -34,18 +34,21 @@ fn multi_band_config() -> LshConfig {
     LshConfig::new(32, 4).expect("multi-band config should validate")
 }
 
+/// Create the shared signature fixture used by index tests.
 #[allow_fixture_expansion_lints]
 #[fixture]
 fn shared_signature() -> MinHashSignature {
     sketch(&[1, 2, 3, 4])
 }
 
+/// Create a signature distinct from the shared fixture.
 #[allow_fixture_expansion_lints]
 #[fixture]
 fn distinct_signature() -> MinHashSignature {
     sketch(&[8, 9, 10, 11])
 }
 
+/// Create the repeated signature used to test identical fragments.
 #[allow_fixture_expansion_lints]
 #[fixture]
 fn identical_signature() -> MinHashSignature {

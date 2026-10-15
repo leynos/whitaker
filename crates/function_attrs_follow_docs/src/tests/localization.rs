@@ -111,6 +111,10 @@ fn resolve_attribute(world: &LocalizationWorld, failing: bool) -> String {
     }
 }
 
+/// Return localized messages from the configured or failing lookup.
+///
+/// # Errors
+/// Returns the lookup error when localization fails.
 fn resolve_localization(
     world: &LocalizationWorld,
     kind: FunctionKind,

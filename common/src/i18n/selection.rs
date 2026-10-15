@@ -217,6 +217,7 @@ mod tests {
         assert_eq!(selection.used_fallback(), case.expected_fallback);
     }
 
+    /// Check locale normalization for empty, padded, and valid candidates.
     #[rstest]
     #[case(None, None)]
     #[case(Some(""), None)]

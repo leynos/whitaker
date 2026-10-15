@@ -567,6 +567,7 @@ mod path_scan_tests {
         );
     }
 
+    /// Keep path-scan failure category labels stable and bounded.
     #[test]
     fn path_scan_failure_categories_are_stable_and_bounded() {
         assert_eq!(

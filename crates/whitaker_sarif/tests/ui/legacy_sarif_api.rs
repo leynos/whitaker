@@ -2,6 +2,7 @@
 
 use whitaker_sarif::{Artifact, ArtifactLocation, RunBuilder};
 
+/// Exercise removed SARIF API names in the compile-fail fixture.
 fn main() {
     let _ = RunBuilder::new("whitaker", "0.3.0").with_artifact(Artifact {
         location: ArtifactLocation {

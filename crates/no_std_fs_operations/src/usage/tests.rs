@@ -2,6 +2,7 @@
 use super::{StdFsUsage, label_is_std_fs};
 use rstest::rstest;
 
+/// Check whether each candidate label names a standard filesystem path.
 #[rstest]
 #[case("std::fs", true)]
 #[case("std::fs::File::open", true)]
@@ -25,6 +26,7 @@ fn recognizes_std_fs_paths(#[case] path: &str, #[case] expected: bool) {
     assert_eq!(label_is_std_fs(path), expected);
 }
 
+/// Check that the usage builder retains its operation label.
 #[rstest]
 fn usage_builder_carries_operation() {
     let usage = StdFsUsage::new(String::from("std::fs::read"));

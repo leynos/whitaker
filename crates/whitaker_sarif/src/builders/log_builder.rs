@@ -98,6 +98,7 @@ mod tests {
         assert!(log.runs.is_empty());
     }
 
+    /// Build a log containing a run.
     #[test]
     fn builds_log_with_run() {
         let run = Run {

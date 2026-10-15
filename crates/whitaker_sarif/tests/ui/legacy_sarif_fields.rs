@@ -2,6 +2,7 @@
 
 use whitaker_sarif::{Artefact, ArtefactLocation, PhysicalLocation, RunBuilder};
 
+/// Exercise removed SARIF field names in the compile-fail fixture.
 fn main() {
     let _location = PhysicalLocation {
         artifact_location: ArtefactLocation {

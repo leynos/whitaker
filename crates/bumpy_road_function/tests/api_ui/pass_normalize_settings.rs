@@ -5,6 +5,7 @@
 
 use bumpy_road_function::analysis::{Settings, normalize_settings};
 
+/// Exercise the renamed settings API in the compile-pass fixture.
 fn main() {
     let settings = normalize_settings(Settings::default());
     assert!(settings.window > 0);
