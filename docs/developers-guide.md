@@ -4224,16 +4224,19 @@ failure and `tests/nextest_ui_filter.rs` requires the key.
 
 It discovers the compile-contract tests rather than listing them. A test that
 drives `trybuild` invokes a nested cargo build, so it costs what a build costs
-and the base per-test allowance is the wrong order of magnitude for it. There
-are two here, and both are in a binary called `ui`, which is why the set is
-found from the `trybuild::TestCases` calls in the tree and each test is
-required by name: `whitaker-installer`'s test sits in a binary named `ui` but
-is not itself named `ui`, so the `(binary(ui) & test(=ui))` clause never
-reached it. It ran under the base 300-second allowance, passed at 235 seconds,
-and timed out at 300.216 seconds on the Windows lane, cancelling the run. A
-handwritten list would have had the same hole, and a discovery that stops
-recognizing the call would sweep a smaller set silently, so finding nothing is
-a failure rather than a pass.
+and the base per-test allowance is the wrong order of magnitude for it. The
+current discovery finds six tests across `common/tests/public_api_contract.rs`,
+`crates/bumpy_road_function/tests/api_contract.rs`,
+`crates/whitaker_sarif/tests/api_contract.rs`, `installer/tests/ui.rs`,
+`crates/whitaker_test_macros/tests/ui.rs`, and
+`crates/rstest_helper_should_be_fixture/tests/ui.rs`. Three of those binaries
+are named `ui`, but their test functions have different names. For example,
+`whitaker-installer`'s test is in a binary named `ui` but is not itself named
+`ui`, so the `(binary(ui) & test(=ui))` clause never reached it. It ran under
+the base 300-second allowance, passed at 235 seconds, and timed out at 300.216
+seconds on the Windows lane, cancelling the run. A handwritten list would have
+had the same hole, and a discovery that stops recognizing the call would sweep
+a smaller set silently, so finding nothing is a failure rather than a pass.
 
 It drives the lane discovery with workflow documents rather than only with the
 files. `_declared_jobs` takes parsed documents and reads the repository's own
