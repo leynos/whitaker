@@ -219,9 +219,12 @@ coverage: ## Generate LCOV coverage over the CI-tested crate subset
 	@# three lint crates whose dylint UI tests are excluded) stay excluded,
 	@# so coverage never attempts a bare `--workspace` build the suite
 	@# cannot support.
+	@# LLVM coverage maps carry source locations without DWARF debug info.
+	@# Omit optional symbols from this throwaway target to limit runner disk use.
 	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v cargo-llvm-cov >/dev/null || { echo "Install cargo-llvm-cov (cargo install cargo-llvm-cov)"; exit 1; }
 	@CARGO_LLVM_COV_TARGET_DIR="$(COVERAGE_TARGET_DIR)" \
 		CARGO_TARGET_DIR="$(COVERAGE_TARGET_DIR)" \
+		CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 \
 		$(MAKE) test TEST_RUNNER="llvm-cov nextest --lcov --output-path $(COVERAGE_OUTPUT)"
 
 test-doc: ## Run the workspace doctests, which no other lane executes
