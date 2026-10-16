@@ -133,7 +133,7 @@ fn source_fallback_forbidden_carries_the_artefact_and_the_reason() {
 }
 
 #[test]
-fn the_policy_errors_survive_a_clone() {
+fn policy_and_io_errors_survive_a_clone() {
     // `InstallerError::clone` matches every variant by hand, so a new variant
     // that nobody added an arm for is a panic waiting for the first caller.
     for err in [
@@ -143,6 +143,13 @@ fn the_policy_errors_survive_a_clone() {
         InstallerError::SourceFallbackForbidden {
             artefact: "a prebuilt lint library".to_owned(),
             reason: "repository asset not found".to_owned(),
+        },
+        InstallerError::Io(std::io::Error::other("standalone I/O error")),
+        InstallerError::ScanFailed {
+            source: std::io::Error::other("scan I/O error"),
+        },
+        InstallerError::WriteFailed {
+            source: std::io::Error::other("write I/O error"),
         },
     ] {
         assert_eq!(err.clone().to_string(), err.to_string());

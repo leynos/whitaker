@@ -8,8 +8,6 @@ mod install_flow;
 mod staged_suite;
 mod tracing_config;
 
-#[cfg(test)]
-use crate::install_flow::ensure_dylint_tools_with_options;
 use crate::install_flow::{
     MetricsWriteContext, PrebuiltInstallationContext, ensure_dylint_tools_with_executor,
     try_prebuilt_installation, write_install_metrics,
@@ -20,7 +18,9 @@ use std::io::Write;
 use std::time::Instant;
 use whitaker_installer::cli::{Cli, Command, InstallArgs};
 use whitaker_installer::crate_name::CrateName;
-use whitaker_installer::deps::{SourcePolicy, SystemCommandExecutor};
+use whitaker_installer::deps::{
+    SourcePolicy, SystemCommandExecutor, install_dylint_tools_with_output,
+};
 use whitaker_installer::dirs::{BaseDirs, SystemBaseDirs};
 use whitaker_installer::error::{InstallerError, Result};
 use whitaker_installer::install_metrics::InstallMode;
@@ -197,7 +197,9 @@ use dry_run::run_dry;
 /// Checks for and installs Dylint tools if missing.
 fn ensure_dylint_tools(policy: SourcePolicy, stderr: &mut dyn Write) -> Result<()> {
     let executor = SystemCommandExecutor;
-    ensure_dylint_tools_with_executor(&executor, policy, stderr)
+    ensure_dylint_tools_with_executor(&executor, policy, stderr, |status, stderr| {
+        install_dylint_tools_with_output(&executor, status, policy, stderr)
+    })
 }
 
 /// Ensures a Whitaker workspace is available.

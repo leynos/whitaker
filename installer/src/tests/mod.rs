@@ -8,7 +8,7 @@ use rstest::{fixture, rstest};
 use whitaker_installer::{
     cli::InstallArgs,
     dependency_binaries::DependencyBinaryInstaller,
-    deps::{DependencyInstallOptions, SourcePolicy},
+    deps::{DependencyInstallOptions, SourcePolicy, install_dylint_tools_with_options},
     dirs::BaseDirs,
     installer_packaging::TargetTriple,
     test_utils::{
@@ -139,7 +139,12 @@ fn ensure_dylint_tools_skips_install_when_installed(
         let mut stderr = Vec::new();
         let options = dependency_install_options(&test_base_dirs, &repository_installer, false)
             .expect("dependency install options should build");
-        let result = ensure_dylint_tools_with_options(&executor, &mut stderr, options);
+        let result = ensure_dylint_tools_with_executor(
+            &executor,
+            options.policy,
+            &mut stderr,
+            |status, stderr| install_dylint_tools_with_options(&executor, status, stderr, options),
+        );
 
         assert!(result.is_ok());
         assert!(stderr.is_empty());
@@ -183,7 +188,12 @@ fn ensure_dylint_tools_installs_missing_tools(
         let mut stderr = Vec::new();
         let options = dependency_install_options(&test_base_dirs, &repository_installer, quiet)
             .expect("dependency install options should build");
-        let result = ensure_dylint_tools_with_options(&executor, &mut stderr, options);
+        let result = ensure_dylint_tools_with_executor(
+            &executor,
+            options.policy,
+            &mut stderr,
+            |status, stderr| install_dylint_tools_with_options(&executor, status, stderr, options),
+        );
 
         assert!(result.is_ok());
         let stderr_text = String::from_utf8(stderr).expect("stderr was not UTF-8");
@@ -232,8 +242,13 @@ fn ensure_dylint_tools_propagates_install_failures(
         let mut stderr = Vec::new();
         let options = dependency_install_options(&test_base_dirs, &repository_installer, false)
             .expect("dependency install options should build");
-        let err = ensure_dylint_tools_with_options(&executor, &mut stderr, options)
-            .expect_err("expected install failure");
+        let err = ensure_dylint_tools_with_executor(
+            &executor,
+            options.policy,
+            &mut stderr,
+            |status, stderr| install_dylint_tools_with_options(&executor, status, stderr, options),
+        )
+        .expect_err("expected install failure");
 
         assert!(matches!(
             err,

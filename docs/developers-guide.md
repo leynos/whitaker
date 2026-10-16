@@ -2591,6 +2591,12 @@ duplicated across multiple test modules. The key helpers are:
   by `installer/src/tests.rs` to force the direct Cargo fallback path without
   network access.
 
+The end-to-end tracing test in `installer/tests/tracing_cli.rs` keeps its
+workspace, fake executables, and child environment private to that test module.
+Those helpers model the test's controlled CLI failure and tracing contract;
+they are not shared PATH utilities. Its `CliMode`, `DependencyPackage`, and
+`FixtureExecutable` types represent only the finite choices used by this test.
+
 ### CLI tool usage
 
 Release automation uses the `whitaker-package-dependency-binary` helper in
