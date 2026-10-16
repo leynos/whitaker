@@ -7,6 +7,7 @@ use crate::test_utils::dependency_binary_helpers::{
     dylint_link_install_list_check, with_fake_binary_on_path,
 };
 
+/// Verify local Cargo installs refresh companion link status.
 #[rstest]
 #[case(InstallOutcome::CargoBinstall)]
 #[case(InstallOutcome::CargoInstall)]
@@ -25,7 +26,8 @@ fn update_status_after_install_refreshes_link_for_local_cargo_dylint_installs(
             dylint_link: false,
         };
 
-        update_status_after_install(&mut status, &executor, &CARGO_DYLINT_TOOL, outcome);
+        update_status_after_install(&mut status, &executor, &CARGO_DYLINT_TOOL, outcome)
+            .expect("local Cargo install status should refresh");
 
         assert!(status.cargo_dylint);
         assert!(status.dylint_link);
@@ -34,6 +36,7 @@ fn update_status_after_install_refreshes_link_for_local_cargo_dylint_installs(
     Ok(())
 }
 
+/// Verify repository releases skip the companion link query.
 #[test]
 fn update_status_after_install_skips_link_probe_for_repository_release() {
     let executor = crate::test_utils::StubExecutor::new(vec![]);
@@ -47,13 +50,15 @@ fn update_status_after_install_skips_link_probe_for_repository_release() {
         &executor,
         &CARGO_DYLINT_TOOL,
         InstallOutcome::RepositoryRelease,
-    );
+    )
+    .expect("repository release status should refresh");
 
     assert!(status.cargo_dylint);
     assert!(!status.dylint_link);
     executor.assert_finished();
 }
 
+/// Verify installation decisions for both dependency tool statuses.
 #[rstest]
 #[case(false, false, &CARGO_DYLINT_TOOL, true)]
 #[case(true, false, &CARGO_DYLINT_TOOL, false)]
@@ -73,6 +78,7 @@ fn should_install_tool_returns_expected(
     assert_eq!(should_install_tool(&status, tool), expected);
 }
 
+/// Verify companion refresh decisions for install outcomes and current status.
 #[rstest]
 #[case::non_repo_release_and_link_missing(
     InstallOutcome::CargoInstall,

@@ -139,7 +139,7 @@ mod tests {
         let arguments = std::iter::once("whitaker-installer").chain(flags.iter().copied());
         let cli = Cli::try_parse_from(arguments).expect("probe arguments must match the CLI");
         configure_tracing(cli.install_args());
-        let _ = whitaker_installer::deps::check_dylint_tools(
+        let _ = crate::install_flow::check_dylint_tools_for_command(
             &whitaker_installer::deps::SystemCommandExecutor,
         );
     }

@@ -22,7 +22,7 @@ use whitaker_common::{
 };
 
 mod numeric;
-use self::numeric::saturating_diagnostic_integer;
+use self::numeric::diagnostic_integer_argument;
 
 const LINT_NAME: &str = "conditional_max_n_branches";
 const MESSAGE_KEY: MessageKey<'static> = MessageKey::new(LINT_NAME);
@@ -225,33 +225,7 @@ fn emit_diagnostic(
     limit: usize,
     localizer: &Localizer,
 ) {
-    let mut args: Arguments<'static> = Arguments::default();
-    args.insert(
-        Cow::Borrowed("name"),
-        FluentValue::from(metadata.kind.display_name()),
-    );
-    args.insert(
-        Cow::Borrowed("branches"),
-        FluentValue::from(saturating_diagnostic_integer(
-            u64::try_from(metadata.branches).unwrap_or(u64::MAX),
-        )),
-    );
-    args.insert(
-        Cow::Borrowed("limit"),
-        FluentValue::from(saturating_diagnostic_integer(
-            u64::try_from(limit).unwrap_or(u64::MAX),
-        )),
-    );
-    let branch_phrase_text = branch_phrase(localizer.locale(), metadata.branches);
-    args.insert(
-        Cow::Borrowed("branch_phrase"),
-        FluentValue::String(Cow::Owned(branch_phrase_text)),
-    );
-    let limit_phrase_text = branch_phrase(localizer.locale(), limit);
-    args.insert(
-        Cow::Borrowed("limit_phrase"),
-        FluentValue::String(Cow::Owned(limit_phrase_text)),
-    );
+    let args = diagnostic_arguments(metadata.kind, metadata.branches, limit, localizer);
 
     let resolution = MessageResolution {
         lint_name: LINT_NAME,
@@ -275,6 +249,39 @@ fn emit_diagnostic(
             lint.help(help);
         }),
     );
+}
+
+/// Build the production branch-count and limit arguments for a diagnostic.
+fn diagnostic_arguments(
+    kind: ConditionKind,
+    branches: usize,
+    limit: usize,
+    localizer: &Localizer,
+) -> Arguments<'static> {
+    let mut args: Arguments<'static> = Arguments::default();
+    args.insert(
+        Cow::Borrowed("name"),
+        FluentValue::from(kind.display_name()),
+    );
+    args.insert(
+        Cow::Borrowed("branches"),
+        FluentValue::from(diagnostic_integer_argument(branches)),
+    );
+    args.insert(
+        Cow::Borrowed("limit"),
+        FluentValue::from(diagnostic_integer_argument(limit)),
+    );
+    let branch_phrase_text = branch_phrase(localizer.locale(), branches);
+    args.insert(
+        Cow::Borrowed("branch_phrase"),
+        FluentValue::String(Cow::Owned(branch_phrase_text)),
+    );
+    let limit_phrase_text = branch_phrase(localizer.locale(), limit);
+    args.insert(
+        Cow::Borrowed("limit_phrase"),
+        FluentValue::String(Cow::Owned(limit_phrase_text)),
+    );
+    args
 }
 
 /// Replace injected bidi isolates and replacement characters in diagnostics.
@@ -323,9 +330,12 @@ fn fallback_messages(kind: ConditionKind, branches: usize, limit: usize) -> Diag
 
 #[cfg(test)]
 mod tests {
+    //! Verify branch thresholds and the production diagnostic argument path.
+
     use super::*;
     use rstest::rstest;
 
+    /// Verify branch counts below, at, and above the configured limit.
     #[rstest]
     #[case(1, 2, ConditionDisposition::WithinLimit)]
     #[case(2, 2, ConditionDisposition::WithinLimit)]
@@ -336,6 +346,20 @@ mod tests {
         #[case] expected: ConditionDisposition,
     ) {
         assert_eq!(evaluate_condition(branches, limit), expected);
+    }
+
+    /// Verify oversized branch counts saturate before Fluent argument creation.
+    #[cfg(target_pointer_width = "64")]
+    #[test]
+    fn diagnostic_arguments_saturate_oversized_branch_counts() {
+        let oversized = usize::try_from(u64::try_from(i64::MAX).expect("i64 max fits u64") + 1)
+            .expect("oversized branch count fits usize");
+        let localizer = Localizer::new(None);
+
+        let args = diagnostic_arguments(ConditionKind::If, oversized, oversized, &localizer);
+
+        assert_eq!(args.get("branches"), Some(&FluentValue::from(i64::MAX)));
+        assert_eq!(args.get("limit"), Some(&FluentValue::from(i64::MAX)));
     }
 }
 

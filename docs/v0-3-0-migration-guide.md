@@ -133,3 +133,23 @@ The Rust names change while the SARIF wire names remain fixed. The
 `#[serde(rename = "artifactLocation")]`. Consequently, serialized JSON still
 uses the SARIF 2.1.0 keys `artifacts` and `artifactLocation`; no update to
 stored SARIF data or downstream SARIF readers is required.
+
+## Installer dependency query
+
+`whitaker_installer::deps::check_dylint_tools` now returns
+`Result<DylintToolStatus>` so callers can distinguish a missing or unpinned
+tool from a failed availability query. Propagate the result before deciding
+whether to install:
+
+```rust
+let status = check_dylint_tools(&executor)?;
+if !status.all_installed() {
+    install_dylint_tools(&executor, &status)?;
+}
+```
+
+The error enum also adds `InstallerError::DependencyCheck`. Update exhaustive
+matches on `InstallerError` to handle this query failure. A missing tool or a
+version mismatch remains a successful query with a `false` status field.
+Unexpected command failures or version output without a semantic version now
+return an error instead of being treated as permission to install.

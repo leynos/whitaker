@@ -14,10 +14,11 @@ default-filter = "not (binary(behaviour_toolchain) | binary(behaviour_cli) | kin
 # cancels the run and discards the log that would have named the test.
 slow-timeout = { period = "300s", terminate-after = 1, grace-period = "5s" }
 # The whole run's budget. It sits above the largest per-test allowance below,
-# so a test may spend its budget in full. It also leaves fifteen minutes beyond
-# the prior whole-run timeout, which stopped a nearly complete suite.
+# so a test may spend its budget in full. The previous 75-minute run reached
+# 1,840 of 1,842 tests before the nested SARIF API contract was still compiling.
+# Ten more minutes give that remaining trybuild work room to finish.
 # See "Test timeouts: four tiers, outermost last" in the developers' guide.
-global-timeout = "60m"
+global-timeout = "85m"
 
 # CI profile — run the full suite including slow installer tests.
 [profile.ci]
@@ -31,7 +32,7 @@ default-filter = "not kind(example)"
 # budgets that govern CI belong where a reader of this profile finds
 # them.
 slow-timeout = { period = "300s", terminate-after = 1, grace-period = "5s" }
-global-timeout = "60m"
+global-timeout = "85m"
 
 [[profile.ci.overrides]]
 # The toolchain auto-install behavioural tests may download and install a

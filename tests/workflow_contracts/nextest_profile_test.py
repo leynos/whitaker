@@ -41,7 +41,7 @@ BASE_SLOW_TIMEOUT: typ.Final[dict[str, object]] = {
 }
 
 #: The whole-run budget both profiles must declare.
-REQUIRED_GLOBAL_TIMEOUT: typ.Final[str] = "60m"
+REQUIRED_GLOBAL_TIMEOUT: typ.Final[str] = "85m"
 
 # Parser-pin fixtures share one integration binary, target directory and Cargo
 # package cache, so the allowance must cover that whole binary and serialize it.

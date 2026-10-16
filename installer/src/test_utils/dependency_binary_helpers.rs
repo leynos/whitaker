@@ -126,6 +126,20 @@ pub fn cargo_dylint_version_output() -> HelperResult<Output> {
     )))
 }
 
+/// Creates an expected Cargo probe reporting a stale `cargo-dylint` version.
+pub fn cargo_dylint_stale_version_check() -> HelperResult<ExpectedCall> {
+    let pinned_version = dependency_version("cargo-dylint")?;
+    let stale_version = if pinned_version.starts_with("0.") {
+        "1.0.0"
+    } else {
+        "0.0.0"
+    };
+
+    Ok(cargo_dylint_check_with_result(Ok(stdout_output(format!(
+        "cargo-dylint {stale_version}\n"
+    )))))
+}
+
 /// Expected `cargo install --list` call reporting the manifest-pinned
 /// `dylint-link` version.
 pub fn dylint_link_install_list_check() -> HelperResult<ExpectedCall> {
@@ -153,14 +167,11 @@ pub fn repository_verification_call(
     verification_fails: bool,
 ) -> HelperResult<Option<ExpectedCall>> {
     Ok(match tool {
-        "cargo-dylint" => Some(ExpectedCall {
-            cmd: "cargo",
-            args: vec!["dylint", "--version"],
-            result: if verification_fails {
-                Ok(failure_output("still missing"))
-            } else {
-                Ok(cargo_dylint_version_output()?)
-            },
+        "cargo-dylint" => Some(if verification_fails {
+            // A stale version is a verification miss; command failures are query errors.
+            cargo_dylint_stale_version_check()?
+        } else {
+            cargo_dylint_check()?
         }),
         // Repository installs of dylint-link are verified by probing the
         // extracted binary directly, so neither outcome consults the

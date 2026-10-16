@@ -7,7 +7,9 @@ use crate::test_utils::dependency_binary_helpers::{
     binstall_install, binstall_version_check_with_result, cargo_dylint_check,
     cargo_dylint_check_with_result, dylint_link_install_list_check, with_fake_binary_on_path,
 };
-use crate::test_utils::{ExpectedCall, StubDirs, StubExecutor, failure_output, success_output};
+use crate::test_utils::{
+    ExpectedCall, StubDirs, StubExecutor, failure_output, stdout_output, success_output,
+};
 use std::path::PathBuf;
 
 fn install_options<'a>(
@@ -136,15 +138,16 @@ fn install_dylint_tools_falls_back_to_cargo_install_when_binstall_missing() {
     executor.assert_finished();
 }
 
+/// Exercise source fallback when repository verification reports a stale version.
 #[test]
-fn install_dylint_tools_falls_back_when_repository_verification_fails() {
+fn install_dylint_tools_falls_back_when_repository_verification_reports_a_stale_version() {
     let mut repository_installer = MockDependencyBinaryInstaller::new();
     repository_installer
         .expect_install()
         .returning(|_, _, _| Ok(PathBuf::from("/tmp/bin/cargo-dylint")));
     let executor = StubExecutor::new(vec![
         binstall_version_check_with_result(Ok(success_output())),
-        cargo_dylint_check_with_result(Ok(failure_output("still missing"))),
+        cargo_dylint_check_with_result(Ok(stdout_output("cargo-dylint 5.0.0\n"))),
         binstall_install("cargo-dylint", Ok(success_output()))
             .expect("cargo-dylint dependency version should resolve"),
         cargo_dylint_check().expect("cargo-dylint dependency version should resolve"),

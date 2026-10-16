@@ -1179,7 +1179,7 @@ worker count rather than `-n auto`.
 
 #### Coverage lane time limits
 
-`coverage-check` and `coverage-upload` run under the 100-minute ceiling that
+`coverage-check` and `coverage-upload` run under the 120-minute ceiling that
 "Test timeouts: four tiers, outermost last" derives from the suite's budgets,
 and that section's contract pins it. The ceiling must also hold a cold compiler
 cache, not only a warm one. A cold cache is not rare: every change to the
@@ -1201,8 +1201,8 @@ CodeScene upload and three cache saves), could not finish cold at all. A
 cancelled writer keeps the compiler-cache entries it stored while it compiled,
 which is why the next trunk run was warm, but it loses its doctests, its
 CodeScene upload and its archive saves. The slowest cold job measured, 38m45s,
-sits well inside the 100-minute ceiling, which leaves `coverage-upload` about
-an hour after a cold `Generate coverage` for its doctests, upload and saves.
+sits well inside the 120-minute ceiling, which leaves `coverage-upload` about
+81 minutes after a cold `Generate coverage` for its doctests, upload and saves.
 Re-measure the cold figure after a change that makes the suite materially
 larger; if it approaches the ceiling, the tier derivation is where to raise it,
 not a per-lane value.
@@ -2515,10 +2515,10 @@ six small private helpers:
   path, binary name, and failure accumulator explicit:
 
   ```rust
-  fn find_binary_in_directory<'binary>(
+  fn find_binary_in_directory(
       directory: &Path,
-      binary_name: &'binary str,
-      failures: &mut Vec<PathScanFailure<'binary>>,
+      binary_name: &str,
+      failures: &mut Vec<PathScanFailure>,
   ) -> Option<std::path::PathBuf>
   ```
 
@@ -2542,10 +2542,9 @@ six small private helpers:
   ```
 
   It obtains metadata with `Dir::metadata`, requires a regular file and, on
-  Unix, at least one executable permission bit. Metadata errors always return
-  `false`; ordinary `NotFound` misses add no failure category, while other
-  metadata errors add the bounded `metadata` category to the caller-provided
-  list.
+  Unix, at least one executable permission bit. Ordinary `NotFound` misses add
+  no failure category, while other metadata errors add the bounded `metadata`
+  category to the caller-provided list.
 - `windows_path_extensions()` normalizes `PATHEXT` on Windows so
   `binary_candidates()` can expand extensionless names the same way the shell
   does.
@@ -2557,11 +2556,25 @@ these classifications without logging. At verbose level, the installer CLI
 emits structured debug events with `binary_name` and `failure_category`; it
 does not record PATH values or candidate paths.
 
+`check_dylint_tools()` returns `Result<DylintToolStatus>`. A successful status
+with a `false` field means the query established that a tool is absent or does
+not match the pinned version. Command-spawn and Cargo-registry errors propagate
+as errors; if PATH scanning finds no binary after a non-missing lookup failure,
+it returns `InstallerError::DependencyCheck`. The install flow only starts
+installation after a successful query reports a missing tool. The query uses the
+`CommandExecutor` and `BinaryLocator` interfaces, and returns PATH diagnostics
+without emitting tracing events. The CLI logs those diagnostics at the command
+boundary. Cargo's explicit `no such command: dylint` response is treated as an
+absent tool; other nonzero command results and successful version probes that
+report no semantic version are query errors.
+
 These key helpers are covered by direct unit tests in
 `installer/src/deps/path_tests.rs` for missing PATH values, empty PATH values,
 multiple PATH directories, non-executable Unix files, executable Unix files,
 broken PATH shims, and Windows `PATHEXT` resolution via both direct helper
-tests and `check_dylint_tools()`.
+tests and `check_dylint_tools()`. Availability tests also verify that query
+failures remain errors, do not emit tracing events, and stop before the install
+callback.
 
 Installer PATH-fixture helpers now live in
 `installer/src/test_utils/dependency_binary_helpers.rs` instead of being
@@ -3961,9 +3974,9 @@ tier went.
 | Tier                     | What it bounds                     | Where it is set                             | Current value                                                                                                                                             |
 | ------------------------ | ---------------------------------- | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`, both profiles       | 300 s default; 20 m for serialized Dylint/trybuild UI harnesses; 30 m for serialized nested-Cargo fixtures; 30 m for toolchain-installing behaviour tests |
-| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, both profiles       | 60 m                                                                                                                                                      |
+| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, both profiles       | 85 m                                                                                                                                                      |
 | Cargo watchdog           | one `cargo` invocation, wall clock | not used here, see below                    | absent                                                                                                                                                    |
-| Job `timeout-minutes`    | the whole job                      | `ci.yml` and `coverage-main.yml`, job level | 100 m for every lane that runs the suite                                                                                                                  |
+| Job `timeout-minutes`    | the whole job                      | `ci.yml` and `coverage-main.yml`, job level | 120 m for every lane that runs the suite                                                                                                                  |
 
 *Table: the timers that can end a run, innermost first.*
 
@@ -4054,10 +4067,10 @@ for the build and the steps either side of the suite, plus a fifteen-minute
 margin above that sum. The margin is there because a ceiling equal to the sum
 it contains cancels the job at the moment the innermost timer would have
 reported the overrun, and the report is the only thing that makes an overrun
-actionable. That is 60 m + 65 s + 15 m + 15 m, or 91 minutes 5 seconds, which
+actionable. That is 85 m + 65 s + 15 m + 15 m, or 116 minutes 5 seconds, which
 `required_ceiling` computes for both profiles.
 
-The ceiling is not that requirement. It is pinned separately at 100 minutes, a
+The ceiling is not that requirement. It is pinned separately at 120 minutes, a
 policy value above it: the derivation accepts any ceiling at or above the
 requirement, so the value is pinned as well, to stop a lane drifting to a
 number nobody chose.
@@ -4068,11 +4081,11 @@ written down, so it has been corrected rather than kept as a special case.
 
 ### What the values are sized against
 
-The 60 m whole-run budget is a bound with headroom for the complete workspace
-suite. A recent full run reached the previous 45 m limit with 1,759 of 1,762
-tests completed while the final nested trybuild compile was still progressing.
-The additional 15 m leaves time for that compile and normal variation without
-weakening the 30 m per-test ceiling.
+The 85 m whole-run budget is sized against the latest uncached full run. It
+reached 1,840 of 1,842 tests before the global timeout stopped the SARIF API
+contract's nested trybuild compilation while Cargo waited on shared locks and
+compiler admission. The additional 10 m gives that contract and the remaining
+test room to finish without weakening the 30 m per-test ceiling.
 
 The 15 m allowance for work outside nextest's window is measured, from the
 worst of several runs rather than one:
@@ -4101,7 +4114,7 @@ and this suite cannot run a bare `--workspace` build. Coverage runs through
 
 That absence is asserted rather than assumed. A lane that adopted the action
 without setting `RUN_RUST_CARGO_WAIT_TIMEOUT` would inherit the 1,800 s default
-underneath a 60 m nextest budget, which is exactly the inversion the canonical
+underneath an 85 m nextest budget, which is exactly the inversion the canonical
 section exists to prevent, and it would do so silently. The contract therefore
 fails if either the action appears or the variable is set, so adopting it needs
 this section updated in the same change.
@@ -4272,9 +4285,9 @@ fails `ci`'s ordering too. Whether a profile terminates a test no override
 matches is still read from its own table alone.
 
 It pins the values the tables above state as well as ordering them: the base
-`slow-timeout` on both profiles compared as a whole table, the 60 m whole-run
+`slow-timeout` on both profiles compared as a whole table, the 85 m whole-run
 budget, both overrides' whole `slow-timeout` including the grace period, and
-the 100-minute ceiling on every suite lane. The ordering assertions hold for a
+the 120-minute ceiling on every suite lane. The ordering assertions hold for a
 range of values, so on their own they would let any of these drift to a number
 nobody chose while still passing. The grace period is pinned for the same
 reason it is read: the watchdog and the ceiling above it are sized to cover

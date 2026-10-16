@@ -43,7 +43,7 @@ pub(super) fn install_missing_tools(
         }
 
         let outcome = install_tool(executor, tool, stderr, context)?;
-        update_status_after_install(&mut remaining_status, executor, tool, outcome);
+        update_status_after_install(&mut remaining_status, executor, tool, outcome)?;
     }
 
     Ok(())
@@ -64,12 +64,12 @@ pub(super) fn repository_install_context<'a>(
     }
 }
 
-pub(super) fn cargo_fallback_mode(executor: &dyn CommandExecutor) -> InstallMode {
-    if is_binstall_available(executor) {
+pub(super) fn cargo_fallback_mode(executor: &dyn CommandExecutor) -> Result<InstallMode> {
+    Ok(if is_binstall_available(executor)? {
         InstallMode::Binstall
     } else {
         InstallMode::CargoInstall
-    }
+    })
 }
 
 pub(super) fn should_install_tool(status: &DylintToolStatus, tool: &DependencyTool) -> bool {
@@ -109,15 +109,15 @@ pub(super) fn install_tool(
         cargo_install_plan = cargo_install_plan.with_version(dependency.version());
 
         match repo.installer.install(dependency, repo.target, repo.dirs) {
-            Ok(_) if repository_install_verified(executor, tool) => {
-                write_message(
-                    stderr,
-                    context.quiet,
-                    format!("Installed {} from repository release.", tool.package),
-                );
-                return Ok(InstallOutcome::RepositoryRelease);
-            }
             Ok(_) => {
+                if repository_install_verified(executor, tool)? {
+                    write_message(
+                        stderr,
+                        context.quiet,
+                        format!("Installed {} from repository release.", tool.package),
+                    );
+                    return Ok(InstallOutcome::RepositoryRelease);
+                }
                 refuse_or_announce_fallback(tool, "failed verification", stderr, context)?;
             }
             Err(error) if error.is_not_found() => {
@@ -270,7 +270,7 @@ fn try_binstall(
         return Ok(false);
     }
 
-    if !is_tool_installed(executor, cargo_install_plan.tool) {
+    if !is_tool_installed(executor, cargo_install_plan.tool)? {
         return Ok(false);
     }
 
@@ -315,7 +315,7 @@ fn run_cargo_install(
         });
     }
 
-    if !is_tool_installed(executor, cargo_install_plan.tool) {
+    if !is_tool_installed(executor, cargo_install_plan.tool)? {
         return Err(InstallerError::DependencyInstall {
             tool: cargo_install_plan.tool.package,
             message: format!(
@@ -348,9 +348,12 @@ fn run_cargo_install(
 ///
 /// `cargo-dylint` keeps the generic check because it reports its own version
 /// and must additionally be discoverable by Cargo as a subcommand.
-fn repository_install_verified(executor: &dyn CommandExecutor, tool: &DependencyTool) -> bool {
+fn repository_install_verified(
+    executor: &dyn CommandExecutor,
+    tool: &DependencyTool,
+) -> Result<bool> {
     if tool == &DYLINT_LINK_TOOL {
-        return true;
+        return Ok(true);
     }
     is_tool_installed(executor, tool)
 }
@@ -372,10 +375,12 @@ pub(super) fn write_message(stderr: &mut dyn Write, quiet: bool, message: String
     let _ = writeln!(stderr, "{message}");
 }
 
-pub(super) fn command_succeeds(executor: &dyn CommandExecutor, cmd: &str, args: &[&str]) -> bool {
-    executor
-        .run(cmd, args)
-        .is_ok_and(|output| output.status.success())
+pub(super) fn command_succeeds(
+    executor: &dyn CommandExecutor,
+    cmd: &str,
+    args: &[&str],
+) -> Result<bool> {
+    Ok(executor.run(cmd, args)?.status.success())
 }
 
 fn should_refresh_companions(outcome: InstallOutcome, status: &DylintToolStatus) -> bool {
@@ -387,17 +392,18 @@ fn update_status_after_install(
     executor: &dyn CommandExecutor,
     tool: &DependencyTool,
     outcome: InstallOutcome,
-) {
+) -> Result<()> {
     if tool == &CARGO_DYLINT_TOOL {
         status.cargo_dylint = true;
 
         if should_refresh_companions(outcome, status) {
             // Installing cargo-dylint locally can also provide dylint-link.
-            status.dylint_link = is_tool_installed(executor, &DYLINT_LINK_TOOL);
+            status.dylint_link = is_tool_installed(executor, &DYLINT_LINK_TOOL)?;
         }
     } else if tool == &DYLINT_LINK_TOOL {
         status.dylint_link = true;
     }
+    Ok(())
 }
 
 #[cfg(test)]

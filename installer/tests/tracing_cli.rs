@@ -2,19 +2,23 @@
 
 #![cfg(unix)]
 
+use camino::Utf8PathBuf;
+use cap_std::{
+    ambient_authority,
+    fs_utf8::{Dir, Permissions, PermissionsExt},
+};
 use std::{
     error::Error,
     ffi::OsString,
-    fs, io,
-    os::unix::fs::PermissionsExt,
-    path::{Path, PathBuf},
+    io,
     process::{Command, Output},
 };
 
 /// Keep an isolated workspace, PATH, and home directories alive for CLI runs.
 struct TracingFixture {
-    root: tempfile::TempDir,
-    workspace: PathBuf,
+    _root: tempfile::TempDir,
+    root_path: Utf8PathBuf,
+    workspace: Utf8PathBuf,
     environment: Vec<(OsString, OsString)>,
 }
 
@@ -27,65 +31,86 @@ impl TracingFixture {
     /// versions cannot be read from the embedded manifest.
     fn new() -> Result<Self, Box<dyn Error>> {
         let root = tempfile::tempdir()?;
-        let workspace = root.path().join("workspace");
-        let binary_directory = root.path().join("bin");
-        let invalid_path_entry = root.path().join("not-a-directory");
-        fs::create_dir(&workspace)?;
-        fs::create_dir(&binary_directory)?;
-        fs::write(&invalid_path_entry, b"PATH entry is a file")?;
-        fs::write(
-            workspace.join("Cargo.toml"),
+        let root_path = Utf8PathBuf::from_path_buf(root.path().to_path_buf()).map_err(|path| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("temporary fixture path is not UTF-8: {}", path.display()),
+            )
+        })?;
+        let root_dir = Dir::open_ambient_dir(&root_path, ambient_authority())?;
+        let workspace = root_path.join("workspace");
+        let binary_directory = root_path.join("bin");
+        root_dir.create_dir("workspace")?;
+        root_dir.create_dir("bin")?;
+        root_dir.write("not-a-directory", b"PATH entry is a file")?;
+        let workspace_dir = root_dir.open_dir("workspace")?;
+        let binary_dir = root_dir.open_dir("bin")?;
+        workspace_dir.write(
+            "Cargo.toml",
             "[package]\nname = \"whitaker\"\nversion = \"0.0.0\"\nedition = \"2024\"\n",
         )?;
         let cargo_version = dependency_version("cargo-dylint")?;
         let link_version = dependency_version("dylint-link")?;
         write_executable(
-            &binary_directory.join("cargo"),
+            &binary_dir,
+            "cargo",
             &fake_cargo_script(cargo_version, link_version),
         )?;
-        write_executable(&binary_directory.join("dylint-link"), "#!/bin/sh\nexit 0\n")?;
+        write_executable(&binary_dir, "dylint-link", "#!/bin/sh\nexit 0\n")?;
         write_executable(
-            &binary_directory.join("rustup"),
+            &binary_dir,
+            "rustup",
             "#!/bin/sh\necho 'controlled rustup failure' >&2\nexit 1\n",
         )?;
 
-        let data_home = root.path().join("data");
-        let config_home = root.path().join("config");
-        let cache_home = root.path().join("cache");
-        let rustup_home = root.path().join("rustup");
-        let cargo_home = root.path().join("cargo-home");
-        for directory in [
-            &data_home,
-            &config_home,
-            &cache_home,
-            &rustup_home,
-            &cargo_home,
-        ] {
-            fs::create_dir(directory)?;
+        for directory in ["data", "config", "cache", "rustup", "cargo-home"] {
+            root_dir.create_dir(directory)?;
         }
 
-        let path = std::env::join_paths([&invalid_path_entry, &binary_directory])?;
+        let data_home = root_path.join("data");
+        let config_home = root_path.join("config");
+        let cache_home = root_path.join("cache");
+        let rustup_home = root_path.join("rustup");
+        let cargo_home = root_path.join("cargo-home");
+        let invalid_path_entry = root_path.join("not-a-directory");
+        let path = std::env::join_paths([
+            invalid_path_entry.as_std_path().as_os_str(),
+            binary_directory.as_std_path().as_os_str(),
+        ])?;
         let mut environment = vec![
             (OsString::from("PATH"), path),
-            (OsString::from("HOME"), root.path().as_os_str().to_owned()),
-            (OsString::from("XDG_DATA_HOME"), data_home.into_os_string()),
+            (
+                OsString::from("HOME"),
+                root_path.as_std_path().as_os_str().to_owned(),
+            ),
+            (
+                OsString::from("XDG_DATA_HOME"),
+                data_home.as_std_path().as_os_str().to_owned(),
+            ),
             (
                 OsString::from("XDG_CONFIG_HOME"),
-                config_home.into_os_string(),
+                config_home.as_std_path().as_os_str().to_owned(),
             ),
             (
                 OsString::from("XDG_CACHE_HOME"),
-                cache_home.into_os_string(),
+                cache_home.as_std_path().as_os_str().to_owned(),
             ),
-            (OsString::from("RUSTUP_HOME"), rustup_home.into_os_string()),
-            (OsString::from("CARGO_HOME"), cargo_home.into_os_string()),
+            (
+                OsString::from("RUSTUP_HOME"),
+                rustup_home.as_std_path().as_os_str().to_owned(),
+            ),
+            (
+                OsString::from("CARGO_HOME"),
+                cargo_home.as_std_path().as_os_str().to_owned(),
+            ),
         ];
         if let Some(ld_library_path) = std::env::var_os("LD_LIBRARY_PATH") {
             environment.push((OsString::from("LD_LIBRARY_PATH"), ld_library_path));
         }
 
         Ok(Self {
-            root,
+            _root: root,
+            root_path,
             workspace,
             environment,
         })
@@ -120,7 +145,7 @@ fn run_cli_mode(fixture: &TracingFixture, arguments: &[&str]) -> io::Result<Outp
     Command::new(env!("CARGO_BIN_EXE_whitaker-installer"))
         .args(["--toolchain", "nightly-test"])
         .args(arguments)
-        .current_dir(&fixture.workspace)
+        .current_dir(fixture.workspace.as_std_path())
         .env_clear()
         .envs(fixture.environment.iter().cloned())
         .output()
@@ -157,9 +182,8 @@ fn assert_cli_output(output: &Output, fixture: &TracingFixture, mode: &str, is_v
         "{mode} mode stderr: {stderr}"
     );
     assert!(!stdout.contains(diagnostic), "diagnostic must be on stderr");
-    let fixture_path = fixture.root.path().to_string_lossy();
-    assert!(!stdout.contains(fixture_path.as_ref()));
-    assert!(!stderr.contains(fixture_path.as_ref()));
+    assert!(!stdout.contains(fixture.root_path.as_str()));
+    assert!(!stderr.contains(fixture.root_path.as_str()));
     assert!(!stdout.contains('\u{1b}'));
     assert!(!stderr.contains('\u{1b}'));
 }
@@ -202,7 +226,7 @@ fn dependency_version(package: &str) -> Result<&'static str, Box<dyn Error>> {
 ///
 /// Returns a filesystem error if the script or its executable permissions
 /// cannot be written.
-fn write_executable(path: &Path, contents: &str) -> io::Result<()> {
-    fs::write(path, contents)?;
-    fs::set_permissions(path, fs::Permissions::from_mode(0o755))
+fn write_executable(directory: &Dir, path: &str, contents: &str) -> io::Result<()> {
+    directory.write(path, contents)?;
+    directory.set_permissions(path, Permissions::from_mode(0o755))
 }

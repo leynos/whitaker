@@ -173,6 +173,15 @@ pub enum InstallerError {
         message: String,
     },
 
+    /// A dependency availability query could not establish whether a tool is installed.
+    #[error("failed to check whether {tool} is installed: {reason}")]
+    DependencyCheck {
+        /// Name of the tool whose availability could not be established.
+        tool: &'static str,
+        /// Description of the command or filesystem query failure.
+        reason: String,
+    },
+
     /// Wrapper script generation failed.
     #[error("wrapper script generation failed: {0}")]
     WrapperGeneration(String),
@@ -284,6 +293,10 @@ impl Clone for InstallerError {
             Self::DependencyInstall { tool, message } => Self::DependencyInstall {
                 tool,
                 message: message.clone(),
+            },
+            Self::DependencyCheck { tool, reason } => Self::DependencyCheck {
+                tool,
+                reason: reason.clone(),
             },
             Self::ConflictingSourceOptions { option } => Self::ConflictingSourceOptions {
                 option: option.clone(),

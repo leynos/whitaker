@@ -13,7 +13,8 @@ use whitaker_installer::{
     installer_packaging::TargetTriple,
     test_utils::{
         dependency_binary_helpers::{
-            AlwaysNotFoundRepositoryInstaller, cargo_dylint_check, dylint_link_install_list_check,
+            AlwaysNotFoundRepositoryInstaller, cargo_dylint_check,
+            cargo_dylint_stale_version_check, dylint_link_install_list_check,
             with_fake_binary_on_path,
         },
         *,
@@ -162,11 +163,7 @@ fn ensure_dylint_tools_installs_missing_tools(
 ) -> std::io::Result<()> {
     with_fake_binary_on_path("dylint-link", || {
         let executor = StubExecutor::new(vec![
-            ExpectedCall {
-                cmd: "cargo",
-                args: vec!["dylint", "--version"],
-                result: Ok(failure_output("missing cargo-dylint")),
-            },
+            cargo_dylint_stale_version_check().expect("stale cargo-dylint version should resolve"),
             dylint_link_install_list_check()
                 .expect("dylint-link dependency version should resolve"),
             ExpectedCall {
@@ -216,11 +213,7 @@ fn ensure_dylint_tools_propagates_install_failures(
 ) -> std::io::Result<()> {
     with_fake_binary_on_path("dylint-link", || {
         let executor = StubExecutor::new(vec![
-            ExpectedCall {
-                cmd: "cargo",
-                args: vec!["dylint", "--version"],
-                result: Ok(failure_output("missing cargo-dylint")),
-            },
+            cargo_dylint_stale_version_check().expect("stale cargo-dylint version should resolve"),
             dylint_link_install_list_check()
                 .expect("dylint-link dependency version should resolve"),
             ExpectedCall {

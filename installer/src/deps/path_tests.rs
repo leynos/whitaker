@@ -31,7 +31,8 @@ fn check_dylint_tools_reports_installed_tools() -> std::io::Result<()> {
                 .expect("dylint-link dependency version should resolve"),
         ]);
 
-        let status = check_dylint_tools(&executor);
+        let status =
+            check_dylint_tools(&executor).expect("available dependency checks should complete");
 
         assert_eq!(
             status,
@@ -47,7 +48,6 @@ fn check_dylint_tools_reports_installed_tools() -> std::io::Result<()> {
 
 #[rstest::rstest]
 #[case::stale_version("cargo-dylint 5.0.0\n")]
-#[case::unparsable_output("not a version\n")]
 fn check_dylint_tools_rejects_unusable_cargo_dylint_output(
     #[case] version_stdout: &str,
 ) -> std::io::Result<()> {
@@ -59,7 +59,8 @@ fn check_dylint_tools_rejects_unusable_cargo_dylint_output(
                 stdout_output(version_stdout),
             ))]);
 
-            let status = check_dylint_tools(&executor);
+            let status =
+                check_dylint_tools(&executor).expect("available dependency checks should complete");
 
             assert_eq!(
                 status,
@@ -67,6 +68,29 @@ fn check_dylint_tools_rejects_unusable_cargo_dylint_output(
                     cargo_dylint: false,
                     dylint_link: false,
                 }
+            );
+            executor.assert_finished();
+        },
+    )?;
+    Ok(())
+}
+
+#[test]
+fn check_dylint_tools_rejects_unparsable_cargo_dylint_output() -> std::io::Result<()> {
+    with_fake_path(
+        |_| Ok(()),
+        || {
+            let executor = StubExecutor::new(vec![cargo_dylint_check_with_result(Ok(
+                stdout_output("not a version\n"),
+            ))]);
+
+            let error = check_dylint_tools(&executor)
+                .expect_err("unparsable version output must not authorize installation");
+
+            assert!(
+                error
+                    .to_string()
+                    .contains("without reporting a semantic version")
             );
             executor.assert_finished();
         },
@@ -90,7 +114,8 @@ fn check_dylint_tools_rejects_unpinned_dylint_link(
             install_list_check,
         ]);
 
-        let status = check_dylint_tools(&executor);
+        let status =
+            check_dylint_tools(&executor).expect("available dependency checks should complete");
 
         assert_eq!(
             status,
@@ -104,8 +129,9 @@ fn check_dylint_tools_rejects_unpinned_dylint_link(
     Ok(())
 }
 
+/// Verify PATH detection never executes the discovered dylint-link wrapper.
 #[test]
-fn check_dylint_tools_rejects_non_invocable_dylint_link_on_path() -> std::io::Result<()> {
+fn check_dylint_tools_does_not_invoke_dylint_link_on_path() -> std::io::Result<()> {
     with_fake_path(
         |directories| {
             let first_dir = &directories[0];
@@ -119,15 +145,18 @@ fn check_dylint_tools_rejects_non_invocable_dylint_link_on_path() -> std::io::Re
         || {
             let executor = StubExecutor::new(vec![
                 cargo_dylint_check().expect("cargo-dylint dependency version should resolve"),
+                dylint_link_install_list_check()
+                    .expect("dylint-link dependency version should resolve"),
             ]);
 
-            let status = check_dylint_tools(&executor);
+            let status =
+                check_dylint_tools(&executor).expect("available dependency checks should complete");
 
             assert_eq!(
                 status,
                 DylintToolStatus {
                     cargo_dylint: true,
-                    dylint_link: false,
+                    dylint_link: true,
                 }
             );
             executor.assert_finished();
@@ -249,11 +278,11 @@ fn path_scan_classifies_invalid_entries_and_continues_to_a_later_binary() -> std
         scan.failures,
         vec![
             PathScanFailure {
-                binary_name: "dylint-link",
+                binary_name: "dylint-link".to_owned(),
                 category: PathScanFailureCategory::NonUtf8Path,
             },
             PathScanFailure {
-                binary_name: "dylint-link",
+                binary_name: "dylint-link".to_owned(),
                 category: PathScanFailureCategory::DirectoryOpen,
             },
         ]
@@ -335,7 +364,7 @@ fn path_scan_ordering_holds_for_bounded_match_patterns() {
                 .take_while(|entry_kind| **entry_kind != 2)
                 .filter(|entry_kind| **entry_kind == 1)
                 .map(|_| PathScanFailure {
-                    binary_name: "probe.exe",
+                    binary_name: "probe.exe".to_owned(),
                     category: PathScanFailureCategory::DirectoryOpen,
                 })
                 .collect::<Vec<_>>();
@@ -383,7 +412,8 @@ fn check_dylint_tools_detects_dylint_link_via_pathext_suffix() -> std::io::Resul
                         .expect("dylint-link dependency version should resolve"),
                 ]);
 
-                let status = check_dylint_tools(&executor);
+                let status = check_dylint_tools(&executor)
+                    .expect("available dependency checks should complete");
 
                 assert_eq!(
                     status,
