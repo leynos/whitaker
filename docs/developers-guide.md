@@ -1429,8 +1429,12 @@ were rejected, is recorded in
 A module that has grown into submodules becomes a directory whose root file is
 `mod.rs`, for example `installer/src/install_flow/mod.rs` and
 `installer/src/toolchain/mod.rs`. The self-named-sibling form, where
-`install_flow.rs` sits next to an `install_flow/` directory, is not used in
-this repository: 46 `mod.rs` files are tracked outside `vendor/`.
+`install_flow.rs` sits next to an `install_flow/` directory, is not the
+convention here: 46 `mod.rs` files are tracked outside `vendor/`, and no path
+has both `name.rs` and `name/mod.rs`. Two file modules do reach a child that
+way — `installer/src/cli.rs` and
+`crates/conditional_max_n_branches/src/driver.rs` — but they are single-child
+outliers, not the pattern to copy.
 
 Directory modules nest. `installer/src/toolchain/tests/` is a `tests/`
 directory module with its own `mod.rs`, holding `test_helpers.rs` and a further
@@ -1475,8 +1479,9 @@ repository rule that every module begins with one.
 `installer/src/deps/tests.rs` shows the one variation on this. It is not a
 module file in its own right: `installer/src/deps/mod.rs` declares it as
 `#[cfg(test)] mod tests;`, so the whole file is already test-only. Its own
-children are therefore declared without the attribute, and take their names
-from the `#[path]` files rather than the parent's `tests`:
+children therefore omit `#[cfg(test)]`, which would be redundant. They still
+carry `#[path]`, because no `deps/tests/` directory exists for a bare `mod` to
+resolve into:
 
 ```rust
 #[path = "policy_tests.rs"]

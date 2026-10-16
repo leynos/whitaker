@@ -55,10 +55,15 @@ the same file with no mechanism to separate them later.
 
 ### Option B: extract tests but use the self-named sibling form
 
-Rejected. The repository does not use this form anywhere: 46 `mod.rs` files are
-tracked outside `vendor/`, and no path in the tree has both `name.rs` and
-`name/mod.rs`. Adopting a second convention for the same job would make a
-module's location depend on which convention its author happened to use.
+Rejected. The repository's convention is the `mod.rs` form: 46 `mod.rs` files
+are tracked outside `vendor/`, and no path in the tree has both `name.rs` and
+`name/mod.rs`, so no module is ambiguous between the two. Two file modules
+deviate and reach a child through a same-named directory:
+`installer/src/cli.rs` resolves `mod source_policy;` to `cli/source_policy.rs`,
+and `crates/conditional_max_n_branches/src/driver.rs` resolves `mod numeric;` to
+`driver/numeric.rs`. Both are single-child outliers, and neither is a
+convention anyone is expected to follow. Adopting the form deliberately would
+make a module's location depend on which convention its author happened to use.
 
 ### Option C: `mod.rs` directory modules with `#[path]` sibling test files
 
@@ -98,9 +103,9 @@ above the extracted module already restricts it to test builds:
 
 `installer/src/deps/tests.rs` shows the variation that follows from the rule.
 It is declared as `#[cfg(test)] mod tests;` by `installer/src/deps/mod.rs`, so
-the whole file is already test-only and its own children take the
-attribute-free form, drawing their names from the `#[path]` files rather than
-from a parent `tests`.
+the whole file is already test-only and its children omit `#[cfg(test)]` for
+that reason alone. They still carry `#[path]`, because there is no
+`deps/tests/` directory for a bare `mod` to resolve into.
 
 An extracted test file still opens with a `//!` module-level doc comment, so it
 satisfies the repository rule that every module documents its purpose.
