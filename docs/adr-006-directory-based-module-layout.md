@@ -115,6 +115,15 @@ satisfies the repository rule that every module documents its purpose.
 - `#[path]` is a manual anchor. Renaming or moving an extracted test file is not
   checked by the compiler until the module is built, so the attribute can go
   stale in a way that a conventional module path cannot.
+- The attribute's *meaning* moves with the module's form. In a file module
+  `name.rs`, `#[path = "p"]` resolves relative to the containing directory; in
+  a directory module `name/mod.rs` it resolves relative to `name/` itself.
+  Converting a file module to a directory module therefore doubles the module's
+  own segment in any `#[path]` that already opens with it, as
+  `install_flow/mod.rs` did when a rebase renamed `install_flow.rs` around a
+  pre-existing anchor. A bare `mod` in a directory module carries no such
+  hazard, which is why the decision outcome above confines the attribute to the
+  file-module case.
 - The 400-line budget is a repository convention that this decision serves, and
   it is **not** yet machine-enforced in this repository. The `module_max_lines`
   dylint lint implements the check and its own UI tests cover it, but the

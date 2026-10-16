@@ -1462,9 +1462,10 @@ Three shapes of this appear in the tree.
   `policy_tests.rs` and `tests_repository.rs`.
 - **Directory-module `tests.rs`.** Inside a directory module the attribute is
   unnecessary, because Rust already resolves it, so a bare
-  `#[cfg(test)] mod tests;` resolves to `tests.rs` in the same directory. Both
-  `installer/src/install_flow/mod.rs` and `installer/src/toolchain/mod.rs` end
-  with that declaration.
+  `#[cfg(test)] mod tests;` resolves to `tests.rs` in the same directory.
+  `installer/src/toolchain/mod.rs` ends with that declaration, and
+  `installer/src/install_flow/mod.rs` reaches `dependency_check_tests.rs` the
+  same way, with a bare `#[cfg(test)] mod dependency_check_tests;`.
 - **Nested tests directory.** When the tests themselves need helpers and
   submodules, they become a `tests/` directory module with a `mod.rs`.
 
