@@ -142,3 +142,7 @@ they contain spaces (`C:\Program Files\...`). The example-testing code lives in
 Whitaker's 400-line limit; `example_targets` returns its list directly instead
 of an infallible `Result`; and Cargo's `Running` lines are parsed without a
 regex, removing a production `unwrap()` and the `regex` dependency.
+
+Remove this patch when an upstream release handles wrapped compiler commands.
+The upstream licence is MIT OR Apache-2.0; this vendored copy uses the MIT
+option in [LICENSE-MIT](LICENSE-MIT).

@@ -6,7 +6,7 @@ expression: normalized_dry_run_output(&stderr)
 Dry run - no files will be modified
 
 Workspace root: [workspace]
-Toolchain: nightly-2026-05-28
+Toolchain: [pinned toolchain]
 Target directory: [staging directory]
 Verbosity level: 0
 Quiet: false

@@ -77,7 +77,13 @@ pub fn record_installation(
     let mut file = open_record(&record_path)?;
     file.lock_exclusive()
         .map_err(|source| record_io_error("lock", &record_path, source))?;
-    let mut paths = read_paths(&record_path, &mut file)?;
+    let mut paths = match read_paths(&record_path, &mut file) {
+        Ok(paths) => paths,
+        Err(InstallationRecordError::Io {
+            operation: "parse", ..
+        }) => BTreeMap::new(),
+        Err(error) => return Err(error),
+    };
     paths.insert(toolchain.to_owned(), absolute_staging_path.into_string());
     write_paths(&record_path, &mut file, &paths)
 }
@@ -278,6 +284,33 @@ mod tests {
             installed_paths(&dirs)
                 .expect("stale records should be ignored")
                 .is_empty()
+        );
+    }
+
+    #[test]
+    fn successful_install_replaces_a_malformed_record() {
+        let temporary = TempDir::new().expect("temporary directory should be created");
+        let data = temporary.path().join("data");
+        let staging = temporary.path().join("staging");
+        std::fs::create_dir_all(&data).expect("data directory should be created");
+        std::fs::create_dir_all(&staging).expect("staging directory should be created");
+        std::fs::write(data.join(super::RECORD_FILENAME), "not JSON")
+            .expect("malformed record should be written");
+        let dirs = mock_dirs(data);
+
+        assert!(installed_paths(&dirs).is_err());
+        record_installation(
+            &dirs,
+            "nightly",
+            Utf8Path::from_path(&staging).expect("staging path should be UTF-8"),
+        )
+        .expect("successful install should replace malformed record");
+
+        assert_eq!(
+            installed_paths(&dirs)
+                .expect("new record should load")
+                .len(),
+            1
         );
     }
 
