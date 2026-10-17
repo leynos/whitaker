@@ -37,18 +37,22 @@ Job = tuple[str, str, dict[str, typ.Any]]
 
 
 def _ci_jobs() -> list[Job]:
+    """Return the jobs of `ci.yml`."""
     return [j for j in all_jobs() if j[0] == "ci.yml"]
 
 
 def _ids(jobs: list[Job]) -> list[str]:
+    """Return readable parameter identifiers for a job list."""
     return [f"{w}:{n}" for w, n, _ in jobs]
 
 
 def _steps(job: dict[str, typ.Any]) -> list[dict[str, typ.Any]]:
+    """Return a job's step mappings."""
     return [s for s in job.get("steps", []) if isinstance(s, dict)]
 
 
 def _uses(step: dict[str, typ.Any]) -> str:
+    """Return a step's `uses` reference, or an empty string."""
     return str(step.get("uses", ""))
 
 
