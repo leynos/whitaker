@@ -87,612 +87,49 @@ stop at.
 
 ## Progress
 
-- [x] (2026-08-24T01:58Z) `EP-M0` — extracted the Dylint driver library and
-  made the root package publishable and testable. Evidence: package, format,
-  typecheck, lint, test, dynamic binary build, and root test-link gates all
-  passed; 1,664 workspace tests, 80 feature-free core tests, and doctests ran.
-- [x] (2026-08-24T02:08Z) `EP-M1` — moved installer orchestration behind the
-  library boundary. Evidence: 1,665 tests, doctests, dynamic binary build, and
-  the `whitaker-installer --dry-run` snapshot all passed unchanged.
-- [ ] `EP-M2` — the `whitaker` binary: `install`, `ls`, and `cargo dylint`
-  forwarding.
+- [x] `EP-M0` — extracted the compiler-private Dylint driver into
+  `whitaker_lint_core`; the root package now packages and tests independently.
+- [x] `EP-M1` — moved installer orchestration behind the installer library API
+  and protected the legacy dry-run output with a snapshot.
+- [ ] `EP-M2` — root `whitaker` commands and compatibility forwarding.
 - [ ] `EP-M3` — binstall metadata and crates.io name reservation.
-- [ ] `EP-M4` — ADR `docs/adr-005-whitaker-cli-boundary.md` and documentation.
+- [x] `EP-M4` — architecture and user/developer documentation.
 
-- (2026-10-15T16:45Z) Resumed the approved implementation after the user
-  explicitly invoked the full `sdlc-implementation` plan while its prior scope
-  hold was visible. This accepts the existing 70-file tolerance breach solely
-  to finish this plan; the 2,500-net-line ceiling and all other requirements
-  remain. Current base/head are `afb1e4ac1387aff8e51fa7bbeb62d94f0f6c8970` /
-  `6eadba3ce04172645745264bf9c6509d56d6ae85`. The PR author and all branch
-  contributors are `leynos` in `leynos/whitaker`, establishing the trusted
-  candidate basis independently of candidate instructions. M0 and M1 remain
-  complete; M2–M4 and roadmap 3.5.1 remain incomplete. The rebased `make test`
-  failure remains unresolved and no milestone review is requested until the
-  current candidate passes its deterministic gates.
+Implementation resumed on 2026-10-15 under the approved 7,000-net-line ceiling
+(D-12). The branch was rebased onto PR #356's target,
+`origin/harden-lint-config` (`afb1e4ac1387aff8e51fa7bbeb62d94f0f6c8970`); the
+target remains an ancestor of the current branch. The 70-file tolerance
+exception is limited to this approved plan. No crates.io package has been
+published or reserved.
 
-- (2026-10-15T17:17Z) Started EP-M2. Added the root command/application
-  boundary, pure routing and exit-policy modules, adapter ports, localized clap
-  parsing, and a production adapter for installer inventory and Dylint
-  forwarding. Added a public installer inventory collector by factoring the
-  existing scan path without changing its renderer. Root installs now select a
-  lister-only wrapper policy; the legacy installer keeps its two-script policy.
-  Added the first M2 property, BDD, exit-code, routing, and wrapper
-  preservation tests; these have not yet been validated. The first focused
-  compile caught a missing direct `camino` dependency and an obsolete import;
-  both were corrected. The follow-up compile was still queued when this entry
-  was written.
+M2 now provides the root binary with `install`, transitional `ls`, localized
+help/version, and legacy `cargo dylint` forwarding. The root package has
+binstall metadata, but release archives remain deferred. The shared installer
+records canonical successful staging paths by toolchain, so forwarding from an
+external project can locate custom target directories while preserving an
+explicit `DYLINT_LIBRARY_PATH`. BDD, property, snapshot, exit-status, package,
+and installer tests cover the public behaviour. D-19 keeps the CLI Verus proof
+out of the default proof group until it verifies within the approved limit and
+its negative control is recorded; D-20 records the install-path persistence
+decision.
 
-- (2026-10-15T17:27Z) The queued `cargo check -p whitaker --all-targets`
-  completed successfully after 14m35s under shared compile admission. The
-  managed sccache service was unreachable, so compilation proceeded directly;
-  the initial run reported only an unused `Services` import in `src/main.rs`,
-  which has been removed. This check predates the latest property/BDD/proof
-  edits and is not current-candidate evidence. Tightened the parity test to
-  assert the specified 5% frequency for every option, added a fake-cargo BDD
-  forwarding scenario and dry-run staging assertion, and registered the planned
-  Kani/Verus proof runners. None of those changes has been validated yet. The
-  red-test transcripts were not captured before production code was present at
-  resumption; this deviation will be covered with explicit negative controls
-  for each proof/test obligation before acceptance. No M2 gate or CodeRabbit
-  review has been requested.
+Kani passed its 360 checks and reachability negative control. Verus did not
+finish within its ten-minute tolerance. At the user's direction, roadmap item
+3.5.1 is checked complete for the implementation deliverable. The separate
+proof and crates.io-name acceptance criteria remain open; no package is
+published or reserved, and reservation still needs explicit authorization.
 
-- (2026-10-15T17:44Z) The refreshed all-target check exposed missing direct
-  root dev-dependencies for `rstest-bdd` and `whitaker_test_macros`, a missing
-  `clap::Parser` trait import in the parity test, and implicit capture syntax
-  unsupported by two `prop_assert_eq!` messages. Added the manifest edges and
-  explicit formatting arguments. The failure log is
-  `/tmp/check-whitaker-m2-current.out`; the corrected candidate has not yet
-  been checked. This confirms the BDD fixture remains local to the root package
-  and does not change production dependencies.
-
-- (2026-10-15T17:58Z) The retry compiled the new BDD dependency graph and all
-  root test targets, then found one ownership error in the parity test: the
-  first equality assertion moved `InstallArgs` before constructing the
-  `InstallRequest`. The assertion now compares a clone, preserving the value
-  for the request-level equality check. The retry log is
-  `/tmp/check-whitaker-m2-current-retry1.out`; another focused check is
-  pending. No production behaviour change was required.
-
-- (2026-10-15T18:05Z) `cargo check -p whitaker --all-targets` now passes on the
-  corrected source, including every root integration-test target, with no
-  diagnostics. It took 6m26s under the shared cache lock and compile-slot queue
-  while sccache remained unavailable. Current-candidate test execution,
-  format/typecheck/lint gates, Kani/Verus, packaging, smoke tests, and review
-  remain pending. The successful log is
-  `/tmp/check-whitaker-m2-current-retry2.out`.
-
-- (2026-10-15T18:15Z) The first root-package nextest run passed 26 of 33 tests,
-  including the exit/forwarding checks, JSON snapshot, and generated parity
-  property. Seven BDD cases failed before executing because their step fixture
-  parameter names did not match the scenario fixture. Renamed the fixture from
-  `cli_world` to the shared `world` name used by the step definitions. Failure
-  log: `/tmp/nextest-whitaker-m2-focused.out`.
-
-- (2026-10-15T18:21Z) `cargo nextest run -p whitaker` passes all 33 tests across
-  six binaries after the fixture correction. The seven root CLI BDD scenarios,
-  the `--all --version` forwarding check, JSON snapshot, and 4,096-set parity
-  property all pass. Log: `/tmp/nextest-whitaker-m2-fixture-fix.out`. This is
-  focused evidence; the full workspace CI-profile suite and remaining M2 gates
-  are still required.
-
-- (2026-10-15T18:27Z) Added the planned `OrthoConfig`/Clap derive-compatibility
-  spike as `tests/ortho_config_compat.rs` with `serde` limited to root dev
-  dependencies. Its test target compiled, but the first `nextest` invocation
-  filtered by target-file name and selected zero tests; no behaviour failure
-  occurred. Retry with an explicit test-name expression, then record the derive
-  result. Log: `/tmp/nextest-whitaker-ortho-config-spike.out`.
-
-- (2026-10-15T18:29Z) The explicit
-  `cargo nextest run -p whitaker ortho_config_derives_alongside_clap_parser`
-  retry passed its one selected test (33 unrelated tests skipped), confirming
-  the requested derive compatibility. The earlier filename filter selected no
-  tests and is not counted as evidence. CLI Kani and Verus checks and their
-  negative controls are the next bounded checks; full M2 gates and review
-  remain pending.
-
-- (2026-10-15T18:34Z) The focused Kani runner started, but its `cargo metadata`
-  child is waiting on the shared `/home/leynos/.cargo/.package-cache` lock; PID
-  524311 holds the write lock for an unrelated offline build. Kani has not
-  reached its verifier and this is neither a pass nor a source failure. The
-  existing job remains in place; no parallel Cargo process or cache workaround
-  was started. Resume the proof check after the shared lock is released.
-
-- (2026-10-15T18:35Z) Read-only inspection found that the `cli` Verus group
-  had been registered for direct selection but its proof path was missing from
-  the `all` group's `printf` list because the preceding path lacked a shell
-  continuation. Added the continuation so `make verus` includes the new proof;
-  `bash -n scripts/run-verus.sh scripts/run-kani.sh` and `git diff --check`
-  pass. The focused Kani process remains blocked at Cargo metadata.
-
-- (2026-10-15T18:37Z) Rechecked the pending Kani metadata process. The original
-  cache-lock writer has exited and a different unrelated offline build (PID
-  593239) now owns the package-cache write lock. The Kani process remains
-  alive and queued; no timeout or source failure has been reported.
-
-- (2026-10-15T18:40Z) Cargo released the shared package-cache lock. Kani has
-  begun compiling `whitaker` through its `cargo rustc --package whitaker --lib`
-  harness path. It is still compiling dependencies, so the empirical cost of
-  the crate-level graph has not yet been measured to completion. Let this first
-  run decide whether the planned pure-module siting is viable before
-  considering any structural deviation.
-
-- (2026-10-15T18:54Z) The Kani dependency build completed in 15m14s under the
-  shared compile queue. `verify_classify_is_total_and_disjoint` passed all 360
-  generated checks (0 failed); Kani also noted unsupported constructs in the
-  larger library, but they were not reachable from this harness. The runner is
-  now checking the three intentional reachability counterexamples. The first
-  run confirms semantic viability but exposes a costly crate-level build;
-  consider a narrower shared production/proof boundary only if later Kani
-  invocations remain costly after this cache warm-up.
-
-- (2026-10-15T19:02Z) The `whitaker-cli` Kani group stopped on its first
-  reachability check. Kani reported the expected failure of the intentional
-  `assert!(false)` in `verify_subcommand_is_reachable`, but the runner then
-  returned failure because Kani 0.67.0 did not print the literal
-  `Counterexample:` marker required by `run_expected_counterexample`; it
-  emitted only the failed-check summary. No concrete input trace was captured,
-  and the other two reachability checks did not run. The totality harness
-  itself remains green; the group as a whole is not green. Full output is
-  `/tmp/kani-whitaker-cli-focused.out`.
-
-- (2026-10-15T19:02Z) Recalculated scope against live
-  `origin/harden-lint-config` at `afb1e4ac1387aff8e51fa7bbeb62d94f0f6c8970`.
-  The committed branch diff is 80 files and 2,436 net added lines. The current
-  uncommitted M2 candidate adds another 2,433 net lines (710 tracked net plus
-  1,723 lines in 13 untracked files), for 4,869 net added lines. D-11 accepted
-  the existing file-count overrun only; it explicitly retained the 2,500-line
-  ceiling at that checkpoint. D-12 below records the user's later approval and
-  resumes implementation. No M2 milestone gates or CodeRabbit review have been
-  requested; roadmap item 3.5.1 remains unchecked. The Kani command also spent
-  15m14s in dependency compilation; its harness verification itself took 4.73s
-  before the reachability attempt. D-12 later records that
-  compilation/admission is measured separately from verifier execution.
-
-- (2026-10-16T23:14Z) The user approved an increase to the remaining change-size
-  ceiling. D-12 sets an operational cap of 7,000 net added lines for this plan;
-  the candidate was 4,894 net lines at the latest recount, leaving 2,106 for M2
-  completion, M3 packaging, and M4 documentation. The existing 80-file count is
-  already covered by D-11. The Kani tolerance counts verifier execution time,
-  while Cargo compilation and shared admission wait are recorded separately as
-  build cost; the measured 4.73-second positive proof is within budget. The
-  Kani runner still needs to recognize the verifier's reported failed
-  reachability assertion and run all three reachability harnesses before
-  acceptance.
-
-- (2026-10-15T19:05Z) `make fmt` formatted the plan checkpoint. The first
-  `make markdownlint` run caught an en-GB spelling issue in this new note;
-  after correcting it, the retry passed all spelling checks and linted 79
-  Markdown files without errors. `make nixie` validated every diagram, and
-  `git diff --check` passed. Formatter changes to unrelated documentation were
-  restored. These documentation checks do not validate M2 product code or lift
-  the scope hold.
-
-- (2026-10-17T00:02Z) The Kani runner now validates Kani 0.67.0's actual output:
-  the positive totality harness passed 360 checks, and each of the three
-  reachability harnesses produced its named expected failure after a successful
-  concrete witness assertion. Verifier time was 3.345 seconds total; Cargo
-  build and shared-admission elapsed time was 2,633 seconds and remains outside
-  the verifier tolerance. Focused `bash -n` and ShellCheck checks passed for
-  both proof runners after expressing the empty `CDPATH` assignment as
-  `CDPATH=''`. The negative control that removes `Ls` routing, the Verus proof
-  and its overlap negative control, and full M2 gates remain outstanding. Kani
-  log: `/tmp/kani-whitaker-cli-runner-fix.out`; shell-check log:
-  `/tmp/shellcheck-0c485c79-c21a-486e-b126-29c3ef23084f-3-5-1-root-whitaker-binary.out`.
-  The latest worktree recount is +5,622/-674 (4,948 net added lines), leaving
-  2,052 lines under D-12's 7,000-line ceiling.
-
-- (2026-10-17T00:06Z) Ran the planned Kani negative control by temporarily
-  routing `TokenTag::Ls` to `Forward`. `verify_classify_is_total_and_disjoint`
-  failed at the `Subcommand(Ls)` assertion in 5.206 seconds, so the proof
-  detects the intended regression. Kani's text output omitted its model
-  assignment; the minimal concrete witness is `raw = [1, 0, 0, 0, 0, 0]`,
-  `length = 1`, which the harness maps to `[Ls]`. Restored the production
-  classifier and confirmed its SHA-256 is identical to the pre-mutation value.
-  Log: `/tmp/kani-whitaker-cli-negative-control-20261017T000428Z-2446136.out`.
-  The Verus proof and overlap negative control, and full M2 gates, remain open.
-
-- (2026-10-17T00:19Z) The first CLI Verus invocation failed before verification
-  because this repository runs proof files as binary crates and requires the
-  empty `main()` used by every existing sidecar. Added that entry point and
-  reran the focused proof. `rust_verify` then ran CPU-bound for 650 seconds
-  without emitting a result; it was stopped after exceeding the ten-minute
-  Verus tolerance. No proof result is available. The output is
-  `/tmp/verus-cli-3-5-1-root-whitaker-binary-retry-20261017T000747Z.out`.
-  Further Verus runs are paused pending the user's decision on the explicit
-  tolerance exception. The positive Kani proof and its Ls negative control are
-  complete; the Verus proof and overlap negative control remain unresolved.
-
-- (2026-10-17T00:58Z) Implemented the root package's binstall metadata from the
-  installer's shared templates, including the Windows ZIP override, and added a
-  five-target disjoint-URL check. Kept existing two-argument expansion and
-  manifest-loader signatures intact by adding package-aware and explicit-path
-  helpers. The focused metadata test passed (1 passed, 0 skipped); Cargo
-  compilation took 14m51s in the shared queue and the test itself took 0.007s.
-  Log:
-  `/tmp/test-binstall-0c485c79-c21a-486e-b126-29c3ef23084f-3-5-1-root-whitaker-binary.out`.
-  A crates.io lookup returned 404 for `whitaker`; no publication or name
-  reservation has been attempted. M3 and the required reservation remain open.
-  The current target-to-worktree count is +5,829/-687 (5,142 net added lines),
-  leaving 1,858 lines under D-12's ceiling.
-
-- (2026-10-17T00:58Z) Simplified the CLI Verus model to recurse through one
-  enum-valued classifier instead of three independent recursive predicates. The
-  bounded retry was stopped after 481 seconds because the earlier 650-second
-  attempt had already exceeded the plan's cumulative ten-minute tolerance. No
-  proof result was produced. The user's latest approval increases only the
-  change-size ceiling; the separate Verus-runtime question remains unanswered.
-  No further Verus run or milestone review is authorized by that approval.
-
-- (2026-10-17T01:05Z) Started M4 documentation while the independent Verus
-  tolerance decision remains pending. Added ADR 005 for the root CLI boundary,
-  recorded the staged 3.5.1 command surface and `CLI-REQ-FWD` in the CLI
-  design, indexed the ADR, and updated the repository layout, developer
-  architecture notes, Dylint suite tree, and crate publishing guide. The user
-  guide remains deferred until the crates.io name reservation so it does not
-  instruct users to install an unpublished package. The 7,000-net-line ceiling
-  is the approved plan-specific limit; M2 proof acceptance, M3 reservation,
-  user-facing guidance, roadmap completion, and full candidate gates remain
-  open.
-
-- (2026-10-17T01:07Z) The help-path audit found that Clap's bare `help`
-  subcommand was classified as an unknown token and would therefore be
-  forwarded to `cargo dylint`, despite appearing in root help. Classified it as
-  a Whitaker display request and added an end-to-end exit/output regression in
-  `tests/e2e_exit_codes.rs`. This closes a routing gap without changing the
-  forwarding contract for `help` after `--` or after a Dylint option. The
-  focused test and full gates are pending the scrutineer.
-
-- (2026-10-17T01:10Z) Added Rustdoc examples for the new public root CLI,
-  installer inventory, package-metadata, wrapper-policy, and service-port APIs.
-  Confirmed the existing
-  `lister_only_generation_preserves_an_existing_whitaker_binary` unit test
-  directly protects the non-overwrite acceptance criterion. `make fmt` passed,
-  including all Markdown lint checks it invokes; its unrelated reflow of the
-  archived M0 debugging note was restored. The current worktree passes
-  `git diff --check`. The root help regression and final full candidate gates
-  remain pending scrutineer execution.
-
-- (2026-10-17T01:12Z) The user confirmed the increased change-size ceiling;
-  D-12's 7,000-net-line cap remains the operative limit. Counting tracked
-  worktree changes and untracked implementation files, the current target-to-
-  worktree delta is 5,689 net added lines. M2 command routing, adapter ports,
-  end-to-end coverage, M3 binstall metadata, and M4 internal documentation are
-  implemented but remain unvalidated as one candidate. The bare `help`
-  regression and public Rustdoc examples have since been added; `make fmt` and
-  `git diff --check` pass. The full deterministic gates, Verus approval/result,
-  negative-control run, crates.io name reservation, packaging/release checks,
-  and milestone reviews remain outstanding.
-
-- (2026-10-17T02:53Z) The final-gate run passed `make check-fmt`, then
-  `make test` terminated red after 4,145.720 seconds: 1,664 passed, five
-  failed, one timed out, and 20 were not run after fail-fast. The failures
-  followed nested Cargo lock/admission waits: two `rstest_helper` tests timed
-  out waiting for their live cross-process fixture lock, three Dylint UI tests
-  reported no captured `rustc` invocation, and `bumpy_road_function::ui::ui`
-  exhausted its three 10-minute attempts. Inspection found these
-  `rstest_helper` and two `no_unwrap_or_else_panic` cases were missing from the
-  existing `serial-dylint-ui` Nextest group. D-14 records a narrow filter
-  correction to serialize those nested-build tests; no product-code behaviour
-  was implicated by the captured errors. The test gate must be rerun after that
-  scheduling fix; typecheck, lint, Markdown, Mermaid, and CodeRabbit remain
-  unrun.
-
-- (2026-10-17T04:25Z) The rebased candidate passes `make check-fmt` and
-  `make typecheck`. The serialized full test run passed 1,677 cases before one
-  Dylint UI fixture failed to capture any `rustc` invocation; 12 tests were not
-  run after fail-fast. Inspection confirmed Dylint 6.0.4 only recognizes a
-  command whose first executable is named `rustc`, while this host's global
-  Cargo configuration inserts the managed `build-limits-rustc` wrapper.
-  Bypassing compiler admission or excluding this test would violate repository
-  policy. A request asks whether a minimal local patch to `dylint_testing` may
-  recognize the wrapper prefix; that scope decision is pending. The first
-  diagnostic lint run also found `finish_install` over the Clippy argument
-  limit. It now takes the existing `FinishInstallContext`, preserving behaviour
-  while grouping its inputs; the complete candidate gates must be rerun for
-  this source change. CodeRabbit, Markdown, Mermaid, and milestone acceptance
-  remain outstanding.
-
-- (2026-10-17T04:44Z) The fresh serialized test run confirmed that 1,677 of
-  1,678 executed cases pass; the same Dylint UI fixture failed all retries
-  because `dylint_testing` could not recognize the globally configured
-  `build-limits-rustc` invocation. `make typecheck` passed. Diagnostic
-  `make lint` confirmed the installer finalization grouping removed its
-  original argument-count finding and exposed nine Clippy findings in the new
-  root CLI. Replaced redundant `continue`, collapsed equivalent help-token
-  arms, avoided variable shadowing and needless owned error arguments, and
-  grouped the stdout/stderr sinks into `CommandStreams` to keep the public
-  runner within the argument limit. These lint corrections have not yet been
-  revalidated. The user has not yet decided whether to authorize a narrow local
-  `dylint_testing` parser patch; no wrapper bypass or test exclusion is being
-  used. Full gates and CodeRabbit remain incomplete.
-
-- (2026-10-17T05:15Z) After the root CLI Clippy cleanup, a fresh check-format
-  pass and another 1,677-test pass reproduced the one Dylint wrapper-parser
-  failure; `make typecheck` passed. Rustdoc also passed. The subsequent Clippy
-  run found 43 policy violations in the new behavioral/property test files,
-  primarily `expect` calls in unmarked BDD steps, assertions in a
-  `Result`-returning test, and integer arithmetic forbidden by the workspace
-  lint policy. These are in-scope test quality findings and are being repaired
-  without lint suppressions. The remaining test failure is still isolated to
-  Dylint 6.0.4's parser not recognizing the managed rustc wrapper; permission
-  for a local dependency patch remains unanswered. No review or completion
-  claim is justified yet.
-
-- (2026-10-17T05:17Z) The user approved the increased plan-specific change
-  ceiling; D-12's 7,000-net-line cap remains unchanged. The latest `make fmt`
-  pass completed. The preceding `make lint` identified 43 Clippy violations in
-  the new tests. Reworked the root CLI BDD steps to return descriptive errors
-  instead of panicking, moved binstall metadata checks outside the test
-  boundary, and replaced property-test arithmetic flagged by workspace policy.
-  These changes still need current-candidate format, typecheck, test, and lint
-  validation. The last full test run still has one Dylint UI failure because
-  Dylint 6.0.4 does not parse the managed `build-limits-rustc` command prefix;
-  the separate request to authorize a local `dylint_testing` parser fix remains
-  unanswered. No wrapper bypass, test exclusion, CodeRabbit review, commit,
-  roadmap completion, or completion claim has been made.
-
-- (2026-10-17T05:51Z) Re-ran the four requested gates sequentially after the
-  test-lint repairs. `make check-fmt` passed and `make typecheck` passed.
-  `make test` ran for 1,193 seconds and again reported 1,677 passed, one
-  failed, and 12 not run; the sole failure is Dylint 6.0.4 not recognizing the
-  managed `build-limits-rustc` command for
-  `fail_unwrap_in_aliased_test_crate_non_companion`. `make lint` passed rustdoc
-  and Clippy, then found `installer/src/orchestration.rs` at 446 lines, over
-  the 400-line limit. Extracted dry-run handling and the legacy exit-code
-  adapter into `orchestration/dry_run.rs` and `orchestration/exit.rs`; the
-  public facade is now 396 lines and re-exports the same exit-code API. The
-  follow-up `make fmt` passed. The module-size correction and its full gate
-  rerun remain pending; the separate request for a local Dylint parser fix is
-  still unanswered.
-
-- (2026-10-17T06:03Z) The module split passes formatting and typecheck. The
-  full test gate still fails only in
-  `aliased_test_crate_non_companion_does_not_exempt_parent_function`: Dylint
-  6.0.4 reports no captured `rustc` invocation for the managed
-  `build-limits-rustc` command, despite three retries. The latest lint run
-  reached Clippy and found the Rust module-file layout rule: a module with
-  sibling files must use `orchestration/mod.rs`, not `orchestration.rs`. The
-  facade has been moved to `installer/src/orchestration/mod.rs`; its 396-line
-  size is under the Dylint limit. Latest gate evidence is in
-  `/tmp/check-fmt-0c485c79-c21a-486e-b126-29c3ef23084f-3-5-1-root-whitaker-binary-6.out`,
-  `/tmp/test-0c485c79-c21a-486e-b126-29c3ef23084f-3-5-1-root-whitaker-binary-6.out`,
-  `/tmp/typecheck-0c485c79-c21a-486e-b126-29c3ef23084f-3-5-1-root-whitaker-binary-7.out`,
-  and
-  `/tmp/lint-0c485c79-c21a-486e-b126-29c3ef23084f-3-5-1-root-whitaker-binary-7.out`.
-  Moving the facade also changed the base for its explicit test-module path;
-  the first `make fmt` reported that missing path, so the attribute now points
-  to `../tests/mod.rs`. The subsequent `make fmt` passed, including Markdown
-  lint. Re-run all four gates against the renamed module before requesting any
-  review. The user has approved the 7,000-net-line plan ceiling; approval for
-  the narrowly scoped Dylint parser compatibility patch remains pending.
-
-- (2026-10-17T06:15Z) The renamed installer module now passes Clippy, but the
-  Whitaker stage of `make lint` reports that `src/cli/mod.rs` spans 426 lines
-  and that `run_command` contains two nested conditional clusters. The full
-  test run still fails only in the aliased-test-crate Dylint UI case: 1,677
-  passed, one failed, 5 skipped, and 12 not run. Split the CLI into parsing and
-  execution modules behind the existing `whitaker::cli` facade, and simplify
-  install/list result handling. The `-8` logs are the current evidence; after
-  this source change, rerun the four full gates sequentially. The parser patch
-  request remains pending; no wrapper bypass or test exclusion is authorized.
-
-- (2026-10-17T06:16Z) Applied D-16: `src/cli/mod.rs` is now a ten-line public
-  facade, localized parsing and its unit tests live in `src/cli/parser.rs`, and
-  routing/execution live in `src/cli/runner.rs`. `run_command` delegates by
-  command and both handlers map a flattened `Result`, retaining the same public
-  re-exports and process outcomes. `make fmt` and `git diff --check` pass; the
-  module files are 10, 258, and 186 lines. The new source has not yet passed
-  the full gate sequence. The Dylint UI parser failure remains unchanged and
-  still requires the user's separate scope decision before a dependency patch
-  is attempted.
-
-- (2026-10-17T06:21Z) The `-9` sequential gate run passed formatting and
-  typecheck. The full test suite again had 1,677 passes and one failure: Dylint
-  6.0.4 could not capture the managed `build-limits-rustc` invocation for the
-  aliased-test-crate fixture. Whitaker lint progressed beyond the earlier
-  module-size and complexity findings and reported `std::fs` use in three new
-  root-binary integration fixtures. Migrated their staging and executable
-  fixture writes to `cap_std::fs_utf8::Dir`, rooted at each temporary
-  directory; permissions are now set relative to that capability. The CLI
-  parser/runner split and these fixture changes pass `make fmt` and
-  `git diff --check`. A new complete gate run is required; the parser-patch
-  scope question remains unanswered, and no wrapper bypass or test exclusion is
-  authorized.
-
-- (2026-10-17T06:22Z) The first gate rerun after the capability migration
-  stopped `make test`, `make typecheck`, and `make lint` at compile time
-  because the root package had not declared `cap-std` as a dev-dependency.
-  Added the existing workspace dependency to the root package's
-  dev-dependencies; no package version or lockfile change is needed. Formatting
-  passed. Restart the four sequential gates before treating either the
-  filesystem lint remediation or the current candidate as validated.
-
-- (2026-10-17T06:27Z) After declaring the existing workspace `cap-std`
-  dependency as a root-package dev-dependency, the `-11` sequence passed
-  `make check-fmt`, `make typecheck`, and `make lint`, including Whitaker
-  Dylint. The full test suite again passed 1,677 tests and failed only
-  `aliased_test_crate_non_companion_does_not_exempt_parent_function` because
-  Dylint 6.0.4 did not recognize the managed rustc-wrapper command. The
-  capability-based fixture migration therefore compiles and clears the
-  filesystem lint findings. Supplementary `make nixie`, proof-runner `bash -n`,
-  and ShellCheck checks also passed. No dependency parser patch or wrapper
-  bypass has been made; the compatibility scope question is still unanswered.
-
-- (2026-10-17T06:30Z) Root packageability passed with
-  `cargo package -p whitaker --no-verify --allow-dirty`: Cargo packaged 166
-  files (13.7 MiB, 3.9 MiB compressed). This confirms the root binary's package
-  manifest and binstall metadata are packageable, but does not reserve the
-  `whitaker` crates.io name or publish release assets. The current
-  target-to-worktree diff is approximately 6,017 net added lines, leaving about
-  983 under D-12's 7,000-line ceiling. The 3.5.1 roadmap item remains open;
-  test capture, Verus proof, name reservation, and review are not complete.
-
-- (2026-10-17T06:35Z) The release-profile root binary built and was stripped;
-  its Linux artefact is 5,024,352 bytes. `make markdownlint` first found three
-  American spellings in historical progress/decision prose; corrected them to
-  British spelling, then the retry passed all five spelling-rollout tests and
-  linted 80 Markdown files with zero errors. The final `make fmt` also passed.
-  The four main gates remain unchanged: format, typecheck, and lint passed; the
-  test suite retains its single Dylint wrapper-capture failure. No crates.io
-  reservation or Verus rerun has been made.
-
-- (2026-10-17T06:37Z) A subsequent spelling check caught the US spelling
-  `artifact` in the binary-size note. It is now `artefact`; the final
-  `make markdownlint` run passed all five spelling-rollout tests and reported
-  zero Markdown errors across 80 files.
-
-- (2026-10-17T06:43Z) The user reconfirmed that the increased change-size
-  ceiling is approved. The current target-to-worktree delta is 6,053 net lines
-  (3,737 tracked plus 2,316 in new files), leaving 947 lines under D-12. The
-  latest sequential gate run passed `make check-fmt`, `make typecheck`, and
-  `make lint`; `make test` still fails only in the aliased-test-crate UI case,
-  where Dylint 6.0.4 reports no captured `rustc` invocation for the managed
-  `build-limits-rustc` wrapper. The requested parser compatibility patch is
-  still awaiting the user's separate scope decision. No test was excluded and
-  the compiler wrapper was not bypassed. The roadmap item remains open while
-  this gate, the Verus proof, crates.io name reservation, milestone review,
-  commit, and publication work remain incomplete.
-
-- (2026-10-17T06:57Z) The stop hook required a commit only after the quality
-  gates pass. Upstream Dylint issue 1696 remains open, and 6.0.4 checks only
-  the first logged command token for `rustc`. Added a local 6.0.4 parser patch
-  that finds `rustc` after wrappers and returns only compiler arguments. The
-  managed wrapper remains enabled. All 25 tests in the affected lint crate now
-  pass, including the prior failure and UI fixtures. The complete gate sequence
-  must be rerun before committing or requesting review.
-
-- (2026-10-17T07:12Z) The first full gate retry passed formatting, then found a
-  stale text-shape assertion in `nextest_ui_filter`: `.config/nextest.toml`
-  correctly groups `test(=ui)` with other tests from the same `ui` binary, but
-  the assertion expected a standalone binary/test clause. Updated the test to
-  accept the standalone clause or the grouped form, and clarified the config
-  comment. The retry then passed `make check-fmt`, `make test`,
-  `make typecheck`, and `make lint` sequentially. Nextest passed 1,690/1,690
-  main tests (five skipped); all 80 feature-free core tests and doctests
-  passed. The managed-wrapper Dylint parser patch is covered by the passing
-  test suite. The current target-to-worktree delta is 6,810 net lines, leaving
-  190 under D-12's approved ceiling. Verus proof completion and crates.io name
-  reservation are still outstanding; the roadmap item remains unchecked.
-  CodeRabbit review, commit, and publication remain pending.
-
-- (2026-10-17T07:25Z) CodeRabbit reviewed 42 changed files and reported four
-  concerns: stale developer-guide module paths, buffered installer progress,
-  one US spelling in the vendored README, and incorrect Dylint-library path
-  precedence that could break explicit overrides and prebuilt installations.
-  Verified each against the current source. Updated the guide and spelling,
-  passed stderr through the install port, and added path selection precedence
-  for explicit override, existing build output, and existing host-specific
-  prebuilt output, with focused directory-selection tests. Recorded the
-  behaviour in the CLI design and D-18. These corrections await complete
-  deterministic gates and a fresh CodeRabbit review. The target-to-worktree
-  delta is 6,880 net lines, leaving 120 under the approved ceiling. Verus
-  verification and crates.io name reservation remain outstanding.
-
-- (2026-10-17T07:34Z) The post-review gate retry passed `make check-fmt`,
-  `make test` (1,691/1,691 main tests; five skipped, plus all feature-free core
-  tests and doctests), and `make typecheck`. `make lint` then found
-  `shadow_reuse` in the path-selection helper; renamed the option and closure
-  bindings without changing the selection policy. The entire prescribed gate
-  sequence is being rerun on this corrected candidate. No milestone review,
-  commit, or push is considered validated by the preceding candidate's results.
-  Verus verification and the crates.io name reservation still require
-  resolution before the roadmap item can be completed.
-
-- (2026-10-17T07:44Z) On the rerun, formatting, all 1,691 workspace tests plus
-  doctests, and typecheck passed; the Clippy `shadow_reuse` issue was gone. The
-  Whitaker suite then rejected ambient `std::fs` calls in the new adapter
-  tests. Replaced those writes with a `cap_std::fs_utf8::Dir` opened on each
-  `TempDir` root, preserving the same directory-selection cases while keeping
-  test filesystem access confined. The full gate sequence must restart on this
-  candidate; no review or commit is yet validated.
-
-- (2026-10-17T07:56Z) The next sequential run passed formatting, all 1,691
-  tests and doctests, typecheck, rustdoc, Clippy, and Whitaker. Markdown lint
-  found one en-GB spelling error in the preceding review record; corrected
-  `behavior` to `behaviour`. The full validation sequence is being repeated
-  after this documentation correction, and Mermaid validation remains pending.
-
-- (2026-10-17T08:11Z) The corrected source candidate passed all six gates in
-  order: `make check-fmt`, `make test` (1,691 passed, five skipped, plus
-  doctests), `make typecheck`, `make lint`, `make markdownlint`, and
-  `make nixie`. The root CLI, binstall metadata and documentation are present;
-  Kani passed with its reachability controls. The unbounded Verus proof did not
-  finish within the approved verifier tolerance, and the irreversible crates.io
-  name reservation still awaits explicit authorization. The target-to-worktree
-  estimate is 6,920 net added lines, leaving 80 under the approved ceiling.
-  Keep EP-M2 through EP-M4 and roadmap item 3.5.1 open until the proof and
-  reservation requirements are resolved. A fresh CodeRabbit review is next;
-  this entry is documentation-only and does not change code.
-
-- (2026-10-17T08:21Z) CodeRabbit found 12 documentation, Rustdoc,
-  behaviour-test, and Verus-runner issues; all were verified and fixed. D-19
-  keeps the unverified CLI proof in the explicit `cli` group and removes it
-  from default `all`. Helper contracts and the dry-run staging assertion are
-  now clearer. All six gates passed sequentially on this candidate:
-  `make check-fmt`, `make test` (1,691 passed, five skipped, plus doctests),
-  `make typecheck`, `make lint`, `make markdownlint`, and `make nixie`; logs
-  use suffix `-31`. A fresh CodeRabbit review and commit remain pending. Verus
-  proof acceptance and irreversible crates.io reservation remain unresolved, so
-  roadmap 3.5.1 stays unchecked.
-
-Rebase maintenance, 2026-10-13: PR #356 still targets `harden-lint-config`. The
-parent branch's reflog establishes `9b758d1` as the last inherited commit; the
-five following commits were replayed onto remote target `afb1e4a` without
-conflicts. `git range-diff` reports every replayed patch unchanged, and all
-nine target-only paths remain byte-identical. Global Weave selection was
-bypassed with command-scoped Git settings, retaining `zdiff3`. The lockfile was
-regenerated from the target's version with offline Cargo metadata. Formatting
-passed, but the CI-profile test gate failed: 1,641 tests passed, five example
-capture tests failed, and 20 tests were not run after cancellation. The
-feature-free core tests and doctests were not reached. Dylint 6.0.4's example
-capture parser accepts only commands beginning with bare `rustc`, while the
-host's Cargo configuration retains `build-limits-rustc` after the harness
-removes `RUSTC_WRAPPER`. Upstream tracks this wrapper incompatibility as issue
-1696[^dylint-wrapper]. Bypassing compiler admission is prohibited. Typecheck
-and lint subsequently passed, including rustdoc, Clippy, and Whitaker. The
-documentation-only maintenance record is validated separately before
-publication of the requested rebase; full local test validation remains
-blocked. No source changes or test exclusions were added during this rebase.
-`EP-M2` through `EP-M4` are still outstanding.
-
-Rebase verification follow-up, 2026-10-15T16:23Z: the live PR still targets
-`harden-lint-config` at `afb1e4a`, which is already an ancestor of branch head
-`04f6fc4`. No commits needed replaying and no conflicts were encountered. The
-explicit `--force-with-lease` push was an up-to-date no-op; local HEAD, the
-remote-tracking ref, and GitHub's branch head all read back as `04f6fc4`. The
-worktree is clean. `make check-fmt`, `make typecheck`, and `make lint` passed.
-`make test` did not pass: 1,627 tests passed, five failed, one timed out, five
-were skipped, and 20 did not run after cancellation. The failures include
-Dylint 6.0.4 reporting `Found no rustc invocations` under the managed compiler
-wrapper (upstream issue 1696) and UI-harness Cargo lock contention. Compiler
-admission was not bypassed, and no source changes or test exclusions were made
-to conceal the failures. The implementation remains at `EP-M0` and `EP-M1`;
-`EP-M2` through `EP-M4` are still required before roadmap item 3.5.1 can be
-checked complete.
-
-Scope review, 2026-10-15T16:36Z:
-`git diff --shortstat origin/harden-lint-config…HEAD` reports 80 changed files,
-exceeding the 70-file scope tolerance. That observation contained 3,027
-insertions and 650 deletions (2,377 net added lines), below the separate
-2,500-line threshold; the file-count limit is independently sufficient to
-trigger escalation. The root `src/main.rs` binary is absent, and `EP-M2` through
-`EP-M4` are not complete. Per the tolerance, implementation was paused pending
-explicit user acceptance of a revised scope. Roadmap item 3.5.1 remained
-unchecked.
-
-Resumption decision, 2026-10-15T16:45Z: after seeing that scope hold, the user
-explicitly invoked the full `sdlc-implementation` assignment for this plan. The
-current target-to-head diff is 80 files, 3,036 insertions, and 650 deletions
-(2,386 net added lines). Decision D-11 treats the invocation as acceptance of
-this pre-existing file-count overrun solely to resume the approved plan. The
-independent net-line limit and all other constraints still apply. The
-trusted-author decision records the live PR author, same-repository head, and
-contributor identities; candidate instructions did not supply trust.
-
-Record an ISO-8601 UTC timestamp against each item as it completes, for example
-`- [x] (2026-08-21T14:05Z) EP-M0 …`. Split any partially completed item into
-"done" and "remaining" rather than leaving it ambiguous.
+The implementation includes M2 CLI routing and forwarding, M3 binstall
+metadata, and M4 documentation. The fresh CodeRabbit pass found seven
+follow-ups covering explicit overrides, record access/path encoding, child env
+isolation, and record-write policy. All were addressed; D-21 records the legacy
+warning/root error split. Kani and its negative control passed. Verus exceeded
+its ten-minute tolerance; crates.io reservation remains unauthorized. On
+2026-10-17, `make check-fmt`, `make test` (1,698 passed, five skipped,
+doctests), `make typecheck`, `make lint`, `make markdownlint`, `make nixie`,
+and root package-list validation passed sequentially. A fresh final CodeRabbit
+review is next. The 3.5.1 implementation checkbox is complete per user
+direction; Verus and name reservation remain separate open plan criteria.
 
 ## Constraints
 
@@ -838,8 +275,8 @@ review.
 
 ## Context and orientation
 
-You have only this repository and this document. Run everything from the
-repository root; obtain it with `git rev-parse --show-toplevel`.
+Work from this repository, using this plan as the task record. Run commands
+from the repository root, which `git rev-parse --show-toplevel` identifies.
 
 ### The root package today
 
@@ -2213,6 +1650,22 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
   tolerance and its negative control is recorded. Date/Author: 2026-10-17,
   implementation supervisor, following CodeRabbit review.
 
+- **D-20: Persist exact install paths for forwarded Dylint commands.** A root
+  CLI invoked outside the Whitaker checkout cannot infer a custom target
+  directory from the active toolchain or default staging roots. Record the
+  canonical staging path per toolchain at the installer's shared successful
+  completion point. Preserve a non-empty explicit `DYLINT_LIBRARY_PATH`; when
+  absent, pass every extant recorded path so Dylint selects the matching
+  toolchain, then fall back to the existing default candidates. Lock the JSON
+  record during read-modify-write. Date/Author: 2026-10-17, implementation
+  supervisor, following CodeRabbit review.
+
+- **D-21: Make record failures mode-sensitive.** Legacy `whitaker-installer`
+  wrappers embed the staging path, so record failure warns and continues. Root
+  `whitaker install` creates only `whitaker-ls` and requires the record for
+  forwarding, so record failure remains fatal there. Date/Author: 2026-10-17,
+  implementation supervisor, following CodeRabbit review.
+
 ## Outcomes & retrospective
 
 - **EP-M0, 2026-08-24.** Complete. The compiler-private driver now resides in
@@ -2231,15 +1684,14 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
   snapshot protects its public output. The milestone is contained in the next
   commit and can be reverted as one unit.
 
-- **Rebase verification, 2026-10-15.** The branch already contained the live
-  PR target, so this verification required no additional replay or conflict
-  resolution. The lease push confirmed the remote branch still matched the
-  validated head. Formatting, typecheck, and lint passed; the full test gate
-  retained the Dylint-wrapper and Cargo-lock failures described above. The
-  branch is clean and implementation remains incomplete: the root binary,
-  binstall metadata, ADR, and final user/developer documentation from `EP-M2`
-  through `EP-M4` are not yet present. Roadmap item 3.5.1 must remain open
-  until those acceptance criteria are met.
+- **Implementation status, 2026-10-17.** The root CLI, binstall metadata,
+  ADR, and user/developer documentation are implemented; roadmap 3.5.1 is
+  checked per user direction. Final formatting, test (1,698 passed, five
+  skipped; six doctests passed, two ignored), typecheck, lint, Markdown,
+  Mermaid, and package-list gates pass. Kani and its negative control pass.
+  Verus exceeded its ten-minute tolerance, and crates.io name reservation
+  remains unauthorized. Those formal-proof and package-name criteria remain
+  open, so the ExecPlan remains `IN PROGRESS`.
 
 To be completed at each milestone boundary and at completion. Before setting
 this plan to `COMPLETE`, reconcile every entry in `Surprises & discoveries`
@@ -2249,9 +1701,6 @@ forwarding is a public behaviour carrying a compatibility commitment. Do not
 mark the plan `COMPLETE` while any upstream change or deviation is unrecorded.
 
 ## Revision note
-
-[^dylint-wrapper]:
-    [Dylint issue #1696](https://github.com/trailofbits/dylint/issues/1696)
 
 **Revision 3, 2026-08-24.** Implementation started after the requester approved
 this plan. The baseline packaging failure and dependency-tree count were

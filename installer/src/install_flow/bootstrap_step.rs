@@ -24,7 +24,6 @@ use crate::error::{InstallerError, Result};
 use crate::output::{ShellSnippet, write_stderr_line};
 #[cfg(debug_assertions)]
 use crate::test_support::TEST_CLIPPY_SNAPSHOT_MANIFEST_ENV;
-use crate::wrapper::{generate_wrapper_scripts, path_instructions};
 
 /// The snapshot generation this installation provisioned.
 #[derive(Debug, Clone)]
@@ -197,39 +196,6 @@ pub(crate) fn write_shell_snippet(
             "these variables, let one cargo dylint run finish before starting others.",
         ),
     );
-}
-
-/// Generate the wrapper scripts and report how to run them.
-///
-/// # Errors
-///
-/// Returns [`InstallerError::WrapperGeneration`] when a script cannot be
-/// written, and [`InstallerError::StagingFailed`] when its path has no parent.
-pub(crate) fn write_wrappers(dirs: &dyn BaseDirs, stderr: &mut dyn Write) -> Result<()> {
-    let result = generate_wrapper_scripts(dirs)?;
-    write_stderr_line(stderr, "");
-    write_stderr_line(stderr, "Wrapper scripts created:");
-    write_stderr_line(stderr, format!("  - {}", result.whitaker_path.display()));
-    write_stderr_line(stderr, format!("  - {}", result.whitaker_ls_path.display()));
-    write_stderr_line(stderr, "");
-
-    if result.in_path {
-        write_stderr_line(stderr, "You can now run:");
-    } else {
-        let bin_dir =
-            result
-                .whitaker_path
-                .parent()
-                .ok_or_else(|| InstallerError::StagingFailed {
-                    reason: "wrapper script path has no parent directory".to_owned(),
-                })?;
-        write_stderr_line(stderr, path_instructions(bin_dir));
-        write_stderr_line(stderr, "");
-        write_stderr_line(stderr, "Then run:");
-    }
-    write_stderr_line(stderr, "  whitaker --all");
-    write_stderr_line(stderr, "  whitaker-ls");
-    Ok(())
 }
 
 #[cfg(test)]

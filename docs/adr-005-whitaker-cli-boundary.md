@@ -112,6 +112,15 @@ propagate into the cross-compiled lint crates. This boundary also makes the
 future `whitaker check` lazy-repair decision belong to the CLI, while the
 installer remains responsible for executing a requested repair.
 
+The installer records one canonical staging directory per toolchain in
+`<whitaker_data>/installed_lint_paths.json` after a successful installation.
+The root CLI supplies all extant recorded paths to Dylint when forwarding a
+legacy invocation, preserving custom `--target-dir` installs and allowing
+Dylint to choose the matching toolchain. A non-empty user-provided
+`DYLINT_LIBRARY_PATH` remains authoritative. The installer owns this record's
+format and updates it at the common completion point for source builds,
+prebuilt downloads, and staged-suite installs.
+
 The root package carries cargo-binstall metadata. Publishing the crate reserves
 the name `whitaker`, but GitHub release archives for that executable are not
 published until roadmap item 3.5.3. Until those archives exist,
