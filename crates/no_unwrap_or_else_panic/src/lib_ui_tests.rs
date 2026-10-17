@@ -7,9 +7,7 @@ use dylint_testing::ui::Test;
 #[cfg(not(windows))]
 use rstest::rstest;
 #[cfg(not(windows))]
-use temp_env::with_vars_unset;
-#[cfg(not(windows))]
-use whitaker_common::test_support::run_test_runner_with_env_guard;
+use whitaker::testing::ui::stage_example;
 use whitaker_common::test_support::{prepare_fixture, run_fixtures_with, run_test_runner};
 
 /// Describes a single example-based regression to run under the test harness.
@@ -19,7 +17,7 @@ use whitaker_common::test_support::{prepare_fixture, run_fixtures_with, run_test
 /// passed to `dylint_testing`.
 #[cfg(not(windows))]
 struct ExampleHarnessRun<'a> {
-    /// Example target name passed to `Test::example`.
+    /// Example target name passed to `stage_example`.
     name: &'a str,
     /// Human-readable label used when a regression runner fails.
     label: &'a str,
@@ -60,16 +58,13 @@ fn ui() { whitaker::testing::ui::run_ui_test(env!("CARGO_PKG_NAME"), "ui", run_f
 fn run_example_under_test_harness(spec: &ExampleHarnessRun<'_>) {
     let crate_name = env!("CARGO_PKG_NAME");
     let directory = "examples";
-    whitaker::testing::ui::run_with_runner(crate_name, directory, |crate_name, _| {
-        run_test_runner_with_env_guard(spec.name, || {
-            with_vars_unset(
-                ["SCCACHE_GHA_ENABLED", "SCCACHE_PATH", "SCCACHE_ERROR_LOG"],
-                || {
-                    let mut test = Test::example(crate_name, spec.name);
-                    test.rustc_flags(spec.rustc_flags);
-                    test.run();
-                },
-            );
+    whitaker::testing::ui::run_with_runner(crate_name, directory, |_, _| {
+        let staged = stage_example(crate_name, spec.name).map_err(|error| error.to_string())?;
+        run_test_runner(spec.name, || {
+            let mut test = Test::src_base(crate_name, staged.directory());
+            test.rustc_flags(staged.linking_flags())
+                .rustc_flags(spec.rustc_flags);
+            test.run();
         })
     })
     .unwrap_or_else(|error| {

@@ -119,6 +119,9 @@ fn run_ui_test_panics_with_context_from_runner_failure() {
     assert!(message.contains("known runner failure"));
 }
 
+
+// A configured wrapper caches or admits compilations, so the runner must not
+// strip it. Example staging tolerates wrappers instead.
 #[test]
 fn runner_env_guard_preserves_rustc_wrapper() {
     let _serial_guard = runner_env_guard_test_lock();
@@ -195,6 +198,8 @@ fn overlapping_runner_guards_keep_the_flag_until_the_last_drops() {
     });
 }
 
+
+
 #[cfg(windows)]
 #[test]
 fn windows_env_guard_leaves_absent_rustc_wrapper_untouched() {
@@ -211,6 +216,19 @@ fn windows_env_guard_leaves_absent_rustc_wrapper_untouched() {
             assert_eq!(env::var_os("RUSTC_WRAPPER"), None);
         });
     });
+}
+
+#[test]
+fn example_staging_failures_name_the_example() {
+    let error = HarnessError::ExampleStagingFailed {
+        example: String::from("pass_demo"),
+        message: String::from("found no `rustc` invocation for `pass_demo`"),
+    };
+
+    assert_eq!(
+        error.to_string(),
+        "failed to stage example pass_demo: found no `rustc` invocation for `pass_demo`",
+    );
 }
 
 #[test]
@@ -237,9 +255,11 @@ fn runner_env_guard_test_lock_releases_after_panic() {
         .expect("second environment-lock test thread should complete");
 }
 
+
 /// Acquires the production environment protocol for assertions spanning a callback.
 fn runner_env_guard_test_lock() -> EnvTestGuard {
     // These tests inspect process-global environment state after callbacks,
     // so their whole bodies must run serially rather than only each mutation.
     env_test_guard()
 }
+// weave: run 'weave explain src/testing/ui/tests.rs' for per-hunk detail, 'weave check' to verify your resolution
