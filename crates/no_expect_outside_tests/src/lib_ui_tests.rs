@@ -9,7 +9,8 @@ use std::{
 use camino::Utf8Path;
 use dylint_testing::ui::Test;
 use rstest::rstest;
-use whitaker_common::test_support::{env_test_guard, prepare_fixture, run_test_runner};
+use whitaker::testing::ui::stage_example;
+use whitaker_common::test_support::{prepare_fixture, run_test_runner};
 
 /// Describes a single example-based regression to run under the test harness.
 ///
@@ -17,7 +18,7 @@ use whitaker_common::test_support::{env_test_guard, prepare_fixture, run_test_ru
 /// used in panic messages, and `rustc_flags` supplies the extra harness flags
 /// passed to `dylint_testing`.
 struct ExampleHarnessRun<'a> {
-    /// Example target name passed to `Test::example`.
+    /// Example target name passed to `stage_example`.
     name: &'a str,
     /// Human-readable label used when a regression runner fails.
     label: &'a str,
@@ -84,10 +85,11 @@ fn run_example_under_test_harness(spec: &ExampleHarnessRun<'_>) {
     let crate_name = env!("CARGO_PKG_NAME");
     let directory = "examples";
     whitaker::testing::ui::run_with_runner(crate_name, directory, |_, _| {
+        let staged = stage_example(crate_name, spec.name).map_err(|error| error.to_string())?;
         run_test_runner(spec.name, || {
-            let _guard = env_test_guard();
-            let mut test = Test::example(crate_name, spec.name);
-            test.rustc_flags(spec.rustc_flags);
+            let mut test = Test::src_base(crate_name, staged.directory());
+            test.rustc_flags(staged.linking_flags())
+                .rustc_flags(spec.rustc_flags);
             test.run();
         })
     })
@@ -117,13 +119,17 @@ fn run_fixture_under_test_harness(
     let harness_flag_refs: Vec<_> = harness_flags.iter().map(String::as_str).collect();
 
     run_test_runner(spec.fixture_name, || {
-        let _guard = env_test_guard();
-        let mut test = Test::src_base(spec.crate_name, env.workdir());
         if let Some(config) = env.take_config() {
             test.dylint_toml(config);
         }
         test.rustc_flags(harness_flag_refs.as_slice());
         test.run();
+        if let Some(config) = env.take_config() {
+            test.dylint_toml(config);
+        }
+        test.rustc_flags(harness_flag_refs.as_slice());
+        test.run();
+        let mut test = Test::src_base(spec.crate_name, env.workdir());
     })
 }
 
@@ -375,3 +381,4 @@ fn tokio_expect_outside_tests_still_fails_in_non_test_code() {
 #[cfg(test)]
 #[path = "dependency_rlib_tests.rs"]
 mod dependency_rlib_tests;
+// weave: run 'weave explain crates/no_expect_outside_tests/src/lib_ui_tests.rs' for per-hunk detail, 'weave check' to verify your resolution

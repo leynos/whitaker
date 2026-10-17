@@ -247,8 +247,8 @@ runner in `src/lib_ui_tests.rs`.
 The harness splits cases into two shapes:
 
 - Example-based runs use `ExampleHarnessRun` plus
-  `dylint_testing::ui::Test::example` when a single example target is enough
-  and no extra fixture assets are needed.
+  `whitaker::testing::ui::stage_example` and `Test::src_base` when a single
+  example target is enough and no extra fixture assets are needed.
 - Fixture-based runs use `FixtureHarnessRun`, `prepare_fixture`, and
   `Test::src_base` when the case needs copied support files, a per-fixture
   `dylint.toml`, or additional `--extern` wiring.
@@ -3642,6 +3642,42 @@ the guard also sets `VCPKG_ROOT` to `C:\vcpkg` when that directory exists and
 the variable is otherwise absent. Restoration uses the same shared environment
 mutex, but the runner callback itself executes without holding that mutex to
 avoid nested-lock deadlocks.
+
+Example targets are staged with
+[`stage_example`](#example-target-staging), which tolerates a wrapper, rather
+than with `dylint_testing::ui::Test::example`, which does not.
+
+#### Example-target staging
+
+Do not call `dylint_testing::ui::Test::example`. It recovers an example's
+`--extern`, `-L`, and `--edition` flags by rebuilding the example with
+`cargo build --verbose` and keeping the `Running` line whose *first* word is
+`rustc`. Any configured `rustc` wrapper takes that position instead —
+`sccache` in CI, or a compile-admission wrapper on a shared development host —
+and every example test then fails with "Found no `rustc` invocations".
+
+Clearing `RUSTC_WRAPPER` does not fix this. A wrapper set through
+`build.rustc-wrapper` in Cargo configuration survives environment clearing,
+and removing a wrapper would bypass the caching or admission control it
+exists to provide.
+
+Use `whitaker::testing::ui::stage_example(crate_name, example)` instead. It
+performs the same rebuild, skips any wrapper chain or environment assignments
+before the compiler, and copies the example source with its `.stderr`,
+`.stdout`, and `.fixed` expectation files into a temporary directory. Pass the
+result to `Test::src_base`, which is what `Test::example` does internally:
+
+```rust
+let staged = stage_example(crate_name, "pass_in_test_harness")?;
+let mut test = Test::src_base(crate_name, staged.directory());
+test.rustc_flags(staged.linking_flags()).rustc_flags(["--test"]);
+test.run();
+```
+
+`stage_example` is the single owner of example-flag recovery. Lint crates'
+UI harnesses may call it; they must not parse Cargo output themselves. Keep
+the returned `StagedExample` alive until the test has run, because dropping it
+deletes the staging directory.
 
 Any UI test that holds `env_test_guard()` while invoking Dylint must use
 `run_test_runner_with_env_guard()`. It catches a runner panic before releasing
