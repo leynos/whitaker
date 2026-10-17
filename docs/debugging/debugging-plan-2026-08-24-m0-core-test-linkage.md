@@ -1,12 +1,11 @@
 # Debugging Plan: M0 core integration-test linkage
 
-**Generated**: 2026-08-24
-**Issue ID**: EP-M0 gate failure
-**Severity**: medium
-**Falsification sub-agent**: alchemist
-**Planning agent boundary**: This document was prepared by the planning agent.
-Falsification must be executed by the named sub-agent, not by the planning
-agent.
+- **Generated**: 2026-08-24
+- **Issue ID**: EP-M0 gate failure
+- **Severity**: medium
+- **Falsification sub-agent**: alchemist
+- **Planning agent boundary**: The planning agent prepared this document. The
+  named sub-agent, not the planning agent, must execute falsification.
 
 ## Problem Statement
 
@@ -17,12 +16,12 @@ preserve that coverage without suppressing a lint or weakening the gate.
 
 ## Context Summary
 
-| Aspect | Details |
-| --- | --- |
-| First observed | 2026-08-24, first M0 full gate run |
-| Reproduction rate | deterministic under workspace `--all-features` |
-| Affected components | core test target and Dylint driver feature |
-| Recent changes | root driver library moved to `crates/whitaker_lint_core` |
+| Aspect              | Details                                                  |
+| ------------------- | -------------------------------------------------------- |
+| First observed      | 2026-08-24, first M0 full gate run                       |
+| Reproduction rate   | deterministic under workspace `--all-features`           |
+| Affected components | core test target and Dylint driver feature               |
+| Recent changes      | root driver library moved to `crates/whitaker_lint_core` |
 
 ### Error Artefacts
 
@@ -47,10 +46,10 @@ link failure when it is enabled directly.
 
 #### H1 Falsification Plan
 
-| Step | Action | Expected Negative Result |
-| --- | --- | --- |
-| 1 | Run `cargo test -p whitaker_lint_core --test lint_template --no-default-features --no-run`. | A link failure disproves H1. |
-| 2 | Run the same command with `--features dylint-driver`. | Success disproves H1. |
+| Step | Action                                                                                      | Expected Negative Result     |
+| ---- | ------------------------------------------------------------------------------------------- | ---------------------------- |
+| 1    | Run `cargo test -p whitaker_lint_core --test lint_template --no-default-features --no-run`. | A link failure disproves H1. |
+| 2    | Run the same command with `--features dylint-driver`.                                       | Success disproves H1.        |
 
 **Tooling**: Cargo only; do not edit tracked files or run a repository gate.
 

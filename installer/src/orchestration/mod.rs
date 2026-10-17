@@ -8,6 +8,12 @@ use std::{io::Write, time::Instant};
 
 use camino::{Utf8Path, Utf8PathBuf};
 
+mod dry_run;
+mod exit;
+
+use dry_run::run_dry;
+pub use exit::exit_code_for_run_result;
+
 #[cfg(test)]
 use crate::install_flow::ensure_dylint_tools_with_options;
 use crate::{
@@ -19,23 +25,34 @@ use crate::{
     install_flow::{
         MetricsWriteContext,
         PrebuiltInstallationContext,
-        detect_host_target,
         ensure_dylint_tools_with_executor,
         try_prebuilt_installation,
         write_install_metrics,
     },
     install_metrics::InstallMode,
     list::{determine_target_dir, run_list},
-    output::{DryRunInfo, DryRunSkips, ShellSnippet, write_stderr_line},
+    output::{ShellSnippet, write_stderr_line},
     pipeline::{PipelineContext, perform_build, stage_libraries},
-    prebuilt_path::prebuilt_library_dir,
     resolution::{CrateResolutionOptions, resolve_crates, validate_crate_names},
     staged_suite,
     toolchain::Toolchain,
-    wrapper::{generate_wrapper_scripts, path_instructions},
+    wrapper::{WrapperScripts, generate_wrapper_scripts_with, path_instructions},
 };
 
 /// Routes CLI commands to their respective handlers.
+///
+/// # Examples
+///
+/// ```no_run
+/// use std::io;
+///
+/// use clap::Parser as _;
+/// use whitaker_installer::{cli::Cli, orchestration::run};
+///
+/// let cli = Cli::try_parse_from(["whitaker-installer", "--dry-run"])?;
+/// run(&cli, &mut io::sink(), &mut io::sink())?;
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 ///
 /// # Errors
 ///
@@ -43,9 +60,35 @@ use crate::{
 pub fn run(cli: &Cli, stdout: &mut dyn Write, stderr: &mut dyn Write) -> Result<()> {
     match &cli.command {
         Some(Command::List(args)) => run_list(args, stdout),
-        Some(Command::Install(args)) => run_install(args, stderr),
-        None => run_install(cli.install_args(), stderr),
+        Some(Command::Install(args)) => run_install(args, stderr, WrapperScripts::Both),
+        None => run_install(cli.install_args(), stderr, WrapperScripts::Both),
     }
+}
+
+/// Runs a root-CLI install without replacing its `whitaker` executable.
+///
+/// The legacy installer continues to use [`run`] and creates both scripts.
+/// The root binary creates only `whitaker-ls`, preserving the executable name
+/// that the user invoked.
+///
+/// # Examples
+///
+/// ```no_run
+/// use std::io;
+///
+/// use whitaker_installer::{cli::InstallArgs, orchestration::run_install_for_whitaker};
+///
+/// let arguments = InstallArgs::default();
+/// let mut diagnostics = io::stderr();
+/// run_install_for_whitaker(&arguments, &mut diagnostics)?;
+/// # Ok::<(), whitaker_installer::error::InstallerError>(())
+/// ```
+///
+/// # Errors
+///
+/// Returns an error when the selected installation operation cannot complete.
+pub fn run_install_for_whitaker(args: &InstallArgs, stderr: &mut dyn Write) -> Result<()> {
+    run_install(args, stderr, WrapperScripts::WhitakerLsOnly)
 }
 
 /// Returns the set of additional rustup components requested by the CLI flags.
@@ -93,7 +136,11 @@ fn try_fast_path_installation(
 /// # Errors
 ///
 /// Returns an error if any step fails.
-fn run_install(args: &InstallArgs, stderr: &mut dyn Write) -> Result<()> {
+fn run_install(
+    args: &InstallArgs,
+    stderr: &mut dyn Write,
+    wrapper_scripts: WrapperScripts,
+) -> Result<()> {
     let dirs = SystemBaseDirs::new().ok_or_else(|| InstallerError::WorkspaceNotFound {
         reason: "could not determine platform directories".to_owned(),
     })?;
@@ -132,6 +179,7 @@ fn run_install(args: &InstallArgs, stderr: &mut dyn Write) -> Result<()> {
             args,
             dirs: &dirs,
             staging_path: &staging_path,
+            wrapper_scripts,
             install_mode,
             install_started,
         };
@@ -154,53 +202,11 @@ fn run_install(args: &InstallArgs, stderr: &mut dyn Write) -> Result<()> {
         args,
         dirs: &dirs,
         staging_path: &staging_path,
+        wrapper_scripts,
         install_mode: InstallMode::Build,
         install_started,
     };
     finish_install_and_record_metrics(&finish_context, stderr)
-}
-
-/// Runs in dry-run mode, showing configuration without side effects.
-fn run_dry(args: &InstallArgs, dirs: &dyn BaseDirs, stderr: &mut dyn Write) -> Result<()> {
-    use crate::workspace::resolve_workspace_path;
-
-    let workspace_root = resolve_workspace_path(dirs)?;
-    let requested_crates = resolve_requested_crates(args)?;
-    let toolchain = resolve_toolchain(&workspace_root, args.toolchain.as_deref())?;
-    toolchain.verify_installed()?;
-    let target_dir = determine_dry_run_target_dir(args, dirs, &toolchain, &requested_crates)?;
-    let info = DryRunInfo {
-        workspace_root: &workspace_root,
-        toolchain: toolchain.channel(),
-        target_dir: &target_dir,
-        verbosity: args.verbosity,
-        quiet: args.quiet,
-        skips: DryRunSkips {
-            deps: args.skip.skip_deps,
-            wrapper: args.skip.skip_wrapper,
-            update: args.skip.no_update,
-        },
-        jobs: args.jobs,
-        crates: &requested_crates,
-    };
-    write_stderr_line(stderr, info.display_text());
-    Ok(())
-}
-
-fn determine_dry_run_target_dir(
-    args: &InstallArgs,
-    dirs: &dyn BaseDirs,
-    toolchain: &Toolchain,
-    requested_crates: &[CrateName],
-) -> Result<Utf8PathBuf> {
-    let build_target_dir = determine_target_dir(args.target_dir.as_deref())?;
-    if !args.should_attempt_prebuilt(requested_crates) {
-        return Ok(build_target_dir);
-    }
-    let Ok(host_target) = detect_host_target() else {
-        return Ok(build_target_dir);
-    };
-    Ok(prebuilt_library_dir(dirs, toolchain.channel(), &host_target).unwrap_or(build_target_dir))
 }
 
 /// Checks for and installs Dylint tools if missing.
@@ -276,17 +282,20 @@ fn ensure_toolchain_installed(
 }
 
 /// Common final steps: generate wrapper scripts or print shell snippet.
-fn finish_install(
-    args: &InstallArgs,
-    dirs: &dyn BaseDirs,
-    staging_path: &Utf8Path,
-    stderr: &mut dyn Write,
-) -> Result<()> {
-    if args.skip.skip_wrapper {
+fn finish_install(context: &FinishInstallContext<'_>, stderr: &mut dyn Write) -> Result<()> {
+    if context.args.skip.skip_wrapper {
         write_stderr_line(stderr, "");
-        write_stderr_line(stderr, ShellSnippet::new(staging_path).display_text());
+        write_stderr_line(
+            stderr,
+            ShellSnippet::new(context.staging_path).display_text(),
+        );
     } else {
-        generate_and_report_wrapper(dirs, staging_path, stderr)?;
+        generate_and_report_wrapper(
+            context.dirs,
+            context.staging_path,
+            context.wrapper_scripts,
+            stderr,
+        )?;
     }
     Ok(())
 }
@@ -296,6 +305,7 @@ struct FinishInstallContext<'a> {
     args: &'a InstallArgs,
     dirs: &'a dyn BaseDirs,
     staging_path: &'a Utf8Path,
+    wrapper_scripts: WrapperScripts,
     install_mode: InstallMode,
     install_started: Instant,
 }
@@ -314,7 +324,7 @@ fn finish_install_and_record_metrics(
     context: &FinishInstallContext<'_>,
     stderr: &mut dyn Write,
 ) -> Result<()> {
-    finish_install(context.args, context.dirs, context.staging_path, stderr)?;
+    finish_install(context, stderr)?;
     let metrics_context = MetricsWriteContext {
         quiet: context.args.quiet,
         dirs: context.dirs,
@@ -348,12 +358,15 @@ fn resolve_requested_crates(args: &InstallArgs) -> Result<Vec<CrateName>> {
 fn generate_and_report_wrapper(
     dirs: &dyn BaseDirs,
     staging_path: &Utf8Path,
+    scripts: WrapperScripts,
     stderr: &mut dyn Write,
 ) -> Result<()> {
-    let result = generate_wrapper_scripts(dirs, staging_path)?;
+    let result = generate_wrapper_scripts_with(dirs, staging_path, scripts)?;
     write_stderr_line(stderr, "");
     write_stderr_line(stderr, "Wrapper scripts created:");
-    write_stderr_line(stderr, format!("  - {}", result.whitaker_path.display()));
+    if scripts == WrapperScripts::Both {
+        write_stderr_line(stderr, format!("  - {}", result.whitaker_path.display()));
+    }
     write_stderr_line(stderr, format!("  - {}", result.whitaker_ls_path.display()));
     write_stderr_line(stderr, "");
 
@@ -378,17 +391,6 @@ fn generate_and_report_wrapper(
     Ok(())
 }
 
-/// Writes an installation error and maps the result to a process exit code.
-pub fn exit_code_for_run_result(result: Result<()>, stderr: &mut dyn Write) -> i32 {
-    match result {
-        Ok(()) => 0,
-        Err(err) => {
-            write_stderr_line(stderr, err);
-            1
-        }
-    }
-}
-
 #[cfg(test)]
-#[path = "tests/mod.rs"]
+#[path = "../tests/mod.rs"]
 mod tests;

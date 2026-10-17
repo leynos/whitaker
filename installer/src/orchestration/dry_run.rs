@@ -1,0 +1,66 @@
+//! Renders installer configuration without performing installation side effects.
+
+use std::io::Write;
+
+use camino::Utf8PathBuf;
+
+use super::{resolve_requested_crates, resolve_toolchain};
+use crate::{
+    cli::InstallArgs,
+    crate_name::CrateName,
+    dirs::BaseDirs,
+    error::Result,
+    install_flow::detect_host_target,
+    list::determine_target_dir,
+    output::{DryRunInfo, DryRunSkips, write_stderr_line},
+    prebuilt_path::prebuilt_library_dir,
+    toolchain::Toolchain,
+    workspace::resolve_workspace_path,
+};
+
+/// Runs in dry-run mode, showing configuration without side effects.
+pub(super) fn run_dry(
+    args: &InstallArgs,
+    dirs: &dyn BaseDirs,
+    stderr: &mut dyn Write,
+) -> Result<()> {
+    let workspace_root = resolve_workspace_path(dirs)?;
+    let requested_crates = resolve_requested_crates(args)?;
+    let toolchain = resolve_toolchain(&workspace_root, args.toolchain.as_deref())?;
+    toolchain.verify_installed()?;
+    let target_dir = determine_dry_run_target_dir(args, dirs, &toolchain, &requested_crates)?;
+    let info = DryRunInfo {
+        workspace_root: &workspace_root,
+        toolchain: toolchain.channel(),
+        target_dir: &target_dir,
+        verbosity: args.verbosity,
+        quiet: args.quiet,
+        skips: DryRunSkips {
+            deps: args.skip.skip_deps,
+            wrapper: args.skip.skip_wrapper,
+            update: args.skip.no_update,
+        },
+        jobs: args.jobs,
+        crates: &requested_crates,
+    };
+    write_stderr_line(stderr, info.display_text());
+    Ok(())
+}
+
+/// Selects the install target, falling back to the build directory when host
+/// detection or prebuilt-path resolution fails.
+fn determine_dry_run_target_dir(
+    args: &InstallArgs,
+    dirs: &dyn BaseDirs,
+    toolchain: &Toolchain,
+    requested_crates: &[CrateName],
+) -> Result<Utf8PathBuf> {
+    let build_target_dir = determine_target_dir(args.target_dir.as_deref())?;
+    if !args.should_attempt_prebuilt(requested_crates) {
+        return Ok(build_target_dir);
+    }
+    let Ok(host_target) = detect_host_target() else {
+        return Ok(build_target_dir);
+    };
+    Ok(prebuilt_library_dir(dirs, toolchain.channel(), &host_target).unwrap_or(build_target_dir))
+}

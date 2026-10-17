@@ -73,7 +73,7 @@ pub enum Command {
 }
 
 /// Arguments for the install command.
-#[derive(Parser, Debug, Clone)]
+#[derive(Parser, Debug, Clone, PartialEq, Eq)]
 pub struct InstallArgs {
     /// Staging directory for built libraries [default: platform-specific].
     #[arg(short, long, value_name = "DIR")]
@@ -125,7 +125,7 @@ pub struct InstallArgs {
 /// Flags selecting which lint crates are built.
 ///
 /// Flattened into [`InstallArgs`] so the command-line surface is unchanged.
-#[derive(clap::Args, Debug, Clone, Default)]
+#[derive(clap::Args, Debug, Clone, Default, PartialEq, Eq)]
 pub struct LintSelectionFlags {
     /// Build all individual lint crates instead of the aggregated suite.
     #[arg(long, conflicts_with = "lint")]
@@ -139,7 +139,7 @@ pub struct LintSelectionFlags {
 /// Flags adjusting how the installer executes the build.
 ///
 /// Flattened into [`InstallArgs`] so the command-line surface is unchanged.
-#[derive(clap::Args, Debug, Clone, Default)]
+#[derive(clap::Args, Debug, Clone, Default, PartialEq, Eq)]
 pub struct ExecutionFlags {
     /// Install rustc-codegen-cranelift via rustup.
     #[arg(long, default_value_t = false)]
@@ -153,7 +153,7 @@ pub struct ExecutionFlags {
 /// Flags that skip individual installation steps.
 ///
 /// Flattened into [`InstallArgs`] so the command-line surface is unchanged.
-#[derive(clap::Args, Debug, Clone, Default)]
+#[derive(clap::Args, Debug, Clone, Default, PartialEq, Eq)]
 pub struct SkipFlags {
     /// Skip installation of cargo-dylint and dylint-link.
     #[arg(long)]
