@@ -58,8 +58,11 @@ impl ExampleHarnessLockOwner {
 }
 impl ExampleHarnessLock {
     pub(crate) fn acquire() -> io::Result<Self> {
+        // The lock protects example rebuilds inside one Cargo target
+        // directory, so it lives there. A host-wide path made every worktree
+        // and agent on a shared machine queue behind each other's compiles.
         Self::acquire_at(
-            &std::env::temp_dir().join("rstest-helper-example-harness.lock"),
+            &Path::new(env!("CARGO_TARGET_TMPDIR")).join("rstest-helper-example-harness.lock"),
             Some(EXAMPLE_HARNESS_LOCK_ACQUIRE_TIMEOUT),
         )
     }

@@ -98,15 +98,17 @@ fn propagates_runner_failures() {
     );
 }
 
+// A configured wrapper caches or admits compilations, so the runner must not
+// strip it. Example staging tolerates wrappers instead.
 #[test]
-fn runner_env_guard_clears_and_restores_rustc_wrapper() {
+fn runner_env_guard_preserves_rustc_wrapper() {
     let _serial_guard = runner_env_guard_test_lock();
     with_env_var("RUSTC_WRAPPER", "sccache", || {
         run_with_runner("lint", "ui", |_, _| {
-            assert_eq!(env::var_os("RUSTC_WRAPPER"), None);
+            assert_eq!(env::var_os("RUSTC_WRAPPER"), Some("sccache".into()));
             Ok(())
         })
-        .expect("runner should execute with RUSTC_WRAPPER cleared");
+        .expect("runner should execute with RUSTC_WRAPPER intact");
 
         assert_eq!(env::var_os("RUSTC_WRAPPER"), Some("sccache".into()));
     });
@@ -129,6 +131,19 @@ fn windows_env_guard_leaves_absent_rustc_wrapper_untouched() {
             assert_eq!(env::var_os("RUSTC_WRAPPER"), None);
         });
     });
+}
+
+#[test]
+fn example_staging_failures_name_the_example() {
+    let error = HarnessError::ExampleStagingFailed {
+        example: String::from("pass_demo"),
+        message: String::from("found no `rustc` invocation for `pass_demo`"),
+    };
+
+    assert_eq!(
+        error.to_string(),
+        "failed to stage example pass_demo: found no `rustc` invocation for `pass_demo`",
+    );
 }
 
 #[test]

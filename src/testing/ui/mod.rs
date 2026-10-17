@@ -10,10 +10,10 @@ use std::fmt;
 
 use camino::{Utf8Path, Utf8PathBuf};
 
+mod example;
 mod toolchain;
 
-use whitaker_common::test_support::with_env_var_removed;
-
+pub use self::example::{StagedExample, stage_example};
 use self::toolchain::{CrateName, ensure_toolchain_library};
 
 /// Errors produced when preparing or executing Dylint UI tests.
@@ -63,6 +63,13 @@ pub enum HarnessError {
         /// Error emitted while loading metadata.
         message: String,
     },
+    /// Building or staging an example target for a UI run failed.
+    ExampleStagingFailed {
+        /// Example target being staged.
+        example: String,
+        /// Error produced while building, parsing, or copying the example.
+        message: String,
+    },
 }
 
 impl fmt::Display for HarnessError {
@@ -107,6 +114,9 @@ impl fmt::Display for HarnessError {
             }
             Self::MetadataFailed { message } => {
                 write!(formatter, "failed to retrieve Cargo metadata: {message}")
+            }
+            Self::ExampleStagingFailed { example, message } => {
+                write!(formatter, "failed to stage example {example}: {message}")
             }
         }
     }
@@ -178,24 +188,18 @@ pub fn run_with_runner(
 
 /// Runs `callback` with the environment `run_with_runner` requires.
 ///
-/// `RUSTC_WRAPPER` must be cleared on every platform when set (for example to
-/// `sccache`), because `dylint_testing::Test::example` scans
-/// `cargo build --message-format=json` output for bare `rustc` invocations.
-/// When a wrapper is active, Cargo invokes `<wrapper> rustc ...` instead, and
-/// `dylint_testing` finds zero invocations, causing a panic.
+/// Any configured `rustc` wrapper is deliberately left in place. A wrapper set
+/// in Cargo configuration survives environment clearing anyway, and it exists
+/// to cache or admit compilations. Example targets are staged with
+/// [`stage_example`], which tolerates wrappers, rather than with
+/// `dylint_testing::ui::Test::example`, which does not.
 ///
-/// On Windows, one additional environment variable needs temporary adjustment:
-///
-/// - `VCPKG_ROOT`: must be set to `C:\vcpkg` when that directory exists and the variable is
-///   otherwise absent, so downstream `cargo` invocations resolve vcpkg.
-///
-/// The scoped mutations are serialized by `temp_env`'s re-entrant global lock,
-/// so runner closures that perform their own scoped environment setup nest
-/// without deadlocking, and every prior value is restored when the callback
-/// returns or panics.
-fn with_runner_env<R>(callback: impl FnOnce() -> R) -> R {
-    with_vcpkg_root(|| with_env_var_removed("RUSTC_WRAPPER", callback))
-}
+/// On Windows, `VCPKG_ROOT` must be set to `C:\vcpkg` when that directory
+/// exists and the variable is otherwise absent, so downstream `cargo`
+/// invocations resolve vcpkg. The scoped mutation is serialized by
+/// `temp_env`'s re-entrant global lock and restored when the callback returns
+/// or panics.
+fn with_runner_env<R>(callback: impl FnOnce() -> R) -> R { with_vcpkg_root(callback) }
 
 #[cfg(windows)]
 fn with_vcpkg_root<R>(callback: impl FnOnce() -> R) -> R {
