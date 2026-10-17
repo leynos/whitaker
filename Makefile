@@ -49,6 +49,9 @@ NEXTEST_PROFILE ?=
 # overrides this with `cargo llvm-cov nextest ...` so instrumentation runs
 # over the exact same crate subset (TEST_CARGO_FLAGS) and RUSTFLAGS.
 TEST_RUNNER ?= nextest run
+# The driver for the feature-free `whitaker_lint_core` pass. `coverage`
+# overrides this as well, so instrumenting both passes composes one report.
+CORE_TEST_RUNNER ?= nextest run
 # The trybuild contract tests assert that small fixtures compile or fail to
 # compile; they run no workspace code the coverage report attributes. Under
 # instrumentation they only cost build time (about 250 s of the 616 s test
@@ -230,7 +233,7 @@ test: ## Run tests with warnings treated as errors
 		WHITAKER_BACKUP=""; \
 	fi; \
 	RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS)" $(CARGO) $(TEST_RUNNER) $(CARGO_LOCKED) $(TEST_CARGO_FLAGS) $(BUILD_JOBS) $(if $(NEXTEST_PROFILE),--profile $(NEXTEST_PROFILE)); \
-	RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) nextest run $(CARGO_LOCKED) $(CORE_TEST_CARGO_FLAGS) $(BUILD_JOBS) $(if $(NEXTEST_PROFILE),--profile $(NEXTEST_PROFILE)); \
+	RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) $(CORE_TEST_RUNNER) $(CARGO_LOCKED) $(CORE_TEST_CARGO_FLAGS) $(BUILD_JOBS) $(if $(NEXTEST_PROFILE),--profile $(NEXTEST_PROFILE)); \
 	RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS)" $(CARGO) test $(CARGO_LOCKED) -p dylint_testing --lib --no-default-features $(BUILD_JOBS); \
 	if [ "$${ACT_WORKFLOW_TESTS:-0}" = "1" ]; then \
 		$(MAKE) workflow-test; \
@@ -239,20 +242,27 @@ test: ## Run tests with warnings treated as errors
 coverage: ## Generate LCOV coverage over the CI-tested crate subset
 	@# Reuse the `test` recipe verbatim (same TEST_CARGO_FLAGS excludes,
 	@# same prefer-dynamic RUSTFLAGS, same WHITAKER_SCRIPT safeguard) but
-	@# swap the driver to `cargo llvm-cov nextest`. This keeps the
+	@# swap both drivers to `cargo llvm-cov nextest`. This keeps the
 	@# instrumented run in lockstep with the plain test run: the 11
-	@# CI-excluded crates (rustc_* proxy shims, the whitaker root, and the
+	@# CI-excluded crates (rustc_* proxy shims, `whitaker_lint_core`, and the
 	@# three lint crates whose dylint UI tests are excluded) stay excluded,
 	@# so coverage never attempts a bare `--workspace` build the suite
-	@# cannot support.
+	@# cannot support, and the separate feature-free `whitaker_lint_core`
+	@# pass still contributes its lines to the same report.
+	@# `--no-report` retains coverage data between the passes, so one final
+	@# `report` step writes the composed LCOV file.
 	@# LLVM coverage maps carry source locations without DWARF debug info.
 	@# Omit optional symbols from this throwaway target to limit runner disk use.
 	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v cargo-llvm-cov >/dev/null || { echo "Install cargo-llvm-cov (cargo install cargo-llvm-cov)"; exit 1; }
-	@CARGO_LLVM_COV_TARGET_DIR="$(COVERAGE_TARGET_DIR)" \
+	@export CARGO_LLVM_COV_TARGET_DIR="$(COVERAGE_TARGET_DIR)" \
 		CARGO_TARGET_DIR="$(COVERAGE_TARGET_DIR)" \
 		LLVM_PROFILE_FILE_NAME="$(COVERAGE_PROFILE_FILE_NAME)" \
-		CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 \
-		$(MAKE) test TEST_RUNNER="llvm-cov nextest --lcov --output-path $(COVERAGE_OUTPUT) -E '$(COVERAGE_NEXTEST_FILTER)'"
+		CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0; \
+		$(CARGO) llvm-cov clean --workspace && \
+		$(MAKE) test \
+			TEST_RUNNER="llvm-cov nextest --no-report -E '$(COVERAGE_NEXTEST_FILTER)'" \
+			CORE_TEST_RUNNER="llvm-cov nextest --no-report" && \
+		$(CARGO) llvm-cov report --lcov --output-path $(COVERAGE_OUTPUT)
 
 trybuild-contracts: ## Run the trybuild compile-contract tests, which `make coverage` skips
 	@# `make coverage` leaves six of these out (see TRYBUILD_CONTRACT_FILTER), so
@@ -268,6 +278,11 @@ test-doc: ## Run the workspace doctests, which no other lane executes
 	@# `force-unstable-if-unmarked` then makes every one of them fail to load
 	@# its own library at `E0658`.
 	RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) test --doc $(CARGO_LOCKED) $(DOCTEST_CARGO_FLAGS) $(BUILD_JOBS)
+	@# `whitaker_lint_core` is excluded above because Cargo unifies the
+	@# `dylint-driver` feature for an all-features run. Its doctests do run in
+	@# the feature-free configuration, which is the same configuration
+	@# CORE_TEST_CARGO_FLAGS exercises for its unit tests.
+	RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) test $(CARGO_LOCKED) $(CORE_TEST_CARGO_FLAGS) --doc $(BUILD_JOBS)
 
 workflow-test: workflow-test-deps ## Run opt-in GitHub workflow smoke tests with act + pytest
 	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v act >/dev/null || { echo "Install act to run workflow tests"; exit 1; }

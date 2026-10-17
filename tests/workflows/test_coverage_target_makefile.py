@@ -68,10 +68,14 @@ def test_coverage_shares_target_and_profile_policy_with_nested_cargo(
 
     assert result.returncode == 0, result.stderr
     expected_target = workspace / "target" / "llvm-cov-target"
-    assert environment_log.read_text(encoding="utf-8").splitlines() == [
-        f"outer|{expected_target}|{expected_target}|whitaker-%m.profraw",
-        f"nested|{expected_target}|{expected_target}|whitaker-%m.profraw",
-    ], "coverage and nested Cargo must share the target and profile policy"
+    expected = f"outer|{expected_target}|{expected_target}|whitaker-%m.profraw"
+    nested = f"nested|{expected_target}|{expected_target}|whitaker-%m.profraw"
+    observed = environment_log.read_text(encoding="utf-8").splitlines()
+    assert observed, "coverage ran no Cargo invocation"
+    assert set(observed) == {expected, nested}, (
+        "every coverage pass, and the Cargo build it nests, must share the "
+        f"target and profile policy; got: {observed}"
+    )
 
 
 def _makefile_variable(name: str) -> str:
@@ -118,23 +122,35 @@ def test_coverage_passes_nextest_the_base_filter_less_the_skipped_contracts(
         f"{_makefile_variable('COVERAGE_BASE_FILTER')} & "
         f"not ({_makefile_variable('COVERAGE_SKIPPED_TRYBUILD_FILTER')})"
     )
-    (line,) = [a for a in _cargo_arguments(tmp_path, "coverage") if "llvm-cov" in a]
-    assert f" -E {expected}" in line, (
-        f"make coverage must pass the base filter less the skipped trybuild "
-        f"contracts to nextest; got: {line}"
+    filtered = [
+        a for a in _cargo_arguments(tmp_path, "coverage") if "llvm-cov" in a and " -E " in a
+    ]
+    assert len(filtered) == 1, (
+        f"only the all-feature coverage pass may narrow the crate subset; got: {filtered}"
+    )
+    assert f" -E {expected}" in filtered[0], (
+        "make coverage must pass the base filter less the skipped trybuild "
+        f"contracts to nextest; got: {filtered[0]}"
     )
 
 
 def test_make_test_runs_every_test_without_a_filter(tmp_path: Path) -> None:
     """``make test`` passes no ``-E``, so the contract tests still run in it."""
-    (line,) = [a for a in _cargo_arguments(tmp_path, "test") if "nextest" in a]
-    assert " -E " not in line, f"make test must not filter tests; got: {line}"
+    lines = [a for a in _cargo_arguments(tmp_path, "test") if "nextest" in a]
+    assert lines, "make test ran no nextest invocation"
+    unfiltered = [a for a in lines if " -E " not in a]
+    assert unfiltered == lines, f"make test must not filter tests; got: {lines}"
 
 
 def test_contracts_target_runs_all_seven_under_the_ci_profile(tmp_path: Path) -> None:
     """``make trybuild-contracts`` filters to the seven contract tests, uninstrumented."""
     expected = _makefile_variable("TRYBUILD_CONTRACT_FILTER")
-    (line,) = [a for a in _cargo_arguments(tmp_path, "trybuild-contracts") if "nextest" in a]
+    lines = [a for a in _cargo_arguments(tmp_path, "trybuild-contracts") if "nextest" in a]
+    filtered = [a for a in lines if " -E " in a]
+    assert len(filtered) == 1, f"expected one filtered contract run; got: {filtered}"
+    line = filtered[0]
     assert f" -E {expected}" in line, f"expected the seven contract tests; got: {line}"
     assert "--profile ci" in line, f"expected the ci profile; got: {line}"
-    assert "llvm-cov" not in line, f"expected no instrumentation; got: {line}"
+    assert all("llvm-cov" not in a for a in lines), (
+        f"expected no instrumentation; got: {lines}"
+    )

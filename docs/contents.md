@@ -119,7 +119,7 @@
 - [Architectural decision record (ADR) 008: OrthoConfig CLI boundary](adr-008-ortho-config-cli-boundary.md)
   records the configuration sources, compatibility bridge, and application
   boundary for the planned CLI.
-- [Architectural decision record (ADR): root Whitaker CLI boundary](adr-005-whitaker-cli-boundary.md)
+- [Architectural decision record (ADR) 009: root Whitaker CLI boundary](adr-009-whitaker-cli-boundary.md)
   records the executable namespace, installer API boundary, Dylint forwarding,
   and staged publication decision for the unified CLI.
 
