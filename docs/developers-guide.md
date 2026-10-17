@@ -1404,6 +1404,145 @@ make check-fmt  # Verify formatting
 make fmt        # Apply formatting
 ```
 
+## Module layout and test placement
+
+### The 400-line module budget
+
+`AGENTS.md` states that no single code file may be longer than 400 lines. The
+limit has a machine implementation — `module_max_lines`, one of Whitaker's own
+dylint lints, measures the source lines occupied by a module and warns when the
+count exceeds a configurable `max_lines` threshold, which defaults to 400 — but
+that implementation does not yet run against this repository. See
+[Where the budget is checked](#where-the-budget-is-checked) for what does and
+does not execute.
+
+The budget is a readability rule. A module of that length has stopped being
+reviewable in one sitting, so growth past the limit is answered by decomposing
+the module, not by raising the threshold.
+
+The reasoning behind the layout rules below, including the alternatives that
+were rejected, is recorded in
+[ADR 006](./adr-006-directory-based-module-layout.md).
+
+### Directory modules
+
+A module that has grown into submodules becomes a directory whose root file is
+`mod.rs`, for example `installer/src/install_flow/mod.rs` and
+`installer/src/toolchain/mod.rs`. The self-named-sibling form, where
+`install_flow.rs` sits next to an `install_flow/` directory, is not the
+convention here: 46 `mod.rs` files are tracked outside `vendor/`, and no path
+has both `name.rs` and `name/mod.rs`. Two file modules do reach a child that
+way — `installer/src/cli.rs` and
+`crates/conditional_max_n_branches/src/driver.rs` — but they are single-child
+outliers, not the pattern to copy.
+
+Directory modules nest. `installer/src/toolchain/tests/` is a `tests/`
+directory module with its own `mod.rs`, holding `test_helpers.rs` and a further
+`failure_mocks/` subdirectory.
+
+### Sibling test modules
+
+An inline `#[cfg(test)] mod tests { … }` block that grows large enough to
+threaten the 400-line budget moves to a sibling file. The declaration keeps the
+module's name, and an explicit `#[path]` attribute points it at the file:
+
+```rust
+#[cfg(test)]
+#[path = "list_tests.rs"]
+mod tests;
+```
+
+Three shapes of this appear in the tree.
+
+- **File-module sibling.** The extracted file is a sibling of the module file,
+  wired with `#[cfg(test)]` plus `#[path = "<name>_tests.rs"]`.
+  `installer/src/list.rs` gains `installer/src/list_tests.rs`,
+  `installer/src/dependency_binaries/install/downloader.rs` gains
+  `downloader_tests.rs`, and `installer/src/deps/tests.rs` gains
+  `policy_tests.rs` and `tests_repository.rs`.
+- **Directory-module `tests.rs`.** Inside a directory module the attribute is
+  unnecessary, because Rust already resolves it, so a bare
+  `#[cfg(test)] mod tests;` resolves to `tests.rs` in the same directory.
+  `installer/src/toolchain/mod.rs` ends with that declaration, and
+  `installer/src/install_flow/mod.rs` reaches `dependency_check_tests.rs` the
+  same way, with a bare `#[cfg(test)] mod dependency_check_tests;`.
+- **Nested tests directory.** When the tests themselves need helpers and
+  submodules, they become a `tests/` directory module with a `mod.rs`.
+
+The `#[path]` form is preferred for the file-module case because `mod tests;`
+keeps the test module's name, `tests`, and therefore its module path unchanged,
+while the attribute places the file beside the module rather than in a
+directory of its own. Left to the default location, a bare `mod tests;` in
+`list.rs` resolves to `list/tests.rs`; naming the declaration after the file, as
+`mod list_tests;`, would rename the module to `crate::list::list_tests` and
+still resolve to `list/list_tests.rs`, not to a sibling. Only the attribute
+puts the file beside `list.rs` while keeping the module named `tests`.
+
+Renaming the module would not break `super::`, since the module stays a child of
+`list`; what breaks is `crate::` paths such as `crate::list::tests::…` and
+`cargo test` filters naming `tests`. With the attribute the production file
+drops back under the budget without folding a behaviour change into a purely
+structural edit. A test file extracted this way still carries a `//!`
+module-level doc comment, matching the repository rule that every module begins
+with one.
+
+`installer/src/deps/tests.rs` shows the one variation on this. It is not a
+module file in its own right: `installer/src/deps/mod.rs` declares it as
+`#[cfg(test)] mod tests;`, so the whole file is already test-only. Its own
+children therefore omit `#[cfg(test)]`, which would be redundant. They still
+carry `#[path]`, because no `deps/tests/` directory exists for a bare `mod` to
+resolve into:
+
+```rust
+#[path = "policy_tests.rs"]
+mod policy;
+
+#[path = "tests_repository.rs"]
+mod repository;
+```
+
+Add `#[cfg(test)]` to an extracted test module only when nothing above it
+already restricts it to test builds.
+
+The convention is repository-wide rather than installer-only: 65 tracked `.rs`
+files contain a `#[path = "` anchor.
+
+### Where the budget is checked
+
+Be precise about this, because the current answer is narrower than it looks.
+
+`make lint` runs
+`cargo clippy --workspace --all-targets --all-features -- -D warnings`,
+preceded by a `cargo doc` pass. Neither runs the 400-line budget. The budget is
+implemented by `module_max_lines`, one of Whitaker's own dylint lints, and a
+dylint lint is not a rustc or Clippy built-in: it is a separate compiler plugin
+that runs only when a workspace loads it deliberately. This workspace does not.
+`rg 'dylint run' Makefile scripts/` finds nothing, and the root `dylint.toml`
+configures `[no_std_fs_operations]` alone. The `[workspace.lints.rust]` and
+`[workspace.lints.rustdoc]` tables in `Cargo.toml` do not change this: they
+configure rustc and rustdoc lints, and neither names `module_max_lines`. Within
+the CI workflow the dylint host tools are restored for the `make publish-check`
+step alone, and that step's single dylint invocation is
+`dylint list --no-metadata --no-build` — it enumerates built libraries to
+verify packaging, and lints nothing.
+
+So the budget is **not** currently enforced automatically against this
+repository's own source. The lint itself is real and tested — its UI fixtures
+under `crates/module_max_lines/ui/` pin both the failing and passing cases —
+but nothing runs it over these crates. Running Whitaker's lints over Whitaker
+is the final layer of the lint-hardening stack, and it has not landed yet.
+
+Until it does, the budget is held by review. That is a weaker guarantee than a
+gate, and the difference matters: a module that drifts past 400 lines will not
+turn a check red.
+
+The threshold, when self-linting arrives, is set as TOML under
+`[module_max_lines]`, not by a compiler flag. The shape is documented in
+[`docs/whitaker-cli-design.md`](./whitaker-cli-design.md).
+
+The layout convention itself is recorded in
+[ADR 006](./adr-006-directory-based-module-layout.md).
+
 ## Python script interpreter convention
 
 Every Python script that a workflow or the `Makefile` runs by path carries the

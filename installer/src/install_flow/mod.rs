@@ -365,5 +365,4 @@ fn write_metrics_summary(quiet: bool, record_outcome: &RecordOutcome, stderr: &m
 mod tests;
 
 #[cfg(test)]
-#[path = "install_flow/dependency_check_tests.rs"]
 mod dependency_check_tests;
