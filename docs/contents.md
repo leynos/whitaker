@@ -85,9 +85,10 @@
   contract](adr-004-pin-only-mutation-testing-contract.md) records why the
   shared mutation workflow tests its declared configuration without claiming
   parity with the continuous integration test baseline.
-- [Architectural decision record (ADR) 005: root Whitaker CLI boundary](adr-005-whitaker-cli-boundary.md)
-  records the executable namespace, installer API boundary, Dylint forwarding,
-  and staged publication decision for the unified CLI.
+- [Architectural decision record (ADR) 005: root Whitaker CLI
+  boundary](adr-005-whitaker-cli-boundary.md) records the executable namespace,
+  installer API boundary, Dylint forwarding, and staged publication decision
+  for the unified CLI.
 
 ## Requests for comments
 

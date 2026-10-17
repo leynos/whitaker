@@ -324,16 +324,16 @@ The caller passes a small set of configuration inputs, each carrying intent:
   Makefile's `CARGO_FLAGS` uses for `make test`, so feature-gated code is not
   reported as untested.
 
-Unlike the excludes applied by `make test`'s `TEST_EXCLUDES`, the mutation
-caller does **not** exclude the `whitaker` root crate or the
-`function_attrs_follow_docs`, `module_max_lines`, and `no_expect_outside_tests`
-lint crates from mutation scope (only their `ui/`/`examples/` fixtures are
-excluded). The root `whitaker` package is an ordinary CLI crate;
-compiler-private driver code and its `feature(rustc_private)` use live in
-`whitaker_lint_core`. The three listed lint crates still enable
-`feature(rustc_private)` under `dylint-driver` and need the dynamic-linking
-`RUSTFLAGS` (`-C prefer-dynamic -Z force-unstable-if-unmarked`) that the `test`
-and `typecheck` Makefile targets inject per invocation — see the note in
+Unlike the all-feature `make test` pass, the mutation caller includes
+`whitaker_lint_core` and the `function_attrs_follow_docs`, `module_max_lines`,
+and `no_expect_outside_tests` lint crates in mutation scope (only their
+`ui/`/`examples/` fixtures are excluded). The root `whitaker` package is an
+ordinary CLI crate; compiler-private driver code and its
+`feature(rustc_private)` use live in `whitaker_lint_core`. The three listed
+lint crates still enable `feature(rustc_private)` under `dylint-driver` and
+need the dynamic-linking `RUSTFLAGS`
+(`-C prefer-dynamic -Z force-unstable-if-unmarked`) that the `test` and
+`typecheck` Makefile targets inject per invocation — see the note in
 [`.cargo/config.toml`](../.cargo/config.toml), which deliberately keeps that
 flag out of workspace-wide configuration because it would break `cargo install`
 for `whitaker-installer`. The shared mutation workflow has no equivalent

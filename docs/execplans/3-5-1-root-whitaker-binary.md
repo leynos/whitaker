@@ -109,9 +109,8 @@ present. Kani passed 360 checks and reachability controls; Verus exceeded
 tolerance without a verdict (D-19). Name reservation is unauthorized. Roadmap
 3.5.1 is checked per direction; the plan stays open for these two criteria.
 
-Latest review concerns are fixed; final 2026-10-17 format, test (1,699 passed,
-five skipped), doctests, typecheck, lint, Markdown, Mermaid, and package-list
-gates now pass. Verus and name reservation remain separate open criteria.
+Final review and required gates passed. The earlier coverage run timed out on
+trybuild; the target now clears workspace data before rerunning.
 
 ## Constraints
 
@@ -1507,17 +1506,9 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
   composes with the clap-derived arguments, rather than leaving 3.6.3 to
   discover that it does not. Date/Author: 2026-08-21, planning agent.
 
-- **D-7: Use `googletest` and `pretty_assertions` in new test files only, and
-  flag the inconsistency.** The task brief authorizes both. However
-  `docs/execplans/7-3-1-map-candidate-spans-and-extract-ast-feature-vectors.md`
-  records the opposite decision for a sibling item — follow the in-repo
-  `assert_eq!` plus `insta` idiom, on the reading that the brief lists these as
-  available tools rather than mandates — and neither crate appears anywhere in
-  the workspace today. Adopting them here makes the repository inconsistent
-  with itself. This plan follows the brief but raises the conflict for the
-  reviewer to settle; if consistency is preferred, cut both and use
-  `assert_eq!` plus `insta`, which covers every assertion described here.
-  Date/Author: 2026-08-21, planning agent.
+- **D-7: Use `googletest` and `pretty_assertions` in new test files only.**
+  The brief authorizes both despite a sibling plan's opposite preference;
+  existing tests stay unchanged. Date/Author: 2026-08-21, planning agent.
 
 - **D-8: Cut the release-asset-name Verus proof and the routing-conflict Kani
   harness; verify argv classification instead.** Both original obligations were
@@ -1527,10 +1518,9 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
   directions, which is what the two verification tools now target. Date/Author:
   2026-08-21, planning agent.
 
-- **D-9: The plan file is named `3-5-1-root-whitaker-binary.md`.** The task
-  brief gave a filename referencing roadmap 6.5.1, a different item. The task
-  body, branch name, and required pull-request title all identify 3.5.1.
-  Confirmed with the requester. Date/Author: 2026-08-21.
+- **D-9: Name the plan `3-5-1-root-whitaker-binary.md`.** The brief filename
+  said 6.5.1, but its task, branch, and PR title identify 3.5.1; confirmed by
+  the requester. Date/Author: 2026-08-21.
 
 - **D-10: Test the compiler-private core outside the workspace all-feature
   invocation.** Cargo unifies `dylint-driver` through every lint crate, and its
@@ -1540,29 +1530,18 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
   weakening the Dylint driver pass. Date/Author: 2026-08-24, implementation
   agent; supported by the H1 falsification experiment.
 
-- **D-11: Resume after the pre-existing 70-file scope tolerance breach.** The
-  plan was paused when the rebased target-to-head diff reached 80 files. The
-  user then explicitly invoked the full `sdlc-implementation` assignment while
-  that hold and the unfinished milestones were documented. Interpret this as
-  acceptance of the existing file-count overrun to complete this plan only; the
-  2,500-net-line ceiling, approved functionality, and all other constraints
-  remain in force. Evidence: PR #356 is authored by `leynos`, the target and
-  head are in `leynos/whitaker`, and all branch commits are attributed to
-  `leynos`; the live diff is 80 files and 2,386 net added lines. Date/Author:
-  2026-10-15, implementation supervisor.
+- **D-11: Accept the 70-file tolerance breach for this plan.** The user resumed
+  implementation with the 80-file rebase delta and unfinished milestones
+  documented. This accepts the file-count overrun only; D-12 later changes the
+  net-line ceiling. PR #356 and branch ownership were verified in
+  `leynos/whitaker`. Date/Author: 2026-10-15, implementation supervisor.
 
-- **D-12: Increase the net-line ceiling to 7,000 for this plan only.** The user
-  explicitly approved an increased change-size ceiling after the candidate
-  reached 4,869 net lines and reconfirmed that approval on 2026-10-17. The
-  current target-to-worktree delta is 6,053 net lines, leaving 947 lines under
-  the cap. The remaining bounded work is M2 proof and gate completion, M3
-  binstall metadata and reservation, and M4 design/user/developer
-  documentation. This does not widen product scope, remove other constraints,
-  or change D-11's file-count decision. Interpret the 15-minute Kani and
-  10-minute Verus tolerances as verifier execution time; compilation and shared
-  admission are logged independently. Current recorded Kani verification was
-  4.73 seconds. Date/Author: 2026-10-16, implementation supervisor, following
-  explicit user approval.
+- **D-12: Raise the net-line ceiling to 7,000 for this plan only.** The user
+  approved the increase at 4,869 lines and reconfirmed it on 2026-10-17. This
+  changes no product scope or D-11 decision. Verifier tolerances measure Kani
+  or Verus execution, separately from compilation and admission; one recorded
+  Kani run took 4.73 seconds. Date/Author: 2026-10-16, implementation
+  supervisor, following explicit user approval.
 
 - **D-13: Keep installer metadata helpers source-compatible.** The root package
   needs to expand cargo-binstall templates for its own package name and inspect

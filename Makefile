@@ -31,6 +31,7 @@ NEXTEST_PROFILE ?=
 # overrides this with `cargo llvm-cov nextest ...` so instrumentation runs
 # over the exact same crate subset (TEST_CARGO_FLAGS) and RUSTFLAGS.
 TEST_RUNNER ?= nextest run
+CORE_TEST_RUNNER ?= nextest run
 COVERAGE_OUTPUT ?= lcov.info
 RUST_FLAGS ?= -D warnings
 RUSTDOC_FLAGS ?= --cfg docsrs -D warnings
@@ -134,7 +135,7 @@ test: ## Run tests with warnings treated as errors
 		WHITAKER_BACKUP=""; \
 	fi; \
 	RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS)" $(CARGO) $(TEST_RUNNER) $(CARGO_LOCKED) $(TEST_CARGO_FLAGS) $(BUILD_JOBS) $(if $(NEXTEST_PROFILE),--profile $(NEXTEST_PROFILE)); \
-	RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) nextest run $(CARGO_LOCKED) $(CORE_TEST_CARGO_FLAGS) $(BUILD_JOBS) $(if $(NEXTEST_PROFILE),--profile $(NEXTEST_PROFILE)); \
+	RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) $(CORE_TEST_RUNNER) $(CARGO_LOCKED) $(CORE_TEST_CARGO_FLAGS) $(BUILD_JOBS) $(if $(NEXTEST_PROFILE),--profile $(NEXTEST_PROFILE)); \
 	RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) test --workspace --doc --all-features $(DOCTEST_EXCLUDES) $(BUILD_JOBS); \
 	RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) test $(CARGO_LOCKED) $(CORE_TEST_CARGO_FLAGS) --doc $(BUILD_JOBS); \
 	if [ "$${ACT_WORKFLOW_TESTS:-0}" = "1" ]; then \
@@ -142,16 +143,14 @@ test: ## Run tests with warnings treated as errors
 	fi
 
 coverage: ## Generate LCOV coverage over the CI-tested crate subset
-	@# Reuse the `test` recipe verbatim (same TEST_CARGO_FLAGS excludes,
-	@# same prefer-dynamic RUSTFLAGS, same WHITAKER_SCRIPT safeguard) but
-	@# swap the driver to `cargo llvm-cov nextest`. This keeps the
-	@# instrumented run in lockstep with the plain test run: the 11
-	@# CI-excluded crates (rustc_* proxy shims, the whitaker root, and the
-	@# three lint crates whose dylint UI tests are excluded) stay excluded,
-	@# so coverage never attempts a bare `--workspace` build the suite
-	@# cannot support.
+	@# Instrument both test passes. The all-feature workspace pass keeps its
+	@# 11 exclusions (rustc_* shims, whitaker_lint_core, and three lint crates);
+	@# the separate feature-free pass adds core coverage to the same report.
 	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v cargo-llvm-cov >/dev/null || { echo "Install cargo-llvm-cov (cargo install cargo-llvm-cov)"; exit 1; }
-	@$(MAKE) test TEST_RUNNER="llvm-cov nextest --lcov --output-path $(COVERAGE_OUTPUT)"
+	@$(CARGO) llvm-cov clean --workspace
+	@$(MAKE) test TEST_RUNNER="llvm-cov nextest --no-report" \
+		CORE_TEST_RUNNER="llvm-cov nextest --no-report --no-clean"
+	@$(CARGO) llvm-cov report --lcov --output-path $(COVERAGE_OUTPUT)
 
 workflow-test: workflow-test-deps ## Run opt-in GitHub workflow smoke tests with act + pytest
 	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v act >/dev/null || { echo "Install act to run workflow tests"; exit 1; }
