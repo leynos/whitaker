@@ -12,6 +12,8 @@ use crate::{
     dependency_binaries::DependencyBinaryInstaller,
     deps::DependencyInstallOptions,
     dirs::BaseDirs,
+    install_flow::{MetricsWriteContext, write_install_metrics},
+    install_metrics::InstallMode,
     installer_packaging::TargetTriple,
     test_utils::{
         dependency_binary_helpers::{

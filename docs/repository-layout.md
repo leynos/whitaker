@@ -28,7 +28,7 @@ formal verification helpers.
 | `skills/`    | Agent-facing skills that document repeatable maintenance and remediation workflows.                                                   |
 | `src/`       | Root `whitaker` CLI, its command policy, installer adapters, and application ports.                                                   |
 | `suite/`     | The suite crate used to package and expose the lint set coherently.                                                                   |
-| `tests/`     | Workspace-level integration, behaviour, UI harness, and workflow tests.                                                               |
+| `tests/`     | Root CLI integration, behaviour, packaging, and workflow tests.                                                                       |
 | `vendor/`    | Patched third-party crates, currently `dylint_testing` with compiler-wrapper support, until an upstream fix is available.             |
 | `verus/`     | Verus proof sidecars and formal verification experiments.                                                                             |
 
@@ -66,7 +66,8 @@ small set of support crates:
   `no_expect_outside_tests/`, `no_std_fs_operations/`,
   `no_unwrap_or_else_panic/`, `rstest_helper_should_be_fixture/`, and
   `test_must_not_have_example/`.
-- Support crates such as `whitaker_clones_core/` and `whitaker_sarif/`.
+- Support crates such as `whitaker_clones_core/`, `whitaker_sarif/`, and
+  `whitaker_lint_core/`, which owns the compiler-private driver and UI harness.
 - Vendored compatibility crates such as `rustc_ast/`, `rustc_hir/`, and other
   `rustc_*` crates used to align with the Rust compiler interfaces Whitaker
   targets.
@@ -95,9 +96,9 @@ lint set as an integrated suite and carries its own source and tests.
 
 ## Testing and verification assets
 
-- `tests/` holds workspace-level integration tests, behaviour-driven tests for
-  the root CLI and packaging metadata, feature files, UI harness coverage, and
-  workflow validation support.
+- `tests/` holds behaviour-driven and end-to-end tests for the root CLI and its
+  packaging metadata, feature files, and workflow validation support. The
+  Dylint UI harness and fixtures live in `crates/whitaker_lint_core/tests/`.
 - `common/tests/` and the per-crate `tests/` directories hold crate-scoped
   behavioural and integration coverage.
 - Per-crate `ui/`, `ui-cy/`, `ui-gd/`, and similar directories store compiler

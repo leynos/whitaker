@@ -80,6 +80,7 @@ name = "whitaker"
 version = "0.2.7"
 edition = "2024"
 description = "Whitaker command-line interface"
+include = ["/README.md", "/LICENSE", "/src/**"]
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
@@ -110,6 +111,7 @@ serde.workspace = true
 serde_json.workspace = true
 tempfile.workspace = true
 toml.workspace = true
+whitaker-common.workspace = true
 whitaker-installer = { workspace = true, features = ["test-support"] }
 whitaker_test_macros.workspace = true
 

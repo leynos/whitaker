@@ -567,9 +567,7 @@ sections. A typical progression is:
 5. localize help and initialize tracing at the application boundary; and
 6. generate human and agent documentation once the command surface stabilizes.
 
-The [Hello World application](../examples/hello_world/) demonstrates these
-pieces in a larger layout. The
-[v0.9.0 migration guide](v0-9-0-migration-guide.md) explains compatibility
-changes for existing v0.8.0 users, and the
-[API documentation](https://docs.rs/ortho_config) is the source for complete
-type and method signatures.
+The [Whitaker CLI design](whitaker-cli-design.md) shows how these pieces fit
+the project's command surface. The
+[API documentation](https://docs.rs/ortho_config) provides complete type and
+method signatures.

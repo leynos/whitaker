@@ -318,8 +318,8 @@ The caller passes a small set of configuration inputs, each carrying intent:
 - `exclude-globs` — scaffolding whose surviving mutants would be noise rather
   than genuine test gaps: the `rustc_*` proxy crates and the `clippy_utils`
   stub (both re-export compiler internals), each lint's `ui/` and `examples/`
-  dylint fixtures, and the shared test infrastructure in `src/testing` and
-  `common/src/test_support`.
+  dylint fixtures, and shared test infrastructure in
+  `crates/whitaker_lint_core/src/testing` and `common/src/test_support`.
 - `extra-args` — `--all-features`, matching the feature baseline the
   Makefile's `CARGO_FLAGS` uses for `make test`, so feature-gated code is not
   reported as untested.
@@ -328,10 +328,12 @@ Unlike the excludes applied by `make test`'s `TEST_EXCLUDES`, the mutation
 caller does **not** exclude the `whitaker` root crate or the
 `function_attrs_follow_docs`, `module_max_lines`, and `no_expect_outside_tests`
 lint crates from mutation scope (only their `ui/`/`examples/` fixtures are
-excluded). Those crates enable `feature(rustc_private)` under the
-`dylint-driver` feature and need the dynamic-linking `RUSTFLAGS`
-(`-C prefer-dynamic -Z force-unstable-if-unmarked`) that the `test` and
-`typecheck` Makefile targets inject per invocation — see the note in
+excluded). The root `whitaker` package is an ordinary CLI crate; compiler-
+private driver code and its `feature(rustc_private)` use live in
+`whitaker_lint_core`. The three listed lint crates still enable
+`feature(rustc_private)` under `dylint-driver` and need the dynamic-linking
+`RUSTFLAGS` (`-C prefer-dynamic -Z force-unstable-if-unmarked`) that the `test`
+and `typecheck` Makefile targets inject per invocation — see the note in
 [`.cargo/config.toml`](../.cargo/config.toml), which deliberately keeps that
 flag out of workspace-wide configuration because it would break `cargo install`
 for `whitaker-installer`. The shared mutation workflow has no equivalent

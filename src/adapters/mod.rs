@@ -6,6 +6,7 @@ use camino::Utf8PathBuf;
 use whitaker_installer::{
     dependency_binaries::host_target,
     dirs::SystemBaseDirs,
+    installation_record::installed_paths,
     list::{collect_installed, detect_active_toolchain},
     orchestration::run_install_for_whitaker,
     prebuilt_path::prebuilt_library_dir,
@@ -107,28 +108,46 @@ impl LintRunner for SystemServices {
 
 /// Resolves the library path used when forwarding a command to cargo-dylint.
 fn active_library_path() -> Option<OsString> {
+    let explicit_path = std::env::var_os("DYLINT_LIBRARY_PATH");
+    if explicit_path.as_ref().is_some_and(|path| !path.is_empty()) {
+        return explicit_path;
+    }
+    let recorded_paths = SystemBaseDirs::new()
+        .and_then(|dirs| installed_paths(&dirs).ok())
+        .unwrap_or_default();
     let active_toolchain = detect_active_toolchain();
     let build_path = active_toolchain.as_ref().and_then(|toolchain| {
         default_target_dir().map(|target_dir| target_dir.join(toolchain).join("release"))
     });
     let prebuilt_path = active_toolchain.as_deref().and_then(prebuilt_library_path);
-    active_library_path_for(
-        std::env::var_os("DYLINT_LIBRARY_PATH"),
-        build_path,
-        prebuilt_path,
-    )
+    active_library_path_for(explicit_path, recorded_paths, build_path, prebuilt_path)
 }
 
 /// Chooses an explicit path, then a build path, then a prebuilt path.
 fn active_library_path_for(
     explicit_path: Option<OsString>,
+    recorded_paths: Vec<Utf8PathBuf>,
     build_path: Option<Utf8PathBuf>,
     prebuilt_path: Option<Utf8PathBuf>,
 ) -> Option<OsString> {
     explicit_path
         .filter(|path| !path.is_empty())
+        .or_else(|| existing_recorded_directories(recorded_paths))
         .or_else(|| existing_directory(build_path))
         .or_else(|| existing_directory(prebuilt_path))
+}
+
+/// Joins every existing recorded path so Dylint can select by toolchain.
+fn existing_recorded_directories(paths: Vec<Utf8PathBuf>) -> Option<OsString> {
+    let existing: Vec<_> = paths
+        .into_iter()
+        .filter(|path| path.is_absolute() && path.is_dir())
+        .map(Utf8PathBuf::into_std_path_buf)
+        .filter(|path| std::env::join_paths([path]).is_ok())
+        .collect();
+    (!existing.is_empty())
+        .then(|| std::env::join_paths(existing).ok())
+        .flatten()
 }
 
 /// Returns a directory path only when it currently names an existing directory.
@@ -147,15 +166,16 @@ fn prebuilt_library_path(toolchain: &str) -> Option<Utf8PathBuf> {
 
 #[cfg(test)]
 mod tests {
-    //! Tests for adapter path selection and child-process behavior.
+    //! Tests for adapter path selection and child-process behaviour.
 
     use std::ffi::OsString;
 
     use camino::{Utf8Path, Utf8PathBuf};
     use cap_std::{ambient_authority, fs_utf8::Dir};
     use tempfile::TempDir;
+    use whitaker_common::test_support::with_env_var;
 
-    use super::active_library_path_for;
+    use super::{active_library_path, active_library_path_for};
 
     fn utf8_path(path: &std::path::Path) -> Utf8PathBuf {
         Utf8PathBuf::from_path_buf(path.to_path_buf())
@@ -179,14 +199,25 @@ mod tests {
         let temporary = TempDir::new().expect("temporary directories should be created");
         let build_path = create_test_directory(&temporary, "build");
         let prebuilt_path = create_test_directory(&temporary, "prebuilt");
+        let recorded_path = create_test_directory(&temporary, "recorded");
         let expected = OsString::from("/custom/dylint/lib");
         let actual = active_library_path_for(
             Some(expected.clone()),
+            vec![recorded_path],
             Some(build_path),
             Some(prebuilt_path),
         );
 
         assert_eq!(actual, Some(expected));
+    }
+
+    #[test]
+    fn explicit_environment_path_precedes_recorded_and_default_paths() {
+        let expected = OsString::from("/custom/dylint/lib");
+
+        with_env_var("DYLINT_LIBRARY_PATH", &expected, || {
+            assert_eq!(active_library_path(), Some(expected.clone()));
+        });
     }
 
     #[test]
@@ -196,7 +227,8 @@ mod tests {
         let prebuilt_path = create_test_directory(&temporary, "prebuilt");
         let expected = build_path.clone().into_os_string();
 
-        let actual = active_library_path_for(None, Some(build_path), Some(prebuilt_path));
+        let actual =
+            active_library_path_for(None, Vec::new(), Some(build_path), Some(prebuilt_path));
 
         assert_eq!(actual, Some(expected));
     }
@@ -208,7 +240,41 @@ mod tests {
         let prebuilt_path = create_test_directory(&temporary, "prebuilt");
         let expected = prebuilt_path.clone().into_os_string();
 
-        let actual = active_library_path_for(None, Some(missing_build_path), Some(prebuilt_path));
+        let actual = active_library_path_for(
+            None,
+            Vec::new(),
+            Some(missing_build_path),
+            Some(prebuilt_path),
+        );
+
+        assert_eq!(actual, Some(expected));
+    }
+
+    #[test]
+    fn recorded_directories_cover_each_toolchain_before_default_candidates() {
+        let temporary = TempDir::new().expect("temporary directories should be created");
+        let stable = create_test_directory(&temporary, "stable-custom-target");
+        let nightly = create_test_directory(&temporary, "nightly-custom-target");
+        let expected = std::env::join_paths([
+            stable.as_std_path().to_path_buf(),
+            nightly.as_std_path().to_path_buf(),
+        ])
+        .expect("temporary paths should form an environment path list");
+
+        let actual = active_library_path_for(None, vec![stable, nightly], None, None);
+
+        assert_eq!(actual, Some(expected));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn an_unrepresentable_recorded_directory_does_not_hide_valid_paths() {
+        let temporary = TempDir::new().expect("temporary directories should be created");
+        let valid = create_test_directory(&temporary, "valid");
+        let invalid = create_test_directory(&temporary, "invalid:directory");
+        let expected = valid.clone().into_os_string();
+
+        let actual = active_library_path_for(None, vec![invalid, valid], None, None);
 
         assert_eq!(actual, Some(expected));
     }

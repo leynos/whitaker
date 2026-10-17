@@ -56,6 +56,11 @@ This:
 After installation, run `whitaker --all` in any Rust project to lint it. Use
 `whitaker-ls` to list the installed Whitaker suite libraries.
 
+The root `whitaker` CLI also remembers each successful install's staging path
+by Rust toolchain. This lets `whitaker --all` find libraries installed with a
+custom `--target-dir`, including when run from another project. An explicitly
+set `DYLINT_LIBRARY_PATH` continues to override the recorded paths.
+
 On Windows, the installer's `PATH` check honours `PATHEXT` and falls back to
 the usual executable suffixes when `PATHEXT` is unset, so a normal
 Cargo-installed executable such as `dylint-link.exe` in
