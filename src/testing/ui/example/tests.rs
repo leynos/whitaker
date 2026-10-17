@@ -45,6 +45,16 @@ fn recovers_flags_past_any_prefix(#[case] prefix: &str) {
     assert_eq!(flags, expected_flags());
 }
 
+// CI forces Cargo to style its status words with terminal escapes.
+#[test]
+fn recovers_flags_from_styled_output() {
+    let styled = running("sccache ").replacen("Running", "\u{1b}[1m\u{1b}[32mRunning\u{1b}[0m", 1);
+
+    let flags = linking_flags_from_build_log(&styled, "demo").expect("styling should be ignored");
+
+    assert_eq!(flags, expected_flags());
+}
+
 #[test]
 fn ignores_invocations_for_other_crates() {
     let other = running("sccache ").replace("--crate-name demo", "--crate-name helper");

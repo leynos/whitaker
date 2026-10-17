@@ -139,7 +139,7 @@ fn build_example_verbosely(package: &Package, example: &str) -> Result<String, S
         .arg("build")
         .arg("--manifest-path")
         .arg(package.manifest_path.as_std_path())
-        .args(["--example", example, "--verbose", "--color", "never"])
+        .args(["--example", example, "--verbose"])
         .output()
         .map_err(|error| format!("failed to run cargo: {error}"))?;
     let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
@@ -181,8 +181,10 @@ fn snake_case(name: &str) -> String { name.replace('-', "_") }
 /// `crate_name` from a `cargo build --verbose` log.
 ///
 /// Words before the compiler are a wrapper chain (or, at higher verbosity,
-/// environment assignments) and are skipped. Like `dylint_testing`, this
-/// splits the command on spaces, so paths containing spaces are unsupported.
+/// environment assignments) and are skipped. Terminal styling is stripped
+/// first, because CI commonly forces Cargo to style its status words. Like
+/// `dylint_testing`, this splits the command on spaces, so paths containing
+/// spaces are unsupported.
 ///
 /// # Examples
 ///
@@ -194,9 +196,10 @@ fn snake_case(name: &str) -> String { name.replace('-', "_") }
 /// );
 /// ```
 fn linking_flags_from_build_log(log: &str, crate_name: &str) -> Result<Vec<String>, String> {
-    let mut invocations = log
-        .lines()
-        .filter_map(running_command)
+    let plain_lines: Vec<String> = log.lines().map(strip_terminal_styling).collect();
+    let mut invocations = plain_lines
+        .iter()
+        .filter_map(|line| running_command(line))
         .filter_map(compiler_arguments)
         .filter(|arguments| names_crate(arguments, crate_name));
     let arguments = invocations
@@ -208,6 +211,22 @@ fn linking_flags_from_build_log(log: &str, crate_name: &str) -> Result<Vec<Strin
         ));
     }
     linking_flags(&arguments)
+}
+
+/// Removes terminal control sequences (`ESC [ ... final-byte`), which Cargo
+/// wraps around its status words when styling is forced.
+fn strip_terminal_styling(line: &str) -> String {
+    let mut plain = String::with_capacity(line.len());
+    let mut characters = line.chars();
+    while let Some(character) = characters.next() {
+        if character == '\u{1b}' {
+            // Discard the sequence up to and including its alphabetic final byte.
+            let _final_byte = characters.by_ref().find(char::is_ascii_alphabetic);
+        } else {
+            plain.push(character);
+        }
+    }
+    plain
 }
 
 /// Extracts the command from a line shaped like ``Running `<command>` ``.
