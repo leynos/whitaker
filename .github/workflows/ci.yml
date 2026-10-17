@@ -84,6 +84,9 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Start CI telemetry
+        uses: leynos/shared-actions/.github/actions/ci-telemetry-start@81374b6f183e59f0570ad36217ded90d3240fda6
+
       - name: Bound concurrency to the runner shape
         run: |
           {
@@ -254,6 +257,12 @@ jobs:
         # or reads); isolated errors only warn.
         run: python3 scripts/check_sccache_health.py --expect-location ghac sccache-stats.json
 
+      - name: Report CI telemetry
+        if: always()
+        uses: leynos/shared-actions/.github/actions/ci-telemetry-finish@81374b6f183e59f0570ad36217ded90d3240fda6
+        with:
+          sccache-status: ${{ steps.setup-rust.outputs.sccache-status }}
+
   linux-full:
     runs-on: ubicloud-standard-2-ubuntu-2404
     timeout-minutes: 60
@@ -265,6 +274,9 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           persist-credentials: false
+
+      - name: Start CI telemetry
+        uses: leynos/shared-actions/.github/actions/ci-telemetry-start@81374b6f183e59f0570ad36217ded90d3240fda6
 
       - name: Bound concurrency to the runner shape
         run: |
@@ -455,6 +467,12 @@ jobs:
         # or reads); isolated errors only warn.
         run: python3 scripts/check_sccache_health.py --expect-location ghac sccache-stats.json
 
+      - name: Report CI telemetry
+        if: always()
+        uses: leynos/shared-actions/.github/actions/ci-telemetry-finish@81374b6f183e59f0570ad36217ded90d3240fda6
+        with:
+          sccache-status: ${{ steps.setup-rust.outputs.sccache-status }}
+
       - name: Record disk headroom before the saves
         if: always()
         run: bash scripts/record-cache-observations.sh headroom
@@ -520,6 +538,9 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           persist-credentials: false
+
+      - name: Start CI telemetry
+        uses: leynos/shared-actions/.github/actions/ci-telemetry-start@81374b6f183e59f0570ad36217ded90d3240fda6
 
       - name: Restore Cargo registry
         id: cargo-registry
@@ -592,6 +613,12 @@ jobs:
           path: sccache-stats.json
           if-no-files-found: error
           retention-days: 14
+
+      - name: Report CI telemetry
+        if: always()
+        uses: leynos/shared-actions/.github/actions/ci-telemetry-finish@81374b6f183e59f0570ad36217ded90d3240fda6
+        with:
+          sccache-status: ${{ steps.setup-rust.outputs.sccache-status }}
 
       - name: Record disk headroom before the saves
         if: always()
