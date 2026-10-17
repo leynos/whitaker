@@ -1443,8 +1443,8 @@ directory module with its own `mod.rs`, holding `test_helpers.rs` and a further
 ### Sibling test modules
 
 An inline `#[cfg(test)] mod tests { … }` block that grows large enough to
-threaten the 400-line budget moves to a sibling file, with the module path kept
-intact by an explicit `#[path]` attribute:
+threaten the 400-line budget moves to a sibling file. The declaration keeps the
+module's name, and an explicit `#[path]` attribute points it at the file:
 
 ```rust
 #[cfg(test)]
@@ -1469,13 +1469,22 @@ Three shapes of this appear in the tree.
 - **Nested tests directory.** When the tests themselves need helpers and
   submodules, they become a `tests/` directory module with a `mod.rs`.
 
-The `#[path]` form is preferred for the file-module case because it keeps the
-test module's name, `tests`, and therefore its module path unchanged. `super::`
-and `crate::` imports inside the tests keep resolving, `cargo test` filter
-paths keep matching, and the production file drops back under the budget
-without folding a behaviour change into a purely structural edit. A test file
-extracted this way still carries a `//!` module-level doc comment, matching the
-repository rule that every module begins with one.
+The `#[path]` form is preferred for the file-module case because `mod tests;`
+keeps the test module's name, `tests`, and therefore its module path unchanged,
+while the attribute places the file beside the module rather than in a
+directory of its own. Left to the default location, a bare `mod tests;` in
+`list.rs` resolves to `list/tests.rs`; naming the declaration after the file, as
+`mod list_tests;`, would rename the module to `crate::list::list_tests` and
+still resolve to `list/list_tests.rs`, not to a sibling. Only the attribute
+puts the file beside `list.rs` while keeping the module named `tests`.
+
+Renaming the module would not break `super::`, since the module stays a child of
+`list`; what breaks is `crate::` paths such as `crate::list::tests::…` and
+`cargo test` filters naming `tests`. With the attribute the production file
+drops back under the budget without folding a behaviour change into a purely
+structural edit. A test file extracted this way still carries a `//!`
+module-level doc comment, matching the repository rule that every module begins
+with one.
 
 `installer/src/deps/tests.rs` shows the one variation on this. It is not a
 module file in its own right: `installer/src/deps/mod.rs` declares it as
