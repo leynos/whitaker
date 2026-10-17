@@ -306,7 +306,7 @@ fn ensure_whitaker_workspace(
     ensure_workspace(dirs, &plan)
 }
 
-/// Detects or overrides the toolchain, then verifies it is installed.
+/// Detect the workspace toolchain or apply an explicit channel override.
 pub(super) fn resolve_toolchain(
     workspace_root: &Utf8Path,
     override_channel: Option<&str>,
@@ -317,6 +317,7 @@ pub(super) fn resolve_toolchain(
     )
 }
 
+/// Install the toolchain and extra components when absent.
 fn ensure_toolchain_installed(
     toolchain: &Toolchain,
     additional_components: &[&str],

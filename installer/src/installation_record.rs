@@ -27,6 +27,16 @@ pub enum InstallationRecordError {
     #[error("could not determine Whitaker data directory")]
     MissingDataDirectory,
 
+    /// The installation record is not valid JSON.
+    #[error("failed to parse installation record {path}: {source}")]
+    Parse {
+        /// Record path.
+        path: PathBuf,
+        /// Underlying deserialization error.
+        #[source]
+        source: serde_json::Error,
+    },
+
     /// An operation on the installation record failed.
     #[error("failed to {operation} installation record {path}: {source}")]
     Io {
@@ -79,9 +89,10 @@ pub fn record_installation(
         .map_err(|source| record_io_error("lock", &record_path, source))?;
     let mut paths = match read_paths(&record_path, &mut file) {
         Ok(paths) => paths,
-        Err(InstallationRecordError::Io {
-            operation: "parse", ..
-        }) => BTreeMap::new(),
+        Err(InstallationRecordError::Parse { path, source }) => {
+            tracing::warn!(path = %path.display(), error = %source, "discarding paths");
+            BTreeMap::new()
+        }
         Err(error) => return Err(error),
     };
     paths.insert(toolchain.to_owned(), absolute_staging_path.into_string());
@@ -159,12 +170,11 @@ fn read_paths(
     if content.trim().is_empty() {
         return Ok(BTreeMap::new());
     }
-    serde_json::from_str::<BTreeMap<String, String>>(&content).map_err(|error| {
-        record_io_error(
-            "parse",
-            path,
-            std::io::Error::new(std::io::ErrorKind::InvalidData, error),
-        )
+    serde_json::from_str::<BTreeMap<String, String>>(&content).map_err(|source| {
+        InstallationRecordError::Parse {
+            path: path.to_path_buf(),
+            source,
+        }
     })
 }
 
@@ -204,7 +214,7 @@ mod tests {
     use camino::Utf8Path;
     use tempfile::TempDir;
 
-    use super::{installed_paths, record_installation};
+    use super::{InstallationRecordError, installed_paths, record_installation};
     use crate::dirs::{BaseDirs, MockBaseDirs};
 
     fn mock_dirs(data: PathBuf) -> MockBaseDirs {
@@ -298,7 +308,10 @@ mod tests {
             .expect("malformed record should be written");
         let dirs = mock_dirs(data);
 
-        assert!(installed_paths(&dirs).is_err());
+        assert!(matches!(
+            installed_paths(&dirs),
+            Err(InstallationRecordError::Parse { .. })
+        ));
         record_installation(
             &dirs,
             "nightly",
