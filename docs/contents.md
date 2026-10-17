@@ -101,5 +101,5 @@
 
 ## Planning material
 
-- [docs/execplans/](execplans/) stores execution plans for branch-scoped
-  implementation work and larger follow-up tasks.
+- [docs/execplans/](execplans/) and [debugging plans](debugging/) record
+  implementation plans and bounded investigations.

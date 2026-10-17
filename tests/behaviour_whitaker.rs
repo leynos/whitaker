@@ -5,10 +5,10 @@ use std::{
     path::PathBuf,
     process::{Command, Output},
 };
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "macos")))]
 use std::{error::Error, path::Path};
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "macos")))]
 use cap_std::{
     ambient_authority,
     fs_utf8::{Dir, Permissions, PermissionsExt},
@@ -17,7 +17,7 @@ use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use tempfile::TempDir;
 use whitaker_installer::builder::{library_extension, library_prefix};
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "macos")))]
 use whitaker_installer::{dirs::BaseDirs, installation_record::record_installation};
 
 #[derive(Default)]
@@ -315,7 +315,7 @@ fn workspace_root() -> Result<PathBuf, String> {
         .ok_or_else(|| "root package directory should have a parent".to_owned())
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "macos")))]
 #[test]
 fn forwarding_uses_all_recorded_custom_paths_outside_a_checkout() {
     let temporary = TempDir::new().expect("temporary directory should be created");
@@ -339,12 +339,12 @@ fn forwarding_uses_all_recorded_custom_paths_outside_a_checkout() {
     assert!(!fixture.external_cwd.join("rust-toolchain.toml").exists());
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "macos")))]
 struct TestBaseDirs {
     data: PathBuf,
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "macos")))]
 impl BaseDirs for TestBaseDirs {
     fn home(&self) -> Option<PathBuf> { None }
 
@@ -353,7 +353,7 @@ impl BaseDirs for TestBaseDirs {
     fn whitaker_data(&self) -> Option<PathBuf> { Some(self.data.clone()) }
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "macos")))]
 struct RecordedPathFixture {
     data_home: PathBuf,
     stable: PathBuf,
@@ -362,7 +362,7 @@ struct RecordedPathFixture {
     fake_cargo: PathBuf,
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "macos")))]
 fn recorded_path_fixture(temporary: &TempDir) -> Result<RecordedPathFixture, Box<dyn Error>> {
     let test_root = Dir::open_ambient_dir(
         camino::Utf8Path::from_path(temporary.path())
@@ -383,7 +383,7 @@ fn recorded_path_fixture(temporary: &TempDir) -> Result<RecordedPathFixture, Box
     Ok(fixture)
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "macos")))]
 fn create_fixture_directories(root: &Dir) -> std::io::Result<()> {
     for directory in [
         "xdg-data",
@@ -397,7 +397,7 @@ fn create_fixture_directories(root: &Dir) -> std::io::Result<()> {
     Ok(())
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "macos")))]
 fn record_fixture_toolchains(fixture: &RecordedPathFixture) -> Result<(), Box<dyn Error>> {
     let dirs = TestBaseDirs {
         data: fixture.data_home.join("whitaker"),
@@ -410,7 +410,7 @@ fn record_fixture_toolchains(fixture: &RecordedPathFixture) -> Result<(), Box<dy
     Ok(())
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "macos")))]
 fn create_fake_cargo(directory: &Path) -> Result<(), Box<dyn Error>> {
     let path = camino::Utf8Path::from_path(directory)
         .ok_or_else(|| std::io::Error::other("fake cargo path should be UTF-8"))?;

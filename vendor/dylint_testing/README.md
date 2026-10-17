@@ -10,4 +10,5 @@ that compiler and keeps its arguments, while allowing the wrapper to continue
 running.
 
 Remove this patch when an upstream release handles wrapped compiler commands.
-The package's upstream licence is MIT OR Apache-2.0.
+The upstream licence is MIT OR Apache-2.0; this vendored copy uses the MIT
+option in [LICENSE-MIT](LICENSE-MIT).
