@@ -130,3 +130,7 @@ This source is based on `dylint_testing` 6.0.1. Whitaker's local patch makes
 example-target discovery accept Cargo commands that place a compiler wrapper
 before `rustc`. The test runner can then keep configured compiler wrappers
 active while recovering the example's linking flags.
+
+Remove this patch when an upstream release handles wrapped compiler commands.
+The upstream licence is MIT OR Apache-2.0; this vendored copy uses the MIT
+option in [LICENSE-MIT](LICENSE-MIT).

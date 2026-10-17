@@ -91,45 +91,27 @@ stop at.
   `whitaker_lint_core`; the root package now packages and tests independently.
 - [x] `EP-M1` — moved installer orchestration behind the installer library API
   and protected the legacy dry-run output with a snapshot.
-- [ ] `EP-M2` — root `whitaker` commands and compatibility forwarding.
-- [ ] `EP-M3` — binstall metadata and crates.io name reservation.
+- [x] `EP-M2a` — root commands, forwarding, Kani proof, and bounded property
+  checks are implemented.
+- [ ] `EP-M2b` — CLI Verus proof and its negative control remain unverified.
+- [x] `EP-M3a` — binstall and platform package metadata implemented.
+- [ ] `EP-M3b` — crates.io name reservation remains unauthorized.
 - [x] `EP-M4` — architecture and user/developer documentation.
 
-Implementation resumed on 2026-10-15 under the approved 7,000-net-line ceiling
-(D-12). The branch was rebased onto PR #356's target,
-`origin/harden-lint-config` (`afb1e4ac1387aff8e51fa7bbeb62d94f0f6c8970`); the
-target remains an ancestor of the current branch. The 70-file tolerance
-exception is limited to this approved plan. No crates.io package has been
-published or reserved.
+Resumed 2026-10-15; rebased onto `origin/harden-lint-config`
+(`afb1e4ac1387aff8e51fa7bbeb62d94f0f6c8970`), still an ancestor. D-11/D-12
+approve 70 files and 7,000 net added lines for this plan only.
 
-M2 now provides the root binary with `install`, transitional `ls`, localized
-help/version, and legacy `cargo dylint` forwarding. The root package has
-binstall metadata, but release archives remain deferred. The shared installer
-records canonical successful staging paths by toolchain, so forwarding from an
-external project can locate custom target directories while preserving an
-explicit `DYLINT_LIBRARY_PATH`. BDD, property, snapshot, exit-status, package,
-and installer tests cover the public behaviour. D-19 keeps the CLI Verus proof
-out of the default proof group until it verifies within the approved limit and
-its negative control is recorded; D-20 records the install-path persistence
-decision.
+The CLI delivers `install`, transitional `ls`, localized help/version, and
+legacy forwarding. Installer records retain canonical staging paths per
+toolchain and respect explicit `DYLINT_LIBRARY_PATH`; binstall metadata is
+present. Kani passed 360 checks and reachability controls; Verus exceeded
+tolerance without a verdict (D-19). Name reservation is unauthorized. Roadmap
+3.5.1 is checked per direction; the plan stays open for these two criteria.
 
-Kani passed its 360 checks and reachability negative control. Verus did not
-finish within its ten-minute tolerance. At the user's direction, roadmap item
-3.5.1 is checked complete for the implementation deliverable. The separate
-proof and crates.io-name acceptance criteria remain open; no package is
-published or reserved, and reservation still needs explicit authorization.
-
-The implementation includes M2 CLI routing and forwarding, M3 binstall
-metadata, and M4 documentation. The fresh CodeRabbit pass found seven
-follow-ups covering explicit overrides, record access/path encoding, child env
-isolation, and record-write policy. All were addressed; D-21 records the legacy
-warning/root error split. Kani and its negative control passed. Verus exceeded
-its ten-minute tolerance; crates.io reservation remains unauthorized. On
-2026-10-17, `make check-fmt`, `make test` (1,698 passed, five skipped,
-doctests), `make typecheck`, `make lint`, `make markdownlint`, `make nixie`,
-and root package-list validation passed sequentially. A fresh final CodeRabbit
-review is next. The 3.5.1 implementation checkbox is complete per user
-direction; Verus and name reservation remain separate open plan criteria.
+Latest review concerns are fixed; final 2026-10-17 format, test (1,699 passed,
+five skipped), doctests, typecheck, lint, Markdown, Mermaid, and package-list
+gates now pass. Verus and name reservation remain separate open criteria.
 
 ## Constraints
 
@@ -1660,38 +1642,25 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
   record during read-modify-write. Date/Author: 2026-10-17, implementation
   supervisor, following CodeRabbit review.
 
-- **D-21: Make record failures mode-sensitive.** Legacy `whitaker-installer`
-  wrappers embed the staging path, so record failure warns and continues. Root
-  `whitaker install` creates only `whitaker-ls` and requires the record for
-  forwarding, so record failure remains fatal there. Date/Author: 2026-10-17,
-  implementation supervisor, following CodeRabbit review.
+- **D-21: Make record failures mode-sensitive.** The legacy wrapper embeds its
+  staging path and warns on record failure; root install needs its record for
+  forwarding and fails instead. Date/Author: 2026-10-17, following review.
+
+- **D-22: Recover corrupt records only on successful install.** Keep
+  `installed_paths` strict; successful install replaces malformed JSON. Derive
+  snapshots from the pinned toolchain, gate XDG tests, and ship the vendored
+  helper's selected MIT notice. Date/Author: 2026-10-17, following review.
 
 ## Outcomes & retrospective
 
-- **EP-M0, 2026-08-24.** Complete. The compiler-private driver now resides in
-  the non-publishable `whitaker_lint_core` package. The root package has its
-  crates.io metadata and no compiler-private dependencies, and packages
-  successfully. All in-tree consumers were migrated to the core package. The
-  feature-unification discovery requires a dedicated feature-free core test
-  pass, preserving all newly activated coverage without weakening the driver
-  pass. The milestone is contained in the next commit and can be reverted as
-  one unit.
-
-- **EP-M1, 2026-08-24.** Complete. `whitaker_installer::orchestration` now
-  owns request routing and installation flow; `whitaker-installer` is a thin
-  parser, adapter constructor, and exit-code composition root. The existing
-  installer integration tests remain unmodified, and a normalized dry-run
-  snapshot protects its public output. The milestone is contained in the next
-  commit and can be reverted as one unit.
-
-- **Implementation status, 2026-10-17.** The root CLI, binstall metadata,
-  ADR, and user/developer documentation are implemented; roadmap 3.5.1 is
-  checked per user direction. Final formatting, test (1,698 passed, five
-  skipped; six doctests passed, two ignored), typecheck, lint, Markdown,
-  Mermaid, and package-list gates pass. Kani and its negative control pass.
-  Verus exceeded its ten-minute tolerance, and crates.io name reservation
-  remains unauthorized. Those formal-proof and package-name criteria remain
-  open, so the ExecPlan remains `IN PROGRESS`.
+- **EP-M0, 2026-08-24.** Complete. Extracted the compiler-private driver into
+  `whitaker_lint_core`; root metadata and a feature-free core test pass make
+  the CLI package publishable and tested.
+- **EP-M1, 2026-08-24.** Complete. Installer orchestration is library-owned;
+  the old binary is a thin composition root, protected by its dry-run snapshot.
+- **Status, 2026-10-17.** CLI, binstall metadata, ADR, and user/developer docs
+  are implemented; Kani passed. Verus exceeded tolerance and name reservation
+  remains unauthorized, so the plan stays `IN PROGRESS`.
 
 To be completed at each milestone boundary and at completion. Before setting
 this plan to `COMPLETE`, reconcile every entry in `Surprises & discoveries`
@@ -1702,42 +1671,4 @@ mark the plan `COMPLETE` while any upstream change or deviation is unrecorded.
 
 ## Revision note
 
-**Revision 3, 2026-08-24.** Implementation started after the requester approved
-this plan. The baseline packaging failure and dependency-tree count were
-reproduced before `EP-M0`; no scope or architectural decision changed.
-
-**Revision 2, 2026-08-21.** Rewritten after a six-perspective design review.
-
-What changed, and why. The structural bet was wrong:
-`cargo package -p whitaker` fails, so the root package cannot be published and
-the plan's stated outcome was unreachable. The driver-library extraction,
-previously filed as a contingency under a risk entry, is now `EP-M0` and the
-plan's precondition; the separate `crates/whitaker_cli` crate it was designed
-to avoid is gone, because the extraction makes the root package a normal,
-testable, publishable CLI package. That also fixed three downstream defects:
-`CARGO_BIN_EXE_whitaker` is now available to the end-to-end tests, the policy
-layer no longer imports clap through a supposedly pure domain boundary, and
-`ortho_config` no longer propagates into eleven lint crates.
-
-A collision the first draft missed entirely — the installer generates an
-executable named `whitaker` that a `cargo install`ed binary deterministically
-shadows, breaking `whitaker --all` and this repository's own `make lint` — is
-now Constraint 2, requirement `CLI-REQ-FWD`, and the subject of both
-verification obligations.
-
-Both original verification obligations were cut as vacuous: nothing ever
-inverts an asset name, and clap rejects the flag conflicts before any
-repository-owned routing code runs. They are replaced by argv-classification
-totality and disjointness, bounded by Kani and closed unbounded by Verus. Exit
-codes are settled at 0, 2, and 1 rather than left to the implementer. The
-feasibility spike now uses `cargo build` rather than `cargo check`, which
-cannot link and so could never have observed the failure it tested for.
-
-How it affects remaining work. `EP-M0` is new and is roughly 40 mechanical
-files; the overall scope tolerance rose from 45 to 70 files to accommodate it.
-`EP-M1` is unchanged. Three items still want a reviewer's eye: the `googletest`
-and `pretty_assertions` inconsistency with the sibling plan for 7.3.1 (D-7),
-whether `ortho_config` earns its place at this milestone given that
-`NoOpLocalizer` does not translate (D-6), and confirmation of
-`is_display_request`'s exact signature before Stage B writes red tests against
-it.
+Revisions 2–3 and D-6–D-12 record design decisions and the package baseline.

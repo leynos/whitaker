@@ -174,7 +174,7 @@
 
 ## Planning material
 
-- [docs/execplans/](execplans/) stores execution plans for branch-scoped
-  implementation work and larger follow-up tasks.
+- [docs/execplans/](execplans/) and [debugging plans](debugging/) record
+  implementation plans and bounded investigations.
 - [Issue #523 OrthoConfig adoption plan](execplans/issue-523-adopt-ortho-config-v0-10-0-for-the-whitaker-cli.md)
   records the proposed scope, baseline, implementation sequence, and gates.

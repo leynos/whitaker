@@ -1807,8 +1807,8 @@ Unlike the excludes applied by `make test`'s `TEST_EXCLUDES`, the mutation
 caller does **not** exclude the `whitaker` root crate or the
 `function_attrs_follow_docs`, `module_max_lines`, and `no_expect_outside_tests`
 lint crates from mutation scope (only their `ui/`/`examples/` fixtures are
-excluded). The root `whitaker` package is an ordinary CLI crate; compiler-
-private driver code and its `feature(rustc_private)` use live in
+excluded). The root `whitaker` package is an ordinary CLI crate;
+compiler-private driver code and its `feature(rustc_private)` use live in
 `whitaker_lint_core`. The three listed lint crates still enable
 `feature(rustc_private)` under `dylint-driver` and need the dynamic-linking
 `RUSTFLAGS` (`-C prefer-dynamic -Z force-unstable-if-unmarked`) that the `test`
