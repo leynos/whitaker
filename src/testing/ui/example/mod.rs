@@ -71,23 +71,21 @@ impl StagedExample {
 /// # Ok::<(), whitaker::testing::ui::HarnessError>(())
 /// ```
 pub fn stage_example(crate_name: &str, example: &str) -> Result<StagedExample, HarnessError> {
-    let failure = |message: String| HarnessError::ExampleStagingFailed {
-        example: example.to_owned(),
-        message,
-    };
+    let example_name = ExampleName::new(example);
+    let failure = |message: String| example_name.failure(message);
     let package_name = CrateName::try_from(crate_name).map_err(|_| HarnessError::EmptyCrateName)?;
     let metadata = fetch_metadata()?;
     let package = package_for_crate(&metadata, &package_name)?;
-    let target = example_target(package, example).ok_or_else(|| {
+    let target = example_target(package, &example_name).ok_or_else(|| {
         failure(format!(
             "{crate_name} declares no example target named `{example}`"
         ))
     })?;
 
-    remove_built_example(&metadata, example).map_err(|error| failure(error.to_string()))?;
-    let build_log = build_example_verbosely(package, example).map_err(&failure)?;
+    remove_built_example(&metadata, &example_name).map_err(|error| failure(error.to_string()))?;
+    let build_log = build_example_verbosely(package, &example_name).map_err(&failure)?;
     let linking_flags =
-        linking_flags_from_build_log(&build_log, &snake_case(example)).map_err(&failure)?;
+        linking_flags_from_build_log(&build_log, &example_name).map_err(&failure)?;
     let directory =
         stage_sources(target.src_path.as_std_path()).map_err(|error| failure(error.to_string()))?;
 
@@ -97,18 +95,52 @@ pub fn stage_example(crate_name: &str, example: &str) -> Result<StagedExample, H
     })
 }
 
-fn example_target<'a>(package: &'a Package, example: &str) -> Option<&'a Target> {
+/// An example target's name, paired with the crate name Cargo compiles it
+/// under (the target name with `-` replaced by `_`).
+#[derive(Debug)]
+struct ExampleName {
+    target: String,
+    crate_name: String,
+}
+
+impl ExampleName {
+    fn new(target: &str) -> Self {
+        Self {
+            target: target.to_owned(),
+            crate_name: target.replace('-', "_"),
+        }
+    }
+
+    fn failure(&self, message: String) -> HarnessError {
+        HarnessError::ExampleStagingFailed {
+            example: self.target.clone(),
+            message,
+        }
+    }
+
+    /// Whether `path` is build output for this example: the binary itself or
+    /// one of Cargo's hashed artefacts beside it.
+    fn is_built_artefact(&self, path: &Path) -> bool {
+        let Some(file_name) = path.file_name().and_then(OsStr::to_str) else {
+            return false;
+        };
+        let binary_name = format!("{}{}", self.crate_name, std::env::consts::EXE_SUFFIX);
+        file_name == binary_name || file_name.starts_with(&format!("{}-", self.crate_name))
+    }
+}
+
+fn example_target<'a>(package: &'a Package, example: &ExampleName) -> Option<&'a Target> {
     package
         .targets
         .iter()
-        .find(|target| target.is_example() && target.name == example)
+        .find(|target| target.is_example() && target.name == example.target)
 }
 
 /// Deletes the example's previous build output.
 ///
 /// Cargo prints a `Running` line only for units it actually compiles, so a
 /// fresh example would leave nothing to recover the flags from.
-fn remove_built_example(metadata: &Metadata, example: &str) -> io::Result<()> {
+fn remove_built_example(metadata: &Metadata, example: &ExampleName) -> io::Result<()> {
     let examples = metadata.target_directory.join("debug").join("examples");
     let entries = match fs::read_dir(&examples) {
         Ok(entries) => entries,
@@ -116,30 +148,21 @@ fn remove_built_example(metadata: &Metadata, example: &str) -> io::Result<()> {
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
         Err(error) => return Err(error),
     };
-    let stem = snake_case(example);
     for entry in entries {
         let path = entry?.path();
-        if is_built_example(&path, &stem) {
+        if example.is_built_artefact(&path) {
             fs::remove_file(&path)?;
         }
     }
     Ok(())
 }
 
-fn is_built_example(path: &Path, stem: &str) -> bool {
-    let Some(file_name) = path.file_name().and_then(OsStr::to_str) else {
-        return false;
-    };
-    let binary_name = format!("{stem}{}", std::env::consts::EXE_SUFFIX);
-    file_name == binary_name || file_name.starts_with(&format!("{stem}-"))
-}
-
-fn build_example_verbosely(package: &Package, example: &str) -> Result<String, String> {
+fn build_example_verbosely(package: &Package, example: &ExampleName) -> Result<String, String> {
     let output = Command::new("cargo")
         .arg("build")
         .arg("--manifest-path")
         .arg(package.manifest_path.as_std_path())
-        .args(["--example", example, "--verbose"])
+        .args(["--example", &example.target, "--verbose"])
         .output()
         .map_err(|error| format!("failed to run cargo: {error}"))?;
     let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
@@ -174,11 +197,8 @@ fn copy_if_present(from: &Path, to: &Path) -> io::Result<()> {
     }
 }
 
-/// Cargo names an example's crate after the target, with `-` replaced.
-fn snake_case(name: &str) -> String { name.replace('-', "_") }
-
 /// Recovers the linking flags of the single compiler invocation for
-/// `crate_name` from a `cargo build --verbose` log.
+/// `example` from a `cargo build --verbose` log.
 ///
 /// Words before the compiler are a wrapper chain (or, at higher verbosity,
 /// environment assignments) and are skipped. Terminal styling is stripped
@@ -191,18 +211,18 @@ fn snake_case(name: &str) -> String { name.replace('-', "_") }
 /// ```ignore
 /// let log = "     Running `sccache /bin/rustc --crate-name demo --edition=2024 -L dependency=/t`";
 /// assert_eq!(
-///     linking_flags_from_build_log(log, "demo")?,
+///     linking_flags_from_build_log(log, &ExampleName::new("demo"))?,
 ///     ["--edition=2024", "-L", "dependency=/t"],
 /// );
 /// ```
-fn linking_flags_from_build_log(log: &str, crate_name: &str) -> Result<Vec<String>, String> {
-    let plain_lines: Vec<String> = log.lines().map(strip_terminal_styling).collect();
-    let mut invocations = plain_lines
-        .iter()
-        .filter_map(|line| running_command(line))
-        .filter_map(compiler_arguments)
-        .filter(|arguments| names_crate(arguments, crate_name));
-    let arguments = invocations
+fn linking_flags_from_build_log(log: &str, example: &ExampleName) -> Result<Vec<String>, String> {
+    let crate_name = &example.crate_name;
+    let mut invocations = log
+        .lines()
+        .map(LogLine::from_styled)
+        .filter_map(|line| line.compiler_invocation())
+        .filter(|invocation| invocation.names_crate(example));
+    let invocation = invocations
         .next()
         .ok_or_else(|| format!("found no `rustc` invocation for `{crate_name}`"))?;
     if invocations.next().is_some() {
@@ -210,67 +230,75 @@ fn linking_flags_from_build_log(log: &str, crate_name: &str) -> Result<Vec<Strin
             "found several `rustc` invocations for `{crate_name}`"
         ));
     }
-    linking_flags(&arguments)
+    invocation.linking_flags()
 }
 
-/// Removes terminal control sequences (`ESC [ ... final-byte`), which Cargo
-/// wraps around its status words when styling is forced.
-fn strip_terminal_styling(line: &str) -> String {
-    let mut plain = String::with_capacity(line.len());
-    let mut characters = line.chars();
-    while let Some(character) = characters.next() {
-        if character == '\u{1b}' {
-            // Discard the sequence up to and including its alphabetic final byte.
-            let _final_byte = characters.by_ref().find(char::is_ascii_alphabetic);
-        } else {
-            plain.push(character);
+/// One line of Cargo output with terminal styling removed.
+struct LogLine(String);
+
+impl LogLine {
+    /// Removes terminal control sequences (`ESC [ ... final-byte`), which
+    /// Cargo wraps around its status words when styling is forced.
+    fn from_styled(line: &str) -> Self {
+        let mut plain = String::with_capacity(line.len());
+        let mut characters = line.chars();
+        while let Some(character) = characters.next() {
+            if character == '\u{1b}' {
+                // Discard the sequence up to and including its alphabetic final byte.
+                let _final_byte = characters.by_ref().find(char::is_ascii_alphabetic);
+            } else {
+                plain.push(character);
+            }
         }
+        Self(plain)
     }
-    plain
+
+    /// Parses a line shaped like ``Running `<command>` `` and returns the
+    /// arguments after the first word naming `rustc`, if any.
+    ///
+    /// An assignment such as `RUSTC=/bin/rustc` also has the stem `rustc`, so
+    /// words containing `=` are treated as environment, not the compiler.
+    fn compiler_invocation(&self) -> Option<CompilerInvocation> {
+        let command = self
+            .0
+            .trim_start()
+            .strip_prefix("Running")?
+            .trim_start()
+            .strip_prefix('`')?
+            .strip_suffix('`')?;
+        let mut words = command.split(' ');
+        words.by_ref().find(|word| {
+            !word.contains('=') && Path::new(word).file_stem() == Some(OsStr::new("rustc"))
+        })?;
+        Some(CompilerInvocation(words.map(str::to_owned).collect()))
+    }
 }
 
-/// Extracts the command from a line shaped like ``Running `<command>` ``.
-fn running_command(line: &str) -> Option<&str> {
-    line.trim_start()
-        .strip_prefix("Running")?
-        .trim_start()
-        .strip_prefix('`')?
-        .strip_suffix('`')
-}
+/// The arguments of one `rustc` invocation, without the compiler path.
+struct CompilerInvocation(Vec<String>);
 
-/// Returns the arguments after the first word naming `rustc`, if any.
-fn compiler_arguments(command: &str) -> Option<Vec<&str>> {
-    let mut words = command.split(' ');
-    words.by_ref().find(|word| is_rustc(word))?;
-    Some(words.collect())
-}
+impl CompilerInvocation {
+    fn names_crate(&self, example: &ExampleName) -> bool {
+        self.0
+            .windows(2)
+            .any(|pair| matches!(pair, [flag, name] if flag == "--crate-name" && *name == example.crate_name))
+    }
 
-/// An assignment such as `RUSTC=/bin/rustc` also has the stem `rustc`, so
-/// words containing `=` are environment, not the compiler.
-fn is_rustc(word: &str) -> bool {
-    !word.contains('=') && Path::new(word).file_stem() == Some(OsStr::new("rustc"))
-}
-
-fn names_crate(arguments: &[&str], crate_name: &str) -> bool {
-    arguments
-        .windows(2)
-        .any(|pair| pair == ["--crate-name", crate_name])
-}
-
-fn linking_flags(arguments: &[&str]) -> Result<Vec<String>, String> {
-    let mut flags = Vec::new();
-    let mut remaining = arguments.iter();
-    while let Some(&argument) = remaining.next() {
-        if argument.starts_with("--edition=") {
-            flags.push(argument.to_owned());
-        } else if argument == "--extern" || argument == "-L" {
-            let value = remaining
-                .next()
-                .ok_or_else(|| format!("`{argument}` is missing its value"))?;
-            flags.extend([argument.to_owned(), value.trim_matches('\'').to_owned()]);
+    fn linking_flags(&self) -> Result<Vec<String>, String> {
+        let mut flags = Vec::new();
+        let mut remaining = self.0.iter();
+        while let Some(argument) = remaining.next() {
+            if argument.starts_with("--edition=") {
+                flags.push(argument.clone());
+            } else if argument == "--extern" || argument == "-L" {
+                let value = remaining
+                    .next()
+                    .ok_or_else(|| format!("`{argument}` is missing its value"))?;
+                flags.extend([argument.clone(), value.trim_matches('\'').to_owned()]);
+            }
         }
+        Ok(flags)
     }
-    Ok(flags)
 }
 
 #[cfg(test)]
