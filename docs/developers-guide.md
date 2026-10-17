@@ -3622,6 +3622,22 @@ crate consumes the same HIR lowering policy. Until then, keep compiler-aware
 HIR logic in the lint crate and keep the pure `ArgAtom`/`ArgFingerprint` model
 in `whitaker_common::rstest`.
 
+### Numeric and span bounds in complexity diagnostics
+
+The Bumpy Road and conditional-branch lints convert counts at the boundary
+between analysis and compiler diagnostics. Their `diagnostic_integer_argument`
+and `saturating_diagnostic_integer` helpers clamp Fluent integer arguments to
+`i64::MAX` rather than wrapping. Bumpy Road's `SegmentWeight::Fixed` keeps its
+supplied value; `SegmentWeight::Predicate` uses `saturating_branch_count` and
+`predicate_segment_weight` to cap branch counts at `u32::MAX` before scaling.
+
+Rust compiler `BytePos` offsets are also `u32`. `span_byte_offset_range`
+rejects a highlighted source range if either endpoint exceeds that limit; the
+lint omits the secondary span label and still emits the primary diagnostic.
+Tests cover the maximum accepted value and the first value above each boundary
+in `crates/bumpy_road_function/src/driver/numeric.rs` and
+`crates/conditional_max_n_branches/src/driver/numeric.rs`.
+
 ### Adding a new lint
 
 New lints should typically start as experimental. To add a lint:
@@ -3977,12 +3993,12 @@ of the rule lives in the `generate-coverage` README in
 this repository sets, what each value is sized against, and where the third
 tier went.
 
-| Tier                     | What it bounds                     | Where it is set                             | Current value                                                                                                                                             |
-| ------------------------ | ---------------------------------- | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`, both profiles       | 300 s default; 20 m for serialized Dylint/trybuild UI harnesses; 30 m for serialized nested-Cargo fixtures; 30 m for toolchain-installing behaviour tests |
-| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, both profiles       | 85 m                                                                                                                                                      |
-| Cargo watchdog           | one `cargo` invocation, wall clock | not used here, see below                    | absent                                                                                                                                                    |
-| Job `timeout-minutes`    | the whole job                      | `ci.yml` and `coverage-main.yml`, job level | 120 m for every lane that runs the suite                                                                                                                  |
+| Tier                     | What it bounds                     | Where it is set                             | Current value                                                                                                                                                                           |
+| ------------------------ | ---------------------------------- | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`, both profiles       | 300 s default; 20 m for ordinary serialized UI and no-default-feature builds; 45 m for parser-pin and trybuild compile-contract fixtures; 30 m for toolchain-installing behaviour tests |
+| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, both profiles       | 85 m                                                                                                                                                                                    |
+| Cargo watchdog           | one `cargo` invocation, wall clock | not used here, see below                    | absent                                                                                                                                                                                  |
+| Job `timeout-minutes`    | the whole job                      | `ci.yml` and `coverage-main.yml`, job level | 120 m for every lane that runs the suite                                                                                                                                                |
 
 *Table: the timers that can end a run, innermost first.*
 
@@ -4025,28 +4041,36 @@ where a reader of that profile will find them. Restating them also makes a
 later divergence between the two profiles explicit rather than silent, since a
 changed default would otherwise change CI without touching the `ci` section.
 
-The parser-pin build-script tests each create an isolated nested Cargo
-workspace with its own target directory. Their 10 m allowance accommodates cold
-builds queued for compiler admission after one exceeded the 300 s base timeout;
-it does not serialize the tests.
+The no-default-feature regression test checks the library in a nested Cargo
+invocation with an isolated target directory, so it rebuilds dependencies
+instead of reusing artefacts from the workspace test run. It exceeded the
+300-second base allowance while compiler admission was heavily queued. The
+20-minute allowance and shared nested-Cargo test group leave room for a cold
+build without letting it compete with the parser-pin fixtures.
 
 The contract holds that policy, and its failure messages say so rather than
 claiming nextest requires it.
 
-The serial UI group has a 20-minute bound. A full workspace run reached 9m56 in
-the nested trybuild harness while compiler admission queued; the wider
-allowance lets a contended compile finish while still terminating a stalled
-test.
+The ordinary serial UI group has a 20-minute bound. A full workspace run
+reached 9m56 in the nested trybuild harness while compiler admission queued;
+the wider allowance lets a contended compile finish while still terminating a
+stalled test.
 
-The three parser-pin build-script integration cases also receive a 30-minute
-allowance and run in a dedicated serial test group. Each case invokes nested
-Cargo against a fresh temporary target directory, so it rebuilds the fixture's
-build dependencies. The exact-pin case performs both `cargo check` and
-`cargo run`; a traced run completed in 591 seconds after waiting on the shared
-package-cache lock. The loose-pin case was still compiling when its 15-minute
-allowance expired under shared compiler admission. The 30-minute allowance
-leaves room for that queue without changing the whole-suite budget. Serializing
-these cases keeps their Cargo invocations from queueing against one another.
+Every trybuild compile contract rebuilds fixture crates through nested Cargo.
+In a cold workspace, the Bumpy Road public API contract timed out on three
+20-minute attempts; the final attempt reached its pass fixture after 15 minutes
+of nested compilation. Retrying restarted that expensive build without
+producing a result. All discovered compile contracts therefore share a
+45-minute allowance and disable retries, leaving one build enough time to reach
+its fixtures without repeating the same work.
+
+The three parser-pin build-script integration cases run in the same serial
+nested-Cargo group and each use a fresh temporary target directory. The
+exact-pin case performs both `cargo check` and `cargo run`; a traced run
+completed in 591 seconds after waiting on the shared package-cache lock. A
+later full run exhausted the 30-minute allowance while compiler admission had a
+large queue. The 45-minute allowance reflects that observed wait, and the group
+prevents these fixtures from competing with the no-default-feature build.
 
 ### The clocks do not start together
 
@@ -4249,7 +4273,8 @@ failure and `tests/nextest_ui_filter.rs` requires the key.
 It discovers the compile-contract tests rather than listing them. A test that
 drives `trybuild` invokes a nested cargo build, so it costs what a build costs
 and the base per-test allowance is the wrong order of magnitude for it. The
-current discovery finds six tests across `common/tests/public_api_contract.rs`,
+current discovery finds seven tests across
+`common/tests/public_api_contract.rs`,
 `crates/bumpy_road_function/tests/api_contract.rs`,
 `crates/whitaker_sarif/tests/api_contract.rs`, `installer/tests/ui.rs`,
 `crates/whitaker_test_macros/tests/ui.rs`, and

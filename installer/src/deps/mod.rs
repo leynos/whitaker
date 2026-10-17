@@ -142,6 +142,11 @@ fn metadata_failure_category(kind: io::ErrorKind) -> Option<PathScanFailureCateg
     (kind != io::ErrorKind::NotFound).then_some(PathScanFailureCategory::Metadata)
 }
 
+/// Classify directory-open errors, omitting PATH entries that no longer exist.
+fn directory_open_failure_category(kind: io::ErrorKind) -> Option<PathScanFailureCategory> {
+    (kind != io::ErrorKind::NotFound).then_some(PathScanFailureCategory::DirectoryOpen)
+}
+
 /// Status of Dylint tool availability.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DylintToolStatus {
@@ -543,11 +548,13 @@ fn find_binary_in_directory(
     };
     let directory_capability = match Dir::open_ambient_dir(utf8_directory, ambient_authority()) {
         Ok(directory_capability) => directory_capability,
-        Err(_) => {
-            failures.push(PathScanFailure {
-                binary_name: binary_name.to_owned(),
-                category: PathScanFailureCategory::DirectoryOpen,
-            });
+        Err(error) => {
+            if let Some(category) = directory_open_failure_category(error.kind()) {
+                failures.push(PathScanFailure {
+                    binary_name: binary_name.to_owned(),
+                    category,
+                });
+            }
             return None;
         }
     };
@@ -681,7 +688,9 @@ mod tests;
 mod path_scan_tests {
     //! Verify that PATH scan failure categories remain stable and bounded.
 
-    use super::{PathScanFailureCategory, metadata_failure_category};
+    use super::{
+        PathScanFailureCategory, directory_open_failure_category, metadata_failure_category,
+    };
 
     /// Treat an absent PATH candidate as routine while preserving other failures.
     #[test]
@@ -693,6 +702,19 @@ mod path_scan_tests {
         assert_eq!(
             metadata_failure_category(std::io::ErrorKind::PermissionDenied),
             Some(PathScanFailureCategory::Metadata)
+        );
+    }
+
+    /// Treat disappeared PATH directories as misses while preserving other errors.
+    #[test]
+    fn directory_open_failures_exclude_missing_directories() {
+        assert_eq!(
+            directory_open_failure_category(std::io::ErrorKind::NotFound),
+            None
+        );
+        assert_eq!(
+            directory_open_failure_category(std::io::ErrorKind::PermissionDenied),
+            Some(PathScanFailureCategory::DirectoryOpen)
         );
     }
 

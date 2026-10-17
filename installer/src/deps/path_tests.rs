@@ -319,6 +319,29 @@ fn path_scan_skips_missing_candidates_and_returns_the_first_binary() -> std::io:
     Ok(())
 }
 
+/// Skip a PATH directory that disappeared and continue to a later executable.
+///
+/// # Errors
+///
+/// Returns an I/O error if the temporary PATH fixtures cannot be created.
+#[test]
+fn path_scan_skips_missing_directories_and_returns_a_later_binary() -> std::io::Result<()> {
+    let fixture_root = tempfile::tempdir()?;
+    let missing_directory = fixture_root.path().join("removed-from-path");
+    let valid_directory = tempfile::tempdir()?;
+    let expected_binary = valid_directory.path().join("dylint-link");
+    write_fake_binary(&expected_binary, true)?;
+
+    let scan = scan_path_directories(
+        vec![missing_directory, valid_directory.path().to_path_buf()],
+        "dylint-link",
+    );
+
+    assert_eq!(scan.binary, Some(expected_binary));
+    assert!(scan.failures.is_empty());
+    Ok(())
+}
+
 /// Check first-match and stop-after-match behaviour for bounded PATH patterns.
 #[test]
 fn path_scan_ordering_holds_for_bounded_match_patterns() {

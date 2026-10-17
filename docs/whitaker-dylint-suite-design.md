@@ -1290,6 +1290,18 @@ highlight the top two intervals in the diagnostic.
 - Include the lint in the aggregated `whitaker_suite` crate by default as a
   stable rule, while still allowing direct usage by loading the lint crate.
 
+**Numeric and span boundaries.** Fluent diagnostic integer arguments are signed
+64-bit values, so `diagnostic_integer_argument` and
+`saturating_diagnostic_integer` clamp oversized counts at `i64::MAX`.
+`SegmentWeight::Fixed` keeps its supplied value, while
+`SegmentWeight::Predicate` uses `saturating_branch_count` and
+`predicate_segment_weight` to cap branch counts at `u32::MAX` before scaling.
+Compiler `BytePos` offsets are `u32`; `span_byte_offset_range` rejects any
+highlighted range with an unrepresentable endpoint, omitting its secondary
+label while preserving the primary diagnostic. The conditional-branch lint uses
+the same signed boundary for Fluent counts. Boundary tests cover the maximum
+accepted values and the first values above them.
+
 **Algorithm sketch.**
 
 1. Walk the function HIR, updating depth and collecting segments for blocks,

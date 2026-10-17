@@ -27,7 +27,7 @@ from nextest_config import load_nextest_config
 from ubicloud_workflow_support import REPOSITORY_ROOT
 
 #: Bound for compile-contract harnesses under shared compiler admission.
-COMPILE_CONTRACT_TIMEOUT: typ.Final[str] = "20m"
+COMPILE_CONTRACT_TIMEOUT: typ.Final[str] = "45m"
 
 
 class RustSourceError(OSError):
