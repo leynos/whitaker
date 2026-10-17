@@ -120,8 +120,8 @@ runner in `src/lib_ui_tests.rs`.
 The harness splits cases into two shapes:
 
 - Example-based runs use `ExampleHarnessRun` plus
-  `dylint_testing::ui::Test::example` when a single example target is enough
-  and no extra fixture assets are needed.
+  `whitaker::testing::ui::stage_example` and `Test::src_base` when a single
+  example target is enough and no extra fixture assets are needed.
 - Fixture-based runs use `FixtureHarnessRun`, `prepare_fixture`, and
   `Test::src_base` when the case needs copied support files, a per-fixture
   `dylint.toml`, or additional `--extern` wiring.
@@ -1760,15 +1760,63 @@ returns or panics. The workspace forbids `unsafe` code, so tests must never
 call `std::env::set_var`/`remove_var` directly.
 
 `whitaker::testing::ui::run_with_runner` wraps the Dylint UI runner in the
-same scoped helpers. On every platform it clears `RUSTC_WRAPPER` while the
-runner needs bare `rustc` invocations for `dylint_testing::Test::example`. On
-Windows it also sets `VCPKG_ROOT` to `C:\vcpkg` when that directory exists
-and the variable is otherwise absent.
+same scoped helpers. On Windows it sets `VCPKG_ROOT` to `C:\vcpkg` when that
+directory exists and the variable is otherwise absent. It deliberately leaves
+any configured `rustc` wrapper in place; see
+[Example-target staging](#example-target-staging).
+
+#### Example-target staging
+
+Do not call `dylint_testing::ui::Test::example`. It recovers an example's
+`--extern`, `-L`, and `--edition` flags by rebuilding the example with
+`cargo build --verbose` and keeping the `Running` line whose *first* word is
+`rustc`. Any configured `rustc` wrapper takes that position instead —
+`sccache` in CI, or a compile-admission wrapper on a shared development host —
+and every example test then fails with "Found no `rustc` invocations".
+
+Clearing `RUSTC_WRAPPER` does not fix this. A wrapper set through
+`build.rustc-wrapper` in Cargo configuration survives environment clearing,
+and removing a wrapper would bypass the caching or admission control it
+exists to provide.
+
+Use `whitaker::testing::ui::stage_example(crate_name, example)` instead. It
+performs the same rebuild, skips any wrapper chain or environment assignments
+before the compiler, and copies the example source with its `.stderr`,
+`.stdout`, and `.fixed` expectation files into a temporary directory. Pass the
+result to `Test::src_base`, which is what `Test::example` does internally:
+
+```rust
+let staged = stage_example(crate_name, "pass_in_test_harness")?;
+let mut test = Test::src_base(crate_name, staged.directory());
+test.rustc_flags(staged.linking_flags()).rustc_flags(["--test"]);
+test.run();
+```
+
+`stage_example` is the single owner of example-flag recovery. Lint crates'
+UI harnesses may call it; they must not parse Cargo output themselves. Keep
+the returned `StagedExample` alive until the test has run, because dropping it
+deletes the staging directory.
+
+#### UI test time budgets
+
+Every Dylint UI run compiles the lint library and its fixtures, so its
+wall-clock time includes waiting for a compiler slot or the Cargo package
+cache when other builds share the host. `.config/nextest.toml` therefore gives
+the `serial-dylint-ui` tier a 15-minute slow-test period with a one-hour
+watchdog per attempt, and the example-target harnesses, whose single cases have
+measured over 28 minutes under a full gate run, a 30-minute period with a
+three-hour watchdog. These budgets are
+containment for queueing outside the repository's control, not an estimate of
+execution time; keep the watchdog finite so a genuinely hung test still fails.
 
 Example-based UI tests in `rstest_helper_should_be_fixture` also use a
-cross-process directory lock under the system temporary directory. `nextest`
-can run test binaries in separate processes, so a plain in-process `Mutex` is
-not sufficient for those examples. A directory becomes eligible for stale
+cross-process directory lock under the Cargo target directory's
+`CARGO_TARGET_TMPDIR`, so only builds sharing that target directory contend for
+it. `nextest` can run test binaries in separate processes, so a plain
+in-process `Mutex` is not sufficient for those examples; the
+`serial-rstest-helper-examples` test group in `.config/nextest.toml` also runs
+them one at a time, so waiting for a turn never consumes the lock's acquire
+timeout. A directory becomes eligible for stale
 recovery only after it has aged past 30 minutes, and stale cleanup removes that
 age-eligible lock directory only after successfully acquiring the lifetime
 owner-liveness lock. If stale cleanup sees `NotFound`, it treats the directory

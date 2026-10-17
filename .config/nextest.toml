@@ -20,6 +20,7 @@ default-filter = "not kind(example)"
 # racing on the shared target directory.
 [test-groups]
 serial-dylint-ui = { max-threads = 1 }
+serial-rstest-helper-examples = { max-threads = 1 }
 serial-toolchain-installs = { max-threads = 1 }
 
 [[profile.default.overrides]]
@@ -46,7 +47,31 @@ serial-toolchain-installs = { max-threads = 1 }
 filter = "test(driver::ui::) | test(tests::ui::) | test(ui::ui) | test(ui::example_compiles_under_test_harness) | test(ui::rstest_unwrap_outside_tests_still_fails_in_non_harness_code) | test(ui::rstest_empty_companion_does_not_exempt_parent_function) | (binary(ui) & test(=ui))"
 test-group = "serial-dylint-ui"
 retries = { backoff = "exponential", count = 2, delay = "5s" }
-slow-timeout = { period = "10m", terminate-after = 1 }
+# Each UI run compiles the lint library and its fixtures, so its wall-clock
+# time includes any wait for a compiler slot or the Cargo package cache on a
+# shared host. Those waits routinely exceed ten minutes, which a single
+# ten-minute period misreported as a test timeout. Report slowness every 15
+# minutes and keep a finite one-hour watchdog per attempt.
+slow-timeout = { period = "15m", terminate-after = 4 }
+
+[[profile.default.overrides]]
+# The `rstest_helper_should_be_fixture` example tests share a lock around
+# example rebuilds. Running them one at a time keeps each test's wait for its
+# turn in nextest's queue, where it consumes neither the lock's acquire
+# timeout nor the test's own budget. The trybuild case joins the group because
+# it is this binary's heaviest compile.
+filter = "package(rstest_helper_should_be_fixture) & binary(ui) & (test(/^example_/) | test(=trybuild_fixtures_compile_without_diagnostics))"
+test-group = "serial-rstest-helper-examples"
+slow-timeout = { period = "30m", terminate-after = 6 }
+
+[[profile.default.overrides]]
+# Example-target harnesses rebuild their example and the lint library before
+# running it, so their wall-clock time is dominated by waits for compiler
+# slots on a shared host: single cases have measured over 28 minutes, and the
+# trybuild case over an hour, under a full gate run. Keep a finite watchdog
+# sized to those measurements rather than to execution time.
+filter = "(package(rstest_helper_should_be_fixture) & binary(ui)) | ((package(no_unwrap_or_else_panic) | package(no_expect_outside_tests)) & test(/^ui::/))"
+slow-timeout = { period = "30m", terminate-after = 6 }
 
 [[profile.default.overrides]]
 # Serialize ignored exclusion integration tests when they are explicitly run.
