@@ -34,7 +34,7 @@ fn multi_band_config() -> LshConfig {
     LshConfig::new(32, 4).expect("multi-band config should validate")
 }
 
-/// Create the shared signature fixture used by index tests.
+/// Create a deterministic signature shared by fixtures using `[1, 2, 3, 4]`.
 #[allow_fixture_expansion_lints]
 #[fixture]
 fn shared_signature() -> MinHashSignature {

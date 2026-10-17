@@ -132,6 +132,7 @@ fn source_fallback_forbidden_carries_the_artefact_and_the_reason() {
     assert!(message.contains("not found"), "got: {message}");
 }
 
+/// Verify policy and I/O error variants retain their messages when cloned.
 #[test]
 fn policy_and_io_errors_survive_a_clone() {
     // `InstallerError::clone` matches every variant by hand, so a new variant

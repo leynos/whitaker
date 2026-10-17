@@ -285,6 +285,7 @@ impl InstallerError {
 }
 
 impl Clone for InstallerError {
+    /// Clone every error variant while preserving its displayable details.
     fn clone(&self) -> Self {
         if let Some(value) = self
             .clone_toolchain_variant()

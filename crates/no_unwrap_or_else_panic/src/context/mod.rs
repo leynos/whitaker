@@ -29,7 +29,10 @@ use rustc_lint::LateContext;
 #[cfg(feature = "dylint-driver")]
 use rustc_span::sym;
 
-/// Summarize the context for a given HIR node.
+/// Derive test status and `main` membership from a HIR node's ancestry.
+///
+/// Ancestor `cfg(test)` attributes contribute to test status alongside the
+/// test-like scopes and attributes represented by context entries.
 #[cfg(feature = "dylint-driver")]
 pub(crate) fn summarize_context<'tcx>(
     cx: &LateContext<'tcx>,

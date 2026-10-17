@@ -162,10 +162,12 @@ impl<'a, 'tcx> SegmentBuilder<'a, 'tcx> {
         self.visit_expr(expr);
     }
 
+    /// Add the configured nesting-depth weight for `span`.
     fn push_depth_segment(&mut self, span: Span) {
         self.push_segment(span, SegmentWeight::Fixed(self.settings.weights.depth));
     }
 
+    /// Add the configured control-flow weight for `span`.
     fn push_flow_segment(&mut self, span: Span) {
         self.push_segment(span, SegmentWeight::Fixed(self.settings.weights.flow));
     }
@@ -188,6 +190,10 @@ impl<'a, 'tcx> SegmentBuilder<'a, 'tcx> {
         );
     }
 
+    /// Add a weighted segment when `span` maps to lines within this function.
+    ///
+    /// Ignore macro-expanded or unmappable spans; report an internal delayed
+    /// bug for invalid segments or lines outside the function range.
     fn push_segment(&mut self, span: Span, weight: SegmentWeight) {
         // Skip spans from macro expansions; their line numbers can point to
         // locations outside the function (e.g., the macro definition site).

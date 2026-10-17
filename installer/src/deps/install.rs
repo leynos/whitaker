@@ -29,6 +29,12 @@ pub(super) struct InstallContext<'a> {
     pub(super) no_source_fallback: bool,
 }
 
+/// Install each missing dependency and refresh availability after installation.
+///
+/// # Errors
+///
+/// Returns an error if installation, verification, or a follow-up availability
+/// query fails.
 pub(super) fn install_missing_tools(
     executor: &dyn CommandExecutor,
     status: &DylintToolStatus,
@@ -69,6 +75,11 @@ pub(super) fn repository_install_context<'a>(
     }
 }
 
+/// Select Cargo Binstall when available, otherwise use `cargo install`.
+///
+/// # Errors
+///
+/// Returns an error if the Binstall availability query fails.
 pub(super) fn cargo_fallback_mode(executor: &dyn CommandExecutor) -> Result<InstallMode> {
     Ok(if is_binstall_available(executor)? {
         InstallMode::Binstall
@@ -87,6 +98,12 @@ pub(super) fn should_install_tool(status: &DylintToolStatus, tool: &DependencyTo
     }
 }
 
+/// Install one dependency, preferring its repository release when configured.
+///
+/// # Errors
+///
+/// Returns an error if dependency metadata, installation, source policy, or
+/// post-install verification fails.
 pub(super) fn install_tool(
     executor: &dyn CommandExecutor,
     tool: &DependencyTool,
@@ -229,6 +246,11 @@ impl<'a> CargoInstallPlan<'a> {
     }
 }
 
+/// Install a dependency through Cargo, trying Binstall before source install.
+///
+/// # Errors
+///
+/// Returns an error if a Cargo command cannot run or source installation fails.
 fn install_tool_with_cargo(
     executor: &dyn CommandExecutor,
     cargo_install_plan: CargoInstallPlan<'_>,
@@ -377,6 +399,11 @@ pub(super) fn write_message(stderr: &mut dyn Write, quiet: bool, message: String
     let _ = writeln!(stderr, "{message}");
 }
 
+/// Run a command and report whether it exits successfully.
+///
+/// # Errors
+///
+/// Returns an error if the command cannot be started or completed.
 pub(super) fn command_succeeds(
     executor: &dyn CommandExecutor,
     cmd: &str,
@@ -389,6 +416,11 @@ fn should_refresh_companions(outcome: InstallOutcome, status: &DylintToolStatus)
     outcome != InstallOutcome::RepositoryRelease && !status.dylint_link
 }
 
+/// Record an installed tool and recheck companion binaries when needed.
+///
+/// # Errors
+///
+/// Returns an error if checking for the companion `dylint-link` binary fails.
 fn update_status_after_install(
     status: &mut DylintToolStatus,
     executor: &dyn CommandExecutor,

@@ -122,6 +122,7 @@ pub(crate) trait BinaryLocator {
 pub(crate) struct SystemBinaryLocator;
 
 impl BinaryLocator for SystemBinaryLocator {
+    /// Search the process PATH and classify failures from skipped entries.
     fn find_binary(&self, binary_name: &str) -> PathScanResult {
         find_binary_on_path(binary_name)
     }
@@ -266,6 +267,10 @@ pub fn install_dylint_tools(
 }
 
 /// Install missing tools while writing progress output to `stderr`.
+///
+/// # Errors
+///
+/// Returns query, installation, or source-policy errors from the install flow.
 pub fn install_dylint_tools_with_output(
     executor: &dyn CommandExecutor,
     status: &DylintToolStatus,
@@ -295,6 +300,10 @@ pub fn install_dylint_tools_with_output(
 }
 
 /// Install missing tools with injected repository-install hooks.
+///
+/// # Errors
+///
+/// Returns query, installation, or source-policy errors from the install flow.
 #[cfg(any(test, feature = "test-support"))]
 #[doc(hidden)]
 pub fn install_dylint_tools_with_options(
@@ -361,7 +370,9 @@ fn is_tool_installed_with_locator(
 ///
 /// Presence is established by finding an executable on PATH without running
 /// the linker wrapper. An expected version is compared with Cargo's install
-/// list; skipped-entry classifications are traced here, without logging paths.
+/// list. If PATH scanning finds no executable after entry failures, or the
+/// Cargo query fails, return an error; skipped-entry classifications are
+/// collected for the caller.
 fn is_dylint_link_installed(
     executor: &dyn CommandExecutor,
     expected_version: &str,
