@@ -329,12 +329,13 @@ fn path_scan_skips_missing_directories_and_returns_a_later_binary() -> std::io::
     let fixture_root = tempfile::tempdir()?;
     let missing_directory = fixture_root.path().join("removed-from-path");
     let valid_directory = tempfile::tempdir()?;
-    let expected_binary = valid_directory.path().join("dylint-link");
+    let binary_name = "dylint-link.exe";
+    let expected_binary = valid_directory.path().join(binary_name);
     write_fake_binary(&expected_binary, true)?;
 
     let scan = scan_path_directories(
         vec![missing_directory, valid_directory.path().to_path_buf()],
-        "dylint-link",
+        binary_name,
     );
 
     assert_eq!(scan.binary, Some(expected_binary));
