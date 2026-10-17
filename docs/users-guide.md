@@ -76,6 +76,19 @@ environment-variable workaround.
   `DYLINT_LIBRARY_PATH` instructions instead)
 - `--no-update` — Don't update existing repository clone
 
+### Root CLI
+
+The root `whitaker` command provides `install` and transitional `ls` commands,
+including `whitaker ls --json`; other arguments, such as `--all`, are forwarded
+to `cargo dylint`. From a checkout, install it with `cargo install --path .`.
+Crates.io packages and binstall archives are pending. When both `whitaker`
+binaries are on `PATH`, the first wins; `install` creates only `whitaker-ls`.
+
+The root `whitaker` CLI also remembers each successful install's staging path
+by Rust toolchain. This lets `whitaker --all` find libraries installed with a
+custom `--target-dir`, including when run from another project. An explicitly
+set `DYLINT_LIBRARY_PATH` continues to override the recorded paths.
+
 ### Adding Whitaker to a project
 
 Add the following to the workspace `Cargo.toml`:

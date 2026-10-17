@@ -1,30 +1,8 @@
-//! Core Whitaker library surfaces shared configuration and helpers for lint crates.
-#![cfg_attr(feature = "dylint-driver", feature(rustc_private))]
+//! Public command-line application boundary for Whitaker.
+//!
+//! The root package owns command selection and process exit policy. Installation,
+//! inventory scanning, and Dylint execution remain behind installer adapters.
 
-// Link against `rustc_driver` only when consumers need the dylint driver runtime.
-// Unit tests of this crate should not pull the compiler driver to avoid the
-// duplicated `std`/`core` link errors seen during all-features test runs.
-#[cfg(feature = "dylint-driver")]
-extern crate rustc_data_structures;
-#[cfg(all(feature = "dylint-driver", not(test)))]
-extern crate rustc_driver;
-
-pub mod config;
-#[cfg(feature = "dylint-driver")]
-pub mod hir;
-pub mod lints;
-pub mod testing;
-
-pub use config::{ModuleMaxLinesConfig, SharedConfig};
-#[cfg(feature = "dylint-driver")]
-pub use hir::{
-    module_body_span,
-    module_header_span,
-    recover_user_editable_hir_span,
-    span_recovery_frames,
-};
-pub use lints::{LintCrateTemplate, TemplateError, TemplateFiles};
-
-/// Returns a greeting for the library.
-#[must_use]
-pub const fn greet() -> &'static str { "Hello from Whitaker!" }
+pub mod adapters;
+pub mod cli;
+pub mod ports;

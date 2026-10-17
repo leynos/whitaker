@@ -37,7 +37,9 @@ lint crate, a feasibility study for a **Bumpy Road** detector, and a phased
 ├─ Cargo.toml                     # workspace + dylint metadata
 ├─ rust-toolchain.toml            # nightly pinned for lints
 ├─ dylint.toml                    # optional defaults per lint
+├─ src/                            # root `whitaker` CLI and application ports
 ├─ crates/
+│  ├─ whitaker_lint_core/          # internal compiler-private Dylint driver
 │  ├─ function_attrs_follow_docs/
 │  ├─ no_expect_outside_tests/
 │  ├─ public_fn_must_have_docs/
@@ -47,7 +49,7 @@ lint crate, a feasibility study for a **Bumpy Road** detector, and a phased
 │  ├─ module_max_lines/
 │  └─ no_unwrap_or_else_panic/        # separate crate
 ├─ suite/                         # aggregated dylint library (optional)
-├─ installer/                     # optional convenience binary
+├─ installer/                     # installer library and legacy binary
 ├─ common/                        # shared helpers for lints
 └─ ci/                            # CI workflows
 ```
@@ -1034,8 +1036,8 @@ declare_combined_late_lint_pass!(SuitePass => [
     NoStdFsOperations,
 ]);
 
-#[no_mangle]
-pub extern "C" fn register_lints(sess: &Session, store: &mut LintStore) {
+#[no_mangle] pub extern "C" fn register_lints(sess: &Session, store: &mut
+LintStore) {
     dylint_linting::init_config(sess);
     store.register_lints(&[
         function_attrs_follow_docs::FUNCTION_ATTRS_FOLLOW_DOCS,
