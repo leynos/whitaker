@@ -76,6 +76,8 @@
   explains the repository's preferred approach to testable Rust design.
 - [Rust doctest dry guide](rust-doctest-dry-guide.md) explains how to keep
   Rust doctests accurate without unnecessary execution.
+- [OrthoConfig user's guide](ortho-config-users-guide.md) explains how to build
+  layered command-line configuration with OrthoConfig.
 - [Complexity antipatterns and refactoring strategies](complexity-antipatterns-and-refactoring-strategies.md)
   records the complexity patterns Whitaker flags and the refactorings they are
   intended to encourage.

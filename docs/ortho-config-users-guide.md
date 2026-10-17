@@ -1972,6 +1972,9 @@ sections. A typical progression is:
 The [Hello World application](../examples/hello_world/) demonstrates these
 pieces in a larger layout. Its public greeting command is `greet`: file
 settings use `[cmds.greet]`, and environment settings use
-`HELLO_WORLD_CMDS_GREET_<FIELD>`. The
+`HELLO_WORLD_CMDS_GREET_<FIELD>`.
+
+The [Whitaker CLI design](whitaker-cli-design.md) shows how these pieces fit
+the project's command surface. The
 [API documentation](https://docs.rs/ortho_config) is the source for complete
 type and method signatures.

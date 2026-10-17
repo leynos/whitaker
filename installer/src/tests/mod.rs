@@ -13,7 +13,7 @@ use crate::{
     deps::{DependencyInstallOptions, SourcePolicy, install_dylint_tools_with_options},
     dirs::BaseDirs,
     error::InstallerError,
-    install_flow::write_install_metrics,
+    install_flow::{MetricsWriteContext, write_install_metrics},
     install_metrics::InstallMode,
     installer_packaging::TargetTriple,
     orchestration::{exit_code_for_run_result, report_suite_source, resolve_requested_crates},

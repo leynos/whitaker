@@ -196,7 +196,7 @@ published-GPUI workspace invocation.
 
 ### 3.5. Unified CLI foundation
 
-- [ ] 3.5.1. Add a root `whitaker` binary and move the current installer
+- [x] 3.5.1. Add a root `whitaker` binary and move the current installer
   behaviour behind an internal library boundary. See
   [Whitaker CLI design](whitaker-cli-design.md) §Public CLI surface and
   §Compatibility and migration. Requires 3.2.1.

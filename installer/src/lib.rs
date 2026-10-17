@@ -49,6 +49,8 @@ pub mod git;
 mod hex;
 pub mod install_flow;
 pub mod install_metrics;
+/// Persists successful installation staging paths for root CLI forwarding.
+pub mod installation_record;
 pub mod installer_packaging;
 pub mod list;
 pub mod list_output;
