@@ -74,9 +74,9 @@ jobs:
     # admits `main` alone; the codescene environment contract holds it to
     # this job.
     environment: codescene
-    # Above the 60 m nextest global timeout plus a cold build and the work
+    # Above the 85 m nextest global timeout plus a cold build and the work
     # either side of the suite; kept in step with ci.yml's coverage lane.
-    timeout-minutes: 100
+    timeout-minutes: 120
     defaults:
       run:
         shell: bash

@@ -13,11 +13,7 @@ use std::time::Duration;
 use whitaker_installer::builder::{library_extension, library_prefix};
 use whitaker_installer::cli::InstallArgs;
 use whitaker_installer::crate_name::CrateName;
-use whitaker_installer::deps::{
-    CommandExecutor, SourcePolicy, check_dylint_tools, install_dylint_tools_with_output,
-};
-#[cfg(test)]
-use whitaker_installer::deps::{DependencyInstallOptions, install_dylint_tools_with_options};
+use whitaker_installer::deps::{CommandExecutor, DylintToolStatus, SourcePolicy};
 use whitaker_installer::dirs::BaseDirs;
 use whitaker_installer::error::{InstallerError, Result};
 use whitaker_installer::install_metrics::{InstallMode, RecordOutcome, record_install};
@@ -25,6 +21,10 @@ use whitaker_installer::output::write_stderr_line;
 use whitaker_installer::prebuilt::{PrebuiltConfig, PrebuiltResult, attempt_prebuilt};
 use whitaker_installer::prebuilt_path::prebuilt_library_dir;
 use whitaker_installer::resolution::{EXPERIMENTAL_LINT_CRATES, LINT_CRATES, SUITE_CRATE};
+
+mod dependency_check;
+#[cfg(all(test, unix))]
+pub(crate) use dependency_check::check_dylint_tools_for_command;
 
 pub(crate) fn ensure_dylint_tools_core(
     quiet: bool,
@@ -50,29 +50,21 @@ pub(crate) fn ensure_dylint_tools_core(
     Ok(())
 }
 
+/// Query availability once, then delegate missing-tool installation.
+///
+/// The callback keeps query ordering shared by the CLI and tests while
+/// leaving the concrete installation boundary injectable.
 pub(crate) fn ensure_dylint_tools_with_executor(
     executor: &dyn CommandExecutor,
     policy: SourcePolicy,
     stderr: &mut dyn Write,
+    install: impl FnOnce(&DylintToolStatus, &mut dyn Write) -> Result<()>,
 ) -> Result<()> {
-    let status = check_dylint_tools(executor);
-    ensure_dylint_tools_core(policy.quiet, stderr, status.all_installed(), |stderr| {
-        install_dylint_tools_with_output(executor, &status, policy, stderr)
-    })
-}
-
-#[cfg(test)]
-pub(crate) fn ensure_dylint_tools_with_options(
-    executor: &dyn CommandExecutor,
-    stderr: &mut dyn Write,
-    options: DependencyInstallOptions<'_>,
-) -> Result<()> {
-    let status = check_dylint_tools(executor);
-    ensure_dylint_tools_core(
-        options.policy.quiet,
+    dependency_check::ensure_dylint_tools_with_query(
+        policy.quiet,
         stderr,
-        status.all_installed(),
-        |stderr| install_dylint_tools_with_options(executor, &status, stderr, options),
+        || dependency_check::check_dylint_tools_for_command(executor),
+        install,
     )
 }
 
@@ -371,3 +363,7 @@ fn write_metrics_summary(quiet: bool, record_outcome: &RecordOutcome, stderr: &m
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+#[path = "install_flow/dependency_check_tests.rs"]
+mod dependency_check_tests;

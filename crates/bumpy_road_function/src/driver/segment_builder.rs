@@ -13,6 +13,42 @@ use rustc_span::source_map::SourceMap;
 use rustc_span::{DesugaringKind, Span};
 use whitaker_common::complexity_signal::LineSegment;
 
+use super::numeric::predicate_segment_weight;
+
+/// Describe a fixed or branch-scaled contribution to a line segment.
+#[derive(Clone, Copy)]
+enum SegmentWeight {
+    /// Use the supplied value unchanged.
+    Fixed(f64),
+    /// Scale by a branch count after clamping it to the supported range.
+    Predicate { branches: usize, per_branch: f64 },
+}
+
+impl SegmentWeight {
+    /// Convert the selected production weight to the value stored in a segment.
+    fn value(self) -> f64 {
+        match self {
+            Self::Fixed(value) => value,
+            Self::Predicate {
+                branches,
+                per_branch,
+            } => predicate_segment_weight(branches, per_branch),
+        }
+    }
+}
+
+/// Construct the line segment after applying the production weight policy.
+///
+/// # Errors
+///
+/// Returns an error when the inclusive line range is not one-based and ordered.
+fn line_segment(
+    lines: RangeInclusive<usize>,
+    weight: SegmentWeight,
+) -> Result<LineSegment, whitaker_common::complexity_signal::SegmentError> {
+    LineSegment::new(*lines.start(), *lines.end(), weight.value())
+}
+
 pub(super) struct SegmentBuilder<'a, 'tcx> {
     cx: &'a LateContext<'tcx>,
     settings: &'a Settings,
@@ -126,25 +162,39 @@ impl<'a, 'tcx> SegmentBuilder<'a, 'tcx> {
         self.visit_expr(expr);
     }
 
+    /// Add the configured nesting-depth weight for `span`.
     fn push_depth_segment(&mut self, span: Span) {
-        self.push_segment(span, self.settings.weights.depth);
+        self.push_segment(span, SegmentWeight::Fixed(self.settings.weights.depth));
     }
 
+    /// Add the configured control-flow weight for `span`.
     fn push_flow_segment(&mut self, span: Span) {
-        self.push_segment(span, self.settings.weights.flow);
+        self.push_segment(span, SegmentWeight::Fixed(self.settings.weights.flow));
     }
 
+    /// Add a predicate-weighted segment unless the condition is a `let` test.
+    ///
+    /// Branch counts above `u32::MAX` are saturated before conversion to the
+    /// floating-point weight; spans rejected by `push_segment` are omitted.
     fn push_predicate_segment(&mut self, expr: &'tcx hir::Expr<'tcx>) {
         if matches!(expr.kind, ExprKind::Let(..)) {
             return;
         }
 
-        let branches = count_branches(expr) as f64;
-        let value = branches * self.settings.weights.predicate;
-        self.push_segment(expr.span, value);
+        self.push_segment(
+            expr.span,
+            SegmentWeight::Predicate {
+                branches: count_branches(expr),
+                per_branch: self.settings.weights.predicate,
+            },
+        );
     }
 
-    fn push_segment(&mut self, span: Span, value: f64) {
+    /// Add a weighted segment when `span` maps to lines within this function.
+    ///
+    /// Ignore macro-expanded or unmappable spans; report an internal delayed
+    /// bug for invalid segments or lines outside the function range.
+    fn push_segment(&mut self, span: Span, weight: SegmentWeight) {
         // Skip spans from macro expansions; their line numbers can point to
         // locations outside the function (e.g., the macro definition site).
         if span.from_expansion() {
@@ -170,7 +220,7 @@ impl<'a, 'tcx> SegmentBuilder<'a, 'tcx> {
             return;
         }
 
-        let segment = match LineSegment::new(*lines.start(), *lines.end(), value) {
+        let segment = match line_segment(lines, weight) {
             Ok(segment) => segment,
             Err(error) => {
                 self.cx
@@ -206,22 +256,26 @@ fn extract_while_components<'hir>(
     }
 }
 
+/// Count logical branches, treating `&&` and `||` as sums of their operands.
+///
+/// Negation, blocks, and `if` expressions are transparent; every other
+/// expression contributes one branch.
 fn count_branches(expr: &hir::Expr<'_>) -> usize {
     match expr.kind {
         ExprKind::Binary(op, lhs, rhs) if matches!(op.node, BinOpKind::And | BinOpKind::Or) => {
             count_branches(lhs) + count_branches(rhs)
         }
-        ExprKind::Unary(UnOp::Not, inner) => count_branches(inner),
-        ExprKind::DropTemps(inner) => count_branches(inner),
-        ExprKind::Block(block, _) => match block.expr {
-            Some(inner) => count_branches(inner),
-            None => 1,
-        },
+        ExprKind::Unary(UnOp::Not, inner) | ExprKind::DropTemps(inner) => count_branches(inner),
+        ExprKind::Block(block, _) => block.expr.map_or(1, count_branches),
         ExprKind::If(cond, ..) => count_branches(cond),
         _ => 1,
     }
 }
 
+/// Return the contiguous 1-based source-line range covered by a compiler span.
+///
+/// Returns `None` when the span cannot be mapped to source lines or maps to a
+/// non-contiguous set of lines.
 pub(super) fn span_line_range(source_map: &SourceMap, span: Span) -> Option<RangeInclusive<usize>> {
     let info = source_map.span_to_lines(span).ok()?;
     let first = info.lines.first()?;
@@ -229,11 +283,38 @@ pub(super) fn span_line_range(source_map: &SourceMap, span: Span) -> Option<Rang
 
     let contiguous = info
         .lines
-        .windows(2)
-        .all(|pair| pair[1].line_index == pair[0].line_index + 1);
+        .iter()
+        .zip(info.lines.iter().skip(1))
+        .all(|(previous, next)| next.line_index == previous.line_index + 1);
     if !contiguous {
         return None;
     }
 
     Some((first.line_index + 1)..=(last.line_index + 1))
+}
+
+#[cfg(test)]
+mod tests {
+    //! Verify the production segment builder applies bounded predicate weights.
+
+    use super::{SegmentWeight, line_segment};
+
+    /// Verify oversized branch counts saturate in the constructed line segment.
+    #[cfg(target_pointer_width = "64")]
+    #[test]
+    fn predicate_segment_saturates_oversized_branch_counts() {
+        let oversized =
+            usize::try_from(u64::from(u32::MAX) + 1).expect("oversized branch count fits usize");
+
+        let segment = line_segment(
+            1..=1,
+            SegmentWeight::Predicate {
+                branches: oversized,
+                per_branch: 0.5,
+            },
+        )
+        .expect("one-based line range should build");
+
+        assert_eq!(segment.value(), f64::from(u32::MAX) * 0.5);
+    }
 }

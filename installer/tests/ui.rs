@@ -1,4 +1,4 @@
-//! Compile-fail guards for the `sha2` 0.11 migration.
+//! Compile-time guards for installer compatibility contracts.
 //!
 //! `sha2` 0.11 made two source-breaking changes that the installer had to work
 //! around:
@@ -17,4 +17,13 @@ fn sha2_0_11_pre_migration_patterns_fail_to_compile() {
     let cases = trybuild::TestCases::new();
     cases.compile_fail("tests/ui/digest_lowerhex.rs");
     cases.compile_fail("tests/ui/hasher_io_write.rs");
+}
+
+/// Keep the public dependency-query result and error variant usable downstream.
+#[test]
+fn dependency_check_result_contract_is_public() {
+    let cases = trybuild::TestCases::new();
+    cases.pass("tests/ui/pass_dylint_dependency_check_api.rs");
+    cases.compile_fail("tests/ui/legacy_dylint_dependency_check_status.rs");
+    cases.compile_fail("tests/ui/legacy_installer_error_match.rs");
 }

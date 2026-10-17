@@ -136,3 +136,22 @@ def test_only_main_uploads_the_explicit_root_lcov_report(
     assert inputs.get("format") == "lcov"
     assert inputs.get("mode") == "upload"
     assert inputs.get("path") == "lcov.info"
+
+
+def test_coverage_lanes_use_the_shared_online_profile_pool(
+    workflows: Mapping[str, Mapping[str, Any]],
+) -> None:
+    """Keep both workflows on the Makefile's bounded profile pattern."""
+    makefile = (REPOSITORY_ROOT / "Makefile").read_text(encoding="utf-8")
+    assert "COVERAGE_PROFILE_FILE_NAME ?= whitaker-%m.profraw" in makefile
+    assert "COVERAGE_PROFILE_FILE_NAME ?= whitaker-%p-%m.profraw" not in makefile
+
+    for workflow_name, job_name in (
+        ("ci.yml", "coverage-check"),
+        ("coverage-main.yml", "coverage-upload"),
+    ):
+        steps = _job_steps(workflows[workflow_name], job_name)
+        generate = steps[_named_step_index(steps, "Generate coverage")]
+        assert generate.get("run") == "make coverage", (
+            f"{workflow_name}:{job_name} must use the shared profile policy"
+        )

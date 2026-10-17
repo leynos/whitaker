@@ -17,8 +17,8 @@ one lane whose inner tiers were weakest.
 The third tier of the canonical four, the shared coverage action's cargo
 watchdog, does not exist here and its absence is asserted rather than
 assumed: `coverage-main.yml` says why the action is not used, and a lane
-that adopted it would inherit an undocumented 1,800 s default beneath a
-60 m nextest budget. See "Test timeouts: four tiers, outermost last" in
+that adopted it would inherit an undocumented 1,800 s default beneath an
+85 m nextest budget. See "Test timeouts: four tiers, outermost last" in
 ``docs/developers-guide.md``, and the canonical wording in
 `leynos/shared-actions`' `generate-coverage` README.
 
@@ -277,7 +277,7 @@ def test_the_cargo_watchdog_tier_is_absent_rather_than_defaulted() -> None:
     `cargo llvm-cov` itself and does not use that action, so the tier is
     absent by choice. A lane that adopted the action without setting
     `RUN_RUST_CARGO_WAIT_TIMEOUT` would inherit its undocumented 1,800 s
-    default underneath a 60 m nextest budget, which is the inversion the
+    default underneath an 85 m nextest budget, which is the inversion the
     canonical section exists to prevent, so both halves are asserted:
     the action is not used, and the variable is not set.
     """
@@ -298,7 +298,7 @@ def test_the_cargo_watchdog_tier_is_absent_rather_than_defaulted() -> None:
 #: `docs/developers-guide.md` records it. Pinned as well as derived: the
 #: derivation accepts any ceiling above its requirement, so a value
 #: nobody chose passes it while drifting away from the guide.
-REQUIRED_CEILING_MINUTES: typ.Final[int] = 100
+REQUIRED_CEILING_MINUTES: typ.Final[int] = 120
 
 #: The condition each suite lane legitimately carries, keyed by workflow
 #: and job, as the step's ``if`` and its job's.
@@ -326,8 +326,8 @@ def test_every_suite_lane_carries_the_documented_ceiling(
 
     The derivation asserts the ordering holds, and it holds for a range
     of ceilings, so a lane drifting to a value nobody chose still passes
-    it. This asserts the 100 minutes the developers' guide pins: a policy
-    value above the derived requirement of 91 minutes 5 seconds, which
+    it. This asserts the 120 minutes the developers' guide pins: a policy
+    value above the derived requirement of 116 minutes 5 seconds, which
     already carries the fifteen-minute margin.
     """
     wrong = {

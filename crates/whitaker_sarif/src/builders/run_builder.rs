@@ -2,7 +2,7 @@
 
 use crate::model::descriptor::ReportingDescriptor;
 use crate::model::result::SarifResult;
-use crate::model::run::{Artifact, Invocation, Run, Tool, ToolComponent};
+use crate::model::run::{Artefact, Invocation, Run, Tool, ToolComponent};
 
 /// Fluent builder for constructing a [`Run`].
 ///
@@ -22,7 +22,7 @@ pub struct RunBuilder {
     rules: Vec<ReportingDescriptor>,
     invocations: Vec<Invocation>,
     results: Vec<SarifResult>,
-    artifacts: Vec<Artifact>,
+    artefacts: Vec<Artefact>,
 }
 
 impl RunBuilder {
@@ -36,7 +36,7 @@ impl RunBuilder {
             rules: Vec::new(),
             invocations: Vec::new(),
             results: Vec::new(),
-            artifacts: Vec::new(),
+            artefacts: Vec::new(),
         }
     }
 
@@ -117,27 +117,27 @@ impl RunBuilder {
         self
     }
 
-    /// Appends an artifact reference.
+    /// Appends an artefact reference.
     ///
     /// # Examples
     ///
     /// ```
-    /// use whitaker_sarif::{RunBuilder, Artifact, ArtifactLocation};
+    /// use whitaker_sarif::{RunBuilder, Artefact, ArtefactLocation};
     ///
     /// let run = RunBuilder::new("tool", "1.0")
-    ///     .with_artifact(Artifact {
-    ///         location: ArtifactLocation {
+    ///     .with_artefact(Artefact {
+    ///         location: ArtefactLocation {
     ///             uri: "src/main.rs".into(),
     ///             uri_base_id: None,
     ///         },
     ///         mime_type: Some("text/x-rust".into()),
     ///     })
     ///     .build();
-    /// assert_eq!(run.artifacts.len(), 1);
+    /// assert_eq!(run.artefacts.len(), 1);
     /// ```
     #[must_use]
-    pub fn with_artifact(mut self, artifact: Artifact) -> Self {
-        self.artifacts.push(artifact);
+    pub fn with_artefact(mut self, artefact: Artefact) -> Self {
+        self.artefacts.push(artefact);
         self
     }
 
@@ -166,7 +166,7 @@ impl RunBuilder {
             },
             invocations: self.invocations,
             results: self.results,
-            artifacts: self.artifacts,
+            artefacts: self.artefacts,
         }
     }
 }

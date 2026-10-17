@@ -26,6 +26,8 @@ impl DocumentationWorld {
     }
 }
 
+/// Create an empty world for the documentation behaviour tests.
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> DocumentationWorld {
     DocumentationWorld::default()

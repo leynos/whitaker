@@ -157,6 +157,7 @@ fn multi_line_region_tracks_trailing_newline() {
     );
 }
 
+/// Verify that run0 emits primary and related SARIF locations.
 #[test]
 fn emit_run0_uses_primary_and_related_locations() {
     let fragments = vec![
@@ -191,13 +192,13 @@ fn emit_run0_uses_primary_and_related_locations() {
     assert_eq!(result.locations.len(), 1);
     assert_eq!(result.related_locations.len(), 1);
     assert_eq!(
-        result.locations[0].physical_location.artifact_location.uri,
+        result.locations[0].physical_location.artefact_location.uri,
         "src/a.rs"
     );
     assert_eq!(
         result.related_locations[0]
             .physical_location
-            .artifact_location
+            .artefact_location
             .uri,
         "src/b.rs"
     );

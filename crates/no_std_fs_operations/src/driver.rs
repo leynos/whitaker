@@ -4,9 +4,7 @@
 use crate::config::{LINT_NAME, load_configuration};
 use crate::diagnostics::emit_diagnostic;
 use crate::exclusion::PathExclusions;
-use crate::usage::{
-    StdFsUsage, UsageCategory, classify_def_id, classify_qpath, classify_res, label_is_std_fs,
-};
+use crate::usage::{StdFsUsage, classify_def_id, classify_qpath, classify_res, label_is_std_fs};
 use log::{debug, info};
 use rustc_hir as hir;
 use rustc_hir::AmbigArg;
@@ -66,6 +64,10 @@ impl<'tcx> LateLintPass<'tcx> for NoStdFsOperations {
         }
     }
 
+    /// Classify resolved imports and emit diagnostics for `std::fs` usages.
+    ///
+    /// Excluded crates are skipped, as are non-`use` items; each resolved item
+    /// in a use tree is classified at the import's span.
     fn check_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx hir::Item<'tcx>) {
         if self.should_skip() {
             return;
@@ -76,12 +78,17 @@ impl<'tcx> LateLintPass<'tcx> for NoStdFsOperations {
                 span: path.span,
             };
             for res in path.res.present_items() {
-                let usage = classify_res(cx, res, UsageCategory::Import);
+                let usage = classify_res(cx, res);
                 self.emit_optional(cx, site, usage);
             }
         }
     }
 
+    /// Classify path, struct-construction, and method-call expressions.
+    ///
+    /// Excluded crates and unrelated expression kinds are ignored. Method
+    /// calls use their resolved definition first, then inspect the receiver
+    /// type when resolution did not identify a `std::fs` operation.
     fn check_expr(&mut self, cx: &LateContext<'tcx>, expr: &'tcx hir::Expr<'tcx>) {
         if self.should_skip() {
             return;
@@ -92,18 +99,18 @@ impl<'tcx> LateLintPass<'tcx> for NoStdFsOperations {
         };
         match &expr.kind {
             hir::ExprKind::Path(qpath) => {
-                let usage = classify_qpath(cx, qpath, expr.hir_id, UsageCategory::Call);
+                let usage = classify_qpath(cx, qpath, expr.hir_id);
                 self.emit_optional(cx, site, usage);
             }
             hir::ExprKind::Struct(qpath, ..) => {
-                let usage = classify_qpath(cx, qpath, expr.hir_id, UsageCategory::Call);
+                let usage = classify_qpath(cx, qpath, expr.hir_id);
                 self.emit_optional(cx, site, usage);
             }
             hir::ExprKind::MethodCall(segment, receiver, ..) => {
                 let mut usage = cx
                     .typeck_results()
                     .type_dependent_def_id(expr.hir_id)
-                    .and_then(|def_id| classify_def_id(cx, def_id, UsageCategory::Call));
+                    .and_then(|def_id| classify_def_id(cx, def_id));
 
                 if usage.is_none() {
                     usage = self.receiver_usage_for_method(cx, receiver, segment.ident.as_str());
@@ -115,12 +122,15 @@ impl<'tcx> LateLintPass<'tcx> for NoStdFsOperations {
         }
     }
 
+    /// Classify path types and emit a diagnostic for a resolved `std::fs` use.
+    ///
+    /// Excluded crates and non-path type expressions are ignored.
     fn check_ty(&mut self, cx: &LateContext<'tcx>, ty: &'tcx hir::Ty<'tcx, AmbigArg>) {
         if self.should_skip() {
             return;
         }
         if let hir::TyKind::Path(qpath) = &ty.kind {
-            let usage = classify_qpath(cx, qpath, ty.hir_id, UsageCategory::Type);
+            let usage = classify_qpath(cx, qpath, ty.hir_id);
             self.emit_optional(
                 cx,
                 LintSite {
@@ -181,6 +191,10 @@ impl NoStdFsOperations {
         emit_diagnostic(cx, span, usage, &self.localizer);
     }
 
+    /// Infer a filesystem operation from a method receiver's standard type.
+    ///
+    /// Returns `None` for non-ADT receivers, types outside `std`, or standard
+    /// types outside `std::fs`; otherwise returns the qualified operation label.
     fn receiver_usage_for_method(
         &self,
         cx: &LateContext<'_>,
@@ -204,7 +218,7 @@ impl NoStdFsOperations {
         }
 
         let operation = format!("{label}::{method}");
-        Some(StdFsUsage::new(operation, UsageCategory::Call))
+        Some(StdFsUsage::new(operation))
     }
 }
 

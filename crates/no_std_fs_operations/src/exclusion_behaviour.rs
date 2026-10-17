@@ -34,6 +34,8 @@ impl ExclusionWorld {
 
 type WorldCell = RefCell<ExclusionWorld>;
 
+/// Create the default exclusion behaviour-test world.
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> WorldCell {
     RefCell::new(ExclusionWorld::default())

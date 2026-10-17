@@ -11,7 +11,7 @@ use whitaker_common::i18n::{I18nError, testing::FailingLookup};
 
 use super::{
     FunctionAttrsMessages, FunctionKind, Localizer, MESSAGE_KEY, attribute_fallback,
-    localised_messages,
+    localized_messages,
 };
 
 #[derive(Default)]
@@ -111,6 +111,10 @@ fn resolve_attribute(world: &LocalizationWorld, failing: bool) -> String {
     }
 }
 
+/// Return localized messages from the configured or failing lookup.
+///
+/// # Errors
+/// Returns the lookup error when localization fails.
 fn resolve_localization(
     world: &LocalizationWorld,
     kind: FunctionKind,
@@ -119,9 +123,9 @@ fn resolve_localization(
 ) -> Result<FunctionAttrsMessages, I18nError> {
     if failing {
         let lookup = failing_lookup();
-        localised_messages(&lookup, kind, attribute)
+        localized_messages(&lookup, kind, attribute)
     } else {
-        world.with_localizer(|localizer| localised_messages(localizer, kind, attribute))
+        world.with_localizer(|localizer| localized_messages(localizer, kind, attribute))
     }
 }
 

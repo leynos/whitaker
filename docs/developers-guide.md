@@ -278,6 +278,11 @@ later assertion steps to return without inspecting missing output, and is
 reported through `rstest_bdd::skip!`. Keep these skip rules in the shared setup
 helpers so all scenario variants retain the same isolation and lifecycle.
 
+The PATH-scan tracing test in `installer/src/tracing_config.rs` re-executes its
+test binary in a child process to exercise the real CLI flags and diagnostic.
+Its probe helper belongs only to that test; the child boundary keeps tracing
+subscriber setup and the test `PATH` isolated from the parent process.
+
 ### Test profiles
 
 By default, `make test` excludes slow installer integration tests
@@ -303,7 +308,9 @@ are never silently skipped in the pipeline.
 `make test`, but runs it through `cargo llvm-cov nextest`. The Makefile assigns
 the absolute `COVERAGE_TARGET_DIR` (by default,
 `$(CURDIR)/target/llvm-cov-target`) to both `CARGO_LLVM_COV_TARGET_DIR` and
-`CARGO_TARGET_DIR`.
+`CARGO_TARGET_DIR`. It also sets `LLVM_PROFILE_FILE_NAME` to
+`whitaker-%m.profraw`, so LLVM merges each instrumented binary's counters
+online instead of retaining a separate raw profile for every Nextest process.
 
 The first variable makes `cargo-llvm-cov` instrument its output in that
 directory. The second is inherited by nested Cargo commands that Dylint UI
@@ -1172,7 +1179,7 @@ worker count rather than `-n auto`.
 
 #### Coverage lane time limits
 
-`coverage-check` and `coverage-upload` run under the 100-minute ceiling that
+`coverage-check` and `coverage-upload` run under the 120-minute ceiling that
 "Test timeouts: four tiers, outermost last" derives from the suite's budgets,
 and that section's contract pins it. The ceiling must also hold a cold compiler
 cache, not only a warm one. A cold cache is not rare: every change to the
@@ -1194,8 +1201,8 @@ CodeScene upload and three cache saves), could not finish cold at all. A
 cancelled writer keeps the compiler-cache entries it stored while it compiled,
 which is why the next trunk run was warm, but it loses its doctests, its
 CodeScene upload and its archive saves. The slowest cold job measured, 38m45s,
-sits well inside the 100-minute ceiling, which leaves `coverage-upload` about
-an hour after a cold `Generate coverage` for its doctests, upload and saves.
+sits well inside the 120-minute ceiling, which leaves `coverage-upload` about
+81 minutes after a cold `Generate coverage` for its doctests, upload and saves.
 Re-measure the cold figure after a change that makes the suite materially
 larger; if it approaches the ceiling, the tier derivation is where to raise it,
 not a per-lane value.
@@ -2421,7 +2428,7 @@ no longer implements `io::Write`, so neither `format!("{:x}", digest)` nor
 shared by `downloader.rs`, `artefact/packaging.rs`, and the `sha256_hex` test
 helper.
 
-`installer/src/deps.rs` drives the high-level fallback order:
+`installer/src/deps/mod.rs` drives the high-level fallback order:
 
 1. Attempt the repository-hosted dependency archive for the current target.
 2. Verify the installed tool is now usable. `cargo-dylint` is checked by
@@ -2495,27 +2502,79 @@ A Cargo-managed `dylint-link` already on `PATH` is checked by resolving an
 executable file and comparing the version Cargo recorded for it, which needs no
 execution either.
 
-The `dylint-link` verification in `installer/src/deps.rs` is implemented by
-five small private helpers:
+The `dylint-link` verification in `installer/src/deps/mod.rs` is implemented by
+six small private helpers:
 
-- `find_binary_on_path(binary_name)` returns the first executable candidate so
-  the installation check can validate the exact path it found.
-- `find_binary_in_directory(directory, binary_name)` performs the per-directory
-  search that `find_binary_on_path()` uses while walking `PATH`.
-- `binary_candidates(directory, binary_name)` builds the ordered set of
-  candidate paths that each directory contributes to the lookup.
-- `is_executable_file(path)` applies the platform-specific file test:
-  executable-bit plus regular-file checks on Unix, and `path.is_file()` on
-  non-Unix targets where the executable suffix carries the meaning.
+- `find_binary_on_path(binary_name)` returns a `PathScanResult` containing the
+  first executable path and classified failures encountered during the scan.
+- `scan_path_directories(directories, binary_name)` scans the supplied ordered
+  `PathBuf` entries and returns a `PathScanResult` with the first match and
+  failures from entries checked before that match.
+- `find_binary_in_directory` checks candidates relative to one PATH entry and
+  returns the first match joined to the original directory. Its inputs make the
+  path, binary name, and failure accumulator explicit:
+
+  ```rust
+  fn find_binary_in_directory(
+      directory: &Path,
+      binary_name: &str,
+      failures: &mut Vec<PathScanFailure>,
+  ) -> Option<std::path::PathBuf>
+  ```
+
+  It converts the entry to `camino::Utf8Path`, opens a `cap_std::fs_utf8::Dir`,
+  and checks candidate names relative to that capability. Non-UTF-8 entries and
+  directories that cannot be opened are skipped; classified failures are
+  appended without retaining the path.
+- `binary_candidates(binary_name: &str) -> Vec<String>` returns candidate
+  executable names in probe order. Unix returns the requested name unchanged.
+  Windows preserves a name with an extension as its sole candidate; otherwise,
+  it appends the `PATHEXT` suffixes in configured order, skipping suffixes
+  already present at the end of the name, case-insensitively.
+- `is_executable_file` has this signature:
+
+  ```rust
+  fn is_executable_file(
+      directory: &Dir,
+      candidate: &Utf8Path,
+      failures: &mut Vec<PathScanFailureCategory>,
+  ) -> bool
+  ```
+
+  It obtains metadata with `Dir::metadata`, requires a regular file and, on
+  Unix, at least one executable permission bit. Ordinary `NotFound` misses add
+  no failure category, while other metadata errors add the bounded `metadata`
+  category to the caller-provided list.
 - `windows_path_extensions()` normalizes `PATHEXT` on Windows so
   `binary_candidates()` can expand extensionless names the same way the shell
   does.
+
+`PathScanResult` is a narrowly scoped report for this PATH scan: it carries the
+first matching path and the bounded categories encountered while checking
+entries. It is not a reusable filesystem abstraction. The scan helpers return
+these classifications without logging. At verbose level, the installer CLI
+emits structured debug events with `binary_name` and `failure_category`; it
+does not record PATH values or candidate paths.
+
+`check_dylint_tools()` returns `Result<DylintToolStatus>`. A successful status
+with a `false` field means the query established that a tool is absent or does
+not match the pinned version. Command-spawn and Cargo-registry errors propagate
+as errors; if PATH scanning finds no binary after a non-missing lookup failure,
+it returns `InstallerError::DependencyCheck`. The install flow only starts
+installation after a successful query reports a missing tool. The query uses the
+`CommandExecutor` and `BinaryLocator` interfaces, and returns PATH diagnostics
+without emitting tracing events. The CLI logs those diagnostics at the command
+boundary. Cargo's explicit `no such command: dylint` response is treated as an
+absent tool; other nonzero command results and successful version probes that
+report no semantic version are query errors.
 
 These key helpers are covered by direct unit tests in
 `installer/src/deps/path_tests.rs` for missing PATH values, empty PATH values,
 multiple PATH directories, non-executable Unix files, executable Unix files,
 broken PATH shims, and Windows `PATHEXT` resolution via both direct helper
-tests and `check_dylint_tools()`.
+tests and `check_dylint_tools()`. Availability tests also verify that query
+failures remain errors, do not emit tracing events, and stop before the install
+callback.
 
 Installer PATH-fixture helpers now live in
 `installer/src/test_utils/dependency_binary_helpers.rs` instead of being
@@ -2531,6 +2590,12 @@ duplicated across multiple test modules. The key helpers are:
 - `AlwaysNotFoundRepositoryInstaller`, a repository-installer test double used
   by `installer/src/tests.rs` to force the direct Cargo fallback path without
   network access.
+
+The end-to-end tracing test in `installer/tests/tracing_cli.rs` keeps its
+workspace, fake executables, and child environment private to that test module.
+Those helpers model the test's controlled CLI failure and tracing contract;
+they are not shared PATH utilities. Its `CliMode`, `DependencyPackage`, and
+`FixtureExecutable` types represent only the finite choices used by this test.
 
 ### CLI tool usage
 
@@ -2922,7 +2987,7 @@ context by combining a HIR ancestry walk with attribute-shape matching.
 `ContextEntry` items for modules, functions, impls, and blocks, and carries a
 boolean `has_test_context_ancestry` alongside that list. On each step,
 `has_test_ancestry` updates that boolean so the test-only decision can
-propagate from outer ancestors into nested helper code. `summarise_context`
+propagate from outer ancestors into nested helper code. `summarize_context`
 then combines the accumulated entries, the propagated boolean, and
 `in_test_like_context_with(additional_test_attributes)` to produce the final
 `ContextSummary.is_test` result. This pattern matters because user-configured
@@ -2936,7 +3001,7 @@ not just the immediately enclosing function.
     `is_cfg_test_attribute`
   - the current ancestor is a function item whose attributes match Whitaker's
     built-in test list or `additional_test_attributes`
-- `summarise_context` merges that ancestry flag with the collected
+- `summarize_context` merges that ancestry flag with the collected
   `ContextEntry` values to derive the final `ContextSummary.is_test` decision.
 
 rustc removes an evaluated `#[cfg(test)]` from the item and leaves a parsed
@@ -3330,6 +3395,13 @@ Whitaker data directory keyed by toolchain and target:
 - Windows:
   `%LOCALAPPDATA%\whitaker\lints\<toolchain>\<target>\lib`
 
+The private `installer/src/tracing_config.rs` formatter belongs only to CLI
+startup and its colocated tests; other modules must emit events rather than
+reuse or initialize this subscriber. It sends diagnostics to stderr, enables
+errors in quiet mode, warnings by default, and debug events when verbosity is
+positive, with ANSI escapes disabled. Tests capture formatted events with a
+thread-scoped subscriber and verify stderr routing in an isolated subprocess.
+
 ### Configuration options
 
 - `-t, --target-dir DIR` — Staging directory for built libraries
@@ -3549,6 +3621,40 @@ Future rstest lints should promote this adapter out of
 crate consumes the same HIR lowering policy. Until then, keep compiler-aware
 HIR logic in the lint crate and keep the pure `ArgAtom`/`ArgFingerprint` model
 in `whitaker_common::rstest`.
+
+### Numeric and span bounds in complexity diagnostics
+
+The Bumpy Road and conditional-branch lints convert counts at the boundary
+between analysis and compiler diagnostics. Their `diagnostic_integer_argument`
+and `saturating_diagnostic_integer` helpers clamp Fluent integer arguments to
+`i64::MAX` rather than wrapping. Bumpy Road's `SegmentWeight::Fixed` keeps its
+supplied value; `SegmentWeight::Predicate` uses `saturating_branch_count` and
+`predicate_segment_weight` to cap branch counts at `u32::MAX` before scaling.
+
+Rust compiler `BytePos` offsets are also `u32`. `span_byte_offset_range`
+rejects a highlighted source range if either endpoint exceeds that limit;
+`line_range_byte_offsets` also rejects a start line before the snippet's base
+line, a reversed range, or a start line missing from the snippet's line table.
+When the requested end line has no following line-start entry, the mapper uses
+the snippet length as the end offset. If either resulting byte offset cannot be
+represented as `u32`, the mapper omits the secondary span label while still
+emitting the primary diagnostic. Tests cover the maximum accepted value and the
+first value above each boundary in
+`crates/bumpy_road_function/src/driver/numeric.rs` and
+`crates/conditional_max_n_branches/src/driver/numeric.rs`.
+
+Production tests that pass a value beyond a `usize` boundary are gated by
+`#[cfg(target_pointer_width = "64")]`; 32-bit targets cannot represent those
+inputs. The cases are `diagnostic_arguments_saturate_oversized_bump_counts` and
+`span_mapping_omits_unrepresentable_offsets` in
+`crates/bumpy_road_function/src/driver/diagnostic.rs`, plus
+`production_diagnostic_arguments_saturate_at_the_signed_boundary`,
+`production_predicate_weight_saturates_excess_branches`,
+`production_span_offset_ranges_reject_an_unrepresentable_end`, and
+`production_line_range_mapping_rejects_an_unrepresentable_offset` in its
+`numeric.rs`. The conditional-branch boundary case is
+`production_diagnostic_arguments_saturate_at_the_signed_boundary` in
+`crates/conditional_max_n_branches/src/driver/numeric.rs`.
 
 ### Adding a new lint
 
@@ -3905,12 +4011,12 @@ of the rule lives in the `generate-coverage` README in
 this repository sets, what each value is sized against, and where the third
 tier went.
 
-| Tier                     | What it bounds                     | Where it is set                             | Current value                                                                                                                                             |
-| ------------------------ | ---------------------------------- | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`, both profiles       | 300 s default; 20 m for serialized Dylint/trybuild UI harnesses; 30 m for serialized nested-Cargo fixtures; 30 m for toolchain-installing behaviour tests |
-| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, both profiles       | 60 m                                                                                                                                                      |
-| Cargo watchdog           | one `cargo` invocation, wall clock | not used here, see below                    | absent                                                                                                                                                    |
-| Job `timeout-minutes`    | the whole job                      | `ci.yml` and `coverage-main.yml`, job level | 100 m for every lane that runs the suite                                                                                                                  |
+| Tier                     | What it bounds                     | Where it is set                             | Current value                                                                                                                                                                           |
+| ------------------------ | ---------------------------------- | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`, both profiles       | 300 s default; 20 m for ordinary serialized UI and no-default-feature builds; 45 m for parser-pin and trybuild compile-contract fixtures; 30 m for toolchain-installing behaviour tests |
+| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, both profiles       | 85 m                                                                                                                                                                                    |
+| Cargo watchdog           | one `cargo` invocation, wall clock | not used here, see below                    | absent                                                                                                                                                                                  |
+| Job `timeout-minutes`    | the whole job                      | `ci.yml` and `coverage-main.yml`, job level | 120 m for every lane that runs the suite                                                                                                                                                |
 
 *Table: the timers that can end a run, innermost first.*
 
@@ -3953,28 +4059,36 @@ where a reader of that profile will find them. Restating them also makes a
 later divergence between the two profiles explicit rather than silent, since a
 changed default would otherwise change CI without touching the `ci` section.
 
-The parser-pin build-script tests each create an isolated nested Cargo
-workspace with its own target directory. Their 10 m allowance accommodates cold
-builds queued for compiler admission after one exceeded the 300 s base timeout;
-it does not serialize the tests.
+The no-default-feature regression test checks the library in a nested Cargo
+invocation with an isolated target directory, so it rebuilds dependencies
+instead of reusing artefacts from the workspace test run. It exceeded the
+300-second base allowance while compiler admission was heavily queued. The
+20-minute allowance and shared nested-Cargo test group leave room for a cold
+build without letting it compete with the parser-pin fixtures.
 
 The contract holds that policy, and its failure messages say so rather than
 claiming nextest requires it.
 
-The serial UI group has a 20-minute bound. A full workspace run reached 9m56 in
-the nested trybuild harness while compiler admission queued; the wider
-allowance lets a contended compile finish while still terminating a stalled
-test.
+The ordinary serial UI group has a 20-minute bound. The installer UI case
+measured 235 seconds and timed out at the 300-second base allowance on Windows.
+The wider allowance lets nested UI builds finish under contention while still
+terminating a stalled test.
 
-The three parser-pin build-script integration cases also receive a 30-minute
-allowance and run in a dedicated serial test group. Each case invokes nested
-Cargo against a fresh temporary target directory, so it rebuilds the fixture's
-build dependencies. The exact-pin case performs both `cargo check` and
-`cargo run`; a traced run completed in 591 seconds after waiting on the shared
-package-cache lock. The loose-pin case was still compiling when its 15-minute
-allowance expired under shared compiler admission. The 30-minute allowance
-leaves room for that queue without changing the whole-suite budget. Serializing
-these cases keeps their Cargo invocations from queueing against one another.
+Every trybuild compile contract rebuilds fixture crates through nested Cargo.
+In a cold workspace, the Bumpy Road public API contract timed out on three
+20-minute attempts; the final attempt reached its pass fixture after 15 minutes
+of nested compilation. Retrying restarted that expensive build without
+producing a result. All discovered compile contracts therefore share a
+45-minute allowance and disable retries, leaving one build enough time to reach
+its fixtures without repeating the same work.
+
+The three parser-pin build-script integration cases run in the same serial
+nested-Cargo group and each use a fresh temporary target directory. The
+exact-pin case performs both `cargo check` and `cargo run`; a traced run
+completed in 591 seconds after waiting on the shared package-cache lock. A
+later full run exhausted the 30-minute allowance while compiler admission had a
+large queue. The 45-minute allowance reflects that observed wait, and the group
+prevents these fixtures from competing with the no-default-feature build.
 
 ### The clocks do not start together
 
@@ -4001,10 +4115,10 @@ for the build and the steps either side of the suite, plus a fifteen-minute
 margin above that sum. The margin is there because a ceiling equal to the sum
 it contains cancels the job at the moment the innermost timer would have
 reported the overrun, and the report is the only thing that makes an overrun
-actionable. That is 60 m + 65 s + 15 m + 15 m, or 91 minutes 5 seconds, which
+actionable. That is 85 m + 65 s + 15 m + 15 m, or 116 minutes 5 seconds, which
 `required_ceiling` computes for both profiles.
 
-The ceiling is not that requirement. It is pinned separately at 100 minutes, a
+The ceiling is not that requirement. It is pinned separately at 120 minutes, a
 policy value above it: the derivation accepts any ceiling at or above the
 requirement, so the value is pinned as well, to stop a lane drifting to a
 number nobody chose.
@@ -4015,11 +4129,11 @@ written down, so it has been corrected rather than kept as a special case.
 
 ### What the values are sized against
 
-The 60 m whole-run budget is a bound with headroom for the complete workspace
-suite. A recent full run reached the previous 45 m limit with 1,759 of 1,762
-tests completed while the final nested trybuild compile was still progressing.
-The additional 15 m leaves time for that compile and normal variation without
-weakening the 30 m per-test ceiling.
+The 85 m whole-run budget is sized against the latest uncached full run. It
+reached 1,840 of 1,842 tests before the global timeout stopped the SARIF API
+contract's nested trybuild compilation while Cargo waited on shared locks and
+compiler admission. The additional 10 m gives that contract and the remaining
+test room to finish without weakening the configured per-test ceilings.
 
 The 15 m allowance for work outside nextest's window is measured, from the
 worst of several runs rather than one:
@@ -4048,7 +4162,7 @@ and this suite cannot run a bare `--workspace` build. Coverage runs through
 
 That absence is asserted rather than assumed. A lane that adopted the action
 without setting `RUN_RUST_CARGO_WAIT_TIMEOUT` would inherit the 1,800 s default
-underneath a 60 m nextest budget, which is exactly the inversion the canonical
+underneath an 85 m nextest budget, which is exactly the inversion the canonical
 section exists to prevent, and it would do so silently. The contract therefore
 fails if either the action appears or the variable is set, so adopting it needs
 this section updated in the same change.
@@ -4176,16 +4290,20 @@ failure and `tests/nextest_ui_filter.rs` requires the key.
 
 It discovers the compile-contract tests rather than listing them. A test that
 drives `trybuild` invokes a nested cargo build, so it costs what a build costs
-and the base per-test allowance is the wrong order of magnitude for it. There
-are two here, and both are in a binary called `ui`, which is why the set is
-found from the `trybuild::TestCases` calls in the tree and each test is
-required by name: `whitaker-installer`'s test sits in a binary named `ui` but
-is not itself named `ui`, so the `(binary(ui) & test(=ui))` clause never
-reached it. It ran under the base 300-second allowance, passed at 235 seconds,
-and timed out at 300.216 seconds on the Windows lane, cancelling the run. A
-handwritten list would have had the same hole, and a discovery that stops
-recognizing the call would sweep a smaller set silently, so finding nothing is
-a failure rather than a pass.
+and the base per-test allowance is the wrong order of magnitude for it. The
+current discovery finds seven tests across
+`common/tests/public_api_contract.rs`,
+`crates/bumpy_road_function/tests/api_contract.rs`,
+`crates/whitaker_sarif/tests/api_contract.rs`, `installer/tests/ui.rs`,
+`crates/whitaker_test_macros/tests/ui.rs`, and
+`crates/rstest_helper_should_be_fixture/tests/ui.rs`. Three of those binaries
+are named `ui`, but their test functions have different names. For example,
+`whitaker-installer`'s test is in a binary named `ui` but is not itself named
+`ui`, so the `(binary(ui) & test(=ui))` clause never reached it. It ran under
+the base 300-second allowance, passed at 235 seconds, and timed out at 300.216
+seconds on the Windows lane, cancelling the run. A handwritten list would have
+had the same hole, and a discovery that stops recognizing the call would sweep
+a smaller set silently, so finding nothing is a failure rather than a pass.
 
 It drives the lane discovery with workflow documents rather than only with the
 files. `_declared_jobs` takes parsed documents and reads the repository's own
@@ -4216,9 +4334,9 @@ fails `ci`'s ordering too. Whether a profile terminates a test no override
 matches is still read from its own table alone.
 
 It pins the values the tables above state as well as ordering them: the base
-`slow-timeout` on both profiles compared as a whole table, the 60 m whole-run
+`slow-timeout` on both profiles compared as a whole table, the 85 m whole-run
 budget, both overrides' whole `slow-timeout` including the grace period, and
-the 100-minute ceiling on every suite lane. The ordering assertions hold for a
+the 120-minute ceiling on every suite lane. The ordering assertions hold for a
 range of values, so on their own they would let any of these drift to a number
 nobody chose while still passing. The grace period is pinned for the same
 reason it is read: the watchdog and the ceiling above it are sized to cover

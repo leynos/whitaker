@@ -98,6 +98,7 @@ mod tests {
         assert!(log.runs.is_empty());
     }
 
+    /// Build a log containing a run.
     #[test]
     fn builds_log_with_run() {
         let run = Run {
@@ -111,7 +112,7 @@ mod tests {
             },
             invocations: Vec::new(),
             results: Vec::new(),
-            artifacts: Vec::new(),
+            artefacts: Vec::new(),
         };
         let log = SarifLogBuilder::new().with_run(run).build();
         assert_eq!(log.runs.len(), 1);

@@ -679,7 +679,7 @@ If a quality gate fails because of unrelated main-branch drift or another
 agent's changes, stop, record the evidence in this plan, and ask for direction.
 Do not revert unrelated work.
 
-## Artifacts and notes
+## Artefacts and notes
 
 Wyvern planning agents reported three useful facts:
 

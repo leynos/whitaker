@@ -6,6 +6,15 @@ explains how to integrate the lints into a project and configure them.
 For contributors who want to develop new lints or work on Whitaker itself, see
 the [Developer's Guide](developers-guide.md).
 
+## Upgrading library consumers
+
+Version 0.3.0 includes source-breaking spelling changes to public Rust APIs.
+Existing library consumers must update imports, field access, and builder calls
+to the names listed in the
+[Whitaker 0.3.0 migration guide](v0-3-0-migration-guide.md). The changes affect
+Rust source only: SARIF 2.1.0 JSON keys retain their schema-defined spellings,
+so existing serialized data requires no migration.
+
 ## Quick Setup
 
 ### Prerequisites
@@ -103,6 +112,18 @@ environment-variable workaround.
   [Pinning the lint suite](#pinning-the-lint-suite)
 - `--no-source-fallback` — Fail rather than build from source when a published
   artefact is absent. See [Refusing a source build](#refusing-a-source-build)
+- `-v`, `--verbose` — Include debug diagnostics, including bounded reasons why
+  a `PATH` candidate was skipped. The candidate path is not printed.
+- `-q`, `--quiet` — Suppress progress output and show only errors.
+
+Installer diagnostics are written to standard error without ANSI formatting.
+The default verbosity shows warnings and errors; `-v` enables debug events, and
+`-q` limits tracing output to errors.
+
+The installer scans `PATH` entries in order and uses the first regular
+executable candidate for `dylint-link`. It skips missing candidates and entries
+that cannot be represented as UTF-8 or opened, then continues searching later
+entries.
 
 ### Adding Whitaker to a project
 

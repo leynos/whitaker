@@ -1,4 +1,4 @@
-//! Passing trybuild fixture proving the fixture-expansion lint attribute works
+//! Passing trybuild fixture verifying suppression of fixture-expansion lints
 //! with a denied `unused_braces` lint.
 //!
 //! The fixture applies `allow_fixture_expansion_lints` to the small function

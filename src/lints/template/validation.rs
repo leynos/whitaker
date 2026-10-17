@@ -97,23 +97,30 @@ pub(crate) fn lint_constant(crate_name: &str) -> String {
         .collect()
 }
 
-fn capitalise_segment(segment: &str) -> Option<String> {
+/// Capitalize one non-empty segment using ASCII case conversion.
+///
+/// Returns `None` for an empty segment; non-ASCII characters are preserved.
+fn capitalize_segment(segment: &str) -> Option<String> {
     let mut characters = segment.chars();
     let first = characters.next()?;
 
-    let mut capitalised = String::with_capacity(segment.len());
-    capitalised.push(first.to_ascii_uppercase());
+    let mut capitalized = String::with_capacity(segment.len());
+    capitalized.push(first.to_ascii_uppercase());
     for character in characters {
-        capitalised.push(character.to_ascii_lowercase());
+        capitalized.push(character.to_ascii_lowercase());
     }
 
-    Some(capitalised)
+    Some(capitalized)
 }
 
+/// Derive the UI pass struct name by joining capitalized crate-name segments.
+///
+/// Hyphens and underscores delimit segments, and empty segments are ignored.
+/// ASCII letters are case-normalized while other characters are preserved.
 pub(crate) fn pass_struct_name(crate_name: &str) -> String {
     crate_name
         .split(['-', '_'])
-        .filter_map(capitalise_segment)
+        .filter_map(capitalize_segment)
         .collect()
 }
 

@@ -6,9 +6,8 @@
 
 mod install_flow;
 mod staged_suite;
+mod tracing_config;
 
-#[cfg(test)]
-use crate::install_flow::ensure_dylint_tools_with_options;
 use crate::install_flow::{
     MetricsWriteContext, PrebuiltInstallationContext, ensure_dylint_tools_with_executor,
     try_prebuilt_installation, write_install_metrics,
@@ -19,7 +18,9 @@ use std::io::Write;
 use std::time::Instant;
 use whitaker_installer::cli::{Cli, Command, InstallArgs};
 use whitaker_installer::crate_name::CrateName;
-use whitaker_installer::deps::{SourcePolicy, SystemCommandExecutor};
+use whitaker_installer::deps::{
+    SourcePolicy, SystemCommandExecutor, install_dylint_tools_with_output,
+};
 use whitaker_installer::dirs::{BaseDirs, SystemBaseDirs};
 use whitaker_installer::error::{InstallerError, Result};
 use whitaker_installer::install_metrics::InstallMode;
@@ -32,12 +33,16 @@ use whitaker_installer::resolution::{
 use whitaker_installer::toolchain::Toolchain;
 use whitaker_installer::wrapper::{generate_wrapper_scripts, path_instructions};
 
+/// Parse options, configure tracing, and run the selected command.
 fn main() {
     let cli = Cli::parse();
     let mut stdout = std::io::stdout();
     let mut stderr = std::io::stderr();
-    let run_result = run(&cli, &mut stdout, &mut stderr);
-    let exit_code = exit_code_for_run_result(run_result, &mut stderr);
+    if let Err(error) = tracing_config::configure_tracing(cli.install_args()) {
+        write_stderr_line(&mut stderr, error);
+        std::process::exit(1);
+    }
+    let exit_code = exit_code_for_run_result(run(&cli, &mut stdout, &mut stderr), &mut stderr);
     if exit_code != 0 {
         std::process::exit(exit_code);
     }
@@ -194,7 +199,9 @@ use dry_run::run_dry;
 /// Checks for and installs Dylint tools if missing.
 fn ensure_dylint_tools(policy: SourcePolicy, stderr: &mut dyn Write) -> Result<()> {
     let executor = SystemCommandExecutor;
-    ensure_dylint_tools_with_executor(&executor, policy, stderr)
+    ensure_dylint_tools_with_executor(&executor, policy, stderr, |status, stderr| {
+        install_dylint_tools_with_output(&executor, status, policy, stderr)
+    })
 }
 
 /// Ensures a Whitaker workspace is available.

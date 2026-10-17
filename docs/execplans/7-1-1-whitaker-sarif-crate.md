@@ -263,9 +263,9 @@ field. Convenience type alias `Result<T>`.
 ### Stage D: Implement SARIF model types
 
 Split into `model/` directory: `mod.rs`, `log.rs` (`SarifLog`), `run.rs` (`Run`,
-`Tool`, `ToolComponent`, `Invocation`, `Artifact`), `result.rs` (`SarifResult`,
+`Tool`, `ToolComponent`, `Invocation`, `Artefact`), `result.rs` (`SarifResult`,
 `Level`, `Message`), `location.rs` (`Location`, `PhysicalLocation`,
-`ArtifactLocation`, `Region`, `RelatedLocation`), `descriptor.rs`
+`ArtefactLocation`, `Region`, `RelatedLocation`), `descriptor.rs`
 (`ReportingDescriptor`, `MultiformatMessageString`). All types derive `Debug`,
 `Clone`, `PartialEq`, `Serialize`, `Deserialize` with
 `#[serde(rename_all = "camelCase")]`.

@@ -5,7 +5,7 @@
 //! more separated bumps above a configurable threshold. The warning highlights
 //! the two largest bump intervals with labelled spans.
 
-use crate::analysis::{Settings, detect_bumps, normalise_settings};
+use crate::analysis::{Settings, detect_bumps, normalize_settings};
 use rustc_hir as hir;
 use rustc_hir::ExprKind;
 use rustc_lint::{LateContext, LateLintPass};
@@ -22,6 +22,7 @@ const MESSAGE_KEY: MessageKey<'static> = MessageKey::new(LINT_NAME);
 
 mod config;
 mod diagnostic;
+mod numeric;
 mod segment_builder;
 
 use self::config::load_configuration;
@@ -51,8 +52,12 @@ impl Default for BumpyRoadFunction {
 }
 
 impl<'tcx> LateLintPass<'tcx> for BumpyRoadFunction {
+    /// Load normalized lint settings and the locale-specific message resolver.
+    ///
+    /// This runs once before HIR traversal so every analysed body uses the same
+    /// configuration and localization context.
     fn check_crate(&mut self, _cx: &LateContext<'tcx>) {
-        self.settings = normalise_settings(load_configuration().into_settings());
+        self.settings = normalize_settings(load_configuration().into_settings());
         let shared_config = SharedConfig::load();
         self.localizer = get_localizer_for_lint(LINT_NAME, shared_config.locale());
     }
@@ -170,6 +175,11 @@ struct AnalysisTarget {
     body_id: hir::BodyId,
 }
 
+/// Build the complexity signal for one body and report separated bumps.
+///
+/// Macro-expanded bodies, bodies without source line information, and bodies
+/// with fewer than two detected bumps produce no diagnostic. Rasterization or
+/// smoothing failures are reported as delayed compiler bugs and stop analysis.
 fn analyse_body(
     cx: &LateContext<'_>,
     target: AnalysisTarget,
@@ -196,7 +206,7 @@ fn analyse_body(
         Err(error) => {
             cx.tcx.sess.dcx().span_delayed_bug(
                 body_span,
-                format!("bumpy-road signal rasterisation failed: {error}"),
+                format!("bumpy-road signal rasterization failed: {error}"),
             );
             return;
         }

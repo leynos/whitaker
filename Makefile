@@ -49,6 +49,10 @@ COVERAGE_OUTPUT ?= lcov.info
 # exact directory. cargo-llvm-cov otherwise passes its target only as a
 # Nextest argument, which Dylint's nested Cargo build cannot observe.
 COVERAGE_TARGET_DIR ?= $(CURDIR)/target/llvm-cov-target
+# Nextest runs each test case in a separate process. Keep one online-merged
+# profile per instrumented binary instead of one raw profile per process, as
+# cargo-llvm-cov's default `%p` pattern does.
+COVERAGE_PROFILE_FILE_NAME ?= whitaker-%m.profraw
 RUST_FLAGS ?= -D warnings
 # The installer MSRV check and the publish check each build in a scratch
 # tree they discard afterwards. The trees live at fixed paths rather than
@@ -80,6 +84,8 @@ SCRATCH_ROOT_CHECK = mkdir -p -m 700 "$(SCRATCH_ROOT)"; \
 		exit 1; \
 	fi
 RUSTDOC_FLAGS ?= --cfg docsrs -D warnings
+# `markdownlint` passes MDLINT to xargs as one command word, so overrides must
+# name a single executable path rather than include command-line arguments.
 MDLINT ?= $(shell command -v markdownlint-cli2 2>/dev/null || printf '%s' "$$HOME/.bun/bin/markdownlint-cli2")
 # `make fmt` and `make check-fmt` call mdtablefix directly. `--git` selects the
 # Markdown files Git tracks and `--include-untracked` adds the untracked files
@@ -147,7 +153,7 @@ WHITAKER_SCRIPT ?= $(HOME)/.local/bin/whitaker
 MD_FILES_FIND = find . \
 	\( -type d \( -name .git -o -name target -o -name .venv -o \
 	-name .uv-cache -o -name .uv-tools -o -name .pytest_cache -o \
-	-name .vtcode -o -name memories -o -name node_modules \) -prune \) -o \
+	-name .vtcode -o -name memories -o -name .memories -o -name node_modules \) -prune \) -o \
 	\( -type f -name '*.md' -print0 \)
 
 build: target/debug/$(APP) ## Build debug binary
@@ -217,9 +223,13 @@ coverage: ## Generate LCOV coverage over the CI-tested crate subset
 	@# three lint crates whose dylint UI tests are excluded) stay excluded,
 	@# so coverage never attempts a bare `--workspace` build the suite
 	@# cannot support.
+	@# LLVM coverage maps carry source locations without DWARF debug info.
+	@# Omit optional symbols from this throwaway target to limit runner disk use.
 	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v cargo-llvm-cov >/dev/null || { echo "Install cargo-llvm-cov (cargo install cargo-llvm-cov)"; exit 1; }
 	@CARGO_LLVM_COV_TARGET_DIR="$(COVERAGE_TARGET_DIR)" \
 		CARGO_TARGET_DIR="$(COVERAGE_TARGET_DIR)" \
+		LLVM_PROFILE_FILE_NAME="$(COVERAGE_PROFILE_FILE_NAME)" \
+		CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 \
 		$(MAKE) test TEST_RUNNER="llvm-cov nextest --lcov --output-path $(COVERAGE_OUTPUT)"
 
 test-doc: ## Run the workspace doctests, which no other lane executes
@@ -321,7 +331,7 @@ check-fmt: ## Verify formatting
 	$(MDTABLEFIX) --check $(MDTABLEFIX_SELECT) $(MDTABLEFIX_RULES)
 
 markdownlint: spelling ## Lint Markdown files and enforce spelling
-	export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; $(MDLINT) '**/*.md' '!**/.uv-cache/**' '!**/.uv-tools/**'
+	export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; $(MD_FILES_FIND) | xargs -0 -r "$(MDLINT)"
 
 spelling: ## Enforce en-GB-oxendict in tracked text
 	$(TYPOS_CONFIG_BUILDER) gate --repository . --scope all

@@ -173,6 +173,15 @@ pub enum InstallerError {
         message: String,
     },
 
+    /// A dependency availability query could not establish whether a tool is installed.
+    #[error("failed to check whether {tool} is installed: {reason}")]
+    DependencyCheck {
+        /// Name of the tool whose availability could not be established.
+        tool: &'static str,
+        /// Description of the command or filesystem query failure.
+        reason: String,
+    },
+
     /// Wrapper script generation failed.
     #[error("wrapper script generation failed: {0}")]
     WrapperGeneration(String),
@@ -202,13 +211,45 @@ pub enum InstallerError {
     },
 }
 
-// Helper to clone io::Error by preserving ErrorKind and formatted message.
-// This is lossy: the original source chain is discarded.
+/// Clone an I/O error while preserving its kind and formatted message.
+///
+/// The clone is lossy because the original source chain is discarded.
 fn clone_io_error(source: &std::io::Error) -> std::io::Error {
     std::io::Error::new(source.kind(), source.to_string())
 }
 
 impl InstallerError {
+    /// Clone the source-policy variants while preserving their policy details.
+    fn clone_source_policy_variant(&self) -> Option<Self> {
+        match self {
+            Self::ConflictingSourceOptions { option } => Some(Self::ConflictingSourceOptions {
+                option: option.clone(),
+            }),
+            Self::SourceFallbackForbidden { artefact, reason } => {
+                Some(Self::SourceFallbackForbidden {
+                    artefact: artefact.clone(),
+                    reason: reason.clone(),
+                })
+            }
+            _ => None,
+        }
+    }
+
+    /// Clone the I/O-backed variants while preserving their error details.
+    fn clone_io_variant(&self) -> Option<Self> {
+        match self {
+            Self::Io(source) => Some(Self::Io(clone_io_error(source))),
+            Self::ScanFailed { source } => Some(Self::ScanFailed {
+                source: clone_io_error(source),
+            }),
+            Self::WriteFailed { source } => Some(Self::WriteFailed {
+                source: clone_io_error(source),
+            }),
+            _ => None,
+        }
+    }
+
+    /// Clone the toolchain variants while preserving their semantic details.
     fn clone_toolchain_variant(&self) -> Option<Self> {
         match self {
             Self::ToolchainDetection { reason } => Some(Self::ToolchainDetection {
@@ -244,8 +285,13 @@ impl InstallerError {
 }
 
 impl Clone for InstallerError {
+    /// Clone every error variant while preserving its displayable details.
     fn clone(&self) -> Self {
-        if let Some(value) = self.clone_toolchain_variant() {
+        if let Some(value) = self
+            .clone_toolchain_variant()
+            .or_else(|| self.clone_io_variant())
+            .or_else(|| self.clone_source_policy_variant())
+        {
             return value;
         }
 
@@ -276,7 +322,6 @@ impl Clone for InstallerError {
                 path: path.clone(),
                 reason: reason.clone(),
             },
-            Self::Io(source) => Self::Io(clone_io_error(source)),
             Self::Git { operation, message } => Self::Git {
                 operation,
                 message: message.clone(),
@@ -285,27 +330,23 @@ impl Clone for InstallerError {
                 tool,
                 message: message.clone(),
             },
-            Self::ConflictingSourceOptions { option } => Self::ConflictingSourceOptions {
-                option: option.clone(),
-            },
-            Self::SourceFallbackForbidden { artefact, reason } => Self::SourceFallbackForbidden {
-                artefact: artefact.clone(),
+            Self::DependencyCheck { tool, reason } => Self::DependencyCheck {
+                tool,
                 reason: reason.clone(),
             },
             Self::WrapperGeneration(message) => Self::WrapperGeneration(message.clone()),
-            Self::ScanFailed { source } => Self::ScanFailed {
-                source: clone_io_error(source),
-            },
-            Self::WriteFailed { source } => Self::WriteFailed {
-                source: clone_io_error(source),
-            },
-            Self::ToolchainDetection { .. }
+            Self::ConflictingSourceOptions { .. }
+            | Self::SourceFallbackForbidden { .. }
+            | Self::ToolchainDetection { .. }
             | Self::ToolchainFileNotFound { .. }
             | Self::InvalidToolchainFile { .. }
             | Self::ToolchainNotInstalled { .. }
             | Self::ToolchainInstallFailed { .. }
-            | Self::ToolchainComponentInstallFailed { .. } => {
-                unreachable!("handled by clone_toolchain_variant")
+            | Self::ToolchainComponentInstallFailed { .. }
+            | Self::Io(_)
+            | Self::ScanFailed { .. }
+            | Self::WriteFailed { .. } => {
+                unreachable!("handled by a clone helper")
             }
             #[cfg(any(test, feature = "test-support"))]
             Self::StubMismatch { message } => Self::StubMismatch {

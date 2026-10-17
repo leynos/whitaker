@@ -253,6 +253,7 @@ mod tests {
     }
 
     impl Read for ChunkedReader<'_> {
+        /// Read at most the configured chunk size and record each call.
         fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
             self.reads += 1;
             if self.pending_interrupts > 0 {
@@ -260,8 +261,11 @@ mod tests {
                 return Err(io::Error::new(io::ErrorKind::Interrupted, "interrupted"));
             }
             let take = self.data.len().min(self.chunk).min(buf.len());
-            buf[..take].copy_from_slice(&self.data[..take]);
-            self.data = &self.data[take..];
+            let (to_copy, rest) = self.data.split_at(take);
+            buf.get_mut(..take)
+                .expect("take is bounded by buf.len()")
+                .copy_from_slice(to_copy);
+            self.data = rest;
             Ok(take)
         }
     }

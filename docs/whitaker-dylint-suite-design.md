@@ -731,10 +731,9 @@ qualified paths (`std::fs::read_to_string`) and items pulled in via
   into a `SimplePath` parser. A match requires the first two segments to equal
   `["std", "fs"]`. Re-exports remain covered because the resolved `DefId`
   points back to `std`.
-- Each finding produces a `StdFsUsage` struct containing the resolved operation
-  label (for diagnostics) and a category (`Import`, `Type`, or `Call`). The
-  category drives unit tests and future config knobs but diagnostics currently
-  emphasize the operation name only to keep translations succinct.
+- Each finding produces a `StdFsUsage` value that stores only the resolved
+  operation label. Classifiers return operation-only usage values, and
+  diagnostics use that label to keep translations succinct.
 - Diagnostics reuse Fluent bundles (`no_std_fs_operations.ftl`) with the
   operation label supplied via `{ $operation }`. The note explains why ambient
   access is disallowed and the help recommends `cap_std::fs` + `camino`.
@@ -813,8 +812,8 @@ sequenceDiagram
 
 - Unit tests cover the operation classifier, ensuring paths such as
   `std::fs::File::open`, `std::fs::remove_file`, bare module references, and
-  renamed imports all register as `StdFsUsage` while `cap_std::fs` remains
-  untouched.
+  renamed imports all produce operation-only usage values while `cap_std::fs`
+  remains untouched.
 - Behaviour-driven tests (via `rstest-bdd 0.5.0`) exercise localization, failure
   fallbacks, and the world state used to model capability hints. Scenarios
   cover en-GB, cy, and gd locales, as well as missing-message paths.
@@ -1237,7 +1236,7 @@ and predicate complexity.
 
 Collect segments `(start_line, end_line, value)` using `SourceMap` mapping and
 accumulate contributions with weights (`wD = 1.0`, `wP = 0.5`, `wK = 0.5`).
-Rasterise once per function to produce a per-line signal `C[line]` representing
+Rasterize once per function to produce a per-line signal `C[line]` representing
 local complexity.
 
 ```rust
@@ -1291,11 +1290,39 @@ highlight the top two intervals in the diagnostic.
 - Include the lint in the aggregated `whitaker_suite` crate by default as a
   stable rule, while still allowing direct usage by loading the lint crate.
 
+**Numeric and span boundaries.** Fluent diagnostic integer arguments are signed
+64-bit values, so `diagnostic_integer_argument` and
+`saturating_diagnostic_integer` clamp oversized counts at `i64::MAX`.
+`SegmentWeight::Fixed` keeps its supplied value, while
+`SegmentWeight::Predicate` uses `saturating_branch_count` and
+`predicate_segment_weight` to cap branch counts at `u32::MAX` before scaling.
+Compiler `BytePos` offsets are `u32`; `span_byte_offset_range` rejects any
+highlighted range with an unrepresentable endpoint. `line_range_byte_offsets`
+also rejects starts before the snippet's base line, reversed ranges, and starts
+missing from its line table; when the end line has no following entry, it uses
+the snippet length as the end offset. A rejected or unrepresentable range omits
+the secondary label while preserving the primary diagnostic. The
+conditional-branch lint uses the same signed boundary for Fluent counts.
+Boundary tests cover the maximum accepted values and the first values above
+them.
+
+Production tests that pass values beyond a `usize` boundary use
+`#[cfg(target_pointer_width = "64")]`; 32-bit targets cannot represent those
+inputs. Bumpy Road tests `diagnostic_arguments_saturate_oversized_bump_counts`
+and `span_mapping_omits_unrepresentable_offsets` in `driver/diagnostic.rs`, plus
+`production_diagnostic_arguments_saturate_at_the_signed_boundary`,
+`production_predicate_weight_saturates_excess_branches`,
+`production_span_offset_ranges_reject_an_unrepresentable_end`, and
+`production_line_range_mapping_rejects_an_unrepresentable_offset` in
+`driver/numeric.rs`. The conditional-branch test is
+`production_diagnostic_arguments_saturate_at_the_signed_boundary` in its
+`driver/numeric.rs`.
+
 **Algorithm sketch.**
 
 1. Walk the function HIR, updating depth and collecting segments for blocks,
    branches, and predicate spans.
-2. Rasterise segments to per-line values, then smooth with the configured
+2. Rasterize segments to per-line values, then smooth with the configured
    window.
 3. Detect bumps where the smoothed value meets or exceeds `threshold`.
 4. Emit a diagnostic on the function name span when bumps ≥ 2, attaching labels
@@ -1321,7 +1348,7 @@ functions typically remain below the threshold after smoothing. Deep single
 nests fall under other lints such as `excessive_nesting`.
 
 **Performance.** The pass is linear in the size of each function’s HIR. Segment
-rasterisation touches at most the number of lines in the function, keeping the
+rasterization touches at most the number of lines in the function, keeping the
 overhead negligible for typical Rust code.
 
 **Test plan.** Provide UI cases covering two separated nested blocks,
@@ -1366,7 +1393,7 @@ function and is suitable as a stable Dylint rule in the default suite.
 
 ### Phase 0 — Repo scaffolding
 
-- Initialise workspace
+- Initialize workspace
   - Create `Cargo.toml` with `[workspace]`, resolver = 2, members = `crates/*`,
     `common`, `suite`, `installer`.
   - Add `rust-toolchain.toml` (pin nightly) and `rustfmt.toml`.
@@ -1651,7 +1678,10 @@ used by the installer itself.
 - Extend `.github/workflows/release.yml` so tagged releases publish the same
   dependency-binary archives and provenance document next to the
   `whitaker-installer` archives.
-- Teach `installer/src/deps.rs` to install missing tools in this order:
+- Keep the dependency-tool installer in `installer/src/deps/mod.rs` so its
+  implementation children, including `install.rs`, remain colocated with the
+  module that owns the fallback policy.
+- Teach `installer/src/deps/mod.rs` to install missing tools in this order:
   repository archive, `cargo binstall`, then `cargo install`. Repository-path
   failures stay non-fatal and degrade cleanly into the Cargo fallback path.
 

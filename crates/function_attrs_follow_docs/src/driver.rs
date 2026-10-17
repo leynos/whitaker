@@ -331,8 +331,9 @@ const MESSAGE_KEY: MessageKey<'static> = MessageKey::new("function_attrs_follow_
 
 type FunctionAttrsMessages = DiagnosticMessageSet;
 
+/// Build localized diagnostics for an attribute kind using the supplied lookup.
 #[cfg(test)]
-fn localised_messages(
+fn localized_messages(
     lookup: &impl BundleLookup,
     kind: FunctionKind,
     attribute: &str,

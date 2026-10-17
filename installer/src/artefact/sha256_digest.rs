@@ -129,6 +129,8 @@ mod tests {
     use super::*;
     use rstest::{fixture, rstest};
 
+    /// Create a valid hexadecimal digest for validation tests.
+    #[whitaker_test_macros::allow_fixture_expansion_lints]
     #[fixture]
     fn valid_digest() -> String {
         "a".repeat(64)

@@ -1,6 +1,6 @@
 //! Behaviour-driven localization tests for the `no_std_fs_operations` lint.
 
-use crate::diagnostics::{StdFsMessages, localised_messages};
+use crate::diagnostics::{StdFsMessages, localized_messages};
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use std::cell::RefCell;
@@ -28,13 +28,14 @@ impl LocalizationWorld {
         self.failing = true;
     }
 
+    /// Resolve localized messages with the selected locale or configured failure.
     fn resolve(&mut self) {
         let op = self.operation.clone();
         let result = if self.failing {
-            localised_messages(&FailingLookup::new("no_std_fs_operations"), &op)
+            localized_messages(&FailingLookup::new("no_std_fs_operations"), &op)
         } else {
             let localizer = self.localizer.as_ref().expect("a locale must be selected");
-            localised_messages(localizer, &op)
+            localized_messages(localizer, &op)
         };
         self.result = Some(result);
     }
@@ -83,8 +84,9 @@ fn given_failure(world: &WorldCell) {
     world.borrow_mut().mark_failure();
 }
 
-#[when("I localise the std::fs diagnostic")]
-fn when_localise(world: &WorldCell) {
+/// Resolve the current standard-filesystem diagnostic messages.
+#[when("I localize the std::fs diagnostic")]
+fn when_localize(world: &WorldCell) {
     world.borrow_mut().resolve();
 }
 

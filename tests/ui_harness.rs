@@ -57,6 +57,8 @@ impl Default for HarnessWorld {
     }
 }
 
+/// Create the default UI-harness test world.
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
 fn harness_world() -> HarnessWorld {
     HarnessWorld::default()
