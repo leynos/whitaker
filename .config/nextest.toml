@@ -43,15 +43,14 @@ test-group = "serial-toolchain-installs"
 
 [[profile.ci.overrides]]
 # Dylint UI harnesses build lint libraries; the default profile gives them
-# the same allowance below. This selector also matches named trybuild
-# contracts, whose dedicated 45-minute override below takes precedence.
+# the same allowance below. Compile-contract tests use the dedicated
+# 45-minute override below.
 # `whitaker-installer`'s binary is
 # named `ui` but its test is not, so the `(binary(ui) & test(=ui))`
 # clause does not reach it; it measured 235 s and timed out at 300 s on
 # the Windows lane under the base allowance. A full workspace run also
-# reached 9m56 in the trybuild harness while compiler admission queued.
 # Keep that nested build bounded while leaving room to finish under contention.
-filter = "test(driver::ui::) | test(tests::ui::) | test(ui::ui) | test(sha2_0_11_pre_migration_patterns_fail_to_compile) | test(trybuild_fixtures_compile_without_diagnostics) | test(renamed_common_apis_are_public_and_legacy_names_stay_removed) | test(renamed_sarif_api_is_public_and_legacy_names_stay_removed) | (binary(ui) & test(=ui))"
+filter = "test(driver::ui::) | test(tests::ui::) | test(ui::ui) | (binary(ui) & test(=ui))"
 slow-timeout = { period = "20m", terminate-after = 1, grace-period = "5s" }
 test-group = "serial-dylint-ui"
 
@@ -119,10 +118,9 @@ serial-nested-cargo-builds = { max-threads = 1 }
 # dev-dependency proc-macro hangs during cargo's dev-dependency resolution on
 # Windows CI regardless of whether any example source uses rstest, so all
 # Dylint example compilation for that crate is compiled away on Windows.
-# The trybuild harness reached 9m56 in a full run while compiler admission
-# queued, so allow 20 minutes for the ordinary serial UI group. Compile
-# contracts have a separate longer allowance below.
-filter = "test(driver::ui::) | test(tests::ui::) | test(ui::ui) | test(sha2_0_11_pre_migration_patterns_fail_to_compile) | test(example_compiles_without_diagnostics) | test(example_harness_collects_call_site_evidence) | test(trybuild_fixtures_compile_without_diagnostics) | test(renamed_common_apis_are_public_and_legacy_names_stay_removed) | test(renamed_sarif_api_is_public_and_legacy_names_stay_removed) | test(ui::example_compiles_under_test_harness) | test(ui::hand_written_test_companion_does_not_exempt_parent_function) | test(ui::rstest_unwrap_outside_tests_still_fails_in_non_harness_code) | test(ui::rstest_empty_companion_does_not_exempt_parent_function) | test(ui::aliased_test_crate_non_companion_does_not_exempt_parent_function) | (binary(ui) & test(=ui))"
+# The installer UI case measured 235 s and timed out at the 300 s base
+# allowance on Windows. Allow nested UI builds to finish while keeping a cap.
+filter = "test(driver::ui::) | test(tests::ui::) | test(ui::ui) | test(example_compiles_without_diagnostics) | test(example_harness_collects_call_site_evidence) | test(ui::example_compiles_under_test_harness) | test(ui::hand_written_test_companion_does_not_exempt_parent_function) | test(ui::rstest_unwrap_outside_tests_still_fails_in_non_harness_code) | test(ui::rstest_empty_companion_does_not_exempt_parent_function) | test(ui::aliased_test_crate_non_companion_does_not_exempt_parent_function) | (binary(ui) & test(=ui))"
 test-group = "serial-dylint-ui"
 retries = { backoff = "exponential", count = 2, delay = "5s" }
 slow-timeout = { period = "20m", terminate-after = 1, grace-period = "5s" }

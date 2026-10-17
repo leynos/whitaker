@@ -12,9 +12,26 @@ use tracing_subscriber::{
 };
 use whitaker_installer::cli::InstallArgs;
 
+/// Describe a CLI tracing subscriber registration failure.
+#[derive(Debug, thiserror::Error)]
+#[error("failed to initialize diagnostic tracing: {source}")]
+pub(crate) struct TracingInitializationError {
+    /// The underlying global subscriber registration failure.
+    #[source]
+    source: Box<dyn std::error::Error + Send + Sync>,
+}
+
 /// Enable bounded stderr diagnostics according to install verbosity flags.
-pub(crate) fn configure_tracing(args: &InstallArgs) {
-    let _ = tracing_formatter(args).try_init();
+///
+/// # Errors
+///
+/// Returns an error if another global subscriber has already been installed.
+pub(crate) fn configure_tracing(
+    args: &InstallArgs,
+) -> std::result::Result<(), TracingInitializationError> {
+    tracing_formatter(args)
+        .try_init()
+        .map_err(|source| TracingInitializationError { source })
 }
 
 /// Build the CLI-only formatter without installing a global subscriber.
@@ -138,7 +155,8 @@ mod tests {
         };
         let arguments = std::iter::once("whitaker-installer").chain(flags.iter().copied());
         let cli = Cli::try_parse_from(arguments).expect("probe arguments must match the CLI");
-        configure_tracing(cli.install_args());
+        configure_tracing(cli.install_args())
+            .expect("child probe tracing subscriber must initialize");
         let _ = crate::install_flow::check_dylint_tools_for_command(
             &whitaker_installer::deps::SystemCommandExecutor,
         );
@@ -149,7 +167,8 @@ mod tests {
     fn tracing_writes_to_stderr() {
         const PROBE_ENV: &str = "WHITAKER_TRACING_STDERR_PROBE";
         if std::env::var_os(PROBE_ENV).is_some() {
-            configure_tracing(&InstallArgs::default());
+            configure_tracing(&InstallArgs::default())
+                .expect("child probe tracing subscriber must initialize");
             tracing::warn!("installer stderr diagnostic");
             return;
         }
@@ -173,6 +192,40 @@ mod tests {
         assert!(stderr.contains("installer stderr diagnostic"));
         assert!(!stdout.contains("installer stderr diagnostic"));
         assert!(!stderr.contains('\u{1b}'), "stderr must omit ANSI escapes");
+    }
+
+    /// Verify a pre-installed global subscriber becomes a reported CLI error.
+    #[test]
+    fn tracing_initialization_failure_is_reported() {
+        const PROBE_ENV: &str = "WHITAKER_TRACING_INITIALIZATION_FAILURE_PROBE";
+        if std::env::var_os(PROBE_ENV).is_some() {
+            tracing::subscriber::set_global_default(tracing_subscriber::registry())
+                .expect("probe subscriber must be installed first");
+            let error = configure_tracing(&InstallArgs::default())
+                .expect_err("a second global subscriber must be rejected");
+            assert!(
+                error
+                    .to_string()
+                    .contains("failed to initialize diagnostic tracing")
+            );
+            return;
+        }
+
+        let output = std::process::Command::new(
+            std::env::current_exe().expect("test executable must be discoverable"),
+        )
+        .args([
+            "--exact",
+            "tracing_config::tests::tracing_initialization_failure_is_reported",
+            "--nocapture",
+        ])
+        .env(PROBE_ENV, "1")
+        .output()
+        .expect("isolated tracing failure probe must run");
+        assert!(
+            output.status.success(),
+            "tracing failure probe must report the error: {output:?}"
+        );
     }
 
     /// Verify each verbosity policy through emitted, formatted events.

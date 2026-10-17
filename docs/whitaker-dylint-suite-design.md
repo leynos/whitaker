@@ -1297,10 +1297,26 @@ highlight the top two intervals in the diagnostic.
 `SegmentWeight::Predicate` uses `saturating_branch_count` and
 `predicate_segment_weight` to cap branch counts at `u32::MAX` before scaling.
 Compiler `BytePos` offsets are `u32`; `span_byte_offset_range` rejects any
-highlighted range with an unrepresentable endpoint, omitting its secondary
-label while preserving the primary diagnostic. The conditional-branch lint uses
-the same signed boundary for Fluent counts. Boundary tests cover the maximum
-accepted values and the first values above them.
+highlighted range with an unrepresentable endpoint. `line_range_byte_offsets`
+also rejects starts before the snippet's base line, reversed ranges, and starts
+missing from its line table; when the end line has no following entry, it uses
+the snippet length as the end offset. A rejected or unrepresentable range omits
+the secondary label while preserving the primary diagnostic. The
+conditional-branch lint uses the same signed boundary for Fluent counts.
+Boundary tests cover the maximum accepted values and the first values above
+them.
+
+Production tests that pass values beyond a `usize` boundary use
+`#[cfg(target_pointer_width = "64")]`; 32-bit targets cannot represent those
+inputs. Bumpy Road tests `diagnostic_arguments_saturate_oversized_bump_counts`
+and `span_mapping_omits_unrepresentable_offsets` in `driver/diagnostic.rs`, plus
+`production_diagnostic_arguments_saturate_at_the_signed_boundary`,
+`production_predicate_weight_saturates_excess_branches`,
+`production_span_offset_ranges_reject_an_unrepresentable_end`, and
+`production_line_range_mapping_rejects_an_unrepresentable_offset` in
+`driver/numeric.rs`. The conditional-branch test is
+`production_diagnostic_arguments_saturate_at_the_signed_boundary` in its
+`driver/numeric.rs`.
 
 **Algorithm sketch.**
 

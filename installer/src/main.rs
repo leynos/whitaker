@@ -36,11 +36,13 @@ use whitaker_installer::wrapper::{generate_wrapper_scripts, path_instructions};
 /// Parse options, configure tracing, and run the selected command.
 fn main() {
     let cli = Cli::parse();
-    tracing_config::configure_tracing(cli.install_args());
     let mut stdout = std::io::stdout();
     let mut stderr = std::io::stderr();
-    let run_result = run(&cli, &mut stdout, &mut stderr);
-    let exit_code = exit_code_for_run_result(run_result, &mut stderr);
+    if let Err(error) = tracing_config::configure_tracing(cli.install_args()) {
+        write_stderr_line(&mut stderr, error);
+        std::process::exit(1);
+    }
+    let exit_code = exit_code_for_run_result(run(&cli, &mut stdout, &mut stderr), &mut stderr);
     if exit_code != 0 {
         std::process::exit(exit_code);
     }

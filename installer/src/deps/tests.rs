@@ -71,6 +71,9 @@ fn install_dylint_tools_uses_repository_release_first() {
     executor.assert_finished();
 }
 
+#[path = "install_failure_tests.rs"]
+mod failure_tests;
+
 #[test]
 fn install_dylint_tools_falls_back_to_binstall_when_repository_unavailable() {
     let mut repository_installer = MockDependencyBinaryInstaller::new();

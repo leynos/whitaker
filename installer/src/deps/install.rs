@@ -44,6 +44,11 @@ pub(super) fn install_missing_tools(
 
         let outcome = install_tool(executor, tool, stderr, context)?;
         update_status_after_install(&mut remaining_status, executor, tool, outcome)?;
+        write_message(
+            stderr,
+            context.quiet,
+            install_success_message(tool, outcome, context.repo.is_some()),
+        );
     }
 
     Ok(())
@@ -111,11 +116,6 @@ pub(super) fn install_tool(
         match repo.installer.install(dependency, repo.target, repo.dirs) {
             Ok(_) => {
                 if repository_install_verified(executor, tool)? {
-                    write_message(
-                        stderr,
-                        context.quiet,
-                        format!("Installed {} from repository release.", tool.package),
-                    );
                     return Ok(InstallOutcome::RepositoryRelease);
                 }
                 refuse_or_announce_fallback(tool, "failed verification", stderr, context)?;
@@ -237,7 +237,7 @@ fn install_tool_with_cargo(
 ) -> Result<InstallOutcome> {
     // Always try binstall first if available; fall back to cargo install on failure
     if context.cargo_fallback_mode == InstallMode::Binstall && !cargo_install_plan.skip_binstall {
-        if try_binstall(executor, cargo_install_plan, stderr, context.quiet)? {
+        if try_binstall(executor, cargo_install_plan)? {
             return Ok(InstallOutcome::CargoBinstall);
         }
         write_message(
@@ -250,14 +250,13 @@ fn install_tool_with_cargo(
         );
     }
 
-    run_cargo_install(executor, cargo_install_plan, stderr, context.quiet)
+    run_cargo_install(executor, cargo_install_plan)
 }
 
+/// Install through Cargo Binstall and verify the resulting executable.
 fn try_binstall(
     executor: &dyn CommandExecutor,
     cargo_install_plan: CargoInstallPlan<'_>,
-    stderr: &mut dyn Write,
-    quiet: bool,
 ) -> Result<bool> {
     let mut args = vec!["binstall", "-y"];
     if let Some(version) = cargo_install_plan.version {
@@ -274,36 +273,18 @@ fn try_binstall(
         return Ok(false);
     }
 
-    write_message(
-        stderr,
-        quiet,
-        format!(
-            "Installed {} with cargo binstall.",
-            cargo_install_plan.tool.package
-        ),
-    );
     Ok(true)
 }
 
+/// Install through Cargo and verify the resulting executable.
 fn run_cargo_install(
     executor: &dyn CommandExecutor,
     cargo_install_plan: CargoInstallPlan<'_>,
-    stderr: &mut dyn Write,
-    quiet: bool,
 ) -> Result<InstallOutcome> {
     let mut args = vec!["install"];
-    let success_message = if let Some(version) = cargo_install_plan.version {
+    if let Some(version) = cargo_install_plan.version {
         args.extend(["--locked", "--version", version]);
-        format!(
-            "Installed {} from source with cargo install.",
-            cargo_install_plan.tool.package
-        )
-    } else {
-        format!(
-            "Installed {} with cargo install.",
-            cargo_install_plan.tool.package
-        )
-    };
+    }
     args.push(cargo_install_plan.tool.package);
 
     let output = executor.run("cargo", &args)?;
@@ -325,8 +306,29 @@ fn run_cargo_install(
         });
     }
 
-    write_message(stderr, quiet, success_message);
     Ok(InstallOutcome::CargoInstall)
+}
+
+/// Describe a completed install after its follow-up status checks succeed.
+fn install_success_message(
+    tool: &DependencyTool,
+    outcome: InstallOutcome,
+    has_pinned_version: bool,
+) -> String {
+    match outcome {
+        InstallOutcome::RepositoryRelease => {
+            format!("Installed {} from repository release.", tool.package)
+        }
+        InstallOutcome::CargoBinstall => {
+            format!("Installed {} with cargo binstall.", tool.package)
+        }
+        InstallOutcome::CargoInstall if has_pinned_version => {
+            format!("Installed {} from source with cargo install.", tool.package)
+        }
+        InstallOutcome::CargoInstall => {
+            format!("Installed {} with cargo install.", tool.package)
+        }
+    }
 }
 
 /// Verify a repository-release install of `tool`.

@@ -3632,10 +3632,28 @@ supplied value; `SegmentWeight::Predicate` uses `saturating_branch_count` and
 `predicate_segment_weight` to cap branch counts at `u32::MAX` before scaling.
 
 Rust compiler `BytePos` offsets are also `u32`. `span_byte_offset_range`
-rejects a highlighted source range if either endpoint exceeds that limit; the
-lint omits the secondary span label and still emits the primary diagnostic.
-Tests cover the maximum accepted value and the first value above each boundary
-in `crates/bumpy_road_function/src/driver/numeric.rs` and
+rejects a highlighted source range if either endpoint exceeds that limit;
+`line_range_byte_offsets` also rejects a start line before the snippet's base
+line, a reversed range, or a start line missing from the snippet's line table.
+When the requested end line has no following line-start entry, the mapper uses
+the snippet length as the end offset. If either resulting byte offset cannot be
+represented as `u32`, the mapper omits the secondary span label while still
+emitting the primary diagnostic. Tests cover the maximum accepted value and the
+first value above each boundary in
+`crates/bumpy_road_function/src/driver/numeric.rs` and
+`crates/conditional_max_n_branches/src/driver/numeric.rs`.
+
+Production tests that pass a value beyond a `usize` boundary are gated by
+`#[cfg(target_pointer_width = "64")]`; 32-bit targets cannot represent those
+inputs. The cases are `diagnostic_arguments_saturate_oversized_bump_counts` and
+`span_mapping_omits_unrepresentable_offsets` in
+`crates/bumpy_road_function/src/driver/diagnostic.rs`, plus
+`production_diagnostic_arguments_saturate_at_the_signed_boundary`,
+`production_predicate_weight_saturates_excess_branches`,
+`production_span_offset_ranges_reject_an_unrepresentable_end`, and
+`production_line_range_mapping_rejects_an_unrepresentable_offset` in its
+`numeric.rs`. The conditional-branch boundary case is
+`production_diagnostic_arguments_saturate_at_the_signed_boundary` in
 `crates/conditional_max_n_branches/src/driver/numeric.rs`.
 
 ### Adding a new lint
@@ -4051,10 +4069,10 @@ build without letting it compete with the parser-pin fixtures.
 The contract holds that policy, and its failure messages say so rather than
 claiming nextest requires it.
 
-The ordinary serial UI group has a 20-minute bound. A full workspace run
-reached 9m56 in the nested trybuild harness while compiler admission queued;
-the wider allowance lets a contended compile finish while still terminating a
-stalled test.
+The ordinary serial UI group has a 20-minute bound. The installer UI case
+measured 235 seconds and timed out at the 300-second base allowance on Windows.
+The wider allowance lets nested UI builds finish under contention while still
+terminating a stalled test.
 
 Every trybuild compile contract rebuilds fixture crates through nested Cargo.
 In a cold workspace, the Bumpy Road public API contract timed out on three
@@ -4115,7 +4133,7 @@ The 85 m whole-run budget is sized against the latest uncached full run. It
 reached 1,840 of 1,842 tests before the global timeout stopped the SARIF API
 contract's nested trybuild compilation while Cargo waited on shared locks and
 compiler admission. The additional 10 m gives that contract and the remaining
-test room to finish without weakening the 30 m per-test ceiling.
+test room to finish without weakening the configured per-test ceilings.
 
 The 15 m allowance for work outside nextest's window is measured, from the
 worst of several runs rather than one:
