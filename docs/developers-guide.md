@@ -833,6 +833,20 @@ every step that records, uploads or health-checks the statistics by the command
 it runs, in any job, and refuses one whose condition omits, inverts, negates or
 `||`-composes the guard.
 
+Every job in `ci.yml` also starts `ci-telemetry-start` right after the checkout
+and ends its work with `ci-telemetry-finish` under `if: always()`, both from
+shared-actions and pinned to one commit. Finish prints one `DF12_CI_TELEMETRY`
+line that the central CI observability collector reads from the job log: the
+busy cores (average, 95th percentile and maximum), the peak memory and the
+smallest free disk, plus the sccache hit ratio. It is given `setup-rust`'s
+`sccache-status` and reads the `sccache-stats.json` that
+`scripts/record-sccache-effectiveness.sh` writes, so it asks sccache for
+nothing a second time, and a fallback run carries null counts rather than zeros.
+`ci_telemetry_test.py` holds the placement, the `if: always()`, the status
+wiring and the pin. `windows-compat` carries the pair too; its record says
+`unsupported-os` and has no CPU figures. A job added to `ci.yml` without the
+pair reads as a missing record to the collector.
+
 On the three lanes that use the `gha` backend, `coverage-check`, `linux-full`
 and `coverage-upload`, the statistics are uploaded as a `sccache-stats-<job>`
 artefact under `if: always()`, and then
