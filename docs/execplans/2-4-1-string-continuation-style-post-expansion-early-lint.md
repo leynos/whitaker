@@ -231,8 +231,11 @@ Hard invariants. Violating one requires escalation, not a workaround.
       corrected, the superseded mechanics replaced, and the staging and
       configuration decisions folded in. Status stays *Proposed* until this
       plan is approved.
-- [ ] Plan approved as a whole.
-- [ ] EP-M0a: expansion-shape probe.
+- [x] (2026-10-18) Plan approved as a whole; implementation commenced under
+      the implementation skill.
+- [x] (2026-10-18) EP-M0a: expansion-shape probe. `EV-M0-transcript` recorded;
+      `SURP-012` reproduced in the identifier-control form, so `DEC-002`'s
+      depth gate proceeds unchanged. One refinement recorded as `SURP-017`.
 - [ ] EP-M1: pure domain crate.
 - [ ] EP-M2: plain cooked string literals.
 - [ ] EP-M3: source-authored format strings from compiler built-ins.
@@ -445,6 +448,79 @@ Note that this is the `rustc-src` component, not the `rust-src` component at
   a wrong specification. The corrected rule is now normative, and RFC 0002
   §Continuation scanner must be amended.
 
+- **SURP-017: `-Zunpretty=expanded,hygiene` does not annotate string
+  literals, and a captured format string never reaches `FormatArgs`.**
+  Found at `EP-M0a`. The pretty-printer emits a syntax-context annotation
+  only for `Ident`, `NtIdent`, `Lifetime`, and `NtLifetime` tokens
+  (`rustc_ast_pretty/src/pprust/state.rs:748-775`); a `Lit` token prints
+  bare. The direct probe for "does a captured literal carry a root context?"
+  is therefore unavailable from that flag alone. The same expansion machinery
+  *is* observable with a captured identifier: `take_ident!(rootfn)` prints
+  `fn rootfn /* 2842#0 */`, while an identifier written in the macro body
+  prints `fn body_fn /* 2841#5 */`. A metavariable supplied at the call site
+  arrives with the root context; the macro's own tokens carry the mark. That
+  is exactly the asymmetry `SURP-012` predicts for literals, and it is why
+  the *container* is the only reliable discriminator. One consequence is
+  narrower than the first draft assumed: `format!("{}", capture_literal!(
+  "captured {} join"))` expands to `format_args!("{0}", "captured {} join")`
+  — a `$l:literal` used as a *format string* is not propagated into
+  `FormatArgs` at all, because the outer macro sees a metavariable and
+  `is_source_literal` is false. The wrapper-depth gate is therefore
+  mandatory for the plain `ExprKind::Lit` path (`EP-M2`); on `EP-M3`'s path
+  it is defence in depth. `DEC-002` stands unchanged.
+  Impact: `EV-M0-transcript` records the identifier probe in place of the
+  unavailable literal probe, and the toolchain-bump runbook in the
+  developers guide names it.
+
+- **SURP-018: `EarlyLintPass` has no `check_stmt_post`, so `DEC-002`'s counter
+  cannot be written as stated.**
+  Found while reading the pinned toolchain's `rustc_lint` to plan
+  `src/driver/depth.rs`. `EarlyContextAndPass::visit_stmt`
+  (`rustc_lint/src/early.rs:119-130`) calls `check_stmt`, walks the statement,
+  and returns; there is no `_post` callback. `check_local`, `check_block`,
+  `check_arm`, and `check_ty` are likewise unpaired. The complete paired set is
+  `check_item`/`check_item_post`, `check_expr`/`check_expr_post`,
+  `check_pat`/`check_pat_post`, `check_trait_item`/`check_trait_item_post`,
+  `check_impl_item`/`check_impl_item_post`, both `check_attributes` hooks, and
+  `enter_where_predicate`/`exit_where_predicate`
+  (`rustc_lint/src/passes.rs:137-175`).
+  Impact: incrementing in `check_stmt` without a matching decrement leaves the
+  counter permanently non-zero after the first expanded statement, which
+  silences the lint for the rest of the crate.
+  The obvious workaround — count only the node kinds that *do* have paired
+  hooks, namely `check_item`, `check_trait_item`, `check_impl_item`, and
+  `check_expr` — is **not sufficient**, and the reason is the whole point of
+  `SURP-012`. For
+  `macro_rules! shout { ($l:literal) => { let _x = $l; } }`, the expanded
+  ancestor of the substituted literal is a `Local` inside a `Stmt`, both of
+  which are unpaired and neither of which is an expression. The nearest paired
+  expanded ancestor does not exist: the enclosing function item is *not*
+  expanded, because the macro call sat in the function body. A paired-hooks-only
+  counter would therefore report depth zero and emit the unsound suggestion
+  that `SURP-012` exists to prevent.
+  Resolution adopted: stop trying to maintain depth through the lint hooks at
+  all. `check_crate` runs its own `rustc_ast::visit::Visitor` over the crate —
+  the same AST the pass will later be walked over — with explicit
+  enter/exit push-pop for every container kind, including the unpaired ones.
+  That traversal records the set of literal-expression spans that occur at
+  depth zero into an `FxHashSet<Span>`, and computes `DEC-002`'s crate-scoped
+  shadow kill switch in the same pass. `check_expr` and the `FormatArgs` path
+  then emit only for expressions whose span is a member. Membership is keyed on
+  the *safe* set rather than the unsafe set deliberately: if the analyser
+  misses a container kind, the literal is absent from the safe set and the
+  lint stays silent, which is the failure direction the Constraints require.
+  Cost: one extra abstract-syntax-tree walk per crate; `EV-M2-cost` measures it.
+  The standard hooks still do the emitting, so `#[allow]`, `#[expect]`, and
+  lint-level scoping keep working — emitting from the analyser instead would
+  bypass the `with_lint_attrs` bookkeeping in `EarlyContextAndPass` and lose
+  them.
+  `LEM-DEPTH-1` is restated against the analyser: its push/pop balance is
+  structural, and the fixture matrix must include the `shout!` shape above,
+  since that is the case a hooks-only counter cannot see.
+  Date/Author: 2026-10-18, implementation agent, while planning `EP-M2`;
+  corrected the same day after the first draft of this entry proposed the
+  unsound paired-hooks-only counter.
+
 ## Decision log
 
 - **DEC-001: Implement as a post-expansion early lint, per RFC 0002.**
@@ -462,10 +538,20 @@ Note that this is the `rustc-src` component, not the `rust-src` component at
   "which macro produced this literal". The lint does not need that answer. It
   needs "is anything standing between this literal and the compiler", which is
   answerable from `EarlyContext` alone. The adopted design:
-  1. **Wrapper depth.** Maintain a counter incremented in `check_item`,
-     `check_stmt`, and `check_expr` when the node's span `from_expansion()`,
-     and decremented in the matching `_post` hooks. Fire only at depth zero.
-     This closes `SURP-012`, which `is_root()` alone does not.
+  1. **Wrapper depth.** Fire only for expressions at depth zero, where depth is
+     the number of enclosing abstract-syntax-tree containers whose span
+     `from_expansion()`. This closes `SURP-012`, which `is_root()` alone does
+     not.
+     *Amended 2026-10-18 after `SURP-018`: the first draft maintained the
+     counter in the lint hooks, incrementing in `check_stmt` among others.
+     `nightly-2026-05-28` has no `check_stmt_post` (`check_local`,
+     `check_block`, `check_arm`, and `check_ty` are likewise unpaired), and the
+     paired hooks alone do not cover the `$l:literal` capture case that
+     `SURP-012` is about. The depth set is therefore computed by a
+     `rustc_ast::visit::Visitor` run from `check_crate`, with explicit
+     push/pop for every container kind, recording safe literal spans into a
+     `FxHashSet` that the emitting hooks consult. `SURP-018` gives the full
+     argument, including why membership is keyed on the safe set.*
   2. **Built-in name set.** For `ExprKind::FormatArgs`, require the outermost
      non-root frame of the literal span's expansion chain to be
      `ExpnKind::Macro(MacroKind::Bang, sym)` with `sym` in a fixed set:
@@ -1214,20 +1300,24 @@ that turn a byte offset into a write.
 
 **LEM-DEPTH-1 — wrapper depth is maintained across every containing node.**
 
-- Statement: for every abstract-syntax-tree node kind that can contain an
-  expression and that this pass visits, entering an expansion-derived node
-  increments the counter and leaving it decrements; the counter is zero exactly
-  when no enclosing node came from an expansion.
-- Method: in-process `rstest` cases over a synthetic visit sequence, plus one
-  UI fixture per containing kind: a literal inside a `macro_rules!`-expanded
-  `let`, inside an expanded item, inside an expanded statement, inside a
-  derive-generated impl, and inside a nested two-level expansion. All must be
-  silent.
+- Statement: the `check_crate` analyser's depth is zero, at every emitting
+  point, exactly when no enclosing abstract-syntax-tree node came from an
+  expansion; the set of safe literal spans it records is therefore a subset of
+  the literals that are genuinely unwrapped.
+- Method: in-process `rstest` cases over synthetic visitor sequences exercising
+  push/pop balance, plus one UI fixture per containing kind: a literal inside a
+  `macro_rules!`-expanded `let` (the `shout!` shape in `SURP-018`), inside an
+  expanded item, inside an expanded statement, inside a derive-generated impl,
+  and inside a nested two-level expansion. All must be silent.
 - Rationale: `SURP-012` makes this the load-bearing soundness gate, and it is
   the one part of the design the pure-domain verification cannot reach.
-- Non-vacuity: negative control **NV-DEPTH-1** — disable the counter and
-  require `pass_literal_macro_capture.rs` to emit a diagnostic. This is the
-  control that proves the whole class of `pass_*` fixtures is not vacuous.
+  `SURP-018` records why the analyser cannot simply reuse the lint's own
+  enter/exit hooks: statements, locals, blocks, arms, and types have no `_post`
+  hook, and the `shout!` shape's expanded ancestors are exactly those kinds.
+- Non-vacuity: negative control **NV-DEPTH-1** — disable the analyser's
+  recording and require `pass_literal_macro_capture.rs` to emit a diagnostic.
+  This is the control that proves the whole class of `pass_*` fixtures is not
+  vacuous.
 
 **LEM-EMIT-1 — no suggestion is emitted without a run-time value check.**
 
@@ -1532,6 +1622,15 @@ Edit `Cargo.toml`:
 Edit `Makefile`: add `whitaker_string_literals` to `WHITAKER_PACKAGES` so the
 suite lints the new pure crate and the 400-line ceiling is gate-enforced there.
 
+> **Amended 2026-10-18, at execution.** The `Makefile` edit moves to Step 2,
+> committed together with the crate it names. `WHITAKER_PACKAGES` feeds
+> `cargo -p ...` selection, and a name that matches no package is a hard
+> `error: package ID specification ... did not match any packages` — not a
+> warning. Committing it in Step 1 would leave a tree in which `make lint`
+> fails until Step 2 lands, which breaks the "commit after each change, and gate
+> each commit" rule in `CLAUDE.md`. Step 1 therefore contains only the
+> `Cargo.toml` changes, which `cargo metadata` resolves on their own.
+
 Expected:
 
 ```plaintext
@@ -1807,6 +1906,146 @@ To be filled in as work proceeds. Required entries:
 - `cargo nextest show-config test-groups --profile ci` output.
 - The `make publish-check` tail showing the lint in `cargo dylint list`.
 
+### `EV-M0-transcript` (2026-10-18)
+
+Probe crate: `/tmp/string-cont-probe`, outside the workspace so `crates/*`
+does not sweep it into a gate. Toolchain
+`nightly-2026-05-28-x86_64-unknown-linux-gnu` (rustc 1.98.0-nightly
+`57d06900f 2026-05-27`), built with Cargo's configured admission wrapper and
+no override.
+
+Probe source (abridged to the cases that decided anything):
+
+```rust
+macro_rules! capture_literal { ($l:literal) => { $l }; }
+macro_rules! forward_literal_to_println { ($l:literal) => { println!($l) }; }
+macro_rules! forward_literal_to_format { ($l:literal) => { format!($l) }; }
+macro_rules! local_info { ($($t:tt)*) => { format!($($t)*) }; }
+macro_rules! take_ident { ($i:ident) => { fn $i() {} }; }
+macro_rules! body_ident { () => { fn body_fn() {} }; }
+take_ident!(rootfn);
+body_ident!();
+fn main() {
+    let _direct = format!("direct format \
+                           join");
+    println!("direct println \
+              join");
+    let mut buf = String::new();
+    let _ = write!(buf, "direct write \
+                         join");
+    assert!(true, "direct assert \
+                   join");
+    let _captured = capture_literal!("captured literal \
+                                      join");
+    forward_literal_to_println!("forwarded println \
+                                 join");
+    let _forwarded = forward_literal_to_format!("forwarded format \
+                                                 join");
+    let _local = local_info!("local macro \
+                              join");
+    log::info!("log \
+                join");
+    tracing::info!("tracing \
+                    join");
+}
+```
+
+One line per probe:
+
+- `cargo rustc -- -Zunpretty=expanded` — **all five built-ins and both
+  forwarding forms reach the AST as `format_args!` carrying the joined
+  literal**: `format_args!("direct format join")`,
+  `format_args!("direct println join\n")`,
+  `format_args!("direct write join")`,
+  `format_args!("direct assert join")`,
+  `format_args!("forwarded println join\n")`,
+  `format_args!("forwarded format join")`, and
+  `format_args!("local macro join")`. The `$l:literal` capture used *plainly*
+  (`let _captured = $l;`) stays `ExprKind::Lit` with the continuation intact.
+  `log::info!` and `tracing::info!` also surface `format_args!("log join")`
+  and `format_args!("tracing join")`, forwarded through
+  `$crate::__private_api::format_args` and
+  `$crate::__macro_support::format_args` respectively — relevant to roadmap
+  item 2.4.2, not this plan.
+- `cargo rustc -- -Zunpretty=expanded,hygiene` — **string literals are not
+  annotated**, so the literal's own context is not directly observable
+  (`SURP-017`). The captured-identifier control is: `fn rootfn /* 2842#0 */`
+  against `fn body_fn /* 2841#5 */`. A call-site metavariable arrives at the
+  root context; a macro-body token is marked. The same `format!`-with-capture
+  probe expands a `$l:literal` format string to an *argument*:
+  `format_args!("{0}", "captured {} join")` — so `EP-M3`'s path cannot be
+  reached through a captured literal at all.
+- `-Zmacro-backtrace` on deliberately malformed literals — renders
+  `in this expansion of body_written!` for a literal written in a macro body,
+  and no expansion chain for a captured metavariable (its diagnostic is
+  reported at the call site). This matches the reading `DEC-002` relies on.
+
+Per-axiom statements:
+
+- **AXIOM-1 — matches.** `is_source_literal` is true only for direct
+  literals: every built-in that received a source-written literal produced
+  `format_args!` with the literal as its format string, while a
+  `$l:literal`-captured literal used as a format string produced an ordinary
+  format *argument* instead.
+- **AXIOM-2 — matches.** The `format_args!` node printed by
+  `-Zunpretty=expanded` carries the recovered, joined literal, so `fmt_span`
+  is that literal token's span. Byte-offset behaviour will be exercised
+  boundary-wise by `LEM-SPAN-1` and the `.stderr` carets.
+- **AXIOM-3 — matches.** `format_args!("direct println join\n")` shows the
+  cooked symbol has the appended newline while the literal body the scanner
+  would read does not (`SURP-003`).
+- **AXIOM-7 — matches.** Post-expansion output contains `format_args!` nodes
+  for every built-in and the pass runs over the expanded AST; the
+  once-per-crate claim remains a cost property, not a correctness one
+  (`SURP-015`).
+
+**Go/no-go:** `SURP-012` reproduces in the form that matters. A call-site
+metavariable keeps the root context (`rootfn#0`), and the only observable
+mark is on the container (`body_fn#5`). `DEC-002`'s wrapper-depth gate is
+mandatory and `EP-M2` proceeds as written. No observation falsifies an axiom,
+so RFC 0002 needs no further amendment for this milestone.
+
+### `EV-BASELINE`
+
+Measured 2026-10-18 on the pre-change tree (`HEAD` = `7ee807d9`), via
+`make test 2>&1 | tee /tmp/baseline-whitaker-<branch>.md.out`.
+
+**The run did not complete.** It was stopped at the harness's two-hour cap
+having passed 1636 of 1652 tests with zero failures. The sixteen outstanding
+tests were all in the `serial-dylint-ui` group (`no_std_fs_operations` and
+three `module_must_have_inner_docs` locale cases among them), each waiting on a
+compile slot in a pool saturated by three other agents' workspaces. Their
+cumulative wall-clock time is therefore *not* in the figure below; the true
+uncontended baseline is larger.
+
+Observed figures:
+
+- Wall-clock at termination: `1h53m` of test execution.
+- Sum of per-test durations for the 1635 reported `PASS` lines: **307.7 min**.
+  This overstates elapsed time (tests overlap); it measures total serialized
+  cost, which is the quantity that matters for the `serial-dylint-ui` group.
+- Longest five tests, all UI harnesses: 2910.6 s, 2441.8 s, 1696.0 s, 1695.9 s,
+  1695.9 s. Every one is dominated by admission queueing, not execution.
+
+Consequence for the `Tolerances` wall-clock trigger: the trigger compares
+against a number that is an artefact of host contention rather than of this
+repository. A post-change `make test` run under a saturated pool will exceed
+this figure by an amount that says nothing about the new crate.
+
+Decision recorded: treat the trigger as **advisory only** for this plan, and
+evaluate it against (a) the count of tests, (b) the sum of per-test durations
+for non-UI tests, and (c) the number and total duration of `serial-dylint-ui`
+entries — three figures that are comparable across runs even when the host is
+not. Escalation under the tolerance still applies if any of those moves
+materially, and in particular if the new crate adds more than two
+`serial-dylint-ui` entries, since each one serializes behind every other.
+
+A clean uncontended baseline was not obtainable: the pool has been full for
+every observation in this session, and re-running would duplicate a queue that
+three other agents are already in, which `CLAUDE.md` forbids. This substitutes
+the decomposition above and states the limitation rather than fabricating a
+single number.
+
 ## Interfaces and dependencies
 
 ### Domain — `crates/whitaker_string_literals` (no rustc imports)
@@ -1953,8 +2192,10 @@ width, and fall back to the indented multi-line form otherwise.
 - `src/driver/mod.rs` — the `EarlyLintPass`, config and localizer lifecycle
   (`check_crate`, per `DEC-016`), and dispatch. The lint declaration lives in a
   private `declaration` module per the `conditional_max_n_branches` pattern.
-- `src/driver/depth.rs` — the wrapper-depth counter of `DEC-002`, the built-in
-  name set, and the crate-scoped shadow kill switch.
+- `src/driver/depth.rs` — the wrapper-depth analyser of `DEC-002` as amended by
+  `SURP-018`: a `rustc_ast::visit::Visitor` run from `check_crate` with its own
+  push/pop, producing the safe-literal span set, the built-in name set, and the
+  crate-scoped shadow kill switch.
 - `src/driver/facts.rs` — construction of `LiteralFacts` from `ExprKind::Lit`
   and `ExprKind::FormatArgs`, under `DEC-015`'s cheap-first ordering.
 - `src/driver/span.rs` — the sole owner of the offset conversion:
