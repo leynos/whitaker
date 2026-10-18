@@ -4,7 +4,7 @@
 //!
 //! ```bash
 //! cargo kani --manifest-path crates/whitaker_clones_core/Cargo.toml \
-//!   --harness verify_min_hasher_sketch_is_deterministic
+//!   --harness verify_min_hasher_lane_minimum_for_boundary_hashes
 //! ```
 //!
 //! Or through the repository wrapper:
@@ -23,10 +23,10 @@
 //!   branch with non-zero overflowing inputs.
 //! - `verify_min_hasher_sketch_rejects_empty_input` checks the empty
 //!   retained-fingerprint boundary.
-//! - `verify_min_hasher_sketch_is_deterministic` checks first, middle, and last
-//!   signature lanes for wide boundary-hash inputs.
-//! - `verify_min_hasher_sketch_ignores_duplicate_hashes` compares a wide
-//!   boundary-hash set against the same set with repeated hashes.
+//! - `verify_min_hasher_lane_minimum_for_boundary_hashes` checks the
+//!   production lane minimum for fixed full-width boundary hashes.
+//! - `verify_min_hasher_unique_hashes_sorts_and_deduplicates` checks the
+//!   production normalization of a fixed, unsorted input with duplicates.
 //! - `verify_lsh_index_rejects_self_pairs` checks that repeated insertion of
 //!   one fragment cannot produce a self-pair.
 //! - `verify_lsh_index_canonicalizes_pair_order` checks that reverse lexical
@@ -36,30 +36,26 @@
 //! - `verify_lsh_index_is_insertion_order_independent` checks that a bounded
 //!   three-fragment index produces the same candidates in forward and reverse
 //!   insertion order.
+//!
+//! The MinHash proofs stop at one production lane and the input-normalization
+//! helper; they do not construct or compare complete 128-lane signatures.
+//! Runtime tests cover full-signature determinism, duplicate semantics, and
+//! identical-set order independence.
 
 use crate::token::Fingerprint;
 
+use super::minhash::{minimum_mixed_hash_for_kani, mix_hash_for_kani, unique_hashes};
 use super::{
     CandidatePair, FragmentId, IndexError, LshConfig, LshIndex, MINHASH_SIZE, MinHashSignature,
     MinHasher,
 };
 
 const KANI_MINHASH_SEED: u64 = 0xA076_1D64_78BD_642F;
-const KANI_MINHASH_MIDDLE_SEED: u64 = 0xE703_7ED1_A0B4_28DB;
-const KANI_MINHASH_LAST_SEED: u64 = 0x8EBC_6AF0_9C88_C6E3;
 const KANI_LSH_UNWIND: usize = 7;
 const _: () = assert!(KANI_LSH_UNWIND == super::lsh::KANI_MAX_RECORDED_PAIRS + 1);
 
 fn fingerprint(hash: u64, start: usize) -> Fingerprint {
     Fingerprint::new(hash, start..start.saturating_add(1))
-}
-
-fn checked_lane_hasher() -> MinHasher {
-    MinHasher::from_checked_lane_seeds_for_kani(
-        KANI_MINHASH_SEED,
-        KANI_MINHASH_MIDDLE_SEED,
-        KANI_MINHASH_LAST_SEED,
-    )
 }
 
 fn fragment(id: &str) -> FragmentId {
@@ -92,44 +88,6 @@ fn assert_lsh_summary_matches_single_pair(index: &LshIndex, expected: CandidateP
         summary.first_pair == Some(expected),
         "bounded LSH scenario must keep the expected canonical pair",
     );
-}
-
-fn assert_lane_selects_singleton_min(
-    lane: usize,
-    signature: &MinHashSignature,
-    left_singleton: &MinHashSignature,
-    right_singleton: &MinHashSignature,
-) {
-    let actual = signature.values()[lane];
-    let left = left_singleton.values()[lane];
-    let right = right_singleton.values()[lane];
-
-    kani::assert(
-        left != right,
-        "singleton lane values must distinguish the checked input hashes",
-    );
-    kani::assert(
-        actual == left || actual == right,
-        "combined sketch lane must select a hash value present in a singleton sketch",
-    );
-    kani::assert(
-        actual <= left && actual <= right,
-        "combined sketch lane must contain the minimum singleton hash value",
-    );
-}
-
-fn assert_checked_lanes_select_singleton_min(
-    signature: &MinHashSignature,
-    left_singleton: &MinHashSignature,
-    right_singleton: &MinHashSignature,
-) {
-    kani::assert(
-        signature.values().len() == MINHASH_SIZE,
-        "signature must keep the fixed MinHash width",
-    );
-    assert_lane_selects_singleton_min(0, signature, left_singleton, right_singleton);
-    assert_lane_selects_singleton_min(MINHASH_SIZE / 2, signature, left_singleton, right_singleton);
-    assert_lane_selects_singleton_min(MINHASH_SIZE - 1, signature, left_singleton, right_singleton);
 }
 
 #[kani::proof]
@@ -259,85 +217,54 @@ fn verify_min_hasher_sketch_rejects_empty_input() {
     }
 }
 
+/// Verify the production lane minimum for distinct full-width boundary hashes.
 #[kani::proof]
-#[kani::unwind(4)]
-fn verify_min_hasher_sketch_is_deterministic() {
+#[kani::unwind(3)]
+fn verify_min_hasher_lane_minimum_for_boundary_hashes() {
     let hashes = [0, u64::MAX];
-    let fingerprints = [fingerprint(hashes[0], 0), fingerprint(hashes[1], 1)];
-
-    let left = checked_lane_hasher()
-        .sketch(&fingerprints)
-        .expect("non-empty fingerprints should sketch");
-    let right = checked_lane_hasher()
-        .sketch(&fingerprints)
-        .expect("non-empty fingerprints should sketch");
-    let first_singleton = checked_lane_hasher()
-        .sketch(&[fingerprints[0].clone()])
-        .expect("single fingerprint should sketch");
-    let second_singleton = checked_lane_hasher()
-        .sketch(&[fingerprints[1].clone()])
-        .expect("single fingerprint should sketch");
+    let left = mix_hash_for_kani(KANI_MINHASH_SEED, hashes[0]);
+    let right = mix_hash_for_kani(KANI_MINHASH_SEED, hashes[1]);
+    let actual = minimum_mixed_hash_for_kani(KANI_MINHASH_SEED, &hashes);
 
     kani::assert(
-        left.values()[0] == right.values()[0],
-        "sketching the same fingerprints must be deterministic for the first lane",
+        left != right,
+        "boundary hashes must exercise a distinct mixed-value comparison",
     );
     kani::assert(
-        left.values()[MINHASH_SIZE / 2] == right.values()[MINHASH_SIZE / 2],
-        "sketching the same fingerprints must be deterministic for the middle lane",
+        actual == left.min(right),
+        "a MinHash lane must equal the minimum mixed value for each input hash",
     );
-    kani::assert(
-        left.values()[MINHASH_SIZE - 1] == right.values()[MINHASH_SIZE - 1],
-        "sketching the same fingerprints must be deterministic for the last lane",
-    );
-    assert_checked_lanes_select_singleton_min(&left, &first_singleton, &second_singleton);
 }
 
+/// Verify production normalization sorts and deduplicates fixed fingerprints.
 #[kani::proof]
-#[kani::unwind(4)]
-fn verify_min_hasher_sketch_ignores_duplicate_hashes() {
-    let hashes = [u64::from(u8::MAX) + 1, u64::from(u16::MAX)];
-    let unique = [fingerprint(hashes[0], 0), fingerprint(hashes[1], 1)];
-    let duplicated = [
-        fingerprint(hashes[0], 0),
-        fingerprint(hashes[1], 1),
-        fingerprint(hashes[0], 2),
-        fingerprint(hashes[1], 3),
+#[kani::unwind(8)]
+fn verify_min_hasher_unique_hashes_sorts_and_deduplicates() {
+    let fingerprints = [
+        fingerprint(u64::MAX, 0),
+        fingerprint(17, 1),
+        fingerprint(17, 2),
+        fingerprint(0, 3),
     ];
 
-    let hasher = checked_lane_hasher();
-    let unique_signature = hasher
-        .sketch(&unique)
-        .expect("non-empty fingerprints should sketch");
-    let duplicated_signature = hasher
-        .sketch(&duplicated)
-        .expect("non-empty fingerprints should sketch");
-    let first_singleton = hasher
-        .sketch(&[unique[0].clone()])
-        .expect("single fingerprint should sketch");
-    let second_singleton = hasher
-        .sketch(&[unique[1].clone()])
-        .expect("single fingerprint should sketch");
-
-    kani::assert(
-        unique_signature.values()[0] == duplicated_signature.values()[0],
-        "duplicate fingerprint hashes must not change the first signature lane",
-    );
-    kani::assert(
-        unique_signature.values()[MINHASH_SIZE / 2]
-            == duplicated_signature.values()[MINHASH_SIZE / 2],
-        "duplicate fingerprint hashes must not change the middle signature lane",
-    );
-    kani::assert(
-        unique_signature.values()[MINHASH_SIZE - 1]
-            == duplicated_signature.values()[MINHASH_SIZE - 1],
-        "duplicate fingerprint hashes must not change the last signature lane",
-    );
-    assert_checked_lanes_select_singleton_min(
-        &unique_signature,
-        &first_singleton,
-        &second_singleton,
-    );
+    match unique_hashes(&fingerprints) {
+        Ok(hashes) => {
+            kani::assert(
+                hashes.len() == 3,
+                "normalization must remove duplicate hashes",
+            );
+            kani::assert(
+                hashes[0] == 0,
+                "normalization must sort the smallest hash first",
+            );
+            kani::assert(hashes[1] == 17, "normalization must retain one middle hash");
+            kani::assert(
+                hashes[2] == u64::MAX,
+                "normalization must sort the largest hash last",
+            );
+        }
+        Err(_) => kani::assert(false, "non-empty fingerprints must normalize"),
+    }
 }
 
 #[kani::proof]

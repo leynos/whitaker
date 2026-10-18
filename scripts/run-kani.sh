@@ -61,8 +61,8 @@ run_clone_detector_harnesses() {
         verify_lsh_config_new_symbolic \
         verify_lsh_config_new_overflow_product \
         verify_min_hasher_sketch_rejects_empty_input \
-        verify_min_hasher_sketch_is_deterministic \
-        verify_min_hasher_sketch_ignores_duplicate_hashes \
+        verify_min_hasher_lane_minimum_for_boundary_hashes \
+        verify_min_hasher_unique_hashes_sorts_and_deduplicates \
         verify_lsh_index_rejects_self_pairs \
         verify_lsh_index_canonicalizes_pair_order \
         verify_lsh_index_deduplicates_repeated_band_collisions \

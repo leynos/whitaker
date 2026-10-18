@@ -256,9 +256,9 @@ Thresholds that trigger escalation rather than autonomous continuation.
 - [x] Stage D — `ra_ap_syntax` adapter (`lowering.rs`) and span→node mapping.
 - [x] Stage E — Behavioural (`rstest-bdd`), snapshot (`insta`), and property
       (`proptest`) coverage.
-- [ ] Stage F — Verus lemma and Kani harnesses; proof-script wiring. Focused
-      candidate proofs pass, but the complete bounded Kani group remains
-      inconclusive because an unchanged MinHash harness reaches the memory cap.
+- [x] Stage F — Verus lemma and Kani harnesses; proof-script wiring. The
+      complete bounded Kani group passes after splitting the expensive MinHash
+      signature checks into lane and normalization obligations.
 - [ ] Stage G — Documentation, final gates, CodeRabbit review, roadmap tick.
 
 Each stage records a timestamp here when complete and splits into
@@ -1261,8 +1261,18 @@ operations symbolic. Experiments that called production `kind_counts` on a
 symbolic and then a fixed-key five-node tree both timed out at ten minutes, at
 3,381 MiB and 3,915 MiB peak memory respectively. They are inconclusive, not
 passes, so Kani leaves production-map internals to runtime tests and proptest.
-Every harness runs in an 8 GiB process-tree scope with a ten-minute timeout;
-timeout, resource exhaustion, or missing peak measurement is unsuccessful or
+The index's MinHash harnesses split three independent obligations: empty-input
+rejection still exercises `MinHasher::sketch`; a lane-minimum harness sends the
+fixed full-width boundary hashes `0` and `u64::MAX` through the production
+minimum and mixer; and a normalization harness checks a fixed unsorted list
+with a duplicate through production `unique_hashes`. These deliberately do not
+construct complete 128-lane signatures. Runtime tests remain responsible for
+full-signature determinism, duplicate-equivalent signatures, and identical-set
+order independence. The lane proof uses `#[kani::unwind(3)]` for two visits
+plus loop termination; the fixed four-fingerprint normalization proof uses
+`#[kani::unwind(8)]`, with unwinding assertions retained. Every harness runs
+sequentially in an 8 GiB process-tree scope with a ten-minute timeout; timeout,
+resource exhaustion, or missing peak measurement is unsuccessful or
 inconclusive. Register the harness names in `scripts/run-kani.sh`.
 **Mutation-validate as a matrix** (review finding 🟡-3): each deliberate
 mutation — `<=`→`<` in the minimality compare, *and* dropping the covering
@@ -1450,14 +1460,81 @@ proves success.
   particular, this is narrower Kani coverage than the removed symbolic
   `kind_counts` accumulation-order harness; it does not prove the production
   `BTreeMap` sink or general traversal fidelity.
-- Stage F complete-group Kani disposition for the same candidate: the
-  8 GiB-capped, 600-second `make kani-clone-detector` run passed its first four
-  harnesses, then `verify_min_hasher_sketch_is_deterministic` reached the
-  memory cap at 8,192 MiB and was killed after 357 seconds (`oom-kill`). The
-  group is unsuccessful/inconclusive, not passed; it stopped before the three
-  AST harnesses, which were run individually above. No unrestricted rerun was
-  made. Do not treat focused harness results as satisfying the complete-group
-  gate.
+- Historical full-group result on the `c5982625` source candidate: the
+  8 GiB-capped, 600-second run reached the former full-signature
+  `verify_min_hasher_sketch_is_deterministic` harness at the memory cap after
+  357 seconds (`oom-kill`). That result was unsuccessful/inconclusive; it was
+  not treated as a pass, and no unrestricted run was made.
+- MinHash Kani reduction on the candidate based on `17bd3398`: replace the two
+  full-signature MinHash harnesses with
+  `verify_min_hasher_lane_minimum_for_boundary_hashes` and
+  `verify_min_hasher_unique_hashes_sorts_and_deduplicates`. The first proof
+  uses a fixed seed and the distinct mixed values of `0` and `u64::MAX`; it
+  proves only that this production lane returns their minimum. The second uses
+  four fixed fingerprints and proves sorted unique output from `unique_hashes`.
+  Full-signature behaviour remains covered by the runtime tests cited above. An
+  exploratory symbolic full-width lane proof timed out at 600 seconds and 237
+  MiB; it was inconclusive and replaced by the fixed boundary case. The first
+  normalization proof also exposed a `memcmp` unwinding failure in a
+  slice-equality assertion at unwind 8. Replacing that comparison with scalar
+  length and element assertions kept unwinding assertions enabled and passed.
+- Final complete-group result on the revised candidate (base
+  `61a101dd2eaa62059ed0152249bceda85ece3ac1`, HEAD
+  `17bd3398b4547eaf907464eca6d10e0976aa00de`, and executable-source diff
+  SHA-256 at proof time
+  `7f199ba1873062208bc7b861720375f2934c3058ea8b4e136038fe9030e95969`):
+  `make kani-clone-detector` passed all 15 harnesses, with zero failed checks
+  and zero unwinding failures. Kani 0.67.0 used its pinned `nightly-2025-11-21`
+  / rustc 1.93 toolchain, CBMC 6.8.0, and CaDiCaL 2.0.0. Each harness ran in
+  its own 8 GiB process-tree cgroup, with swap disabled and a 600-second
+  timeout; missing peak-memory evidence, timeout, OOM, or any non-zero result
+  fails the wrapper and records no proof pass. The wrapper durations sum to 388
+  seconds, and the highest peak was 4,842 MiB for
+  `verify_lsh_index_is_insertion_order_independent` (126 seconds). After this
+  run, only Kani module/harness documentation was added to the changed Rust
+  source; no executable proof logic changed. The current changed-source diff
+  SHA-256, including those comments, is
+  `5073a9aa6669636fba267eb80c15241ef3a1809b92f6553141da398594ff4f56`. The
+  complete per-harness record follows:
+
+  | Harness                                                  | Checks          | Unreachable | Wall (s) | Peak (MiB) |
+  | -------------------------------------------------------- | --------------: | ----------: | -------: | ---------: |
+  | `verify_lsh_config_new_smoke`                            | 15, 0 failed    | 0           | 30       | 90         |
+  | `verify_lsh_config_new_symbolic`                         | 59, 0 failed    | 1           | 3        | 67         |
+  | `verify_lsh_config_new_overflow_product`                 | 30, 0 failed    | 4           | 3        | 67         |
+  | `verify_min_hasher_sketch_rejects_empty_input`           | 2,208, 0 failed | 223         | 10       | 232        |
+  | `verify_min_hasher_lane_minimum_for_boundary_hashes`     | 81, 0 failed    | 1           | 2        | 67         |
+  | `verify_min_hasher_unique_hashes_sorts_and_deduplicates` | 1,161, 0 failed | 80          | 9        | 161        |
+  | `verify_lsh_index_rejects_self_pairs`                    | 3,590, 0 failed | 11          | 45       | 1,938      |
+  | `verify_lsh_index_canonicalizes_pair_order`              | 3,612, 0 failed | 8           | 64       | 2,876      |
+  | `verify_lsh_index_deduplicates_repeated_band_collisions` | 3,615, 0 failed | 136         | 80       | 3,579      |
+  | `verify_lsh_index_is_insertion_order_independent`        | 3,628, 0 failed | 8           | 126      | 4,842      |
+  | `verify_smallest_covering_node_selects_minimal_range`    | 342, 0 failed   | 2           | 6        | 167        |
+  | `verify_smallest_covering_root_fallback`                 | 319, 0 failed   | 8           | 3        | 361        |
+  | `verify_kind_id_round_trips_full_u16_domain`             | 1, 0 failed     | 0           | 2        | 67         |
+  | `verify_kind_counts_stop_at_max_depth`                   | 569, 0 failed   | 9           | 4        | 152        |
+  | `verify_kind_id_equality_and_order_cover_small_alphabet` | 39, 0 failed    | 0           | 1        | 67         |
+
+  The depth-only harness's nine unreachable checks are all compiler/library
+  safety guards, not harness assertions: checks 68 and 69 are the two
+  `usize::abs_diff` subtraction guards for concrete valid ranges; checks 96 and
+  97 are Kani's fixed-fixture pointer-validity guards for the `vec!`
+  allocation; check 110 is `is_aligned_to` pointer-alignment arithmetic; check
+  112 is allocation-size validity; check 114 is the formatting bit-shift guard;
+  check 118 is signed-negation overflow; and check 123 is allocator growth
+  arithmetic. Both explicit harness assertions (checks 26 and 31) report
+  `SUCCESS`, including the no-beyond-depth and five-node tally assertions; the
+  four associated array-index bounds checks (27–30) also report `SUCCESS`. The
+  depth proof therefore checks the fixed five-node traversal with unwind 6
+  (five visits plus the terminal loop check); unwinding assertions stayed
+  enabled. This scoped property still does not prove the production `BTreeMap`
+  sink or general traversal fidelity. The complete run log is
+  `/tmp/kani-clone-detector-pr365-equilibrium-pr365-equilibrium.out`.
+
+  A preliminary full-group attempt at a stricter 4 GiB cap reached the
+  insertion-order harness and was killed at 4,096 MiB after 133 seconds. This
+  remains a resource-limited, inconclusive result rather than a pass; the final
+  run stayed bounded at 8 GiB per process tree.
 - Stage F Verus trust bridge: `verus/clone_detector_ast_features.rs` proves
   the exact count accumulator algebra for a supplied multiset of
   `(kind, depth)` contributions; Rust unit tests and `proptest` cover the
@@ -1471,8 +1548,7 @@ proves success.
   `count_and_production_features_ignore_sibling_visit_order` supplies the
   complementary property test by reversing sibling order on generated trees and
   comparing production `kind_counts` and `production_multiset` results. The
-  previously declared full-group Kani validation requirement remains unmet
-  until that bounded target passes.
+  full bounded Kani group passed on the revised candidate as recorded above.
 - Stage F mutation matrix:
   - `<=` -> `<` in the covering lower-bound predicate failed
     `verify_smallest_covering_node_selects_minimal_range` with
