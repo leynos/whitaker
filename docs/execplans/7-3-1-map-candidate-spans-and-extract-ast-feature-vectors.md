@@ -256,8 +256,10 @@ Thresholds that trigger escalation rather than autonomous continuation.
 - [x] Stage D — `ra_ap_syntax` adapter (`lowering.rs`) and span→node mapping.
 - [x] Stage E — Behavioural (`rstest-bdd`), snapshot (`insta`), and property
       (`proptest`) coverage.
-- [x] Stage F — Verus lemma and Kani harnesses; proof-script wiring.
-- [x] Stage G — Documentation, final gates, CodeRabbit review, roadmap tick.
+- [ ] Stage F — Verus lemma and Kani harnesses; proof-script wiring. Focused
+      candidate proofs pass, but the complete bounded Kani group remains
+      inconclusive because an unchanged MinHash harness reaches the memory cap.
+- [ ] Stage G — Documentation, final gates, CodeRabbit review, roadmap tick.
 
 Each stage records a timestamp here when complete and splits into
 done/remaining if interrupted.
@@ -328,8 +330,10 @@ Stage E completed on 2026-06-16. Green gates:
 - `make markdownlint`
 - `coderabbit review --agent --type uncommitted --fast` (`0` findings)
 
-Stage F implementation and deterministic validation completed on 2026-06-16.
-Green gates:
+Historical Stage F implementation and deterministic validation completed on
+2026-06-16. Its Kani harness inventory was revised on 2026-10-18; the current
+candidate's verification state is recorded under Artefacts and is not covered
+by this historical green-gate list.
 
 - `cargo test -p whitaker_clones_core ast` (`28` AST unit tests plus the
   parser-boundary guard and AST behavioural scenarios)
@@ -1415,10 +1419,60 @@ proves success.
   use a four-value scalar alphabet. Production `BTreeMap` construction stays
   outside Kani after bounded symbolic and fixed-key map proofs each timed out;
   runtime unit tests and `proptest` cover that accumulator.
+- Stage F candidate-bound Kani evidence (2026-10-18, base
+  `61a101dd2eaa62059ed0152249bceda85ece3ac1`, head
+  `c59826254eccb56bce0c7290cc62ec5910d27dad`): Kani 0.67.0 used its pinned
+  `nightly-2025-11-21` / rustc 1.93 toolchain, CBMC 6.8.0, and CaDiCaL 2.0.0.
+  The Kani results trust Kani's Rust translation and library models, CBMC, and
+  CaDiCaL; they are not independently checked proof certificates. Each harness
+  ran separately through `./scripts/run-kani.sh clone-detector-harness <name>`
+  with `--no-default-features`, `--default-unwind 4`, its named harness, and a
+  4 GiB process-tree memory cap, swap disabled, and a 600-second timeout. The
+  harness-specific unwind attribute overrides the default where present.
+  Captured outcomes:
+  - `verify_kind_id_round_trips_full_u16_domain`: passed, 1/1 checks;
+    14-second wrapper duration, 69 MiB peak.
+  - `verify_kind_counts_stop_at_max_depth`: passed, 569 checks, zero failed,
+    nine unreachable; 2.34 seconds of verification, 6-second wrapper duration,
+    151 MiB peak. CBMC check IDs 68, 69, 96, 97, 110, 112, 114, 118, and 123
+    are the nine unreachable checks. They are standard-library safety guards
+    for `usize::abs_diff`, `vec!` pointer alignment/null validity,
+    `is_aligned_to`, allocation-size division, formatting shifts, signed
+    negation, and allocator growth arithmetic. None is a harness assertion:
+    the custom no-beyond-depth and five-node tally assertions (checks 26 and
+    31) both report `SUCCESS`. No harness assertion is unreachable.
+  - `verify_kind_id_equality_and_order_cover_small_alphabet`: passed, 39/39
+    checks; 12-second wrapper duration, 68 MiB peak.
+  - Negative control with the depth harness at unwind 5 failed its unwinding
+    assertion at `for_each_node_at_depth`; 20-second wrapper duration,
+    159 MiB peak. Unwinding assertions remained enabled in all runs.
+  These bounded results verify the three stated propositions only. In
+  particular, this is narrower Kani coverage than the removed symbolic
+  `kind_counts` accumulation-order harness; it does not prove the production
+  `BTreeMap` sink or general traversal fidelity.
+- Stage F complete-group Kani disposition for the same candidate: the
+  8 GiB-capped, 600-second `make kani-clone-detector` run passed its first four
+  harnesses, then `verify_min_hasher_sketch_is_deterministic` reached the
+  memory cap at 8,192 MiB and was killed after 357 seconds (`oom-kill`). The
+  group is unsuccessful/inconclusive, not passed; it stopped before the three
+  AST harnesses, which were run individually above. No unrestricted rerun was
+  made. Do not treat focused harness results as satisfying the complete-group
+  gate.
 - Stage F Verus trust bridge: `verus/clone_detector_ast_features.rs` proves
   the exact count accumulator algebra for a supplied multiset of
   `(kind, depth)` contributions; Rust unit tests and `proptest` cover the
-  production `NormalizedTree` traversal that produces those contributions.
+  production `NormalizedTree` traversal that produces those contributions. For
+  the candidate above, `make verus-clone-detector` passed against Verus
+  `0.2026.03.17.a96bad0` (toolchain `1.94.0-x86_64-unknown-linux-gnu`): the
+  three proof groups reported 9, 10, and 8 verified, each with zero errors. The
+  Verus lemma assumes equal per-`(kind, depth)` contribution multisets and
+  proves equal exact counts for every queried bucket; it does not establish
+  that Rust traversal emits the same multiset.
+  `count_and_production_features_ignore_sibling_visit_order` supplies the
+  complementary property test by reversing sibling order on generated trees and
+  comparing production `kind_counts` and `production_multiset` results. The
+  previously declared full-group Kani validation requirement remains unmet
+  until that bounded target passes.
 - Stage F mutation matrix:
   - `<=` -> `<` in the covering lower-bound predicate failed
     `verify_smallest_covering_node_selects_minimal_range` with
