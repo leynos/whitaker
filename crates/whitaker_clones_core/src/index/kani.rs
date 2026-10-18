@@ -44,7 +44,7 @@
 
 use crate::token::Fingerprint;
 
-use super::minhash::{minimum_mixed_hash_for_kani, mix_hash_for_kani, unique_hashes};
+use super::minhash::{Seed, minimum_mixed_hash, unique_hashes};
 use super::{
     CandidatePair, FragmentId, IndexError, LshConfig, LshIndex, MINHASH_SIZE, MinHashSignature,
     MinHasher,
@@ -222,9 +222,10 @@ fn verify_min_hasher_sketch_rejects_empty_input() {
 #[kani::unwind(3)]
 fn verify_min_hasher_lane_minimum_for_boundary_hashes() {
     let hashes = [0, u64::MAX];
-    let left = mix_hash_for_kani(KANI_MINHASH_SEED, hashes[0]);
-    let right = mix_hash_for_kani(KANI_MINHASH_SEED, hashes[1]);
-    let actual = minimum_mixed_hash_for_kani(KANI_MINHASH_SEED, &hashes);
+    let seed = Seed(KANI_MINHASH_SEED);
+    let left = minimum_mixed_hash(seed, &[hashes[0]]);
+    let right = minimum_mixed_hash(seed, &[hashes[1]]);
+    let actual = minimum_mixed_hash(seed, &hashes);
 
     kani::assert(
         left != right,

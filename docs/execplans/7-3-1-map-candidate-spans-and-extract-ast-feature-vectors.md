@@ -1478,42 +1478,52 @@ proves success.
   normalization proof also exposed a `memcmp` unwinding failure in a
   slice-equality assertion at unwind 8. Replacing that comparison with scalar
   length and element assertions kept unwinding assertions enabled and passed.
-- Final complete-group result on the revised candidate (base
-  `61a101dd2eaa62059ed0152249bceda85ece3ac1`, HEAD
-  `17bd3398b4547eaf907464eca6d10e0976aa00de`, and executable-source diff
-  SHA-256 at proof time
-  `7f199ba1873062208bc7b861720375f2934c3058ea8b4e136038fe9030e95969`):
+- Follow-up seam correction after local CodeScene review: the lane harness now
+  passes the existing `Seed` domain type and calls production
+  `minimum_mixed_hash` directly for the two singleton values and their pair.
+  This removes proof-only raw-`u64` helper parameters that triggered a new
+  Primitive Obsession signal. The focused lane proof passed again with 81
+  checks, zero failures, one unreachable safety guard, a 3-second wrapper
+  duration, and 67 MiB peak under the 8 GiB cap; see
+  `/tmp/kani-minhash-lane-boundary-pr365-codescene-fix.out`. The follow-up
+  executable-source diff from `d32558150b3200c17a9ae7e3c8c5d99d6d0853e8` at
+  this run has SHA-256
+  `36b4dc156344b4c259f16cdc4af8610a5fbcfe3324a1f0af310dc767123f4864`. CodeScene
+  CLI 1.0.52's base-to-working-tree delta then reported no new issue; its only
+  result was an unrelated pre-existing Complex Method improvement in
+  `module_must_have_inner_docs/src/driver/inner_attr.rs`, recorded in
+  `/tmp/codescene-delta-pr365-lane-seam-fix.out`.
+- Current complete-group result on the candidate worktree (base
+  `61a101dd2eaa62059ed0152249bceda85ece3ac1`, committed parent
+  `d32558150b3200c17a9ae7e3c8c5d99d6d0853e8`, executable-source follow-up diff
+  SHA-256 `36b4dc156344b4c259f16cdc4af8610a5fbcfe3324a1f0af310dc767123f4864`):
   `make kani-clone-detector` passed all 15 harnesses, with zero failed checks
   and zero unwinding failures. Kani 0.67.0 used its pinned `nightly-2025-11-21`
   / rustc 1.93 toolchain, CBMC 6.8.0, and CaDiCaL 2.0.0. Each harness ran in
   its own 8 GiB process-tree cgroup, with swap disabled and a 600-second
   timeout; missing peak-memory evidence, timeout, OOM, or any non-zero result
-  fails the wrapper and records no proof pass. The wrapper durations sum to 388
+  fails the wrapper and records no proof pass. The wrapper durations sum to 362
   seconds, and the highest peak was 4,842 MiB for
-  `verify_lsh_index_is_insertion_order_independent` (126 seconds). After this
-  run, only Kani module/harness documentation was added to the changed Rust
-  source; no executable proof logic changed. The current changed-source diff
-  SHA-256, including those comments, is
-  `5073a9aa6669636fba267eb80c15241ef3a1809b92f6553141da398594ff4f56`. The
-  complete per-harness record follows:
+  `verify_lsh_index_is_insertion_order_independent` (124 seconds). The complete
+  per-harness record follows:
 
   | Harness                                                  | Checks          | Unreachable | Wall (s) | Peak (MiB) |
   | -------------------------------------------------------- | --------------: | ----------: | -------: | ---------: |
-  | `verify_lsh_config_new_smoke`                            | 15, 0 failed    | 0           | 30       | 90         |
-  | `verify_lsh_config_new_symbolic`                         | 59, 0 failed    | 1           | 3        | 67         |
-  | `verify_lsh_config_new_overflow_product`                 | 30, 0 failed    | 4           | 3        | 67         |
-  | `verify_min_hasher_sketch_rejects_empty_input`           | 2,208, 0 failed | 223         | 10       | 232        |
-  | `verify_min_hasher_lane_minimum_for_boundary_hashes`     | 81, 0 failed    | 1           | 2        | 67         |
-  | `verify_min_hasher_unique_hashes_sorts_and_deduplicates` | 1,161, 0 failed | 80          | 9        | 161        |
-  | `verify_lsh_index_rejects_self_pairs`                    | 3,590, 0 failed | 11          | 45       | 1,938      |
-  | `verify_lsh_index_canonicalizes_pair_order`              | 3,612, 0 failed | 8           | 64       | 2,876      |
-  | `verify_lsh_index_deduplicates_repeated_band_collisions` | 3,615, 0 failed | 136         | 80       | 3,579      |
-  | `verify_lsh_index_is_insertion_order_independent`        | 3,628, 0 failed | 8           | 126      | 4,842      |
-  | `verify_smallest_covering_node_selects_minimal_range`    | 342, 0 failed   | 2           | 6        | 167        |
-  | `verify_smallest_covering_root_fallback`                 | 319, 0 failed   | 8           | 3        | 361        |
+  | `verify_lsh_config_new_smoke`                            | 15, 0 failed    | 0           | 2        | 67         |
+  | `verify_lsh_config_new_symbolic`                         | 59, 0 failed    | 1           | 2        | 67         |
+  | `verify_lsh_config_new_overflow_product`                 | 30, 0 failed    | 4           | 2        | 67         |
+  | `verify_min_hasher_sketch_rejects_empty_input`           | 2,208, 0 failed | 223         | 8        | 231        |
+  | `verify_min_hasher_lane_minimum_for_boundary_hashes`     | 81, 0 failed    | 1           | 1        | 67         |
+  | `verify_min_hasher_unique_hashes_sorts_and_deduplicates` | 1,161, 0 failed | 80          | 7        | 160        |
+  | `verify_lsh_index_rejects_self_pairs`                    | 3,590, 0 failed | 11          | 41       | 1,939      |
+  | `verify_lsh_index_canonicalizes_pair_order`              | 3,612, 0 failed | 8           | 57       | 2,879      |
+  | `verify_lsh_index_deduplicates_repeated_band_collisions` | 3,615, 0 failed | 136         | 73       | 3,581      |
+  | `verify_lsh_index_is_insertion_order_independent`        | 3,628, 0 failed | 8           | 124      | 4,842      |
+  | `verify_smallest_covering_node_selects_minimal_range`    | 342, 0 failed   | 2           | 18       | 164        |
+  | `verify_smallest_covering_root_fallback`                 | 319, 0 failed   | 8           | 15       | 360        |
   | `verify_kind_id_round_trips_full_u16_domain`             | 1, 0 failed     | 0           | 2        | 67         |
-  | `verify_kind_counts_stop_at_max_depth`                   | 569, 0 failed   | 9           | 4        | 152        |
-  | `verify_kind_id_equality_and_order_cover_small_alphabet` | 39, 0 failed    | 0           | 1        | 67         |
+  | `verify_kind_counts_stop_at_max_depth`                   | 569, 0 failed   | 9           | 6        | 151        |
+  | `verify_kind_id_equality_and_order_cover_small_alphabet` | 39, 0 failed    | 0           | 4        | 67         |
 
   The depth-only harness's nine unreachable checks are all compiler/library
   safety guards, not harness assertions: checks 68 and 69 are the two
@@ -1529,7 +1539,7 @@ proves success.
   (five visits plus the terminal loop check); unwinding assertions stayed
   enabled. This scoped property still does not prove the production `BTreeMap`
   sink or general traversal fidelity. The complete run log is
-  `/tmp/kani-clone-detector-pr365-equilibrium-pr365-equilibrium.out`.
+  `/tmp/kani-pr365-equilibrium-codescene-fix.out`.
 
   A preliminary full-group attempt at a stricter 4 GiB cap reached the
   insertion-order harness and was killed at 4,096 MiB after 133 seconds. This
@@ -1539,16 +1549,22 @@ proves success.
   the exact count accumulator algebra for a supplied multiset of
   `(kind, depth)` contributions; Rust unit tests and `proptest` cover the
   production `NormalizedTree` traversal that produces those contributions. For
-  the candidate above, `make verus-clone-detector` passed against Verus
-  `0.2026.03.17.a96bad0` (toolchain `1.94.0-x86_64-unknown-linux-gnu`): the
-  three proof groups reported 9, 10, and 8 verified, each with zero errors. The
-  Verus lemma assumes equal per-`(kind, depth)` contribution multisets and
-  proves equal exact counts for every queried bucket; it does not establish
-  that Rust traversal emits the same multiset.
+  the current candidate worktree (base
+  `61a101dd2eaa62059ed0152249bceda85ece3ac1`, committed parent
+  `d32558150b3200c17a9ae7e3c8c5d99d6d0853e8`, executable-source follow-up diff
+  SHA-256 `36b4dc156344b4c259f16cdc4af8610a5fbcfe3324a1f0af310dc767123f4864`),
+  `make verus-clone-detector` passed against Verus `0.2026.03.17.a96bad0`
+  (toolchain `1.94.0-x86_64-unknown-linux-gnu`): the three proof groups
+  reported 9, 10, and 8 verified, each with zero errors. The Verus lemma
+  assumes equal per-`(kind, depth)` contribution multisets and proves equal
+  exact counts for every queried bucket; it does not establish that Rust
+  traversal emits the same multiset.
   `count_and_production_features_ignore_sibling_visit_order` supplies the
   complementary property test by reversing sibling order on generated trees and
   comparing production `kind_counts` and `production_multiset` results. The
-  full bounded Kani group passed on the revised candidate as recorded above.
+  full bounded Kani group passed on the same candidate worktree as recorded
+  above. The exact Verus log is
+  `/tmp/verus-pr365-equilibrium-codescene-fix.out`.
 - Stage F mutation matrix:
   - `<=` -> `<` in the covering lower-bound predicate failed
     `verify_smallest_covering_node_selects_minimal_range` with

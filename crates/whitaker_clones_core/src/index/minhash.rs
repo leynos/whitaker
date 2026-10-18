@@ -39,7 +39,7 @@ const HASH_MIX: u64 = 0x94D0_49BB_1331_11EB;
 /// Keeps seed values distinct from raw hash values at the type level,
 /// preventing accidental argument transposition inside the hashing core.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct Seed(u64);
+pub(super) struct Seed(pub(super) u64);
 
 /// Deterministic `MinHash` sketcher for retained token fingerprints.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -283,30 +283,14 @@ pub(super) fn unique_hashes(fingerprints: &[Fingerprint]) -> IndexResult<Vec<u64
     Ok(hashes)
 }
 
-fn minimum_mixed_hash(seed: Seed, hashes: &[u64]) -> u64 {
+/// Return the minimum mixed hash for one lane.
+///
+/// The sibling Kani harness checks this production operation directly instead
+/// of constructing all 128 lanes of a signature.
+pub(super) fn minimum_mixed_hash(seed: Seed, hashes: &[u64]) -> u64 {
     hashes.iter().fold(u64::MAX, |current, hash| {
         current.min(mix_hash(seed.0, *hash))
     })
-}
-
-/// Computes one production MinHash lane for the bounded Kani proof.
-///
-/// Exposes the production lane calculation to the sibling proof module without
-/// constructing all 128 signature lanes. The harness checks this exact
-/// production operation for one fixed seed and full-width boundary hashes;
-/// complete signature behaviour remains covered by runtime tests.
-#[cfg(kani)]
-pub(super) fn minimum_mixed_hash_for_kani(seed: u64, hashes: &[u64]) -> u64 {
-    minimum_mixed_hash(Seed(seed), hashes)
-}
-
-/// Applies the production hash mixer to one value for the bounded Kani proof.
-///
-/// This proof-only seam lets the lane harness compare its result with each
-/// candidate produced by the same production mixer.
-#[cfg(kani)]
-pub(super) fn mix_hash_for_kani(seed: u64, hash: u64) -> u64 {
-    mix_hash(seed, hash)
 }
 
 const fn mix_hash(seed: u64, hash: u64) -> u64 {
