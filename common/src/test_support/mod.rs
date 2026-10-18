@@ -21,10 +21,7 @@ pub mod decomposition;
 pub mod fixtures;
 pub mod ui;
 
-use std::{
-    ffi::OsStr,
-    sync::OnceLock,
-};
+use std::{ffi::OsStr, sync::OnceLock};
 
 use parking_lot::{ReentrantMutex, ReentrantMutexGuard};
 

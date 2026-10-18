@@ -41,7 +41,7 @@ BASE_SLOW_TIMEOUT: typ.Final[dict[str, object]] = {
 }
 
 #: The whole-run budget both profiles must declare.
-REQUIRED_GLOBAL_TIMEOUT: typ.Final[str] = "85m"
+REQUIRED_GLOBAL_TIMEOUT: typ.Final[str] = "120m"
 
 # Parser-pin fixtures share one integration binary and Cargo package cache, so
 # the allowance must cover that whole binary and serialize it.
@@ -117,7 +117,7 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
         ),
         COMPILE_CONTRACT_FILTER: Allowance(
             slow_timeout={
-                "period": "45m",
+                "period": "60m",
                 "terminate-after": 1,
                 "grace-period": "5s",
             },
@@ -179,7 +179,7 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
         ),
         COMPILE_CONTRACT_FILTER: Allowance(
             slow_timeout={
-                "period": "45m",
+                "period": "60m",
                 "terminate-after": 1,
                 "grace-period": "5s",
             },

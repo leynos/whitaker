@@ -5,21 +5,42 @@
 
 use std::ops::Range;
 
+use super::features::for_each_node_at_depth;
 use super::{
-    ByteSpan, Depth, KindId, LeafClass, NormalizedNode, NormalizedTree, kind_counts,
-    select_smallest_covering,
+    ByteSpan, KindId, LeafClass, NormalizedNode, NormalizedTree, select_smallest_covering,
 };
 
 const KANI_AST_MAX_DEPTH: usize = 3;
 const KANI_AST_MAX_CHILDREN: usize = 2;
-const KANI_AST_UNWIND: usize = 5;
+const KANI_AST_NODE_COUNT: usize = 5;
+const KANI_AST_UNWIND: usize = KANI_AST_NODE_COUNT + 1;
 const _: () = assert!(KANI_AST_MAX_CHILDREN == 2);
-const _: () = assert!(KANI_AST_UNWIND == KANI_AST_MAX_DEPTH + 2);
+const _: () = assert!(KANI_AST_UNWIND == 6);
 
-fn symbolic_kind() -> KindId {
-    KindId::new(kani::any())
+/// Create a symbolic kind from four ordered ids.
+fn symbolic_kind_from_small_alphabet() -> KindId {
+    // Two symbolic bits produce four ordered ids, enough to realize every
+    // equality partition and ordering of the root, two child, and query labels.
+    // The full-width `KindId` round trip is proved in a separate harness.
+    let low_bit: bool = kani::any();
+    let high_bit: bool = kani::any();
+    let raw = u16::from(low_bit) | (u16::from(high_bit) << 1);
+    KindId::new(raw)
 }
 
+/// Assert that `KindId` comparisons agree with comparisons of their raw ids.
+fn assert_kind_comparisons_match_raw(left: KindId, right: KindId) {
+    kani::assert(
+        (left == right) == (left.get() == right.get()),
+        "KindId equality must preserve raw-id equality",
+    );
+    kani::assert(
+        left.cmp(&right) == left.get().cmp(&right.get()),
+        "KindId ordering must preserve raw-id ordering",
+    );
+}
+
+/// Build the valid static span used by synthetic AST fixtures.
 fn ast_span() -> ByteSpan {
     match ByteSpan::new("abcd", 0, 1) {
         Ok(span) => span,
@@ -27,10 +48,12 @@ fn ast_span() -> ByteSpan {
     }
 }
 
+/// Build a leaf node with the requested kind and class.
 fn leaf(kind: KindId, leaf: LeafClass) -> NormalizedNode {
     NormalizedNode::new(kind, Some(leaf), Vec::new())
 }
 
+/// Build a branch node with the requested kind and children.
 fn branch(kind: KindId, children: Vec<NormalizedNode>) -> NormalizedNode {
     NormalizedNode::new(kind, None, children)
 }
@@ -40,6 +63,7 @@ struct BranchSpec {
     leaf_kind: KindId,
 }
 
+/// Build a five-node tree whose leaves sit at depth two.
 fn bounded_tree(
     root_kind: KindId,
     left: BranchSpec,
@@ -59,6 +83,7 @@ fn bounded_tree(
     NormalizedTree::new(branch(root_kind, children), ast_span())
 }
 
+/// Generate a valid range within the bounded offset domain.
 fn symbolic_range() -> Range<u32> {
     let start: u32 = kani::any();
     let end: u32 = kani::any();
@@ -68,14 +93,17 @@ fn symbolic_range() -> Range<u32> {
     start..end
 }
 
+/// Return whether `candidate` encloses `target`.
 fn covers(candidate: &Range<u32>, target: &Range<u32>) -> bool {
     candidate.start <= target.start && candidate.end >= target.end
 }
 
+/// Compare the lengths of two valid ranges.
 fn strictly_smaller(left: &Range<u32>, right: &Range<u32>) -> bool {
     left.end - left.start < right.end - right.start
 }
 
+/// Assert that `selected` is a smallest candidate covering `target`.
 fn assert_minimal_cover(candidates: &[Range<u32>], target: &Range<u32>, selected: usize) {
     let selected_candidate = &candidates[selected];
     kani::assert(
@@ -93,6 +121,7 @@ fn assert_minimal_cover(candidates: &[Range<u32>], target: &Range<u32>, selected
     }
 }
 
+/// Verify selection returns a smallest covering range.
 #[kani::proof]
 #[kani::unwind(5)]
 fn verify_smallest_covering_node_selects_minimal_range() {
@@ -112,6 +141,7 @@ fn verify_smallest_covering_node_selects_minimal_range() {
     }
 }
 
+/// Verify missing covering candidates leave selection empty.
 #[kani::proof]
 #[kani::unwind(5)]
 fn verify_smallest_covering_root_fallback() {
@@ -135,71 +165,74 @@ fn verify_smallest_covering_root_fallback() {
     );
 }
 
+/// Verify `KindId` preserves every bit of its raw `u16` id.
 #[kani::proof]
-#[kani::unwind(5)]
-fn verify_kind_index_is_bounded() {
+#[kani::unwind(1)]
+fn verify_kind_id_round_trips_full_u16_domain() {
     let raw: u16 = kani::any();
     let kind = KindId::new(raw);
-
     kani::assert(kind.get() == raw, "KindId must preserve the lowered index");
+}
+
+/// Verify traversal does not observe nodes beyond the configured depth.
+///
+/// Six unwind steps cover five node visits and the final termination check.
+/// The child loop needs at most three steps (two children plus exhaustion),
+/// including its iterator helpers. Fixed kinds keep this proof focused on
+/// depth; the production `BTreeMap` is exercised by runtime and property tests.
+/// Unwinding assertions remain enabled.
+#[kani::proof]
+#[kani::unwind(6)]
+fn verify_kind_counts_stop_at_max_depth() {
+    let kind = KindId::new(1);
     let tree = bounded_tree(
         kind,
         BranchSpec {
-            kind: symbolic_kind(),
-            leaf_kind: symbolic_kind(),
+            kind,
+            leaf_kind: kind,
         },
         BranchSpec {
-            kind: symbolic_kind(),
-            leaf_kind: symbolic_kind(),
+            kind,
+            leaf_kind: kind,
         },
         true,
     );
-    let beyond_bound = Depth::new(KANI_AST_MAX_DEPTH as u16 + 1);
+    let mut depth_counts = [0_u8; KANI_AST_MAX_DEPTH + 1];
+    let mut observed_beyond_max_depth = false;
+    for_each_node_at_depth(tree.root(), |_, depth| {
+        let depth_index = usize::from(depth.get());
+        if depth_index < depth_counts.len() {
+            depth_counts[depth_index] = depth_counts[depth_index].saturating_add(1);
+        } else {
+            observed_beyond_max_depth = true;
+        }
+    });
     kani::assert(
-        kind_counts(&tree).count(kind, beyond_bound) == 0,
+        !observed_beyond_max_depth,
         "bounded trees must contain no nodes beyond KANI_AST_MAX_DEPTH",
+    );
+    kani::assert(
+        depth_counts[0] == 1
+            && depth_counts[1] == 2
+            && depth_counts[2] == 2
+            && depth_counts[3] == 0,
+        "the depth-only fixture must count all five nodes",
     );
 }
 
+/// Verify `KindId` equality and ordering over the documented small alphabet.
 #[kani::proof]
-#[kani::unwind(5)]
-fn verify_count_accumulation_is_order_independent_bounded() {
-    let root_kind = symbolic_kind();
-    let left_branch_kind = symbolic_kind();
-    let right_branch_kind = symbolic_kind();
-    let left_leaf_kind = symbolic_kind();
-    let right_leaf_kind = symbolic_kind();
-    let forward = bounded_tree(
-        root_kind,
-        BranchSpec {
-            kind: left_branch_kind,
-            leaf_kind: left_leaf_kind,
-        },
-        BranchSpec {
-            kind: right_branch_kind,
-            leaf_kind: right_leaf_kind,
-        },
-        true,
-    );
-    let reverse = bounded_tree(
-        root_kind,
-        BranchSpec {
-            kind: left_branch_kind,
-            leaf_kind: left_leaf_kind,
-        },
-        BranchSpec {
-            kind: right_branch_kind,
-            leaf_kind: right_leaf_kind,
-        },
-        false,
-    );
-    let query_kind = symbolic_kind();
-    let query_depth = Depth::new(kani::any());
-    kani::assume(query_depth.get() <= KANI_AST_MAX_DEPTH as u16);
+#[kani::unwind(1)]
+fn verify_kind_id_equality_and_order_cover_small_alphabet() {
+    let root_kind = symbolic_kind_from_small_alphabet();
+    let left_kind = symbolic_kind_from_small_alphabet();
+    let right_kind = symbolic_kind_from_small_alphabet();
+    let query_kind = symbolic_kind_from_small_alphabet();
 
-    kani::assert(
-        kind_counts(&forward).count(query_kind, query_depth)
-            == kind_counts(&reverse).count(query_kind, query_depth),
-        "kind-count contribution folds must ignore sibling visit order for the bounded tree",
-    );
+    assert_kind_comparisons_match_raw(root_kind, left_kind);
+    assert_kind_comparisons_match_raw(root_kind, right_kind);
+    assert_kind_comparisons_match_raw(root_kind, query_kind);
+    assert_kind_comparisons_match_raw(left_kind, right_kind);
+    assert_kind_comparisons_match_raw(left_kind, query_kind);
+    assert_kind_comparisons_match_raw(right_kind, query_kind);
 }

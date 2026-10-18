@@ -4,9 +4,9 @@ use super::{HarnessError, run_ui_test, run_with_runner};
 use camino::{Utf8Path, Utf8PathBuf};
 use rstest::rstest;
 use std::env;
-use whitaker_common::test_support::{EnvTestGuard, env_test_guard, with_env_var};
 #[cfg(windows)]
 use whitaker_common::test_support::with_env_var_removed;
+use whitaker_common::test_support::{EnvTestGuard, env_test_guard, with_env_var};
 
 #[rstest]
 #[case(

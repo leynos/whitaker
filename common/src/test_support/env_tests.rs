@@ -117,7 +117,9 @@ fn with_env_var_removed_restores_the_previous_value() {
 fn with_env_var_restores_an_absent_value_after_a_panic() {
     with_env_var_removed(SET_PANIC_KEY, || {
         let result = catch_unwind(AssertUnwindSafe(|| {
-            with_env_var(SET_PANIC_KEY, "temporary", || panic!("intentional test panic"));
+            with_env_var(SET_PANIC_KEY, "temporary", || {
+                panic!("intentional test panic")
+            });
         }));
 
         assert!(result.is_err());
@@ -231,14 +233,19 @@ fn scoped_mutations_allow_nested_environment_setup() {
 fn locale_scopes_restore_set_and_removed_values() {
     with_env_var("DYLINT_LOCALE", "en-GB", || {
         with_locale(Some("cy"), || {
-            assert_eq!(std::env::var_os("DYLINT_LOCALE").as_deref(), Some(OsStr::new("cy")));
+            assert_eq!(
+                std::env::var_os("DYLINT_LOCALE").as_deref(),
+                Some(OsStr::new("cy"))
+            );
         });
         assert_eq!(
             std::env::var_os("DYLINT_LOCALE").as_deref(),
             Some(OsStr::new("en-GB"))
         );
 
-        with_locale(None, || assert!(std::env::var_os("DYLINT_LOCALE").is_none()));
+        with_locale(None, || {
+            assert!(std::env::var_os("DYLINT_LOCALE").is_none())
+        });
         assert_eq!(
             std::env::var_os("DYLINT_LOCALE").as_deref(),
             Some(OsStr::new("en-GB"))

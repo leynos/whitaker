@@ -475,6 +475,20 @@ invariance over equal contribution multisets. Green follow-up gates:
   `--no-default-features`. Normal library builds keep the parser feature on by
   default; Kani verifies only parser-independent AST domain code and bounded
   synthetic `NormalizedTree` values.
+- Observation (2026-10-18): the five-node depth harness failed its unwinding
+  assertion at the child loop (`features.rs:216`) with `#[kani::unwind(5)]`;
+  unwinding assertions stayed enabled. With the correct bound of six, all 569
+  checks passed (9 unreachable), verification took 2.34 seconds, wall time was
+  6 seconds, and peak memory was 151 MiB under a 4 GiB cap. The first run's
+  peak was 159 MiB over 20 seconds. Logs:
+  `/tmp/kani-depth-five-whitaker-pr365.out` and
+  `/tmp/kani-depth-six-whitaker-pr365.out`.
+- Observation (2026-10-18): the full clone-detector Kani run was also bounded
+  per proof (8 GiB, 600 seconds). Its first four harnesses passed, then
+  `verify_min_hasher_sketch_is_deterministic` reached the 8 GiB cap and was
+  killed after 357 seconds. The limited runner reported `oom-kill` and marked
+  the proof inconclusive; no pass was recorded. Log:
+  `/tmp/kani-clone-detector-whitaker-pr365-limited.out`.
 - Observation: an intermediate Stage C CodeRabbit follow-up raised two
   documentation concerns about the build-script module purpose and the
   test-only visibility of `FNV_PRIME`. The next completed review raised five
@@ -1229,21 +1243,23 @@ attempts, escalate (Tolerances) — the fallback is Kani + proptest only, with a
 Decision Log entry, and the bounded Kani order-independence harness must then
 stand alone as the order-independence evidence (not a coverage hole).
 
-Kani (`src/ast/kani.rs`, `#[cfg(kani)]`): harnesses over a bounded synthetic
-`NormalizedTree`/candidate set, never the parser. Pin the bounded tree shape
-(depth ≤ 3, ≤ 2 children) with a `const _` assertion tying the unwind bound to
-it — note the recursive state space is `branching^depth`, unlike the existing
-flat `LshIndex` harnesses; the resolved bound is `KANI_AST_UNWIND = 5`
-(`KANI_AST_MAX_DEPTH + 2`), applied per-harness via `#[kani::unwind(5)]`.
-Harnesses: `verify_smallest_covering_node_selects_minimal_range` (over the
-factored `cover::select_smallest_covering`, with `kani::assume(n >= 2)` so the
-minimality postcondition has something to bite on: result covers the target and
-no covering candidate is strictly smaller); a **separate**
-`verify_smallest_covering_root_fallback` for the `n == 0`/no-cover path (do not
-fold it into the minimality harness, where it would be vacuous);
-`verify_kind_index_is_bounded`; and a cheap
-`verify_count_accumulation_is_order_independent_bounded`. Register the harness
-names in `run_clone_detector_harnesses` in `scripts/run-kani.sh`.
+Kani (`crates/whitaker_clones_core/src/ast/kani.rs`, `#[cfg(kani)]`): harnesses
+over bounded synthetic `NormalizedTree`/candidate values, never the parser. The
+five-node tree has at most two children per node. Its depth-traversal bound is
+six: five visits plus the terminating loop check. The depth-only proof uses
+`#[kani::unwind(6)]`, with unwinding assertions enabled. The full-range
+`KindId` round trip has its own `#[kani::unwind(1)]` proof. The depth-only
+proof uses fixed kinds and a fixed-size tally, avoiding map internals. A scalar
+equality/order proof uses four independent two-bit labels for the root, left
+subtree, right subtree, and query; this alphabet covers every equality
+partition and relative ordering of those four roles without making map
+operations symbolic. Experiments that called production `kind_counts` on a
+symbolic and then a fixed-key five-node tree both timed out at ten minutes, at
+3,381 MiB and 3,915 MiB peak memory respectively. They are inconclusive, not
+passes, so Kani leaves production-map internals to runtime tests and proptest.
+Every harness runs in an 8 GiB process-tree scope with a ten-minute timeout;
+timeout, resource exhaustion, or missing peak measurement is unsuccessful or
+inconclusive. Register the harness names in `scripts/run-kani.sh`.
 **Mutation-validate as a matrix** (review finding 🟡-3): each deliberate
 mutation — `<=`→`<` in the minimality compare, *and* dropping the covering
 check — must be shown to fail **at least one named harness**, recording which
@@ -1392,9 +1408,13 @@ proves success.
 
 - Stage 0 rustc: `rustc 1.98.0-nightly (57d06900f 2026-05-27)`.
 - Stage F Kani bounds: the AST harnesses use a synthetic tree with
-  `KANI_AST_MAX_DEPTH = 3`, `KANI_AST_MAX_CHILDREN = 2`, and
-  `KANI_AST_UNWIND = 5`; a `const _` assertion ties the unwind bound to
-  `KANI_AST_MAX_DEPTH + 2`.
+  `KANI_AST_MAX_DEPTH = 3`, `KANI_AST_MAX_CHILDREN = 2`, and five nodes. The
+  depth traversal uses `KANI_AST_UNWIND = 6` (five visits plus termination); a
+  `const _` assertion ties this bound to `KANI_AST_NODE_COUNT + 1`. The full
+  `u16` round trip is a separate unwind-1 proof, while equality/order checks
+  use a four-value scalar alphabet. Production `BTreeMap` construction stays
+  outside Kani after bounded symbolic and fixed-key map proofs each timed out;
+  runtime unit tests and `proptest` cover that accumulator.
 - Stage F Verus trust bridge: `verus/clone_detector_ast_features.rs` proves
   the exact count accumulator algebra for a supplied multiset of
   `(kind, depth)` contributions; Rust unit tests and `proptest` cover the

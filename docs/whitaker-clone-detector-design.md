@@ -698,7 +698,24 @@ cargo whitaker clones report --in target/whitaker/clones.refined.sarif --html
    sibling-order independence for count and production accumulation, leaf
    normalization, and parser-version drift. Kani verifies bounded AST
    span-cover selection and bounded AST feature invariants over synthetic
-   trees. Verus proves the contribution-count accumulator algebra for a
+   trees. The full-range `KindId` round trip is separate from the five-node
+   depth-count proof. That harness uses fixed kinds and checks the shared
+   preorder depth visitor with a four-slot array tally, avoiding production
+   `BTreeMap` internals while proving the five-node depth counts. Its unwind
+   bound of six covers five node visits and the terminating loop check; each
+   node has at most two children, and child iteration fits within that bound. A
+   scalar proof uses four independent two-bit kind labels for the root, left
+   subtree, right subtree, and query. Those four values cover every equality
+   partition and relative ordering among the roles; the proof checks both `Eq`
+   and `Ord` against the raw `u16` values and contains no loops or maps.
+   Bounded Kani proofs intentionally leave production `BTreeMap` construction
+   to runtime tests: both symbolic and fixed-key five-node map experiments
+   exceeded their ten-minute bounds, with peak memory of 3,381 MiB and 3,915
+   MiB respectively. Unit tests and proptest cover sibling-order independence
+   for the production traversal and `BTreeMap` accumulator. Each clone-detector
+   harness runs with an 8 GiB process-tree memory cap and ten-minute timeout;
+   timeout, resource exhaustion, or missing peak measurement is unsuccessful or
+   inconclusive. Verus proves the contribution-count accumulator algebra for a
    supplied multiset; it does not claim to verify parser traversal or the
    production Rust implementation directly.
 
