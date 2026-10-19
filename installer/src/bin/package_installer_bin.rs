@@ -127,32 +127,18 @@ mod tests {
         assert_eq!(cli.output_dir, PathBuf::from("/tmp/dist"));
     }
 
-    #[test]
-    fn cli_rejects_missing_crate_version() {
-        Cli::try_parse_from([
-            "whitaker-package-installer",
-            "--target",
-            "x86_64-unknown-linux-gnu",
-            "--binary-path",
-            "/tmp/bin",
-            "--output-dir",
-            "/tmp/dist",
-        ])
-        .expect_err("expected clap to reject missing --crate-version");
-    }
+    #[rstest]
+    #[case::missing_crate_version("--crate-version")]
+    #[case::missing_binary_path("--binary-path")]
+    fn cli_rejects_missing_required_option(#[case] missing_option: &str) {
+        let mut args = BASE_ARGS.to_vec();
+        let option_index = args
+            .iter()
+            .position(|argument| *argument == missing_option)
+            .expect("required option should be present in base arguments");
+        args.drain(option_index..=option_index + 1);
 
-    #[test]
-    fn cli_rejects_missing_binary_path() {
-        Cli::try_parse_from([
-            "whitaker-package-installer",
-            "--crate-version",
-            "0.2.1",
-            "--target",
-            "x86_64-unknown-linux-gnu",
-            "--output-dir",
-            "/tmp/dist",
-        ])
-        .expect_err("expected clap to reject missing --binary-path");
+        Cli::try_parse_from(args).expect_err("clap should reject a missing required option");
     }
 
     #[rstest]
