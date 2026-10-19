@@ -95,7 +95,7 @@ an integrated suite and carries its own source and tests.
 
 ### `vendor/`
 
-The `vendor/` directory contains the local `dylint_testing` 6.0.1 patch. Its
+The `vendor/` directory contains a local patch to `dylint_testing` 6.0.1. Its
 example-target parser recognizes compiler commands with Cargo wrappers, so UI
 tests can preserve configured wrappers and compiler admission.
 

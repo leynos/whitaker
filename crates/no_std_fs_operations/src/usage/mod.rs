@@ -26,7 +26,7 @@ impl StdFsUsage {
     /// let usage = StdFsUsage::new(String::from("std::fs::read"));
     /// assert_eq!(usage.operation(), "std::fs::read");
     /// ```
-    pub fn new(operation: String) -> Self {
+    pub const fn new(operation: String) -> Self {
         Self { operation }
     }
 

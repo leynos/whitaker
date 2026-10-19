@@ -6,8 +6,6 @@
 //! This module centralizes input validation so lint crates can depend on a
 //! small helper rather than repeat the same checks.
 
-#[cfg(windows)]
-use std::env;
 use std::fmt;
 
 use camino::{Utf8Path, Utf8PathBuf};
@@ -15,8 +13,6 @@ use camino::{Utf8Path, Utf8PathBuf};
 mod toolchain;
 
 use self::toolchain::{CrateName, ensure_toolchain_library};
-#[cfg(windows)]
-use whitaker_common::test_support::with_env_var;
 
 /// Errors produced when preparing or executing Dylint UI tests.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -164,7 +160,7 @@ pub fn run_with_runner(
     let crate_name_owned =
         CrateName::try_from(crate_name).map_err(|_| HarnessError::EmptyCrateName)?;
     let crate_name_str = crate_name_owned.as_str().to_owned();
-    with_vcpkg_root(|| {
+    with_runner_env(|| {
         ensure_toolchain_library(&crate_name_owned)?;
 
         match runner(&crate_name_str, directory.as_ref()) {
@@ -208,28 +204,38 @@ pub fn run_ui_test(
     });
 }
 
-/// Runs `callback` with the vcpkg environment required by the UI runner.
+/// Runs `callback` with the environment `run_with_runner` requires.
 ///
 /// On Windows, one additional environment variable needs temporary adjustment:
 ///
 /// - `VCPKG_ROOT`: must be set to `C:\vcpkg` when that directory exists and the
 ///   variable is otherwise absent, so downstream `cargo` invocations resolve vcpkg.
 ///
-/// The scoped helper restores the previous value after `callback` returns or
-/// panics. The runner preserves `RUSTC_WRAPPER` so nested Cargo builds retain
-/// compiler admission and the vendored `dylint_testing` can decode wrapped
-/// compiler commands.
+/// The runner preserves `RUSTC_WRAPPER` so Cargo continues to use the configured
+/// compiler-admission and cache wrappers.
+///
+/// The scoped mutations are serialized by `temp_env`'s re-entrant global lock,
+/// so runner closures that perform their own scoped environment setup nest
+/// without deadlocking, and every prior value is restored when the callback
+/// returns or panics.
+fn with_runner_env<R>(callback: impl FnOnce() -> R) -> R {
+    with_vcpkg_root(callback)
+}
+
+/// Add `VCPKG_ROOT` for runners that need a local Windows vcpkg installation.
 #[cfg(windows)]
 fn with_vcpkg_root<R>(callback: impl FnOnce() -> R) -> R {
+    use whitaker_common::test_support::with_env_var;
+
     let candidate = Utf8Path::new(r"C:\vcpkg");
-    if candidate.is_dir() && env::var_os("VCPKG_ROOT").is_none() {
+    if candidate.is_dir() && std::env::var_os("VCPKG_ROOT").is_none() {
         with_env_var("VCPKG_ROOT", candidate.as_std_path(), callback)
     } else {
         callback()
     }
 }
 
-/// Runs `callback` unchanged on platforms that do not need vcpkg setup.
+/// Run the callback unchanged on platforms without a vcpkg environment.
 #[cfg(not(windows))]
 fn with_vcpkg_root<R>(callback: impl FnOnce() -> R) -> R {
     callback()

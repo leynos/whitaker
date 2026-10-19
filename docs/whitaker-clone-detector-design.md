@@ -611,36 +611,32 @@ cargo whitaker clones report --in target/whitaker/clones.refined.sarif --html
    the public set-semantics contract from 7.2.2 while avoiding verifier-heavy
    `BTreeSet` internals in the bounded Kani proof.
 
-2. **Kani verifies real `MinHasher::sketch` calls with a private proof seam.**
-   The harnesses use a `cfg(kani)`-only `MinHasher::from_seed_for_kani`
-   constructor so the proof does not spend its unwind bound constructing the
-   128-seed stream. Successful harnesses still call the production
-   `MinHasher::sketch` body; only the seed fixture and fixed-width signature
-   construction are specialized for Kani.
+2. **Kani checks bounded MinHash seams, not full-signature properties.** The
+   empty-input harness calls `MinHasher::sketch`; the lane-minimum harness calls
+   `minimum_mixed_hash` for fixed mixed hashes of `0` and `u64::MAX`; and the
+   normalization harness checks sorting and deduplication through
+   `unique_hashes` for four fixed fingerprints. These proofs do not establish
+   non-empty full-signature determinism or general duplicate-hash insensitivity.
 
-3. **The bounded proof shape is deliberately split by invariant.** The empty
-   input harness checks that `MinHasher::sketch(&[])` returns
-   `IndexError::EmptyFingerprintSet`. The determinism harness sketches the same
-   one-fingerprint set twice and proves equality for an arbitrary symbolic
-   signature lane. The duplicate-hash harness keeps the retained hash symbolic
-   over a bounded `u8` domain and proves that repeating that hash at a distinct
-   range does not change the first signature lane.
+3. **Runtime tests carry broader MinHash properties.** Unit and BDD tests still
+   cover deterministic full signatures, reordered input, empty input and
+   duplicate retained hashes. The bounded Kani seams retain the properties
+   whose proof state spaces have explicit, measured resource bounds.
 
 4. **Ordinary tests carry the broader regression surface.** Unit tests and the
    `rstest-bdd` MinHash/LSH scenario cover full-signature equality,
-   representative full-width `u64` hashes, reordered inputs, empty input, and
-   duplicate retained hashes. The Kani harnesses provide exhaustive bounded
-   verification for the proof-shaped state spaces rather than replacing those
-   runtime regression tests.
+   representative full-width `u64` hashes, reordered inputs, empty input and
+   duplicate retained hashes. Kani verifies only its named bounded
+   propositions; it does not stand in for these runtime regression tests.
 
 ## Implementation decisions (7.2.8)
 
-1. **Bounded `LshIndex` invariants are verified with Kani.** The clone-detector
-   Kani harness set now checks four candidate-generation invariants: repeated
-   insertion of one fragment emits no self-pair, reversed lexical insertion
-   still emits the canonical pair, two fragments colliding in two bands emit
-   one deduplicated pair, and a bounded three-fragment scenario is independent
-   of insertion order.
+1. **Bounded candidate-generation scenarios use a Kani-specific model.** Four
+   harnesses check no self-pairs, canonical pair ordering, shared-band
+   scenarios, and insertion-order independence. In `#[cfg(kani)]` builds,
+   `candidate_pair_summary_for_kani` compares recorded fragment pairs directly
+   and emits each pair once when any recorded band matches. These checks do not
+   execute production bucket enumeration or its cross-band set deduplication.
 
 2. **Production candidate generation remains B-tree backed.** Normal builds
    still store LSH buckets in `BTreeMap<BandBucketKey, BTreeSet<FragmentId>>`
@@ -648,12 +644,15 @@ cargo whitaker clones report --in target/whitaker/clones.refined.sarif --html
    the public runtime API. Existing unit tests and `rstest-bdd` scenarios keep
    covering that public path.
 
-3. **The Kani proof uses private fixed-size logs.** `#[cfg(kani)]` builds
+3. **The Kani model uses private fixed-size logs.** `#[cfg(kani)]` builds
    compile out production B-tree storage and record inserted fragments in a
-   four-slot insertion log with compact two-band keys, plus a six-slot bounded
-   pair log. This keeps the proof focused on the LSH transition and
-   `CandidatePair::new` policy instead of allocator, destructor, and
-   tree-balancing internals in the standard library.
+   four-slot insertion log with compact two-band keys. The separate
+   `candidate_pair_summary_for_kani` routine checks all recorded fragment pairs
+   for any shared band, then applies `CandidatePair::new` and records results
+   in a six-slot pair log. It is a bounded candidate-generation model, not
+   execution of production `candidate_pairs` or `add_bucket_pairs`; runtime
+   tests and BDD scenarios cover those production paths. This boundary avoids
+   allocator, destructor, and tree-balancing internals in the standard library.
 
 4. **Unwind bounds are tied to the proof representation.** The new LSH
    harnesses use `#[kani::unwind(7)]`, one greater than the six-slot bounded
@@ -698,7 +697,24 @@ cargo whitaker clones report --in target/whitaker/clones.refined.sarif --html
    sibling-order independence for count and production accumulation, leaf
    normalization, and parser-version drift. Kani verifies bounded AST
    span-cover selection and bounded AST feature invariants over synthetic
-   trees. Verus proves the contribution-count accumulator algebra for a
+   trees. The full-range `KindId` round trip is separate from the five-node
+   depth-count proof. That harness uses fixed kinds and checks the shared
+   preorder depth visitor with a four-slot array tally, avoiding production
+   `BTreeMap` internals while proving the five-node depth counts. Its unwind
+   bound of six covers five node visits and the terminating loop check; each
+   node has at most two children, and child iteration fits within that bound. A
+   scalar proof uses four independent two-bit kind labels for the root, left
+   subtree, right subtree, and query. Those four values cover every equality
+   partition and relative ordering among the roles; the proof checks both `Eq`
+   and `Ord` against the raw `u16` values and contains no loops or maps.
+   Bounded Kani proofs intentionally leave production `BTreeMap` construction
+   to runtime tests: both symbolic and fixed-key five-node map experiments
+   exceeded their ten-minute bounds, with peak memory of 3,381 MiB and 3,915
+   MiB respectively. Unit tests and proptest cover sibling-order independence
+   for the production traversal and `BTreeMap` accumulator. Each clone-detector
+   harness runs with an 8 GiB process-tree memory cap and ten-minute timeout;
+   timeout, resource exhaustion, or missing peak measurement is unsuccessful or
+   inconclusive. Verus proves the contribution-count accumulator algebra for a
    supplied multiset; it does not claim to verify parser traversal or the
    production Rust implementation directly.
 
@@ -708,6 +724,18 @@ cargo whitaker clones report --in target/whitaker/clones.refined.sarif --html
    ordinary tests for broad behavioural coverage, Kani for bounded execution of
    selected Rust code, and Verus for sidecar proofs with explicit trust
    boundaries.
+
+7. **Lowering budgets include every emitted normalized node.** The per-candidate
+   `MAX_AST_NODES` limit counts parser syntax nodes and non-trivia token
+   leaves; token-heavy macro bodies cannot bypass the allocation bound. The
+   adapter retains its pruned covering-path traversal, while its coverage and
+   minimum-width choice use the same parser-independent predicate as the Kani
+   selector harnesses.
+
+8. **The parser pin guard accepts one complete exact version.** The build
+   script's `semver::Version` parse rejects partial `=major` or `=major.minor`
+   requirements and comma-separated comparators before deriving
+   `PARSER_SCHEMA_VERSION`.
 
 ## Minimal code skeletons (selected)
 

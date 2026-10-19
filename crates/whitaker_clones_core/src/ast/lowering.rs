@@ -10,6 +10,7 @@ use ra_ap_syntax::{
 };
 use tracing::{debug, error, warn};
 
+use super::cover::{candidate_covers_target, should_select_covering_candidate};
 use super::metrics::record_lower_span_metrics;
 use super::{AstError, AstResult, ByteSpan, KindId, LeafClass, NormalizedNode, NormalizedTree};
 
@@ -80,8 +81,6 @@ pub fn lower_span(file_text: &str, span: ByteSpan) -> AstResult<NormalizedTree> 
 fn lower_span_inner(file_text: &str, span: ByteSpan) -> (AstResult<NormalizedTree>, bool) {
     let mut recovered = false;
     let result = (|| -> AstResult<NormalizedTree> {
-        // Re-validation returns a span with identical offsets, so the original
-        // binding can keep serving later uses without a shadowing rebind.
         ByteSpan::new(file_text, span.start(), span.end()).map_err(|error| {
             trace_ast_error(
                 error,
@@ -170,24 +169,23 @@ fn validate_covering_node_budget(span: ByteSpan, depth: usize, node_count: usize
 }
 
 fn node_covers_target(node: &SyntaxNode, target: &Range<u32>) -> bool {
-    let range = range_to_u32(node.text_range());
-    range.start <= target.start && range.end >= target.end
+    candidate_covers_target(&range_to_u32(node.text_range()), target)
 }
 
-/// Records `node` as the current best when it is narrower than the incumbent.
+/// Records `node` as the current best when it satisfies the shared selection rule.
 ///
-/// Callers must confirm `node` covers the target before calling this; the
-/// smallest such node encountered wins, and the strict `<` comparison keeps the
-/// first of any equal-width covering nodes (the shallowest, given pre-order
-/// descent).
-fn update_smallest_covering_node(selected: &mut Option<(SyntaxNode, u32)>, node: &SyntaxNode) {
+/// The parser-independent range predicate is also used by
+/// [`super::select_smallest_covering`], which Kani verifies without parsing.
+fn update_smallest_covering_node(
+    selected: &mut Option<(SyntaxNode, u32)>,
+    node: &SyntaxNode,
+    target: &Range<u32>,
+) {
     let range = range_to_u32(node.text_range());
     let width = range.end - range.start;
-    let is_strictly_smaller = selected
-        .as_ref()
-        .is_none_or(|(_, selected_width)| width < *selected_width);
+    let selected_width = selected.as_ref().map(|(_, selected_width)| *selected_width);
 
-    if is_strictly_smaller {
+    if should_select_covering_candidate(&range, target, selected_width) {
         *selected = Some((node.clone(), width));
     }
 }
@@ -222,7 +220,7 @@ fn select_covering_node(root: &SyntaxNode, span: ByteSpan) -> AstResult<SyntaxNo
         if !node_covers_target(&node, &target) {
             continue;
         }
-        update_smallest_covering_node(&mut selected, &node);
+        update_smallest_covering_node(&mut selected, &node, &target);
 
         pending.extend(
             node.children()
@@ -251,12 +249,13 @@ fn select_covering_node(root: &SyntaxNode, span: ByteSpan) -> AstResult<SyntaxNo
 struct LoweringLimits {
     /// Maximum syntax depth permitted during lowering.
     maximum_depth: usize,
-    /// Maximum syntax nodes permitted in the lowered subtree.
+    /// Maximum normalized nodes, including non-trivia token leaves, permitted
+    /// in the lowered subtree.
     maximum_nodes: usize,
     /// Requested candidate span, reported when the subtree is unparsable.
     span: ByteSpan,
-    /// Nodes lowered so far, accumulated across the recursive descent.
-    node_count: Cell<usize>,
+    /// Normalized nodes emitted so far, including token leaves.
+    lowered_node_count: Cell<usize>,
 }
 
 impl LoweringLimits {
@@ -269,15 +268,12 @@ impl LoweringLimits {
             maximum_depth,
             maximum_nodes: MAX_AST_NODES,
             span,
-            node_count: Cell::new(0),
+            lowered_node_count: Cell::new(0),
         }
     }
 
-    /// Lowers `node` while rejecting any parser `ERROR` node or token in the
-    /// same descent, so error detection needs no separate subtree walk. The
-    /// running node count bounds the lowered subtree so an oversized selection
-    /// cannot turn a single parse into unbounded lowering work.
-    fn lower(&self, node: &SyntaxNode, depth: usize) -> AstResult<NormalizedNode> {
+    /// Reserve one normalized node at `depth`, enforcing both lowering budgets.
+    fn claim_node(&self, depth: usize) -> AstResult<()> {
         if depth > self.maximum_depth {
             error!(
                 start = self.span.start(),
@@ -290,20 +286,30 @@ impl LoweringLimits {
                 limit: self.maximum_depth,
             });
         }
-        let lowered_nodes = self.node_count.get();
+        let lowered_nodes = self.lowered_node_count.get();
         if lowered_nodes == self.maximum_nodes {
             error!(
                 start = self.span.start(),
                 end = self.span.end(),
-                node_count = lowered_nodes,
+                normalized_node_count = lowered_nodes,
                 limit = self.maximum_nodes,
-                "AST lowering exceeded the node budget"
+                "AST lowering exceeded the normalized-node budget"
             );
             return Err(AstError::TreeTooLarge {
                 limit: self.maximum_nodes,
             });
         }
-        self.node_count.set(lowered_nodes + 1);
+        self.lowered_node_count.set(lowered_nodes + 1);
+        Ok(())
+    }
+
+    /// Lowers `node` while rejecting any parser `ERROR` node or token in the
+    /// same descent, so error detection needs no separate subtree walk. The
+    /// running normalized-node count bounds the lowered subtree, including
+    /// token leaves, so an oversized selection cannot turn a parse into
+    /// unbounded lowering work.
+    fn lower(&self, node: &SyntaxNode, depth: usize) -> AstResult<NormalizedNode> {
+        self.claim_node(depth)?;
         if node.kind() == SyntaxKind::ERROR {
             return Err(self.unparsable_span());
         }
@@ -318,6 +324,7 @@ impl LoweringLimits {
                     return Err(self.unparsable_span());
                 }
                 NodeOrToken::Token(token) if !token.kind().is_trivia() => {
+                    self.claim_node(depth + 1)?;
                     children.push(lower_token(&token));
                 }
                 NodeOrToken::Token(_) => {}

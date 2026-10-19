@@ -73,6 +73,31 @@ fn build_script_rejects_a_loose_workspace_parser_pin(
 }
 
 #[rstest]
+#[case::partial_major("=1")]
+#[case::partial_minor("=1.2")]
+#[case::additional_comparator("=1.2.3, <1.2.4")]
+fn build_script_rejects_incomplete_or_ranged_parser_pins(
+    #[case] requirement: &str,
+) -> Result<(), Box<dyn Error>> {
+    let fixture = build_fixture(Some(requirement))?;
+    let output = cargo_check(&fixture)?;
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    if output.status.success() {
+        return Err(
+            format!("non-exact parser pin `{requirement}` must fail the build script").into(),
+        );
+    }
+    if !stderr.contains("must be exact-pinned") {
+        return Err(format!(
+            "build-script failure must explain the parser-pin rule for `{requirement}`:\n{stderr}"
+        )
+        .into());
+    }
+    Ok(())
+}
+
+#[rstest]
 fn build_script_rejects_a_missing_workspace_parser_pin(
     #[with(None)] build_fixture: Result<BuildFixture, Box<dyn Error>>,
 ) -> Result<(), Box<dyn Error>> {
@@ -140,6 +165,7 @@ fn build_fixture(
                 "[build-dependencies]\n",
                 "camino = \"1.2.1\"\n",
                 "cap-std = {{ version = \"4.0.2\", features = [\"fs_utf8\"] }}\n",
+                "semver = \"1.0.28\"\n",
                 "toml = \"1.1.2\"\n",
             ),
             FIXTURE_PACKAGE = FIXTURE_PACKAGE,

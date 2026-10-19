@@ -14,11 +14,12 @@ default-filter = "not (binary(behaviour_toolchain) | binary(behaviour_cli) | kin
 # cancels the run and discards the log that would have named the test.
 slow-timeout = { period = "300s", terminate-after = 1, grace-period = "5s" }
 # The whole run's budget. It sits above the largest per-test allowance below,
-# so a test may spend its budget in full. The previous 75-minute run reached
-# 1,840 of 1,842 tests before the nested SARIF API contract was still compiling.
-# Ten more minutes give that remaining trybuild work room to finish.
+# so a test may spend its budget in full. The previous 85-minute run reached
+# 1,843 of 1,860 tests before the nested no-unwrap example build was cancelled;
+# 17 tests remained unrun. The 120-minute budget gives that cold build and the
+# rest of the suite room to finish after shared Cargo and compiler queues.
 # See "Test timeouts: four tiers, outermost last" in the developers' guide.
-global-timeout = "85m"
+global-timeout = "120m"
 
 # CI profile — run the full suite including slow installer tests.
 [profile.ci]
@@ -26,12 +27,13 @@ default-filter = "not kind(example)"
 # This profile is what the Windows lane runs, and it had no base per-test
 # bound: nothing here terminated an ordinary hung test, whichever profile
 # ran it. nextest does consult `[[profile.default.overrides]]` when this
-# profile is selected, so the toolchain, dylint, and nested-Cargo allowances
-# below were already in force. They are restated here because this profile
-# includes the binaries they exist for, and the CI budgets belong where a
-# reader of this profile finds them.
+# profile is selected, so the toolchain and dylint allowances below were
+# already in force; they are restated as this profile's own because this
+# is the profile that includes the binaries they exist for, and the
+# budgets that govern CI belong where a reader of this profile finds
+# them.
 slow-timeout = { period = "300s", terminate-after = 1, grace-period = "5s" }
-global-timeout = "85m"
+global-timeout = "120m"
 
 [[profile.ci.overrides]]
 # The toolchain auto-install behavioural tests may download and install a
@@ -42,46 +44,46 @@ test-group = "serial-toolchain-installs"
 
 [[profile.ci.overrides]]
 # Dylint UI harnesses build lint libraries; the default profile gives them
-# the same allowance below. `trybuild` compile-contract binaries belong
-# here too: they invoke a nested cargo build, so they cost what a build
-# costs rather than what a test costs. The API contract with repeated nested
-# Cargo builds has its own longer allowance below. `whitaker-installer`'s
-# binary is named `ui` but its test is not, so the `(binary(ui) & test(=ui))`
+# the same allowance below. Compile-contract tests use the dedicated
+# 60-minute override below.
+# `whitaker-installer`'s binary is
+# named `ui` but its test is not, so the `(binary(ui) & test(=ui))`
 # clause does not reach it; it measured 235 s and timed out at 300 s on
 # the Windows lane under the base allowance. A full workspace run also
 # reached 9m56 in the trybuild harness while compiler admission queued.
 # Keep that nested build bounded while leaving room to finish under contention.
-filter = "test(driver::ui::) | test(tests::ui::) | test(ui::ui) | test(sha2_0_11_pre_migration_patterns_fail_to_compile) | test(trybuild_fixtures_compile_without_diagnostics) | test(renamed_common_apis_are_public_and_legacy_names_stay_removed) | test(renamed_sarif_api_is_public_and_legacy_names_stay_removed) | (binary(ui) & test(=ui))"
+filter = "test(driver::ui::) | test(tests::ui::) | test(ui::ui) | (binary(ui) & test(=ui))"
 slow-timeout = { period = "20m", terminate-after = 1, grace-period = "5s" }
 test-group = "serial-dylint-ui"
 
 [[profile.ci.overrides]]
-# This API contract compiles pass/fail fixtures through nested Cargo. The
-# general UI timeout retried it, restarting compilation after cache-lock waits.
-# Give one attempt room to finish without repeating the same queued build.
-filter = "test(normalize_settings_is_public_and_the_legacy_name_stays_removed)"
-slow-timeout = { period = "45m", terminate-after = 1, grace-period = "5s" }
+# Every discovered trybuild test builds fixtures through nested Cargo. Keep
+# them under one build-sized allowance and avoid retries that repeat the work.
+filter = "test(dependency_check_result_contract_is_public) | test(fixture_expansion_lint_attribute_contract) | test(normalize_settings_is_public_and_the_legacy_name_stays_removed) | test(renamed_common_apis_are_public_and_legacy_names_stay_removed) | test(renamed_sarif_api_is_public_and_legacy_names_stay_removed) | test(sha2_0_11_pre_migration_patterns_fail_to_compile) | test(trybuild_fixtures_compile_without_diagnostics)"
+slow-timeout = { period = "60m", terminate-after = 1, grace-period = "5s" }
 test-group = "serial-dylint-ui"
+retries = 0
 
 [[profile.ci.overrides]]
-# The macro crate's trybuild contract builds fixture crates too, so it needs a
-# build-sized timeout and the same serial target-directory protection.
-filter = "test(fixture_expansion_lint_attribute_contract)"
-slow-timeout = { period = "20m", terminate-after = 1, grace-period = "5s" }
-test-group = "serial-dylint-ui"
-
-[[profile.ci.overrides]]
-# The parser-pin cases run nested Cargo checks in isolated workspaces and need
-# the longer allowance while compiler admission queues.
+# The parser-pin fixtures run nested Cargo builds with isolated targets. Their
+# longer allowance reflects a full interval spent queued for compiler slots.
 filter = "binary(build_script_integration)"
 slow-timeout = { period = "60m", terminate-after = 1, grace-period = "5s" }
-test-group = "serial-build-script-integration"
+test-group = "serial-nested-cargo-builds"
 
 [[profile.ci.overrides]]
-# These isolated checks spawn Cargo too; they can wait on the shared package
-# cache before the nested build or packaging operation gets started.
+# This feature-disabled build also uses a fresh target directory; allow it to
+# finish after nested Cargo waits for shared compiler admission.
+filter = "binary(no_default_features_build)"
+slow-timeout = { period = "20m", terminate-after = 1, grace-period = "5s" }
+test-group = "serial-nested-cargo-builds"
+
+[[profile.ci.overrides]]
+# Package-isolated checks can queue for shared cache and compiler resources;
+# serialize them with the other nested builds.
 filter = "test(crate_builds_without_dylint_driver_feature) | test(fluent_bundles_are_included_in_the_package_tarball)"
 slow-timeout = { period = "30m", terminate-after = 1, grace-period = "5s" }
+test-group = "serial-nested-cargo-builds"
 
 # Serialize dylint UI tests that build lint libraries and use
 # `#[serial]`.  nextest runs each test in its own process, so the
@@ -91,7 +93,7 @@ slow-timeout = { period = "30m", terminate-after = 1, grace-period = "5s" }
 [test-groups]
 serial-dylint-ui = { max-threads = 1 }
 serial-toolchain-installs = { max-threads = 1 }
-serial-build-script-integration = { max-threads = 1 }
+serial-nested-cargo-builds = { max-threads = 1 }
 
 [[profile.default.overrides]]
 # Include crate-local UI entrypoints that wrap dylint UI fixtures.
@@ -125,40 +127,39 @@ serial-build-script-integration = { max-threads = 1 }
 # dev-dependency proc-macro hangs during cargo's dev-dependency resolution on
 # Windows CI regardless of whether any example source uses rstest, so all
 # Dylint example compilation for that crate is compiled away on Windows.
-# The trybuild harness reached 9m56 in a full run while compiler admission
-# queued, so allow 20 minutes for the complete serial UI group.
-filter = "test(driver::ui::) | test(tests::ui::) | test(ui::ui) | test(sha2_0_11_pre_migration_patterns_fail_to_compile) | test(example_compiles_without_diagnostics) | test(example_harness_collects_call_site_evidence) | test(trybuild_fixtures_compile_without_diagnostics) | test(renamed_common_apis_are_public_and_legacy_names_stay_removed) | test(renamed_sarif_api_is_public_and_legacy_names_stay_removed) | test(ui::example_compiles_under_test_harness) | test(ui::hand_written_test_companion_does_not_exempt_parent_function) | test(ui::rstest_unwrap_outside_tests_still_fails_in_non_harness_code) | test(ui::rstest_empty_companion_does_not_exempt_parent_function) | test(ui::aliased_test_crate_non_companion_does_not_exempt_parent_function) | (binary(ui) & test(=ui))"
+# The installer UI case measured 235 s and timed out at the 300 s base
+# allowance on Windows. Allow nested UI builds to finish while keeping a cap.
+filter = "test(driver::ui::) | test(tests::ui::) | test(ui::ui) | test(example_compiles_without_diagnostics) | test(example_harness_collects_call_site_evidence) | test(ui::example_compiles_under_test_harness) | test(ui::hand_written_test_companion_does_not_exempt_parent_function) | test(ui::rstest_unwrap_outside_tests_still_fails_in_non_harness_code) | test(ui::rstest_empty_companion_does_not_exempt_parent_function) | test(ui::aliased_test_crate_non_companion_does_not_exempt_parent_function) | (binary(ui) & test(=ui))"
 test-group = "serial-dylint-ui"
 retries = { backoff = "exponential", count = 2, delay = "5s" }
 slow-timeout = { period = "20m", terminate-after = 1, grace-period = "5s" }
 
 [[profile.default.overrides]]
-# The macro crate's trybuild contract builds fixture crates too, so it needs a
-# build-sized timeout and the same serial target-directory protection.
-filter = "test(fixture_expansion_lint_attribute_contract)"
-slow-timeout = { period = "20m", terminate-after = 1, grace-period = "5s" }
+# Every discovered trybuild test builds fixtures through nested Cargo. Keep
+# them under one build-sized allowance and avoid retries that repeat the work.
+filter = "test(dependency_check_result_contract_is_public) | test(fixture_expansion_lint_attribute_contract) | test(normalize_settings_is_public_and_the_legacy_name_stays_removed) | test(renamed_common_apis_are_public_and_legacy_names_stay_removed) | test(renamed_sarif_api_is_public_and_legacy_names_stay_removed) | test(sha2_0_11_pre_migration_patterns_fail_to_compile) | test(trybuild_fixtures_compile_without_diagnostics)"
+slow-timeout = { period = "60m", terminate-after = 1, grace-period = "5s" }
 test-group = "serial-dylint-ui"
+retries = 0
 
 [[profile.default.overrides]]
-# These parser-pin integration cases run nested Cargo checks in isolated
-# workspaces; a cold build may queue behind other admitted compiler work.
+# These parser-pin and no-default-feature cases run nested Cargo builds in
+# isolated targets; a cold build may queue behind admitted compiler work.
 filter = "binary(build_script_integration)"
 slow-timeout = { period = "60m", terminate-after = 1, grace-period = "5s" }
-test-group = "serial-build-script-integration"
+test-group = "serial-nested-cargo-builds"
 
 [[profile.default.overrides]]
-# These isolated checks spawn Cargo too; they can wait on the shared package
-# cache before the nested build or packaging operation gets started.
+filter = "binary(no_default_features_build)"
+slow-timeout = { period = "20m", terminate-after = 1, grace-period = "5s" }
+test-group = "serial-nested-cargo-builds"
+
+[[profile.default.overrides]]
+# These isolated Cargo checks also wait for shared cache and compiler
+# resources; serialize them with the other nested builds.
 filter = "test(crate_builds_without_dylint_driver_feature) | test(fluent_bundles_are_included_in_the_package_tarball)"
 slow-timeout = { period = "30m", terminate-after = 1, grace-period = "5s" }
-
-[[profile.default.overrides]]
-# This API contract compiles pass/fail fixtures through nested Cargo. The
-# general UI timeout retried it, restarting compilation after cache-lock waits.
-# Give one attempt room to finish without repeating the same queued build.
-filter = "test(normalize_settings_is_public_and_the_legacy_name_stays_removed)"
-slow-timeout = { period = "45m", terminate-after = 1, grace-period = "5s" }
-test-group = "serial-dylint-ui"
+test-group = "serial-nested-cargo-builds"
 
 [[profile.default.overrides]]
 # Serialize ignored exclusion integration tests when they are explicitly run.

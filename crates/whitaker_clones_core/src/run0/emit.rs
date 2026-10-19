@@ -318,7 +318,6 @@ fn u64_big_endian_bytes(value: u64) -> [u8; 8] {
     }
     bytes
 }
-
 fn digest_hex(bytes: impl AsRef<[u8]>) -> String {
     let mut output = String::new();
     for byte in bytes.as_ref() {

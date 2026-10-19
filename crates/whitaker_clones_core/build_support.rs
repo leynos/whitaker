@@ -8,6 +8,7 @@ use std::{error::Error, io};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
+use semver::Version;
 const PARSER_DEPENDENCY: &str = "ra_ap_syntax";
 
 pub(crate) fn parser_dependency_requirement(manifest: &str) -> Result<String, Box<dyn Error>> {
@@ -27,11 +28,17 @@ pub(crate) fn parser_dependency_requirement(manifest: &str) -> Result<String, Bo
         .ok_or_else(|| invalid_workspace_dependency().into())
 }
 
+/// Return the complete release version from one exact equality requirement.
+///
+/// `Version::parse` rejects partial versions and comma-separated comparators,
+/// so the schema seed cannot silently accept a range that Cargo may resolve to
+/// a different parser release.
 pub(crate) fn exact_version(requirement: &str) -> Result<&str, io::Error> {
-    requirement
+    let version = requirement
         .strip_prefix('=')
-        .filter(|version| !version.is_empty())
-        .ok_or_else(|| non_exact_workspace_dependency(requirement))
+        .ok_or_else(|| non_exact_workspace_dependency(requirement))?;
+    Version::parse(version).map_err(|_| non_exact_workspace_dependency(requirement))?;
+    Ok(version)
 }
 
 pub(crate) fn find_workspace_manifest(

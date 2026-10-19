@@ -4,10 +4,9 @@ use super::{HarnessError, run_ui_test, run_with_runner};
 use camino::{Utf8Path, Utf8PathBuf};
 use rstest::rstest;
 use std::env;
-use std::sync::{Mutex, MutexGuard, OnceLock};
-use whitaker_common::test_support::with_env_var;
 #[cfg(windows)]
 use whitaker_common::test_support::with_env_var_removed;
+use whitaker_common::test_support::{EnvTestGuard, env_test_guard, with_env_var};
 
 #[rstest]
 #[case(
@@ -139,7 +138,7 @@ fn windows_env_guard_leaves_absent_rustc_wrapper_untouched() {
                 assert_eq!(env::var_os("RUSTC_WRAPPER"), None);
                 Ok(())
             })
-            .expect("runner should execute without changing RUSTC_WRAPPER");
+            .expect("runner should execute without installing RUSTC_WRAPPER");
 
             assert_eq!(env::var_os("RUSTC_WRAPPER"), None);
         });
@@ -147,19 +146,32 @@ fn windows_env_guard_leaves_absent_rustc_wrapper_untouched() {
 }
 
 #[test]
-fn runner_env_guard_test_lock_recovers_after_panic() {
+fn runner_env_guard_test_lock_releases_after_panic() {
     let result = std::panic::catch_unwind(|| {
         let _serial_guard = runner_env_guard_test_lock();
-        panic!("intentionally poison the UI environment test lock");
+        panic!("intentionally release the UI environment test lock");
     });
 
     assert!(result.is_err());
-    let _serial_guard = runner_env_guard_test_lock();
+    let (acquired_sender, acquired_receiver) = std::sync::mpsc::channel();
+    let thread = std::thread::spawn(move || {
+        let _serial_guard = runner_env_guard_test_lock();
+        acquired_sender
+            .send(())
+            .expect("second thread must report lock acquisition");
+    });
+
+    acquired_receiver
+        .recv_timeout(std::time::Duration::from_secs(1))
+        .expect("second thread should acquire the released environment lock");
+    thread
+        .join()
+        .expect("second environment-lock test thread should complete");
 }
 
-fn runner_env_guard_test_lock() -> MutexGuard<'static, ()> {
-    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-    LOCK.get_or_init(|| Mutex::new(()))
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
+/// Acquires the production environment protocol for assertions spanning a callback.
+fn runner_env_guard_test_lock() -> EnvTestGuard {
+    // These tests inspect process-global environment state after callbacks,
+    // so their whole bodies must run serially rather than only each mutation.
+    env_test_guard()
 }

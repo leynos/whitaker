@@ -988,8 +988,9 @@ Pair each `.rs` with a `.stderr` expectation using `dylint_testing::ui_test`.
 
 Bundle all lint crates for users who prefer a single dynamic library. The
 `whitaker_suite` crate enables the `constituent` feature on each lint
-dependency so their individual dylint entrypoints stay dormant while the
-combined pass exposes a single `register_lints` symbol.
+dependency so their individual Dylint entrypoints stay dormant. The shared
+entrypoint macro exports Dylint's required `register_lints` symbol and forwards
+to the suite's internal `register_suite_entry` function.
 
 <!-- markdownlint-disable MD033 MD013 -->
 <pre><code class="language-toml">[package] name = "whitaker_suite" version =
@@ -997,8 +998,9 @@ combined pass exposes a single `register_lints` symbol.
 
 [lib] crate-type = ["cdylib", "rlib"]
 
-[dependencies] dylint_linting = { workspace = true } function_attrs_follow_docs
-= { path = "../crates/function_attrs_follow_docs", features = ["dylint-driver",
+[dependencies] dylint_linting = { workspace = true } whitaker-common = {
+workspace = true } function_attrs_follow_docs = { path =
+"../crates/function_attrs_follow_docs", features = ["dylint-driver",
 "constituent"] } no_expect_outside_tests = { path =
 "../crates/no_expect_outside_tests", features = ["dylint-driver",
 "constituent"] } module_must_have_inner_docs = { path =
@@ -1037,8 +1039,7 @@ declare_combined_late_lint_pass!(SuitePass => [
     NoStdFsOperations,
 ]);
 
-#[no_mangle] pub extern "C" fn register_lints(sess: &Session, store: &mut
-LintStore) {
+fn register_suite_entry(sess: &Session, store: &mut LintStore) {
     dylint_linting::init_config(sess);
     store.register_lints(&[
         function_attrs_follow_docs::FUNCTION_ATTRS_FOLLOW_DOCS,
@@ -1050,7 +1051,10 @@ LintStore) {
         no_std_fs_operations::NO_STD_FS_OPERATIONS,
     ]);
     store.register_late_pass(|_| Box::new(SuitePass));
-} </code></pre>
+}
+
+whitaker_common::declare_dylint_register_entry!(register_suite_entry);
+</code></pre>
 <!-- markdownlint-enable MD033 MD013 -->
 
 Re-export `register_suite_lints` and `suite_lint_decls` so tests and
@@ -1293,6 +1297,34 @@ highlight the top two intervals in the diagnostic.
   panicking.
 - Include the lint in the aggregated `whitaker_suite` crate by default as a
   stable rule, while still allowing direct usage by loading the lint crate.
+
+**Numeric and span boundaries.** Fluent diagnostic integer arguments are signed
+64-bit values, so `diagnostic_integer_argument` and
+`saturating_diagnostic_integer` clamp oversized counts at `i64::MAX`.
+`SegmentWeight::Fixed` keeps its supplied value, while
+`SegmentWeight::Predicate` uses `saturating_branch_count` and
+`predicate_segment_weight` to cap branch counts at `u32::MAX` before scaling.
+Compiler `BytePos` offsets are `u32`; `span_byte_offset_range` rejects any
+highlighted range with an unrepresentable endpoint. `line_range_byte_offsets`
+also rejects starts before the snippet's base line, reversed ranges, and starts
+missing from its line table; when the end line has no following entry, it uses
+the snippet length as the end offset. A rejected or unrepresentable range omits
+the secondary label while preserving the primary diagnostic. The
+conditional-branch lint uses the same signed boundary for Fluent counts.
+Boundary tests cover the maximum accepted values and the first values above
+them.
+
+Production tests that pass values beyond a `usize` boundary use
+`#[cfg(target_pointer_width = "64")]`; 32-bit targets cannot represent those
+inputs. Bumpy Road tests `diagnostic_arguments_saturate_oversized_bump_counts`
+and `span_mapping_omits_unrepresentable_offsets` in `driver/diagnostic.rs`, plus
+`production_diagnostic_arguments_saturate_at_the_signed_boundary`,
+`production_predicate_weight_saturates_excess_branches`,
+`production_span_offset_ranges_reject_an_unrepresentable_end`, and
+`production_line_range_mapping_rejects_an_unrepresentable_offset` in
+`driver/numeric.rs`. The conditional-branch test is
+`production_diagnostic_arguments_saturate_at_the_signed_boundary` in its
+`driver/numeric.rs`.
 
 **Algorithm sketch.**
 

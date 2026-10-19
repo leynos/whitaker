@@ -13,7 +13,7 @@ use crate::builders::{LocationBuilder, RegionBuilder, ResultBuilder};
 use crate::merge::WHITAKER_FRAGMENT_KEY;
 use crate::model::result::{Level, SarifResult};
 
-/// Assert that `value` survives a JSON serialize/deserialize round trip
+/// Asserts that `value` survives a JSON serialize/deserialize round trip
 /// unchanged.
 ///
 /// Panics with the type name and underlying serde error on failure; intended
@@ -36,7 +36,7 @@ where
     }
 }
 
-/// Serialize `value` to JSON and pass the resulting string to `check`.
+/// Serializes `value` to JSON and passes the resulting string to `check`.
 ///
 /// Panics with the underlying serde error if serialization fails; intended
 /// only for test code.
@@ -49,12 +49,13 @@ pub fn assert_serialized_json(value: &impl Serialize, check: impl FnOnce(&str)) 
 
 /// Builds a [`SarifResult`] with a fingerprint, location, and region.
 ///
-/// Intended only for test code.
+/// Computes the end line as `line + 5`; integer overflow follows the active
+/// Rust overflow-check configuration. Intended only for test code.
 ///
 /// # Panics
 ///
-/// Panics if the region or result builder rejects its inputs, which indicates
-/// a defect in the test fixture rather than a recoverable condition.
+/// Panics if a region or result builder rejects its input, which indicates a
+/// defect in the test fixture rather than a recoverable condition.
 #[must_use]
 pub fn make_keyed_result(rule: &str, file: &str, line: usize, fp: &str) -> SarifResult {
     let region = match RegionBuilder::new(line).with_end_line(line + 5).build() {

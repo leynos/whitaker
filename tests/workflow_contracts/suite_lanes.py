@@ -251,6 +251,15 @@ def _lanes_in_job(job: _Job) -> tuple[SuiteLane, ...]:
     )
 
 
+def read_suite_lanes() -> tuple[SuiteLane, ...]:
+    """Read every suite-running lane from the repository workflows."""
+    return tuple(
+        lane
+        for job in _declared_jobs(_workflow_documents())
+        for lane in _lanes_in_job(job)
+    )
+
+
 def _watchdog_offences(
     job: _Job,
     documents: dict[str, dict[str, typ.Any]],

@@ -18,15 +18,11 @@ use whitaker_common::i18n::MessageKey;
 use whitaker_common::{Localizer, get_localizer_for_lint};
 
 const LINT_NAME: &str = "bumpy_road_function";
-
 const MESSAGE_KEY: MessageKey<'static> = MessageKey::new(LINT_NAME);
 
 mod config;
-
 mod diagnostic;
-
 mod numeric;
-
 mod segment_builder;
 
 use self::config::load_configuration;

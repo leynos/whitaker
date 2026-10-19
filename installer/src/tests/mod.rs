@@ -124,6 +124,11 @@ fn resolve_requested_crates_rejects_unknown_lints() {
     ));
 }
 
+/// Skip installation when both required Dylint tools are already installed.
+///
+/// # Errors
+///
+/// Returns an I/O error if the temporary PATH fixture cannot be created.
 #[rstest]
 fn ensure_dylint_tools_skips_install_when_installed(
     test_base_dirs: TestBaseDirs,
@@ -153,6 +158,11 @@ fn ensure_dylint_tools_skips_install_when_installed(
     Ok(())
 }
 
+/// Install missing Dylint tools and check the configured progress output.
+///
+/// # Errors
+///
+/// Returns an I/O error if the temporary PATH fixture cannot be created.
 #[rstest]
 #[case::logs_when_not_quiet(
     false,
@@ -217,6 +227,11 @@ fn ensure_dylint_tools_installs_missing_tools(
     Ok(())
 }
 
+/// Propagate a failure from the dependency installation command.
+///
+/// # Errors
+///
+/// Returns an I/O error if the temporary PATH fixture cannot be created.
 #[rstest]
 fn ensure_dylint_tools_propagates_install_failures(
     test_base_dirs: TestBaseDirs,

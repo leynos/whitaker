@@ -219,6 +219,22 @@ fn clone_io_error(source: &std::io::Error) -> std::io::Error {
 }
 
 impl InstallerError {
+    /// Clone the source-policy variants while preserving their policy details.
+    fn clone_source_policy_variant(&self) -> Option<Self> {
+        match self {
+            Self::ConflictingSourceOptions { option } => Some(Self::ConflictingSourceOptions {
+                option: option.clone(),
+            }),
+            Self::SourceFallbackForbidden { artefact, reason } => {
+                Some(Self::SourceFallbackForbidden {
+                    artefact: artefact.clone(),
+                    reason: reason.clone(),
+                })
+            }
+            _ => None,
+        }
+    }
+
     /// Clone the I/O-backed variants while preserving their error details.
     fn clone_io_variant(&self) -> Option<Self> {
         match self {
@@ -269,10 +285,12 @@ impl InstallerError {
 }
 
 impl Clone for InstallerError {
+    /// Clone every error variant while preserving its displayable details.
     fn clone(&self) -> Self {
         if let Some(value) = self
             .clone_toolchain_variant()
             .or_else(|| self.clone_io_variant())
+            .or_else(|| self.clone_source_policy_variant())
         {
             return value;
         }
@@ -316,15 +334,10 @@ impl Clone for InstallerError {
                 tool,
                 reason: reason.clone(),
             },
-            Self::ConflictingSourceOptions { option } => Self::ConflictingSourceOptions {
-                option: option.clone(),
-            },
-            Self::SourceFallbackForbidden { artefact, reason } => Self::SourceFallbackForbidden {
-                artefact: artefact.clone(),
-                reason: reason.clone(),
-            },
             Self::WrapperGeneration(message) => Self::WrapperGeneration(message.clone()),
-            Self::ToolchainDetection { .. }
+            Self::ConflictingSourceOptions { .. }
+            | Self::SourceFallbackForbidden { .. }
+            | Self::ToolchainDetection { .. }
             | Self::ToolchainFileNotFound { .. }
             | Self::InvalidToolchainFile { .. }
             | Self::ToolchainNotInstalled { .. }

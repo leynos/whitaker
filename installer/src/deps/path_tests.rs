@@ -22,6 +22,11 @@ use crate::{
     },
 };
 
+/// Verify both installed tools are reported as available.
+///
+/// # Errors
+///
+/// Returns an I/O error if the temporary PATH fixture cannot be created.
 #[test]
 fn check_dylint_tools_reports_installed_tools() -> std::io::Result<()> {
     with_fake_binary_on_path("dylint-link", || {
@@ -46,6 +51,11 @@ fn check_dylint_tools_reports_installed_tools() -> std::io::Result<()> {
     Ok(())
 }
 
+/// Reject Cargo output that does not report the pinned `cargo-dylint` version.
+///
+/// # Errors
+///
+/// Returns an I/O error if the temporary PATH fixture cannot be created.
 #[rstest::rstest]
 #[case::stale_version("cargo-dylint 5.0.0\n")]
 fn check_dylint_tools_rejects_unusable_cargo_dylint_output(
@@ -75,6 +85,11 @@ fn check_dylint_tools_rejects_unusable_cargo_dylint_output(
     Ok(())
 }
 
+/// Reject successful Cargo output that contains no parseable version.
+///
+/// # Errors
+///
+/// Returns an I/O error if the temporary PATH fixture cannot be created.
 #[test]
 fn check_dylint_tools_rejects_unparsable_cargo_dylint_output() -> std::io::Result<()> {
     with_fake_path(
@@ -98,6 +113,11 @@ fn check_dylint_tools_rejects_unparsable_cargo_dylint_output() -> std::io::Resul
     Ok(())
 }
 
+/// Reject `dylint-link` when Cargo does not record the pinned installed version.
+///
+/// # Errors
+///
+/// Returns an I/O error if the temporary PATH fixture cannot be created.
 #[rstest::rstest]
 #[case::stale_version(dylint_link_install_list_check_with_version("5.0.0"))]
 #[case::missing_from_list(ExpectedCall {
@@ -319,6 +339,30 @@ fn path_scan_skips_missing_candidates_and_returns_the_first_binary() -> std::io:
     Ok(())
 }
 
+/// Skip a PATH directory that disappeared and continue to a later executable.
+///
+/// # Errors
+///
+/// Returns an I/O error if the temporary PATH fixtures cannot be created.
+#[test]
+fn path_scan_skips_missing_directories_and_returns_a_later_binary() -> std::io::Result<()> {
+    let fixture_root = tempfile::tempdir()?;
+    let missing_directory = fixture_root.path().join("removed-from-path");
+    let valid_directory = tempfile::tempdir()?;
+    let binary_name = "dylint-link.exe";
+    let expected_binary = valid_directory.path().join(binary_name);
+    write_fake_binary(&expected_binary, true)?;
+
+    let scan = scan_path_directories(
+        vec![missing_directory, valid_directory.path().to_path_buf()],
+        binary_name,
+    );
+
+    assert_eq!(scan.binary, Some(expected_binary));
+    assert!(scan.failures.is_empty());
+    Ok(())
+}
+
 /// Check first-match and stop-after-match behaviour for bounded PATH patterns.
 #[test]
 fn path_scan_ordering_holds_for_bounded_match_patterns() {
@@ -397,6 +441,11 @@ fn is_binary_on_path_handles_windows_executable_suffixes(
     Ok(())
 }
 
+/// Detect `dylint-link` through a suffix supplied by the Windows `PATHEXT`.
+///
+/// # Errors
+///
+/// Returns an I/O error if the temporary PATH fixture cannot be created.
 #[cfg(windows)]
 #[test]
 fn check_dylint_tools_detects_dylint_link_via_pathext_suffix() -> std::io::Result<()> {

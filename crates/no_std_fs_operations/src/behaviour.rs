@@ -34,26 +34,26 @@ impl LocalizationWorld {
         let result = if self.failing {
             localized_messages(&FailingLookup::new("no_std_fs_operations"), &op)
         } else {
-            let localizer = self.localizer.as_ref().expect("a locale must be selected");
+            let Some(localizer) = self.localizer.as_ref() else {
+                panic!("a locale must be selected before resolving messages")
+            };
             localized_messages(localizer, &op)
         };
         self.result = Some(result);
     }
 
     fn messages(&self) -> &StdFsMessages {
-        self.result
-            .as_ref()
-            .expect("localization result should be recorded")
-            .as_ref()
-            .expect("localization should succeed")
+        let Some(Ok(messages)) = self.result.as_ref().map(Result::as_ref) else {
+            panic!("localization should have been resolved successfully")
+        };
+        messages
     }
 
     fn error(&self) -> &I18nError {
-        self.result
-            .as_ref()
-            .expect("localization result should be recorded")
-            .as_ref()
-            .expect_err("localization should fail")
+        let Some(Err(error)) = self.result.as_ref().map(Result::as_ref) else {
+            panic!("localization should have been resolved to a failure")
+        };
+        error
     }
 }
 

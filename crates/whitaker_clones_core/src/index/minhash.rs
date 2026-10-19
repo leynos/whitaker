@@ -12,10 +12,11 @@
 //! values because fingerprints and signature lanes are represented as hash
 //! words throughout the index API.
 //!
-//! The `#[cfg(kani)]` constructors and the unrolled `sketch_values`
-//! implementation are proof seams for bounded model checking. They keep Kani
-//! harnesses focused on [`MinHasher::sketch`] invariants without changing the
-//! production API or the production array `map` implementation.
+//! The `#[cfg(kani)]` constructor and unrolled `sketch_values` implementation
+//! are proof seams for bounded model checking. Kani checks the lane-minimum
+//! operation and fingerprint normalization separately, while runtime tests
+//! cover complete [`MinHasher::sketch`] signatures. The proof seams do not
+//! change the production API or the production array `map` implementation.
 //!
 //! [`LshIndex`](super::LshIndex) in `lsh.rs` consumes the signatures produced
 //! here by partitioning them into configured bands and emitting candidate
@@ -38,7 +39,7 @@ const HASH_MIX: u64 = 0x94D0_49BB_1331_11EB;
 /// Keeps seed values distinct from raw hash values at the type level,
 /// preventing accidental argument transposition inside the hashing core.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct Seed(u64);
+pub(super) struct Seed(pub(super) u64);
 
 /// Deterministic `MinHash` sketcher for retained token fingerprints.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -100,30 +101,6 @@ impl MinHasher {
         Self {
             seeds: [Seed(seed); MINHASH_SIZE],
         }
-    }
-
-    /// Creates a deterministic proof-only fixture with selected lane seeds.
-    ///
-    /// This `pub(super)` `#[cfg(kani)]` helper is restricted to the parent
-    /// module and exists for Kani harnesses that need to observe the first,
-    /// middle, and last MinHash lanes with distinct seed values. The remaining
-    /// lanes reuse `first_seed`.
-    ///
-    /// `first_seed` initializes every lane, `middle_seed` replaces lane
-    /// [`MINHASH_SIZE`] / 2, and `last_seed` replaces lane [`MINHASH_SIZE`] -
-    /// 1. Callers provide raw `u64` seeds at this proof boundary; the function
-    /// wraps them as internal [`Seed`] values and returns a [`MinHasher`] ready
-    /// for [`MinHasher::sketch`]. There are no additional preconditions.
-    #[cfg(kani)]
-    pub(super) fn from_checked_lane_seeds_for_kani(
-        first_seed: u64,
-        middle_seed: u64,
-        last_seed: u64,
-    ) -> Self {
-        let mut seeds = [Seed(first_seed); MINHASH_SIZE];
-        seeds[MINHASH_SIZE / 2] = Seed(middle_seed);
-        seeds[MINHASH_SIZE - 1] = Seed(last_seed);
-        Self { seeds }
     }
 }
 
@@ -306,7 +283,11 @@ pub(super) fn unique_hashes(fingerprints: &[Fingerprint]) -> IndexResult<Vec<u64
     Ok(hashes)
 }
 
-fn minimum_mixed_hash(seed: Seed, hashes: &[u64]) -> u64 {
+/// Return the minimum mixed hash for one lane.
+///
+/// The sibling Kani harness checks this production operation directly instead
+/// of constructing all 128 lanes of a signature.
+pub(super) fn minimum_mixed_hash(seed: Seed, hashes: &[u64]) -> u64 {
     hashes.iter().fold(u64::MAX, |current, hash| {
         current.min(mix_hash(seed.0, *hash))
     })

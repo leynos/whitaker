@@ -75,8 +75,9 @@ A module that has grown submodules becomes a directory whose root file is
 `mod.rs`. Directory modules nest, so `installer/src/toolchain/tests/` is itself
 a `tests/` directory module with its own `mod.rs`.
 
-An inline test module that outgrows the budget moves to a sibling file, and an
-explicit `#[path]` attribute holds its module path still:
+An inline test module that outgrows the budget moves to a sibling file. The
+declaration keeps the module's name, and an explicit `#[path]` attribute points
+it at the new file:
 
 ```rust
 #[cfg(test)]
@@ -84,11 +85,23 @@ explicit `#[path]` attribute holds its module path still:
 mod tests;
 ```
 
-The attribute is what makes the move reviewable. Without it, moving `mod tests`
-into another file renames the module, and every `super::` reference inside the
-tests, together with every `cargo test` filter that names the old path,
-silently changes meaning. With it, the test bodies are byte-identical across
-the move and the extraction can be checked as a move.
+A module's name and its file are separate things. `mod tests;` fixes the name,
+and with it the module path `crate::list::tests`; `#[path]` selects the file
+that backs it. The attribute is what makes the move reviewable: the test bodies
+stay byte-identical across it, so the extraction can be checked as a move
+rather than re-read as behaviour.
+
+The attribute also supplies the placement. Left to the default location, a bare
+`mod tests;` in `list.rs` resolves to `list/tests.rs`, inside a `list/`
+directory of its own. Naming the declaration after the file, as
+`mod list_tests;`, would rename the module to `crate::list::list_tests` — and
+still resolve to `list/list_tests.rs`, not to a sibling. Only the attribute
+puts the file beside `list.rs` while keeping the module named `tests`.
+
+Renaming the module would not, on its own, break the tests: `super::` keeps
+working, because the module remains a child of `list`. What breaks is absolute
+paths such as `crate::list::tests::…` and `cargo test` filter expressions that
+name `tests`.
 
 Three shapes occur, and the rule that distinguishes them is whether anything
 above the extracted module already restricts it to test builds:
@@ -138,12 +151,12 @@ satisfies the repository rule that every module documents its purpose.
 ## Architectural rationale
 
 The decision keeps two properties that matter more than the specific file
-names. The first is that structure and behaviour stay separable: because
-`#[path]` holds the module path fixed, a decomposition commit can be reviewed
-as a move, and a behaviour change can never hide inside one. The second is that
-the budget is answered by decomposition rather than exemption, so the rule
-continues to describe the codebase instead of describing the exceptions to
-itself.
+names. The first is that structure and behaviour stay separable: because the
+declaration keeps the module name and `#[path]` only redirects the file, a
+decomposition commit can be reviewed as a move, and a behaviour change can
+never hide inside one. The second is that the budget is answered by
+decomposition rather than exemption, so the rule continues to describe the
+codebase instead of describing the exceptions to itself.
 
 Both properties follow from treating the module layout as a repository-wide
 convention rather than a per-module judgement. 65 tracked `.rs` files already

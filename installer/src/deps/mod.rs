@@ -122,6 +122,7 @@ pub(crate) trait BinaryLocator {
 pub(crate) struct SystemBinaryLocator;
 
 impl BinaryLocator for SystemBinaryLocator {
+    /// Search the process PATH and classify failures from skipped entries.
     fn find_binary(&self, binary_name: &str) -> PathScanResult {
         find_binary_on_path(binary_name)
     }
@@ -140,6 +141,11 @@ pub struct DylintToolCheck {
 /// Classify metadata errors, omitting the ordinary miss for an absent candidate.
 fn metadata_failure_category(kind: io::ErrorKind) -> Option<PathScanFailureCategory> {
     (kind != io::ErrorKind::NotFound).then_some(PathScanFailureCategory::Metadata)
+}
+
+/// Classify directory-open errors, omitting PATH entries that no longer exist.
+fn directory_open_failure_category(kind: io::ErrorKind) -> Option<PathScanFailureCategory> {
+    (kind != io::ErrorKind::NotFound).then_some(PathScanFailureCategory::DirectoryOpen)
 }
 
 /// Status of Dylint tool availability.
@@ -261,6 +267,10 @@ pub fn install_dylint_tools(
 }
 
 /// Install missing tools while writing progress output to `stderr`.
+///
+/// # Errors
+///
+/// Returns query, installation, or source-policy errors from the install flow.
 pub fn install_dylint_tools_with_output(
     executor: &dyn CommandExecutor,
     status: &DylintToolStatus,
@@ -290,6 +300,10 @@ pub fn install_dylint_tools_with_output(
 }
 
 /// Install missing tools with injected repository-install hooks.
+///
+/// # Errors
+///
+/// Returns query, installation, or source-policy errors from the install flow.
 #[cfg(any(test, feature = "test-support"))]
 #[doc(hidden)]
 pub fn install_dylint_tools_with_options(
@@ -356,7 +370,9 @@ fn is_tool_installed_with_locator(
 ///
 /// Presence is established by finding an executable on PATH without running
 /// the linker wrapper. An expected version is compared with Cargo's install
-/// list; skipped-entry classifications are traced here, without logging paths.
+/// list. If PATH scanning finds no executable after entry failures, or the
+/// Cargo query fails, return an error; skipped-entry classifications are
+/// collected for the caller.
 fn is_dylint_link_installed(
     executor: &dyn CommandExecutor,
     expected_version: &str,
@@ -543,11 +559,13 @@ fn find_binary_in_directory(
     };
     let directory_capability = match Dir::open_ambient_dir(utf8_directory, ambient_authority()) {
         Ok(directory_capability) => directory_capability,
-        Err(_) => {
-            failures.push(PathScanFailure {
-                binary_name: binary_name.to_owned(),
-                category: PathScanFailureCategory::DirectoryOpen,
-            });
+        Err(error) => {
+            if let Some(category) = directory_open_failure_category(error.kind()) {
+                failures.push(PathScanFailure {
+                    binary_name: binary_name.to_owned(),
+                    category,
+                });
+            }
             return None;
         }
     };
@@ -681,7 +699,9 @@ mod tests;
 mod path_scan_tests {
     //! Verify that PATH scan failure categories remain stable and bounded.
 
-    use super::{PathScanFailureCategory, metadata_failure_category};
+    use super::{
+        PathScanFailureCategory, directory_open_failure_category, metadata_failure_category,
+    };
 
     /// Treat an absent PATH candidate as routine while preserving other failures.
     #[test]
@@ -693,6 +713,19 @@ mod path_scan_tests {
         assert_eq!(
             metadata_failure_category(std::io::ErrorKind::PermissionDenied),
             Some(PathScanFailureCategory::Metadata)
+        );
+    }
+
+    /// Treat disappeared PATH directories as misses while preserving other errors.
+    #[test]
+    fn directory_open_failures_exclude_missing_directories() {
+        assert_eq!(
+            directory_open_failure_category(std::io::ErrorKind::NotFound),
+            None
+        );
+        assert_eq!(
+            directory_open_failure_category(std::io::ErrorKind::PermissionDenied),
+            Some(PathScanFailureCategory::DirectoryOpen)
         );
     }
 

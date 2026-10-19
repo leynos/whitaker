@@ -87,25 +87,11 @@ fn has_test_ancestry(
         || (is_function_item && has_test_like_hir_attributes(attrs, additional_test_attributes))
 }
 
-/// Summarizes collected ancestor context into the lint's final test decision.
+/// Derive whether a call site is test-only and find its innermost function.
 ///
-/// Combines the pre-computed ancestor entries with the carried
-/// `has_test_context_ancestry` flag so the lint can determine whether the
-/// current call site should be treated as test-only code.
-///
-/// # Parameters
-///
-/// - `entries`: Simplified ancestor contexts produced by `collect_context`.
-/// - `has_test_context_ancestry`: Whether any ancestor already established
-///   test-only ancestry via propagation, `cfg(test)`, or a recognized
-///   test-marker attribute.
-/// - `additional_test_attributes`: Extra user-configured attribute paths that
-///   should be considered test markers during the final summary check.
-///
-/// # Returns
-///
-/// Returns a `ContextSummary` describing the derived test-context status and
-/// the innermost enclosing function name, if one was found.
+/// The entries are simplified HIR ancestors; the ancestry flag carries test
+/// context such as `cfg(test)`, and configured attributes add test markers.
+/// The summary includes test-like status and the innermost enclosing function.
 ///
 /// # Examples
 ///

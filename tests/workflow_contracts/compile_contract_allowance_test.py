@@ -22,9 +22,9 @@ import typing as typ
 
 import pytest
 from nextest_profile_test import REQUIRED_OVERRIDES
+from nextest_durations import seconds
 from rust_functions import compile_contracts_in
 from nextest_config import load_nextest_config
-from nextest_durations import seconds
 from ubicloud_workflow_support import REPOSITORY_ROOT
 
 #: Minimum allowance for compile-contract harnesses under shared admission.
@@ -205,12 +205,13 @@ def test_every_compile_contract_test_carries_the_long_allowance(
     # override names no test whatever its allowance. An empty string
     # matches no `test(...)` clause below, which is the same answer a
     # crash would have hidden.
-    long_filters = [
-        override.get("filter", "")
-        for override in (parsed_nextest["profile"][profile].get("overrides") or [])
-        if (period := _period(override.get("slow-timeout"))) is not None
-        and seconds(period) >= seconds(COMPILE_CONTRACT_MINIMUM_TIMEOUT)
-    ]
+    long_filters = []
+    for override in parsed_nextest["profile"][profile].get("overrides") or []:
+        period = _period(override.get("slow-timeout"))
+        if period is not None and seconds(period) >= seconds(
+            COMPILE_CONTRACT_MINIMUM_TIMEOUT
+        ):
+            long_filters.append(override.get("filter", ""))
     for name, path in sorted(discovered.items()):
         assert any(f"test({name})" in one for one in long_filters), (
             f"[profile.{profile}] grants no long allowance to the compile "

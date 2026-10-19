@@ -41,17 +41,24 @@ BASE_SLOW_TIMEOUT: typ.Final[dict[str, object]] = {
 }
 
 #: The whole-run budget both profiles must declare.
-REQUIRED_GLOBAL_TIMEOUT: typ.Final[str] = "85m"
+REQUIRED_GLOBAL_TIMEOUT: typ.Final[str] = "120m"
 
-# Parser-pin fixtures share one integration binary, target directory and Cargo
-# package cache, so the allowance must cover that whole binary and serialize it.
+# Parser-pin fixtures share one integration binary and Cargo package cache, so
+# the allowance must cover that whole binary and serialize it.
 BUILD_SCRIPT_INTEGRATION_FILTER: typ.Final[str] = "binary(build_script_integration)"
-API_CONTRACT_FILTER: typ.Final[str] = (
-    "test(normalize_settings_is_public_and_the_legacy_name_stays_removed)"
-)
+NO_DEFAULT_FEATURES_FILTER: typ.Final[str] = "binary(no_default_features_build)"
 ISOLATED_CARGO_CHECKS_FILTER: typ.Final[str] = (
     "test(crate_builds_without_dylint_driver_feature) | "
     "test(fluent_bundles_are_included_in_the_package_tarball)"
+)
+COMPILE_CONTRACT_FILTER: typ.Final[str] = (
+    "test(dependency_check_result_contract_is_public) | "
+    "test(fixture_expansion_lint_attribute_contract) | "
+    "test(normalize_settings_is_public_and_the_legacy_name_stays_removed) | "
+    "test(renamed_common_apis_are_public_and_legacy_names_stay_removed) | "
+    "test(renamed_sarif_api_is_public_and_legacy_names_stay_removed) | "
+    "test(sha2_0_11_pre_migration_patterns_fail_to_compile) | "
+    "test(trybuild_fixtures_compile_without_diagnostics)"
 )
 
 
@@ -63,20 +70,19 @@ class Allowance(typ.NamedTuple):
     slow_timeout : dict[str, object]
         The whole ``slow-timeout`` table the override must declare.
     test_group : str or None
-        The group it must name, or None when the tests use isolated state.
-        The timeout bounds an individual nested build; the group serializes
-        tests that share a target directory or another mutable resource.
-    retries : dict[str, object] or None
-        The whole ``retries`` table, or None when the override declares
-        none. Part of the same claim: the Dylint UI harnesses retry a
-        transient Windows rename failure, and `tests/nextest_ui_filter.rs`
-        requires the key, so a change to its count, backoff or delay
-        would otherwise pass every assertion here.
+        The group it must name, or None when it names none. The budget
+        and group are one claim: nested Cargo builds with long allowances
+        share one serial group so cold fixtures do not compete for admission.
+    retries : integer, dict[str, object], or None
+        The whole ``retries`` setting, or None when the override declares
+        none. The Dylint UI harnesses retry transient Windows rename failures;
+        Compile contracts disable retries because each retry repeats a
+        costly nested Cargo build.
     """
 
     slow_timeout: dict[str, object]
     test_group: str | None
-    retries: dict[str, object] | None = None
+    retries: int | dict[str, object] | None = None
 
 
 #: The overrides both profiles carry, keyed by the binary or filter they
@@ -89,33 +95,29 @@ class Allowance(typ.NamedTuple):
 #: cover it.
 #:
 #: The filters are stated whole and matched exactly, per profile. A
-#: substring would accept a narrowed one: dropping a clause from the
-#: `ui` disjunction leaves the needle intact while the tests that clause
-#: named lose the ten-minute allowance and fall back to the base three
-#: hundred seconds. The two profiles genuinely differ here, the default one
-#: naming seven more `test(...)` clauses in its shared UI override than
-#: `ci`: fourteen against seven, with `(binary(ui) & test(=ui))` shared and
-#: counted in neither. The macro crate's compile contract, isolated Cargo
-#: checks, API contract, and parser-pin nested Cargo checks have allowances in
-#: both profiles. The API contract has a separate allowance because retries
-#: restarted its nested Cargo build while it waited for the shared cache lock.
+#: substring would accept a narrowed one: dropping a clause from a `ui`
+#: disjunction leaves each selected needle intact while the affected tests
+#: lose the 20-minute allowance and fall back to the base 300 seconds. The
+#: default profile includes platform-specific example tests that `ci` omits,
+#: but both profiles give expensive API contracts and nested Cargo fixtures
+#: their own explicit allowances.
 REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
     "default": {
-        API_CONTRACT_FILTER: Allowance(
-            slow_timeout={
-                "period": "45m",
-                "terminate-after": 1,
-                "grace-period": "5s",
-            },
-            test_group="serial-dylint-ui",
-        ),
         BUILD_SCRIPT_INTEGRATION_FILTER: Allowance(
             slow_timeout={
                 "period": "60m",
                 "terminate-after": 1,
                 "grace-period": "5s",
             },
-            test_group="serial-build-script-integration",
+            test_group="serial-nested-cargo-builds",
+        ),
+        NO_DEFAULT_FEATURES_FILTER: Allowance(
+            slow_timeout={
+                "period": "20m",
+                "terminate-after": 1,
+                "grace-period": "5s",
+            },
+            test_group="serial-nested-cargo-builds",
         ),
         ISOLATED_CARGO_CHECKS_FILTER: Allowance(
             slow_timeout={
@@ -123,7 +125,16 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
                 "terminate-after": 1,
                 "grace-period": "5s",
             },
-            test_group=None,
+            test_group="serial-nested-cargo-builds",
+        ),
+        COMPILE_CONTRACT_FILTER: Allowance(
+            slow_timeout={
+                "period": "60m",
+                "terminate-after": 1,
+                "grace-period": "5s",
+            },
+            test_group="serial-dylint-ui",
+            retries=0,
         ),
         ("binary(behaviour_toolchain)"): Allowance(
             slow_timeout={
@@ -139,14 +150,8 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
             "test(driver::ui::) | "
             "test(tests::ui::) | "
             "test(ui::ui) | "
-            "test(sha2_0_11_pre_migration_patterns_fail_to_compile) | "
             "test(example_compiles_without_diagnostics) | "
             "test(example_harness_collects_call_site_evidence) | "
-            "test(trybuild_fixtures_compile_without_diagnostics) | "
-            "test(renamed_common_apis_are_public_and_legacy_names_stay_"
-            "removed) | "
-            "test(renamed_sarif_api_is_public_and_legacy_names_stay_"
-            "removed) | "
             "test(ui::example_compiles_under_test_harness) | "
             "test(ui::hand_written_test_companion_does_not_exempt_parent_"
             "function) | "
@@ -166,31 +171,23 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
             test_group="serial-dylint-ui",
             retries={"backoff": "exponential", "count": 2, "delay": "5s"},
         ),
-        "test(fixture_expansion_lint_attribute_contract)": Allowance(
-            slow_timeout={
-                "period": "20m",
-                "terminate-after": 1,
-                "grace-period": "5s",
-            },
-            test_group="serial-dylint-ui",
-        ),
     },
     "ci": {
-        API_CONTRACT_FILTER: Allowance(
-            slow_timeout={
-                "period": "45m",
-                "terminate-after": 1,
-                "grace-period": "5s",
-            },
-            test_group="serial-dylint-ui",
-        ),
         BUILD_SCRIPT_INTEGRATION_FILTER: Allowance(
             slow_timeout={
                 "period": "60m",
                 "terminate-after": 1,
                 "grace-period": "5s",
             },
-            test_group="serial-build-script-integration",
+            test_group="serial-nested-cargo-builds",
+        ),
+        NO_DEFAULT_FEATURES_FILTER: Allowance(
+            slow_timeout={
+                "period": "20m",
+                "terminate-after": 1,
+                "grace-period": "5s",
+            },
+            test_group="serial-nested-cargo-builds",
         ),
         ISOLATED_CARGO_CHECKS_FILTER: Allowance(
             slow_timeout={
@@ -198,7 +195,16 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
                 "terminate-after": 1,
                 "grace-period": "5s",
             },
-            test_group=None,
+            test_group="serial-nested-cargo-builds",
+        ),
+        COMPILE_CONTRACT_FILTER: Allowance(
+            slow_timeout={
+                "period": "60m",
+                "terminate-after": 1,
+                "grace-period": "5s",
+            },
+            test_group="serial-dylint-ui",
+            retries=0,
         ),
         ("binary(behaviour_toolchain)"): Allowance(
             slow_timeout={
@@ -212,22 +218,8 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
             "test(driver::ui::) | "
             "test(tests::ui::) | "
             "test(ui::ui) | "
-            "test(sha2_0_11_pre_migration_patterns_fail_to_compile) | "
-            "test(trybuild_fixtures_compile_without_diagnostics) | "
-            "test(renamed_common_apis_are_public_and_legacy_names_stay_"
-            "removed) | "
-            "test(renamed_sarif_api_is_public_and_legacy_names_stay_"
-            "removed) | "
             "(binary(ui) & test(=ui))"
         ): Allowance(
-            slow_timeout={
-                "period": "20m",
-                "terminate-after": 1,
-                "grace-period": "5s",
-            },
-            test_group="serial-dylint-ui",
-        ),
-        "test(fixture_expansion_lint_attribute_contract)": Allowance(
             slow_timeout={
                 "period": "20m",
                 "terminate-after": 1,
@@ -242,12 +234,12 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
 #: A group a profile names and ``[test-groups]`` does not declare is a
 #: configuration nextest refuses, and one declared without
 #: ``max-threads = 1`` serializes nothing: the UI harnesses would then
-#: build lint libraries concurrently against the shared target
-#: directory, which is the race the groups exist to stop.
+#: build lint libraries concurrently against the shared target directory,
+#: while nested Cargo fixtures would compete for compiler admission.
 REQUIRED_TEST_GROUPS: typ.Final[dict[str, dict[str, object]]] = {
     "serial-dylint-ui": {"max-threads": 1},
     "serial-toolchain-installs": {"max-threads": 1},
-    "serial-build-script-integration": {"max-threads": 1},
+    "serial-nested-cargo-builds": {"max-threads": 1},
 }
 
 
@@ -330,16 +322,16 @@ def test_each_profile_states_the_overrides_its_own_tests_need(
     than silent.
 
     Each policy key is compared as a whole table, so the grace period is
-    asserted alongside the period and the multiplier, and the retry
-    backoff and delay alongside the count. Checking
-    the period alone would let the grace period be dropped, and the
+    asserted alongside the period and the multiplier, and the retry policy
+    alongside its count, backoff and delay. Compile contracts explicitly
+    disable retries because each attempt repeats a costly nested build.
+    Checking only the period would let the grace period be dropped, and the
     watchdog above these budgets is sized to cover exactly that wait.
 
     The filter is compared whole and exactly, per profile. A substring
-    would accept a narrowed filter: dropping a clause from the `ui`
-    disjunction leaves any needle intact while the tests that clause
-    named lose the ten-minute allowance and fall back to the base three
-    hundred seconds.
+    would accept a narrowed filter: dropping a clause from a `ui`
+    disjunction leaves each selected needle intact while the affected tests
+    lose the 20-minute allowance and fall back to the base 300 seconds.
 
     Only overrides that declare a budget are counted. The default
     profile matches ``binary(behaviour_toolchain)`` twice, once for the
@@ -369,9 +361,10 @@ def test_each_profile_states_the_overrides_its_own_tests_need(
     )
     assert matching[0].get("retries") == allowance.retries, (
         f"[profile.{profile}]'s {needle!r} override must declare retries "
-        f"{allowance.retries}, got {matching[0].get('retries')}; the Dylint UI "
-        f"harnesses retry a transient Windows rename failure, and "
-        f"`tests/nextest_ui_filter.rs` requires the key"
+        f"{allowance.retries}, got {matching[0].get('retries')}; Dylint UI "
+        f"harnesses retain retries for transient Windows rename failures, "
+        f"while the compile-contract override disables retries; "
+        f"`tests/nextest_ui_filter.rs` also requires the UI retry policy"
     )
 
 
