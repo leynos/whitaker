@@ -17,21 +17,22 @@ use whitaker_installer::cli::{Cli as InstallerCli, Command as InstallerCommand, 
 const OPTION_PAIR_COUNT: usize = 91;
 
 #[derive(Clone, Copy)]
+#[repr(u16)]
 enum OptionKind {
-    TargetDir,
-    Lint,
-    IndividualLints,
-    Experimental,
-    Jobs,
-    Toolchain,
-    Cranelift,
-    DryRun,
-    Verbosity,
-    Quiet,
-    SkipDeps,
-    SkipWrapper,
-    NoUpdate,
-    BuildOnly,
+    TargetDir = 1 << 0,
+    Lint = 1 << 1,
+    IndividualLints = 1 << 2,
+    Experimental = 1 << 3,
+    Jobs = 1 << 4,
+    Toolchain = 1 << 5,
+    Cranelift = 1 << 6,
+    DryRun = 1 << 7,
+    Verbosity = 1 << 8,
+    Quiet = 1 << 9,
+    SkipDeps = 1 << 10,
+    SkipWrapper = 1 << 11,
+    NoUpdate = 1 << 12,
+    BuildOnly = 1 << 13,
 }
 
 impl OptionKind {
@@ -52,24 +53,7 @@ impl OptionKind {
         Self::BuildOnly,
     ];
 
-    const fn bit(self) -> u16 {
-        match self {
-            Self::TargetDir => 1 << 0,
-            Self::Lint => 1 << 1,
-            Self::IndividualLints => 1 << 2,
-            Self::Experimental => 1 << 3,
-            Self::Jobs => 1 << 4,
-            Self::Toolchain => 1 << 5,
-            Self::Cranelift => 1 << 6,
-            Self::DryRun => 1 << 7,
-            Self::Verbosity => 1 << 8,
-            Self::Quiet => 1 << 9,
-            Self::SkipDeps => 1 << 10,
-            Self::SkipWrapper => 1 << 11,
-            Self::NoUpdate => 1 << 12,
-            Self::BuildOnly => 1 << 13,
-        }
-    }
+    const fn bit(self) -> u16 { self as u16 }
 
     const fn name(self) -> &'static str {
         match self {
