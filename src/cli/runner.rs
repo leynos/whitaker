@@ -68,8 +68,10 @@ where
     }
     match Cli::try_parse_localized_from(raw, localizer) {
         Ok(cli) => run_command(&cli, services, streams),
-        Err(error) if is_display_request(&error) => print_clap_error(&error, Outcome::Display),
-        Err(error) => print_clap_error(&error, Outcome::UsageError),
+        Err(error) if is_display_request(&error) => {
+            print_clap_error(&error, Outcome::Display, streams)
+        }
+        Err(error) => print_clap_error(&error, Outcome::UsageError, streams),
     }
 }
 
@@ -144,9 +146,18 @@ fn print_cli_error(error: &CliError, stderr: &mut dyn Write) -> Outcome {
     Outcome::OperationalFailure
 }
 
-/// Prints a clap diagnostic through clap's own output streams.
-fn print_clap_error(error: &clap::Error, outcome: Outcome) -> Outcome {
-    match error.print() {
+/// Writes a clap diagnostic to the stream clap selects for it.
+fn print_clap_error(
+    error: &clap::Error,
+    outcome: Outcome,
+    streams: &mut CommandStreams<'_>,
+) -> Outcome {
+    let result = if error.use_stderr() {
+        write!(streams.stderr, "{}", error.render())
+    } else {
+        write!(streams.stdout, "{}", error.render())
+    };
+    match result {
         Ok(()) => outcome,
         Err(_) => Outcome::OperationalFailure,
     }
@@ -182,5 +193,41 @@ fn token_tag(argument: &OsStr) -> TokenTag {
         Some(value) if is_common_cluster(value) => TokenTag::GlobalFlag,
         Some(value) if value.starts_with('-') => TokenTag::DylintFlag,
         Some(_) | None => TokenTag::Other,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    //! Tests for routing parser diagnostics through the supplied streams.
+
+    use super::{CommandStreams, Outcome, run_from};
+    use crate::adapters::SystemServices;
+
+    #[test]
+    fn clap_diagnostics_use_the_configured_streams() {
+        let services = SystemServices::new();
+        let ports = services.ports();
+
+        for (arguments, expected, uses_stderr) in [
+            (&["whitaker", "--help"][..], Outcome::Display, false),
+            (
+                &["whitaker", "install", "--invalid-option"][..],
+                Outcome::UsageError,
+                true,
+            ),
+        ] {
+            let mut stdout = Vec::new();
+            let mut stderr = Vec::new();
+            let outcome = run_from(
+                arguments.iter().copied(),
+                &ports,
+                &ortho_config::NoOpLocalizer::new(),
+                &mut CommandStreams::new(&mut stdout, &mut stderr),
+            );
+
+            assert_eq!(outcome, expected);
+            assert_eq!(stdout.is_empty(), uses_stderr);
+            assert_eq!(stderr.is_empty(), !uses_stderr);
+        }
     }
 }

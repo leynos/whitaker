@@ -93,7 +93,7 @@ path = "src/main.rs"
 
 [dependencies]
 camino.workspace = true
-clap.workspace = true
+clap = { workspace = true, features = ["derive"] }
 ortho_config.workspace = true
 thiserror.workspace = true
 whitaker-installer.workspace = true

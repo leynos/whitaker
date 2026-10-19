@@ -97,7 +97,8 @@ cargo publish -p whitaker
 ## After publishing
 
 - Confirm the new releases appear on crates.io for the
-  [whitaker-common](https://crates.io/crates/whitaker-common), [whitaker-installer](https://crates.io/crates/whitaker-installer),
+  [whitaker-common](https://crates.io/crates/whitaker-common),
+  [whitaker-installer](https://crates.io/crates/whitaker-installer),
   and [whitaker](https://crates.io/crates/whitaker) crates.
 - Tag the release if Git tags are maintained for published versions.
 - Announce the release through the agreed channels (team chat, mailing list,
