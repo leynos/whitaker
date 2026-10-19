@@ -237,29 +237,30 @@ channel = "nightly-2026-05-28"
 // -------------------------------------------------------------------------
 
 #[rstest]
-fn determine_target_dir_returns_cli_value_when_provided(
+#[case::cli_value_only(true, false)]
+#[case::default_is_used_when_cli_is_missing(false, true)]
+#[case::cli_value_wins_when_both_are_available(true, true)]
+fn determine_target_dir_selects_cli_before_default(
     #[from(temp_target)] temp_target_res: std::io::Result<TempTarget>,
+    #[case] cli_path_is_available: bool,
+    #[case] default_path_is_available: bool,
 ) {
     let temp_target = temp_target_res.expect("temporary target directory should be created");
+    let cli_path = temp_target.path.join("cli");
+    let default_path = temp_target.path.join("default");
+    let cli_target = cli_path_is_available.then_some(cli_path.as_path());
 
-    let result = determine_target_dir_with(Some(&temp_target.path), || None);
-
-    assert!(result.is_ok(), "expected success, got: {result:?}");
-    assert_eq!(result.expect("already checked"), temp_target.path);
-}
-
-#[rstest]
-fn determine_target_dir_falls_back_to_default_when_cli_is_none(
-    #[from(temp_target)] temp_target_res: std::io::Result<TempTarget>,
-) {
-    let temp_target = temp_target_res.expect("temporary target directory should be created");
-
-    let default_path = temp_target.path.clone();
-
-    let result = determine_target_dir_with(None, || Some(default_path.clone()));
+    let result = determine_target_dir_with(cli_target, || {
+        default_path_is_available.then(|| default_path.clone())
+    });
 
     assert!(result.is_ok(), "expected success, got: {result:?}");
-    assert_eq!(result.expect("already checked"), default_path);
+    let expected_path = if cli_path_is_available {
+        cli_path
+    } else {
+        default_path
+    };
+    assert_eq!(result.expect("already checked"), expected_path);
 }
 
 #[test]
@@ -271,19 +272,4 @@ fn determine_target_dir_returns_error_when_no_default_available() {
         matches!(err, InstallerError::StagingFailed { .. }),
         "expected StagingFailed error, got: {err:?}"
     );
-}
-
-#[rstest]
-fn determine_target_dir_prefers_cli_over_default(
-    #[from(temp_target)] temp_target_res: std::io::Result<TempTarget>,
-) {
-    let temp_target = temp_target_res.expect("temporary target directory should be created");
-
-    let cli_path = temp_target.path.clone();
-    let default_path = temp_target.path.join("should_not_be_used");
-
-    let result = determine_target_dir_with(Some(&cli_path), || Some(default_path));
-
-    assert!(result.is_ok(), "expected success, got: {result:?}");
-    assert_eq!(result.expect("already checked"), cli_path);
 }

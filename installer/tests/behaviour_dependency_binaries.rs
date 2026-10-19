@@ -62,7 +62,7 @@ impl DependencyBinaryInstaller for StubRepositoryInstaller {
         match &self.behaviour {
             RepositoryInstallerBehaviour::Success
             | RepositoryInstallerBehaviour::SuccessWithFailedVerification => {
-                dirs.bin_dir().map_or_else(
+                dirs.executables().map_or_else(
                     || Err(DependencyBinaryInstallError::MissingBinDir),
                     |bin_dir| {
                         // Stage a runnable fake at the returned path: dylint-link

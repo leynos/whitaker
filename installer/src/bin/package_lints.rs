@@ -236,13 +236,13 @@ fn format_epoch_secs(epoch_secs: u64) -> String {
 ///
 /// Adapted from Howard Hinnant's `civil_from_days` algorithm, which is
 /// public domain and widely used in C++ `<chrono>` implementations.
-const fn civil_from_epoch(epoch_secs: u64) -> (i64, u64, u64) {
-    let z = epoch_secs.div_euclid(86_400).cast_signed() + 719_468;
+const fn civil_from_epoch(epoch_secs: u64) -> (u64, u64, u64) {
+    let z = epoch_secs.div_euclid(86_400) + 719_468;
     let era = z.div_euclid(146_097);
-    let doe = z.rem_euclid(146_097).cast_unsigned(); // day of era [0, 146_096]
+    let doe = z.rem_euclid(146_097); // day of era [0, 146_096]
     let yoe = (doe - doe.div_euclid(1_460) + doe.div_euclid(36_524) - doe.div_euclid(146_096))
         .div_euclid(365);
-    let y = yoe.cast_signed() + era * 400;
+    let y = yoe + era * 400;
     let doy = doe - (365 * yoe + yoe.div_euclid(4) - yoe.div_euclid(100)); // day of year
     let mp = (5 * doy + 2).div_euclid(153);
     let d = doy - (153 * mp + 2).div_euclid(5) + 1;

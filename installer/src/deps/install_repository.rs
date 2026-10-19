@@ -1,29 +1,23 @@
 //! Repository-release installation path for dependency tools.
 //!
-//! Whitaker publishes prebuilt `cargo-dylint` and `dylint-link` binaries as
-//! release assets. This module resolves the manifest entry for a tool, drives
-//! the release install, and reports which Cargo fallback (if any) remains
-//! viable when the release cannot be used.
-
-use std::io::Write;
+//! This module resolves release metadata and verifies installed tools while
+//! keeping repository-download orchestration out of the Cargo fallback path.
 
 use super::{
-    CommandExecutor, DYLINT_LINK_TOOL, DependencyTool, InstallContext, InstallerError,
-    RepositoryInstallContext, Result, find_dependency_binary, is_tool_installed, write_message,
+    CommandExecutor, DYLINT_LINK_TOOL, DependencyTool, InstallerError, RepositoryInstallContext,
+    Result, find_dependency_binary, is_tool_installed,
 };
 use crate::dependency_binaries::DependencyBinary;
 
-/// Outcome of attempting a repository-release install for one dependency tool.
+/// Result of trying to install one dependency from a repository release.
 pub(super) enum RepositoryInstall {
-    /// The release was installed and verified; no Cargo fallback is needed.
+    /// The release installed successfully and passed verification.
     Installed,
-    /// The release was unusable; fall back to the configured Cargo mode.
-    FallBackToCargo,
-    /// The release is absent upstream, so `cargo binstall` cannot help either.
-    FallBackToCargoInstall,
+    /// The caller should continue with Cargo; skip Binstall when no archive exists.
+    FallBack { reason: String, skip_binstall: bool },
 }
 
-/// Looks up the manifest entry describing the release asset for `tool`.
+/// Resolve the manifest entry describing the release asset for a tool.
 pub(super) fn resolve_dependency_binary(
     tool: &DependencyTool,
 ) -> Result<&'static DependencyBinary> {
@@ -43,13 +37,9 @@ pub(super) fn resolve_dependency_binary(
     })
 }
 
-/// The tool to install from a repository release, together with the
-/// collaborators needed to perform and verify that install.
-///
-/// Grouped so [`attempt_repository_install`] stays within the workspace
-/// argument budget; the three fields are only ever supplied together.
+/// The collaborators needed to attempt a repository-release install.
 pub(super) struct RepositoryInstallRequest<'a> {
-    /// Executor used to probe whether the installed binary runs.
+    /// Executor used to check whether the installed binary runs.
     pub(super) executor: &'a dyn CommandExecutor,
     /// The dependency tool being installed.
     pub(super) tool: &'a DependencyTool,
@@ -57,79 +47,48 @@ pub(super) struct RepositoryInstallRequest<'a> {
     pub(super) dependency: &'static DependencyBinary,
 }
 
-/// Installs the requested tool from a repository release, reporting whether
-/// Cargo must still run and, if so, which fallback mode remains viable.
+/// Try a repository release and report whether Cargo fallback is needed.
+///
+/// # Errors
+///
+/// Returns an error if the post-install verification command cannot run.
 pub(super) fn attempt_repository_install(
     request: &RepositoryInstallRequest<'_>,
-    stderr: &mut dyn Write,
-    context: &InstallContext<'_>,
     repo: &RepositoryInstallContext<'_>,
-) -> RepositoryInstall {
-    let tool = request.tool;
+) -> Result<RepositoryInstall> {
     match repo
         .installer
         .install(request.dependency, repo.target, repo.dirs)
     {
-        Ok(_) if repository_install_verified(request.executor, tool) => {
-            write_message(
-                stderr,
-                context.quiet,
-                &format!("Installed {} from repository release.", tool.package),
-            );
-            RepositoryInstall::Installed
+        Ok(_) if repository_install_verified(request.executor, request.tool)? => {
+            Ok(RepositoryInstall::Installed)
         }
-        Ok(_) => {
-            write_message(
-                stderr,
-                context.quiet,
-                &format!(
-                    "Repository install for {} failed verification; falling back to Cargo.",
-                    tool.package
-                ),
-            );
-            RepositoryInstall::FallBackToCargo
-        }
+        Ok(_) => Ok(RepositoryInstall::FallBack {
+            reason: "failed verification".to_owned(),
+            skip_binstall: false,
+        }),
         Err(error) => {
-            let not_found = error.is_not_found();
-            write_message(
-                stderr,
-                context.quiet,
-                &format!(
-                    "Repository install for {} unavailable: {error}. Falling back to Cargo.",
-                    tool.package
-                ),
-            );
-            if not_found {
-                RepositoryInstall::FallBackToCargoInstall
-            } else {
-                RepositoryInstall::FallBackToCargo
-            }
+            let skip_binstall = error.is_not_found();
+            Ok(RepositoryInstall::FallBack {
+                reason: format!("unavailable: {error}"),
+                skip_binstall,
+            })
         }
     }
 }
 
-/// Verify a repository-release install of `tool`.
+/// Verify a repository-release install of a dependency tool.
 ///
-/// The trust boundary for a repository install is established entirely by the
-/// installer pipeline: the release asset name pins the package and version,
-/// the `.sha256` sidecar establishes integrity, extraction confirms the
-/// expected archive member, and the permission step establishes launch
-/// eligibility. A successful install is therefore sufficient evidence on its
-/// own.
-///
-/// `dylint-link` is additionally never executed as a health check. It is a
-/// linker wrapper that forwards its entire argument list to the underlying
-/// linker, so it has no reliable self-reporting subcommand: `--version` exits
-/// early and `--help` depends on a usable linker and toolchain in the ambient
-/// environment. Probing it rejects valid, verified artefacts and forces a
-/// source build that cannot succeed on toolchains older than the crate's
-/// rustc floor.
-///
-/// `cargo-dylint` keeps the generic check because it reports its own version
-/// and must additionally be discoverable by Cargo as a subcommand.
-fn repository_install_verified(executor: &dyn CommandExecutor, tool: &DependencyTool) -> bool {
+/// A verified release asset has passed the archive name, checksum, extraction,
+/// and executable-permission checks. The generic health check remains useful
+/// for cargo-dylint, while dylint-link is a linker wrapper and has no reliable
+/// self-reporting command.
+fn repository_install_verified(
+    executor: &dyn CommandExecutor,
+    tool: &DependencyTool,
+) -> Result<bool> {
     if tool == &DYLINT_LINK_TOOL {
-        return true;
+        return Ok(true);
     }
     is_tool_installed(executor, tool)
 }
