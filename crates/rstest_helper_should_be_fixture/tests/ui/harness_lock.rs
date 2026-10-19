@@ -2,7 +2,7 @@
 //!
 //! `tests/ui.rs`'s `ExampleHarness` fixture serializes example compilations
 //! across separate nextest processes with a filesystem lock. This module owns
-//! that protocol — the lock type, its stale-owner recovery, and the adapter
+//! that protocol — the lock type, abandoned-owner recovery, and the adapter
 //! tests that exercise it — so `ui.rs` stays focused on the example and
 //! trybuild assertions.
 
@@ -14,18 +14,12 @@ use std::{
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
-use filetime::{FileTime, set_file_mtime};
 use fs2::FileExt;
 use log::debug;
 use rstest::rstest;
 
-// The example harness lock coordinates separate nextest processes. Windows CI
-// can legitimately hold it for several minutes, so only remove directories
-// old enough to be abandoned by a crashed process.
-const EXAMPLE_HARNESS_LOCK_STALE_AFTER: Duration = Duration::from_mins(30);
-// Bound the default `acquire()` wait so a wedged live owner surfaces a timeout
-// instead of polling forever. It exceeds the stale-recovery window so genuinely
-// abandoned locks are reclaimed before this ceiling is reached.
+// Bound the wait so a wedged live owner surfaces a timeout instead of polling
+// forever. Abandoned locks are reclaimed as soon as their liveness lock drops.
 const EXAMPLE_HARNESS_LOCK_ACQUIRE_TIMEOUT: Duration = Duration::from_mins(31);
 const EXAMPLE_HARNESS_LOCK_POLL_INTERVAL: Duration = Duration::from_millis(100);
 const EXAMPLE_HARNESS_LOCK_OWNER_FILENAME: &str = "owner";
@@ -77,7 +71,7 @@ impl ExampleHarnessLock {
                 }
                 Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
                     debug!(target: EXAMPLE_HARNESS_LOCK_LOG_TARGET, "event=contended path={} attempt={} elapsed_ms={}", path.display(), attempt, started_at.elapsed().as_millis());
-                    recover_stale_example_harness_lock_while_locked(path)?;
+                    recover_abandoned_example_harness_lock_while_locked(path)?;
                 }
                 Err(error) => return Err(error),
             }
@@ -119,7 +113,7 @@ fn wait_for_example_harness_lock_release(
     started_at: Instant,
     wait_limit: Option<Duration>,
 ) -> io::Result<()> {
-    recover_stale_example_harness_lock(path)?;
+    recover_abandoned_example_harness_lock(path)?;
     if wait_limit.is_some_and(|limit| started_at.elapsed() >= limit) {
         debug!(target: EXAMPLE_HARNESS_LOCK_LOG_TARGET, "event=timed_out path={} elapsed_ms={}", path.display(), started_at.elapsed().as_millis());
         return Err(example_harness_lock_timeout(path));
@@ -137,31 +131,24 @@ fn example_harness_lock_timeout(path: &Path) -> io::Error {
         ),
     )
 }
-fn recover_stale_example_harness_lock(path: &Path) -> io::Result<()> {
+fn recover_abandoned_example_harness_lock(path: &Path) -> io::Result<()> {
     let _state_guard = lock_example_harness_state(path)?;
-    recover_stale_example_harness_lock_while_locked(path)
+    recover_abandoned_example_harness_lock_while_locked(path)
 }
-fn recover_stale_example_harness_lock_while_locked(path: &Path) -> io::Result<()> {
-    let metadata = match std::fs::metadata(path) {
-        Ok(metadata) => metadata,
-        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
-        Err(error) => return Err(error),
-    };
-    let modified = metadata.modified()?;
-
-    if example_harness_lock_is_stale(modified, SystemTime::now()) {
-        debug!(target: EXAMPLE_HARNESS_LOCK_LOG_TARGET, "event=stale_recovery_eligible path={}", path.display());
-        remove_stale_example_harness_lock_while_locked(path)?;
+fn recover_abandoned_example_harness_lock_while_locked(path: &Path) -> io::Result<()> {
+    match std::fs::metadata(path) {
+        Ok(_) => remove_released_example_harness_lock_while_locked(path),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error),
     }
-    Ok(())
 }
-fn remove_stale_example_harness_lock(path: &Path) -> io::Result<()> {
+fn remove_released_example_harness_lock(path: &Path) -> io::Result<()> {
     let _state_guard = lock_example_harness_state(path)?;
-    remove_stale_example_harness_lock_while_locked(path)
+    remove_released_example_harness_lock_while_locked(path)
 }
-fn remove_stale_example_harness_lock_while_locked(path: &Path) -> io::Result<()> {
+fn remove_released_example_harness_lock_while_locked(path: &Path) -> io::Result<()> {
     let Some(_owner_liveness) = try_lock_example_harness_liveness(path)? else {
-        debug!(target: EXAMPLE_HARNESS_LOCK_LOG_TARGET, "event=stale_recovery_live_owner path={}", path.display());
+        debug!(target: EXAMPLE_HARNESS_LOCK_LOG_TARGET, "event=recovery_live_owner path={}", path.display());
         return Ok(());
     };
     read_example_harness_lock_owner(path)?.map_or_else(
@@ -234,41 +221,15 @@ fn remove_example_harness_lock_directory(path: &Path) -> io::Result<()> {
     }
 }
 
-fn example_harness_lock_is_stale(modified: SystemTime, now: SystemTime) -> bool {
-    now.duration_since(modified)
-        .is_ok_and(|age| age > EXAMPLE_HARNESS_LOCK_STALE_AFTER)
-}
-
-fn make_example_harness_lock_stale(path: &Path) {
-    let Some(stale_modified) =
-        SystemTime::now().checked_sub(EXAMPLE_HARNESS_LOCK_STALE_AFTER + Duration::from_secs(1))
-    else {
-        panic!("stale timestamp should be representable")
-    };
-    if let Err(error) = set_file_mtime(path, FileTime::from_system_time(stale_modified)) {
-        panic!("lock mtime should be adjustable: {error}");
-    }
-}
-
-#[rstest]
-#[case(Duration::from_mins(1), false)]
-#[case(EXAMPLE_HARNESS_LOCK_STALE_AFTER + Duration::from_secs(1), true)]
-fn example_harness_lock_stale_policy(#[case] age: Duration, #[case] expected: bool) {
-    let now = SystemTime::now();
-    let modified = now - age;
-
-    assert_eq!(example_harness_lock_is_stale(modified, now), expected);
-}
-
 #[rstest]
 #[case(true)]
 #[case(false)]
-fn stale_lock_operations_treat_missing_directory_as_released(#[case] recover: bool) {
+fn released_lock_operations_treat_missing_directory_as_released(#[case] recover: bool) {
     let path = super::unique_summary_path();
     let operation = if recover {
-        recover_stale_example_harness_lock(&path)
+        recover_abandoned_example_harness_lock(&path)
     } else {
-        remove_stale_example_harness_lock(&path)
+        remove_released_example_harness_lock(&path)
     };
 
     operation.expect("missing lock directory should be released");
@@ -277,6 +238,9 @@ fn stale_lock_operations_treat_missing_directory_as_released(#[case] recover: bo
 #[test]
 fn example_harness_lock_reports_active_contention_timeout() {
     let path = super::unique_summary_path();
+    let _owner_liveness = try_lock_example_harness_liveness(&path)
+        .expect("open liveness lock")
+        .expect("acquire active liveness lock");
     std::fs::create_dir(&path).expect("create test lock directory");
     let Err(error) = ExampleHarnessLock::acquire_at(&path, Some(Duration::ZERO)) else {
         panic!("active lock contention should time out");
@@ -303,26 +267,25 @@ fn held_example_harness_liveness_lock_is_reported_as_contended() {
     }
 }
 
-/// Adapter coverage for the model's live-owner, release, then reclaim boundary.
+/// A live owner is preserved until its liveness lock is released.
 #[test]
-fn stale_recovery_preserves_active_owner_then_reclaims_after_release() {
+fn recovery_preserves_a_live_owner() {
     let path = super::unique_summary_path();
     let owner = ExampleHarnessLock::acquire_at(&path, None).expect("acquire active owner");
-    make_example_harness_lock_stale(&path);
-    recover_stale_example_harness_lock(&path).expect("active owner blocks recovery");
+    recover_abandoned_example_harness_lock(&path).expect("active owner blocks recovery");
     assert!(path.is_dir(), "live owner directory must remain intact");
-
-    {
-        let _state_guard = lock_example_harness_state(&path).expect("lock state");
-        std::fs::remove_file(path.join(EXAMPLE_HARNESS_LOCK_OWNER_FILENAME))
-            .expect("remove owner metadata");
-    }
-    make_example_harness_lock_stale(&path);
     drop(owner);
+}
 
-    assert!(path.is_dir(), "stale directory remains");
-    recover_stale_example_harness_lock(&path).expect("reclaim released stale owner");
-    assert!(!path.exists(), "released stale directory should be removed");
+/// A recent directory without a live owner is reclaimed immediately.
+#[test]
+fn recovery_reclaims_a_recent_abandoned_lock() {
+    let path = super::unique_summary_path();
+    std::fs::create_dir(&path).expect("create abandoned lock directory");
+    write_lock_owner(&path, &ExampleHarnessLockOwner::new()).expect("write abandoned owner");
+
+    recover_abandoned_example_harness_lock(&path).expect("reclaim abandoned lock");
+    assert!(!path.exists(), "abandoned lock should be removed");
 }
 
 /// Adapter coverage for the model's owner-token cleanup boundary.
@@ -342,5 +305,5 @@ fn lock_cleanup_does_not_remove_a_different_owner() {
         "a successor-owned lock directory must survive"
     );
     drop(original);
-    remove_stale_example_harness_lock(&path).expect("remove released different-owner directory");
+    remove_released_example_harness_lock(&path).expect("remove released different-owner directory");
 }

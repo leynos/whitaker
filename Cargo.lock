@@ -2589,7 +2589,6 @@ dependencies = [
  "cap-std 4.0.3",
  "dylint_linting",
  "dylint_testing",
- "filetime",
  "fs2",
  "log",
  "proptest",

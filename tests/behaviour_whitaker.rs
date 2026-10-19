@@ -5,20 +5,15 @@ use std::{
     path::PathBuf,
     process::{Command, Output},
 };
-#[cfg(all(unix, not(target_os = "macos")))]
-use std::{error::Error, path::Path};
 
-#[cfg(all(unix, not(target_os = "macos")))]
-use cap_std::{
-    ambient_authority,
-    fs_utf8::{Dir, Permissions, PermissionsExt},
-};
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use tempfile::TempDir;
 use whitaker_installer::builder::{library_extension, library_prefix};
+
 #[cfg(all(unix, not(target_os = "macos")))]
-use whitaker_installer::{dirs::BaseDirs, installation_record::record_installation};
+#[path = "behaviour_whitaker/recorded_path.rs"]
+mod recorded_path;
 
 #[derive(Default)]
 struct CliWorld {
@@ -123,7 +118,7 @@ fn when_run_whitaker(world: &CliWorld, arguments: &str) -> Result<(), String> {
         command.args(["--target-dir", target_dir]);
     }
     let output = command
-        .current_dir(workspace_root()?)
+        .current_dir(workspace_root())
         .output()
         .map_err(|error| format!("whitaker process should start: {error}"))?;
     world.output.replace(Some(output));
@@ -308,117 +303,4 @@ fn scenario_conflicting_lint_flags_are_rejected(world: CliWorld) { let _ = world
 #[scenario(path = "tests/features/whitaker_cli.feature", index = 6)]
 fn scenario_legacy_lint_invocations_are_forwarded(world: CliWorld) { let _ = world; }
 
-fn workspace_root() -> Result<PathBuf, String> {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .map(PathBuf::from)
-        .ok_or_else(|| "root package directory should have a parent".to_owned())
-}
-
-#[cfg(all(unix, not(target_os = "macos")))]
-#[test]
-fn forwarding_uses_all_recorded_custom_paths_outside_a_checkout() {
-    let temporary = TempDir::new().expect("temporary directory should be created");
-    let fixture = recorded_path_fixture(&temporary).expect("recorded-path fixture should exist");
-
-    let output = Command::new(env!("CARGO_BIN_EXE_whitaker"))
-        .arg("--all")
-        .env("PATH", &fixture.fake_cargo)
-        .env_remove("DYLINT_LIBRARY_PATH")
-        .env("XDG_DATA_HOME", &fixture.data_home)
-        .env("HOME", temporary.path())
-        .current_dir(&fixture.external_cwd)
-        .output()
-        .expect("root CLI should start outside a Whitaker checkout");
-
-    assert!(output.status.success());
-    let path_list = String::from_utf8(output.stdout).expect("fake cargo output should be UTF-8");
-    let forwarded_paths: Vec<_> = std::env::split_paths(path_list.trim()).collect();
-    assert!(forwarded_paths.contains(&fixture.stable));
-    assert!(forwarded_paths.contains(&fixture.nightly));
-    assert!(!fixture.external_cwd.join("rust-toolchain.toml").exists());
-}
-
-#[cfg(all(unix, not(target_os = "macos")))]
-struct TestBaseDirs {
-    data: PathBuf,
-}
-
-#[cfg(all(unix, not(target_os = "macos")))]
-impl BaseDirs for TestBaseDirs {
-    fn home(&self) -> Option<PathBuf> { None }
-
-    fn executables(&self) -> Option<PathBuf> { None }
-
-    fn whitaker_data(&self) -> Option<PathBuf> { Some(self.data.clone()) }
-}
-
-#[cfg(all(unix, not(target_os = "macos")))]
-struct RecordedPathFixture {
-    data_home: PathBuf,
-    stable: PathBuf,
-    nightly: PathBuf,
-    external_cwd: PathBuf,
-    fake_cargo: PathBuf,
-}
-
-#[cfg(all(unix, not(target_os = "macos")))]
-fn recorded_path_fixture(temporary: &TempDir) -> Result<RecordedPathFixture, Box<dyn Error>> {
-    let test_root = Dir::open_ambient_dir(
-        camino::Utf8Path::from_path(temporary.path())
-            .ok_or_else(|| std::io::Error::other("temporary path should be UTF-8"))?,
-        ambient_authority(),
-    )?;
-    create_fixture_directories(&test_root)?;
-
-    let fixture = RecordedPathFixture {
-        data_home: temporary.path().join("xdg-data"),
-        stable: temporary.path().join("custom-stable"),
-        nightly: temporary.path().join("custom-nightly"),
-        external_cwd: temporary.path().join("external-project"),
-        fake_cargo: temporary.path().join("fake-cargo"),
-    };
-    record_fixture_toolchains(&fixture)?;
-    create_fake_cargo(&fixture.fake_cargo)?;
-    Ok(fixture)
-}
-
-#[cfg(all(unix, not(target_os = "macos")))]
-fn create_fixture_directories(root: &Dir) -> std::io::Result<()> {
-    for directory in [
-        "xdg-data",
-        "custom-stable",
-        "custom-nightly",
-        "external-project",
-        "fake-cargo",
-    ] {
-        root.create_dir_all(directory)?;
-    }
-    Ok(())
-}
-
-#[cfg(all(unix, not(target_os = "macos")))]
-fn record_fixture_toolchains(fixture: &RecordedPathFixture) -> Result<(), Box<dyn Error>> {
-    let dirs = TestBaseDirs {
-        data: fixture.data_home.join("whitaker"),
-    };
-    for (toolchain, path) in [("stable", &fixture.stable), ("nightly", &fixture.nightly)] {
-        let staging_path = camino::Utf8Path::from_path(path)
-            .ok_or_else(|| std::io::Error::other("staging path should be UTF-8"))?;
-        record_installation(&dirs, toolchain, staging_path)?;
-    }
-    Ok(())
-}
-
-#[cfg(all(unix, not(target_os = "macos")))]
-fn create_fake_cargo(directory: &Path) -> Result<(), Box<dyn Error>> {
-    let path = camino::Utf8Path::from_path(directory)
-        .ok_or_else(|| std::io::Error::other("fake cargo path should be UTF-8"))?;
-    let fake_cargo_dir = Dir::open_ambient_dir(path, ambient_authority())?;
-    fake_cargo_dir.write(
-        "cargo",
-        "#!/bin/sh\nprintf '%s\\n' \"$DYLINT_LIBRARY_PATH\"\n",
-    )?;
-    fake_cargo_dir.set_permissions("cargo", Permissions::from_mode(0o755))?;
-    Ok(())
-}
+fn workspace_root() -> PathBuf { PathBuf::from(env!("CARGO_MANIFEST_DIR")) }

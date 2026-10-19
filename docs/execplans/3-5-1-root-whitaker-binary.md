@@ -109,8 +109,16 @@ present. Kani passed 360 checks and reachability controls; Verus exceeded
 tolerance without a verdict (D-19). Name reservation is unauthorized. Roadmap
 3.5.1 is checked per direction; the plan stays open for these two criteria.
 
-Final review and required gates passed. The earlier coverage run timed out on
-trybuild; the target now clears workspace data before rerunning.
+Hosted CodeScene at published `a02ddff` predates local remediation; refresh
+after publication. Candidate `edea587d` passed `make check-fmt`, `make lint`
+(rustdoc, Clippy, Dylint), `make typecheck`, `make test NEXTEST_PROFILE=ci`
+(1,711 passed, five skipped; feature-free core and workspace doctests passed),
+`make markdownlint`, `make nixie`,
+`cargo package -p whitaker --no-verify --allow-dirty`, `make spelling-config`,
+and `mbake validate Makefile`. The optional instrumented coverage run timed out
+in a trybuild fixture after three retries and produced no LCOV report; the
+updated cleanup target was not rerun. CodeRabbit review of the committed
+milestone and refreshed hosted checks remain pending.
 
 ## Constraints
 
@@ -1446,6 +1454,16 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
   unbounded proof is not validated. Further work requires an approved tolerance
   decision or a separately authorized change to the verification plan.
 
+- Observation: `workspace_root()` used the manifest's parent; fresh-home CI
+  failed dry-run on Linux, Windows and coverage. It now uses the package root.
+
+- Observation: a timed-out Dylint example left its cross-process lock behind.
+  Evidence: Nextest killed the first `collection_zero_diagnostic` attempt at
+  ten minutes; recovery then waited for a thirty-minute mtime threshold, so two
+  retries timed out on the abandoned lock. Its advisory liveness lock was free.
+  Impact: reclaim immediately when that lock is free, while preserving active
+  owners; regression tests cover both states.
+
 ## Decision log
 
 - **D-1: Extract the Dylint driver library into `crates/whitaker_lint_core` as
@@ -1548,21 +1566,17 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
   the root manifest from an integration test. Preserve the existing
   `expand_pkg_url`, `expand_bin_dir`, and `load_cargo_toml` signatures; add
   `expand_pkg_url_for`, `expand_bin_dir_for`, and `load_cargo_toml_from` for
-  the new callers. This avoids changing existing installer test and packaging
-  call-sites while keeping one template implementation. Date/Author:
-  2026-10-17, implementation agent.
+  the new callers; `BinstallRelease` groups inputs behind one renderer for both
+  templates, eliminating duplicate rendering and preserving existing
+  call-sites. Date/Author: 2026-10-17, implementation agent.
 
-- **D-14: Serialize the remaining nested-build UI tests.** The existing
-  `serial-dylint-ui` Nextest group omitted the parameterized
-  `rstest_helper_should_be_fixture` fixture and call-site tests, as well as two
-  `no_unwrap_or_else_panic` examples added after its filter was written. Under
-  the recorded shared Cargo target-lock contention, those tests ran
-  concurrently, held the cross-process fixture lock for more than 31 minutes,
-  and caused Dylint capture failures. Add only the observed test names to the
-  existing group so one workspace's UI builds do not queue behind sibling UI
-  tests that hold the same build lock. Keep the existing timeout and retry
-  policy unchanged; the full test gate will establish whether this resolves the
-  self-contention. Date/Author: 2026-10-17, implementation supervisor.
+- **D-14: Serialize nested-build UI tests and recover killed owners.** Extend
+  `serial-dylint-ui` with the observed fixture and call-site tests after shared
+  Cargo target-lock contention caused Dylint capture failures. A later Nextest
+  timeout showed that killed attempts left an ownerless lock until its
+  thirty-minute age threshold; reclaim it as soon as the advisory liveness lock
+  is free. Live owners remain protected. Keep timeout and retry policy
+  unchanged. Date/Author: 2026-10-19, implementation supervisor.
 
 - **D-15: Use the conventional module directory facade for installer
   orchestration.** After extracting dry-run and exit adapters, the public

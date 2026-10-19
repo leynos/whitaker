@@ -47,7 +47,6 @@ whitaker_lint_core = { workspace = true, features = ["dylint-driver"], optional 
 
 [dev-dependencies]
 dylint_testing = { workspace = true }
-filetime = "0.2.29"
 fs2 = "0.4"
 proptest = { workspace = true }
 rstest = { workspace = true }
