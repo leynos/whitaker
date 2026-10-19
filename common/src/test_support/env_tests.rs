@@ -20,6 +20,11 @@ const SCOPED_KEY: &str = "WHITAKER_TEST_SUPPORT_SCOPED";
 const OVERLAPPING_SCOPES_KEY: &str = "WHITAKER_TEST_SUPPORT_OVERLAPPING_SCOPES";
 const PROPERTY_KEY: &str = "WHITAKER_TEST_SUPPORT_PROPERTY";
 
+enum NestedMutation {
+    Set,
+    Remove,
+}
+
 struct ReleaseOnDrop(Option<Sender<()>>);
 
 impl ReleaseOnDrop {
@@ -210,27 +215,22 @@ fn transition_removes_and_restores_value() -> Result<(), TestCaseError> {
     Ok(())
 }
 
-fn transition_restores_outer_value_after_nested_removal() -> Result<(), TestCaseError> {
-    let (inner_removed, outer_restored) = with_env_var(PROPERTY_KEY, "outer", || {
-        let inner_removed =
-            with_env_var_removed(PROPERTY_KEY, || std::env::var_os(PROPERTY_KEY).is_none());
+fn transition_restores_outer_value_after_nested_mutation(
+    nested_mutation: NestedMutation,
+) -> Result<(), TestCaseError> {
+    let (inner_mutation_applied, outer_restored) = with_env_var(PROPERTY_KEY, "outer", || {
+        let inner_mutation_applied = match nested_mutation {
+            NestedMutation::Set => with_env_var(PROPERTY_KEY, "inner", || {
+                std::env::var_os(PROPERTY_KEY).as_deref() == Some(OsStr::new("inner"))
+            }),
+            NestedMutation::Remove => {
+                with_env_var_removed(PROPERTY_KEY, || std::env::var_os(PROPERTY_KEY).is_none())
+            }
+        };
         let outer_restored = std::env::var_os(PROPERTY_KEY).as_deref() == Some(OsStr::new("outer"));
-        (inner_removed, outer_restored)
+        (inner_mutation_applied, outer_restored)
     });
-    prop_assert!(inner_removed);
-    prop_assert!(outer_restored);
-    Ok(())
-}
-
-fn transition_restores_outer_value_after_nested_set() -> Result<(), TestCaseError> {
-    let (inner_visible, outer_restored) = with_env_var(PROPERTY_KEY, "outer", || {
-        let inner_visible = with_env_var(PROPERTY_KEY, "inner", || {
-            std::env::var_os(PROPERTY_KEY).as_deref() == Some(OsStr::new("inner"))
-        });
-        let outer_restored = std::env::var_os(PROPERTY_KEY).as_deref() == Some(OsStr::new("outer"));
-        (inner_visible, outer_restored)
-    });
-    prop_assert!(inner_visible);
+    prop_assert!(inner_mutation_applied);
     prop_assert!(outer_restored);
     Ok(())
 }
@@ -263,8 +263,8 @@ proptest! {
                     match transition {
                         0 => transition_exposes_temporary_value()?,
                         1 => transition_removes_and_restores_value()?,
-                        2 => transition_restores_outer_value_after_nested_removal()?,
-                        3 => transition_restores_outer_value_after_nested_set()?,
+                        2 => transition_restores_outer_value_after_nested_mutation(NestedMutation::Remove)?,
+                        3 => transition_restores_outer_value_after_nested_mutation(NestedMutation::Set)?,
                         4 => transition_restores_value_after_set_callback_panic()?,
                         5 => transition_restores_value_after_remove_callback_panic()?,
                         _ => prop_assert!(false, "transition is outside the generated range"),

@@ -21,10 +21,9 @@ pub mod decomposition;
 pub mod fixtures;
 pub mod ui;
 
-use std::{
-    ffi::OsStr,
-    sync::{Mutex, MutexGuard, OnceLock, PoisonError},
-};
+use std::{ffi::OsStr, sync::OnceLock};
+
+use parking_lot::{ReentrantMutex, ReentrantMutexGuard};
 
 pub use fixtures::{copy_directory, copy_fixture};
 pub use ui::{
@@ -39,15 +38,26 @@ pub use ui::{
 /// use `temp_env`'s own re-entrant lock. This mutex is for multi-step test
 /// protocols whose participants explicitly acquire the same guard.
 ///
-/// The mutex guards `()`, so a poisoned lock carries no corrupted state: it
-/// only records that some earlier test panicked while holding the
-/// serialization token. Recovering the guard is therefore sound, and keeps one
-/// failing test from cascading into every later one.
-pub fn env_test_guard() -> MutexGuard<'static, ()> {
-    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-    LOCK.get_or_init(|| Mutex::new(()))
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
+/// The re-entrant lock guards `()` and is used only for serialization, so a
+/// protocol can safely call another helper that acquires the same guard.
+pub type EnvTestGuard = ReentrantMutexGuard<'static, ()>;
+
+/// Acquire the shared guard for environment-sensitive test protocols.
+///
+/// Hold the guard across a multi-step protocol that must not interleave with
+/// other tests mutating the process environment. Re-entrancy permits that
+/// protocol to call another helper that acquires the same guard.
+///
+/// # Examples
+///
+/// ```
+/// use whitaker_common::test_support::env_test_guard;
+///
+/// let _guard = env_test_guard();
+/// ```
+pub fn env_test_guard() -> EnvTestGuard {
+    static LOCK: OnceLock<ReentrantMutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| ReentrantMutex::new(())).lock()
 }
 
 /// Runs `callback` with one environment variable temporarily set.

@@ -46,6 +46,13 @@ REQUIRED_GLOBAL_TIMEOUT: typ.Final[str] = "85m"
 # Parser-pin fixtures share one integration binary, target directory and Cargo
 # package cache, so the allowance must cover that whole binary and serialize it.
 BUILD_SCRIPT_INTEGRATION_FILTER: typ.Final[str] = "binary(build_script_integration)"
+API_CONTRACT_FILTER: typ.Final[str] = (
+    "test(normalize_settings_is_public_and_the_legacy_name_stays_removed)"
+)
+ISOLATED_CARGO_CHECKS_FILTER: typ.Final[str] = (
+    "test(crate_builds_without_dylint_driver_feature) | "
+    "test(fluent_bundles_are_included_in_the_package_tarball)"
+)
 
 
 class Allowance(typ.NamedTuple):
@@ -56,10 +63,9 @@ class Allowance(typ.NamedTuple):
     slow_timeout : dict[str, object]
         The whole ``slow-timeout`` table the override must declare.
     test_group : str or None
-        The group it must name, or None when it names none. The budget
-        and the group are one claim: a test allowed thirty minutes but
-        no longer serialized runs concurrently with its siblings on the
-        shared target directory, which is what the group exists to stop.
+        The group it must name, or None when the tests use isolated state.
+        The timeout bounds an individual nested build; the group serializes
+        tests that share a target directory or another mutable resource.
     retries : dict[str, object] or None
         The whole ``retries`` table, or None when the override declares
         none. Part of the same claim: the Dylint UI harnesses retry a
@@ -88,18 +94,36 @@ class Allowance(typ.NamedTuple):
 #: named lose the ten-minute allowance and fall back to the base three
 #: hundred seconds. The two profiles genuinely differ here, the default one
 #: naming seven more `test(...)` clauses in its shared UI override than
-#: `ci`: fifteen against eight, with `(binary(ui) & test(=ui))` shared and
-#: counted in neither. The macro crate's compile contract and parser-pin
-#: nested Cargo checks have their own identical allowances in both profiles.
+#: `ci`: fourteen against seven, with `(binary(ui) & test(=ui))` shared and
+#: counted in neither. The macro crate's compile contract, isolated Cargo
+#: checks, API contract, and parser-pin nested Cargo checks have allowances in
+#: both profiles. The API contract has a separate allowance because retries
+#: restarted its nested Cargo build while it waited for the shared cache lock.
 REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
     "default": {
+        API_CONTRACT_FILTER: Allowance(
+            slow_timeout={
+                "period": "45m",
+                "terminate-after": 1,
+                "grace-period": "5s",
+            },
+            test_group="serial-dylint-ui",
+        ),
         BUILD_SCRIPT_INTEGRATION_FILTER: Allowance(
+            slow_timeout={
+                "period": "60m",
+                "terminate-after": 1,
+                "grace-period": "5s",
+            },
+            test_group="serial-build-script-integration",
+        ),
+        ISOLATED_CARGO_CHECKS_FILTER: Allowance(
             slow_timeout={
                 "period": "30m",
                 "terminate-after": 1,
                 "grace-period": "5s",
             },
-            test_group="serial-build-script-integration",
+            test_group=None,
         ),
         ("binary(behaviour_toolchain)"): Allowance(
             slow_timeout={
@@ -119,8 +143,6 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
             "test(example_compiles_without_diagnostics) | "
             "test(example_harness_collects_call_site_evidence) | "
             "test(trybuild_fixtures_compile_without_diagnostics) | "
-            "test(normalize_settings_is_public_and_the_legacy_name_stays_"
-            "removed) | "
             "test(renamed_common_apis_are_public_and_legacy_names_stay_"
             "removed) | "
             "test(renamed_sarif_api_is_public_and_legacy_names_stay_"
@@ -154,13 +176,29 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
         ),
     },
     "ci": {
+        API_CONTRACT_FILTER: Allowance(
+            slow_timeout={
+                "period": "45m",
+                "terminate-after": 1,
+                "grace-period": "5s",
+            },
+            test_group="serial-dylint-ui",
+        ),
         BUILD_SCRIPT_INTEGRATION_FILTER: Allowance(
+            slow_timeout={
+                "period": "60m",
+                "terminate-after": 1,
+                "grace-period": "5s",
+            },
+            test_group="serial-build-script-integration",
+        ),
+        ISOLATED_CARGO_CHECKS_FILTER: Allowance(
             slow_timeout={
                 "period": "30m",
                 "terminate-after": 1,
                 "grace-period": "5s",
             },
-            test_group="serial-build-script-integration",
+            test_group=None,
         ),
         ("binary(behaviour_toolchain)"): Allowance(
             slow_timeout={
@@ -176,8 +214,6 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
             "test(ui::ui) | "
             "test(sha2_0_11_pre_migration_patterns_fail_to_compile) | "
             "test(trybuild_fixtures_compile_without_diagnostics) | "
-            "test(normalize_settings_is_public_and_the_legacy_name_stays_"
-            "removed) | "
             "test(renamed_common_apis_are_public_and_legacy_names_stay_"
             "removed) | "
             "test(renamed_sarif_api_is_public_and_legacy_names_stay_"

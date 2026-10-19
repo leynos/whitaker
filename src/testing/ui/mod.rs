@@ -163,11 +163,11 @@ pub fn run_with_runner(
 
     let crate_name_owned =
         CrateName::try_from(crate_name).map_err(|_| HarnessError::EmptyCrateName)?;
-    let crate_name_str = crate_name_owned.as_str();
+    let crate_name_str = crate_name_owned.as_str().to_owned();
     with_vcpkg_root(|| {
         ensure_toolchain_library(&crate_name_owned)?;
 
-        match runner(crate_name_str, directory.as_ref()) {
+        match runner(&crate_name_str, directory.as_ref()) {
             Ok(()) => Ok(()),
             Err(message) => Err(HarnessError::RunnerFailure {
                 crate_name: crate_name_owned.into_inner(),

@@ -24,10 +24,11 @@ import pytest
 from nextest_profile_test import REQUIRED_OVERRIDES
 from rust_functions import compile_contracts_in
 from nextest_config import load_nextest_config
+from nextest_durations import seconds
 from ubicloud_workflow_support import REPOSITORY_ROOT
 
-#: Bound for compile-contract harnesses under shared compiler admission.
-COMPILE_CONTRACT_TIMEOUT: typ.Final[str] = "20m"
+#: Minimum allowance for compile-contract harnesses under shared admission.
+COMPILE_CONTRACT_MINIMUM_TIMEOUT: typ.Final[str] = "20m"
 
 
 class RustSourceError(OSError):
@@ -207,7 +208,8 @@ def test_every_compile_contract_test_carries_the_long_allowance(
     long_filters = [
         override.get("filter", "")
         for override in (parsed_nextest["profile"][profile].get("overrides") or [])
-        if _period(override.get("slow-timeout")) == COMPILE_CONTRACT_TIMEOUT
+        if (period := _period(override.get("slow-timeout"))) is not None
+        and seconds(period) >= seconds(COMPILE_CONTRACT_MINIMUM_TIMEOUT)
     ]
     for name, path in sorted(discovered.items()):
         assert any(f"test({name})" in one for one in long_filters), (

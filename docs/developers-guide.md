@@ -4108,12 +4108,12 @@ of the rule lives in the `generate-coverage` README in
 this repository sets, what each value is sized against, and where the third
 tier went.
 
-| Tier                     | What it bounds                     | Where it is set                             | Current value                                                                                                                                             |
-| ------------------------ | ---------------------------------- | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`, both profiles       | 300 s default; 20 m for serialized Dylint/trybuild UI harnesses; 30 m for serialized nested-Cargo fixtures; 30 m for toolchain-installing behaviour tests |
-| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, both profiles       | 85 m                                                                                                                                                      |
-| Cargo watchdog           | one `cargo` invocation, wall clock | not used here, see below                    | absent                                                                                                                                                    |
-| Job `timeout-minutes`    | the whole job                      | `ci.yml` and `coverage-main.yml`, job level | 120 m for every lane that runs the suite                                                                                                                  |
+| Tier                     | What it bounds                     | Where it is set                             | Current value                                                                                                                                                                                                                    |
+| ------------------------ | ---------------------------------- | ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`, both profiles       | 300 s default; 20 m for serialized Dylint/trybuild UI harnesses; 30 m for isolated Cargo checks and packaging; 45 m for the API contract; 60 m for serialized parser-pin fixtures; 30 m for toolchain-installing behaviour tests |
+| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, both profiles       | 85 m                                                                                                                                                                                                                             |
+| Cargo watchdog           | one `cargo` invocation, wall clock | not used here, see below                    | absent                                                                                                                                                                                                                           |
+| Job `timeout-minutes`    | the whole job                      | `ci.yml` and `coverage-main.yml`, job level | 120 m for every lane that runs the suite                                                                                                                                                                                         |
 
 *Table: the timers that can end a run, innermost first.*
 
@@ -4145,9 +4145,9 @@ have discarded the log.
 ### Both profiles state their own budgets
 
 Each profile now declares its own base `slow-timeout` and `global-timeout`, and
-`ci` restates the toolchain, dylint, and parser-pin build-script allowances as
-its own overrides. None of that is required for the run to be bounded: `ci`
-would inherit all of it.
+`ci` restates the toolchain, Dylint, isolated-Cargo, API-contract, and
+parser-pin allowances as its own overrides. None of that is required for the
+run to be bounded: `ci` would inherit all of it.
 
 It is repository policy, for two reasons. `ci` is the profile that includes the
 toolchain-installing behaviour tests the default profile excludes, so it is the
@@ -4157,9 +4157,9 @@ later divergence between the two profiles explicit rather than silent, since a
 changed default would otherwise change CI without touching the `ci` section.
 
 The parser-pin build-script tests each create an isolated nested Cargo
-workspace with its own target directory. Their 10 m allowance accommodates cold
-builds queued for compiler admission after one exceeded the 300 s base timeout;
-it does not serialize the tests.
+workspace with its own target directory. Their 60 m allowance accommodates cold
+builds queued for compiler admission; the dedicated test group serializes the
+tests so their Cargo invocations do not compete for the shared package cache.
 
 The contract holds that policy, and its failure messages say so rather than
 claiming nextest requires it.
@@ -4169,15 +4169,27 @@ the nested trybuild harness while compiler admission queued; the wider
 allowance lets a contended compile finish while still terminating a stalled
 test.
 
-The three parser-pin build-script integration cases also receive a 30-minute
-allowance and run in a dedicated serial test group. Each case invokes nested
-Cargo against a fresh temporary target directory, so it rebuilds the fixture's
+The public API contract that uses trybuild has its own 45-minute allowance. The
+general UI override retries tests after a timeout, but three consecutive
+20-minute attempts restarted nested Cargo work while waiting on the package
+cache lock and compiler admission. Giving this one contract a longer single
+attempt avoids spending the same budget rebuilding the same fixtures.
+
+These cases use a fresh temporary target directory and rebuild the fixture's
 build dependencies. The exact-pin case performs both `cargo check` and
 `cargo run`; a traced run completed in 591 seconds after waiting on the shared
 package-cache lock. The loose-pin case was still compiling when its 15-minute
-allowance expired under shared compiler admission. The 30-minute allowance
-leaves room for that queue without changing the whole-suite budget. Serializing
-these cases keeps their Cargo invocations from queueing against one another.
+allowance expired under shared compiler admission. A later full run found that
+the exact-pin case had not completed at its 45-minute limit: its `cargo run`
+phase was still waiting on the shared package-cache lock. The 60-minute
+allowance gives that observed queue another 15 minutes without changing the
+whole-suite budget. Serializing these cases keeps their Cargo invocations from
+queueing against one another.
+
+The no-default-features build check and Fluent packaging check also start
+nested Cargo commands. They use isolated target directories and receive a
+30-minute allowance so package-cache lock waits do not consume the ordinary
+test limit.
 
 ### The clocks do not start together
 
@@ -4219,10 +4231,11 @@ written down, so it has been corrected rather than kept as a special case.
 ### What the values are sized against
 
 The 85 m whole-run budget is sized against the latest uncached full run. It
-reached 1,840 of 1,842 tests before the global timeout stopped the SARIF API
-contract's nested trybuild compilation while Cargo waited on shared locks and
-compiler admission. The additional 10 m gives that contract and the remaining
-test room to finish without weakening the 30 m per-test ceiling.
+reached 1,814 of 1,850 tests in about 64 minutes before two nested Cargo tests
+hit their individual limits while waiting on shared locks and compiler
+admission. The 21-minute margin leaves room for the 60-minute parser-pin limit
+and the remaining tests to finish while still ensuring nextest reports a
+per-test timeout before the job limit.
 
 The 15 m allowance for work outside nextest's window is measured, from the
 worst of several runs rather than one:
