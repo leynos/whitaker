@@ -522,15 +522,14 @@ and build date.
 Installation progress and diagnostics are written to stderr as they are
 produced, including during downloads and source builds. When forwarding a
 legacy invocation to `cargo dylint`, the CLI preserves a non-empty
-`DYLINT_LIBRARY_PATH` override. Otherwise it passes every extant recorded
-staging path so Dylint can select the matching toolchain. Successful installs
-persist the canonical staging directory per toolchain in Whitaker's data
-directory, allowing custom `--target-dir` installs to work from projects
-outside the checkout. If the record is absent or has no extant paths, the CLI
-selects an existing source-build staging directory for the active toolchain,
-then an existing prebuilt bundle directory for the host target. If neither
-exists, it leaves the environment unset so Dylint can report its usual
-missing-library error.
+`DYLINT_LIBRARY_PATH` override. Otherwise it combines every extant recorded
+staging path with any existing source-build path for the active toolchain and
+prebuilt bundle directory for the host target. Dylint selects the matching
+toolchain; including defaults also covers older installs absent from the
+record. Successful installs persist the canonical staging directory per
+toolchain in Whitaker's data directory, allowing custom `--target-dir` installs
+to work outside the checkout. If no candidate exists, the CLI leaves the
+environment unset so Dylint can report its usual missing-library error.
 
 `--build-only` should be renamed to `--build-from-source`. The old flag may
 survive as a hidden compatibility alias for one or two releases.

@@ -1,6 +1,9 @@
 //! Production adapters for installer, inventory, and Dylint subprocess ports.
 
-use std::{ffi::OsString, process::Command};
+use std::{
+    ffi::OsString,
+    process::{Command, ExitStatus},
+};
 
 use camino::Utf8PathBuf;
 use whitaker_installer::{
@@ -99,12 +102,26 @@ impl LintRunner for SystemServices {
         let status = command
             .status()
             .map_err(|source| CliError::Forward { source })?;
-        Ok(status
-            .code()
-            .and_then(|code| u8::try_from(code).ok())
-            .unwrap_or(1))
+        Ok(child_exit_code(status))
     }
 }
+
+fn child_exit_code(status: ExitStatus) -> u8 {
+    status
+        .code()
+        .or_else(|| signal_exit_code(status))
+        .and_then(|code| u8::try_from(code).ok())
+        .unwrap_or(1)
+}
+
+#[cfg(unix)]
+fn signal_exit_code(status: ExitStatus) -> Option<i32> {
+    use std::os::unix::process::ExitStatusExt as _;
+    status.signal().map(|signal| 128 + signal)
+}
+
+#[cfg(not(unix))]
+const fn signal_exit_code(_status: ExitStatus) -> Option<i32> { None }
 
 /// Resolves the library path used when forwarding a command to cargo-dylint.
 fn active_library_path() -> Option<OsString> {
@@ -123,18 +140,23 @@ fn active_library_path() -> Option<OsString> {
     active_library_path_for(explicit_path, recorded_paths, build_path, prebuilt_path)
 }
 
-/// Chooses an explicit path, then a build path, then a prebuilt path.
+/// Includes recorded and default directories so Dylint can select by toolchain.
 fn active_library_path_for(
     explicit_path: Option<OsString>,
     recorded_paths: Vec<Utf8PathBuf>,
     build_path: Option<Utf8PathBuf>,
     prebuilt_path: Option<Utf8PathBuf>,
 ) -> Option<OsString> {
-    explicit_path
-        .filter(|path| !path.is_empty())
-        .or_else(|| existing_recorded_directories(recorded_paths))
-        .or_else(|| existing_directory(build_path))
-        .or_else(|| existing_directory(prebuilt_path))
+    if let Some(path) = explicit_path.filter(|path| !path.is_empty()) {
+        return Some(path);
+    }
+    let mut candidates = recorded_paths;
+    for candidate in [build_path, prebuilt_path].into_iter().flatten() {
+        if !candidates.contains(&candidate) {
+            candidates.push(candidate);
+        }
+    }
+    existing_recorded_directories(candidates)
 }
 
 /// Joins every existing recorded path so Dylint can select by toolchain.
@@ -148,13 +170,6 @@ fn existing_recorded_directories(paths: Vec<Utf8PathBuf>) -> Option<OsString> {
     (!existing.is_empty())
         .then(|| std::env::join_paths(existing).ok())
         .flatten()
-}
-
-/// Returns a directory path only when it currently names an existing directory.
-fn existing_directory(directory: Option<Utf8PathBuf>) -> Option<OsString> {
-    directory
-        .filter(|candidate| candidate.is_dir())
-        .map(|candidate| candidate.into_std_path_buf().into_os_string())
 }
 
 /// Resolves the prebuilt library directory for the active host and toolchain.
@@ -175,7 +190,7 @@ mod tests {
     use tempfile::TempDir;
     use whitaker_common::test_support::with_env_var;
 
-    use super::{active_library_path, active_library_path_for};
+    use super::{active_library_path, active_library_path_for, child_exit_code};
 
     fn utf8_path(path: &std::path::Path) -> Utf8PathBuf {
         Utf8PathBuf::from_path_buf(path.to_path_buf())
@@ -221,11 +236,15 @@ mod tests {
     }
 
     #[test]
-    fn existing_build_directory_precedes_existing_prebuilt_directory() {
+    fn build_directory_precedes_prebuilt_directory_in_candidate_list() {
         let temporary = TempDir::new().expect("temporary directories should be created");
         let build_path = create_test_directory(&temporary, "build");
         let prebuilt_path = create_test_directory(&temporary, "prebuilt");
-        let expected = build_path.clone().into_os_string();
+        let expected = std::env::join_paths([
+            build_path.as_std_path().to_path_buf(),
+            prebuilt_path.as_std_path().to_path_buf(),
+        ])
+        .expect("temporary paths should form an environment path list");
 
         let actual =
             active_library_path_for(None, Vec::new(), Some(build_path), Some(prebuilt_path));
@@ -251,19 +270,31 @@ mod tests {
     }
 
     #[test]
-    fn recorded_directories_cover_each_toolchain_before_default_candidates() {
+    fn recorded_and_default_directories_cover_each_toolchain() {
         let temporary = TempDir::new().expect("temporary directories should be created");
         let stable = create_test_directory(&temporary, "stable-custom-target");
         let nightly = create_test_directory(&temporary, "nightly-custom-target");
+        let active_build = create_test_directory(&temporary, "active-default-target");
         let expected = std::env::join_paths([
             stable.as_std_path().to_path_buf(),
             nightly.as_std_path().to_path_buf(),
+            active_build.as_std_path().to_path_buf(),
         ])
         .expect("temporary paths should form an environment path list");
 
-        let actual = active_library_path_for(None, vec![stable, nightly], None, None);
+        let actual = active_library_path_for(None, vec![stable, nightly], Some(active_build), None);
 
         assert_eq!(actual, Some(expected));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn child_signal_termination_uses_the_conventional_shell_status() {
+        use std::os::unix::process::ExitStatusExt as _;
+
+        let interrupted = std::process::ExitStatus::from_raw(2);
+
+        assert_eq!(child_exit_code(interrupted), 130);
     }
 
     #[cfg(unix)]

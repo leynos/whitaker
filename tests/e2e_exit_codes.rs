@@ -118,4 +118,18 @@ fn legacy_dylint_invocations_forward_arguments_and_exit_status() {
         version_stdout.starts_with("dylint\n--all\n--version\n"),
         "cargo dylint should receive the later version option: {version_stdout:?}",
     );
+
+    bin_dir_handle
+        .write("cargo", "#!/bin/sh\nkill -INT $$\n")
+        .expect("interrupting cargo command should be written");
+    let interrupted = Command::new(env!("CARGO_BIN_EXE_whitaker"))
+        .args(["--all"])
+        .env("PATH", bin_dir.path())
+        .output()
+        .expect("whitaker forwarding process should start");
+    assert_eq!(
+        interrupted.status.code(),
+        Some(130),
+        "a signal-terminated child should preserve the shell status"
+    );
 }
