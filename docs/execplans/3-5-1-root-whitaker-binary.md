@@ -102,23 +102,20 @@ Resumed 2026-10-15; rebased onto `origin/harden-lint-config`
 (`afb1e4ac1387aff8e51fa7bbeb62d94f0f6c8970`), still an ancestor. D-11/D-12
 approve 70 files and 7,000 net added lines for this plan only.
 
-The CLI delivers `install`, transitional `ls`, localized help/version, and
-legacy forwarding. Installer records retain canonical staging paths per
-toolchain and respect explicit `DYLINT_LIBRARY_PATH`; binstall metadata is
-present. Kani passed 360 checks and reachability controls; Verus exceeded
-tolerance without a verdict (D-19). Name reservation is unauthorized. Roadmap
-3.5.1 is checked per direction; the plan stays open for these two criteria.
+The CLI delivers `install`, transitional `ls`, localized help/version, legacy
+forwarding, per-toolchain install records, and binstall metadata. Kani passed
+360 checks; Verus remains unverified and name reservation is unauthorized, so
+the checked roadmap item keeps this plan open.
 
-Hosted CodeScene at published `a02ddff` predates local remediation; refresh
-after publication. Candidate `edea587d` passed `make check-fmt`, `make lint`
-(rustdoc, Clippy, Dylint), `make typecheck`, `make test NEXTEST_PROFILE=ci`
-(1,711 passed, five skipped; feature-free core and workspace doctests passed),
-`make markdownlint`, `make nixie`,
-`cargo package -p whitaker --no-verify --allow-dirty`, `make spelling-config`,
-and `mbake validate Makefile`. The optional instrumented coverage run timed out
-in a trybuild fixture after three retries and produced no LCOV report; the
-updated cleanup target was not rerun. CodeRabbit review of the committed
-milestone and refreshed hosted checks remain pending.
+Published `a02ddff` failed three hosted test jobs because `workspace_root`
+selected the manifest's parent. Local `8444efa` fixes that path and reclaims
+abandoned locks. Its three CodeRabbit findings are addressed; fresh review,
+hosted checks, and CodeScene status remain to be refreshed after publication.
+
+All nine local gates pass on the current candidate: 1,712 tests, 5 skipped,
+doctests, formatting, typecheck, lint, documentation, spelling, Makefile
+validation, and packageability. Optional instrumented coverage still times out
+in trybuild.
 
 ## Constraints
 
@@ -241,26 +238,6 @@ entries; about 80% of the closure is already present. Mitigation: after `EP-M0`
 the root package is _not_ a dependency of the lint crates, so this cost is
 confined to the CLI binary. Record the stripped release size in `EP-M3` rather
 than guessing.
-
-**R8 — Removing `--exclude whitaker` switches on six never-run test binaries.**
-Severity: medium. Likelihood: high.
-`tests/{build_config,config_loading,lint_template,locale_resolution,nextest_ui_filter,ui_harness}.rs`
-total roughly 1,045 lines and have never run under `make test`, because
-`Makefile:23` excludes the package. `tests/ui_harness.rs` drives the Dylint UI
-harness under
-`RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked -D warnings"`.
-Mitigation: treat this as its own step inside `EP-M0` with its own validation,
-not a one-line edit. Note `Makefile:64-68` `DOCTEST_EXCLUDES` carries a _second_
-`--exclude whitaker`; decide both explicitly. `make coverage` (`Makefile:151`)
-reuses the same recipe, so a bad landing reddens two CI jobs.
-
-**R9 — The rebased baseline has an unresolved full-test gate failure.**
-Severity: high. Likelihood: confirmed on the current pre-M2 head. The
-CI-profile suite reported Dylint 6.0.4's `Found no rustc invocations` under the
-managed compiler wrapper and shared Cargo-lock contention. Do not bypass
-compiler admission or exclude tests. Reassess the exact failure after M2
-changes and require a green current-candidate test gate before its CodeRabbit
-review.
 
 ## Context and orientation
 
@@ -667,9 +644,9 @@ This is the precondition, not a spike. Do it first and completely.
    re-add it deliberately in `EP-M1`, so the before-and-after dependency
    measurement is honest.
 4. Remove `--exclude whitaker` from `TEST_EXCLUDES` (`Makefile:23`) **and**
-   decide `DOCTEST_EXCLUDES` (`Makefile:64-68`) explicitly. Expect R8: six test
-   binaries begin running for the first time. Fix what they surface; if any
-   fails for a pre-existing reason unrelated to this plan, record it in
+   decide `DOCTEST_EXCLUDES` (`Makefile:64-68`) explicitly. Run the six newly
+   included test binaries. Fix what they surface; if any fails for a
+   pre-existing reason unrelated to this plan, record it in
    `Surprises & discoveries` and escalate rather than papering over it.
 5. Add `-p whitaker` to `WHITAKER_PACKAGES` (`Makefile:81`) so the project's
    own lint suite covers the new code. Check `dylint.toml:35-52`
@@ -1423,39 +1400,22 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
   `bool`. Impact: the planned error guard can be implemented and tested against
   the library's real signature; no API adjustment is needed.
 
-- Observation: Kani 0.67.0 does not print the literal `Counterexample:` marker
-  for these reachability harnesses. Evidence: all three harness runs report
-  `VERIFICATION:- FAILED` and the expected named failed check, preceded by a
-  successful `assertion.1` containing the concrete selected token sequence.
-  Impact: `scripts/run-kani.sh` now checks that verifier-owned evidence instead
-  of relying on a version-specific marker; all three reachability cases execute
-  and the focused group exits successfully. The positive proof verified 360
-  checks. Total verifier execution was 3.345 seconds; the 2,633-second command
-  elapsed time was Cargo compilation/admission and is tracked separately under
-  D-12. The updated runners pass `bash -n` and ShellCheck.
+- Observation: Kani 0.67.0 omits the literal `Counterexample:` marker and its
+  Ls negative-control report omits the satisfying model. The runner checks
+  `VERIFICATION:- FAILED`, the named check, and the successful witness
+  assertion. All reachability controls pass; the positive proof verified 360
+  checks. The Ls control fails check 64/361, with `[Ls]` derived from the
+  harness, not quoted as verifier output. Source hashes match after mutation;
+  runner checks pass `bash -n` and ShellCheck.
 
-- Observation: Kani's text report for the Ls-routing negative control names
-  the failed `Subcommand(Ls)` assertion but does not print the satisfying
-  model. Evidence: with `TokenTag::Ls` temporarily mapped to `Forward`, check
-  64 of 361 fails at the Ls branch in `verify_classify_is_total_and_disjoint`;
-  evaluating the harness mapping gives the minimal witness
-  `raw = [1, 0, 0, 0, 0, 0]` and `length = 1`, i.e. `[Ls]`. Impact: the control
-  is non-vacuous and the regression is detectable, while the exact solver
-  assignment must be recorded as derived rather than quoted as emitted output.
-  The source was restored and its pre/post SHA-256 hashes match.
+- Observation: Verus sidecar inputs compile as binary crates and need an empty
+  `main()` inside `verus!`; without it, the first run failed with `E0601`.
+  Adding the entry point started verification, but the solver remained
+  CPU-bound for 650 seconds without a verdict, beyond the ten-minute tolerance.
+  The proof remains unverified pending an approved tolerance or plan change.
 
-- Observation: Verus sidecar inputs in this repository are compiled as binary
-  crates, so each file needs an empty `main()` inside `verus!`. Evidence: all
-  existing proof files define one, while the first CLI proof invocation failed
-  with `E0601` before verification. Adding the same entry point let the solver
-  start. It then remained CPU-bound for 650 seconds without output, exceeding
-  the plan's ten-minute verifier tolerance; it was stopped and produced no
-  proof verdict. Impact: the missing-entry-point failure is fixed, but the
-  unbounded proof is not validated. Further work requires an approved tolerance
-  decision or a separately authorized change to the verification plan.
-
-- Observation: `workspace_root()` used the manifest's parent; fresh-home CI
-  failed dry-run on Linux, Windows and coverage. It now uses the package root.
+- Observation: fresh-home CI exposed `workspace_root()` selecting the
+  manifest's parent. It now uses the package root.
 
 - Observation: a timed-out Dylint example left its cross-process lock behind.
   Evidence: Nextest killed the first `collection_zero_diagnostic` attempt at
