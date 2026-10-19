@@ -1854,11 +1854,12 @@ tests and Kani:
 - The BDD harness in
   `crates/whitaker_clones_core/tests/min_hash_lsh_behaviour.rs` includes a
   duplicate-retained-hash candidate-generation scenario.
-- The Kani harnesses in `crates/whitaker_clones_core/src/index/kani.rs` call
-  real `MinHasher::sketch` for the empty-input, deterministic-output, and
-  duplicate-hash properties. They use a private `cfg(kani)` seed fixture and
-  fixed-width signature builder so the proof focuses on sketch semantics rather
-  than seed-stream array construction.
+- Kani checks the empty-input error through `MinHasher::sketch`, the lane
+  minimum for the fixed mixed hashes of `0` and `u64::MAX` through
+  `minimum_mixed_hash`, and sorting/deduplication of four fixed fingerprints
+  through `unique_hashes`. These bounded proofs do not establish non-empty
+  full-signature determinism or general duplicate-hash insensitivity; ordinary
+  tests retain those broader runtime obligations.
 
 The direct `LshIndex` invariant coverage is also split between ordinary tests
 and Kani:
@@ -1906,6 +1907,14 @@ parent-child and parent-child-grandchild production counts, and
 `canonical_hash` emits an `AstHash` seeded with `PARSER_SCHEMA_VERSION`.
 Changing the parser pin, normalization rules, hash algorithm, or schema string
 must produce a reviewable snapshot change.
+
+Parser-backed lowering enforces a 10,000-node budget over every emitted
+`NormalizedNode`, including non-trivia token leaves, and a depth limit of 256.
+Those bounds keep parser-produced per-kind counts within `u32` and depths within
+`u16`, so the production saturating operations cannot saturate for lowered
+parser trees. Public callers can construct larger `NormalizedTree` values
+directly; the Verus sidecar's mathematical-`nat` accumulator proof does not
+establish saturation behaviour for those arbitrary trees.
 
 #### AST operational metrics
 
@@ -2045,22 +2054,25 @@ For the current clone-detector constructors, the split is:
   four-slot proof log with compact two-band keys; normal builds keep the
   production `BTreeMap`/`BTreeSet` implementation and public API.
 - Kani verifies AST span-cover selection and bounded AST feature invariants
-  over synthetic `NormalizedTree` values. It calls the production
-  `select_smallest_covering` helper for covering-node minimality and root
-  fallback, and uses compact bounded tree fixtures for feature invariants so
-  the proof does not compile or model `ra_ap_syntax`. The full-range `u16`
-  `KindId` round trip has its own harness. The depth-only harness uses fixed
-  kinds and checks the shared preorder depth visitor with a four-slot array
-  tally, so it proves the five-node depth counts without entering production
-  `BTreeMap` internals. Its unwind bound of six covers five node visits and the
-  loop's final termination check; the child loop has at most two children plus
+  over synthetic `NormalizedTree` values. The parser adapter's pruned tree walk
+  and the parser-independent `select_smallest_covering` helper share the same
+  covering and minimal-width decision predicate, which Kani checks without
+  compiling or modelling `ra_ap_syntax`. Compact bounded tree fixtures keep
+  feature proofs independent of parser internals. The full-range `u16` `KindId`
+  round trip has its own harness. The depth-only harness uses fixed kinds and
+  checks the shared preorder depth visitor with a four-slot array tally, so it
+  proves the five-node depth counts without entering production `BTreeMap`
+  internals. Its unwind bound of six covers five node visits and the loop's
+  final termination check; the child loop has at most two children plus
   exhaustion. Unwinding assertions remain enabled. A separate scalar harness
   checks `KindId` equality and ordering against raw `u16` comparisons for each
   pair among the root, two child labels, and query label. Four values from two
   symbolic bits represent every equality partition and relative ordering those
   four roles can have. It has no loops to unwind and does not model map
   operations. Unit tests and proptest cover the production traversal and
-  `BTreeMap` count accumulator.
+  `BTreeMap` count accumulator. A generated-source property also varies
+  identifier and integer-literal payloads while checking normalized AST-hash
+  equality.
 - Verus proves the AST feature-count accumulator algebra for supplied
   `(kind, depth)` contributions. The proof establishes adjacent two-item order
   independence for exact counts; ordinary tests and proptest remain responsible
@@ -2193,11 +2205,11 @@ toolchain bump must update the channel written here as part of the runbook
    explicitly requires that trade-off.
 2. Exact-pin the parser dependency in the workspace `Cargo.toml` under
    `[workspace.dependencies]`. The accepted outcome is an entry such as
-   `ra_ap_syntax = "=0.0.334"` with the `parser` feature wired through
-   `whitaker_clones_core`. Loose pins, invalid specifiers, or a missing
-   workspace dependency must fail the re-pin attempt. If more than three
-   transitive crates need manual `cargo update --precise` pins, stop and record
-   the mismatch.
+   `ra_ap_syntax = "=0.0.334"` with one equality comparator and a complete
+   major/minor/patch version. The build guard parses the version and rejects
+   partial versions, extra comparators, loose pins, and a missing workspace
+   dependency. If more than three transitive crates need manual
+   `cargo update --precise` pins, stop and record the mismatch.
 3. Keep parser imports confined to `src/ast/lowering.rs`. If a parser API
    change tempts domain code to import `ra_ap_syntax`, update the lowered
    `NormalizedTree` boundary instead.

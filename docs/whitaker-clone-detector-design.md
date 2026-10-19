@@ -611,27 +611,23 @@ cargo whitaker clones report --in target/whitaker/clones.refined.sarif --html
    the public set-semantics contract from 7.2.2 while avoiding verifier-heavy
    `BTreeSet` internals in the bounded Kani proof.
 
-2. **Kani verifies real `MinHasher::sketch` calls with a private proof seam.**
-   The harnesses use a `cfg(kani)`-only `MinHasher::from_seed_for_kani`
-   constructor so the proof does not spend its unwind bound constructing the
-   128-seed stream. Successful harnesses still call the production
-   `MinHasher::sketch` body; only the seed fixture and fixed-width signature
-   construction are specialized for Kani.
+2. **Kani checks bounded MinHash seams, not full-signature properties.** The
+   empty-input harness calls `MinHasher::sketch`; the lane-minimum harness calls
+   `minimum_mixed_hash` for fixed mixed hashes of `0` and `u64::MAX`; and the
+   normalization harness checks sorting and deduplication through
+   `unique_hashes` for four fixed fingerprints. These proofs do not establish
+   non-empty full-signature determinism or general duplicate-hash insensitivity.
 
-3. **The bounded proof shape is deliberately split by invariant.** The empty
-   input harness checks that `MinHasher::sketch(&[])` returns
-   `IndexError::EmptyFingerprintSet`. The determinism harness sketches the same
-   one-fingerprint set twice and proves equality for an arbitrary symbolic
-   signature lane. The duplicate-hash harness keeps the retained hash symbolic
-   over a bounded `u8` domain and proves that repeating that hash at a distinct
-   range does not change the first signature lane.
+3. **Runtime tests carry broader MinHash properties.** Unit and BDD tests still
+   cover deterministic full signatures, reordered input, empty input and
+   duplicate retained hashes. The bounded Kani seams retain the properties
+   whose proof state spaces have explicit, measured resource bounds.
 
 4. **Ordinary tests carry the broader regression surface.** Unit tests and the
    `rstest-bdd` MinHash/LSH scenario cover full-signature equality,
-   representative full-width `u64` hashes, reordered inputs, empty input, and
-   duplicate retained hashes. The Kani harnesses provide exhaustive bounded
-   verification for the proof-shaped state spaces rather than replacing those
-   runtime regression tests.
+   representative full-width `u64` hashes, reordered inputs, empty input and
+   duplicate retained hashes. Kani verifies only its named bounded
+   propositions; it does not stand in for these runtime regression tests.
 
 ## Implementation decisions (7.2.8)
 
@@ -725,6 +721,18 @@ cargo whitaker clones report --in target/whitaker/clones.refined.sarif --html
    ordinary tests for broad behavioural coverage, Kani for bounded execution of
    selected Rust code, and Verus for sidecar proofs with explicit trust
    boundaries.
+
+7. **Lowering budgets include every emitted normalized node.** The per-candidate
+   `MAX_AST_NODES` limit counts parser syntax nodes and non-trivia token
+   leaves; token-heavy macro bodies cannot bypass the allocation bound. The
+   adapter retains its pruned covering-path traversal, while its coverage and
+   minimum-width choice use the same parser-independent predicate as the Kani
+   selector harnesses.
+
+8. **The parser pin guard accepts one complete exact version.** The build
+   script's `semver::Version` parse rejects partial `=major` or `=major.minor`
+   requirements and comma-separated comparators before deriving
+   `PARSER_SCHEMA_VERSION`.
 
 ## Minimal code skeletons (selected)
 

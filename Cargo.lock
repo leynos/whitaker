@@ -3698,6 +3698,7 @@ dependencies = [
  "rstest-bdd",
  "rstest-bdd-macros",
  "rustc_lexer",
+ "semver",
  "serde_json",
  "sha2",
  "tempfile",

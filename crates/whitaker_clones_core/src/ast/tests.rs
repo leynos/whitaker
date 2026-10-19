@@ -246,6 +246,23 @@ fn feature_functions_reflect_tree_contents() {
 proptest! {
 
     #[test]
+    fn generated_tree_feature_outputs_are_deterministic(
+        root in normalized_node_strategy()
+    ) {
+        let first_tree = tree_with_root(root.clone()).expect("static test span should be valid");
+        let second_tree = tree_with_root(root).expect("static test span should be valid");
+        let first_counts = kind_counts(&first_tree);
+        let second_counts = kind_counts(&second_tree);
+        let first_productions = production_multiset(&first_tree);
+        let second_productions = production_multiset(&second_tree);
+
+        prop_assert_eq!(&first_counts, &second_counts);
+        prop_assert_eq!(weighted_histogram(&first_counts), weighted_histogram(&second_counts));
+        prop_assert_eq!(first_productions, second_productions);
+        prop_assert_eq!(canonical_hash(&first_tree), canonical_hash(&second_tree));
+    }
+
+    #[test]
     fn count_and_production_features_ignore_sibling_visit_order(
         root in normalized_node_strategy()
     ) {

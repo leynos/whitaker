@@ -4,7 +4,7 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
 and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: COMPLETED
+Status: IN PROGRESS
 
 ## Purpose / big picture
 
@@ -82,12 +82,13 @@ escalation, not a workaround.
   (7.6.x) cannot accidentally compare raw discriminants across parser pins.
 - **Bounded per-candidate cost.** Lowering touches one candidate subtree; the
   upstream `min_nodes`/node-count bound from the Pass A config governs subtree
-  size. 7.3.1 avoids indiscriminate full-file lowering — a candidate that spans
-  the source still legitimately selects `SOURCE_FILE` and intentionally lowers
-  the complete file through `lower_span`. The smallest-covering selection
-  descends from the root via a bounded pending-stack worklist over covering
-  children, enforcing the `MAX_AST_NODES` node budget and `MAX_AST_DEPTH` depth
-  budget.
+  size, and `MAX_AST_NODES` caps every emitted normalized node, including
+  non-trivia token leaves. 7.3.1 avoids indiscriminate full-file lowering — a
+  candidate that spans the source still legitimately selects `SOURCE_FILE` and
+  intentionally lowers the complete file through `lower_span`. The
+  smallest-covering selection descends from the root via a bounded
+  pending-stack worklist over covering children, enforcing the `MAX_AST_NODES`
+  node budget and `MAX_AST_DEPTH` depth budget.
 - **Toolchain bump (Stage 0).** This item bumps `rust-toolchain.toml` from
   `nightly-2025-09-18` (rustc 1.92.0-nightly) to **`nightly-2026-05-28`**
   (rustc ≈ 1.9x-nightly, comfortably ≥ 1.95) as a prerequisite Stage 0, landing
@@ -253,8 +254,10 @@ Thresholds that trigger escalation rather than autonomous continuation.
       (prototyping milestone; go/no-go).
 - [x] Stage C — Domain IR and pure feature math (`tree`, `features`, `hash`),
       red-green-refactor.
-- [x] Stage D — `ra_ap_syntax` adapter (`lowering.rs`) and span→node mapping.
-- [x] Stage E — Behavioural (`rstest-bdd`), snapshot (`insta`), and property
+- [ ] Stage D — `ra_ap_syntax` adapter (`lowering.rs`) and span→node mapping;
+      follow-up enforces the node budget for token leaves and shares the
+      parser-independent covering decision with production traversal.
+- [ ] Stage E — Behavioural (`rstest-bdd`), snapshot (`insta`), and property
       (`proptest`) coverage.
 - [x] Stage F — Verus lemma and Kani harnesses; proof-script wiring. The
       complete bounded Kani group passes after splitting the expensive MinHash
@@ -263,6 +266,16 @@ Thresholds that trigger escalation rather than autonomous continuation.
 
 Each stage records a timestamp here when complete and splits into
 done/remaining if interrupted.
+
+- [x] 2026-10-19: Revalidated the bounded Kani group after separating the
+      full-domain `KindId` round trip from depth-only traversal, using fixed
+      kinds in the depth proof, and documenting the four-value symbolic
+      comparison alphabet. All 15 harnesses passed under per-process-tree
+      limits; the unwind-5 negative control failed as expected. See Artefacts.
+- [x] 2026-10-19: Revalidated the clone-detector Verus group (9, 10, and 8
+      verified obligations; zero errors) and the local workspace gates. Stage
+      D, Stage E, and Stage G remain open pending fresh current-head review and
+      hosted checks.
 
 Stage 0 completed on 2026-06-16. Green gates:
 
@@ -762,8 +775,21 @@ the default unless Stage findings contradict it, then escalate):
 
 ## Outcomes & retrospective
 
-Completed at the end of the milestone sequence. Compare delivered behaviour
-against the Purpose section; note any deltas, trade-offs, or follow-up work.
+The initial implementation delivered the parser-agnostic tree, AST feature
+extraction, bounded Kani/Verus obligations, and the planned runtime and
+behavioural tests. The 2026-10-18 plan assessment at candidate
+`c0ef8c2074127a3083b6907b16474f819e77ddea` found that Stage D's node budget
+counted syntax nodes but not emitted token leaves, Stage E lacked generated
+source-payload normalization coverage, and the parser adapter duplicated the
+pure selector's covering/minimal-width decision. It also found that the parser
+pin guard accepted partial exact requirements, the MinHash Kani documentation
+overstated current harness scope, and the Verus-to-Rust arithmetic boundary
+needed an explicit statement. Stage D, Stage E and Stage G are therefore open
+again while those gaps are addressed. The current Kani and Verus results remain
+bounded evidence for their named propositions only. Historical per-function
+red-failure transcripts are unavailable; the retained negative controls and
+their limits are listed in Artefacts rather than presented as a complete
+red-green history.
 
 ## Context and orientation
 
@@ -1146,7 +1172,9 @@ dependency to `[workspace.dependencies]` with the documented-reason comment, and
 `{ workspace = true }` to `whitaker_clones_core`. Run
 `cargo build -p whitaker_clones_core` under `-D warnings`, pinning at most
 three offending transitive crates with `--precise` (escalate if more are
-needed). Commit `Cargo.toml` and `Cargo.lock` together; record the resolved
+needed). The build guard must parse one full major/minor/patch version after
+one equality comparator; partial versions and additional comparators are not
+exact pins. Commit `Cargo.toml` and `Cargo.lock` together; record the resolved
 transitive set (including exact `rowan`/`ra_ap_parser` versions) in Surprises &
 Discoveries.
 
@@ -1183,16 +1211,18 @@ the 400-line file budget; re-run.
 ### Stage D — Adapter and span→node mapping
 
 Implement `lowering.rs`: parse with `Edition::CURRENT`; validate the `ByteSpan`
-against the root range; build `TextRange`; call the domain
-`cover::select_smallest_covering` over the `descendants()` ranges (the pure
-index math lives in `cover.rs` so Kani can verify it without parsing); lower
-the chosen subtree via a private recursive `lower_node` that maps
-`kind() as u16 → KindId`, classifies leaf tokens via a single private
+against the root range; build `TextRange`; retain the pruned covering-path
+worklist instead of collecting every descendant; share its covering and
+minimum-width decision predicate with `cover::select_smallest_covering` (the
+pure predicate lives in `cover.rs` so Kani can verify the same decision without
+parsing); lower the chosen subtree via a private recursive `lower_node` that
+maps `kind() as u16 → KindId`, classifies leaf tokens via a single private
 `leaf_class` function (the only place encoding which `SyntaxKind`s are `<ID>`/
 `<LIT>`), recurses over children in document order skipping trivia per OQ4, and
 applies the OQ1 `ERROR`-node policy (return `AstError::UnparsableSpan` when the
 covering node is/contains an `ERROR` subtree; `tracing::warn` when a lowered
-span had parse errors).
+span had parse errors). Charge the `MAX_AST_NODES` budget for every emitted
+normalized node, including each non-trivia token leaf.
 
 Drive with red `rstest` mapping tests: exact node, smallest covering inner
 expression, two-sibling common ancestor, whole-file root, and the unhappy paths
@@ -1220,12 +1250,14 @@ forces the bumper to confront cache invalidation. Render `KindId` as its
 but the `KindId → "BIN_EXPR"` renderer is a `#[cfg(test)]` helper in the adapter
 (`lowering.rs`), **not** a `Display` impl on the domain `KindId` (which would
 re-couple the domain to parser vocabulary). Add `proptest` invariants over an
-`Arbitrary` `NormalizedTree` strategy: determinism; `kind_counts`/
-`production_multiset` accumulation order-independence (sibling-visit
-permutation); leaf-normalization hash equality. State explicitly that the
-order-independence property excludes `canonical_hash`, which is deliberately
-order-*sensitive*; proptest uses the opaque `KindId(u16)`, never the rendered
-name. Keep a checked-in `proptest-regressions/` file. Validation:
+`Arbitrary` `NormalizedTree` strategy: repeatable feature outputs;
+`kind_counts`/`production_multiset` accumulation order-independence
+(sibling-visit permutation); leaf-normalization hash equality. Add a generated
+source-payload property that varies identifier and integer-literal spellings
+while requiring the normalized AST hash to remain equal. State explicitly that
+the order-independence property excludes `canonical_hash`, which is
+deliberately order-*sensitive*; proptest uses the opaque `KindId(u16)`, never
+the rendered name. Keep a checked-in `proptest-regressions/` file. Validation:
 `cargo test -p whitaker_clones_core` green; `cargo insta` review accepted.
 
 ### Stage F — Verus lemma and Kani harnesses
@@ -1233,19 +1265,23 @@ name. Keep a checked-in `proptest-regressions/` file. Validation:
 Verus (`verus/clone_detector_ast_features.rs`): prove that count accumulation
 is a permutation-invariant fold over the multiset of per-node `(kind, depth)`
 contributions — folding **exact `u32` counts**, not scaled rationals (the
-count-substrate hybrid makes this a clean, decidable statement with no
-overflow/rounding obligation). State, in one falsifiable sentence in Artefacts,
-**exactly** what the trust bridge assumes versus proves. Be honest about the
-division of labour (review finding 🟡-3): if the property that actually breaks
-operationally — sibling visit order in the feature walk — is carried by
-**proptest**, and Verus proves only the algebraic fold over a given multiset,
-then say so plainly and do **not** claim Verus is “the unbounded root proptest
-samples”; the two check different things. Register the file in both the
-`clone-detector` and `all` groups of `scripts/run-verus.sh`. If the lemma
-cannot be made substantive (not a restatement) and well-founded in two
-attempts, escalate (Tolerances) — the fallback is Kani + proptest only, with a
-Decision Log entry, and the bounded Kani order-independence harness must then
-stand alone as the order-independence evidence (not a coverage hole).
+count-substrate hybrid makes this a clean, decidable statement without a
+fixed-point rounding obligation). Parser lowering caps output at 10,000
+normalized nodes and depth 256, so parser-produced counts and depths are
+representable in production `u32` and `u16` fields. Public callers can
+construct larger `NormalizedTree` values directly; do not extend that
+representability claim to those arbitrary trees. State, in one falsifiable
+sentence in Artefacts, **exactly** what the trust bridge assumes versus proves.
+Be honest about the division of labour (review finding 🟡-3): if the property
+that actually breaks operationally — sibling visit order in the feature walk —
+is carried by **proptest**, and Verus proves only the algebraic fold over a
+given multiset, then say so plainly and do **not** claim Verus is “the
+unbounded root proptest samples”; the two check different things. Register the
+file in both the `clone-detector` and `all` groups of `scripts/run-verus.sh`.
+If the lemma cannot be made substantive (not a restatement) and well-founded in
+two attempts, escalate (Tolerances) — the fallback is Kani + proptest only,
+with a Decision Log entry, and the bounded Kani order-independence harness must
+then stand alone as the order-independence evidence (not a coverage hole).
 
 Kani (`crates/whitaker_clones_core/src/ast/kani.rs`, `#[cfg(kani)]`): harnesses
 over bounded synthetic `NormalizedTree`/candidate values, never the parser. The
@@ -1545,6 +1581,47 @@ proves success.
   insertion-order harness and was killed at 4,096 MiB after 133 seconds. This
   remains a resource-limited, inconclusive result rather than a pass; the final
   run stayed bounded at 8 GiB per process tree.
+- Current bounded Kani result (2026-10-19, candidate worktree based on
+  `c0ef8c2074127a3083b6907b16474f819e77ddea`):
+  `scripts/run-kani.sh clone-detector` passed all 15 registered harnesses with
+  zero failed checks. Each invocation used its own process-tree cgroup with an
+  8 GiB memory cap, swap disabled, and a 600-second timeout. The wrapper fails
+  on timeout, OOM, non-zero exit, or missing peak-memory evidence, so none of
+  those outcomes can be reported as a proof pass. Durations sum to 936 seconds;
+  the highest peak was 4,835 MiB for
+  `verify_lsh_index_is_insertion_order_independent` (254 seconds). Full log:
+  `/tmp/kani-clone-detector-pr365-equilibrium-final.out`.
+
+  | Harness                                                  | Checks          | Unreachable | Wall (s) | Peak (MiB) |
+  | -------------------------------------------------------- | --------------: | ----------: | -------: | ---------: |
+  | `verify_lsh_config_new_smoke`                            | 15, 0 failed    | 0           | 73       | 93         |
+  | `verify_lsh_config_new_symbolic`                         | 59, 0 failed    | 1           | 16       | 67         |
+  | `verify_lsh_config_new_overflow_product`                 | 30, 0 failed    | 4           | 16       | 67         |
+  | `verify_min_hasher_sketch_rejects_empty_input`           | 2,208, 0 failed | 223         | 24       | 232        |
+  | `verify_min_hasher_lane_minimum_for_boundary_hashes`     | 81, 0 failed    | 1           | 17       | 67         |
+  | `verify_min_hasher_unique_hashes_sorts_and_deduplicates` | 1,161, 0 failed | 80          | 21       | 160        |
+  | `verify_lsh_index_rejects_self_pairs`                    | 3,590, 0 failed | 11          | 68       | 1,938      |
+  | `verify_lsh_index_canonicalizes_pair_order`              | 3,612, 0 failed | 8           | 110      | 2,873      |
+  | `verify_lsh_index_deduplicates_repeated_band_collisions` | 3,615, 0 failed | 136         | 131      | 3,577      |
+  | `verify_lsh_index_is_insertion_order_independent`        | 3,628, 0 failed | 8           | 254      | 4,835      |
+  | `verify_smallest_covering_node_selects_minimal_range`    | 221, 0 failed   | 2           | 141      | 77         |
+  | `verify_smallest_covering_root_fallback`                 | 198, 0 failed   | 4           | 2        | 67         |
+  | `verify_kind_id_round_trips_full_u16_domain`             | 1, 0 failed     | 0           | 29       | 67         |
+  | `verify_kind_counts_stop_at_max_depth`                   | 569, 0 failed   | 9           | 6        | 153        |
+  | `verify_kind_id_equality_and_order_cover_small_alphabet` | 39, 0 failed    | 0           | 28       | 67         |
+
+  The depth-only harness uses fixed kinds and a five-node tree, so symbolic
+  kind variation and production `BTreeMap` operations are outside that
+  obligation. The full-range round trip is proved independently; equality and
+  ordering are checked over the documented four-value alphabet. A focused
+  negative-control run at unwind 5 failed the loop-termination unwinding
+  assertion in `for_each_node_at_depth` (`features.rs:216`), with 569 checks
+  undetermined, one failed unwinding assertion, a 43-second duration, and a 100
+  MiB peak. Unwinding assertions remained enabled. At unwind 6 the depth proof
+  passed with 569 checks, nine unreachable library/safety checks, a six-second
+  duration, and a 153 MiB peak. This confirms that five node visits plus the
+  terminal loop check require bound 6; bound 5 is insufficient. The
+  negative-control log is `/tmp/kani-depth-unwind5-pr365-equilibrium.out`.
 - Stage F Verus trust bridge: `verus/clone_detector_ast_features.rs` proves
   the exact count accumulator algebra for a supplied multiset of
   `(kind, depth)` contributions; Rust unit tests and `proptest` cover the
@@ -1565,6 +1642,21 @@ proves success.
   full bounded Kani group passed on the same candidate worktree as recorded
   above. The exact Verus log is
   `/tmp/verus-pr365-equilibrium-codescene-fix.out`.
+- Current Verus revalidation (2026-10-19, same worktree as the current Kani
+  run): `make verus-clone-detector` passed with 9, 10, and 8 verified
+  obligations and zero errors. Full output:
+  `/tmp/verus-clone-detector-pr365-equilibrium-final.out`.
+- Current local gates (2026-10-19, candidate source; run sequentially):
+  `make check-fmt`, `make lint`, `make typecheck`, `make test`,
+  `make markdownlint`, and `make nixie` passed. The workspace test run reports
+  1,871 passed and 5 skipped; the additional `dylint_testing` suite reports 11
+  passed. Logs are `/tmp/check-fmt-pr365-equilibrium-followup-2.out`,
+  `/tmp/lint-pr365-equilibrium-followup-2.out`,
+  `/tmp/typecheck-pr365-equilibrium-followup-2.out`,
+  `/tmp/test-pr365-equilibrium-followup-2.out`,
+  `/tmp/markdownlint-pr365-equilibrium-followup-2.out`, and
+  `/tmp/nixie-pr365-equilibrium-followup-2.out`. The documentation update still
+  requires formatting and the Markdown-only gates before commit.
 - Stage F mutation matrix:
   - `<=` -> `<` in the covering lower-bound predicate failed
     `verify_smallest_covering_node_selects_minimal_range` with
