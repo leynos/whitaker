@@ -276,6 +276,17 @@ done/remaining if interrupted.
       verified obligations; zero errors) and the local workspace gates. Stage
       D, Stage E, and Stage G remain open pending fresh current-head review and
       hosted checks.
+- [x] 2026-10-19: Candidate-bound plan assessment on head
+      `d3e62ec1966b1eae87f46a3ece325955064e401a` accepted the token-leaf budget,
+      exact parser pin, selector correspondence, generated properties, and
+      Verus arithmetic-boundary corrections. It found one stale MinHash/Verus
+      summary in this guide and requested an explicit disposition for the
+      unavailable historical red-failure transcripts; both are recorded below
+      and await candidate-bound confirmation.
+- [ ] 2026-10-19: Reconcile the plan-assessment documentation finding and
+      exception with CodeRabbit before closing Stages D and E. Hosted CI run
+      `39182218490` and CodeScene result `8008611` pass on the current head;
+      formal review and Stage G remain open.
 
 Stage 0 completed on 2026-06-16. Green gates:
 
@@ -784,12 +795,21 @@ source-payload normalization coverage, and the parser adapter duplicated the
 pure selector's covering/minimal-width decision. It also found that the parser
 pin guard accepted partial exact requirements, the MinHash Kani documentation
 overstated current harness scope, and the Verus-to-Rust arithmetic boundary
-needed an explicit statement. Stage D, Stage E and Stage G are therefore open
-again while those gaps are addressed. The current Kani and Verus results remain
-bounded evidence for their named propositions only. Historical per-function
-red-failure transcripts are unavailable; the retained negative controls and
-their limits are listed in Artefacts rather than presented as a complete
-red-green history.
+needed an explicit statement. A candidate-bound assessment on
+`d3e62ec1966b1eae87f46a3ece325955064e401a` accepted the first five repairs and
+identified the stale MinHash/Verus summary in this guide; the current bounded
+Kani and Verus results remain evidence only for their named propositions.
+
+**Historical evidence exception (2026-10-19):** the original per-function
+red-failure transcripts required by the Red-Green-Refactor acceptance item are
+not present in the tracked plan, the retained candidate worktree logs, or the
+current run's CI artefacts. This historical-evidence item is explicitly
+excepted for this revision and is not reported as satisfied. The available
+passing tests, mutation negative controls, and candidate-bound verification
+validate present behaviour, but do not recreate the missing original red runs.
+This check does not establish whether an expired earlier CI run or another
+unretained workspace still has those transcripts. The retained negative
+controls and their limits are listed in Artefacts.
 
 ## Context and orientation
 

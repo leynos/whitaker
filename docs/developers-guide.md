@@ -2042,12 +2042,12 @@ For the current clone-detector constructors, the split is:
 - Kani executes the real constructor with one concrete acceptance harness, one
   bounded symbolic harness over `[0, 128]²`, and one overflow harness that
   forces the `checked_mul(None)` branch.
-- Kani executes real `MinHasher::sketch` calls for empty input, deterministic
-  output, and duplicate retained hashes. The non-empty harnesses keep their
-  symbolic domains intentionally bounded: determinism proves equality at an
-  arbitrary signature lane for a fixed retained hash, while duplicate-hash
-  insensitivity proves a symbolic bounded retained hash at the first signature
-  lane.
+- Kani checks the empty-input error through `MinHasher::sketch`, the lane
+  minimum for fixed mixed hashes through `minimum_mixed_hash`, and sorting and
+  deduplication of fixed fingerprints through `unique_hashes`. These bounded
+  proofs do not establish non-empty full-signature determinism or general
+  duplicate-hash insensitivity; ordinary tests retain those broader runtime
+  obligations.
 - Kani verifies bounded `LshIndex` states for no self-pairs, canonical pair
   ordering, repeated-band deduplication, and insertion-order independence. In
   `#[cfg(kani)]` builds, `LshIndex` records inserted fragments in a fixed
@@ -2074,10 +2074,11 @@ For the current clone-detector constructors, the split is:
   identifier and integer-literal payloads while checking normalized AST-hash
   equality.
 - Verus proves the AST feature-count accumulator algebra for supplied
-  `(kind, depth)` contributions. The proof establishes adjacent two-item order
-  independence for exact counts; ordinary tests and proptest remain responsible
-  for proving that production traversal supplies the intended contribution
-  multiset.
+  `(kind, depth)` contributions. `lemma_fold_count_is_permutation_invariant`
+  establishes that equal contribution multisets yield equal exact counts for
+  every queried bucket. It does not prove that production traversal emits those
+  multisets; Rust unit tests and `proptest` exercise that traversal
+  correspondence.
 - Ordinary unit tests and `rstest-bdd` scenarios pin the concrete lexical
   `FragmentId` ordering contract that the `CandidatePair` proof's bridge still
   trusts rather than proving from `String` internals, and they pin the AST
