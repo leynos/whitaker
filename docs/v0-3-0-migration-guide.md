@@ -190,11 +190,35 @@ to 1000) instead of floating-point rates:
 | `build_rate()`    | `build_rate_permille()`    |
 
 Each unit is a tenth of a percentage point: 333 permille represents 33.3%.
-Packaging functions now borrow their parameter structs, so pass `&params` to
-`package_installer` and `package_dependency_binary`. The binstall metadata
-helpers `load_cargo_toml()` and `extract_binstall_table()` (available to tests
-and the `test-support` feature) now return `Result<_, String>`; propagate or
-handle failures instead of assuming the manifest and metadata table are present.
+Packaging functions now borrow their parameter structs. Pass a reference to
+`package_artefact`, `package_installer` and `package_dependency_binary`:
+
+```rust
+// Before 0.3.0
+package_artefact(artefact_params)?;
+package_installer(installer_params)?;
+package_dependency_binary(dependency_params)?;
+
+// From 0.3.0
+package_artefact(&artefact_params)?;
+package_installer(&installer_params)?;
+package_dependency_binary(&dependency_params)?;
+```
+
+The binstall metadata helpers `load_cargo_toml()` and
+`extract_binstall_table()` (available to tests and the `test-support` feature)
+now return `Result<toml::Table, String>`. Propagate or handle these errors
+instead of assuming the manifest and metadata table are present:
+
+```rust
+// Before 0.3.0
+let manifest = load_cargo_toml();
+let binstall = extract_binstall_table(&manifest);
+
+// From 0.3.0; the caller returns Result<_, String>.
+let manifest = load_cargo_toml()?;
+let binstall = extract_binstall_table(&manifest)?;
+```
 
 For example, update method names, field access and packaging calls at the
 caller:
