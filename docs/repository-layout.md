@@ -100,8 +100,9 @@ lint set as an integrated suite and carries its own source and tests.
 ## Testing and verification assets
 
 - `tests/` holds behaviour-driven and end-to-end tests for the root CLI and its
-  packaging metadata, feature files, and workflow validation support. The
-  Dylint UI harness and fixtures live in `crates/whitaker_lint_core/tests/`.
+  packaging metadata, feature files, and workflow validation support.
+- The Dylint UI harness lives in `crates/whitaker_lint_core/src/testing/ui/`;
+  each lint crate stores fixtures in its own UI directories.
 - `common/tests/` and the per-crate `tests/` directories hold crate-scoped
   behavioural and integration coverage.
 - `scripts/check-markdown-format.sh` verifies the canonical Markdown formatter

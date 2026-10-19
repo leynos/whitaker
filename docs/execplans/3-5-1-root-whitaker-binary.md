@@ -107,15 +107,16 @@ forwarding, per-toolchain install records, and binstall metadata. Kani passed
 360 checks; Verus remains unverified and name reservation is unauthorized, so
 the checked roadmap item keeps this plan open.
 
-Published `a02ddff` failed three hosted test jobs because `workspace_root`
-selected the manifest's parent. Local `8444efa` fixes that path and reclaims
-abandoned locks. Its three CodeRabbit findings are addressed; fresh review,
-hosted checks, and CodeScene status remain to be refreshed after publication.
+Published `a02ddff` failed three hosted tests because `workspace_root` selected
+the manifest's parent. `8444efa` fixes the path and recovers abandoned locks.
+Fresh review of `20494294` found three defects; the current tree addresses
+signal exit status, library path selection, and the layout description.
 
-All nine local gates pass on the current candidate: 1,712 tests, 5 skipped,
-doctests, formatting, typecheck, lint, documentation, spelling, Makefile
-validation, and packageability. Optional instrumented coverage still times out
-in trybuild.
+All nine gates pass on the current tree: 1,713 tests, 5 skipped, doctests,
+format, typecheck, lint, docs, spelling, Makefile, and packageability. Review
+findings are fixed: the guide names the UI harness; signal status and default
+toolchain paths are preserved. PR review, hosted checks, and CodeScene remain
+after publication; instrumented coverage still times out in trybuild.
 
 ## Constraints
 
@@ -187,57 +188,15 @@ Stop and escalate; do not improvise.
 
 ## Risks
 
-**R1 — `EP-M0` is a wide mechanical rename that can break the lint suite.**
-Severity: high. Likelihood: medium. Eleven lint-crate manifests and roughly 25
-`use whitaker::` sites move. Note
-`crates/test_must_not_have_example/Cargo.toml:34` uses a literal path
-dependency, not the `workspace = true` alias, so a global search-and-replace on
-the alias misses it. Mitigation: the Dylint UI suite already exercises every
-affected crate. Run it before and after and require identical results. Do the
-extraction as one commit so bisection is clean.
-
-**R2 — Argument forwarding can swallow a real subcommand.** Severity: high.
-Likelihood: medium. The binary must decide, from argv alone, whether to
-dispatch a subcommand or forward to `cargo dylint`. Get it wrong and
-`whitaker install` silently runs `cargo dylint install`, or `whitaker --all`
-prints a usage error. Mitigation: this is the plan's one genuinely new decision
-procedure, and it is the subject of both verification obligations —
-`EP-INV-DISPATCH` (Kani) and `EP-LEM-DISPATCH` (Verus).
-
-**R3 — Index-based BDD scenario bindings break silently.** Severity: medium.
-Likelihood: medium. `#[scenario(path = "…", index = N)]` binds by position;
-inserting a scenario mid-file rebinds every later one, often still passing. See
-the warning at `installer/tests/behaviour_cli/scenarios.rs:7`. Mitigation: new
-scenarios go only in new feature files.
-
-**R4 — A new test binary named `behaviour_cli` is skipped by default.**
-Severity: medium. Likelihood: high if unaddressed. `.config/nextest.toml` sets
-`default-filter = "not (binary(behaviour_toolchain) | binary(behaviour_cli) | kind(example))"`,
-and nextest's `binary()` matches by binary _name_, not package-qualified name.
-Mitigation: name the new file `behaviour_whitaker.rs`, and run
-`make test NEXTEST_PROFILE=ci` at every milestone boundary.
-
-**R5 — `--help` and `--version` may exit non-zero.** Severity: medium.
-Likelihood: medium. clap reports both as `Err`. Routing every `Err` to a
-failure code makes `whitaker --help` fail. Mitigation: `EP-INV-EXIT`, asserted
-end-to-end on the real process.
+**R2 — Forwarding may misroute argv or lose subprocess status.** Severity:
+high. The classifier selects a Whitaker command or forwards to `cargo dylint`;
+a mistake breaks either interface. Kani and CLI tests cover bounded routing,
+reachability, and child exit status. The unbounded Verus proof exceeded
+tolerance without a verdict, so keep `EP-M2b` open.
 
 **R6 — Publishing instructions may precede name reservation.** Severity:
-medium. Likelihood: low, but severe if it lands. The name `whitaker` is
-unregistered on crates.io. If `EP-M4` publishes `cargo install whitaker` before
-the name is claimed, and 3.5.3 slips, users following official documentation
-install someone else's crate. Mitigation: `EP-M3` reserves the name; `EP-M4` is
-explicitly gated behind it.
-
-**R7 — `ortho_config` brings a second `toml` stack.** Severity: low.
-Likelihood: certain. `ortho_config` 0.9.0 reaches `figment` → `toml 0.8` +
-`toml_edit 0.22` alongside the workspace's existing `toml 1.x` +
-`toml_edit 0.25`, and enables `figment`'s `test` feature (pulling `tempfile` and
-`parking_lot`) into the production graph. Roughly 26 genuinely new lock
-entries; about 80% of the closure is already present. Mitigation: after `EP-M0`
-the root package is _not_ a dependency of the lint crates, so this cost is
-confined to the CLI binary. Record the stripped release size in `EP-M3` rather
-than guessing.
+medium, with high impact. The `whitaker` name remains unreserved. Keep official
+publication gated on authorized reservation; `EP-M3b` remains open.
 
 ## Context and orientation
 
