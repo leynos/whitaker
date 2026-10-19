@@ -164,11 +164,14 @@ fn resolve_workspace_path_errors_when_data_dir_unavailable(
 }
 
 #[rstest]
-fn plan_refuses_a_pin_inside_a_whitaker_workspace(temp_workspace: TempWorkspace) {
+fn plan_refuses_a_pin_inside_a_whitaker_workspace(
+    #[from(temp_workspace)] temp_workspace_res: std::io::Result<TempWorkspace>,
+) -> std::io::Result<()> {
+    let temp_workspace = temp_workspace_res?;
     // Checking out a reference here would move the caller's own working
     // tree, discarding whatever they were doing. Refused rather than
     // done, and the error says where to run it instead.
-    write_cargo_toml(&temp_workspace.path, "whitaker");
+    write_cargo_toml(&temp_workspace.path, "whitaker")?;
     let clone_dir = temp_workspace.path.join("clone_target");
     let plan = WorkspacePlan {
         should_update: false,
@@ -184,13 +187,17 @@ fn plan_refuses_a_pin_inside_a_whitaker_workspace(temp_workspace: TempWorkspace)
     );
     let rendered = error.to_string();
     assert!(rendered.contains("v0.2.7"), "{rendered}");
+    Ok(())
 }
 
 #[rstest]
-fn plan_uses_a_whitaker_workspace_when_nothing_is_pinned(temp_workspace: TempWorkspace) {
+fn plan_uses_a_whitaker_workspace_when_nothing_is_pinned(
+    #[from(temp_workspace)] temp_workspace_res: std::io::Result<TempWorkspace>,
+) -> std::io::Result<()> {
+    let temp_workspace = temp_workspace_res?;
     // The counterpart: without a pin the current workspace is used, which
     // is what a Whitaker developer running the installer in-tree expects.
-    write_cargo_toml(&temp_workspace.path, "whitaker");
+    write_cargo_toml(&temp_workspace.path, "whitaker")?;
     let clone_dir = temp_workspace.path.join("clone_target");
 
     let action = plan_workspace_action(
@@ -204,10 +211,14 @@ fn plan_uses_a_whitaker_workspace_when_nothing_is_pinned(temp_workspace: TempWor
         action,
         WorkspaceAction::UseCurrentDir(temp_workspace.path.clone())
     );
+    Ok(())
 }
 
 #[rstest]
-fn plan_clones_and_pins_from_outside_a_workspace(temp_workspace: TempWorkspace) {
+fn plan_clones_and_pins_from_outside_a_workspace(
+    #[from(temp_workspace)] temp_workspace_res: std::io::Result<TempWorkspace>,
+) -> std::io::Result<()> {
+    let temp_workspace = temp_workspace_res?;
     // The CI case: not in a Whitaker checkout, so the pin applies to the
     // installer's own clone and nothing of the caller's is touched.
     let clone_dir = temp_workspace.path.join("clone_target");
@@ -220,6 +231,7 @@ fn plan_clones_and_pins_from_outside_a_workspace(temp_workspace: TempWorkspace) 
         .expect("a pin outside a workspace is fine");
 
     assert_eq!(action, WorkspaceAction::CloneTo(clone_dir));
+    Ok(())
 }
 
 #[rstest]
@@ -267,13 +279,16 @@ fn init_clone(root: &Utf8Path) -> Option<(Utf8PathBuf, Utf8PathBuf)> {
 }
 
 #[rstest]
-fn an_unpinned_update_recovers_a_clone_left_detached(temp_workspace: TempWorkspace) {
+fn an_unpinned_update_recovers_a_clone_left_detached(
+    #[from(temp_workspace)] temp_workspace_res: std::io::Result<TempWorkspace>,
+) -> std::io::Result<()> {
+    let temp_workspace = temp_workspace_res?;
     // The defect this guards: one pinned install leaves HEAD detached, and
     // every later update in that clone then runs `git pull` there, where git
     // refuses with "You are not currently on a branch". Without the recovery
     // a single pin would break the cache permanently.
     let Some((_origin, clone)) = init_clone(&temp_workspace.path) else {
-        return; // git unavailable; the assertion needs a real repository.
+        return Ok(()); // git unavailable; the assertion needs a real repository.
     };
     crate::git::checkout_ref(&clone, &"main".try_into().expect("valid reference"))
         .expect("checkout should succeed");
@@ -288,14 +303,18 @@ fn an_unpinned_update_recovers_a_clone_left_detached(temp_workspace: TempWorkspa
         !crate::git::is_detached_head(&clone).expect("HEAD should be readable"),
         "the update should have returned to a branch"
     );
+    Ok(())
 }
 
 #[rstest]
-fn a_pinned_update_never_pulls(temp_workspace: TempWorkspace) {
+fn a_pinned_update_never_pulls(
+    #[from(temp_workspace)] temp_workspace_res: std::io::Result<TempWorkspace>,
+) -> std::io::Result<()> {
+    let temp_workspace = temp_workspace_res?;
     // A pinned plan must not pull at all, because checkout_ref fetches for
     // itself and a pull would fail on the detached HEAD a previous pin left.
     let Some((_origin, clone)) = init_clone(&temp_workspace.path) else {
-        return;
+        return Ok(());
     };
     crate::git::checkout_ref(&clone, &"main".try_into().expect("valid reference"))
         .expect("checkout should succeed");
@@ -311,14 +330,18 @@ fn a_pinned_update_never_pulls(temp_workspace: TempWorkspace) {
         crate::git::is_detached_head(&clone).expect("HEAD should be readable"),
         "a pinned plan should leave the pin in place"
     );
+    Ok(())
 }
 
 #[rstest]
-fn an_unpinned_reuse_does_not_inherit_a_previous_pin(temp_workspace: TempWorkspace) {
+fn an_unpinned_reuse_does_not_inherit_a_previous_pin(
+    #[from(temp_workspace)] temp_workspace_res: std::io::Result<TempWorkspace>,
+) -> std::io::Result<()> {
+    let temp_workspace = temp_workspace_res?;
     // `--no-update` after a pin would otherwise silently mean "somebody
     // else's pin" rather than "the suite as it stands".
     let Some((_origin, clone)) = init_clone(&temp_workspace.path) else {
-        return;
+        return Ok(());
     };
     crate::git::checkout_ref(&clone, &"main".try_into().expect("valid reference"))
         .expect("checkout should succeed");
@@ -329,14 +352,18 @@ fn an_unpinned_reuse_does_not_inherit_a_previous_pin(temp_workspace: TempWorkspa
         !crate::git::is_detached_head(&clone).expect("HEAD should be readable"),
         "reuse should have returned to a branch"
     );
+    Ok(())
 }
 
 #[rstest]
-fn a_local_pin_does_not_require_origin(temp_workspace: TempWorkspace) {
+fn a_local_pin_does_not_require_origin(
+    #[from(temp_workspace)] temp_workspace_res: std::io::Result<TempWorkspace>,
+) -> std::io::Result<()> {
+    let temp_workspace = temp_workspace_res?;
     // A local pin must remain usable with `--no-update` when the origin is
     // unavailable, rather than turning a cached checkout into a network call.
     let Some((_origin, clone)) = init_clone(&temp_workspace.path) else {
-        return;
+        return Ok(());
     };
     let changed_origin = std::process::Command::new("git")
         .args(["remote", "set-url", "origin", "/unavailable-origin"])
@@ -347,6 +374,7 @@ fn a_local_pin_does_not_require_origin(temp_workspace: TempWorkspace) {
 
     crate::git::checkout_ref(&clone, &"main".try_into().expect("valid reference"))
         .expect("checkout should succeed");
+    Ok(())
 }
 
 #[test]
