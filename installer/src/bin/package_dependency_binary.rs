@@ -151,8 +151,15 @@ mod tests {
     //! Tests for the dependency-binary packaging command.
 
     use super::*;
+    use rstest::rstest;
     use tempfile::tempdir;
     use whitaker_installer::dependency_binaries::provenance_filename;
+
+    #[derive(Clone, Copy, Debug)]
+    enum ExpectedPackageError {
+        Target,
+        UnknownPackage(&'static str),
+    }
 
     struct BrokenPipeWriter;
 
@@ -166,23 +173,41 @@ mod tests {
         }
     }
 
-    #[test]
-    fn run_package_command_rejects_invalid_target() {
+    #[rstest]
+    #[case::invalid_target("cargo-dylint", "invalid-target-triple", ExpectedPackageError::Target)]
+    #[case::unknown_package(
+        "missing-package",
+        "x86_64-unknown-linux-gnu",
+        ExpectedPackageError::UnknownPackage("missing-package")
+    )]
+    fn run_package_command_rejects_invalid_input(
+        #[case] package: &str,
+        #[case] target: &str,
+        #[case] expected_error: ExpectedPackageError,
+    ) {
         let temp_dir = tempdir().expect("temp dir");
-        let binary_path = temp_dir.path().join("cargo-dylint");
+        let binary_path = temp_dir.path().join("fake-binary");
         std::fs::write(&binary_path, b"fake binary").expect("write binary");
 
         let cli = Cli {
             command: Command::Package {
-                package: "cargo-dylint".to_owned(),
-                target: "invalid-target-triple".to_owned(),
+                package: package.to_owned(),
+                target: target.to_owned(),
                 binary_path,
                 output_dir: temp_dir.path().join("dist"),
             },
         };
 
-        let result = run(cli);
-        assert!(matches!(result, Err(CliError::Target(_))));
+        let error = run(cli).expect_err("invalid package input should be rejected");
+        match (expected_error, error) {
+            (ExpectedPackageError::Target, CliError::Target(_)) => {}
+            (ExpectedPackageError::UnknownPackage(expected), CliError::UnknownPackage(actual)) => {
+                assert_eq!(actual, expected)
+            }
+            (expected, actual) => {
+                panic!("expected {expected:?}, got {actual:?}");
+            }
+        }
     }
 
     #[test]
@@ -275,26 +300,5 @@ mod tests {
             error,
             CliError::Stdout(source) if source.kind() == std::io::ErrorKind::BrokenPipe
         ));
-    }
-
-    #[test]
-    fn run_package_command_rejects_unknown_package() {
-        let temp_dir = tempdir().expect("temp dir");
-        let binary_path = temp_dir.path().join("fake-binary");
-        std::fs::write(&binary_path, b"fake binary").expect("write binary");
-
-        let cli = Cli {
-            command: Command::Package {
-                package: "missing-package".to_owned(),
-                target: "x86_64-unknown-linux-gnu".to_owned(),
-                binary_path,
-                output_dir: temp_dir.path().join("dist"),
-            },
-        };
-
-        let result = run(cli);
-        assert!(
-            matches!(result, Err(CliError::UnknownPackage(package)) if package == "missing-package")
-        );
     }
 }
