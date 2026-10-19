@@ -53,6 +53,14 @@ enum Command {
     },
 }
 
+/// Inputs required to package one dependency executable.
+struct PackageRequest {
+    package: String,
+    target: String,
+    binary_path: PathBuf,
+    output_dir: PathBuf,
+}
+
 /// Command-line errors returned by the dependency-binary packaging tool.
 #[derive(Debug, Error)]
 enum CliError {
@@ -84,49 +92,57 @@ fn main() {
 
 /// Execute one dependency-binary packaging command.
 fn run(cli: Cli) -> Result<(), CliError> {
+    run_with_stdout(cli, &mut std::io::stdout())
+}
+
+/// Execute a subcommand and write its success report to `stdout`.
+///
+/// # Errors
+///
+/// Return the validation, packaging, or output error from the command.
+fn run_with_stdout<W: Write>(cli: Cli, stdout: &mut W) -> Result<(), CliError> {
     match cli.command {
         Command::Package {
             package,
             target,
             binary_path,
             output_dir,
-        } => run_package(package, &target, binary_path, output_dir),
-        Command::Provenance { output_dir } => run_provenance(&output_dir),
+        } => run_package(
+            PackageRequest {
+                package,
+                target,
+                binary_path,
+                output_dir,
+            },
+            stdout,
+        ),
+        Command::Provenance { output_dir } => run_provenance(&output_dir, stdout),
     }
 }
 
 /// Package a single dependency binary into a release archive.
-fn run_package(
-    package: String,
-    target: &str,
-    binary_path: PathBuf,
-    output_dir: PathBuf,
-) -> Result<(), CliError> {
-    let dependency = find_dependency_binary(&package)
+fn run_package(request: PackageRequest, stdout: &mut impl Write) -> Result<(), CliError> {
+    let dependency = find_dependency_binary(&request.package)
         .map_err(|error| CliError::Manifest(error.to_string()))?
         .cloned()
-        .ok_or(CliError::UnknownPackage(package))?;
-    let target_triple = TargetTriple::try_from(target)?;
+        .ok_or(CliError::UnknownPackage(request.package))?;
+    let target_triple = TargetTriple::try_from(request.target.as_str())?;
     let output = package_dependency_binary(&DependencyPackageParams {
         dependency,
         target: target_triple,
-        binary_path,
-        output_dir,
+        binary_path: request.binary_path,
+        output_dir: request.output_dir,
     })?;
-    writeln!(
-        std::io::stdout(),
-        "Created {}",
-        output.archive_path.display()
-    )?;
+    writeln!(stdout, "Created {}", output.archive_path.display())?;
     Ok(())
 }
 
 /// Write the dependency provenance summary into `output_dir`.
-fn run_provenance(output_dir: &Path) -> Result<(), CliError> {
+fn run_provenance(output_dir: &Path, stdout: &mut impl Write) -> Result<(), CliError> {
     let dependencies =
         required_dependency_binaries().map_err(|error| CliError::Manifest(error.to_string()))?;
     let output = write_provenance_markdown(output_dir, dependencies)?;
-    writeln!(std::io::stdout(), "Created {}", output.display())?;
+    writeln!(stdout, "Created {}", output.display())?;
     Ok(())
 }
 
@@ -137,6 +153,18 @@ mod tests {
     use super::*;
     use tempfile::tempdir;
     use whitaker_installer::dependency_binaries::provenance_filename;
+
+    struct BrokenPipeWriter;
+
+    impl Write for BrokenPipeWriter {
+        fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
+            Err(std::io::Error::from(std::io::ErrorKind::BrokenPipe))
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
 
     #[test]
     fn run_package_command_rejects_invalid_target() {
@@ -206,6 +234,47 @@ mod tests {
             "expected provenance command to succeed: {result:?}"
         );
         assert!(output_dir.join(provenance_filename()).is_file());
+    }
+
+    #[test]
+    fn package_command_reports_broken_stdout() {
+        let temp_dir = tempdir().expect("temp dir");
+        let binary_path = temp_dir.path().join("cargo-dylint");
+        std::fs::write(&binary_path, b"fake binary").expect("write binary");
+        let cli = Cli {
+            command: Command::Package {
+                package: "cargo-dylint".to_owned(),
+                target: "x86_64-unknown-linux-gnu".to_owned(),
+                binary_path,
+                output_dir: temp_dir.path().join("dist"),
+            },
+        };
+
+        let error = run_with_stdout(cli, &mut BrokenPipeWriter)
+            .expect_err("broken stdout should fail the package command");
+
+        assert!(matches!(
+            error,
+            CliError::Stdout(source) if source.kind() == std::io::ErrorKind::BrokenPipe
+        ));
+    }
+
+    #[test]
+    fn provenance_command_reports_broken_stdout() {
+        let temp_dir = tempdir().expect("temp dir");
+        let cli = Cli {
+            command: Command::Provenance {
+                output_dir: temp_dir.path().join("dist"),
+            },
+        };
+
+        let error = run_with_stdout(cli, &mut BrokenPipeWriter)
+            .expect_err("broken stdout should fail the provenance command");
+
+        assert!(matches!(
+            error,
+            CliError::Stdout(source) if source.kind() == std::io::ErrorKind::BrokenPipe
+        ));
     }
 
     #[test]

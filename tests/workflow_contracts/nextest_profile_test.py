@@ -55,6 +55,7 @@ COMPILE_CONTRACT_FILTER: typ.Final[str] = (
     "test(dependency_check_result_contract_is_public) | "
     "test(fixture_expansion_lint_attribute_contract) | "
     "test(normalize_settings_is_public_and_the_legacy_name_stays_removed) | "
+    "test(public_const_api_works_in_const_context) | "
     "test(renamed_common_apis_are_public_and_legacy_names_stay_removed) | "
     "test(renamed_sarif_api_is_public_and_legacy_names_stay_removed) | "
     "test(sha2_0_11_pre_migration_patterns_fail_to_compile) | "

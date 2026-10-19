@@ -18,6 +18,11 @@ pub(super) enum RepositoryInstall {
 }
 
 /// Resolve the manifest entry describing the release asset for a tool.
+///
+/// # Errors
+///
+/// Return an error if the dependency manifest cannot be read or parsed, or if
+/// it has no entry for `tool.package`.
 pub(super) fn resolve_dependency_binary(
     tool: &DependencyTool,
 ) -> Result<&'static DependencyBinary> {
@@ -83,6 +88,10 @@ pub(super) fn attempt_repository_install(
 /// and executable-permission checks. The generic health check remains useful
 /// for cargo-dylint, while dylint-link is a linker wrapper and has no reliable
 /// self-reporting command.
+///
+/// # Errors
+///
+/// Return an error if the generic installed-tool health check cannot complete.
 fn repository_install_verified(
     executor: &dyn CommandExecutor,
     tool: &DependencyTool,

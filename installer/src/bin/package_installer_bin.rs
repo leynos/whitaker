@@ -5,7 +5,6 @@
 //! by the release CI workflow to create binstall-compatible archives.
 
 use clap::Parser;
-use std::io::Write;
 use std::path::PathBuf;
 use thiserror::Error;
 use whitaker_installer::artefact::error::ArtefactError;
@@ -65,6 +64,15 @@ fn main() {
 
 /// Validate inputs and delegate to the packaging library.
 fn run(cli: Cli) -> Result<(), CliError> {
+    run_with_stdout(cli, &mut std::io::stdout())
+}
+
+/// Package the installer and write the success report to `stdout`.
+///
+/// # Errors
+///
+/// Return the validation, packaging, or output error from the command.
+fn run_with_stdout<W: std::io::Write>(cli: Cli, stdout: &mut W) -> Result<(), CliError> {
     let params = whitaker_installer::installer_packaging::InstallerPackageParams {
         version: Version::new(cli.crate_version),
         target: TargetTriple::try_from(cli.target.as_str())?,
@@ -73,11 +81,7 @@ fn run(cli: Cli) -> Result<(), CliError> {
     };
 
     let output = package_installer(&params)?;
-    writeln!(
-        std::io::stdout(),
-        "Created {}",
-        output.archive_path.display()
-    )?;
+    writeln!(stdout, "Created {}", output.archive_path.display())?;
     Ok(())
 }
 
@@ -88,6 +92,19 @@ mod tests {
     use super::*;
     use clap::Parser;
     use rstest::rstest;
+    use std::io::Write;
+
+    struct BrokenPipeWriter;
+
+    impl Write for BrokenPipeWriter {
+        fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
+            Err(std::io::Error::from(std::io::ErrorKind::BrokenPipe))
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
 
     const BASE_ARGS: [&str; 9] = [
         "whitaker-package-installer",
@@ -154,5 +171,26 @@ mod tests {
             ),
             "expected BinaryNotFound, got {err:?}"
         );
+    }
+
+    #[test]
+    fn run_reports_broken_stdout_after_packaging() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let binary_path = temp_dir.path().join("whitaker-installer");
+        std::fs::write(&binary_path, b"fake installer binary").expect("write binary");
+        let cli = Cli {
+            crate_version: "0.2.9".to_owned(),
+            target: "x86_64-unknown-linux-gnu".to_owned(),
+            binary_path,
+            output_dir: temp_dir.path().join("dist"),
+        };
+
+        let error = run_with_stdout(cli, &mut BrokenPipeWriter)
+            .expect_err("broken stdout should fail the packaging command");
+
+        assert!(matches!(
+            error,
+            CliError::Stdout(source) if source.kind() == std::io::ErrorKind::BrokenPipe
+        ));
     }
 }
