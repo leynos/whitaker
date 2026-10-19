@@ -1645,6 +1645,11 @@ proves success.
   transcript and focused proof output are preserved in
   [the PR 365 proof-run record](../verification/clone-detector/pr365-2026-10-19/README.md).
 
+  Before the full group, the standalone focused run of
+  `verify_missing_cover_returns_none` passed in 68 seconds and peaked at 124
+  MiB under the same 8 GiB cap. In the later full-group run, that harness took
+  2 seconds and peaked at 67 MiB. The proof-run record links both transcripts.
+
   | Harness                                                  | Checks          | Unreachable | Wall (s) | Peak (MiB) |
   | -------------------------------------------------------- | --------------: | ----------: | -------: | ---------: |
   | `verify_lsh_config_new_smoke`                            | 15, 0 failed    | 0           | 116      | 94         |

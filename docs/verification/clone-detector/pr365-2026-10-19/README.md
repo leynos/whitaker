@@ -17,16 +17,18 @@ inconclusive run; it cannot be reported as a pass. The largest peak was 4,835
 MiB for `verify_lsh_index_is_insertion_order_independent`, which took 159
 seconds. `verify_kind_counts_stop_at_max_depth` took 10 seconds and used 151
 MiB. `verify_kind_id_round_trips_full_u16_domain` took 5 seconds and used 67
-MiB. The corrected `verify_missing_cover_returns_none` harness took 2 seconds
+MiB. In this full-group run, `verify_missing_cover_returns_none` took 2 seconds
 and used 67 MiB.
 
 The full transcript is in
 [`kani-clone-detector.log.gz`](kani-clone-detector.log.gz). The focused
 transcript is in
 [`kani-missing-cover-focused.log.gz`](kani-missing-cover-focused.log.gz); it
-was produced by
+was the standalone run completed before the full group. It passed in 68 seconds
+and peaked at 124 MiB. This is the pre-suite measurement; the 2-second result
+above is the later run within the full group. The focused invocation was
+produced by
 `./scripts/run-kani.sh clone-detector-harness verify_missing_cover_returns_none`
-before the full group run.
 
 The unwind-bound negative control is in
 [`kani-depth-unwind-5-negative-control.log.gz`](kani-depth-unwind-5-negative-control.log.gz).
