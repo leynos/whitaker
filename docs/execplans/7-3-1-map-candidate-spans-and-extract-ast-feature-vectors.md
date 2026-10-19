@@ -254,10 +254,10 @@ Thresholds that trigger escalation rather than autonomous continuation.
       (prototyping milestone; go/no-go).
 - [x] Stage C — Domain IR and pure feature math (`tree`, `features`, `hash`),
       red-green-refactor.
-- [ ] Stage D — `ra_ap_syntax` adapter (`lowering.rs`) and span→node mapping;
+- [x] Stage D — `ra_ap_syntax` adapter (`lowering.rs`) and span→node mapping;
       follow-up enforces the node budget for token leaves and shares the
       parser-independent covering decision with production traversal.
-- [ ] Stage E — Behavioural (`rstest-bdd`), snapshot (`insta`), and property
+- [x] Stage E — Behavioural (`rstest-bdd`), snapshot (`insta`), and property
       (`proptest`) coverage.
 - [x] Stage F — Verus lemma and Kani harnesses; proof-script wiring. The
       complete bounded Kani group passes after splitting the expensive MinHash
@@ -281,12 +281,23 @@ done/remaining if interrupted.
       exact parser pin, selector correspondence, generated properties, and
       Verus arithmetic-boundary corrections. It found one stale MinHash/Verus
       summary in this guide and requested an explicit disposition for the
-      unavailable historical red-failure transcripts; both are recorded below
-      and await candidate-bound confirmation.
-- [ ] 2026-10-19: Reconcile the plan-assessment documentation finding and
-      exception with CodeRabbit before closing Stages D and E. Hosted CI run
-      `39182218490` and CodeScene result `8008611` pass on the current head;
-      formal review and Stage G remain open.
+      unavailable historical red-failure transcripts. The follow-up on head
+      `eabfe1ba0306ac9eee1cc7cd29f1fe38bc84ca20` closed the proof-scope finding
+      and accepted the exception paragraph as a transparent evidence record;
+      see [CodeRabbit's response](https://github.com/leynos/whitaker/pull/365#issuecomment-6257839052).
+- [x] 2026-10-19: The repository owner's instruction to merge PR #365 once it
+      reaches equilibrium is recorded as acceptance of the disclosed
+      historical-evidence exception for this delivery. The missing transcripts
+      remain unavailable and the corresponding acceptance item remains
+      excepted, not satisfied. The instruction is in the active delivery task;
+      CodeRabbit's request for this owner disposition is linked above.
+- [x] 2026-10-19: Replaced stale candidate attribution with current-head
+      evidence. [CI run 39184288492](https://github.com/leynos/whitaker/actions/runs/39184288492)
+      passed `linux-full`, `coverage-check`, and `windows-compat` on head
+      `eabfe1ba0306ac9eee1cc7cd29f1fe38bc84ca20`; [CodeScene result 8008849](https://codescene.io/projects/71836/delta/results/8008849)
+      passed on that same head. Formal review and Stage G remain open.
+- [ ] Stage G — Complete the formal CodeRabbit review and roadmap tick after
+      the candidate-bound proof assessment and readiness gates clear.
 
 Stage 0 completed on 2026-06-16. Green gates:
 
