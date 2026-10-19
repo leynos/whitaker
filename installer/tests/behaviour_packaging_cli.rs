@@ -5,6 +5,7 @@ use std::process::{Command, Output};
 use tempfile::tempdir;
 use whitaker_installer::dependency_binaries::find_dependency_binary;
 
+/// Assert that a packaging CLI succeeded and reported its output path.
 fn assert_success(output: Output, command: &str) {
     assert!(
         output.status.success(),
@@ -22,6 +23,7 @@ fn assert_success(output: Output, command: &str) {
     );
 }
 
+/// Assert that a packaging CLI rejects missing input with a diagnostic.
 fn assert_missing_input_is_rejected(command: &str) {
     let output = Command::new(command)
         .output()
