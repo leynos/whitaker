@@ -26,6 +26,17 @@ pub const WINDOWS_PKG_FMT: &str = "zip";
 /// The Windows target triple that receives the `pkg-fmt` override.
 pub const WINDOWS_OVERRIDE_TARGET: &str = "x86_64-pc-windows-msvc";
 
+/// Values required to render one cargo-binstall release entry.
+#[derive(Debug, Clone, Copy)]
+pub struct BinstallRelease<'a> {
+    /// Crate name used in the archive and binary paths.
+    pub package_name: &'a str,
+    /// Published crate version.
+    pub version: &'a str,
+    /// Rust compilation target triple.
+    pub target: &'a str,
+}
+
 /// Expand the `pkg-url` template for a given version and target.
 ///
 /// Replaces `{name}`, `{version}`, `{target}`, and `{archive-format}`
@@ -43,10 +54,14 @@ pub const WINDOWS_OVERRIDE_TARGET: &str = "x86_64-pc-windows-msvc";
 /// ```
 #[must_use]
 pub fn expand_pkg_url(version: &str, target: &str) -> String {
-    expand_pkg_url_for("whitaker-installer", version, target)
+    expand_pkg_url_for(BinstallRelease {
+        package_name: "whitaker-installer",
+        version,
+        target,
+    })
 }
 
-/// Expand the `pkg-url` template for any package name, version, and target.
+/// Expand the `pkg-url` template for a release.
 ///
 /// The archive format follows the same target override as
 /// [`expand_pkg_url`].
@@ -54,23 +69,19 @@ pub fn expand_pkg_url(version: &str, target: &str) -> String {
 /// # Examples
 ///
 /// ```
-/// use whitaker_installer::binstall_metadata::expand_pkg_url_for;
+/// use whitaker_installer::binstall_metadata::{BinstallRelease, expand_pkg_url_for};
 ///
-/// let url = expand_pkg_url_for("whitaker", "0.2.7", "x86_64-unknown-linux-gnu");
+/// let release = BinstallRelease {
+///     package_name: "whitaker",
+///     version: "0.2.7",
+///     target: "x86_64-unknown-linux-gnu",
+/// };
+/// let url = expand_pkg_url_for(release);
 /// assert!(url.contains("/whitaker-x86_64-unknown-linux-gnu-v0.2.7.tgz"));
 /// ```
 #[must_use]
-pub fn expand_pkg_url_for(package: &str, version: &str, target: &str) -> String {
-    let archive_format = if target == WINDOWS_OVERRIDE_TARGET {
-        WINDOWS_PKG_FMT
-    } else {
-        DEFAULT_PKG_FMT
-    };
-    PKG_URL_TEMPLATE
-        .replace("{name}", package)
-        .replace("{version}", version)
-        .replace("{target}", target)
-        .replace("{archive-format}", archive_format)
+pub fn expand_pkg_url_for(release: BinstallRelease<'_>) -> String {
+    render_release(release, &BinstallTemplate::PackageUrl)
 }
 
 /// Expand the `bin-dir` template for a given version and target.
@@ -89,33 +100,71 @@ pub fn expand_pkg_url_for(package: &str, version: &str, target: &str) -> String 
 /// ```
 #[must_use]
 pub fn expand_bin_dir(version: &str, target: &str) -> String {
-    expand_bin_dir_for("whitaker-installer", version, target)
+    expand_bin_dir_for(BinstallRelease {
+        package_name: "whitaker-installer",
+        version,
+        target,
+    })
 }
 
-/// Expand the `bin-dir` template for any package name, version, and target.
+/// Expand the `bin-dir` template for a release.
 ///
 /// The binary name is the package name, with `.exe` appended for Windows.
 ///
 /// # Examples
 ///
 /// ```
-/// use whitaker_installer::binstall_metadata::expand_bin_dir_for;
+/// use whitaker_installer::binstall_metadata::{BinstallRelease, expand_bin_dir_for};
 ///
-/// let dir = expand_bin_dir_for("whitaker", "0.2.7", "x86_64-unknown-linux-gnu");
+/// let release = BinstallRelease {
+///     package_name: "whitaker",
+///     version: "0.2.7",
+///     target: "x86_64-unknown-linux-gnu",
+/// };
+/// let dir = expand_bin_dir_for(release);
 /// assert_eq!(dir, "whitaker-x86_64-unknown-linux-gnu-v0.2.7/whitaker");
 /// ```
 #[must_use]
-pub fn expand_bin_dir_for(package: &str, version: &str, target: &str) -> String {
-    let bin = if target == WINDOWS_OVERRIDE_TARGET {
-        format!("{package}.exe")
-    } else {
-        package.to_owned()
+pub fn expand_bin_dir_for(release: BinstallRelease<'_>) -> String {
+    render_release(release, &BinstallTemplate::BinDirectory)
+}
+
+enum BinstallTemplate {
+    PackageUrl,
+    BinDirectory,
+}
+
+fn render_release(release: BinstallRelease<'_>, template: &BinstallTemplate) -> String {
+    let (template_text, platform_key, platform_value) = match template {
+        BinstallTemplate::PackageUrl => (
+            PKG_URL_TEMPLATE,
+            "{archive-format}",
+            package_archive_format(release.target).to_owned(),
+        ),
+        BinstallTemplate::BinDirectory => (BIN_DIR_TEMPLATE, "{bin}", binary_name(release)),
     };
-    BIN_DIR_TEMPLATE
-        .replace("{name}", package)
-        .replace("{version}", version)
-        .replace("{target}", target)
-        .replace("{bin}", &bin)
+    template_text
+        .replace("{name}", release.package_name)
+        .replace("{version}", release.version)
+        .replace("{target}", release.target)
+        .replace(platform_key, &platform_value)
+}
+
+fn package_archive_format(target: &str) -> &'static str {
+    if target == WINDOWS_OVERRIDE_TARGET {
+        WINDOWS_PKG_FMT
+    } else {
+        DEFAULT_PKG_FMT
+    }
+}
+
+fn binary_name(release: BinstallRelease<'_>) -> String {
+    let extension = if release.target == WINDOWS_OVERRIDE_TARGET {
+        ".exe"
+    } else {
+        ""
+    };
+    format!("{}{extension}", release.package_name)
 }
 
 // ---------------------------------------------------------------------------

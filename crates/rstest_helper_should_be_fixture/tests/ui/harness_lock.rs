@@ -264,11 +264,16 @@ fn recover_stale_example_harness_lock_while_locked(path: &Path) -> io::Result<()
     };
     let modified = metadata.modified()?;
 
+    // An abandoned owner releases its liveness lock, so recovery need not wait
+    // out the grace period before reclaiming. The age still classifies the
+    // event: a recent reclamation means a process died mid-run, while an older
+    // directory was left behind by a previous run.
     if example_harness_lock_is_stale(modified, SystemTime::now()) {
         debug!(target: EXAMPLE_HARNESS_LOCK_LOG_TARGET, "event=stale_recovery_eligible path={}", path.display());
-        remove_stale_example_harness_lock_while_locked(path)?;
+    } else {
+        debug!(target: EXAMPLE_HARNESS_LOCK_LOG_TARGET, "event=recent_recovery_eligible path={}", path.display());
     }
-    Ok(())
+    remove_stale_example_harness_lock_while_locked(path)
 }
 /// Remove a released stale lock while holding its state sidecar.
 ///

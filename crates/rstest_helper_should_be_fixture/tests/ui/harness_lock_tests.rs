@@ -361,6 +361,27 @@ fn stale_recovery_preserves_active_owner_then_reclaims_after_release() {
     assert!(!path.exists(), "released stale directory should be removed");
 }
 
+/// Reclaim a released lock without waiting out the stale grace period.
+///
+/// A crashed process drops its liveness lock immediately, so an abandoned
+/// directory can be reused as soon as the OS reports the release. Only the
+/// owner-aware removal path decides eligibility; the age merely classifies the
+/// event for diagnostics.
+#[test]
+fn recovery_reclaims_a_recently_abandoned_lock() {
+    let test_directory = tempfile::tempdir().expect("create test directory");
+    let path = test_directory.path().join("harness.lock");
+    std::fs::create_dir(&path).expect("create abandoned lock directory");
+    write_lock_owner(&path, &ExampleHarnessLockOwner::new()).expect("write abandoned owner");
+
+    recover_stale_example_harness_lock(&path).expect("reclaim abandoned lock");
+
+    assert!(
+        !path.exists(),
+        "an abandoned lock should be reclaimed without waiting for its age"
+    );
+}
+
 /// Preserve a successor-owned lock when the previous owner is dropped.
 #[test]
 fn lock_cleanup_does_not_remove_a_different_owner() {
