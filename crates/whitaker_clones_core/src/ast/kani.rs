@@ -144,12 +144,12 @@ fn verify_smallest_covering_node_selects_minimal_range() {
 /// Verify missing covering candidates leave selection empty.
 #[kani::proof]
 #[kani::unwind(5)]
-fn verify_smallest_covering_root_fallback() {
+fn verify_missing_cover_returns_none() {
     let empty: [Range<u32>; 0] = [];
     let target = 4..8;
     kani::assert(
         select_smallest_covering(&empty, &target).is_none(),
-        "empty candidate sets must fall back to the parser root",
+        "empty candidate sets must leave selection empty",
     );
 
     let candidates = [0..2, 9..12, 12..16];
@@ -161,7 +161,7 @@ fn verify_smallest_covering_root_fallback() {
     );
     kani::assert(
         select_smallest_covering(&candidates, &target).is_none(),
-        "non-covering candidate sets must fall back to the parser root",
+        "non-covering candidate sets must leave selection empty",
     );
 }
 

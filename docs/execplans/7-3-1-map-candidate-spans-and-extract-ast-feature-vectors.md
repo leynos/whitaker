@@ -1349,6 +1349,26 @@ insufficient. Restore the production code before committing. Validation:
 `make verus-clone-detector` and `make kani-clone-detector` pass; the mutation
 matrix is recorded.
 
+The covering proofs have different domains. The minimal-selection harness uses
+symbolic ranges constrained to valid, non-empty offsets in `0..=16` and assumes
+at least one candidate covers the target. The harness named
+`verify_missing_cover_returns_none` uses an empty array and one fixed
+non-covering array, and asserts that `select_smallest_covering` returns `None`.
+It does not execute the parser adapter's root fallback. The index constructor
+proofs also use explicit domains: the symbolic constructor constrains both
+`bands` and `rows` to at most `MINHASH_SIZE`; the overflow harness fixes
+`rows = 2` and assumes a non-zero `bands` value greater than `usize::MAX / 2`.
+
+The four LSH candidate-pair harnesses use a separate `#[cfg(kani)]` model.
+`insert` records up to four fragments and two compact band keys, then
+`candidate_pair_summary_for_kani` compares recorded fragment pairs directly and
+emits a pair when any recorded band matches. It uses `CandidatePair::new` and a
+fixed-size pair summary, but does not execute production `candidate_pairs`,
+`add_bucket_pairs`, B-tree bucket enumeration, or the production set's
+cross-band deduplication. The repeated-band harness therefore checks that one
+model pair is summarized once; runtime tests and BDD scenarios remain the
+evidence for repeated production bucket emissions and deduplication.
+
 ### Stage G — Documentation, gates, review, roadmap
 
 Record the realized design decisions in
@@ -1612,47 +1632,49 @@ proves success.
   insertion-order harness and was killed at 4,096 MiB after 133 seconds. This
   remains a resource-limited, inconclusive result rather than a pass; the final
   run stayed bounded at 8 GiB per process tree.
-- Current bounded Kani result (2026-10-19, candidate worktree based on
-  `c0ef8c2074127a3083b6907b16474f819e77ddea`):
-  `scripts/run-kani.sh clone-detector` passed all 15 registered harnesses with
-  zero failed checks. Each invocation used its own process-tree cgroup with an
-  8 GiB memory cap, swap disabled, and a 600-second timeout. The wrapper fails
-  on timeout, OOM, non-zero exit, or missing peak-memory evidence, so none of
-  those outcomes can be reported as a proof pass. Durations sum to 936 seconds;
+- Current bounded Kani result (2026-10-19, base commit
+  `a20569eabd350954f639bed5b8307a2435e16070`, proof-source patch SHA-256
+  `e3c44ae90da6fe34bb179af1803ab4d5adc636df34f8cb73d20ac7c2d270b593`):
+  `make kani-clone-detector` passed all 15 registered harnesses with zero
+  failed checks. Each invocation used its own process-tree cgroup with an 8 GiB
+  memory cap, swap disabled, and a 600-second timeout. The wrapper fails on
+  timeout, OOM, non-zero exit, or missing peak-memory evidence, so none of
+  those outcomes can be reported as a proof pass. Durations sum to 652 seconds;
   the highest peak was 4,835 MiB for
-  `verify_lsh_index_is_insertion_order_independent` (254 seconds). Full log:
-  `/tmp/kani-clone-detector-pr365-equilibrium-final.out`.
+  `verify_lsh_index_is_insertion_order_independent` (159 seconds). The complete
+  transcript and focused proof output are preserved in
+  [the PR 365 proof-run record](../verification/clone-detector/pr365-2026-10-19/README.md).
 
   | Harness                                                  | Checks          | Unreachable | Wall (s) | Peak (MiB) |
   | -------------------------------------------------------- | --------------: | ----------: | -------: | ---------: |
-  | `verify_lsh_config_new_smoke`                            | 15, 0 failed    | 0           | 73       | 93         |
-  | `verify_lsh_config_new_symbolic`                         | 59, 0 failed    | 1           | 16       | 67         |
-  | `verify_lsh_config_new_overflow_product`                 | 30, 0 failed    | 4           | 16       | 67         |
-  | `verify_min_hasher_sketch_rejects_empty_input`           | 2,208, 0 failed | 223         | 24       | 232        |
-  | `verify_min_hasher_lane_minimum_for_boundary_hashes`     | 81, 0 failed    | 1           | 17       | 67         |
-  | `verify_min_hasher_unique_hashes_sorts_and_deduplicates` | 1,161, 0 failed | 80          | 21       | 160        |
-  | `verify_lsh_index_rejects_self_pairs`                    | 3,590, 0 failed | 11          | 68       | 1,938      |
-  | `verify_lsh_index_canonicalizes_pair_order`              | 3,612, 0 failed | 8           | 110      | 2,873      |
-  | `verify_lsh_index_deduplicates_repeated_band_collisions` | 3,615, 0 failed | 136         | 131      | 3,577      |
-  | `verify_lsh_index_is_insertion_order_independent`        | 3,628, 0 failed | 8           | 254      | 4,835      |
-  | `verify_smallest_covering_node_selects_minimal_range`    | 221, 0 failed   | 2           | 141      | 77         |
-  | `verify_smallest_covering_root_fallback`                 | 198, 0 failed   | 4           | 2        | 67         |
-  | `verify_kind_id_round_trips_full_u16_domain`             | 1, 0 failed     | 0           | 29       | 67         |
-  | `verify_kind_counts_stop_at_max_depth`                   | 569, 0 failed   | 9           | 6        | 153        |
-  | `verify_kind_id_equality_and_order_cover_small_alphabet` | 39, 0 failed    | 0           | 28       | 67         |
+  | `verify_lsh_config_new_smoke`                            | 15, 0 failed    | 0           | 116      | 94         |
+  | `verify_lsh_config_new_symbolic`                         | 59, 0 failed    | 1           | 14       | 67         |
+  | `verify_lsh_config_new_overflow_product`                 | 30, 0 failed    | 4           | 38       | 67         |
+  | `verify_min_hasher_sketch_rejects_empty_input`           | 2,208, 0 failed | 223         | 17       | 232        |
+  | `verify_min_hasher_lane_minimum_for_boundary_hashes`     | 81, 0 failed    | 1           | 9        | 67         |
+  | `verify_min_hasher_unique_hashes_sorts_and_deduplicates` | 1,161, 0 failed | 80          | 15       | 160        |
+  | `verify_lsh_index_rejects_self_pairs`                    | 3,590, 0 failed | 11          | 72       | 1,939      |
+  | `verify_lsh_index_canonicalizes_pair_order`              | 3,612, 0 failed | 8           | 78       | 2,878      |
+  | `verify_lsh_index_deduplicates_repeated_band_collisions` | 3,615, 0 failed | 136         | 107      | 3,579      |
+  | `verify_lsh_index_is_insertion_order_independent`        | 3,628, 0 failed | 8           | 159      | 4,835      |
+  | `verify_smallest_covering_node_selects_minimal_range`    | 221, 0 failed   | 2           | 6        | 74         |
+  | `verify_missing_cover_returns_none`                      | 198, 0 failed   | 4           | 2        | 67         |
+  | `verify_kind_id_round_trips_full_u16_domain`             | 1, 0 failed     | 0           | 5        | 67         |
+  | `verify_kind_counts_stop_at_max_depth`                   | 569, 0 failed   | 9           | 10       | 151        |
+  | `verify_kind_id_equality_and_order_cover_small_alphabet` | 39, 0 failed    | 0           | 4        | 67         |
 
   The depth-only harness uses fixed kinds and a five-node tree, so symbolic
   kind variation and production `BTreeMap` operations are outside that
   obligation. The full-range round trip is proved independently; equality and
   ordering are checked over the documented four-value alphabet. A focused
   negative-control run at unwind 5 failed the loop-termination unwinding
-  assertion in `for_each_node_at_depth` (`features.rs:216`), with 569 checks
-  undetermined, one failed unwinding assertion, a 43-second duration, and a 100
-  MiB peak. Unwinding assertions remained enabled. At unwind 6 the depth proof
-  passed with 569 checks, nine unreachable library/safety checks, a six-second
-  duration, and a 153 MiB peak. This confirms that five node visits plus the
-  terminal loop check require bound 6; bound 5 is insufficient. The
-  negative-control log is `/tmp/kani-depth-unwind5-pr365-equilibrium.out`.
+  assertion in `for_each_node_at_depth` (`features.rs:216`): 1 of 570 checks
+  failed, with 569 undetermined, after 43 seconds and a 100 MiB peak. The
+  unwinding assertion remained enabled. At unwind 6 the depth proof passed with
+  569 checks, nine unreachable library/safety checks, a 10-second duration, and
+  a 151 MiB peak. This confirms that five node visits plus the terminal loop
+  check require bound 6; bound 5 is insufficient. The negative control
+  transcript is preserved alongside the full run in the proof-run record.
 - Stage F Verus trust bridge: `verus/clone_detector_ast_features.rs` proves
   the exact count accumulator algebra for a supplied multiset of
   `(kind, depth)` contributions; Rust unit tests and `proptest` cover the
@@ -1673,30 +1695,27 @@ proves success.
   full bounded Kani group passed on the same candidate worktree as recorded
   above. The exact Verus log is
   `/tmp/verus-pr365-equilibrium-codescene-fix.out`.
-- Current Verus revalidation (2026-10-19, same worktree as the current Kani
-  run): `make verus-clone-detector` passed with 9, 10, and 8 verified
-  obligations and zero errors. Full output:
-  `/tmp/verus-clone-detector-pr365-equilibrium-final.out`.
+- Earlier Verus revalidation (2026-10-19, commit
+  `c59826254eccb56bce0c7290cc62ec5910d27dad`): `make verus-clone-detector`
+  passed with 9, 10, and 8 verified obligations and zero errors. This result is
+  separate from the current Kani run; its concise output and tool version are
+  preserved in the proof-run record.
 - Current local gates (2026-10-19, candidate source; run sequentially):
   `make check-fmt`, `make lint`, `make typecheck`, `make test`,
-  `make markdownlint`, and `make nixie` passed. The workspace test run reports
-  1,871 passed and 5 skipped; the additional `dylint_testing` suite reports 11
-  passed. Logs are `/tmp/check-fmt-pr365-equilibrium-followup-2.out`,
-  `/tmp/lint-pr365-equilibrium-followup-2.out`,
-  `/tmp/typecheck-pr365-equilibrium-followup-2.out`,
-  `/tmp/test-pr365-equilibrium-followup-2.out`,
-  `/tmp/markdownlint-pr365-equilibrium-followup-2.out`, and
-  `/tmp/nixie-pr365-equilibrium-followup-2.out`. The documentation update still
-  requires formatting and the Markdown-only gates before commit.
+  `make markdownlint`, `make nixie`, and `make spelling` passed sequentially.
+  The workspace test run reports 1,871 passed and 5 skipped; the additional
+  `dylint_testing` suite reports 11 passed. Captured logs use the
+  `/tmp/*-pr365-equilibrium-scope-fix.out` names. The proof-evidence directory
+  and its index entry require documentation-only gates before commit.
 - Stage F mutation matrix:
   - `<=` -> `<` in the covering lower-bound predicate failed
     `verify_smallest_covering_node_selects_minimal_range` with
     `covering candidate must be selected` and
     `no covering candidate may be strictly smaller than the selected candidate`
     (captured in `/tmp/kani-mutation-start-bound-*.out`).
-  - Dropping the covering predicate failed
-    `verify_smallest_covering_root_fallback` with
-    `non-covering candidate sets must fall back to the parser root`
+  - Dropping the covering predicate failed `verify_missing_cover_returns_none`
+    with the assertion that selection remains empty; the mutation log retains
+    the earlier assertion message claiming parser-root fallback.
     (captured in `/tmp/kani-mutation-drop-cover-*.out`).
   - After restoring `select_smallest_covering`, both affected harnesses passed
     (captured in `/tmp/kani-restored-cover-*.out`).

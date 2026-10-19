@@ -68,7 +68,7 @@ run_clone_detector_harnesses() {
         verify_lsh_index_deduplicates_repeated_band_collisions \
         verify_lsh_index_is_insertion_order_independent \
         verify_smallest_covering_node_selects_minimal_range \
-        verify_smallest_covering_root_fallback \
+        verify_missing_cover_returns_none \
         verify_kind_id_round_trips_full_u16_domain \
         verify_kind_counts_stop_at_max_depth \
         verify_kind_id_equality_and_order_cover_small_alphabet

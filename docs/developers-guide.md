@@ -1870,11 +1870,15 @@ and Kani:
 - The BDD harness in
   `crates/whitaker_clones_core/tests/min_hash_lsh_behaviour.rs` exercises LSH
   candidate generation as part of the token-pass behaviour surface.
-- The Kani harnesses in `crates/whitaker_clones_core/src/index/kani.rs` verify
-  bounded `LshIndex` states for the same invariants. Kani builds use a private
-  fixed-size insertion log and compact band keys so the proof checks the LSH
-  state transition and `CandidatePair::new` policy without modelling `BTreeMap`
-  and `BTreeSet` allocator internals.
+- The Kani harnesses in `crates/whitaker_clones_core/src/index/kani.rs` use a
+  proof-specific candidate-generation model. In Kani builds, `insert` records
+  up to four fragments and their compact band keys;
+  `candidate_pair_summary_for_kani` compares each recorded fragment pair
+  directly, emits it when any recorded band matches, and applies
+  `CandidatePair::new`. This model does not execute production
+  `candidate_pairs` or `add_bucket_pairs`, nor the production B-tree bucket
+  enumeration and cross-bucket deduplication. Runtime tests and the BDD
+  scenario cover those production paths.
 
 ### Clone-detector AST structure
 
@@ -2048,31 +2052,35 @@ For the current clone-detector constructors, the split is:
   proofs do not establish non-empty full-signature determinism or general
   duplicate-hash insensitivity; ordinary tests retain those broader runtime
   obligations.
-- Kani verifies bounded `LshIndex` states for no self-pairs, canonical pair
-  ordering, repeated-band deduplication, and insertion-order independence. In
-  `#[cfg(kani)]` builds, `LshIndex` records inserted fragments in a fixed
-  four-slot proof log with compact two-band keys; normal builds keep the
-  production `BTreeMap`/`BTreeSet` implementation and public API.
+- Kani checks no self-pairs, canonical pair ordering, bounded shared-band
+  scenarios, and insertion-order independence through a proof-specific model. In
+  `#[cfg(kani)]` builds, `insert` records up to four fragments with at most
+  two compact band keys. `candidate_pair_summary_for_kani` checks each recorded
+  pair for any shared band, then uses `CandidatePair::new` and a fixed-array
+  pair summary. It does not run production `candidate_pairs` or
+  `add_bucket_pairs`, so the production B-tree bucket emissions and final
+  cross-band deduplication remain covered by runtime tests and BDD scenarios.
 - Kani verifies AST span-cover selection and bounded AST feature invariants
-  over synthetic `NormalizedTree` values. The parser adapter's pruned tree walk
-  and the parser-independent `select_smallest_covering` helper share the same
-  covering and minimal-width decision predicate, which Kani checks without
-  compiling or modelling `ra_ap_syntax`. Compact bounded tree fixtures keep
-  feature proofs independent of parser internals. The full-range `u16` `KindId`
-  round trip has its own harness. The depth-only harness uses fixed kinds and
-  checks the shared preorder depth visitor with a four-slot array tally, so it
-  proves the five-node depth counts without entering production `BTreeMap`
-  internals. Its unwind bound of six covers five node visits and the loop's
-  final termination check; the child loop has at most two children plus
-  exhaustion. Unwinding assertions remain enabled. A separate scalar harness
-  checks `KindId` equality and ordering against raw `u16` comparisons for each
-  pair among the root, two child labels, and query label. Four values from two
-  symbolic bits represent every equality partition and relative ordering those
-  four roles can have. It has no loops to unwind and does not model map
-  operations. Unit tests and proptest cover the production traversal and
-  `BTreeMap` count accumulator. A generated-source property also varies
-  identifier and integer-literal payloads while checking normalized AST-hash
-  equality.
+  over synthetic `NormalizedTree` values. The missing-cover harness checks that
+  empty and concrete non-covering candidate lists return `None`; it does not
+  execute parser-root fallback. The parser adapter's pruned tree walk and the
+  parser-independent `select_smallest_covering` helper share the same covering
+  and minimal-width decision predicate, which Kani checks without compiling or
+  modelling `ra_ap_syntax`. Compact bounded tree fixtures keep feature proofs
+  independent of parser internals. The full-range `u16` `KindId` round trip has
+  its own harness. The depth-only harness uses fixed kinds and checks the
+  shared preorder depth visitor with a four-slot array tally, so it proves the
+  five-node depth counts without entering production `BTreeMap` internals. Its
+  unwind bound of six covers five node visits and the loop's final termination
+  check; the child loop has at most two children plus exhaustion. Unwinding
+  assertions remain enabled. A separate scalar harness checks `KindId` equality
+  and ordering against raw `u16` comparisons for each pair among the root, two
+  child labels, and query label. Four values from two symbolic bits represent
+  every equality partition and relative ordering those four roles can have. It
+  has no loops to unwind and does not model map operations. Unit tests and
+  proptest cover the production traversal and `BTreeMap` count accumulator. A
+  generated-source property also varies identifier and integer-literal payloads
+  while checking normalized AST-hash equality.
 - Verus proves the AST feature-count accumulator algebra for supplied
   `(kind, depth)` contributions. `lemma_fold_count_is_permutation_invariant`
   establishes that equal contribution multisets yield equal exact counts for

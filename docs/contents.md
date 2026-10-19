@@ -117,3 +117,8 @@
 
 - [docs/execplans/](execplans/) stores execution plans for branch-scoped
   implementation work and larger follow-up tasks.
+
+## Verification evidence
+
+- [Clone-detector proof run for PR 365](verification/clone-detector/pr365-2026-10-19/README.md)
+  preserves the bounded Kani output and the related Verus run record for audit.

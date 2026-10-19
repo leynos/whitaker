@@ -631,12 +631,12 @@ cargo whitaker clones report --in target/whitaker/clones.refined.sarif --html
 
 ## Implementation decisions (7.2.8)
 
-1. **Bounded `LshIndex` invariants are verified with Kani.** The clone-detector
-   Kani harness set now checks four candidate-generation invariants: repeated
-   insertion of one fragment emits no self-pair, reversed lexical insertion
-   still emits the canonical pair, two fragments colliding in two bands emit
-   one deduplicated pair, and a bounded three-fragment scenario is independent
-   of insertion order.
+1. **Bounded candidate-generation scenarios use a Kani-specific model.** Four
+   harnesses check no self-pairs, canonical pair ordering, shared-band
+   scenarios, and insertion-order independence. In `#[cfg(kani)]` builds,
+   `candidate_pair_summary_for_kani` compares recorded fragment pairs directly
+   and emits each pair once when any recorded band matches. These checks do not
+   execute production bucket enumeration or its cross-band set deduplication.
 
 2. **Production candidate generation remains B-tree backed.** Normal builds
    still store LSH buckets in `BTreeMap<BandBucketKey, BTreeSet<FragmentId>>`
@@ -644,12 +644,15 @@ cargo whitaker clones report --in target/whitaker/clones.refined.sarif --html
    the public runtime API. Existing unit tests and `rstest-bdd` scenarios keep
    covering that public path.
 
-3. **The Kani proof uses private fixed-size logs.** `#[cfg(kani)]` builds
+3. **The Kani model uses private fixed-size logs.** `#[cfg(kani)]` builds
    compile out production B-tree storage and record inserted fragments in a
-   four-slot insertion log with compact two-band keys, plus a six-slot bounded
-   pair log. This keeps the proof focused on the LSH transition and
-   `CandidatePair::new` policy instead of allocator, destructor, and
-   tree-balancing internals in the standard library.
+   four-slot insertion log with compact two-band keys. The separate
+   `candidate_pair_summary_for_kani` routine checks all recorded fragment pairs
+   for any shared band, then applies `CandidatePair::new` and records results
+   in a six-slot pair log. It is a bounded candidate-generation model, not
+   execution of production `candidate_pairs` or `add_bucket_pairs`; runtime
+   tests and BDD scenarios cover those production paths. This boundary avoids
+   allocator, destructor, and tree-balancing internals in the standard library.
 
 4. **Unwind bounds are tied to the proof representation.** The new LSH
    harnesses use `#[kani::unwind(7)]`, one greater than the six-slot bounded
