@@ -345,17 +345,23 @@ fn persist_metrics(
         })
 }
 
-/// Returns `part / whole` in permille (parts per thousand), or zero when
-/// `whole` is zero. The product saturates rather than overflowing.
-const fn rate_permille(part: u64, whole: u64) -> u64 {
+/// Return `part / whole` in permille, rounded to the nearest integer.
+///
+/// Return zero when `whole` is zero and cap inconsistent persisted counts at
+/// 1000 permille. Wider intermediate arithmetic keeps large counters exact.
+pub(crate) const fn rate_permille(part: u64, whole: u64) -> u64 {
     if whole == 0 {
         0
     } else {
-        part.saturating_mul(1000).div_euclid(whole)
+        let part = if part > whole { whole } else { part };
+        let denominator = whole as u128;
+        let numerator = (part as u128) * 1000 + denominator / 2;
+        let rounded = numerator / denominator;
+        if rounded > 1000 { 1000 } else { rounded as u64 }
     }
 }
 
-/// Renders a permille value as a percentage with one decimal place.
+/// Render a permille value as a percentage with one decimal place.
 fn format_permille_as_percent(permille: u64) -> String {
     format!("{}.{}", permille.div_euclid(10), permille.rem_euclid(10))
 }

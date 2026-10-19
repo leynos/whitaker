@@ -9,12 +9,13 @@ the [Developer's Guide](developers-guide.md).
 ## Upgrading library consumers
 
 Version 0.3.0 includes source-breaking changes to public Rust APIs, covering
-spelling, crate re-exports, the `whitaker_suite` entry point, and the fallible
+spelling, installer interfaces, crate re-exports, the `whitaker_suite` entry point, and the fallible
 `suggest_decomposition` query. Existing library consumers must update imports,
 field access, and call sites as described in the
 [Whitaker 0.3.0 migration guide](v0-3-0-migration-guide.md). The changes affect
-Rust source only: SARIF 2.1.0 JSON keys retain their schema-defined spellings,
-so existing serialized data requires no migration.
+Rust source only: the installer's CLI flags and SARIF 2.1.0 JSON keys retain
+their existing spellings, so existing command invocations and serialized data
+require no migration.
 
 ## Quick Setup
 
