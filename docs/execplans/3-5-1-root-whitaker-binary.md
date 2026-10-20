@@ -93,7 +93,7 @@ stop at.
   and protected the legacy dry-run output with a snapshot.
 - [x] `EP-M2a` — root commands, forwarding, Kani proof, and bounded property
   checks are implemented.
-- [ ] `EP-M2b` — CLI Verus proof and its negative control remain unverified.
+- [x] `EP-M2b` — CLI Verus proof/control pass in default `make verus`.
 - [x] `EP-M3a` — binstall and platform package metadata implemented.
 - [ ] `EP-M3b` — crates.io name reservation remains unauthorized.
 - [x] `EP-M4` — architecture and user/developer documentation.
@@ -104,19 +104,18 @@ approve 70 files and 7,000 net added lines for this plan only.
 
 The CLI delivers `install`, transitional `ls`, localized help/version, legacy
 forwarding, per-toolchain install records, and binstall metadata. Kani passed
-360 checks; Verus remains unverified and name reservation is unauthorized, so
-the checked roadmap item keeps this plan open.
+360 checks; the CLI Verus proof and its negative control pass. Name reservation
+remains unauthorized, so the checked roadmap item keeps this plan open.
 
 Published `a02ddff` failed three hosted tests because `workspace_root` selected
 the manifest's parent. `8444efa` fixes the path and recovers abandoned locks.
 Fresh review of `20494294` found three defects; the current tree addresses
 signal exit status, library path selection, and the layout description.
 
-All nine gates pass on the current tree: 1,713 tests, 5 skipped, doctests,
-format, typecheck, lint, docs, spelling, Makefile, and packageability. Review
-findings are fixed: the guide names the UI harness; signal status and default
-toolchain paths are preserved. PR review, hosted checks, and CodeScene remain
-after publication; instrumented coverage still times out in trybuild.
+Before Verus edits, nine gates passed (1,713 tests, 5 skipped, doctests,
+format, typecheck, lint, docs, spelling, Makefile, packageability). Both Verus
+groups pass now; remaining gates await rerun. Instrumented coverage timed out
+in trybuild.
 
 ## Constraints
 
@@ -189,10 +188,10 @@ Stop and escalate; do not improvise.
 ## Risks
 
 **R2 — Forwarding may misroute argv or lose subprocess status.** Severity:
-high. The classifier selects a Whitaker command or forwards to `cargo dylint`;
-a mistake breaks either interface. Kani and CLI tests cover bounded routing,
-reachability, and child exit status. The unbounded Verus proof exceeded
-tolerance without a verdict, so keep `EP-M2b` open.
+high. The classifier selects Whitaker or forwards to `cargo dylint`; errors
+break an interface. Kani, CLI tests, and unbounded Verus cover routing,
+reachability, and child status. The revised proof verifies within tolerance
+(`EP-M2b`).
 
 **R6 — Publishing instructions may precede name reservation.** Severity:
 medium, with high impact. The `whitaker` name remains unreserved. Keep official
@@ -501,9 +500,8 @@ or every existing user. That is worth verifying properly.
 - **Domain.** Unbounded `Seq<TokenTag>`. This would be the repository's first
   sequence-shaped proof; every file in `verus/` today is numeric or
   vector-algebraic. Budget accordingly and respect the verification tolerance.
-- **Artefact.** `verus/whitaker_cli_dispatch.rs`, added as a new `cli` group
-  in `scripts/run-verus.sh` — which needs **both** the `case` at `:10-26` and
-  the second `case` at `:53-54` edited, not one.
+- **Artefact.** `verus/whitaker_cli_dispatch.rs`, in the `cli` group and the
+  default `all` group in `scripts/run-verus.sh`.
 - **Evidence.** `make verus 2>&1 | tee /tmp/verus-whitaker-3-5-1.out`. Expect
   `verification results:: N verified, 0 errors`.
 - **Non-vacuity.** No `assume` in the final proof. A witness lemma must
@@ -1367,11 +1365,22 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
   harness, not quoted as verifier output. Source hashes match after mutation;
   runner checks pass `bash -n` and ShellCheck.
 
-- Observation: Verus sidecar inputs compile as binary crates and need an empty
-  `main()` inside `verus!`; without it, the first run failed with `E0601`.
-  Adding the entry point started verification, but the solver remained
-  CPU-bound for 650 seconds without a verdict, beyond the ten-minute tolerance.
-  The proof remains unverified pending an approved tolerance or plan change.
+- Observation: the initial Verus proof ran CPU-bound for 650 seconds without
+  a verdict. On 2026-10-19, plain classification equalities replacing symbolic
+  `by (compute)` assertions made the focused proof pass in one second. Pinned
+  Verus `0.2026.03.17.a96bad0` guide files
+  `source/docs/guide/src/assert_by_compute.md` and
+  `source/docs/guide/src/proof_functions.md` explain that compute assertions
+  reason over isolated expressions and symbolic expressions can leave work to
+  SMT. This is context, not a confirmed root cause.
+- Observation:
+  `timeout --signal=TERM --kill-after=15s 600s ./scripts/run-verus.sh cli`
+  passed 4/0 in 1 second (Verus `0.2026.03.17.a96bad0`, toolchain
+  `1.94.0-x86_64-unknown-linux-gnu`). A scratch negative control widened the
+  lemma guard to overlap `Help`; the expected assertion failed (3 verified, 1
+  error) in under a second. Logs:
+  `/tmp/verus-3-5-1-root-whitaker-binary-reviewrepair.out`;
+  `/tmp/whitaker-cli-verus-negative-control.out`.
 
 - Observation: fresh-home CI exposed `workspace_root()` selecting the
   manifest's parent. It now uses the package root.
@@ -1536,13 +1545,11 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
   avoiding nonexistent or empty build paths. Date/Author: 2026-10-17,
   implementation supervisor, following CodeRabbit review.
 
-- **D-19: Keep the unverified CLI Verus proof out of the default group.** The
-  CLI proof exceeded the approved verifier-time tolerance without a verdict.
-  Keep it available through the focused `cli` group, but omit it from `all` so
-  the default `make verus` run does not imply that the unverified proof is an
-  accepted gate. Restore it to `all` only after it verifies within the agreed
-  tolerance and its negative control is recorded. Date/Author: 2026-10-17,
-  implementation supervisor, following CodeRabbit review.
+- **D-19: Keep CLI Verus out of the default group until verified.** The first
+  run exceeded tolerance; keep it in `cli`, outside `all`, until proof and
+  negative control pass. **Met 2026-10-19:** both passed; restored to `all`.
+  `make verus` passed six files (5, 8, 9, 10, 8, 4; 0 errors each). Log:
+  `/tmp/verus-all-3-5-1-root-whitaker-binary-reviewrepair2.out`.
 
 - **D-20: Persist exact install paths for forwarded Dylint commands.** A root
   CLI invoked outside the Whitaker checkout cannot infer a custom target
@@ -1570,9 +1577,9 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
   the CLI package publishable and tested.
 - **EP-M1, 2026-08-24.** Complete. Installer orchestration is library-owned;
   the old binary is a thin composition root, protected by its dry-run snapshot.
-- **Status, 2026-10-17.** CLI, binstall metadata, ADR, and user/developer docs
-  are implemented; Kani passed. Verus exceeded tolerance and name reservation
-  remains unauthorized, so the plan stays `IN PROGRESS`.
+- **Status, 2026-10-19.** CLI/docs are implemented; Kani passed 360 checks,
+  and Verus proof/control pass focused and in the default group. Crates.io
+  reservation remains unauthorized, so the plan stays `IN PROGRESS`.
 
 To be completed at each milestone boundary and at completion. Before setting
 this plan to `COMPLETE`, reconcile every entry in `Surprises & discoveries`
