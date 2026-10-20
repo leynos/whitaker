@@ -28,7 +28,8 @@ proof_files_for_group() {
                 "${REPO_ROOT}/verus/decomposition_vector_algebra.rs" \
                 "${REPO_ROOT}/verus/clone_detector_lsh_config.rs" \
                 "${REPO_ROOT}/verus/clone_detector_candidate_pair.rs" \
-                "${REPO_ROOT}/verus/clone_detector_ast_features.rs"
+                "${REPO_ROOT}/verus/clone_detector_ast_features.rs" \
+                "${REPO_ROOT}/verus/whitaker_cli_dispatch.rs"
             ;;
         *)
             printf 'unknown Verus proof group: %s\n' "$1" >&2

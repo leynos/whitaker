@@ -93,25 +93,17 @@ proof fn lemma_classification_is_total_and_disjoint(tokens: Seq<TokenTag>)
     decreases tokens.len()
 {
     if tokens.len() == 0 {
-        assert(is_forward(tokens)) by (compute);
+        assert(is_forward(tokens));
     } else if tokens[0] == TokenTag::GlobalFlag {
         let rest = tokens.drop_first();
         lemma_classification_is_total_and_disjoint(rest);
-        assert(is_subcommand(tokens) == is_subcommand(rest)) by (compute);
-        assert(is_display(tokens) == is_display(rest)) by (compute);
-        assert(is_forward(tokens) == is_forward(rest)) by (compute);
+        assert(classify(tokens) == classify(rest));
     } else if tokens[0] == TokenTag::Install || tokens[0] == TokenTag::Ls {
-        assert(is_subcommand(tokens)) by (compute);
-        assert(!is_display(tokens)) by (compute);
-        assert(!is_forward(tokens)) by (compute);
+        assert(classify(tokens) == RoutingClass::Subcommand);
     } else if tokens[0] == TokenTag::Help || tokens[0] == TokenTag::Version {
-        assert(!is_subcommand(tokens)) by (compute);
-        assert(is_display(tokens)) by (compute);
-        assert(!is_forward(tokens)) by (compute);
+        assert(classify(tokens) == RoutingClass::Display);
     } else {
-        assert(!is_subcommand(tokens)) by (compute);
-        assert(!is_display(tokens)) by (compute);
-        assert(is_forward(tokens)) by (compute);
+        assert(classify(tokens) == RoutingClass::Forward);
     }
 }
 
