@@ -112,6 +112,9 @@
   proposes a pre-expansion lint that requires documentation for source-authored
   functions in configured Rust test-source paths without inspecting generated
   test code.
+- [RFC 0004: nested `cargo` lints for tests](rfcs/0004-nested-cargo-lints.md)
+  proposes three late-pass lints for tests that spawn `cargo` or `rustc` with a
+  private target directory, directly, or without a time bound.
 - [RFC 0010: macro-aware cognitive complexity](rfcs/0010-macro-aware-cognitive-complexity.md)
   proposes a cognitive complexity lint that charges only author-written
   constructs, and a shared authored-versus-generated classifier for every
