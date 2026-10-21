@@ -117,7 +117,7 @@ expressions rather than in text.
 
 ## 6. Proposed design
 
-All three lints are `LateLintPass` implementations. They share one recogniser
+All three lints are `LateLintPass` implementations. They share one recognizer
 for "this expression is a child process for `cargo` or `rustc`", one for "this
 value derives from a temporary directory", and the existing test-context
 helpers. They fire only in test-like context: a function under `#[test]`,
@@ -125,7 +125,7 @@ helpers. They fire only in test-like context: a function under `#[test]`,
 in a test-harness compilation of an integration-test crate. Production items in
 the same crate are not examined.
 
-### Shared recognisers
+### Shared recognizers
 
 *Spawned program.* A call resolving to `std::process::Command::new` (and
 `tokio::process::Command::new`) whose first argument is one of:
@@ -144,7 +144,7 @@ issued on a `let mut` local in the same body. The lint collects `.env`, `.envs`,
 `.status` and `.spawn` calls whose receiver resolves to the same binding.
 
 *Temporary-derived value.* An expression is temporary-derived when its type or
-its initialiser is, within depth 2 of `let` bindings in the same body:
+its initializer is, within depth 2 of `let` bindings in the same body:
 
 - `tempfile::tempdir()`, `TempDir::new`, `TempDir::path`, `Builder::tempdir`;
 - `std::env::temp_dir()`;
@@ -181,7 +181,7 @@ function body, using typed HIR. This catches the packaging-style
 function in another module whose result depends on a field of a context value.
 Following that needs inter-procedural summaries and is not attempted. The lint
 would still diagnose the call site in `steps_cmd.rs` only if the local it
-passes is initialised in the same function from a temporary-derived call. An
+passes is initialized in the same function from a temporary-derived call. An
 open question below asks whether a crate-local `#[whitaker::target_dir_source]`
 marker is worth adding.
 
@@ -194,7 +194,7 @@ marker is worth adding.
   set the variable to inspect the tool's behaviour without building anything.
 - A `tempdir` that is created inside the workspace target directory and shared
   across the whole test binary (a `OnceLock`). The lint does not follow
-  `OnceLock` initialisers and so would flag the use; the diagnostic points to
+  `OnceLock` initializers and so would flag the use; the diagnostic points to
   the shared-directory idiom.
 
 ### Lint 2: `test_spawns_rustc`
@@ -205,7 +205,7 @@ most 3, calls `Command::new` with a `rustc` program (the literal,
 compiler work performed in the test body is charged to that test's timeout, and
 it bypasses Cargo's package-cache lock and the build queue's admission.
 
-*Feasible dataflow.* The same recogniser as above plus a bounded call graph
+*Feasible dataflow.* The same recognizer as above plus a bounded call graph
 within the crate. Cross-crate helpers (a `test_support` crate) are followed
 only when their MIR is available through `tcx.optimized_mir`; otherwise the
 call is not followed.
@@ -293,12 +293,12 @@ group".
 ### Technical requirements
 
 - All three MUST be late passes over typed HIR; none may scan source text.
-- The recognisers MUST be shared in `whitaker_common`, with their scope and
+- The recognizers MUST be shared in `whitaker_common`, with their scope and
   re-use policy recorded in the developers' guide as the repository's helper
   policy requires.
 - Dataflow depth and call-graph depth MUST be constants with unit tests that pin
   them.
-- Diagnostics, help text and UI snapshots MUST use the localisation
+- Diagnostics, help text and UI snapshots MUST use the localization
   infrastructure.
 
 ## 8. Compatibility and migration
@@ -350,9 +350,9 @@ runs the repository's formatting, lint, test, Markdown and Mermaid gates.
 
 - Should a crate-local attribute mark a function as a source of private target
   directories, so inter-procedural cases such as ortho-config#611 are caught?
-- Where should the shared recognisers live, and should Lint 2 follow
+- Where should the shared recognizers live, and should Lint 2 follow
   `test_support` crates through MIR or stop at the crate boundary?
-- Should Lint 3 recognise nextest configuration by reading
+- Should Lint 3 recognize nextest configuration by reading
   `.config/nextest.toml` at lint time, accepting the coupling, instead of
   requiring an `expect`?
 - Is the naming fallback for a `cargo` or `rustc` function argument acceptable,
