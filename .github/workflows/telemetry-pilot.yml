@@ -1,0 +1,47 @@
+name: Telemetry pilot
+# Pilot only (leynos/shared-actions ci-telemetry-test-phase). Never merged.
+on:
+  push:
+    branches: [telemetry-pilot-nested-cargo]
+permissions:
+  contents: read
+jobs:
+  pilot:
+    runs-on: ubicloud-standard-2-ubuntu-2404
+    timeout-minutes: 40
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: leynos/shared-actions/.github/actions/ci-telemetry-start@81374b6f183e59f0570ad36217ded90d3240fda6
+      - id: setup-rust
+        uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
+        with:
+          expect-cache: ubicloud
+          cache-provider: external
+      - name: Build phase
+        run: cargo build -p whitaker-common
+      - name: Snapshot sccache after the build
+        uses: leynos/shared-actions/.github/actions/sccache-report@4ee790b6140065f7b886c8d5fdf01817da18fee4
+        with:
+          status: ${{ steps.setup-rust.outputs.sccache-status }}
+          stats-file: sccache-stats-build.json
+          text-file: sccache-stats-build.txt
+          summary: 'false'
+      - name: Test phase (compiles a second crate on purpose)
+        run: cargo build -p whitaker-installer
+      - id: sccache
+        if: always()
+        uses: leynos/shared-actions/.github/actions/sccache-report@4ee790b6140065f7b886c8d5fdf01817da18fee4
+        with:
+          status: ${{ steps.setup-rust.outputs.sccache-status }}
+      - name: Report CI telemetry (deliberately low thresholds)
+        if: always()
+        uses: leynos/shared-actions/.github/actions/ci-telemetry-finish@4ee790b6140065f7b886c8d5fdf01817da18fee4
+        with:
+          sccache-status: ${{ steps.setup-rust.outputs.sccache-status }}
+          thresholds: always
+          test-hit-ratio-min: '1.01'
+          test-min-compile-requests: '1'
+          min-free-disk-mib: '999999'
