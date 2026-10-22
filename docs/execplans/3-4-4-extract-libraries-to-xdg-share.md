@@ -13,14 +13,14 @@ The canonical plan file is
 
 ## Purpose / big picture
 
-Roadmap item 3.4.5 requires the prebuilt installer path from ADR-001: prebuilt
+Roadmap item 3.4.5 requires the prebuilt installer path from ADR 0001: prebuilt
 lint libraries must extract to
 `~/.local/share/whitaker/lints/<toolchain>/<target>/lib` (platform-equivalent
 path on macOS/Windows) and `DYLINT_LIBRARY_PATH` must point at that exact
 directory.
 
 Today, the prebuilt pipeline writes to `<target-dir>/<toolchain>/release`,
-which does not include target segregation and does not match ADR-001.
+which does not include target segregation and does not match ADR 0001.
 
 After this change, a successful prebuilt install will:
 
@@ -43,7 +43,7 @@ Success is observable by:
 
 ## Constraints
 
-- Implement ADR-001 path contract exactly:
+- Implement ADR 0001 path contract exactly:
   `<whitaker_data_dir>/lints/<toolchain>/<target>/lib`.
 - Keep prebuilt failures non-fatal; fallback to local build must remain intact.
 - Keep `rstest-bdd` at workspace version `0.5.0`; do not introduce alternate
@@ -101,7 +101,7 @@ Current relevant code:
 
 Reference docs to follow while implementing:
 
-- `docs/adr-001-prebuilt-dylint-libraries.md`
+- `docs/adrs/adr-0001-prebuilt-dylint-library-distribution.md`
 - `docs/whitaker-dylint-suite-design.md`
 - `docs/rust-testing-with-rstest-fixtures.md`
 - `docs/rstest-bdd-users-guide.md`

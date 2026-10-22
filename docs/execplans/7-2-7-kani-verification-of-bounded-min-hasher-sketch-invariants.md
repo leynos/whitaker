@@ -21,7 +21,7 @@ coverage was three implementation invariants:
 This plan deliberately does not claim to prove MinHash statistical quality,
 collision probability, or unbounded set behaviour. It proves bounded
 implementation behaviour over the real Rust code, in line with
-`docs/adr-003-formal-proof-strategy-for-clone-detector-pipeline.md`.
+`docs/adrs/adr-0003-formal-proof-strategy-for-the-clone-detector-pipeline.md`.
 
 **Current proof scope (2026-10-19):** Later boundedness review replaced the
 non-empty full-signature harnesses. The current Kani group calls
@@ -307,9 +307,9 @@ the current scope is stated at the start of this plan.
 - Decision: implement the future-proof work in the existing
   `crates/whitaker_clones_core/src/index/kani.rs` harness location, unless the
   file becomes too large or the helper structure becomes unclear. Rationale:
-  ADR 003 and the clone-detector design already establish colocated `cfg(kani)`
-  harnesses as the clone-detector proof pattern. Date/Author: 2026-05-18 /
-  Codex.
+  ADR 0003 and the clone-detector design already establish colocated
+  `cfg(kani)` harnesses as the clone-detector proof pattern. Date/Author:
+  2026-05-18 / Codex.
 
 - Decision: use bounded arrays plus active lengths for symbolic fingerprint
   inputs. Rationale: Kani verifies every value in the bounded state space;
@@ -317,7 +317,7 @@ the current scope is stated at the start of this plan.
   explicit. Date/Author: 2026-05-18 / Codex.
 
 - Decision: do not add a new ADR for 7.2.7 unless implementation uncovers a
-  substantive strategy change. Rationale: ADR 003 already decides the proof
+  substantive strategy change. Rationale: ADR 0003 already decides the proof
   split and names `MinHasher::sketch` as a Kani target. Date/Author: 2026-05-18
   / Codex.
 
@@ -437,7 +437,7 @@ binary against explicit harness names in
 Relevant documents to keep open during implementation:
 
 - `docs/roadmap.md`, item 7.2.7.
-- `docs/adr-003-formal-proof-strategy-for-clone-detector-pipeline.md`.
+- `docs/adrs/adr-0003-formal-proof-strategy-for-the-clone-detector-pipeline.md`.
 - `docs/whitaker-clone-detector-design.md`, especially the MinHash and LSH
   sections and the implementation decisions for 7.2.2 through 7.2.5.
 - `docs/developers-guide.md`, especially the Kani bounded model checking
