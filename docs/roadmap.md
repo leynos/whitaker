@@ -1365,7 +1365,7 @@ whether downstream projects can migrate mechanically. See
 [RFC 0006](rfcs/0006-macro-aware-cognitive-complexity.md) §10.
 
 - [ ] 16.5.1. Add the cross-lint harmonization end-to-end suite.
-  - Requires 15.4.2, 16.2.1, 16.3.2 and 16.4.1.
+  - Requires 15.4.2, 15.5.1, 16.2.1, 16.3.2 and 16.4.1.
   - Build one fixture workspace and lint it across three axes:
     - `tracing/log` on and off;
     - the experimental feature on and off;
