@@ -1,12 +1,12 @@
-# RFC 0003: Compiler-validated rewrite checking
+# RFC 0007: Compiler-validated rewrite checking
 
 ## Preamble
 
-- **RFC number:** 0003
+- **RFC number:** 0007
 - **Status:** Proposed
 - **Created:** 2026-08-30
 - **Scope:** Compiler-based validation of candidate Rust source rewrites.
-- **Related RFCs:** RFC 0004 and RFC 0005.
+- **Related RFCs:** RFC 0008 and RFC 0009.
 - **Precedence documents:** `docs/whitaker-cli-design.md`,
   `docs/ownership-shape-lints-design.md`, and any later accepted Architecture
   Decision Records (ADRs).
@@ -31,7 +31,7 @@ The checker classifies a candidate as:
 The checker does not mutate the working tree. It also does not claim semantic
 equivalence merely because a rewrite compiles. Recipe-specific reasoning and
 test validation remain separate responsibilities of the rewriter proposed by
-RFC 0005.
+RFC 0009.
 
 The design deliberately reuses three planned Whitaker capabilities:
 
@@ -132,7 +132,7 @@ stabilization and soundness work.[^3]
 - Prove semantic equivalence, panic equivalence, drop-order equivalence, or
   performance equivalence.
 - Execute a complete test suite for every candidate by default.
-- Rewrite source code. RFC 0005 owns materialization and application.
+- Rewrite source code. RFC 0009 owns materialization and application.
 - Support legacy Datalog Polonius as a fallback for Polonius Alpha.
 - Guarantee sandboxing of Cargo build scripts or procedural macros.
 
@@ -180,10 +180,10 @@ The checker must preserve the following invariants:
 ## 6. Proposed architecture
 
 The following pipeline description serves as assistive text for Figure 1. A
-Dylint rule emits a rewrite intent. RFC 0005 materializes that intent into text
+Dylint rule emits a rewrite intent. RFC 0009 materializes that intent into text
 edits. The checker copies the relevant workspace into an overlay, runs baseline
 and candidate compilations, compares diagnostics, and returns a validation
-report. RFC 0005 may then display or apply the candidate.
+report. RFC 0009 may then display or apply the candidate.
 
 ```mermaid
 flowchart LR
@@ -230,7 +230,7 @@ crates, the root CLI, and the rewrite engine can depend on it without importing
 Cargo orchestration.
 
 `whitaker_rewrite_check` owns overlay creation and compiler execution. It
-should expose a library API so Phase 11 workspace analysis and RFC 0005 can
+should expose a library API so Phase 11 workspace analysis and RFC 0009 can
 share the same implementation.
 
 The root `whitaker` crate owns CLI parsing, configuration merging,
@@ -533,7 +533,7 @@ pub struct ValidationGates {
 }
 ```
 
-The rewrite checker itself should default to `cargo check` only. RFC 0005 may
+The rewrite checker itself should default to `cargo check` only. RFC 0009 may
 request affected tests or workspace quality gates before applying a rewrite.
 
 Running tests under NLL when the candidate is intentionally Polonius-only is not
@@ -563,7 +563,7 @@ delete. The cache must never be the sole record of an applied rewrite.
 
 ### 6.13. CLI surface
 
-RFC 0005 defines the complete rewrite command family. This RFC requires at
+RFC 0009 defines the complete rewrite command family. This RFC requires at
 least:
 
 ```plaintext
@@ -579,7 +579,7 @@ Options:
   --offline                     Prevent network access
 ```
 
-When `--plan` is omitted, RFC 0005 may discover and materialize candidates
+When `--plan` is omitted, RFC 0009 may discover and materialize candidates
 before invoking the checker.
 
 A concise human result should look like:
@@ -667,7 +667,7 @@ Implementation should proceed in four stages.
 - Add reverse-dependency scope selection.
 - Add cache reuse across workspace analyses and rewrite checking.
 
-No accepted source rewrite should depend on RFC 0003 until the checker has
+No accepted source rewrite should depend on RFC 0007 until the checker has
 corpus coverage across representative workspaces.
 
 ## 9. Performance and resource use
@@ -828,8 +828,8 @@ exact Cargo configuration, normalized diagnostic deltas, and no working-tree
 mutation.
 
 This checker should become shared infrastructure for Phase 11, the ownership
-lints, the borrow-workaround lints proposed by RFC 0004, and the transactional
-rewriter proposed by RFC 0005.
+lints, the borrow-workaround lints proposed by RFC 0008, and the transactional
+rewriter proposed by RFC 0009.
 
 ## References
 

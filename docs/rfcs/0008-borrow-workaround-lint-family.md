@@ -1,14 +1,14 @@
-# RFC 0004: Borrow-workaround lint family
+# RFC 0008: Borrow-workaround lint family
 
 ## Preamble
 
-- **RFC number:** 0004
+- **RFC number:** 0008
 - **Status:** Proposed
 - **Created:** 2026-08-30
 - **Scope:** Candidate-generating lints for indirect ownership and borrowing
   shapes not covered by Whitaker's proposed Phase 9 ownership lints.
-- **Depends on:** RFC 0003.
-- **Related RFC:** RFC 0005.
+- **Depends on:** RFC 0007.
+- **Related RFC:** RFC 0009.
 - **Precedence documents:** `docs/ownership-shape-lints-design.md`,
   `docs/whitaker-dylint-suite-design.md`, and any later accepted ADRs.
 
@@ -35,8 +35,8 @@ The rules should therefore operate as **rewrite-backed lints**:
 
 1. HIR and MIR analysis identify a mechanically bounded candidate.
 2. The lint emits a versioned rewrite intent rather than asserting motive.
-3. RFC 0005 materializes one or more direct alternatives.
-4. RFC 0003 compiles those alternatives under NLL and Polonius.
+3. RFC 0009 materializes one or more direct alternatives.
+4. RFC 0007 compiles those alternatives under NLL and Polonius.
 5. Whitaker emits the final diagnostic only when at least one alternative is
    compiler-validated.
 
@@ -124,7 +124,7 @@ portable API.
 ### 3.3. Let the compiler reject speculative transformations
 
 Candidate generation can be moderately broad when the final diagnostic is
-gated by RFC 0003. Detection still needs a strict false-positive budget because
+gated by RFC 0007. Detection still needs a strict false-positive budget because
 compiler acceptance does not prove semantic equivalence.
 
 ### 3.4. Separate portability from semantic confidence
@@ -169,7 +169,7 @@ The rules must remain quiet when the shape is imposed by:
 - Cover every workaround family listed in Section 2.
 - Generate concrete rewrite intents with stable source anchors.
 - Reuse Phase 9 HIR prefiltering and MIR confirmation infrastructure.
-- Reuse RFC 0003 for NLL and Polonius validation.
+- Reuse RFC 0007 for NLL and Polonius validation.
 - Emit useful diagnostics only after a candidate is validated.
 - Prefer transformations that remove allocation, repeated lookup, or
   unnecessary indirection.
@@ -239,7 +239,7 @@ pub struct RecipeDescriptor {
 }
 ```
 
-The owning lint crate should define and test a typed payload. RFC 0005's
+The owning lint crate should define and test a typed payload. RFC 0009's
 materializer registry should reject unsupported recipe versions.
 
 ### 5.4. Sidecar collection
@@ -436,7 +436,7 @@ Suppress when:
 - the absence is intentional for recursive re-entry;
 - early return, `?`, `break`, or `continue` can skip reinsertion;
 - the removed value participates in rollback or transaction logic; or
-- the direct candidate fails RFC 0003 validation.
+- the direct candidate fails RFC 0007 validation.
 
 ### 7.3. `BOR003 take_then_restore`
 
@@ -646,7 +646,7 @@ Candidate forms include:
 #### Candidate rewrite
 
 The materializer removes the fence, flattens the block, or substitutes the
-single-use binding. RFC 0003 then determines whether NLL or Polonius accepts the
+single-use binding. RFC 0007 then determines whether NLL or Polonius accepts the
 result.
 
 #### Restrictions
@@ -730,7 +730,7 @@ This permits one message to include:
 - semantic-confidence level;
 - affected targets;
 - whether the project policy permits Polonius-only source; and
-- a rewrite identifier consumable by RFC 0005.
+- a rewrite identifier consumable by RFC 0009.
 
 A representative diagnostic is:
 
@@ -771,7 +771,7 @@ When several rules identify the same region:
 3. `BOR003` wins over `BOR002` for `Option::take` or `mem::take`;
 4. a stable entry-API alternative suppresses a lower-ranked Polonius-only
    `BOR001` alternative; and
-5. overlapping candidates are passed to RFC 0005's conflict planner.
+5. overlapping candidates are passed to RFC 0009's conflict planner.
 
 ## 10. Configuration
 
@@ -849,7 +849,7 @@ pub enum OriginalPlaceConflict {
 }
 ```
 
-`PotentiallyPathSensitive` should emit a rewrite intent for RFC 0003 rather than
+`PotentiallyPathSensitive` should emit a rewrite intent for RFC 0007 rather than
 discarding the candidate. This is the principal integration point between
 Phase 9 and Polonius-aware validation.
 
@@ -934,7 +934,7 @@ that a detector is too broad even if it emits no false final warning.
 - Implement `BOR004`.
 - Implement `BOR006`.
 - Ship all three behind `--experimental`.
-- Permit automatic application only after RFC 0003 validation.
+- Permit automatic application only after RFC 0007 validation.
 
 ### 13.3. Stage 3: Ownership-transfer rules
 
@@ -1014,7 +1014,7 @@ stable alternatives, and comparatively low semantic risk.
 The more ambitious ownership-transfer, snapshot, staging, scope, and helper
 rules should still be designed now so that shared intent, effect, and rewrite
 infrastructure does not harden around clones alone. Their diagnostics should
-remain silent or review-only until RFC 0003 verifies a candidate and corpus
+remain silent or review-only until RFC 0007 verifies a candidate and corpus
 evidence supports promotion.
 
 ## References
@@ -1025,8 +1025,8 @@ evidence supports promotion.
 [^2]: Whitaker Dylint suite design:
     `../whitaker-dylint-suite-design.md`
 
-[^3]: RFC 0003, compiler-validated rewrite checking:
-    `0003-compiler-validated-rewrite-checking.md`
+[^3]: RFC 0007, compiler-validated rewrite checking:
+    `0007-compiler-validated-rewrite-checking.md`
 
 [^4]: Rust Project Goals, "Stabilize and model Polonius Alpha":
     <https://rust-lang.github.io/rust-project-goals/2026/polonius.html>
