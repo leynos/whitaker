@@ -98,6 +98,10 @@
   layout](adr-006-directory-based-module-layout.md) records the `mod.rs` module
   convention and the extraction of oversized test modules into sibling files,
   and states plainly that the 400-line budget is not yet machine-enforced here.
+- [Architectural decision record (ADR) 007: Rust source rewrite
+  substrate](adr-007-rust-rewrite-materialization-substrate.md) defines a
+  bounded comparative spike between ast-grep and `ra_ap_syntax::SyntaxEditor`,
+  with source-fidelity gates and an evidence-based backend selection rule.
 
 ## Requests for comments
 
@@ -112,6 +116,18 @@
   proposes a pre-expansion lint that requires documentation for source-authored
   functions in configured Rust test-source paths without inspecting generated
   test code.
+- [RFC 0007: compiler-validated rewrite
+  checking](rfcs/0007-compiler-validated-rewrite-checking.md) proposes isolated
+  overlay compilation that classifies materialized rewrites under equivalent
+  NLL and Polonius configurations.
+- [RFC 0008: borrow-workaround lint
+  family](rfcs/0008-borrow-workaround-lint-family.md) proposes rewrite-backed
+  rules for repeated lookups, remove-and-reinsert cycles, staged identifiers,
+  snapshots, lexical fences, and other indirect borrowing shapes.
+- [RFC 0009: validated ownership and borrow
+  rewriter](rfcs/0009-validated-ownership-and-borrow-rewriter.md) proposes
+  recipe materialization, alternative ranking, deterministic previews,
+  transactional application, and byte-exact rollback.
 
 ## Planning material
 
