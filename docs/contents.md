@@ -135,6 +135,14 @@
   proposes a cognitive complexity lint that charges only author-written
   constructs, and a shared authored-versus-generated classifier for every
   complexity-sensitive Whitaker lint.
+- [RFC 0007: weak representations at domain
+  boundaries](rfcs/0007-weak-domain-boundaries.md) proposes the `DOMAIN` lint
+  family and rules for discarded parser witnesses, validation without
+  refinement, and repeated boundary parsing.
+- [RFC 0008: fragile types and invalid-state
+  encodings](rfcs/0008-fragile-types.md) proposes correlation-aware rules for
+  manual tagged unions, constrained optional and boolean fields, bypassable
+  invariants, and invalid defaults.
 
 ## Planning material
 
