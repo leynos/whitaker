@@ -1,8 +1,8 @@
-# RFC 0004: nested `cargo` lints for tests
+# RFC 0006: nested `cargo` lints for tests
 
 ## 1. Preamble
 
-- **RFC number:** 0004
+- **RFC number:** 0006
 - **Status:** Proposed
 - **Created:** 2026-10-22
 
