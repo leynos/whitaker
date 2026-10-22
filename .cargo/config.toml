@@ -1,3 +1,6 @@
 # NOTE: Dynamic linking for dylint lint crates is handled via RUSTFLAGS in the
 # Makefile's `test` and `typecheck` targets. Do not add workspace-wide
 # rustflags here as it would break `cargo install` for whitaker-installer.
+
+[unstable]
+no-embed-metadata = true
