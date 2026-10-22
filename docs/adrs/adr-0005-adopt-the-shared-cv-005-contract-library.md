@@ -1,4 +1,4 @@
-# Architectural decision record (ADR) 005: Adopt the shared CV-005 contract library
+# Architectural decision record (ADR) 0005: adopt the shared CV-005 contract library
 
 ## Status
 

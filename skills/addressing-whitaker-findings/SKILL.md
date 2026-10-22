@@ -103,7 +103,7 @@ unfulfilled-expectation error on top. The lint emits through
 `LintContext::emit_span_lint`, which resolves the lint level at the visitor's
 *current* lint node rather than at the node owning the offending code. Do not
 spend time on `cfg_attr(dylint_lib = ...)` wrappers — they cannot work until
-that lookup is fixed, which is also why ADR-002's `dylint_expect` macro has no
+that lookup is fixed, which is also why ADR 0002's `dylint_expect` macro has no
 implementation to adopt.
 
 Two `[no_std_fs_operations]` keys in the root `dylint.toml` are therefore the

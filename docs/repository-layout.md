@@ -120,6 +120,10 @@ an integrated suite and carries its own source and tests.
 - `docs/contents.md` is the documentation index and should be updated whenever
   documents are added, removed, or renamed.
 - `docs/roadmap.md` tracks longer-running product and implementation work.
+- `docs/adrs/` stores architectural decision records, one file per decision,
+  named `adr-nnnn-title-slug.md`.
+- `docs/rfcs/` stores requests for comments, one file per proposal, named
+  `rfc-nnnn-title-slug.md`.
 - `docs/execplans/` stores execution plans for branch-specific tasks and larger
   follow-up efforts.
 

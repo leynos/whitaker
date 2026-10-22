@@ -30,21 +30,23 @@
 - [ ] 1.3.1. Add the `crates/whitaker_support_macros` proc-macro crate and
   implement `#[whitaker_support::dylint_expect(...)]` with `lib`, `lints`, and
   optional `reason` arguments. See
-  [ADR 002](adr-002-dylint-expect-attribute-macro.md) §Decision outcome /
-  proposed direction and §Functional requirements.
+  [ADR 0002](adrs/adr-0002-attribute-macro-for-conditional-dylint-expect.md)
+  §Decision outcome / proposed direction and §Functional requirements.
 - [ ] 1.3.2. Add the `crates/whitaker_support` re-export crate, wire both
   support crates into the workspace, and document the supported attribute
   surface with API examples. See
-  [ADR 002](adr-002-dylint-expect-attribute-macro.md) §Decision outcome /
-  proposed direction and §Migration plan. Requires 1.3.1.
+  [ADR 0002](adrs/adr-0002-attribute-macro-for-conditional-dylint-expect.md)
+  §Decision outcome / proposed direction and §Migration plan. Requires 1.3.1.
 - [ ] 1.3.3. Add compatibility coverage that proves the attribute stays warning
   free in non-Dylint builds, Clippy runs, and Dylint runs with the matching
-  `dylint_lib` value. See [ADR 002](adr-002-dylint-expect-attribute-macro.md)
+  `dylint_lib` value. See
+  [ADR 0002](adrs/adr-0002-attribute-macro-for-conditional-dylint-expect.md)
   §Technical requirements and §Migration plan. Requires 1.3.2.
 - [ ] 1.3.4. Document intended usage, narrow-scope review guidance, and
   pre-expansion limitations for the conditional `expect` attribute. See
-  [ADR 002](adr-002-dylint-expect-attribute-macro.md) §Decision outcome /
-  proposed direction and §Known risks and limitations. Requires 1.3.3.
+  [ADR 0002](adrs/adr-0002-attribute-macro-for-conditional-dylint-expect.md)
+  §Decision outcome / proposed direction and §Known risks and limitations.
+  Requires 1.3.3.
 
 ## 2. Core lint delivery
 
@@ -83,36 +85,37 @@ published-GPUI workspace invocation.
 - [ ] 2.2.9. Replace ad hoc conditional `allow` and `expect` sequences in
   Whitaker-managed code with `#[whitaker_support::dylint_expect(...)]`, keeping
   suppressions narrowly scoped to the item they justify. See
-  [ADR 002](adr-002-dylint-expect-attribute-macro.md) §Migration plan. Requires
-  1.3.3.
+  [ADR 0002](adrs/adr-0002-attribute-macro-for-conditional-dylint-expect.md)
+  §Migration plan. Requires 1.3.3.
 - [ ] 2.2.10. Implement `string_continuation_style` as a post-expansion early
   lint, including source-preserving `concat!()` suggestions, format-capture and
   literal-context exemptions, localized diagnostics, and suite integration. See
-  [RFC 0002](rfcs/0002-string-continuation-style.md).
+  [RFC 0002](rfcs/rfc-0002-string-continuation-style.md).
   Requires 2.1.1 and 2.3.4.
 - [ ] 2.2.11. Deliver the `missing_docs_in_test_functions` pre-expansion AST
   pass and candidate-selection predicate for test-harness compilations. See
-  [RFC 0003](rfcs/0003-missing-docs-in-test-functions.md) §§6-7. Requires 2.1.1.
+  [RFC 0003](rfcs/rfc-0003-missing-docs-in-test-functions.md) §§6-7. Requires
+  2.1.1.
   - Success: diagnostics occur only for source-authored, undocumented
     functions in test harnesses, with an identifier span when available; both
     `///` and `#[doc = "..."]` are recognized as documentation.
 - [ ] 2.2.12. Add typed include/exclude configuration with workspace-relative,
   slash-normalized path matching and safe invalid-pattern handling. See
-  [RFC 0003](rfcs/0003-missing-docs-in-test-functions.md) §6. Requires 1.1.2
-  and 2.2.11.
+  [RFC 0003](rfcs/rfc-0003-missing-docs-in-test-functions.md) §6. Requires
+  1.1.2 and 2.2.11.
   - Success: exclusions take precedence, separators behave equivalently,
     non-relative or invalid patterns produce actionable diagnostics, and no
     pattern can widen enforcement beyond the workspace.
 - [ ] 2.2.13. Register `missing_docs_in_test_functions` in the normal Whitaker
   suite and expose it through the standard suite distribution. See
-  [RFC 0003](rfcs/0003-missing-docs-in-test-functions.md) §§6-7. Requires
+  [RFC 0003](rfcs/rfc-0003-missing-docs-in-test-functions.md) §§6-7. Requires
   2.1.1, 2.2.11, and 2.2.12.
   - Success: one suite invocation discovers the lint and applies its configured
     path policy without a bespoke runner.
 - [ ] 2.2.14. Localize the lint's diagnostic, help text, and UI messages through
   Whitaker's existing localization infrastructure. See
-  [RFC 0003](rfcs/0003-missing-docs-in-test-functions.md) §§6-7. Requires 2.3.4
-  and 2.2.13.
+  [RFC 0003](rfcs/rfc-0003-missing-docs-in-test-functions.md) §§6-7. Requires
+  2.3.4 and 2.2.13.
   - Success: the default locale and at least one non-English locale render the
     same rule outcome with translated human-facing text.
 - [ ] 2.2.15. Add UI fixtures using a deterministic pre-baked SARIF diagnostic-
@@ -121,8 +124,8 @@ published-GPUI workspace invocation.
   attributes, excluded paths, normal library sources compiled under a harness,
   generated-code immunity, and the two-attribute suppression workaround for
   `missing_docs_in_test_functions`. See
-  [RFC 0003](rfcs/0003-missing-docs-in-test-functions.md) §§7 and 9. Requires
-  1.1.2, 2.1.1, 2.2.11, 2.2.12, and 2.3.4.
+  [RFC 0003](rfcs/rfc-0003-missing-docs-in-test-functions.md) §§7 and 9.
+  Requires 1.1.2, 2.1.1, 2.2.11, 2.2.12, and 2.3.4.
   - Success: at least nine pass/fail cases cover each listed behaviour,
     including an undocumented compiler-supported associated function whose
     diagnostic targets its identifier; the suppression fixture includes an
@@ -131,8 +134,8 @@ published-GPUI workspace invocation.
     annotated item.
 - [ ] 2.2.16. Add substantive Rust `proptest` coverage for the pure
   candidate-selection and path-configuration logic. See
-  [RFC 0003](rfcs/0003-missing-docs-in-test-functions.md) §9. Requires 1.1.2,
-  2.1.1, and 2.2.12.
+  [RFC 0003](rfcs/rfc-0003-missing-docs-in-test-functions.md) §9. Requires
+  1.1.2, 2.1.1, and 2.2.12.
   - Success: generated combinations cover harness status, expansion provenance,
     documentation presence, include/exclude matches, slash and backslash
     separators, and valid/invalid patterns, asserting the diagnostic predicate,
@@ -173,26 +176,27 @@ published-GPUI workspace invocation.
 ### 3.4. Prebuilt lint libraries
 
 - [x] 3.4.1. Define artefact naming, manifest schema, and verification policy.
-  See `docs/adr-001-prebuilt-dylint-libraries.md`.
+  See `docs/adrs/adr-0001-prebuilt-dylint-library-distribution.md`.
 - [x] 3.4.2. Build CI automation to compile lint libraries for the supported
   target matrix and publish `.tar.zst` assets to the rolling release. See
-  `docs/adr-001-prebuilt-dylint-libraries.md` §Decision outcome / proposed
-  direction. Requires 3.1.1 and 3.4.1.
+  `docs/adrs/adr-0001-prebuilt-dylint-library-distribution.md` §Decision
+  outcome / proposed direction. Requires 3.1.1 and 3.4.1.
 - [x] 3.4.3. Emit `manifest.json` for each artefact with git SHA, toolchain,
   target triple, build time, and SHA256. See
-  `docs/adr-001-prebuilt-dylint-libraries.md` §Decision outcome / proposed
-  direction. Requires 3.4.2.
+  `docs/adrs/adr-0001-prebuilt-dylint-library-distribution.md` §Decision
+  outcome / proposed direction. Requires 3.4.2.
 - [x] 3.4.4. Extend the installer to download and verify prebuilt artefacts
   before local compilation, falling back on failure. See
-  `docs/adr-001-prebuilt-dylint-libraries.md` §Decision outcome / proposed
-  direction. Requires 3.2.1 and 3.4.3.
+  `docs/adrs/adr-0001-prebuilt-dylint-library-distribution.md` §Decision
+  outcome / proposed direction. Requires 3.2.1 and 3.4.3.
 - [x] 3.4.5. Extract libraries to
   `~/.local/share/whitaker/lints/<toolchain>/<target>/lib` and set
-  `DYLINT_LIBRARY_PATH`. See `docs/adr-001-prebuilt-dylint-libraries.md`
-  §Decision outcome / proposed direction. Requires 3.4.4.
+  `DYLINT_LIBRARY_PATH`. See
+  `docs/adrs/adr-0001-prebuilt-dylint-library-distribution.md` §Decision
+  outcome / proposed direction. Requires 3.4.4.
 - [x] 3.4.6. Record download-versus-build rates and total installation time.
-  See `docs/adr-001-prebuilt-dylint-libraries.md` §Migration plan. Requires
-  3.4.5.
+  See `docs/adrs/adr-0001-prebuilt-dylint-library-distribution.md` §Migration
+  plan. Requires 3.4.5.
 
 ### 3.5. Unified CLI foundation
 
@@ -449,30 +453,30 @@ published-GPUI workspace invocation.
   (Run 0). Requires 7.1.1 and 7.2.2.
 - [x] 7.2.4. Add sidecar proof workflows and Makefile targets for
   clone-detector Verus and Kani checks. See
-  [ADR 003](adr-003-formal-proof-strategy-for-clone-detector-pipeline.md).
+  [ADR 0003](adrs/adr-0003-formal-proof-strategy-for-the-clone-detector-pipeline.md).
   Requires 7.2.2.
 - [x] 7.2.5. Use Verus to prove `LshConfig::new` rejects zero `bands` and
   `rows`, and enforces `bands * rows == MINHASH_SIZE`. See
-  [ADR 003](adr-003-formal-proof-strategy-for-clone-detector-pipeline.md) and
-  [clone detector design](whitaker-clone-detector-design.md) §MinHash and LSH.
-  Requires 7.2.4.
+  [ADR 0003](adrs/adr-0003-formal-proof-strategy-for-the-clone-detector-pipeline.md)
+  and [clone detector design](whitaker-clone-detector-design.md) §MinHash and
+  LSH. Requires 7.2.4.
 - [x] 7.2.6. Use Verus to prove `CandidatePair::new` canonicalizes fragment
   ordering and suppresses self-pairs. See
-  [ADR 003](adr-003-formal-proof-strategy-for-clone-detector-pipeline.md) and
-  [clone detector design](whitaker-clone-detector-design.md) §MinHash and LSH.
-  Requires 7.2.4.
+  [ADR 0003](adrs/adr-0003-formal-proof-strategy-for-the-clone-detector-pipeline.md)
+  and [clone detector design](whitaker-clone-detector-design.md) §MinHash and
+  LSH. Requires 7.2.4.
 - [x] 7.2.7. Use Kani to verify bounded `MinHasher::sketch` invariants,
   including deterministic output, duplicate-hash insensitivity, and empty-input
   failure. See
-  [ADR 003](adr-003-formal-proof-strategy-for-clone-detector-pipeline.md) and
-  [clone detector design](whitaker-clone-detector-design.md) §MinHash and LSH.
-  Requires 7.2.4.
+  [ADR 0003](adrs/adr-0003-formal-proof-strategy-for-the-clone-detector-pipeline.md)
+  and [clone detector design](whitaker-clone-detector-design.md) §MinHash and
+  LSH. Requires 7.2.4.
 - [x] 7.2.8. Use Kani to verify bounded `LshIndex` invariants, including no
   self-pairs, canonical pair ordering, repeated-band deduplication, and
   insertion-order independence. See
-  [ADR 003](adr-003-formal-proof-strategy-for-clone-detector-pipeline.md) and
-  [clone detector design](whitaker-clone-detector-design.md) §MinHash and LSH.
-  Requires 7.2.4.
+  [ADR 0003](adrs/adr-0003-formal-proof-strategy-for-the-clone-detector-pipeline.md)
+  and [clone detector design](whitaker-clone-detector-design.md) §MinHash and
+  LSH. Requires 7.2.4.
 
 ### 7.3. AST refinement (Type-3)
 
@@ -999,18 +1003,19 @@ published-GPUI workspace invocation.
   test-step and fixture functions that panic instead of propagating failure
   through `Result`. Control analysis of plain helper functions called from
   those functions through configuration. See
-  [RFC 0001](rfcs/0001-coderabbit-derived-lint-candidates.md) §Tier 1:
-  immediate and Clippy-first candidates. Requires 8.1.1 and 8.1.2.
+  [RFC 0001](rfcs/rfc-0001-lint-candidates-derived-from-coderabbit-review-findings.md)
+  §Tier 1: immediate and Clippy-first candidates. Requires 8.1.1 and 8.1.2.
 - [ ] 13.1.2. Enable and trial Clippy's `missing_assert_message` against the
   source corpus, then implement `assertion_context_incomplete` only for
   surviving mismatch branches whose error payload omits either expected or
   actual context. See
-  [RFC 0001](rfcs/0001-coderabbit-derived-lint-candidates.md) §Tier 1:
-  immediate and Clippy-first candidates. Requires 8.1.2.
+  [RFC 0001](rfcs/rfc-0001-lint-candidates-derived-from-coderabbit-review-findings.md)
+  §Tier 1: immediate and Clippy-first candidates. Requires 8.1.2.
 - [ ] 13.1.3. Trial Clippy's `disallowed_methods` for direct environment calls,
   then implement `no_std_env_operations` only if centrally configured boundary
   exemptions, operation-specific severity, or context-sensitive remediation
-  remain unmet. See [RFC 0001](rfcs/0001-coderabbit-derived-lint-candidates.md)
+  remain unmet. See
+  [RFC 0001](rfcs/rfc-0001-lint-candidates-derived-from-coderabbit-review-findings.md)
   §Tier 1: immediate and Clippy-first candidates. Requires 2.1.1.
 - [ ] 13.1.4. Add implemented candidates to the experimental suite, localize
   their diagnostics, document Clippy prerequisites and configuration, and
@@ -1021,22 +1026,22 @@ published-GPUI workspace invocation.
 
 - [ ] 13.2.1. Implement `error_context_discarded` for mechanically provable
   error-type or context erasure at propagation sites. See
-  [RFC 0001](rfcs/0001-coderabbit-derived-lint-candidates.md) §Tier 2:
-  recommended as follow-ups. Requires 13.1.4.
+  [RFC 0001](rfcs/rfc-0001-lint-candidates-derived-from-coderabbit-review-findings.md)
+  §Tier 2: recommended as follow-ups. Requires 13.1.4.
 - [ ] 13.2.2. Implement `no_drop_to_silence_unused` for `drop(binding)` calls
   used only to suppress an otherwise-unused parameter. See
-  [RFC 0001](rfcs/0001-coderabbit-derived-lint-candidates.md) §Tier 2:
-  recommended as follow-ups. Requires 1.3.3 and 13.1.4.
+  [RFC 0001](rfcs/rfc-0001-lint-candidates-derived-from-coderabbit-review-findings.md)
+  §Tier 2: recommended as follow-ups. Requires 1.3.3 and 13.1.4.
 
 ### 13.3. Deferred candidates
 
 - [ ] 13.3.1. Reassess and, if the ownership analysis supports a sufficiently
   precise rule, implement `fallible_gap_before_guard` for fallible operations
   between resource acquisition and guard construction. See
-  [RFC 0001](rfcs/0001-coderabbit-derived-lint-candidates.md) §Tier 3: recorded
-  but deferred. Requires 9.1.4.
+  [RFC 0001](rfcs/rfc-0001-lint-candidates-derived-from-coderabbit-review-findings.md)
+  §Tier 3: recorded but deferred. Requires 9.1.4.
 - [ ] 13.3.2. Reassess and, if existing duplicate detection is too coarse for
   test-specific guidance, implement `parameterizable_duplicate_tests` using the
   established clone fingerprints. See
-  [RFC 0001](rfcs/0001-coderabbit-derived-lint-candidates.md) §Tier 3: recorded
-  but deferred. Requires 7.5.1 and 8.5.4.
+  [RFC 0001](rfcs/rfc-0001-lint-candidates-derived-from-coderabbit-review-findings.md)
+  §Tier 3: recorded but deferred. Requires 7.5.1 and 8.5.4.

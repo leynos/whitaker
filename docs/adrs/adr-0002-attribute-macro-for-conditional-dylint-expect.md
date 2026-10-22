@@ -1,4 +1,4 @@
-# Architectural decision record (ADR) 002: Attribute macro for conditional Dylint `expect`
+# Architectural decision record (ADR) 0002: attribute macro for conditional Dylint `expect`
 
 ## Status
 

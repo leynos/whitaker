@@ -19,8 +19,8 @@ Issue [#377](https://github.com/leynos/whitaker/issues/377) defines the cold
 installer contract. Issue [#378](https://github.com/leynos/whitaker/issues/378)
 defines the Linux glibc contract. Issue
 [#387](https://github.com/leynos/whitaker/issues/387) defines the Namespace
-pilot. `docs/adr-001-prebuilt-dylint-libraries.md` requires Linux release
-portability through a conservative glibc baseline.
+pilot. `docs/adrs/adr-0001-prebuilt-dylint-library-distribution.md` requires
+Linux release portability through a conservative glibc baseline.
 `docs/whitaker-dylint-suite-design.md` and `docs/publishing.md` define the
 installer and publishing flows. Issue
 [#386](https://github.com/leynos/whitaker/issues/386) tracks publication of the
@@ -30,7 +30,7 @@ workstation-local source was last verified with `nsc` 0.0.561 on 2026-09-01.
 The trace links are:
 
 - ISSUE-377 -> EP-M1 -> `make installer-msrv-check`;
-- ISSUE-378 -> ADR-001 -> EP-M2 -> release workflow contracts and an Ubuntu
+- ISSUE-378 -> ADR 0001 -> EP-M2 -> release workflow contracts and an Ubuntu
   22.04 packaged-artefact smoke test; and
 - ISSUE-387 -> EP-M3 -> workflow contracts, `actionlint`, GitHub Actions, and
   `nsc github job list` evidence.
@@ -184,7 +184,7 @@ symbol version for ELF executables and fails above 2.35. Apply it to the
 packaged installer and dependency binaries before upload, then add an Ubuntu
 22.04 end-to-end smoke job or release dry-run path that extracts and executes
 all three tools. Keep architecture-specific non-Linux runners and artefact
-names unchanged. Update ADR-001, the design document, publishing guide, and
+names unchanged. Update ADR 0001, the design document, publishing guide, and
 repository layout for the owned script and enforced baseline.
 
 The milestone is complete when the existing v0.2.7 Linux assets fail the new
