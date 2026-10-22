@@ -13,8 +13,8 @@
 
 ## 1. Summary
 
-This RFC proposes a reusable rewrite checker for Whitaker. The checker accepts a
-materialized source rewrite, constructs an isolated overlay workspace, and
+This RFC proposes a reusable rewrite checker for Whitaker. The checker accepts
+a materialized source rewrite, constructs an isolated overlay workspace, and
 compiles the unchanged and rewritten source under equivalent Cargo
 configurations. It can run the candidate with both the ordinary non-lexical
 lifetime (NLL) analysis and Polonius Alpha, using the same Rust compiler.
@@ -69,10 +69,10 @@ The useful question is therefore counterfactual:
 > Polonius accept a rewrite that NLL rejects?
 
 Answering that question requires a second compilation of rewritten source.
-Running two borrow analyses inside a normal Dylint pass would couple Whitaker to
-unstable `rustc_borrowck` internals and would still leave multi-file rewrites,
-Cargo target selection, feature selection, build scripts, and path dependencies
-unmodelled.
+Running two borrow analyses inside a normal Dylint pass would couple Whitaker
+to unstable `rustc_borrowck` internals and would still leave multi-file
+rewrites, Cargo target selection, feature selection, build scripts, and path
+dependencies unmodelled.
 
 Whitaker needs an external compiler oracle with a stable input and output model.
 
@@ -81,9 +81,9 @@ Whitaker needs an external compiler oracle with a stable input and output model.
 Whitaker's ownership-shape design already proposes High-level Intermediate
 Representation (HIR) prefiltering followed by Mid-level Intermediate
 Representation (MIR) confirmation. It also distinguishes machine-applicable,
-possibly incorrect, and diagnostic-only fixes.
+possibly incorrect, and diagnostic-only fixes.[^1]
 
-The planned Phase 11 workspace analysis already proposes:
+The planned Phase 11 workspace analysis already proposes:[^2]
 
 - temporary overlay workspaces;
 - minimal text edits that never touch the working tree;
@@ -93,17 +93,17 @@ The planned Phase 11 workspace analysis already proposes:
 
 The planned unified CLI makes `whitaker check` the product surface and already
 owns Cargo invocation, target configuration, installation, output, and exit
-status handling.
+status handling.[^3]
 
-Cargo provides stable, versioned JSON for workspace metadata and build
-messages. `RUSTC_WORKSPACE_WRAPPER` can wrap compiler invocations for workspace
-members while preserving separate artifact hashes. These facilities provide a
-sufficiently stable boundary for the checker.[^1][^2]
+Cargo provides stable, versioned JSON for workspace metadata and build messages.
+`RUSTC_WORKSPACE_WRAPPER` can wrap compiler invocations for workspace members
+while preserving separate artefact hashes. These facilities provide a
+sufficiently stable boundary for the checker.[^4][^5]
 
 Polonius Alpha is a location-sensitive borrow analysis intended to accept NLL
 problem case 3, conditional mutable borrows, and lending-iterator patterns. The
 Rust project currently treats it as a superset of NLL, while retaining known
-stabilization and soundness work.[^3]
+stabilization and soundness work.[^6]
 
 ## 4. Goals and non-goals
 
@@ -199,8 +199,8 @@ flowchart LR
     I --> J["Diff or transactional apply"]
 ```
 
-_Figure 1: Rewrite discovery, materialization, compiler validation, and optional
-application._
+_Figure 1: Rewrite discovery, materialization, compiler validation, and
+optional application._
 
 ### 6.1. Crate boundaries
 
@@ -343,8 +343,8 @@ version.
 
 Polonius support must be capability-probed once per compiler identity. The
 probe should compile a tiny, known NLL problem case with the configured
-Polonius Alpha arguments. Merely finding a flag name in `rustc -Z help` does not
-prove that the desired behaviour is available.
+Polonius Alpha arguments. Merely finding a flag name in `rustc -Z help` does
+not prove that the desired behaviour is available.
 
 The initial `PoloniusNext` adapter should append:
 
@@ -362,7 +362,7 @@ fall back to `-Zpolonius=legacy`.
 
 The checker should inject profile-specific arguments with a small
 `RUSTC_WORKSPACE_WRAPPER`. This confines Polonius to workspace members and
-allows dependency artifacts to be reused.
+allows dependency artefacts to be reused.
 
 The wrapper must preserve existing wrappers:
 
@@ -397,8 +397,8 @@ The engine should:
 7. assign a separate target directory under the validation session.
 
 Source files must not be symlinked or hard-linked to the working tree. Build
-scripts occasionally write into package directories despite Cargo guidance.
-A symlink or writable hard link would therefore violate the no-mutation
+scripts occasionally write into package directories despite Cargo guidance. A
+symlink or writable hard link would therefore violate the no-mutation
 invariant. Copy-on-write reflinks may be used when the platform guarantees
 write isolation; otherwise ordinary copies are required.
 
@@ -410,13 +410,13 @@ back to the original workspace.
 
 The checker should derive a minimal sound scope from `ImpactScope`.
 
-| Impact scope | Initial Cargo scope |
-| --- | --- |
-| `BodyLocal` | Discovering package and target |
-| `ItemLocal` | All targets in the discovering package that can compile the item |
-| `PackageTargets` | All selected targets in the package |
-| `ReverseWorkspaceDependencies` | Package plus affected reverse workspace dependencies |
-| `Workspace` | All selected workspace members |
+| Impact scope                   | Initial Cargo scope                                              |
+| ------------------------------ | ---------------------------------------------------------------- |
+| `BodyLocal`                    | Discovering package and target                                   |
+| `ItemLocal`                    | All targets in the discovering package that can compile the item |
+| `PackageTargets`               | All selected targets in the package                              |
+| `ReverseWorkspaceDependencies` | Package plus affected reverse workspace dependencies             |
+| `Workspace`                    | All selected workspace members                                   |
 
 _Table 1: Initial Cargo scope selected from rewrite impact._
 
@@ -428,8 +428,8 @@ cargo check -p <package> --lib --message-format=json
 
 A private signature rewrite should compile every target in the package. A
 public or cross-crate signature rewrite should include reverse workspace
-dependencies. Rewrites touching workspace manifests, generated code,
-procedural macros, or shared include files should escalate to the workspace.
+dependencies. Rewrites touching workspace manifests, generated code, procedural
+macros, or shared include files should escalate to the workspace.
 
 The checker must preserve:
 
@@ -511,10 +511,10 @@ else:
     Inconclusive
 ```
 
-`PoloniusOnly` requires that every candidate error counted against NLL is absent
-from the Polonius candidate. The report should include the NLL diagnostic codes
-and spans, but it need not maintain a hard-coded list of borrow-check error
-codes.
+`PoloniusOnly` requires that every candidate error counted against NLL is
+absent from the Polonius candidate. The report should include the NLL
+diagnostic codes and spans, but it need not maintain a hard-coded list of
+borrow-check error codes.
 
 `PoloniusRegression` should produce a high-visibility diagnostic and preserve
 the overlay and command log for reporting upstream.
@@ -536,9 +536,9 @@ pub struct ValidationGates {
 The rewrite checker itself should default to `cargo check` only. RFC 0009 may
 request affected tests or workspace quality gates before applying a rewrite.
 
-Running tests under NLL when the candidate is intentionally Polonius-only is not
-useful. Polonius-only candidates should run requested gates under Polonius and
-retain the failed NLL check as portability evidence.
+Running tests under NLL when the candidate is intentionally Polonius-only is
+not useful. Polonius-only candidates should run requested gates under Polonius
+and retain the failed NLL check as portability evidence.
 
 ### 6.12. Caching
 
@@ -617,7 +617,7 @@ BOR001 lookup_then_relookup
 - Store only workspace-relative paths in durable reports.
 - Use deterministic maps and ordering for serialized output.
 - Compose, rather than discard, user compiler wrappers.
-- Keep NLL and Polonius artifacts distinct.
+- Keep NLL and Polonius artefacts distinct.
 - Avoid global environment mutation in tests.
 - Record all subprocess arguments and relevant environment variables in verbose
   logs with secrets redacted.
@@ -676,7 +676,7 @@ The dominant cost is Cargo replay. The design should reduce it through:
 
 - one baseline per profile and invocation fingerprint;
 - workspace-only compiler wrapping;
-- shared dependency artifacts;
+- shared dependency artefacts;
 - target-scoped checking;
 - batching only independent candidates;
 - candidate result caching; and
@@ -768,8 +768,8 @@ stability, and false classifications.
 ### 11.1. Run both analyses inside Dylint
 
 This would avoid a second Cargo process, but it would couple Whitaker to
-unstable borrow-checker internals, provide no natural multi-file source overlay,
-and duplicate Cargo target and feature logic. It is rejected.
+unstable borrow-checker internals, provide no natural multi-file source
+overlay, and duplicate Cargo target and feature logic. It is rejected.
 
 ### 11.2. Use `RUSTFLAGS` for every compiler invocation
 
@@ -833,19 +833,19 @@ rewriter proposed by RFC 0009.
 
 ## References
 
-[^1]: Cargo Book, "External Tools":
-    <https://doc.rust-lang.org/cargo/reference/external-tools.html>
-
-[^2]: Cargo Book, "Environment Variables":
-    <https://doc.rust-lang.org/cargo/reference/environment-variables.html>
-
-[^3]: Rust Project Goals, "Stabilize and model Polonius Alpha":
-    <https://rust-lang.github.io/rust-project-goals/2026/polonius.html>
-
-[^4]: Whitaker CLI design: `../whitaker-cli-design.md`
-
-[^5]: Whitaker ownership-shape lints design:
+[^1]: Whitaker ownership-shape lints design:
     `../ownership-shape-lints-design.md`
 
-[^6]: Whitaker test-support overlay design:
+[^2]: Whitaker test-support overlay design:
     `../technical-design-for-test-support-dead-code-and-masked-dead-code-expectations.md`
+
+[^3]: Whitaker CLI design: `../whitaker-cli-design.md`
+
+[^4]: Cargo Book, "External Tools":
+    <https://doc.rust-lang.org/cargo/reference/external-tools.html>
+
+[^5]: Cargo Book, "Environment Variables":
+    <https://doc.rust-lang.org/cargo/reference/environment-variables.html>
+
+[^6]: Rust Project Goals, "Stabilize and model Polonius Alpha":
+    <https://rust-lang.github.io/rust-project-goals/2026/polonius.html>

@@ -53,13 +53,13 @@ Polonius Alpha.
 
 ## 2. Problem
 
-A lint can point to ownership inflation, but agents and developers still need to
-perform the difficult step: reconstruct the direct borrowing form.
+A lint can point to ownership inflation, but agents and developers still need
+to perform the difficult step: reconstruct the direct borrowing form.
 
 That step is not uniformly local.
 
-`clone_only_used_by_borrow` may require replacing a clone binding and all of its
-uses. `owned_param_causes_clone` may require changing a private function
+`clone_only_used_by_borrow` may require replacing a clone binding and all of
+its uses. `owned_param_causes_clone` may require changing a private function
 signature and several call sites. A repeated collection lookup may have both an
 `entry` rewrite and a Polonius-only direct-borrow rewrite. A staged identifier
 loop may require selecting a mutable iterator. A temporary snapshot may require
@@ -82,7 +82,7 @@ Without a rewriter, a lint can become a stern sign beside an unbuilt bridge.
 
 ## 3. Current state
 
-The ownership-shape design proposes three lints:
+The ownership-shape design proposes three lints:[^1]
 
 - `clone_only_used_by_borrow`;
 - `owned_param_causes_clone`; and
@@ -97,13 +97,13 @@ It also proposes exact mappings such as:
 
 The rustc diagnostic system supports applicability levels ranging from
 `MachineApplicable` to `MaybeIncorrect`, and tools may consume compiler
-suggestions.[^1] Whitaker needs a richer model because several proposed
+suggestions.[^2] Whitaker needs a richer model because several proposed
 transformations span functions or files.
 
-RFC 0007 defines a compiler-validation engine. RFC 0008 defines nine additional
-candidate-generating rules. The planned Phase 11 overlay design supplies the
-basis for isolated source replay. The unified CLI supplies configuration,
-localization, installation, and Cargo orchestration.
+RFC 0007 defines a compiler-validation engine.[^3] RFC 0008 defines nine
+additional candidate-generating rules.[^4] The planned Phase 11 overlay design
+supplies the basis for isolated source replay.[^5] The unified CLI supplies
+configuration, localization, installation, and Cargo orchestration.[^6]
 
 This RFC connects those pieces into one product workflow.
 
@@ -343,8 +343,8 @@ application unless the materializer re-runs all structural preconditions.
 
 ### 7.3. Macro source
 
-Candidates whose primary span comes solely from expansion should be rejected.
-A macro-generated finding may proceed only when rustc identifies a writable,
+Candidates whose primary span comes solely from expansion should be rejected. A
+macro-generated finding may proceed only when rustc identifies a writable,
 user-authored call-site span and the recipe is explicitly designed for that
 macro surface.
 
@@ -418,7 +418,7 @@ materialized.
 
 ### 9.1. `clone_only_used_by_borrow`
 
-#### Supported first-release forms
+#### `clone_only_used_by_borrow` Supported first-release forms
 
 1. Direct argument clone:
 
@@ -447,7 +447,7 @@ materialized.
    log::debug!("{}", path.display());
    ```
 
-#### Preconditions
+#### `clone_only_used_by_borrow` Preconditions
 
 - Every clone-local use has an editable span.
 - The local does not escape.
@@ -456,7 +456,7 @@ materialized.
 - No use depends on clone identity or owned method resolution.
 - RFC 0007 accepts the result.
 
-#### Policy
+#### `clone_only_used_by_borrow` Policy
 
 A direct argument rewrite may be `MachineApplicable`. A multi-use local
 substitution begins as `LocallyReasoned` until corpus validation establishes
@@ -468,14 +468,14 @@ invalid.
 
 ### 9.2. `owned_param_causes_clone`
 
-#### Supported first-release mappings
+#### `owned_param_causes_clone` Supported first-release mappings
 
 - `String` to `&str`;
 - `Vec<T>` to `&[T]`;
 - `PathBuf` to `&Path`; and
 - `OsString` to `&OsStr`.
 
-#### Edit group
+#### `owned_param_causes_clone` Edit group
 
 The rewrite group must atomically include:
 
@@ -485,7 +485,7 @@ The rewrite group must atomically include:
 - method receiver or turbofish changes where required; and
 - imports introduced or removed by the exact mapping.
 
-#### Preconditions
+#### `owned_param_causes_clone` Preconditions
 
 - Callee is private or explicitly authorized.
 - All relevant call sites in the selected feature configuration are known.
@@ -495,7 +495,7 @@ The rewrite group must atomically include:
   type.
 - Package and reverse-dependent targets compile.
 
-#### Policy
+#### `owned_param_causes_clone` Policy
 
 This is a multi-file, compiler-validated rewrite. It should begin as
 `LocallyReasoned` and require explicit selection. Automatic application may be
@@ -507,8 +507,7 @@ coverage.
 The first release should not automatically transform general `Rc`, `Arc`,
 `Cell`, `RefCell`, `Mutex`, or `RwLock` code.
 
-The materializer may produce review-only alternatives for tightly bounded
-cases:
+The materializer may produce review-only alternatives for tightly bounded cases:
 
 - a local `Cell<Copy>` used sequentially;
 - an `Rc<T>` with exactly one strong handle and no `Weak`;
@@ -520,17 +519,17 @@ These alternatives should be labelled `ReviewRequired` and shown only when RFC
 
 ## 10. Borrow-workaround materializers
 
-| Rule | First materializer | Automatic ceiling |
-| --- | --- | --- |
-| `BOR001` | Entry API or direct conditional borrow | Mechanical |
-| `BOR002` | Replace remove/reinsert with `get_mut` or entry mutation | Review required initially |
-| `BOR003` | Direct field split, destructuring, or helper field parameters | Review required |
-| `BOR004` | Replace position/index round-trip with `iter_mut().find` | Mechanical |
-| `BOR005` | Replace staged keys with mutable or owned-key iteration | Review required |
-| `BOR006` | Fuse read and mutable search passes | Mechanical when predicate is pure |
-| `BOR007` | Remove snapshot and split direct borrows | Review required |
-| `BOR008` | Flatten reference-only scope fence | Mechanical |
-| `BOR009` | Inline and optionally remove single-use helper | Diff only |
+| Rule     | First materializer                                            | Automatic ceiling                 |
+| -------- | ------------------------------------------------------------- | --------------------------------- |
+| `BOR001` | Entry API or direct conditional borrow                        | Mechanical                        |
+| `BOR002` | Replace remove/reinsert with `get_mut` or entry mutation      | Review required initially         |
+| `BOR003` | Direct field split, destructuring, or helper field parameters | Review required                   |
+| `BOR004` | Replace position/index round-trip with `iter_mut().find`      | Mechanical                        |
+| `BOR005` | Replace staged keys with mutable or owned-key iteration       | Review required                   |
+| `BOR006` | Fuse read and mutable search passes                           | Mechanical when predicate is pure |
+| `BOR007` | Remove snapshot and split direct borrows                      | Review required                   |
+| `BOR008` | Flatten reference-only scope fence                            | Mechanical                        |
+| `BOR009` | Inline and optionally remove single-use helper                | Diff only                         |
 
 _Table 1: First materializers and their maximum automatic policy._
 
@@ -628,18 +627,18 @@ panic, drop, transaction, framework, or API semantics require human judgement.
 
 Whitaker should be more conservative than the compiler suggestion ceiling.
 
-| Whitaker evidence | Maximum rustc-style applicability |
-| --- | --- |
-| Mechanical, current anchor, accepted checker | `MachineApplicable` |
-| Locally reasoned, current anchor, accepted checker | `MaybeIncorrect` initially |
-| Review required | Diagnostic or diff only |
-| Stale or unvalidated | No suggestion |
-| Polonius-only without project authorization | No applicable suggestion |
+| Whitaker evidence                                  | Maximum rustc-style applicability |
+| -------------------------------------------------- | --------------------------------- |
+| Mechanical, current anchor, accepted checker       | `MachineApplicable`               |
+| Locally reasoned, current anchor, accepted checker | `MaybeIncorrect` initially        |
+| Review required                                    | Diagnostic or diff only           |
+| Stale or unvalidated                               | No suggestion                     |
+| Polonius-only without project authorization        | No applicable suggestion          |
 
 _Table 2: Mapping from Whitaker evidence to suggestion applicability._
 
 The rustc development guide explicitly recommends conservative applicability
-selection.[^1]
+selection.[^2]
 
 ### 11.4. Project borrow-checker policy
 
@@ -661,8 +660,8 @@ This setting means that Polonius-only rewrites are eligible for policy
 evaluation. It does not make `ReviewRequired` rewrites automatic.
 
 The report must attach a portability note to every Polonius-only edit. The
-rewriter must not modify `.cargo/config.toml` or `rust-toolchain.toml` as a side
-effect.
+rewriter must not modify `.cargo/config.toml` or `rust-toolchain.toml` as a
+side effect.
 
 ## 12. Planning, dependencies, and conflicts
 
@@ -793,8 +792,8 @@ may retain the source and journal for investigation, but must be explicit.
 
 ### 13.5. Rollback
 
-Rollback restores exact original bytes, then reruns the source digest check.
-A rollback failure is a high-severity operational error and must preserve all
+Rollback restores exact original bytes, then reruns the source digest check. A
+rollback failure is a high-severity operational error and must preserve all
 journal data.
 
 The rewriter should never rely on Git for rollback. Git may be absent, the tree
@@ -860,7 +859,7 @@ Whitaker may derive affected tests from:
 - Cargo target ownership;
 - source-file inclusion;
 - reverse workspace dependencies;
-- existing test-support analysis;
+- existing test-support analysis;[^5]
 - configured test commands; and
 - rule-specific impact.
 
@@ -1022,10 +1021,9 @@ and avoid duplicating the full diff in compiler output.
 
 ### 19.2. Toolchain compatibility
 
-The rewriter uses the target workspace toolchain through RFC 0007. The
-Whitaker binary and its Dylint bundle may have their own installation
-constraints, but a rewrite report must record the target compiler that
-validated the source.
+The rewriter uses the target workspace toolchain through RFC 0007. The Whitaker
+binary and its Dylint bundle may have their own installation constraints, but a
+rewrite report must record the target compiler that validated the source.
 
 ### 19.3. Schema compatibility
 
@@ -1231,8 +1229,8 @@ semantics. Automatic policy must remain stricter than compiler acceptance.
 ### 22.6. Require a clean Git tree
 
 A clean tree is a convenient policy but not a correctness condition. Exact
-digests and transactional journals provide a version-control-independent
-safety boundary. Teams may opt into a clean-tree requirement.
+digests and transactional journals provide a version-control-independent safety
+boundary. Teams may opt into a clean-tree requirement.
 
 ## 23. Open questions
 
@@ -1277,19 +1275,19 @@ agents exactly the missing feedback loop:
 
 ## References
 
-[^1]: Rust Compiler Development Guide, "Errors and lints":
-    <https://rustc-dev-guide.rust-lang.org/diagnostics.html>
-
-[^2]: Whitaker CLI design: `../whitaker-cli-design.md`
-
-[^3]: Whitaker ownership-shape lints design:
+[^1]: Whitaker ownership-shape lints design:
     `../ownership-shape-lints-design.md`
 
-[^4]: Whitaker test-support overlay design:
-    `../technical-design-for-test-support-dead-code-and-masked-dead-code-expectations.md`
+[^2]: Rust Compiler Development Guide, "Errors and lints":
+    <https://rustc-dev-guide.rust-lang.org/diagnostics.html>
 
-[^5]: RFC 0007, compiler-validated rewrite checking:
+[^3]: RFC 0007, compiler-validated rewrite checking:
     `0007-compiler-validated-rewrite-checking.md`
 
-[^6]: RFC 0008, borrow-workaround lint family:
+[^4]: RFC 0008, borrow-workaround lint family:
     `0008-borrow-workaround-lint-family.md`
+
+[^5]: Whitaker test-support overlay design:
+    `../technical-design-for-test-support-dead-code-and-masked-dead-code-expectations.md`
+
+[^6]: Whitaker CLI design: `../whitaker-cli-design.md`

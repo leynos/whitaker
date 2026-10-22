@@ -1048,8 +1048,8 @@ published-GPUI workspace invocation.
 - [ ] 14.1.1. Implement the backend-neutral spike contract and shared fixtures
   for borrow-only clone removal, private owned-parameter conversion,
   Polonius-only conditional borrowing, and remove/mutate/reinsert collapse. See
-  [ADR 007](adr-007-rust-rewrite-materialization-substrate.md) §Comparative
-  spike.
+  [ADR 007](adr-007-rust-rewrite-materialization-substrate.md)
+  §Comparative spike.
 - [ ] 14.1.2. Implement the spike once with `ast-grep-core` and
   `ast-grep-language`, and once with `ra_ap_syntax::SyntaxEditor`, including
   stale-anchor, trivia-preservation, overlapping-edit, CRLF, Unicode,
@@ -1058,9 +1058,8 @@ published-GPUI workspace invocation.
   fixtures and §Adversarial fixtures. Requires 14.1.1.
 - [ ] 14.1.3. Record source-fidelity, recipe-complexity, build-cost,
   dependency-churn, and runtime evidence; select one production backend and pin
-  its version. See
-  [ADR 007](adr-007-rust-rewrite-materialization-substrate.md) §Decision rule
-  and §Spike exit artefacts. Requires 14.1.2.
+  its version. See [ADR 007](adr-007-rust-rewrite-materialization-substrate.md)
+  §Decision rule and §Spike exit artefacts. Requires 14.1.2.
 
 ### 14.2. Compiler-validated rewrite checker
 
@@ -1070,16 +1069,14 @@ published-GPUI workspace invocation.
   [RFC 0007](rfcs/0007-compiler-validated-rewrite-checking.md) §Proposed
   architecture. Requires 14.1.3.
 - [ ] 14.2.2. Generalize the Phase 11 overlay builder for copy-isolated
-  candidate workspaces and equivalent baseline and candidate Cargo
-  invocations. See
-  [RFC 0007](rfcs/0007-compiler-validated-rewrite-checking.md) §Overlay
+  candidate workspaces and equivalent baseline and candidate Cargo invocations.
+  See [RFC 0007](rfcs/0007-compiler-validated-rewrite-checking.md) §Overlay
   construction. Requires 11.2.1 and 14.2.1.
 - [ ] 14.2.3. Implement same-nightly NLL and `-Zpolonius=next` replay,
   capability probing, normalized diagnostic deltas, and classifications for
   NLL-valid, Polonius-only, rejected, stale, divergent, and inconclusive
-  candidates. See
-  [RFC 0007](rfcs/0007-compiler-validated-rewrite-checking.md) §Classification
-  algorithm. Requires 11.2.2 and 14.2.2.
+  candidates. See [RFC 0007](rfcs/0007-compiler-validated-rewrite-checking.md)
+  §Classification algorithm. Requires 11.2.2 and 14.2.2.
 - [ ] 14.2.4. Add content-addressed validation caching, retained-overlay
   reproduction bundles, human-readable output, and stable JSON output. See
   [RFC 0007](rfcs/0007-compiler-validated-rewrite-checking.md) §Caching and
@@ -1101,8 +1098,8 @@ published-GPUI workspace invocation.
   Requires 14.3.1.
 - [ ] 14.3.4. Add UI and corpus fixtures that cover true workarounds,
   reallocation hazards, rollback and undo semantics, callback and async
-  boundaries, external API constraints, and cases rejected by both checkers.
-  See [RFC 0008](rfcs/0008-borrow-workaround-lint-family.md) §Testing strategy.
+  boundaries, external API constraints, and cases rejected by both checkers. See
+  [RFC 0008](rfcs/0008-borrow-workaround-lint-family.md) §Testing strategy.
   Requires 14.3.2 and 14.3.3.
 - [ ] 14.3.5. Keep BOR findings review-only unless a direct candidate can be
   materialized and compiler-validated; expose confidence and checker
