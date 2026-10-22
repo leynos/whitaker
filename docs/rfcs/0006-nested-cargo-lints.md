@@ -157,12 +157,16 @@ A test spawns `cargo` and one of the following holds on its builder chain:
 1. `.env("CARGO_TARGET_DIR", v)` or `.envs([...])` carrying that key, or
    `.arg("--target-dir")` followed by a value `v`, where `v` is
    temporary-derived;
-2. the chain calls `.current_dir(d)` with a temporary-derived `d` and neither
-   sets a target directory nor calls `.env_remove("CARGO_TARGET_DIR")` away
-   from an inherited shared one; Cargo then builds into `d/target`, which is
-   private by construction;
-3. the chain calls `.env_clear()` and does not set `CARGO_TARGET_DIR` again,
-   because the child can no longer inherit the shared directory.
+2. the lint can establish that the child's effective target directory is
+   private: the chain calls `.current_dir(d)` with a temporary-derived `d`,
+   sets no target directory, and the child cannot inherit a shared one. That
+   needs all of: `.env_remove("CARGO_TARGET_DIR")` or `.env_clear()` on the
+   chain (so no parent variable reaches the child), no `build.target-dir` in a
+   Cargo configuration file the lint can see in or above `d`, and no manifest in
+   `d` that places it in a workspace whose root lies outside `d`. Cargo then
+   builds into `d/target`. If any of these cannot be established, the lint
+   stays silent, because an inherited `CARGO_TARGET_DIR`, the workspace-root
+   default or `build.target-dir` can each select a shared directory.
 
 A bare child `cargo` in the workspace directory with no `CARGO_TARGET_DIR`
 override inherits the parent's variable and is deliberately not flagged. A
@@ -260,12 +264,22 @@ typed-configuration convention; the initial set is:
 
 ```toml
 [unbounded_child_cargo]
-bounded_wrappers = ["wait_timeout", "recv_timeout"]
-compiling_subcommands = ["build", "check", "test", "run", "package"]
+# Added to the built-in wrappers (wait_timeout, wait-timeout, recv_timeout,
+# tokio::time::timeout, Child::kill on a deadline).
+extra_bounded_wrappers = ["run_with_deadline"]
+# Added to the built-in compiling subcommands (build, check, test, run,
+# package, clippy, doc, install, publish, bench, rustc).
+extra_compiling_subcommands = ["miri"]
 
 [test_spawns_rustc]
-allowed_arguments = ["--version", "--print"]
+# Added to the built-in query-only arguments (--version, -V, --print, --help).
+extra_allowed_arguments = ["--explain"]
 ```
+
+Every list extends the built-in values and never replaces them, so a project
+cannot silently narrow a lint by listing fewer entries; the `extra_` prefix
+says so. A project that needs a built-in removed uses the `expect` escape hatch
+on the item instead.
 
 ### Escape hatch
 
