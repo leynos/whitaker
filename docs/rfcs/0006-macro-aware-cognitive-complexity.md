@@ -317,10 +317,11 @@ crate layout that `conditional_max_n_branches` established.
 ### 7.2. The authored-versus-generated classifier
 
 **Rule.** A node is *generated* when its expansion chain contains at least one
-*opaque* step. Otherwise it is *authored*. The chain is the sequence of
+*opaque* step. Otherwise, it is *authored*. The chain is the sequence of
 expansions between the node's syntax context and the crate root, outermost
-first. A macro expansion or compiler AST pass is opaque. A desugaring of syntax
-the author wrote is transparent.
+first. A macro expansion, a compiler AST pass and a desugaring that inserts
+logic the author did not write (`GeneratedDesugaring`) are all opaque. Only a
+desugaring of syntax the author wrote (`AuthoredDesugaring`) is transparent.
 
 Two consequences follow:
 
@@ -400,9 +401,10 @@ The variant list follows `DesugaringKind` in current nightly documentation[^12]
 and must be re-verified against the pinned toolchain.
 
 **Walking the chain.** Walk the chain one mark at a time, from the node's
-`SyntaxContext` towards the root. At a macro or AST-pass mark, stop and report
-`Generated`. Never follow a macro's `call_site`, because that leads back to the
-caller's context and would wrongly classify the macro's text as authored.
+`SyntaxContext` towards the root. At a macro, AST-pass or generated-desugaring
+mark, stop and report `Generated`. Never follow a macro's `call_site`, because
+that leads back to the caller's context and would wrongly classify the macro's
+text as authored.
 
 At a transparent desugaring mark, the walk must continue into the context that
 was being lowered. Implementers must confirm on the pinned compiler whether
