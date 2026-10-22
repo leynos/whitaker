@@ -1,8 +1,8 @@
-# RFC 0006: Macro-aware cognitive complexity
+# RFC 0010: Macro-aware cognitive complexity
 
 ## 1. Preamble
 
-- **RFC number:** 0006
+- **RFC number:** 0010
 - **Status:** Proposed
 - **Created:** 2026-10-22
 - **Proposed lint:** `macro_aware_cognitive_complexity`
@@ -12,8 +12,8 @@
 - **Tracking issue:**
   [leynos/whitaker#504](https://github.com/leynos/whitaker/issues/504)
 
-RFC numbers 0003 to 0005 are already allocated on unmerged branches, so this
-RFC takes 0006 to avoid a collision.
+Other branches already hold RFC numbers up to 0009, including a different RFC
+0006, so this RFC takes 0010 to avoid a collision.
 
 ## 2. Summary
 

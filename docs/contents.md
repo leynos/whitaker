@@ -112,7 +112,7 @@
   proposes a pre-expansion lint that requires documentation for source-authored
   functions in configured Rust test-source paths without inspecting generated
   test code.
-- [RFC 0006: macro-aware cognitive complexity](rfcs/0006-macro-aware-cognitive-complexity.md)
+- [RFC 0010: macro-aware cognitive complexity](rfcs/0010-macro-aware-cognitive-complexity.md)
   proposes a cognitive complexity lint that charges only author-written
   constructs, and a shared authored-versus-generated classifier for every
   complexity-sensitive Whitaker lint.
