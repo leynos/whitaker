@@ -1,4 +1,4 @@
-# Architectural decision record (ADR) 004: pin-only mutation-testing contract
+# Architectural decision record (ADR) 0004: pin-only mutation-testing contract
 
 ## Status
 

@@ -88,7 +88,7 @@ Success is observable by:
   for multi-library packaging and manifest `files` field.
 - [x] Stage F: Add SHA-256 self-consistency test to packaging unit
   tests.
-- [x] Stage G: Update ADR-001 implementation notes.
+- [x] Stage G: Update ADR 0001 implementation notes.
 - [x] Stage H: Run quality gates.
 
 ## Surprises & discoveries

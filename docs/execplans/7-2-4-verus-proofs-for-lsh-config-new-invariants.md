@@ -220,7 +220,7 @@ Observable outcome:
   first proof would create extra doc churn without reducing risk. Date/Author:
   2026-04-08 / Codex.
 - Decision: keep proof workflows opt-in through `Makefile` targets and wrapper
-  scripts, not through normal `cargo test` or build hooks. Rationale: ADR 002
+  scripts, not through normal `cargo test` or build hooks. Rationale: ADR 0003
   explicitly requires sidecar proof tooling independent of ordinary Cargo
   development. Date/Author: 2026-04-08 / Codex.
 - Decision: extend the existing `min_hash_lsh` unit and BDD coverage instead
@@ -307,9 +307,9 @@ under `## Implementation decisions (7.2.2)`, which states that `bands` and
 `rows` must both be greater than zero and must multiply to the fixed
 `MINHASH_SIZE` of 128.
 
-### Relationship to ADR 002
+### Relationship to ADR 0003
 
-ADR 002 makes the proof split explicit:
+ADR 0003 makes the proof split explicit:
 
 1. Verus owns local semantic invariants such as `LshConfig::new`.
 2. Kani owns bounded behavioural checks for real MinHash and LSH code.

@@ -1,4 +1,4 @@
-# Architectural decision record (ADR) 001: prebuilt Dylint lint library distribution
+# Architectural decision record (ADR) 0001: prebuilt Dylint lint library distribution
 
 ## Status
 

@@ -1704,7 +1704,8 @@ the latest assets discoverable without tagging every commit.
 
 **Scope notes:** Linux builds target a conservative glibc baseline; musl
 artefacts remain optional. The decision is recorded in
-`docs/adr-001-prebuilt-dylint-libraries.md` (Accepted 2026-02-03).
+`docs/adrs/adr-0001-prebuilt-dylint-library-distribution.md` (Accepted
+2026-02-03).
 
 **Implementation decision (2026-02-18):** The installer now derives prebuilt
 extraction paths from `BaseDirs::whitaker_data_dir()` and writes libraries to

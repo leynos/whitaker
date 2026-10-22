@@ -143,8 +143,8 @@ Thresholds that trigger escalation rather than autonomous continuation.
 - **Verus.** If the histogram-accumulation lemma (Stage F) cannot be made
   substantive and well-founded within two focused attempts, stop and escalate;
   do **not** commit a vacuous proof or a restatement of the assumption. The
-  fallback (Kani + proptest only, citing ADR-003) requires a Decision Log entry
-  and is an escalation, not a silent downgrade.
+  fallback (Kani + proptest only, citing ADR 0003) requires a Decision Log
+  entry and is an escalation, not a silent downgrade.
 - **Kani.** If a bounded harness still times out after trying a tightened unwind
   bound and a `kissat`/`cadical` solver swap, stop and escalate.
 - **Scope (Stage 0 excepted).** Stage 0's toolchain bump is *expected* to be a
@@ -203,7 +203,7 @@ Thresholds that trigger escalation rather than autonomous continuation.
   the Dylint/`trybuild` blessing flow as part of Stage 0, reviewing each diff
   so a genuine behaviour change is not masked by a cosmetic re-bless.
 - Risk: **Stale toolchain-string references.** ~105 occurrences of
-  `nightly-2025-09-18` exist in installer source, tests, ADR-001, and docs;
+  `nightly-2025-09-18` exist in installer source, tests, ADR 0001, and docs;
   some are load-bearing test fixtures (the installer's `ToolchainChannel`
   parsing tests), most are doc/example strings. Severity: medium. Likelihood:
   high. Mitigation: Stage 0 updates the load-bearing ones and the
@@ -675,9 +675,9 @@ Decisions already taken while drafting this plan:
   2026-06-16, implementation.
 - Decision: **Do not add a new ADR for 7.3.1.** Rationale: the lowered-IR
   boundary is a local adapter decision already captured in the clone-detector
-  design document, while the proof strategy directly applies ADR-003's existing
-  split between tests, bounded Kani execution, and Verus sidecars with explicit
-  trust boundaries. Date/Author: 2026-06-16, implementation.
+  design document, while the proof strategy directly applies ADR 0003's
+  existing split between tests, bounded Kani execution, and Verus sidecars with
+  explicit trust boundaries. Date/Author: 2026-06-16, implementation.
 - Decision: **Follow `origin/main`'s default `CARGO_LOCKED` policy after the
   2026-07-16 rebase.** Rationale: `origin/main` keeps `CARGO_LOCKED` empty by
   default while retaining the Makefile variable for callers that need
@@ -813,10 +813,10 @@ Consult these while implementing:
 
 - `docs/whitaker-clone-detector-design.md` — §“Pass B: AST engine”
   (authoritative requirements; record new decisions back into it).
-- `docs/adr-003-formal-proof-strategy-for-clone-detector-pipeline.md` — when to
-  use Verus (small local pure semantic invariants, sidecar models in `verus/`)
-  versus Kani (bounded checks over real production code, colocated under
-  `#[cfg(kani)]`).
+- `docs/adrs/adr-0003-formal-proof-strategy-for-the-clone-detector-pipeline.md`
+  — when to use Verus (small local pure semantic invariants, sidecar models in
+  `verus/`) versus Kani (bounded checks over real production code, colocated
+  under `#[cfg(kani)]`).
 - `docs/rust-testing-with-rstest-fixtures.md` — fixture and parameterization
   patterns for the unit tests.
 - `docs/rstest-bdd-users-guide.md` — the behavioural test pattern; mirror the
@@ -1084,7 +1084,7 @@ UI harness; if `dylint` v5 cannot drive it, bump `dylint_linting`/
 `.stderr` UI fixtures through the Dylint/`trybuild` blessing flow, **reviewing
 each diff** so a genuine behaviour change is never masked by a cosmetic
 re-bless; (4) update the load-bearing toolchain-string references (installer
-`ToolchainChannel`/manifest tests and ADR-001 examples) from
+`ToolchainChannel`/manifest tests and ADR 0001 examples) from
 `nightly-2025-09-18` to the new channel — CI's `rolling-release.yml` reads the
 channel dynamically, so artefact naming propagates automatically, but the
 installer unit/behaviour tests that hardcode the date must be updated and kept
@@ -1263,7 +1263,7 @@ Record the realized design decisions in
 **“toolchain bump runbook”** capturing the Stage 0 procedure (set the channel;
 rebuild the whole suite; fix `clippy_utils`/lint-crate `rustc_private`
 breakage; verify `dylint` drives the new nightly; re-baseline `.stderr`
-fixtures with diff review; update the load-bearing installer/ADR-001 toolchain
+fixtures with diff review; update the load-bearing installer/ADR 0001 toolchain
 strings), and a **“`ra_ap_syntax` re-pinning runbook”** (review finding 🟡-7)
 covering the contemporaneous-snapshot selection, the ≤ 3 transitive `--precise`
 pin budget, the escalation trigger, and the note that `PARSER_SCHEMA_VERSION`
@@ -1272,8 +1272,8 @@ toolchain-bump author does not re-derive Stages 0/B from scratch. Confirm
 `Cargo.lock` is committed and that the CI build leaves `CARGO_LOCKED` empty by
 default so callers opt into `--locked` explicitly. Assess whether the
 lowered-IR boundary or the proof strategy warrants a new ADR; if so, author
-`docs/adr-004-*.md` per the style guide and reference it from the design doc
-(record the decision either way). Run `make check-fmt`, `make lint`,
+`docs/adrs/adr-0004-*.md` per the style guide and reference it from the design
+doc (record the decision either way). Run `make check-fmt`, `make lint`,
 `make test`, then the proof targets, then `make markdownlint` for the docs.
 Request `coderabbit review --agent` only after all deterministic gates pass;
 clear every concern. Tick roadmap item 7.3.1 to done. Commit, push, and ensure

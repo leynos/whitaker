@@ -74,41 +74,51 @@
 
 ## Decision records
 
-- [Architectural decision record (ADR) 001: prebuilt Dylint
-  libraries](adr-001-prebuilt-dylint-libraries.md) records the decision to ship
-  prebuilt Dylint libraries and the constraints that follow from that release
-  model.
-- [Architectural decision record (ADR) 002: Dylint `expect` attribute
-  macro](adr-002-dylint-expect-attribute-macro.md) records the support-macro
-  decision, migration phases, and known limitations for conditional
-  `#[expect(...)]` usage.
-- [Architectural decision record (ADR) 003: formal proof strategy for clone
+The `docs/adrs/` directory holds the architectural decision records (ADRs).
+Each file follows `adr-nnnn-title-slug.md`, as the
+[documentation style guide](documentation-style-guide.md) prescribes.
+
+- [Architectural decision record (ADR) 0001: prebuilt Dylint lint library
+  distribution](adrs/adr-0001-prebuilt-dylint-library-distribution.md) records
+  the decision to ship prebuilt Dylint libraries and the constraints that
+  follow from that release model.
+- [Architectural decision record (ADR) 0002: attribute macro for conditional
+  Dylint
+  `expect`](adrs/adr-0002-attribute-macro-for-conditional-dylint-expect.md)
+  records the support-macro decision, migration phases, and known limitations
+  for conditional `#[expect(...)]` usage.
+- [Architectural decision record (ADR) 0003: formal proof strategy for the clone
   detector
-  pipeline](adr-003-formal-proof-strategy-for-clone-detector-pipeline.md)
-  records the formal verification direction for the clone detector pipeline and
-  its proof boundaries.
-- [Architectural decision record (ADR) 004: pin-only mutation-testing
-  contract](adr-004-pin-only-mutation-testing-contract.md) records why the
-  shared mutation workflow tests its declared configuration without claiming
-  parity with the continuous integration test baseline.
-- [Architectural decision record (ADR) 005: adopt the shared CV-005 contract
-  library](adr-005-adopt-the-shared-cv005-contract-library.md) records the move
-  from a local copy of the CV-005 contract to the pinned shared check.
-- [Architectural decision record (ADR) 006: directory-based module
-  layout](adr-006-directory-based-module-layout.md) records the `mod.rs` module
-  convention and the extraction of oversized test modules into sibling files,
-  and states plainly that the 400-line budget is not yet machine-enforced here.
+  pipeline](adrs/adr-0003-formal-proof-strategy-for-the-clone-detector-pipeline.md)
+  records the formal verification direction for the clone detector pipeline
+  and its proof boundaries.
+- [Architectural decision record (ADR) 0004: pin-only mutation-testing
+  contract](adrs/adr-0004-pin-only-mutation-testing-contract.md) records why
+  the shared mutation workflow tests its declared configuration without
+  claiming parity with the continuous integration test baseline.
+- [Architectural decision record (ADR) 0005: adopt the shared CV-005 contract
+  library](adrs/adr-0005-adopt-the-shared-cv-005-contract-library.md) records
+  the move from a local copy of the CV-005 contract to the pinned shared check.
+- [Architectural decision record (ADR) 0006: directory-based module
+  layout](adrs/adr-0006-directory-based-module-layout.md) records the `mod.rs`
+  module convention and the extraction of oversized test modules into sibling
+  files, and states plainly that the 400-line budget is not yet
+  machine-enforced here.
 
 ## Requests for comments
 
+The `docs/rfcs/` directory holds requests for comments (RFCs). Each file follows
+`rfc-nnnn-title-slug.md`, as the
+[documentation style guide](documentation-style-guide.md) prescribes.
+
 - [RFC 0001: lint candidates derived from CodeRabbit review
-  findings](rfcs/0001-coderabbit-derived-lint-candidates.md) proposes new
-  Whitaker lints distilled from recurring CodeRabbit review findings in Rust
-  code.
-- [RFC 0002: `string_continuation_style`](rfcs/0002-string-continuation-style.md)
+  findings](rfcs/rfc-0001-lint-candidates-derived-from-coderabbit-review-findings.md)
+  proposes new Whitaker lints distilled from recurring CodeRabbit review
+  findings in Rust code.
+- [RFC 0002: `string_continuation_style`](rfcs/rfc-0002-string-continuation-style.md)
   proposes a context-sensitive lint that prefers `concat!()` only when it can
   preserve a cooked string literal's semantics and surrounding grammar.
-- [RFC 0003: `missing_docs_in_test_functions`](rfcs/0003-missing-docs-in-test-functions.md)
+- [RFC 0003: `missing_docs_in_test_functions`](rfcs/rfc-0003-missing-docs-in-test-functions.md)
   proposes a pre-expansion lint that requires documentation for source-authored
   functions in configured Rust test-source paths without inspecting generated
   test code.

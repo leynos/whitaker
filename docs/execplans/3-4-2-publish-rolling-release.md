@@ -28,9 +28,9 @@ Success is observable by:
 
 ## Constraints
 
-- The artefact naming scheme must follow ADR-001 exactly:
+- The artefact naming scheme must follow ADR 0001 exactly:
   `whitaker-lints-<git_sha>-<toolchain>-<target>.tar.zst`.
-- The manifest JSON schema must match ADR-001 § Decision outcome.
+- The manifest JSON schema must match ADR 0001 § Decision outcome.
 - The five supported target triples are those defined in
   `installer/src/artefact/target.rs:SUPPORTED_TARGETS`.
 - The pinned toolchain is `nightly-2025-09-18` from
@@ -102,7 +102,7 @@ Success is observable by:
 - [x] Stage F: Add a Makefile `package-lints` target for local
   testing.
 - [x] Stage G: Run `make check-fmt`, `make lint`, `make test`.
-- [x] Stage H: Update `docs/roadmap.md` and `docs/adr-001-*`
+- [x] Stage H: Update `docs/roadmap.md` and `docs/adrs/adr-0001-*`
   design doc.
 - [x] Stage I: Write the execplan to `docs/execplans/3-4-2-*`.
 
@@ -171,7 +171,7 @@ All stages completed successfully. Key outcomes:
   filename convention).
 - `make check-fmt`, `make lint`, and `make test` all pass.
 - Roadmap items 3.4.2 and 3.4.3 marked complete.
-- ADR-001 updated with implementation notes.
+- ADR 0001 updated with implementation notes.
 - 3 new workspace dependencies added: `sha2`, `tar`, `zstd`.
 - No existing public API surfaces changed.
 - No `unsafe` code introduced.
@@ -183,8 +183,8 @@ The Whitaker project is a collection of Dylint lint libraries for Rust,
 organized as a Cargo workspace. The key areas for this task are:
 
 **Artefact domain model** (`installer/src/artefact/`): Implemented in task
-3.4.1, this module contains validated newtypes for all components of the
-ADR-001 artefact naming and manifest schema:
+3.4.1, this module contains validated newtypes for all components of the ADR
+0001 artefact naming and manifest schema:
 
 - `ArtefactName` (`naming.rs`) — produces filenames like
   `whitaker-lints-abc1234-nightly-2025-09-18-x86_64-unknown-linux-gnu.tar.zst`
@@ -228,9 +228,9 @@ taking `&mut World`.
 `serde_json`, `thiserror`, `rstest` 0.26.1, `rstest-bdd` 0.5.0 are already
 declared.
 
-**ADR-001** (`docs/adr-001-prebuilt-dylint-libraries.md`): Specifies the five
-target triples, artefact naming, manifest schema, verification policy, and
-rolling release model.
+**ADR 0001** (`docs/adrs/adr-0001-prebuilt-dylint-library-distribution.md`):
+Specifies the five target triples, artefact naming, manifest schema,
+verification policy, and rolling release model.
 
 ## Plan of work
 
@@ -238,7 +238,7 @@ rolling release model.
 
 Add `#[derive(serde::Serialize)]` (and custom `Serialize` impls where needed)
 to the existing artefact domain types so that `Manifest` can be serialized to
-JSON matching the ADR-001 schema. The newtypes (`GitSha`, `ToolchainChannel`,
+JSON matching the ADR 0001 schema. The newtypes (`GitSha`, `ToolchainChannel`,
 `TargetTriple`, `Sha256Digest`) should serialize as their inner string value.
 `SchemaVersion` should serialize as its inner `u32`. `GeneratedAt` should
 serialize as its inner string.
@@ -253,7 +253,7 @@ Files modified:
 - `installer/src/artefact/manifest.rs` — added `Serialize` to
   `ManifestProvenance`, `ManifestContent`, `Manifest`, `GeneratedAt`; added
   `#[serde(flatten)]` to provenance and content fields in `Manifest` so the
-  JSON is flat as specified in ADR-001
+  JSON is flat as specified in ADR 0001
 
 ### Stage B — Packaging module
 
@@ -305,7 +305,7 @@ Created `installer/src/artefact/packaging_tests.rs` with 7 rstest tests:
    matches the well-known constant.
 2. `create_archive_contains_files` — archive contains expected
    entries.
-3. `generate_manifest_json_matches_schema` — all 7 ADR-001 keys
+3. `generate_manifest_json_matches_schema` — all 7 ADR 0001 keys
    present.
 4. `package_artefact_produces_valid_archive` — full pipeline
    produces valid archive with library and manifest.
@@ -345,8 +345,8 @@ stage.
 ### Stage H — Documentation updates
 
 Marked roadmap items 3.4.2 and 3.4.3 as complete. Added implementation notes
-section to ADR-001 documenting the rolling release strategy, manifest inclusion
-approach, serialization-only approach, and packaging module location.
+section to ADR 0001 documenting the rolling release strategy, manifest
+inclusion approach, serialization-only approach, and packaging module location.
 
 ### Stage I — Write execplan
 
@@ -362,7 +362,7 @@ Quality criteria:
 - New BDD scenarios (5) in `artefact_packaging.feature` pass.
 - Unit tests for `compute_sha256`, `create_archive`,
   `generate_manifest_json`, and `package_artefact` pass.
-- Serialized manifest JSON contains all 7 ADR-001 keys at the
+- Serialized manifest JSON contains all 7 ADR 0001 keys at the
   top level.
 - `.github/workflows/rolling-release.yml` is syntactically valid
   YAML with correct GitHub Actions schema.
@@ -485,7 +485,7 @@ its `provenance` and `content` fields to produce a flat JSON object.
 - `Cargo.toml` (workspace) — added workspace dependency entries
 - `Makefile` — added `package-lints` target
 - `docs/roadmap.md` — marked 3.4.2 and 3.4.3 complete
-- `docs/adr-001-prebuilt-dylint-libraries.md` — added
+- `docs/adrs/adr-0001-prebuilt-dylint-library-distribution.md` — added
   implementation notes
 
 ## Revision note

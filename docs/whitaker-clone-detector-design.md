@@ -704,10 +704,10 @@ cargo whitaker clones report --in target/whitaker/clones.refined.sarif --html
 
 6. **No new ADR is needed for 7.3.1.** The lowered-IR boundary is a local
    adapter decision, and the proof strategy is an application of
-   [ADR 003](adr-003-formal-proof-strategy-for-clone-detector-pipeline.md): use
-   ordinary tests for broad behavioural coverage, Kani for bounded execution of
-   selected Rust code, and Verus for sidecar proofs with explicit trust
-   boundaries.
+   [ADR 0003](adrs/adr-0003-formal-proof-strategy-for-the-clone-detector-pipeline.md):
+   use ordinary tests for broad behavioural coverage, Kani for bounded
+   execution of selected Rust code, and Verus for sidecar proofs with explicit
+   trust boundaries.
 
 ## Minimal code skeletons (selected)
 

@@ -288,14 +288,14 @@ contracts that are not already covered.
 ## Decision log
 
 - Decision: Keep 7.2.8 as Kani-focused implementation work, not Verus work.
-  Rationale: ADR 003 assigns stateful, bounded `LshIndex` candidate-pair
+  Rationale: ADR 0003 assigns stateful, bounded `LshIndex` candidate-pair
   invariants to Kani and reserves Verus for pure constructor and ordering
   proofs. Date/Author: 2026-05-21T22:20:13Z / Codex.
 
 - Decision: Treat ordinary tests as the first regression net and Kani as the
-  exhaustive bounded invariant check. Rationale: ADR 003 explicitly says formal
-  proofs do not replace unit, behaviour, or integration tests. Date/Author:
-  2026-05-21T22:20:13Z / Codex.
+  exhaustive bounded invariant check. Rationale: ADR 0003 explicitly says
+  formal proofs do not replace unit, behaviour, or integration tests.
+  Date/Author: 2026-05-21T22:20:13Z / Codex.
 
 - Decision: Keep harnesses adjacent to the index module in
   `crates/whitaker_clones_core/src/index/kani.rs`. Rationale: The crate already
@@ -469,7 +469,7 @@ that consumes `MinHashSignature` values.
 Relevant documentation to keep open while implementing:
 
 - `docs/roadmap.md`, item 7.2.8.
-- `docs/adr-003-formal-proof-strategy-for-clone-detector-pipeline.md`.
+- `docs/adrs/adr-0003-formal-proof-strategy-for-the-clone-detector-pipeline.md`.
 - `docs/whitaker-clone-detector-design.md`, especially "Implementation
   decisions" for 7.2.2 through 7.2.7 and "Proof and verification scope".
 - `docs/rust-testing-with-rstest-fixtures.md`.
@@ -725,7 +725,7 @@ without changing production semantics. It must not add a new port or adapter
 layer for formal verification; the existing boundary is sufficient because the
 proof tooling is an external validation adapter around the domain crate.
 
-Revision note: Initial draft created from the roadmap, ADR 003, clone-detector
+Revision note: Initial draft created from the roadmap, ADR 0003, clone-detector
 design, existing `LshIndex` code, nearby proof execplans, Wyvern planning
 reports, and current Kani documentation. This established the approval gate and
 recorded the implementation route.

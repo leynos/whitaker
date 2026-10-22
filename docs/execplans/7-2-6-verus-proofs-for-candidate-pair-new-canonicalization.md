@@ -59,8 +59,8 @@ Observable outcome:
 Use these repository documents during implementation:
 
 - `docs/roadmap.md` for the exact 7.2.6 scope and dependency on 7.2.4.
-- `docs/adr-003-formal-proof-strategy-for-clone-detector-pipeline.md` for the
-  Verus-versus-Kani proof split.
+- `docs/adrs/adr-0003-formal-proof-strategy-for-the-clone-detector-pipeline.md`
+  for the Verus-versus-Kani proof split.
 - `docs/whitaker-clone-detector-design.md` for the published MinHash, LSH,
   `CandidatePair`, and SARIF contracts.
 - `docs/developers-guide.md` for the proof workflow and trust-boundary wording
@@ -287,7 +287,7 @@ The direct upstream and downstream dependencies that matter are:
 
 ### Proof shape to preserve
 
-ADR 003 assigns small canonicalization invariants to Verus and bounded
+ADR 0003 assigns small canonicalization invariants to Verus and bounded
 collection-heavy behaviour to Kani. That means 7.2.6 should stay intentionally
 small:
 

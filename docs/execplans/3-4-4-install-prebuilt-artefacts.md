@@ -13,7 +13,7 @@ The canonical plan file is `docs/execplans/3-4-4-install-prebuilt-artefacts.md`.
 ## Purpose / big picture
 
 The Whitaker installer currently builds every Dylint lint library locally,
-which is slow. Architecture Decision Record (ADR-001) specifies a
+which is slow. Architecture Decision Record (ADR 0001) specifies a
 download-first, compile-second approach: before local compilation the installer
 should attempt to download a prebuilt `.tar.zst` archive from the GitHub
 rolling release, verify its SHA-256 checksum against an external manifest, and
@@ -129,7 +129,7 @@ see a warning and the existing build path runs unchanged.
 ## Outcomes & retrospective
 
 All 9 phases completed. The installer now implements the download-first
-strategy from ADR-001:
+strategy from ADR 0001:
 
 - 4 new modules created: `download`, `extraction`, `manifest_parser`,
   `prebuilt`.
@@ -139,7 +139,7 @@ strategy from ADR-001:
 - 6 BDD scenarios in `prebuilt_download.feature` covering the end-to-end
   workflow.
 - CI workflow updated to upload target-specific manifests.
-- ADR-001 and roadmap updated.
+- ADR 0001 and roadmap updated.
 
 All constraints respected: no file exceeds 400 lines, no breaking changes to
 existing public APIs, en-GB-oxendict spelling throughout.
@@ -510,8 +510,8 @@ Create `installer/tests/behaviour_prebuilt.rs` (~250 lines):
 ### Phase 8: Update documentation and roadmap
 
 - `docs/roadmap.md`: mark 3.4.4 as `[x]`.
-- `docs/adr-001-prebuilt-dylint-libraries.md`: add implementation notes
-  section for task 3.4.4 covering:
+- `docs/adrs/adr-0001-prebuilt-dylint-library-distribution.md`: add
+  implementation notes section for task 3.4.4 covering:
   - Module structure (download, extraction, manifest_parser, prebuilt).
   - `ureq` choice rationale.
   - Custom `Deserialize` approach.
@@ -546,7 +546,7 @@ Quality criteria:
 - Format: `make check-fmt` passes.
 - No file exceeds 400 lines.
 - Roadmap 3.4.4 marked done.
-- ADR-001 updated with implementation notes.
+- ADR 0001 updated with implementation notes.
 
 Quality method:
 
@@ -586,7 +586,8 @@ Key files modified:
 - `.github/workflows/rolling-release.yml` (upload manifests)
 - `installer/src/bin/package_lints.rs` (target-specific manifest name)
 - `docs/roadmap.md` (mark 3.4.4 done)
-- `docs/adr-001-prebuilt-dylint-libraries.md` (implementation notes)
+- `docs/adrs/adr-0001-prebuilt-dylint-library-distribution.md` (implementation
+  notes)
 
 ## Interfaces and dependencies
 
