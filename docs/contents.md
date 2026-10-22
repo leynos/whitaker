@@ -112,6 +112,14 @@
   proposes a pre-expansion lint that requires documentation for source-authored
   functions in configured Rust test-source paths without inspecting generated
   test code.
+- [RFC 0007: weak representations at domain
+  boundaries](rfcs/0007-weak-domain-boundaries.md) proposes the `DOMAIN` lint
+  family and rules for discarded parser witnesses, validation without
+  refinement, and repeated boundary parsing.
+- [RFC 0008: fragile types and invalid-state
+  encodings](rfcs/0008-fragile-types.md) proposes correlation-aware rules for
+  manual tagged unions, constrained optional and boolean fields, bypassable
+  invariants, and invalid defaults.
 
 ## Planning material
 
