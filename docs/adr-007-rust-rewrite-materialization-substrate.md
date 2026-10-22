@@ -11,19 +11,19 @@ production rewrite backend until the spike evidence has been reviewed.
 
 ## Context and problem statement
 
-Whitaker's proposed rewrite pipeline in [RFC 0007][rfc-0003],
-[RFC 0008][rfc-0004], and [RFC 0009][rfc-0005] separates semantic detection,
+Whitaker's proposed rewrite pipeline in [RFC 0007][rfc-0007],
+[RFC 0008][rfc-0008], and [RFC 0009][rfc-0009] separates semantic detection,
 source edit materialization, compiler validation, and transactional
 application. Dylint rules identify an ownership or borrowing shape and emit a
-versioned `RewriteIntent`. A materializer must then turn that intent into one or
-more precise `TextEditPlan` values before the compiler-validation and
+versioned `RewriteIntent`. A materializer must then turn that intent into one
+or more precise `TextEditPlan` values before the compiler-validation and
 application stages can proceed.
 
 The materializer is not responsible for deciding whether two source expressions
-refer to the same Rust place, whether a value escapes, or whether Polonius makes
-a proposed borrow valid. Rust compiler analysis and the rewrite checker own
-those questions. The materializer is responsible for a different, deceptively
-sharp problem:
+refer to the same Rust place, whether a value escapes, or whether Polonius
+makes a proposed borrow valid. Rust compiler analysis and the rewrite checker
+own those questions. The materializer is responsible for a different,
+deceptively sharp problem:
 
 - locate the syntax identified by semantic anchors;
 - revalidate the expected local source shape;
@@ -41,10 +41,11 @@ Two existing Rust libraries appear suitable as the foundation:
 2. `ra_ap_syntax`, using rust-analyzer's full-fidelity Rust concrete syntax tree
    (CST), typed abstract syntax tree (AST) wrappers, and `SyntaxEditor`.
 
-The first option offers the most direct "template with holes" programming model.
-The second offers a Rust-specific, full-fidelity syntax model and structured
-editing operations. Neither option should be selected from API appearance
-alone. Whitaker needs evidence from the rewrites it actually intends to ship.
+The first option offers the most direct "template with holes" programming
+model. The second offers a Rust-specific, full-fidelity syntax model and
+structured editing operations. Neither option should be selected from API
+appearance alone. Whitaker needs evidence from the rewrites it actually intends
+to ship.
 
 ## Decision drivers
 
@@ -108,9 +109,10 @@ capture, and replacement, with `ast-grep-language` providing the Rust grammar
 and pattern preprocessing.
 
 A materializer would receive a semantic anchor and recipe payload, restrict the
-search to the anchored item or statement range, apply a recipe-specific pattern,
-and confirm that captured source ranges agree with the compiler-derived
-captures. The replacement would use ast-grep metavariables in a template.
+search to the anchored item or statement range, apply a recipe-specific
+pattern, and confirm that captured source ranges agree with the
+compiler-derived captures. The replacement would use ast-grep metavariables in
+a template.
 
 A representative recipe might resemble:
 
@@ -161,9 +163,9 @@ nodes, and build structured edits with `SyntaxEditor`.
 
 Whitaker already exact-pins `ra_ap_syntax` for clone-detector AST refinement.
 Option B may therefore reuse a parser dependency and version-management policy
-that the repository already carries. That prior investment is relevant evidence,
-not a foregone selection: the spike must still measure the incremental editing
-API, adapter complexity, build footprint, and update burden.
+that the repository already carries. That prior investment is relevant
+evidence, not a foregone selection: the spike must still measure the
+incremental editing API, adapter complexity, build footprint, and update burden.
 
 A materializer would resolve compiler-derived byte ranges to syntax nodes or
 tokens, cast them to expected typed AST nodes, construct replacement fragments,
@@ -211,19 +213,19 @@ Disadvantages and risks:
 Screen reader note: The following table compares the two candidate substrates
 against Whitaker's decision drivers.
 
-| Topic | Option A: ast-grep | Option B: `ra_ap_syntax` |
-| --- | --- | --- |
-| Template-shaped local rewrites | Native metavariable model | Requires recipe code or a Whitaker template layer |
-| Rust-specific typed syntax | Limited | Strong |
-| Full-fidelity source model | Tree-sitter source ranges and captured text | Explicit design property |
-| Statement-range edits | Possible with expanded ranges and custom planning | Structured node and token editing |
-| Multi-file edits | Composed by Whitaker | Composed by Whitaker |
-| Semantic identity | Must be supplied by Whitaker | Must be supplied by Whitaker |
-| Trivia and punctuation control | Recipe-dependent | Rust-specific syntax operations available |
-| API and version churn | Adapter required | Exact synchronized version pin required |
-| Expected simple-recipe effort | Lower | Medium |
-| Expected complex-recipe effort | Medium to high | Lower to medium |
-| Dependency and cold-build cost | To be measured | To be measured |
+| Topic                          | Option A: ast-grep                                | Option B: `ra_ap_syntax`                          |
+| ------------------------------ | ------------------------------------------------- | ------------------------------------------------- |
+| Template-shaped local rewrites | Native metavariable model                         | Requires recipe code or a Whitaker template layer |
+| Rust-specific typed syntax     | Limited                                           | Strong                                            |
+| Full-fidelity source model     | Tree-sitter source ranges and captured text       | Explicit design property                          |
+| Statement-range edits          | Possible with expanded ranges and custom planning | Structured node and token editing                 |
+| Multi-file edits               | Composed by Whitaker                              | Composed by Whitaker                              |
+| Semantic identity              | Must be supplied by Whitaker                      | Must be supplied by Whitaker                      |
+| Trivia and punctuation control | Recipe-dependent                                  | Rust-specific syntax operations available         |
+| API and version churn          | Adapter required                                  | Exact synchronized version pin required           |
+| Expected simple-recipe effort  | Lower                                             | Medium                                            |
+| Expected complex-recipe effort | Medium to high                                    | Lower to medium                                   |
+| Dependency and cold-build cost | To be measured                                    | To be measured                                    |
 
 _Table 1: Expected trade-offs between ast-grep and `ra_ap_syntax`._
 
@@ -312,8 +314,8 @@ Generated timing data and temporary rewritten workspaces should remain under
 
 ### Shared spike interface
 
-Both prototypes must implement the same small interface and return the same edit
-model.
+Both prototypes must implement the same small interface and return the same
+edit model.
 
 ```rust,no_run
 pub trait SpikeBackend {
@@ -383,8 +385,7 @@ and comment ownership.
 
 Exercise `owned_param_causes_clone` across at least three files. Change a
 private `String` parameter to `&str`, remove `.clone()` at multiple call sites,
-and
-preserve documentation and attributes on the function.
+and preserve documentation and attributes on the function.
 
 The rewrite must:
 
@@ -449,8 +450,8 @@ The spike must also cover failure and fidelity cases:
 - a structurally valid but unsupported recipe variant.
 
 The required behaviour is deterministic rejection or an exact expected edit.
-Neither backend may panic, silently widen the edit range, or rewrite a different
-same-spelled expression.
+Neither backend may panic, silently widen the edit range, or rewrite a
+different same-spelled expression.
 
 ### Validation pipeline
 
@@ -643,25 +644,24 @@ Negative consequences:
 
 ## Architectural rationale
 
-The rewriter's most dangerous failure mode is not an obvious parser error.
-It is a plausible diff that targets the wrong same-spelled expression, drops a
+The rewriter's most dangerous failure mode is not an obvious parser error. It
+is a plausible diff that targets the wrong same-spelled expression, drops a
 comment, widens a deletion, or quietly makes future recipes depend on ad hoc
-byte surgery.
-The substrate decision therefore deserves evidence from semantic anchors,
-statement edits, multi-file changes, trivia, stale input, and Polonius-only
-output.
+byte surgery. The substrate decision therefore deserves evidence from semantic
+anchors, statement edits, multi-file changes, trivia, stale input, and
+Polonius-only output.
 
 A bounded spike keeps that evidence inexpensive while protecting the larger
-rewrite architecture. Selecting one backend after both implementations cross the
-same hard gates gives Whitaker a coherent syntax-editing foundation without
+rewrite architecture. Selecting one backend after both implementations cross
+the same hard gates gives Whitaker a coherent syntax-editing foundation without
 letting either a pleasant template syntax or an impressive AST API win by
 brochure.
 
 ## References
 
-[rfc-0003]: rfcs/0007-compiler-validated-rewrite-checking.md
-[rfc-0004]: rfcs/0008-borrow-workaround-lint-family.md
-[rfc-0005]: rfcs/0009-validated-ownership-and-borrow-rewriter.md
+[rfc-0007]: rfcs/0007-compiler-validated-rewrite-checking.md
+[rfc-0008]: rfcs/0008-borrow-workaround-lint-family.md
+[rfc-0009]: rfcs/0009-validated-ownership-and-borrow-rewriter.md
 
 [^1]: `ast-grep-core` crate documentation, parsing, traversal, search, and
     replacement APIs: <https://docs.rs/ast-grep-core/latest/ast_grep_core/>.

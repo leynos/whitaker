@@ -123,8 +123,8 @@ portable API.
 
 ### 3.3. Let the compiler reject speculative transformations
 
-Candidate generation can be moderately broad when the final diagnostic is
-gated by RFC 0007. Detection still needs a strict false-positive budget because
+Candidate generation can be moderately broad when the final diagnostic is gated
+by RFC 0007. Detection still needs a strict false-positive budget because
 compiler acceptance does not prove semantic equivalence.
 
 ### 3.4. Separate portability from semantic confidence
@@ -185,7 +185,7 @@ The rules must remain quiet when the shape is imposed by:
 - Infer that every indirect ownership shape was caused by NLL.
 - Prove panic, drop-order, transactional, or performance equivalence.
 - Rewrite public APIs by default.
-- Analyze arbitrary unsafe code.
+- Analyse arbitrary unsafe code.
 - Understand undocumented effects of every third-party collection type.
 - Emit unvalidated warnings by default.
 - Make genuine simultaneous mutable aliases legal.
@@ -218,8 +218,8 @@ across an overlay replay. Each intent should therefore record:
 
 ### 5.3. Generic recipe envelope
 
-The shared model should avoid adding every rule payload to one central enum.
-A generic envelope permits independent lint and rewriter evolution.
+The shared model should avoid adding every rule payload to one central enum. A
+generic envelope permits independent lint and rewriter evolution.
 
 ```rust,no_run
 pub struct RewriteIntent {
@@ -252,8 +252,9 @@ WHITAKER_REWRITE_SESSION_DIR=target/whitaker/rewrite-scan/<session>
 ```
 
 Lint processes should atomically write one JSON file per crate process and
-candidate. Files should be named from a crate disambiguator, process identifier,
-and monotonic local counter. Aggregation occurs after Cargo finishes.
+candidate. Files should be named from a crate disambiguator, process
+identifier, and monotonic local counter. Aggregation occurs after Cargo
+finishes.
 
 Ordinary `cargo dylint` use without a Whitaker session should behave as follows:
 
@@ -301,34 +302,37 @@ clear.
 
 ## 6. Proposed rule inventory
 
-| Code | Canonical name | Primary workaround | Initial level | Initial rewrite policy |
-| --- | --- | --- | --- | --- |
-| `BOR001` | `lookup_then_relookup` | Repeated lookup around conditional mutation | Experimental warn after validation | Automatic for mechanical candidates |
-| `BOR002` | `remove_then_reinsert` | Temporarily removing an entry to mutate it | Experimental allow | Review by default |
-| `BOR003` | `take_then_restore` | `mem::take`, `replace`, or `Option::take` followed by restoration | Experimental allow | Review by default |
-| `BOR004` | `index_round_trip_for_mutation` | `position` or index lookup followed by `get_mut` | Experimental warn after validation | Automatic for single-pass equivalents |
-| `BOR005` | `staged_keys_before_mutation` | Collecting keys or IDs solely for a later mutation loop | Experimental allow | Review by default |
-| `BOR006` | `split_search_and_mutate_pass` | Duplicated read and write traversals | Experimental warn after validation | Automatic for pure repeated predicates |
-| `BOR007` | `snapshot_around_mutation` | Owned clone retained only as a read view during mutation | Experimental allow | Review by default |
-| `BOR008` | `borrow_scope_fence` | Extra block, reference drop, or binding solely to end a borrow | Experimental allow | Automatic only for reference-only fences |
-| `BOR009` | `single_use_borrow_split_helper` | Private helper introduced to split one borrow-sensitive operation | Research allow | Diff only |
+| Code     | Canonical name                   | Primary workaround                                                | Initial level                      | Initial rewrite policy                   |
+| -------- | -------------------------------- | ----------------------------------------------------------------- | ---------------------------------- | ---------------------------------------- |
+| `BOR001` | `lookup_then_relookup`           | Repeated lookup around conditional mutation                       | Experimental warn after validation | Automatic for mechanical candidates      |
+| `BOR002` | `remove_then_reinsert`           | Temporarily removing an entry to mutate it                        | Experimental allow                 | Review by default                        |
+| `BOR003` | `take_then_restore`              | `mem::take`, `replace`, or `Option::take` followed by restoration | Experimental allow                 | Review by default                        |
+| `BOR004` | `index_round_trip_for_mutation`  | `position` or index lookup followed by `get_mut`                  | Experimental warn after validation | Automatic for single-pass equivalents    |
+| `BOR005` | `staged_keys_before_mutation`    | Collecting keys or IDs solely for a later mutation loop           | Experimental allow                 | Review by default                        |
+| `BOR006` | `split_search_and_mutate_pass`   | Duplicated read and write traversals                              | Experimental warn after validation | Automatic for pure repeated predicates   |
+| `BOR007` | `snapshot_around_mutation`       | Owned clone retained only as a read view during mutation          | Experimental allow                 | Review by default                        |
+| `BOR008` | `borrow_scope_fence`             | Extra block, reference drop, or binding solely to end a borrow    | Experimental allow                 | Automatic only for reference-only fences |
+| `BOR009` | `single_use_borrow_split_helper` | Private helper introduced to split one borrow-sensitive operation | Research allow                     | Diff only                                |
 
 _Table 1: Proposed borrow-workaround rules and first-release policy._
 
 The `BOR` family should be separate from the broader `OWN` or ownership-shape
-family. `OWN` rules diagnose ownership inflation. `BOR` rules diagnose
+family.[^1] `OWN` rules diagnose ownership inflation. `BOR` rules diagnose
 compiler-validated indirect control-flow or data-access shapes.
 
 ## 7. Rule contracts
 
+Each rule follows the Dylint detection conventions established for the
+suite.[^2]
+
 ### 7.1. `BOR001 lookup_then_relookup`
 
-#### Intent
+#### BOR001 Intent
 
 Detect repeated lookup of the same logical key and receiver when a direct
 conditional borrow or a dedicated entry API removes the repetition.
 
-#### Candidate shape
+#### BOR001 Candidate shape
 
 ```rust
 if map.contains_key(&key) {
@@ -342,7 +346,7 @@ if map.contains_key(&key) {
 A second form searches mutably, returns or uses the successful borrow, then
 performs a mutation and repeats the lookup on the failure path.
 
-#### Candidate alternatives
+#### BOR001 Candidate alternatives
 
 The materializer should generate, in order:
 
@@ -368,9 +372,9 @@ match map.get_mut(&key) {
 }
 ```
 
-The second form is a canonical Polonius Alpha use case.
+The second form is a canonical Polonius Alpha use case.[^3]
 
-#### Detection requirements
+#### BOR001 Detection requirements
 
 - Receiver places resolve to the same value.
 - Key expressions have the same normalized expression fingerprint.
@@ -380,7 +384,7 @@ The second form is a canonical Polonius Alpha use case.
   invariant.
 - Macro-only spans are excluded.
 
-#### Suppressions
+#### BOR001 Suppressions
 
 Suppress when:
 
@@ -392,13 +396,13 @@ Suppress when:
 
 ### 7.2. `BOR002 remove_then_reinsert`
 
-#### Intent
+#### BOR002 Intent
 
 Detect a value removed from a collection, used locally, and reinserted into the
 same receiver under the same key when a direct mutable borrow is a viable
 candidate.
 
-#### Candidate shape
+#### BOR002 Candidate shape
 
 ```rust
 let mut value = map.remove(&key)?;
@@ -406,7 +410,7 @@ value.refresh();
 map.insert(key, value);
 ```
 
-#### Detection requirements
+#### BOR002 Detection requirements
 
 - `remove` and `insert` resolve to recognized methods.
 - Receiver and key identity match.
@@ -417,7 +421,7 @@ map.insert(key, value);
 - The key is not mutated.
 - No second value is inserted under the key.
 
-#### Semantic caveat
+#### BOR002 Semantic caveat
 
 Remove-and-reinsert changes observable state during the middle of the region.
 It may also change panic behaviour, drop order, map order, allocation, or
@@ -427,7 +431,7 @@ The rule should therefore mark the candidate `ReviewRequired` unless the
 intervening operations are a bounded sequence of field assignments or
 recognized no-escape methods on the removed value.
 
-#### Suppressions
+#### BOR002 Suppressions
 
 Suppress when:
 
@@ -440,12 +444,12 @@ Suppress when:
 
 ### 7.3. `BOR003 take_then_restore`
 
-#### Intent
+#### BOR003 Intent
 
 Detect a field or local temporarily replaced by an empty/default value and
 restored from the same local.
 
-#### Candidate operations
+#### BOR003 Candidate operations
 
 - `std::mem::take`;
 - `std::mem::replace`;
@@ -453,7 +457,7 @@ restored from the same local.
 - `Vec::split_off(0)` followed by restoration, where recognized; and
 - configured equivalents.
 
-#### Candidate shape
+#### BOR003 Candidate shape
 
 ```rust
 let mut cache = std::mem::take(&mut self.cache);
@@ -461,7 +465,7 @@ rebuild(&mut cache, &mut self.index);
 self.cache = cache;
 ```
 
-#### Candidate alternatives
+#### BOR003 Candidate alternatives
 
 The materializer may attempt:
 
@@ -470,7 +474,7 @@ The materializer may attempt:
 - changing a same-module helper from `&mut self` to the exact fields it uses; or
 - inlining a single-use helper under the constraints of `BOR009`.
 
-#### Restrictions
+#### BOR003 Restrictions
 
 This rule is intentionally conservative. Taking a field can be a valid way to
 model ownership transfer, panic recovery, re-entrancy, or a state-machine
@@ -479,12 +483,12 @@ should never apply it automatically by default.
 
 ### 7.4. `BOR004 index_round_trip_for_mutation`
 
-#### Intent
+#### BOR004 Intent
 
 Detect a collection searched for an index or position and then immediately
 indexed mutably, when direct mutable iteration expresses the operation.
 
-#### Candidate shape
+#### BOR004 Candidate shape
 
 ```rust
 let index = items.iter().position(|item| item.id == wanted)?;
@@ -492,14 +496,14 @@ let item = items.get_mut(index)?;
 item.refresh();
 ```
 
-#### Preferred rewrite
+#### BOR004 Preferred rewrite
 
 ```rust
 let item = items.iter_mut().find(|item| item.id == wanted)?;
 item.refresh();
 ```
 
-#### Detection requirements
+#### BOR004 Detection requirements
 
 - The index local is used only for the subsequent access.
 - The collection is not structurally modified between search and access.
@@ -514,12 +518,12 @@ under NLL and should be preferred over a Polonius-only alternative.
 
 ### 7.5. `BOR005 staged_keys_before_mutation`
 
-#### Intent
+#### BOR005 Intent
 
 Detect a temporary collection of keys, IDs, or handles consumed exactly once by
 a following mutation loop.
 
-#### Candidate shape
+#### BOR005 Candidate shape
 
 ```rust
 let ids: Vec<_> = graph.nodes().map(Node::id).collect();
@@ -528,7 +532,7 @@ for id in ids {
 }
 ```
 
-#### Candidate alternatives
+#### BOR005 Candidate alternatives
 
 The materializer may attempt:
 
@@ -538,7 +542,7 @@ The materializer may attempt:
 - a field-split helper; or
 - a Polonius-only direct loop.
 
-#### Detection requirements
+#### BOR005 Detection requirements
 
 - The staging collection is local, non-escaping, and single-use.
 - Its item type is copied or cloned solely for staging.
@@ -553,12 +557,12 @@ default until corpus evidence demonstrates acceptable signal.
 
 ### 7.6. `BOR006 split_search_and_mutate_pass`
 
-#### Intent
+#### BOR006 Intent
 
 Detect two traversals over the same receiver where the first identifies a
 candidate and the second repeats the same search to mutate it.
 
-#### Candidate shape
+#### BOR006 Candidate shape
 
 ```rust
 let found = items.iter().any(|item| item.id == wanted);
@@ -569,7 +573,7 @@ if found {
 }
 ```
 
-#### Preferred rewrite
+#### BOR006 Preferred rewrite
 
 ```rust
 if let Some(item) = items.iter_mut().find(|item| item.id == wanted) {
@@ -580,7 +584,7 @@ if let Some(item) = items.iter_mut().find(|item| item.id == wanted) {
 The rule also covers an immutable `find` followed by a mutable `find` when the
 first result contributes only identity or existence.
 
-#### Detection requirements
+#### BOR006 Detection requirements
 
 - Receiver and predicate fingerprints match.
 - No mutation or externally visible call occurs between passes.
@@ -588,18 +592,18 @@ first result contributes only identity or existence.
 - The first pass contributes no additional value.
 - Short-circuit and iteration order remain equal.
 
-This rule overlaps `BOR004`; `BOR004` should win for explicit index
-round-trips. `BOR006` handles existence flags, copied IDs, and repeated
-predicates without an index local.
+This rule overlaps `BOR004`; `BOR004` should win for explicit index round-trips.
+`BOR006` handles existence flags, copied IDs, and repeated predicates without
+an index local.
 
 ### 7.7. `BOR007 snapshot_around_mutation`
 
-#### Intent
+#### BOR007 Intent
 
 Extend `clone_only_used_by_borrow` to clones whose only purpose is to provide a
 read view while the original owner is mutated.
 
-#### Candidate shape
+#### BOR007 Candidate shape
 
 ```rust
 let snapshot = self.document.clone();
@@ -612,7 +616,7 @@ The existing clone lint is expected to suppress this shape when borrowing the
 original appears to overlap mutation. `BOR007` should retain it as a
 path-sensitive rewrite candidate.
 
-#### Detection requirements
+#### BOR007 Detection requirements
 
 - Snapshot creation is clone-like.
 - Snapshot data is only read.
@@ -621,7 +625,7 @@ path-sensitive rewrite candidate.
 - No code observes snapshot identity.
 - A candidate field split or direct borrow can be materialized.
 
-#### Suppressions
+#### BOR007 Suppressions
 
 Suppress when the clone is recorded in history, retained after the mutation,
 compared with the result, used on an error path, or represents an immutable
@@ -631,7 +635,7 @@ This rule should remain review-only in the first release.
 
 ### 7.8. `BOR008 borrow_scope_fence`
 
-#### Intent
+#### BOR008 Intent
 
 Detect syntax whose only observable purpose appears to be forcing a borrow
 local out of scope before a later operation.
@@ -643,13 +647,13 @@ Candidate forms include:
 - an intermediate binding used once before a mutation; and
 - an immediately invoked closure used only as a scope.
 
-#### Candidate rewrite
+#### BOR008 Candidate rewrite
 
 The materializer removes the fence, flattens the block, or substitutes the
-single-use binding. RFC 0007 then determines whether NLL or Polonius accepts the
-result.
+single-use binding. RFC 0007 then determines whether NLL or Polonius accepts
+the result.
 
-#### Restrictions
+#### BOR008 Restrictions
 
 Flattening can change local name resolution and the drop time of owned values.
 The first release should require every affected local to be a reference, a
@@ -661,12 +665,12 @@ simplification.
 
 ### 7.9. `BOR009 single_use_borrow_split_helper`
 
-#### Intent
+#### BOR009 Intent
 
 Detect a small private helper called exactly once when inlining it permits a
 clearer direct ownership formulation.
 
-#### Candidate constraints
+#### BOR009 Candidate constraints
 
 The helper must be:
 
@@ -712,9 +716,9 @@ pub struct CandidateScore {
 }
 ```
 
-Performance claims must be descriptive unless benchmarked. Removing a
-temporary vector or duplicate lookup is mechanically observable; claiming an
-end-to-end speed-up is not.
+Performance claims must be descriptive unless benchmarked. Removing a temporary
+vector or duplicate lookup is mechanically observable; claiming an end-to-end
+speed-up is not.
 
 ## 9. Diagnostics and reporting
 
@@ -849,8 +853,8 @@ pub enum OriginalPlaceConflict {
 }
 ```
 
-`PotentiallyPathSensitive` should emit a rewrite intent for RFC 0007 rather than
-discarding the candidate. This is the principal integration point between
+`PotentiallyPathSensitive` should emit a rewrite intent for RFC 0007 rather
+than discarding the candidate. This is the principal integration point between
 Phase 9 and Polonius-aware validation.
 
 ## 12. Testing strategy
@@ -885,8 +889,8 @@ UI tests should verify candidate metadata as well as diagnostics.
 
 ### 12.3. Rewrite golden tests
 
-Every materializer should have golden before-and-after fixtures. Fixtures should
-preserve comments, attributes, indentation, and trailing commas.
+Every materializer should have golden before-and-after fixtures. Fixtures
+should preserve comments, attributes, indentation, and trailing commas.
 
 ### 12.4. Differential compiler tests
 
@@ -934,7 +938,7 @@ that a detector is too broad even if it emits no false final warning.
 - Implement `BOR004`.
 - Implement `BOR006`.
 - Ship all three behind `--experimental`.
-- Permit automatic application only after RFC 0007 validation.
+- Permit automatic application only after RFC 0007 validation.[^4]
 
 ### 13.3. Stage 3: Ownership-transfer rules
 
@@ -959,9 +963,9 @@ that a detector is too broad even if it emits no false final warning.
 
 ### 14.1. One broad `possible_borrow_workaround` lint
 
-A single lint would be simple to name but difficult to configure, test, explain,
-or rewrite. The candidate families have materially different semantics and
-risk. It is rejected.
+A single lint would be simple to name but difficult to configure, test,
+explain, or rewrite. The candidate families have materially different semantics
+and risk. It is rejected.
 
 ### 14.2. Emit every syntactic candidate and let the checker filter
 
@@ -1025,8 +1029,8 @@ evidence supports promotion.
 [^2]: Whitaker Dylint suite design:
     `../whitaker-dylint-suite-design.md`
 
-[^3]: RFC 0007, compiler-validated rewrite checking:
-    `0007-compiler-validated-rewrite-checking.md`
-
-[^4]: Rust Project Goals, "Stabilize and model Polonius Alpha":
+[^3]: Rust Project Goals, "Stabilize and model Polonius Alpha":
     <https://rust-lang.github.io/rust-project-goals/2026/polonius.html>
+
+[^4]: RFC 0007, compiler-validated rewrite checking:
+    `0007-compiler-validated-rewrite-checking.md`
