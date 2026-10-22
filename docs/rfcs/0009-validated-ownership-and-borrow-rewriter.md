@@ -1,28 +1,28 @@
-# RFC 0005: Validated ownership and borrow rewriter
+# RFC 0009: Validated ownership and borrow rewriter
 
 ## Preamble
 
-- **RFC number:** 0005
+- **RFC number:** 0009
 - **Status:** Proposed
 - **Created:** 2026-08-30
 - **Scope:** Discovery, materialization, review, and transactional
   application of ownership and borrowing rewrites.
-- **Depends on:** RFC 0003.
-- **Consumes rules from:** Whitaker Phase 9 and RFC 0004.
+- **Depends on:** RFC 0007.
+- **Consumes rules from:** Whitaker Phase 9 and RFC 0008.
 - **Precedence documents:** `docs/whitaker-cli-design.md`,
   `docs/ownership-shape-lints-design.md`, and any later accepted ADRs.
 
 ## 1. Summary
 
 This RFC proposes a first-class Whitaker rewriter for the existing ownership
-lints and the borrow-workaround rules proposed by RFC 0004.
+lints and the borrow-workaround rules proposed by RFC 0008.
 
 The rewriter should:
 
 1. collect versioned rewrite intents from Dylint rules;
 2. resolve their semantic anchors against current source;
 3. materialize one or more concrete rewrite alternatives;
-4. invoke RFC 0003 to classify each alternative under NLL and Polonius;
+4. invoke RFC 0007 to classify each alternative under NLL and Polonius;
 5. rank compiler-valid alternatives;
 6. show a deterministic diff;
 7. apply selected edit groups transactionally; and
@@ -100,7 +100,7 @@ The rustc diagnostic system supports applicability levels ranging from
 suggestions.[^1] Whitaker needs a richer model because several proposed
 transformations span functions or files.
 
-RFC 0003 defines a compiler-validation engine. RFC 0004 defines nine additional
+RFC 0007 defines a compiler-validation engine. RFC 0008 defines nine additional
 candidate-generating rules. The planned Phase 11 overlay design supplies the
 basis for isolated source replay. The unified CLI supplies configuration,
 localization, installation, and Cargo orchestration.
@@ -234,7 +234,7 @@ agents and CI.
 The following description serves as assistive text for Figure 1. Dylint rules
 write versioned intents into a scan session. The rewriter loads them, resolves
 anchors, invokes a recipe materializer, builds an edit plan, checks conflicts,
-and asks RFC 0003 to validate each alternative. A policy engine decides whether
+and asks RFC 0007 to validate each alternative. A policy engine decides whether
 a result may be shown, selected, or automatically applied. The transactional
 writer updates source and runs post-application gates.
 
@@ -245,7 +245,7 @@ flowchart TD
     C --> D["Materializer registry"]
     D --> E["Alternative edit groups"]
     E --> F["Conflict and dependency planner"]
-    F --> G["RFC 0003 checker"]
+    F --> G["RFC 0007 checker"]
     G --> H["Policy and ranking"]
     H --> I["Unified diff"]
     H --> J["Transactional apply"]
@@ -258,7 +258,7 @@ transactional application._
 
 ### 6.1. Crate boundaries
 
-RFC 0003 introduces `whitaker_rewrite_model`. This RFC should add:
+RFC 0007 introduces `whitaker_rewrite_model`. This RFC should add:
 
 ```text
 crates/
@@ -394,7 +394,7 @@ A materializer must:
 - declare automatic-application eligibility; and
 - produce deterministic output.
 
-A materializer should not call the compiler. RFC 0003 owns validation.
+A materializer should not call the compiler. RFC 0007 owns validation.
 
 ### 8.3. Recipe versioning
 
@@ -454,7 +454,7 @@ materialized.
 - Pattern type and mutability remain valid.
 - Removing the binding does not remove comments or attributes.
 - No use depends on clone identity or owned method resolution.
-- RFC 0003 accepts the result.
+- RFC 0007 accepts the result.
 
 #### Policy
 
@@ -463,7 +463,7 @@ substitution begins as `LocallyReasoned` until corpus validation establishes
 low risk.
 
 A `PotentiallyPathSensitive` conflict from Phase 9 should still materialize the
-direct borrow. RFC 0003 decides whether it is NLL-valid, Polonius-only, or
+direct borrow. RFC 0007 decides whether it is NLL-valid, Polonius-only, or
 invalid.
 
 ### 9.2. `owned_param_causes_clone`
@@ -547,7 +547,7 @@ For example, `BOR001` may produce:
 3. direct early-return form; and
 4. removal of only a redundant existence check.
 
-RFC 0003 validates each alternative. The policy engine then ranks successful
+RFC 0007 validates each alternative. The policy engine then ranks successful
 ones.
 
 ### 10.2. Structural transformations
@@ -594,7 +594,7 @@ pub struct RewriteEvidence {
 The axes mean:
 
 - **Materialization evidence:** structural preconditions held.
-- **Compiler evidence:** RFC 0003 accepted the edit.
+- **Compiler evidence:** RFC 0007 accepted the edit.
 - **Semantic confidence:** recipe-specific equivalence confidence.
 - **Test evidence:** which tests or gates passed.
 - **Portability:** NLL or Polonius requirement.
@@ -1022,7 +1022,7 @@ and avoid duplicating the full diff in compiler output.
 
 ### 19.2. Toolchain compatibility
 
-The rewriter uses the target workspace toolchain through RFC 0003. The
+The rewriter uses the target workspace toolchain through RFC 0007. The
 Whitaker binary and its Dylint bundle may have their own installation
 constraints, but a rewrite report must record the target compiler that
 validated the source.
@@ -1044,16 +1044,16 @@ On acceptance, the roadmap should add:
 
 - rewrite-intent emission to Phase 9;
 - shared overlay extraction from Phase 11;
-- the rewrite model and checker from RFC 0003;
-- the `BOR` family from RFC 0004; and
+- the rewrite model and checker from RFC 0007;
+- the `BOR` family from RFC 0008; and
 - a new rewrite product phase covering materializers, planning, application,
   and CLI integration.
 
 The three RFCs should be implemented in dependency order:
 
-1. RFC 0003 model and checker;
+1. RFC 0007 model and checker;
 2. simple existing ownership materializers;
-3. RFC 0004 high-confidence lints;
+3. RFC 0008 high-confidence lints;
 4. transactional diff and apply;
 5. Polonius-only opt-in;
 6. review-only and research transformations.
@@ -1263,7 +1263,7 @@ Whitaker should implement a recipe-based, compiler-validated, transactional
 rewriter.
 
 The first release should be modest: simple clone removal, deterministic diffs,
-RFC 0003 validation, and rollback-safe application. The architecture should
+RFC 0007 validation, and rollback-safe application. The architecture should
 nevertheless support multi-file signatures, multiple alternatives, Polonius
 portability, and the `BOR` family from the outset.
 
@@ -1288,8 +1288,8 @@ agents exactly the missing feedback loop:
 [^4]: Whitaker test-support overlay design:
     `../technical-design-for-test-support-dead-code-and-masked-dead-code-expectations.md`
 
-[^5]: RFC 0003, compiler-validated rewrite checking:
-    `0003-compiler-validated-rewrite-checking.md`
+[^5]: RFC 0007, compiler-validated rewrite checking:
+    `0007-compiler-validated-rewrite-checking.md`
 
-[^6]: RFC 0004, borrow-workaround lint family:
-    `0004-borrow-workaround-lint-family.md`
+[^6]: RFC 0008, borrow-workaround lint family:
+    `0008-borrow-workaround-lint-family.md`

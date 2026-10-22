@@ -1,4 +1,4 @@
-# Architectural decision record (ADR) 005: Rust source rewrite substrate
+# Architectural decision record (ADR) 007: Rust source rewrite substrate
 
 ## Status
 
@@ -11,8 +11,8 @@ production rewrite backend until the spike evidence has been reviewed.
 
 ## Context and problem statement
 
-Whitaker's proposed rewrite pipeline in [RFC 0003][rfc-0003],
-[RFC 0004][rfc-0004], and [RFC 0005][rfc-0005] separates semantic detection,
+Whitaker's proposed rewrite pipeline in [RFC 0007][rfc-0003],
+[RFC 0008][rfc-0004], and [RFC 0009][rfc-0005] separates semantic detection,
 source edit materialization, compiler validation, and transactional
 application. Dylint rules identify an ownership or borrowing shape and emit a
 versioned `RewriteIntent`. A materializer must then turn that intent into one or
@@ -193,7 +193,7 @@ Advantages:
   Roslyn's editor model.[^4]
 - The Rust-specific parser should track current language syntax more closely
   than generic tree-sitter patterns.
-- Structured node and token operations may reduce hand-written punctuation and
+- Structured node and token operations may reduce handwritten punctuation and
   trivia handling for complex recipes.
 
 Disadvantages and risks:
@@ -571,7 +571,7 @@ Goals:
 
 Non-goals:
 
-- Implement the complete rewriter described by RFC 0005.
+- Implement the complete rewriter described by RFC 0009.
 - Discover candidates from real Dylint lints during the spike.
 - Prove behavioural equivalence of remove/reinsert or snapshot rewrites.
 - Benchmark whole-repository rewrite checking.
@@ -589,7 +589,7 @@ Non-goals:
 6. Review the report against the mandatory gates and decision rule.
 7. Amend this ADR with the selected outcome and rationale.
 8. Move reusable fixtures and the winning adapter seam into the implementation
-   plan for RFC 0005.
+   plan for RFC 0009.
 9. Remove the losing backend from production dependency resolution.
 
 ## Consequences
@@ -659,9 +659,9 @@ brochure.
 
 ## References
 
-[rfc-0003]: rfcs/0003-compiler-validated-rewrite-checking.md
-[rfc-0004]: rfcs/0004-borrow-workaround-lint-family.md
-[rfc-0005]: rfcs/0005-validated-ownership-and-borrow-rewriter.md
+[rfc-0003]: rfcs/0007-compiler-validated-rewrite-checking.md
+[rfc-0004]: rfcs/0008-borrow-workaround-lint-family.md
+[rfc-0005]: rfcs/0009-validated-ownership-and-borrow-rewriter.md
 
 [^1]: `ast-grep-core` crate documentation, parsing, traversal, search, and
     replacement APIs: <https://docs.rs/ast-grep-core/latest/ast_grep_core/>.
