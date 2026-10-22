@@ -1040,3 +1040,367 @@ published-GPUI workspace invocation.
   established clone fingerprints. See
   [RFC 0001](rfcs/0001-coderabbit-derived-lint-candidates.md) §Tier 3: recorded
   but deferred. Requires 7.5.1 and 8.5.4.
+
+## 15. Macro-aware cognitive complexity
+
+Idea: if Whitaker charges cognitive complexity only to constructs the author
+wrote, using one hygiene-based classifier, then function scores stop depending
+on dependency features such as `tracing/log` and match Clippy exactly on
+macro-free code. Downstream projects then get a complexity gate they can keep
+enabled, instead of restructuring code around generated branching.
+
+This phase implements phases 1, 2, 3 and 5 of
+[RFC 0006](rfcs/0006-macro-aware-cognitive-complexity.md) §12. It settles the
+compiler behaviour the classifier depends on, proves the classifier in
+isolation, and ships the lint as an experimental suite member with differential
+and end-to-end evidence. It closes by testing whether the Sonar-faithful model
+should become the shared measure. Adoption by the existing complexity lints is
+deliberately held back to phase 16, because it changes stable behaviour.
+
+### 15.1. Settle how the pinned compiler records desugaring provenance
+
+This step answers whether rustc stacks a desugaring mark on top of the
+enclosing syntax context or re-roots it behind `ExpnData::call_site`. The
+answer fixes the adapter's chain walk and decides whether a `for` loop or `?`
+inside a macro body can be classified at all. See
+[RFC 0006](rfcs/0006-macro-aware-cognitive-complexity.md) §7.2 and §14.
+
+- [ ] 15.1.1. Measure desugaring mark placement on the pinned toolchain and
+  record the authored-versus-generated classifier as an architectural decision
+  record (ADR).
+  - Requires 1.2.1.
+  - Probe `for`, `while`, `?`, `.await` and `async` written in source, in
+    macro arguments, and inside `macro_rules!` bodies. Log each node's mark
+    chain and `ExpnData::call_site`.
+  - Re-establish issue 504's `ExpnKind` census and `tracing/log` measurements
+    on `nightly-2026-05-28`.
+  - Record the classification rule, chain-walk decision and reuse policy in
+    the ADR, and reference it from
+    [Whitaker Dylint suite design](whitaker-dylint-suite-design.md).
+  - See [RFC 0006](rfcs/0006-macro-aware-cognitive-complexity.md) §§3.2, 7.2
+    and 7.10.
+  - Success: the accepted ADR lists the observed chain and required
+    classification for every probe construct, and the re-measured tables
+    either match issue 504 or record the differences.
+
+### 15.2. Prove the authored-versus-generated classifier
+
+This step answers whether one compiler-free policy and a thin compiler adapter
+can classify real HIR nodes correctly. Its outcome is the single provenance
+rule that the lint in step 15.3 and every lint in phase 16 consume. See
+[RFC 0006](rfcs/0006-macro-aware-cognitive-complexity.md) §7.2 and §7.10.
+
+- [ ] 15.2.1. Implement `NodeOrigin`, `ExpansionStep` and `classify` in
+  `common/src/node_origin.rs`.
+  - Requires 15.1.1.
+  - Enumerate every chain of length 0 to 4 exhaustively, and add `proptest`
+    properties for desugaring transparency and macro opacity over unbounded
+    lengths.
+  - Document the walker rules and reuse policy in
+    [developers' guide](developers-guide.md): classify the node's own span,
+    never prune generated subtrees, and recover spans only for diagnostics.
+  - See [RFC 0006](rfcs/0006-macro-aware-cognitive-complexity.md) §7.2, §7.10
+    and §11.1.
+  - Success: all 341 enumerated chains satisfy the three properties, and the
+    module builds and tests without `rustc_private` in the default nextest
+    lane.
+- [ ] 15.2.2. Implement the `src/hir/` adapter `node_origin` and
+  `is_generated`, with an exhaustive `ExpnKind` and `DesugaringKind` mapping.
+  - Requires 15.2.1.
+  - Walk the chain as the ADR from 15.1.1 prescribes, and never follow a
+    macro expansion's `call_site`.
+  - Parameterize the synthetic hygiene constructor in `src/hir/tests.rs` by
+    `ExpnKind` and parent context.
+  - See [RFC 0006](rfcs/0006-macro-aware-cognitive-complexity.md) §7.2
+    (Table 5) and §11.2.
+  - Success: the five synthetic contexts in RFC 0006 §11.2 classify as
+    required, and the mapping has no wildcard arm, so a new `DesugaringKind`
+    variant fails to compile.
+
+### 15.3. Deliver the Clippy-compatible macro-aware lint
+
+This step answers whether charging by origin, while always descending,
+reproduces Clippy's arithmetic on macro-free code and removes generated
+branching everywhere else. It produces the lint that phase 16 measures the
+other complexity lints against. See
+[RFC 0006](rfcs/0006-macro-aware-cognitive-complexity.md) §7.
+
+- [ ] 15.3.1. Create `crates/macro_aware_cognitive_complexity` with its
+  configuration, pure scoring policy and feature-off stub.
+  - Requires 2.1.1 and 15.2.1.
+  - Parse `max_complexity` (default 25, strictly-greater-than comparison) with
+    `serde(default, deny_unknown_fields)`.
+  - Implement the authored tally: baseline, `if`, multi-arm `match`, guard and
+    the consecutive-return-aware adjustment. Test it model-based against an
+    oracle of Clippy's arithmetic, with a `proptest` property that generated
+    charges never change the score.
+  - See [RFC 0006](rfcs/0006-macro-aware-cognitive-complexity.md) §7.4 and
+    §7.7.
+  - Success: policy tests run in the ordinary test lane without the
+    `dylint-driver` feature.
+- [ ] 15.3.2. Implement the HIR walker and `check_fn` driver that charge
+  authored nodes and always descend.
+  - Requires 15.2.2 and 15.3.1.
+  - Anchor bodies on the identifier or the closure's `fn_decl_span`. Treat
+    generated closures and `async` blocks as transparent, skip `#[test]`
+    functions, and unwrap `async fn` bodies.
+  - See [RFC 0006](rfcs/0006-macro-aware-cognitive-complexity.md) §7.3, §7.5
+    and §7.9.
+  - Success: every user-interface (UI) fixture listed in RFC 0006 §11.3 passes
+    at `max_complexity = 0`. That includes each Table 7 row, identity-macro
+    invariance and the `when!` mixed-provenance case.
+- [ ] 15.3.3. Emit localized diagnostics reporting the score, the limit and the
+  excluded generated units.
+  - Requires 2.3.3 and 15.3.2.
+  - Add `en-GB`, `cy` and `gd` Fluent resources, and emit the excluded-units
+    note only when the count is non-zero.
+  - See [RFC 0006](rfcs/0006-macro-aware-cognitive-complexity.md) §7.8.
+  - Success: UI `.stderr` files pin the primary message, note and help in
+    `en-GB`, and a locale-selection test covers `cy` and `gd`.
+
+### 15.4. Prove parity and dependency-feature invariance end to end
+
+This step answers whether the lint's two headline guarantees hold against the
+real Clippy and against real dependency graphs, rather than only against
+fixtures written to match the design. Its evidence decides whether the lint is
+trustworthy enough to promote and to serve as phase 16's reference. See
+[RFC 0006](rfcs/0006-macro-aware-cognitive-complexity.md) §8.1 and §11.
+
+- [ ] 15.4.1. Add the differential parity suite against Clippy's
+  `cognitive_complexity`.
+  - Requires 15.3.3.
+  - Build a macro-free fixture crate under both tools at threshold 0 and
+    compare scores per function. On a fixture with macros but no generated
+    `return`, assert that Clippy's score minus Whitaker's equals the reported
+    excluded units.
+  - Enumerate any bodies Clippy skips because of desugaring marks.
+  - See [RFC 0006](rfcs/0006-macro-aware-cognitive-complexity.md) §11.4.
+  - Success: the suite passes against the pinned toolchain's Clippy, and every
+    enumerated divergence is listed in [users' guide](users-guide.md).
+- [ ] 15.4.2. Add the `tracing/log` feature-matrix end-to-end suite.
+  - Requires 15.3.3.
+  - Generate two standalone fixture projects that differ only in `tracing`'s
+    `log` feature, following `crates/no_std_fs_operations/tests/test_support`.
+    Include a `#[tracing::instrument]` `async fn`.
+  - Isolate each project's target directory, and run the suite in its own
+    nextest group with a timeout and registry access.
+  - See [RFC 0006](rfcs/0006-macro-aware-cognitive-complexity.md) §3.1 and
+    §11.5.
+  - Success: `cargo tree -e features` shows the difference, the four-call
+    probe scores 1 in both projects, and the diagnostics are byte-identical.
+
+### 15.5. Ship the lint as an experimental suite member
+
+This step answers whether users can opt in through the suite and installer
+without changing the stable lint set. See
+[RFC 0006](rfcs/0006-macro-aware-cognitive-complexity.md) §8.2 and §10.
+
+- [ ] 15.5.1. Register `macro_aware_cognitive_complexity` behind
+  `experimental-macro-aware-cognitive-complexity` in the suite and installer.
+  - Requires 3.1.1, 3.2.1 and 15.3.3.
+  - Update `suite/Cargo.toml`, `suite/src/lints.rs`, `suite/src/driver.rs` and
+    `installer/src/resolution.rs`, following
+    `rstest_helper_should_be_fixture`.
+  - Success: the suite builds with and without the feature, `--experimental`
+    installs the lint, and the default installation is unchanged.
+- [ ] 15.5.2. Document the lint and the migration from Clippy.
+  - Requires 15.4.1 and 15.5.1.
+  - In [users' guide](users-guide.md), describe the lint as a structural proxy
+    for reading effort. Cover its configuration, exclusion semantics, known
+    blind spots and the migration from `clippy::cognitive_complexity`.
+  - Add a lint section to
+    [Whitaker Dylint suite design](whitaker-dylint-suite-design.md) that
+    references the ADR from 15.1.1 and RFC 0006.
+  - See [RFC 0006](rfcs/0006-macro-aware-cognitive-complexity.md) §5.5, §7.9
+    and §10.
+  - Success: every configuration and diagnostic example in the users' guide
+    matches UI fixture output.
+
+### 15.6. Test the Sonar-faithful model and decide promotion
+
+This step answers whether the empirically validated Sonar model, fed by the
+same classifier, ranks real functions more usefully than Clippy's model. Its
+outcome selects the shared measure that phase 16 adopts. See
+[RFC 0006](rfcs/0006-macro-aware-cognitive-complexity.md) §5.2 and §12.
+
+- [ ] 15.6.1. Add `model = "sonar"` to the lint, backed by
+  `CognitiveComplexityBuilder`.
+  - Requires 15.3.2.
+  - Map HIR onto Sonar increments: `if` with `else if` and `else` as hybrid
+    increments, `match` as a switch, loops recognized through `LoopSource`,
+    labelled `break` and `continue`, boolean operator sequences, and closures
+    as nesting.
+  - Ensure generated structures neither charge nor raise the nesting depth,
+    and resolve RFC 0006 open question 2 (`.await`) for this model.
+  - See [RFC 0006](rfcs/0006-macro-aware-cognitive-complexity.md) §5.1 and
+    §7.4, and [brain trust lints design](brain-trust-lints-design.md)
+    §Implementation decisions (6.2.3).
+  - Success: UI fixtures reproduce the white paper's worked examples, as
+    transliterated into Rust, and no generated wrapper raises an authored
+    construct's nesting increment.
+- [ ] 15.6.2. Run the corpus evaluation and record the promotion and
+  shared-measure decision.
+  - Requires 15.4.1 and 15.6.1.
+  - Score Whitaker, Netsuke and a sample of public crates under Clippy, the
+    version-1 model and the Sonar model. Explain every per-function difference
+    and hand-inspect the 20 highest-scoring functions under each model.
+  - Decide the default model, default threshold, lint name and stable
+    promotion (RFC 0006 open questions 6 and 7).
+  - See [RFC 0006](rfcs/0006-macro-aware-cognitive-complexity.md) §11.6 and
+    §14.
+  - Success: a published report and an ADR amendment name the shared measure
+    and threshold scale that phase 16 adopts.
+
+## 16. Harmonized complexity measurement across the suite (breaking)
+
+Idea: suppose `conditional_max_n_branches`, `bumpy_road_function` and the brain
+trust lints all consume the classifier and the shared measure chosen in 15.6.2.
+Users then get one consistent account of complexity across every Whitaker
+complexity lint. A single breaking release is repaid by removing both
+generated-branch false positives and the silent skipping of source `for` loops
+and macro arguments. If corpus results show that the lints lose detection
+quality when moved onto the shared measure, the idea is falsified.
+
+These lints currently disagree with each other: `bumpy_road_function`
+over-excludes, `conditional_max_n_branches` under-excludes, and the brain trust
+design plans to pass `from_expansion()` to its builder. This phase moves them
+all onto the shared measure and ships the result as one breaking change with a
+migration guide, rather than as a series of silent behaviour changes. See
+[RFC 0006](rfcs/0006-macro-aware-cognitive-complexity.md) §3.3, §9 and §10.
+
+### 16.1. Ratify the harmonized complexity contract
+
+This step answers what "harmonized" means for three lints that measure
+different signals: predicate breadth, per-line bumps and per-type weighted
+method complexity. Its contract fixes the configuration, defaults and
+diagnostics that every later step changes. See
+[RFC 0006](rfcs/0006-macro-aware-cognitive-complexity.md) §9 and §14.
+
+- [ ] 16.1.1. Record an ADR that defines the shared complexity measure and how
+  each complexity lint consumes it.
+  - Requires 15.6.2.
+  - Define the three consumers:
+    - `conditional_max_n_branches` counts authored predicate atoms;
+    - `bumpy_road_function` derives its per-line signal from the shared
+      measure's increments;
+    - the brain trust lints compute weighted method complexity (WMC) and
+      brain-method complexity with the shared measure and threshold scale.
+  - List every renamed or deprecated configuration key, every re-baselined
+    default and every changed diagnostic, per lint.
+  - See [RFC 0006](rfcs/0006-macro-aware-cognitive-complexity.md) §9 and open
+    question 8, [brain trust lints design](brain-trust-lints-design.md)
+    §Implementation decisions (6.2.3) and (6.3.1), and
+    [Whitaker Dylint suite design](whitaker-dylint-suite-design.md) §12.
+  - Success: the accepted ADR is the complete change list that 16.5.2's
+    migration guide must cover.
+
+### 16.2. Move `conditional_max_n_branches` onto the classifier
+
+This step answers whether predicate counting can exclude generated conditions
+without losing authored ones. It is the smallest adoption, so it exercises the
+contract before the riskier Bumpy Road change. See
+[RFC 0006](rfcs/0006-macro-aware-cognitive-complexity.md) §9.
+
+- [ ] 16.2.1. Exclude generated conditions from `conditional_max_n_branches`,
+  classifying each match guard by its own span.
+  - Requires 15.2.2 and 16.1.1.
+  - Skip `inspect_condition` for generated `If` nodes and generated `while`
+    loops, and leave traversal unchanged.
+  - Apply the configuration and diagnostic changes the ADR assigns to this
+    lint.
+  - Success: `assert!(a && b && c)` is no longer flagged, while an authored
+    three-predicate `if` in a macro argument and a source three-predicate
+    `while` still are.
+
+### 16.3. Move `bumpy_road_function` onto the shared measure
+
+This step answers whether deriving the bump signal from the shared measure
+preserves Bumpy Road's detection quality once subtree pruning is gone. See
+[RFC 0006](rfcs/0006-macro-aware-cognitive-complexity.md) §3.3 and §9, and
+[Whitaker Dylint suite design](whitaker-dylint-suite-design.md) §12.
+
+- [ ] 16.3.1. Replace `bumpy_road_function`'s `from_expansion()` pruning with
+  charge-gating.
+  - Requires 15.2.2 and 16.1.1.
+  - Replace the item and body guards with `is_generated` on the anchor.
+    `SegmentBuilder::visit_expr` records nothing for a generated node but
+    still walks its children, and the `push_segment` guard uses the
+    classifier.
+  - Keep the `DesugaringKind::WhileLoop` handling and the closure policy.
+  - Success: UI fixtures show that branching in source `for` loops and macro
+    arguments contributes bumps and macro-generated branching does not.
+- [ ] 16.3.2. Derive Bumpy Road's per-line complexity signal from the shared
+  measure's increments.
+  - Requires 16.3.1.
+  - Attribute each authored increment to its source line, and re-baseline the
+    default threshold against the 15.6.2 corpus.
+  - Keep the weighting model tracked by issue 357 out of scope.
+  - Success: on the 15.6.2 corpus, every reported bump interval traces to
+    increments the shared measure records. The re-baselined default is
+    published together with its false-positive review.
+
+### 16.4. Move the brain trust lints onto the shared measure
+
+This step answers whether type-level complexity can reuse the function-level
+measure, so that a brain method and a complex function mean the same thing. See
+[brain trust lints design](brain-trust-lints-design.md)
+§Implementation decisions (6.2.3) and (6.3.1).
+
+- [ ] 16.4.1. Feed `CognitiveComplexityBuilder` from the classifier, and align
+  brain trust thresholds with the shared measure's scale.
+  - Requires 16.1.1.
+  - Derive the builder's expansion flags from `is_generated`, not
+    `from_expansion()`, and rename the parameters as the ADR specifies.
+  - Re-derive the brain-method complexity threshold on the shared scale, and
+    amend the brain trust design sections cited above.
+  - See [RFC 0006](rfcs/0006-macro-aware-cognitive-complexity.md) §3.3 and §9.
+  - Success: for every function in a shared fixture, the brain-method
+    complexity equals `macro_aware_cognitive_complexity`'s score under the
+    shared model.
+
+### 16.5. Release the harmonized measure as one breaking change
+
+This step answers whether the harmonized lints behave consistently together and
+whether downstream projects can migrate mechanically. See
+[RFC 0006](rfcs/0006-macro-aware-cognitive-complexity.md) §10.
+
+- [ ] 16.5.1. Add the cross-lint harmonization end-to-end suite.
+  - Requires 15.4.2, 16.2.1, 16.3.2 and 16.4.1.
+  - Build one fixture workspace and lint it across three axes:
+    - `tracing/log` on and off;
+    - the experimental feature on and off;
+    - each complexity lint enabled alone, and all enabled together.
+  - Success: each lint's diagnostics are byte-identical across the `log` axis,
+    and no lint charges a construct that the classifier marks as generated.
+- [ ] 16.5.2. Publish the migration guide, changelog entries and breaking
+  version bump for the harmonized measure.
+  - Requires 16.5.1.
+  - Add a `docs/migrations/` guide with before-and-after behaviour,
+    configuration renames and threshold re-baselining advice for each lint.
+  - Update the affected sections of [users' guide](users-guide.md) and
+    [Whitaker Dylint suite design](whitaker-dylint-suite-design.md). Promote
+    `macro_aware_cognitive_complexity` to the stable suite if 15.6.2 approved
+    it.
+  - Success: the migration guide covers every change listed in the 16.1.1
+    ADR, and the release notes flag the release as breaking.
+
+### 16.6. Revisit deferred macro-aware extensions
+
+This step collects scope that RFC 0006 explicitly leaves open, so that it does
+not creep into the harmonized release. See
+[RFC 0006](rfcs/0006-macro-aware-cognitive-complexity.md) §6 and §14.
+
+- [ ] 16.6.1. Decide whether to add a `charged_macros` setting for
+  control-flow domain-specific language (DSL) macros, a per-item threshold
+  override and broader test-function detection.
+  - Requires 16.5.2.
+  - Base the decision on false-positive and false-negative reports gathered
+    after the harmonized release (RFC 0006 open questions 3, 4 and 5).
+  - Success: each option is either implemented with UI coverage or rejected
+    in the ADR with its reasoning.
+- [ ] 16.6.2. Offer the validated classifier and its evidence upstream to
+  Clippy.
+  - Requires 15.4.1.
+  - See [RFC 0006](rfcs/0006-macro-aware-cognitive-complexity.md) §6.
+  - Success: a comment or pull request on `rust-lang/rust-clippy` issue 14417
+    links the ADR, the parity suite and the corpus report.

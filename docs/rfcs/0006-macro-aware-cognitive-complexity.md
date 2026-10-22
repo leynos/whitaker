@@ -757,6 +757,11 @@ functions under each model.
 
 *Table 8: Delivery phases and their exit gates.*
 
+[Roadmap](../roadmap.md) phase 15 schedules phases 1, 2, 3 and 5. Roadmap phase
+16 extends phase 4 into a single breaking release. That release moves
+`conditional_max_n_branches`, `bumpy_road_function` and the brain trust lints
+onto the shared measure selected by the corpus evaluation.
+
 ## 13. Alternatives considered
 
 | Option                                             | Advantages                                      | Rejected because                                                                                                       |
