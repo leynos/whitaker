@@ -14,6 +14,7 @@ Run via ``make test-workflow-contracts``.
 from __future__ import annotations
 
 import typing as typ
+from collections.abc import Callable
 
 import pytest
 
@@ -76,7 +77,7 @@ def _starts_cache_or_setup(step: dict[str, typ.Any]) -> bool:
 
 def _index(
     steps: list[dict[str, typ.Any]],
-    matches: typ.Callable[[dict[str, typ.Any]], bool],
+    matches: Callable[[dict[str, typ.Any]], bool],
 ) -> int:
     """Return the position of the first step a predicate matches."""
     hits = [i for i, s in enumerate(steps) if matches(s)]
@@ -106,7 +107,8 @@ def test_the_free_step_is_linux_only_and_bash(job: Job) -> None:
 @pytest.mark.parametrize("job", _reclaiming_jobs(), ids=_ids(_reclaiming_jobs()))
 def test_the_free_step_measures_removes_and_measures_again(job: Job) -> None:
     """Record headroom before and after the removal, in that order."""
-    run = str(_free_step(job[2]).get("run", ""))
+    lines = str(_free_step(job[2]).get("run", "")).splitlines()
+    run = "\n".join(x for x in lines if not x.lstrip().startswith("#"))
     assert run.splitlines()[0] == "set -euo pipefail"
     first = run.index(MEASURE)
     removal = run.index(REMOVE)
