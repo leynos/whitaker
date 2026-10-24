@@ -36,14 +36,14 @@ fn jaccard_returns_none_for_empty_fragments() {
 
 fn make_t2_emission_run() -> whitaker_sarif::Run {
     let fragments = vec![
-        fragment(FragmentInput {
+        fragment(&FragmentInput {
             id: "alpha",
             profile: NormProfile::T2,
             file_uri: "src/a.rs",
             source_text: "fn a(x: i32) {}\n",
             hashes: &[(1, 0..15), (2, 0..15)],
         }),
-        fragment(FragmentInput {
+        fragment(&FragmentInput {
             id: "beta",
             profile: NormProfile::T2,
             file_uri: "src/b.rs",

@@ -202,6 +202,10 @@ LEG_DISCRIMINATOR: Final[str] = "${{ runner.arch }}"
 #: hours is a typo or a hang nobody has looked at.
 MAXIMUM_LANE_TIMEOUT_MINUTES: Final[int] = 120
 
+#: The test-suite lanes have a separately derived ceiling because their
+#: nextest budgets exceed the ordinary Ubicloud build-lane limit.
+SUITE_LANE_TIMEOUT_MINUTES: Final[int] = 180
+
 
 #: Every lane whose runner image sets the glibc floor for a consumer of
 #: whitaker's x86_64 Linux binaries. Both rolling-release matrix jobs publish

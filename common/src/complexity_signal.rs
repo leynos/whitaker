@@ -24,6 +24,11 @@ impl LineSegment {
     ///
     /// Line numbers are one-based and ranges are inclusive.
     ///
+    /// # Errors
+    ///
+    /// - Returns [`SegmentError::LineNumberMustBeOneBased`] when either line is `0`.
+    /// - Returns [`SegmentError::StartAfterEnd`] when `start_line` exceeds `end_line`.
+    ///
     /// # Examples
     ///
     /// ```
@@ -34,7 +39,7 @@ impl LineSegment {
     /// assert_eq!(segment.end_line(), 5);
     /// ```
     #[must_use = "Inspect the segment creation result to handle invalid ranges"]
-    pub fn new(start_line: usize, end_line: usize, value: f64) -> Result<Self, SegmentError> {
+    pub const fn new(start_line: usize, end_line: usize, value: f64) -> Result<Self, SegmentError> {
         if start_line == 0 || end_line == 0 {
             return Err(SegmentError::LineNumberMustBeOneBased {
                 start_line,
@@ -80,13 +85,23 @@ impl LineSegment {
 pub enum SegmentError {
     /// Line numbers must be one-based (line 0 is invalid).
     #[error("line numbers must be one-based (got start_line={start_line}, end_line={end_line})")]
-    LineNumberMustBeOneBased { start_line: usize, end_line: usize },
+    LineNumberMustBeOneBased {
+        /// One-based first line requested for the segment.
+        start_line: usize,
+        /// One-based last line requested for the segment.
+        end_line: usize,
+    },
 
     /// The segment start must not occur after its end.
     #[error(
         "segment start must not occur after end (start_line={start_line}, end_line={end_line})"
     )]
-    StartAfterEnd { start_line: usize, end_line: usize },
+    StartAfterEnd {
+        /// One-based first line requested for the segment.
+        start_line: usize,
+        /// One-based last line requested for the segment.
+        end_line: usize,
+    },
 }
 
 /// Errors emitted when building a per-line signal.
@@ -96,27 +111,41 @@ pub enum SignalBuildError {
     #[error(
         "function line range must be one-based (got start_line={start_line}, end_line={end_line})"
     )]
-    FunctionLineRangeMustBeOneBased { start_line: usize, end_line: usize },
+    FunctionLineRangeMustBeOneBased {
+        /// One-based first line of the supplied function range.
+        start_line: usize,
+        /// One-based last line of the supplied function range.
+        end_line: usize,
+    },
 
     /// The function start must not occur after its end.
     #[error(
         "function start must not occur after end (start_line={start_line}, end_line={end_line})"
     )]
-    FunctionStartAfterEnd { start_line: usize, end_line: usize },
+    FunctionStartAfterEnd {
+        /// One-based first line of the supplied function range.
+        start_line: usize,
+        /// One-based last line of the supplied function range.
+        end_line: usize,
+    },
 
     /// A segment does not intersect the function's line range.
     #[error(
         "segment lies outside function range (segment={segment_start}..={segment_end}, function={function_start}..={function_end})"
     )]
     SegmentOutsideFunctionRange {
+        /// One-based first line covered by the offending segment.
         segment_start: usize,
+        /// One-based last line covered by the offending segment.
         segment_end: usize,
+        /// One-based first line of the function range.
         function_start: usize,
+        /// One-based last line of the function range.
         function_end: usize,
     },
 }
 
-fn validate_function_range(
+const fn validate_function_range(
     function_start: usize,
     function_end: usize,
 ) -> Result<(), SignalBuildError> {
@@ -137,7 +166,7 @@ fn validate_function_range(
     Ok(())
 }
 
-fn validate_segment_in_range(
+const fn validate_segment_in_range(
     segment: &LineSegment,
     function_start: usize,
     function_end: usize,
@@ -154,6 +183,10 @@ fn validate_segment_in_range(
     Ok(())
 }
 
+#[expect(
+    clippy::float_arithmetic,
+    reason = "bumpy-road signal processing operates on user-configured floating-point weights"
+)]
 fn apply_segment_to_diff(segment: &LineSegment, diff: &mut [f64], function_start: usize) {
     let segment_start = segment.start_line().saturating_sub(function_start);
     let segment_end = segment.end_line().saturating_sub(function_start);
@@ -167,6 +200,10 @@ fn apply_segment_to_diff(segment: &LineSegment, diff: &mut [f64], function_start
     }
 }
 
+#[expect(
+    clippy::float_arithmetic,
+    reason = "bumpy-road signal processing operates on user-configured floating-point weights"
+)]
 fn accumulate_signal_from_diff(diff: &[f64], len: usize) -> Vec<f64> {
     let mut signal = Vec::with_capacity(len);
     let mut running = 0.0_f64;
@@ -230,11 +267,17 @@ pub fn rasterize_signal(
 pub enum SmoothingError {
     /// The moving average window must be positive.
     #[error("smoothing window must be positive (got {window})")]
-    WindowMustBePositive { window: usize },
+    WindowMustBePositive {
+        /// The rejected window size, in lines.
+        window: usize,
+    },
 
     /// The moving average window must be odd so the average is centred.
     #[error("smoothing window must be odd (got {window})")]
-    WindowMustBeOdd { window: usize },
+    WindowMustBeOdd {
+        /// The rejected window size, in lines.
+        window: usize,
+    },
 }
 
 /// Applies a centred moving-average smoothing window.
@@ -257,16 +300,16 @@ pub enum SmoothingError {
 /// assert_eq!(smoothed, vec![0.0, 1.0, 1.0, 1.0, 0.0]);
 /// ```
 #[must_use = "Inspect the smoothing result to handle invalid window sizes"]
+#[expect(
+    clippy::float_arithmetic,
+    reason = "bumpy-road signal processing operates on user-configured floating-point weights"
+)]
 pub fn smooth_moving_average(signal: &[f64], window: usize) -> Result<Vec<f64>, SmoothingError> {
     if window == 0 {
         return Err(SmoothingError::WindowMustBePositive { window });
     }
 
-    fn is_even(value: usize) -> bool {
-        (value & 1) == 0
-    }
-
-    if is_even(window) {
+    if (window & 1) == 0 {
         return Err(SmoothingError::WindowMustBeOdd { window });
     }
 
@@ -274,11 +317,11 @@ pub fn smooth_moving_average(signal: &[f64], window: usize) -> Result<Vec<f64>, 
         return Ok(Vec::new());
     }
 
-    let half_window = window / 2;
+    let half_window = window.div_euclid(2);
     let mut prefix = Vec::with_capacity(signal.len() + 1);
     prefix.push(0.0_f64);
     for &value in signal {
-        let next = prefix[prefix.len() - 1] + value;
+        let next = prefix.last().copied().unwrap_or(0.0) + value;
         prefix.push(next);
     }
 
@@ -287,8 +330,9 @@ pub fn smooth_moving_average(signal: &[f64], window: usize) -> Result<Vec<f64>, 
     for idx in 0..signal.len() {
         let start = idx.saturating_sub(half_window);
         let end = (idx + half_window).min(last_index);
-        let sum = prefix[end + 1] - prefix[start];
-        let count = (end - start + 1) as f64;
+        let sum =
+            prefix.get(end + 1).copied().unwrap_or(0.0) - prefix.get(start).copied().unwrap_or(0.0);
+        let count = u32::try_from(end - start + 1).map_or_else(|_| f64::from(u32::MAX), f64::from);
         smoothed.push(sum / count);
     }
 

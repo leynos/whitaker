@@ -7,8 +7,6 @@
 //! See `docs/brain-trust-lints-design.md` §Diagnostic output for the
 //! full format specification.
 
-use std::fmt::Write;
-
 use super::evaluation::BrainTypeDisposition;
 use super::{MethodMetrics, TypeMetrics};
 use crate::decomposition_advice::{
@@ -72,25 +70,25 @@ impl BrainTypeDiagnostic {
 
     /// Returns the evaluation disposition.
     #[must_use]
-    pub fn disposition(&self) -> BrainTypeDisposition {
+    pub const fn disposition(&self) -> BrainTypeDisposition {
         self.disposition
     }
 
     /// Returns the Weighted Methods Count.
     #[must_use]
-    pub fn wmc(&self) -> usize {
+    pub const fn wmc(&self) -> usize {
         self.wmc
     }
 
     /// Returns the LCOM4 connected component count.
     #[must_use]
-    pub fn lcom4(&self) -> usize {
+    pub const fn lcom4(&self) -> usize {
         self.lcom4
     }
 
     /// Returns the foreign reach count.
     #[must_use]
-    pub fn foreign_reach(&self) -> usize {
+    pub const fn foreign_reach(&self) -> usize {
         self.foreign_reach
     }
 
@@ -177,25 +175,22 @@ fn format_primary_with_many_brain_methods(
     let lcom4 = diagnostic.lcom4();
     let fr_suffix = foreign_reach_suffix(diagnostic);
     let n = methods.len();
-    let mut msg = format!(
+    let method_list = methods
+        .iter()
+        .map(|bm| {
+            format!(
+                "`{}` (CC={}, LOC={})",
+                bm.name(),
+                bm.cognitive_complexity(),
+                bm.lines_of_code(),
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!(
         "`{name}` has WMC={wmc}, LCOM4={lcom4}{fr_suffix}, \
-         and {n} brain methods: ",
-    );
-    for (i, bm) in methods.iter().enumerate() {
-        if i > 0 {
-            msg.push_str(", ");
-        }
-        // Write cannot fail on String.
-        let _ = write!(
-            msg,
-            "`{}` (CC={}, LOC={})",
-            bm.name(),
-            bm.cognitive_complexity(),
-            bm.lines_of_code(),
-        );
-    }
-    msg.push('.');
-    msg
+         and {n} brain methods: {method_list}.",
+    )
 }
 
 /// Returns the foreign reach suffix for the primary message, or an
@@ -229,24 +224,26 @@ fn foreign_reach_suffix(diagnostic: &BrainTypeDiagnostic) -> String {
 /// ```
 #[must_use]
 pub fn format_note(diagnostic: &BrainTypeDiagnostic) -> String {
-    let mut note = String::from("WMC measures total cognitive complexity across all methods.");
+    let mut sentences = vec![String::from(
+        "WMC measures total cognitive complexity across all methods.",
+    )];
     if !diagnostic.brain_methods().is_empty() {
-        note.push_str(" Brain methods are methods with high complexity and size.");
+        sentences.push(String::from(
+            "Brain methods are methods with high complexity and size.",
+        ));
     }
     if diagnostic.lcom4() >= 2 {
-        note.push_str(
-            " LCOM4 >= 2 indicates the type has multiple unrelated \
-             responsibilities.",
-        );
+        sentences.push(String::from(
+            "LCOM4 >= 2 indicates the type has multiple unrelated responsibilities.",
+        ));
     }
     if diagnostic.foreign_reach() > 0 {
-        let _ = write!(
-            note,
-            " Foreign reach of {} indicates coupling to external modules.",
+        sentences.push(format!(
+            "Foreign reach of {} indicates coupling to external modules.",
             diagnostic.foreign_reach(),
-        );
+        ));
     }
-    note
+    sentences.join(" ")
 }
 
 /// Formats a decomposition note from precomputed community suggestions.

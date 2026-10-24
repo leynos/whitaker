@@ -24,7 +24,7 @@ impl FragmentId {
 
     /// Returns the fragment identifier as a string slice.
     #[must_use]
-    pub fn as_str(&self) -> &str {
+    pub const fn as_str(&self) -> &str {
         self.0.as_str()
     }
 

@@ -72,44 +72,44 @@ impl BrainTraitDiagnostic {
 
     /// Returns the evaluation disposition.
     #[must_use]
-    pub fn disposition(&self) -> BrainTraitDisposition {
+    pub const fn disposition(&self) -> BrainTraitDisposition {
         self.disposition
     }
 
     /// Returns the number of required methods.
     #[must_use]
-    pub fn required_method_count(&self) -> usize {
+    pub const fn required_method_count(&self) -> usize {
         self.required_method_count
     }
 
     /// Returns the number of default methods.
     #[must_use]
-    pub fn default_method_count(&self) -> usize {
+    pub const fn default_method_count(&self) -> usize {
         self.default_method_count
     }
 
     /// Returns the total method count (required + default).
     #[must_use]
-    pub fn total_method_count(&self) -> usize {
+    pub const fn total_method_count(&self) -> usize {
         self.required_method_count + self.default_method_count
     }
 
     /// Returns the sum of default method cognitive complexity values.
     #[must_use]
-    pub fn default_method_cc_sum(&self) -> usize {
+    pub const fn default_method_cc_sum(&self) -> usize {
         self.default_method_cc_sum
     }
 
     /// Returns the total number of trait items (methods + associated
     /// types + associated consts).
     #[must_use]
-    pub fn total_item_count(&self) -> usize {
+    pub const fn total_item_count(&self) -> usize {
         self.total_item_count
     }
 
     /// Returns implementor burden (required method count).
     #[must_use]
-    pub fn implementor_burden(&self) -> usize {
+    pub const fn implementor_burden(&self) -> usize {
         self.implementor_burden
     }
 }

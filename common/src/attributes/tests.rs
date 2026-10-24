@@ -5,8 +5,8 @@ use rstest::rstest;
 
 #[rstest]
 #[case::empty(Vec::<String>::new())]
-#[case::single(vec!["dead_code".to_string()])]
-#[case::complex(vec!["cfg(feature = \"test\")".to_string(), "path(\"std::io\")".to_string()])]
+#[case::single(vec!["dead_code".to_owned()])]
+#[case::complex(vec!["cfg(feature = \"test\")".to_owned(), "path(\"std::io\")".to_owned()])]
 fn attribute_with_arguments_preserves_inputs(#[case] arguments: Vec<String>) {
     let attribute = Attribute::with_arguments(
         AttributePath::from("allow"),

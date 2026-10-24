@@ -1,6 +1,7 @@
 //! Adapter-scoped tests for Rust syntax lowering.
 
 use insta::assert_json_snapshot;
+use proptest::prelude::*;
 use ra_ap_syntax::{AstNode, Edition, SourceFile};
 use rstest::rstest;
 use serde_json::json;
@@ -94,6 +95,23 @@ fn oversized_source_is_rejected_by_the_node_budget() {
         .collect::<Vec<_>>()
         .join(" ");
     let source = format!("fn generated() {{ {statements} }}");
+    let span = whole_span(&source).expect("span should validate");
+
+    assert_eq!(
+        lower_span(&source, span),
+        Err(AstError::TreeTooLarge {
+            limit: MAX_AST_NODES
+        })
+    );
+}
+
+#[rstest]
+fn flat_macro_token_tree_is_rejected_by_the_normalized_node_budget() {
+    let tokens = (0..=MAX_AST_NODES)
+        .map(|index| format!("token_{index}"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let source = format!("macro_rules! generated {{ () => {{ {tokens} }} }}");
     let span = whole_span(&source).expect("span should validate");
 
     assert_eq!(
@@ -208,6 +226,31 @@ fn error_subtree_is_rejected() {
         lower_span(source, span),
         Err(AstError::UnparsableSpan { start: 0, end })
     );
+}
+
+proptest! {
+    #[test]
+    fn generated_source_payloads_do_not_change_normalized_ast_hash(
+        left_name in "[a-z][a-z0-9]{0,8}",
+        right_name in "[a-z][a-z0-9]{0,8}",
+        left_literal in 0_u32..u32::MAX,
+        right_literal in 0_u32..u32::MAX,
+    ) {
+        let left_source = format!(
+            "fn function_{left_name}() {{ let binding_{left_name} = {left_literal}; }}"
+        );
+        let right_source = format!(
+            "fn function_{right_name}() {{ let binding_{right_name} = {right_literal}; }}"
+        );
+        let left_span = whole_span(&left_source).expect("generated source span should validate");
+        let right_span = whole_span(&right_source).expect("generated source span should validate");
+        let left = lower_span(&left_source, left_span)
+            .expect("generated source with identifier and integer literal should parse");
+        let right = lower_span(&right_source, right_span)
+            .expect("generated source with identifier and integer literal should parse");
+
+        prop_assert_eq!(canonical_hash(&left), canonical_hash(&right));
+    }
 }
 
 /// Lower the first occurrence of `needle` within `source`.

@@ -38,7 +38,7 @@ impl CallSiteRecord {
     /// assert_eq!(record.callee_def_id, callee);
     /// # }
     /// ```
-    pub(crate) fn new(
+    pub(crate) const fn new(
         callee_def_id: DefId,
         fingerprint: ArgFingerprint,
         test_source_def_id: DefId,
@@ -137,10 +137,7 @@ impl CallSiteCollector {
         if !self.seen.insert(location) {
             debug!(
                 target: "rstest_helper_should_be_fixture",
-                "dropping duplicate rstest helper call-site evidence: callee={}, lo={:?}, hi={:?}",
-                callee_key,
-                lo,
-                hi,
+                "dropping duplicate rstest helper call-site evidence: callee={callee_key}, lo={lo:?}, hi={hi:?}",
             );
             return false;
         }
@@ -291,8 +288,7 @@ fn local_fixture_atom(
     } else {
         debug!(
             target: "rstest_helper_should_be_fixture",
-            "lowering unsupported local argument: `{}` is not an rstest fixture local",
-            name,
+            "lowering unsupported local argument: `{name}` is not an rstest fixture local",
         );
         ArgAtom::unsupported()
     }
@@ -336,8 +332,7 @@ pub(crate) fn resolve_local_callee<'tcx>(
     } else {
         debug!(
             target: "rstest_helper_should_be_fixture",
-            "callee resolution skipped non-local or non-function callee: {:?}",
-            def_id,
+            "callee resolution skipped non-local or non-function callee: {def_id:?}",
         );
         None
     }

@@ -353,10 +353,13 @@ mod tests {
 
         let infos = collect_method_infos(vec![b1, b2, b3]);
         assert_eq!(infos.len(), 3);
-        assert_eq!(infos[0].name(), "alpha");
-        assert_eq!(infos[1].name(), "beta");
-        assert_eq!(infos[2].name(), "gamma");
-        assert!(infos[0].accessed_fields().contains("x"));
-        assert!(infos[1].called_methods().contains("alpha"));
+        let alpha = infos.first().expect("collected infos should include alpha");
+        let beta = infos.get(1).expect("collected infos should include beta");
+        let gamma = infos.get(2).expect("collected infos should include gamma");
+        assert_eq!(alpha.name(), "alpha");
+        assert_eq!(beta.name(), "beta");
+        assert_eq!(gamma.name(), "gamma");
+        assert!(alpha.accessed_fields().contains("x"));
+        assert!(beta.called_methods().contains("alpha"));
     }
 }

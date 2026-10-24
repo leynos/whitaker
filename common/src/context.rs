@@ -89,7 +89,7 @@ impl ContextEntry {
 
     /// Returns a mutable reference to the attributes for in-place updates.
     #[must_use]
-    pub fn attributes_mut(&mut self) -> &mut Vec<Attribute> {
+    pub const fn attributes_mut(&mut self) -> &mut Vec<Attribute> {
         &mut self.attributes
     }
 

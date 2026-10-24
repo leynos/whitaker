@@ -13,7 +13,7 @@ struct DocumentationWorld {
 
 impl DocumentationWorld {
     fn push_line(&self, line: &str) {
-        self.lines.borrow_mut().push(line.to_string());
+        self.lines.borrow_mut().push(line.to_owned());
     }
 
     fn evaluate(&self) {

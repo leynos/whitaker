@@ -76,7 +76,7 @@ impl RstestDetectionOptions {
     /// assert!(options.use_expansion_trace_fallback());
     /// ```
     #[must_use]
-    pub fn new(
+    pub const fn new(
         provider_param_attributes: Vec<AttributePath>,
         use_expansion_trace_fallback: bool,
     ) -> Self {
@@ -199,7 +199,7 @@ fn matches_direct_or_trace(
 ) -> bool {
     has_matching_attribute(attrs, candidates)
         || (options.use_expansion_trace_fallback()
-            && trace.is_some_and(|trace| has_matching_trace(trace, candidates)))
+            && trace.is_some_and(|expansion| has_matching_trace(expansion, candidates)))
 }
 
 fn has_matching_attribute(attrs: &[Attribute], candidates: &[&[&str]]) -> bool {

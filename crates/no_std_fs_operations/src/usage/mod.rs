@@ -26,7 +26,7 @@ impl StdFsUsage {
     /// let usage = StdFsUsage::new(String::from("std::fs::read"));
     /// assert_eq!(usage.operation(), "std::fs::read");
     /// ```
-    pub fn new(operation: String) -> Self {
+    pub const fn new(operation: String) -> Self {
         Self { operation }
     }
 
@@ -122,12 +122,11 @@ pub fn classify_def_id(cx: &LateContext<'_>, def_id: DefId) -> Option<StdFsUsage
 /// The first two segments must be exactly `std` and `fs`; deeper segments are
 /// allowed, while shorter or differently rooted paths return `false`.
 fn is_std_fs_path(path: &SimplePath) -> bool {
-    let segments = path.segments();
-    segments.len() >= 2 && segments[0] == "std" && segments[1] == "fs"
+    matches!(path.segments(), [first, second, ..] if first == "std" && second == "fs")
 }
 
-/// Returns true if the character should be rejected in a valid std::fs label.
-fn is_invalid_label_char(ch: char) -> bool {
+/// Returns true if the character should be rejected in a valid `std::fs` label.
+const fn is_invalid_label_char(ch: char) -> bool {
     ch.is_whitespace() || matches!(ch, '(' | ')')
 }
 
@@ -144,11 +143,9 @@ pub(crate) fn label_is_std_fs(label: &str) -> bool {
         return false;
     }
 
-    if !label.starts_with("std::fs") {
+    let Some(remainder) = label.strip_prefix("std::fs") else {
         return false;
-    }
-
-    let remainder = &label["std::fs".len()..];
+    };
     if remainder.is_empty() {
         return true;
     }

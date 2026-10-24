@@ -1,4 +1,4 @@
-//! MinHash and LSH indexing for token-pass candidate generation.
+//! `MinHash` and LSH indexing for token-pass candidate generation.
 
 mod error;
 mod fragment_id;
