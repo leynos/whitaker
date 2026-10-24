@@ -86,6 +86,22 @@ jobs:
         with:
           persist-credentials: false
 
+      # The preinstalled Android SDK and .NET are 16.9 GB on a 73 GB volume and
+      # nothing here uses them. A change that misses every Rust compiler-cache
+      # entry makes the coverage target tree and the cache archives grow until
+      # the volume fills ("No space left on device" under
+      # target/llvm-cov-target, run 39833184396). The step runs before the first
+      # cache restore; `rm -rf` of an absent path is a no-op, so an image
+      # without them still passes.
+      - name: Free preinstalled toolchains the job does not use
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          df -m /
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet
+          df -m /
+
       - name: Bound concurrency to the runner shape
         run: |
           {
