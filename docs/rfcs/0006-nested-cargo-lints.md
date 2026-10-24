@@ -160,8 +160,9 @@ A test spawns `cargo` and one of the following holds on its builder chain:
 2. the lint can establish that the child's effective target directory is
    private: the chain calls `.current_dir(d)` with a temporary-derived `d`,
    sets no target directory, and the child cannot inherit a shared one. That
-   needs all of the following: `.env_remove("CARGO_TARGET_DIR")` or
-   `.env_clear()` on the chain (so no parent variable reaches the child), no
+   needs all of the following: `.env_clear()` on the chain, or `.env_remove` of
+   both `CARGO_TARGET_DIR` and `CARGO_BUILD_TARGET_DIR` (Cargo reads the second
+   as `build.target-dir`), so that no parent variable reaches the child; no
    `build.target-dir` in a Cargo configuration file the lint can see in or above
    `d`, and no manifest in `d` that places it in a workspace whose root lies
    outside `d`. Cargo then builds into `d/target`. If any of these cannot be
@@ -337,8 +338,10 @@ passing case drawn from their fixes:
 
 - Lint 1: `.env("CARGO_TARGET_DIR", tmp.path())` fails; the same with a value
   read from `std::env::var("CARGO_TARGET_DIR")` passes; `current_dir(tmp)` with
-  `.env_remove("CARGO_TARGET_DIR")` (or `.env_clear()`) and no target fails,
-  while the same call with an inherited `CARGO_TARGET_DIR` stays silent;
+  `.env_clear()` (or `.env_remove` of both `CARGO_TARGET_DIR` and
+  `CARGO_BUILD_TARGET_DIR`) and no target fails, while the same call with an
+  inherited `CARGO_TARGET_DIR`, or one that removes only `CARGO_TARGET_DIR` and
+  so leaves an inherited `CARGO_BUILD_TARGET_DIR`, stays silent;
   `join("target/cargo-bdd-cli")` on `CARGO_MANIFEST_DIR` fails; the `OnceLock`
   shared directory idiom is documented as a known false positive; `#[expect]`
   with a reason suppresses.
