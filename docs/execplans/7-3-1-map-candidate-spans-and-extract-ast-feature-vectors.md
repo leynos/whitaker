@@ -296,6 +296,28 @@ done/remaining if interrupted.
       passed `linux-full`, `coverage-check`, and `windows-compat` on head
       `eabfe1ba0306ac9eee1cc7cd29f1fe38bc84ca20`; [CodeScene result 8008849](https://codescene.io/projects/71836/delta/results/8008849)
       passed on that same head. Formal review and Stage G remain open.
+- [x] 2026-10-19: Applied the three scope corrections from the proof
+      assessment. Commit `6f57fc37` renamed the missing-cover harness to
+      `verify_missing_cover_returns_none` and reworded its assertions so the
+      proof is described as concrete `None` checks rather than parser-root
+      fallback; it states the `MINHASH_SIZE` and `usize::MAX / 2` assumption
+      domains for the index constructor proofs; and it records that the four
+      LSH harnesses run a separate bounded model, not production
+      `candidate_pairs` or `add_bucket_pairs`. That commit also added the
+      durable proof logs under
+      [the proof-run record](../verification/clone-detector/pr365-2026-10-19/README.md),
+      addressing the assessment's request for copies outside `/tmp`.
+- [x] 2026-10-19: Merged the updated support-lint candidate as `15a29bce`. On
+      that head, [CI run 39209042444](https://github.com/leynos/whitaker/actions/runs/39209042444)
+      passed `linux-full`, `coverage-check`, and `windows-compat`, and
+      [CodeScene result 8010894](https://codescene.io/projects/71836/delta/results/8010894)
+      succeeded. Local sequential gates on the same tree passed `make
+      check-fmt`, `make lint`, and `make typecheck`. The first `make test`
+      invocation was stopped by its wrapper timeout at 1,836 of 1,871 tests,
+      with only `SIGTERM` aborts and no assertion failures. The longer rerun
+      passed all 1,871 workspace tests, with 5 tests and 11 binaries skipped;
+      the additional `dylint_testing` suite passed 11/11, as recorded under
+      Artefacts.
 - [ ] Stage G — Complete the formal CodeRabbit review and roadmap tick after
       the candidate-bound proof assessment and readiness gates clear.
 
