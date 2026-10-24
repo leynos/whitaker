@@ -469,10 +469,19 @@ def test_coverage_skips_the_override_contracts_but_the_one_that_counts() -> None
     )
 
 
-def test_a_linux_job_runs_the_contracts_that_coverage_skips() -> None:
-    """``linux-full`` runs ``make trybuild-contracts``, the Linux home of the skipped tests."""
+def test_windows_compat_runs_the_contracts_that_coverage_skips() -> None:
+    """``windows-compat`` runs ``make test NEXTEST_PROFILE=ci``, which includes them.
+
+    ``make coverage`` skips six compile-contract tests. They are compile-time API
+    contracts, not platform-specific, and ``linux-full`` builds no test binaries
+    (a step there cost a cold workspace test build, 1,693 s), so the Windows
+    lane's full test run is their CI home.
+    """
     workflow = (MAKEFILE.parent / ".github" / "workflows" / "ci.yml").read_text()
-    assert re.search(r"^\s+run: make trybuild-contracts$", workflow, re.MULTILINE), (
-        "ci.yml must run `make trybuild-contracts` so the contract tests that "
-        "`make coverage` skips still execute on Linux"
+    assert re.search(
+        r"^\s+run: make test NEXTEST_PROFILE=ci$", workflow, re.MULTILINE
+    ), "ci.yml must run `make test NEXTEST_PROFILE=ci` so the contracts that coverage skips still run"
+    assert "make trybuild-contracts" not in workflow, (
+        "ci.yml must not run `make trybuild-contracts`: linux-full builds no "
+        "test binaries and the step added a cold workspace test build"
     )
