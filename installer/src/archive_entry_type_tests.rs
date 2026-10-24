@@ -114,7 +114,7 @@ fn the_fixture_is_stored_sparse_by_a_default_builder(holey_binary: HoleyBinary) 
 
 #[rstest]
 fn the_installer_archive_holds_regular_entries(holey_binary: HoleyBinary) {
-    let output = package_installer(InstallerPackageParams {
+    let output = package_installer(&InstallerPackageParams {
         version: Version::new("0.2.9"),
         target: TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid target"),
         binary_path: holey_binary.path.clone(),
@@ -129,7 +129,7 @@ fn a_dependency_archive_holds_regular_entries(holey_binary: HoleyBinary) {
     let dependency = find_dependency_binary("dylint-link")
         .expect("dependency manifest should load")
         .expect("dependency should exist");
-    let output = package_dependency_binary(DependencyPackageParams {
+    let output = package_dependency_binary(&DependencyPackageParams {
         dependency: dependency.clone(),
         target: TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid target"),
         binary_path: holey_binary.path.clone(),

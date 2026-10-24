@@ -103,7 +103,10 @@ fn the_environment_conflicts_with_a_source_only_option() {
         (
             "--experimental",
             InstallArgs {
-                experimental: true,
+                lint_selection: super::super::LintSelectionFlags {
+                    experimental: true,
+                    ..super::super::LintSelectionFlags::default()
+                },
                 ..InstallArgs::default()
             },
         ),
@@ -171,7 +174,10 @@ fn the_flag_conflicts_with_every_source_only_option() {
             "--experimental",
             InstallArgs {
                 no_source_fallback: true,
-                experimental: true,
+                lint_selection: super::super::LintSelectionFlags {
+                    experimental: true,
+                    ..super::super::LintSelectionFlags::default()
+                },
                 ..InstallArgs::default()
             },
         ),

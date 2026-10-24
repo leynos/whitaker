@@ -132,7 +132,7 @@ impl InstallArgs {
         }
         let requires_source = if self.is_build_only {
             Some("--build-only")
-        } else if self.experimental {
+        } else if self.lint_selection.experimental {
             Some("--experimental")
         } else if self.suite_version.is_some() {
             Some("--suite-version")

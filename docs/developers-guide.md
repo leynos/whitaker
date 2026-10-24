@@ -1396,7 +1396,6 @@ import re
 
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 
-
 def test_uses_pinned_full_sha(caller_step):
     ref = caller_step["uses"].split("@")[-1]
     assert SHA_RE.match(ref), f"expected a 40-hex commit SHA, got {ref!r}"
@@ -2727,10 +2726,15 @@ to older toolchains.
 The trust boundary for a repository-release install is the install pipeline:
 the release asset name pins the package and version, the `.sha256` sidecar
 establishes integrity, extraction confirms the expected archive member, and the
-permission step establishes launch eligibility. `repository_install_verified()`
-in `installer/src/deps/install.rs` therefore accepts `dylint-link` as soon as
-that pipeline reports success, and retains the generic version check for
-`cargo-dylint`. Genuine pipeline failures still fall back to Cargo.
+permission step establishes launch eligibility. The implementation lives in
+`installer/src/deps/install_repository.rs`. Its `RepositoryInstallRequest`
+groups the command executor, dependency tool and release metadata;
+`attempt_repository_install()` returns either `RepositoryInstall::Installed` or
+`RepositoryInstall::FallBack`, including the reason and whether Binstall should
+be skipped. The private `repository_install_verified()` helper therefore accepts
+`dylint-link` as soon as that pipeline reports success, and retains the
+generic version check for `cargo-dylint`. Genuine pipeline failures still fall
+back to Cargo.
 
 A Cargo-managed `dylint-link` already on `PATH` is checked by resolving an
 executable file and comparing the version Cargo recorded for it, which needs no
@@ -3691,6 +3695,14 @@ This skips building entirely, providing faster lint runs during development.
 set of focused private helpers. Understanding them is useful when extending the
 installation pipeline.
 
+The installer-facing APIs use `BaseDirs::home`, `BaseDirs::executables` and
+`BaseDirs::whitaker_data`. `InstallArgs` keeps the related clap inputs in its
+`lint_selection`, `execution` and `skip` fields; the nested flag structs remain
+flattened on the command line. `InstallMetrics` exposes download and build
+rates through `download_rate_permille()` and `build_rate_permille()`. The
+[0.3.0 migration guide](v0-3-0-migration-guide.md#installer-rust-apis) lists
+the source changes for consumers upgrading from 0.2.x.
+
 #### Public Git operation APIs
 
 `SuiteRef` is the validated reference type used by the installer. The canonical
@@ -4541,7 +4553,7 @@ failure and `tests/nextest_ui_filter.rs` requires the key.
 It discovers the compile-contract tests rather than listing them. A test that
 drives `trybuild` invokes a nested cargo build, so it costs what a build costs
 and the base per-test allowance is the wrong order of magnitude for it. The
-current discovery finds seven tests across
+current discovery finds eight tests across
 `common/tests/public_api_contract.rs`,
 `crates/bumpy_road_function/tests/api_contract.rs`,
 `crates/whitaker_sarif/tests/api_contract.rs`, `installer/tests/ui.rs`,

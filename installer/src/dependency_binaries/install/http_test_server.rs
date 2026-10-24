@@ -10,7 +10,7 @@ use std::io;
 use std::io::{BufRead, BufReader, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, PoisonError};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
@@ -53,12 +53,10 @@ pub(super) struct LocalServer {
 
 impl LocalServer {
     /// Start a loopback HTTP server for the supplied canned routes.
-    pub(super) fn start(routes: HashMap<String, CannedResponse>) -> Self {
-        let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback listener");
-        let port = listener.local_addr().expect("resolve local addr").port();
-        listener
-            .set_nonblocking(true)
-            .expect("set listener non-blocking");
+    pub(super) fn start(routes: HashMap<String, CannedResponse>) -> io::Result<Self> {
+        let listener = TcpListener::bind("127.0.0.1:0")?;
+        let port = listener.local_addr()?.port();
+        listener.set_nonblocking(true)?;
         let requested = Arc::new(Mutex::new(Vec::new()));
         let stop = Arc::new(AtomicBool::new(false));
         let handle = {
@@ -68,12 +66,12 @@ impl LocalServer {
                 run_server(&listener, &routes, &requested_for_thread, &stop_for_thread);
             })
         };
-        Self {
+        Ok(Self {
             base_url: format!("http://127.0.0.1:{port}"),
             requested,
             stop,
             handle: Some(handle),
-        }
+        })
     }
 
     pub(super) fn url(&self, path: &str) -> String {
@@ -81,12 +79,16 @@ impl LocalServer {
     }
 
     pub(super) fn requested_paths(&self) -> Vec<String> {
-        self.requested.lock().expect("lock requested paths").clone()
+        // A poisoned lock only means a test thread panicked while logging a
+        // request; the recorded paths remain a valid `Vec`.
+        self.requested
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
     }
 }
 
 impl Drop for LocalServer {
-    /// Stop the server loop and wait for its thread to exit.
     fn drop(&mut self) {
         self.stop.store(true, Ordering::Relaxed);
         if let Some(handle) = self.handle.take()
@@ -117,14 +119,25 @@ fn run_server(
     }
 }
 
+/// Configure an accepted socket for bounded synchronous request handling.
+///
+/// The listener remains non-blocking so the accept loop can poll for shutdown;
+/// each accepted socket gets bounded reads and writes.
+fn configure_connection(stream: &TcpStream) -> io::Result<()> {
+    stream.set_nonblocking(false)?;
+    stream.set_read_timeout(Some(Duration::from_secs(5)))?;
+    stream.set_write_timeout(Some(Duration::from_secs(5)))?;
+    Ok(())
+}
+
 /// Read one request, record its path, and write its canned response or a 404.
 ///
 /// Bound socket reads and writes with five-second timeouts. Drop the connection
 /// without responding if socket setup or cloning fails, or if no request line
 /// can be read. A header read failure ends header draining but still uses the
-/// parsed request path. `Connection: close` frames the response; write or flush
-/// failures, including a client disconnect, are not retried and drop the
-/// connection on return.
+/// parsed request path. The connection-close header frames the response; write
+/// or flush failures, including a client disconnect, are not retried and drop
+/// the connection on return.
 fn serve_connection(
     mut stream: TcpStream,
     routes: &HashMap<String, CannedResponse>,
@@ -134,11 +147,7 @@ fn serve_connection(
     // (the listener is non-blocking only so the accept loop can poll for
     // shutdown). `try_clone` shares the socket, so `peer` inherits these.
     // Drop the connection if the socket cannot be configured.
-    let setup_result = stream
-        .set_nonblocking(false)
-        .and_then(|()| stream.set_read_timeout(Some(Duration::from_secs(5))))
-        .and_then(|()| stream.set_write_timeout(Some(Duration::from_secs(5))));
-    if setup_result.is_err() {
+    if configure_connection(&stream).is_err() {
         return;
     }
     let Ok(peer) = stream.try_clone() else {
@@ -158,7 +167,8 @@ fn serve_connection(
     loop {
         let mut line = String::new();
         let bytes_read = reader.read_line(&mut line).unwrap_or(0);
-        if matches!((bytes_read, line.as_str()), (0, _) | (_, "\r\n" | "\n")) {
+        let is_blank_line = matches!(line.as_str(), "\r\n" | "\n");
+        if bytes_read == 0 || is_blank_line {
             break;
         }
     }
@@ -175,7 +185,11 @@ fn serve_connection(
             )
         },
     );
-    requested.lock().expect("lock requested paths").push(path);
+    // See `LocalServer::requested_paths` for why poisoning is recovered here.
+    requested
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .push(path);
     let header = format!(
         concat!(
             "HTTP/1.1 {}\r\n",

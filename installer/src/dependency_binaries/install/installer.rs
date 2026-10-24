@@ -80,7 +80,7 @@ pub enum DependencyBinaryInstallError {
 impl DependencyBinaryInstallError {
     /// Returns `true` when the failure is caused by a missing repository asset.
     #[must_use]
-    pub(crate) fn is_not_found(&self) -> bool {
+    pub(crate) const fn is_not_found(&self) -> bool {
         matches!(self, Self::NotFound { .. })
     }
 }
@@ -143,7 +143,7 @@ pub(crate) fn install_with(
 ) -> Result<PathBuf, DependencyBinaryInstallError> {
     let bin_dir = support
         .dirs
-        .bin_dir()
+        .executables()
         .ok_or(DependencyBinaryInstallError::MissingBinDir)?;
     fs::create_dir_all(bin_dir.as_path())?;
 
