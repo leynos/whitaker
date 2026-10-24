@@ -103,7 +103,7 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
     "default": {
         BUILD_SCRIPT_INTEGRATION_FILTER: Allowance(
             slow_timeout={
-                "period": "45m",
+                "period": "75m",
                 "terminate-after": 1,
                 "grace-period": "5s",
             },
@@ -119,7 +119,7 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
         ),
         COMPILE_CONTRACT_FILTER: Allowance(
             slow_timeout={
-                "period": "45m",
+                "period": "75m",
                 "terminate-after": 1,
                 "grace-period": "5s",
             },
@@ -165,7 +165,7 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
     "ci": {
         BUILD_SCRIPT_INTEGRATION_FILTER: Allowance(
             slow_timeout={
-                "period": "45m",
+                "period": "75m",
                 "terminate-after": 1,
                 "grace-period": "5s",
             },
@@ -181,7 +181,7 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
         ),
         COMPILE_CONTRACT_FILTER: Allowance(
             slow_timeout={
-                "period": "45m",
+                "period": "75m",
                 "terminate-after": 1,
                 "grace-period": "5s",
             },

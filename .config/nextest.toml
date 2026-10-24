@@ -44,7 +44,7 @@ test-group = "serial-toolchain-installs"
 [[profile.ci.overrides]]
 # Dylint UI harnesses build lint libraries; the default profile gives them
 # the same allowance below. Compile-contract tests use the dedicated
-# 45-minute override below.
+# 75-minute override below.
 # `whitaker-installer`'s binary is
 # named `ui` but its test is not, so the `(binary(ui) & test(=ui))`
 # clause does not reach it; it measured 235 s and timed out at 300 s on
@@ -58,7 +58,7 @@ test-group = "serial-dylint-ui"
 # Every discovered trybuild test builds fixtures through nested Cargo. Keep
 # them under one build-sized allowance and avoid retries that repeat the work.
 filter = "test(dependency_check_result_contract_is_public) | test(fixture_expansion_lint_attribute_contract) | test(normalize_settings_is_public_and_the_legacy_name_stays_removed) | test(renamed_common_apis_are_public_and_legacy_names_stay_removed) | test(renamed_sarif_api_is_public_and_legacy_names_stay_removed) | test(sha2_0_11_pre_migration_patterns_fail_to_compile) | test(trybuild_fixtures_compile_without_diagnostics)"
-slow-timeout = { period = "45m", terminate-after = 1, grace-period = "5s" }
+slow-timeout = { period = "75m", terminate-after = 1, grace-period = "5s" }
 test-group = "serial-dylint-ui"
 retries = 0
 
@@ -66,7 +66,7 @@ retries = 0
 # The parser-pin fixtures run nested Cargo builds with isolated targets. Their
 # longer allowance reflects a full interval spent queued for compiler slots.
 filter = "binary(build_script_integration)"
-slow-timeout = { period = "45m", terminate-after = 1, grace-period = "5s" }
+slow-timeout = { period = "75m", terminate-after = 1, grace-period = "5s" }
 test-group = "serial-nested-cargo-builds"
 
 [[profile.ci.overrides]]
@@ -129,7 +129,7 @@ slow-timeout = { period = "20m", terminate-after = 1, grace-period = "5s" }
 # Every discovered trybuild test builds fixtures through nested Cargo. Keep
 # them under one build-sized allowance and avoid retries that repeat the work.
 filter = "test(dependency_check_result_contract_is_public) | test(fixture_expansion_lint_attribute_contract) | test(normalize_settings_is_public_and_the_legacy_name_stays_removed) | test(renamed_common_apis_are_public_and_legacy_names_stay_removed) | test(renamed_sarif_api_is_public_and_legacy_names_stay_removed) | test(sha2_0_11_pre_migration_patterns_fail_to_compile) | test(trybuild_fixtures_compile_without_diagnostics)"
-slow-timeout = { period = "45m", terminate-after = 1, grace-period = "5s" }
+slow-timeout = { period = "75m", terminate-after = 1, grace-period = "5s" }
 test-group = "serial-dylint-ui"
 retries = 0
 
@@ -137,7 +137,7 @@ retries = 0
 # These parser-pin and no-default-feature cases run nested Cargo builds in
 # isolated targets; a cold build may queue behind admitted compiler work.
 filter = "binary(build_script_integration)"
-slow-timeout = { period = "45m", terminate-after = 1, grace-period = "5s" }
+slow-timeout = { period = "75m", terminate-after = 1, grace-period = "5s" }
 test-group = "serial-nested-cargo-builds"
 
 [[profile.default.overrides]]

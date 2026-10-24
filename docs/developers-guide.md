@@ -4219,7 +4219,7 @@ tier went.
 
 | Tier                     | What it bounds                     | Where it is set                             | Current value                                                                                                                                                                           |
 | ------------------------ | ---------------------------------- | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`, both profiles       | 300 s default; 20 m for ordinary serialized UI and no-default-feature builds; 45 m for parser-pin and trybuild compile-contract fixtures; 30 m for toolchain-installing behaviour tests |
+| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`, both profiles       | 300 s default; 20 m for ordinary serialized UI and no-default-feature builds; 75 m for parser-pin and trybuild compile-contract fixtures; 30 m for toolchain-installing behaviour tests |
 | nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, both profiles       | 85 m                                                                                                                                                                                    |
 | Cargo watchdog           | one `cargo` invocation, wall clock | not used here, see below                    | absent                                                                                                                                                                                  |
 | Job `timeout-minutes`    | the whole job                      | `ci.yml` and `coverage-main.yml`, job level | 120 m for every lane that runs the suite                                                                                                                                                |
@@ -4284,17 +4284,20 @@ Every trybuild compile contract rebuilds fixture crates through nested Cargo.
 In a cold workspace, the Bumpy Road public API contract timed out on three
 20-minute attempts; the final attempt reached its pass fixture after 15 minutes
 of nested compilation. Retrying restarted that expensive build without
-producing a result. All discovered compile contracts therefore share a
-45-minute allowance and disable retries, leaving one build enough time to reach
-its fixtures without repeating the same work.
+producing a result. A later full run exceeded the 45-minute allowance while
+Cargo waited on package-cache and compiler-admission queues. All discovered
+compile contracts therefore share a 75-minute allowance and disable retries,
+leaving one build more time to reach its fixtures without repeating the same
+work.
 
 The three parser-pin build-script integration cases run in the same serial
 nested-Cargo group and each use a fresh temporary target directory. The
 exact-pin case performs both `cargo check` and `cargo run`; a traced run
 completed in 591 seconds after waiting on the shared package-cache lock. A
 later full run exhausted the 30-minute allowance while compiler admission had a
-large queue. The 45-minute allowance reflects that observed wait, and the group
-prevents these fixtures from competing with the no-default-feature build.
+large queue, then exceeded the 45-minute allowance during the same kind of
+contention. The 75-minute allowance accounts for that observed wait, and the
+group prevents these fixtures from competing with the no-default-feature build.
 
 ### The clocks do not start together
 
