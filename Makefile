@@ -1,4 +1,4 @@
-.PHONY: help all clean test test-doc coverage build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke installer-msrv-check release-installer-dry-run package-lints workflow-test workflow-test-deps test-workflow-contracts test-markdown-format test-glibc-baseline test-sccache-health verus kani verus-clone-detector kani-clone-detector spelling skill-frontmatter-lint skill-manifest-validate skill-metadata-check skill-manifest-check test-skill-metadata-check
+.PHONY: help all clean test trybuild-contracts test-doc coverage build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke installer-msrv-check release-installer-dry-run package-lints workflow-test workflow-test-deps test-workflow-contracts test-markdown-format test-glibc-baseline test-sccache-health verus kani verus-clone-detector kani-clone-detector spelling skill-frontmatter-lint skill-manifest-validate skill-metadata-check skill-manifest-check test-skill-metadata-check
 
 # Make chooses the recipe shell itself, so the `shell: bash` default in the
 # workflows does not reach recipes; the `/bin/sh` it would otherwise use
@@ -46,16 +46,16 @@ NEXTEST_PROFILE ?=
 TEST_RUNNER ?= nextest run
 # The trybuild contract tests assert that small fixtures compile or fail to
 # compile; they run no workspace code the coverage report attributes. Under
-# instrumentation they only cost build time (about 290 s of the 616 s test
-# phase), so `make coverage` leaves them out. They still run in `make test`,
-# which the pull-request lane executes. The names are the ones
-# `.config/nextest.toml` gives its compile-contract override, less
-# `fixture_expansion_lint_attribute_contract`: that test expands the
-# whitaker_test_macros proc macro inside rustc, and leaving it out lowers that
-# crate's line coverage by 4 lines, so it stays in. A workflow contract keeps
-# the lists in step. Naming a filterset replaces the
-# profile's `default-filter`, so COVERAGE_BASE_FILTER repeats the default
-# profile's.
+# instrumentation they only cost build time (about 250 s of the 616 s test
+# phase), so `make coverage` leaves six of the seven out and `make trybuild-contracts`
+# runs all seven in a plain, uninstrumented run (the `linux-full` job runs it).
+# The names are the ones `.config/nextest.toml` gives its compile-contract
+# override. `fixture_expansion_lint_attribute_contract` stays in the coverage
+# run: it expands the whitaker_test_macros proc macro inside rustc, and leaving
+# it out lowers that crate's line coverage by 4 lines. A workflow contract keeps
+# the lists in step. Naming a filterset replaces the profile's
+# `default-filter`, so COVERAGE_BASE_FILTER repeats the default profile's.
+TRYBUILD_CONTRACT_FILTER ?= test(dependency_check_result_contract_is_public) | test(fixture_expansion_lint_attribute_contract) | test(normalize_settings_is_public_and_the_legacy_name_stays_removed) | test(renamed_common_apis_are_public_and_legacy_names_stay_removed) | test(renamed_sarif_api_is_public_and_legacy_names_stay_removed) | test(sha2_0_11_pre_migration_patterns_fail_to_compile) | test(trybuild_fixtures_compile_without_diagnostics)
 COVERAGE_SKIPPED_TRYBUILD_FILTER ?= test(dependency_check_result_contract_is_public) | test(normalize_settings_is_public_and_the_legacy_name_stays_removed) | test(renamed_common_apis_are_public_and_legacy_names_stay_removed) | test(renamed_sarif_api_is_public_and_legacy_names_stay_removed) | test(sha2_0_11_pre_migration_patterns_fail_to_compile) | test(trybuild_fixtures_compile_without_diagnostics)
 COVERAGE_BASE_FILTER ?= not (binary(behaviour_toolchain) | binary(behaviour_cli) | kind(example))
 COVERAGE_NEXTEST_FILTER ?= $(COVERAGE_BASE_FILTER) & not ($(COVERAGE_SKIPPED_TRYBUILD_FILTER))
@@ -246,6 +246,12 @@ coverage: ## Generate LCOV coverage over the CI-tested crate subset
 		LLVM_PROFILE_FILE_NAME="$(COVERAGE_PROFILE_FILE_NAME)" \
 		CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 \
 		$(MAKE) test TEST_RUNNER="llvm-cov nextest --lcov --output-path $(COVERAGE_OUTPUT) -E '$(COVERAGE_NEXTEST_FILTER)'"
+
+trybuild-contracts: ## Run the trybuild compile-contract tests, which `make coverage` skips
+	@# `make coverage` leaves six of these out (see TRYBUILD_CONTRACT_FILTER), so
+	@# the Linux lane runs them here, plain and uninstrumented, under the `ci`
+	@# profile that gives them their serial group and build-sized allowance.
+	@$(MAKE) test NEXTEST_PROFILE=ci TEST_RUNNER="nextest run -E '$(TRYBUILD_CONTRACT_FILTER)'"
 
 test-doc: ## Run the workspace doctests, which no other lane executes
 	@# `cargo llvm-cov nextest` runs no doctests and `--all-targets` excludes

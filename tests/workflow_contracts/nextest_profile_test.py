@@ -445,30 +445,34 @@ COVERAGE_KEPT_CONTRACT_TEST: typ.Final[str] = (
 )
 
 
-def test_coverage_leaves_out_the_compile_contract_tests_that_add_no_coverage() -> None:
-    """``make coverage`` excludes the override's contract tests but the one that counts.
+def test_coverage_skips_the_override_contracts_but_the_one_that_counts() -> None:
+    """The Makefile lists track the nextest override, less the one test that counts.
 
-    The trybuild contract tests assert that fixtures compile; under
-    instrumentation they only cost build time. The Makefile names them in
-    ``COVERAGE_SKIPPED_TRYBUILD_FILTER``, and this holds that list equal to the
-    override's filter less the one test that moves coverage, so adding a
-    contract test to one place and not the other fails here instead of silently
-    putting it back into (or leaving it out of) the coverage lane.
+    ``TRYBUILD_CONTRACT_FILTER`` must equal the compile-contract override's
+    filter, and ``COVERAGE_SKIPPED_TRYBUILD_FILTER`` that list less the one
+    test that moves coverage, so adding a contract test to one place and not
+    the other fails here instead of silently changing the coverage lane.
     """
+    all_seven = _makefile_variable("TRYBUILD_CONTRACT_FILTER")
+    assert all_seven == COMPILE_CONTRACT_FILTER, (
+        "TRYBUILD_CONTRACT_FILTER must equal the nextest compile-contract "
+        "override's filter"
+    )
     expected = " | ".join(
         part
         for part in COMPILE_CONTRACT_FILTER.split(" | ")
         if part != COVERAGE_KEPT_CONTRACT_TEST
     )
-    assert _makefile_variable("COVERAGE_SKIPPED_TRYBUILD_FILTER") == expected
+    assert _makefile_variable("COVERAGE_SKIPPED_TRYBUILD_FILTER") == expected, (
+        "make coverage must skip every compile-contract test except the "
+        "proc-macro expansion test that adds coverage"
+    )
 
 
-def test_coverage_passes_its_filter_to_nextest_and_make_test_does_not() -> None:
-    """Only the coverage recipe filters; ``make test`` still runs every contract."""
-    text = MAKEFILE.read_text()
-    recipe = re.search(r"^coverage:.*?(?=^\S)", text, re.MULTILINE | re.DOTALL)
-    assert recipe, "Makefile has no coverage recipe"
-    assert "COVERAGE_NEXTEST_FILTER" in recipe.group(0)
-    test_recipe = re.search(r"^test:.*?(?=^\S)", text, re.MULTILINE | re.DOTALL)
-    assert test_recipe, "Makefile has no test recipe"
-    assert "FILTER" not in test_recipe.group(0)
+def test_a_linux_job_runs_the_contracts_that_coverage_skips() -> None:
+    """``linux-full`` runs ``make trybuild-contracts``, the Linux home of the skipped tests."""
+    workflow = (MAKEFILE.parent / ".github" / "workflows" / "ci.yml").read_text()
+    assert re.search(r"^\s+run: make trybuild-contracts$", workflow, re.MULTILINE), (
+        "ci.yml must run `make trybuild-contracts` so the contract tests that "
+        "`make coverage` skips still execute on Linux"
+    )

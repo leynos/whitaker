@@ -326,12 +326,13 @@ are never silently skipped in the pipeline.
 ### Coverage and nested Cargo builds
 
 `make coverage` uses the same selected crate set and warning policy as
-`make test`, but runs it through `cargo llvm-cov nextest`. The Makefile assigns
-the absolute `COVERAGE_TARGET_DIR` (by default,
-`$(CURDIR)/target/llvm-cov-target`) to both `CARGO_LLVM_COV_TARGET_DIR` and
-`CARGO_TARGET_DIR`. It also sets `LLVM_PROFILE_FILE_NAME` to
-`whitaker-%m.profraw`, so LLVM merges each instrumented binary's counters
-online instead of retaining a separate raw profile for every Nextest process.
+`make test`, but runs it through `cargo llvm-cov nextest` and skips six
+trybuild contract tests (see the lane table below). The Makefile assigns the
+absolute `COVERAGE_TARGET_DIR` (by default, `$(CURDIR)/target/llvm-cov-target`)
+to both `CARGO_LLVM_COV_TARGET_DIR` and `CARGO_TARGET_DIR`. It also sets
+`LLVM_PROFILE_FILE_NAME` to `whitaker-%m.profraw`, so LLVM merges each
+instrumented binary's counters online instead of retaining a separate raw
+profile for every Nextest process.
 
 The first variable makes `cargo-llvm-cov` instrument its output in that
 directory. The second is inherited by nested Cargo commands that Dylint UI
@@ -1081,11 +1082,28 @@ Table: Jobs that execute the Rust test suite.
 | `coverage-upload` | Ubicloud Linux   | `make coverage`, `make test-doc` | the trunk baseline, on `main` pushes only |
 | `windows-compat`  | `windows-latest` | `make test NEXTEST_PROFILE=ci`   | a different platform                      |
 
-`make coverage` delegates to the `make test` recipe and swaps only the driver to
+`make coverage` delegates to the `make test` recipe and swaps the driver to
 `cargo llvm-cov nextest`, so the instrumented run keeps one package set, one
 feature set, and one target set: `--workspace --all-targets --all-features`
 minus the eleven CI-excluded crates. Both coverage lanes run identical flags,
 so the pull-request gate and the trunk baseline are comparable.
+
+It differs from `make test` in one respect: it passes nextest a filterset
+(`COVERAGE_NEXTEST_FILTER`) that skips six of the seven trybuild
+compile-contract tests, which assert that fixtures compile and add no coverage
+(about 250 s of the instrumented test phase). The seventh,
+`fixture_expansion_lint_attribute_contract`, stays in because it expands the
+`whitaker_test_macros` proc macro inside rustc and is worth four lines of that
+crate's coverage. Naming a filterset replaces the profile's `default-filter`, so
+`COVERAGE_BASE_FILTER` repeats the default profile's. The skipped contracts
+still run on Linux: the `linux-full` job runs `make trybuild-contracts`, which
+runs all seven, uninstrumented, under the `ci` profile; `make test` runs them
+too, and so does the Windows lane. To run them yourself, use
+`make trybuild-contracts` (or plain `make test`). A workflow contract keeps
+`TRYBUILD_CONTRACT_FILTER` equal to the nextest override's filter and
+`COVERAGE_SKIPPED_TRYBUILD_FILTER` equal to that list less the retained test,
+and an execution test runs the Makefile against a stub Cargo to check the
+arguments each target passes.
 
 `make test-doc` is the second half of that one executed set, not a second lane.
 `cargo llvm-cov nextest` executes no doctests and `--all-targets` excludes
