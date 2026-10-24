@@ -68,6 +68,10 @@ env:
 jobs:
   coverage-check:
     if: github.event_name == 'pull_request'
+    # dependabot-runner: exempt. Dependabot pull requests stay on Ubicloud:
+    # the setup-rust-sccache step below sets `expect-cache: ubicloud`, which
+    # fails closed on a hosted runner, and the glibc-baseline contract is pinned
+    # to this runner image.
     runs-on: ubicloud-standard-2-ubuntu-2404
     # Above the 85 m nextest global timeout plus a cold build and the work
     # either side of the suite. A ceiling merely above the suite's budget
@@ -280,6 +284,9 @@ jobs:
           sccache-status: ${{ steps.setup-rust.outputs.sccache-status }}
 
   linux-full:
+    # dependabot-runner: exempt. As `coverage-check`: `expect-cache: ubicloud`
+    # fails closed on a hosted runner, and the glibc-baseline contract is
+    # pinned to this runner image.
     runs-on: ubicloud-standard-2-ubuntu-2404
     timeout-minutes: 60
     defaults:
