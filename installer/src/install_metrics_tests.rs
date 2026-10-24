@@ -2,10 +2,11 @@
 
 use std::{io::ErrorKind, path::PathBuf, time::Duration};
 
+use proptest::prelude::*;
 use rstest::{fixture, rstest};
 
 use crate::install_metrics::{
-    InstallMetrics, InstallMetricsError, InstallMode, record_install_at_path,
+    InstallMetrics, InstallMetricsError, InstallMode, rate_permille, record_install_at_path,
 };
 
 struct MetricsPathFixture {
@@ -26,14 +27,42 @@ fn metrics_path_fixture() -> std::io::Result<MetricsPathFixture> {
 #[test]
 fn zero_state_rates_are_zero() {
     let metrics = InstallMetrics::default();
-    assert!(
-        metrics.download_rate().abs() < f64::EPSILON,
+    assert_eq!(
+        metrics.download_rate_permille(),
+        0,
         "zero-state download rate"
     );
-    assert!(
-        metrics.build_rate().abs() < f64::EPSILON,
-        "zero-state build rate"
-    );
+    assert_eq!(metrics.build_rate_permille(), 0, "zero-state build rate");
+}
+
+#[rstest]
+#[case::one_sixth(1, 6, 167)]
+#[case::half_permille(1, 2_000, 1)]
+#[case::below_half_permille(1, 2_001, 0)]
+#[case::maximum_counters(u64::MAX, u64::MAX, 1_000)]
+#[case::inconsistent_counts_are_capped(5, 4, 1_000)]
+fn rate_permille_rounds_without_overflow(
+    #[case] part: u64,
+    #[case] whole: u64,
+    #[case] expected: u64,
+) {
+    assert_eq!(rate_permille(part, whole), expected);
+}
+
+proptest! {
+    #[test]
+    fn rate_permille_matches_wide_rounded_ratio(
+        whole in 1_u64..=u64::MAX,
+        part_seed in any::<u64>(),
+    ) {
+        let part = part_seed.min(whole);
+        let denominator = u128::from(whole);
+        let numerator = u128::from(part) * 1_000 + denominator / 2;
+        let expected = u64::try_from(numerator / denominator)
+            .expect("a valid ratio is at most 1000 permille");
+
+        prop_assert_eq!(rate_permille(part, whole), expected);
+    }
 }
 
 #[test]
@@ -46,13 +75,26 @@ fn record_install_updates_counts_and_duration() {
     assert_eq!(metrics.download_installs(), 1);
     assert_eq!(metrics.build_installs(), 1);
     assert_eq!(metrics.total_install_duration(), Duration::from_secs(2));
-    assert!(
-        (metrics.download_rate() - 0.5).abs() < f64::EPSILON,
-        "download rate"
+    assert_eq!(
+        metrics.download_rate_permille(),
+        500,
+        "download rate permille"
     );
-    assert!(
-        (metrics.build_rate() - 0.5).abs() < f64::EPSILON,
-        "build rate"
+    assert_eq!(metrics.build_rate_permille(), 500, "build rate permille");
+}
+
+#[test]
+fn summary_line_rounds_complementary_rates_to_one_decimal_place() {
+    let mut metrics = InstallMetrics::default();
+    metrics.record_install(InstallMode::Download, Duration::from_millis(1));
+    metrics.record_install(InstallMode::Build, Duration::from_millis(1));
+    metrics.record_install(InstallMode::Build, Duration::from_millis(1));
+
+    let summary = metrics.summary_line();
+
+    assert_eq!(
+        summary,
+        "Install metrics: download 1/3 (33.3%), build 2/3 (66.7%), total installation time 0.003s"
     );
 }
 

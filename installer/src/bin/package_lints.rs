@@ -5,6 +5,7 @@
 //! rolling-release CI workflow.
 
 use clap::Parser;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use thiserror::Error;
@@ -17,6 +18,7 @@ use whitaker_installer::artefact::packaging::{
 use whitaker_installer::artefact::packaging_error::PackagingError;
 use whitaker_installer::artefact::target::TargetTriple;
 use whitaker_installer::artefact::toolchain_channel::ToolchainChannel;
+use whitaker_installer::output::write_stderr_line;
 use whitaker_installer::resolution::{LINT_CRATES, SUITE_CRATE};
 
 /// Package prebuilt lint libraries into `.tar.zst` archives following
@@ -82,19 +84,36 @@ enum PackageCliError {
     /// Failed to read the system clock.
     #[error("system time error: {0}")]
     SystemTime(#[from] std::time::SystemTimeError),
+
+    /// Failed to write the success report to standard output.
+    #[error("failed to write to stdout: {0}")]
+    Stdout(#[from] std::io::Error),
 }
 
 fn main() {
     let cli = PackageCli::parse();
     if let Err(err) = run(cli) {
-        eprintln!("error: {err}");
+        write_stderr_line(&mut std::io::stderr(), format!("error: {err}"));
         std::process::exit(1);
     }
 }
 
-/// Validate CLI inputs, delegate to the packaging pipeline, and report
-/// the resulting archive path on stdout.
+/// Validate CLI inputs, package the libraries, and report the output paths.
+///
+/// # Errors
+///
+/// Returns validation, packaging, clock, or stdout errors from the command.
 fn run(cli: PackageCli) -> Result<(), PackageCliError> {
+    let mut stdout = std::io::stdout();
+    run_with_stdout(cli, &mut stdout)
+}
+
+/// Validate CLI inputs, package the libraries, and write both output paths.
+///
+/// # Errors
+///
+/// Returns validation, packaging, clock, or writer errors from the command.
+fn run_with_stdout(cli: PackageCli, stdout: &mut impl Write) -> Result<(), PackageCliError> {
     let git_sha = GitSha::try_from(cli.git_sha.as_str())?;
     let toolchain = ToolchainChannel::try_from(cli.toolchain.as_str())?;
     let target = TargetTriple::try_from(cli.target.as_str())?;
@@ -119,6 +138,7 @@ fn run(cli: PackageCli) -> Result<(), PackageCliError> {
 
     std::fs::create_dir_all(&cli.output_dir).map_err(PackagingError::from)?;
 
+    let out_dir = cli.output_dir.clone();
     let params = PackageParams {
         git_sha,
         toolchain,
@@ -128,14 +148,13 @@ fn run(cli: PackageCli) -> Result<(), PackageCliError> {
         generated_at: GeneratedAt::new(timestamp),
     };
 
-    let output = package_artefact(params)?;
+    let output = package_artefact(&params)?;
     let manifest_json = generate_manifest_json(&output.manifest)?;
-    let out_dir = output.archive_path.parent().expect("archive has parent");
     let manifest_filename = format!("manifest-{}.json", output.manifest.target());
     let manifest_path = out_dir.join(manifest_filename);
     std::fs::write(&manifest_path, &manifest_json).map_err(PackagingError::from)?;
-    println!("Created {}", output.archive_path.display());
-    println!("Manifest {}", manifest_path.display());
+    writeln!(stdout, "Created {}", output.archive_path.display())?;
+    writeln!(stdout, "Manifest {}", manifest_path.display())?;
     Ok(())
 }
 
@@ -174,34 +193,37 @@ fn validate_library_files(paths: &[PathBuf]) -> Result<(), PackageCliError> {
 
 /// Verify that `ts` matches the expected `YYYY-MM-DDThh:mm:ssZ` shape.
 fn validate_iso8601(ts: &str) -> Result<(), PackageCliError> {
-    let b = ts.as_bytes();
-    if !has_valid_length(b) {
+    let &[
+        y0,
+        y1,
+        y2,
+        y3,
+        b'-',
+        mo0,
+        mo1,
+        b'-',
+        d0,
+        d1,
+        b'T',
+        h0,
+        h1,
+        b':',
+        mi0,
+        mi1,
+        b':',
+        s0,
+        s1,
+        b'Z',
+    ] = ts.as_bytes()
+    else {
         return Err(PackageCliError::InvalidTimestamp(ts.to_owned()));
+    };
+    let digits = [y0, y1, y2, y3, mo0, mo1, d0, d1, h0, h1, mi0, mi1, s0, s1];
+    if digits.iter().all(u8::is_ascii_digit) {
+        Ok(())
+    } else {
+        Err(PackageCliError::InvalidTimestamp(ts.to_owned()))
     }
-    if !has_valid_separators(b) {
-        return Err(PackageCliError::InvalidTimestamp(ts.to_owned()));
-    }
-    if !has_valid_digits(b) {
-        return Err(PackageCliError::InvalidTimestamp(ts.to_owned()));
-    }
-    Ok(())
-}
-
-fn has_valid_length(b: &[u8]) -> bool {
-    b.len() == 20
-}
-
-fn has_valid_separators(b: &[u8]) -> bool {
-    b[4] == b'-' && b[7] == b'-' && b[10] == b'T' && b[13] == b':' && b[16] == b':' && b[19] == b'Z'
-}
-
-/// Digit positions in `YYYY-MM-DDThh:mm:ssZ` (start, end pairs).
-const DIGIT_RANGES: [(usize, usize); 6] = [(0, 4), (5, 7), (8, 10), (11, 13), (14, 16), (17, 19)];
-
-fn has_valid_digits(b: &[u8]) -> bool {
-    DIGIT_RANGES
-        .iter()
-        .all(|&(s, e)| b[s..e].iter().all(u8::is_ascii_digit))
 }
 
 /// Return the current UTC time as an ISO 8601 string (`YYYY-MM-DDThh:mm:ssZ`).
@@ -215,10 +237,10 @@ fn now_utc_iso8601() -> Result<String, std::time::SystemTimeError> {
 /// Format a Unix epoch timestamp as `YYYY-MM-DDThh:mm:ssZ`.
 fn format_epoch_secs(epoch_secs: u64) -> String {
     let (year, month, day) = civil_from_epoch(epoch_secs);
-    let day_secs = (epoch_secs % 86_400) as u32;
-    let hour = day_secs / 3_600;
-    let minute = (day_secs % 3_600) / 60;
-    let second = day_secs % 60;
+    let day_secs = epoch_secs.rem_euclid(86_400);
+    let hour = day_secs.div_euclid(3_600);
+    let minute = day_secs.rem_euclid(3_600).div_euclid(60);
+    let second = day_secs.rem_euclid(60);
     format!("{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}Z")
 }
 
@@ -226,177 +248,21 @@ fn format_epoch_secs(epoch_secs: u64) -> String {
 ///
 /// Adapted from Howard Hinnant's `civil_from_days` algorithm, which is
 /// public domain and widely used in C++ `<chrono>` implementations.
-fn civil_from_epoch(epoch_secs: u64) -> (u32, u32, u32) {
-    let z = (epoch_secs / 86_400) as i64 + 719_468;
+const fn civil_from_epoch(epoch_secs: u64) -> (u64, u64, u64) {
+    let z = epoch_secs.div_euclid(86_400) + 719_468;
     let era = z.div_euclid(146_097);
-    let doe = z.rem_euclid(146_097) as u64; // day of era [0, 146_096]
-    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
-    let y = (yoe as i64) + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100); // day of year
-    let mp = (5 * doy + 2) / 153;
-    let d = doy - (153 * mp + 2) / 5 + 1;
+    let doe = z.rem_euclid(146_097); // day of era [0, 146_096]
+    let yoe = (doe - doe.div_euclid(1_460) + doe.div_euclid(36_524) - doe.div_euclid(146_096))
+        .div_euclid(365);
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe.div_euclid(4) - yoe.div_euclid(100)); // day of year
+    let mp = (5 * doy + 2).div_euclid(153);
+    let d = doy - (153 * mp + 2).div_euclid(5) + 1;
     let m = if mp < 10 { mp + 3 } else { mp - 9 };
-    let y = if m <= 2 { y + 1 } else { y };
-    #[expect(
-        clippy::cast_sign_loss,
-        reason = "year is always positive for post-epoch dates"
-    )]
-    (y as u32, m as u32, d as u32)
+    let year = if m <= 2 { y + 1 } else { y };
+    (year, m, d)
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use clap::Parser;
-    use rstest::{fixture, rstest};
-    use std::fs;
-
-    /// Common CLI base arguments shared across parsing tests.
-    const BASE_ARGS: [&str; 9] = [
-        "whitaker-package-lints",
-        "--git-sha",
-        "abc1234",
-        "--toolchain",
-        "nightly-2026-05-28",
-        "--target",
-        "x86_64-unknown-linux-gnu",
-        "--output-dir",
-        "/tmp/dist",
-    ];
-
-    /// Build a CLI arg vec from base args plus extra trailing args.
-    fn cli_args<'a>(extra: &'a [&'a str]) -> Vec<&'a str> {
-        BASE_ARGS
-            .iter()
-            .copied()
-            .chain(extra.iter().copied())
-            .collect()
-    }
-
-    #[fixture]
-    fn linux_target() -> TargetTriple {
-        TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid")
-    }
-
-    #[test]
-    fn cli_parses_all_required_args() {
-        let cli = PackageCli::parse_from(cli_args(&["/tmp/libfoo.so", "/tmp/libbar.so"]));
-        assert_eq!(cli.git_sha, "abc1234");
-        assert_eq!(cli.toolchain, "nightly-2026-05-28");
-        assert_eq!(cli.target, "x86_64-unknown-linux-gnu");
-        assert_eq!(cli.output_dir, PathBuf::from("/tmp/dist"));
-        assert_eq!(cli.library_files.len(), 2);
-        assert!(cli.generated_at.is_none());
-    }
-
-    #[test]
-    fn cli_accepts_optional_generated_at() {
-        let args = cli_args(&["--generated-at", "2026-02-12T10:00:00Z", "/tmp/lib.so"]);
-        let cli = PackageCli::parse_from(args);
-        assert_eq!(cli.generated_at, Some("2026-02-12T10:00:00Z".to_owned()));
-    }
-
-    #[test]
-    fn cli_rejects_missing_git_sha() {
-        PackageCli::try_parse_from([
-            "whitaker-package-lints",
-            "--toolchain",
-            "nightly",
-            "--target",
-            "x86_64-unknown-linux-gnu",
-            "--output-dir",
-            "/tmp",
-            "/tmp/lib.so",
-        ])
-        .expect_err("expected clap to reject missing --git-sha");
-    }
-
-    #[test]
-    fn cli_rejects_missing_library_files_and_release_dir() {
-        PackageCli::try_parse_from(cli_args(&[]))
-            .expect_err("expected clap to reject zero library files");
-    }
-
-    #[test]
-    fn cli_parses_release_dir_flag() {
-        let cli = PackageCli::parse_from(cli_args(&["--release-dir", "/tmp/target/release"]));
-        assert_eq!(cli.release_dir, Some(PathBuf::from("/tmp/target/release")));
-        assert!(cli.library_files.is_empty());
-    }
-
-    #[test]
-    fn cli_rejects_both_release_dir_and_library_files() {
-        PackageCli::try_parse_from(cli_args(&["--release-dir", "/tmp/release", "/tmp/lib.so"]))
-            .expect_err("expected clap to reject conflicting args");
-    }
-
-    #[rstest]
-    fn discover_library_files_finds_expected_files(linux_target: TargetTriple) {
-        let dir = tempfile::tempdir().expect("temp dir");
-        for name in LINT_CRATES.iter().chain(std::iter::once(&SUITE_CRATE)) {
-            fs::write(dir.path().join(format!("lib{name}.so")), b"fake").expect("write");
-        }
-        let found = discover_library_files(dir.path(), &linux_target).expect("all present");
-        assert_eq!(found.len(), LINT_CRATES.len() + 1);
-    }
-
-    #[test]
-    fn discover_library_files_uses_correct_extension() {
-        let target = TargetTriple::try_from("aarch64-apple-darwin").expect("valid");
-        let dir = tempfile::tempdir().expect("temp dir");
-        for name in LINT_CRATES.iter().chain(std::iter::once(&SUITE_CRATE)) {
-            fs::write(dir.path().join(format!("lib{name}.dylib")), b"fake").expect("write");
-        }
-        let found = discover_library_files(dir.path(), &target).expect("all present");
-        assert!(
-            found
-                .iter()
-                .all(|p| p.to_string_lossy().ends_with(".dylib"))
-        );
-    }
-
-    #[rstest]
-    fn discover_library_files_rejects_missing(linux_target: TargetTriple) {
-        let dir = tempfile::tempdir().expect("temp dir");
-        fs::write(dir.path().join("libconditional_max_n_branches.so"), b"fake").expect("write");
-        let result = discover_library_files(dir.path(), &linux_target);
-        assert!(result.is_err(), "must reject incomplete set of libraries");
-    }
-
-    #[rstest]
-    #[case::unix_epoch(0, "1970-01-01T00:00:00Z")]
-    #[case::y2k(946_684_800, "2000-01-01T00:00:00Z")]
-    #[case::midday_2026(1_771_156_800, "2026-02-15T12:00:00Z")]
-    fn format_epoch_secs_produces_correct_iso8601(#[case] secs: u64, #[case] expected: &str) {
-        assert_eq!(format_epoch_secs(secs), expected);
-    }
-
-    #[test]
-    fn now_utc_iso8601_format_is_valid() {
-        let ts = now_utc_iso8601().expect("system time");
-        assert!(validate_iso8601(&ts).is_ok(), "own output must validate");
-    }
-
-    #[rstest]
-    #[case::valid("2026-02-12T10:00:00Z", true)]
-    #[case::too_short("2026-02-12T10:00Z", false)]
-    #[case::no_z("2026-02-12T10:00:00X", false)]
-    #[case::letters("XXXX-XX-XXTXX:XX:XXZ", false)]
-    fn validate_iso8601_accepts_and_rejects(#[case] ts: &str, #[case] ok: bool) {
-        assert_eq!(validate_iso8601(ts).is_ok(), ok);
-    }
-
-    #[test]
-    fn release_dir_rejects_non_directory() {
-        let dir = tempfile::tempdir().expect("temp dir");
-        let file = dir.path().join("not-a-dir");
-        fs::write(&file, b"x").expect("write");
-        let file_str = file.to_str().expect("utf8").to_owned();
-        let extra = ["--release-dir", &file_str];
-        let cli = PackageCli::parse_from(cli_args(&extra));
-        assert!(
-            run(cli).is_err(),
-            "should reject non-directory --release-dir"
-        );
-    }
-}
+#[path = "package_lints/tests.rs"]
+mod tests;

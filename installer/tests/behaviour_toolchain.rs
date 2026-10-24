@@ -5,8 +5,8 @@
 //!
 //! The tests include:
 //! - Dry-run scenarios that test toolchain detection (skipped if toolchain missing)
-//! - Install scenarios that exercise auto-install using an isolated rustup environment
-//!   (`RUSTUP_HOME/CARGO_HOME` set to temp directories)
+//! - Install scenarios that exercise auto-install using an isolated rustup
+//!   environment (`RUSTUP_HOME/CARGO_HOME` set to temp directories)
 //! - Failure scenarios that test error handling with a non-existent toolchain
 
 mod prebuilt_markers;

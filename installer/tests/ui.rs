@@ -27,3 +27,8 @@ fn dependency_check_result_contract_is_public() {
     cases.compile_fail("tests/ui/legacy_dylint_dependency_check_status.rs");
     cases.compile_fail("tests/ui/legacy_installer_error_match.rs");
 }
+
+#[test]
+fn public_const_api_works_in_const_context() {
+    trybuild::TestCases::new().pass("tests/ui/pass_const_schema_version.rs");
+}

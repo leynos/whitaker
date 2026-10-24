@@ -51,7 +51,7 @@ impl TargetTriple {
 
     /// Return the full list of supported target triples.
     #[must_use]
-    pub fn supported() -> &'static [&'static str] {
+    pub const fn supported() -> &'static [&'static str] {
         SUPPORTED_TARGETS
     }
 
@@ -159,6 +159,8 @@ impl fmt::Display for TargetTriple {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for target-triple parsing and validation.
+
     use super::*;
     use rstest::rstest;
 

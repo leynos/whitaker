@@ -23,7 +23,7 @@ fn download_from_urls_rejects_a_non_utf8_destination_before_any_request(
 ) {
     // No route is registered; the server exists only to prove it is never
     // contacted for an invalid destination.
-    let server = LocalServer::start(HashMap::new());
+    let server = LocalServer::start(HashMap::new()).expect("local server should start");
 
     let error = download_from_urls(
         &agent(),

@@ -120,20 +120,20 @@ pub fn failure_output(stderr: impl AsRef<str>) -> Output {
 /// Minimal directory stub for tests that only care about the binary path.
 #[derive(Debug, Clone, Default)]
 pub struct StubDirs {
-    /// Directory returned by [`BaseDirs::bin_dir`].
+    /// Directory returned by [`BaseDirs::executables`].
     pub bin_dir: Option<PathBuf>,
 }
 
 impl BaseDirs for StubDirs {
-    fn home_dir(&self) -> Option<PathBuf> {
+    fn home(&self) -> Option<PathBuf> {
         None
     }
 
-    fn bin_dir(&self) -> Option<PathBuf> {
+    fn executables(&self) -> Option<PathBuf> {
         self.bin_dir.clone()
     }
 
-    fn whitaker_data_dir(&self) -> Option<PathBuf> {
+    fn whitaker_data(&self) -> Option<PathBuf> {
         None
     }
 }

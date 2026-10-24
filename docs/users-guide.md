@@ -8,12 +8,13 @@ the [Developer's Guide](developers-guide.md).
 
 ## Upgrading library consumers
 
-Version 0.3.0 includes source-breaking spelling changes to public Rust APIs.
-Existing library consumers must update imports, field access, and builder calls
-to the names listed in the
+Version 0.3.0 includes source-breaking changes to public Rust APIs, including
+the installer interfaces. Existing library consumers must update imports, field
+access, and builder calls to the names listed in the
 [Whitaker 0.3.0 migration guide](v0-3-0-migration-guide.md). The changes affect
-Rust source only: SARIF 2.1.0 JSON keys retain their schema-defined spellings,
-so existing serialized data requires no migration.
+Rust source only: the installer's CLI flags and SARIF 2.1.0 JSON keys retain
+their existing spellings, so existing command invocations and serialized data
+require no migration.
 
 ## Quick Setup
 
