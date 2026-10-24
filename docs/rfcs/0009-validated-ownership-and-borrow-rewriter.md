@@ -150,7 +150,14 @@ whitaker rewrite check --select OWN,BOR -- --all-features
 ```
 
 The command should discover intents, materialize alternatives, and invoke RFC
-0003. It should not modify source.
+0007. It creates temporary session files and launches Cargo and compiler
+processes while leaving user source untouched. RFC 0007 confines those
+processes to a filesystem and network sandbox; unsupported sandbox environments
+fail before Cargo starts.
+
+The public command is `whitaker rewrite check`, consistent with RFC 0007 and
+the shared CLI design. `rewrite-scan` names the internal lint-session phase,
+not a user-facing command or an alternative to `whitaker check`.
 
 Example output:
 
@@ -454,13 +461,21 @@ materialized.
 - Pattern type and mutability remain valid.
 - Removing the binding does not remove comments or attributes.
 - No use depends on clone identity or owned method resolution.
+- The resolved `Clone::clone` implementation has a trusted proof of
+  observational purity and cannot panic.
 - RFC 0007 accepts the result.
 
 #### `clone_only_used_by_borrow` Policy
 
-A direct argument rewrite may be `MachineApplicable`. A multi-use local
-substitution begins as `LocallyReasoned` until corpus validation establishes
-low risk.
+A clone-removal rewrite is `ReviewRequired` by default because `Clone` has no
+purity contract and a custom implementation may have side effects or panic. In
+the first release, only compiler-known identity implementations for primitive
+`Copy` scalars, shared references, and tuples or arrays composed exclusively of
+those types may be treated as trusted. A direct argument rewrite using such an
+implementation may be `MachineApplicable`. Derived and user-defined
+implementations remain review-required unless a future reviewed effect-summary
+contract proves the same properties. A multi-use local substitution begins as
+`LocallyReasoned` only after the clone-effect precondition is satisfied.
 
 A `PotentiallyPathSensitive` conflict from Phase 9 should still materialize the
 direct borrow. RFC 0007 decides whether it is NLL-valid, Polonius-only, or
@@ -740,6 +755,13 @@ Before writing, the engine must verify:
 - successful compiler validation; and
 - clean materializer invariants.
 
+Compiler validation occurs in an overlay and may take time. Immediately before
+the first source replacement, acquire an exclusive Whitaker workspace-edit lock
+and recheck every original file digest under that lock. Hold the lock through
+all replacements, post-application gates, commit marking, and any rollback.
+External editors need not honour this lock, so every replacement and rollback
+must also compare the current file with the expected bytes before writing.
+
 A dirty version-control tree is not inherently unsafe. Digest matching is the
 authoritative precondition. The CLI may offer `--require-clean-vcs` for teams
 that prefer it.
@@ -759,20 +781,45 @@ target/whitaker/rewrite/<session-id>/
 ```
 
 `originals/` contains the exact original bytes for touched files. Durable
-reports use workspace-relative paths. Secrets must be redacted from logs.
+reports use workspace-relative paths. Secrets must be redacted from logs. The
+journal records a durable transaction state, the original digest, the expected
+post-application digest, and each replacement intent before changing a file.
 
 ### 13.3. Atomic file replacement
 
 For each touched file, the engine should:
 
-1. write transformed bytes to a sibling temporary file;
-2. flush and close the temporary file;
-3. preserve relevant permissions;
-4. atomically rename it over the original where the platform permits; and
-5. record completion in the journal.
+1. verify the current file still matches its original digest;
+2. write transformed bytes to a sibling temporary file;
+3. flush and close the temporary file;
+4. preserve relevant permissions;
+5. durably record the replacement intent;
+6. atomically rename it over the original where the platform permits;
+7. sync the containing directory where the platform supports it; and
+8. durably record completion in the journal.
 
 If any file replacement fails, already replaced files must be restored from the
 journal.
+
+Before the first replacement, flush and sync the complete originals, candidate
+files, prepared journal, and session directory. If the platform cannot provide
+the required atomic replacement and durable journal operations, multi-file
+application remains diff-only. After all files are replaced and
+post-application gates succeed, write and sync a final commit marker before
+releasing the workspace lock. The marker separates a committed transaction from
+an interrupted one. This provides crash-recoverable all-or-nothing completion
+across files when no intervening writer changes a touched file; it does not
+promise that concurrent readers can never observe an intermediate replacement
+while the transaction is in progress.
+
+At startup, inspect journals without a final commit marker before accepting a
+new rewrite. First examine every touched file in an uncommitted transaction. If
+any file matches neither its original nor expected post-application digest,
+stop before restoring any file, preserve the journal, and report a recovery
+conflict. Otherwise leave files already matching their original digest alone
+and restore files matching their expected post-application digest from the
+original bytes. A transaction with a durable commit marker is kept as applied
+and may be cleaned up according to retention policy.
 
 The implementation should use capability-based filesystem handles and reject
 paths escaping the workspace.
@@ -788,13 +835,20 @@ After source replacement, the engine should run:
 5. workspace gates when required by impact scope.
 
 If a mandatory gate fails, the default behaviour is rollback. `--keep-failed`
-may retain the source and journal for investigation, but must be explicit.
+may retain the source and journal for investigation, but must be explicit. In
+that case, write and sync a `FAILED_KEPT` terminal marker before releasing the
+workspace lock. Startup recovery preserves and reports that state instead of
+rolling it back; a later explicit rollback still checks the expected
+post-application digests.
 
 ### 13.5. Rollback
 
-Rollback restores exact original bytes, then reruns the source digest check. A
-rollback failure is a high-severity operational error and must preserve all
-journal data.
+Before rollback, compare every current file with its expected post-application
+digest. If any file has changed since application, do not begin restoration or
+overwrite the intervening change; preserve the journal and report a rollback
+conflict. Otherwise restore exact original bytes, verify every original digest,
+and then mark recovery complete. A rollback failure is a high-severity
+operational error and must preserve all journal data.
 
 The rewriter should never rely on Git for rollback. Git may be absent, the tree
 may be dirty, and generated worktrees may not have repository metadata.
@@ -1161,7 +1215,8 @@ post-application rollback rates.
 
 - Add journals, atomic replacement, formatting checks, compiler checks, and
   rollback.
-- Permit `apply --safe` for direct clone and `BOR004` mechanical rewrites.
+- Permit `apply --safe` only for trusted pure direct-clone mappings and
+  `BOR004` mechanical rewrites.
 
 ### 21.3. Stage 3: Multi-file private signatures
 
@@ -1234,25 +1289,24 @@ boundary. Teams may opt into a clean-tree requirement.
 
 ## 23. Open questions
 
-1. Should `rewrite check` be a subcommand or an option of `whitaker check`?
-2. Should simple machine-applicable lint suggestions be imported as rewrite
+1. Should simple machine-applicable lint suggestions be imported as rewrite
    intents automatically?
-3. Should automatic multi-file private signature rewrites wait for complete
+2. Should automatic multi-file private signature rewrites wait for complete
    workspace feature-matrix coverage?
-4. How should configured external effect summaries be signed or reviewed?
-5. Should affected-test selection integrate with an existing test impact tool?
-6. Should formatting application use per-file `rustfmt`, repository commands,
+3. How should configured external effect summaries be signed or reviewed?
+4. Should affected-test selection integrate with an existing test impact tool?
+5. Should formatting application use per-file `rustfmt`, repository commands,
    or only a check?
-7. How many previous journal schema versions should rollback support?
-8. Should the rewriter preserve failed overlays automatically for
+6. How many previous journal schema versions should rollback support?
+7. Should the rewriter preserve failed overlays automatically for
    `ReviewRequired` candidates?
-9. Should Polonius-only candidates be auto-applicable once Polonius stabilizes,
+8. Should Polonius-only candidates be auto-applicable once Polonius stabilizes,
    or should project policy remain explicit permanently?
-10. Can `local_shared_ownership` ever reach `Mechanical` confidence outside
+9. Can `local_shared_ownership` ever reach `Mechanical` confidence outside
     trivial `Cell<Copy>` cases?
-11. Should helper inlining move to a language-server assist while Whitaker keeps
+10. Should helper inlining move to a language-server assist while Whitaker keeps
     only discovery and validation?
-12. How should generated files with reproducible generators participate in
+11. How should generated files with reproducible generators participate in
     rewrite plans?
 
 ## 24. Recommendation

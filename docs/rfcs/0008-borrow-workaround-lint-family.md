@@ -256,13 +256,23 @@ candidate. Files should be named from a crate disambiguator, process
 identifier, and monotonic local counter. Aggregation occurs after Cargo
 finishes.
 
+`rewrite-scan` is an internal lint-session phase and directory name, not a
+public command. `whitaker check` remains the generic lint command;
+`whitaker rewrite check` is the public discovery and validation workflow shared
+with RFC 0007 and RFC 0009.
+
 Ordinary `cargo dylint` use without a Whitaker session should behave as follows:
 
-- emit an ordinary diagnostic when the lint has a self-contained,
-  high-confidence NLL-valid suggestion;
+- emit an ordinary diagnostic only when a current RFC 0007 report confirms NLL
+  acceptance for the exact source digests, toolchain, target, feature
+  selection, and lint-bundle version;
 - emit a help message inviting `whitaker rewrite check` for a strong but
   unvalidated candidate; or
 - remain silent for experimental, validation-dependent rules.
+
+The no-session path may consult the RFC 0007 validation cache for that report.
+A missing, stale, or invocation-mismatched report is not evidence of NLL
+acceptance and follows the help-or-silent behaviour above.
 
 ### 5.5. Effect summaries
 
@@ -379,6 +389,12 @@ The second form is a canonical Polonius Alpha use case.[^3]
 - Receiver places resolve to the same value.
 - Key expressions have the same normalized expression fingerprint.
 - Key evaluation is side-effect free or evaluated once in the candidate.
+- The resolved `Hash` and `Eq` implementations for the key type are trusted
+  side-effect-free, non-panicking implementations or have verified effect
+  summaries.
+- Otherwise, the candidate is `ReviewRequired` and cannot be
+  `MachineApplicable`; replacing two lookups with one may change calls into
+  user-defined `Hash` or `Eq` code.
 - Intervening mutation is understood.
 - The repeated lookup result is not deliberately revalidating a changed
   invariant.
@@ -392,6 +408,7 @@ Suppress when:
   semantics;
 - a concurrent or interior-mutable container can change between lookups;
 - a custom API has unknown lookup or insertion effects; or
+- the key's `Hash` or `Eq` effects are unknown; or
 - the repeated check produces a distinct user-facing error.
 
 ### 7.2. `BOR002 remove_then_reinsert`
@@ -624,6 +641,9 @@ path-sensitive rewrite candidate.
 - It is not used for rollback, undo, comparison, retry, diagnostics, or restore.
 - No code observes snapshot identity.
 - A candidate field split or direct borrow can be materialized.
+- A complete effect summary proves that the mutation loop does not change the
+  iterator's membership or order; writes to the iterated domain or unknown
+  effects suppress the candidate.
 
 #### BOR007 Suppressions
 
@@ -683,6 +703,12 @@ The helper must be:
 - below a configurable MIR and source-size threshold;
 - free of macro-only source; and
 - removable without affecting documentation or tests that reference it.
+
+For direct inlining, every substituted argument must be a side-effect-free
+place expression, and each substituted parameter must be used exactly once in
+the helper body. Arguments involving calls, indexing, overloaded dereferences,
+or other expressions with observable evaluation require an explicit single
+evaluation binding; without one, the candidate is suppressed.
 
 The materializer should inline the body, substitute arguments, and optionally
 remove the helper. The checker must compile all package targets.

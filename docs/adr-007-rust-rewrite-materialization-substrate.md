@@ -323,7 +323,7 @@ pub trait SpikeBackend {
 
     fn materialize(
         &self,
-        fixture: &FixtureWorkspace,
+        sources: &BTreeMap<WorkspaceRelativePath, String>,
         intent: &SpikeIntent,
     ) -> Result<TextEditPlan, SpikeError>;
 }
@@ -337,12 +337,24 @@ pub struct SpikeIntent {
 pub struct SemanticCapture {
     pub name: String,
     pub path: WorkspaceRelativePath,
+    pub compiler_identity: CompilerIdentity,
+    pub node_identity: SemanticNodeIdentity,
+    pub expansion: ExpansionProvenance,
     pub base_file_sha256: Sha256Digest,
     pub range: ByteRange,
     pub snippet_sha256: Sha256Digest,
     pub expected_syntax: ExpectedSyntax,
 }
 ```
+
+The harness passes only immutable source strings for paths named by the intent;
+the backend receives no fixture services or filesystem handle. `node_identity`
+must be compiler-derived and stable within the recorded compiler identity: use
+a definition path hash for items and an owner identity plus normalized syntax
+fingerprint for expressions, not a session-local `HirId` alone. `expansion`
+distinguishes source-authored syntax, an editable macro call site, and
+macro-expansion-only syntax. A capture derived only from macro expansion is
+rejected before a backend can produce edits.
 
 The fixtures should contain hand-authored semantic captures equivalent to those
 a Dylint rule would emit. This prevents the comparison from accidentally
@@ -351,7 +363,7 @@ syntax inside the bounded anchor to confirm structural preconditions.
 
 The harness, not either backend, should own:
 
-- file digest verification;
+- fixture snapshot integrity checks against the fixture manifest;
 - edit sorting;
 - overlap detection;
 - edit application;
@@ -360,6 +372,14 @@ The harness, not either backend, should own:
 - timing;
 - metric collection; and
 - JSON report serialization.
+
+Stale-anchor rejection is part of the backend contract: before rematching
+syntax, each backend checks the capture's `base_file_sha256` and
+`snippet_sha256` against the immutable source map and returns a typed stale
+capture error on mismatch. The harness supplies the same deliberately stale
+capture to both backends and asserts that result. This keeps fixture-byte
+integrity separate from backend anchor validation and makes stale-anchor
+behaviour comparable.
 
 ### Primary rewrite fixtures
 
@@ -450,23 +470,32 @@ The spike must also cover failure and fidelity cases:
 - a structurally valid but unsupported recipe variant.
 
 The required behaviour is deterministic rejection or an exact expected edit.
-Neither backend may panic, silently widen the edit range, or rewrite a
-different same-spelled expression.
+For rejection fixtures, the harness checks the expected typed error and records
+the result, then stops that fixture's pipeline. It does not validate or apply a
+plan, compare rewritten source, run `cargo fmt`, or invoke a compiler after a
+rejection. Neither backend may panic, silently widen the edit range, or rewrite
+a different same-spelled expression.
 
 ### Validation pipeline
 
 For every backend and fixture, the harness should perform these steps:
 
-1. Verify file and snippet digests.
-2. Materialize the edit plan.
-3. Validate edit ordering and non-overlap.
-4. Repeat materialization 100 times and compare serialized plans byte-for-byte.
-5. Apply the plan in an isolated fixture copy.
-6. Compare the complete rewritten source with the checked-in expected source.
-7. Assert that bytes outside declared edit ranges are unchanged.
-8. Run `cargo fmt --check` on the rewritten fixture.
-9. Run the expected NLL and Polonius compiler profiles.
-10. Record metrics and diagnostic output in a stable JSON report.
+1. Verify source snapshot bytes against the fixture manifest.
+2. Start a fresh backend process and materialize the edit plan from the
+   immutable source map.
+3. For an expected rejection, assert the typed error and stop this fixture's
+   pipeline.
+4. For a successful plan, validate edit ordering, bounds, UTF-8 boundaries,
+   and non-overlap.
+5. Repeat steps 2–4 in 100 fresh backend processes and compare the raw
+   serialized plans byte-for-byte before harness canonicalization.
+6. Apply the successful plan in an isolated fixture copy.
+7. Compare the complete rewritten source with the checked-in expected source.
+8. Assert that bytes outside declared edit ranges are unchanged.
+9. Run `cargo fmt --check` on the rewritten fixture and report formatting-only
+   differences as diagnostics; malformed Rust remains a hard failure.
+10. Run the expected NLL and Polonius compiler profiles.
+11. Record metrics and diagnostic output in a stable JSON report.
 
 Compiler runs verify that both backends emitted the intended program. They must
 not compensate for a backend that changes unrelated source or loses comments.
@@ -479,11 +508,16 @@ A backend remains eligible only if it:
 - passes every adversarial fixture with the specified result;
 - preserves untouched bytes exactly;
 - preserves required comments, attributes, and line endings;
-- emits deterministic plans across 100 repetitions;
+- emits identical raw plans from 100 fresh backend processes;
 - rejects stale and ambiguous anchors;
 - detects overlap before edit application;
 - produces the expected NLL and Polonius compiler outcomes; and
 - contains no fixture-specific source-string replacement in the shared harness.
+
+Formatting-only differences reported by `cargo fmt --check` do not affect
+backend eligibility; exact expected output and untouched-byte fidelity remain
+mandatory. Malformed output, stale captures, and unexpected acceptance of a
+rejection fixture fail the corresponding gate.
 
 A candidate that fails a mandatory gate cannot win through a better benchmark
 score.

@@ -26,12 +26,14 @@ The checker classifies a candidate as:
 - rejected by Polonius;
 - accepted by NLL but rejected by Polonius;
 - stale; or
-- inconclusive because the toolchain or build could not be reproduced.
+- inconclusive because completed compiler runs could not be compared reliably.
 
-The checker does not mutate the working tree. It also does not claim semantic
-equivalence merely because a rewrite compiles. Recipe-specific reasoning and
-test validation remain separate responsibilities of the rewriter proposed by
-RFC 0009.
+The checker does not edit user source. It creates temporary session files and
+runs compiler subprocesses inside an operating-system sandbox that denies
+network access and limits writes to the session. It also does not claim
+semantic equivalence merely because a rewrite compiles. Recipe-specific
+reasoning and test validation remain separate responsibilities of the rewriter
+proposed by RFC 0009.
 
 The design deliberately reuses three planned Whitaker capabilities:
 
@@ -112,6 +114,8 @@ stabilization and soundness work.[^6]
 - Validate concrete, multi-file Rust rewrites without mutating the working tree.
 - Compare NLL and Polonius with the same compiler, target, features, and Cargo
   resolution.
+- Run every compiler-check subprocess in a sandbox that denies network access
+  and prevents writes outside its session directory.
 - Reuse one checker for existing ownership lints, the lints proposed by RFC
   0004, and future refactoring rules.
 - Produce deterministic human-readable and JSON reports.
@@ -134,7 +138,7 @@ stabilization and soundness work.[^6]
 - Execute a complete test suite for every candidate by default.
 - Rewrite source code. RFC 0009 owns materialization and application.
 - Support legacy Datalog Polonius as a fallback for Polonius Alpha.
-- Guarantee sandboxing of Cargo build scripts or procedural macros.
+- Run Cargo build scripts or procedural macros outside the mandatory sandbox.
 
 ## 5. Terminology and invariants
 
@@ -176,6 +180,10 @@ The checker must preserve the following invariants:
 9. A candidate accepted by NLL but rejected by Polonius is preserved as a
    possible compiler regression rather than silently discarded.
 10. Build configuration is immutable for the duration of a validation session.
+11. Every process used by the checker runs in a sandbox with network access
+    denied and writes confined to the session directory.
+12. A missing or unenforceable sandbox is an error before Cargo is started; the
+    checker never falls back to an unsandboxed process.
 
 ## 6. Proposed architecture
 
@@ -278,6 +286,13 @@ Edits within one file must be non-overlapping and sorted by their original byte
 range. Application proceeds from the end of the file towards the beginning so
 earlier offsets remain valid.
 
+Before any source slicing or edit application, validate the complete plan.
+Reject duplicate file paths rather than merging edit sets implicitly. For each
+file, require `start_byte <= end_byte <= base_file_length`, UTF-8 boundaries at
+both offsets, matching base-file digests, and sorted non-overlapping ranges.
+Malformed serialized plans return a typed validation error before any file is
+partially changed.
+
 `DiscoveryContext` should record:
 
 - package and target identity;
@@ -306,21 +321,111 @@ pub enum BorrowCheckerProfile {
 pub enum RewriteAcceptance {
     NllAndPolonius,
     PoloniusOnly,
+    AcceptedByNll,
+    AcceptedByPolonius,
+    RejectedByNll,
     RejectedByPolonius,
+    RejectedByBoth,
     PoloniusRegression,
     Stale,
+    Unavailable,
     Inconclusive,
+}
+
+pub enum ProfileOutcome {
+    Accepted,
+    Rejected,
+    Unavailable { reason: String },
+    Inconclusive { reason: String },
+}
+
+pub struct ProfileCheckResult {
+    pub profile: BorrowCheckerProfile,
+    pub outcome: ProfileOutcome,
+    pub baseline: Option<CompilationReport>,
+    pub candidate: Option<CompilationReport>,
+    pub diagnostic_delta: Vec<NormalizedDiagnostic>,
+}
+
+pub struct InvocationProvenance {
+    pub checker_version: String,
+    pub model_schema_version: u16,
+    pub compiler_identity: CompilerIdentity,
+    pub cargo_version: String,
+    pub target_triple: Option<String>,
+    pub features: Vec<String>,
+    pub effective_cargo_args: Vec<RedactedArgument>,
+    pub checker_flags: Vec<String>,
+    pub wrapper_chain: Vec<WrapperIdentity>,
+    pub environment_fingerprint: EnvironmentFingerprint,
+    pub digest: InvocationFingerprint,
 }
 
 pub struct RewriteCheckReport {
     pub rewrite_id: RewriteId,
     pub acceptance: RewriteAcceptance,
-    pub baseline: Vec<CompilationReport>,
-    pub candidate: Vec<CompilationReport>,
-    pub diagnostic_delta: Vec<NormalizedDiagnostic>,
-    pub invocation_fingerprint: InvocationFingerprint,
+    pub profile_results: Vec<ProfileCheckResult>,
+    pub invocation: InvocationProvenance,
+}
+
+pub enum RewriteCheckError {
+    SandboxUnavailable,
+    SandboxSetup { reason: RedactedReason },
+    NetworkPolicyUnavailable { reason: RedactedReason },
+    FilesystemIo { operation: FilesystemOperation, reason: RedactedReason },
+    ProcessStart { program: ProgramIdentity, reason: RedactedReason },
+    ProcessTimeout { program: ProgramIdentity },
+    ClockUnavailable { reason: RedactedReason },
+    ToolchainUnavailable { component: Option<String>, reason: RedactedReason },
+    NetworkPolicyViolation { operation: RedactedReason },
+    DependencyUnavailable { package: Option<String> },
 }
 ```
+
+The checker is an application service with a small, checker-local set of
+outbound capabilities: a capability-scoped filesystem for source snapshots and
+session files, a sandboxed process runner, a monotonic clock for deadlines, and
+a network-policy provider that supplies an enforceable deny-all policy. The CLI
+composition root selects the operating-system adapters. Pure plan validation
+and report classification remain ordinary data-to-data functions; the public
+`whitaker rewrite check` command has side effects: it creates temporary files
+and starts compiler processes, and it leaves user source untouched.
+
+`RewriteCheckError` belongs to the `whitaker_rewrite_check` API, not the shared
+model crate or the serialized `RewriteCheckReport`.
+
+Keep these capabilities inside `whitaker_rewrite_check` and inject them at the
+checker entry point. The CLI supplies the operating-system adapters; Phase 11
+and RFC 0009 reuse the same checker library. The ports are not a new
+repository-wide process or filesystem abstraction. Existing installer command
+runners do not enforce this sandbox contract and must not be reused as the
+checker process port. Environmental failures return
+`Result<RewriteCheckReport, RewriteCheckError>` and produce a command error
+with a stable error code and redacted detail. They must not be encoded only as
+`RewriteAcceptance::Inconclusive` or `ProfileOutcome::Unavailable`. The latter
+continues to describe a requested compiler profile that the sandboxed probe
+actually found unsupported.
+
+`profiles` must contain at least one unique profile. A profile result carries
+its own baseline, candidate, diagnostics, and status, so JSON consumers never
+infer profile identity from vector position. An unavailable capability probe is
+serialized as `ProfileOutcome::Unavailable` with its reason and produces an
+aggregate `Unavailable` result when that profile was requested. Failed or
+non-reproducible compiler output is `Inconclusive` only after the sandboxed
+process completed. Filesystem, sandbox, toolchain, process-start, clock,
+deadline, dependency, and network-policy failures return `RewriteCheckError`;
+they are not reported as compiler classifications.
+
+`InvocationProvenance` records replay-relevant settings in structured fields as
+well as their digest: resolved compiler and Cargo versions, target, features,
+normalized effective Cargo arguments, checker flags, wrapper chain, and the
+relevant environment fingerprint. Secret-valued arguments and environment
+values are redacted or represented by a non-reversible digest; the report
+remains replayable when the caller supplies credentials separately.
+
+The report also records the sandbox provider, policy version, and effective
+filesystem and network policy. An unavailable sandbox is reported as a command
+error before a compiler report is created.
 
 The serialized JSON envelope must carry a schema version. Unknown fields must
 be ignored where safe. Unknown enum variants must cause a clear compatibility
@@ -346,6 +451,12 @@ probe should compile a tiny, known NLL problem case with the configured
 Polonius Alpha arguments. Merely finding a flag name in `rustc -Z help` does
 not prove that the desired behaviour is available.
 
+Run `cargo metadata`, compiler identity commands, profile probes, Cargo, and
+any existing compiler wrappers through the sandboxed process port. The
+operating-system adapter must establish filesystem and network restrictions
+before starting each child process and must terminate the complete process tree
+when its deadline expires.
+
 The initial `PoloniusNext` adapter should append:
 
 ```plaintext
@@ -356,13 +467,23 @@ The flag must live behind the profile adapter. A future stable preview or
 feature gate should require changing one adapter rather than every caller.
 
 If the probe fails, the profile result is `Unavailable`. The checker must not
-fall back to `-Zpolonius=legacy`.
+fall back to `-Zpolonius=legacy`. A request selecting only one profile receives
+`AcceptedByNll`, `RejectedByNll`, `AcceptedByPolonius`, or
+`RejectedByPolonius`; it must not use comparison-only classifications such as
+`PoloniusOnly` or `PoloniusRegression`.
 
 ### 6.5. Compiler wrapping
 
 The checker should inject profile-specific arguments with a small
 `RUSTC_WORKSPACE_WRAPPER`. This confines Polonius to workspace members and
 allows dependency artefacts to be reused.
+
+The initial implementation may rewrite only workspace-member packages. If a
+materialized path resolves to a local path dependency that is not a workspace
+member, reject it as an unsupported validation scope before invoking Cargo; the
+current wrapper does not inject profile flags into that package. Add an
+end-to-end fixture proving that such a rewrite is rejected. Dependency packages
+may still be compiled unchanged as dependencies of a selected member.
 
 The wrapper must preserve existing wrappers:
 
@@ -374,6 +495,12 @@ The wrapper must preserve existing wrappers:
 
 Whitaker must record the composed wrapper chain in verbose diagnostics.
 
+Every wrapper and its descendants run inside the same sandbox. Local wrapper
+caches and temporary files must resolve under the session; do not expose a host
+wrapper daemon, shared writable cache, or remote cache service. Preserve the
+wrapper chain only when it can run under those restrictions. If it cannot,
+return a typed process or policy error and do not retry outside the sandbox.
+
 Using `RUSTFLAGS` globally is a supported fallback, but not the default,
 because it rebuilds dependencies and can accidentally change build scripts or
 procedural macros.
@@ -384,17 +511,36 @@ The overlay engine should be shared with Phase 11.
 
 The engine should:
 
-1. call `cargo metadata --format-version 1`;
-2. identify workspace members and local path dependencies needed by the selected
-   targets;
-3. create a temporary workspace under
-   `target/whitaker/rewrite/<session-id>/overlay`;
+1. create the overlay and per-session Cargo target under an operating-system
+   temporary root outside the canonicalized source checkout;
+2. run `cargo metadata --format-version 1` in a discovery sandbox with the
+   canonical workspace and local path dependencies mounted read-only;
+3. identify workspace members and local path dependencies needed by the
+   selected targets;
 4. copy manifests, lockfiles, Cargo configuration, toolchain files, sources,
-   and required local assets;
+   and required local assets into a session snapshot;
 5. omit `.git/`, ordinary `target/` directories, and unrelated generated
    artefacts;
-6. apply concrete edits only inside the overlay; and
-7. assign a separate target directory under the validation session.
+6. apply concrete edits only inside candidate copies of the overlay; and
+7. assign separate session-local target directories to baseline and candidate
+   runs.
+
+The selected temporary root must not be inside the source checkout. If the
+platform temporary directory resolves inside it, choose another
+operating-system-managed temporary root or fail before copying. The discovery
+sandbox mounts the canonical workspace and required local path dependencies
+read-only and denies network access; it has no writable host paths. For
+compilation, mount only the copied source inputs and the exact toolchain and
+dependency caches needed, all read-only. Do not mount the canonical source
+checkout or the caller's home directory into compiler processes. Within the
+session, keep overlay sources read-only and allow writes only to dedicated
+target, log, and temporary directories. Set `CARGO_TARGET_DIR`, build-script
+`OUT_DIR` values, and temporary-directory variables to those session paths so
+Cargo configuration cannot redirect writes to the host. Build scripts and
+procedural macros are executable code supplied by the workspace or its
+dependencies,[^7] so run them as untrusted code inside these restrictions: they
+cannot write outside the session or access the network. If the platform cannot
+enforce this policy, return `SandboxUnavailable` before invoking Cargo.
 
 Source files must not be symlinked or hard-linked to the working tree. Build
 scripts occasionally write into package directories despite Cargo guidance. A
@@ -441,8 +587,23 @@ The checker must preserve:
 - selected packages and targets; and
 - relevant configuration passed after `--`.
 
+Cargo invocations use `--locked` by default, including metadata and compiler
+checks. `--offline` adds Cargo's offline dependency-resolution behaviour while
+retaining `--locked`; `--frozen` means both locked and offline.[^8] Forwarded
+Cargo arguments may add compatible selection and compiler settings, but may not
+weaken Whitaker's locked default or contradict an explicit mode. Reject
+conflicting policy flags before execution and canonicalize repeated identical
+flags to one effective setting. Record the normalized effective arguments in
+`InvocationProvenance` and use those same arguments in the cache fingerprint.
+Cargo's `--offline` does not restrict network access by build scripts or
+procedural macros; the required sandbox backend enforces that policy.
+
 A report is valid only for the recorded configuration. It must not imply that
-untested feature combinations or target triples were checked.
+untested feature combinations or target triples were checked. The sandbox
+denies egress regardless of Cargo's `--offline` setting. If Cargo cannot find a
+required dependency in the available local cache, return an explicit
+`DependencyUnavailable` or `NetworkPolicyViolation` error, as appropriate;
+never retry without the sandbox.
 
 ### 6.8. Baseline and candidate runs
 
@@ -477,39 +638,61 @@ pub struct DiagnosticKey {
     pub level: DiagnosticLevel,
     pub code: Option<String>,
     pub primary_file: Option<WorkspaceRelativePath>,
+    pub primary_start_byte: Option<u64>,
+    pub primary_end_byte: Option<u64>,
     pub primary_start: Option<LineColumn>,
     pub primary_end: Option<LineColumn>,
     pub message_fingerprint: Option<MessageFingerprint>,
 }
 ```
 
-The compiler error code and primary span should dominate matching. A normalized
-message fingerprint is a fallback for diagnostics without codes. Rendered prose
-must not be the sole identity because wording can change between toolchains.
+The compiler error code and primary span should dominate matching. Before
+computing a delta, map candidate spans backwards through the edit map to the
+original byte coordinates when the entire span lies in unchanged source. This
+keeps an unrelated baseline diagnostic matched when an earlier edit shifts its
+line or column. A candidate span inside replacement text has no baseline source
+anchor and remains a new diagnostic. A normalized message fingerprint is a
+fallback for diagnostics without codes. Rendered prose must not be the sole
+identity because wording can change between toolchains.
 
 Overlay paths, temporary target paths, and session identifiers must be removed
 before comparison or serialization.
 
 ### 6.10. Classification algorithm
 
-The checker should classify one candidate as follows.
+For each requested profile, a candidate is accepted when the baseline and
+candidate runs complete sufficiently to compare diagnostics and the candidate's
+error diagnostic delta is empty. Pre-existing baseline errors do not by
+themselves reject a rewrite; a new compiler error rejects it. A completed run
+whose output cannot be classified reliably is inconclusive. Sandbox and other
+environmental failures return `RewriteCheckError`. Classification is relative
+to the baseline, not to an assumption that the unmodified workspace is
+error-free.
+
+When both profiles are requested, the checker classifies one candidate as
+follows. `PoloniusRegression` is checked before the general two-profile
+rejection case so it remains reachable.
 
 ```text
 if source digests do not match:
     Stale
 else if a required baseline cannot be reproduced:
     Inconclusive
-else if candidate Polonius run has new errors:
-    RejectedByPolonius
+else if candidate NLL run succeeds and candidate Polonius run has new errors:
+    PoloniusRegression
 else if candidate NLL run succeeds and candidate Polonius run succeeds:
     NllAndPolonius
 else if candidate NLL run has new errors and candidate Polonius run succeeds:
     PoloniusOnly
-else if candidate NLL run succeeds and candidate Polonius run has new errors:
-    PoloniusRegression
+else if candidate NLL run has new errors and candidate Polonius run has new errors:
+    RejectedByBoth
 else:
     Inconclusive
 ```
+
+When only one profile is requested, use its profile-specific accepted or
+rejected outcome from §6.4. If a requested profile is unavailable, report
+`Unavailable`; do not infer a cross-profile result from the remaining profile.
 
 `PoloniusOnly` requires that every candidate error counted against NLL is
 absent from the Polonius candidate. The report should include the NLL
@@ -521,11 +704,11 @@ the overlay and command log for reporting upstream.
 
 ### 6.11. Additional validation gates
 
-Compiler checking is the mandatory gate. Callers may request additional gates:
+Compiler checking always runs and is not represented by an optional gate flag.
+Callers may request additional gates:
 
 ```rust,no_run
 pub struct ValidationGates {
-    pub check: bool,
     pub compile_tests: TestScope,
     pub run_tests: TestScope,
     pub clippy: GateMode,
@@ -533,8 +716,10 @@ pub struct ValidationGates {
 }
 ```
 
-The rewrite checker itself should default to `cargo check` only. RFC 0009 may
-request affected tests or workspace quality gates before applying a rewrite.
+The mandatory compiler baseline and candidate checks always run. This structure
+contains only additional gates. The rewrite checker itself should default to
+`cargo check` only beyond those compiler checks. RFC 0009 may request affected
+tests or workspace quality gates before applying a rewrite.
 
 Running tests under NLL when the candidate is intentionally Polonius-only is
 not useful. Polonius-only candidates should run requested gates under Polonius
@@ -558,8 +743,20 @@ Baseline results may be reused across candidates in one session. Candidate
 results may be reused across repeated `diff` or `apply` commands while source
 digests remain unchanged.
 
-Cache entries should live under `target/whitaker/rewrite-cache/` and be safe to
-delete. The cache must never be the sole record of an applied rewrite.
+Every cache entry must include an explicit cache schema, checker implementation
+version, materialized-model schema, and diagnostic-classification version.
+Increment any component when its semantics change. The key must fingerprint the
+complete transitive Cargo input set for the selected scope, including
+manifests, lockfiles, dependency sources, build scripts, procedural macros,
+generated inputs, relevant assets, and configuration. If the checker cannot
+determine that input set completely, it must not reuse a cached result.
+
+Cache entries should live outside the source checkout in the platform cache
+directory and be safe to delete. The cache must never be the sole record of an
+applied rewrite. `--offline` only controls Cargo dependency access; it does not
+prevent network activity by itself. The mandatory operating-system sandbox
+denies network access to Cargo, build scripts, procedural macros, and compiler
+wrappers. Include the sandbox provider and policy version in the cache key.
 
 ### 6.13. CLI surface
 
@@ -576,11 +773,15 @@ Options:
   --scope <SCOPE>               auto | target | package | reverse-deps | workspace
   --json                        Emit the versioned machine-readable report
   --keep-overlay                Preserve the temporary overlay for inspection
-  --offline                     Prevent network access
+  --locked                      Require lockfile stability (default)
+  --offline                     Use Cargo's offline dependency resolution
+  --frozen                      Combine --locked and --offline
 ```
 
 When `--plan` is omitted, RFC 0009 may discover and materialize candidates
-before invoking the checker.
+before invoking the checker. `whitaker rewrite check` is the public command
+name; `rewrite-scan` names the internal lint-session phase only. These names
+must remain consistent with RFC 0008, RFC 0009, and the shared CLI design.
 
 A concise human result should look like:
 
@@ -624,7 +825,7 @@ BOR001 lookup_then_relookup
 
 ### 7.3. Safety and trust requirements
 
-- Never modify the source checkout.
+- Never write checker-controlled files into the source checkout.
 - Never follow a rewrite path outside the workspace root.
 - Reject overlapping edits.
 - Reject edits that split a UTF-8 code point.
@@ -632,8 +833,9 @@ BOR001 lookup_then_relookup
   span is available.
 - Never label compiler validation as semantic equivalence.
 - Never auto-select Polonius-only acceptance as project policy.
-- Clearly state that Cargo build scripts and procedural macros execute with the
-  caller's privileges.
+- Confine Cargo, build scripts, procedural macros, and compiler wrappers to the
+  mandatory filesystem and network sandbox.
+- Fail before starting Cargo when the platform cannot enforce the sandbox.
 - Default to `--locked`; support `--offline` and `--frozen`.
 - Redact credentials and token-valued environment variables from reports.
 
@@ -646,8 +848,12 @@ Implementation should proceed in four stages.
 ### 8.1. Stage 1: Shared model and NLL checker
 
 - Add `whitaker_rewrite_model`.
-- Add overlay creation and ordinary NLL baseline-to-candidate checking.
+- Add overlay creation, the required sandbox adapter, and ordinary NLL
+  baseline-to-candidate checking.
 - Expose a library API without adding automatic rewrite discovery.
+- Add sandbox integration fixtures proving that a malicious build script
+  cannot write to the checkout or reach a network listener, and that sandbox,
+  filesystem, process, and deadline failures reach the caller as errors.
 
 ### 8.2. Stage 2: Polonius profile
 
@@ -702,6 +908,7 @@ compiler work improves agent throughput.
 Unit tests should cover:
 
 - source digest validation;
+- duplicate file-path rejection and edit-bound validation;
 - non-overlapping edit enforcement;
 - UTF-8 boundary checking;
 - diagnostic normalization;
@@ -729,6 +936,7 @@ Behaviour-driven tests should cover:
 - a rewrite rejected by both profiles;
 - a simulated Polonius regression;
 - a pre-existing baseline error;
+- an edit before a pre-existing error whose source span remains unchanged;
 - a multi-file signature rewrite;
 - feature and target selection;
 - an existing `sccache` wrapper;
@@ -742,10 +950,21 @@ End-to-end fixtures should include:
 - a single-package application;
 - a multi-package workspace with reverse dependencies;
 - a path dependency outside the root package but inside the workspace;
+- a candidate targeting a local path dependency that is not a workspace member;
 - a build script;
 - a procedural macro;
 - a custom target directory; and
 - a dirty working tree whose edited files still match the recorded digest.
+
+Sandbox behaviour fixtures should also include a build script that attempts to
+write to the original checkout and another path outside the session, then
+assert that both writes are denied and the source remains unchanged. A second
+fixture should attempt to reach a test network listener and assert that the
+connection is denied. If the sandbox provider is unavailable or cannot
+establish either restriction, assert that the command returns the matching
+environmental error before Cargo starts. Inject filesystem, process, clock, and
+policy failures and assert that each is surfaced as a command error rather than
+only as an inconclusive report.
 
 ### 10.5. Corpus evaluation
 
@@ -812,8 +1031,8 @@ losing uncommitted work. It is rejected.
    every command?
 6. Should non-deterministic compiler diagnostics trigger an automatic retry
    before `Inconclusive`?
-7. Should the checker offer an optional sandbox backend for build scripts and
-   procedural macros?
+7. Which operating-system sandbox providers should the first implementation
+   support?
 8. How long should validation reports remain compatible across Whitaker
    versions?
 
@@ -849,3 +1068,11 @@ rewriter proposed by RFC 0009.
 
 [^6]: Rust Project Goals, "Stabilize and model Polonius Alpha":
     <https://rust-lang.github.io/rust-project-goals/2026/polonius.html>
+
+[^7]: Cargo Book, "Build Scripts":
+    <https://doc.rust-lang.org/cargo/reference/build-scripts.html>, and Rust
+    Reference, "Procedural Macros":
+    <https://doc.rust-lang.org/reference/procedural-macros.html>
+
+[^8]: Cargo Book, "cargo":
+    <https://doc.rust-lang.org/cargo/commands/cargo.html>
