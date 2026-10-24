@@ -20,6 +20,8 @@ other is the state these tests exist to catch.
 
 from __future__ import annotations
 
+import pathlib
+import re
 import typing as typ
 
 import pytest
@@ -423,3 +425,50 @@ def test_no_workflow_selects_a_profile_through_the_environment() -> None:
         f"against budgets it does not run under. Pass it on the command "
         f"line, or teach the reader to resolve the environment first"
     )
+
+
+MAKEFILE: typ.Final[pathlib.Path] = pathlib.Path(__file__).resolve().parents[2] / "Makefile"
+
+
+def _makefile_variable(name: str) -> str:
+    """Return the value of a ``NAME ?= value`` assignment in the Makefile."""
+    match = re.search(rf"^{name} \?= (.+)$", MAKEFILE.read_text(), re.MULTILINE)
+    assert match, f"Makefile has no {name} assignment"
+    return match.group(1)
+
+
+#: The one contract test that does move coverage: it expands the
+#: ``whitaker_test_macros`` proc macro inside rustc, so the instrumented macro
+#: crate's lines count only while it runs (measured: 4 lines).
+COVERAGE_KEPT_CONTRACT_TEST: typ.Final[str] = (
+    "test(fixture_expansion_lint_attribute_contract)"
+)
+
+
+def test_coverage_leaves_out_the_compile_contract_tests_that_add_no_coverage() -> None:
+    """``make coverage`` excludes the override's contract tests but the one that counts.
+
+    The trybuild contract tests assert that fixtures compile; under
+    instrumentation they only cost build time. The Makefile names them in
+    ``COVERAGE_SKIPPED_TRYBUILD_FILTER``, and this holds that list equal to the
+    override's filter less the one test that moves coverage, so adding a
+    contract test to one place and not the other fails here instead of silently
+    putting it back into (or leaving it out of) the coverage lane.
+    """
+    expected = " | ".join(
+        part
+        for part in COMPILE_CONTRACT_FILTER.split(" | ")
+        if part != COVERAGE_KEPT_CONTRACT_TEST
+    )
+    assert _makefile_variable("COVERAGE_SKIPPED_TRYBUILD_FILTER") == expected
+
+
+def test_coverage_passes_its_filter_to_nextest_and_make_test_does_not() -> None:
+    """Only the coverage recipe filters; ``make test`` still runs every contract."""
+    text = MAKEFILE.read_text()
+    recipe = re.search(r"^coverage:.*?(?=^\S)", text, re.MULTILINE | re.DOTALL)
+    assert recipe, "Makefile has no coverage recipe"
+    assert "COVERAGE_NEXTEST_FILTER" in recipe.group(0)
+    test_recipe = re.search(r"^test:.*?(?=^\S)", text, re.MULTILINE | re.DOTALL)
+    assert test_recipe, "Makefile has no test recipe"
+    assert "FILTER" not in test_recipe.group(0)
