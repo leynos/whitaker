@@ -283,6 +283,27 @@ test binary in a child process to exercise the real CLI flags and diagnostic.
 Its probe helper belongs only to that test; the child boundary keeps tracing
 subscriber setup and the test `PATH` isolated from the parent process.
 
+### Development build defaults
+
+Ordinary local development and test builds do not compile incrementally and
+carry no debug information. The committed `[profile.dev]` sets
+`incremental = false` and `debug = 0`, which keeps `target` small: the
+`Coverage (main)` run at 8460cb02 ran out of disk under
+`target/llvm-cov-target`. Local backtraces and debugger sessions therefore lack
+source-level debug information.
+
+To debug, override the profile for one invocation rather than editing it. Pass
+`--config 'profile.dev.debug=2'` on the Cargo command line, and optionally
+`--config 'profile.dev.incremental=true'`, or set `CARGO_PROFILE_DEV_DEBUG=2`
+in the environment. Never change the committed profile to get debug information
+back.
+
+The `[unstable] no-embed-metadata = true` key in `.cargo/config.toml` is a
+nightly-only Cargo setting tied to the dated nightly pinned in
+`rust-toolchain.toml`. Whoever changes that pin to a nightly from 2026-07-31
+onward must replace the key with `embed-metadata = false`. Stable and beta
+toolchains ignore it.
+
 ### Test profiles
 
 By default, `make test` excludes slow installer integration tests
