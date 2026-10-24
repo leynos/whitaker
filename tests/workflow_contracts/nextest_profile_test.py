@@ -20,6 +20,8 @@ other is the state these tests exist to catch.
 
 from __future__ import annotations
 
+import pathlib
+import re
 import typing as typ
 
 import pytest
@@ -422,4 +424,55 @@ def test_no_workflow_selects_a_profile_through_the_environment() -> None:
         f"lane there would be judged under the wrong profile and checked "
         f"against budgets it does not run under. Pass it on the command "
         f"line, or teach the reader to resolve the environment first"
+    )
+
+
+MAKEFILE: typ.Final[pathlib.Path] = pathlib.Path(__file__).resolve().parents[2] / "Makefile"
+
+
+def _makefile_variable(name: str) -> str:
+    """Return the value of a ``NAME ?= value`` assignment in the Makefile."""
+    match = re.search(rf"^{name} \?= (.+)$", MAKEFILE.read_text(), re.MULTILINE)
+    assert match, f"Makefile has no {name} assignment"
+    return match.group(1)
+
+
+#: The one contract test that does move coverage: it expands the
+#: ``whitaker_test_macros`` proc macro inside rustc, so the instrumented macro
+#: crate's lines count only while it runs (measured: 4 lines).
+COVERAGE_KEPT_CONTRACT_TEST: typ.Final[str] = (
+    "test(fixture_expansion_lint_attribute_contract)"
+)
+
+
+def test_coverage_skips_the_override_contracts_but_the_one_that_counts() -> None:
+    """The Makefile lists track the nextest override, less the one test that counts.
+
+    ``TRYBUILD_CONTRACT_FILTER`` must equal the compile-contract override's
+    filter, and ``COVERAGE_SKIPPED_TRYBUILD_FILTER`` that list less the one
+    test that moves coverage, so adding a contract test to one place and not
+    the other fails here instead of silently changing the coverage lane.
+    """
+    all_seven = _makefile_variable("TRYBUILD_CONTRACT_FILTER")
+    assert all_seven == COMPILE_CONTRACT_FILTER, (
+        "TRYBUILD_CONTRACT_FILTER must equal the nextest compile-contract "
+        "override's filter"
+    )
+    expected = " | ".join(
+        part
+        for part in COMPILE_CONTRACT_FILTER.split(" | ")
+        if part != COVERAGE_KEPT_CONTRACT_TEST
+    )
+    assert _makefile_variable("COVERAGE_SKIPPED_TRYBUILD_FILTER") == expected, (
+        "make coverage must skip every compile-contract test except the "
+        "proc-macro expansion test that adds coverage"
+    )
+
+
+def test_a_linux_job_runs_the_contracts_that_coverage_skips() -> None:
+    """``linux-full`` runs ``make trybuild-contracts``, the Linux home of the skipped tests."""
+    workflow = (MAKEFILE.parent / ".github" / "workflows" / "ci.yml").read_text()
+    assert re.search(r"^\s+run: make trybuild-contracts$", workflow, re.MULTILINE), (
+        "ci.yml must run `make trybuild-contracts` so the contract tests that "
+        "`make coverage` skips still execute on Linux"
     )
