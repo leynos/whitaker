@@ -48,7 +48,8 @@ TEST_RUNNER ?= nextest run
 # compile; they run no workspace code the coverage report attributes. Under
 # instrumentation they only cost build time (about 250 s of the 616 s test
 # phase), so `make coverage` leaves six of the seven out and `make trybuild-contracts`
-# runs all seven in a plain, uninstrumented run (the `linux-full` job runs it).
+# runs all seven in a plain, uninstrumented run (the `windows-compat` lane's
+# `make test` runs them in CI; this target is for running them locally).
 # The names are the ones `.config/nextest.toml` gives its compile-contract
 # override. `fixture_expansion_lint_attribute_contract` stays in the coverage
 # run: it expands the whitaker_test_macros proc macro inside rustc, and leaving
@@ -249,7 +250,7 @@ coverage: ## Generate LCOV coverage over the CI-tested crate subset
 
 trybuild-contracts: ## Run the trybuild compile-contract tests, which `make coverage` skips
 	@# `make coverage` leaves six of these out (see TRYBUILD_CONTRACT_FILTER), so
-	@# the Linux lane runs them here, plain and uninstrumented, under the `ci`
+	@# a developer runs them here, plain and uninstrumented, under the `ci`
 	@# profile that gives them their serial group and build-sized allowance.
 	@$(MAKE) test NEXTEST_PROFILE=ci TEST_RUNNER="nextest run -E '$(TRYBUILD_CONTRACT_FILTER)'"
 

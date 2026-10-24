@@ -1096,9 +1096,11 @@ compile-contract tests, which assert that fixtures compile and add no coverage
 `whitaker_test_macros` proc macro inside rustc and is worth four lines of that
 crate's coverage. Naming a filterset replaces the profile's `default-filter`, so
 `COVERAGE_BASE_FILTER` repeats the default profile's. The skipped contracts
-still run on Linux: the `linux-full` job runs `make trybuild-contracts`, which
-runs all seven, uninstrumented, under the `ci` profile; `make test` runs them
-too, and so does the Windows lane. To run them yourself, use
+run in the `windows-compat` lane, whose `make test NEXTEST_PROFILE=ci` includes
+all seven; they are compile-time API contracts, not platform-specific. No Linux
+lane runs them: `linux-full` builds no test binaries, so a step there would pay
+for a cold, uninstrumented workspace test build (a trial added 1,693 s and took
+`linux-full` from about 10 to 37 minutes). To run them yourself, use
 `make trybuild-contracts` (or plain `make test`). A workflow contract keeps
 `TRYBUILD_CONTRACT_FILTER` equal to the nextest override's filter and
 `COVERAGE_SKIPPED_TRYBUILD_FILTER` equal to that list less the retained test,

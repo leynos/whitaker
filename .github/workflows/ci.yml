@@ -473,10 +473,6 @@ jobs:
       - name: Workflow contract tests
         run: make test-workflow-contracts
 
-      - name: Trybuild contract tests
-        # `make coverage` skips six of these; this is their Linux execution.
-        run: make trybuild-contracts
-
       - name: Publish dry run
         run: make publish-check PUBLISH_PACKAGES="whitaker-common whitaker-installer"
 
