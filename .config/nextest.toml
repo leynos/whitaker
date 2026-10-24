@@ -87,7 +87,7 @@ retries = 0
 # Keep them under one build-sized allowance and avoid retries that repeat work.
 filter = "test(dependency_check_result_contract_is_public) | test(fixture_expansion_lint_attribute_contract) | test(normalize_settings_is_public_and_the_legacy_name_stays_removed) | test(renamed_common_apis_are_public_and_legacy_names_stay_removed) | test(renamed_sarif_api_is_public_and_legacy_names_stay_removed) | test(sha2_0_11_pre_migration_patterns_fail_to_compile)"
 slow-timeout = { period = "75m", terminate-after = 1, grace-period = "5s" }
-test-group = "serial-dylint-ui"
+test-group = "serial-trybuild"
 retries = 0
 
 [[profile.ci.overrides]]
@@ -95,7 +95,7 @@ retries = 0
 # but busy compiler queue. Allow one longer build without retrying it.
 filter = "package(rstest_helper_should_be_fixture) & test(trybuild_fixtures_compile_without_diagnostics)"
 slow-timeout = { period = "120m", terminate-after = 1, grace-period = "5s" }
-test-group = "serial-dylint-ui"
+test-group = "serial-trybuild"
 retries = 0
 
 [[profile.ci.overrides]]
@@ -124,8 +124,13 @@ test-group = "serial-nested-cargo-builds"
 # `serial_test` crate's in-process mutex has no effect.  A test-group
 # with max-threads = 1 prevents concurrent lint-library builds from
 # racing on the shared target directory.
+#
+# The trybuild contract tests build into `target/tests/trybuild`, a tree no
+# Dylint UI test touches, so they get their own serial group and run beside the
+# UI group instead of behind it (measured: cold nextest 382 s down to 300 s).
 [test-groups]
 serial-dylint-ui = { max-threads = 1 }
+serial-trybuild = { max-threads = 1 }
 serial-toolchain-installs = { max-threads = 1 }
 serial-nested-cargo-builds = { max-threads = 1 }
 
@@ -206,7 +211,7 @@ slow-timeout = { period = "75m", terminate-after = 1, grace-period = "5s" }
 # Keep them under one build-sized allowance and avoid retries that repeat work.
 filter = "test(dependency_check_result_contract_is_public) | test(fixture_expansion_lint_attribute_contract) | test(normalize_settings_is_public_and_the_legacy_name_stays_removed) | test(renamed_common_apis_are_public_and_legacy_names_stay_removed) | test(renamed_sarif_api_is_public_and_legacy_names_stay_removed) | test(sha2_0_11_pre_migration_patterns_fail_to_compile)"
 slow-timeout = { period = "75m", terminate-after = 1, grace-period = "5s" }
-test-group = "serial-dylint-ui"
+test-group = "serial-trybuild"
 retries = 0
 
 [[profile.default.overrides]]
@@ -214,7 +219,7 @@ retries = 0
 # but busy compiler queue. Allow one longer build without retrying it.
 filter = "package(rstest_helper_should_be_fixture) & test(trybuild_fixtures_compile_without_diagnostics)"
 slow-timeout = { period = "120m", terminate-after = 1, grace-period = "5s" }
-test-group = "serial-dylint-ui"
+test-group = "serial-trybuild"
 retries = 0
 
 [[profile.default.overrides]]
