@@ -123,7 +123,7 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
                 "terminate-after": 1,
                 "grace-period": "5s",
             },
-            test_group="serial-dylint-ui",
+            test_group="serial-trybuild",
             retries=0,
         ),
         ("binary(behaviour_toolchain)"): Allowance(
@@ -185,7 +185,7 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
                 "terminate-after": 1,
                 "grace-period": "5s",
             },
-            test_group="serial-dylint-ui",
+            test_group="serial-trybuild",
             retries=0,
         ),
         ("binary(behaviour_toolchain)"): Allowance(
@@ -220,6 +220,7 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
 #: while nested Cargo fixtures would compete for compiler admission.
 REQUIRED_TEST_GROUPS: typ.Final[dict[str, dict[str, object]]] = {
     "serial-dylint-ui": {"max-threads": 1},
+    "serial-trybuild": {"max-threads": 1},
     "serial-toolchain-installs": {"max-threads": 1},
     "serial-nested-cargo-builds": {"max-threads": 1},
 }
