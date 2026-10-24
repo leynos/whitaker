@@ -43,12 +43,16 @@ BASE_SLOW_TIMEOUT: typ.Final[dict[str, object]] = {
 }
 
 #: The whole-run budget both profiles must declare.
-REQUIRED_GLOBAL_TIMEOUT: typ.Final[str] = "85m"
+REQUIRED_GLOBAL_TIMEOUT: typ.Final[str] = "120m"
 
 # Parser-pin fixtures share one integration binary and Cargo package cache, so
 # the allowance must cover that whole binary and serialize it.
 BUILD_SCRIPT_INTEGRATION_FILTER: typ.Final[str] = "binary(build_script_integration)"
 NO_DEFAULT_FEATURES_FILTER: typ.Final[str] = "binary(no_default_features_build)"
+ISOLATED_CARGO_CHECKS_FILTER: typ.Final[str] = (
+    "test(crate_builds_without_dylint_driver_feature) | "
+    "test(fluent_bundles_are_included_in_the_package_tarball)"
+)
 COMPILE_CONTRACT_FILTER: typ.Final[str] = (
     "test(dependency_check_result_contract_is_public) | "
     "test(fixture_expansion_lint_attribute_contract) | "
@@ -103,7 +107,7 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
     "default": {
         BUILD_SCRIPT_INTEGRATION_FILTER: Allowance(
             slow_timeout={
-                "period": "45m",
+                "period": "60m",
                 "terminate-after": 1,
                 "grace-period": "5s",
             },
@@ -117,9 +121,17 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
             },
             test_group="serial-nested-cargo-builds",
         ),
+        ISOLATED_CARGO_CHECKS_FILTER: Allowance(
+            slow_timeout={
+                "period": "30m",
+                "terminate-after": 1,
+                "grace-period": "5s",
+            },
+            test_group="serial-nested-cargo-builds",
+        ),
         COMPILE_CONTRACT_FILTER: Allowance(
             slow_timeout={
-                "period": "45m",
+                "period": "60m",
                 "terminate-after": 1,
                 "grace-period": "5s",
             },
@@ -165,7 +177,7 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
     "ci": {
         BUILD_SCRIPT_INTEGRATION_FILTER: Allowance(
             slow_timeout={
-                "period": "45m",
+                "period": "60m",
                 "terminate-after": 1,
                 "grace-period": "5s",
             },
@@ -179,9 +191,17 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
             },
             test_group="serial-nested-cargo-builds",
         ),
+        ISOLATED_CARGO_CHECKS_FILTER: Allowance(
+            slow_timeout={
+                "period": "30m",
+                "terminate-after": 1,
+                "grace-period": "5s",
+            },
+            test_group="serial-nested-cargo-builds",
+        ),
         COMPILE_CONTRACT_FILTER: Allowance(
             slow_timeout={
-                "period": "45m",
+                "period": "60m",
                 "terminate-after": 1,
                 "grace-period": "5s",
             },

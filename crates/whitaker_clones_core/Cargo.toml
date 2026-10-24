@@ -28,6 +28,7 @@ cap-std = { workspace = true }
 insta = { workspace = true }
 metrics-util = { workspace = true }
 proptest = { workspace = true }
+semver = { workspace = true }
 rstest = { workspace = true }
 rstest-bdd = { workspace = true }
 rstest-bdd-macros = { workspace = true }
@@ -38,6 +39,7 @@ toml = { workspace = true }
 [build-dependencies]
 camino = { workspace = true }
 cap-std = { workspace = true }
+semver = { workspace = true }
 toml = { workspace = true }
 [lints]
 workspace = true

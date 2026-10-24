@@ -31,7 +31,7 @@ pub(crate) struct CallSiteVisitor<'a, 'tcx> {
 }
 
 impl<'a, 'tcx> CallSiteVisitor<'a, 'tcx> {
-    pub(crate) fn new(
+    pub(crate) const fn new(
         cx: &'a LateContext<'tcx>,
         collector: &'a mut CallSiteCollector,
         test_source_def_id: DefId,
@@ -94,7 +94,7 @@ impl<'tcx> Visitor<'tcx> for CallSiteVisitor<'_, 'tcx> {
         match expr.kind {
             hir::ExprKind::Call(_, args) => self.collect_call(expr, args),
             hir::ExprKind::MethodCall(_, receiver, args, _) => {
-                self.collect_call(expr, std::iter::once(receiver).chain(args))
+                self.collect_call(expr, std::iter::once(receiver).chain(args));
             }
             hir::ExprKind::Closure(hir::Closure { .. }) => {
                 self.closure_span_fallbacks.push(expr.span);
@@ -115,7 +115,7 @@ impl CallSiteVisitor<'_, '_> {
             self.closure_span_fallbacks
                 .iter()
                 .rev()
-                .find_map(|span| whitaker::hir::recover_user_editable_hir_span(*span))
+                .find_map(|fallback| whitaker::hir::recover_user_editable_hir_span(*fallback))
         })
     }
 }
@@ -190,11 +190,13 @@ fn attribute_kind(attr: &hir::Attribute) -> AttributeKind {
     }
 }
 
+/// Parsed attributes never reach this helper because `attribute_path` filters
+/// them out; treating them as outer keeps the mapping total.
 fn attribute_style(attr: &hir::Attribute) -> AttrStyle {
-    let hir::Attribute::Unparsed(item) = attr else {
-        unreachable!("attribute_path filters parsed attributes");
-    };
-    item.style
+    match attr {
+        hir::Attribute::Unparsed(item) => item.style,
+        hir::Attribute::Parsed(_) => AttrStyle::Outer,
+    }
 }
 
 pub(crate) fn redacted_fingerprint_shape(fingerprint: &ArgFingerprint) -> String {
@@ -208,7 +210,7 @@ pub(crate) fn redacted_fingerprint_shape(fingerprint: &ArgFingerprint) -> String
         .join(",")
 }
 
-fn redacted_atom_shape(atom: &ArgAtom) -> &'static str {
+const fn redacted_atom_shape(atom: &ArgAtom) -> &'static str {
     match atom {
         ArgAtom::FixtureLocal { .. } => "fixture-local",
         ArgAtom::ConstLit { .. } => "const-lit",

@@ -8,11 +8,10 @@ Status: COMPLETE
 
 ## Purpose / big picture
 
-Roadmap item 7.2.7 adds bounded Kani verification for `MinHasher::sketch`, the
-clone-detector token-pass function that turns retained token fingerprints into
-a fixed-width MinHash signature. After this work is approved and implemented,
-maintainers can run `make kani-clone-detector` and observe machine-checked
-coverage for three implementation invariants:
+Roadmap item 7.2.7 originally added bounded Kani verification around
+`MinHasher::sketch`, the clone-detector token-pass function that turns retained
+token fingerprints into a fixed-width MinHash signature. Its initial planned
+coverage was three implementation invariants:
 
 - Sketching the same bounded retained fingerprints is deterministic.
 - Repeating an already present fingerprint hash does not change the sketch.
@@ -24,14 +23,26 @@ collision probability, or unbounded set behaviour. It proves bounded
 implementation behaviour over the real Rust code, in line with
 `docs/adr-003-formal-proof-strategy-for-clone-detector-pipeline.md`.
 
+**Current proof scope (2026-10-19):** Later boundedness review replaced the
+non-empty full-signature harnesses. The current Kani group calls
+`MinHasher::sketch` only for empty-input rejection; it separately verifies the
+production lane-minimum and sorted/deduplicated-hash helpers on fixed inputs.
+It does not prove full-signature determinism, duplicate-equivalent signatures,
+or identical-set order independence. Runtime tests cover those behaviours. The
+historical implementation and gate results below describe the earlier proof
+shape, not the current claims; see the current scope in
+`docs/developers-guide.md` and the proof log in
+`docs/execplans/7-3-1-map-candidate-spans-and-extract-ast-feature-vectors.md`.
+
 The implementation began after explicit user approval on 2026-05-18.
 
 ## Constraints
 
 - Work must implement roadmap item 7.2.7 only. Do not start roadmap item 7.2.8
   for `LshIndex`.
-- Kani harnesses must call the real `MinHasher::sketch` implementation in
-  `crates/whitaker_clones_core/src/index/minhash.rs`, not a clean-room model.
+- The empty-input Kani harness calls the real `MinHasher::sketch`
+  implementation. Other MinHash harnesses must call the exact production helper
+  they claim to verify and must not be described as proving complete signatures.
 - Kani proof code must stay behind `#[cfg(kani)]` in
   `crates/whitaker_clones_core/src/index/kani.rs` or a child module reached
   from there.
@@ -90,11 +101,10 @@ The implementation began after explicit user approval on 2026-05-18.
   the shipped `cfg(kani)` seam, and keep the fixed-width signature path
   explicit under Kani.
 
-- Risk: An over-broad proof proves a helper model rather than production code.
-  Severity: high. Likelihood: low. Mitigation: every harness must construct the
-  hasher through the shipped `MinHasher::from_seed_for_kani` seam, call the
-  Vec-backed `MinHasher::sketch(...)` entrypoint, and inspect the returned
-  `MinHashSignature` or `IndexError`.
+- Risk: An over-broad proof claim exceeds the production code reached by a
+  harness. Severity: high. Likelihood: medium. Mitigation: document each
+  harness's exact production call path; the current non-empty proofs cover a
+  lane-minimum helper and hash normalization, not a complete signature.
 
 - Risk: Empty-input verification is trivial if it only checks `sketch(&[])`
   with no symbolic path. Severity: low. Likelihood: medium. Mitigation: include
@@ -199,8 +209,16 @@ The implementation began after explicit user approval on 2026-05-18.
   coverage split; `docs/users-guide.md` remains unchanged because the work does
   not change user-visible behaviour.
 - [x] 2026-05-19: Marked roadmap item 7.2.7 done.
+- [x] 2026-10-19: Corrected this plan's current-scope summary after assessment
+  found that later Kani harnesses no longer prove non-empty full signatures.
+  Historical gate results remain recorded as evidence for the earlier harness
+  implementation only.
 
 ## Surprises & Discoveries
+
+The notes below record the original implementation. Later harness changes
+supersede the MinHash proof claims about complete signatures; the current scope
+is stated at the start of this plan.
 
 - `MinHasher::sketch` already rejects empty input, deduplicates hashes through
   `BTreeSet<u64>`, and has ordinary unit coverage for determinism, duplicate
@@ -277,6 +295,10 @@ The implementation began after explicit user approval on 2026-05-18.
   bounded input.
 
 ## Decision Log
+
+These decisions describe the original implementation. Decisions concerning
+full-signature Kani proofs were superseded by the later bounded harness split;
+the current scope is stated at the start of this plan.
 
 - Decision: keep item 7.2.7 as a pre-implementation plan until the user
   approves it. Rationale: the user explicitly stated that the plan must be
@@ -368,14 +390,13 @@ The implementation began after explicit user approval on 2026-05-18.
 
 ## Outcomes & Retrospective
 
-Implementation is complete. `make kani-clone-detector` verifies the
-clone-detector Kani harness group, including the new `MinHasher::sketch`
-empty-input, deterministic-output, and duplicate-hash insensitivity harnesses.
-The proof shape uses a private `cfg(kani)` seed fixture and fixed-width
-signature builder while still calling real `MinHasher::sketch`. Ordinary unit
-tests and `rstest-bdd` scenarios continue to cover the broader runtime
-regression surface, including full-signature duplicate equality and
-representative full-width `u64` hashes.
+The roadmap item was completed on 2026-05-19 with a broader Kani harness set.
+That implementation and its validation results below are historical: the
+current Kani group has since narrowed the non-empty MinHash claims to the
+production lane-minimum and hash-normalization helpers. Only the empty-input
+harness currently calls `MinHasher::sketch`; no current Kani proof establishes
+complete signature determinism or duplicate-equivalent signatures. Ordinary
+unit and behaviour tests cover those runtime behaviours.
 
 Validation completed on 2026-05-19:
 
@@ -397,10 +418,9 @@ The relevant implementation lives in the `whitaker_clones_core` crate.
 `MinHasher::sketch` accepts a slice of `Fingerprint` values, applies Vec-backed
 set semantics by sorting and deduplicating `Fingerprint.hash` values, mixes
 each unique hash with each seed, and returns a `MinHashSignature`. Kani
-harnesses construct proof fixtures through the shipped
-`MinHasher::from_seed_for_kani` seam and still call the real
-`MinHasher::sketch(...)` entrypoint, validating the returned `MinHashSignature`
-or `IndexError`.
+harnesses call `MinHasher::sketch(...)` for empty-input rejection and call the
+production lane-minimum and hash-normalization helpers directly for their
+bounded non-empty obligations. Runtime tests cover full-signature behaviour.
 
 The surrounding index module is exposed through
 `crates/whitaker_clones_core/src/index/mod.rs` and re-exported from

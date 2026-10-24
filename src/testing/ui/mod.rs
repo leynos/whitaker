@@ -6,8 +6,6 @@
 //! This module centralizes input validation so lint crates can depend on a
 //! small helper rather than repeat the same checks.
 
-#[cfg(windows)]
-use std::env;
 use std::fmt;
 
 use camino::{Utf8Path, Utf8PathBuf};
@@ -15,8 +13,6 @@ use camino::{Utf8Path, Utf8PathBuf};
 mod toolchain;
 
 use self::toolchain::{CrateName, ensure_toolchain_library};
-#[cfg(windows)]
-use whitaker_common::test_support::env_test_guard;
 
 /// Errors produced when preparing or executing Dylint UI tests.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -163,18 +159,19 @@ pub fn run_with_runner(
 
     let crate_name_owned =
         CrateName::try_from(crate_name).map_err(|_| HarnessError::EmptyCrateName)?;
-    let crate_name_str = crate_name_owned.as_str();
-    let _runner_env_guard = runner_env_guard();
-    ensure_toolchain_library(&crate_name_owned)?;
+    let crate_name_str = crate_name_owned.as_str().to_owned();
+    with_runner_env(|| {
+        ensure_toolchain_library(&crate_name_owned)?;
 
-    match runner(crate_name_str, directory.as_ref()) {
-        Ok(()) => Ok(()),
-        Err(message) => Err(HarnessError::RunnerFailure {
-            crate_name: crate_name_owned.into_inner(),
-            directory,
-            message,
-        }),
-    }
+        match runner(&crate_name_str, directory.as_ref()) {
+            Ok(()) => Ok(()),
+            Err(message) => Err(HarnessError::RunnerFailure {
+                crate_name: crate_name_owned.into_inner(),
+                directory,
+                message,
+            }),
+        }
+    })
 }
 
 /// Runs a UI test and reports runner failures using the standard panic format.
@@ -207,65 +204,41 @@ pub fn run_ui_test(
     });
 }
 
-/// Serializes environment mutations required by `run_with_runner`.
+/// Runs `callback` with the environment `run_with_runner` requires.
 ///
 /// On Windows, one additional environment variable needs temporary adjustment:
 ///
 /// - `VCPKG_ROOT`: must be set to `C:\vcpkg` when that directory exists and the
 ///   variable is otherwise absent, so downstream `cargo` invocations resolve vcpkg.
 ///
-/// Each mutation and restoration step acquires `env_test_guard()` only for the
-/// environment write itself. The guard deliberately does not hold that mutex
-/// across the UI runner callback, because runner closures can perform their
-/// own environment-guarded setup.
-struct RunnerEnvGuard {
-    #[cfg(windows)]
-    vcpkg_root_was_absent: bool,
+/// The runner preserves `RUSTC_WRAPPER` so Cargo continues to use the configured
+/// compiler-admission and cache wrappers.
+///
+/// The scoped mutations are serialized by `temp_env`'s re-entrant global lock,
+/// so runner closures that perform their own scoped environment setup nest
+/// without deadlocking, and every prior value is restored when the callback
+/// returns or panics.
+fn with_runner_env<R>(callback: impl FnOnce() -> R) -> R {
+    with_vcpkg_root(callback)
 }
 
-impl Drop for RunnerEnvGuard {
-    /// Restore temporary environment changes when the runner finishes.
-    fn drop(&mut self) {
-        #[cfg(windows)]
-        {
-            let _env_guard = env_test_guard();
-
-            // SAFETY: `env_test_guard` serializes the restoration write below.
-            if self.vcpkg_root_was_absent {
-                unsafe {
-                    env::remove_var("VCPKG_ROOT");
-                }
-            }
-        }
-    }
-}
-
-/// Prepare any platform-specific environment required by the UI runner.
+/// Add `VCPKG_ROOT` for runners that need a local Windows vcpkg installation.
 #[cfg(windows)]
-fn runner_env_guard() -> Option<RunnerEnvGuard> {
-    let vcpkg_candidate = Utf8Path::new(r"C:\vcpkg");
-    let vcpkg_applicable = vcpkg_candidate.is_dir();
+fn with_vcpkg_root<R>(callback: impl FnOnce() -> R) -> R {
+    use whitaker_common::test_support::with_env_var;
 
-    if !vcpkg_applicable {
-        return None;
+    let candidate = Utf8Path::new(r"C:\vcpkg");
+    if candidate.is_dir() && std::env::var_os("VCPKG_ROOT").is_none() {
+        with_env_var("VCPKG_ROOT", candidate.as_std_path(), callback)
+    } else {
+        callback()
     }
-    let _env_guard = env_test_guard();
-    if env::var_os("VCPKG_ROOT").is_some() {
-        return None;
-    }
-    // SAFETY: `_env_guard` serializes concurrent environment mutations.
-    unsafe {
-        env::set_var("VCPKG_ROOT", vcpkg_candidate.as_std_path());
-    }
-    Some(RunnerEnvGuard {
-        vcpkg_root_was_absent: true,
-    })
 }
 
-/// Prepare any platform-specific environment required by the UI runner.
+/// Run the callback unchanged on platforms without a vcpkg environment.
 #[cfg(not(windows))]
-const fn runner_env_guard() -> Option<RunnerEnvGuard> {
-    None
+fn with_vcpkg_root<R>(callback: impl FnOnce() -> R) -> R {
+    callback()
 }
 
 fn directory_is_rooted(path: &Utf8Path) -> bool {

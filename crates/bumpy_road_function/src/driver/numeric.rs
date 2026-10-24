@@ -24,6 +24,10 @@ pub(super) fn diagnostic_integer_argument(value: usize) -> i64 {
 }
 
 /// Compute the production predicate weight with a bounded branch count.
+#[expect(
+    clippy::float_arithmetic,
+    reason = "predicate weights are floating-point tuning parameters scaled by branch counts"
+)]
 pub(super) fn predicate_segment_weight(branches: usize, weight: f64) -> f64 {
     f64::from(saturating_branch_count(
         u64::try_from(branches).unwrap_or(u64::MAX),

@@ -167,7 +167,9 @@ impl ProductionMultiset {
 #[must_use]
 pub fn kind_counts(tree: &NormalizedTree) -> KindCounts {
     let mut counts = KindCounts::default();
-    count_node_kinds(tree.root(), Depth::root(), &mut counts);
+    for_each_node_at_depth(tree.root(), |node, depth| {
+        counts.increment(node.kind(), depth);
+    });
     counts
 }
 
@@ -201,22 +203,26 @@ pub fn production_multiset(tree: &NormalizedTree) -> ProductionMultiset {
     productions
 }
 
-fn count_node_kinds(node: &NormalizedNode, depth: Depth, counts: &mut KindCounts) {
-    let mut pending = vec![(node, depth)];
+/// Visit each node in preorder with its depth relative to `root`.
+///
+/// Keep traversal separate from the count sink so bounded proofs can validate
+/// depth assignment without expanding `BTreeMap` internals. Production callers
+/// still accumulate these visits into `KindCounts`.
+pub(super) fn for_each_node_at_depth(
+    root: &NormalizedNode,
+    mut visit: impl FnMut(&NormalizedNode, Depth),
+) {
+    let mut pending = vec![(root, Depth::root())];
     while let Some((current, current_depth)) = pending.pop() {
-        counts.increment(current.kind(), current_depth);
+        visit(current, current_depth);
         let child_depth = next_depth(current_depth);
-        pending.extend(
-            current
-                .children()
-                .iter()
-                .rev()
-                .map(|child| (child, child_depth)),
-        );
+        for child in current.children().iter().rev() {
+            pending.push((child, child_depth));
+        }
     }
 }
 
-fn next_depth(depth: Depth) -> Depth {
+const fn next_depth(depth: Depth) -> Depth {
     Depth::new(depth.get().saturating_add(1))
 }
 
@@ -272,10 +278,10 @@ mod tests {
     proptest! {
         #[test]
         fn each_representable_count_increases_its_weight(
-            depth in 0_u16..64,
+            raw_depth in 0_u16..64,
             count in 0_u32..u32::MAX
         ) {
-            let depth = Depth::new(depth);
+            let depth = Depth::new(raw_depth);
             let current_weight = weighted_contribution(depth, count);
             let increased_weight = weighted_contribution(depth, count + 1);
 

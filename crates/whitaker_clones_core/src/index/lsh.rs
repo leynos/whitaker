@@ -1,4 +1,4 @@
-//! Locality-sensitive hashing over fixed-width MinHash signatures.
+//! Locality-sensitive hashing over fixed-width `MinHash` signatures.
 //!
 //! This module contains [`LshIndex`], the token-pass index that groups
 //! [`MinHashSignature`] band slices into locality-sensitive hashing (LSH)
@@ -66,7 +66,7 @@ impl LshIndex {
     /// # Ok::<(), whitaker_clones_core::IndexError>(())
     /// ```
     #[must_use]
-    pub fn new(config: LshConfig) -> Self {
+    pub const fn new(config: LshConfig) -> Self {
         Self {
             config,
             #[cfg(not(kani))]

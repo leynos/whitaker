@@ -27,8 +27,10 @@ impl ExclusionWorld {
     }
 
     fn suppressed(&self) -> bool {
-        self.suppressed
-            .expect("a usage should have been evaluated before asserting")
+        let Some(suppressed) = self.suppressed else {
+            panic!("a usage should have been evaluated before asserting")
+        };
+        suppressed
     }
 }
 

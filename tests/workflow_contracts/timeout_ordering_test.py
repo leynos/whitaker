@@ -18,7 +18,7 @@ The third tier of the canonical four, the shared coverage action's cargo
 watchdog, does not exist here and its absence is asserted rather than
 assumed: `coverage-main.yml` says why the action is not used, and a lane
 that adopted it would inherit an undocumented 1,800 s default beneath an
-85 m nextest budget. See "Test timeouts: four tiers, outermost last" in
+120 m nextest budget. See "Test timeouts: four tiers, outermost last" in
 ``docs/developers-guide.md``, and the canonical wording in
 `leynos/shared-actions`' `generate-coverage` README.
 
@@ -31,6 +31,7 @@ import typing as typ
 
 import pytest
 from nextest_config import nextest_config_text
+from runner_lanes import SUITE_LANE_TIMEOUT_MINUTES
 from timeout_budgets import (
     Profile,
     CEILING_MARGIN_SECONDS,
@@ -58,6 +59,7 @@ from suite_lanes import (
     _declared_jobs,
     _lanes_in_job,
     _workflow_documents,
+    read_suite_lanes,
 )
 
 
@@ -87,11 +89,7 @@ def suite_lanes() -> tuple[SuiteLane, ...]:
     tuple[SuiteLane, ...]
         One entry per suite-running step.
     """
-    return tuple(
-        lane
-        for job in _declared_jobs(_workflow_documents())
-        for lane in _lanes_in_job(job)
-    )
+    return read_suite_lanes()
 
 
 def test_the_suite_runs_somewhere(suite_lanes: tuple[SuiteLane, ...]) -> None:
@@ -277,7 +275,7 @@ def test_the_cargo_watchdog_tier_is_absent_rather_than_defaulted() -> None:
     `cargo llvm-cov` itself and does not use that action, so the tier is
     absent by choice. A lane that adopted the action without setting
     `RUN_RUST_CARGO_WAIT_TIMEOUT` would inherit its undocumented 1,800 s
-    default underneath an 85 m nextest budget, which is the inversion the
+    default underneath a 120 m nextest budget, which is the inversion the
     canonical section exists to prevent, so both halves are asserted:
     the action is not used, and the variable is not set.
     """
@@ -298,7 +296,7 @@ def test_the_cargo_watchdog_tier_is_absent_rather_than_defaulted() -> None:
 #: `docs/developers-guide.md` records it. Pinned as well as derived: the
 #: derivation accepts any ceiling above its requirement, so a value
 #: nobody chose passes it while drifting away from the guide.
-REQUIRED_CEILING_MINUTES: typ.Final[int] = 120
+REQUIRED_CEILING_MINUTES: typ.Final[int] = SUITE_LANE_TIMEOUT_MINUTES
 
 #: The condition each suite lane legitimately carries, keyed by workflow
 #: and job, as the step's ``if`` and its job's.
@@ -326,8 +324,8 @@ def test_every_suite_lane_carries_the_documented_ceiling(
 
     The derivation asserts the ordering holds, and it holds for a range
     of ceilings, so a lane drifting to a value nobody chose still passes
-    it. This asserts the 120 minutes the developers' guide pins: a policy
-    value above the derived requirement of 116 minutes 5 seconds, which
+    it. This asserts the 180 minutes the developers' guide pins: a policy
+    value above the derived requirement of 151 minutes 5 seconds, which
     already carries the fifteen-minute margin.
     """
     wrong = {

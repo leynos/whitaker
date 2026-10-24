@@ -17,6 +17,7 @@ use whitaker_common::i18n::{
 };
 
 const LINT_NAME: &str = "module_max_lines";
+
 const MESSAGE_KEY: MessageKey<'static> = MessageKey::new("module_max_lines");
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -26,12 +27,30 @@ enum ModuleDisposition {
     ExceedsLimit,
 }
 
-dylint_linting::impl_late_lint! {
-    pub MODULE_MAX_LINES,
-    Warn,
-    "modules should stay within the configured maximum line count",
-    ModuleMaxLines::default()
+/// Dylint lint declaration and registration glue.
+///
+/// `impl_late_lint!` expands to the Dylint ABI entry point and the
+/// `impl_lint_pass!` accessor, neither of which has a source location that
+/// could carry documentation. Isolating the invocation keeps the expectation
+/// scoped to exactly those generated items.
+mod declaration {
+    #![expect(
+        missing_docs,
+        reason = "dylint_linting macro expansion emits items with no documentable source location"
+    )]
+
+    use super::ModuleMaxLines;
+
+    dylint_linting::impl_late_lint! {
+        /// Warns when a module exceeds the configured maximum line count.
+        pub MODULE_MAX_LINES,
+        Warn,
+        "modules should stay within the configured maximum line count",
+        ModuleMaxLines::default()
+    }
 }
+
+pub use declaration::MODULE_MAX_LINES;
 
 /// Lint pass that tracks configuration and localization state while checking modules.
 pub struct ModuleMaxLines {
@@ -56,9 +75,8 @@ impl<'tcx> LateLintPass<'tcx> for ModuleMaxLines {
     }
 
     fn check_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx hir::Item<'tcx>) {
-        let (ident, module) = match item.kind {
-            hir::ItemKind::Mod(ident, module) => (ident, module),
-            _ => return,
+        let hir::ItemKind::Mod(ident, module) = item.kind else {
+            return;
         };
 
         let span = module_body_span(cx, item, module);
@@ -93,7 +111,7 @@ impl<'tcx> LateLintPass<'tcx> for ModuleMaxLines {
     }
 }
 
-fn evaluate_module(lines: usize, limit: usize, from_macro: bool) -> ModuleDisposition {
+const fn evaluate_module(lines: usize, limit: usize, from_macro: bool) -> ModuleDisposition {
     if from_macro {
         ModuleDisposition::Ignore
     } else if lines > limit {
@@ -110,8 +128,7 @@ fn load_configuration() -> usize {
         Err(error) => {
             debug!(
                 target: LINT_NAME,
-                "failed to parse `{}` configuration: {error}; using defaults",
-                LINT_NAME
+                "failed to parse `{LINT_NAME}` configuration: {error}; using defaults"
             );
             ModuleMaxLinesConfig::default().max_lines
         }
@@ -126,7 +143,7 @@ fn count_lines(source_map: &SourceMap, span: Span) -> Option<usize> {
     let contiguous = info
         .lines
         .windows(2)
-        .all(|pair| pair[1].line_index == pair[0].line_index + 1);
+        .all(|pair| matches!(pair, [previous, next] if next.line_index == previous.line_index + 1));
     if !contiguous {
         debug!(
             target: LINT_NAME,
@@ -153,8 +170,12 @@ fn emit_diagnostic(cx: &LateContext<'_>, info: &ModuleDiagnosticInfo, localizer:
     let mut args: Arguments<'_> = Arguments::default();
     let module_name = info.ident.name.as_str();
     args.insert(Cow::Borrowed("module"), FluentValue::from(module_name));
-    args.insert(Cow::Borrowed("lines"), FluentValue::from(info.lines as i64));
-    args.insert(Cow::Borrowed("limit"), FluentValue::from(info.limit as i64));
+    // Fluent arguments are `i64`; module sizes never approach the bound, so
+    // saturating keeps the diagnostic honest without a fallible path.
+    let line_count = i64::try_from(info.lines).unwrap_or(i64::MAX);
+    let line_limit = i64::try_from(info.limit).unwrap_or(i64::MAX);
+    args.insert(Cow::Borrowed("lines"), FluentValue::from(line_count));
+    args.insert(Cow::Borrowed("limit"), FluentValue::from(line_limit));
 
     let resolution = MessageResolution {
         lint_name: LINT_NAME,
@@ -169,12 +190,12 @@ fn emit_diagnostic(cx: &LateContext<'_>, info: &ModuleDiagnosticInfo, localizer:
         MODULE_MAX_LINES,
         info.ident.span,
         rustc_lint::errors::DiagDecorator(|lint| {
-            lint.primary_message(messages.primary().to_string());
+            lint.primary_message(messages.primary().to_owned());
             lint.span_note(
                 module_header_span(info.item_span, info.ident.span),
-                messages.note().to_string(),
+                messages.note().to_owned(),
             );
-            lint.help(messages.help().to_string());
+            lint.help(messages.help().to_owned());
         }),
     );
 }
