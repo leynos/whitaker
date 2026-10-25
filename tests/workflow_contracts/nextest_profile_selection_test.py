@@ -1,4 +1,13 @@
-"""Keep workflow profile selection visible in each suite command."""
+"""Keep workflow profile selection visible in each suite command.
+
+Purpose
+-------
+Ensure workflow lanes pass Nextest profile selection to the test command.
+
+Usage
+-----
+Run this contract with ``make test-workflow-contracts``.
+"""
 
 from __future__ import annotations
 
