@@ -94,13 +94,17 @@ impl ExampleHarness {
         let crate_name = env!("CARGO_PKG_NAME");
         let directory = "examples";
         let lock_path = self.lock.path().display();
-        whitaker::testing::ui::run_with_runner(crate_name, directory, |runner_crate, _| {
-            run_test_runner(example, || {
-                let mut test = Test::example(runner_crate, example);
-                test.rustc_flags(["--test"]);
-                test.run();
-            })
-        })
+        whitaker_lint_core::testing::ui::run_with_runner(
+            crate_name,
+            directory,
+            |runner_crate, _| {
+                run_test_runner(example, || {
+                    let mut test = Test::example(runner_crate, example);
+                    test.rustc_flags(["--test"]);
+                    test.run();
+                })
+            },
+        )
         .unwrap_or_else(|error| {
             panic!(
                 "UI tests should execute without diffs: RunnerFailure {{ crate_name: \

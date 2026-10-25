@@ -30,10 +30,11 @@ serial-toolchain-installs = { max-threads = 1 }
 # "Access is denied (os error 5)".  Retrying with back-off is the standard
 # mitigation for this class of transient failure.
 #
-# The final clause `(binary(ui) & test(=ui))` catches crates whose test
-# integration binary is `tests/ui.rs` with a top-level `fn ui()` — the test
-# name reported to nextest is plain `ui`, not `ui::ui`, so the substring
-# match `test(ui::ui)` does not capture them (e.g. bumpy_road_function).
+# The final clause constrains `test(=ui)` to the `ui` binary, catching crates
+# whose integration binary is `tests/ui.rs` with a top-level `fn ui()` — the
+# test name reported to nextest is plain `ui`, not `ui::ui`, so the substring
+# match `test(ui::ui)` does not capture them (e.g. bumpy_road_function). Other
+# tests from that binary can share the same binary clause.
 #
 # `ui::example_compiles_under_test_harness`,
 # `ui::rstest_unwrap_outside_tests_still_fails_in_non_harness_code`, and
@@ -43,7 +44,7 @@ serial-toolchain-installs = { max-threads = 1 }
 # hangs during cargo's dev-dependency resolution on Windows CI regardless of
 # whether any example source uses rstest, so all Dylint example compilation for
 # that crate is compiled away on Windows.
-filter = "test(driver::ui::) | test(tests::ui::) | test(ui::ui) | test(ui::example_compiles_under_test_harness) | test(ui::rstest_unwrap_outside_tests_still_fails_in_non_harness_code) | test(ui::rstest_empty_companion_does_not_exempt_parent_function) | (binary(ui) & test(=ui))"
+filter = "test(driver::ui::) | test(tests::ui::) | test(ui::ui) | test(ui::example_compiles_under_test_harness) | test(ui::rstest_unwrap_outside_tests_still_fails_in_non_harness_code) | test(ui::rstest_empty_companion_does_not_exempt_parent_function) | test(ui::hand_written_test_companion_does_not_exempt_parent_function) | test(ui::aliased_test_crate_non_companion_does_not_exempt_parent_function) | (binary(ui) & (test(=ui) | test(example_compiles_without_diagnostics) | test(example_harness_collects_call_site_evidence) | test(trybuild_fixtures_compile_without_diagnostics)))"
 test-group = "serial-dylint-ui"
 retries = { backoff = "exponential", count = 2, delay = "5s" }
 slow-timeout = { period = "10m", terminate-after = 1 }

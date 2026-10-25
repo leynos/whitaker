@@ -56,6 +56,8 @@
   explains the repository's preferred approach to testable Rust design.
 - [Rust doctest dry guide](rust-doctest-dry-guide.md) explains how to keep
   Rust doctests accurate without unnecessary execution.
+- [OrthoConfig user's guide](ortho-config-users-guide.md) explains how to build
+  layered command-line configuration with OrthoConfig.
 - [Complexity antipatterns and refactoring strategies](complexity-antipatterns-and-refactoring-strategies.md)
   records the complexity patterns Whitaker flags and the refactorings they are
   intended to encourage.
@@ -83,6 +85,10 @@
   contract](adr-004-pin-only-mutation-testing-contract.md) records why the
   shared mutation workflow tests its declared configuration without claiming
   parity with the continuous integration test baseline.
+- [Architectural decision record (ADR) 005: root Whitaker CLI
+  boundary](adr-005-whitaker-cli-boundary.md) records the executable namespace,
+  installer API boundary, Dylint forwarding, and staged publication decision
+  for the unified CLI.
 
 ## Requests for comments
 
@@ -96,5 +102,5 @@
 
 ## Planning material
 
-- [docs/execplans/](execplans/) stores execution plans for branch-scoped
-  implementation work and larger follow-up tasks.
+- [docs/execplans/](execplans/) and [debugging plans](debugging/) record
+  implementation plans and bounded investigations.

@@ -19,7 +19,7 @@ dylint-driver = [
     "dep:rustc_lint",
     "dep:rustc_span",
     "dep:serde",
-    "dep:whitaker"
+    "dep:whitaker_lint_core"
 ]
 constituent = ["dylint-driver", "dylint_linting/constituent"]
 
@@ -31,7 +31,7 @@ rustc_span = { workspace = true, optional = true }
 whitaker-common = { workspace = true, optional = true }
 serde = { version = "1.0", features = ["derive"], optional = true }
 log = { workspace = true, optional = true }
-whitaker = { version = "0.2.7", path = "../../", features = ["dylint-driver"], optional = true }
+whitaker_lint_core = { version = "0.2.7", path = "../whitaker_lint_core", features = ["dylint-driver"], optional = true }
 
 [dev-dependencies]
 whitaker_test_macros = { workspace = true }

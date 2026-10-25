@@ -17,12 +17,22 @@ use crate::{
 /// Result of wrapper script generation.
 #[derive(Debug)]
 pub struct WrapperResult {
-    /// Path to the `whitaker` wrapper script.
+    /// Conventional path for the `whitaker` wrapper, if that script was
+    /// selected for creation.
     pub whitaker_path: std::path::PathBuf,
-    /// Path to the `whitaker-ls` wrapper script.
+    /// Path to the `whitaker-ls` wrapper script created by this invocation.
     pub whitaker_ls_path: std::path::PathBuf,
     /// Whether the bin directory is in PATH.
     pub in_path: bool,
+}
+
+/// Selects which compatibility scripts an installer invocation may create.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WrapperScripts {
+    /// Write both scripts used by the legacy `whitaker-installer` command.
+    Both,
+    /// Write only the lister script because the `whitaker` name is now a binary.
+    WhitakerLsOnly,
 }
 
 /// Generates wrapper scripts for invoking Whitaker lints.
@@ -69,6 +79,41 @@ pub fn generate_wrapper_scripts(
     dirs: &dyn BaseDirs,
     library_path: &Utf8Path,
 ) -> Result<WrapperResult> {
+    generate_wrapper_scripts_with(dirs, library_path, WrapperScripts::Both)
+}
+
+/// Generates the selected compatibility scripts for invoking Whitaker lints.
+///
+/// The returned paths name the conventional locations even when a script was
+/// not selected for writing. This lets callers report a consistent PATH
+/// location while preserving an executable installed at the `whitaker` path.
+///
+/// # Examples
+///
+/// ```no_run
+/// use camino::Utf8Path;
+/// use whitaker_installer::{
+///     dirs::SystemBaseDirs,
+///     wrapper::{WrapperScripts, generate_wrapper_scripts_with},
+/// };
+///
+/// let dirs = SystemBaseDirs::new().expect("platform directories should exist");
+/// let library_path = Utf8Path::new("/home/user/.local/share/whitaker/lints");
+/// let result =
+///     generate_wrapper_scripts_with(&dirs, library_path, WrapperScripts::WhitakerLsOnly)?;
+/// assert!(result.whitaker_ls_path.exists());
+/// # Ok::<(), whitaker_installer::error::InstallerError>(())
+/// ```
+///
+/// # Errors
+///
+/// Returns a wrapper-generation error if the bin directory cannot be created
+/// or a selected script cannot be written.
+pub fn generate_wrapper_scripts_with(
+    dirs: &dyn BaseDirs,
+    library_path: &Utf8Path,
+    scripts: WrapperScripts,
+) -> Result<WrapperResult> {
     let bin_dir = dirs.executables().ok_or_else(|| {
         InstallerError::WrapperGeneration("could not determine bin directory".to_owned())
     })?;
@@ -78,10 +123,11 @@ pub fn generate_wrapper_scripts(
     })?;
 
     #[cfg(unix)]
-    let (whitaker_path, whitaker_ls_path) = generate_unix_scripts(&bin_dir, library_path)?;
+    let (whitaker_path, whitaker_ls_path) = generate_unix_scripts(&bin_dir, library_path, scripts)?;
 
     #[cfg(windows)]
-    let (whitaker_path, whitaker_ls_path) = generate_windows_scripts(&bin_dir, library_path)?;
+    let (whitaker_path, whitaker_ls_path) =
+        generate_windows_scripts(&bin_dir, library_path, scripts)?;
 
     #[cfg(not(any(unix, windows)))]
     return Err(InstallerError::WrapperGeneration(
@@ -101,16 +147,19 @@ pub fn generate_wrapper_scripts(
 fn generate_unix_scripts(
     bin_dir: &Path,
     library_path: &Utf8Path,
+    scripts: WrapperScripts,
 ) -> Result<(std::path::PathBuf, std::path::PathBuf)> {
     let whitaker_path = bin_dir.join("whitaker");
-    let whitaker_content = format!(
-        r#"#!/usr/bin/env bash
+    if scripts == WrapperScripts::Both {
+        let whitaker_content = format!(
+            r#"#!/usr/bin/env bash
 set -euo pipefail
 export DYLINT_LIBRARY_PATH="{library_path}"
 exec cargo dylint "$@"
 "#
-    );
-    write_unix_script(&whitaker_path, &whitaker_content)?;
+        );
+        write_unix_script(&whitaker_path, &whitaker_content)?;
+    }
 
     let whitaker_ls_path = bin_dir.join("whitaker-ls");
     let whitaker_ls_content = format!(
@@ -149,16 +198,20 @@ fn write_unix_script(path: &Path, content: &str) -> Result<()> {
 fn generate_windows_scripts(
     bin_dir: &Path,
     library_path: &Utf8Path,
+    scripts: WrapperScripts,
 ) -> Result<(std::path::PathBuf, std::path::PathBuf)> {
     let whitaker_path = bin_dir.join("whitaker.ps1");
-    let whitaker_content = format!(
-        r#"$env:DYLINT_LIBRARY_PATH = "{library_path}"
+    if scripts == WrapperScripts::Both {
+        let whitaker_content = format!(
+            r#"$env:DYLINT_LIBRARY_PATH = "{library_path}"
 cargo dylint @args
 "#
-    );
+        );
 
-    std::fs::write(&whitaker_path, whitaker_content)
-        .map_err(|e| InstallerError::WrapperGeneration(format!("failed to write script: {e}")))?;
+        std::fs::write(&whitaker_path, whitaker_content).map_err(|e| {
+            InstallerError::WrapperGeneration(format!("failed to write script: {e}"))
+        })?;
+    }
 
     let whitaker_ls_path = bin_dir.join("whitaker-ls.ps1");
     let whitaker_ls_content = format!(
@@ -271,7 +324,8 @@ mod tests {
         let library_path = Utf8PathBuf::from("/tmp/dylint/lib");
 
         let (whitaker_path, whitaker_ls_path) =
-            generate_unix_scripts(temp.path(), &library_path).expect("failed to generate scripts");
+            generate_unix_scripts(temp.path(), &library_path, WrapperScripts::Both)
+                .expect("failed to generate scripts");
 
         assert!(whitaker_path.exists());
         assert!(whitaker_ls_path.exists());
@@ -283,6 +337,42 @@ mod tests {
         assert_script_contains!(
             &whitaker_ls_path,
             &["DYLINT_LIBRARY_PATH", "cargo dylint list", "whitaker_suite"]
+        );
+    }
+
+    #[test]
+    fn lister_only_generation_preserves_an_existing_whitaker_binary() {
+        use camino::Utf8PathBuf;
+
+        let temp = TempDir::new().expect("temporary bin parent should be created");
+        let bin_dir = temp.path().join("bin");
+        let whitaker_path = bin_dir.join(if cfg!(windows) {
+            "whitaker.ps1"
+        } else {
+            "whitaker"
+        });
+        std::fs::create_dir_all(&bin_dir).expect("bin directory should be created");
+        std::fs::write(&whitaker_path, "installed binary sentinel")
+            .expect("existing executable sentinel should be written");
+
+        let mut dirs = crate::dirs::MockBaseDirs::new();
+        let expected_bin_dir = bin_dir.clone();
+        dirs.expect_executables()
+            .return_once(move || Some(expected_bin_dir));
+        let library_path = Utf8PathBuf::from("/tmp/dylint/lib");
+
+        let result =
+            generate_wrapper_scripts_with(&dirs, &library_path, WrapperScripts::WhitakerLsOnly)
+                .expect("lister wrapper should be generated");
+
+        assert_eq!(
+            std::fs::read(&whitaker_path).expect("existing executable should remain readable"),
+            b"installed binary sentinel",
+            "root install must not overwrite its own executable",
+        );
+        assert!(
+            result.whitaker_ls_path.exists(),
+            "lister wrapper should be created"
         );
     }
 

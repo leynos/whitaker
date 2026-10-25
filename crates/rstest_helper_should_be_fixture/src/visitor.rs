@@ -126,11 +126,13 @@ impl<'tcx> Visitor<'tcx> for CallSiteVisitor<'_, 'tcx> {
 
 impl CallSiteVisitor<'_, '_> {
     fn recover_call_span(&self, span: Span) -> Option<Span> {
-        whitaker::hir::recover_user_editable_hir_span(span).or_else(|| {
+        whitaker_lint_core::hir::recover_user_editable_hir_span(span).or_else(|| {
             self.closure_span_fallbacks
                 .iter()
                 .rev()
-                .find_map(|fallback| whitaker::hir::recover_user_editable_hir_span(*fallback))
+                .find_map(|fallback| {
+                    whitaker_lint_core::hir::recover_user_editable_hir_span(*fallback)
+                })
         })
     }
 }

@@ -20,8 +20,8 @@
 # cargo-kani.
 set -eu
 
-SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-REPO_ROOT=$(CDPATH= cd -- "${SCRIPT_DIR}/.." && pwd)
+SCRIPT_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+REPO_ROOT=$(CDPATH='' cd -- "${SCRIPT_DIR}/.." && pwd)
 KANI_INSTALL_DIR=$("${SCRIPT_DIR}/install-kani.sh")
 CARGO_KANI_BIN="${KANI_INSTALL_DIR}/bin/cargo-kani"
 CLONE_DETECTOR_MANIFEST="${REPO_ROOT}/crates/whitaker_clones_core/Cargo.toml"
@@ -80,9 +80,82 @@ run_decomposition_harnesses() {
     fi
 }
 
+run_expected_counterexample() {
+    harness=$1
+    expected_witness=$2
+    expected_failure=$3
+    shift 3
+    output_file=$(mktemp)
+    if "${CARGO_KANI_BIN}" kani \
+        --manifest-path "${REPO_ROOT}/Cargo.toml" \
+        --package whitaker \
+        --lib \
+        --harness "${harness}" \
+        "$@" >"${output_file}" 2>&1; then
+        cat "${output_file}"
+        rm -f "${output_file}"
+        printf 'Kani reachability harness unexpectedly verified: %s\n' "${harness}" >&2
+        return 1
+    fi
+    cat "${output_file}"
+    if ! grep -Fq 'VERIFICATION:- FAILED' "${output_file}" \
+        || ! grep -Fq "Failed Checks: \"${expected_failure}\"" "${output_file}" \
+        || ! awk -v expected="${expected_witness}" '
+            /^Check [0-9]+:/ {
+                if (is_witness && status == "SUCCESS" && index(description, expected) > 0) {
+                    found = 1
+                }
+                is_witness = ($0 ~ /assertion\.1$/)
+                status = ""
+                description = ""
+            }
+            /- Status:/ && is_witness { status = $3 }
+            /- Description:/ && is_witness { description = $0 }
+            END {
+                if (is_witness && status == "SUCCESS" && index(description, expected) > 0) {
+                    found = 1
+                }
+                exit !found
+            }
+        ' "${output_file}"; then
+        rm -f "${output_file}"
+        printf 'Kani did not report the expected witness and named failure: %s\n' \
+            "${harness}" >&2
+        return 1
+    fi
+    rm -f "${output_file}"
+}
+
+run_whitaker_cli_harness() {
+    harness=$1
+    printf 'Running Whitaker CLI Kani harness: %s\n' "${harness}"
+    "${CARGO_KANI_BIN}" kani \
+        --manifest-path "${REPO_ROOT}/Cargo.toml" \
+        --package whitaker \
+        --lib \
+        --harness "${harness}"
+}
+
+run_whitaker_cli_harnesses() {
+    run_whitaker_cli_harness verify_classify_is_total_and_disjoint
+    run_expected_counterexample \
+        verify_subcommand_is_reachable \
+        'assertion failed: classify(&[TokenTag::Install]) == Class::Subcommand(Subcommand::Install)' \
+        'subcommand class should have a counterexample'
+    run_expected_counterexample \
+        verify_forward_is_reachable \
+        'assertion failed: classify(&[TokenTag::DylintFlag]) == Class::Forward' \
+        'forward class should have a counterexample'
+    run_expected_counterexample \
+        verify_display_is_reachable \
+        'assertion failed: classify(&[TokenTag::Help]) == Class::Display' \
+        'display class should have a counterexample'
+}
+
 if [ $# -eq 0 ]; then
     run_decomposition_harnesses
     run_clone_detector_harnesses
+    run_whitaker_cli_harnesses
     exit 0
 fi
 
@@ -94,6 +167,10 @@ case "$1" in
     clone-detector)
         shift
         run_clone_detector_harnesses "$@"
+        ;;
+    whitaker-cli)
+        shift
+        run_whitaker_cli_harnesses "$@"
         ;;
     *)
         run_decomposition_harnesses "$@"

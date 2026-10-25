@@ -6,9 +6,10 @@
 use std::{collections::HashSet, fs, io, io::Write, time::Duration};
 
 use camino::{Utf8Path, Utf8PathBuf};
+
 #[cfg(test)]
-use whitaker_installer::deps::{DependencyInstallOptions, install_dylint_tools_with_options};
-use whitaker_installer::{
+use crate::deps::{DependencyInstallOptions, install_dylint_tools_with_options};
+use crate::{
     builder::{library_extension, library_prefix},
     cli::InstallArgs,
     crate_name::CrateName,

@@ -235,7 +235,7 @@ pub(crate) fn lower_arg_atom<'tcx>(
 }
 
 fn should_skip_arg_for_unrecoverable_span(span: Span) -> bool {
-    whitaker::hir::recover_user_editable_hir_span(span).is_none()
+    whitaker_lint_core::hir::recover_user_editable_hir_span(span).is_none()
 }
 
 fn lower_path_arg<'tcx>(

@@ -14,7 +14,6 @@ use rustc_lint::{LateContext, LateLintPass, LintContext};
 #[cfg(test)]
 use rustc_span::DUMMY_SP;
 use rustc_span::{BytePos, Span, source_map::SourceMap, symbol::Ident};
-use whitaker::{SharedConfig, module_body_span, module_header_span};
 use whitaker_common::i18n::{
     Arguments,
     DiagnosticMessageSet,
@@ -26,6 +25,7 @@ use whitaker_common::i18n::{
     noop_reporter,
     safe_resolve_message_set,
 };
+use whitaker_lint_core::{SharedConfig, module_body_span, module_header_span};
 
 mod inner_attr;
 mod parser;
