@@ -34,30 +34,43 @@ def _test_name_matches(selector: str, test_name: str) -> bool:
     return selector in test_name
 
 
+def _advance_selector_nesting(
+    character: str, depth: int, escaped: bool
+) -> tuple[int, bool]:
+    """Track balanced parentheses while respecting Nextest escapes."""
+    if escaped:
+        return depth, False
+    if character == "\\":
+        return depth, True
+    if character == "(":
+        return depth + 1, False
+    if character == ")":
+        return depth - 1, False
+    return depth, False
+
+
+def _test_selector_end(filter_expression: str, selector_start: int) -> int | None:
+    """Find the closing parenthesis for a test selector."""
+    depth = 1
+    escaped = False
+    for position, character in enumerate(filter_expression[selector_start:], selector_start):
+        depth, escaped = _advance_selector_nesting(character, depth, escaped)
+        if depth == 0:
+            return position
+    return None
+
+
 def _test_name_selectors(filter_expression: str) -> list[str]:
     """Extract test-name selectors from a Nextest filter expression."""
     selectors = []
     offset = 0
     while (start := filter_expression.find("test(", offset)) != -1:
         selector_start = start + len("test(")
-        depth = 1
-        escaped = False
-        end = selector_start
-        while end < len(filter_expression) and depth:
-            character = filter_expression[end]
-            if escaped:
-                escaped = False
-            elif character == "\\":
-                escaped = True
-            elif character == "(":
-                depth += 1
-            elif character == ")":
-                depth -= 1
-            end += 1
-        if depth:
+        selector_end = _test_selector_end(filter_expression, selector_start)
+        if selector_end is None:
             break
-        selectors.append(filter_expression[selector_start : end - 1])
-        offset = end
+        selectors.append(filter_expression[selector_start:selector_end])
+        offset = selector_end + 1
     return selectors
 
 
