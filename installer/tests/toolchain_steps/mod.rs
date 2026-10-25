@@ -166,6 +166,9 @@ pub fn when_installer_cli_run(world: &ToolchainWorld) -> Result<(), String> {
     }
     if let Some(ref cargo_home) = *world.cargo_home.borrow() {
         cmd.env("CARGO_HOME", cargo_home.path());
+        // This fresh registry is empty, so production installer builds must be
+        // allowed to download their dependencies.
+        cmd.env_remove("CARGO_NET_OFFLINE");
     }
 
     // The snapshot step precedes the toolchain step under test; give it a

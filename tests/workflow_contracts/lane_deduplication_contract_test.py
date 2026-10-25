@@ -183,6 +183,11 @@ def test_only_one_linux_job_runs_the_coverage_gate() -> None:
     )
 
 
+def test_dependency_fetch_is_not_a_test_execution() -> None:
+    """The shared online preparation step does not count as a test lane."""
+    assert not any(pattern.search("make fetch") for pattern in TEST_COMMANDS)
+
+
 def test_no_linux_job_adds_a_plain_test_step() -> None:
     """A test-only Linux step adds nothing over the instrumented run."""
     offenders = sorted(
@@ -324,7 +329,7 @@ def test_windows_keeps_its_own_platform_lane() -> None:
 def test_coverage_reuses_the_plain_test_recipe() -> None:
     """The instrumented run must not drift from the run it replaced."""
     recipe = _make_recipe("coverage")
-    assert "$(MAKE) test TEST_RUNNER=" in recipe, (
+    assert "$(MAKE) test" in recipe and "TEST_RUNNER=" in recipe, (
         "coverage must delegate to the test recipe rather than restate it"
     )
     assert "llvm-cov nextest" in recipe, (

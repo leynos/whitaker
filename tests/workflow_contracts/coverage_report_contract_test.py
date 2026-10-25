@@ -81,6 +81,11 @@ def test_coverage_lanes_validate_a_fresh_root_lcov_report(
     """
     steps = _job_steps(workflows[workflow_name], job_name)
     generate_index = _named_step_index(steps, "Generate coverage")
+    fetch_index = _named_step_index(steps, "Fetch dependencies and warm Dylint driver")
+    assert fetch_index < generate_index, (
+        f"{job_name} must fetch dependencies and warm Dylint before coverage tests"
+    )
+    assert steps[fetch_index].get("run") == "make fetch"
     assert generate_index > 0, f"{job_name} must clear stale LCOV before generation"
     remove_stale = steps[generate_index - 1]
     generate = steps[generate_index]

@@ -60,6 +60,7 @@ mod unix {
             .env("CARGO_TARGET_DIR", target_dir)
             .args([
                 "package",
+                "--frozen",
                 "-p",
                 "whitaker-common",
                 "--allow-dirty",

@@ -245,9 +245,9 @@ def _coverage_check_job(workflow: Mapping[str, Any]) -> dict[str, Any]:
     )
     assert _step_names(coverage_job) == [
         "Checkout",
+        "Start CI telemetry",
+        "Free preinstalled toolchains the job does not use",
         "Bound concurrency to the runner shape",
-        "Export the Ubicloud cache credentials",
-        "Select the compiler cache backend",
         "Restore Cargo registry",
         "Restore the Rust toolchain and installed tools",
         "Restore the Clippy source mirror",
@@ -256,6 +256,7 @@ def _coverage_check_job(workflow: Mapping[str, Any]) -> dict[str, Any]:
         "Setup Rust",
         "Install cargo-nextest",
         "Install cargo-llvm-cov",
+        "Fetch dependencies and warm Dylint driver",
         "Remove stale LCOV report",
         "Generate coverage",
         "Verify LCOV report",
@@ -263,6 +264,8 @@ def _coverage_check_job(workflow: Mapping[str, Any]) -> dict[str, Any]:
         "Run doctests",
         "Record sccache effectiveness",
         "Upload sccache statistics",
+        "Check sccache health",
+        "Report CI telemetry",
     ], "coverage-check must contain only the approved ordered steps"
     return coverage_job
 
@@ -283,13 +286,14 @@ def _assert_coverage_checkout_and_setup(coverage_job: Mapping[str, Any]) -> None
     setup_step = _find_step(coverage_job, "Setup Rust")
     assert setup_step.get("uses") == (
         "leynos/shared-actions/.github/actions/setup-rust@"
-        "7cb894fe62c40951cccf33819548095e64a1291e"
-    ), "coverage-check must reuse the current main-branch Rust setup pin"
+        "6cec89bac47a21cf756d68d638a9a510998e57f8"
+    ), "coverage-check must use the repository's shared Rust setup pin"
     assert setup_step.get("with") == {
+        "expect-cache": "ubicloud",
         "cache-provider": "external",
     }, (
-        "coverage-check must own its Cargo cache and take the shared "
-        "compiler-cache arm, which `use-sccache: false` would disable"
+        "coverage-check must require its Ubicloud cache and keep the shared "
+        "compiler-cache setup"
     )
 
 
@@ -311,6 +315,11 @@ def _assert_coverage_tool_installation(coverage_job: Mapping[str, Any]) -> None:
     )
     assert llvm_cov_step.get("with", {}).get("tool") == "cargo-llvm-cov@0.6.24", (
         "coverage-check must install the estate-audited cargo-llvm-cov version"
+    )
+
+    fetch = _find_step(coverage_job, "Fetch dependencies and warm Dylint driver")
+    assert fetch.get("run") == "make fetch", (
+        "coverage-check must prepare the dependency and Dylint caches before tests"
     )
 
     generate_coverage = _find_step(coverage_job, "Generate coverage")
@@ -507,6 +516,7 @@ def test_windows_compat_stays_limited_to_windows_compatibility_checks(
         [
             "Setup Rust",
             "Install cargo-nextest",
+            "Fetch dependencies and warm Dylint driver",
             "Test",
             "Installer smoke test",
             "Installer release dry run",
@@ -539,6 +549,9 @@ def test_windows_compat_stays_limited_to_windows_compatibility_checks(
     assert (
         _find_step(windows_job, "Test").get("run") == "make test NEXTEST_PROFILE=ci"
     ), "windows-compat must run the full CI test profile on Windows"
+    assert _find_step(windows_job, "Fetch dependencies and warm Dylint driver").get(
+        "run"
+    ) == "make fetch", "windows-compat must prepare before the test command"
     assert _find_step(windows_job, "Installer smoke test").get("run") == (
         "make install-smoke"
     ), "windows-compat must install and execute the packaged installer"
