@@ -247,7 +247,7 @@ proptest! {
 }
 
 #[test]
-fn root_install_matches_legacy_for_mixed_short_clusters_and_option_orders() {
+fn root_install_matches_legacy_for_parser_edge_cases() {
     let cases = [
         ShortClusterCase::accepting(&["-vj2"], false, 1, Some(2)),
         ShortClusterCase::accepting(&["-qj2"], true, 0, Some(2)),
@@ -260,6 +260,9 @@ fn root_install_matches_legacy_for_mixed_short_clusters_and_option_orders() {
         ShortClusterCase::rejecting(&["-q", "-vj2"]),
         ShortClusterCase::rejecting(&["-vqj2"]),
         ShortClusterCase::rejecting(&["-qvj2"]),
+        ShortClusterCase::rejecting(&["--jobs", "-v", "2"]),
+        ShortClusterCase::rejecting(&["--toolchain", "-v", "nightly-test"]),
+        ShortClusterCase::rejecting(&["-q", "-q"]),
     ];
 
     for test_case in cases {
@@ -275,54 +278,62 @@ fn verify_short_cluster_case(test_case: &ShortClusterCase) -> Result<(), String>
         .copied()
         .map(OsString::from)
         .collect::<Vec<_>>();
-    let root_result = parse_root(&parsed_arguments);
-    let legacy_result = parse_legacy(&parsed_arguments, false);
-    if let Some(expected_options) = test_case.expected {
-        let root = root_result.map_err(|error| {
-            format!(
-                "root parser rejected valid arguments {:?}: {error}",
-                test_case.arguments
-            )
-        })?;
-        let legacy = legacy_result.map_err(|error| {
-            format!(
-                "legacy parser rejected valid arguments {:?}: {error}",
-                test_case.arguments
-            )
-        })?;
-        let Command::Install(parsed_root_arguments) = &root.command else {
-            return Err(format!(
-                "root parser produced a different command for {:?}",
-                test_case.arguments
-            ));
-        };
-        let root_arguments = root.install_arguments(parsed_root_arguments);
-        let legacy_arguments = legacy.install_args();
-        if root_arguments != *legacy_arguments {
-            return Err(format!(
-                "parser arguments differ for {:?}",
-                test_case.arguments
-            ));
-        }
-        verify_expected_common_options(test_case.arguments, &root_arguments, expected_options)?;
-    } else {
-        let Err(root_error) = root_result else {
-            return Err(format!(
-                "root parser accepted conflicting arguments {:?}",
-                test_case.arguments
-            ));
-        };
-        let Err(legacy_error) = legacy_result else {
-            return Err(format!(
-                "legacy parser accepted conflicting arguments {:?}",
-                test_case.arguments
-            ));
-        };
-        if root_error.kind() != legacy_error.kind() {
-            return Err(format!(
-                "parser rejection kinds differ for {:?}",
-                test_case.arguments
-            ));
+    for explicit_subcommand in [false, true] {
+        let root_result = parse_root(&parsed_arguments);
+        let legacy_result = parse_legacy(&parsed_arguments, explicit_subcommand);
+        if let Some(expected_options) = test_case.expected {
+            let root = root_result.map_err(|error| {
+                format!(
+                    "root parser rejected valid arguments {:?}: {error}",
+                    test_case.arguments
+                )
+            })?;
+            let legacy = legacy_result.map_err(|error| {
+                format!(
+                    "legacy parser rejected valid arguments {:?} with \
+                     explicit_subcommand={explicit_subcommand}: {error}",
+                    test_case.arguments
+                )
+            })?;
+            let Command::Install(parsed_root_arguments) = &root.command else {
+                return Err(format!(
+                    "root parser produced a different command for {:?}",
+                    test_case.arguments
+                ));
+            };
+            let root_arguments = root.install_arguments(parsed_root_arguments);
+            let legacy_arguments = legacy.install_args();
+            if root_arguments != *legacy_arguments {
+                return Err(format!(
+                    "parser arguments differ for {:?} with \
+                     explicit_subcommand={explicit_subcommand}",
+                    test_case.arguments
+                ));
+            }
+            verify_expected_common_options(test_case.arguments, &root_arguments, expected_options)?;
+        } else {
+            let Err(root_error) = root_result else {
+                return Err(format!(
+                    "root parser accepted conflicting arguments {:?}",
+                    test_case.arguments
+                ));
+            };
+            let Err(legacy_error) = legacy_result else {
+                return Err(format!(
+                    "legacy parser accepted conflicting arguments {:?} with \
+                     explicit_subcommand={explicit_subcommand}",
+                    test_case.arguments
+                ));
+            };
+            if root_error.kind() != legacy_error.kind()
+                || root_error.exit_code() != legacy_error.exit_code()
+            {
+                return Err(format!(
+                    "parser rejection differs for {:?} with \
+                     explicit_subcommand={explicit_subcommand}",
+                    test_case.arguments
+                ));
+            }
         }
     }
     Ok(())

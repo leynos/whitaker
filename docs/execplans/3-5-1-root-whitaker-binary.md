@@ -124,17 +124,32 @@ narrowed to one byte. Source review confirmed both; regression fixes now pass
 `make typecheck`, `make lint`, `make markdownlint`, and `make nixie`.
 `cargo package -p whitaker --no-verify --allow-dirty` also passes.
 
-The parity negative control failed on case 12 with `--no-update`; the exit
-negative control made `whitaker --help` exit 2. Transcripts are in
-`/tmp/negative-control-parity-0c485c79-c21a-486e-b126-29c3ef23084f.out` and
-`/tmp/negative-control-exit-0c485c79-c21a-486e-b126-29c3ef23084f.out`.
-Dependency count fell from 342 to 189; the stripped release binary is 5,040,816
-bytes (6,506,472 bytes unstripped).
+Negative-control evidence is recorded here so it survives local log rotation:
 
-The current branch diff is 128 files and 7,264 net added lines, 264 above
-D-12's 7,000-line ceiling and beyond D-11's 80-file candidate. Resolve that
-scope deviation with the owner before merge. Crates.io name reservation remains
-unauthorized; this plan remains in progress.
+- `EP-INV-PARITY`: dropping `--no-update` from the root-to-installer mapping
+  made the 4,096-case property test fail at case 12; the expected parsed value
+  was `no_update=true`, while the root mapping returned `false`.
+- `EP-INV-EXIT`: mapping `whitaker --help` to a usage error made the process
+  exit-code test fail with actual status 2 instead of expected status 0.
+- `EP-INV-DISPATCH`: removing the `Ls` classifier arm made the scoped Kani
+  proof fail at check 64 of 361. The three reachability controls each produced
+  the expected counterexample.
+- `EP-LEM-DISPATCH`: widening the Verus disjointness guard to overlap `Help`
+  produced 3 verified obligations and 1 expected error.
+
+`cargo package -p whitaker --no-verify --allow-dirty` passed, producing a
+15-file archive (133 KiB unpacked, 36.3 KiB compressed). The normal dependency
+count fell from 342 to 189; the stripped release binary is 5,040,816 bytes
+(6,506,472 bytes unstripped).
+
+The assessment on `41e3f52f` found parser value-boundary and repeated-quiet
+parity gaps. The candidate validates install arguments through the installer
+parser, adds regression coverage for both legacy forms and a Windows child-exit
+test, and adds root-package validation to CI. Local gates pass; the
+Windows-only test still awaits hosted Windows CI. The 129-file diff is +7,373
+net lines, 373 above D-12's ceiling, and exceeds D-11's accepted 80 files.
+Resolve this scope with the owner before merge. Crates.io reservation remains
+unauthorized; the plan stays `IN PROGRESS`.
 
 ## Constraints
 
