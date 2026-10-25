@@ -149,7 +149,7 @@ pub trait LintRunner {
     /// # Errors
     ///
     /// Returns an error when the subprocess cannot be started.
-    fn forward(&self, args: &[OsString]) -> Result<u8, CliError>;
+    fn forward(&self, args: &[OsString]) -> Result<i32, CliError>;
 }
 
 /// Groups the independently replaceable command adapters.

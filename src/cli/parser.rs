@@ -145,13 +145,18 @@ fn extract_global_options(arguments: Vec<OsString>) -> (Vec<OsString>, bool, u8)
             continue;
         }
         match common_option(&argument) {
-            Some(CommonOption::Quiet) => quiet = true,
-            Some(CommonOption::Verbose(count)) => {
-                verbosity = verbosity.saturating_add(count);
+            Some((CommonOption::Quiet, remainder)) => {
+                quiet = true;
+                parsed_arguments.extend(remainder);
             }
-            Some(CommonOption::QuietAndVerbose(count)) => {
+            Some((CommonOption::Verbose(count), remainder)) => {
+                verbosity = verbosity.saturating_add(count);
+                parsed_arguments.extend(remainder);
+            }
+            Some((CommonOption::QuietAndVerbose(count), remainder)) => {
                 quiet = true;
                 verbosity = verbosity.saturating_add(count);
+                parsed_arguments.extend(remainder);
             }
             None => parsed_arguments.push(argument),
         }
@@ -160,45 +165,65 @@ fn extract_global_options(arguments: Vec<OsString>) -> (Vec<OsString>, bool, u8)
 }
 
 /// Recognizes a quiet or verbose flag, including supported short clusters.
-fn common_option(argument: &OsStr) -> Option<CommonOption> {
+fn common_option(argument: &OsStr) -> Option<(CommonOption, Option<OsString>)> {
     match argument.to_str()? {
-        "-q" | "--quiet" => Some(CommonOption::Quiet),
-        "-v" | "--verbose" | "--verbosity" => Some(CommonOption::Verbose(1)),
-        value if is_verbosity_cluster(value) => {
-            let count = u8::try_from(value.len().saturating_sub(1)).unwrap_or(u8::MAX);
-            Some(CommonOption::Verbose(count))
-        }
-        value if is_mixed_common_cluster(value) => {
-            let options = value.strip_prefix('-')?;
-            let count = u8::try_from(options.chars().filter(|option| *option == 'v').count())
-                .unwrap_or(u8::MAX);
-            Some(CommonOption::QuietAndVerbose(count))
-        }
-        _ => None,
+        "-q" | "--quiet" => Some((CommonOption::Quiet, None)),
+        "-v" | "--verbose" | "--verbosity" => Some((CommonOption::Verbose(1), None)),
+        value => common_short_cluster(value).map(|(option, remainder)| {
+            (
+                option,
+                remainder.map(|suffix| OsString::from(format!("-{suffix}"))),
+            )
+        }),
     }
 }
 
-/// Reports whether a short cluster contains only recognized common options.
+/// Reports whether a short cluster contains only shared options.
 pub(super) fn is_common_cluster(value: &str) -> bool {
-    is_verbosity_cluster(value) || is_mixed_common_cluster(value)
-}
-
-/// Recognizes a cluster containing two or more `-v` flags.
-fn is_verbosity_cluster(value: &str) -> bool {
     let Some(short_options) = value.strip_prefix('-') else {
         return false;
     };
-    short_options.len() > 1 && short_options.chars().all(|option| option == 'v')
+    short_options.len() > 1
+        && short_options
+            .chars()
+            .all(|option| matches!(option, 'q' | 'v'))
 }
 
-/// Recognizes a cluster of `-q` and `-v` flags that includes quiet mode.
-fn is_mixed_common_cluster(value: &str) -> bool {
-    let Some(options) = value.strip_prefix('-') else {
-        return false;
+/// Extracts leading shared flags and leaves any attached value option intact.
+fn common_short_cluster(value: &str) -> Option<(CommonOption, Option<&str>)> {
+    let short_options = value.strip_prefix('-')?;
+    if short_options.starts_with('-') {
+        return None;
+    }
+    let common_end = short_options
+        .char_indices()
+        .find_map(|(index, option)| (!matches!(option, 'q' | 'v')).then_some(index))
+        .unwrap_or(short_options.len());
+    if common_end == 0 {
+        return None;
+    }
+    let (common_options, remainder) = short_options.split_at(common_end);
+    if remainder
+        .chars()
+        .next()
+        .is_some_and(|option| !matches!(option, 'j' | 'l' | 't'))
+    {
+        return None;
+    }
+    let quiet = common_options.contains('q');
+    let verbosity = u8::try_from(
+        common_options
+            .chars()
+            .filter(|option| *option == 'v')
+            .count(),
+    )
+    .unwrap_or(u8::MAX);
+    let common_option = match (quiet, verbosity) {
+        (true, 0) => CommonOption::Quiet,
+        (false, count) => CommonOption::Verbose(count),
+        (true, count) => CommonOption::QuietAndVerbose(count),
     };
-    options.len() > 1
-        && options.chars().all(|option| matches!(option, 'q' | 'v'))
-        && options.contains('q')
+    Some((common_option, (!remainder.is_empty()).then_some(remainder)))
 }
 
 #[cfg(test)]
@@ -207,7 +232,7 @@ mod tests {
 
     use ortho_config::NoOpLocalizer;
 
-    use super::{Cli, Command};
+    use super::{Cli, Command, is_common_cluster};
 
     #[test]
     fn common_flags_are_accepted_before_and_after_subcommands() {
@@ -244,6 +269,13 @@ mod tests {
             effective.execution.dry_run,
             "installer option should remain set"
         );
+    }
+
+    #[test]
+    fn attached_value_options_are_not_classified_as_global_clusters() {
+        assert!(is_common_cluster("-vq"));
+        assert!(!is_common_cluster("-vj2"));
+        assert!(!is_common_cluster("-qj2"));
     }
 
     #[cfg(unix)]

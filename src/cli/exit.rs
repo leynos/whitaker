@@ -12,7 +12,7 @@ pub enum Outcome {
     /// An installer, inventory, output, or process error occurred.
     OperationalFailure,
     /// `cargo dylint` returned this status.
-    Forwarded(u8),
+    Forwarded(i32),
 }
 
 /// Maps an outcome onto a process exit code.
@@ -26,7 +26,7 @@ pub enum Outcome {
 /// assert_eq!(exit_code_for(&Outcome::Forwarded(23)), 23);
 /// ```
 #[must_use]
-pub const fn exit_code_for(outcome: &Outcome) -> u8 {
+pub const fn exit_code_for(outcome: &Outcome) -> i32 {
     match outcome {
         Outcome::Success | Outcome::Display => 0,
         Outcome::UsageError => 2,
@@ -49,7 +49,8 @@ mod tests {
     #[case::usage_error(Outcome::UsageError, 2)]
     #[case::operational_failure(Outcome::OperationalFailure, 1)]
     #[case::forwarded_nonzero(Outcome::Forwarded(17), 17)]
-    fn maps_outcomes_to_exit_codes(#[case] outcome: Outcome, #[case] expected: u8) {
+    #[case::forwarded_windows_code(Outcome::Forwarded(256), 256)]
+    fn maps_outcomes_to_exit_codes(#[case] outcome: Outcome, #[case] expected: i32) {
         assert_eq!(
             exit_code_for(&outcome),
             expected,
