@@ -51,11 +51,26 @@ fn example_harness_lock_reports_active_contention_timeout() {
 fn effective_target_directory_contains_the_running_test_binary() {
     let target_directory = effective_target_directory().expect("resolve Cargo target directory");
     let executable = std::env::current_exe().expect("resolve current test executable");
+    let executable = std::fs::canonicalize(executable).expect("canonicalize test executable");
 
     assert!(
-        executable.starts_with(target_directory),
-        "target directory should contain the test executable"
+        executable.starts_with(&target_directory),
+        "target directory {} should contain the test executable {}",
+        target_directory.display(),
+        executable.display()
     );
+}
+
+/// Check that the production acquisition path locks the resolved target directory.
+#[test]
+fn acquire_uses_the_effective_target_directory() {
+    let target_directory = effective_target_directory().expect("resolve Cargo target directory");
+    let lock_root = std::env::temp_dir();
+    let expected_path = example_harness_lock_path(&target_directory, &lock_root);
+
+    let lock = ExampleHarnessLock::acquire().expect("acquire the effective-target lock");
+
+    assert_eq!(lock.path(), expected_path);
 }
 
 /// Infer the active profile directory from a Cargo test binary path.

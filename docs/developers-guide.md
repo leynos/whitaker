@@ -4289,7 +4289,8 @@ directory. Resolution prefers Cargo's target marker, then an absolute
 `CARGO_TARGET_DIR`, and finally the profile output directory inferred from
 the test executable. Test processes that share build artefacts share one
 lock and serialize, while independent target directories use independent
-locks.
+locks. The direct acquisition regression test shares this serialized UI
+group because it exercises the target-scoped lock used by fixture builds.
 
 The alias UI fixture in `no_unwrap_or_else_panic` exceeded its 20-minute
 allowance while rebuilding its lint library through nested Cargo and waiting
