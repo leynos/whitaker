@@ -1624,11 +1624,10 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
   packaging passed. Scoped CLI Kani proofs and reachability controls passed;
   `make verus` verified 44 obligations. The broad `make kani` run was
   interrupted when the shared filesystem filled, before a verdict. Before this
-  note, the 128-file implementation diff was net +7,250 lines; including this
-  note, it was net +7,265 lines, 265 above D-12's 7,000-line ceiling. The later
-  proof-comment correction reduced the current branch diff to net +7,264 lines,
-  264 above the ceiling. Owner approval remains outstanding; the plan stays
-  `IN PROGRESS`, and crates.io reservation remains unauthorized.
+  note, the 128-file diff was +7,250 net; including it: +7,265 net (265 above
+  D-12's 7,000-line ceiling). The later proof-comment correction reduced the
+  current diff to +7,264 net (264 above). Owner approval remains outstanding;
+  plan stays `IN PROGRESS`; crates.io reservation remains unauthorized.
 
 To be completed at each milestone boundary and at completion. Before setting
 this plan to `COMPLETE`, reconcile every entry in `Surprises & discoveries`
