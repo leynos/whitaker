@@ -233,6 +233,14 @@ mod tests {
         std::fs::create_dir_all(&nightly).expect("nightly staging directory should be created");
         std::fs::create_dir_all(&replacement)
             .expect("replacement staging directory should be created");
+        let expected_nightly = Utf8Path::from_path(&nightly)
+            .expect("nightly path should be UTF-8")
+            .canonicalize_utf8()
+            .expect("nightly path should be canonicalized");
+        let expected_replacement = Utf8Path::from_path(&replacement)
+            .expect("replacement path should be UTF-8")
+            .canonicalize_utf8()
+            .expect("replacement path should be canonicalized");
         let dirs = mock_dirs(temporary.path().join("data"));
 
         record_installation(
@@ -256,20 +264,8 @@ mod tests {
 
         let recorded = installed_paths(&dirs).expect("recorded paths should load");
         assert_eq!(recorded.len(), 2);
-        assert!(
-            recorded.contains(
-                &Utf8Path::from_path(&replacement)
-                    .expect("replacement path should be UTF-8")
-                    .to_owned()
-            )
-        );
-        assert!(
-            recorded.contains(
-                &Utf8Path::from_path(&nightly)
-                    .expect("nightly path should be UTF-8")
-                    .to_owned()
-            )
-        );
+        assert!(recorded.contains(&expected_replacement));
+        assert!(recorded.contains(&expected_nightly));
     }
 
     #[test]
