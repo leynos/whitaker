@@ -76,6 +76,8 @@ def _test_name_selectors(filter_expression: str) -> list[str]:
 
 def _filter_may_select_test(filter_expression: str, test_name: str) -> bool:
     """Check whether a test predicate can match a test name."""
+    if "all()" in filter_expression:
+        return True
     return any(
         _test_name_matches(selector, test_name)
         for selector in _test_name_selectors(filter_expression)
@@ -129,6 +131,8 @@ def test_no_override_names_a_group_the_configuration_lacks(
 @pytest.mark.parametrize(
     ("selector", "matches"),
     [
+        ("all()", True),
+        ("test(other) | all()", True),
         ("test(trybuild)", True),
         ("test(=trybuild_fixtures_compile_without_diagnostics)", True),
         ("test(/trybuild/)", True),
