@@ -249,8 +249,10 @@ coverage: ## Generate LCOV coverage over the CI-tested crate subset
 	@# so coverage never attempts a bare `--workspace` build the suite
 	@# cannot support, and the separate feature-free `whitaker_lint_core`
 	@# pass still contributes its lines to the same report.
-	@# `--no-report` retains coverage data between the passes, so one final
-	@# `report` step writes the composed LCOV file.
+	@# Both passes use `--no-report`, which retains coverage data between
+	@# them so one final `report` step writes the composed LCOV file.
+	@# `--no-report` and `--no-clean` are mutually exclusive in
+	@# cargo-llvm-cov, so neither pass may add `--no-clean`.
 	@# LLVM coverage maps carry source locations without DWARF debug info.
 	@# Omit optional symbols from this throwaway target to limit runner disk use.
 	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v cargo-llvm-cov >/dev/null || { echo "Install cargo-llvm-cov (cargo install cargo-llvm-cov)"; exit 1; }

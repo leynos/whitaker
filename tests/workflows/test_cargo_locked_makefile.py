@@ -42,6 +42,18 @@ def test_recipe_lines_are_empty_for_an_absent_target() -> None:
         "an absent Makefile target must yield no recipe lines"
     )
 
+
+def test_coverage_preserves_data_without_conflicting_llvm_cov_options() -> None:
+    """Both coverage passes reuse data without incompatible cleanup flags."""
+    coverage_recipe = "\n".join(_makefile_recipe_lines("coverage"))
+
+    assert coverage_recipe.count("llvm-cov nextest --no-report") == 2, (
+        "both coverage passes must defer reporting until their data is merged"
+    )
+    assert 'CORE_TEST_RUNNER="llvm-cov nextest --no-report --no-clean"' not in (
+        coverage_recipe
+    ), "cargo-llvm-cov rejects --no-clean together with --no-report"
+
 def test_coverage_recipe_exports_one_explicit_nested_cargo_target() -> None:
     """Require outer coverage and nested Cargo builds to share one target."""
     makefile = (REPO_ROOT / "Makefile").read_text(encoding="utf-8")
@@ -59,6 +71,8 @@ def test_coverage_recipe_exports_one_explicit_nested_cargo_target() -> None:
     assert '$(MAKE) test TEST_RUNNER="llvm-cov nextest' in recipe, (
         "coverage must invoke the nested test runner through cargo-llvm-cov"
     )
+
+
 def _cargo_invocation(recipe_line: str) -> str:
     """Return the `$(CARGO) ...` call in a recipe line, trimmed at its terminator.
 
