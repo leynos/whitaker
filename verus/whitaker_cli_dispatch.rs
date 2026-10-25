@@ -1,9 +1,8 @@
 //! Unbounded proof that Whitaker CLI token classification is total and disjoint.
 //!
-//! Run with `scripts/run-verus.sh cli`; the default `make verus` group omits
-//! this proof until it verifies within tolerance. This model mirrors the pure
-//! classifier in `src/cli/dispatch.rs`; the bounded Kani harness checks the
-//! production implementation over token sequences up to length six.
+//! Run with `scripts/run-verus.sh cli`; default `make verus` includes it.
+//! This model mirrors `src/cli/dispatch.rs`; bounded Kani checks the production
+//! implementation over token sequences up to length six.
 
 use vstd::prelude::*;
 
