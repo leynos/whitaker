@@ -139,7 +139,12 @@ fn render_release(release: BinstallRelease<'_>, template: &BinstallTemplate) -> 
         BinstallTemplate::PackageUrl => (
             PKG_URL_TEMPLATE,
             "{archive-format}",
-            package_archive_format(release.target).to_owned(),
+            (if release.target == WINDOWS_OVERRIDE_TARGET {
+                WINDOWS_PKG_FMT
+            } else {
+                DEFAULT_PKG_FMT
+            })
+            .to_owned(),
         ),
         BinstallTemplate::BinDirectory => (BIN_DIR_TEMPLATE, "{bin}", binary_name(release)),
     };
@@ -148,14 +153,6 @@ fn render_release(release: BinstallRelease<'_>, template: &BinstallTemplate) -> 
         .replace("{version}", release.version)
         .replace("{target}", release.target)
         .replace(platform_key, &platform_value)
-}
-
-fn package_archive_format(target: &str) -> &'static str {
-    if target == WINDOWS_OVERRIDE_TARGET {
-        WINDOWS_PKG_FMT
-    } else {
-        DEFAULT_PKG_FMT
-    }
 }
 
 fn binary_name(release: BinstallRelease<'_>) -> String {
