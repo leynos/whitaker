@@ -530,7 +530,7 @@ The materializer may produce review-only alternatives for tightly bounded cases:
 - an `Arc<T>` that never crosses a thread or task and has no clone.
 
 These alternatives should be labelled `ReviewRequired` and shown only when RFC
-0003 accepts them. No first-release `apply --safe` path should include them.
+0007 accepts them. No first-release `apply --safe` path should include them.
 
 ## 10. Borrow-workaround materializers
 

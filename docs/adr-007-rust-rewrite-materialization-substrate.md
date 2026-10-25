@@ -361,6 +361,13 @@ a Dylint rule would emit. This prevents the comparison from accidentally
 measuring repository-wide pattern discovery. Each backend may rematch or cast
 syntax inside the bounded anchor to confirm structural preconditions.
 
+Each backend's materializer must compare `base_file_sha256` with the supplied
+source for `path` and `snippet_sha256` with the bytes at `range` before it
+produces edits. A stale digest must be rejected by the materializer, not
+preflighted by the harness, so the harness can exercise the same rejection
+contract against both backends. Fixture-manifest integrity remains a separate
+harness check.
+
 The harness, not either backend, should own:
 
 - fixture snapshot integrity checks against the fixture manifest;

@@ -13,12 +13,13 @@ default-filter = "not (binary(behaviour_toolchain) | binary(behaviour_cli) | kin
 # that hangs is reported slow for ever and only the job timer ends it, which
 # cancels the run and discards the log that would have named the test.
 slow-timeout = { period = "300s", terminate-after = 1, grace-period = "5s" }
-# The whole run's budget. It sits above the largest per-test allowance below,
-# so a test may spend its budget in full. The previous 75-minute run reached
-# 1,840 of 1,842 tests before the nested SARIF API contract was still compiling.
-# Ten more minutes give that remaining trybuild work room to finish.
+# A full run under the 240-minute limit ran 1,846/1,852 tests: 1,845 passed
+# (one flaky), and `trybuild_fixtures_compile_without_diagnostics` timed out
+# after 75 minutes while nested Cargo waited for compiler slots. Its 120-minute
+# allowance below uses the additional 60 minutes for 45 more minutes on that
+# build and 15 minutes for the remaining tests.
 # See "Test timeouts: four tiers, outermost last" in the developers' guide.
-global-timeout = "85m"
+global-timeout = "300m"
 
 # CI profile — run the full suite including slow installer tests.
 [profile.ci]
@@ -32,7 +33,7 @@ default-filter = "not kind(example)"
 # budgets that govern CI belong where a reader of this profile finds
 # them.
 slow-timeout = { period = "300s", terminate-after = 1, grace-period = "5s" }
-global-timeout = "85m"
+global-timeout = "300m"
 
 [[profile.ci.overrides]]
 # The toolchain auto-install behavioural tests may download and install a
@@ -43,22 +44,57 @@ test-group = "serial-toolchain-installs"
 
 [[profile.ci.overrides]]
 # Dylint UI harnesses build lint libraries; the default profile gives them
-# the same allowance below. Compile-contract tests use the dedicated
-# 75-minute override below.
+# the same allowance below. Other compile-contract tests use the dedicated
+# 75-minute override below; the rstest helper fixture has its own 120-minute
+# allowance.
 # `whitaker-installer`'s binary is
 # named `ui` but its test is not, so the `(binary(ui) & test(=ui))`
 # clause does not reach it; it measured 235 s and timed out at 300 s on
-# the Windows lane under the base allowance. A full workspace run also
-# Keep that nested build bounded while leaving room to finish under contention.
-filter = "test(driver::ui::) | test(tests::ui::) | test(ui::ui) | (binary(ui) & test(=ui))"
+# the Windows lane under the base allowance. The fixture crate's nested
+# example build has its own allowance below, so this stays limited to the
+# other Dylint UI harnesses.
+filter = "test(driver::ui::) | test(tests::ui::) | (test(ui::ui) & not package(no_unwrap_or_else_panic)) | (binary(ui) & test(=ui))"
 slow-timeout = { period = "20m", terminate-after = 1, grace-period = "5s" }
 test-group = "serial-dylint-ui"
 
 [[profile.ci.overrides]]
-# Every discovered trybuild test builds fixtures through nested Cargo. Keep
-# them under one build-sized allowance and avoid retries that repeat the work.
-filter = "test(dependency_check_result_contract_is_public) | test(fixture_expansion_lint_attribute_contract) | test(normalize_settings_is_public_and_the_legacy_name_stays_removed) | test(renamed_common_apis_are_public_and_legacy_names_stay_removed) | test(renamed_sarif_api_is_public_and_legacy_names_stay_removed) | test(sha2_0_11_pre_migration_patterns_fail_to_compile) | test(trybuild_fixtures_compile_without_diagnostics)"
+# This whole UI harness rebuilds its lint library through nested Cargo. The
+# 150-minute run reached it near the global deadline while the package-cache
+# lock was held; give one build time to finish instead of retrying it.
+filter = "package(no_unwrap_or_else_panic) & test(ui::ui)"
 slow-timeout = { period = "75m", terminate-after = 1, grace-period = "5s" }
+test-group = "serial-dylint-ui"
+retries = 0
+
+[[profile.ci.overrides]]
+# Match the default profile's allowance for this nested library/example build.
+filter = "package(rstest_helper_should_be_fixture) & test(example_compiles_without_diagnostics)"
+slow-timeout = { period = "75m", terminate-after = 1, grace-period = "5s" }
+test-group = "serial-dylint-ui"
+retries = { backoff = "exponential", count = 2, delay = "5s" }
+
+[[profile.ci.overrides]]
+# The alias UI fixture rebuilds its lint library through nested Cargo. Its
+# 20-minute attempt timed out while compiler admission was queued; let one
+# build finish rather than restarting it on retry.
+filter = "package(no_unwrap_or_else_panic) & test(ui::aliased_test_crate_non_companion_does_not_exempt_parent_function)"
+slow-timeout = { period = "75m", terminate-after = 1, grace-period = "5s" }
+test-group = "serial-dylint-ui"
+retries = 0
+
+[[profile.ci.overrides]]
+# The other trybuild compile contracts build fixtures through nested Cargo.
+# Keep them under one build-sized allowance and avoid retries that repeat work.
+filter = "test(dependency_check_result_contract_is_public) | test(fixture_expansion_lint_attribute_contract) | test(normalize_settings_is_public_and_the_legacy_name_stays_removed) | test(renamed_common_apis_are_public_and_legacy_names_stay_removed) | test(renamed_sarif_api_is_public_and_legacy_names_stay_removed) | test(sha2_0_11_pre_migration_patterns_fail_to_compile)"
+slow-timeout = { period = "75m", terminate-after = 1, grace-period = "5s" }
+test-group = "serial-dylint-ui"
+retries = 0
+
+[[profile.ci.overrides]]
+# This fixture suite had not finished compiling after 75 minutes in a healthy
+# but busy compiler queue. Allow one longer build without retrying it.
+filter = "package(rstest_helper_should_be_fixture) & test(trybuild_fixtures_compile_without_diagnostics)"
+slow-timeout = { period = "120m", terminate-after = 1, grace-period = "5s" }
 test-group = "serial-dylint-ui"
 retries = 0
 
@@ -99,37 +135,74 @@ serial-nested-cargo-builds = { max-threads = 1 }
 # name reported to nextest is plain `ui`, not `ui::ui`, so the substring
 # match `test(ui::ui)` does not capture them (e.g. bumpy_road_function).
 #
-# `example_compiles_without_diagnostics`,
-# `example_harness_collects_call_site_evidence`, and
+# `example_harness_collects_call_site_evidence` and
 # `trybuild_fixtures_compile_without_diagnostics` use nested Cargo UI harnesses
 # in `rstest_helper_should_be_fixture`. They must share this group with the
 # other Dylint UI tests: constrained Namespace coverage runners otherwise
-# compile them concurrently against the shared target directory.
+# compile them concurrently against the shared target directory. The separate
+# example-compilation override below gives its library and example builds a
+# 75-minute allowance after its earlier 20-minute limit expired in the queue.
 #
 # `ui::example_compiles_under_test_harness`,
 # `ui::hand_written_test_companion_does_not_exempt_parent_function`,
-# `ui::rstest_unwrap_outside_tests_still_fails_in_non_harness_code`,
-# `ui::rstest_empty_companion_does_not_exempt_parent_function`, and
-# `ui::aliased_test_crate_non_companion_does_not_exempt_parent_function` are
+# `ui::rstest_unwrap_outside_tests_still_fails_in_non_harness_code`, and
+# `ui::rstest_empty_companion_does_not_exempt_parent_function` are
 # gated on `#[cfg(not(windows))]` in `no_unwrap_or_else_panic`; on Windows
 # these filter clauses match nothing.  Together they are the complete set of
 # nested Cargo example harnesses in that crate, and must share this group while
-# coverage instrumentation uses its target directory. The `rstest-bdd-macros`
-# dev-dependency proc-macro hangs during cargo's dev-dependency resolution on
+# coverage instrumentation uses its target directory. The alias fixture has a
+# separate 75-minute allowance below after a queued build exceeded 20 minutes.
+# The `rstest-bdd-macros` dev-dependency proc-macro hangs during cargo's
+# dev-dependency resolution on
 # Windows CI regardless of whether any example source uses rstest, so all
 # Dylint example compilation for that crate is compiled away on Windows.
 # The installer UI case measured 235 s and timed out at the 300 s base
 # allowance on Windows. Allow nested UI builds to finish while keeping a cap.
-filter = "test(driver::ui::) | test(tests::ui::) | test(ui::ui) | test(example_compiles_without_diagnostics) | test(example_harness_collects_call_site_evidence) | test(ui::example_compiles_under_test_harness) | test(ui::hand_written_test_companion_does_not_exempt_parent_function) | test(ui::rstest_unwrap_outside_tests_still_fails_in_non_harness_code) | test(ui::rstest_empty_companion_does_not_exempt_parent_function) | test(ui::aliased_test_crate_non_companion_does_not_exempt_parent_function) | (binary(ui) & test(=ui))"
+filter = "test(driver::ui::) | test(tests::ui::) | (test(ui::ui) & not package(no_unwrap_or_else_panic)) | test(example_harness_collects_call_site_evidence) | test(ui::example_compiles_under_test_harness) | test(ui::hand_written_test_companion_does_not_exempt_parent_function) | test(ui::rstest_unwrap_outside_tests_still_fails_in_non_harness_code) | test(ui::rstest_empty_companion_does_not_exempt_parent_function) | (binary(ui) & test(=ui))"
 test-group = "serial-dylint-ui"
 retries = { backoff = "exponential", count = 2, delay = "5s" }
 slow-timeout = { period = "20m", terminate-after = 1, grace-period = "5s" }
 
 [[profile.default.overrides]]
-# Every discovered trybuild test builds fixtures through nested Cargo. Keep
-# them under one build-sized allowance and avoid retries that repeat the work.
-filter = "test(dependency_check_result_contract_is_public) | test(fixture_expansion_lint_attribute_contract) | test(normalize_settings_is_public_and_the_legacy_name_stays_removed) | test(renamed_common_apis_are_public_and_legacy_names_stay_removed) | test(renamed_sarif_api_is_public_and_legacy_names_stay_removed) | test(sha2_0_11_pre_migration_patterns_fail_to_compile) | test(trybuild_fixtures_compile_without_diagnostics)"
+# This whole UI harness rebuilds its lint library through nested Cargo. The
+# 150-minute run reached it near the global deadline while the package-cache
+# lock was held; give one build time to finish instead of retrying it.
+filter = "package(no_unwrap_or_else_panic) & test(ui::ui)"
 slow-timeout = { period = "75m", terminate-after = 1, grace-period = "5s" }
+test-group = "serial-dylint-ui"
+retries = 0
+
+[[profile.default.overrides]]
+# This UI fixture rebuilds its lint library through nested Cargo. Its 20-minute
+# attempt timed out while compiler admission was queued; let one build finish
+# instead of restarting it on retry.
+filter = "package(no_unwrap_or_else_panic) & test(ui::aliased_test_crate_non_companion_does_not_exempt_parent_function)"
+slow-timeout = { period = "75m", terminate-after = 1, grace-period = "5s" }
+test-group = "serial-dylint-ui"
+retries = 0
+
+[[profile.default.overrides]]
+# This test builds both the fixture library and its example through nested
+# Cargo. Keep its existing retry for transient UI failures, but give the cold
+# build enough time to clear package-cache and compiler-admission queues.
+filter = "package(rstest_helper_should_be_fixture) & test(example_compiles_without_diagnostics)"
+test-group = "serial-dylint-ui"
+retries = { backoff = "exponential", count = 2, delay = "5s" }
+slow-timeout = { period = "75m", terminate-after = 1, grace-period = "5s" }
+
+[[profile.default.overrides]]
+# The other trybuild compile contracts build fixtures through nested Cargo.
+# Keep them under one build-sized allowance and avoid retries that repeat work.
+filter = "test(dependency_check_result_contract_is_public) | test(fixture_expansion_lint_attribute_contract) | test(normalize_settings_is_public_and_the_legacy_name_stays_removed) | test(renamed_common_apis_are_public_and_legacy_names_stay_removed) | test(renamed_sarif_api_is_public_and_legacy_names_stay_removed) | test(sha2_0_11_pre_migration_patterns_fail_to_compile)"
+slow-timeout = { period = "75m", terminate-after = 1, grace-period = "5s" }
+test-group = "serial-dylint-ui"
+retries = 0
+
+[[profile.default.overrides]]
+# This fixture suite had not finished compiling after 75 minutes in a healthy
+# but busy compiler queue. Allow one longer build without retrying it.
+filter = "package(rstest_helper_should_be_fixture) & test(trybuild_fixtures_compile_without_diagnostics)"
+slow-timeout = { period = "120m", terminate-after = 1, grace-period = "5s" }
 test-group = "serial-dylint-ui"
 retries = 0
 

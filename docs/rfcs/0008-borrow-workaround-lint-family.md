@@ -503,7 +503,7 @@ should never apply it automatically by default.
 #### BOR004 Intent
 
 Detect a collection searched for an index or position and then immediately
-indexed mutably, when direct mutable iteration expresses the operation.
+indexed mutably when direct mutable iteration expresses the operation.
 
 #### BOR004 Candidate shape
 

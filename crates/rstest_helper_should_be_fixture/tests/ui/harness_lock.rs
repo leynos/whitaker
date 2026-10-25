@@ -1,13 +1,16 @@
 //! Example-harness lock protocol for the UI test binary.
 //!
-//! `tests/ui.rs` serializes example and trybuild compilations across separate
-//! nextest processes with a filesystem lock. This module owns that protocol —
-//! the lock type, its stale-owner recovery, and the adapter tests that exercise
-//! it — so `ui.rs` stays focused on assertions rather than cross-process
-//! coordination.
+//! `tests/ui.rs` serializes example and trybuild compilations that share a
+//! Cargo `deps` directory across separate nextest processes. The temporary lock
+//! is keyed by the test executable's `deps` directory, so independent worktrees
+//! do not block one another. This module owns that protocol — the lock type, its
+//! stale-owner recovery, and the adapter tests that exercise it — so `ui.rs`
+//! stays focused on assertions rather than cross-process coordination.
 
 use std::{
+    collections::hash_map::DefaultHasher,
     fs::{File, OpenOptions},
+    hash::{Hash, Hasher},
     io,
     path::{Path, PathBuf},
     sync::atomic::{AtomicU64, Ordering},
@@ -58,11 +61,21 @@ impl ExampleHarnessLockOwner {
     }
 }
 impl ExampleHarnessLock {
+    /// Acquire the lock shared by processes using the current Cargo target.
+    ///
+    /// # Errors
+    /// Returns an error when the executable path cannot be resolved or the lock
+    /// cannot be acquired.
     pub(crate) fn acquire() -> io::Result<Self> {
-        Self::acquire_at(
-            &std::env::temp_dir().join("rstest-helper-example-harness.lock"),
-            Some(EXAMPLE_HARNESS_LOCK_ACQUIRE_TIMEOUT),
-        )
+        let executable = std::env::current_exe()?;
+        let target_deps_directory = executable.parent().ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::NotFound,
+                "test executable has no parent directory",
+            )
+        })?;
+        let lock_path = example_harness_lock_path(target_deps_directory);
+        Self::acquire_at(&lock_path, Some(EXAMPLE_HARNESS_LOCK_ACQUIRE_TIMEOUT))
     }
 
     fn acquire_at(path: &Path, wait_limit: Option<Duration>) -> io::Result<Self> {
@@ -87,6 +100,17 @@ impl ExampleHarnessLock {
         }
     }
 }
+
+/// Return a temporary lock path for the target dependencies directory.
+fn example_harness_lock_path(target_deps_directory: &Path) -> PathBuf {
+    let mut hasher = DefaultHasher::new();
+    target_deps_directory.hash(&mut hasher);
+    std::env::temp_dir().join(format!(
+        "rstest-helper-example-harness-{:016x}.lock",
+        hasher.finish()
+    ))
+}
+
 fn create_example_harness_lock(path: PathBuf) -> io::Result<ExampleHarnessLock> {
     let Some(owner_liveness) = try_lock_example_harness_liveness(&path)? else {
         return Err(io::Error::from(io::ErrorKind::AlreadyExists));
@@ -249,6 +273,17 @@ fn make_example_harness_lock_stale(path: &Path) {
     if let Err(error) = set_file_mtime(path, FileTime::from_system_time(stale_modified)) {
         panic!("lock mtime should be adjustable: {error}");
     }
+}
+
+/// Assert that only processes sharing one target directory share a lock.
+#[test]
+fn example_harness_lock_path_is_scoped_to_target_directory() {
+    let first_target = PathBuf::from("/worktrees/first/target/debug/deps");
+    let second_target = PathBuf::from("/worktrees/second/target/debug/deps");
+    let first_lock = example_harness_lock_path(&first_target);
+
+    assert_eq!(first_lock, example_harness_lock_path(&first_target));
+    assert_ne!(first_lock, example_harness_lock_path(&second_target));
 }
 
 #[rstest]

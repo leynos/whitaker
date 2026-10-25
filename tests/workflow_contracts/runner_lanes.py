@@ -196,11 +196,10 @@ def leg_guard_selects(condition: object, leg: str) -> bool:
 LEG_DISCRIMINATOR: Final[str] = "${{ runner.arch }}"
 
 
-#: The longest `timeout-minutes` any lane here may declare. Not a limit on
-#: what a job needs, but a bound on what a hang can cost: the slowest observed
-#: leg in this repository is under ten minutes, so anything approaching two
-#: hours is a typo or a hang nobody has looked at.
-MAXIMUM_LANE_TIMEOUT_MINUTES: Final[int] = 120
+#: The longest `timeout-minutes` any lane here may declare. The 335-minute
+#: suite jobs need room above the 300-minute nextest budget; five more minutes
+#: cap their enclosing work while keeping unrelated lanes on measured values.
+MAXIMUM_LANE_TIMEOUT_MINUTES: Final[int] = 340
 
 
 #: Every lane whose runner image sets the glibc floor for a consumer of
