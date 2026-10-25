@@ -5,8 +5,8 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision log`, `Outcomes & retrospective`, `Conformance basis`, and
 `Verification plan` must be kept up to date as work proceeds.
 
-Status: DRAFT — awaiting approval of the plan as a whole. The three decisions
-that were open at first review have been answered and are now settled:
+Status: APPROVED. The plan is approved as a whole. The three decisions that
+were open at first review have been answered and are now settled:
 `DEC-009` (scope) is approved, `DEC-013` (manual applicability for the first
 release) is approved, and `DEC-014` resolves to a single lint name.
 
@@ -233,6 +233,7 @@ Hard invariants. Violating one requires escalation, not a workaround.
       plan is approved.
 - [x] (2026-10-18) Plan approved as a whole; implementation commenced under
       the implementation skill.
+- [x] (2026-10-25) Approval status reaffirmed before resuming implementation.
 - [x] (2026-10-18) EP-M0a: expansion-shape probe. `EV-M0-transcript` recorded;
       `SURP-012` reproduced in the identifier-control form, so `DEC-002`'s
       depth gate proceeds unchanged. One refinement recorded as `SURP-017`.
