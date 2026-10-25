@@ -131,10 +131,10 @@ negative control made `whitaker --help` exit 2. Transcripts are in
 Dependency count fell from 342 to 189; the stripped release binary is 5,040,816
 bytes (6,506,472 bytes unstripped).
 
-The current branch diff is 127 files and 7,245 net added lines, beyond D-11's
-80-file candidate and D-12's 7,000-line ceiling. Resolve that scope deviation
-with the owner before merge. Crates.io name reservation remains unauthorized;
-this plan remains in progress.
+The current branch diff is 128 files and 7,264 net added lines, 264 above
+D-12's 7,000-line ceiling and beyond D-11's 80-file candidate. Resolve that
+scope deviation with the owner before merge. Crates.io name reservation remains
+unauthorized; this plan remains in progress.
 
 ## Constraints
 
@@ -1623,10 +1623,11 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
   and doctests passed), `make typecheck`, `make lint`, and root-package
   packaging passed. Scoped CLI Kani proofs and reachability controls passed;
   `make verus` verified 44 obligations. The broad `make kani` run was
-  interrupted when the shared filesystem filled, before a verdict. At this
-  Before this note, the 127-file implementation diff was net +7,250 lines;
-  including this note, the branch diff is net +7,265 lines, 265 above D-12's
-  7,000-line ceiling. Owner approval remains outstanding; the plan stays
+  interrupted when the shared filesystem filled, before a verdict. Before this
+  note, the 128-file implementation diff was net +7,250 lines; including this
+  note, it was net +7,265 lines, 265 above D-12's 7,000-line ceiling. The later
+  proof-comment correction reduced the current branch diff to net +7,264 lines,
+  264 above the ceiling. Owner approval remains outstanding; the plan stays
   `IN PROGRESS`, and crates.io reservation remains unauthorized.
 
 To be completed at each milestone boundary and at completion. Before setting
