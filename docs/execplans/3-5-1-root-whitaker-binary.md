@@ -1613,6 +1613,21 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
   the target now uses `--no-report` for both passes, with a workflow-contract
   regression protecting that option combination. The plan stays `IN PROGRESS`,
   and crates.io reservation remains unauthorized.
+- **Rebase and validation follow-up, 2026-10-25.** The fetched PR base
+  `afb1e4ac` remains current. Rebase was a no-op, and `range-diff` matched all
+  21 existing commits; there were no conflicts. Commit `80991c60` moves
+  vendored example-target resolution and compiler-flag extraction into
+  `vendor/dylint_testing/src/examples.rs`. The three vendored modules are 297,
+  176, and 169 lines. CodeScene reports no issues. Vendor formatting,
+  `make check-fmt`, `make test` (1,703 passed, 5 skipped; the secondary suite
+  and doctests passed), `make typecheck`, `make lint`, and root-package
+  packaging passed. Scoped CLI Kani proofs and reachability controls passed;
+  `make verus` verified 44 obligations. The broad `make kani` run was
+  interrupted when the shared filesystem filled, before a verdict. At this
+  Before this note, the 127-file implementation diff was net +7,250 lines;
+  including this note, the branch diff is net +7,265 lines, 265 above D-12's
+  7,000-line ceiling. Owner approval remains outstanding; the plan stays
+  `IN PROGRESS`, and crates.io reservation remains unauthorized.
 
 To be completed at each milestone boundary and at completion. Before setting
 this plan to `COMPLETE`, reconcile every entry in `Surprises & discoveries`
