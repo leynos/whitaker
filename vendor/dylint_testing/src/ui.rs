@@ -1,9 +1,20 @@
 use std::{
     env::current_dir,
+    fs::copy,
     path::{Path, PathBuf},
 };
 
-use crate::{example_target, example_targets, initialize, run_example_test, run_tests};
+use anyhow::{Context, Result, anyhow};
+use cargo_metadata::{Metadata, Package, Target as CargoTarget};
+
+use crate::{
+    copy_with_extension,
+    example_target,
+    example_targets,
+    initialize,
+    linking_flags,
+    run_tests,
+};
 
 enum Target {
     SrcBase(PathBuf),
@@ -90,7 +101,7 @@ impl Test {
                     dylint_internal::cargo::package_with_root(&metadata, &current_dir).unwrap();
                 let target = example_target(&package, example).unwrap();
 
-                run_example_test(driver, &metadata, &package, &target, &self.config).unwrap();
+                self.run_example_test(&metadata, &package, &target).unwrap();
             }
             Target::Examples => {
                 let metadata = dylint_internal::cargo::current_metadata().unwrap();
@@ -100,10 +111,48 @@ impl Test {
                 let targets = example_targets(&package).unwrap();
 
                 for target in targets {
-                    run_example_test(driver, &metadata, &package, &target, &self.config).unwrap();
+                    self.run_example_test(&metadata, &package, &target).unwrap();
                 }
             }
         }
+    }
+
+    fn run_example_test(
+        &self,
+        metadata: &Metadata,
+        package: &Package,
+        target: &CargoTarget,
+    ) -> Result<()> {
+        let driver = initialize(&self.name).as_ref().unwrap();
+        let linking_flags = linking_flags(metadata, package, target)?;
+        let file_name = target
+            .src_path
+            .file_name()
+            .ok_or_else(|| anyhow!("Could not get file name"))?;
+
+        let tempdir = tempfile::tempdir().with_context(|| "`tempdir` failed")?;
+        let src_base = tempdir.path();
+        let to = src_base.join(file_name);
+
+        copy(&target.src_path, &to).with_context(|| {
+            format!(
+                "Could not copy `{}` to `{}`",
+                target.src_path,
+                to.to_string_lossy()
+            )
+        })?;
+        for extension in ["fixed", "stderr", "stdout"] {
+            copy_with_extension(&target.src_path, &to, extension)
+                .map(|_| ())
+                .unwrap_or_default();
+        }
+
+        let mut config = self.config.clone();
+        config.rustc_flags.extend(linking_flags.iter().cloned());
+
+        run_tests(driver, src_base, &config);
+
+        Ok(())
     }
 }
 

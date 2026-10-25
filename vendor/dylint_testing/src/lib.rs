@@ -215,44 +215,6 @@ fn example_targets(package: &Package) -> Result<Vec<Target>> {
         .collect())
 }
 
-fn run_example_test(
-    driver: &Path,
-    metadata: &Metadata,
-    package: &Package,
-    target: &Target,
-    config: &ui::Config,
-) -> Result<()> {
-    let linking_flags = linking_flags(metadata, package, target)?;
-    let file_name = target
-        .src_path
-        .file_name()
-        .ok_or_else(|| anyhow!("Could not get file name"))?;
-
-    let tempdir = tempfile::tempdir().with_context(|| "`tempdir` failed")?;
-    let src_base = tempdir.path();
-    let to = src_base.join(file_name);
-
-    copy(&target.src_path, &to).with_context(|| {
-        format!(
-            "Could not copy `{}` to `{}`",
-            target.src_path,
-            to.to_string_lossy()
-        )
-    })?;
-    for extension in ["fixed", "stderr", "stdout"] {
-        copy_with_extension(&target.src_path, &to, extension)
-            .map(|_| ())
-            .unwrap_or_default();
-    }
-
-    let mut config = config.clone();
-    config.rustc_flags.extend(linking_flags.iter().cloned());
-
-    run_tests(driver, src_base, &config);
-
-    Ok(())
-}
-
 fn linking_flags(
     metadata: &Metadata,
     package: &Package,

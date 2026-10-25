@@ -1580,6 +1580,19 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
 - **Status, 2026-10-19.** CLI/docs are implemented; Kani passed 360 checks,
   and Verus proof/control pass focused and in the default group. Crates.io
   reservation remains unauthorized, so the plan stays `IN PROGRESS`.
+- **Validation follow-up, 2026-10-25.** Rebasing onto the PR target
+  `harden-lint-config` was a no-op; all 17 branch commits remain unchanged.
+  Hosted CI for `789f5212` found a Windows-only unused test import and the
+  CodeScene string-argument threshold in installer metadata. The import is now
+  Unix-gated, and the one-use archive-format helper is inlined. The complete
+  local CodeScene delta is clean after these changes. The vendored UI example
+  runner now owns its example-test method on the existing `Test` type, removing
+  the five-argument helper without changing the test flow. Formatting, tests
+  and doctests, typecheck, lint, Markdown, Mermaid, Makefile validation, and
+  focused CodeScene checks passed on this candidate. Hosted coverage CI also
+  exposed incompatible `--no-report` and `--no-clean` options in the Makefile;
+  that repair remains outstanding. The plan stays `IN PROGRESS`, and crates.io
+  reservation remains unauthorized.
 
 To be completed at each milestone boundary and at completion. Before setting
 this plan to `COMPLETE`, reconcile every entry in `Surprises & discoveries`

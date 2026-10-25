@@ -190,7 +190,9 @@ mod tests {
     use tempfile::TempDir;
     use whitaker_common::test_support::with_env_var;
 
-    use super::{active_library_path, active_library_path_for, child_exit_code};
+    #[cfg(unix)]
+    use super::child_exit_code;
+    use super::{active_library_path, active_library_path_for};
 
     fn utf8_path(path: &std::path::Path) -> Utf8PathBuf {
         Utf8PathBuf::from_path_buf(path.to_path_buf())
