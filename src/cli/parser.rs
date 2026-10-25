@@ -74,8 +74,26 @@ impl Cli {
         T: Into<OsString> + Clone,
     {
         let raw: Vec<OsString> = arguments.into_iter().map(Into::into).collect();
-        let (parsed_arguments, quiet, verbosity) = extract_global_options(raw);
+        let (parsed_arguments, quiet, verbosity) = extract_global_options(raw.clone());
         let parsed = ParsedCli::try_parse_localized_from(parsed_arguments, localizer)?;
+        if matches!(&parsed.command, Command::Install(_))
+            && let (Some(program), Some(install_index)) = (
+                raw.first(),
+                raw.iter()
+                    .enumerate()
+                    .skip(1)
+                    .find_map(|(index, argument)| {
+                        (argument == OsStr::new("install")).then_some(index)
+                    }),
+            )
+        {
+            // Keep the installer parser authoritative for value boundaries
+            // and repeated flags instead of duplicating its option rules.
+            let mut install_arguments = Vec::with_capacity(raw.len() - install_index);
+            install_arguments.push(program.clone());
+            install_arguments.extend(raw.iter().skip(install_index + 1).cloned());
+            InstallArgs::try_parse_localized_from(install_arguments, localizer)?;
+        }
         if quiet && verbosity > 0 {
             return Err(ParsedCli::command().error(
                 clap::error::ErrorKind::ArgumentConflict,

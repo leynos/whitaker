@@ -61,6 +61,68 @@ fn install_usage_errors_use_clap_exit_code_two() {
     );
 }
 
+#[cfg(windows)]
+#[test]
+fn forwarded_windows_child_exit_codes_above_255_are_preserved() {
+    use std::{env, io};
+
+    use camino::Utf8Path;
+    use cap_std::{ambient_authority, fs_utf8::Dir};
+    use tempfile::TempDir;
+
+    let bin_dir = TempDir::new().expect("fake cargo directory should be created");
+    let bin_path = Utf8Path::from_path(bin_dir.path()).expect("temporary path should be UTF-8");
+    let bin_handle = Dir::open_ambient_dir(bin_path, ambient_authority())
+        .expect("fake cargo directory should be opened");
+
+    let test_executable = env::current_exe().expect("test executable path should be available");
+    let executable_name = test_executable
+        .file_name()
+        .and_then(|name| name.to_str())
+        .expect("test executable name should be UTF-8");
+    let executable_directory = test_executable
+        .parent()
+        .and_then(Utf8Path::from_path)
+        .expect("test executable directory should be UTF-8");
+    let executable_directory = Dir::open_ambient_dir(executable_directory, ambient_authority())
+        .expect("test executable directory should be opened");
+    let mut source = executable_directory
+        .open(executable_name)
+        .expect("test executable should be readable");
+    let mut fake_cargo = bin_handle
+        .create("cargo.exe")
+        .expect("fake cargo executable should be created");
+    io::copy(&mut source, &mut fake_cargo).expect("test executable should be copied");
+    drop(fake_cargo);
+
+    let existing_path = env::var_os("PATH").unwrap_or_default();
+    let mut search_paths = vec![bin_dir.path().as_os_str().to_owned()];
+    search_paths.extend(env::split_paths(&existing_path).map(|path| path.into_os_string()));
+    let search_path =
+        env::join_paths(search_paths).expect("fake cargo search path should be valid");
+    let output = Command::new(env!("CARGO_BIN_EXE_whitaker"))
+        .arg("--ignored")
+        .env("PATH", search_path)
+        .env("WHITAKER_E2E_FAKE_CARGO", "1")
+        .output()
+        .expect("whitaker forwarding process should start");
+
+    assert_eq!(
+        output.status.code(),
+        Some(256),
+        "the forwarded Windows child status should retain all 32 bits"
+    );
+}
+
+#[cfg(windows)]
+#[test]
+#[ignore = "subprocess fixture for Windows forwarded exit-code coverage"]
+fn fake_cargo_dylint() {
+    if std::env::var_os("WHITAKER_E2E_FAKE_CARGO").is_some() {
+        std::process::exit(256);
+    }
+}
+
 #[cfg(unix)]
 #[test]
 fn legacy_dylint_invocations_forward_arguments_and_exit_status() {

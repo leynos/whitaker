@@ -473,6 +473,9 @@ jobs:
       - name: Workflow contract tests
         run: make test-workflow-contracts
 
+      - name: Package the root CLI
+        run: cargo package --locked -p whitaker --no-verify
+
       - name: Publish dry run
         run: make publish-check PUBLISH_PACKAGES="whitaker-common whitaker-installer"
 
