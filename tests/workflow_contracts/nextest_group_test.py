@@ -74,9 +74,17 @@ def _test_name_selectors(filter_expression: str) -> list[str]:
     return selectors
 
 
+def _contains_negation(filter_expression: str) -> bool:
+    """Recognize Nextest's symbolic and word-form negation operators."""
+    return "!" in filter_expression or re.search(
+        r"\bnot\b", filter_expression
+    ) is not None
+
+
 def _filter_may_select_test(filter_expression: str, test_name: str) -> bool:
-    """Check whether a test predicate can match a test name."""
-    if "all()" in filter_expression:
+    """Check whether the filter may select a test name."""
+    if "all()" in filter_expression or _contains_negation(filter_expression):
+        # Without evaluating boolean operators, negation can broaden the set.
         return True
     return any(
         _test_name_matches(selector, test_name)
@@ -133,6 +141,8 @@ def test_no_override_names_a_group_the_configuration_lacks(
     [
         ("all()", True),
         ("test(other) | all()", True),
+        ("not test(=ui)", True),
+        ("!test(=ui)", True),
         ("test(trybuild)", True),
         ("test(=trybuild_fixtures_compile_without_diagnostics)", True),
         ("test(/trybuild/)", True),
