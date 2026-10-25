@@ -7,14 +7,7 @@ use std::{
 use anyhow::{Context, Result, anyhow};
 use cargo_metadata::{Metadata, Package, Target as CargoTarget};
 
-use crate::{
-    copy_with_extension,
-    example_target,
-    example_targets,
-    initialize,
-    linking_flags,
-    run_tests,
-};
+use crate::{example_targets, examples::example_target, initialize, linking_flags, run_tests};
 
 enum Target {
     SrcBase(PathBuf),
@@ -154,6 +147,16 @@ impl Test {
 
         Ok(())
     }
+}
+
+fn copy_with_extension<P: AsRef<Path>, Q: AsRef<Path>>(
+    from: P,
+    to: Q,
+    extension: &str,
+) -> Result<u64> {
+    let from = from.as_ref().with_extension(extension);
+    let to = to.as_ref().with_extension(extension);
+    copy(from, to).map_err(Into::into)
 }
 
 #[cfg(test)]
