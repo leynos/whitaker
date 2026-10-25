@@ -7,6 +7,7 @@
 //! focused on assertions rather than cross-process coordination.
 
 use std::{
+    ffi::OsStr,
     fs::{File, OpenOptions},
     hash::{Hash, Hasher},
     io,
@@ -15,7 +16,6 @@ use std::{
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
-use filetime::{FileTime, set_file_mtime};
 use fs2::FileExt;
 use log::debug;
 
@@ -115,10 +115,10 @@ impl ExampleHarnessLock {
         }
     }
 }
-/// Resolve the effective target directory used by this Cargo test process.
+/// Resolve the Cargo output directory used by this test process.
 ///
-/// Inspect the running test executable, then use Cargo's explicit target path
-/// when the executable does not expose its target-directory marker.
+/// Prefer Cargo's target marker or explicit target path, then infer the active
+/// profile directory from the test executable when neither is available.
 ///
 /// # Errors
 ///
@@ -136,10 +136,22 @@ fn effective_target_directory() -> io::Result<PathBuf> {
         return std::fs::canonicalize(target_directory);
     }
 
+    if let Some(profile_directory) = target_profile_directory_for_test_binary(&executable) {
+        return std::fs::canonicalize(profile_directory);
+    }
+
     Err(io::Error::new(
         io::ErrorKind::NotFound,
         "could not resolve Cargo target directory from the test process",
     ))
+}
+
+/// Find the active Cargo profile directory above a test binary's `deps` path.
+fn target_profile_directory_for_test_binary(executable: &Path) -> Option<&Path> {
+    executable
+        .ancestors()
+        .find(|ancestor| ancestor.file_name() == Some(OsStr::new("deps")))
+        .and_then(Path::parent)
 }
 
 /// Hash one normalized target-directory path into a lock identity.
@@ -371,18 +383,6 @@ fn remove_example_harness_lock_directory(path: &Path) -> io::Result<()> {
 fn example_harness_lock_is_stale(modified: SystemTime, now: SystemTime) -> bool {
     now.duration_since(modified)
         .is_ok_and(|age| age > EXAMPLE_HARNESS_LOCK_STALE_AFTER)
-}
-
-/// Age a lock directory for stale-recovery tests.
-fn make_example_harness_lock_stale(path: &Path) {
-    let Some(stale_modified) =
-        SystemTime::now().checked_sub(EXAMPLE_HARNESS_LOCK_STALE_AFTER + Duration::from_secs(1))
-    else {
-        panic!("stale timestamp should be representable")
-    };
-    if let Err(error) = set_file_mtime(path, FileTime::from_system_time(stale_modified)) {
-        panic!("lock mtime should be adjustable: {error}");
-    }
 }
 
 #[cfg(test)]

@@ -4285,8 +4285,11 @@ measured 235 seconds and timed out at the 300-second base allowance on Windows.
 The wider allowance lets nested UI builds finish under contention while still
 terminating a stalled test.
 The example-harness lock is keyed by the canonical effective Cargo target
-directory. Test processes that share build artefacts share one lock and
-serialize, while independent target directories use independent locks.
+directory. Resolution prefers Cargo's target marker, then an absolute
+`CARGO_TARGET_DIR`, and finally the profile output directory inferred from
+the test executable. Test processes that share build artefacts share one
+lock and serialize, while independent target directories use independent
+locks.
 
 The alias UI fixture in `no_unwrap_or_else_panic` exceeded its 20-minute
 allowance while rebuilding its lint library through nested Cargo and waiting

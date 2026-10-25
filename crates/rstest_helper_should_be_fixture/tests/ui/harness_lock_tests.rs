@@ -1,5 +1,6 @@
 //! Unit tests for target-scoped example-harness locking and stale recovery.
 
+use filetime::{FileTime, set_file_mtime};
 use proptest::prelude::*;
 use rstest::rstest;
 
@@ -54,6 +55,22 @@ fn effective_target_directory_contains_the_running_test_binary() {
     assert!(
         executable.starts_with(target_directory),
         "target directory should contain the test executable"
+    );
+}
+
+/// Infer the active profile directory from a Cargo test binary path.
+#[rstest]
+#[case("debug")]
+#[case("release")]
+#[case("custom-profile")]
+fn target_profile_directory_follows_test_binary_path(#[case] profile: &str) {
+    let target_directory = tempfile::tempdir().expect("create target directory");
+    let profile_directory = target_directory.path().join(profile);
+    let executable = profile_directory.join("deps").join("test-binary.exe");
+
+    assert_eq!(
+        target_profile_directory_for_test_binary(&executable),
+        Some(profile_directory.as_path())
     );
 }
 
@@ -211,4 +228,16 @@ fn lock_cleanup_does_not_remove_a_different_owner() {
     );
     drop(original);
     remove_stale_example_harness_lock(&path).expect("remove released different-owner directory");
+}
+
+/// Age a lock directory for stale-recovery tests.
+fn make_example_harness_lock_stale(path: &Path) {
+    let Some(stale_modified) =
+        SystemTime::now().checked_sub(EXAMPLE_HARNESS_LOCK_STALE_AFTER + Duration::from_secs(1))
+    else {
+        panic!("stale timestamp should be representable")
+    };
+    if let Err(error) = set_file_mtime(path, FileTime::from_system_time(stale_modified)) {
+        panic!("lock mtime should be adjustable: {error}");
+    }
 }
