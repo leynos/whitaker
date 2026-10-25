@@ -97,7 +97,7 @@ impl LintInventory for SystemServices {
 }
 
 impl LintRunner for SystemServices {
-    fn forward(&self, args: &[OsString]) -> Result<u8, CliError> {
+    fn forward(&self, args: &[OsString]) -> Result<i32, CliError> {
         let mut command = Command::new("cargo");
         command.arg("dylint").args(args);
         if let Some(library_path) = active_library_path() {
@@ -110,13 +110,13 @@ impl LintRunner for SystemServices {
     }
 }
 
-fn child_exit_code(status: ExitStatus) -> u8 {
+fn child_exit_code(status: ExitStatus) -> i32 {
     status
         .code()
         .or_else(|| signal_exit_code(status))
-        .and_then(|code| u8::try_from(code).ok())
         .unwrap_or(1)
 }
+
 
 #[cfg(unix)]
 fn signal_exit_code(status: ExitStatus) -> Option<i32> {
@@ -124,8 +124,10 @@ fn signal_exit_code(status: ExitStatus) -> Option<i32> {
     status.signal().map(|signal| 128 + signal)
 }
 
+
 #[cfg(not(unix))]
 const fn signal_exit_code(_status: ExitStatus) -> Option<i32> { None }
+
 
 /// Resolves the library path used when forwarding a command to cargo-dylint.
 fn active_library_path() -> Option<OsString> {
@@ -194,7 +196,7 @@ mod tests {
     use tempfile::TempDir;
     use whitaker_common::test_support::with_env_var;
 
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     use super::child_exit_code;
     use super::{active_library_path, active_library_path_for};
 
@@ -301,6 +303,16 @@ mod tests {
         let interrupted = std::process::ExitStatus::from_raw(2);
 
         assert_eq!(child_exit_code(interrupted), 130);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn child_exit_code_preserves_statuses_above_the_unix_byte_range() {
+        use std::os::windows::process::ExitStatusExt as _;
+
+        let child_status = std::process::ExitStatus::from_raw(256);
+
+        assert_eq!(child_exit_code(child_status), 256);
     }
 
     #[cfg(unix)]

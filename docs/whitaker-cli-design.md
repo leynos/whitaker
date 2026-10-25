@@ -116,6 +116,10 @@ caller; a failure to start the subprocess is an operational error with exit
 code 1. Root help and version are handled by Whitaker only when they precede a
 Dylint option, so `whitaker --all --version` reaches Dylint.
 
+The subprocess port carries the native `i32` exit code through the root exit
+policy. This preserves the full 32-bit status reported on Windows; Unix signal
+termination continues to map to the conventional `128 + signal` shell status.
+
 This is `CLI-REQ-FWD`, a compatibility requirement derived from the existing
 user workflow rather than an upstream CLI specification. Removing forwarding is
 deferred until roadmap item 3.9.3, after `whitaker check` supersedes it.

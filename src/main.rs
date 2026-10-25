@@ -19,6 +19,6 @@ fn main() {
     );
     let exit_code = cli::exit::exit_code_for(&outcome);
     if exit_code != 0 {
-        process::exit(i32::from(exit_code));
+        process::exit(exit_code);
     }
 }

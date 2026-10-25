@@ -17,6 +17,43 @@ use whitaker_installer::cli::{Cli as InstallerCli, Command as InstallerCommand, 
 const OPTION_PAIR_COUNT: usize = 91;
 
 #[derive(Clone, Copy)]
+struct ExpectedCommonOptions {
+    quiet: bool,
+    verbosity: u8,
+    jobs: Option<usize>,
+}
+
+struct ShortClusterCase {
+    arguments: &'static [&'static str],
+    expected: Option<ExpectedCommonOptions>,
+}
+
+impl ShortClusterCase {
+    const fn accepting(
+        arguments: &'static [&'static str],
+        quiet: bool,
+        verbosity: u8,
+        jobs: Option<usize>,
+    ) -> Self {
+        Self {
+            arguments,
+            expected: Some(ExpectedCommonOptions {
+                quiet,
+                verbosity,
+                jobs,
+            }),
+        }
+    }
+
+    const fn rejecting(arguments: &'static [&'static str]) -> Self {
+        Self {
+            arguments,
+            expected: None,
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
 #[repr(u16)]
 enum OptionKind {
     TargetDir = 1 << 0,
@@ -119,8 +156,9 @@ proptest! {
         }
         masks.extend(generated_masks);
 
+        let mut rotation_index = 0;
         for (case_index, mask) in masks.iter().copied().enumerate() {
-            let selected: Vec<OptionKind> = OptionKind::ALL
+            let mut selected: Vec<OptionKind> = OptionKind::ALL
                 .iter()
                 .copied()
                 .filter(|kind| mask & kind.bit() != 0)
@@ -135,6 +173,16 @@ proptest! {
                 }
             }
 
+            if !selected.is_empty() {
+                if rotation_index >= selected.len() {
+                    rotation_index = 0;
+                }
+                selected.rotate_left(rotation_index);
+                rotation_index += 1;
+                if case_index & 1 == 0 {
+                    selected.reverse();
+                }
+            }
             let mut install_arguments = Vec::new();
             for kind in selected {
                 kind.append(&mut install_arguments);
@@ -196,6 +244,105 @@ proptest! {
             );
         }
     }
+}
+
+#[test]
+fn root_install_matches_legacy_for_mixed_short_clusters_and_option_orders() {
+    let cases = [
+        ShortClusterCase::accepting(&["-vj2"], false, 1, Some(2)),
+        ShortClusterCase::accepting(&["-qj2"], true, 0, Some(2)),
+        ShortClusterCase::accepting(&["-vvj2"], false, 2, Some(2)),
+        ShortClusterCase::accepting(&["-j2", "-v"], false, 1, Some(2)),
+        ShortClusterCase::accepting(&["-v", "-j2"], false, 1, Some(2)),
+        ShortClusterCase::rejecting(&["-vj2", "-q"]),
+        ShortClusterCase::rejecting(&["-v", "-qj2"]),
+        ShortClusterCase::rejecting(&["-qj2", "-v"]),
+        ShortClusterCase::rejecting(&["-q", "-vj2"]),
+        ShortClusterCase::rejecting(&["-vqj2"]),
+        ShortClusterCase::rejecting(&["-qvj2"]),
+    ];
+
+    for test_case in cases {
+        verify_short_cluster_case(&test_case)
+            .expect("root and legacy parsers should agree for each short-cluster case");
+    }
+}
+
+fn verify_short_cluster_case(test_case: &ShortClusterCase) -> Result<(), String> {
+    let parsed_arguments = test_case
+        .arguments
+        .iter()
+        .copied()
+        .map(OsString::from)
+        .collect::<Vec<_>>();
+    let root_result = parse_root(&parsed_arguments);
+    let legacy_result = parse_legacy(&parsed_arguments, false);
+    if let Some(expected_options) = test_case.expected {
+        let root = root_result.map_err(|error| {
+            format!(
+                "root parser rejected valid arguments {:?}: {error}",
+                test_case.arguments
+            )
+        })?;
+        let legacy = legacy_result.map_err(|error| {
+            format!(
+                "legacy parser rejected valid arguments {:?}: {error}",
+                test_case.arguments
+            )
+        })?;
+        let Command::Install(parsed_root_arguments) = &root.command else {
+            return Err(format!(
+                "root parser produced a different command for {:?}",
+                test_case.arguments
+            ));
+        };
+        let root_arguments = root.install_arguments(parsed_root_arguments);
+        let legacy_arguments = legacy.install_args();
+        if root_arguments != *legacy_arguments {
+            return Err(format!(
+                "parser arguments differ for {:?}",
+                test_case.arguments
+            ));
+        }
+        verify_expected_common_options(test_case.arguments, &root_arguments, expected_options)?;
+    } else {
+        let Err(root_error) = root_result else {
+            return Err(format!(
+                "root parser accepted conflicting arguments {:?}",
+                test_case.arguments
+            ));
+        };
+        let Err(legacy_error) = legacy_result else {
+            return Err(format!(
+                "legacy parser accepted conflicting arguments {:?}",
+                test_case.arguments
+            ));
+        };
+        if root_error.kind() != legacy_error.kind() {
+            return Err(format!(
+                "parser rejection kinds differ for {:?}",
+                test_case.arguments
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn verify_expected_common_options(
+    arguments: &[&str],
+    actual: &InstallArgs,
+    expected: ExpectedCommonOptions,
+) -> Result<(), String> {
+    if actual.quiet != expected.quiet {
+        return Err(format!("quiet flag differs for {arguments:?}"));
+    }
+    if actual.verbosity != expected.verbosity {
+        return Err(format!("verbosity differs for {arguments:?}"));
+    }
+    if actual.jobs != expected.jobs {
+        return Err(format!("job count differs for {arguments:?}"));
+    }
+    Ok(())
 }
 
 fn parse_root(arguments: &[OsString]) -> Result<Cli, clap::Error> {

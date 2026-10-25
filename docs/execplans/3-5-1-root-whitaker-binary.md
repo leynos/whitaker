@@ -100,7 +100,8 @@ stop at.
 
 Resumed 2026-10-15; rebased onto `origin/harden-lint-config`
 (`afb1e4ac1387aff8e51fa7bbeb62d94f0f6c8970`), still an ancestor. D-11/D-12
-approve 70 files and 7,000 net added lines for this plan only.
+accepted the then-current 80-file diff and set a 7,000-line ceiling for this
+plan only.
 
 The CLI delivers `install`, transitional `ls`, localized help/version, legacy
 forwarding, per-toolchain install records, and binstall metadata. Kani passed
@@ -114,8 +115,26 @@ signal exit status, library path selection, and the layout description.
 
 Before Verus edits, nine gates passed (1,713 tests, 5 skipped, doctests,
 format, typecheck, lint, docs, spelling, Makefile, packageability). Both Verus
-groups pass now; remaining gates await rerun. Instrumented coverage timed out
-in trybuild.
+groups passed; the instrumented coverage attempt timed out in trybuild.
+
+**Review follow-up, 2026-10-25.** A completeness assessment on `3759ee4` found
+mixed short clusters losing common flags and forwarded Windows statuses being
+narrowed to one byte. Source review confirmed both; regression fixes now pass
+`make check-fmt`, `make test` (1,703 passed, 5 skipped, doctests passed),
+`make typecheck`, `make lint`, `make markdownlint`, and `make nixie`.
+`cargo package -p whitaker --no-verify --allow-dirty` also passes.
+
+The parity negative control failed on case 12 with `--no-update`; the exit
+negative control made `whitaker --help` exit 2. Transcripts are in
+`/tmp/negative-control-parity-0c485c79-c21a-486e-b126-29c3ef23084f.out` and
+`/tmp/negative-control-exit-0c485c79-c21a-486e-b126-29c3ef23084f.out`.
+Dependency count fell from 342 to 189; the stripped release binary is 5,040,816
+bytes (6,506,472 bytes unstripped).
+
+The current branch diff is 127 files and 7,245 net added lines, beyond D-11's
+80-file candidate and D-12's 7,000-line ceiling. Resolve that scope deviation
+with the owner before merge. Crates.io name reservation remains unauthorized;
+this plan remains in progress.
 
 ## Constraints
 
