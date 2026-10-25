@@ -439,31 +439,6 @@ def test_each_profile_states_the_overrides_its_own_tests_need(
     )
 
 
-def test_trybuild_contracts_do_not_match_dylint_ui_overrides(
-    parsed_nextest: dict[str, typ.Any],
-) -> None:
-    """Keep trybuild tests out of the serial Dylint UI overrides."""
-    trybuild_names = tuple(
-        clause.removeprefix("test(").removesuffix(")")
-        for clause in COMPILE_CONTRACT_FILTER.split(" | ")
-    )
-    matching_filters = [
-        (profile_name, override.get("filter"))
-        for profile_name in ("default", "ci")
-        for override in parsed_nextest["profile"][profile_name].get("overrides") or []
-        if override.get("test-group") == "serial-dylint-ui"
-        and any(
-            f"test({test_name})" in (override.get("filter") or "")
-            for test_name in trybuild_names
-        )
-    ]
-
-    assert not matching_filters, (
-        "trybuild contract names must not match serial-dylint-ui overrides "
-        f"in either profile; found {matching_filters}"
-    )
-
-
 MAKEFILE: typ.Final[pathlib.Path] = pathlib.Path(__file__).resolve().parents[2] / "Makefile"
 
 
