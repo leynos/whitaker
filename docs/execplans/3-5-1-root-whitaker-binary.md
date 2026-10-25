@@ -145,11 +145,14 @@ count fell from 342 to 189; the stripped release binary is 5,040,816 bytes
 The assessment on `41e3f52f` found parser value-boundary and repeated-quiet
 parity gaps. The candidate validates install arguments through the installer
 parser, adds regression coverage for both legacy forms and a Windows child-exit
-test, and adds root-package validation to CI. Local gates pass; the
-Windows-only test still awaits hosted Windows CI. The 129-file diff is +7,373
-net lines, 373 above D-12's ceiling, and exceeds D-11's accepted 80 files.
-Resolve this scope with the owner before merge. Crates.io reservation remains
-unauthorized; the plan stays `IN PROGRESS`.
+test, and adds root-package validation to CI. The published candidate's local
+gates pass; the Windows-only test still awaits hosted Windows CI. A helper
+split clears CodeScene's complexity finding, and the short-cluster cases move
+into `tests/property_arg_parity/short_clusters.rs` to keep the parity test
+under the 400-line limit. The 130-file diff is +7,428 net lines, 428 above
+D-12's ceiling, and exceeds D-11's accepted 80 files. Resolve this scope with
+the owner before merge. Crates.io reservation remains unauthorized; the plan
+stays `IN PROGRESS`.
 
 ## Constraints
 
