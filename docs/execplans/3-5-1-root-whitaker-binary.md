@@ -1591,8 +1591,9 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
   and doctests, typecheck, lint, Markdown, Mermaid, Makefile validation, and
   focused CodeScene checks passed on this candidate. Hosted coverage CI also
   exposed incompatible `--no-report` and `--no-clean` options in the Makefile;
-  that repair remains outstanding. The plan stays `IN PROGRESS`, and crates.io
-  reservation remains unauthorized.
+  the target now uses `--no-report` for both passes, with a workflow-contract
+  regression protecting that option combination. The plan stays `IN PROGRESS`,
+  and crates.io reservation remains unauthorized.
 
 To be completed at each milestone boundary and at completion. Before setting
 this plan to `COMPLETE`, reconcile every entry in `Surprises & discoveries`
