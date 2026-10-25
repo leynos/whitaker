@@ -28,6 +28,7 @@ use serial_test::serial;
 
 #[path = "integration_exclusion/assertions.rs"]
 mod assertions;
+
 mod test_support;
 
 use test_support::{FixtureKind, create_fixture_project};
@@ -38,6 +39,7 @@ const LINT_CRATE_NAME: &str = "no_std_fs_operations";
 fn build_lint_library() -> anyhow::Result<PathBuf> {
     let metadata = MetadataCommand::new()
         .no_deps()
+        .other_options(vec!["--frozen".to_owned()])
         .exec()
         .context("failed to fetch cargo metadata")?;
 
@@ -59,6 +61,7 @@ fn build_lint_library() -> anyhow::Result<PathBuf> {
 fn run_lint_crate_build(workspace_root: &Path) -> anyhow::Result<Vec<u8>> {
     let output = Command::new("cargo")
         .arg("build")
+        .arg("--frozen")
         .arg("--lib")
         .arg("--quiet")
         .arg("--message-format=json")
@@ -180,7 +183,8 @@ fn run_cargo_dylint(fixture_dir: &Path, library_path: &Path) -> anyhow::Result<C
         .current_dir(fixture_dir)
         .env("DYLINT_LIBRARY_PATH", library_path)
         .env("DYLINT_RUSTFLAGS", "-D warnings")
-        .env("RUSTUP_TOOLCHAIN", pinned_toolchain())
+.env("RUSTUP_TOOLCHAIN", pinned_toolchain())
+        .env("CARGO_NET_OFFLINE", "true")
         .output()
         .context("failed to execute cargo dylint")?;
 
@@ -350,3 +354,4 @@ fn exclusion_paths_behaviour_test(
         FixtureKind::PathExclusion,
     )
 }
+// weave: run 'weave explain crates/no_std_fs_operations/tests/integration_exclusion.rs' for per-hunk detail, 'weave check' to verify your resolution

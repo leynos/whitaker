@@ -10,13 +10,22 @@ use std::{
     fmt,
     fs,
     io::Cursor,
-    path::PathBuf,
     process::{Command, Output},
+    path::{Path, PathBuf},
 };
 
 use cargo_metadata::{self, Message, Metadata, MetadataCommand};
 
 use super::HarnessError;
+
+
+//! Toolchain preparation helpers for the Whitaker UI harness.
+//!
+//! The harness needs the compiled lint library to exist under a
+//! toolchain-qualified filename so Dylint discovers the latest build each run.
+//! This module owns the Cargo metadata queries and artefact management needed
+//! to refresh that copy.
+};
 
 #[derive(Debug, Clone)]
 pub(super) struct CrateName(String);
@@ -129,20 +138,11 @@ fn execute_build_command(
     metadata: &Metadata,
     needs_driver_feature: bool,
 ) -> Result<Output, HarnessError> {
-    let mut command = Command::new("cargo");
-    command
-        .arg("build")
-        .arg("--lib")
-        .arg("--quiet")
-        .arg("--message-format=json")
-        .arg("--package")
-        .arg(crate_name.as_str());
-
-    if needs_driver_feature {
-        command.arg("--features").arg("dylint-driver");
-    }
-
-    command.current_dir(metadata.workspace_root.as_std_path());
+    let mut command = lint_library_build_command(
+        crate_name,
+        needs_driver_feature,
+        metadata.workspace_root.as_std_path(),
+    );
 
     let output = command
         .output()
@@ -159,6 +159,30 @@ fn execute_build_command(
     }
 
     Ok(output)
+}
+
+/// Build the frozen Cargo command used to compile a lint library.
+fn lint_library_build_command(
+    crate_name: &CrateName,
+    needs_driver_feature: bool,
+    workspace_root: &Path,
+) -> Command {
+    let mut command = Command::new("cargo");
+    command
+        .arg("build")
+        .arg("--frozen")
+        .arg("--lib")
+        .arg("--quiet")
+        .arg("--message-format=json")
+        .arg("--package")
+        .arg(crate_name.as_str());
+
+    if needs_driver_feature {
+        command.arg("--features").arg("dylint-driver");
+    }
+
+    command.current_dir(workspace_root);
+    command
 }
 
 fn package_for_crate<'a>(
@@ -227,6 +251,7 @@ fn extract_cdylib_path(
 fn fetch_metadata() -> Result<Metadata, HarnessError> {
     MetadataCommand::new()
         .no_deps()
+        .other_options(vec!["--frozen".to_owned()])
         .exec()
         .map_err(|error| HarnessError::MetadataFailed {
             message: error.to_string(),
@@ -250,4 +275,60 @@ fn is_workspace_member(
             .workspace_members
             .iter()
             .any(|member| member == &package.id)
+}
+
+#[cfg(test)]
+mod tests {
+    //! Check the UI harness's frozen Cargo build command.
+
+    use std::path::Path;
+
+    use super::{CrateName, lint_library_build_command};
+
+    /// Return Cargo arguments as strings for readable command assertions.
+    fn command_arguments(command: &std::process::Command) -> Vec<String> {
+        command
+            .get_args()
+            .map(|argument| argument.to_string_lossy().into_owned())
+            .collect()
+    }
+
+    /// Require the UI library build to use frozen Cargo resolution.
+    #[test]
+    fn library_build_command_is_frozen() {
+        let crate_name = CrateName::try_from("no_std_fs_operations")
+            .expect("the fixture crate name should be valid");
+        let command = lint_library_build_command(&crate_name, false, Path::new("/workspace"));
+
+        assert_eq!(
+            command_arguments(&command),
+            [
+                "build",
+                "--frozen",
+                "--lib",
+                "--quiet",
+                "--message-format=json",
+                "--package",
+                "no_std_fs_operations",
+            ]
+        );
+        assert_eq!(command.get_current_dir(), Some(Path::new("/workspace")));
+    }
+
+    /// Add the Dylint driver feature only for crates that declare it.
+    #[test]
+    fn library_build_command_adds_driver_feature_conditionally() {
+        let crate_name = CrateName::try_from("no_std_fs_operations")
+            .expect("the fixture crate name should be valid");
+        let command = lint_library_build_command(&crate_name, true, Path::new("/workspace"));
+        let arguments = command_arguments(&command);
+
+        assert!(
+            arguments
+                .windows(2)
+                .any(|pair| pair == ["--features", "dylint-driver"])
+        );
+        assert!(arguments.iter().any(|argument| argument == "--frozen"));
+        assert_eq!(command.get_current_dir(), Some(Path::new("/workspace")));
+    }
 }
