@@ -4715,6 +4715,22 @@ seconds on the Windows lane, cancelling the run. A handwritten list would have
 had the same hole, and a discovery that stops recognizing the call would sweep
 a smaller set silently, so finding nothing is a failure rather than a pass.
 
+The seven tests are members of the capacity-one `serial-trybuild-contracts`
+group: `dependency_check_result_contract_is_public`,
+`fixture_expansion_lint_attribute_contract`,
+`normalize_settings_is_public_and_the_legacy_name_stays_removed`,
+`renamed_common_apis_are_public_and_legacy_names_stay_removed`,
+`renamed_sarif_api_is_public_and_legacy_names_stay_removed`,
+`sha2_0_11_pre_migration_patterns_fail_to_compile`, and
+`trybuild_fixtures_compile_without_diagnostics`. Trybuild writes under
+`target/tests/trybuild`, separate from Dylint's `debug` and `debug/examples`
+artefacts, so this group can run alongside the capacity-one `serial-dylint-ui`
+group. The latter still covers Dylint UI tests, the
+`rstest_helper_should_be_fixture` example-harness tests and
+`integration_exclusion`; `ExampleHarnessLock` serializes its example cases with
+the trybuild fixture in that crate. The independence inventory for issue #513
+records the target, environment and lock checks behind this split.
+
 It drives the lane discovery with workflow documents rather than only with the
 files. `_declared_jobs` takes parsed documents and reads the repository's own
 only when given none, so `lane_discovery_test.py` can put a job with no

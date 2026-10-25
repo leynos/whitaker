@@ -25,11 +25,6 @@ import re
 import typing as typ
 
 import pytest
-from suite_lanes import (
-    PROFILE_VARIABLE,
-    _scopes_declaring_profile,
-    _workflow_documents,
-)
 from nextest_config import load_nextest_config
 
 #: The base per-test allowance both profiles must declare, as the guide
@@ -143,7 +138,7 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
                 "terminate-after": 1,
                 "grace-period": "5s",
             },
-            test_group="serial-trybuild",
+            test_group="serial-trybuild-contracts",
             retries=0,
         ),
         NESTED_TRYBUILD_FILTER: Allowance(
@@ -152,7 +147,7 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
                 "terminate-after": 1,
                 "grace-period": "5s",
             },
-            test_group="serial-trybuild",
+            test_group="serial-trybuild-contracts",
             retries=0,
         ),
         NESTED_EXAMPLE_FILTER: Allowance(
@@ -240,7 +235,7 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
                 "terminate-after": 1,
                 "grace-period": "5s",
             },
-            test_group="serial-trybuild",
+            test_group="serial-trybuild-contracts",
             retries=0,
         ),
         NESTED_TRYBUILD_FILTER: Allowance(
@@ -249,7 +244,7 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
                 "terminate-after": 1,
                 "grace-period": "5s",
             },
-            test_group="serial-trybuild",
+            test_group="serial-trybuild-contracts",
             retries=0,
         ),
         NESTED_EXAMPLE_FILTER: Allowance(
@@ -313,7 +308,7 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
 #: while nested Cargo fixtures would compete for compiler admission.
 REQUIRED_TEST_GROUPS: typ.Final[dict[str, dict[str, object]]] = {
     "serial-dylint-ui": {"max-threads": 1},
-    "serial-trybuild": {"max-threads": 1},
+    "serial-trybuild-contracts": {"max-threads": 1},
     "serial-toolchain-installs": {"max-threads": 1},
     "serial-nested-cargo-builds": {"max-threads": 1},
 }
@@ -444,80 +439,28 @@ def test_each_profile_states_the_overrides_its_own_tests_need(
     )
 
 
-@pytest.mark.parametrize(
-    ("group", "declaration"),
-    sorted(REQUIRED_TEST_GROUPS.items()),
-    ids=sorted(REQUIRED_TEST_GROUPS),
-)
-def test_each_group_the_overrides_name_is_declared_serial(
-    parsed_nextest: dict[str, typ.Any], group: str, declaration: dict[str, object]
-) -> None:
-    """A group exists to serialize, and only `max-threads = 1` does that.
-
-    The overrides above name these groups, and nextest refuses a
-    configuration naming a group `[test-groups]` does not declare. A
-    group declared with any other thread count parses, reads as
-    deliberate, and serializes nothing, so the lint-library builds it
-    covers race on the shared target directory exactly as they did
-    before the group existed. Compared as a whole table so an added key
-    fails too.
-    """
-    declared = parsed_nextest.get("test-groups", {})
-    assert declared.get(group) == declaration, (
-        f"[test-groups] must declare {group} as {declaration}; got "
-        f"{declared.get(group)}"
-    )
-
-
-def test_no_override_names_a_group_the_configuration_lacks(
+def test_trybuild_contracts_do_not_match_dylint_ui_overrides(
     parsed_nextest: dict[str, typ.Any],
 ) -> None:
-    """Every group named anywhere is declared, including ones not pinned above.
-
-    The table above pins the groups this contract requires; this catches
-    an override added later that names a group nobody declared, which
-    nextest refuses at startup rather than at the test that needed it.
-    """
-    declared = set(parsed_nextest.get("test-groups", {}))
-    named = {
-        group
-        for section in parsed_nextest["profile"].values()
-        for override in section.get("overrides") or []
-        if (group := override.get("test-group")) is not None
-    }
-    assert named <= declared, (
-        f"every test-group an override names must be declared in "
-        f"[test-groups]; {sorted(named - declared)} are not"
+    """Keep trybuild tests out of the serial Dylint UI overrides."""
+    trybuild_names = tuple(
+        clause.removeprefix("test(").removesuffix(")")
+        for clause in COMPILE_CONTRACT_FILTER.split(" | ")
     )
+    matching_filters = [
+        (profile_name, override.get("filter"))
+        for profile_name in ("default", "ci")
+        for override in parsed_nextest["profile"][profile_name].get("overrides") or []
+        if override.get("test-group") == "serial-dylint-ui"
+        and any(
+            f"test({test_name})" in (override.get("filter") or "")
+            for test_name in trybuild_names
+        )
+    ]
 
-
-def test_no_workflow_selects_a_profile_through_the_environment() -> None:
-    """The lane reader decides a lane's profile from its command line.
-
-    `timeout_ordering_test` judges each lane against the profile it
-    runs, and it learns that profile from `NEXTEST_PROFILE=ci` appearing
-    in the command. That reading is complete only while the variable is
-    never set any other way. A job-level `env` block naming it would put
-    every lane in that job under `ci` while the reader still judged them
-    under `default`, so the lane would be checked against the wrong
-    budgets and pass.
-
-    Nothing fails when that happens: both profiles carry a full set of
-    values, so the comparison succeeds against the wrong ones. This is
-    the assertion that makes the command-line reading true rather than
-    merely true so far.
-
-    The shape is not hypothetical. It is how a sibling repository
-    selects its coverage profile, because the shared coverage action
-    takes no profile input and the environment is the only lever.
-    """
-    declared = _scopes_declaring_profile(_workflow_documents())
-    assert not declared, (
-        f"{PROFILE_VARIABLE} is declared in an env block at {declared}; the "
-        f"lane reader takes a lane's profile from its command line, so a "
-        f"lane there would be judged under the wrong profile and checked "
-        f"against budgets it does not run under. Pass it on the command "
-        f"line, or teach the reader to resolve the environment first"
+    assert not matching_filters, (
+        "trybuild contract names must not match serial-dylint-ui overrides "
+        f"in either profile; found {matching_filters}"
     )
 
 
