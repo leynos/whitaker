@@ -43,6 +43,18 @@ def test_recipe_lines_are_empty_for_an_absent_target() -> None:
     )
 
 
+def test_coverage_preserves_data_without_conflicting_llvm_cov_options() -> None:
+    """Both coverage passes reuse data without incompatible cleanup flags."""
+    coverage_recipe = "\n".join(_makefile_recipe_lines("coverage"))
+
+    assert coverage_recipe.count("llvm-cov nextest --no-report") == 2, (
+        "both coverage passes must defer reporting until their data is merged"
+    )
+    assert 'CORE_TEST_RUNNER="llvm-cov nextest --no-report --no-clean"' not in (
+        coverage_recipe
+    ), "cargo-llvm-cov rejects --no-clean together with --no-report"
+
+
 def _cargo_invocation(recipe_line: str) -> str:
     """Return the `$(CARGO) ...` call in a recipe line, trimmed at its terminator.
 

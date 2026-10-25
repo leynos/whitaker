@@ -146,10 +146,11 @@ coverage: ## Generate LCOV coverage over the CI-tested crate subset
 	@# Instrument both test passes. The all-feature workspace pass keeps its
 	@# 11 exclusions (rustc_* shims, whitaker_lint_core, and three lint crates);
 	@# the separate feature-free pass adds core coverage to the same report.
+	@# `--no-report` retains coverage data between passes; `--no-clean` conflicts.
 	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v cargo-llvm-cov >/dev/null || { echo "Install cargo-llvm-cov (cargo install cargo-llvm-cov)"; exit 1; }
 	@$(CARGO) llvm-cov clean --workspace
 	@$(MAKE) test TEST_RUNNER="llvm-cov nextest --no-report" \
-		CORE_TEST_RUNNER="llvm-cov nextest --no-report --no-clean"
+		CORE_TEST_RUNNER="llvm-cov nextest --no-report"
 	@$(CARGO) llvm-cov report --lcov --output-path $(COVERAGE_OUTPUT)
 
 workflow-test: workflow-test-deps ## Run opt-in GitHub workflow smoke tests with act + pytest
