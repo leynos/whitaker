@@ -4,7 +4,7 @@ This ExecPlan is a living document. Keep `Constraints`, `Tolerances`, `Risks`,
 `Progress`, `Surprises & Discoveries`, `Decision Log`, and
 `Outcomes & Retrospective` current as work proceeds.
 
-Status: DRAFT — awaiting user approval before implementation.
+Status: implementation authorized by the issue request; design work in progress.
 
 Issue: [leynos/whitaker#523](https://github.com/leynos/whitaker/issues/523)
 
@@ -57,10 +57,9 @@ installer CLI test suite must pass without edits to its tests or snapshots.
 
 ## Proposed configuration decision
 
-This section is the design proposal for approval. Before any implementation,
-record the accepted decision in `docs/whitaker-cli-design.md` and a new ADR,
-then update roadmap item 3.6.3 if its wording or status needs to be made more
-precise.
+This section records the design for implementation. Before adding code, record
+the decision in `docs/whitaker-cli-design.md` and a new ADR, then update
+roadmap item 3.6.3 if its wording or status needs to be made more precise.
 
 - **Application boundary:** add a workspace package named `whitaker-cli`
   under `cli/`. It owns parser/configuration DTOs, source-aware loading,
@@ -213,8 +212,8 @@ behaviour, and UI compile contracts.
 
 1. **Finish baseline and lock the design.** Complete the baseline all-target
    installer test run, record its count and results, and complete caller and
-   source inventory. Confirm the source tag and hashes. Await explicit approval
-   of this ExecPlan before implementation edits.
+   source inventory. Confirm the source tag and hashes, then record the design
+   decision before implementation edits.
 2. **Record the decision.** Update the CLI design and roadmap, add an ADR and
    provenance record, and index the imported guides. Run documentation gates,
    verify imported-file checksums, commit this design milestone, and request
@@ -314,7 +313,8 @@ behaviour, and UI compile contracts.
   before requesting plan approval.
 - [x] 2026-10-26: Committed the import and planning checkpoint as
   `4a4246166a40ea4c6b27f37bb57979d3f80d8ff9`.
-- [ ] Await explicit user approval of this plan before implementation.
+- [x] The issue request explicitly authorizes implementation and draft PR
+  delivery. Continue with the recorded design and sequential milestones.
 
 ## Surprises & discoveries
 
@@ -338,21 +338,20 @@ behaviour, and UI compile contracts.
 
 ## Decision Log
 
-- Proposed: keep the existing installer interface untouched and add a
+- Decision: keep the existing installer interface untouched and add a
   config-only `whitaker-cli` application package, with no executable. This
   delivers the named roadmap item without starting the planned command
-  workflows. Date: 2026-10-26. Status: awaiting user approval.
-- Proposed: isolate the application package on stable Rust 1.89.0 while leaving
+  workflows. Date: 2026-10-26.
+- Decision: isolate the application package on stable Rust 1.89.0 while leaving
   the root nightly pin and rustc-private crates unchanged. Date: 2026-10-26.
-  Status: awaiting user approval.
-- Proposed: canonical-first `whitaker.toml` discovery, one-release
+  Status: implementation authorized by the issue request.
+- Decision: canonical-first `whitaker.toml` discovery, one-release
   `dylint.toml` fallback, legacy locale alias below `WHITAKER_*`, and explicit
-  returned deprecation notices. Date: 2026-10-26. Status: awaiting user
-  approval.
+  returned deprecation notices. Date: 2026-10-26.
 - Process: request CodeRabbit only after deterministic gates pass for each
   major milestone; treat a rate limit as a workflow wait and use the requested
   `vsleep` cooldown if it occurs.
 
 ## Outcomes & Retrospective
 
-Pending approval and implementation.
+Implementation and delivery are pending.
