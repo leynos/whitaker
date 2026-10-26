@@ -3462,20 +3462,22 @@ subsequent tests.
 Example-based UI tests in `rstest_helper_should_be_fixture` also use a
 cross-process directory lock under the system temporary directory. `nextest`
 can run test binaries in separate processes, so a plain in-process `Mutex` is
-not sufficient for those examples. The lock name is derived from the test
-executable's `target/.../deps` directory: processes using the same `deps`
+not sufficient for those examples. The lock name is derived from a hash of the
+test executable's `target/.../deps` directory: processes using the same `deps`
 directory serialize on one lock, while worktrees with separate target
-directories do not block one another. In the 1,845/1,852 run,
-`trybuild_fixtures_compile_without_diagnostics` hit its 360-second timeout
-while waiting on the former host-wide lock, which another worktree's
-`example_harness_collects_call_site_evidence` process held despite using a
-separate target directory. A lock directory becomes eligible for stale recovery
-after five minutes, and stale cleanup removes it only after successfully
-acquiring the lifetime owner-liveness lock. If stale cleanup sees `NotFound`,
-it treats the directory as already removed rather than as a failed recovery
-attempt. The default `acquire()` wait is bounded at six minutes. A sidecar
-advisory lock serializes ownership transitions, and the directory's owner token
-prevents an original holder from deleting a successor after stale recovery.
+directories normally do not block one another. A hash collision shares a lock
+and only adds serialization; it cannot permit concurrent use. In the
+1,845/1,852 run, `trybuild_fixtures_compile_without_diagnostics` hit its
+360-second timeout while waiting on the former host-wide lock, which another
+worktree's `example_harness_collects_call_site_evidence` process held despite
+using a separate target directory. A lock directory becomes eligible for stale
+recovery after five minutes, and stale cleanup removes it only after
+successfully acquiring the lifetime owner-liveness lock. If stale cleanup sees
+`NotFound`, it treats the directory as already removed rather than as a failed
+recovery attempt. The default `acquire()` wait is bounded at six minutes. A
+sidecar advisory lock serializes ownership transitions, and the directory's
+owner token prevents an original holder from deleting a successor after stale
+recovery.
 
 ### Configuration constant patterns
 

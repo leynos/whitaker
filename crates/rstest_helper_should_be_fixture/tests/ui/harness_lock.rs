@@ -2,10 +2,11 @@
 //!
 //! `tests/ui.rs` serializes example and trybuild compilations that share a
 //! Cargo `deps` directory across separate nextest processes. The temporary lock
-//! is keyed by the test executable's `deps` directory, so independent worktrees
-//! do not block one another. This module owns that protocol — the lock type, its
-//! stale-owner recovery, and the adapter tests that exercise it — so `ui.rs`
-//! stays focused on assertions rather than cross-process coordination.
+//! is keyed by a hash of the test executable's `deps` directory, so independent
+//! worktrees normally do not block one another. A hash collision shares a lock
+//! and only adds serialization; it cannot permit concurrent use. This module
+//! owns the lock protocol, while its adapter tests live in a child module so
+//! `ui.rs` stays focused on fixture assertions.
 
 use std::{
     collections::hash_map::DefaultHasher,
@@ -17,10 +18,8 @@ use std::{
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
-use filetime::{FileTime, set_file_mtime};
 use fs2::FileExt;
 use log::debug;
-use rstest::rstest;
 
 // A live owner keeps the OS liveness lock, so this grace period only delays
 // recovery after a process has abandoned its directory.
@@ -42,7 +41,7 @@ pub(crate) struct ExampleHarnessLock {
 }
 
 impl ExampleHarnessLock {
-    /// Returns the lock directory serializing the current UI fixture compilation.
+    /// Return the lock directory serializing this UI fixture compilation.
     pub(crate) fn path(&self) -> &Path {
         &self.path
     }
@@ -50,6 +49,7 @@ impl ExampleHarnessLock {
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct ExampleHarnessLockOwner(String);
 impl ExampleHarnessLockOwner {
+    /// Create a unique token identifying this process's lock ownership.
     fn new() -> Self {
         static COUNTER: AtomicU64 = AtomicU64::new(0);
         let timestamp = SystemTime::now()
@@ -87,6 +87,11 @@ impl ExampleHarnessLock {
         Self::acquire_at(&lock_path, Some(EXAMPLE_HARNESS_LOCK_ACQUIRE_TIMEOUT))
     }
 
+    /// Acquire the lock at `path`, waiting no longer than the optional limit.
+    ///
+    /// # Errors
+    /// Returns an error if lock state cannot be read, written, acquired, or
+    /// reclaimed before the wait limit expires.
     fn acquire_at(path: &Path, wait_limit: Option<Duration>) -> io::Result<Self> {
         let started_at = Instant::now();
         let mut attempt = 0_u64;
@@ -123,12 +128,22 @@ impl ExampleHarnessLock {
 fn example_harness_lock_path(target_deps_directory: &Path) -> PathBuf {
     let mut hasher = DefaultHasher::new();
     target_deps_directory.hash(&mut hasher);
-    std::env::temp_dir().join(format!(
-        "rstest-helper-example-harness-{:016x}.lock",
-        hasher.finish()
-    ))
+    example_harness_lock_path_for_digest(hasher.finish())
 }
 
+/// Map a target-directory digest to its shared lock filename.
+///
+/// Keep this helper private to target-path mapping so tests can model digest
+/// collisions without changing the production hashing policy.
+fn example_harness_lock_path_for_digest(digest: u64) -> PathBuf {
+    std::env::temp_dir().join(format!("rstest-helper-example-harness-{digest:016x}.lock"))
+}
+
+/// Create the lock directory and record the token that owns it.
+///
+/// # Errors
+/// Returns an error if the liveness lock, directory, or owner record cannot be
+/// created.
 fn create_example_harness_lock(path: PathBuf) -> io::Result<ExampleHarnessLock> {
     let Some(owner_liveness) = try_lock_example_harness_liveness(&path)? else {
         return Err(io::Error::from(io::ErrorKind::AlreadyExists));
@@ -147,6 +162,7 @@ fn create_example_harness_lock(path: PathBuf) -> io::Result<ExampleHarnessLock> 
     })
 }
 impl Drop for ExampleHarnessLock {
+    /// Remove the lock directory when this guard still owns it.
     fn drop(&mut self) {
         if let Ok(_state_guard) = lock_example_harness_state(&self.path) {
             // Best-effort cleanup: a failure only leaves a directory to reclaim.
@@ -157,6 +173,10 @@ impl Drop for ExampleHarnessLock {
     }
 }
 
+/// Wait for release or return when the configured wait limit expires.
+///
+/// # Errors
+/// Returns an error if stale-lock recovery fails or the wait limit expires.
 fn wait_for_example_harness_lock_release(
     path: &Path,
     started_at: Instant,
@@ -171,6 +191,7 @@ fn wait_for_example_harness_lock_release(
     Ok(())
 }
 
+/// Build the timeout error for a lock at the supplied path.
 fn example_harness_lock_timeout(path: &Path) -> io::Error {
     io::Error::new(
         io::ErrorKind::TimedOut,
@@ -180,10 +201,18 @@ fn example_harness_lock_timeout(path: &Path) -> io::Error {
         ),
     )
 }
+/// Recover an eligible stale lock while holding the state-transition lock.
+///
+/// # Errors
+/// Returns an error if lock metadata cannot be read or stale cleanup fails.
 fn recover_stale_example_harness_lock(path: &Path) -> io::Result<()> {
     let _state_guard = lock_example_harness_state(path)?;
     recover_stale_example_harness_lock_while_locked(path)
 }
+/// Recover an eligible stale lock when the caller already holds its state lock.
+///
+/// # Errors
+/// Returns an error if lock metadata cannot be read or stale cleanup fails.
 fn recover_stale_example_harness_lock_while_locked(path: &Path) -> io::Result<()> {
     let metadata = match std::fs::metadata(path) {
         Ok(metadata) => metadata,
@@ -198,10 +227,25 @@ fn recover_stale_example_harness_lock_while_locked(path: &Path) -> io::Result<()
     }
     Ok(())
 }
+
+/// Determine whether a directory is older than the stale-lock threshold.
+fn example_harness_lock_is_stale(modified: SystemTime, now: SystemTime) -> bool {
+    now.duration_since(modified)
+        .is_ok_and(|age| age > EXAMPLE_HARNESS_LOCK_STALE_AFTER)
+}
+
+/// Reclaim an eligible stale lock under its state-transition lock.
+///
+/// # Errors
+/// Returns an error if lock state cannot be opened or stale cleanup fails.
 fn remove_stale_example_harness_lock(path: &Path) -> io::Result<()> {
     let _state_guard = lock_example_harness_state(path)?;
     remove_stale_example_harness_lock_while_locked(path)
 }
+/// Reclaim an eligible stale lock when its state lock is already held.
+///
+/// # Errors
+/// Returns an error if owner metadata cannot be read or cleanup fails.
 fn remove_stale_example_harness_lock_while_locked(path: &Path) -> io::Result<()> {
     let Some(_owner_liveness) = try_lock_example_harness_liveness(path)? else {
         debug!(target: EXAMPLE_HARNESS_LOCK_LOG_TARGET, "event=stale_recovery_live_owner path={}", path.display());
@@ -212,6 +256,10 @@ fn remove_stale_example_harness_lock_while_locked(path: &Path) -> io::Result<()>
         |owner| remove_lock_if_owned(path, &owner),
     )
 }
+/// Lock the sidecar that serializes ownership changes for a lock path.
+///
+/// # Errors
+/// Returns an error if the sidecar cannot be opened or exclusively locked.
 fn lock_example_harness_state(path: &Path) -> io::Result<File> {
     let state_path = path.with_extension("state");
     let state_file = OpenOptions::new()
@@ -223,6 +271,11 @@ fn lock_example_harness_state(path: &Path) -> io::Result<File> {
     state_file.lock_exclusive()?;
     Ok(state_file)
 }
+/// Try to hold the sidecar that marks a live lock owner.
+///
+/// # Errors
+/// Returns an error if the sidecar cannot be opened or locked for a reason
+/// other than another live owner.
 fn try_lock_example_harness_liveness(path: &Path) -> io::Result<Option<File>> {
     let liveness_file = OpenOptions::new()
         .create(true)
@@ -237,14 +290,23 @@ fn try_lock_example_harness_liveness(path: &Path) -> io::Result<Option<File>> {
     }
 }
 
+/// Check whether an advisory-lock error means another process owns the lock.
 fn example_harness_liveness_lock_is_contended(error: &io::Error) -> bool {
     error.raw_os_error() == fs2::lock_contended_error().raw_os_error()
 }
 
+/// Write the owner token into the lock directory.
+///
+/// # Errors
+/// Returns an error if the owner file cannot be written.
 fn write_lock_owner(path: &Path, owner: &ExampleHarnessLockOwner) -> io::Result<()> {
     std::fs::write(path.join(EXAMPLE_HARNESS_LOCK_OWNER_FILENAME), &owner.0)
 }
 
+/// Read the owner token, returning `None` when the owner file is absent.
+///
+/// # Errors
+/// Returns an error if the owner file exists but cannot be read.
 fn read_example_harness_lock_owner(path: &Path) -> io::Result<Option<ExampleHarnessLockOwner>> {
     match std::fs::read_to_string(path.join(EXAMPLE_HARNESS_LOCK_OWNER_FILENAME)) {
         Ok(owner) => Ok(Some(ExampleHarnessLockOwner(owner))),
@@ -253,6 +315,11 @@ fn read_example_harness_lock_owner(path: &Path) -> io::Result<Option<ExampleHarn
     }
 }
 
+/// Remove the lock directory only when its recorded owner matches `owner`.
+///
+/// # Errors
+/// Returns an error if owner metadata cannot be read or the directory cannot
+/// be removed.
 fn remove_lock_if_owned(path: &Path, owner: &ExampleHarnessLockOwner) -> io::Result<()> {
     let Some(current_owner) = read_example_harness_lock_owner(path)? else {
         return Ok(());
@@ -264,6 +331,11 @@ fn remove_lock_if_owned(path: &Path, owner: &ExampleHarnessLockOwner) -> io::Res
     remove_example_harness_lock_directory(path)
 }
 
+/// Remove owner metadata and then remove the lock directory.
+///
+/// # Errors
+/// Returns an error if filesystem cleanup fails for a reason other than a
+/// missing owner file or directory.
 fn remove_example_harness_lock_directory(path: &Path) -> io::Result<()> {
     match std::fs::remove_file(path.join(EXAMPLE_HARNESS_LOCK_OWNER_FILENAME)) {
         Ok(()) => {}
@@ -277,124 +349,6 @@ fn remove_example_harness_lock_directory(path: &Path) -> io::Result<()> {
     }
 }
 
-fn example_harness_lock_is_stale(modified: SystemTime, now: SystemTime) -> bool {
-    now.duration_since(modified)
-        .is_ok_and(|age| age > EXAMPLE_HARNESS_LOCK_STALE_AFTER)
-}
-
-fn make_example_harness_lock_stale(path: &Path) {
-    let Some(stale_modified) =
-        SystemTime::now().checked_sub(EXAMPLE_HARNESS_LOCK_STALE_AFTER + Duration::from_secs(1))
-    else {
-        panic!("stale timestamp should be representable")
-    };
-    if let Err(error) = set_file_mtime(path, FileTime::from_system_time(stale_modified)) {
-        panic!("lock mtime should be adjustable: {error}");
-    }
-}
-
-/// Assert that only processes sharing one target directory share a lock.
-#[test]
-fn example_harness_lock_path_is_scoped_to_target_directory() {
-    let first_target = PathBuf::from("/worktrees/first/target/debug/deps");
-    let second_target = PathBuf::from("/worktrees/second/target/debug/deps");
-    let first_lock = example_harness_lock_path(&first_target);
-
-    assert_eq!(first_lock, example_harness_lock_path(&first_target));
-    assert_ne!(first_lock, example_harness_lock_path(&second_target));
-}
-
-#[rstest]
-#[case(Duration::from_mins(1), false)]
-#[case(EXAMPLE_HARNESS_LOCK_STALE_AFTER + Duration::from_secs(1), true)]
-fn example_harness_lock_stale_policy(#[case] age: Duration, #[case] expected: bool) {
-    let now = SystemTime::now();
-    let modified = now - age;
-
-    assert_eq!(example_harness_lock_is_stale(modified, now), expected);
-}
-
-#[rstest]
-#[case(true)]
-#[case(false)]
-fn stale_lock_operations_treat_missing_directory_as_released(#[case] recover: bool) {
-    let path = super::unique_summary_path();
-    let operation = if recover {
-        recover_stale_example_harness_lock(&path)
-    } else {
-        remove_stale_example_harness_lock(&path)
-    };
-
-    operation.expect("missing lock directory should be released");
-}
-
-#[test]
-fn example_harness_lock_reports_active_contention_timeout() {
-    let path = super::unique_summary_path();
-    std::fs::create_dir(&path).expect("create test lock directory");
-    let Err(error) = ExampleHarnessLock::acquire_at(&path, Some(Duration::ZERO)) else {
-        panic!("active lock contention should time out");
-    };
-    let _cleanup_result = std::fs::remove_dir(&path);
-    assert_eq!(error.kind(), io::ErrorKind::TimedOut);
-}
-
-#[test]
-fn held_example_harness_liveness_lock_is_reported_as_contended() {
-    let path = super::unique_summary_path();
-    let first = try_lock_example_harness_liveness(&path)
-        .expect("acquire liveness lock")
-        .expect("first liveness lock should be available");
-    assert!(
-        try_lock_example_harness_liveness(&path)
-            .expect("check liveness lock contention")
-            .is_none()
-    );
-    drop(first);
-    let liveness_path = path.with_extension(EXAMPLE_HARNESS_LOCK_LIVENESS_EXTENSION);
-    if let Err(error) = std::fs::remove_file(liveness_path) {
-        assert_eq!(error.kind(), io::ErrorKind::NotFound);
-    }
-}
-
-/// Adapter coverage for the model's live-owner, release, then reclaim boundary.
-#[test]
-fn stale_recovery_preserves_active_owner_then_reclaims_after_release() {
-    let path = super::unique_summary_path();
-    let owner = ExampleHarnessLock::acquire_at(&path, None).expect("acquire active owner");
-    make_example_harness_lock_stale(&path);
-    recover_stale_example_harness_lock(&path).expect("active owner blocks recovery");
-    assert!(path.is_dir(), "live owner directory must remain intact");
-
-    {
-        let _state_guard = lock_example_harness_state(&path).expect("lock state");
-        std::fs::remove_file(path.join(EXAMPLE_HARNESS_LOCK_OWNER_FILENAME))
-            .expect("remove owner metadata");
-    }
-    make_example_harness_lock_stale(&path);
-    drop(owner);
-
-    assert!(path.is_dir(), "stale directory remains");
-    recover_stale_example_harness_lock(&path).expect("reclaim released stale owner");
-    assert!(!path.exists(), "released stale directory should be removed");
-}
-
-/// Adapter coverage for the model's owner-token cleanup boundary.
-#[test]
-fn lock_cleanup_does_not_remove_a_different_owner() {
-    let path = super::unique_summary_path();
-    let original = ExampleHarnessLock::acquire_at(&path, None).expect("acquire lock");
-    let successor = ExampleHarnessLockOwner::new();
-    {
-        let _state_guard = lock_example_harness_state(&path).expect("lock state");
-        write_lock_owner(&path, &successor).expect("replace owner metadata");
-        remove_lock_if_owned(&path, &original.owner).expect("inspect successor ownership");
-    }
-
-    assert!(
-        path.is_dir(),
-        "a successor-owned lock directory must survive"
-    );
-    drop(original);
-    remove_stale_example_harness_lock(&path).expect("remove released different-owner directory");
-}
+#[cfg(test)]
+#[path = "harness_lock_tests.rs"]
+mod tests;
