@@ -63,6 +63,15 @@ impl ExampleHarnessLockOwner {
 impl ExampleHarnessLock {
     /// Acquire the lock shared by processes using the current Cargo target.
     ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// let lock = ExampleHarnessLock::acquire()?;
+    /// assert!(lock.path().is_dir());
+    /// // The lock remains held until `lock` is dropped.
+    /// # Ok::<(), std::io::Error>(())
+    /// ```
+    ///
     /// # Errors
     /// Returns an error when the executable path cannot be resolved or the lock
     /// cannot be acquired.
@@ -102,6 +111,15 @@ impl ExampleHarnessLock {
 }
 
 /// Return a temporary lock path for the target dependencies directory.
+///
+/// # Examples
+///
+/// ```ignore
+/// let deps = std::path::Path::new("target/debug/deps");
+/// let lock_path = example_harness_lock_path(deps);
+/// assert!(lock_path.starts_with(std::env::temp_dir()));
+/// assert_eq!(lock_path.extension().and_then(|ext| ext.to_str()), Some("lock"));
+/// ```
 fn example_harness_lock_path(target_deps_directory: &Path) -> PathBuf {
     let mut hasher = DefaultHasher::new();
     target_deps_directory.hash(&mut hasher);
