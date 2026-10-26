@@ -196,6 +196,8 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
             "test(driver::ui::) | "
             "test(tests::ui::) | "
             "(test(ui::ui) & not package(no_unwrap_or_else_panic)) | "
+            "test(acquire_uses_the_effective_target_directory) | "
+            "test(cross_process_lock_contention_and_release) | "
             "test(example_harness_collects_call_site_evidence) | "
             "test(ui::example_compiles_under_test_harness) | "
             "test(ui::hand_written_test_companion_does_not_exempt_parent_"
@@ -289,6 +291,8 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
             "test(driver::ui::) | "
             "test(tests::ui::) | "
             "(test(ui::ui) & not package(no_unwrap_or_else_panic)) | "
+            "test(acquire_uses_the_effective_target_directory) | "
+            "test(cross_process_lock_contention_and_release) | "
             "(binary(ui) & test(=ui))"
         ): Allowance(
             slow_timeout={

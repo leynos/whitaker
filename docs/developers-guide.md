@@ -3459,25 +3459,20 @@ Any UI test that holds `env_test_guard()` while invoking Dylint must use
 the mutex, so a failed example cannot poison environment synchronization for
 subsequent tests.
 
-Example-based UI tests in `rstest_helper_should_be_fixture` also use a
-cross-process directory lock under the system temporary directory. `nextest`
-can run test binaries in separate processes, so a plain in-process `Mutex` is
-not sufficient for those examples. The lock name is derived from a hash of the
-test executable's `target/.../deps` directory: processes using the same `deps`
-directory serialize on one lock, while worktrees with separate target
-directories normally do not block one another. A hash collision shares a lock
-and only adds serialization; it cannot permit concurrent use. In the
-1,845/1,852 run, `trybuild_fixtures_compile_without_diagnostics` hit its
-360-second timeout while waiting on the former host-wide lock, which another
-worktree's `example_harness_collects_call_site_evidence` process held despite
-using a separate target directory. A lock directory becomes eligible for stale
-recovery after five minutes, and stale cleanup removes it only after
-successfully acquiring the lifetime owner-liveness lock. If stale cleanup sees
-`NotFound`, it treats the directory as already removed rather than as a failed
-recovery attempt. The default `acquire()` wait is bounded at six minutes. A
-sidecar advisory lock serializes ownership transitions, and the directory's
-owner token prevents an original holder from deleting a successor after stale
-recovery.
+Example-based UI tests in `rstest_helper_should_be_fixture` use a cross-process
+lock under the canonical effective Cargo target directory. Resolution prefers
+Cargo's `.rustc_info.json` marker, then an absolute `CARGO_TARGET_DIR`, then
+the executable's profile directory; relative overrides are ignored. The lock
+lives inside the resolved target, so different `TMPDIR` values cannot split
+locks for a shared target. Worktrees sharing a target directory share one lock
+and serialize; independent target directories use separate locks. A sidecar
+advisory lock serializes ownership changes, and an owner-liveness lock prevents
+reclaiming a live owner. Missing lock paths count as released during cleanup;
+owner tokens prevent an old holder from deleting a successor. A lock directory
+becomes eligible for stale recovery once it is older than five minutes, and
+acquisition waits up to six minutes before returning a timeout. The
+[timeout policy](#test-timeouts-four-tiers-outermost-last) explains the other
+bounds.
 
 ### Configuration constant patterns
 
@@ -4283,7 +4278,17 @@ claiming nextest requires it.
 The ordinary serial UI group has a 20-minute bound. The installer UI case
 measured 235 seconds and timed out at the 300-second base allowance on Windows.
 The wider allowance lets nested UI builds finish under contention while still
-terminating a stalled test.
+terminating a stalled test. The example-harness lock is keyed by the canonical
+effective Cargo target directory. Resolution prefers Cargo's `.rustc_info.json`
+marker, then an absolute `CARGO_TARGET_DIR`, and finally the profile output
+directory inferred from the test executable. Relative overrides are ignored
+because Cargo resolves them from its invocation directory, which may differ
+from the test process. The lock directory is stored inside the resolved target,
+so differing `TMPDIR` values cannot split locks for a shared target. Test
+processes that share build artefacts share one lock and serialize, while
+independent target directories use independent locks. The direct acquisition
+regression test shares this serialized UI group because it exercises the
+target-scoped lock used by fixture builds.
 
 The alias UI fixture in `no_unwrap_or_else_panic` exceeded its 20-minute
 allowance while rebuilding its lint library through nested Cargo and waiting
