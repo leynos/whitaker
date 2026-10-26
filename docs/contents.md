@@ -48,6 +48,8 @@
 - [OrthoConfig v0.10.0 migration guide](ortho-config-v0-10-0-migration-guide.md)
   is a compatibility entry point to the byte-preserved release guide, stored
   under `ortho-config/` so its relative links resolve to the correct guide.
+- [OrthoConfig v0.10.0 legacy migration link target](v0-10-0-migration-guide.md)
+  preserves the original relative link in the imported user's guide.
 - [OrthoConfig ADR 0004 compatibility entry point](adrs/adr-0004-cargo-external-subcommand-entry-point.md)
   links to the upstream Cargo external-subcommand decision; it is not a
   Whitaker design decision.
