@@ -121,10 +121,11 @@ impl ExampleHarnessLock {
 }
 /// Resolve the Cargo output directory used by this test process.
 ///
-/// Prefer Cargo's marker, then an absolute override, then the executable's
-/// profile directory. Ignore relative overrides because Cargo resolves them
-/// from its invocation directory, which may differ from the test process. For
-/// example, `target/debug/deps/test` falls back to `target/debug`.
+/// Prefer Cargo's marker, then the executable's profile directory so
+/// marker-free processes share a lock identity. Fall back to an absolute
+/// override; ignore relative overrides because Cargo resolves them from its
+/// invocation directory. For example, `target/debug/deps/test` falls back to
+/// `target/debug`.
 ///
 /// # Errors
 ///
@@ -142,12 +143,12 @@ fn effective_target_directory(
         }
     }
 
-    if let Some(target_directory) = configured_target_directory.filter(|path| path.is_absolute()) {
-        return std::fs::canonicalize(target_directory);
-    }
-
     if let Some(profile_directory) = target_profile_directory_for_test_binary(executable) {
         return std::fs::canonicalize(profile_directory);
+    }
+
+    if let Some(target_directory) = configured_target_directory.filter(|path| path.is_absolute()) {
+        return std::fs::canonicalize(target_directory);
     }
 
     Err(io::Error::new(

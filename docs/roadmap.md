@@ -1637,9 +1637,10 @@ corpus govern current scope; non-conflicting tasks remain applicable.
   examples. Requires 17.4.1.
 - [ ] 17.4.4. Run the family over representative df12 and third-party corpora,
   classify findings by the RFC exception models, publish the false-positive
-  budget, and promote each rule independently. `DOMAIN001` and `DOMAIN101`
-  should receive the first promotion decisions; `DOMAIN104` and `DOMAIN105`
-  remain experimental or report-only until their proof boundaries are stable.
-  See [RFC 0011](rfcs/0011-weak-domain-boundaries.md) §Downstream corpus and
+  budget, and promote each rule independently. `DOMAIN001`, `DOMAIN101`, and
+  `DOMAIN106` should receive the first promotion decisions. `DOMAIN107`,
+  `DOMAIN108`, and `DOMAIN151` remain experimental or report-only until their
+  proof boundaries are stable. See
+  [RFC 0011](rfcs/0011-weak-domain-boundaries.md) §Downstream corpus and
   [RFC 0012](rfcs/0012-fragile-types.md) §Downstream corpus. Requires 17.4.2
   and 17.4.3.

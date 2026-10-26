@@ -11,7 +11,8 @@ roadmap work remains applicable.
 
 - [ ] 17.1.1. Reserve the `DOMAIN` rule family: `DOMAIN001` to `DOMAIN099`
   for boundary refinement, `DOMAIN101` to `DOMAIN149` for type state spaces,
-  `DOMAIN150` to `DOMAIN179` for local protocol surfaces, and `DOMAIN900` to
+  `DOMAIN150` to `DOMAIN179` for local protocol surfaces, `DOMAIN180` to
+  `DOMAIN199` for future local domain-modelling rules, and `DOMAIN900` to
   `DOMAIN999` for grouped reports. Integrate the family with experimental
   selector semantics. See [RFC 0011](rfcs/0011-weak-domain-boundaries.md)
   §Rule-code allocation. Requires 3.6.1.

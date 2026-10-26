@@ -214,38 +214,35 @@ proptest! {
         .. ProptestConfig::default()
     })]
 
-    #[doc = "Check stable mapping and safe collision serialization across varied paths."]
+    #[doc = "Keep generated lock paths scoped and well formed."]
     #[test]
-    fn target_lock_paths_follow_the_hash_collision_policy(
-        first_components in prop::collection::vec("[a-zA-Z0-9_-]{1,16}", 1..6),
-        second_components in prop::collection::vec("[a-zA-Z0-9_-]{1,16}", 1..6),
+    fn target_lock_paths_remain_scoped_and_well_formed(
+        components in prop::collection::vec("[a-zA-Z0-9_-]{1,16}", 1..6),
     ) {
         let lock_root = PathBuf::from("temporary-lock-root");
-        let first_target = first_components
-            .into_iter()
-            .fold(PathBuf::from("target"), |path, component| path.join(component));
-        let second_target = second_components
+        let target_directory = components
             .into_iter()
             .fold(PathBuf::from("target"), |path, component| path.join(component));
 
-        let first_lock = example_harness_lock_path(&first_target, &lock_root);
-        let second_lock = example_harness_lock_path(&second_target, &lock_root);
-        prop_assert_eq!(
-            &first_lock,
-            &example_harness_lock_path(&first_target, &lock_root),
-            "one target directory should always map to the same lock"
-        );
-        prop_assert_eq!(
-            first_lock == second_lock,
-            example_harness_lock_key(&first_target) == example_harness_lock_key(&second_target),
-            "only equal hash keys may share a lock; collisions serialize safely"
-        );
+        let lock_path = example_harness_lock_path(&target_directory, &lock_root);
+        prop_assert_eq!(lock_path.parent(), Some(lock_root.as_path()));
+        let file_name = lock_path.file_name().and_then(|name| name.to_str());
+        let has_expected_name = file_name
+            .and_then(|name| name.strip_prefix("rstest-helper-example-harness-"))
+            .and_then(|name| name.strip_suffix(".lock"))
+            .is_some_and(|hash| {
+                hash.len() == 16
+                    && hash
+                        .bytes()
+                        .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+            });
+        prop_assert!(has_expected_name, "lock file name should use 16 lowercase hexadecimal digits");
     }
 }
 
-/// Preserve deterministic mapping for absolute, relative, parent, and spaced paths.
+/// Acquire separate scoped locks for absolute, relative, parent, and spaced paths.
 #[test]
-fn target_lock_paths_are_stable_for_path_edge_forms() {
+fn target_lock_paths_separate_path_edge_forms() {
     let lock_root = tempfile::tempdir().expect("create temporary lock root");
     let target_paths = [
         PathBuf::from("target"),
@@ -254,13 +251,38 @@ fn target_lock_paths_are_stable_for_path_edge_forms() {
         std::env::temp_dir().join("absolute target"),
     ];
 
+    let mut acquired_paths = std::collections::HashSet::new();
+    let mut locks = Vec::new();
+
     for target_path in target_paths {
-        assert_eq!(
-            example_harness_lock_path(&target_path, lock_root.path()),
-            example_harness_lock_path(&target_path, lock_root.path()),
-            "path form should map deterministically: {}",
-            target_path.display()
+        let lock = ExampleHarnessLock::acquire_for_target_directory(
+            &target_path,
+            lock_root.path(),
+            Some(Duration::ZERO),
+        )
+        .expect("distinct target paths should acquire separate locks");
+        assert_eq!(lock.path().parent(), Some(lock_root.path()));
+
+        let file_name = lock
+            .path()
+            .file_name()
+            .and_then(|name| name.to_str())
+            .expect("lock file name should be valid UTF-8");
+        let hash = file_name
+            .strip_prefix("rstest-helper-example-harness-")
+            .and_then(|name| name.strip_suffix(".lock"))
+            .expect("lock file name should use the scoped lock format");
+        assert_eq!(hash.len(), 16, "lock hash should contain 16 digits");
+        assert!(
+            hash.bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)),
+            "lock hash should use lowercase hexadecimal digits"
         );
+        assert!(
+            acquired_paths.insert(lock.path().to_path_buf()),
+            "distinct target paths should not share a lock"
+        );
+        locks.push(lock);
     }
 }
 

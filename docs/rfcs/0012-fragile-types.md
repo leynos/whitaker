@@ -2,7 +2,7 @@
 
 ## Preamble
 
-- **RFC number:** 0008
+- **RFC number:** 0012
 - **Status:** Proposed
 - **Repository:** `leynos/whitaker`
 - **Created:** 2026-08-07
