@@ -302,6 +302,12 @@ behaviour, and UI compile contracts.
   the byte-preserved upstream migration guide and remain intentionally
   unmodified. Rerun documentation gates and review this index correction before
   requesting plan approval.
+- [x] 2026-10-26: The fourth CodeRabbit review found that the nested migration
+  guide's unchanged `../ortho_l10n/README.md` link needed a pointer under
+  `docs/ortho_l10n/`. That symlink now resolves to the existing compatibility
+  README. The repeated upstream grammar findings remain intentionally
+  unmodified. Rerun documentation gates and review this link correction before
+  requesting plan approval.
 - [x] 2026-10-26: Committed the import and planning checkpoint as
   `4a4246166a40ea4c6b27f37bb57979d3f80d8ff9`.
 - [ ] Await explicit user approval of this plan before implementation.
