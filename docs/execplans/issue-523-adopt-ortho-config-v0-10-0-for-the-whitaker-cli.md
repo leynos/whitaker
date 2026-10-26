@@ -261,9 +261,17 @@ behaviour, and UI compile contracts.
   design, roadmap, manifests, installer CLI tests, and local caller references.
 - [x] 2026-10-26: Confirmed target branch already exists in a separate clean
   worktree at the supplied baseline; exact target PR search returned none.
+- [x] 2026-10-26: Live issue #523 is open, no PR uses the target head, and
+  GitHub's branch API returned 404 for the remote target branch. The local
+  candidate currently tracks `origin/main` and is one commit behind it; set
+  `origin/issue-523-adopt-ortho-config-v0-10-0-for-the-whitaker-cli` after the
+  eventual SSH push.
 - [x] 2026-10-26: Fetched v0.10.0 tag; tag object and peeled commit match the
   supplied values. Imported guides match both upstream Git blobs and recorded
   SHA-256 checksums.
+- [x] 2026-10-26: Renamed the Lody session to
+  `Adopt ortho_config v0.10.0 for the whitaker CLI (#523)`; its ID is
+  `9a515cd8-a3a4-43d3-9fe0-1974854c450c`.
 - [x] 2026-10-26: Captured the baseline nightly compiler identity and confirmed
   stable Rust 1.89.0 is installed.
 - [x] 2026-10-26: `cargo test -p whitaker-installer --all-targets` passed on
