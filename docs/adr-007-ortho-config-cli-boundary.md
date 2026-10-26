@@ -45,6 +45,10 @@ version are successful display requests; parse and configuration failures
 remain typed at the application boundary. Localize help and parse errors
 together with an `en-GB` fallback.
 
+The documented `WHITAKER_NO_SOURCE_FALLBACK` environment control and
+`--no-source-fallback` flag map to the inverse of
+`install.allow_build_from_source`.
+
 ## Consequences
 
 Injected sources and explicit file roots permit precedence and compatibility
