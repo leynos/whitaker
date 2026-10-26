@@ -3470,8 +3470,9 @@ advisory lock serializes ownership changes, and an owner-liveness lock prevents
 reclaiming a live owner. Missing lock paths count as released during cleanup;
 owner tokens prevent an old holder from deleting a successor. A lock directory
 becomes eligible for stale recovery once it is older than five minutes, and
-acquisition waits up to six minutes. See [the timeout policy](#test-timeouts-
-four-tiers-outermost-last) for details.
+acquisition waits up to six minutes before returning a timeout. The
+[timeout policy](#test-timeouts-four-tiers-outermost-last) explains the other
+bounds.
 
 ### Configuration constant patterns
 
@@ -4277,18 +4278,17 @@ claiming nextest requires it.
 The ordinary serial UI group has a 20-minute bound. The installer UI case
 measured 235 seconds and timed out at the 300-second base allowance on Windows.
 The wider allowance lets nested UI builds finish under contention while still
-terminating a stalled test.
-The example-harness lock is keyed by the canonical effective Cargo target
-directory. Resolution prefers Cargo's `.rustc_info.json` marker, then an
-absolute `CARGO_TARGET_DIR`, and finally the profile output directory
-inferred from the test executable. Relative overrides are ignored because
-Cargo resolves them from its invocation directory, which may differ from
-the test process. The lock directory is stored inside the resolved target,
+terminating a stalled test. The example-harness lock is keyed by the canonical
+effective Cargo target directory. Resolution prefers Cargo's `.rustc_info.json`
+marker, then an absolute `CARGO_TARGET_DIR`, and finally the profile output
+directory inferred from the test executable. Relative overrides are ignored
+because Cargo resolves them from its invocation directory, which may differ
+from the test process. The lock directory is stored inside the resolved target,
 so differing `TMPDIR` values cannot split locks for a shared target. Test
 processes that share build artefacts share one lock and serialize, while
-independent target directories use independent locks. The direct
-acquisition regression test shares this serialized UI group because it
-exercises the target-scoped lock used by fixture builds.
+independent target directories use independent locks. The direct acquisition
+regression test shares this serialized UI group because it exercises the
+target-scoped lock used by fixture builds.
 
 The alias UI fixture in `no_unwrap_or_else_panic` exceeded its 20-minute
 allowance while rebuilding its lint library through nested Cargo and waiting

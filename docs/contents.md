@@ -135,21 +135,21 @@
   proposes a cognitive complexity lint that charges only author-written
   constructs, and a shared authored-versus-generated classifier for every
   complexity-sensitive Whitaker lint.
-- [RFC 0007: weak representations at domain
-  boundaries](rfcs/0007-weak-domain-boundaries.md) proposes the `DOMAIN` lint
+- [RFC 0011: weak representations at domain
+  boundaries](rfcs/0011-weak-domain-boundaries.md) proposes the `DOMAIN` lint
   family and rules for discarded parser witnesses, validation without
   refinement, and repeated boundary parsing.
-- [RFC 0008: fragile types and invalid-state
-  encodings](rfcs/0008-fragile-types.md) proposes rules for manual sum types,
+- [RFC 0012: fragile types and invalid-state
+  encodings](rfcs/0012-fragile-types.md) proposes rules for manual sum types,
   mixed presence constraints, finite Boolean and sentinel state, redundant
   dimensions, primitive-to-domain projections, invariant surfaces, and local
   terminal protocols.
-- [RFC 0008 amendment: state-machine ADT and protocol
-  coverage](rfcs/0008-state-machine-adt-amendment.md) normatively broadens the
-  RFC 0008 rule contracts and establishes mdtablefix issues 443–449 as the
+- [RFC 0012 amendment: state-machine ADT and protocol
+  coverage](rfcs/0012-state-machine-adt-amendment.md) normatively broadens the
+  RFC 0012 rule contracts and establishes mdtablefix issues 443–449 as the
   acceptance corpus.
-- [Phase 14 DOMAIN roadmap amendment](roadmap-phase-14-domain-amendment.md)
-  supersedes conflicting Phase 14 state-space tasks with the expanded RFC 0008
+- [Phase 17 DOMAIN roadmap amendment](roadmap-phase-17-domain-amendment.md)
+  supersedes conflicting Phase 17 state-space tasks with the expanded RFC 0012
   rule catalogue and the mdtablefix 443–449 acceptance corpus.
 
 ## Planning material

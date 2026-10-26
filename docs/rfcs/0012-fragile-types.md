@@ -1,4 +1,4 @@
-# RFC 0008: Fragile types and invalid-state encodings
+# RFC 0012: Fragile types and invalid-state encodings
 
 ## Preamble
 
@@ -34,7 +34,7 @@ last two compare a type's invariant surface with its construction surface. All
 rules begin experimentally, report on the type definition with secondary spans
 at enforcement sites, and avoid automatic public-API rewrites.
 
-RFC 0007 allocates the `DOMAIN` selector and the common distinction between
+RFC 0011 allocates the `DOMAIN` selector and the common distinction between
 intrinsic and extrinsic validity. This RFC uses rule codes `DOMAIN101` onward
 for type state-space findings.
 
@@ -155,7 +155,7 @@ concrete default value contradicts a proven intrinsic invariant.
   mutators, or typestate according to the observed shape.
 - Treat raw, builder, serialization, FFI, and runtime-resource types as
   first-class exception models.
-- Reuse the `DOMAIN` family selection and rollout model from RFC 0007.
+- Reuse the `DOMAIN` family selection and rollout model from RFC 0011.
 
 ### Non-goals
 
@@ -237,7 +237,7 @@ necessarily permanent value invariants.
 
 _Table 1: Proposed fragile-type rules in the `DOMAIN` family._
 
-The codes are grouped separately from RFC 0007 boundary rules so selectors can
+The codes are grouped separately from RFC 0011 boundary rules so selectors can
 later distinguish `DOMAIN0` and `DOMAIN1` prefixes if Whitaker adopts numeric
 prefix selection.
 
@@ -747,7 +747,7 @@ The initial rule should accept invariant evidence from:
 - a fallible associated constructor returning `Result<Self, E>` or
   `Option<Self>`;
 - a pure `validate(&self) -> Result<(), E>` or `is_valid(&self) -> bool` summary
-  under the conservative rules from RFC 0007;
+  under the conservative rules from RFC 0011;
 - assertions over persistent fields in every private constructor, when a public
   bypass exists; and
 - a custom `Deserialize` or `serde(try_from = "Raw")` path that delegates to a
@@ -965,7 +965,7 @@ No automatic edit is safe.
 
 ### Module layout
 
-RFC 0007 introduces `common::domain_model`. This RFC adds:
+RFC 0011 introduces `common::domain_model`. This RFC adds:
 
 ```text
 common/src/domain_model/state_space/

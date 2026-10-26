@@ -1,4 +1,4 @@
-# RFC 0007: Weak representations at domain boundaries
+# RFC 0011: Weak representations at domain boundaries
 
 ## Preamble
 
@@ -45,7 +45,7 @@ lint crates so consumers can adopt them independently. The family name is a
 teaching slogan; diagnostics describe concrete evidence rather than accusing
 code of violating a maxim.
 
-RFC 0008 extends the same family from boundary flow into type state spaces,
+RFC 0012 extends the same family from boundary flow into type state spaces,
 semantic partitions, sentinel encodings, primitive-to-domain projections,
 invariant surfaces, and local protocol obligations.
 
@@ -234,9 +234,9 @@ include it only when experimental rules are enabled.
 
 | Range                      | Purpose                                                        | Initial allocation |
 | -------------------------- | -------------------------------------------------------------- | ------------------ |
-| `DOMAIN001` to `DOMAIN099` | Boundary refinement and proof retention                        | RFC 0007           |
-| `DOMAIN101` to `DOMAIN149` | Type state spaces, semantic partitions, and invariant surfaces | RFC 0008           |
-| `DOMAIN150` to `DOMAIN179` | Local protocol and lifecycle surfaces                          | RFC 0008           |
+| `DOMAIN001` to `DOMAIN099` | Boundary refinement and proof retention                        | RFC 0011           |
+| `DOMAIN101` to `DOMAIN149` | Type state spaces, semantic partitions, and invariant surfaces | RFC 0012           |
+| `DOMAIN150` to `DOMAIN179` | Local protocol and lifecycle surfaces                          | RFC 0012           |
 | `DOMAIN180` to `DOMAIN199` | Future local domain-modelling rules                            | Reserved           |
 | `DOMAIN900` to `DOMAIN999` | Workspace reports that are not ordinary Dylint diagnostics     | Reserved           |
 
@@ -639,7 +639,7 @@ common/src/domain_model/
 │   ├── fingerprint.rs
 │   └── diagnostics.rs
 └── state_space/
-    └── ... RFC 0008 ...
+    └── ... RFC 0012 ...
 ```
 
 The lint crates own rustc integration:

@@ -1,8 +1,8 @@
-# RFC 0008 amendment: state-machine ADT and protocol coverage
+# RFC 0012 amendment: state-machine ADT and protocol coverage
 
 ## Preamble
 
-- **Amends:** RFC 0008, *Fragile types and invalid-state encodings*
+- **Amends:** RFC 0012, *Fragile types and invalid-state encodings*
 - **Status:** Proposed
 - **Repository:** `leynos/whitaker`
 - **Created:** 2026-08-30
@@ -11,8 +11,8 @@
 
 ## Normative status
 
-This document normatively amends RFC 0008. Where the two documents conflict,
-this amendment takes precedence. Unchanged RFC 0008 requirements remain in
+This document normatively amends RFC 0012. Where the two documents conflict,
+this amendment takes precedence. Unchanged RFC 0012 requirements remain in
 force, including its intrinsic-versus-extrinsic distinction, evidence-first
 diagnostic policy, construction-surface analysis, exemption model, and staged
 experimental rollout.
@@ -25,7 +25,7 @@ state-machine smells.
 
 ## Decision
 
-Broaden RFC 0008 from types that explicitly reject invalid field combinations
+Broaden RFC 0012 from types that explicitly reject invalid field combinations
 to types whose product-shaped storage poorly represents a proven finite
 semantic state space. A finding may therefore rest on one of four defects:
 
@@ -42,7 +42,7 @@ vague aesthetic preference remain insufficient.
 
 ## Revised rule-code allocation
 
-RFC 0007's allocation becomes:
+RFC 0011's allocation becomes:
 
 | Range                      | Purpose                                                                     |
 | -------------------------- | --------------------------------------------------------------------------- |
@@ -253,7 +253,7 @@ strong internal wrapper already exists.
 ## Renumbered invariant rules
 
 The substance of `bypassable_type_invariant` and `invalid_default` remains as
-specified by RFC 0008, but their identifiers become `DOMAIN107` and
+specified by RFC 0012, but their identifiers become `DOMAIN107` and
 `DOMAIN108`. Documentation, configuration keys, Fluent slugs, finding records,
 and tests must use the new codes before either rule ships.
 
@@ -377,13 +377,13 @@ until their proof boundaries stabilize on real corpora.
 ## Roadmap relationship
 
 The accompanying
-[Phase 14 DOMAIN roadmap amendment](../roadmap-phase-14-domain-amendment.md)
-normatively supersedes conflicting Phase 14.1, 14.3, and 14.4 task wording in
-`docs/roadmap.md`. Non-conflicting Phase 14 work remains applicable.
+[Phase 17 DOMAIN roadmap amendment](../roadmap-phase-17-domain-amendment.md)
+normatively supersedes conflicting Phase 17 DOMAIN task wording in
+`docs/roadmap.md`. Non-conflicting Phase 17 work remains applicable.
 
 ## Recommendation
 
-Accept this amendment before implementing RFC 0008. The mdtablefix corpus
+Accept this amendment before implementing RFC 0012. The mdtablefix corpus
 captures the distinction the original draft blurred: code may maintain an
 invariant perfectly today and still force humans to maintain a relationship
 that an ADT, newtype, domain enum, or consuming finalizer could make
@@ -392,9 +392,9 @@ degenerating into a field-count style tribunal.
 
 ## References
 
-- [RFC 0007: weak representations at domain
-  boundaries](0007-weak-domain-boundaries.md)
-- [RFC 0008: fragile types and invalid-state encodings](0008-fragile-types.md)
+- [RFC 0011: weak representations at domain
+  boundaries](0011-weak-domain-boundaries.md)
+- [RFC 0012: fragile types and invalid-state encodings](0012-fragile-types.md)
 - [mdtablefix issue #443](https://github.com/leynos/mdtablefix/issues/443)
 - [mdtablefix issue #444](https://github.com/leynos/mdtablefix/issues/444)
 - [mdtablefix issue #445](https://github.com/leynos/mdtablefix/issues/445)
