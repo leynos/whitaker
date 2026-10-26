@@ -41,6 +41,12 @@
 - [Whitaker command-line interface (CLI) design](whitaker-cli-design.md)
   defines the unified `whitaker` binary, its configuration model, and the
   installation and diagnostic workflows behind it.
+- [OrthoConfig v0.10.0 provenance](ortho-config-provenance.md) records the
+  immutable upstream source and checksums for the imported OrthoConfig guides.
+- [OrthoConfig v0.10.0 user's guide](ortho-config-users-guide.md) is the
+  byte-preserved upstream guide used to design the CLI configuration spine.
+- [OrthoConfig v0.10.0 migration guide](ortho-config-v0-10-0-migration-guide.md)
+  records the release's migration notes and version-specific capabilities.
 - [Whitaker clone detector design](whitaker-clone-detector-design.md)
   documents the clone detector architecture, data flow, and supporting
   reasoning.
