@@ -337,7 +337,10 @@ file is selected or found, and `DYLINT_LOCALE` falls back below
 `WHITAKER_DIAGNOSTICS_LOCALE`. Each legacy path returns a deprecation notice
 naming its replacement. The application boundary presents notices and errors;
 configuration libraries do not print or terminate the process. Help and parse
-failures use the same localized parse path, with `en-GB` as the fallback.
+failures use the same localized parse path, with `en-GB` as the fallback. The
+existing `WHITAKER_NO_SOURCE_FALLBACK` environment control and
+`--no-source-fallback` flag map to the inverse of
+`install.allow_build_from_source`.
 
 The canonical configuration should look like this:
 
