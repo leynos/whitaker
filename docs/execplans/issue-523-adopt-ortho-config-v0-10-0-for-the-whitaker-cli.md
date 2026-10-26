@@ -290,6 +290,12 @@ behaviour, and UI compile contracts.
   nested migration-guide location now preserve upstream bytes while resolving
   those paths. Rerun documentation gates and review these corrections before
   requesting plan approval.
+- [x] 2026-10-26: The second CodeRabbit review found three more missing upstream
+  link targets and five minor grammar issues in the imported migration guide.
+  Repository-owned pointers now resolve the three paths. The upstream grammar
+  remains byte-preserved as explicitly required; no local source edit is
+  appropriate for those five findings. Rerun documentation gates and review
+  these corrections before requesting plan approval.
 - [x] 2026-10-26: Committed the import and planning checkpoint as
   `4a4246166a40ea4c6b27f37bb57979d3f80d8ff9`.
 - [ ] Await explicit user approval of this plan before implementation.
