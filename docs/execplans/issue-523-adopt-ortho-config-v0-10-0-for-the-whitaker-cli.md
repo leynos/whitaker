@@ -289,31 +289,36 @@ behaviour, and UI compile contracts.
   with Whitaker's existing `docs/users-guide.md`; compatibility entries and a
   nested migration-guide location now preserve upstream bytes while resolving
   those paths. Rerun documentation gates and review these corrections before
-  requesting plan approval.
+  continuing.
 - [x] 2026-10-26: The second CodeRabbit review found three more missing upstream
   link targets and five minor grammar issues in the imported migration guide.
   Repository-owned pointers now resolve the three paths. The upstream grammar
   remains byte-preserved as explicitly required; no local source edit is
   appropriate for those five findings. Rerun documentation gates and review
-  these corrections before requesting plan approval.
+  these corrections before continuing.
 - [x] 2026-10-26: The third CodeRabbit review confirmed the compatibility links
   and found that the ADR pointer also needed a contents-index entry. That index
   entry is now added. Its remaining grammar suggestions repeat findings against
   the byte-preserved upstream migration guide and remain intentionally
   unmodified. Rerun documentation gates and review this index correction before
-  requesting plan approval.
+  continuing.
 - [x] 2026-10-26: The fourth CodeRabbit review found that the nested migration
   guide's unchanged `../ortho_l10n/README.md` link needed a pointer under
   `docs/ortho_l10n/`. That symlink now resolves to the existing compatibility
   README. The repeated upstream grammar findings remain intentionally
   unmodified. Rerun documentation gates and review this link correction before
-  requesting plan approval.
+  continuing.
 - [x] 2026-10-26: The fifth CodeRabbit review found that the legacy migration
   compatibility entry point was not indexed. It is now listed in
   `docs/contents.md`; rerun documentation gates and review the index correction
-  before requesting plan approval.
+  before continuing.
 - [x] 2026-10-26: Committed the import and planning checkpoint as
   `4a4246166a40ea4c6b27f37bb57979d3f80d8ff9`.
+- [x] 2026-10-26: Full baseline gates passed on `e22093e0`: format and lint
+  passed, followed by 1,852 nextest passes (five skipped) and 11 Dylint test
+  passes. The corrected design review completed with zero findings.
+- [x] 2026-10-26: Rebased onto upstream `1fadb66b`, retaining its rewrite
+  command design and renumbering the configuration decision as ADR 008.
 - [x] The issue request explicitly authorizes implementation and draft PR
   delivery. Continue with the recorded design and sequential milestones.
 

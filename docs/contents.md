@@ -114,7 +114,7 @@
   substrate](adr-007-rust-rewrite-materialization-substrate.md) defines a
   bounded comparative spike between ast-grep and `ra_ap_syntax::SyntaxEditor`,
   with source-fidelity gates and an evidence-based backend selection rule.
-- [Architectural decision record (ADR) 007: OrthoConfig CLI boundary](adr-007-ortho-config-cli-boundary.md)
+- [Architectural decision record (ADR) 008: OrthoConfig CLI boundary](adr-008-ortho-config-cli-boundary.md)
   records the configuration sources, compatibility bridge, and application
   boundary for the planned CLI.
 - [Architectural decision record (ADR) 009: verified Clippy snapshot for the
