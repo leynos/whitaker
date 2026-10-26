@@ -311,7 +311,7 @@ environment variables, and TOML configuration, including subcommand helpers and
 comma-separated environment values.
 
 The application configuration boundary is specified by
-[ADR 007](adr-007-ortho-config-cli-boundary.md). Roadmap item 3.6.3 introduces
+[ADR 008](adr-008-ortho-config-cli-boundary.md). Roadmap item 3.6.3 introduces
 a configuration-only `whitaker-cli` package; later items add command execution
 and the shared presentation flags. The package owns OrthoConfig DTOs, source
 selection, compatibility notices, and conversion to validated settings. Domain
@@ -334,14 +334,17 @@ offline mode, forwarded Cargo arguments and one-run controls remain CLI-only.
 Named profiles and Cargo external-subcommand invocation are not offered.
 
 For one release, discovery falls back to `dylint.toml` only when no canonical
-file is selected or found, and `DYLINT_LOCALE` falls back below
-`WHITAKER_DIAGNOSTICS_LOCALE`. Each legacy path returns a deprecation notice
-naming its replacement. The application boundary presents notices and errors;
-configuration libraries do not print or terminate the process. Help and parse
-failures use the same localized parse path, with `en-GB` as the fallback. The
-existing `WHITAKER_NO_SOURCE_FALLBACK` environment control and
-`--no-source-fallback` flag map to the inverse of
-`install.allow_build_from_source`.
+file is selected or found. Its root `locale` maps to `diagnostics.locale`;
+known lint tables are preserved and unrelated Dylint tables are tolerated.
+`DYLINT_LOCALE` falls back below `WHITAKER_DIAGNOSTICS_LOCALE`. Each legacy
+path returns a deprecation notice naming its replacement. The application
+boundary presents notices and errors; configuration libraries do not print or
+terminate the process. Help and parse failures use the same localized parse
+path, with `en-GB` as the fallback. The existing `WHITAKER_NO_SOURCE_FALLBACK`
+environment control and `--no-source-fallback` flag map to the inverse of
+`install.allow_build_from_source`. An enabled environment control sets that
+field to false; a disabled value leaves any file setting in place. Empty, `0`,
+and `false` values use the installer’s existing interpretation.
 
 The canonical configuration should look like this:
 
