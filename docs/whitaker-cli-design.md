@@ -310,6 +310,35 @@ crate.[^4] That gives Whitaker a consistent model for merging CLI flags,
 environment variables, and TOML configuration, including subcommand helpers and
 comma-separated environment values.
 
+The application configuration boundary is specified by
+[ADR 007](adr-007-ortho-config-cli-boundary.md). Roadmap item 3.6.3 introduces
+a configuration-only `whitaker-cli` package; later items add command execution
+and the shared presentation flags. The package owns OrthoConfig DTOs, source
+selection, compatibility notices, and conversion to validated settings. Domain
+and reusable library crates do not depend on OrthoConfig.
+
+The package targets Rust 1.89.0, while the Dylint and `rustc` private crates
+retain their separately pinned nightly. It enables OrthoConfig v0.10.0's
+default features. Configuration is TOML, with `whitaker.toml` and the hidden
+project form `.whitaker.toml` discovered in system, user, and project scopes.
+An explicit `--config` or `WHITAKER_CONFIG` selects a file. A missing optional
+file is distinct from an unreadable, malformed, or explicitly missing file.
+
+Precedence is defaults, selected file layers, legacy environment aliases,
+`WHITAKER_*` environment values, then explicit CLI values. Clap defaults for
+configurable fields remain below files and environment through
+`cli_default_as_absent`. Command-specific configuration uses `[cmds.<name>]` and
+`WHITAKER_CMDS_<NAME>_*`. Help, version, the file selector, verbosity, JSON,
+offline mode, forwarded Cargo arguments and one-run controls remain CLI-only.
+Named profiles and Cargo external-subcommand invocation are not offered.
+
+For one release, discovery falls back to `dylint.toml` only when no canonical
+file is selected or found, and `DYLINT_LOCALE` falls back below
+`WHITAKER_DIAGNOSTICS_LOCALE`. Each legacy path returns a deprecation notice
+naming its replacement. The application boundary presents notices and errors;
+configuration libraries do not print or terminate the process. Help and parse
+failures use the same localized parse path, with `en-GB` as the fallback.
+
 The canonical configuration should look like this:
 
 ```toml
