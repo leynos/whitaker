@@ -55,7 +55,7 @@ installer CLI test suite must pass without edits to its tests or snapshots.
 - Do not merge or publish a release. Push the completed candidate and create a
   draft PR after all required checks and requested CodeRabbit reviews pass.
 
-## Proposed configuration decision
+## Configuration decision
 
 This section records the design for implementation. Before adding code, record
 the decision in `docs/whitaker-cli-design.md` and a new ADR, then update
