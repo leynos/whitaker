@@ -1,0 +1,55 @@
+[package]
+name = "string_continuation_style"
+version = "0.2.7"
+edition = "2024"
+publish = false
+description = "Dylint lint for Rust string-literal continuation style"
+license = "MIT OR Apache-2.0"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = []
+dylint-driver = [
+    "dep:dylint_linting",
+    "dep:fluent-templates",
+    "dep:log",
+    "dep:rustc_ast",
+    "dep:rustc_lint",
+    "dep:rustc_session",
+    "dep:rustc_span",
+    "dep:serde",
+    "dep:whitaker-common",
+    "dep:whitaker",
+    "dep:whitaker_string_literals",
+]
+constituent = ["dylint-driver", "dylint_linting/constituent"]
+
+[dependencies]
+dylint_linting = { workspace = true, optional = true }
+fluent-templates = { workspace = true, optional = true }
+log = { workspace = true, optional = true }
+rustc_ast = { workspace = true, optional = true }
+rustc_lint = { workspace = true, optional = true }
+rustc_session = { workspace = true, optional = true }
+rustc_span = { workspace = true, optional = true }
+serde = { workspace = true, optional = true }
+whitaker-common = { workspace = true, optional = true }
+whitaker = { workspace = true, features = ["dylint-driver"], optional = true }
+whitaker_string_literals = { path = "../whitaker_string_literals", optional = true }
+
+[dev-dependencies]
+camino = { workspace = true }
+dylint_testing = { workspace = true }
+googletest = { workspace = true }
+pretty_assertions = { workspace = true }
+rstest = { workspace = true }
+serial_test = { workspace = true }
+tempfile = { workspace = true }
+whitaker-common = { workspace = true }
+whitaker = { workspace = true }
+whitaker_test_macros = { workspace = true }
+
+[lints]
+workspace = true

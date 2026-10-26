@@ -1,21 +1,21 @@
 # Implement `string_continuation_style` as a post-expansion early lint
 
-This ExecPlan (execution plan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & discoveries`,
-`Decision log`, `Outcomes & retrospective`, `Conformance basis`, and
-`Verification plan` must be kept up to date as work proceeds.
+This ExecPlan (execution plan) is a living document. The sections `Constraints`,
+`Tolerances`, `Risks`, `Progress`, `Surprises & discoveries`, `Decision log`,
+`Outcomes & retrospective`, `Conformance basis`, and `Verification plan` must
+be kept up to date as work proceeds.
 
 Status: APPROVED. The plan is approved as a whole. The three decisions that
-were open at first review have been answered and are now settled:
-`DEC-009` (scope) is approved, `DEC-013` (manual applicability for the first
-release) is approved, and `DEC-014` resolves to a single lint name.
+were open at first review have been answered and are now settled: `DEC-009`
+(scope) is approved, `DEC-013` (manual applicability for the first release) is
+approved, and `DEC-014` resolves to a single lint name.
 
 ## Purpose / big picture
 
 Whitaker's house style says a long string literal should be spelled with
 `concat!()` rather than an escaped newline continuation. Reviewers keep
-applying that rule by hand, and they keep getting it wrong: some
-continuations cannot be replaced without changing what the program does.
+applying that rule by hand, and they keep getting it wrong: some continuations
+cannot be replaced without changing what the program does.
 
 After this change, a Rust author who writes
 
@@ -63,18 +63,17 @@ Hard invariants. Violating one requires escalation, not a workaround.
   acceptable margin here.
 - **Never emit a suggestion that has not been checked at run time.** Before
   attaching any applicability above `MaybeIncorrect`, the lint must itself
-  compare the original literal's evaluated bytes against the replacement's.
-  On mismatch it emits nothing. See `LEM-EMIT-1`.
+  compare the original literal's evaluated bytes against the replacement's. On
+  mismatch it emits nothing. See `LEM-EMIT-1`.
 - **Near-zero false positives.** When the lint cannot prove safety it must be
   silent. Prefer `Ignore`/`RequireContinuation` over a speculative diagnostic.
 - **The adapter never panics.** A panicking `EarlyLintPass` aborts the user's
   build with an internal-compiler-error-shaped message that looks like a
   compiler bug. Every fallible recovery maps to a `RequireContinuation` or
-  `Ignore` disposition. No `#[expect]` of a panic-class lint
-  (`unwrap_used`, `expect_used`, `indexing_slicing`, `string_slice`,
-  `panic_in_result_fn`, `unreachable`) is permitted anywhere in either new
-  crate. All offset arithmetic uses `checked_*`; `None` means
-  `UnrecoverableSourceSpan`.
+  `Ignore` disposition. No `#[expect]` of a panic-class lint (`unwrap_used`,
+  `expect_used`, `indexing_slicing`, `string_slice`, `panic_in_result_fn`,
+  `unreachable`) is permitted anywhere in either new crate. All offset
+  arithmetic uses `checked_*`; `None` means `UnrecoverableSourceSpan`.
 - **No macro-argument surgery.** The lint must not add explicit format
   arguments (`status_line = status_line`) to unlock a rewrite. See RFC 0002
   §Non-goals.
@@ -83,15 +82,15 @@ Hard invariants. Violating one requires escalation, not a workaround.
 - **British English.** Comments and documentation use en-GB-oxendict spelling,
   except where quoting an external API.
 - **Domain purity.** The pure scanning, classification, and
-  rewrite-construction logic lives in a crate that has no `rustc_*`
-  dependency at all. See `DEC-010`.
+  rewrite-construction logic lives in a crate that has no `rustc_*` dependency
+  at all. See `DEC-010`.
 - **No changes to existing lints' behaviour.** This plan adds a lint; it must
   not alter the diagnostics of the nine existing standard lints. The one
   exception is `bumpy_road_function`, which migrates onto the shared label
   helper of `DEC-012` with identical output, pinned by its existing fixtures.
 - **Suite structure.** Do not force an early pass into
-  `rustc_lint::late_lint_methods!`/`declare_combined_late_lint_pass!`.
-  Register it separately (RFC 0002 §Suite integration).
+  `rustc_lint::late_lint_methods!`/`declare_combined_late_lint_pass!`. Register
+  it separately (RFC 0002 §Suite integration).
 - **Toolchain.** `rust-toolchain.toml` pins `nightly-2026-05-28`. Do not bump
   it.
 
@@ -105,8 +104,8 @@ Hard invariants. Violating one requires escalation, not a workaround.
 - **Dependencies.** Four changes are pre-authorized (`DEC-006`): add
   `googletest`, add `pretty_assertions`, promote `serial_test`, and add
   `log`/`tracing` dev-dependency edges to workspace pins that already exist.
-  Any other dependency: stop and escalate. Note that `rustc_lexer` is already
-  a workspace dependency and needs no authorization (`SURP-011`).
+  Any other dependency: stop and escalate. Note that `rustc_lexer` is already a
+  workspace dependency and needs no authorization (`SURP-011`).
 - **Public interface.** `whitaker-common` gains two additive functions
   (`DEC-012`). Any non-additive change to its public API: stop and escalate.
 - **Time.** If any milestone exceeds two working days, stop and escalate with
@@ -119,13 +118,14 @@ Hard invariants. Violating one requires escalation, not a workaround.
   meaningful bound after one working day, stop and escalate. Verus: if
   `LEM-REWRITE-1` is not discharged after one working day, stop and escalate
   with the open goals — do not weaken the lemma. (Both figures are calibrated
-  against `docs/execplans/7-2-7-kani-verification-of-bounded-min-hasher-sketch-invariants.md`,
+  against
+  `docs/execplans/7-2-7-kani-verification-of-bounded-min-hasher-sketch-invariants.md`,
   which records two days for a comparable obligation.)
 - **Test wall-clock.** `make test` wall-clock is measured before Step 1 and
   recorded as `EV-BASELINE`. If it grows by more than 40 per cent, stop and
-  escalate with the measurement; the likely response is to move this crate
-  into its own CI job, as the Makefile already does for three other lint
-  crates via `TEST_EXCLUDES`.
+  escalate with the measurement; the likely response is to move this crate into
+  its own CI job, as the Makefile already does for three other lint crates via
+  `TEST_EXCLUDES`.
 - **Iterations.** If a UI fixture's `.stderr` cannot be made stable after 4
   attempts, stop and escalate; unstable diagnostic output usually means the
   span recovery is wrong, not that the fixture needs another nudge.
@@ -135,82 +135,75 @@ Hard invariants. Violating one requires escalation, not a workaround.
 ## Risks
 
 - **Risk: a literal captured by a `$l:literal` macro matcher looks
-  root-context and is not.**
-  Severity: high. Likelihood: high.
-  This is the soundness hole `SURP-012` documents. It is the reason
-  `DEC-002` adopts a wrapper-depth gate rather than RFC 0002's
-  root-syntax-context test.
+  root-context and is not.** Severity: high. Likelihood: high. This is the
+  soundness hole `SURP-012` documents. It is the reason `DEC-002` adopts a
+  wrapper-depth gate rather than RFC 0002's root-syntax-context test.
   Mitigation: the depth counter, plus `NV-DEPTH-1`, plus a
   `pass_literal_macro_capture` fixture that must be silent and whose
   gate-inversion control must make it fire.
 
 - **Risk: wrapper-depth accounting misses an abstract-syntax-tree node kind.**
-  Severity: high. Likelihood: medium.
-  The counter must be maintained across every node kind that can contain an
-  expression. Miss one and an expanded literal slips through with a
-  suggestion. This is the one part of the design that is not pure-domain, so
-  `proptest`, Kani, and Verus cannot reach it.
+  Severity: high. Likelihood: medium. The counter must be maintained across
+  every node kind that can contain an expression. Miss one and an expanded
+  literal slips through with a suggestion. This is the one part of the design
+  that is not pure-domain, so `proptest`, Kani, and Verus cannot reach it.
   Mitigation: `LEM-DEPTH-1` enumerates the enclosing node kinds and pairs each
   with a fixture; the run-time value gate of `LEM-EMIT-1` catches the
   consequence even when the cause slips through; the release applicability
   default of `DEC-013` means the first release cannot write to source.
 
 - **Risk: the suggestion applies incorrectly under `cargo fix`.**
-  Severity: high. Likelihood: low after mitigation.
-  Mitigation: three independent layers. First, `LEM-EMIT-1`'s run-time value
-  comparison inside the lint. Second, `// run-rustfix` fixtures that apply the
-  suggestion, diff it against a checked-in `.fixed` file, recompile the result,
-  and require it to produce no diagnostics (`SURP-014`). Third,
-  `DEC-013`'s configuration default, which withholds `MachineApplicable`
-  entirely in the first release.
+  Severity: high. Likelihood: low after mitigation. Mitigation: three
+  independent layers. First, `LEM-EMIT-1`'s run-time value comparison inside
+  the lint. Second, `// run-rustfix` fixtures that apply the suggestion, diff
+  it against a checked-in `.fixed` file, recompile the result, and require it
+  to produce no diagnostics (`SURP-014`). Third, `DEC-013`'s configuration
+  default, which withholds `MachineApplicable` entirely in the first release.
 
 - **Risk: release builds have overflow checks off; tests have them on.**
-  Severity: high. Likelihood: medium.
-  `installer/src/builder.rs:87` builds lint libraries with `--release`, and
-  the workspace declares no `[profile.release]`, so `overflow-checks = false`.
-  UI tests build with a plain `cargo build`, so checks are on. For a lint whose
-  correctness is byte-offset arithmetic, a subtraction underflow panics in
-  tests and wraps silently in the shipped artefact.
-  Mitigation: `checked_*` arithmetic everywhere (a Constraint),
-  `arithmetic_side_effects = "deny"` for both new crates, and
+  Severity: high. Likelihood: medium. `installer/src/builder.rs:87` builds lint
+  libraries with `--release`, and the workspace declares no
+  `[profile.release]`, so `overflow-checks = false`. UI tests build with a plain
+  `cargo build`, so checks are on. For a lint whose correctness is byte-offset
+  arithmetic, a subtraction underflow panics in tests and wraps silently in the
+  shipped artefact. Mitigation: `checked_*` arithmetic everywhere (a
+  Constraint), `arithmetic_side_effects = "deny"` for both new crates, and
   `overflow-checks = true` added to `[profile.release]`.
 
 - **Risk: the Kani harness is intractable.**
-  Severity: medium. Likelihood: medium.
-  A symbolic-length heap container driven through a nested loop is the exact
-  shape that stalled the clone-detector proofs.
-  Mitigation: start at a body length of 5 over a three-symbol alphabet, use a
-  fixed-capacity `cfg(kani)` sink instead of a `Vec`, derive the unwind bound
-  from that capacity with a `const` assertion, and keep `INV-SCAN-2` out of the
-  Kani harness (proptest covers it). Escalation budget is in `Tolerances`.
+  Severity: medium. Likelihood: medium. A symbolic-length heap container driven
+  through a nested loop is the exact shape that stalled the clone-detector
+  proofs. Mitigation: start at a body length of 5 over a three-symbol alphabet,
+  use a fixed-capacity `cfg(kani)` sink instead of a `Vec`, derive the unwind
+  bound from that capacity with a `const` assertion, and keep `INV-SCAN-2` out
+  of the Kani harness (proptest covers it). Escalation budget is in
+  `Tolerances`.
 
 - **Risk: Verus proof drifts from the production scanner.**
-  Severity: medium. Likelihood: medium.
-  `LEM-REWRITE-1` reasons about `Seq<u8>`, which cannot be `#[path]`-included
-  from a `&str`-based production module, so it is a spec mirror.
-  Mitigation: state the trust boundary in the proof's module doc comment, as
-  `docs/developers-guide.md` §Verus scope and trust boundary requires; add the
-  proof to a CI job (`DEC-011`) so it cannot rot silently; and note that
-  `LEM-REWRITE-2` and `LEM-EMIT-1`, which are what actually protect users, are
-  discharged against real compiler behaviour rather than against the mirror.
+  Severity: medium. Likelihood: medium. `LEM-REWRITE-1` reasons about
+  `Seq<u8>`, which cannot be `#[path]`-included from a `&str`-based production
+  module, so it is a spec mirror. Mitigation: state the trust boundary in the
+  proof's module doc comment, as `docs/developers-guide.md` §Verus scope and
+  trust boundary requires; add the proof to a CI job (`DEC-011`) so it cannot
+  rot silently; and note that `LEM-REWRITE-2` and `LEM-EMIT-1`, which are what
+  actually protect users, are discharged against real compiler behaviour rather
+  than against the mirror.
 
 - **Risk: the user cannot silence a correct-but-unwanted finding.**
-  Severity: medium. Likelihood: medium.
-  A build script that writes a generated file containing wrapped literals
-  produces warnings on a file the user does not own and cannot annotate.
-  Mitigation: `DEC-013`'s configuration table ships in the first release, with
-  `excluded_crates`, `excluded_paths`, and an unconditional skip for literals
-  whose source file lies outside the workspace root or under the target
-  directory.
+  Severity: medium. Likelihood: medium. A build script that writes a generated
+  file containing wrapped literals produces warnings on a file the user does
+  not own and cannot annotate. Mitigation: `DEC-013`'s configuration table
+  ships in the first release, with `excluded_crates`, `excluded_paths`, and an
+  unconditional skip for literals whose source file lies outside the workspace
+  root or under the target directory.
 
 - **Risk: the fixture matrix doubles the serialized test critical path.**
-  Severity: medium. Likelihood: high without mitigation.
-  Every dylint UI test runs in the `serial-dylint-ui` nextest group at
-  `max-threads = 1` with a 10-minute `terminate-after`.
-  Mitigation: `DEC-009` removes 14 fixtures from this plan; `EV-BASELINE` makes
-  the growth measurable; a crate-specific `slow-timeout` override is in the
-  Step 5 edit list; and the `Tolerances` entry names moving the crate into its
-  own CI job as the prepared response.
+  Severity: medium. Likelihood: high without mitigation. Every dylint UI test
+  runs in the `serial-dylint-ui` nextest group at `max-threads = 1` with a
+  10-minute `terminate-after`. Mitigation: `DEC-009` removes 14 fixtures from
+  this plan; `EV-BASELINE` makes the growth measurable; a crate-specific
+  `slow-timeout` override is in the Step 5 edit list; and the `Tolerances`
+  entry names moving the crate into its own CI job as the prepared response.
 
 ## Progress
 
@@ -237,6 +230,17 @@ Hard invariants. Violating one requires escalation, not a workaround.
 - [x] (2026-10-18) EP-M0a: expansion-shape probe. `EV-M0-transcript` recorded;
       `SURP-012` reproduced in the identifier-control form, so `DEC-002`'s
       depth gate proceeds unchanged. One refinement recorded as `SURP-017`.
+- [x] (2026-10-26) Rebase and post-rebase validation completed. The target
+      remained at `afb1e4ac`; the series needed no replay changes. All requested
+      gates passed after the `EV-REBASE-VALIDATION` resource-recovery rerun, and
+      the branch was pushed with an exact lease.
+- [ ] (2026-10-26) Step 2: both crate skeletons and the pure-crate package-list
+      entry are in place; metadata resolved. The pure crate check passed twice.
+      The adapter check first exposed its missing `LintPass` supertrait; the
+      generated implementation then required a narrowly scoped `missing_docs`
+      expectation. That expectation is now isolated around the macro glue, and
+      a fresh sequential gate run is pending (`EV-STEP2-SCAFFOLD`).
+- [ ] Step 2: scaffold both crates (in progress).
 - [ ] EP-M1: pure domain crate.
 - [ ] EP-M2: plain cooked string literals.
 - [ ] EP-M3: source-authored format strings from compiler built-ins.
@@ -256,54 +260,49 @@ Note that this is the `rustc-src` component, not the `rust-src` component at
   `rustc_ast::FormatArgs::is_source_literal` is computed by
   `rustc_parse_format::Parser::new`, which compares the recovered source
   snippet against the parsed input and returns `false` when a proc macro has
-  respanned the literal (the fix for rust-lang/rust#114865).
-  Evidence: `rustc_parse_format/src/lib.rs:302-345`;
-  `rustc_builtin_macros/src/format.rs:290`.
-  Impact: RFC 0002 §Format strings steps 3 and 4 are largely discharged by
-  checking this one flag.
+  respanned the literal (the fix for rust-lang/rust#114865). Evidence:
+  `rustc_parse_format/src/lib.rs:302-345`;
+  `rustc_builtin_macros/src/format.rs:290`. Impact: RFC 0002 §Format strings
+  steps 3 and 4 are largely discharged by checking this one flag.
 
 - **SURP-002: `FormatArgs::span` is the format-string literal token's span.**
   `make_format_args` constructs `FormatArgs { span: fmt_span, .. }` where
   `fmt_span` comes from `expr_to_spanned_string`, which returns `expr.span` of
-  the fully-expanded format-string expression — the literal token including
-  its quotes when `is_source_literal` holds. `Span::from_inner(InnerSpan)` maps
-  a byte offset within that token to a source span.
-  Evidence: `rustc_builtin_macros/src/format.rs:170-181, 675-681`;
+  the fully-expanded format-string expression — the literal token including its
+  quotes when `is_source_literal` holds. `Span::from_inner(InnerSpan)` maps a
+  byte offset within that token to a source span. Evidence:
+  `rustc_builtin_macros/src/format.rs:170-181, 675-681`;
   `rustc_builtin_macros/src/util.rs:61-101`; `rustc_span/src/lib.rs:1256`.
   Impact: no bespoke span arithmetic over the enclosing macro call is needed.
   See also `SURP-013`, which draws a further consequence.
 
 - **SURP-003: `uncooked_fmt_str` carries the raw source body and is not
-  newline-appended.**
-  The `Symbol` in `FormatArgs::uncooked_fmt_str: (token::LitKind, Symbol)` is
+  newline-appended.** The `Symbol` in
+  `FormatArgs::uncooked_fmt_str: (token::LitKind, Symbol)` is
   `token_lit.symbol` — the raw, unescaped source text between the quotes.
   `println!`-family macros append `\n` to the cooked symbol (`fmt.symbol`) but
-  leave `uncooked_symbol` untouched.
-  Evidence: `rustc_ast/src/format.rs:44-59`;
+  leave `uncooked_symbol` untouched. Evidence: `rustc_ast/src/format.rs:44-59`;
   `rustc_builtin_macros/src/util.rs:61-101`;
-  `rustc_builtin_macros/src/format.rs:190-192`.
-  Impact: the scanner's input is `uncooked_fmt_str.1.as_str()` for format
-  strings and `token::Lit::symbol` for plain literals. The `token::LitKind`
-  discriminant is the cooked-versus-raw and type discriminator RFC 0002
-  §Decision matrix needs.
+  `rustc_builtin_macros/src/format.rs:190-192`. Impact: the scanner's input is
+  `uncooked_fmt_str.1.as_str()` for format strings and `token::Lit::symbol` for
+  plain literals. The `token::LitKind` discriminant is the cooked-versus-raw
+  and type discriminator RFC 0002 §Decision matrix needs.
 
 - **SURP-004: `EarlyContext` implements `LintContext`; `Diag::span_suggestion`
-  exists.**
-  Evidence: `rustc_lint/src/context.rs:619`;
-  `rustc_errors/src/diagnostic.rs:918`.
-  Impact: the diagnostic path mirrors `bumpy_road_function`'s
+  exists.** Evidence: `rustc_lint/src/context.rs:619`;
+  `rustc_errors/src/diagnostic.rs:918`. Impact: the diagnostic path mirrors
+  `bumpy_road_function`'s
   `cx.emit_span_lint(LINT, span, DiagDecorator(|lint| { ... }))`, adding
   `lint.span_suggestion(...)`.
 
 - **SURP-005: `register_early_pass` exists, and the factory runs once per
-  crate.**
-  `register_early_pass` takes `impl Fn() -> EarlyLintPassObject`
+  crate.** `register_early_pass` takes `impl Fn() -> EarlyLintPassObject`
   (`rustc_lint/src/context.rs:168`). The only site that instantiates
   `early_passes` is `rustc_interface/src/passes.rs:469`, inside the
   `early_lint_checks` query, called once per crate; the pre-expansion site at
-  `passes.rs:97` uses the separate `pre_expansion_passes` list.
-  Impact: per-crate state in the pass is sound *today*. `SURP-015` records why
-  the plan does not rely on that.
+  `passes.rs:97` uses the separate `pre_expansion_passes` list. Impact:
+  per-crate state in the pass is sound *today*. `SURP-015` records why the plan
+  does not rely on that.
 
 - **SURP-006: `EarlyContext` has no `TyCtxt`.**
   `ExpnData` gives `kind: ExpnKind::Macro(MacroKind, Symbol)`,
@@ -312,59 +311,54 @@ Note that this is the `rustc-src` component, not the `rust-src` component at
   `DefId` into a crate name or definition path needs `TyCtxt`, which
   `EarlyContext` does not hold. Early lints do run inside a query
   (`rustc_interface/src/passes.rs:400`), so a `TyCtxt` exists on the thread,
-  reachable through `rustc_middle::ty::tls`.
-  Impact: this drove the first draft's open architecture question. `DEC-002`
-  now closes it without needing `TyCtxt` at all.
+  reachable through `rustc_middle::ty::tls`. Impact: this drove the first
+  draft's open architecture question. `DEC-002` now closes it without needing
+  `TyCtxt` at all.
 
 - **SURP-007: rustc normalizes CRLF out of source before lexing.**
-  `normalize_src` calls `normalize_newlines` (`rustc_span/src/lib.rs:2510-2528`),
-  so every literal `Symbol` and every `span_to_snippet` result contains LF
-  only.
-  Impact: RFC 0002 §Continuation scanner's CRLF branch is unreachable from the
-  rustc adapter. See `DEC-004` and `SURP-016`.
+  `normalize_src` calls `normalize_newlines`
+  (`rustc_span/src/lib.rs:2510-2528`), so every literal `Symbol` and every
+  `span_to_snippet` result contains LF only. Impact: RFC 0002 §Continuation
+  scanner's CRLF branch is unreachable from the rustc adapter. See `DEC-004` and
+  `SURP-016`.
 
 - **SURP-008: `googletest` and `pretty_assertions` are not yet dependencies,
-  and `serial_test` is pinned per-crate.**
-  Neither appears in any manifest. `serial_test = "4.0.1"` is pinned
-  identically in four crates: `conditional_max_n_branches`,
-  `function_attrs_follow_docs`, `module_must_have_inner_docs`, and
-  `no_std_fs_operations`.
-  Impact: see `DEC-006`.
+  and `serial_test` is pinned per-crate.** Neither appears in any manifest.
+  `serial_test = "4.0.1"` is pinned identically in four crates:
+  `conditional_max_n_branches`, `function_attrs_follow_docs`,
+  `module_must_have_inner_docs`, and `no_std_fs_operations`. Impact: see
+  `DEC-006`.
 
 - **SURP-009: `rustc-literal-escaper` is already in `Cargo.lock`, and
-  `ra_ap_syntax` re-exports it.**
-  Version 0.0.4 is present transitively;
+  `ra_ap_syntax` re-exports it.** Version 0.0.4 is present transitively;
   `ra_ap_syntax-0.0.334/src/lib.rs:65` has
-  `pub use rustc_literal_escaper as unescape;`.
-  Impact: `DEC-007` originally proposed adding it as a direct oracle
-  dependency. That decision is now withdrawn — see `SURP-014`.
+  `pub use rustc_literal_escaper as unescape;`. Impact: `DEC-007` originally
+  proposed adding it as a direct oracle dependency. That decision is now
+  withdrawn — see `SURP-014`.
 
 - **SURP-010: `log 0.4.33`'s facade macros capture `$($arg:tt)+`, and have
-  grown a `logger:` control.**
-  `log::info!` matches
+  grown a `logger:` control.** `log::info!` matches
   `(logger: $logger:expr, target: $target:expr, $($arg:tt)+)`,
-  `(target: $target:expr, $($arg:tt)+)`,
-  `(logger: $logger:expr, $($arg:tt)+)`, and `($($arg:tt)+)`, forwarding to
-  `log!` and then `__log!`; key-value fields are separated from the message
-  by `;`. Evidence: `~/.cargo/registry/src/*/log-0.4.33/src/macros.rs:75-115,
-  252-270`.
-  Impact: RFC 0002's `log` allowlist is already stale, roughly one year after
-  it was written, over a single new control. That is the empirical basis for
-  `DEC-009`.
+  `(target: $target:expr, $($arg:tt)+)`, `(logger: $logger:expr, $($arg:tt)+)`,
+  and `($($arg:tt)+)`, forwarding to `log!` and then `__log!`; key-value fields
+  are separated from the message by `;`. Evidence:
+  `~/.cargo/registry/src/*/log-0.4.33/src/macros.rs:75-115, 252-270`. Impact:
+  RFC 0002's `log` allowlist is already stale, roughly one year after it was
+  written, over a single new control. That is the empirical basis for `DEC-009`.
 
 - **SURP-011: `rustc_lexer` is already a workspace dependency and is pure.**
   `Cargo.toml:44` pins `rustc_lexer = "0.1.0"`, the crates.io mirror, used by
   `crates/whitaker_clones_core` (see `src/token/normalize.rs`). It needs no
-  `rustc_private` plumbing and it vendors an `unescape` module.
-  Impact: the re-lex check that `LEM-APPLY-1` needs, and the unescaper that
-  `LEM-EMIT-1` needs, are both available inside a pure crate at zero
-  dependency cost. The first draft treated the lexer as an unmet need and the
-  escaper as requiring approval; both were wrong.
+  `rustc_private` plumbing and it vendors an `unescape` module. Impact: the
+  re-lex check that `LEM-APPLY-1` needs, and the unescaper that `LEM-EMIT-1`
+  needs, are both available inside a pure crate at zero dependency cost. The
+  first draft treated the lexer as an unmet need and the escaper as requiring
+  approval; both were wrong.
 
 - **SURP-012: root syntax context does not prove the literal is unwrapped.**
-  In `rustc_expand/src/mbe/transcribe.rs`, `maybe_use_metavar_location`
-  returns either the original token or one respanned with the call-site
-  context. Either way a `$l:literal`-captured token reaches `check_expr` with
+  In `rustc_expand/src/mbe/transcribe.rs`, `maybe_use_metavar_location` returns
+  either the original token or one respanned with the call-site context. Either
+  way a `$l:literal`-captured token reaches `check_expr` with
   `span.ctxt().is_root() == true`. So for
 
   ```rust
@@ -376,107 +370,101 @@ Note that this is the `rustc-src` component, not the `rust-src` component at
   every gate in RFC 0002 §Ordinary string expressions passes, and the lint
   would emit a machine-applicable suggestion that does not compile — the exact
   failure the Constraints forbid. The *container* of the substituted literal
-  does carry the macro definition's marked context
-  (`Marker::mark_span`, `transcribe.rs:92-103`), so tracking enclosing
-  expanded nodes is the discriminator that `is_root()` is not.
-  `EarlyLintPass` provides the needed hooks: `check_expr`/`check_expr_post`,
-  `check_item`/`check_item_post`, `check_stmt`, and `check_mac_def`
-  (`rustc_lint/src/passes.rs:143-172`).
+  does carry the macro definition's marked context (`Marker::mark_span`,
+  `transcribe.rs:92-103`), so tracking enclosing expanded nodes is the
+  discriminator that `is_root()` is not. `EarlyLintPass` provides the needed
+  hooks: `check_expr`/`check_expr_post`, `check_item`/`check_item_post`,
+  `check_stmt`, and `check_mac_def` (`rustc_lint/src/passes.rs:143-172`).
   Impact: this is a soundness defect in RFC 0002, not in the plan's reading of
   it. It drives `DEC-002` and requires an RFC amendment.
 
 - **SURP-013: `SURP-002` deletes half of RFC 0002's allowlist specification.**
-  RFC 0002 §Detection architecture asks the lint to "parse the
-  source-authored token tree and prove that the selected literal occupies the
-  stated position" — argument 0 for `format!`, 1 for `write!`, 2 for
-  `assert_eq!`. Since `FormatArgs::span` *is* the format-string literal token's
-  span, there is nothing to count and no token tree to parse. RFC 0002
-  §Non-goals separately forbids "inspecting arbitrary macro token trees whose
-  grammar Whitaker cannot prove", so the RFC contradicts itself here.
-  Impact: the position-proving machinery is dropped. Only the question "is the
-  enclosing macro one whose matcher accepts an expression here" remains, and
-  for compiler built-ins there is no macro-by-example matcher to break —
-  `format_args!` parses an expression, and `write!`/`writeln!` forward through
-  `$($arg:tt)*`.
+  RFC 0002 §Detection architecture asks the lint to "parse the source-authored
+  token tree and prove that the selected literal occupies the stated position"
+  — argument 0 for `format!`, 1 for `write!`, 2 for `assert_eq!`. Since
+  `FormatArgs::span` *is* the format-string literal token's span, there is
+  nothing to count and no token tree to parse. RFC 0002 §Non-goals separately
+  forbids "inspecting arbitrary macro token trees whose grammar Whitaker cannot
+  prove", so the RFC contradicts itself here. Impact: the position-proving
+  machinery is dropped. Only the question "is the enclosing macro one whose
+  matcher accepts an expression here" remains, and for compiler built-ins there
+  is no macro-by-example matcher to break — `format_args!` parses an
+  expression, and `write!`/`writeln!` forward through `$($arg:tt)*`.
 
 - **SURP-014: `compiletest_rs` supports `// run-rustfix`, and
   `dylint_testing` does not support `TRYBUILD=overwrite`.**
   `dylint_testing 6.0.4` depends on `compiletest_rs 0.11.2`, not `trybuild`
   (`Cargo.lock:784-799`), and builds a `compiletest::Config` with
   `..Config::default()`, so `bless` is always `false`. The documented way to
-  update a `.stderr` is to read the "Actual stderr saved to PATH" line from
-  the report and copy that file
-  (`~/.cargo/registry/src/*/dylint_testing-6.0.4/src/lib.rs:90-92`).
-  Far more valuable: `compiletest_rs` in `Mode::Ui` honours a `// run-rustfix`
-  header. When present it applies the machine-applicable suggestions with
-  `rustfix`, diffs the result against a checked-in `.fixed` file, **compiles
-  the fixed code**, and fails if it either does not compile or still produces
-  diagnostics (`compiletest_rs-0.11.2/src/runtest.rs:2627-2645`).
-  Impact: three things the first draft treated as unsolved come free. Applying
-  the fix is verified. Recompiling it is verified. Idempotence — the fixed code
-  producing no further diagnostics — is verified. And because the fixed code is
-  *compiled*, a `const _: () = assert!(...)` inside the `.fixed` file makes
-  **rustc itself** the value-preservation oracle, with no dependency and no
-  shared lineage with our own unescaper. This is why `DEC-007` is withdrawn.
+  update a `.stderr` is to read the "Actual stderr saved to PATH" line from the
+  report and copy that file
+  (`~/.cargo/registry/src/*/dylint_testing-6.0.4/src/lib.rs:90-92`). Far more
+  valuable: `compiletest_rs` in `Mode::Ui` honours a `// run-rustfix` header.
+  When present it applies the machine-applicable suggestions with `rustfix`,
+  diffs the result against a checked-in `.fixed` file, **compiles the fixed
+  code**, and fails if it either does not compile or still produces diagnostics
+  (`compiletest_rs-0.11.2/src/runtest.rs:2627-2645`). Impact: three things the
+  first draft treated as unsolved come free. Applying the fix is verified.
+  Recompiling it is verified. Idempotence — the fixed code producing no further
+  diagnostics — is verified. And because the fixed code is *compiled*, a
+  `const _: () = assert!(...)` inside the `.fixed` file makes **rustc itself**
+  the value-preservation oracle, with no dependency and no shared lineage with
+  our own unescaper. This is why `DEC-007` is withdrawn.
 
 - **SURP-015: dylint UI fixtures needing dev-dependencies live in `examples/`,
-  not `ui/`.**
-  `Makefile:14-19` states it: "`dylint_testing::Test::example` builds them with
-  each lint crate's dev-dependencies (tokio, rstest); `ui/` fixtures are
-  standalone and cannot carry those." `crates/no_unwrap_or_else_panic`,
-  `no_expect_outside_tests`, and `rstest_helper_should_be_fixture` all have
-  `examples/` directories driven through `Test::example` and one rstest case
-  per fixture, each spawning a cargo subprocess.
-  Impact: any fixture needing `log` or `tracing` in scope must live in
-  `examples/` and costs a cargo build, not a bare `rustc` invocation. It also
-  means a `tracing/log`-feature fixture cannot coexist with a
-  `tracing`-without-`log` fixture in one crate, because Cargo unifies
+  not `ui/`.** `Makefile:14-19` states it: "`dylint_testing::Test::example`
+  builds them with each lint crate's dev-dependencies (tokio, rstest); `ui/`
+  fixtures are standalone and cannot carry those."
+  `crates/no_unwrap_or_else_panic`, `no_expect_outside_tests`, and
+  `rstest_helper_should_be_fixture` all have `examples/` directories driven
+  through `Test::example` and one rstest case per fixture, each spawning a
+  cargo subprocess. Impact: any fixture needing `log` or `tracing` in scope
+  must live in `examples/` and costs a cargo build, not a bare `rustc`
+  invocation. It also means a `tracing/log`-feature fixture cannot coexist with
+  a `tracing`-without-`log` fixture in one crate, because Cargo unifies
   dev-dependency features. This is a further argument for `DEC-009`.
 
 - **SURP-016: the real continuation whitespace rule is not what RFC 0002
-  says.**
-  RFC 0002 §Continuation scanner specifies "spaces and tabs, plus complete LF
-  or CRLF sequences" and says a lone carriage return makes the span
+  says.** RFC 0002 §Continuation scanner specifies "spaces and tabs, plus
+  complete LF or CRLF sequences" and says a lone carriage return makes the span
   unrecoverable. Both escapers disagree.
   `rustc-literal-escaper-0.0.4/src/lib.rs:442-472` and the vendored
   `rustc_lexer-0.1.0/src/unescape.rs:260-267` both skip every byte in
   `{b' ', b'\t', b'\n', b'\r'}`, in any order, until the first byte outside
   that set. A bare carriage return is skipped, not rejected, and CRLF has no
   special status. The current escaper additionally excludes the formfeed
-  character (rust-lang/rust#136600) and warns on a skipped blank line and on
-  a following non-ASCII whitespace character.
-  Impact: `INV-SCAN-3` as first stated would have verified the scanner against
-  a wrong specification. The corrected rule is now normative, and RFC 0002
-  §Continuation scanner must be amended.
+  character (rust-lang/rust#136600) and warns on a skipped blank line and on a
+  following non-ASCII whitespace character. Impact: `INV-SCAN-3` as first
+  stated would have verified the scanner against a wrong specification. The
+  corrected rule is now normative, and RFC 0002 §Continuation scanner must be
+  amended.
 
 - **SURP-017: `-Zunpretty=expanded,hygiene` does not annotate string
-  literals, and a captured format string never reaches `FormatArgs`.**
-  Found at `EP-M0a`. The pretty-printer emits a syntax-context annotation
-  only for `Ident`, `NtIdent`, `Lifetime`, and `NtLifetime` tokens
-  (`rustc_ast_pretty/src/pprust/state.rs:748-775`); a `Lit` token prints
-  bare. The direct probe for "does a captured literal carry a root context?"
-  is therefore unavailable from that flag alone. The same expansion machinery
-  *is* observable with a captured identifier: `take_ident!(rootfn)` prints
-  `fn rootfn /* 2842#0 */`, while an identifier written in the macro body
-  prints `fn body_fn /* 2841#5 */`. A metavariable supplied at the call site
-  arrives with the root context; the macro's own tokens carry the mark. That
-  is exactly the asymmetry `SURP-012` predicts for literals, and it is why
-  the *container* is the only reliable discriminator. One consequence is
-  narrower than the first draft assumed: `format!("{}", capture_literal!(
-  "captured {} join"))` expands to `format_args!("{0}", "captured {} join")`
-  — a `$l:literal` used as a *format string* is not propagated into
-  `FormatArgs` at all, because the outer macro sees a metavariable and
-  `is_source_literal` is false. The wrapper-depth gate is therefore
-  mandatory for the plain `ExprKind::Lit` path (`EP-M2`); on `EP-M3`'s path
-  it is defence in depth. `DEC-002` stands unchanged.
-  Impact: `EV-M0-transcript` records the identifier probe in place of the
-  unavailable literal probe, and the toolchain-bump runbook in the
+  literals, and a captured format string never reaches `FormatArgs`.** Found at
+  `EP-M0a`. The pretty-printer emits a syntax-context annotation only for
+  `Ident`, `NtIdent`, `Lifetime`, and `NtLifetime` tokens
+  (`rustc_ast_pretty/src/pprust/state.rs:748-775`); a `Lit` token prints bare.
+  The direct probe for "does a captured literal carry a root context?" is
+  therefore unavailable from that flag alone. The same expansion machinery *is*
+  observable with a captured identifier: `take_ident!(rootfn)` prints
+  `fn rootfn /* 2842#0 */`, while an identifier written in the macro body prints
+  `fn body_fn /* 2841#5 */`. A metavariable supplied at the call site arrives
+  with the root context; the macro's own tokens carry the mark. That is exactly
+  the asymmetry `SURP-012` predicts for literals, and it is why the *container*
+  is the only reliable discriminator. One consequence is narrower than the
+  first draft assumed: `format!("{}", capture_literal!( "captured {} join"))`
+  expands to `format_args!("{0}", "captured {} join")` — a `$l:literal` used as
+  a *format string* is not propagated into `FormatArgs` at all, because the
+  outer macro sees a metavariable and `is_source_literal` is false. The
+  wrapper-depth gate is therefore mandatory for the plain `ExprKind::Lit` path
+  (`EP-M2`); on `EP-M3`'s path it is defence in depth. `DEC-002` stands
+  unchanged. Impact: `EV-M0-transcript` records the identifier probe in place
+  of the unavailable literal probe, and the toolchain-bump runbook in the
   developers guide names it.
 
 - **SURP-018: `EarlyLintPass` has no `check_stmt_post`, so `DEC-002`'s counter
-  cannot be written as stated.**
-  Found while reading the pinned toolchain's `rustc_lint` to plan
-  `src/driver/depth.rs`. `EarlyContextAndPass::visit_stmt`
+  cannot be written as stated.** Found while reading the pinned toolchain's
+  `rustc_lint` to plan `src/driver/depth.rs`. `EarlyContextAndPass::visit_stmt`
   (`rustc_lint/src/early.rs:119-130`) calls `check_stmt`, walks the statement,
   and returns; there is no `_post` callback. `check_local`, `check_block`,
   `check_arm`, and `check_ty` are likewise unpaired. The complete paired set is
@@ -484,55 +472,51 @@ Note that this is the `rustc-src` component, not the `rust-src` component at
   `check_pat`/`check_pat_post`, `check_trait_item`/`check_trait_item_post`,
   `check_impl_item`/`check_impl_item_post`, both `check_attributes` hooks, and
   `enter_where_predicate`/`exit_where_predicate`
-  (`rustc_lint/src/passes.rs:137-175`).
-  Impact: incrementing in `check_stmt` without a matching decrement leaves the
-  counter permanently non-zero after the first expanded statement, which
-  silences the lint for the rest of the crate.
-  The obvious workaround — count only the node kinds that *do* have paired
-  hooks, namely `check_item`, `check_trait_item`, `check_impl_item`, and
+  (`rustc_lint/src/passes.rs:137-175`). Impact: incrementing in `check_stmt`
+  without a matching decrement leaves the counter permanently non-zero after
+  the first expanded statement, which silences the lint for the rest of the
+  crate. The obvious workaround — count only the node kinds that *do* have
+  paired hooks, namely `check_item`, `check_trait_item`, `check_impl_item`, and
   `check_expr` — is **not sufficient**, and the reason is the whole point of
-  `SURP-012`. For
-  `macro_rules! shout { ($l:literal) => { let _x = $l; } }`, the expanded
-  ancestor of the substituted literal is a `Local` inside a `Stmt`, both of
-  which are unpaired and neither of which is an expression. The nearest paired
-  expanded ancestor does not exist: the enclosing function item is *not*
-  expanded, because the macro call sat in the function body. A paired-hooks-only
-  counter would therefore report depth zero and emit the unsound suggestion
-  that `SURP-012` exists to prevent.
-  Resolution adopted: stop trying to maintain depth through the lint hooks at
-  all. `check_crate` runs its own `rustc_ast::visit::Visitor` over the crate —
-  the same AST the pass will later be walked over — with explicit
-  enter/exit push-pop for every container kind, including the unpaired ones.
-  That traversal records the set of literal-expression spans that occur at
-  depth zero into an `FxHashSet<Span>`, and computes `DEC-002`'s crate-scoped
-  shadow kill switch in the same pass. `check_expr` and the `FormatArgs` path
-  then emit only for expressions whose span is a member. Membership is keyed on
-  the *safe* set rather than the unsafe set deliberately: if the analyser
-  misses a container kind, the literal is absent from the safe set and the
-  lint stays silent, which is the failure direction the Constraints require.
-  Cost: one extra abstract-syntax-tree walk per crate; `EV-M2-cost` measures it.
-  The standard hooks still do the emitting, so `#[allow]`, `#[expect]`, and
-  lint-level scoping keep working — emitting from the analyser instead would
-  bypass the `with_lint_attrs` bookkeeping in `EarlyContextAndPass` and lose
-  them.
+  `SURP-012`. For `macro_rules! shout { ($l:literal) => { let _x = $l; } }`,
+  the expanded ancestor of the substituted literal is a `Local` inside a
+  `Stmt`, both of which are unpaired and neither of which is an expression. The
+  nearest paired expanded ancestor does not exist: the enclosing function item
+  is *not* expanded, because the macro call sat in the function body. A
+  paired-hooks-only counter would therefore report depth zero and emit the
+  unsound suggestion that `SURP-012` exists to prevent. Resolution adopted:
+  stop trying to maintain depth through the lint hooks at all. `check_crate`
+  runs its own `rustc_ast::visit::Visitor` over the crate — the same AST the
+  pass will later be walked over — with explicit enter/exit push-pop for every
+  container kind, including the unpaired ones. That traversal records the set
+  of literal-expression spans that occur at depth zero into an
+  `FxHashSet<Span>`, and computes `DEC-002`'s crate-scoped shadow kill switch
+  in the same pass. `check_expr` and the `FormatArgs` path then emit only for
+  expressions whose span is a member. Membership is keyed on the *safe* set
+  rather than the unsafe set deliberately: if the analyser misses a container
+  kind, the literal is absent from the safe set and the lint stays silent,
+  which is the failure direction the Constraints require. Cost: one extra
+  abstract-syntax-tree walk per crate; `EV-M2-cost` measures it. The standard
+  hooks still do the emitting, so `#[allow]`, `#[expect]`, and lint-level
+  scoping keep working — emitting from the analyser instead would bypass the
+  `with_lint_attrs` bookkeeping in `EarlyContextAndPass` and lose them.
   `LEM-DEPTH-1` is restated against the analyser: its push/pop balance is
   structural, and the fixture matrix must include the `shout!` shape above,
-  since that is the case a hooks-only counter cannot see.
-  Date/Author: 2026-10-18, implementation agent, while planning `EP-M2`;
-  corrected the same day after the first draft of this entry proposed the
-  unsound paired-hooks-only counter.
+  since that is the case a hooks-only counter cannot see. Date/Author:
+  2026-10-18, implementation agent, while planning `EP-M2`; corrected the same
+  day after the first draft of this entry proposed the unsound
+  paired-hooks-only counter.
 
 ## Decision log
 
 - **DEC-001: Implement as a post-expansion early lint, per RFC 0002.**
   Rationale (corrected after review): pre-expansion cannot see
-  `FormatArgumentKind::Captured`. A late high-level intermediate
-  representation pass cannot see `ExprKind::FormatArgs` at all, because format
-  arguments are lowered away — that, not loss of source spelling, is the real
-  disqualifier. Source spelling *is* recoverable at any phase through
-  `span_to_snippet`, so RFC 0002 §Alternatives considered's stated reason for
-  rejecting a late pass is imprecise and should be amended.
-  Date/Author: 2026-08-21, planning agent.
+  `FormatArgumentKind::Captured`. A late high-level intermediate representation
+  pass cannot see `ExprKind::FormatArgs` at all, because format arguments are
+  lowered away — that, not loss of source spelling, is the real disqualifier.
+  Source spelling *is* recoverable at any phase through `span_to_snippet`, so
+  RFC 0002 §Alternatives considered's stated reason for rejecting a late pass
+  is imprecise and should be amended. Date/Author: 2026-08-21, planning agent.
 
 - **DEC-002: Prove the *position*, not the macro's identity. RESOLVED.**
   The first draft left three options open, all of which existed only to answer
@@ -567,51 +551,49 @@ Note that this is the `rustc-src` component, not the `rust-src` component at
      `#[macro_use] extern crate`, the lint disables itself for that crate.
      Blunt, and biased entirely towards silence.
   Consequences: no `TyCtxt`, no `rustc_middle`, no thread-local reach-through,
-  no two-pass registration, no shared storage, and no allowlist table. `log`
-  and `tracing` fail the outermost-frame check and produce silence by
-  construction rather than by policy — which is what `DEC-009` wants.
-  Costs accepted: the residual hole is a crate reaching a same-named macro by
-  a path none of the three switches observes; the failure mode is silence, so
-  it is undetectable from inside the lint. And wrapper-depth accounting is a
-  new correctness surface that the pure-domain verification cannot reach; it
-  gets `LEM-DEPTH-1` and its own fixture matrix instead.
-  Date/Author: 2026-08-21, planning agent, on the design review's alternatives
-  finding.
+  no two-pass registration, no shared storage, and no allowlist table. `log` and
+  `tracing` fail the outermost-frame check and produce silence by construction
+  rather than by policy — which is what `DEC-009` wants. Costs accepted: the
+  residual hole is a crate reaching a same-named macro by a path none of the
+  three switches observes; the failure mode is silence, so it is undetectable
+  from inside the lint. And wrapper-depth accounting is a new correctness
+  surface that the pure-domain verification cannot reach; it gets `LEM-DEPTH-1`
+  and its own fixture matrix instead. Date/Author: 2026-08-21, planning agent,
+  on the design review's alternatives finding.
 
 - **DEC-003: Hexagonal split — domain modules take no rustc types.**
   The scanner, the policy, and the rewriter are pure over `&str` and byte
   offsets. The rustc adapter converts abstract-syntax-tree nodes into a
   `LiteralFacts` value and converts a disposition back into spans. The
-  diagnostic adapter converts a disposition into localized output.
-  Rationale: the `hexagonal-architecture` skill's dependency rule, and the
-  practical benefit that every provable invariant lives in the pure half.
-  Note the review's caution, accepted: the adapter is where the byte offsets
-  are, and byte offsets are the whole risk. `DEC-003` must not aim the
-  verification effort away from the danger. That is what `LEM-EMIT-1`,
-  `LEM-SPAN-1`, and `LEM-DEPTH-1` exist for.
-  Date/Author: 2026-08-21, planning agent.
+  diagnostic adapter converts a disposition into localized output. Rationale:
+  the `hexagonal-architecture` skill's dependency rule, and the practical
+  benefit that every provable invariant lives in the pure half. Note the
+  review's caution, accepted: the adapter is where the byte offsets are, and
+  byte offsets are the whole risk. `DEC-003` must not aim the verification
+  effort away from the danger. That is what `LEM-EMIT-1`, `LEM-SPAN-1`, and
+  `LEM-DEPTH-1` exist for. Date/Author: 2026-08-21, planning agent.
 
 - **DEC-004: Keep the whitespace rule complete in the pure scanner; do not
-  claim adapter coverage for carriage returns.**
-  Rationale: `SURP-007` and `SURP-016`. The pure scanner is a reusable
-  component whose contract should be complete and *correct*; the adapter never
-  feeds it a carriage return. The verification plan records this as an explicit
-  reachability bound rather than pretending to cover it.
-  Date/Author: 2026-08-21, revised 2026-08-21 after `SURP-016`.
+  claim adapter coverage for carriage returns.** Rationale: `SURP-007` and
+  `SURP-016`. The pure scanner is a reusable component whose contract should be
+  complete and *correct*; the adapter never feeds it a carriage return. The
+  verification plan records this as an explicit reachability bound rather than
+  pretending to cover it. Date/Author: 2026-08-21, revised 2026-08-21 after
+  `SURP-016`.
 
 - **DEC-005: One diagnostic per literal, with one whole-literal replacement.**
   Rationale: RFC 0002 §Decision matrix, final row. Cascaded per-continuation
   suggestions would overlap under `rustfix`, which reports that it could not
-  apply the fixes and can leave a file partially rewritten.
-  Date/Author: 2026-08-21, planning agent.
+  apply the fixes and can leave a file partially rewritten. Date/Author:
+  2026-08-21, planning agent.
 
 - **DEC-006: Dependency changes.**
   Add `googletest` and `pretty_assertions` to `[workspace.dependencies]`; the
-  task brief authorizes both and neither is present. Promote `serial_test`
-  from four identical per-crate `4.0.1` pins to a workspace pin and migrate
-  all four crates. `log` and `tracing` dev-dependency edges are not needed:
-  `DEC-009` moved the facades to roadmap item 2.4.2.
-  Date/Author: 2026-08-21, planning agent.
+  task brief authorizes both and neither is present. Promote `serial_test` from
+  four identical per-crate `4.0.1` pins to a workspace pin and migrate all four
+  crates. `log` and `tracing` dev-dependency edges are not needed: `DEC-009`
+  moved the facades to roadmap item 2.4.2. Date/Author: 2026-08-21, planning
+  agent.
 
 - **DEC-007: WITHDRAWN.** The first draft proposed adding
   `rustc-literal-escaper` as a differential oracle. `SURP-014` supplies a
@@ -628,134 +610,127 @@ Note that this is the `rustc-src` component, not the `rust-src` component at
 - **DEC-009: Move `log` and `tracing` support out of this item. APPROVED.**
   The facades are cut by construction — `DEC-002`'s outermost-frame check
   produces silence for them — rather than by deferral, so nobody ships half an
-  allowlist.
-  Rationale: the roadmap text for this work never mentioned either crate. They
-  were the sole driver of the whole `TyCtxt` question. The allowlist is a
-  policy table over third-party macro grammars that change between versions,
-  and `SURP-010` shows RFC 0002's was already stale roughly a year after it was
-  written. `SURP-015` shows their fixtures cannot all live in one crate anyway,
-  because Cargo unifies dev-dependency features. They accounted for 14 of
-  roughly 34 fixtures on a serialized test path.
-  Accepted cost: in service codebases long strings disproportionately live in
-  log messages, which is exactly where the hand-application this work replaces
-  actually happens. Coverage there is deferred, not abandoned.
-  Consequence: the approver directed that the whole feature move out of
-  §2.2 Core lint implementations into its own roadmap step rather than
-  overburdening that step. `docs/roadmap.md` now carries §2.4 String
-  continuation style with three tasks: 2.4.1 (this plan), 2.4.2 (the facade
-  allowlist, to be designed against a shipped baseline), and 2.4.3 (`DEC-013`'s
-  promotion to machine applicability). The branch, this file, and the pull
-  request were renamed to match.
-  Date/Author: 2026-08-21, planning agent; approved 2026-08-21 by the
+  allowlist. Rationale: the roadmap text for this work never mentioned either
+  crate. They were the sole driver of the whole `TyCtxt` question. The
+  allowlist is a policy table over third-party macro grammars that change
+  between versions, and `SURP-010` shows RFC 0002's was already stale roughly a
+  year after it was written. `SURP-015` shows their fixtures cannot all live in
+  one crate anyway, because Cargo unifies dev-dependency features. They
+  accounted for 14 of roughly 34 fixtures on a serialized test path. Accepted
+  cost: in service codebases long strings disproportionately live in log
+  messages, which is exactly where the hand-application this work replaces
+  actually happens. Coverage there is deferred, not abandoned. Consequence: the
+  approver directed that the whole feature move out of §2.2 Core lint
+  implementations into its own roadmap step rather than overburdening that step.
+  `docs/roadmap.md` now carries §2.4 String continuation style with three
+  tasks: 2.4.1 (this plan), 2.4.2 (the facade allowlist, to be designed against
+  a shipped baseline), and 2.4.3 (`DEC-013`'s promotion to machine
+  applicability). The branch, this file, and the pull request were renamed to
+  match. Date/Author: 2026-08-21, planning agent; approved 2026-08-21 by the
   repository owner.
 
 - **DEC-010: Put the pure domain in its own plain-library crate.**
   Create `crates/whitaker_string_literals/` as an ordinary `rlib` with no
   `crate-type` override and no rustc dependency, following
-  `crates/whitaker_clones_core/` exactly.
-  `crates/string_continuation_style/` becomes a thin `cdylib` adapter that
-  depends on it.
-  Rationale: five problems collapse into one fix. Kani has never run inside a
-  `cdylib` lint crate in this repository, and `whitaker_clones_core` proves it
-  works in a plain crate. Verus proofs `#[path]`-include production modules
-  from plain crates. Doctests on the pure functions actually run, because the
-  crate is not in `LINT_CRATES` and therefore not in `DOCTEST_EXCLUDES`.
-  `make lint-whitaker` can cover it, because `WHITAKER_PACKAGES` can include a
-  crate that builds as an ordinary library — which means the 400-line ceiling
-  is *gate-enforced* for the domain rather than merely asserted. And domain
-  purity becomes structural rather than a conformance check that no
-  `--all-features` gate would ever notice.
+  `crates/whitaker_clones_core/` exactly. `crates/string_continuation_style/`
+  becomes a thin `cdylib` adapter that depends on it. Rationale: five problems
+  collapse into one fix. Kani has never run inside a `cdylib` lint crate in
+  this repository, and `whitaker_clones_core` proves it works in a plain crate.
+  Verus proofs `#[path]`-include production modules from plain crates. Doctests
+  on the pure functions actually run, because the crate is not in `LINT_CRATES`
+  and therefore not in `DOCTEST_EXCLUDES`. `make lint-whitaker` can cover it,
+  because `WHITAKER_PACKAGES` can include a crate that builds as an ordinary
+  library — which means the 400-line ceiling is *gate-enforced* for the domain
+  rather than merely asserted. And domain purity becomes structural rather than
+  a conformance check that no `--all-features` gate would ever notice.
   Date/Author: 2026-08-21, planning agent, on the review's structural findings.
 
 - **DEC-011: Put Kani and Verus in continuous integration.**
   Neither runs today; `.github/workflows/` contains one proof-adjacent step,
-  `scripts/check-verus-fragment-id-bridge.sh`, which is four `grep -F` calls.
-  A proof outside a gate is a comment. Add a `proofs` job running `make kani`
-  and `make verus`, scheduled nightly and on pull requests that touch
-  `verus/**`, `crates/whitaker_string_literals/**`, or `scripts/run-*.sh`.
-  Rationale: the plan spends most of its verification budget on artefacts
-  that would otherwise be discharged once by hand and never re-run. The
-  toolchain-bump scenario is the concrete danger: a bump patches the adapter to
-  compile, the `.stderr` fixtures get re-blessed as "diagnostic drift", and
-  nobody notices the proof now describes code that no longer exists.
-  Date/Author: 2026-08-21, planning agent.
+  `scripts/check-verus-fragment-id-bridge.sh`, which is four `grep -F` calls. A
+  proof outside a gate is a comment. Add a `proofs` job running `make kani` and
+  `make verus`, scheduled nightly and on pull requests that touch `verus/**`,
+  `crates/whitaker_string_literals/**`, or `scripts/run-*.sh`. Rationale: the
+  plan spends most of its verification budget on artefacts that would otherwise
+  be discharged once by hand and never re-run. The toolchain-bump scenario is
+  the concrete danger: a bump patches the adapter to compile, the `.stderr`
+  fixtures get re-blessed as "diagnostic drift", and nobody notices the proof
+  now describes code that no longer exists. Date/Author: 2026-08-21, planning
+  agent.
 
 - **DEC-012: Promote a label-resolution helper into `whitaker-common`.**
-  Add `safe_resolve_label(localizer, resolution, attribute, report_bug,
-  fallback) -> String` and `normalize_fluent_output(text: String) -> String`,
-  and make `strip_isolating_marks` delegate to the latter. Migrate
-  `bumpy_road_function` onto them in the same change.
-  Rationale: three divergent normalization contracts already exist in-tree —
-  `strip_isolating_marks` strips `{U+2068, U+2069}`; `bumpy_road_function` and
-  `no_std_fs_operations` strip different sets including `U+FFFD`;
-  `conditional_max_n_branches` *replaces* them with a quote character. Copying
-  the workaround would make a fourth. Stripping `U+FFFD` is itself a bug: it is
-  how Fluent signals an unresolved placeable, so deleting it converts "this
-  translation is broken" into "this translation reads plausibly and is wrong".
-  The typed `BundleLookup::attribute(MessageKey, AttrKey, &Arguments)` already
-  exists at `common/src/i18n/diagnostics.rs:73-93` and is bypassed by every
-  caller. The change is purely additive, so it sits inside `Tolerances`.
-  Date/Author: 2026-08-21, planning agent.
+  Add
+  `safe_resolve_label(localizer, resolution, attribute, report_bug,
+  fallback) -> String`
+  and `normalize_fluent_output(text: String) -> String`, and make
+  `strip_isolating_marks` delegate to the latter. Migrate `bumpy_road_function`
+  onto them in the same change. Rationale: three divergent normalization
+  contracts already exist in-tree — `strip_isolating_marks` strips
+  `{U+2068, U+2069}`; `bumpy_road_function` and `no_std_fs_operations` strip
+  different sets including `U+FFFD`; `conditional_max_n_branches` *replaces*
+  them with a quote character. Copying the workaround would make a fourth.
+  Stripping `U+FFFD` is itself a bug: it is how Fluent signals an unresolved
+  placeable, so deleting it converts "this translation is broken" into "this
+  translation reads plausibly and is wrong". The typed
+  `BundleLookup::attribute(MessageKey, AttrKey, &Arguments)` already exists at
+  `common/src/i18n/diagnostics.rs:73-93` and is bypassed by every caller. The
+  change is purely additive, so it sits inside `Tolerances`. Date/Author:
+  2026-08-21, planning agent.
 
 - **DEC-013: Ship a configuration table, defaulting to manual applicability.
-  APPROVED.**
-  RFC 0002 says "No configuration section is proposed. The proof predicate is
-  the configuration." For a warn-level style lint that is defensible; for a
-  lint that writes to source files it is the wrong instinct for release one.
-  Adopted: a `[string_continuation_style]` table in `dylint.toml` with
-  `applicability = "manual" | "machine"` defaulting to `"manual"`, plus
-  `excluded_crates` and `excluded_paths` mirroring `no_std_fs_operations`'s
-  shape exactly. Under `"manual"` the diagnostic still prints the full
-  replacement; only the unattended write is disarmed. Flipping one line in
-  `dylint.toml` arms the fixer estate-wide once the run-rustfix harness has
-  proven itself over real rewrites, with no rebuild.
-  Independently of the setting, skip any literal whose source file lies
-  outside the workspace root or beneath the target directory, with a new
+  APPROVED.** RFC 0002 says "No configuration section is proposed. The proof
+  predicate is the configuration." For a warn-level style lint that is
+  defensible; for a lint that writes to source files it is the wrong instinct
+  for release one. Adopted: a `[string_continuation_style]` table in
+  `dylint.toml` with `applicability = "manual" | "machine"` defaulting to
+  `"manual"`, plus `excluded_crates` and `excluded_paths` mirroring
+  `no_std_fs_operations`'s shape exactly. Under `"manual"` the diagnostic still
+  prints the full replacement; only the unattended write is disarmed. Flipping
+  one line in `dylint.toml` arms the fixer estate-wide once the run-rustfix
+  harness has proven itself over real rewrites, with no rebuild. Independently
+  of the setting, skip any literal whose source file lies outside the workspace
+  root or beneath the target directory, with a new
   `RequiredReason::GeneratedSourceFile` and a fixture pinning it. The
   motivating case is a build script writing `$OUT_DIR/protocol.rs`, included
-  with `include!`: the user cannot annotate a file they do not write, and a
-  fix would rewrite a file the next build deletes.
-  Consequence: promoting the default from `"manual"` to `"machine"` is
-  deliberately *not* in this plan's scope. It is roadmap item 2.4.3, gated on
-  field evidence from an apply-and-recompile pass over the estate. This plan
-  builds the machinery that makes that evidence collectable — the
-  `// run-rustfix` fixtures of `SURP-014` and the run-time value gate of
-  `LEM-EMIT-1` — and stops there.
-  Date/Author: 2026-08-21, planning agent; approved 2026-08-21 by the
-  repository owner.
+  with `include!`: the user cannot annotate a file they do not write, and a fix
+  would rewrite a file the next build deletes. Consequence: promoting the
+  default from `"manual"` to `"machine"` is deliberately *not* in this plan's
+  scope. It is roadmap item 2.4.3, gated on field evidence from an
+  apply-and-recompile pass over the estate. This plan builds the machinery that
+  makes that evidence collectable — the `// run-rustfix` fixtures of `SURP-014`
+  and the run-time value gate of `LEM-EMIT-1` — and stops there. Date/Author:
+  2026-08-21, planning agent; approved 2026-08-21 by the repository owner.
 
 - **DEC-014: One lint name. SETTLED.**
   Ship a single lint, `string_continuation_style`, covering both the
   plain-literal and format-string branches, as RFC 0002 and the roadmap
-  describe.
-  Rationale, from the approver: a user does not care about the internal split
-  between the two branches unless their semantics are fundamentally different,
-  and here they are not — both say "this source-line join could be a
-  `concat!()`". The review's alternative of a second
+  describe. Rationale, from the approver: a user does not care about the
+  internal split between the two branches unless their semantics are
+  fundamentally different, and here they are not — both say "this source-line
+  join could be a `concat!()`". The review's alternative of a second
   `format_string_continuation_style` name would have bought `#[allow]`
   granularity between a high-confidence and a lower-confidence branch, at the
-  cost of exposing an implementation boundary in the user-facing lint list.
-  With `DEC-013`'s configuration table providing a kill switch and `DEC-002`
-  making the format branch no riskier than the plain one, that granularity has
-  no remaining user to serve.
-  Date/Author: 2026-08-21, planning agent; settled 2026-08-21 by the
-  repository owner.
+  cost of exposing an implementation boundary in the user-facing lint list. With
+  `DEC-013`'s configuration table providing a kill switch and `DEC-002` making
+  the format branch no riskier than the plain one, that granularity has no
+  remaining user to serve. Date/Author: 2026-08-21, planning agent; settled
+  2026-08-21 by the repository owner.
 
 - **DEC-015: Order the adapter's checks cheapest-first, normatively.**
   RFC 0002 §Ordinary string expressions puts `span_to_snippet` and a re-lex at
   step 2, before anything has established the literal is a candidate. That runs
   a source-file binary search and a `String` allocation for every cooked
   literal in the crate — plausibly 30,000 to 80,000 per full-workspace build
-  here, for a candidate rate of essentially zero (`git ls-files '*.rs' |
-  xargs grep -c '\\$'` finds no continuation backslashes in this repository at
-  all). Worse, `span_to_snippet` on a foreign `SourceFile` decodes an external
-  crate's source out of crate metadata and retains it in the `SourceMap` for
-  the rest of the compilation.
-  Normative order: (1) `token::LitKind::Str`, touching no source map;
-  (2) the uncooked `Symbol` contains `\` followed by LF — an interned lookup
-  and an allocation-free scan; (3) wrapper depth is zero and the span is not
-  from an expansion; (4) only then `span_to_snippet` and the re-lex.
-  Date/Author: 2026-08-21, planning agent.
+  here, for a candidate rate of essentially zero
+  (`git ls-files '*.rs' | xargs grep -c '\\$'` finds no continuation
+  backslashes in this repository at all). Worse, `span_to_snippet` on a foreign
+  `SourceFile` decodes an external crate's source out of crate metadata and
+  retains it in the `SourceMap` for the rest of the compilation. Normative
+  order: (1) `token::LitKind::Str`, touching no source map; (2) the uncooked
+  `Symbol` contains `\` followed by LF — an interned lookup and an
+  allocation-free scan; (3) wrapper depth is zero and the span is not from an
+  expansion; (4) only then `span_to_snippet` and the re-lex. Date/Author:
+  2026-08-21, planning agent.
 
 - **DEC-016: Construct the localizer in `check_crate`, never in `check_expr`.**
   `SharedConfig::load()` clones a `toml::Value` and runs a serde deserialize
@@ -806,8 +781,8 @@ Layout you need to know:
   thin proxy crates re-exporting the nightly compiler crates. Depend on these
   by workspace alias, never on the raw `extern crate`.
 - `crates/whitaker_clones_core/` — a plain `rlib` of pure logic used by lint
-  crates. It carries Kani harnesses, `proptest` properties, `insta`
-  snapshots, and Verus-bridged modules. **This is the template for
+  crates. It carries Kani harnesses, `proptest` properties, `insta` snapshots,
+  and Verus-bridged modules. **This is the template for
   `crates/whitaker_string_literals/`**, the new pure-domain crate.
 - `common/` — the `whitaker-common` crate: pure helpers plus the Fluent
   localization engine.
@@ -821,8 +796,7 @@ Layout you need to know:
 - `docs/` — the knowledge base. Start at `docs/contents.md` and
   `docs/repository-layout.md`.
 
-`rust-toolchain.toml` pins `nightly-2026-05-28` with `rustc-dev` and
-`rust-src`.
+`rust-toolchain.toml` pins `nightly-2026-05-28` with `rustc-dev` and `rust-src`.
 
 ### Terms used in this plan
 
@@ -841,8 +815,8 @@ Layout you need to know:
   `"\` at the very start of a literal. The lint leaves these alone.
 - **Post-expansion early lint** — an `EarlyLintPass` running on the abstract
   syntax tree after macro expansion but before lowering to the high-level
-  intermediate representation. It sees `ExprKind::FormatArgs`, which records
-  how `format!`-family arguments were bound.
+  intermediate representation. It sees `ExprKind::FormatArgs`, which records how
+  `format!`-family arguments were bound.
 - **Implicit format capture** — writing `format!("{name}")` so that `name` is
   captured from the enclosing scope. The compiler permits this only when the
   format string is a direct source literal, which is exactly why a `concat!()`
@@ -853,8 +827,8 @@ Layout you need to know:
 - **Applicability** — rustc's confidence label on a suggestion.
   `MachineApplicable` means `cargo fix` may apply it unattended.
 - **Bless** — replacing a `.stderr` expectation with the output the code
-  currently produces. In this repository that is a manual copy, not a flag;
-  see `SURP-014`.
+  currently produces. In this repository that is a manual copy, not a flag; see
+  `SURP-014`.
 
 ### What exists today that you will copy
 
@@ -872,9 +846,9 @@ live in `#[cfg(kani)] mod kani;` modules; the workspace already declares
 `dylint-driver` gating every compiler dependency as `optional = true`, and
 `constituent = ["dylint-driver", "dylint_linting/constituent"]`. `src/lib.rs`
 opens with `#![cfg_attr(feature = "dylint-driver", feature(rustc_private))]`
-and gates every module, with a `stub` module filling the crate when the
-feature is off. The `crates/*` glob in the workspace `members` list picks up a
-new directory automatically.
+and gates every module, with a `stub` module filling the crate when the feature
+is off. The `crates/*` glob in the workspace `members` list picks up a new
+directory automatically.
 
 **Lint declaration.** `crates/conditional_max_n_branches/src/driver.rs:73-91`
 wraps the declaration macro in a private module so the macro-generated,
@@ -943,8 +917,8 @@ and resolves the primary/note/help triple by passing a
 `safe_resolve_message_set(&localizer, resolution, noop_reporter, fallback)`.
 Labels go through the new `safe_resolve_label` of `DEC-012`.
 
-**UI tests.** `crates/no_std_fs_operations/src/tests/ui.rs` is the
-locale-aware template:
+**UI tests.** `crates/no_std_fs_operations/src/tests/ui.rs` is the locale-aware
+template:
 
 ```rust
 use serial_test::serial;
@@ -964,10 +938,11 @@ fn run_with_locale(directory: &str, locale: Option<&str>) {
 
 `#[serial]` is mandatory. Never mutate the environment directly in a test; use
 `whitaker_common::test_support::{with_locale, with_env_var,
-with_env_var_removed}`. Note that nextest runs each test in its own process,
-so the real serialization comes from the `serial-dylint-ui` group in
-`.config/nextest.toml`, whose membership is an explicit filter — the layout
-above matches the `test(tests::ui::)` clause, so do not rename it.
+with_env_var_removed}`.
+Note that nextest runs each test in its own process, so the real serialization
+comes from the `serial-dylint-ui` group in `.config/nextest.toml`, whose
+membership is an explicit filter — the layout above matches the
+`test(tests::ui::)` clause, so do not rename it.
 
 **Behavioural tests.** Feature files at `<crate>/tests/features/*.feature`;
 step definitions at `<crate>/tests/<name>_behaviour.rs`. Scenarios bind by
@@ -979,9 +954,9 @@ arrays: `SUITE_LINTS` and `SUITE_LINT_DECLS`.
 `suite/tests/registration.rs::then_decls_align` asserts they agree.
 `suite/src/driver.rs:65-68` is the function to extend.
 
-**Two hard-coded lint lists.** `installer/src/resolution.rs:17`
-(`LINT_CRATES`, a Rust slice) and `Makefile:58` (`LINT_CRATES`, a Make
-variable that additionally contains `whitaker_suite`).
+**Two hard-coded lint lists.** `installer/src/resolution.rs:17` (`LINT_CRATES`,
+a Rust slice) and `Makefile:58` (`LINT_CRATES`, a Make variable that
+additionally contains `whitaker_suite`).
 
 **Gates.** `make check-fmt`, `make typecheck`, `make lint`, `make test`,
 `make markdownlint`, `make nixie`. Note two limits the first draft got wrong.
@@ -1003,8 +978,8 @@ superseded.
 ### Skills and documents to load
 
 Skills: `rust-router`, then `rust-unit-testing` and `rust-types-and-apis`;
-`hexagonal-architecture` for `DEC-003`; `proptest`; `kani`; `verus`; `leta`
-for navigation (prefer `leta show`/`leta refs` over reading whole files);
+`hexagonal-architecture` for `DEC-003`; `proptest`; `kani`; `verus`; `leta` for
+navigation (prefer `leta show`/`leta refs` over reading whole files);
 `execplans` for keeping this document current; `commit-message`;
 `en-GB-oxendict`.
 
@@ -1037,8 +1012,8 @@ Upstream artefacts, at the revisions current on this branch (based on
 - **AGENTS** — `AGENTS.md`.
 - **STYLE** — `docs/documentation-style-guide.md`.
 
-There is no Terms of Reference document; ROADMAP-2.4.1 plus RFC-0002 serve
-that role.
+There is no Terms of Reference document; ROADMAP-2.4.1 plus RFC-0002 serve that
+role.
 
 Trace links:
 
@@ -1067,9 +1042,8 @@ Each is discharged behaviourally at `EP-M0a` and recorded in
 bump invalidates.
 
 - **AXIOM-1.** `is_source_literal == true` implies the format string was
-  written as a direct literal whose recovered snippet matches the parsed
-  input. Basis `SURP-001`. Boundary-verified by
-  `pass_generated_format_string.rs`.
+  written as a direct literal whose recovered snippet matches the parsed input.
+  Basis `SURP-001`. Boundary-verified by `pass_generated_format_string.rs`.
 - **AXIOM-2.** `FormatArgs::span` is the format-string literal token's span,
   and `Span::from_inner(InnerSpan::new(a, b))` yields the sub-span at byte
   offsets `a..b` from that token's start. Basis `SURP-002`. Boundary-verified
@@ -1108,9 +1082,9 @@ bump invalidates.
   the interesting alphabet is tiny.
 - Domain and bound: Kani over bodies of length ≤ 5 drawn from
   `{'\\', '\n', 'a'}` — 364 paths. Grow only if it discharges quickly. Use a
-  `#[cfg(kani)]` fixed-capacity sink `[Option<Continuation>; 3]` in place of
-  the `Vec`, mirroring `whitaker_clones_core`'s `KANI_MAX_RECORDED_PAIRS`
-  pattern, and derive the unwind bound from that capacity with a
+  `#[cfg(kani)]` fixed-capacity sink `[Option<Continuation>; 3]` in place of the
+  `Vec`, mirroring `whitaker_clones_core`'s `KANI_MAX_RECORDED_PAIRS` pattern,
+  and derive the unwind bound from that capacity with a
   `const _: () = assert!(...)`. **Stated limit:** the alphabet excludes `'\r'`,
   `'\t'`, and space, so the Kani result is not exhaustive over `INV-SCAN-3`'s
   whitespace set. Those bytes are covered by parameterized cases and proptest
@@ -1130,8 +1104,8 @@ bump invalidates.
 
 - Statement: for every emitted `Continuation`,
   `escape_range.start < escape_range.end <= skipped_whitespace_range.start <=
-  skipped_whitespace_range.end <= body.len()`; continuations are strictly
-  ordered; and no two combined intervals overlap.
+  skipped_whitespace_range.end <= body.len()`;
+  continuations are strictly ordered; and no two combined intervals overlap.
 - Method: `proptest`, asserted on every scan in every property test through a
   shared `assert_scan_well_formed` helper. Deliberately **not** in the Kani
   harness: an O(n²) pairwise assertion over a symbolic-length container buys
@@ -1191,10 +1165,10 @@ bump invalidates.
   maximal sub-sequences of `body` lying outside `R`. Then
   `concat(fragments) == body with every range in R removed`.
 - Method: Verus deductive proof over `Seq<u8>`, by induction on `|R|`,
-  **inducting on the last range, not the first**. With `r_{n-1}` removed
-  first, `body.subrange(0, r_{n-1}.start)` is untouched and no index-rebasing
-  lemma is needed; inducting from the left would require one, and that is
-  where these proofs stall in Z3.
+  **inducting on the last range, not the first**. With `r_{n-1}` removed first,
+  `body.subrange(0, r_{n-1}.start)` is untouched and no index-rebasing lemma is
+  needed; inducting from the left would require one, and that is where these
+  proofs stall in Z3.
 - Rationale: this is the algebraic core of the suggestion, it must hold for
   every literal length and join count, and it is a pure statement about
   sequences. Note the honest limitation: Verus cannot verify the shipped
@@ -1210,10 +1184,10 @@ bump invalidates.
   written the lemma must fail with an open goal, not vacuously succeed.
 - Non-vacuity: exhibit a concrete witness (`body = "abc"`, `R = [1..2]`,
   fragments `["a", "c"]`) inside the proof file as an `assert` Verus must
-  discharge from the lemma. The proof must contain no `assume`. The
-  `decreases` clause must be present and the base case must be `|R| == 0`.
-  Negative control **NV-REWRITE-2**: weaken the disjointness precondition and
-  confirm Verus rejects the proof.
+  discharge from the lemma. The proof must contain no `assume`. The `decreases`
+  clause must be present and the base case must be `|R| == 0`. Negative control
+  **NV-REWRITE-2**: weaken the disjointness precondition and confirm Verus
+  rejects the proof.
 
 **LEM-REWRITE-2 — the rewrite preserves the evaluated value.**
 
@@ -1244,8 +1218,8 @@ bump invalidates.
 - Statement: `ConcatRewrite::build` returns `Some` only when the original
   snippet lexes as exactly one cooked string token, the generated replacement
   lexes as exactly one `concat!` macro-call expression, every selected split is
-  an interior join, and the context accepts a general expression. Re-lexing
-  uses `rustc_lexer` (`SURP-011`).
+  an interior join, and the context accepts a general expression. Re-lexing uses
+  `rustc_lexer` (`SURP-011`).
 - Method: `rstest` cases, one per failure condition, each failing exactly one
   conjunct with all others satisfied.
 - Artefact: `crates/whitaker_string_literals/src/rewrite/tests.rs`.
@@ -1341,8 +1315,8 @@ that turn a byte offset into a write.
 
 Roughly a dozen `pass_*` fixtures assert that the lint emits nothing. Against
 an unimplemented `check_expr` every one of them passes, so as specified they
-prove nothing. Each therefore gets a paired control: temporarily invert the
-one gate it exercises — drop the `Captured` check for
+prove nothing. Each therefore gets a paired control: temporarily invert the one
+gate it exercises — drop the `Captured` check for
 `pass_implicit_format_capture`, accept `StrRaw` for `pass_raw_strings`, disable
 the depth counter for `pass_literal_macro_capture`, and so on — and record that
 the fixture then fails with a diagnostic. Run each control once, record the
@@ -1350,14 +1324,14 @@ transcript in §Artefacts and notes, and revert it.
 
 ### Deliberately not verified formally
 
-Nothing in this plan's scope is a policy table over third-party macro
-grammars: `DEC-002` removed the allowlist and `DEC-009` moved the facades to
-roadmap item 2.4.2. When 2.4.2 is planned it will need such a table, and it
-should record there — as the first draft of this plan did — why the allowlist
-gets acceptance fixtures rather than a proof: its correctness is a claim about
-third-party crates' macro definitions, which change between their versions,
-so the safe default of "an uncertain contract produces neither a diagnostic
-nor a suggestion" carries the guarantee instead.
+Nothing in this plan's scope is a policy table over third-party macro grammars:
+`DEC-002` removed the allowlist and `DEC-009` moved the facades to roadmap item
+2.4.2. When 2.4.2 is planned it will need such a table, and it should record
+there — as the first draft of this plan did — why the allowlist gets acceptance
+fixtures rather than a proof: its correctness is a claim about third-party
+crates' macro definitions, which change between their versions, so the safe
+default of "an uncertain contract produces neither a diagnostic nor a
+suggestion" carries the guarantee instead.
 
 ## Plan of work
 
@@ -1415,13 +1389,14 @@ Feature: Context-sensitive string continuation style
     Then no suggestion is produced
 ```
 
-Each stage ends with `make check-fmt && make typecheck && make lint &&
-make test`, run sequentially. Do not proceed while any gate fails.
+Each stage ends with
+`make check-fmt && make typecheck && make lint && make test`, run sequentially.
+Do not proceed while any gate fails.
 
 ### Stage C — implementation with verification developed alongside
 
-`EP-M0a` through `EP-M3`, in order. Each writes its Kani harness or Verus
-lemma in the same commit as the code it constrains.
+`EP-M0a` through `EP-M3`, in order. Each writes its Kani harness or Verus lemma
+in the same commit as the code it constrains.
 
 ### Stage D — integration, tooling, documentation, and wider validation
 
@@ -1435,10 +1410,10 @@ lemma in the same commit as the code it constrains.
   depend on. No repository change except this plan's living sections.
 - **Method.** Three compiler flags, no code. On a scratch file outside the
   workspace containing `format!`, `println!`, `write!`, `assert!`, a
-  `macro_rules!` capturing `$l:literal`, and a local `macro_rules! info`.
-  Add `log::info!` and `tracing::info!` too: they are out of scope here, but
-  the probe is the cheapest place to gather the evidence roadmap item 2.4.2
-  will need, and recording it now costs one extra line per flag:
+  `macro_rules!` capturing `$l:literal`, and a local `macro_rules! info`. Add
+  `log::info!` and `tracing::info!` too: they are out of scope here, but the
+  probe is the cheapest place to gather the evidence roadmap item 2.4.2 will
+  need, and recording it now costs one extra line per flag:
   - `cargo rustc -- -Zunpretty=expanded` — does each form reach the abstract
     syntax tree as a `format_args!` node?
   - `cargo rustc -- -Zunpretty=expanded,hygiene` — what syntax context does the
@@ -1470,8 +1445,7 @@ lemma in the same commit as the code it constrains.
 - **Outcome.** `crates/whitaker_string_literals/` exists as a plain library
   with no rustc dependency. The three pure modules — `continuation`,
   `classification`, `rewrite` — plus the `facts` value types are complete,
-  documented with runnable doctests, and fully covered. Nothing consumes it
-  yet.
+  documented with runnable doctests, and fully covered. Nothing consumes it yet.
 - **Requirements discharged.** RFC-0002 §Continuation scanner (as corrected by
   `SURP-016`), §Rewrite construction. `INV-SCAN-1`, `INV-SCAN-2`, `INV-SCAN-3`,
   `INV-CLASS-1`, `LEM-REWRITE-1`, `LEM-REWRITE-2` layer (a), `LEM-APPLY-1`.
@@ -1496,13 +1470,12 @@ lemma in the same commit as the code it constrains.
 
 - **Outcome.** `crates/string_continuation_style/` exists as a `cdylib`
   adapter. `check_expr` handles `ExprKind::Lit` with a cooked
-  `token::LitKind::Str` behind `DEC-015`'s cheap-first ordering and
-  `DEC-002`'s wrapper-depth gate. A plain source-line join produces one
-  warning with a note, a help, one secondary label per join, and a
-  whole-literal `concat!()` suggestion whose applicability follows `DEC-013`.
-  Byte strings, C strings, raw strings, layout trims, macro-captured literals,
-  and generated source files produce silence. Diagnostics are localized in
-  `en-GB`, `cy`, and `gd`.
+  `token::LitKind::Str` behind `DEC-015`'s cheap-first ordering and `DEC-002`'s
+  wrapper-depth gate. A plain source-line join produces one warning with a
+  note, a help, one secondary label per join, and a whole-literal `concat!()`
+  suggestion whose applicability follows `DEC-013`. Byte strings, C strings,
+  raw strings, layout trims, macro-captured literals, and generated source
+  files produce silence. Diagnostics are localized in `en-GB`, `cy`, and `gd`.
 - **Requirements discharged.** RFC-0002 §Ordinary string expressions,
   §Diagnostic, and the plain-literal rows of §Decision matrix. `LEM-SPAN-1`,
   `LEM-DEPTH-1`, `LEM-EMIT-1`, `LEM-FIX-1`, `LEM-REWRITE-2` layer (b).
@@ -1511,16 +1484,16 @@ lemma in the same commit as the code it constrains.
   that is a hard blocker on any applicability above `MaybeIncorrect`, not a
   footnote: escalate rather than shipping an unverified fixer.
 - **Acceptance evidence.** `EV-M2`: fixtures `fail_plain_join`,
-  `fail_multiple_joins`, `fail_join_across_blank_lines`,
-  `fail_value_preserved`, `fail_trim_and_join`, `fail_adjacent_joins`,
-  `pass_leading_layout_trim`, `pass_trailing_layout_trim`,
-  `pass_byte_and_c_strings`, `pass_raw_strings`, `pass_real_newline`,
-  `pass_literal_in_pattern`, `pass_literal_macro_capture`,
+  `fail_multiple_joins`, `fail_join_across_blank_lines`, `fail_value_preserved`,
+  `fail_trim_and_join`, `fail_adjacent_joins`, `pass_leading_layout_trim`,
+  `pass_trailing_layout_trim`, `pass_byte_and_c_strings`, `pass_raw_strings`,
+  `pass_real_newline`, `pass_literal_in_pattern`, `pass_literal_macro_capture`,
   `pass_expanded_item`, `pass_generated_source_file` all pass, each `fail_*`
   with a `.fixed` file under `// run-rustfix`; `ui-cy`, `ui-gd`, and
   `ui-fallback` locale smokes pass; every silence fixture's paired control has
-  been run and observed to fail. `EV-M2-cost`: `time cargo dylint --lib
-  string_continuation_style` over one medium crate, before and after.
+  been run and observed to fail. `EV-M2-cost`:
+  `time cargo dylint --lib string_continuation_style` over one medium crate,
+  before and after.
 - **Conformance check.** Applying `fail_plain_join`'s suggestion produces
   source that compiles and evaluates identically — now verified by the harness
   rather than by hand. No lint fires on any pattern, attribute, or meta-item
@@ -1709,9 +1682,9 @@ constrain, together with their runner edits:
   explicit harness-name list and
   `--manifest-path "${REPO_ROOT}/crates/whitaker_string_literals/Cargo.toml"`,
   a new `string-literals)` case arm, **and** a call in the no-argument path at
-  lines 83-87 so `make kani` picks it up. Note the existing catch-all `*)`
-  arm falls through to `run_decomposition_harnesses`, which would `cd common`
-  and silently match nothing — an unknown group does not error.
+  lines 83-87 so `make kani` picks it up. Note the existing catch-all `*)` arm
+  falls through to `run_decomposition_harnesses`, which would `cd common` and
+  silently match nothing — an unknown group does not error.
 - `Makefile`: a `kani-string-literals` target beside `kani-clone-detector`,
   and a `verus-string-literals` target beside `verus-clone-detector`.
 - `scripts/run-verus.sh`: three edits — the new group arm in
@@ -1724,18 +1697,17 @@ and notes, then revert it.
 ### Step 4 — EP-M2 and EP-M3 fixtures
 
 For each `fail_*` fixture: write the `.rs` file, add `// run-rustfix` as the
-first line, write the `.fixed` file by hand with a
-`const _: () = assert!(...)` value assertion, run the UI test, and create the
-`.stderr` from the observed output.
+first line, write the `.fixed` file by hand with a `const _: () = assert!(...)`
+value assertion, run the UI test, and create the `.stderr` from the observed
+output.
 
 **Blessing is manual.** `dylint_testing` gives `compiletest_rs` a default
 config with `bless: false` and exposes no override; `TRYBUILD=overwrite` does
 nothing. The report prints a line of the form `Actual stderr saved to PATH`;
 copy that file over your `.stderr`. Read it first. A blessed-but-wrong
 expectation is worse than a failing test, and the toolchain-bump scenario is
-exactly where that discipline fails under time pressure — which is why
-`EP-M3`'s `insta` snapshot exists as a second, independently blessable
-artefact.
+exactly where that discipline fails under time pressure — which is why `EP-M3`'s
+`insta` snapshot exists as a second, independently blessable artefact.
 
 ```bash
 cargo nextest run -p string_continuation_style ui 2>&1 \
@@ -1753,9 +1725,9 @@ Edit, in this order:
    `dylint-driver` feature and the path dependency with
    `features = ["dylint-driver", "constituent"]`.
 2. `suite/src/lints.rs` — append to `SUITE_LINTS` and `SUITE_LINT_DECLS` at the
-   same index; extend the doctest's expected name list. Give `LintDescriptor`
-   a `pass: PassKind { Early, Late }` field so the early-pass assertion in
-   step 4 below derives from the same source rather than from a literal.
+   same index; extend the doctest's expected name list. Give `LintDescriptor` a
+   `pass: PassKind { Early, Late }` field so the early-pass assertion in step 4
+   below derives from the same source rather than from a literal.
 3. `suite/src/driver.rs` — insert `store.register_early_pass(...)` into
    `register_suite_lints`, between `register_lints` and `register_late_pass`.
    Update the doctest's `get_lints().len()` from 9 to 10.
@@ -1896,10 +1868,15 @@ to the previous plateau.
 
 ## Artefacts and notes
 
-To be filled in as work proceeds. Required entries:
+Required entries:
 
 - `EV-BASELINE` — `make test` wall-clock before Step 1.
 - `EV-M0-transcript` — the `EP-M0a` probe output, with a per-axiom statement.
+- `EV-REBASE-VALIDATION` — rebase, exact-candidate gates, and lease-push
+  evidence.
+- `EV-STEP2-SCAFFOLD` — crate compile checks and exact-candidate gates for the
+  scaffold commit.
+- `EV-M1` — scanner, classification, and rewrite tests and proof results.
 - The observed failure of each `NV-*` control, including one per silence
   fixture.
 - `EV-M2-cost` — `cargo dylint` timing over one medium crate, before and after.
@@ -1907,13 +1884,40 @@ To be filled in as work proceeds. Required entries:
 - `cargo nextest show-config test-groups --profile ci` output.
 - The `make publish-check` tail showing the lint in `cargo dylint list`.
 
+### `EV-REBASE-VALIDATION` (2026-10-26)
+
+The PR targets `harden-lint-config` at
+`afb1e4ac1387aff8e51fa7bbeb62d94f0f6c8970`. The local branch already had that
+commit as its base, so the `zdiff3` rebase completed without replaying or
+conflicting changes. `git range-diff` matched all ten commits, and the semantic
+diff and whitespace checks passed.
+
+The initial post-rebase `make test` run completed 1,630 tests and failed one
+nested build because `cc` could not start (`EAGAIN`). Read-only diagnosis found
+the Lody service at 16,138 of 16,384 tasks. After task headroom recovered, one
+full rerun passed: 1,652 nextest tests passed, five were skipped, and workspace
+doctests passed. `make check-fmt`, `make typecheck`, `make lint`,
+`make markdownlint`, and `make nixie` also passed. Logs are under `/tmp` with
+the `whitaker-2-4-1-string-continuation-style-post-expansion-early-lint.md`
+prefix; the passing test rerun is
+`test2-whitaker-2-4-1-string-continuation-
+style-post-expansion-early-lint.md.out`.
+
+The exact-lease push updated PR #355 from
+`7ee807d9a68629ee88b614223d39d05f30d8a0c5` to
+`cb5d94e3bb0265f14f44fcb193d7455acfe245bd`. The remote-tracking ref and PR head
+were read back at the pushed commit.
+
+`cargo metadata --format-version 1` resolved `googletest` to `0.14.3` and
+`pretty_assertions` to `1.4.1`.
+
 ### `EV-M0-transcript` (2026-10-18)
 
-Probe crate: `/tmp/string-cont-probe`, outside the workspace so `crates/*`
-does not sweep it into a gate. Toolchain
+Probe crate: `/tmp/string-cont-probe`, outside the workspace so `crates/*` does
+not sweep it into a gate. Toolchain
 `nightly-2026-05-28-x86_64-unknown-linux-gnu` (rustc 1.98.0-nightly
-`57d06900f 2026-05-27`), built with Cargo's configured admission wrapper and
-no override.
+`57d06900f 2026-05-27`), built with Cargo's configured admission wrapper and no
+override.
 
 Probe source (abridged to the cases that decided anything):
 
@@ -1956,15 +1960,14 @@ One line per probe:
 - `cargo rustc -- -Zunpretty=expanded` — **all five built-ins and both
   forwarding forms reach the AST as `format_args!` carrying the joined
   literal**: `format_args!("direct format join")`,
-  `format_args!("direct println join\n")`,
-  `format_args!("direct write join")`,
+  `format_args!("direct println join\n")`, `format_args!("direct write join")`,
   `format_args!("direct assert join")`,
   `format_args!("forwarded println join\n")`,
   `format_args!("forwarded format join")`, and
   `format_args!("local macro join")`. The `$l:literal` capture used *plainly*
   (`let _captured = $l;`) stays `ExprKind::Lit` with the continuation intact.
-  `log::info!` and `tracing::info!` also surface `format_args!("log join")`
-  and `format_args!("tracing join")`, forwarded through
+  `log::info!` and `tracing::info!` also surface `format_args!("log join")` and
+  `format_args!("tracing join")`, forwarded through
   `$crate::__private_api::format_args` and
   `$crate::__macro_support::format_args` respectively — relevant to roadmap
   item 2.4.2, not this plan.
@@ -1989,8 +1992,8 @@ Per-axiom statements:
   `$l:literal`-captured literal used as a format string produced an ordinary
   format *argument* instead.
 - **AXIOM-2 — matches.** The `format_args!` node printed by
-  `-Zunpretty=expanded` carries the recovered, joined literal, so `fmt_span`
-  is that literal token's span. Byte-offset behaviour will be exercised
+  `-Zunpretty=expanded` carries the recovered, joined literal, so `fmt_span` is
+  that literal token's span. Byte-offset behaviour will be exercised
   boundary-wise by `LEM-SPAN-1` and the `.stderr` carets.
 - **AXIOM-3 — matches.** `format_args!("direct println join\n")` shows the
   cooked symbol has the appended newline while the literal body the scanner
@@ -2001,10 +2004,10 @@ Per-axiom statements:
   (`SURP-015`).
 
 **Go/no-go:** `SURP-012` reproduces in the form that matters. A call-site
-metavariable keeps the root context (`rootfn#0`), and the only observable
-mark is on the container (`body_fn#5`). `DEC-002`'s wrapper-depth gate is
-mandatory and `EP-M2` proceeds as written. No observation falsifies an axiom,
-so RFC 0002 needs no further amendment for this milestone.
+metavariable keeps the root context (`rootfn#0`), and the only observable mark
+is on the container (`body_fn#5`). `DEC-002`'s wrapper-depth gate is mandatory
+and `EP-M2` proceeds as written. No observation falsifies an axiom, so RFC 0002
+needs no further amendment for this milestone.
 
 ### `EV-BASELINE`
 
@@ -2013,8 +2016,8 @@ Measured 2026-10-18 on the pre-change tree (`HEAD` = `7ee807d9`), via
 
 **The run did not complete.** It was stopped at the harness's two-hour cap
 having passed 1636 of 1652 tests with zero failures. The sixteen outstanding
-tests were all in the `serial-dylint-ui` group (`no_std_fs_operations` and
-three `module_must_have_inner_docs` locale cases among them), each waiting on a
+tests were all in the `serial-dylint-ui` group (`no_std_fs_operations` and three
+`module_must_have_inner_docs` locale cases among them), each waiting on a
 compile slot in a pool saturated by three other agents' workspaces. Their
 cumulative wall-clock time is therefore *not* in the figure below; the true
 uncontended baseline is larger.
@@ -2176,10 +2179,10 @@ impl<'a> ConcatRewrite<'a> {
 pub enum Newline { Lf, CrLf }
 ```
 
-There is deliberately no `RewriteApplicability` enum. The domain never
-produces anything but a proven rewrite, so a two-variant enum with one
-reachable variant would carry no information; `DEC-013`'s configuration decides
-the rustc `Applicability` at the single `span_suggestion` call site.
+There is deliberately no `RewriteApplicability` enum. The domain never produces
+anything but a proven rewrite, so a two-variant enum with one reachable variant
+would carry no information; `DEC-013`'s configuration decides the rustc
+`Applicability` at the single `span_suggestion` call site.
 
 `render` takes an indentation because a replacement that ignores the original
 literal's column breaks `cargo fmt --check` after every fix run — which, for a
@@ -2217,12 +2220,11 @@ width, and fall back to the indented multi-line form otherwise.
 
 - `src/diagnostics.rs` — converts a disposition plus recovered spans into a
   localized `cx.emit_span_lint` call, and runs `LEM-EMIT-1`'s value check
-  before attaching any applicability. Emits
-  `debug!(target: LINT_NAME, ...)` at two points: the classification boundary,
-  recording the disposition and any `RequiredReason`, and the applicability
-  gate, recording which condition withheld the suggestion. Those two lines turn
-  every "why didn't it fire" report into self-service through
-  `RUST_LOG=string_continuation_style=debug`.
+  before attaching any applicability. Emits `debug!(target: LINT_NAME, ...)` at
+  two points: the classification boundary, recording the disposition and any
+  `RequiredReason`, and the applicability gate, recording which condition
+  withheld the suggestion. Those two lines turn every "why didn't it fire"
+  report into self-service through `RUST_LOG=string_continuation_style=debug`.
 
 ### Dependencies
 
@@ -2230,14 +2232,13 @@ width, and fall back to the indented multi-line form otherwise.
 Dev-dependencies: `rstest`, `rstest-bdd`, `rstest-bdd-macros`, `proptest`,
 `insta`, `googletest`, `pretty_assertions`, `whitaker_test_macros`.
 
-`crates/string_continuation_style`, all `optional = true` under
-`dylint-driver`: `dylint_linting`, `rustc_ast`, `rustc_lint`, `rustc_session`,
-`rustc_span`, `fluent-templates`, `log`, `serde`, `whitaker-common`,
-`whitaker` (with `features = ["dylint-driver"]`), and
-`whitaker_string_literals`. Do not add `clippy_utils`; no lint here uses it.
-Dev-dependencies: `whitaker_test_macros`, `whitaker-common`, `whitaker`,
-`rstest`, `dylint_testing`, `googletest`, `pretty_assertions`, `serial_test`,
-`camino`, `tempfile`.
+`crates/string_continuation_style`, all `optional = true` under `dylint-driver`:
+`dylint_linting`, `rustc_ast`, `rustc_lint`, `rustc_session`, `rustc_span`,
+`fluent-templates`, `log`, `serde`, `whitaker-common`, `whitaker` (with
+`features = ["dylint-driver"]`), and `whitaker_string_literals`. Do not add
+`clippy_utils`; no lint here uses it. Dev-dependencies: `whitaker_test_macros`,
+`whitaker-common`, `whitaker`, `rstest`, `dylint_testing`, `googletest`,
+`pretty_assertions`, `serial_test`, `camino`, `tempfile`.
 
 Both crates set `[lints] workspace = true` and additionally deny
 `arithmetic_side_effects`.
