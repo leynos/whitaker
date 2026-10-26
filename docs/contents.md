@@ -46,7 +46,8 @@
 - [OrthoConfig v0.10.0 user's guide](ortho-config-users-guide.md) is the
   byte-preserved upstream guide used to design the CLI configuration spine.
 - [OrthoConfig v0.10.0 migration guide](ortho-config-v0-10-0-migration-guide.md)
-  records the release's migration notes and version-specific capabilities.
+  is a compatibility entry point to the byte-preserved release guide, stored
+  under `ortho-config/` so its relative links resolve to the correct guide.
 - [Whitaker clone detector design](whitaker-clone-detector-design.md)
   documents the clone detector architecture, data flow, and supporting
   reasoning.
@@ -162,3 +163,5 @@
 
 - [docs/execplans/](execplans/) stores execution plans for branch-scoped
   implementation work and larger follow-up tasks.
+- [Issue #523 OrthoConfig adoption plan](execplans/issue-523-adopt-ortho-config-v0-10-0-for-the-whitaker-cli.md)
+  records the proposed scope, baseline, implementation sequence, and gates.

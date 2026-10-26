@@ -35,7 +35,9 @@ installer CLI test suite must pass without edits to its tests or snapshots.
   `9214b274c062a11c3d8a72de38cac11d8f6e3eff` as the starting point; reconcile
   it with the live base only before delivery.
 - Use the imported, byte-preserved v0.10.0 guides and exact source commit
-  `38812c563e3953a490e3efc202609f37e21a0517`. Do not use unreleased APIs.
+  `38812c563e3953a490e3efc202609f37e21a0517`. The migration guide is nested
+  under `docs/ortho-config/` to keep its upstream relative links distinct from
+  Whitaker's existing `docs/users-guide.md`. Do not use unreleased APIs.
 - Add `ortho_config` only to the application package and keep its default
   features enabled. Do not add it to reusable lint, common, installer, or other
   library crates. Add `ortho_l10n` only if a library needs localization without
@@ -282,10 +284,14 @@ behaviour, and UI compile contracts.
   `make spelling`, and `make nixie` passed for the imported guides, provenance,
   index, and plan. Markdown lint reported zero errors; imported guide hashes
   remained unchanged.
+- [x] 2026-10-26: The formal CodeRabbit review completed after the requested
+  51-minute cooldown. It found a missing plan index and relative-link conflicts
+  with Whitaker's existing `docs/users-guide.md`; compatibility entries and a
+  nested migration-guide location now preserve upstream bytes while resolving
+  those paths. Rerun documentation gates and review these corrections before
+  requesting plan approval.
 - [x] 2026-10-26: Committed the import and planning checkpoint as
   `4a4246166a40ea4c6b27f37bb57979d3f80d8ff9`.
-- [ ] CodeRabbit review is rate-limited. The user-requested `vsleep` cooldown
-  selected 51 minutes and is running; retry only after it completes.
 - [ ] Await explicit user approval of this plan before implementation.
 
 ## Surprises & discoveries
