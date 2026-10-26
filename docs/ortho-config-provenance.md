@@ -26,7 +26,13 @@ guide is stored under `docs/ortho-config/` with a sibling `users-guide.md`
 symlink to the imported OrthoConfig user's guide. The root-level
 `ortho-config-v0-10-0-migration-guide.md` and `v0-10-0-migration-guide.md`
 files are compatibility entry points. They keep the imported user's guide's
-relative migration links working without editing either upstream document.
+relative migration links working without editing either upstream document. The
+`adrs/adr-0004-cargo-external-subcommand-entry-point.md`,
+`v0-9-0-migration-guide.md`, and sibling `../ortho_l10n/README.md` paths are
+repository-owned pointers to their upstream v0.10.0 sources.
+
+Code review identified minor grammar issues in the upstream migration guide.
+They remain unchanged to preserve the required source bytes.
 
 Keep the imported files unchanged; revise this record only if their source
 provenance changes.
