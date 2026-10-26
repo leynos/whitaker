@@ -7,7 +7,6 @@
 //! focused on assertions rather than cross-process coordination.
 
 use std::{
-    ffi::OsStr,
     fs::{File, OpenOptions},
     hash::{Hash, Hasher},
     io,
@@ -66,10 +65,15 @@ impl ExampleHarnessLock {
     /// Return an error when Cargo's target directory cannot be resolved or the
     /// lock cannot be acquired before its timeout.
     pub(crate) fn acquire() -> io::Result<Self> {
-        let target_directory = effective_target_directory()?;
+        let executable = std::env::current_exe()?;
+        let configured_target_directory = std::env::var_os("CARGO_TARGET_DIR");
+        let target_directory = effective_target_directory(
+            &executable,
+            configured_target_directory.as_deref().map(Path::new),
+        )?;
         Self::acquire_for_target_directory(
             &target_directory,
-            &std::env::temp_dir(),
+            &target_directory,
             Some(EXAMPLE_HARNESS_LOCK_ACQUIRE_TIMEOUT),
         )
     }
@@ -117,26 +121,32 @@ impl ExampleHarnessLock {
 }
 /// Resolve the Cargo output directory used by this test process.
 ///
-/// Prefer Cargo's target marker or explicit target path, then infer the active
-/// profile directory from the test executable when neither is available.
+/// Prefer Cargo's marker, then an absolute override, then the executable's
+/// profile directory. Ignore relative overrides because Cargo resolves them
+/// from its invocation directory, which may differ from the test process. For
+/// example, `target/debug/deps/test` falls back to `target/debug`.
 ///
 /// # Errors
 ///
-/// Return an error if Cargo target metadata is unavailable or cannot be read.
-fn effective_target_directory() -> io::Result<PathBuf> {
-    let executable = std::env::current_exe()?;
-    if let Some(target_directory) = executable
-        .ancestors()
-        .find(|ancestor| ancestor.join(".rustc_info.json").is_file())
-    {
+/// Return an error if Cargo metadata cannot be read or no target path resolves.
+fn effective_target_directory(
+    executable: &Path,
+    configured_target_directory: Option<&Path>,
+) -> io::Result<PathBuf> {
+    for ancestor in executable.ancestors().skip(1) {
+        match std::fs::metadata(ancestor.join(".rustc_info.json")) {
+            Ok(metadata) if metadata.is_file() => return std::fs::canonicalize(ancestor),
+            Ok(_) => {}
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error),
+        }
+    }
+
+    if let Some(target_directory) = configured_target_directory.filter(|path| path.is_absolute()) {
         return std::fs::canonicalize(target_directory);
     }
 
-    if let Some(target_directory) = std::env::var_os("CARGO_TARGET_DIR") {
-        return std::fs::canonicalize(target_directory);
-    }
-
-    if let Some(profile_directory) = target_profile_directory_for_test_binary(&executable) {
+    if let Some(profile_directory) = target_profile_directory_for_test_binary(executable) {
         return std::fs::canonicalize(profile_directory);
     }
 
@@ -148,10 +158,10 @@ fn effective_target_directory() -> io::Result<PathBuf> {
 
 /// Find the active Cargo profile directory above a test binary's `deps` path.
 fn target_profile_directory_for_test_binary(executable: &Path) -> Option<&Path> {
-    executable
+    let dependencies_directory = executable
         .ancestors()
-        .find(|ancestor| ancestor.file_name() == Some(OsStr::new("deps")))
-        .and_then(Path::parent)
+        .find(|ancestor| ancestor.ends_with("deps"));
+    dependencies_directory.and_then(Path::parent)
 }
 
 /// Hash one normalized target-directory path into a lock identity.
@@ -161,7 +171,7 @@ fn example_harness_lock_key(target_directory: &Path) -> u64 {
     hasher.finish()
 }
 
-/// Map a target directory to its shared temporary lock path.
+/// Map a target directory to its scoped lock path.
 ///
 /// A 64-bit hash collision can only serialize unrelated targets; it cannot
 /// bypass coordination for processes using the same target directory.

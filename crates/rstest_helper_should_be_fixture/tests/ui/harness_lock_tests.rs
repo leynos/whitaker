@@ -49,8 +49,13 @@ fn example_harness_lock_reports_active_contention_timeout() {
 /// Resolve the target directory that contains the running Cargo test binary.
 #[test]
 fn effective_target_directory_contains_the_running_test_binary() {
-    let target_directory = effective_target_directory().expect("resolve Cargo target directory");
     let executable = std::env::current_exe().expect("resolve current test executable");
+    let configured_target_directory = std::env::var_os("CARGO_TARGET_DIR");
+    let target_directory = effective_target_directory(
+        &executable,
+        configured_target_directory.as_deref().map(Path::new),
+    )
+    .expect("resolve Cargo target directory");
     let executable = std::fs::canonicalize(executable).expect("canonicalize test executable");
 
     assert!(
@@ -64,13 +69,84 @@ fn effective_target_directory_contains_the_running_test_binary() {
 /// Check that the production acquisition path locks the resolved target directory.
 #[test]
 fn acquire_uses_the_effective_target_directory() {
-    let target_directory = effective_target_directory().expect("resolve Cargo target directory");
-    let lock_root = std::env::temp_dir();
-    let expected_path = example_harness_lock_path(&target_directory, &lock_root);
+    let executable = std::env::current_exe().expect("resolve current test executable");
+    let configured_target_directory = std::env::var_os("CARGO_TARGET_DIR");
+    let target_directory = effective_target_directory(
+        &executable,
+        configured_target_directory.as_deref().map(Path::new),
+    )
+    .expect("resolve Cargo target directory");
+    let expected_path = example_harness_lock_path(&target_directory, &target_directory);
 
     let lock = ExampleHarnessLock::acquire().expect("acquire the effective-target lock");
 
     assert_eq!(lock.path(), expected_path);
+}
+
+/// Resolve the target root marked by Cargo's underscore-named metadata file.
+#[test]
+fn effective_target_directory_uses_cargo_marker() {
+    let target_directory = tempfile::tempdir().expect("create target directory");
+    let executable = target_directory.path().join("debug/deps/test-binary");
+    std::fs::create_dir_all(executable.parent().expect("get executable directory"))
+        .expect("create executable directory");
+    std::fs::write(target_directory.path().join(".rustc_info.json"), "{}")
+        .expect("create Cargo target marker");
+
+    assert_eq!(
+        effective_target_directory(&executable, None).expect("resolve marked target directory"),
+        std::fs::canonicalize(target_directory.path()).expect("canonicalize target directory")
+    );
+}
+
+/// Ignore a non-file marker and use the executable's profile directory.
+#[test]
+fn effective_target_directory_skips_non_file_marker() {
+    let target_directory = tempfile::tempdir().expect("create target directory");
+    let executable = target_directory.path().join("debug/deps/test-binary");
+    std::fs::create_dir_all(executable.parent().expect("get executable directory"))
+        .expect("create executable directory");
+    std::fs::create_dir(target_directory.path().join(".rustc_info.json"))
+        .expect("create non-file Cargo marker");
+    let profile_directory = std::fs::canonicalize(target_directory.path().join("debug"))
+        .expect("canonicalize profile directory");
+
+    assert_eq!(
+        effective_target_directory(&executable, None).expect("resolve profile directory"),
+        profile_directory
+    );
+}
+
+/// Ignore a relative target override resolved in another process's directory.
+#[test]
+fn effective_target_directory_ignores_relative_override() {
+    let target_directory = tempfile::tempdir().expect("create target directory");
+    let executable = target_directory.path().join("release/deps/test-binary");
+    std::fs::create_dir_all(executable.parent().expect("get executable directory"))
+        .expect("create executable directory");
+    let profile_directory = std::fs::canonicalize(target_directory.path().join("release"))
+        .expect("canonicalize profile directory");
+
+    assert_eq!(
+        effective_target_directory(&executable, Some(Path::new("relative-target")))
+            .expect("resolve profile directory"),
+        profile_directory
+    );
+}
+
+/// Propagate marker metadata errors other than a missing marker.
+#[cfg(unix)]
+#[test]
+fn effective_target_directory_propagates_marker_metadata_errors() {
+    let test_directory = tempfile::tempdir().expect("create test directory");
+    let regular_file = test_directory.path().join("regular-file");
+    std::fs::write(&regular_file, "not a directory").expect("create regular file");
+    let executable = regular_file.join("deps/test-binary");
+
+    let error = effective_target_directory(&executable, None)
+        .expect_err("metadata lookup below a regular file should fail");
+
+    assert_eq!(error.kind(), io::ErrorKind::NotADirectory);
 }
 
 /// Infer the active profile directory from a Cargo test binary path.
