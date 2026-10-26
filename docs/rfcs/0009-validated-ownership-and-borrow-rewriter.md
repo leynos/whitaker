@@ -210,7 +210,9 @@ whitaker rewrite apply --allow-polonius BOR001-9e20
 
 `--allow-polonius` permits, but does not force, Polonius-only rewrites. It
 should fail unless project policy also declares Polonius acceptable or
-`--accept-borrow-checker polonius-next` is supplied explicitly.
+`--accept-borrow-checker polonius-next` is supplied explicitly. The JSON
+profile name `polonius_next` serializes the same explicit Polonius Alpha
+profile represented by `PoloniusNext` and spelled `polonius-next` on the CLI.
 
 ### 5.4. Explain a candidate
 
@@ -296,9 +298,15 @@ mode. The CLI creates a session directory and sets:
 
 ```plaintext
 WHITAKER_REWRITE_SESSION_DIR=<absolute session directory>
-WHITAKER_REWRITE_SCHEMA_VERSION=<supported version>
+WHITAKER_REWRITE_INTENT_SCHEMA_VERSION=<supported version>
 WHITAKER_REWRITE_MODE=collect
 ```
+
+`WHITAKER_REWRITE_INTENT_SCHEMA_VERSION` versions the lint-emitted intent
+envelope. `MaterializedRewrite.schema_version` in RFC 0007 versions the
+materialized plan, while `report_schema_version` versions the JSON report.
+Intent, plan, and report schemas evolve independently; changing one does not
+implicitly change the others.
 
 Each rustc process writes candidates atomically. The engine then:
 
@@ -534,19 +542,31 @@ These alternatives should be labelled `ReviewRequired` and shown only when RFC
 
 ## 10. Borrow-workaround materializers
 
-| Rule     | First materializer                                            | Automatic ceiling                 |
-| -------- | ------------------------------------------------------------- | --------------------------------- |
-| `BOR001` | Entry API or direct conditional borrow                        | Mechanical                        |
-| `BOR002` | Replace remove/reinsert with `get_mut` or entry mutation      | Review required initially         |
-| `BOR003` | Direct field split, destructuring, or helper field parameters | Review required                   |
-| `BOR004` | Replace position/index round-trip with `iter_mut().find`      | Mechanical                        |
-| `BOR005` | Replace staged keys with mutable or owned-key iteration       | Review required                   |
-| `BOR006` | Fuse read and mutable search passes                           | Mechanical when predicate is pure |
-| `BOR007` | Remove snapshot and split direct borrows                      | Review required                   |
-| `BOR008` | Flatten reference-only scope fence                            | Mechanical                        |
-| `BOR009` | Inline and optionally remove single-use helper                | Diff only                         |
+| Rule     | First materializer                                            | Automatic ceiling                                            |
+| -------- | ------------------------------------------------------------- | ------------------------------------------------------------ |
+| `BOR001` | Entry API or direct conditional borrow                        | Mechanical with proven equivalence; otherwise ReviewRequired |
+| `BOR002` | Replace remove/reinsert with `get_mut` or entry mutation      | Review required initially                                    |
+| `BOR003` | Direct field split, destructuring, or helper field parameters | Review required                                              |
+| `BOR004` | Replace position/index round-trip with `iter_mut().find`      | Mechanical with proven equivalence; otherwise ReviewRequired |
+| `BOR005` | Replace staged keys with mutable or owned-key iteration       | Review required                                              |
+| `BOR006` | Fuse read and mutable search passes                           | Mechanical when predicate is pure                            |
+| `BOR007` | Remove snapshot and split direct borrows                      | Review required                                              |
+| `BOR008` | Flatten reference-only scope fence                            | Mechanical                                                   |
+| `BOR009` | Inline and optionally remove single-use helper                | Diff only                                                    |
 
 _Table 1: First materializers and their maximum automatic policy._
+
+For `BOR001` and `BOR004`, `Mechanical` requires proof that the selected recipe
+preserves evaluation count and order, panic and drop points, and error
+behaviour. This includes key-expression and predicate execution, as well as
+default-value construction. If any of these facts is unknown or the recipe
+cannot establish equivalence, classify it as `ReviewRequired`.
+
+For a `BOR001` entry recipe, account for key evaluation, `Clone`, and default
+construction on both hit and miss paths. For a `BOR004` `iter_mut().find`
+recipe, account for predicate calls and their order relative to the original
+index lookup and mutation. Compiler acceptance alone does not establish these
+semantic preconditions.
 
 ### 10.1. Alternative generation
 
@@ -806,8 +826,11 @@ files, prepared journal, and session directory. If the platform cannot provide
 the required atomic replacement and durable journal operations, multi-file
 application remains diff-only. After all files are replaced and
 post-application gates succeed, write and sync a final commit marker before
-releasing the workspace lock. The marker separates a committed transaction from
-an interrupted one. This provides crash-recoverable all-or-nothing completion
+releasing the workspace lock. Immediately before writing that marker, recheck
+every touched file against its expected post-application digest. If any digest
+differs, do not commit: preserve the journal and follow the existing conflict
+and rollback rules. The marker separates a committed transaction from an
+interrupted one. This provides crash-recoverable all-or-nothing completion
 across files when no intervening writer changes a touched file; it does not
 promise that concurrent readers can never observe an intermediate replacement
 while the transaction is in progress.
@@ -825,6 +848,14 @@ The implementation should use capability-based filesystem handles and reject
 paths escaping the workspace.
 
 ### 13.4. Post-application gates
+
+Before the first source replacement, preflight enforcement of RFC 0007's
+filesystem and network sandbox for the entire post-application process tree,
+including build scripts, procedural macros, compiler wrappers, and tests. If
+the platform cannot enforce it, fail without replacing files or launching
+gates. Run every post-application gate inside that sandbox. If enforcement
+becomes unavailable after replacement, safely roll back before releasing the
+workspace lock.
 
 After source replacement, the engine should run:
 
@@ -874,9 +905,10 @@ formatting check. A failed check prevents automatic application.
 
 ### 14.3. Optional formatting application
 
-`mode = "apply"` may run `rustfmt` on touched files. Any additional rustfmt
-changes must appear in the displayed diff and join the same transactional
-journal.
+`mode = "apply"` runs `rustfmt` on touched files in the overlay before source
+replacement. Record the formatted bytes and their digests in the prepared
+journal, and include the formatted result in the displayed diff. There is no
+post-replacement formatting path that mutates files outside that journal.
 
 Whole-workspace `cargo fmt` should not run silently because it can modify files
 unrelated to the candidate.
@@ -980,7 +1012,7 @@ A representative result is:
 
 ```json
 {
-  "schema_version": 1,
+  "report_schema_version": 1,
   "rewrite_id": "BOR001-9e20",
   "rule": {
     "code": "BOR001",

@@ -290,8 +290,10 @@ Before any source slicing or edit application, validate the complete plan.
 Reject duplicate file paths rather than merging edit sets implicitly. For each
 file, require `start_byte <= end_byte <= base_file_length`, UTF-8 boundaries at
 both offsets, matching base-file digests, and sorted non-overlapping ranges.
-Malformed serialized plans return a typed validation error before any file is
-partially changed.
+Map deserialization and model-validation failures to
+`RewriteCheckError::PlanValidation` at the checker boundary, preserving the
+specific validation cause. Reject malformed plans before any file is sliced,
+edited, or partially changed.
 
 `DiscoveryContext` should record:
 
@@ -307,6 +309,7 @@ partially changed.
 
 ```rust,no_run
 pub struct RewriteCheckRequest {
+    /// One atomic rewrite group to validate in this request.
     pub rewrite: MaterializedRewrite,
     pub invocation: CargoInvocation,
     pub profiles: Vec<BorrowCheckerProfile>,
@@ -347,6 +350,29 @@ pub struct ProfileCheckResult {
     pub diagnostic_delta: Vec<NormalizedDiagnostic>,
 }
 
+pub struct CompilationReport {
+    pub cargo_exit_status: ProcessExitStatus,
+    pub child_process_statuses: Vec<ChildProcessStatus>,
+    pub diagnostics: Vec<NormalizedDiagnostic>,
+    pub outcome: CompilationOutcome,
+}
+
+pub enum ProcessExitStatus {
+    Exited { code: i32 },
+    Signaled { signal: i32 },
+    TimedOut,
+}
+
+pub struct ChildProcessStatus {
+    pub process: ProcessRole,
+    pub exit_status: ProcessExitStatus,
+}
+
+pub enum CompilationOutcome {
+    Completed,
+    Inconclusive { reason: String },
+}
+
 pub struct InvocationProvenance {
     pub checker_version: String,
     pub model_schema_version: u16,
@@ -369,6 +395,7 @@ pub struct RewriteCheckReport {
 }
 
 pub enum RewriteCheckError {
+    PlanValidation { cause: PlanValidationError },
     SandboxUnavailable,
     SandboxSetup { reason: RedactedReason },
     NetworkPolicyUnavailable { reason: RedactedReason },
@@ -381,6 +408,23 @@ pub enum RewriteCheckError {
     DependencyUnavailable { package: Option<String> },
 }
 ```
+
+`PlanValidationError` identifies malformed serialized or model data, including
+invalid ranges, stale digests, duplicate paths, and overlapping edits. The
+checker maps deserialization failures into `RewriteCheckError::PlanValidation`
+before creating or editing candidate files; parser-specific errors do not
+escape as unclassified failures.
+
+`CompilationOutcome::Completed` means Cargo and every required child process
+finished with enough evidence to classify their output. It does not mean that
+rustc accepted the source: parsed rustc errors, including errors from a
+baseline run with a nonzero Cargo exit, remain comparable diagnostics. The
+candidate diagnostic delta decides whether a rewrite is rejected. A failed
+build script, procedural macro, or wrapper; an unexplained nonzero exit; a
+timeout or signal; or missing status for a required child process makes the run
+`Inconclusive` or returns a typed process error. Such a run must never be
+treated as an empty diagnostic delta. Profile reports retain process statuses
+and the classification reason.
 
 The checker is an application service with a small, checker-local set of
 outbound capabilities: a capability-scoped filesystem for source snapshots and
@@ -607,11 +651,18 @@ never retry without the sandbox.
 
 ### 6.8. Baseline and candidate runs
 
+One `MaterializedRewrite` is one atomic rewrite group. A `RewriteCheckRequest`
+validates exactly one group against one invocation and its requested profiles.
+A caller with multiple groups submits separate checks and aggregates the
+per-group reports. Those checks may reuse a baseline only when its complete
+invocation fingerprint and checker profile match; each candidate remains
+isolated to its own group.
+
 Each validation session should create one cached baseline per invocation
 fingerprint and checker profile.
 
 The baseline run compiles the unmodified overlay. The candidate run starts from
-the same overlay snapshot with exactly one rewrite group applied.
+the same overlay snapshot with exactly the request's one rewrite group applied.
 
 Baseline compilation serves three purposes:
 
@@ -642,32 +693,36 @@ pub struct DiagnosticKey {
     pub primary_end_byte: Option<u64>,
     pub primary_start: Option<LineColumn>,
     pub primary_end: Option<LineColumn>,
-    pub message_fingerprint: Option<MessageFingerprint>,
+    pub normalized_message_or_subdiagnostic: NormalizedDiagnosticContent,
 }
 ```
 
-The compiler error code and primary span should dominate matching. Before
-computing a delta, map candidate spans backwards through the edit map to the
-original byte coordinates when the entire span lies in unchanged source. This
-keeps an unrelated baseline diagnostic matched when an earlier edit shifts its
-line or column. A candidate span inside replacement text has no baseline source
-anchor and remains a new diagnostic. A normalized message fingerprint is a
-fallback for diagnostics without codes. Rendered prose must not be the sole
-identity because wording can change between toolchains.
+Matching uses the diagnostic code, mapped primary span, and normalized message
+or subdiagnostic content together. A message or subdiagnostic change at the
+same code and mapped span is a diagnostic delta. Message text is never the sole
+identity across toolchains. Before computing a delta, map candidate spans
+backwards through the edit map to original byte coordinates when the entire
+span lies in unchanged source. This keeps an unrelated baseline diagnostic
+matched when an earlier edit shifts its line or column. A candidate span inside
+replacement text has no baseline source anchor and remains a new diagnostic.
+When a code or primary span is unavailable, the remaining normalized fields
+still participate in matching; rendered prose alone is never sufficient.
 
 Overlay paths, temporary target paths, and session identifiers must be removed
 before comparison or serialization.
 
 ### 6.10. Classification algorithm
 
-For each requested profile, a candidate is accepted when the baseline and
-candidate runs complete sufficiently to compare diagnostics and the candidate's
-error diagnostic delta is empty. Pre-existing baseline errors do not by
-themselves reject a rewrite; a new compiler error rejects it. A completed run
-whose output cannot be classified reliably is inconclusive. Sandbox and other
-environmental failures return `RewriteCheckError`. Classification is relative
-to the baseline, not to an assumption that the unmodified workspace is
-error-free.
+For each requested profile, a candidate is accepted only when baseline and
+candidate runs are completed and classifiable, and the candidate's error
+diagnostic delta is empty. Baseline rustc errors, even when Cargo exits
+nonzero, remain valid comparison input and do not by themselves reject a
+rewrite. Parsed new candidate rustc errors reject it. Failed build scripts,
+procedural macros, or wrappers; unexplained nonzero exits; timeouts or signals;
+and incomplete required process evidence are inconclusive or typed process
+errors, never empty deltas. Sandbox and other environmental failures return
+`RewriteCheckError`. Classification is relative to the baseline, not to an
+assumption that the unmodified workspace is error-free.
 
 When both profiles are requested, the checker classifies one candidate as
 follows. `PoloniusRegression` is checked before the general two-profile
@@ -676,13 +731,17 @@ rejection case so it remains reachable.
 ```text
 if source digests do not match:
     Stale
-else if a required baseline cannot be reproduced:
+else if a required baseline run is incomplete or unclassifiable:
     Inconclusive
-else if candidate NLL run succeeds and candidate Polonius run has new errors:
+else if a requested candidate run is incomplete or unclassifiable:
+    Inconclusive
+else if a requested profile is unavailable:
+    Unavailable
+else if candidate NLL run has no new errors and candidate Polonius run has new errors:
     PoloniusRegression
-else if candidate NLL run succeeds and candidate Polonius run succeeds:
+else if candidate NLL run has no new errors and candidate Polonius run has no new errors:
     NllAndPolonius
-else if candidate NLL run has new errors and candidate Polonius run succeeds:
+else if candidate NLL run has new errors and candidate Polonius run has no new errors:
     PoloniusOnly
 else if candidate NLL run has new errors and candidate Polonius run has new errors:
     RejectedByBoth
@@ -798,7 +857,8 @@ BOR001 lookup_then_relookup
 
 ### 7.1. Functional requirements
 
-- Accept one or more materialized rewrite groups.
+- Accept one materialized rewrite group per checker request; allow batches to
+  submit groups as separate checks and aggregate their reports.
 - Reject stale source digests before creating candidate builds.
 - Reproduce the original Cargo selection.
 - Run NLL and Polonius with the same compiler.
@@ -902,6 +962,11 @@ rates. This enables evidence-based decisions about whether the additional
 compiler work improves agent throughput.
 
 ## 10. Testing strategy
+
+Include a diagnostic-delta fixture where the baseline and candidate report
+share a diagnostic code and mapped primary span but differ in normalized
+message or subdiagnostic content. The changed content must appear in the delta;
+matching must not use message text as the sole cross-toolchain identity.
 
 ### 10.1. Unit tests
 

@@ -116,7 +116,8 @@ this order:
 1. an existing stable standard-library or crate API, such as `entry`;
 2. a direct rewrite accepted by NLL;
 3. a direct rewrite accepted only by Polonius;
-4. no diagnostic when no candidate passes.
+4. within each accepted category, higher semantic confidence first; and
+5. no diagnostic when no candidate passes.
 
 Polonius is an expanded language capability, not a reason to ignore a clearer
 portable API.
@@ -376,7 +377,7 @@ For an API without an entry abstraction, the direct form may be:
 match map.get_mut(&key) {
     Some(value) => value,
     None => {
-        map.insert(key, make_value());
+        map.insert(key.clone(), make_value());
         map.get_mut(&key).expect("inserted key must exist")
     }
 }
@@ -389,6 +390,11 @@ The second form is a canonical Polonius Alpha use case.[^3]
 - Receiver places resolve to the same value.
 - Key expressions have the same normalized expression fingerprint.
 - Key evaluation is side-effect free or evaluated once in the candidate.
+- An entry/move form is eligible only when liveness proves the key is dead
+  afterwards and removing its `Clone` has no observable effect, or a
+  key-preserving materializer retains the original evaluation semantics.
+- If key liveness or clone effects are unknown, suppress the entry/move form
+  or classify it as `ReviewRequired`.
 - The resolved `Hash` and `Eq` implementations for the key type are trusted
   side-effect-free, non-panicking implementations or have verified effect
   summaries.
@@ -642,7 +648,8 @@ path-sensitive rewrite candidate.
 - No code observes snapshot identity.
 - A candidate field split or direct borrow can be materialized.
 - A complete effect summary proves that the mutation loop does not change the
-  iterator's membership or order; writes to the iterated domain or unknown
+  iterator's membership or order, and proves that snapshot-read effects are
+  disjoint from mutation-write effects. Overlapping or unknown read/write
   effects suppress the candidate.
 
 #### BOR007 Suppressions
@@ -711,20 +718,23 @@ or other expressions with observable evaluation require an explicit single
 evaluation binding; without one, the candidate is suppressed.
 
 The materializer should inline the body, substitute arguments, and optionally
-remove the helper. The checker must compile all package targets.
+remove the helper. The checker must compile the originating session's selected
+package targets while preserving its target triple, features, and effective
+Cargo invocation; it must not expand validation to every package target.
 
 This rule is research-grade. Its first release should produce a diff only and
 must never auto-apply.
 
 ## 8. Candidate alternatives and ranking
 
-A detector may emit several recipe alternatives. The rewriter should validate
-all bounded alternatives and rank successful results by:
+A detector may emit several recipe alternatives. First discard candidates
+rejected by the project's accepted checker. Rank the remaining successful
+results by this canonical order:
 
-1. accepted project checker;
-2. NLL portability;
-3. semantic confidence;
-4. existing idiomatic API use;
+1. existing stable idiomatic API;
+2. direct NLL-compatible form;
+3. Polonius-only form;
+4. semantic confidence;
 5. removed allocation or repeated lookup;
 6. smaller edit count;
 7. smaller changed source span; and
@@ -732,10 +742,9 @@ all bounded alternatives and rank successful results by:
 
 ```rust,no_run
 pub struct CandidateScore {
-    pub accepted_policy: bool,
+    pub idiom_rank: u16,
     pub portability: Portability,
     pub semantic_confidence: SemanticConfidence,
-    pub idiom_rank: u16,
     pub allocation_delta: AllocationDelta,
     pub edit_count: usize,
     pub changed_bytes: usize,
@@ -847,17 +856,20 @@ enabled = false
 max_helper_lines = 20
 ```
 
-`accepted_borrow_checker = "polonius-next"` should be explicit. Discovering
-that the compiler supports Polonius must not automatically authorize
-Polonius-only rewrites.
+Project configuration must explicitly set
+`accepted_borrow_checker = "polonius-next"` to accept Polonius-only rewrites.
+Compiler support for Polonius alone never enables those rewrites.
 
 Effect summaries for external APIs should use resolved definition paths and a
 versioned schema. They should not match source text names alone.
 
 ## 11. Compatibility and migration
 
-This RFC extends the proposed ownership phase without changing existing lint
-behaviour.
+This RFC adds rewrite-intent emission and the `PotentiallyPathSensitive`
+classification to `clone_only_used_by_borrow`. That changes the lint
+producer/sidecar contract: consumers must handle the new classification, update
+exhaustive matches, and accommodate the intent schema. Unrelated lint
+diagnostics remain unchanged.
 
 On acceptance, the roadmap should add:
 

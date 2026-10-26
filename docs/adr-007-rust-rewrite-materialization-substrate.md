@@ -363,10 +363,15 @@ syntax inside the bounded anchor to confirm structural preconditions.
 
 Each backend's materializer must compare `base_file_sha256` with the supplied
 source for `path` and `snippet_sha256` with the bytes at `range` before it
-produces edits. A stale digest must be rejected by the materializer, not
-preflighted by the harness, so the harness can exercise the same rejection
-contract against both backends. Fixture-manifest integrity remains a separate
-harness check.
+produces edits. `range` is a half-open `ByteRange` within that source string:
+`start <= end <= source.len()`, and both offsets must be UTF-8 character
+boundaries. Validate those conditions before slicing the source or hashing the
+snippet, and return a typed `InvalidCaptureRange` error for an invalid range.
+This capture range is an input anchor, not a `TextEdit` plan range; plan ranges
+are validated separately after materialization. A stale digest must be rejected
+by the materializer, not preflighted by the harness, so the harness can
+exercise the same rejection contract against both backends. Fixture-manifest
+integrity remains a separate harness check.
 
 The harness, not either backend, should own:
 
@@ -467,6 +472,7 @@ between syntactic materialization and semantic policy.
 The spike must also cover failure and fidelity cases:
 
 - stale whole-file or snippet digest;
+- a capture range that is out of bounds, reversed, or not on UTF-8 boundaries;
 - ambiguous syntax at the recorded range;
 - an edit originating only from macro expansion;
 - overlapping edits from two captures;
@@ -478,10 +484,13 @@ The spike must also cover failure and fidelity cases:
 
 The required behaviour is deterministic rejection or an exact expected edit.
 For rejection fixtures, the harness checks the expected typed error and records
-the result, then stops that fixture's pipeline. It does not validate or apply a
-plan, compare rewritten source, run `cargo fmt`, or invoke a compiler after a
-rejection. Neither backend may panic, silently widen the edit range, or rewrite
-a different same-spelled expression.
+stable diagnostic data, then stops that fixture's pipeline. Repeat each
+rejection fixture in 100 fresh backend processes and compare its typed error
+and stable diagnostic data; rejection fixtures do not produce plans and are not
+part of plan-byte comparisons. They do not validate or apply a plan, compare
+rewritten source, run `cargo fmt`, or invoke a compiler after a rejection.
+Neither backend may panic, silently widen the edit range, or rewrite a
+different same-spelled expression.
 
 ### Validation pipeline
 
@@ -490,18 +499,24 @@ For every backend and fixture, the harness should perform these steps:
 1. Verify source snapshot bytes against the fixture manifest.
 2. Start a fresh backend process and materialize the edit plan from the
    immutable source map.
-3. For an expected rejection, assert the typed error and stop this fixture's
-   pipeline.
+3. For an expected rejection, assert the typed error and stable diagnostic
+   data, then stop this fixture's pipeline.
 4. For a successful plan, validate edit ordering, bounds, UTF-8 boundaries,
    and non-overlap.
-5. Repeat steps 2–4 in 100 fresh backend processes and compare the raw
-   serialized plans byte-for-byte before harness canonicalization.
+5. Across exactly 100 total fresh backend processes per fixture, including the
+   initial process in step 2, compare successful fixtures' raw serialized plans
+   byte-for-byte before harness canonicalization. For rejection fixtures,
+   compare typed errors and stable diagnostic data across those same 100 runs;
+   do not expect or compare plans for rejections.
 6. Apply the successful plan in an isolated fixture copy.
 7. Compare the complete rewritten source with the checked-in expected source.
 8. Assert that bytes outside declared edit ranges are unchanged.
 9. Run `cargo fmt --check` on the rewritten fixture and report formatting-only
    differences as diagnostics; malformed Rust remains a hard failure.
-10. Run the expected NLL and Polonius compiler profiles.
+10. For each requested NLL and Polonius profile, run RFC 0007 Cargo validation
+    on both the untouched fixture and rewritten fixture. Record baseline and
+    candidate outcomes explicitly in the report before attributing any
+    diagnostic delta to the rewrite backend.
 11. Record metrics and diagnostic output in a stable JSON report.
 
 Compiler runs verify that both backends emitted the intended program. They must
@@ -515,10 +530,14 @@ A backend remains eligible only if it:
 - passes every adversarial fixture with the specified result;
 - preserves untouched bytes exactly;
 - preserves required comments, attributes, and line endings;
-- emits identical raw plans from 100 fresh backend processes;
+- emits byte-identical raw plans for successful fixtures across exactly 100
+  total fresh backend processes per fixture;
+- rejects each rejection fixture with the same typed error and stable
+  diagnostic data across exactly 100 total fresh backend processes per fixture;
 - rejects stale and ambiguous anchors;
 - detects overlap before edit application;
-- produces the expected NLL and Polonius compiler outcomes; and
+- records RFC 0007 baseline and rewritten-fixture Cargo outcomes for every
+  requested NLL and Polonius profile before comparing their diagnostic deltas;
 - contains no fixture-specific source-string replacement in the shared harness.
 
 Formatting-only differences reported by `cargo fmt --check` do not affect
