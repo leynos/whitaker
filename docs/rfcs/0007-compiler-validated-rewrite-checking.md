@@ -360,6 +360,8 @@ pub struct CompilationReport {
 
 pub struct ProcessLogArtifactRef {
     pub process: ProcessRole,
+    /// Monotonic order assigned before waiting for the child to finish.
+    pub creation_sequence: u64,
     pub artifact_id: SessionArtifactId,
     pub retained_bytes: u64,
     /// SHA-256 of the retained redacted bytes.
@@ -725,6 +727,10 @@ must nevertheless compare diagnostic deltas rather than assuming success.
 Cargo's JSON stream should be parsed line by line. Non-JSON output from build
 scripts and procedural macros should not crash the parser; retain it in bounded
 session artefacts referenced by `CompilationReport.process_log_artifacts`.
+Assign each child a unique, monotonic `creation_sequence` when it is
+registered, before waiting for it to finish. Serialize `process_log_artifacts`
+in ascending sequence order so child completion order cannot change the JSON
+report.
 
 A normalized diagnostic key should contain:
 
@@ -774,15 +780,18 @@ assumption that the unmodified workspace is error-free.
 After source-current preflight succeeds, the checker classifies profile results
 as follows. A stale source digest has already returned the preflight report
 described in §6.3. `PoloniusRegression` is checked before the general
-two-profile rejection case so it remains reachable.
+two-profile rejection case so it remains reachable. Only a completed capability
+probe that reports an unsupported profile makes that profile unavailable. Check
+such results before run completeness; probe execution and environmental
+failures remain `RewriteCheckError`s as described in §6.3.
 
 ```text
-if a required baseline run is incomplete or unclassifiable:
+if a requested profile is unavailable:
+    Unavailable
+else if a required baseline run is incomplete or unclassifiable:
     Inconclusive
 else if a requested candidate run is incomplete or unclassifiable:
     Inconclusive
-else if a requested profile is unavailable:
-    Unavailable
 else if candidate NLL run has no new errors and candidate Polonius run has new errors:
     PoloniusRegression
 else if candidate NLL run has no new errors and candidate Polonius run has no new errors:

@@ -316,13 +316,16 @@ Each rustc process emits a `SerializedRewriteIntent` DTO through the injected
 3. resolves its source location into the materialization context;
 4. validates the registered recipe kind and version;
 5. decodes the JSON payload into that rule's typed `RecipePayload`;
-6. deduplicates by rule, anchor, and payload digest;
+6. deduplicates by canonical workspace-relative `source_file`, rule, anchor,
+   and payload digest;
 7. sorts candidates deterministically; and
 8. retains source-process logs for verbose diagnostics.
 
 The domain `RewriteIntent<P: RecipePayload>` contains no JSON value or
 session/file path. The materializer registry never passes arbitrary JSON to a
 domain materializer and does not require a central enum of all recipe payloads.
+Keep `source_file` in the session adapter's deduplication key; it does not
+enter the shared domain intent.
 
 Source text should not be copied into durable intent files except for bounded
 snippets needed to recover an anchor. Whole-file contents remain in the
