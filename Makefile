@@ -1,4 +1,4 @@
-.PHONY: help all clean test coverage build release lint lint-clippy lint-whitaker fmt check-fmt markdownlint nixie publish-check typecheck install-smoke release-installer-dry-run package-lints workflow-test workflow-test-deps test-workflow-contracts verus kani verus-clone-detector kani-clone-detector spelling spelling-config spelling-config-write spelling-phrase-check spelling-helper-test
+.PHONY: help all clean test coverage build release lint lint-clippy lint-whitaker fmt check-fmt markdownlint nixie publish-check typecheck install-smoke release-installer-dry-run package-lints workflow-test workflow-test-deps test-workflow-contracts verus kani verus-clone-detector kani-clone-detector verus-string-literals kani-string-literals spelling spelling-config spelling-config-write spelling-phrase-check spelling-helper-test
 
 # Appended only on targets that invoke binaries commonly installed under these
 # prefixes (cargo/bun/user-local), so the default recipe environment stays
@@ -231,11 +231,17 @@ verus: ## Run the pinned Verus proof sidecar
 verus-clone-detector: ## Run clone-detector Verus proofs
 	./scripts/run-verus.sh clone-detector
 
+verus-string-literals: ## Run pure string-literal Verus proof
+	./scripts/run-verus.sh string-literals
+
 kani: ## Run practical Kani sidecar harnesses
 	./scripts/run-kani.sh
 
 kani-clone-detector: ## Run clone-detector Kani harnesses
 	./scripts/run-kani.sh clone-detector
+
+kani-string-literals: ## Run pure string-literal Kani harnesses
+	./scripts/run-kani.sh string-literals
 
 install-smoke: ## Install whitaker-installer and verify basic functionality
 	set -eu; \
