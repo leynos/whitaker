@@ -6,6 +6,9 @@ use rstest::rstest;
 
 use super::*;
 
+#[path = "harness_lock_process_tests.rs"]
+mod process_tests;
+
 /// Check the stale-age boundary for representative lock-directory ages.
 #[rstest]
 #[case(Duration::from_mins(1), false)]
