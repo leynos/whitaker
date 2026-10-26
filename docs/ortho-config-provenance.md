@@ -29,7 +29,9 @@ files are compatibility entry points. They keep the imported user's guide's
 relative migration links working without editing either upstream document. The
 `adrs/adr-0004-cargo-external-subcommand-entry-point.md`,
 `v0-9-0-migration-guide.md`, and sibling `../ortho_l10n/README.md` paths are
-repository-owned pointers to their upstream v0.10.0 sources.
+repository-owned pointers to their upstream v0.10.0 sources. A
+`docs/ortho_l10n/README.md` symlink resolves the migration guide's unchanged
+relative link to the top-level compatibility README.
 
 Code review identified minor grammar issues in the upstream migration guide.
 They remain unchanged to preserve the required source bytes.
