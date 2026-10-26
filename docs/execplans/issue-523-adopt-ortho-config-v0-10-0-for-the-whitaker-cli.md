@@ -71,7 +71,8 @@ roadmap item 3.6.3 if its wording or status needs to be made more precise.
   `install.prefer_prebuilt`, and `install.allow_build_from_source`;
   `diagnostics.locale`; `output.colour` and `output.progress`; and the
   documented per-lint tuning fields. Validate enum-like values when converting
-  into domain settings.
+  into domain settings. Preserve the specified `WHITAKER_NO_SOURCE_FALLBACK`
+  environment control as the inverse of `install.allow_build_from_source`.
 - **CLI-only values:** help, version, config path selection, quiet/verbose,
   JSON output mode, offline operation, forwarded Cargo arguments, and other
   one-run controls that the design does not list as persistent settings. Where
