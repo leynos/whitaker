@@ -239,8 +239,16 @@ Hard invariants. Violating one requires escalation, not a workaround.
       generated `LintPass` supertrait glue and its narrowly scoped
       `missing_docs` expectation. All focused checks and exact-candidate gates
       then passed; evidence is recorded in `EV-STEP2-SCAFFOLD`.
+- [x] (2026-10-26) EP-M1 implementation and its pure-layer non-vacuity
+      controls are complete. Focused tests, doctests, Kani, Verus, and all six
+      sequential full-repository gates pass; evidence is recorded in `EV-M1`
+      and `EV-M1-FULL-GATES`.
+- [x] (2026-10-26) Scope tolerance audit completed. Before EP-M1, the branch
+      already changed 48 paths and added 3,252 net lines outside the two new
+      crates; the EP-M1 candidate reaches 51 paths and 3,507 net lines. Pause
+      before EP-M2 pending the repository owner's scope disposition.
 - [x] Step 2: scaffold both crates. Commit `ea36d5e9`.
-- [ ] EP-M1: pure domain crate.
+- [x] EP-M1: pure domain crate.
 - [ ] EP-M2: plain cooked string literals.
 - [ ] EP-M3: source-authored format strings from compiler built-ins.
 - [ ] EP-M5: suite, installer, tooling, and documentation integration.
@@ -1442,22 +1450,24 @@ in the same commit as the code it constrains.
 ### EP-M1 — Pure domain crate
 
 - **Outcome.** `crates/whitaker_string_literals/` exists as a plain library
-  with no rustc dependency. The three pure modules — `continuation`,
+  with no rustc compiler-internal dependency. It uses `rustc_lexer` for lexical
+  validation and unescaping. The three pure modules — `continuation`,
   `classification`, `rewrite` — plus the `facts` value types are complete,
   documented with runnable doctests, and fully covered. Nothing consumes it yet.
 - **Requirements discharged.** RFC-0002 §Continuation scanner (as corrected by
   `SURP-016`), §Rewrite construction. `INV-SCAN-1`, `INV-SCAN-2`, `INV-SCAN-3`,
   `INV-CLASS-1`, `LEM-REWRITE-1`, `LEM-REWRITE-2` layer (a), `LEM-APPLY-1`.
 - **Acceptance evidence.** `EV-M1`:
-  `cargo nextest run -p whitaker_string_literals` passes;
-  `cargo test -p whitaker_string_literals --doc` passes;
-  `scripts/run-kani.sh string-literals` discharges the harness with the bound
-  recorded; `make verus` discharges `verus/string_continuation_rewrite.rs`;
-  every negative control in the pure set has been run and observed to fail for
-  the stated reason.
-- **Conformance check.** `cargo tree -p whitaker_string_literals` shows no
-  `rustc_*` proxy crate. Every module is under 400 lines, now gate-enforced via
-  `WHITAKER_PACKAGES`. No `#[expect]` of a panic-class lint anywhere.
+  41 focused tests and 22 doctests pass; the Kani harness discharges at unwind
+  bound 9; `make verus` discharges the proof suite including
+  `verus/string_continuation_rewrite.rs`; every pure-layer negative control has
+  been run and observed to fail for the stated reason. The full repository gate
+  results are recorded in `EV-M1-FULL-GATES`.
+- **Conformance check.** `cargo tree -e normal -p whitaker_string_literals`
+  shows `rustc_lexer` as the sole direct runtime dependency and no
+  compiler-internal rustc crate. Every module is under 400 lines, now
+  gate-enforced via `WHITAKER_PACKAGES`. No `#[expect]` of a panic-class lint
+  anywhere.
 - **Recovery.** The crate is unconsumed; deleting the directory and reverting
   the workspace manifest and `WHITAKER_PACKAGES` returns the tree to its prior
   state.
@@ -1932,6 +1942,70 @@ second reported `missing_docs` on the generated accessor. The final scaffold
 uses `rustc_session::impl_lint_pass!` within a small module that carries a
 single `missing_docs` expectation, following the existing lint crates' macro
 isolation pattern.
+
+### `EV-M1` (2026-10-26)
+
+The restored candidate passes `cargo nextest run -p whitaker_string_literals`
+(41/41) and `cargo test -p whitaker_string_literals --doc` (22/22).
+`make kani-string-literals` verifies the bounded scanner harness at unwind
+bound 9: 632 checks, zero failures, 25 unreachable checks, in 304.3 seconds.
+`make verus` passes all proof groups, including seven verified obligations and
+zero errors for the new rewrite proof. `rustc_lexer` is the sole direct runtime
+dependency; all Rust source and proof files are below 400 lines (the largest is
+`rewrite/mod.rs` at 337).
+
+The pure-layer negative controls were observed as follows:
+
+- **NV-SCAN-1:** the unrestricted parity mutation did not finish within 15
+  minutes and was cancelled. With the same harness constrained to four bytes:
+  `a`, two backslashes, and LF, the defective scanner made Kani fail the
+  independent continuation-count assertion (1 of 633 checks failed, 160.7
+  seconds).
+- **NV-SCAN-2:** setting the skipped range equal to the escape range failed
+  `escape_range.end <= skipped_whitespace_range.start` on `alpha`, backslash,
+  LF, space, `alpha`.
+- **NV-SCAN-3:** omitting consumed whitespace made the evaluated-value
+  property fail: the original produced `alphaalpha`, while the rewrite produced
+  `alpha alpha`.
+- **NV-CLASS-1:** swapping the empty-content tie precedence failed case 3,
+  which expected `LeadingLayoutTrim` and received `TrailingLayoutTrim`.
+- **NV-REWRITE-2:** weakening the sorted/disjoint recursive precondition made
+  Verus reject the proof at the assertion that the earlier ranges fit inside
+  the shortened prefix.
+- **NV-REWRITE-3:** making the pure classifier and rewriter split at leading
+  layout trim failed the assertion that the leading continuation remains in the
+  first fragment. The compiler-fixture layer of this control belongs to EP-M2
+  and has not been run.
+- **NV-APPLY-1:** hard-coding `ConcatRewrite::build` to return `Some` made all
+  eight build-dependent test cases fail. The five independent `concat!`-grammar
+  cases passed because they do not call `build`.
+
+The controls were temporary mutations and have been reverted. The unrestricted
+NV-SCAN-1 timeout is retained above so the successful targeted counterexample
+is not mistaken for a completed unrestricted run. Logs are under
+`/tmp/pr355-nv-*-20261026.out` and `/tmp/pr355-m1-*-final-20261026.out`.
+
+### `EV-M1-FULL-GATES` (2026-10-26)
+
+The first full lint run identified three Dylint findings in `scan_into`,
+`ConcatRewrite::build`, and `is_concat_macro_expression`. Private helpers now
+separate backslash-run scanning, build guards, macro-head recognition, and
+macro-argument validation. No lint suppressions were added. The updated
+candidate passed the six requested repository gates in order:
+
+- `make check-fmt`: passed; log
+  `/tmp/check-fmt-79835686-da6f-44b3-8bc2-5c7544bdeec4-2-4-1-string-continuation-style-post-expansion-early-lint.md-4.out`.
+- `make test`: passed, 1,693 passed and 5 skipped; doctests passed, including
+  22/22 for `whitaker_string_literals`; log
+  `/tmp/test-79835686-da6f-44b3-8bc2-5c7544bdeec4-2-4-1-string-continuation-style-post-expansion-early-lint.md-5.out`.
+- `make typecheck`: passed; log
+  `/tmp/typecheck-79835686-da6f-44b3-8bc2-5c7544bdeec4-2-4-1-string-continuation-style-post-expansion-early-lint.md-5.out`.
+- `make lint`: passed, including rustdoc, Clippy, and Whitaker; log
+  `/tmp/lint-79835686-da6f-44b3-8bc2-5c7544bdeec4-2-4-1-string-continuation-style-post-expansion-early-lint.md-4.out`.
+- `make markdownlint`: passed with no errors; log
+  `/tmp/markdownlint-79835686-da6f-44b3-8bc2-5c7544bdeec4-2-4-1-string-continuation-style-post-expansion-early-lint.md-4.out`.
+- `make nixie`: passed; log
+  `/tmp/nixie-79835686-da6f-44b3-8bc2-5c7544bdeec4-2-4-1-string-continuation-style-post-expansion-early-lint.md-4.out`.
 
 ### `EV-M0-transcript` (2026-10-18)
 
