@@ -43,7 +43,7 @@ BASE_SLOW_TIMEOUT: typ.Final[dict[str, object]] = {
 }
 
 #: The whole-run budget both profiles must declare.
-REQUIRED_GLOBAL_TIMEOUT: typ.Final[str] = "85m"
+REQUIRED_GLOBAL_TIMEOUT: typ.Final[str] = "300m"
 
 # Parser-pin fixtures share one integration binary and Cargo package cache, so
 # the allowance must cover that whole binary and serialize it.
@@ -55,8 +55,28 @@ COMPILE_CONTRACT_FILTER: typ.Final[str] = (
     "test(normalize_settings_is_public_and_the_legacy_name_stays_removed) | "
     "test(renamed_common_apis_are_public_and_legacy_names_stay_removed) | "
     "test(renamed_sarif_api_is_public_and_legacy_names_stay_removed) | "
-    "test(sha2_0_11_pre_migration_patterns_fail_to_compile) | "
+    "test(sha2_0_11_pre_migration_patterns_fail_to_compile)"
+)
+NESTED_TRYBUILD_TEST_FILTER: typ.Final[str] = (
     "test(trybuild_fixtures_compile_without_diagnostics)"
+)
+TRYBUILD_CONTRACT_FILTER: typ.Final[str] = (
+    f"{COMPILE_CONTRACT_FILTER} | {NESTED_TRYBUILD_TEST_FILTER}"
+)
+NESTED_TRYBUILD_FILTER: typ.Final[str] = (
+    "package(rstest_helper_should_be_fixture) & "
+    f"{NESTED_TRYBUILD_TEST_FILTER}"
+)
+NESTED_EXAMPLE_FILTER: typ.Final[str] = (
+    "package(rstest_helper_should_be_fixture) & "
+    "test(example_compiles_without_diagnostics)"
+)
+NESTED_UI_FIXTURE_FILTER: typ.Final[str] = (
+    "package(no_unwrap_or_else_panic) & "
+    "test(ui::aliased_test_crate_non_companion_does_not_exempt_parent_function)"
+)
+NESTED_UI_HARNESS_FILTER: typ.Final[str] = (
+    "package(no_unwrap_or_else_panic) & test(ui::ui)"
 )
 
 
@@ -74,8 +94,8 @@ class Allowance(typ.NamedTuple):
     retries : integer, dict[str, object], or None
         The whole ``retries`` setting, or None when the override declares
         none. The Dylint UI harnesses retry transient Windows rename failures;
-        Compile contracts disable retries because each retry repeats a
-        costly nested Cargo build.
+        the large nested UI harnesses and compile contracts disable retries
+        because each retry repeats a costly Cargo build.
     """
 
     slow_timeout: dict[str, object]
@@ -103,7 +123,7 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
     "default": {
         BUILD_SCRIPT_INTEGRATION_FILTER: Allowance(
             slow_timeout={
-                "period": "45m",
+                "period": "75m",
                 "terminate-after": 1,
                 "grace-period": "5s",
             },
@@ -119,7 +139,43 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
         ),
         COMPILE_CONTRACT_FILTER: Allowance(
             slow_timeout={
-                "period": "45m",
+                "period": "75m",
+                "terminate-after": 1,
+                "grace-period": "5s",
+            },
+            test_group="serial-dylint-ui",
+            retries=0,
+        ),
+        NESTED_TRYBUILD_FILTER: Allowance(
+            slow_timeout={
+                "period": "120m",
+                "terminate-after": 1,
+                "grace-period": "5s",
+            },
+            test_group="serial-dylint-ui",
+            retries=0,
+        ),
+        NESTED_EXAMPLE_FILTER: Allowance(
+            slow_timeout={
+                "period": "75m",
+                "terminate-after": 1,
+                "grace-period": "5s",
+            },
+            test_group="serial-dylint-ui",
+            retries={"backoff": "exponential", "count": 2, "delay": "5s"},
+        ),
+        NESTED_UI_FIXTURE_FILTER: Allowance(
+            slow_timeout={
+                "period": "75m",
+                "terminate-after": 1,
+                "grace-period": "5s",
+            },
+            test_group="serial-dylint-ui",
+            retries=0,
+        ),
+        NESTED_UI_HARNESS_FILTER: Allowance(
+            slow_timeout={
+                "period": "75m",
                 "terminate-after": 1,
                 "grace-period": "5s",
             },
@@ -139,8 +195,7 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
         (
             "test(driver::ui::) | "
             "test(tests::ui::) | "
-            "test(ui::ui) | "
-            "test(example_compiles_without_diagnostics) | "
+            "(test(ui::ui) & not package(no_unwrap_or_else_panic)) | "
             "test(example_harness_collects_call_site_evidence) | "
             "test(ui::example_compiles_under_test_harness) | "
             "test(ui::hand_written_test_companion_does_not_exempt_parent_"
@@ -149,8 +204,6 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
             "code) | "
             "test(ui::rstest_empty_companion_does_not_exempt_parent_function)"
             " | "
-            "test(ui::aliased_test_crate_non_companion_does_not_exempt_parent_"
-            "function) | "
             "(binary(ui) & test(=ui))"
         ): Allowance(
             slow_timeout={
@@ -165,7 +218,7 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
     "ci": {
         BUILD_SCRIPT_INTEGRATION_FILTER: Allowance(
             slow_timeout={
-                "period": "45m",
+                "period": "75m",
                 "terminate-after": 1,
                 "grace-period": "5s",
             },
@@ -181,7 +234,43 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
         ),
         COMPILE_CONTRACT_FILTER: Allowance(
             slow_timeout={
-                "period": "45m",
+                "period": "75m",
+                "terminate-after": 1,
+                "grace-period": "5s",
+            },
+            test_group="serial-dylint-ui",
+            retries=0,
+        ),
+        NESTED_TRYBUILD_FILTER: Allowance(
+            slow_timeout={
+                "period": "120m",
+                "terminate-after": 1,
+                "grace-period": "5s",
+            },
+            test_group="serial-dylint-ui",
+            retries=0,
+        ),
+        NESTED_EXAMPLE_FILTER: Allowance(
+            slow_timeout={
+                "period": "75m",
+                "terminate-after": 1,
+                "grace-period": "5s",
+            },
+            test_group="serial-dylint-ui",
+            retries={"backoff": "exponential", "count": 2, "delay": "5s"},
+        ),
+        NESTED_UI_FIXTURE_FILTER: Allowance(
+            slow_timeout={
+                "period": "75m",
+                "terminate-after": 1,
+                "grace-period": "5s",
+            },
+            test_group="serial-dylint-ui",
+            retries=0,
+        ),
+        NESTED_UI_HARNESS_FILTER: Allowance(
+            slow_timeout={
+                "period": "75m",
                 "terminate-after": 1,
                 "grace-period": "5s",
             },
@@ -199,7 +288,7 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
         (
             "test(driver::ui::) | "
             "test(tests::ui::) | "
-            "test(ui::ui) | "
+            "(test(ui::ui) & not package(no_unwrap_or_else_panic)) | "
             "(binary(ui) & test(=ui))"
         ): Allowance(
             slow_timeout={
@@ -448,19 +537,20 @@ COVERAGE_KEPT_CONTRACT_TEST: typ.Final[str] = (
 def test_coverage_skips_the_override_contracts_but_the_one_that_counts() -> None:
     """The Makefile lists track the nextest override, less the one test that counts.
 
-    ``TRYBUILD_CONTRACT_FILTER`` must equal the compile-contract override's
-    filter, and ``COVERAGE_SKIPPED_TRYBUILD_FILTER`` that list less the one
-    test that moves coverage, so adding a contract test to one place and not
-    the other fails here instead of silently changing the coverage lane.
+    ``TRYBUILD_CONTRACT_FILTER`` combines the six standard compile-contract
+    overrides with the separately budgeted nested trybuild test.
+    ``COVERAGE_SKIPPED_TRYBUILD_FILTER`` lists those seven tests less the one
+    that moves coverage, so adding a contract test to one place and not the
+    other fails here instead of silently changing the coverage lane.
     """
     all_seven = _makefile_variable("TRYBUILD_CONTRACT_FILTER")
-    assert all_seven == COMPILE_CONTRACT_FILTER, (
-        "TRYBUILD_CONTRACT_FILTER must equal the nextest compile-contract "
-        "override's filter"
+    assert all_seven == TRYBUILD_CONTRACT_FILTER, (
+        "TRYBUILD_CONTRACT_FILTER must combine the standard and nested "
+        "nextest compile-contract filters"
     )
     expected = " | ".join(
         part
-        for part in COMPILE_CONTRACT_FILTER.split(" | ")
+        for part in TRYBUILD_CONTRACT_FILTER.split(" | ")
         if part != COVERAGE_KEPT_CONTRACT_TEST
     )
     assert _makefile_variable("COVERAGE_SKIPPED_TRYBUILD_FILTER") == expected, (

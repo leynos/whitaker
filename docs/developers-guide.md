@@ -1229,12 +1229,10 @@ bill for days.
 A contract asserts it, which it did not before. This rule was documented and
 unenforced, and two matrix jobs reached a pull request on paid runners with no
 timeout at all before a reviewer caught it. The contract requires a declared
-`timeout-minutes` on every lane in the Ubicloud list and bounds it to two
-hours, which is an order of magnitude above the slowest leg this repository has
-ever run and so catches a typo as readily as an omission. Values are sized from
-observed runs rather than guessed: 30 minutes for `build-lints`, about eight
-times its slowest leg, and 45 for `build-dependency-binaries`, which installs
-every dependency crate from source and is the heavier of the two.
+`timeout-minutes` on every lane in the Ubicloud list and bounds it to 340
+minutes. The two suite lanes use 335 minutes to cover the 300-minute nextest
+budget and its measured outer work; unrelated lanes retain their measured
+30-minute `build-lints` and 45-minute `build-dependency-binaries` budgets.
 
 Test and build concurrency is bounded by one named constant.
 `LINUX_RUNNER_VCPUS` is declared once per workflow and a single step derives
@@ -1246,7 +1244,7 @@ worker count rather than `-n auto`.
 
 #### Coverage lane time limits
 
-`coverage-check` and `coverage-upload` run under the 120-minute ceiling that
+`coverage-check` and `coverage-upload` run under the 335-minute ceiling that
 "Test timeouts: four tiers, outermost last" derives from the suite's budgets,
 and that section's contract pins it. The ceiling must also hold a cold compiler
 cache, not only a warm one. A cold cache is not rare: every change to the
@@ -1268,11 +1266,11 @@ CodeScene upload and three cache saves), could not finish cold at all. A
 cancelled writer keeps the compiler-cache entries it stored while it compiled,
 which is why the next trunk run was warm, but it loses its doctests, its
 CodeScene upload and its archive saves. The slowest cold job measured, 38m45s,
-sits well inside the 120-minute ceiling, which leaves `coverage-upload` about
-81 minutes after a cold `Generate coverage` for its doctests, upload and saves.
-Re-measure the cold figure after a change that makes the suite materially
-larger; if it approaches the ceiling, the tier derivation is where to raise it,
-not a per-lane value.
+sits well inside the 335-minute ceiling, which leaves `coverage-upload` about
+296 minutes after a cold `Generate coverage` for its doctests, upload and
+saves. Re-measure the cold figure after a change that makes the suite
+materially larger; if it approaches the ceiling, the tier derivation is where
+to raise it, not a per-lane value.
 
 #### Placement inside a matrix
 
@@ -3464,15 +3462,22 @@ subsequent tests.
 Example-based UI tests in `rstest_helper_should_be_fixture` also use a
 cross-process directory lock under the system temporary directory. `nextest`
 can run test binaries in separate processes, so a plain in-process `Mutex` is
-not sufficient for those examples. A directory becomes eligible for stale
-recovery only after it has aged past 30 minutes, and stale cleanup removes that
-age-eligible lock directory only after successfully acquiring the lifetime
-owner-liveness lock. If stale cleanup sees `NotFound`, it treats the directory
-as already removed rather than as a failed recovery attempt, and the live lock
-path still waits indefinitely in production while the tests keep the bounded
-timeout. A sidecar advisory lock serializes ownership transitions, and the
-directory's owner token prevents an original holder from deleting a successor
-after stale recovery.
+not sufficient for those examples. The lock name is derived from a hash of the
+test executable's `target/.../deps` directory: processes using the same `deps`
+directory serialize on one lock, while worktrees with separate target
+directories normally do not block one another. A hash collision shares a lock
+and only adds serialization; it cannot permit concurrent use. In the
+1,845/1,852 run, `trybuild_fixtures_compile_without_diagnostics` hit its
+360-second timeout while waiting on the former host-wide lock, which another
+worktree's `example_harness_collects_call_site_evidence` process held despite
+using a separate target directory. A lock directory becomes eligible for stale
+recovery after five minutes, and stale cleanup removes it only after
+successfully acquiring the lifetime owner-liveness lock. If stale cleanup sees
+`NotFound`, it treats the directory as already removed rather than as a failed
+recovery attempt. The default `acquire()` wait is bounded at six minutes. A
+sidecar advisory lock serializes ownership transitions, and the directory's
+owner token prevents an original holder from deleting a successor after stale
+recovery.
 
 ### Configuration constant patterns
 
@@ -4217,12 +4222,12 @@ of the rule lives in the `generate-coverage` README in
 this repository sets, what each value is sized against, and where the third
 tier went.
 
-| Tier                     | What it bounds                     | Where it is set                             | Current value                                                                                                                                                                           |
-| ------------------------ | ---------------------------------- | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`, both profiles       | 300 s default; 20 m for ordinary serialized UI and no-default-feature builds; 45 m for parser-pin and trybuild compile-contract fixtures; 30 m for toolchain-installing behaviour tests |
-| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, both profiles       | 85 m                                                                                                                                                                                    |
-| Cargo watchdog           | one `cargo` invocation, wall clock | not used here, see below                    | absent                                                                                                                                                                                  |
-| Job `timeout-minutes`    | the whole job                      | `ci.yml` and `coverage-main.yml`, job level | 120 m for every lane that runs the suite                                                                                                                                                |
+| Tier                     | What it bounds                     | Where it is set                             | Current value                                                                                                                                                                                                                                                                                                                 |
+| ------------------------ | ---------------------------------- | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`, both profiles       | 300 s default; 20 m for ordinary serialized UI and no-default-feature builds; 75 m for parser-pin, most trybuild, nested example-build, alias UI and whole UI harness fixtures; 120 m for `rstest_helper_should_be_fixture::ui::trybuild_fixtures_compile_without_diagnostics`; 30 m for toolchain-installing behaviour tests |
+| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, both profiles       | 300 m                                                                                                                                                                                                                                                                                                                         |
+| Cargo watchdog           | one `cargo` invocation, wall clock | not used here, see below                    | absent                                                                                                                                                                                                                                                                                                                        |
+| Job `timeout-minutes`    | the whole job                      | `ci.yml` and `coverage-main.yml`, job level | 335 m for every lane that runs the suite                                                                                                                                                                                                                                                                                      |
 
 *Table: the timers that can end a run, innermost first.*
 
@@ -4280,21 +4285,43 @@ measured 235 seconds and timed out at the 300-second base allowance on Windows.
 The wider allowance lets nested UI builds finish under contention while still
 terminating a stalled test.
 
-Every trybuild compile contract rebuilds fixture crates through nested Cargo.
-In a cold workspace, the Bumpy Road public API contract timed out on three
-20-minute attempts; the final attempt reached its pass fixture after 15 minutes
-of nested compilation. Retrying restarted that expensive build without
-producing a result. All discovered compile contracts therefore share a
-45-minute allowance and disable retries, leaving one build enough time to reach
-its fixtures without repeating the same work.
+The alias UI fixture in `no_unwrap_or_else_panic` exceeded its 20-minute
+allowance while rebuilding its lint library through nested Cargo and waiting
+for compiler admission. A retry began the same build again and was cut short by
+the whole-run timeout. It now has a 75-minute allowance and no retry, so one
+queued build can finish without repeating its setup.
+
+The same crate's whole `ui::ui` harness reached the 150-minute global deadline
+with a retry rebuilding the lint library while Cargo waited for the shared
+package-cache lock. It now gets one 75-minute build attempt in the same serial
+UI group, without retries that would repeat the nested build.
+
+The `trybuild_fixtures_compile_without_diagnostics` test in
+`rstest_helper_should_be_fixture` exceeded its 75-minute bound in the later
+240-minute run. At the timeout, it had reached
+`tests/ui/collection_zero_diagnostic.rs`; nested Cargo was still building
+fixture dependencies, and its `trybuild000` compile request was 50 slots back
+in a healthy admission queue. Give this test one 120-minute attempt with no
+retries so the same queued build can finish without repeating its setup.
+
+Every other discovered trybuild compile contract rebuilds fixture crates
+through nested Cargo. In a cold workspace, the Bumpy Road public API contract
+timed out on three 20-minute attempts; the final attempt reached its pass
+fixture after 15 minutes of nested compilation. Retrying restarted that
+expensive build without producing a result. A later full run exceeded the
+45-minute allowance while Cargo waited on package-cache and compiler-admission
+queues. The other discovered compile contracts therefore share a 75-minute
+allowance and disable retries, leaving one build more time to reach its
+fixtures without repeating the same work.
 
 The three parser-pin build-script integration cases run in the same serial
 nested-Cargo group and each use a fresh temporary target directory. The
 exact-pin case performs both `cargo check` and `cargo run`; a traced run
 completed in 591 seconds after waiting on the shared package-cache lock. A
 later full run exhausted the 30-minute allowance while compiler admission had a
-large queue. The 45-minute allowance reflects that observed wait, and the group
-prevents these fixtures from competing with the no-default-feature build.
+large queue, then exceeded the 45-minute allowance during the same kind of
+contention. The 75-minute allowance accounts for that observed wait, and the
+group prevents these fixtures from competing with the no-default-feature build.
 
 ### The clocks do not start together
 
@@ -4321,10 +4348,10 @@ for the build and the steps either side of the suite, plus a fifteen-minute
 margin above that sum. The margin is there because a ceiling equal to the sum
 it contains cancels the job at the moment the innermost timer would have
 reported the overrun, and the report is the only thing that makes an overrun
-actionable. That is 85 m + 65 s + 15 m + 15 m, or 116 minutes 5 seconds, which
+actionable. That is 300 m + 65 s + 15 m + 15 m, or 331 minutes 5 seconds, which
 `required_ceiling` computes for both profiles.
 
-The ceiling is not that requirement. It is pinned separately at 120 minutes, a
+The ceiling is not that requirement. It is pinned separately at 335 minutes, a
 policy value above it: the derivation accepts any ceiling at or above the
 requirement, so the value is pinned as well, to stop a lane drifting to a
 number nobody chose.
@@ -4335,11 +4362,24 @@ written down, so it has been corrected rather than kept as a special case.
 
 ### What the values are sized against
 
-The 85 m whole-run budget is sized against the latest uncached full run. It
-reached 1,840 of 1,842 tests before the global timeout stopped the SARIF API
-contract's nested trybuild compilation while Cargo waited on shared locks and
-compiler admission. The additional 10 m gives that contract and the remaining
-test room to finish without weakening the configured per-test ceilings.
+The 300 m whole-run budget responds to a full run under the 240 m limit.
+Nextest reported 1,846 of 1,852 tests run, with 1,845 passing (one after
+retry), one timed out, and five skipped. Fail-fast left six tests not run. The
+timed-out
+`rstest_helper_should_be_fixture::ui::trybuild_fixtures_compile_without_diagnostics`
+test reached `tests/ui/collection_zero_diagnostic.rs` while its nested Cargo
+build was still waiting in the healthy compile-slot queue. Its per-test
+allowance rises from 75 m to 120 m without retries. The 60 m increase to the
+whole-run budget covers the 45 m per-test increase and leaves 15 m for the
+remaining fixtures; the workflow ceiling rises with it so the job can report a
+nextest overrun. The preceding 150 m run completed 1,841 tests; the 110 m run
+completed 1,834 tests, and the earlier 85 m runs reached 1,842 and 1,846 tests.
+
+The example-compilation test in `rstest_helper_should_be_fixture` also exceeded
+its 20 m per-test allowance during the recovery run: Cargo built the library,
+then timed out while building the example. Its retry passed after 764 seconds.
+The 75 m override covers both nested builds and retains the existing retry for
+transient UI failures.
 
 The 15 m allowance for work outside nextest's window is measured, from the
 worst of several runs rather than one:
@@ -4368,7 +4408,7 @@ and this suite cannot run a bare `--workspace` build. Coverage runs through
 
 That absence is asserted rather than assumed. A lane that adopted the action
 without setting `RUN_RUST_CARGO_WAIT_TIMEOUT` would inherit the 1,800 s default
-underneath an 85 m nextest budget, which is exactly the inversion the canonical
+underneath a 300 m nextest budget, which is exactly the inversion the canonical
 section exists to prevent, and it would do so silently. The contract therefore
 fails if either the action appears or the variable is set, so adopting it needs
 this section updated in the same change.
@@ -4540,9 +4580,9 @@ fails `ci`'s ordering too. Whether a profile terminates a test no override
 matches is still read from its own table alone.
 
 It pins the values the tables above state as well as ordering them: the base
-`slow-timeout` on both profiles compared as a whole table, the 85 m whole-run
+`slow-timeout` on both profiles compared as a whole table, the 300 m whole-run
 budget, both overrides' whole `slow-timeout` including the grace period, and
-the 120-minute ceiling on every suite lane. The ordering assertions hold for a
+the 335-minute ceiling on every suite lane. The ordering assertions hold for a
 range of values, so on their own they would let any of these drift to a number
 nobody chose while still passing. The grace period is pinned for the same
 reason it is read: the watchdog and the ceiling above it are sized to cover

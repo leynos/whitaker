@@ -67,8 +67,22 @@ Commands:
   install   Install or repair Whitaker dependencies and lint bundles
   ls        Show installed lints, bundle metadata, and effective enablement
   doctor    Diagnose config, toolchain, dependencies, bundles, and recent failures
+  rewrite   Discover, validate, inspect, and apply ownership rewrites
   help      Print this message or the help of the given subcommand
 ```
+
+The `rewrite` command family includes `whitaker rewrite check`,
+`whitaker rewrite diff`, `whitaker rewrite apply`, and
+`whitaker rewrite explain <REWRITE-ID>`, as specified by RFCs 0007–0009.
+`rewrite check` is the public rewrite discovery and compiler-validation
+workflow. The `rewrite-scan` name is reserved for its internal lint-session
+phase; it is not a public command or an alias for `whitaker check`.
+
+`whitaker rewrite check` creates temporary session files and runs Cargo and
+compiler processes while leaving user source untouched. Network denial and
+session-directory write confinement apply to the complete checker process tree,
+including build scripts, procedural macros, and compiler wrappers. The command
+fails before starting Cargo if the platform cannot enforce that policy.
 
 `whitaker` becomes a real Rust binary. `whitaker-ls` disappears in favour of
 `whitaker ls`. `whitaker-installer` survives for one compatibility release as a
@@ -111,9 +125,11 @@ Common options:
   -v, --verbose...
 ```
 
-`--json` is intentionally not a global option. It should be exposed only on
-subcommands that return operational state summaries, specifically `whitaker ls`
-and `whitaker doctor`.
+`--json` is intentionally not a global option. It should be exposed on
+`whitaker ls`, `whitaker doctor`, and every rewrite subcommand: `check`, `diff`,
+`apply`, and `explain`. Rewrite JSON output is versioned and includes the
+subcommand's relevant plan, validation report, application result, diff, or
+explanation.
 
 ## `whitaker check`
 
