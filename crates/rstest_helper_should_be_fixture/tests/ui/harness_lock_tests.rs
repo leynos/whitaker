@@ -102,6 +102,42 @@ fn effective_target_directory_uses_cargo_marker() {
     );
 }
 
+/// Prefer Cargo's marker over a conflicting absolute target override.
+#[test]
+fn effective_target_directory_prefers_cargo_marker_over_absolute_override() {
+    let test_directory = tempfile::tempdir().expect("create test directory");
+    let marker_directory = test_directory.path().join("marked-target");
+    let executable = marker_directory.join("debug/deps/test-binary");
+    std::fs::create_dir_all(executable.parent().expect("get executable directory"))
+        .expect("create executable directory");
+    std::fs::write(marker_directory.join(".rustc_info.json"), "{}")
+        .expect("create Cargo target marker");
+    let override_directory = test_directory.path().join("override-target");
+    std::fs::create_dir(&override_directory).expect("create override directory");
+    let expected_directory =
+        std::fs::canonicalize(&marker_directory).expect("canonicalize marked target");
+
+    assert_eq!(
+        effective_target_directory(&executable, Some(&override_directory))
+            .expect("resolve the marker-bearing target directory"),
+        expected_directory
+    );
+}
+
+/// Return `NotFound` when neither Cargo metadata nor a target path resolves.
+#[test]
+fn effective_target_directory_reports_not_found_without_resolution_sources() {
+    let test_directory = tempfile::tempdir().expect("create test directory");
+    let executable = test_directory.path().join("bin/test-binary");
+    std::fs::create_dir_all(executable.parent().expect("get executable directory"))
+        .expect("create executable directory");
+
+    let error = effective_target_directory(&executable, None)
+        .expect_err("unresolvable target directory should report NotFound");
+
+    assert_eq!(error.kind(), io::ErrorKind::NotFound);
+}
+
 /// Ignore a non-file marker and use the executable's profile directory.
 #[test]
 fn effective_target_directory_skips_non_file_marker() {
