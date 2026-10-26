@@ -308,6 +308,10 @@ behaviour, and UI compile contracts.
   README. The repeated upstream grammar findings remain intentionally
   unmodified. Rerun documentation gates and review this link correction before
   requesting plan approval.
+- [x] 2026-10-26: The fifth CodeRabbit review found that the legacy migration
+  compatibility entry point was not indexed. It is now listed in
+  `docs/contents.md`; rerun documentation gates and review the index correction
+  before requesting plan approval.
 - [x] 2026-10-26: Committed the import and planning checkpoint as
   `4a4246166a40ea4c6b27f37bb57979d3f80d8ff9`.
 - [ ] Await explicit user approval of this plan before implementation.
