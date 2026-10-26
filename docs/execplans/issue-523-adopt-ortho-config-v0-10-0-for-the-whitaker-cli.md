@@ -137,7 +137,9 @@ runtime errors write to stderr and return 1. `list` writes human-readable or
 JSON output to stdout. Install progress and diagnostics use stderr, while the
 stable `whitaker-installer: suite-source=...` machine marker uses stdout.
 Installer tests also cover the generated `DYLINT_LIBRARY_PATH` shell setup;
-that is not a CLI configuration input.
+that is not a CLI configuration input. Direct baseline probes with `WHITAKER_*`
+and `DYLINT_*` variables removed confirmed that `--help` and `--version` return
+0 with stdout only, while `--invalid-option` returns 2 with stderr only.
 
 Callers checked include the repository's CI, release, and rolling-release
 workflows, `Makefile`, and external workspace callers in Combobulate and
@@ -268,6 +270,14 @@ behaviour, and UI compile contracts.
   the supplied baseline: 711 tests passed across 21 test targets, including 11
   CLI behaviour tests, one tracing CLI test, and both UI contracts. The UI
   target took 1,502 seconds under shared compiler admission.
+- [x] 2026-10-26: `make fmt`, `make check-fmt`, `make markdownlint`,
+  `make spelling`, and `make nixie` passed for the imported guides, provenance,
+  index, and plan. Markdown lint reported zero errors; imported guide hashes
+  remained unchanged.
+- [x] 2026-10-26: Committed the import and planning checkpoint as
+  `4a4246166a40ea4c6b27f37bb57979d3f80d8ff9`.
+- [ ] CodeRabbit review is rate-limited. The user-requested `vsleep` cooldown
+  selected 51 minutes and is running; retry only after it completes.
 - [ ] Await explicit user approval of this plan before implementation.
 
 ## Surprises & discoveries
