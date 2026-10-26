@@ -1189,6 +1189,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "googletest"
+version = "0.14.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f6b5e2f2b556b7b90297a5a35c8267dd43a537923d2b329beefdba2b4ec19d94"
+dependencies = [
+ "googletest_macro",
+ "num-traits",
+ "regex",
+ "rustversion",
+]
+
+[[package]]
+name = "googletest_macro"
+version = "0.14.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2ae6abc96141edd26bf5aeec0f119c129c44de3ced09e5073711a02cb74725d0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
 name = "hashbrown"
 version = "0.14.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2005,6 +2028,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "pretty_assertions"
+version = "1.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3ae130e2f271fbc2ac3a40fb1d07180839cdbbe443c7a27e1e3c13c5cac0116d"
+dependencies = [
+ "diff",
+ "yansi",
+]
+
+[[package]]
 name = "proc-macro-crate"
 version = "3.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2773,6 +2806,31 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3763264f6b73151db08c50ff20d7d8a0b8796e021cdea7ceedad07b80155fa0e"
 dependencies = [
  "lock_api",
+]
+
+[[package]]
+name = "string_continuation_style"
+version = "0.2.7"
+dependencies = [
+ "camino",
+ "dylint_linting",
+ "dylint_testing",
+ "fluent-templates",
+ "googletest",
+ "log",
+ "pretty_assertions",
+ "rstest",
+ "rustc_ast",
+ "rustc_lint",
+ "rustc_session",
+ "rustc_span",
+ "serde",
+ "serial_test",
+ "tempfile",
+ "whitaker",
+ "whitaker-common",
+ "whitaker_string_literals",
+ "whitaker_test_macros",
 ]
 
 [[package]]
@@ -3555,6 +3613,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "whitaker_string_literals"
+version = "0.1.0"
+dependencies = [
+ "googletest",
+ "insta",
+ "pretty_assertions",
+ "proptest",
+ "rstest",
+ "rstest-bdd",
+ "rstest-bdd-macros",
+ "rustc_lexer",
+ "whitaker_test_macros",
+]
+
+[[package]]
 name = "whitaker_suite"
 version = "0.2.7"
 dependencies = [
@@ -3831,6 +3904,12 @@ dependencies = [
  "libc",
  "rustix",
 ]
+
+[[package]]
+name = "yansi"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cfe53a6657fd280eaa890a3bc59152892ffa3e30101319d168b781ed6529b049"
 
 [[package]]
 name = "zerocopy"

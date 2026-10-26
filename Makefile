@@ -78,7 +78,9 @@ WHITAKER ?= whitaker
 # rustc_private plumbing (dylint-driver feature, prefer-dynamic RUSTFLAGS)
 # that `cargo dylint`'s plain check build cannot provide, so the suite runs
 # over the support crates that build as ordinary libraries.
-WHITAKER_PACKAGES ?= -p whitaker-common -p whitaker-installer -p whitaker_clones_core -p whitaker_sarif
+WHITAKER_PACKAGES ?= \
+	-p whitaker-common -p whitaker-installer -p whitaker_clones_core \
+	-p whitaker_string_literals -p whitaker_sarif
 
 build: target/debug/$(APP) ## Build debug binary
 release: target/release/$(APP) ## Build release binary
