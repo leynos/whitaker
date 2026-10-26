@@ -234,13 +234,12 @@ Hard invariants. Violating one requires escalation, not a workaround.
       remained at `afb1e4ac`; the series needed no replay changes. All requested
       gates passed after the `EV-REBASE-VALIDATION` resource-recovery rerun, and
       the branch was pushed with an exact lease.
-- [ ] (2026-10-26) Step 2: both crate skeletons and the pure-crate package-list
-      entry are in place; metadata resolved. The pure crate check passed twice.
-      The adapter check first exposed its missing `LintPass` supertrait; the
-      generated implementation then required a narrowly scoped `missing_docs`
-      expectation. That expectation is now isolated around the macro glue, and
-      a fresh sequential gate run is pending (`EV-STEP2-SCAFFOLD`).
-- [ ] Step 2: scaffold both crates (in progress).
+- [x] (2026-10-26) Step 2: both crate skeletons and the pure-crate package-list
+      entry are in place; metadata resolved. The adapter scaffold needed the
+      generated `LintPass` supertrait glue and its narrowly scoped
+      `missing_docs` expectation. All focused checks and exact-candidate gates
+      then passed; evidence is recorded in `EV-STEP2-SCAFFOLD`.
+- [x] Step 2: scaffold both crates. Commit `ea36d5e9`.
 - [ ] EP-M1: pure domain crate.
 - [ ] EP-M2: plain cooked string literals.
 - [ ] EP-M3: source-authored format strings from compiler built-ins.
@@ -1910,6 +1909,29 @@ were read back at the pushed commit.
 
 `cargo metadata --format-version 1` resolved `googletest` to `0.14.3` and
 `pretty_assertions` to `1.4.1`.
+
+### `EV-STEP2-SCAFFOLD` (2026-10-26)
+
+Commit `ea36d5e9a503cdb1e7fe8b0b60d9fc96c1f56376` adds the planned two-crate
+skeleton, the `WHITAKER_PACKAGES` entry, and the Cargo lockfile changes. The
+focused checks passed: `cargo check -p whitaker_string_literals` (1 s) and
+`cargo check -p string_continuation_style --features dylint-driver` (25 s).
+
+The complete sequential gate run then passed: `make check-fmt` (7 s),
+`make test` (2,095 s; 1,652 nextest tests passed, 5 skipped, doctests passed),
+`make typecheck` (578 s), `make lint` (888 s; rustdoc, Clippy, and Whitaker /
+Dylint), `make markdownlint` (18 s), and `make nixie` (1 s). Logs are under
+`/tmp` with the
+`79835686-da6f-44b3-8bc2-5c7544bdeec4-2-4-1-string-
+continuation-style-post-expansion-early-lint.md-3.out`
+prefix; focused check logs use `-3.out`, and Make gate logs use `-2.out`.
+
+Two initial adapter checks stopped before the full gate sequence. The first
+reported that the no-op `EarlyLintPass` lacked its `LintPass` supertrait; the
+second reported `missing_docs` on the generated accessor. The final scaffold
+uses `rustc_session::impl_lint_pass!` within a small module that carries a
+single `missing_docs` expectation, following the existing lint crates' macro
+isolation pattern.
 
 ### `EV-M0-transcript` (2026-10-18)
 
