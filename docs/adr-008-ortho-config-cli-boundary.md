@@ -1,4 +1,4 @@
-# Architectural decision record (ADR) 007: OrthoConfig CLI boundary
+# Architectural decision record (ADR) 008: OrthoConfig CLI boundary
 
 ## Status
 
@@ -38,16 +38,19 @@ default for a configurable field, use `cli_default_as_absent` so the default
 does not mask file or environment values.
 
 For one release, fall back to `dylint.toml` only when no canonical file is
-selected or found. Map `DYLINT_LOCALE` below `WHITAKER_DIAGNOSTICS_LOCALE`.
-Return deprecation notices that identify the replacement. A selected missing,
-unreadable, or malformed file is an error, not optional absence. Help and
-version are successful display requests; parse and configuration failures
-remain typed at the application boundary. Localize help and parse errors
-together with an `en-GB` fallback.
+selected or found. Map root-level legacy `locale` to `diagnostics.locale`,
+preserve known lint tables, and tolerate other Dylint tables. Map
+`DYLINT_LOCALE` below `WHITAKER_DIAGNOSTICS_LOCALE`. Return deprecation notices
+that identify the replacement. A selected missing, unreadable, or malformed
+file is an error, not optional absence. Help and version are successful display
+requests; parse and configuration failures remain typed at the application
+boundary. Localize help and parse errors together with an `en-GB` fallback.
 
 The documented `WHITAKER_NO_SOURCE_FALLBACK` environment control and
 `--no-source-fallback` flag map to the inverse of
-`install.allow_build_from_source`.
+`install.allow_build_from_source`. An enabled environment control sets the
+field to false; a disabled value does not override a file setting. Use the
+installer’s existing interpretation of empty, `0`, and `false` values.
 
 ## Consequences
 
