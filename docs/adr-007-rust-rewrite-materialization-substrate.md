@@ -100,6 +100,14 @@ The selected substrate must allow Whitaker to:
 - Compiler acceptance remains the responsibility of the rewrite checker. A
   successful syntax edit does not establish semantic equivalence.
 
+The shared domain uses `RewriteIntent<P: RecipePayload>` with a rule-owned
+typed payload. It contains no JSON value or session/file path. A distinct,
+versioned `SerializedRewriteIntent` DTO carries JSON payload and source-file
+location only at the sidecar adapter boundary. An injected `IntentSink` port
+outside `whitaker_rewrite_model` accepts that DTO; the session adapter writes
+it atomically. This keeps transport and session paths out of the domain without
+introducing a central enum of every recipe payload.
+
 ## Options considered
 
 ### Option A: ast-grep pattern and replacement backend
@@ -395,7 +403,9 @@ behaviour comparable.
 
 ### Primary rewrite fixtures
 
-The spike must implement the same recipes with both backends.
+The spike must implement the same recipes with both backends. Each successful
+fixture manifest must list its exact expected edit ranges by workspace-relative
+file, using offsets in the original fixture source.
 
 #### Fixture 1: borrow-only local clone removal
 
@@ -519,6 +529,12 @@ For every backend and fixture, the harness should perform these steps:
     diagnostic delta to the rewrite backend.
 11. Record metrics and diagnostic output in a stable JSON report.
 
+For each successful raw plan across the 100 runs, compare its exact per-file
+edit-range set with the ranges declared by that fixture manifest before step 6.
+A mismatch rejects the backend before application. The expected rewritten
+source and unchanged-byte checks remain additional gates; neither substitutes
+for the exact range-set comparison.
+
 Compiler runs verify that both backends emitted the intended program. They must
 not compensate for a backend that changes unrelated source or loses comments.
 
@@ -532,6 +548,8 @@ A backend remains eligible only if it:
 - preserves required comments, attributes, and line endings;
 - emits byte-identical raw plans for successful fixtures across exactly 100
   total fresh backend processes per fixture;
+- matches every successful raw plan's exact expected edit-range set by file
+  before applying the plan;
 - rejects each rejection fixture with the same typed error and stable
   diagnostic data across exactly 100 total fresh backend processes per fixture;
 - rejects stale and ambiguous anchors;

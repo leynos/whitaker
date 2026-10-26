@@ -206,9 +206,9 @@ The detector should not attempt to run Polonius inside the lint process.
 ### 5.2. Stable source anchors
 
 A `DefId` is useful within one compiler process but cannot identify source
-across an overlay replay. Each intent should therefore record:
+across an overlay replay. The serialized sidecar DTO should therefore record:
 
-- workspace-relative file;
+- workspace-relative source file;
 - whole-file SHA-256;
 - editable byte range;
 - source snippet SHA-256;
@@ -217,31 +217,50 @@ across an overlay replay. Each intent should therefore record:
 - package and target identity; and
 - rule-specific payload.
 
-### 5.3. Generic recipe envelope
+### 5.3. Typed recipe intent and serialized sidecar
 
 The shared model should avoid adding every rule payload to one central enum. A
-generic envelope permits independent lint and rewriter evolution.
+generic typed intent permits independent lint and rewriter evolution. Each lint
+crate owns its `RecipePayload` type. The shared domain intent contains no JSON
+value or session/file path; the source-file location belongs to the serialized
+sidecar DTO.
 
 ```rust,no_run
-pub struct RewriteIntent {
-    pub schema_version: u16,
+pub trait RecipePayload {}
+
+pub struct RewriteIntent<P: RecipePayload> {
     pub id: RewriteId,
     pub rule: RuleId,
     pub anchor: SemanticAnchor,
     pub impact: ImpactScope,
-    pub recipe: RecipeDescriptor,
+    pub payload: P,
     pub evidence: EvidenceSummary,
 }
 
-pub struct RecipeDescriptor {
-    pub kind: RecipeKind,
-    pub version: u16,
+pub struct SerializedRewriteIntent {
+    pub schema_version: u16,
+    pub source_file: WorkspaceRelativePath,
+    pub id: RewriteId,
+    pub rule: RuleId,
+    pub anchor: SemanticAnchor,
+    pub impact: ImpactScope,
+    pub recipe_kind: RecipeKind,
+    pub recipe_version: u16,
     pub payload: serde_json::Value,
+    pub evidence: EvidenceSummary,
+}
+
+pub trait IntentSink {
+    fn emit(&mut self, intent: SerializedRewriteIntent) -> Result<(), SinkError>;
 }
 ```
 
-The owning lint crate should define and test a typed payload. RFC 0009's
-materializer registry should reject unsupported recipe versions.
+The lint adapter serializes its typed intent into the versioned DTO and emits
+it through an injected `IntentSink` port outside `whitaker_rewrite_model`. The
+session adapter implements the sink and writes DTOs atomically. The
+materializer receives only the typed domain intent; arbitrary JSON remains at
+the adapter boundary. RFC 0009's registry validates the DTO version and decodes
+its payload into the registered rule-owned type before materialization.
 
 ### 5.4. Sidecar collection
 
@@ -252,9 +271,9 @@ JSON. `whitaker check` should therefore set a session directory such as:
 WHITAKER_REWRITE_SESSION_DIR=target/whitaker/rewrite-scan/<session>
 ```
 
-Lint processes should atomically write one JSON file per crate process and
-candidate. Files should be named from a crate disambiguator, process
-identifier, and monotonic local counter. Aggregation occurs after Cargo
+The session adapter should atomically write one serialized DTO per crate
+process and candidate. Files should be named from a crate disambiguator,
+process identifier, and monotonic local counter. Aggregation occurs after Cargo
 finishes.
 
 `rewrite-scan` is an internal lint-session phase and directory name, not a
@@ -891,9 +910,10 @@ pub enum OriginalPlaceConflict {
 }
 ```
 
-`PotentiallyPathSensitive` should emit a rewrite intent for RFC 0007 rather
-than discarding the candidate. This is the principal integration point between
-Phase 9 and Polonius-aware validation.
+`PotentiallyPathSensitive` should emit a rewrite intent to RFC 0009 rather than
+discarding the candidate. RFC 0009 materializes the intent before asking RFC
+0007 to validate the resulting rewrite. This is the principal integration point
+between Phase 9 and Polonius-aware validation.
 
 ## 12. Testing strategy
 

@@ -66,6 +66,20 @@ proptest! {
     }
 }
 
+/// Check the production acquisition path scopes its lock to the test binary.
+#[test]
+fn production_acquisition_uses_current_executable_target_directory() {
+    let executable = std::env::current_exe().expect("resolve the current test executable");
+    let target_deps_directory = executable
+        .parent()
+        .expect("the current test executable should have a parent directory");
+    let expected_path = example_harness_lock_path(target_deps_directory);
+
+    let lock = ExampleHarnessLock::acquire().expect("acquire the production harness lock");
+
+    assert_eq!(lock.path(), expected_path.as_path());
+}
+
 /// Check equal target-directory digests safely share one serialized lock.
 #[test]
 fn colliding_target_digests_share_a_serialized_lock() {

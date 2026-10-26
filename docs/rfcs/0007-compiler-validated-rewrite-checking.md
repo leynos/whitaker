@@ -354,8 +354,29 @@ pub struct CompilationReport {
     pub cargo_exit_status: ProcessExitStatus,
     pub child_process_statuses: Vec<ChildProcessStatus>,
     pub diagnostics: Vec<NormalizedDiagnostic>,
+    pub process_log_artifacts: Vec<ProcessLogArtifactRef>,
     pub outcome: CompilationOutcome,
 }
+
+pub struct ProcessLogArtifactRef {
+    pub process: ProcessRole,
+    pub artifact_id: SessionArtifactId,
+    pub retained_bytes: u64,
+    /// SHA-256 of the retained redacted bytes.
+    pub sha256: Sha256Digest,
+    pub truncated: bool,
+}
+
+pub enum ProcessRole {
+    Cargo,
+    Compiler,
+    BuildScript,
+    ProceduralMacro,
+    OtherChild,
+}
+
+/// An opaque identifier relative to one checker session, never a filesystem path.
+pub struct SessionArtifactId(String);
 
 pub enum ProcessExitStatus {
     Exited { code: i32 },
@@ -390,6 +411,7 @@ pub struct InvocationProvenance {
 pub struct RewriteCheckReport {
     pub rewrite_id: RewriteId,
     pub acceptance: RewriteAcceptance,
+    pub stale_source_paths: Vec<WorkspaceRelativePath>,
     pub profile_results: Vec<ProfileCheckResult>,
     pub invocation: InvocationProvenance,
 }
@@ -410,10 +432,25 @@ pub enum RewriteCheckError {
 ```
 
 `PlanValidationError` identifies malformed serialized or model data, including
-invalid ranges, stale digests, duplicate paths, and overlapping edits. The
-checker maps deserialization failures into `RewriteCheckError::PlanValidation`
-before creating or editing candidate files; parser-specific errors do not
-escape as unclassified failures.
+invalid ranges, duplicate paths, and overlapping edits. The checker maps
+deserialization failures into `RewriteCheckError::PlanValidation` before
+creating or editing candidate files; parser-specific errors do not escape as
+unclassified failures. A well-formed plan whose file digest differs from
+current source is a `Stale` preflight report, not a plan-validation error.
+
+Before creating an overlay or starting compiler processes, compare every
+materialized file digest with current source. If any differ, return a valid
+`RewriteCheckReport` with `acceptance: Stale`, the sorted mismatches in
+`stale_source_paths`, and an empty `profile_results` vector. No candidate or
+overlay is created and no compiler runs. For example, the JSON report includes:
+
+```json
+{
+  "acceptance": "stale",
+  "stale_source_paths": ["crates/example/src/lib.rs"],
+  "profile_results": []
+}
+```
 
 `CompilationOutcome::Completed` means Cargo and every required child process
 finished with enough evidence to classify their output. It does not mean that
@@ -425,6 +462,16 @@ timeout or signal; or missing status for a required child process makes the run
 `Inconclusive` or returns a typed process error. Such a run must never be
 treated as an empty diagnostic delta. Profile reports retain process statuses
 and the classification reason.
+
+Non-JSON output from build scripts, procedural macros, and other child
+processes is retained as bounded, redacted session artefacts. Redact
+credentials before writing. Retain at most 1 MiB per child process and 16 MiB
+per validation session; set `truncated` when either cap omits output. Artefact
+IDs are opaque session-relative identifiers, not filesystem paths. Artefacts
+are private to the checker session and deleted with it by default. Preserve
+them with the overlay only under `--keep-overlay` or the existing
+unexpected-divergence retention rules. JSON reports contain artefact references
+and metadata, never log contents. Log artefacts are not cache entries.
 
 The checker is an application service with a small, checker-local set of
 outbound capabilities: a capability-scoped filesystem for source snapshots and
@@ -676,8 +723,8 @@ must nevertheless compare diagnostic deltas rather than assuming success.
 ### 6.9. Diagnostic normalization
 
 Cargo's JSON stream should be parsed line by line. Non-JSON output from build
-scripts and procedural macros should be retained as unstructured log records
-but must not crash the parser.
+scripts and procedural macros should not crash the parser; retain it in bounded
+session artefacts referenced by `CompilationReport.process_log_artifacts`.
 
 A normalized diagnostic key should contain:
 
@@ -724,14 +771,13 @@ errors, never empty deltas. Sandbox and other environmental failures return
 `RewriteCheckError`. Classification is relative to the baseline, not to an
 assumption that the unmodified workspace is error-free.
 
-When both profiles are requested, the checker classifies one candidate as
-follows. `PoloniusRegression` is checked before the general two-profile
-rejection case so it remains reachable.
+After source-current preflight succeeds, the checker classifies profile results
+as follows. A stale source digest has already returned the preflight report
+described in §6.3. `PoloniusRegression` is checked before the general
+two-profile rejection case so it remains reachable.
 
 ```text
-if source digests do not match:
-    Stale
-else if a required baseline run is incomplete or unclassifiable:
+if a required baseline run is incomplete or unclassifiable:
     Inconclusive
 else if a requested candidate run is incomplete or unclassifiable:
     Inconclusive
@@ -859,7 +905,8 @@ BOR001 lookup_then_relookup
 
 - Accept one materialized rewrite group per checker request; allow batches to
   submit groups as separate checks and aggregate their reports.
-- Reject stale source digests before creating candidate builds.
+- Return a `Stale` preflight report with mismatched source paths before
+  creating an overlay or starting compiler processes.
 - Reproduce the original Cargo selection.
 - Run NLL and Polonius with the same compiler.
 - Compare baseline and candidate diagnostics.
@@ -1001,6 +1048,8 @@ Behaviour-driven tests should cover:
 - a rewrite rejected by both profiles;
 - a simulated Polonius regression;
 - a pre-existing baseline error;
+- a stale file digest returned as a preflight report with no overlay, compiler
+  run, or profile results;
 - an edit before a pre-existing error whose source span remains unchanged;
 - a multi-file signature rewrite;
 - feature and target selection;

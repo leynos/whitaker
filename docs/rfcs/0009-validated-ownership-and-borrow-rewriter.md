@@ -302,20 +302,27 @@ WHITAKER_REWRITE_INTENT_SCHEMA_VERSION=<supported version>
 WHITAKER_REWRITE_MODE=collect
 ```
 
-`WHITAKER_REWRITE_INTENT_SCHEMA_VERSION` versions the lint-emitted intent
-envelope. `MaterializedRewrite.schema_version` in RFC 0007 versions the
-materialized plan, while `report_schema_version` versions the JSON report.
-Intent, plan, and report schemas evolve independently; changing one does not
-implicitly change the others.
+`WHITAKER_REWRITE_INTENT_SCHEMA_VERSION` versions the serialized sidecar DTO.
+`MaterializedRewrite.schema_version` in RFC 0007 versions the materialized
+plan, while `report_schema_version` versions the JSON report. Intent, plan, and
+report schemas evolve independently; changing one does not implicitly change
+the others.
 
-Each rustc process writes candidates atomically. The engine then:
+Each rustc process emits a `SerializedRewriteIntent` DTO through the injected
+`IntentSink`; the session adapter writes each DTO atomically. The engine then:
 
-1. validates every JSON envelope;
+1. validates each DTO schema and source-file location;
 2. rejects candidates outside the workspace;
-3. deduplicates by rule, anchor, and payload digest;
-4. sorts candidates deterministically;
-5. reports unsupported recipe versions; and
-6. retains source-process logs for verbose diagnostics.
+3. resolves its source location into the materialization context;
+4. validates the registered recipe kind and version;
+5. decodes the JSON payload into that rule's typed `RecipePayload`;
+6. deduplicates by rule, anchor, and payload digest;
+7. sorts candidates deterministically; and
+8. retains source-process logs for verbose diagnostics.
+
+The domain `RewriteIntent<P: RecipePayload>` contains no JSON value or
+session/file path. The materializer registry never passes arbitrary JSON to a
+domain materializer and does not require a central enum of all recipe payloads.
 
 Source text should not be copied into durable intent files except for bounded
 snippets needed to recover an anchor. Whole-file contents remain in the
@@ -330,7 +337,6 @@ changes. Each intent should include:
 
 ```rust,no_run
 pub struct SemanticAnchor {
-    pub path: WorkspaceRelativePath,
     pub base_file_sha256: Sha256Digest,
     pub span: ByteRange,
     pub snippet_sha256: Sha256Digest,
@@ -340,6 +346,11 @@ pub struct SemanticAnchor {
     pub after_context_sha256: Option<Sha256Digest>,
 }
 ```
+
+The workspace-relative source-file location is carried by
+`SerializedRewriteIntent` at the sidecar boundary, not by the shared domain
+intent or `SemanticAnchor`. The session adapter resolves that location into the
+source entries supplied through `MaterializeContext`.
 
 ### 7.2. Resolution policy
 
@@ -370,17 +381,22 @@ macro surface.
 A materializer converts one typed recipe payload into bounded alternatives.
 
 ```rust,no_run
-pub trait RewriteMaterializer {
+pub trait RewriteMaterializer<P: RecipePayload> {
     fn kind(&self) -> RecipeKind;
     fn supported_versions(&self) -> VersionRange;
 
     fn materialize(
         &self,
         context: &MaterializeContext<'_>,
-        intent: &RewriteIntent,
+        intent: &RewriteIntent<P>,
     ) -> Result<Vec<RewriteAlternative>, MaterializeError>;
 }
 ```
+
+The registry first validates a `SerializedRewriteIntent` DTO, then decodes its
+payload into the registered rule-owned `P` before calling the typed
+materializer. A malformed or unsupported DTO fails at that boundary; arbitrary
+JSON never reaches domain materialization.
 
 A `RewriteAlternative` contains:
 
