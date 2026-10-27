@@ -5,7 +5,7 @@ use std::ffi::OsStr;
 use ortho_config::{OrthoResult, ScanEnvSource};
 use serde_json::{json, Map, Value};
 
-use crate::{error::invalid, source_fallback_override};
+use crate::{commands::environment_key, error::invalid, source_fallback_override};
 
 /// Collect legacy and canonical environment layers without reading process state.
 ///
@@ -68,7 +68,7 @@ impl EnvironmentLayers {
 
     /// Map a canonical global or command-specific variable when recognized.
     fn insert_canonical(&mut self, key: &str, value: &OsStr) -> OrthoResult<()> {
-        if let Some((command, setting)) = command_key(key) {
+        if let Some((command, setting)) = environment_key(key) {
             let canonical_key = format!("WHITAKER_{setting}");
             if let Some((section, field, kind)) = known_key(&canonical_key) {
                 let parsed = parse_value(key, text_value(key, value)?, kind)?;
@@ -253,27 +253,6 @@ fn insert(root: &mut Map<String, Value>, section: &str, field: &str, value: Valu
 #[cfg(test)]
 #[path = "environment_tests.rs"]
 mod tests;
-
-/// Recognize a documented command-specific environment namespace.
-fn command_key(key: &str) -> Option<(&'static str, &str)> {
-    let rest = key.strip_prefix("WHITAKER_CMDS_")?;
-    for (prefix, command) in [
-        ("REWRITE_EXPLAIN_", "rewrite_explain"),
-        ("REWRITE_CHECK_", "rewrite_check"),
-        ("REWRITE_APPLY_", "rewrite_apply"),
-        ("REWRITE_DIFF_", "rewrite_diff"),
-        ("REWRITE_", "rewrite"),
-        ("INSTALL_", "install"),
-        ("DOCTOR_", "doctor"),
-        ("CHECK_", "check"),
-        ("LS_", "ls"),
-    ] {
-        if let Some(setting) = rest.strip_prefix(prefix) {
-            return Some((command, setting));
-        }
-    }
-    None
-}
 
 /// Insert a value under its command and settings section.
 fn insert_command(
