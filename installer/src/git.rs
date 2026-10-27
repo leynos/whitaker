@@ -10,14 +10,16 @@ mod command;
 #[path = "git/commit_sha.rs"]
 mod commit_sha;
 
-pub use commit_sha::CommitSha;
-
-use crate::artefact::suite_ref::SuiteRef;
-use crate::error::{InstallerError, Result};
-use crate::workspace::WHITAKER_REPO_URL;
 use camino::Utf8Path;
 use command::run_git_with_timeout;
+pub use commit_sha::CommitSha;
 use tracing::{debug, warn};
+
+use crate::{
+    artefact::suite_ref::SuiteRef,
+    error::{InstallerError, Result},
+    workspace::WHITAKER_REPO_URL,
+};
 
 /// Clones the Whitaker repository to the specified target directory.
 ///

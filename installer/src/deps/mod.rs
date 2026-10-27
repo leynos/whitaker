@@ -4,18 +4,26 @@
 //! available, then installs any missing tools by preferring repository-hosted
 //! release archives before falling back to `cargo binstall` or `cargo install`.
 
-use crate::dependency_binaries::{
-    DependencyBinaryInstaller, RepositoryDependencyBinaryInstaller, find_dependency_binary,
-    host_target,
+use std::{
+    io,
+    io::Write,
+    path::Path,
+    process::{Command, Output},
 };
-use crate::dirs::{BaseDirs, SystemBaseDirs};
-use crate::error::{InstallerError, Result};
+
 use camino::Utf8Path;
 use cap_std::{ambient_authority, fs_utf8::Dir};
-use std::io;
-use std::io::Write;
-use std::path::Path;
-use std::process::{Command, Output};
+
+use crate::{
+    dependency_binaries::{
+        DependencyBinaryInstaller,
+        RepositoryDependencyBinaryInstaller,
+        find_dependency_binary,
+        host_target,
+    },
+    dirs::{BaseDirs, SystemBaseDirs},
+    error::{InstallerError, Result},
+};
 
 mod install;
 mod install_repository;
@@ -124,9 +132,7 @@ pub(crate) struct SystemBinaryLocator;
 
 impl BinaryLocator for SystemBinaryLocator {
     /// Search the process PATH and classify failures from skipped entries.
-    fn find_binary(&self, binary_name: &str) -> PathScanResult {
-        find_binary_on_path(binary_name)
-    }
+    fn find_binary(&self, binary_name: &str) -> PathScanResult { find_binary_on_path(binary_name) }
 }
 
 /// Status and diagnostics from a successful availability query.
@@ -161,9 +167,7 @@ pub struct DylintToolStatus {
 impl DylintToolStatus {
     /// Returns `true` when both tools are installed.
     #[must_use]
-    pub fn all_installed(&self) -> bool {
-        self.cargo_dylint && self.dylint_link
-    }
+    pub fn all_installed(&self) -> bool { self.cargo_dylint && self.dylint_link }
 }
 
 /// How a run should react when a published artefact is missing.
@@ -701,7 +705,9 @@ mod path_scan_tests {
     //! Verify that PATH scan failure categories remain stable and bounded.
 
     use super::{
-        PathScanFailureCategory, directory_open_failure_category, metadata_failure_category,
+        PathScanFailureCategory,
+        directory_open_failure_category,
+        metadata_failure_category,
     };
 
     /// Treat an absent PATH candidate as routine while preserving other failures.

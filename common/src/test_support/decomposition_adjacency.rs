@@ -90,9 +90,7 @@ impl AdjacencyReport {
     /// assert_eq!(report.node_count(), 4);
     /// ```
     #[must_use]
-    pub const fn node_count(&self) -> usize {
-        self.node_count
-    }
+    pub const fn node_count(&self) -> usize { self.node_count }
 
     /// Returns the neighbour list for `node`, sorted by neighbour index.
     ///

@@ -22,9 +22,7 @@ fn edge(left: usize, right: usize, weight: u64) -> SimilarityEdge {
 
 #[allow_fixture_expansion_lints]
 #[fixture]
-fn connected_triplet_vectors() -> Vec<MethodFeatureVector> {
-    vectors(&["alpha", "beta", "gamma"])
-}
+fn connected_triplet_vectors() -> Vec<MethodFeatureVector> { vectors(&["alpha", "beta", "gamma"]) }
 
 #[fixture]
 fn connected_triplet_adjacency() -> Vec<Vec<(usize, u64)>> {
@@ -43,21 +41,15 @@ fn linear_quartet_adjacency() -> Vec<Vec<(usize, u64)>> {
 
 #[allow_fixture_expansion_lints]
 #[fixture]
-fn isolated_tail_vectors() -> Vec<MethodFeatureVector> {
-    vectors(&["alpha", "beta", "gamma"])
-}
+fn isolated_tail_vectors() -> Vec<MethodFeatureVector> { vectors(&["alpha", "beta", "gamma"]) }
 
 #[allow_fixture_expansion_lints]
 #[fixture]
-fn isolated_tail_adjacency() -> Vec<Vec<(usize, u64)>> {
-    build_adjacency(3, &[edge(0, 1, 5)])
-}
+fn isolated_tail_adjacency() -> Vec<Vec<(usize, u64)>> { build_adjacency(3, &[edge(0, 1, 5)]) }
 
 #[allow_fixture_expansion_lints]
 #[fixture]
-fn lexical_tie_vectors() -> Vec<MethodFeatureVector> {
-    vectors(&["gamma", "alpha", "beta"])
-}
+fn lexical_tie_vectors() -> Vec<MethodFeatureVector> { vectors(&["gamma", "alpha", "beta"]) }
 
 #[fixture]
 fn lexical_tie_adjacency() -> Vec<Vec<(usize, u64)>> {

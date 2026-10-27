@@ -1,11 +1,12 @@
 //! Tests for the lint-library packaging command.
 
-use super::*;
+use std::{fs, io};
+
 use clap::Parser;
 use proptest::prelude::*;
 use rstest::{fixture, rstest};
-use std::fs;
-use std::io;
+
+use super::*;
 
 /// Common CLI base arguments shared across parsing tests.
 const BASE_ARGS: [&str; 9] = [
@@ -177,9 +178,7 @@ fn days_in_month(year: u64, month: u64) -> u64 {
 }
 
 /// Return whether a year is a leap year in the Gregorian calendar.
-fn is_gregorian_leap_year(year: u64) -> bool {
-    year % 400 == 0 || year % 4 == 0 && year % 100 != 0
-}
+fn is_gregorian_leap_year(year: u64) -> bool { year % 400 == 0 || year % 4 == 0 && year % 100 != 0 }
 
 #[test]
 fn now_utc_iso8601_format_is_valid() {
@@ -242,7 +241,5 @@ impl io::Write for BrokenPipeWriter {
         Err(io::Error::from(io::ErrorKind::BrokenPipe))
     }
 
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
+    fn flush(&mut self) -> io::Result<()> { Ok(()) }
 }

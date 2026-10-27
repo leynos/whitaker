@@ -4,10 +4,10 @@
 //! to users when installation fails. Each error includes recovery hints where
 //! applicable.
 
-use crate::artefact::suite_ref::SuiteRef;
-use crate::crate_name::CrateName;
 use camino::Utf8PathBuf;
 use thiserror::Error;
+
+use crate::{artefact::suite_ref::SuiteRef, crate_name::CrateName};
 
 /// Errors that can occur during the installation process.
 #[derive(Debug, Error)]
@@ -25,8 +25,8 @@ pub enum InstallerError {
     /// A published artefact was absent and `--no-source-fallback` forbade the
     /// source build that would otherwise have replaced it.
     #[error(
-        "{artefact} is not available and --no-source-fallback is set, so the \
-         source build that would have replaced it did not run: {reason}"
+        "{artefact} is not available and --no-source-fallback is set, so the source build that \
+         would have replaced it did not run: {reason}"
     )]
     SourceFallbackForbidden {
         /// What could not be fetched, in terms a caller can act on.
@@ -132,8 +132,8 @@ pub enum InstallerError {
     /// A suite pin was requested from inside a Whitaker working tree.
     #[error(
         "cannot pin the suite to \"{reference}\" from inside a Whitaker workspace at {path}; \
-         checking out a reference here would move your own working tree. \
-         Run the installer from another directory, or check out the reference yourself."
+         checking out a reference here would move your own working tree. Run the installer from \
+         another directory, or check out the reference yourself."
     )]
     SuitePinInWorkspace {
         /// The requested reference.

@@ -1,10 +1,14 @@
 //! Archive extraction helpers for repository-hosted dependency binaries.
 
-use super::installer::DependencyBinaryInstallError;
-use std::fs::File;
-use std::io::{self, Read, Write};
-use std::path::{Path, PathBuf};
+use std::{
+    fs::File,
+    io::{self, Read, Write},
+    path::{Path, PathBuf},
+};
+
 use tempfile::NamedTempFile;
+
+use super::installer::DependencyBinaryInstallError;
 
 /// Extracts a single executable from dependency archives.
 #[cfg_attr(test, mockall::automock)]

@@ -4,14 +4,17 @@
 //! clone them into an isolated workspace, and execute each case via
 //! `dylint_testing` while capturing panics into deterministic error messages.
 
-use crate::test_support::{copy_fixture, env_test_guard};
-use camino::Utf8Path;
-use glob::glob;
 use std::{
-    fs, io,
+    fs,
+    io,
     path::{Path, PathBuf},
 };
+
+use camino::Utf8Path;
+use glob::glob;
 use tempfile::{TempDir, tempdir};
+
+use crate::test_support::{copy_fixture, env_test_guard};
 
 /// Temporary workspace prepared for a single UI fixture run.
 pub struct FixtureEnvironment {
@@ -23,14 +26,10 @@ pub struct FixtureEnvironment {
 impl FixtureEnvironment {
     /// Returns the root directory containing the cloned fixture files.
     #[must_use]
-    pub fn workdir(&self) -> &Path {
-        &self.workdir
-    }
+    pub fn workdir(&self) -> &Path { &self.workdir }
 
     /// Moves the optional `dylint.toml` contents out of the environment.
-    pub const fn take_config(&mut self) -> Option<String> {
-        self.config.take()
-    }
+    pub const fn take_config(&mut self) -> Option<String> { self.config.take() }
 }
 
 /// Discovers `.rs` fixtures inside `directory`, returning the paths unsorted.

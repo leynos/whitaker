@@ -2,13 +2,14 @@
 
 use whitaker_sarif::{WHITAKER_FRAGMENT_KEY, WHK002_ID, WhitakerProperties};
 
-use crate::{Fingerprint, NormProfile};
-
 use super::{
-    AcceptedPair, SimilarityRatio, emit_run0,
+    AcceptedPair,
+    SimilarityRatio,
+    emit_run0,
     score::jaccard_similarity,
     test_helpers::{FragmentInput, config, fingerprint, fragment, pair},
 };
+use crate::{Fingerprint, NormProfile};
 
 #[test]
 fn duplicate_hashes_do_not_inflate_jaccard_score() {

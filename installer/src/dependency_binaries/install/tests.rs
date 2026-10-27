@@ -1,16 +1,22 @@
 //! Unit tests for repository-hosted dependency-binary installation helpers.
 
-use super::downloader::MockDependencyArchiveDownloader;
-use super::extractor::MockDependencyArchiveExtractor;
-use super::installer::{InstallSupport, install_with};
-use super::metadata::expected_member_path;
-use super::{archive_filename, *};
-use crate::dirs::MockBaseDirs;
-use crate::installer_packaging::TargetTriple;
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
+
 use mockall::predicate::{always, eq};
 use rstest::{fixture, rstest};
-use std::fs;
-use std::path::{Path, PathBuf};
+
+use super::{
+    archive_filename,
+    downloader::MockDependencyArchiveDownloader,
+    extractor::MockDependencyArchiveExtractor,
+    installer::{InstallSupport, install_with},
+    metadata::expected_member_path,
+    *,
+};
+use crate::{dirs::MockBaseDirs, installer_packaging::TargetTriple};
 
 /// Build a deterministic installation setup for success and missing-binary
 /// scenarios.

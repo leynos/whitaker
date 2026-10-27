@@ -109,16 +109,17 @@
 //! [examples]: https://github.com/trailofbits/dylint/tree/master/examples
 //! [its repository]: https://github.com/Manishearth/compiletest-rs
 
-use anyhow::Result;
-use compiletest_rs as compiletest;
-use dylint_internal::{CommandExt, env, library_filename};
-use once_cell::sync::OnceCell;
 use std::{
     env::{remove_var, set_var, var_os},
     ffi::{OsStr, OsString},
     path::{Path, PathBuf},
     sync::Mutex,
 };
+
+use anyhow::Result;
+use compiletest_rs as compiletest;
+use dylint_internal::{CommandExt, env, library_filename};
+use once_cell::sync::OnceCell;
 
 mod example;
 pub mod ui;
@@ -131,24 +132,18 @@ static DRIVER: OnceCell<Result<PathBuf>> = OnceCell::new();
 /// - `src_base` is a directory containing:
 ///   - source files on which to test the library (`.rs` files), and
 ///   - the output those files should produce (`.stderr` files).
-pub fn ui_test(name: &str, src_base: impl AsRef<Path>) {
-    ui::Test::src_base(name, src_base).run();
-}
+pub fn ui_test(name: &str, src_base: impl AsRef<Path>) { ui::Test::src_base(name, src_base).run(); }
 
 /// Test a library on one example target.
 ///
 /// - `name` is the name of a Dylint library to be tested.
 /// - `example` is an example target on which to test the library.
-pub fn ui_test_example(name: &str, example: &str) {
-    ui::Test::example(name, example).run();
-}
+pub fn ui_test_example(name: &str, example: &str) { ui::Test::example(name, example).run(); }
 
 /// Test a library on all example targets.
 ///
 /// - `name` is the name of a Dylint library to be tested.
-pub fn ui_test_examples(name: &str) {
-    ui::Test::examples(name).run();
-}
+pub fn ui_test_examples(name: &str) { ui::Test::examples(name).run(); }
 
 fn initialize(name: &str) -> &Result<PathBuf> {
     DRIVER.get_or_init(|| {
@@ -265,6 +260,4 @@ impl Drop for VarGuard {
     }
 }
 
-fn snake_case(name: &str) -> String {
-    name.replace('-', "_")
-}
+fn snake_case(name: &str) -> String { name.replace('-', "_") }

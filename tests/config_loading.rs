@@ -1,10 +1,12 @@
 //! Behaviour-driven tests for shared configuration loading.
 
-use std::any::Any;
-use std::cell::RefCell;
-use std::convert::Infallible;
-use std::panic::{AssertUnwindSafe, catch_unwind};
-use std::str::FromStr;
+use std::{
+    any::Any,
+    cell::RefCell,
+    convert::Infallible,
+    panic::{AssertUnwindSafe, catch_unwind},
+    str::FromStr,
+};
 
 mod support;
 
@@ -17,12 +19,14 @@ use whitaker_common::i18n::normalize_locale;
 /// Create empty configuration source state for one scenario.
 #[fixture]
 fn config_source() -> RefCell<Option<String>> {
+    // Keep the fixture body multiline for the rstest expansion.
     RefCell::new(None)
 }
 
 /// Create empty shared-configuration result state for one scenario.
 #[fixture]
 fn load_result() -> RefCell<Option<Result<SharedConfig, String>>> {
+    // Keep the fixture body multiline for the rstest expansion.
     RefCell::new(None)
 }
 
@@ -56,16 +60,12 @@ impl FromStr for ErrorSnippet {
 
 impl AsRef<str> for ErrorSnippet {
     /// Borrow the snippet as a string slice.
-    fn as_ref(&self) -> &str {
-        self.0.as_str()
-    }
+    fn as_ref(&self) -> &str { self.0.as_str() }
 }
 
 impl ErrorSnippet {
     /// Consume the wrapper and return its inner string.
-    fn into_inner(self) -> String {
-        self.0
-    }
+    fn into_inner(self) -> String { self.0 }
 }
 
 /// Clear stored source and load results before a scenario.
@@ -80,9 +80,7 @@ fn reset_state(
 
 /// Clear any configured workspace override.
 #[given("no workspace configuration overrides are provided")]
-fn no_overrides(config_source: &RefCell<Option<String>>) {
-    config_source.borrow_mut().take();
-}
+fn no_overrides(config_source: &RefCell<Option<String>>) { config_source.borrow_mut().take(); }
 
 /// Configure a workspace override for the module line limit.
 #[given("the workspace config sets the module max line limit to {value}")]

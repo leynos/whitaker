@@ -125,17 +125,11 @@ pub struct StubDirs {
 }
 
 impl BaseDirs for StubDirs {
-    fn home(&self) -> Option<PathBuf> {
-        None
-    }
+    fn home(&self) -> Option<PathBuf> { None }
 
-    fn executables(&self) -> Option<PathBuf> {
-        self.bin_dir.clone()
-    }
+    fn executables(&self) -> Option<PathBuf> { self.bin_dir.clone() }
 
-    fn whitaker_data(&self) -> Option<PathBuf> {
-        None
-    }
+    fn whitaker_data(&self) -> Option<PathBuf> { None }
 }
 
 /// Compute the SHA-256 hex digest of a byte slice for test fixtures.

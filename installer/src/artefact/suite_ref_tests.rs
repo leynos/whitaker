@@ -5,8 +5,9 @@
 //! read as something other than a reference, or refused by git after a clone
 //! had already been paid for.
 
-use super::*;
 use rstest::rstest;
+
+use super::*;
 
 #[rstest]
 #[case::tag("v0.2.7")]

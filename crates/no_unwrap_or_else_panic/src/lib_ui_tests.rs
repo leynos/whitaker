@@ -50,9 +50,7 @@ impl<'a> ExampleHarnessRun<'a> {
 }
 
 #[test]
-fn ui() {
-    whitaker::testing::ui::run_ui_test(env!("CARGO_PKG_NAME"), "ui", run_fixtures);
-}
+fn ui() { whitaker::testing::ui::run_ui_test(env!("CARGO_PKG_NAME"), "ui", run_fixtures); }
 
 /// Runs an example-based regression under the dylint UI test harness.
 ///

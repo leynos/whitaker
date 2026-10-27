@@ -208,8 +208,8 @@ pub fn run_ui_test(
 ///
 /// On Windows, one additional environment variable needs temporary adjustment:
 ///
-/// - `VCPKG_ROOT`: must be set to `C:\vcpkg` when that directory exists and the
-///   variable is otherwise absent, so downstream `cargo` invocations resolve vcpkg.
+/// - `VCPKG_ROOT`: must be set to `C:\vcpkg` when that directory exists and the variable is
+///   otherwise absent, so downstream `cargo` invocations resolve vcpkg.
 ///
 /// The runner preserves `RUSTC_WRAPPER` so Cargo continues to use the configured
 /// compiler-admission and cache wrappers.
@@ -218,9 +218,7 @@ pub fn run_ui_test(
 /// so runner closures that perform their own scoped environment setup nest
 /// without deadlocking, and every prior value is restored when the callback
 /// returns or panics.
-fn with_runner_env<R>(callback: impl FnOnce() -> R) -> R {
-    with_vcpkg_root(callback)
-}
+fn with_runner_env<R>(callback: impl FnOnce() -> R) -> R { with_vcpkg_root(callback) }
 
 /// Add `VCPKG_ROOT` for runners that need a local Windows vcpkg installation.
 #[cfg(windows)]
@@ -237,9 +235,7 @@ fn with_vcpkg_root<R>(callback: impl FnOnce() -> R) -> R {
 
 /// Run the callback unchanged on platforms without a vcpkg environment.
 #[cfg(not(windows))]
-fn with_vcpkg_root<R>(callback: impl FnOnce() -> R) -> R {
-    callback()
-}
+fn with_vcpkg_root<R>(callback: impl FnOnce() -> R) -> R { callback() }
 
 fn directory_is_rooted(path: &Utf8Path) -> bool {
     #[cfg(windows)]

@@ -1,8 +1,10 @@
 //! rstest-based unit tests for [`super::cohesion_components`] and supporting types.
 
-use super::*;
-use rstest::rstest;
 use std::collections::BTreeSet;
+
+use rstest::rstest;
+
+use super::*;
 
 // --- Fixtures (shared setup) ---
 

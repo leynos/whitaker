@@ -4,15 +4,19 @@
 //! staging the resulting libraries. It coordinates between the builder, stager,
 //! and output modules to provide a complete build pipeline.
 
-use crate::builder::{BuildConfig, BuildResult, Builder, CrateBuilder};
-use crate::crate_name::CrateName;
-use crate::error::Result;
-use crate::output::{success_message, write_stderr_line};
-use crate::scanner::lints_for_library_with_experimental;
-use crate::stager::Stager;
-use crate::toolchain::Toolchain;
-use camino::{Utf8Path, Utf8PathBuf};
 use std::io::Write;
+
+use camino::{Utf8Path, Utf8PathBuf};
+
+use crate::{
+    builder::{BuildConfig, BuildResult, Builder, CrateBuilder},
+    crate_name::CrateName,
+    error::Result,
+    output::{success_message, write_stderr_line},
+    scanner::lints_for_library_with_experimental,
+    stager::Stager,
+    toolchain::Toolchain,
+};
 
 /// Creates a [`BuildConfig`] from the pipeline context.
 ///
@@ -24,9 +28,11 @@ use std::io::Write;
 /// # Example
 ///
 /// ```
-/// use whitaker_installer::pipeline::{build_config_from_context, PipelineContext};
-/// use whitaker_installer::toolchain::Toolchain;
 /// use camino::{Utf8Path, Utf8PathBuf};
+/// use whitaker_installer::{
+///     pipeline::{PipelineContext, build_config_from_context},
+///     toolchain::Toolchain,
+/// };
 ///
 /// let workspace = Utf8PathBuf::from("/workspace");
 /// let target = Utf8PathBuf::from("/staging");
@@ -69,9 +75,8 @@ pub fn build_config_from_context(context: &PipelineContext<'_>) -> BuildConfig {
 /// # Example
 ///
 /// ```
-/// use whitaker_installer::pipeline::PipelineContext;
-/// use whitaker_installer::toolchain::Toolchain;
 /// use camino::Utf8PathBuf;
+/// use whitaker_installer::{pipeline::PipelineContext, toolchain::Toolchain};
 ///
 /// let workspace = Utf8PathBuf::from("/workspace");
 /// let target = Utf8PathBuf::from("/staging");

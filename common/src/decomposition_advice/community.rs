@@ -3,8 +3,11 @@
 use std::collections::BTreeMap;
 
 use super::vector::{
-    MIN_COSINE_THRESHOLD_DENOMINATOR_SQUARED, MIN_COSINE_THRESHOLD_NUMERATOR_SQUARED,
-    MethodFeatureVector, cosine_threshold_met, dot_product,
+    MIN_COSINE_THRESHOLD_DENOMINATOR_SQUARED,
+    MIN_COSINE_THRESHOLD_NUMERATOR_SQUARED,
+    MethodFeatureVector,
+    cosine_threshold_met,
+    dot_product,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -25,19 +28,13 @@ impl SimilarityEdge {
     }
 
     #[cfg(test)]
-    pub(crate) const fn left(&self) -> usize {
-        self.left
-    }
+    pub(crate) const fn left(&self) -> usize { self.left }
 
     #[cfg(test)]
-    pub(crate) const fn right(&self) -> usize {
-        self.right
-    }
+    pub(crate) const fn right(&self) -> usize { self.right }
 
     #[cfg(test)]
-    pub(crate) const fn weight(&self) -> u64 {
-        self.weight
-    }
+    pub(crate) const fn weight(&self) -> u64 { self.weight }
 }
 
 pub(crate) fn build_similarity_edges(vectors: &[MethodFeatureVector]) -> Vec<SimilarityEdge> {
@@ -216,7 +213,8 @@ pub(crate) fn propagate_labels_report(
 
     if iteration_count == max_iterations {
         log::debug!(
-            "label propagation reached iteration limit: nodes={}, active_nodes={}, max_iterations={}",
+            "label propagation reached iteration limit: nodes={}, active_nodes={}, \
+             max_iterations={}",
             vectors.len(),
             active_nodes.len(),
             max_iterations,

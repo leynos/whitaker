@@ -1,9 +1,11 @@
 //! Tests for the `list` command handler and its path resolution helpers.
 
-use super::*;
-use rstest::{fixture, rstest};
 use std::fs;
+
+use rstest::{fixture, rstest};
 use tempfile::TempDir;
+
+use super::*;
 
 // -------------------------------------------------------------------------
 // Fixtures

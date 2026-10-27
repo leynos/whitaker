@@ -1,7 +1,8 @@
 //! Verify installer command-query errors are propagated through fallback paths.
 
-use super::*;
 use rstest::rstest;
+
+use super::*;
 
 /// Assert that a dependency command's spawn error remains visible to callers.
 fn assert_spawn_error(error: InstallerError, expected_message: &str) {
@@ -115,9 +116,7 @@ impl QueryFailure {
     }
 
     /// Indicate whether this failure occurs while refreshing the companion.
-    fn refreshes_companion(self) -> bool {
-        matches!(self, Self::CompanionRefresh)
-    }
+    fn refreshes_companion(self) -> bool { matches!(self, Self::CompanionRefresh) }
 }
 
 /// Preserve errors from dependency queries across installation paths.

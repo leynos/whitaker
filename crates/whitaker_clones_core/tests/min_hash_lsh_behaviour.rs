@@ -7,7 +7,13 @@ use std::{cell::RefCell, collections::BTreeMap};
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use whitaker_clones_core::{
-    CandidatePair, Fingerprint, FragmentId, IndexError, LshConfig, LshIndex, MinHasher,
+    CandidatePair,
+    Fingerprint,
+    FragmentId,
+    IndexError,
+    LshConfig,
+    LshIndex,
+    MinHasher,
 };
 use whitaker_test_macros::allow_fixture_expansion_lints;
 
@@ -22,9 +28,7 @@ struct MinHashLshWorld {
 
 #[allow_fixture_expansion_lints]
 #[fixture]
-fn world() -> MinHashLshWorld {
-    MinHashLshWorld::default()
-}
+fn world() -> MinHashLshWorld { MinHashLshWorld::default() }
 
 fn with_candidates(world: &MinHashLshWorld, assert_fn: impl FnOnce(&[CandidatePair])) {
     let candidates = world.candidates.borrow();
@@ -187,41 +191,25 @@ fn then_candidate_generation_error_is(world: &MinHashLshWorld, name: String) -> 
 }
 
 #[scenario(path = "tests/features/min_hash_lsh.feature", index = 0)]
-fn scenario_identical_fragments(world: MinHashLshWorld) {
-    let _ = world;
-}
+fn scenario_identical_fragments(world: MinHashLshWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/min_hash_lsh.feature", index = 1)]
-fn scenario_distinct_fragments(world: MinHashLshWorld) {
-    let _ = world;
-}
+fn scenario_distinct_fragments(world: MinHashLshWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/min_hash_lsh.feature", index = 2)]
-fn scenario_multiple_collisions_one_pair(world: MinHashLshWorld) {
-    let _ = world;
-}
+fn scenario_multiple_collisions_one_pair(world: MinHashLshWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/min_hash_lsh.feature", index = 3)]
-fn scenario_duplicate_hashes_use_set_semantics(world: MinHashLshWorld) {
-    let _ = world;
-}
+fn scenario_duplicate_hashes_use_set_semantics(world: MinHashLshWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/min_hash_lsh.feature", index = 4)]
-fn scenario_invalid_lsh_settings(world: MinHashLshWorld) {
-    let _ = world;
-}
+fn scenario_invalid_lsh_settings(world: MinHashLshWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/min_hash_lsh.feature", index = 5)]
-fn scenario_empty_fingerprints(world: MinHashLshWorld) {
-    let _ = world;
-}
+fn scenario_empty_fingerprints(world: MinHashLshWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/min_hash_lsh.feature", index = 6)]
-fn scenario_zero_rows(world: MinHashLshWorld) {
-    let _ = world;
-}
+fn scenario_zero_rows(world: MinHashLshWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/min_hash_lsh.feature", index = 7)]
-fn scenario_invalid_non_zero_product(world: MinHashLshWorld) {
-    let _ = world;
-}
+fn scenario_invalid_non_zero_product(world: MinHashLshWorld) { let _ = world; }

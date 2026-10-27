@@ -1,12 +1,12 @@
 //! Real-Git regression tests for managed-clone operations.
 
-use super::*;
-use camino::Utf8PathBuf;
-use cap_std::ambient_authority;
-use cap_std::fs_utf8::Dir;
 use std::process::{Command, Stdio};
+
+use camino::Utf8PathBuf;
+use cap_std::{ambient_authority, fs_utf8::Dir};
 use tempfile::TempDir;
 
+use super::*;
 use crate::test_support::{EnvTestGuard, env_test_guard};
 
 struct GitFixture {

@@ -8,30 +8,32 @@ mod install_flow;
 mod staged_suite;
 mod tracing_config;
 
-use crate::install_flow::{
-    MetricsWriteContext, PrebuiltInstallationContext, ensure_dylint_tools_with_executor,
-    try_prebuilt_installation, write_install_metrics,
-};
+use std::{io::Write, time::Instant};
+
 use camino::{Utf8Path, Utf8PathBuf};
 use clap::Parser;
-use std::io::Write;
-use std::time::Instant;
-use whitaker_installer::cli::{Cli, Command, InstallArgs};
-use whitaker_installer::crate_name::CrateName;
-use whitaker_installer::deps::{
-    SourcePolicy, SystemCommandExecutor, install_dylint_tools_with_output,
+use whitaker_installer::{
+    cli::{Cli, Command, InstallArgs},
+    crate_name::CrateName,
+    deps::{SourcePolicy, SystemCommandExecutor, install_dylint_tools_with_output},
+    dirs::{BaseDirs, SystemBaseDirs},
+    error::{InstallerError, Result},
+    install_metrics::InstallMode,
+    list::{determine_target_dir, run_list},
+    output::{ShellSnippet, write_stderr_line},
+    pipeline::{PipelineContext, perform_build, stage_libraries},
+    resolution::{CrateResolutionOptions, resolve_crates, validate_crate_names},
+    toolchain::Toolchain,
+    wrapper::{generate_wrapper_scripts, path_instructions},
 };
-use whitaker_installer::dirs::{BaseDirs, SystemBaseDirs};
-use whitaker_installer::error::{InstallerError, Result};
-use whitaker_installer::install_metrics::InstallMode;
-use whitaker_installer::list::{determine_target_dir, run_list};
-use whitaker_installer::output::{ShellSnippet, write_stderr_line};
-use whitaker_installer::pipeline::{PipelineContext, perform_build, stage_libraries};
-use whitaker_installer::resolution::{
-    CrateResolutionOptions, resolve_crates, validate_crate_names,
+
+use crate::install_flow::{
+    MetricsWriteContext,
+    PrebuiltInstallationContext,
+    ensure_dylint_tools_with_executor,
+    try_prebuilt_installation,
+    write_install_metrics,
 };
-use whitaker_installer::toolchain::Toolchain;
-use whitaker_installer::wrapper::{generate_wrapper_scripts, path_instructions};
 
 /// Parse options, configure tracing, and run the selected command.
 fn main() {
@@ -211,7 +213,11 @@ fn ensure_whitaker_workspace(
     stderr: &mut dyn Write,
 ) -> Result<Utf8PathBuf> {
     use whitaker_installer::workspace::{
-        WorkspaceAction, WorkspacePlan, clone_directory, decide_workspace_action, ensure_workspace,
+        WorkspaceAction,
+        WorkspacePlan,
+        clone_directory,
+        decide_workspace_action,
+        ensure_workspace,
     };
 
     let plan = WorkspacePlan {

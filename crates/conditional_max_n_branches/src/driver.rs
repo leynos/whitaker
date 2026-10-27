@@ -15,10 +15,16 @@ use rustc_lint::{LateContext, LateLintPass, LintContext};
 use rustc_span::{DesugaringKind, Span};
 use serde::Deserialize;
 use whitaker::SharedConfig;
-use whitaker_common::i18n::{DiagnosticMessageSet, MessageKey};
 use whitaker_common::{
-    Arguments, FALLBACK_LOCALE, Localizer, MessageResolution, branch_phrase,
-    get_localizer_for_lint, noop_reporter, safe_resolve_message_set,
+    Arguments,
+    FALLBACK_LOCALE,
+    Localizer,
+    MessageResolution,
+    branch_phrase,
+    get_localizer_for_lint,
+    i18n::{DiagnosticMessageSet, MessageKey},
+    noop_reporter,
+    safe_resolve_message_set,
 };
 
 mod numeric;
@@ -35,9 +41,7 @@ struct Config {
 }
 
 impl Config {
-    const fn default_max_branches() -> usize {
-        2
-    }
+    const fn default_max_branches() -> usize { 2 }
 }
 
 impl Default for Config {
@@ -336,8 +340,9 @@ fn fallback_messages(kind: ConditionKind, branches: usize, limit: usize) -> Diag
 mod tests {
     //! Verify branch thresholds and the production diagnostic argument path.
 
-    use super::*;
     use rstest::rstest;
+
+    use super::*;
 
     /// Verify branch counts below, at, and above the configured limit.
     #[rstest]

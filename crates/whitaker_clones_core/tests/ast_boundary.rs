@@ -207,9 +207,7 @@ fn contains_path(import: &[&str], path: &[&str]) -> bool {
 /// `[[crate, ::, ast, ::, tree, ::, ByteSpan],`
 /// ` [crate, ::, ast, ::, lowering, ::, lower_span]]`, so `contains_path` sees
 /// `ast :: lowering` regardless of the sibling ordering.
-fn expand_use_tree<'a>(tokens: &[&'a str]) -> Vec<Vec<&'a str>> {
-    parse_use_tree(tokens, &[]).0
-}
+fn expand_use_tree<'a>(tokens: &[&'a str]) -> Vec<Vec<&'a str>> { parse_use_tree(tokens, &[]).0 }
 
 /// Parses one use-tree item — a path prefix optionally followed by a `{ … }`
 /// group — returning the leaf paths it expands to and the unconsumed remainder

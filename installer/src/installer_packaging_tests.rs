@@ -12,9 +12,7 @@ use crate::{artefact::error::ArtefactError, binstall_metadata};
 // ---------------------------------------------------------------------------
 
 /// Reports whether `name` has the required case-sensitive `.tgz` suffix.
-fn has_tgz_suffix(name: &str) -> bool {
-    name.ends_with(".tgz")
-}
+fn has_tgz_suffix(name: &str) -> bool { name.ends_with(".tgz") }
 
 /// A temporary directory with a fake binary suitable for packaging.
 struct PackagingFixture {

@@ -23,12 +23,17 @@ pub mod ui;
 
 use std::{ffi::OsStr, sync::OnceLock};
 
-use parking_lot::{ReentrantMutex, ReentrantMutexGuard};
-
 pub use fixtures::{copy_directory, copy_fixture};
+use parking_lot::{ReentrantMutex, ReentrantMutexGuard};
 pub use ui::{
-    FixtureEnvironment, discover_fixtures, prepare_fixture, read_directory_config,
-    read_fixture_config, resolve_fixture_config, run_fixtures_with, run_test_runner,
+    FixtureEnvironment,
+    discover_fixtures,
+    prepare_fixture,
+    read_directory_config,
+    read_fixture_config,
+    resolve_fixture_config,
+    run_fixtures_with,
+    run_test_runner,
     run_test_runner_with_env_guard,
 };
 

@@ -17,53 +17,40 @@ pub struct CrateName(String);
 impl CrateName {
     /// Create a new crate name.
     #[must_use]
-    pub fn new(name: impl Into<String>) -> Self {
-        Self(name.into())
-    }
+    pub fn new(name: impl Into<String>) -> Self { Self(name.into()) }
 
     /// Get the crate name as a string slice.
     #[must_use]
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
+    pub fn as_str(&self) -> &str { &self.0 }
 
     /// Consume the wrapper and return the inner string.
     #[must_use]
-    pub fn into_inner(self) -> String {
-        self.0
-    }
+    pub fn into_inner(self) -> String { self.0 }
 }
 
 impl AsRef<str> for CrateName {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
+    fn as_ref(&self) -> &str { &self.0 }
 }
 
 impl From<&str> for CrateName {
-    fn from(s: &str) -> Self {
-        Self(s.to_owned())
-    }
+    fn from(s: &str) -> Self { Self(s.to_owned()) }
 }
 
 impl From<String> for CrateName {
-    fn from(s: String) -> Self {
-        Self(s)
-    }
+    fn from(s: String) -> Self { Self(s) }
 }
 
 impl fmt::Display for CrateName {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.0) }
 }
 
 #[cfg(test)]
 mod tests {
     //! Tests for crate-name normalization.
 
-    use super::*;
     use std::collections::HashSet;
+
+    use super::*;
 
     #[test]
     fn new_creates_valid_instance() {

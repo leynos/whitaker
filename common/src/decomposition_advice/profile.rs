@@ -61,15 +61,11 @@ impl DecompositionContext {
 
     /// Returns the analysed subject name.
     #[must_use]
-    pub fn subject_name(&self) -> &str {
-        &self.subject_name
-    }
+    pub fn subject_name(&self) -> &str { &self.subject_name }
 
     /// Returns the analysed subject kind.
     #[must_use]
-    pub const fn subject_kind(&self) -> SubjectKind {
-        self.subject_kind
-    }
+    pub const fn subject_kind(&self) -> SubjectKind { self.subject_kind }
 }
 
 /// Immutable per-method metadata used to build feature vectors.
@@ -106,33 +102,23 @@ pub struct MethodProfile {
 impl MethodProfile {
     /// Returns the method name.
     #[must_use]
-    pub fn name(&self) -> &str {
-        &self.name
-    }
+    pub fn name(&self) -> &str { &self.name }
 
     /// Returns accessed fields.
     #[must_use]
-    pub const fn accessed_fields(&self) -> &BTreeSet<String> {
-        &self.accessed_fields
-    }
+    pub const fn accessed_fields(&self) -> &BTreeSet<String> { &self.accessed_fields }
 
     /// Returns types used in the method signature.
     #[must_use]
-    pub const fn signature_types(&self) -> &BTreeSet<String> {
-        &self.signature_types
-    }
+    pub const fn signature_types(&self) -> &BTreeSet<String> { &self.signature_types }
 
     /// Returns types used in local variables.
     #[must_use]
-    pub const fn local_types(&self) -> &BTreeSet<String> {
-        &self.local_types
-    }
+    pub const fn local_types(&self) -> &BTreeSet<String> { &self.local_types }
 
     /// Returns external domains used by the method.
     #[must_use]
-    pub const fn external_domains(&self) -> &BTreeSet<String> {
-        &self.external_domains
-    }
+    pub const fn external_domains(&self) -> &BTreeSet<String> { &self.external_domains }
 }
 
 /// Mutable builder for [`MethodProfile`].
@@ -151,7 +137,10 @@ impl MethodProfile {
 ///     .record_local_type("PathBuf");
 ///
 /// let profile = builder.build();
-/// assert_eq!(profile.external_domains().iter().next().map(String::as_str), Some("std::fs"));
+/// assert_eq!(
+///     profile.external_domains().iter().next().map(String::as_str),
+///     Some("std::fs")
+/// );
 /// ```
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct MethodProfileBuilder {

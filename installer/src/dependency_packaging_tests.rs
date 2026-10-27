@@ -8,8 +8,13 @@ use crate::{
     artefact::error::ArtefactError,
     dependency_binaries::find_dependency_binary,
     dependency_packaging::{
-        ArchiveFormat, DependencyPackageParams, DependencyPackagingError, archive_format,
-        inner_dir_name, package_dependency_binary, render_provenance_markdown,
+        ArchiveFormat,
+        DependencyPackageParams,
+        DependencyPackagingError,
+        archive_format,
+        inner_dir_name,
+        package_dependency_binary,
+        render_provenance_markdown,
         write_provenance_markdown,
     },
     installer_packaging::TargetTriple,
@@ -30,9 +35,7 @@ fn linux_target() -> std::result::Result<TargetTriple, ArtefactError> {
 
 #[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
-fn temp_dir() -> std::io::Result<tempfile::TempDir> {
-    tempfile::tempdir()
-}
+fn temp_dir() -> std::io::Result<tempfile::TempDir> { tempfile::tempdir() }
 
 #[test]
 fn archive_format_matches_target_platform() {

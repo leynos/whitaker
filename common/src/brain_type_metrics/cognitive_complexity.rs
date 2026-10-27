@@ -28,12 +28,11 @@ mod tests;
 ///
 /// # Three increment categories
 ///
-/// - **Structural** (+1): `if`, `else if`, `else`, `match`, `for`,
-///   `while`, `loop`, `?` operator, catch-equivalent constructs.
-/// - **Nesting** (+`effective_depth)`: applied alongside structural for
-///   constructs that also incur a nesting penalty.
-/// - **Fundamental** (+1): boolean operator sequence breaks (`&&`,
-///   `||`).
+/// - **Structural** (+1): `if`, `else if`, `else`, `match`, `for`, `while`, `loop`, `?` operator,
+///   catch-equivalent constructs.
+/// - **Nesting** (+`effective_depth)`: applied alongside structural for constructs that also incur
+///   a nesting penalty.
+/// - **Fundamental** (+1): boolean operator sequence breaks (`&&`, `||`).
 ///
 /// # Examples
 ///
@@ -42,12 +41,12 @@ mod tests;
 ///
 /// let mut cc = CognitiveComplexityBuilder::new();
 /// // Simulate: if condition { ... }
-/// cc.record_structural_increment(false);  // +1
-/// cc.record_nesting_increment(false);     // +0 (depth is 0)
+/// cc.record_structural_increment(false); // +1
+/// cc.record_nesting_increment(false); // +0 (depth is 0)
 /// cc.push_nesting(false);
 /// // Simulate: nested if { ... }
-/// cc.record_structural_increment(false);  // +1
-/// cc.record_nesting_increment(false);     // +1 (depth is 1)
+/// cc.record_structural_increment(false); // +1
+/// cc.record_nesting_increment(false); // +1 (depth is 1)
 /// cc.push_nesting(false);
 /// cc.pop_nesting();
 /// cc.pop_nesting();
@@ -224,9 +223,7 @@ impl CognitiveComplexityBuilder {
     /// cc.pop_nesting();
     /// ```
     #[must_use]
-    pub const fn effective_depth(&self) -> usize {
-        self.effective_depth
-    }
+    pub const fn effective_depth(&self) -> usize { self.effective_depth }
 
     /// Returns the accumulated cognitive complexity score so far.
     ///
@@ -240,9 +237,7 @@ impl CognitiveComplexityBuilder {
     /// assert_eq!(cc.score(), 1);
     /// ```
     #[must_use]
-    pub const fn score(&self) -> usize {
-        self.score
-    }
+    pub const fn score(&self) -> usize { self.score }
 
     /// Consumes the builder and returns the final complexity score.
     ///
@@ -271,7 +266,5 @@ impl CognitiveComplexityBuilder {
 }
 
 impl Default for CognitiveComplexityBuilder {
-    fn default() -> Self {
-        Self::new()
-    }
+    fn default() -> Self { Self::new() }
 }

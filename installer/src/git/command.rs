@@ -1,11 +1,15 @@
 //! Bounded execution of Git commands for the repository adapter.
 
-use crate::error::{InstallerError, Result};
+use std::{
+    process::{Command, Output, Stdio},
+    time::{Duration, Instant},
+};
+
 use camino::Utf8Path;
-use std::process::{Command, Output, Stdio};
-use std::time::{Duration, Instant};
 use tracing::{debug, warn};
 use wait_timeout::ChildExt;
+
+use crate::error::{InstallerError, Result};
 
 /// Default timeout for Git operations.
 const GIT_TIMEOUT: Duration = Duration::from_secs(300);

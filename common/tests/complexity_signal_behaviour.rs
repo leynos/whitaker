@@ -5,7 +5,11 @@ use std::cell::{Cell, RefCell};
 use proptest::prelude::*;
 use rstest::fixture;
 use whitaker_common::complexity_signal::{
-    LineSegment, SignalBuildError, SmoothingError, rasterize_signal, smooth_moving_average,
+    LineSegment,
+    SignalBuildError,
+    SmoothingError,
+    rasterize_signal,
+    smooth_moving_average,
 };
 use whitaker_test_macros::allow_fixture_expansion_lints;
 
@@ -28,19 +32,13 @@ impl SignalWorld {
     }
 
     /// Add a line segment to the scenario state.
-    fn push_segment(&self, segment: LineSegment) {
-        self.segments.borrow_mut().push(segment);
-    }
+    fn push_segment(&self, segment: LineSegment) { self.segments.borrow_mut().push(segment); }
 
     /// Store the raw signal used by the smoothing step.
-    fn set_raw_signal(&self, signal: Vec<f64>) {
-        self.raw_signal.replace(Some(signal));
-    }
+    fn set_raw_signal(&self, signal: Vec<f64>) { self.raw_signal.replace(Some(signal)); }
 
     /// Store the moving-average window used by the smoothing step.
-    fn set_smoothing_window(&self, window: usize) {
-        self.smoothing_window.set(Some(window));
-    }
+    fn set_smoothing_window(&self, window: usize) { self.smoothing_window.set(Some(window)); }
 
     /// Rasterize the configured line range and segments into the saved result.
     ///
@@ -118,9 +116,7 @@ impl SignalWorld {
 /// Create fresh state for one complexity-signal scenario.
 #[allow_fixture_expansion_lints]
 #[fixture]
-fn world() -> SignalWorld {
-    SignalWorld::default()
-}
+fn world() -> SignalWorld { SignalWorld::default() }
 
 /// Parse a comma-separated list of floating-point values.
 ///
@@ -235,16 +231,12 @@ fn ulp_distance_rejects_nan_inputs() {
 /// Rejects a NaN actual value instead of treating it as a close match.
 #[test]
 #[should_panic(expected = "ULP distance None")]
-fn approx_vector_rejects_nan_actual_value() {
-    assert_vec_approx_eq(&[f64::NAN], &[0.0]);
-}
+fn approx_vector_rejects_nan_actual_value() { assert_vec_approx_eq(&[f64::NAN], &[0.0]); }
 
 /// Rejects a NaN expected value instead of treating it as a close match.
 #[test]
 #[should_panic(expected = "ULP distance None")]
-fn approx_vector_rejects_nan_expected_value() {
-    assert_vec_approx_eq(&[0.0], &[f64::NAN]);
-}
+fn approx_vector_rejects_nan_expected_value() { assert_vec_approx_eq(&[0.0], &[f64::NAN]); }
 
 proptest! {
     #[test]

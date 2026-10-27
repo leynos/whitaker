@@ -7,9 +7,7 @@ use dylint_testing::ui::Test;
 use whitaker_common::test_support::{prepare_fixture, run_fixtures_with, run_test_runner};
 
 #[test]
-fn ui() {
-    whitaker::testing::ui::run_ui_test(env!("CARGO_PKG_NAME"), "ui", run_fixtures);
-}
+fn ui() { whitaker::testing::ui::run_ui_test(env!("CARGO_PKG_NAME"), "ui", run_fixtures); }
 
 fn run_fixtures(crate_name: &str, directory: &Utf8Path) -> Result<(), String> {
     run_fixtures_with(crate_name, directory, run_fixture)

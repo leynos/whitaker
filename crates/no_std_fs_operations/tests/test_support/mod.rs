@@ -17,9 +17,7 @@ pub(super) struct FixtureProject {
 
 impl FixtureProject {
     /// Returns the fixture project root directory.
-    pub(super) fn root(&self) -> &Path {
-        &self.root
-    }
+    pub(super) fn root(&self) -> &Path { &self.root }
 }
 
 /// Selects which suppression mechanism a fixture exercises.

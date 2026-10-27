@@ -1,9 +1,5 @@
 //! Example-target discovery and compiler-flag extraction for Dylint UI tests.
 
-use anyhow::{Context, Result, anyhow, ensure};
-use cargo_metadata::{Metadata, Package, Target, TargetKind};
-use dylint_internal::{CommandExt, env, rustup::is_rustc};
-use regex::Regex;
 use std::{
     env::consts,
     fs::{copy, read_dir, remove_file},
@@ -11,6 +7,11 @@ use std::{
     path::Path,
     sync::LazyLock,
 };
+
+use anyhow::{Context, Result, anyhow, ensure};
+use cargo_metadata::{Metadata, Package, Target, TargetKind};
+use dylint_internal::{CommandExt, env, rustup::is_rustc};
+use regex::Regex;
 
 use crate::{run_tests, snake_case, ui};
 
@@ -262,8 +263,9 @@ fn copy_with_extension<P: AsRef<Path>, Q: AsRef<Path>>(
 
 #[cfg(test)]
 mod tests {
-    use super::{rustc_invocation, select_ui_test_flags};
     use rstest::rstest;
+
+    use super::{rustc_invocation, select_ui_test_flags};
 
     /// Extract the rustc arguments after unwrapped and wrapped compiler commands.
     #[rstest]

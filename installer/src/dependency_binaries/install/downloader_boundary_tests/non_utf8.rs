@@ -4,8 +4,10 @@ use std::io;
 
 use rstest::fixture;
 
-use super::super::downloader::{DependencyArchiveDownloader, RepositoryArchiveDownloader};
-use super::*;
+use super::{
+    super::downloader::{DependencyArchiveDownloader, RepositoryArchiveDownloader},
+    *,
+};
 
 #[fixture]
 fn non_utf8_destination() -> std::path::PathBuf {

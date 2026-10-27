@@ -9,8 +9,14 @@ pub use error::{Result, TokenPassError};
 pub use fingerprint::{hash_shingles, winnow};
 pub use normalize::normalize;
 pub use types::{
-    Fingerprint, IdentifierSymbol, LiteralSymbol, NormProfile, NormalizedToken,
-    NormalizedTokenKind, ShingleSize, WinnowWindow,
+    Fingerprint,
+    IdentifierSymbol,
+    LiteralSymbol,
+    NormProfile,
+    NormalizedToken,
+    NormalizedTokenKind,
+    ShingleSize,
+    WinnowWindow,
 };
 
 #[cfg(test)]

@@ -3,20 +3,27 @@
 //! The lint warns when it detects two or more separated bump intervals in the
 //! smoothed signal and highlights the two most severe bumps.
 
-use std::borrow::Cow;
-use std::ops::RangeInclusive;
+use std::{borrow::Cow, ops::RangeInclusive};
 
-use crate::analysis::{BumpInterval, Settings, top_two_bumps};
 use fluent_templates::fluent_bundle::FluentValue;
 use rustc_lint::{LateContext, LintContext};
 use rustc_span::{BytePos, Span};
-use whitaker_common::i18n::DiagnosticMessageSet;
 use whitaker_common::{
-    Arguments, Localizer, MessageResolution, noop_reporter, safe_resolve_message_set,
+    Arguments,
+    Localizer,
+    MessageResolution,
+    i18n::DiagnosticMessageSet,
+    noop_reporter,
+    safe_resolve_message_set,
 };
 
-use super::numeric::{diagnostic_integer_argument, line_range_byte_offsets};
-use super::{BUMPY_ROAD_FUNCTION, LINT_NAME, MESSAGE_KEY};
+use super::{
+    BUMPY_ROAD_FUNCTION,
+    LINT_NAME,
+    MESSAGE_KEY,
+    numeric::{diagnostic_integer_argument, line_range_byte_offsets},
+};
+use crate::analysis::{BumpInterval, Settings, top_two_bumps};
 
 /// Payload describing a lint diagnostic to emit.
 pub(super) struct DiagnosticInput<'a> {
@@ -203,9 +210,10 @@ fn fallback_messages(name: &str, count: usize, threshold: f64) -> DiagnosticMess
 mod tests {
     //! Verify diagnostic construction and compiler span bounds.
 
-    use super::{LineSpanMapper, diagnostic_arguments};
     use fluent_templates::fluent_bundle::FluentValue;
     use rustc_span::DUMMY_SP;
+
+    use super::{LineSpanMapper, diagnostic_arguments};
 
     /// Verify oversized bump counts saturate in the emitted diagnostic arguments.
     #[cfg(target_pointer_width = "64")]

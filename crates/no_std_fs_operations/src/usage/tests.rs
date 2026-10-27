@@ -1,6 +1,7 @@
 //! Tests for classifying `std::fs` usage and its reporting metadata.
-use super::{StdFsUsage, label_is_std_fs};
 use rstest::rstest;
+
+use super::{StdFsUsage, label_is_std_fs};
 
 /// Check whether each candidate label names a standard filesystem path.
 #[rstest]

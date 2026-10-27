@@ -44,17 +44,11 @@ impl FunctionFixture {
         self.additional.borrow_mut().clear();
     }
 
-    fn attributes(&self) -> std::cell::Ref<'_, Vec<Attribute>> {
-        self.attributes.borrow()
-    }
+    fn attributes(&self) -> std::cell::Ref<'_, Vec<Attribute>> { self.attributes.borrow() }
 
-    fn context(&self) -> std::cell::Ref<'_, Vec<ContextEntry>> {
-        self.context.borrow()
-    }
+    fn context(&self) -> std::cell::Ref<'_, Vec<ContextEntry>> { self.context.borrow() }
 
-    fn additional(&self) -> std::cell::Ref<'_, Vec<AttributePath>> {
-        self.additional.borrow()
-    }
+    fn additional(&self) -> std::cell::Ref<'_, Vec<AttributePath>> { self.additional.borrow() }
 
     fn configure_additional(&self, path: &str) {
         self.additional.borrow_mut().push(AttributePath::from(path));
@@ -63,9 +57,7 @@ impl FunctionFixture {
 
 #[allow_fixture_expansion_lints]
 #[fixture]
-fn function() -> FunctionFixture {
-    FunctionFixture::new()
-}
+fn function() -> FunctionFixture { FunctionFixture::new() }
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 struct Evaluation {
     is_test: bool,
@@ -74,9 +66,7 @@ struct Evaluation {
 
 #[allow_fixture_expansion_lints]
 #[fixture]
-fn evaluation() -> Evaluation {
-    Evaluation::default()
-}
+fn evaluation() -> Evaluation { Evaluation::default() }
 
 #[given("a function annotated with rstest")]
 fn given_rstest(function: &FunctionFixture) {
@@ -91,9 +81,7 @@ fn given_tokio(function: &FunctionFixture) {
 }
 
 #[given("a function without test attributes")]
-fn given_plain(function: &FunctionFixture) {
-    function.clear();
-}
+fn given_plain(function: &FunctionFixture) { function.clear(); }
 
 #[given("the lint recognizes {path} as a test attribute")]
 fn given_custom_attribute(function: &FunctionFixture, path: String) {

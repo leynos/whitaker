@@ -1,0 +1,26 @@
+unstable_features = true
+comment_width = 100
+format_code_in_doc_comments = true
+imports_granularity = "Crate"
+imports_layout = "HorizontalVertical"
+wrap_comments = true
+group_imports = "StdExternalCrate"
+use_try_shorthand = true
+hex_literal_case = "Lower"
+format_strings = true
+format_macro_matchers = true
+fn_single_line = true
+condense_wildcard_suffixes = true
+use_field_init_shorthand = true
+
+# Dylint UI fixtures are test data, not source: their `.stderr` expectations
+# match compiler output byte for byte, including line and column numbers.
+# Reformatting them (for example `format_strings` splitting a long `reason`
+# across lines) silently shifts those spans and breaks the UI tests. Fixtures
+# under `ui/` are already immune because they are not Cargo targets; these are
+# targets, so exclude them explicitly.
+ignore = [
+    "crates/no_expect_outside_tests/examples",
+    "crates/no_unwrap_or_else_panic/examples",
+    "crates/rstest_helper_should_be_fixture/examples",
+]

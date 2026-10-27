@@ -121,7 +121,11 @@ impl InstallArgs {
     /// ```
     /// use whitaker_installer::cli::InstallArgs;
     ///
-    /// assert!(InstallArgs::default().validate_source_options_with(false).is_ok());
+    /// assert!(
+    ///     InstallArgs::default()
+    ///         .validate_source_options_with(false)
+    ///         .is_ok()
+    /// );
     /// ```
     pub fn validate_source_options_with(
         &self,

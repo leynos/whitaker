@@ -88,8 +88,8 @@ impl WhitakerProperties {
 /// # Examples
 ///
 /// ```
-/// use whitaker_sarif::{WhitakerProperties, WhitakerPropertiesBuilder};
 /// use serde_json::Value;
+/// use whitaker_sarif::{WhitakerProperties, WhitakerPropertiesBuilder};
 ///
 /// let props = WhitakerPropertiesBuilder::new("T1")
 ///     .with_k(25)

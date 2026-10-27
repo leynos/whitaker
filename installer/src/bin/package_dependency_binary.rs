@@ -1,18 +1,23 @@
 //! Package dependency binaries and shared provenance assets for release uploads.
 
+use std::{
+    io::Write,
+    path::{Path, PathBuf},
+};
+
 use clap::{Parser, Subcommand};
-use std::io::Write;
-use std::path::{Path, PathBuf};
 use thiserror::Error;
-use whitaker_installer::dependency_binaries::{
-    find_dependency_binary, required_dependency_binaries,
+use whitaker_installer::{
+    dependency_binaries::{find_dependency_binary, required_dependency_binaries},
+    dependency_packaging::{
+        DependencyPackageParams,
+        DependencyPackagingError,
+        package_dependency_binary,
+        write_provenance_markdown,
+    },
+    installer_packaging::TargetTriple,
+    output::write_stderr_line,
 };
-use whitaker_installer::dependency_packaging::{
-    DependencyPackageParams, DependencyPackagingError, package_dependency_binary,
-    write_provenance_markdown,
-};
-use whitaker_installer::installer_packaging::TargetTriple;
-use whitaker_installer::output::write_stderr_line;
 
 /// Package repository-hosted dependency binaries for release publication.
 #[derive(Parser, Debug)]
@@ -91,9 +96,7 @@ fn main() {
 }
 
 /// Execute one dependency-binary packaging command.
-fn run(cli: Cli) -> Result<(), CliError> {
-    run_with_stdout(cli, &mut std::io::stdout())
-}
+fn run(cli: Cli) -> Result<(), CliError> { run_with_stdout(cli, &mut std::io::stdout()) }
 
 /// Execute a subcommand and write its success report to `stdout`.
 ///
@@ -150,10 +153,11 @@ fn run_provenance(output_dir: &Path, stdout: &mut impl Write) -> Result<(), CliE
 mod tests {
     //! Tests for the dependency-binary packaging command.
 
-    use super::*;
     use rstest::rstest;
     use tempfile::tempdir;
     use whitaker_installer::dependency_binaries::provenance_filename;
+
+    use super::*;
 
     #[derive(Clone, Copy, Debug)]
     enum ExpectedPackageError {
@@ -168,9 +172,7 @@ mod tests {
             Err(std::io::Error::from(std::io::ErrorKind::BrokenPipe))
         }
 
-        fn flush(&mut self) -> std::io::Result<()> {
-            Ok(())
-        }
+        fn flush(&mut self) -> std::io::Result<()> { Ok(()) }
     }
 
     #[rstest]

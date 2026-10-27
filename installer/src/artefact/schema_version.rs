@@ -3,9 +3,11 @@
 //! Restricts the version to the range `1..=CURRENT_MAX`, matching the
 //! versioning policy defined in ADR-001.
 
-use super::error::{ArtefactError, Result};
-use serde::Serialize;
 use std::fmt;
+
+use serde::Serialize;
+
+use super::error::{ArtefactError, Result};
 
 /// The highest schema version this build can read.
 const CURRENT_MAX: u32 = 1;
@@ -32,15 +34,11 @@ pub struct SchemaVersion(u32);
 impl SchemaVersion {
     /// Return the current (latest) schema version.
     #[must_use]
-    pub const fn current() -> Self {
-        Self(CURRENT_MAX)
-    }
+    pub const fn current() -> Self { Self(CURRENT_MAX) }
 
     /// Return the inner version number.
     #[must_use]
-    pub const fn as_u32(self) -> u32 {
-        self.0
-    }
+    pub const fn as_u32(self) -> u32 { self.0 }
 }
 
 impl<'de> serde::Deserialize<'de> for SchemaVersion {
@@ -68,15 +66,11 @@ impl TryFrom<u32> for SchemaVersion {
 }
 
 impl From<SchemaVersion> for u32 {
-    fn from(v: SchemaVersion) -> Self {
-        v.0
-    }
+    fn from(v: SchemaVersion) -> Self { v.0 }
 }
 
 impl fmt::Display for SchemaVersion {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.0) }
 }
 
 #[cfg(test)]

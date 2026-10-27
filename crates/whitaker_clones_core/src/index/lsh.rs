@@ -49,7 +49,12 @@ impl LshIndex {
     ///
     /// ```rust
     /// use whitaker_clones_core::{
-    ///     Fingerprint, FragmentId, LshConfig, LshIndex, MinHasher, MINHASH_SIZE,
+    ///     Fingerprint,
+    ///     FragmentId,
+    ///     LshConfig,
+    ///     LshIndex,
+    ///     MINHASH_SIZE,
+    ///     MinHasher,
     /// };
     ///
     /// let hasher = MinHasher::new();
@@ -247,9 +252,7 @@ impl InsertedFragmentsForKani {
         }
     }
 
-    const fn len(&self) -> usize {
-        self.len
-    }
+    const fn len(&self) -> usize { self.len }
 
     fn get(&self, index: usize) -> Option<&InsertedFragmentForKani> {
         self.items.get(index).and_then(Option::as_ref)

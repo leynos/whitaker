@@ -27,7 +27,10 @@ impl CandidatePair {
     ///
     /// let pair = CandidatePair::new(FragmentId::from("beta"), FragmentId::from("alpha"));
     /// assert_eq!(
-    ///     pair.map(|pair| (pair.left().as_str().to_owned(), pair.right().as_str().to_owned())),
+    ///     pair.map(|pair| (
+    ///         pair.left().as_str().to_owned(),
+    ///         pair.right().as_str().to_owned()
+    ///     )),
     ///     Some(("alpha".to_owned(), "beta".to_owned()))
     /// );
     /// ```
@@ -47,15 +50,11 @@ impl CandidatePair {
 
     /// Returns the left fragment identifier.
     #[must_use]
-    pub const fn left(&self) -> &FragmentId {
-        &self.left
-    }
+    pub const fn left(&self) -> &FragmentId { &self.left }
 
     /// Returns the right fragment identifier.
     #[must_use]
-    pub const fn right(&self) -> &FragmentId {
-        &self.right
-    }
+    pub const fn right(&self) -> &FragmentId { &self.right }
 }
 
 /// Validated LSH settings for the fixed-width `MinHash` sketch.
@@ -103,15 +102,11 @@ impl LshConfig {
 
     /// Returns the number of LSH bands.
     #[must_use]
-    pub const fn bands(self) -> usize {
-        self.bands.get()
-    }
+    pub const fn bands(self) -> usize { self.bands.get() }
 
     /// Returns the number of rows in each band.
     #[must_use]
-    pub const fn rows(self) -> usize {
-        self.rows.get()
-    }
+    pub const fn rows(self) -> usize { self.rows.get() }
 }
 
 const fn validate_product(bands: NonZeroUsize, rows: NonZeroUsize) -> IndexResult<()> {
@@ -130,9 +125,7 @@ pub struct MinHashSignature([u64; MINHASH_SIZE]);
 
 impl MinHashSignature {
     #[must_use]
-    pub(crate) const fn new(values: &[u64; MINHASH_SIZE]) -> Self {
-        Self(*values)
-    }
+    pub(crate) const fn new(values: &[u64; MINHASH_SIZE]) -> Self { Self(*values) }
 
     /// Returns the sketch values in order.
     ///
@@ -142,23 +135,18 @@ impl MinHashSignature {
     /// use whitaker_clones_core::{Fingerprint, MinHasher};
     ///
     /// let hasher = MinHasher::new();
-    /// let signature = hasher.sketch(&[
-    ///     Fingerprint::new(11, 0..1),
-    ///     Fingerprint::new(22, 1..2),
-    /// ])?;
+    /// let signature = hasher.sketch(&[Fingerprint::new(11, 0..1), Fingerprint::new(22, 1..2)])?;
     /// assert_eq!(signature.values().len(), 128);
     /// # Ok::<(), whitaker_clones_core::IndexError>(())
     /// ```
     #[must_use]
-    pub const fn values(&self) -> &[u64; MINHASH_SIZE] {
-        &self.0
-    }
+    pub const fn values(&self) -> &[u64; MINHASH_SIZE] { &self.0 }
 
     pub(crate) fn bands(&self, rows: usize) -> ChunksExact<'_, u64> {
         debug_assert!(
             self.0.len().is_multiple_of(rows),
-            "MinHashSignature length ({}) must divide evenly by rows ({}); \
-             LshConfig ensures bands * rows == MINHASH_SIZE",
+            "MinHashSignature length ({}) must divide evenly by rows ({}); LshConfig ensures \
+             bands * rows == MINHASH_SIZE",
             self.0.len(),
             rows
         );

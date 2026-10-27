@@ -1,7 +1,8 @@
 //! Unit tests for brain type metric collection.
 
-use super::*;
 use rstest::rstest;
+
+use super::*;
 
 // ---------------------------------------------------------------------------
 // MethodMetrics

@@ -1,8 +1,7 @@
 //! Shared test helpers for Run 0 acceptance and emission tests.
 
-use crate::{CandidatePair, Fingerprint, FragmentId, NormProfile};
-
 use super::{TokenFragment, TokenPassConfig};
+use crate::{CandidatePair, Fingerprint, FragmentId, NormProfile};
 
 pub(super) struct FragmentInput<'a> {
     pub(super) id: &'a str,

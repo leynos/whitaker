@@ -3,12 +3,13 @@
 //! Split from `workspace.rs` to keep each file inside the repository's
 //! 400-line limit; the module they exercise is unchanged.
 
+use std::{fs, path::PathBuf};
+
+use rstest::{fixture, rstest};
+use tempfile::TempDir;
+
 use super::*;
 use crate::dirs::{MockBaseDirs, SystemBaseDirs};
-use rstest::{fixture, rstest};
-use std::fs;
-use std::path::PathBuf;
-use tempfile::TempDir;
 
 /// A temporary directory converted to a UTF-8 path for workspace tests.
 struct TempWorkspace {

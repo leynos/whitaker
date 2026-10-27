@@ -1,19 +1,29 @@
 //! Verify dependency queries preserve failure state without emitting events.
 
+use std::{
+    path::PathBuf,
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    },
+};
+
+use tracing::Subscriber;
+use tracing_subscriber::{Layer, layer::Context, prelude::*};
+
 use super::{
-    BinaryLocator, PathScanFailure, PathScanFailureCategory, PathScanResult,
+    BinaryLocator,
+    PathScanFailure,
+    PathScanFailureCategory,
+    PathScanResult,
     check_dylint_tools_with_locator,
 };
 use crate::test_utils::{
-    ExpectedCall, StubExecutor,
+    ExpectedCall,
+    StubExecutor,
     dependency_binary_helpers::{cargo_dylint_check, dylint_link_install_list_check},
     failure_output,
 };
-use std::path::PathBuf;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use tracing::Subscriber;
-use tracing_subscriber::{Layer, layer::Context, prelude::*};
 
 struct FixedBinaryLocator {
     binary: Option<PathBuf>,

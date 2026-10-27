@@ -19,47 +19,114 @@ pub mod span;
 pub mod test_support;
 
 pub use attributes::{
-    Attribute, AttributeKind, AttributePath, PARSED_ATTRIBUTE_PLACEHOLDER, has_test_like_attribute,
-    has_test_like_attribute_with, outer_attributes, split_doc_attributes,
-};
-pub use brain_trait_metrics::evaluation::{
-    BrainTraitDiagnostic, BrainTraitDisposition, BrainTraitThresholds, BrainTraitThresholdsBuilder,
-    evaluate_brain_trait,
+    Attribute,
+    AttributeKind,
+    AttributePath,
+    PARSED_ATTRIBUTE_PLACEHOLDER,
+    has_test_like_attribute,
+    has_test_like_attribute_with,
+    outer_attributes,
+    split_doc_attributes,
 };
 pub use brain_trait_metrics::{
-    TraitItemKind, TraitItemMetrics, TraitMetrics, TraitMetricsBuilder, default_method_cc_sum,
-    default_method_count, required_method_count, trait_item_count,
-};
-pub use brain_type_metrics::evaluation::{
-    BrainTypeDiagnostic, BrainTypeDisposition, BrainTypeThresholds, BrainTypeThresholdsBuilder,
-    evaluate_brain_type, format_help, format_note, format_primary_message,
+    TraitItemKind,
+    TraitItemMetrics,
+    TraitMetrics,
+    TraitMetricsBuilder,
+    default_method_cc_sum,
+    default_method_count,
+    evaluation::{
+        BrainTraitDiagnostic,
+        BrainTraitDisposition,
+        BrainTraitThresholds,
+        BrainTraitThresholdsBuilder,
+        evaluate_brain_trait,
+    },
+    required_method_count,
+    trait_item_count,
 };
 pub use brain_type_metrics::{
-    CognitiveComplexityBuilder, ForeignReferenceSet, MethodMetrics, TypeMetrics,
-    TypeMetricsBuilder, brain_methods, foreign_reach_count, weighted_methods_count,
+    CognitiveComplexityBuilder,
+    ForeignReferenceSet,
+    MethodMetrics,
+    TypeMetrics,
+    TypeMetricsBuilder,
+    brain_methods,
+    evaluation::{
+        BrainTypeDiagnostic,
+        BrainTypeDisposition,
+        BrainTypeThresholds,
+        BrainTypeThresholdsBuilder,
+        evaluate_brain_type,
+        format_help,
+        format_note,
+        format_primary_message,
+    },
+    foreign_reach_count,
+    weighted_methods_count,
 };
 pub use context::{
-    ContextEntry, ContextKind, in_test_like_context, in_test_like_context_with, is_in_main_fn,
-    is_test_fn, is_test_fn_with,
+    ContextEntry,
+    ContextKind,
+    in_test_like_context,
+    in_test_like_context_with,
+    is_in_main_fn,
+    is_test_fn,
+    is_test_fn_with,
 };
 pub use decomposition_advice::{
-    DecompositionContext, DecompositionSuggestion, MethodProfile, MethodProfileBuilder,
-    SubjectKind, SuggestedExtractionKind, format_diagnostic_note, suggest_decomposition,
+    DecompositionContext,
+    DecompositionSuggestion,
+    MethodProfile,
+    MethodProfileBuilder,
+    SubjectKind,
+    SuggestedExtractionKind,
+    format_diagnostic_note,
+    suggest_decomposition,
 };
 pub use diagnostics::{Applicability, Diagnostic, DiagnosticBuilder, Suggestion, span_lint};
 pub use expr::{Expr, def_id_of_expr_callee, is_path_to, recv_is_option_or_result};
 pub use i18n::{
-    Arguments, FALLBACK_LOCALE, I18nError, LocaleSelection, LocaleSource, Localizer,
-    MessageResolution, available_locales, branch_phrase, get_localizer_for_lint, noop_reporter,
-    normalize_locale, resolve_localizer, safe_resolve_message_set, supports_locale,
+    Arguments,
+    FALLBACK_LOCALE,
+    I18nError,
+    LocaleSelection,
+    LocaleSource,
+    Localizer,
+    MessageResolution,
+    available_locales,
+    branch_phrase,
+    get_localizer_for_lint,
+    noop_reporter,
+    normalize_locale,
+    resolve_localizer,
+    safe_resolve_message_set,
+    supports_locale,
 };
 pub use lcom4::{MethodInfo, MethodInfoBuilder, cohesion_components, collect_method_infos};
 pub use path::SimplePath;
 pub use rstest::{
-    ArgAtom, ArgFingerprint, CalleeShape, ExpansionTrace, ExprShape, LocalSlot,
-    ParagraphFingerprint, ParagraphNormalizer, ParameterBinding, RstestDetectionOptions,
-    RstestParameter, RstestParameterKind, SpanRecoveryFrame, StmtShape, UserEditableSpan,
-    classify_rstest_parameter, fixture_local_names, is_rstest_fixture, is_rstest_fixture_with,
-    is_rstest_test, is_rstest_test_with, recover_user_editable_span,
+    ArgAtom,
+    ArgFingerprint,
+    CalleeShape,
+    ExpansionTrace,
+    ExprShape,
+    LocalSlot,
+    ParagraphFingerprint,
+    ParagraphNormalizer,
+    ParameterBinding,
+    RstestDetectionOptions,
+    RstestParameter,
+    RstestParameterKind,
+    SpanRecoveryFrame,
+    StmtShape,
+    UserEditableSpan,
+    classify_rstest_parameter,
+    fixture_local_names,
+    is_rstest_fixture,
+    is_rstest_fixture_with,
+    is_rstest_test,
+    is_rstest_test_with,
+    recover_user_editable_span,
 };
 pub use span::{SourceLocation, SourceSpan, SpanError, span_line_count, span_to_lines};

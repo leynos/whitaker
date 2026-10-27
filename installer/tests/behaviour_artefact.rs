@@ -40,9 +40,7 @@ struct ArtefactWorld {
 
 #[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
-fn world() -> ArtefactWorld {
-    ArtefactWorld::default()
-}
+fn world() -> ArtefactWorld { ArtefactWorld::default() }
 
 /// Check that an error option contains a specific `ArtefactError` variant.
 fn ensure_error_matches<F>(
@@ -274,62 +272,46 @@ fn then_action_is_fallback(world: &mut ArtefactWorld) -> Result<(), String> {
     path = "tests/features/artefact_policy.feature",
     name = "Construct artefact name from valid components"
 )]
-fn scenario_construct_artefact_name(world: ArtefactWorld) {
-    let _ = world;
-}
+fn scenario_construct_artefact_name(world: ArtefactWorld) { let _ = world; }
 
 #[scenario(
     path = "tests/features/artefact_policy.feature",
     name = "Reject unsupported target triple"
 )]
-fn scenario_reject_unsupported_target(world: ArtefactWorld) {
-    let _ = world;
-}
+fn scenario_reject_unsupported_target(world: ArtefactWorld) { let _ = world; }
 
 #[scenario(
     path = "tests/features/artefact_policy.feature",
     name = "Accept all five supported target triples"
 )]
-fn scenario_accept_all_supported_targets(world: ArtefactWorld) {
-    let _ = world;
-}
+fn scenario_accept_all_supported_targets(world: ArtefactWorld) { let _ = world; }
 
 #[scenario(
     path = "tests/features/artefact_policy.feature",
     name = "Reject invalid git SHA"
 )]
-fn scenario_reject_invalid_git_sha(world: ArtefactWorld) {
-    let _ = world;
-}
+fn scenario_reject_invalid_git_sha(world: ArtefactWorld) { let _ = world; }
 
 #[scenario(
     path = "tests/features/artefact_policy.feature",
     name = "Reject empty toolchain channel"
 )]
-fn scenario_reject_empty_channel(world: ArtefactWorld) {
-    let _ = world;
-}
+fn scenario_reject_empty_channel(world: ArtefactWorld) { let _ = world; }
 
 #[scenario(
     path = "tests/features/artefact_policy.feature",
     name = "Construct manifest with all fields"
 )]
-fn scenario_construct_manifest(world: ArtefactWorld) {
-    let _ = world;
-}
+fn scenario_construct_manifest(world: ArtefactWorld) { let _ = world; }
 
 #[scenario(
     path = "tests/features/artefact_policy.feature",
     name = "Default verification policy requires checksum"
 )]
-fn scenario_default_verification_policy(world: ArtefactWorld) {
-    let _ = world;
-}
+fn scenario_default_verification_policy(world: ArtefactWorld) { let _ = world; }
 
 #[scenario(
     path = "tests/features/artefact_policy.feature",
     name = "Verification failure triggers fallback"
 )]
-fn scenario_verification_failure_fallback(world: ArtefactWorld) {
-    let _ = world;
-}
+fn scenario_verification_failure_fallback(world: ArtefactWorld) { let _ = world; }

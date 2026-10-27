@@ -1,11 +1,19 @@
 //! Shingling, Rabin-Karp rolling hashing, and winnowing helpers.
 
 use super::types::{
-    Fingerprint, IdentifierSymbol, LiteralSymbol, NormalizedToken, NormalizedTokenKind,
-    ShingleSize, WinnowWindow,
+    Fingerprint,
+    IdentifierSymbol,
+    LiteralSymbol,
+    NormalizedToken,
+    NormalizedTokenKind,
+    ShingleSize,
+    WinnowWindow,
 };
 use crate::hashing::{
-    FNV_OFFSET_BASIS, RABIN_KARP_BASE, mix_byte as hash_byte, mix_bytes as hash_bytes,
+    FNV_OFFSET_BASIS,
+    RABIN_KARP_BASE,
+    mix_byte as hash_byte,
+    mix_bytes as hash_bytes,
 };
 
 /// Builds Rabin-Karp fingerprints for all `k`-sized normalized token windows.

@@ -254,8 +254,7 @@ fn a_quiet_forbidden_run_returns_the_reason_without_writing_to_stderr() {
     match result {
         PrebuiltResult::Fallback { reason } => assert!(
             reason.contains("artefact not found"),
-            "the reason must survive the quiet guard so the refusal can name \
-             it, got: {reason}"
+            "the reason must survive the quiet guard so the refusal can name it, got: {reason}"
         ),
         other => panic!("expected Fallback, got {other:?}"),
     }
@@ -296,8 +295,8 @@ fn a_loud_forbidden_run_reports_the_absence_without_promising_a_fallback() {
     );
     assert!(
         !written.contains("Falling back to local compilation."),
-        "promising a fallback the policy forbids says the opposite of what \
-         happens next, got: {written}"
+        "promising a fallback the policy forbids says the opposite of what happens next, got: \
+         {written}"
     );
     assert!(
         matches!(result, PrebuiltResult::Fallback { .. }),

@@ -1,11 +1,17 @@
 //! Query Dylint dependency availability before the install-flow decision.
 
 use std::io::Write;
+
 use tracing::debug;
-use whitaker_installer::deps::{
-    CommandExecutor, DylintToolStatus, PathScanFailure, check_dylint_tools_with_diagnostics,
+use whitaker_installer::{
+    deps::{
+        CommandExecutor,
+        DylintToolStatus,
+        PathScanFailure,
+        check_dylint_tools_with_diagnostics,
+    },
+    error::Result,
 };
-use whitaker_installer::error::Result;
 
 /// Query dependency availability and emit bounded PATH diagnostics.
 pub(crate) fn check_dylint_tools_for_command(

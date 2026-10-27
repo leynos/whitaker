@@ -1,9 +1,11 @@
 //! Verify failed dependency queries stop before the installation decision.
 
-use super::dependency_check::ensure_dylint_tools_with_query;
-use rstest::rstest;
 use std::cell::Cell;
+
+use rstest::rstest;
 use whitaker_installer::error::InstallerError;
+
+use super::dependency_check::ensure_dylint_tools_with_query;
 
 /// Verify failed availability queries stop before tool installation begins.
 #[rstest]

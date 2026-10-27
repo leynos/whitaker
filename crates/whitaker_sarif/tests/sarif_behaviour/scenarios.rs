@@ -8,48 +8,32 @@ use super::{SarifWorld, world};
 // intentionally use the feature's stable indices.
 /// Exercise minimal SARIF log generation through the feature scenario.
 #[scenario(path = "tests/features/sarif.feature", index = 0)]
-fn scenario_minimal_log(world: SarifWorld) {
-    let _ = world;
-}
+fn scenario_minimal_log(world: SarifWorld) { let _ = world; }
 
 /// Exercise rule-bearing SARIF results through the feature scenario.
 #[scenario(path = "tests/features/sarif.feature", index = 1)]
-fn scenario_result_with_rule(world: SarifWorld) {
-    let _ = world;
-}
+fn scenario_result_with_rule(world: SarifWorld) { let _ = world; }
 
 /// Exercise Whitaker SARIF properties through the feature scenario.
 #[scenario(path = "tests/features/sarif.feature", index = 2)]
-fn scenario_whitaker_properties(world: SarifWorld) {
-    let _ = world;
-}
+fn scenario_whitaker_properties(world: SarifWorld) { let _ = world; }
 
 /// Exercise result deduplication through the feature scenario.
 #[scenario(path = "tests/features/sarif.feature", index = 3)]
-fn scenario_merge_deduplicates(world: SarifWorld) {
-    let _ = world;
-}
+fn scenario_merge_deduplicates(world: SarifWorld) { let _ = world; }
 
 /// Exercise SARIF serialization round trips through the feature scenario.
 #[scenario(path = "tests/features/sarif.feature", index = 4)]
-fn scenario_round_trip(world: SarifWorld) {
-    let _ = world;
-}
+fn scenario_round_trip(world: SarifWorld) { let _ = world; }
 
 /// Exercise empty SARIF log generation through the feature scenario.
 #[scenario(path = "tests/features/sarif.feature", index = 5)]
-fn scenario_empty_log(world: SarifWorld) {
-    let _ = world;
-}
+fn scenario_empty_log(world: SarifWorld) { let _ = world; }
 
 /// Exercise all registered SARIF rules through the feature scenario.
 #[scenario(path = "tests/features/sarif.feature", index = 6)]
-fn scenario_all_rules(world: SarifWorld) {
-    let _ = world;
-}
+fn scenario_all_rules(world: SarifWorld) { let _ = world; }
 
 /// Exercise SARIF path helpers through the feature scenario.
 #[scenario(path = "tests/features/sarif.feature", index = 7)]
-fn scenario_path_helpers(world: SarifWorld) {
-    let _ = world;
-}
+fn scenario_path_helpers(world: SarifWorld) { let _ = world; }

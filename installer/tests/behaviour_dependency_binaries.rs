@@ -10,20 +10,29 @@ mod scenarios;
 use temp_env::with_var;
 use whitaker_installer::{
     dependency_binaries::{
-        DependencyBinary, DependencyBinaryInstallError, DependencyBinaryInstaller,
+        DependencyBinary,
+        DependencyBinaryInstallError,
+        DependencyBinaryInstaller,
         required_dependency_binaries,
     },
     dependency_packaging::render_provenance_markdown,
     deps::{
-        DependencyInstallOptions, DylintToolStatus, SourcePolicy, install_dylint_tools_with_options,
+        DependencyInstallOptions,
+        DylintToolStatus,
+        SourcePolicy,
+        install_dylint_tools_with_options,
     },
     dirs::BaseDirs,
     installer_packaging::TargetTriple,
     test_support::env_test_guard,
     test_utils::{
-        StubDirs, StubExecutor,
+        StubDirs,
+        StubExecutor,
         dependency_binary_helpers::{
-            ExpectedCallConfig, RepositoryVerification, expected_calls, path_binary_location,
+            ExpectedCallConfig,
+            RepositoryVerification,
+            expected_calls,
+            path_binary_location,
             write_fake_binary,
         },
     },
@@ -113,9 +122,7 @@ struct DependencyBinaryWorld {
 
 #[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
-fn world() -> DependencyBinaryWorld {
-    DependencyBinaryWorld::default()
-}
+fn world() -> DependencyBinaryWorld { DependencyBinaryWorld::default() }
 
 #[given("the missing tool is \"{tool}\"")]
 fn given_missing_tool(world: &mut DependencyBinaryWorld, tool: String) {

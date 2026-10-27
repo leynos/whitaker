@@ -12,9 +12,11 @@
 //! reference name are rejected rather than left for git to complain about
 //! after a clone has already been paid for.
 
-use super::error::{ArtefactError, Result};
-use serde::Serialize;
 use std::fmt;
+
+use serde::Serialize;
+
+use super::error::{ArtefactError, Result};
 
 /// Longest reference this accepts. Git imposes no such limit, but a value
 /// beyond this is a mistake rather than a reference, and an unbounded one
@@ -54,9 +56,7 @@ impl SuiteRef {
     /// assert_eq!(reference.as_str(), "main");
     /// ```
     #[must_use]
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
+    pub fn as_str(&self) -> &str { &self.0 }
 
     /// Consume the wrapper and return the inner string.
     ///
@@ -69,9 +69,7 @@ impl SuiteRef {
     /// assert_eq!(reference.into_inner(), "v0.2.6");
     /// ```
     #[must_use]
-    pub fn into_inner(self) -> String {
-        self.0
-    }
+    pub fn into_inner(self) -> String { self.0 }
 }
 
 impl TryFrom<&str> for SuiteRef {
@@ -101,20 +99,17 @@ impl std::str::FromStr for SuiteRef {
     ///
     /// ```
     /// use std::str::FromStr;
+    ///
     /// use whitaker_installer::artefact::suite_ref::SuiteRef;
     ///
     /// assert!(SuiteRef::from_str("v0.2.7").is_ok());
     /// assert!(SuiteRef::from_str("--upload-pack=evil").is_err());
     /// ```
-    fn from_str(value: &str) -> Result<Self> {
-        value.try_into()
-    }
+    fn from_str(value: &str) -> Result<Self> { value.try_into() }
 }
 
 impl fmt::Display for SuiteRef {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.0)
-    }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { f.write_str(&self.0) }
 }
 
 /// One rule a reference must satisfy, and what to say when it does not.

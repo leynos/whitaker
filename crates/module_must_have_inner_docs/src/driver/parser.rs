@@ -8,8 +8,8 @@
 //! meta-list walker serves the documentation and case-mismatch checks, while
 //! each caller owns its identifier policy. Key helpers:
 //! - `skip_leading_whitespace`: advances a text cursor past Unicode whitespace.
-//! - `is_doc_comment`: recognizes leading doc comments or doc attributes,
-//!   including those wrapped in `cfg_attr`.
+//! - `is_doc_comment`: recognizes leading doc comments or doc attributes, including those wrapped
+//!   in `cfg_attr`.
 //!
 //! These utilities underpin the lint that determines whether a module has the
 //! required leading inner docs.
@@ -90,9 +90,7 @@ pub(super) fn is_doc_comment(rest: ParseInput<'_>) -> bool {
 
 // Returns true for direct `doc` attributes and for `cfg_attr` wrappers that
 // contain a `doc` entry.
-fn is_doc_attr(attr_body: AttributeBody<'_>) -> bool {
-    is_doc_ident(ParseInput::from(*attr_body))
-}
+fn is_doc_attr(attr_body: AttributeBody<'_>) -> bool { is_doc_ident(ParseInput::from(*attr_body)) }
 
 /// Extracts the leading identifier from the input, skipping any leading
 /// whitespace.
@@ -107,7 +105,9 @@ fn is_doc_attr(attr_body: AttributeBody<'_>) -> bool {
 /// # use module_must_have_inner_docs::ParseInput;
 /// # use module_must_have_inner_docs::parser::take_ident;
 /// let input = ParseInput::from("  foo_bar(baz)");
-/// let Some((ident, rest)) = take_ident(input) else { panic!() };
+/// let Some((ident, rest)) = take_ident(input) else {
+///     panic!()
+/// };
 /// assert_eq!(*ident, "foo_bar");
 /// assert_eq!(rest.as_str(), "(baz)");
 ///
@@ -158,9 +158,7 @@ const fn is_ident_start(ch: char) -> bool {
     ch == '_' || ch.is_ascii_alphabetic()
 }
 
-const fn is_ident_continue(ch: char) -> bool {
-    ch == '_' || ch.is_ascii_alphanumeric()
-}
+const fn is_ident_continue(ch: char) -> bool { ch == '_' || ch.is_ascii_alphanumeric() }
 
 pub(super) fn cfg_attr_has_doc(tail: ParseInput<'_>) -> bool {
     cfg_attr_has_meta_item(tail, segment_is_doc)
@@ -221,9 +219,9 @@ impl CfgAttrScanState {
         }
 
         match (ch, self.depth, self.condition_comma.is_none()) {
-            ('(', _, _) => self.depth += 1,
+            ('(', ..) => self.depth += 1,
             (')', 1, _) => return true,
-            (')', _, _) => self.depth = self.depth.saturating_sub(1),
+            (')', ..) => self.depth = self.depth.saturating_sub(1),
             (',', 1, true) => self.condition_comma = Some(idx),
             _ => {}
         }
@@ -404,17 +402,16 @@ fn meta_item_matches(
     list.get(start..end).is_some_and(&mut matches_attribute)
 }
 
-fn segment_is_doc(segment: &str) -> bool {
-    is_doc_ident(ParseInput::from(segment))
-}
+fn segment_is_doc(segment: &str) -> bool { is_doc_ident(ParseInput::from(segment)) }
 
 #[cfg(test)]
 mod tests {
     //! Unit tests for parsing helpers.
 
+    use rstest::rstest;
+
     use super::{is_doc_comment, skip_leading_whitespace};
     use crate::ParseInput;
-    use rstest::rstest;
 
     #[rstest]
     #[case("", 0, "")]

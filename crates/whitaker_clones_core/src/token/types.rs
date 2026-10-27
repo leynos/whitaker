@@ -99,9 +99,7 @@ pub struct ShingleSize(NonZeroUsize);
 impl ShingleSize {
     /// Returns the validated `k` as a plain `usize`.
     #[must_use]
-    pub const fn get(self) -> usize {
-        self.0.get()
-    }
+    pub const fn get(self) -> usize { self.0.get() }
 }
 
 impl TryFrom<usize> for ShingleSize {
@@ -121,9 +119,7 @@ pub struct WinnowWindow(NonZeroUsize);
 impl WinnowWindow {
     /// Returns the validated window size as a plain `usize`.
     #[must_use]
-    pub const fn get(self) -> usize {
-        self.0.get()
-    }
+    pub const fn get(self) -> usize { self.0.get() }
 }
 
 impl TryFrom<usize> for WinnowWindow {
@@ -148,7 +144,5 @@ pub struct Fingerprint {
 impl Fingerprint {
     /// Creates a fingerprint from a hash value and source range.
     #[must_use]
-    pub const fn new(hash: u64, range: Range<usize>) -> Self {
-        Self { hash, range }
-    }
+    pub const fn new(hash: u64, range: Range<usize>) -> Self { Self { hash, range } }
 }
