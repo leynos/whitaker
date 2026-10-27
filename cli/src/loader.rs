@@ -1,14 +1,14 @@
 //! Discover files and compose injected sources at the application boundary.
 
-use std::{path::PathBuf, sync::Arc};
+use std::path::PathBuf;
 
 use ortho_config::{
     AutomaticMode, ConfigDiscovery, ConfigFilePolicy, ConfigPathSelector, MergeComposer,
-    OrthoError, OrthoResult, SharedEnvSource, SharedScanEnvSource,
+    MergeLayer, OrthoResult, SharedEnvSource, SharedScanEnvSource,
 };
 use serde_json::{json, Value};
 
-use crate::{environment, Configuration};
+use crate::{environment, error::invalid, Configuration};
 
 /// Inputs needed to resolve one invocation without mutating the environment.
 #[derive(Clone)]
@@ -40,7 +40,7 @@ pub struct LoadedConfiguration {
 /// # Errors
 ///
 /// Returns a configuration error when a selected file cannot be read or parsed,
-/// a recognised environment value is invalid, or merged settings are invalid.
+/// a recognized environment value is invalid, or merged settings are invalid.
 ///
 /// # Examples
 ///
@@ -57,8 +57,20 @@ pub struct LoadedConfiguration {
 /// # Ok::<(), std::sync::Arc<ortho_config::OrthoError>>(())
 /// ```
 pub fn load_with_sources(sources: Sources) -> OrthoResult<LoadedConfiguration> {
-    let mut notices = Vec::new();
-    let canonical = policy(&sources, "whitaker.toml", ".whitaker.toml", true).resolve_layers();
+    let files = discover_files(&sources)?;
+    compose_sources(sources, files)
+}
+
+/// Retain the selected files and their compatibility status for composition.
+struct FileLayers {
+    layers: Vec<MergeLayer<'static>>,
+    legacy: bool,
+    notices: Vec<String>,
+}
+
+/// Discover canonical files and fall back to a legacy file when appropriate.
+fn discover_files(sources: &Sources) -> OrthoResult<FileLayers> {
+    let canonical = policy(sources, "whitaker.toml", ".whitaker.toml", true).resolve_layers();
     let explicit = canonical.selection().is_some();
     let explicit_legacy = canonical.selection().is_some_and(|selection| {
         selection
@@ -70,7 +82,7 @@ pub fn load_with_sources(sources: Sources) -> OrthoResult<LoadedConfiguration> {
     let hidden = if explicit {
         None
     } else {
-        let outcome = hidden_project_policy(&sources).resolve_layers();
+        let outcome = hidden_project_policy(sources).resolve_layers();
         check_errors(&outcome)?;
         Some(outcome)
     };
@@ -78,17 +90,17 @@ pub fn load_with_sources(sources: Sources) -> OrthoResult<LoadedConfiguration> {
         .as_ref()
         .is_some_and(|outcome| !outcome.layers_are_empty());
     let fallback_legacy = !explicit && canonical.layers_are_empty() && !has_hidden;
-    let use_legacy = fallback_legacy || explicit_legacy;
+    let mut notices = Vec::new();
     let mut layers = if fallback_legacy {
-        let legacy = policy(&sources, "dylint.toml", ".dylint.toml", false).resolve_layers();
+        let legacy = policy(sources, "dylint.toml", ".dylint.toml", false).resolve_layers();
         check_errors(&legacy)?;
         if !legacy.layers_are_empty() {
-            notices.push(String::from("dylint.toml is deprecated; use whitaker.toml"));
+            notices.push(legacy_file_notice());
         }
         legacy.into_result()?
     } else {
         if explicit_legacy {
-            notices.push(String::from("dylint.toml is deprecated; use whitaker.toml"));
+            notices.push(legacy_file_notice());
         }
         canonical.into_result()?
     };
@@ -97,15 +109,30 @@ pub fn load_with_sources(sources: Sources) -> OrthoResult<LoadedConfiguration> {
             layers.extend(hidden.into_result()?);
         }
     }
+    Ok(FileLayers {
+        layers,
+        legacy: fallback_legacy || explicit_legacy,
+        notices,
+    })
+}
+
+/// Name the replacement for the legacy file.
+fn legacy_file_notice() -> String {
+    String::from("dylint.toml is deprecated; use whitaker.toml")
+}
+
+/// Compose the discovered files, environment layers, and explicit CLI values.
+fn compose_sources(sources: Sources, files: FileLayers) -> OrthoResult<LoadedConfiguration> {
+    let mut notices = files.notices;
     let mut composer = MergeComposer::new();
     composer.push_defaults(
         serde_json::to_value(Configuration::default())
             .map_err(|error| invalid("defaults", &error.to_string()))?,
     );
-    for layer in layers {
+    for layer in files.layers {
         let path = layer.path().map(ToOwned::to_owned);
         let mut value = layer.into_value();
-        if use_legacy {
+        if files.legacy {
             translate_legacy(&mut value);
         }
         apply_command(&mut value, sources.command.as_deref())?;
@@ -196,14 +223,6 @@ fn translate_legacy(value: &mut Value) {
             }
         }
     }
-}
-
-/// Build a typed error for a failed internal conversion.
-fn invalid(key: &str, message: &str) -> Arc<OrthoError> {
-    Arc::new(OrthoError::Validation {
-        key: key.to_owned(),
-        message: message.to_owned(),
-    })
 }
 
 /// Overlay the selected namespace within a source, rejecting unknown commands.

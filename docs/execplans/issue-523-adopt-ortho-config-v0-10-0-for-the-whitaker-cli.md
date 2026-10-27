@@ -329,6 +329,17 @@ behaviour, and UI compile contracts.
   passed during iteration; Rust 1.89.0 tests passed before the latest changes.
   Full gates and CodeRabbit remain pending for the implementation candidate.
 
+- [x] 2026-10-27: The implementation candidate passed `make check-fmt`,
+  `make lint`, `make typecheck`, `make test` (1,904 passed, five skipped, plus
+  11 Dylint tests), `make test-doc`, Markdown, spelling, and diagram checks.
+  The isolated Rust 1.89.0 package run passed 10 unit tests, 26 integration
+  tests, and two doctests; one generated doctest was ignored.
+- [ ] 2026-10-27: CodeRabbit reviewed implementation commit `9f7fbaa3` and
+  reported eight overlapping low-severity concerns. The follow-up refactor
+  consolidates error handling, separates discovery and composition, groups
+  environment mappings, reuses test fixtures, and documents value formats.
+  Repeat candidate gates and review after these changes.
+
 ## Surprises & discoveries
 
 - The requested branch already exists locally and is checked out in another
