@@ -109,8 +109,10 @@ processes.
 The loader resolves one file chain, maps legacy names to their canonical shape,
 and overlays each source in precedence order. The package's private command
 namespace table is shared by file validation and environment mapping; add a
-planned namespace there before using it in either source. A command namespace
-is applied within its own source before the next source is merged. Keep the
+planned namespace there before using it in either source. The environment
+adapter's private name and setting-path types keep source identifiers distinct
+from their values; they are scoped to that adapter. A command namespace is
+applied within its own source before the next source is merged. Keep the
 application package on Rust 1.89.0 and the Dylint workspace on its separately
 pinned nightly. The release uses OrthoConfig's default features.
 

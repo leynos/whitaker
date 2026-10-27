@@ -340,6 +340,11 @@ behaviour, and UI compile contracts.
   repeated before each review. The final review of `07d569eb` completed with
   zero findings.
 
+- [ ] 2026-10-27: Draft PR 525's CodeScene check found string-heavy arguments
+  in the environment adapter. Introduce private types for environment names and
+  setting paths, verify the local CodeScene result, then rerun the gates and
+  CodeRabbit before updating the draft.
+
 ## Surprises & discoveries
 
 - The requested branch already exists locally and is checked out in another
