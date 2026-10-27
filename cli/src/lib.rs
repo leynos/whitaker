@@ -1,5 +1,6 @@
 //! Configuration boundary for the planned Whitaker application.
 
+mod commands;
 mod environment;
 mod error;
 mod legacy;

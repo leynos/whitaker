@@ -340,6 +340,11 @@ behaviour, and UI compile contracts.
   environment mappings, reuses test fixtures, and documents value formats.
   Repeat candidate gates and review after these changes.
 
+- [ ] 2026-10-27: A second implementation review reported three low-severity
+  concerns: duplicated command names, duplicate workspace dependency versions,
+  and complex discovery and command-table functions. Consolidate these before
+  rerunning the complete gates and CodeRabbit review.
+
 ## Surprises & discoveries
 
 - The requested branch already exists locally and is checked out in another

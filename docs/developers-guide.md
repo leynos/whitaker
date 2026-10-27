@@ -107,10 +107,12 @@ processes.
 `Sources` keeps environment lookup and enumeration separate so tests can use
 `MapEnv` and an isolated project root without changing the process environment.
 The loader resolves one file chain, maps legacy names to their canonical shape,
-and overlays each source in precedence order. A command namespace is applied
-within its own source before the next source is merged. Keep the application
-package on Rust 1.89.0 and the Dylint workspace on its separately pinned
-nightly. The release uses OrthoConfig's default features.
+and overlays each source in precedence order. The package's private command
+namespace table is shared by file validation and environment mapping; add a
+planned namespace there before using it in either source. A command namespace
+is applied within its own source before the next source is merged. Keep the
+application package on Rust 1.89.0 and the Dylint workspace on its separately
+pinned nightly. The release uses OrthoConfig's default features.
 
 ## Running Tests
 

@@ -8,7 +8,7 @@ use ortho_config::{
 };
 use serde_json::{json, Value};
 
-use crate::{environment, error::invalid, Configuration};
+use crate::{commands::is_command, environment, error::invalid, Configuration};
 
 /// Inputs needed to resolve one invocation without mutating the environment.
 #[derive(Clone)]
@@ -70,48 +70,98 @@ struct FileLayers {
 
 /// Discover canonical files and fall back to a legacy file when appropriate.
 fn discover_files(sources: &Sources) -> OrthoResult<FileLayers> {
-    let canonical = policy(sources, "whitaker.toml", ".whitaker.toml", true).resolve_layers();
-    let explicit = canonical.selection().is_some();
-    let explicit_legacy = canonical.selection().is_some_and(|selection| {
+    let canonical = discover_canonical(sources)?;
+    if canonical.should_fall_back() {
+        return discover_legacy(sources);
+    }
+    canonical.into_file_layers()
+}
+
+/// Retain canonical discovery outcomes until the fallback decision is made.
+struct CanonicalFiles {
+    outcome: ortho_config::FileLayerOutcome,
+    hidden: Option<ortho_config::FileLayerOutcome>,
+    explicit_legacy: bool,
+}
+
+impl CanonicalFiles {
+    /// Decide whether no canonical file or selector was present.
+    fn should_fall_back(&self) -> bool {
+        self.outcome.selection().is_none()
+            && self.outcome.layers_are_empty()
+            && self
+                .hidden
+                .as_ref()
+                .is_none_or(ortho_config::FileLayerOutcome::layers_are_empty)
+    }
+
+    /// Retain the canonical chain and append the hidden project layer.
+    fn into_file_layers(self) -> OrthoResult<FileLayers> {
+        let mut layers = self.outcome.into_result()?;
+        if let Some(hidden) = self.hidden {
+            layers.extend(hidden.into_result()?);
+        }
+        let notices = if self.explicit_legacy {
+            vec![legacy_file_notice()]
+        } else {
+            Vec::new()
+        };
+        Ok(FileLayers {
+            layers,
+            legacy: self.explicit_legacy,
+            notices,
+        })
+    }
+}
+
+/// Resolve canonical discovery and the separate hidden project candidate.
+fn discover_canonical(sources: &Sources) -> OrthoResult<CanonicalFiles> {
+    let outcome = policy(sources, "whitaker.toml", ".whitaker.toml", true).resolve_layers();
+    check_errors(&outcome)?;
+    let explicit_legacy = is_selected_legacy(&outcome);
+    let hidden = discover_hidden(sources, outcome.selection().is_some())?;
+    Ok(CanonicalFiles {
+        outcome,
+        hidden,
+        explicit_legacy,
+    })
+}
+
+/// Recognize an explicitly selected legacy filename.
+fn is_selected_legacy(outcome: &ortho_config::FileLayerOutcome) -> bool {
+    outcome.selection().is_some_and(|selection| {
         selection
             .path()
             .file_name()
             .is_some_and(|name| name == "dylint.toml" || name == ".dylint.toml")
-    });
-    check_errors(&canonical)?;
-    let hidden = if explicit {
-        None
-    } else {
-        let outcome = hidden_project_policy(sources).resolve_layers();
-        check_errors(&outcome)?;
-        Some(outcome)
-    };
-    let has_hidden = hidden
-        .as_ref()
-        .is_some_and(|outcome| !outcome.layers_are_empty());
-    let fallback_legacy = !explicit && canonical.layers_are_empty() && !has_hidden;
-    let mut notices = Vec::new();
-    let mut layers = if fallback_legacy {
-        let legacy = policy(sources, "dylint.toml", ".dylint.toml", false).resolve_layers();
-        check_errors(&legacy)?;
-        if !legacy.layers_are_empty() {
-            notices.push(legacy_file_notice());
-        }
-        legacy.into_result()?
-    } else {
-        if explicit_legacy {
-            notices.push(legacy_file_notice());
-        }
-        canonical.into_result()?
-    };
-    if !fallback_legacy {
-        if let Some(hidden) = hidden {
-            layers.extend(hidden.into_result()?);
-        }
+    })
+}
+
+/// Discover a hidden project file unless an explicit file was selected.
+fn discover_hidden(
+    sources: &Sources,
+    explicit: bool,
+) -> OrthoResult<Option<ortho_config::FileLayerOutcome>> {
+    if explicit {
+        return Ok(None);
     }
+    let outcome = hidden_project_policy(sources).resolve_layers();
+    check_errors(&outcome)?;
+    Ok(Some(outcome))
+}
+
+/// Load a legacy file chain and record its deprecation when found.
+fn discover_legacy(sources: &Sources) -> OrthoResult<FileLayers> {
+    let outcome = policy(sources, "dylint.toml", ".dylint.toml", false).resolve_layers();
+    check_errors(&outcome)?;
+    let notices = if outcome.layers_are_empty() {
+        Vec::new()
+    } else {
+        vec![legacy_file_notice()]
+    };
     Ok(FileLayers {
-        layers,
-        legacy: fallback_legacy || explicit_legacy,
+        layers: outcome.into_result()?,
+        legacy: true,
         notices,
     })
 }
@@ -227,44 +277,41 @@ fn translate_legacy(value: &mut Value) {
 
 /// Overlay the selected namespace within a source, rejecting unknown commands.
 fn apply_command(value: &mut Value, selected: Option<&str>) -> OrthoResult<()> {
-    const COMMANDS: &[&str] = &[
-        "check",
-        "install",
-        "ls",
-        "doctor",
-        "rewrite",
-        "rewrite_check",
-        "rewrite_diff",
-        "rewrite_apply",
-        "rewrite_explain",
-    ];
-    if let Some(name) = selected {
-        if !COMMANDS.contains(&name) {
-            return Err(invalid("command", "unknown command namespace"));
-        }
-    }
+    validate_command_name(selected, "command")?;
     let Some(root) = value.as_object_mut() else {
         return Err(invalid("configuration", "expected an object"));
     };
     let Some(commands) = root.remove("cmds") else {
         return Ok(());
     };
+    apply_command_table(root, &commands, selected)
+}
+
+/// Validate a command table and apply its selected entry to the source.
+fn apply_command_table(
+    root: &mut serde_json::Map<String, Value>,
+    commands: &Value,
+    selected: Option<&str>,
+) -> OrthoResult<()> {
     let Some(commands) = commands.as_object() else {
         return Err(invalid("cmds", "expected a table"));
     };
     for name in commands.keys() {
-        if !COMMANDS.contains(&name.as_str()) {
-            return Err(invalid(
-                &format!("cmds.{name}"),
-                "unknown command namespace",
-            ));
-        }
+        validate_command_name(Some(name), &format!("cmds.{name}"))?;
     }
     if let Some(command) = selected.and_then(|name| commands.get(name)) {
         if !command.is_object() {
             return Err(invalid("cmds", "command settings must be a table"));
         }
         overlay(root, command);
+    }
+    Ok(())
+}
+
+/// Reject an unrecognized command namespace.
+fn validate_command_name(name: Option<&str>, key: &str) -> OrthoResult<()> {
+    if name.is_some_and(|name| !is_command(name)) {
+        return Err(invalid(key, "unknown command namespace"));
     }
     Ok(())
 }
