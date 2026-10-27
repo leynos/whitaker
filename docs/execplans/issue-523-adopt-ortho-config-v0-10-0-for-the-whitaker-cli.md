@@ -4,7 +4,8 @@ This ExecPlan is a living document. Keep `Constraints`, `Tolerances`, `Risks`,
 `Progress`, `Surprises & Discoveries`, `Decision Log`, and
 `Outcomes & Retrospective` current as work proceeds.
 
-Status: implementation in progress; draft PR 525 is open for design review.
+Status: configuration foundation implemented and validated; draft PR 525 is
+open.
 
 Issue: [leynos/whitaker#523](https://github.com/leynos/whitaker/issues/523)
 
@@ -324,30 +325,20 @@ behaviour, and UI compile contracts.
 
 - [x] 2026-10-27: Opened draft PR 525 for ADR review. A separate agent owns
   the root CLI binary; this branch supplies the configuration foundation.
-- [ ] 2026-10-27: Implementing source discovery, compatibility layers, typed
-  settings, and injected tests in `cli/`. Targeted nightly tests and Clippy
-  passed during iteration; Rust 1.89.0 tests passed before the latest changes.
-  Full gates and CodeRabbit remain pending for the implementation candidate.
-
-- [x] 2026-10-27: The implementation candidate passed `make check-fmt`,
-  `make lint`, `make typecheck`, `make test` (1,904 passed, five skipped, plus
-  11 Dylint tests), `make test-doc`, Markdown, spelling, and diagram checks.
-  The isolated Rust 1.89.0 package run passed 10 unit tests, 26 integration
-  tests, and two doctests; one generated doctest was ignored.
-- [ ] 2026-10-27: CodeRabbit reviewed implementation commit `9f7fbaa3` and
-  reported eight overlapping low-severity concerns. The follow-up refactor
-  consolidates error handling, separates discovery and composition, groups
-  environment mappings, reuses test fixtures, and documents value formats.
-  Repeat candidate gates and review after these changes.
-
-- [ ] 2026-10-27: A second implementation review reported three low-severity
-  concerns: duplicated command names, duplicate workspace dependency versions,
-  and complex discovery and command-table functions. Consolidate these before
-  rerunning the complete gates and CodeRabbit review.
-
-- [ ] 2026-10-27: A third implementation review requested workspace lint
-  inheritance, test-module placement, and clearer malformed-file guidance.
-  Apply these fixes and repeat the deterministic gates before reviewing again.
+- [x] 2026-10-27: Implemented source discovery, compatibility layers, typed
+  settings, command namespaces, and injected tests in `cli/`. The application
+  package is configuration-only; the separate root CLI branch owns parser and
+  command integration.
+- [x] 2026-10-27: `make check-fmt`, `make lint`, `make typecheck`, `make test`,
+  `make test-doc`, `make markdownlint`, `make spelling`, and `make nixie`
+  passed on the final implementation tree. The workspace suite passed 1,904
+  tests with five skips, followed by 11 Dylint tests. Rust 1.89.0 package tests
+  passed 10 unit tests, 26 integration tests, and two doctests; one generated
+  doctest was ignored.
+- [x] 2026-10-27: Three CodeRabbit rounds identified maintainability and
+  documentation concerns. Follow-up commits addressed them, with full gates
+  repeated before each review. The final review of `07d569eb` completed with
+  zero findings.
 
 ## Surprises & discoveries
 
@@ -356,9 +347,9 @@ behaviour, and UI compile contracts.
   not take the target name, so it was preserved under
   `issue-523-ortho-config-adoption-session`; this work uses the existing target
   branch rather than overwriting it.
-- The current workspace has no `whitaker-cli` package or unified CLI binary.
-  Existing clap behaviour belongs to the installer package and will remain
-  isolated from the future CLI config spine.
+- At the baseline the workspace had no `whitaker-cli` package or unified CLI
+  binary. Existing clap behaviour belongs to the installer package and remains
+  isolated from the new configuration spine.
 - The v0.10.0 facade supports injected discovery and scan sources, ordered
   explicit config selectors, localizable parsing, and TOML by default. Its
   package floor is Rust 1.89.0; its default features include `serde_json` and
@@ -387,4 +378,7 @@ behaviour, and UI compile contracts.
 
 ## Outcomes & Retrospective
 
-Implementation and delivery are pending.
+The configuration foundation and its source-level tests are complete and
+validated. The separately developed root CLI must wire its parser and command
+execution to this package; that integration and its binary-level localized
+parse and stream checks are outside this branch. Draft PR 525 remains open.
