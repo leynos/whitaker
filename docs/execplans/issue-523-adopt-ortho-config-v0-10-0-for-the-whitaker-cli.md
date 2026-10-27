@@ -340,10 +340,12 @@ behaviour, and UI compile contracts.
   repeated before each review. The final review of `07d569eb` completed with
   zero findings.
 
-- [ ] 2026-10-27: Draft PR 525's CodeScene check found string-heavy arguments
-  in the environment adapter. Introduce private types for environment names and
-  setting paths, verify the local CodeScene result, then rerun the gates and
-  CodeRabbit before updating the draft.
+- [x] 2026-10-27: Draft PR 525's CodeScene check found string-heavy arguments
+  in the environment adapter. Private environment-name and setting-path types
+  resolved the local check, with a 10.00 score. Full gates passed again, and
+  CodeRabbit reviewed `f9589fbe` with zero findings. Hosted CI on the preceding
+  head passed Linux, coverage, and Windows; the revised head requires its own
+  hosted check results.
 
 ## Surprises & discoveries
 
