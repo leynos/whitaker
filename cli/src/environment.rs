@@ -19,7 +19,7 @@ pub(crate) fn collect(source: &dyn ScanEnvSource) -> OrthoResult<(Value, Value, 
     let mut layers = EnvironmentLayers::default();
     for (key, value) in source.scan() {
         if let Some(key) = key.to_str() {
-            layers.insert_variable(key, &value)?;
+            layers.insert_variable(EnvironmentName(key), &value)?;
         }
     }
     Ok((
@@ -28,6 +28,10 @@ pub(crate) fn collect(source: &dyn ScanEnvSource) -> OrthoResult<(Value, Value, 
         layers.has_legacy_locale,
     ))
 }
+
+/// Identify a source environment variable without mixing it with its value.
+#[derive(Clone, Copy)]
+struct EnvironmentName<'a>(&'a str);
 
 /// Accumulate separate precedence layers while classifying environment values.
 #[derive(Default)]
@@ -39,14 +43,16 @@ struct EnvironmentLayers {
 
 impl EnvironmentLayers {
     /// Map one recognized variable into its corresponding source layer.
-    fn insert_variable(&mut self, key: &str, value: &OsStr) -> OrthoResult<()> {
-        match key {
+    fn insert_variable(&mut self, key: EnvironmentName<'_>, value: &OsStr) -> OrthoResult<()> {
+        match key.0 {
             "DYLINT_LOCALE" => {
                 let text = text_value(key, value)?;
                 insert(
                     &mut self.legacy,
-                    "diagnostics",
-                    "locale",
+                    SettingPath {
+                        section: "diagnostics",
+                        field: "locale",
+                    },
                     Value::String(text.to_owned()),
                 );
                 self.has_legacy_locale = true;
@@ -55,8 +61,10 @@ impl EnvironmentLayers {
                 if let Some(allow) = source_fallback_override(Some(value)) {
                     insert(
                         &mut self.legacy,
-                        "install",
-                        "allow_build_from_source",
+                        SettingPath {
+                            section: "install",
+                            field: "allow_build_from_source",
+                        },
                         json!(allow),
                     );
                 }
@@ -67,31 +75,36 @@ impl EnvironmentLayers {
     }
 
     /// Map a canonical global or command-specific variable when recognized.
-    fn insert_canonical(&mut self, key: &str, value: &OsStr) -> OrthoResult<()> {
-        if let Some((command, setting)) = environment_key(key) {
+    fn insert_canonical(&mut self, key: EnvironmentName<'_>, value: &OsStr) -> OrthoResult<()> {
+        if let Some((command, setting)) = environment_key(key.0) {
             let canonical_key = format!("WHITAKER_{setting}");
-            if let Some((section, field, kind)) = known_key(&canonical_key) {
+            if let Some((section, field, kind)) = known_key(EnvironmentName(&canonical_key)) {
                 let parsed = parse_value(key, text_value(key, value)?, kind)?;
-                insert_command(&mut self.canonical, command, (section, field), parsed);
+                insert_command(
+                    &mut self.canonical,
+                    command,
+                    SettingPath { section, field },
+                    parsed,
+                );
             }
         } else if let Some((section, field, kind)) = known_key(key) {
             let parsed = parse_value(key, text_value(key, value)?, kind)?;
-            insert(&mut self.canonical, section, field, parsed);
+            insert(&mut self.canonical, SettingPath { section, field }, parsed);
         }
         Ok(())
     }
 }
 
 /// Identify the currently specified global environment names.
-fn known_key(key: &str) -> Option<(&'static str, &'static str, Kind)> {
+fn known_key(key: EnvironmentName<'_>) -> Option<(&'static str, &'static str, Kind)> {
     global_key(key)
         .or_else(|| lint_key(key))
         .or_else(|| tuning_key(key))
 }
 
 /// Map global application settings.
-fn global_key(key: &str) -> Option<(&'static str, &'static str, Kind)> {
-    match key {
+fn global_key(key: EnvironmentName<'_>) -> Option<(&'static str, &'static str, Kind)> {
+    match key.0 {
         "WHITAKER_LINT_SELECT" => Some(("lint", "select", Kind::List)),
         "WHITAKER_LINT_IGNORE" => Some(("lint", "ignore", Kind::List)),
         "WHITAKER_LINT_EXPERIMENTAL" => Some(("lint", "experimental", Kind::Bool)),
@@ -108,8 +121,8 @@ fn global_key(key: &str) -> Option<(&'static str, &'static str, Kind)> {
 }
 
 /// Map line, branch, and test-attribute lint settings.
-fn lint_key(key: &str) -> Option<(&'static str, &'static str, Kind)> {
-    match key {
+fn lint_key(key: EnvironmentName<'_>) -> Option<(&'static str, &'static str, Kind)> {
+    match key.0 {
         "WHITAKER_MODULE_MAX_LINES_MAX_LINES" => {
             Some(("module_max_lines", "max_lines", Kind::Integer))
         }
@@ -134,8 +147,8 @@ fn lint_key(key: &str) -> Option<(&'static str, &'static str, Kind)> {
 }
 
 /// Map fixture, filesystem, and complexity tuning settings.
-fn tuning_key(key: &str) -> Option<(&'static str, &'static str, Kind)> {
-    match key {
+fn tuning_key(key: EnvironmentName<'_>) -> Option<(&'static str, &'static str, Kind)> {
+    match key.0 {
         "WHITAKER_RSTEST_HELPER_SHOULD_BE_FIXTURE_MIN_CALLS" => Some((
             "rstest_helper_should_be_fixture",
             "min_calls",
@@ -203,30 +216,30 @@ enum Kind {
 }
 
 /// Convert an operating-system value without silently losing bytes.
-fn text_value<'a>(key: &str, value: &'a OsStr) -> OrthoResult<&'a str> {
+fn text_value<'a>(key: EnvironmentName<'_>, value: &'a OsStr) -> OrthoResult<&'a str> {
     value
         .to_str()
-        .ok_or_else(|| invalid(key, "expected Unicode text"))
+        .ok_or_else(|| invalid(key.0, "expected Unicode text"))
 }
 
 /// Parse one environment value using the corresponding setting's type.
-fn parse_value(key: &str, text: &str, kind: Kind) -> OrthoResult<Value> {
+fn parse_value(key: EnvironmentName<'_>, text: &str, kind: Kind) -> OrthoResult<Value> {
     match kind {
         Kind::Text => Ok(json!(text)),
         Kind::Bool => text
             .parse::<bool>()
             .map(|value| json!(value))
-            .map_err(|_| invalid(key, "expected true or false")),
+            .map_err(|_| invalid(key.0, "expected true or false")),
         Kind::Integer => text
             .parse::<u64>()
             .map(|value| json!(value))
-            .map_err(|_| invalid(key, "expected a non-negative integer")),
+            .map_err(|_| invalid(key.0, "expected a non-negative integer")),
         Kind::Float => text
             .parse::<f64>()
             .ok()
             .filter(|value| value.is_finite())
             .map(|value| json!(value))
-            .ok_or_else(|| invalid(key, "expected a finite number")),
+            .ok_or_else(|| invalid(key.0, "expected a finite number")),
         Kind::List => Ok(json!(text
             .split(',')
             .map(str::trim)
@@ -235,17 +248,31 @@ fn parse_value(key: &str, text: &str, kind: Kind) -> OrthoResult<Value> {
     }
 }
 
+/// Identify the nested destination for one configuration value.
+#[derive(Clone, Copy)]
+struct SettingPath<'a> {
+    section: &'a str,
+    field: &'a str,
+}
+
 /// Insert a setting into a nested configuration object.
-fn insert(root: &mut Map<String, Value>, section: &str, field: &str, value: Value) {
-    if let Some((first, rest)) = section.split_once('.') {
+fn insert(root: &mut Map<String, Value>, setting: SettingPath<'_>, value: Value) {
+    if let Some((first, rest)) = setting.section.split_once('.') {
         let child = root.entry(first).or_insert_with(|| json!({}));
         if let Value::Object(fields) = child {
-            insert(fields, rest, field, value);
+            insert(
+                fields,
+                SettingPath {
+                    section: rest,
+                    ..setting
+                },
+                value,
+            );
         }
     } else {
-        let object = root.entry(section).or_insert_with(|| json!({}));
+        let object = root.entry(setting.section).or_insert_with(|| json!({}));
         if let Value::Object(fields) = object {
-            fields.insert(field.to_owned(), value);
+            fields.insert(setting.field.to_owned(), value);
         }
     }
 }
@@ -254,14 +281,14 @@ fn insert(root: &mut Map<String, Value>, section: &str, field: &str, value: Valu
 fn insert_command(
     root: &mut Map<String, Value>,
     command: &str,
-    setting: (&str, &str),
+    setting: SettingPath<'_>,
     value: Value,
 ) {
     let commands = root.entry("cmds").or_insert_with(|| json!({}));
     if let Value::Object(commands) = commands {
         let command = commands.entry(command).or_insert_with(|| json!({}));
         if let Value::Object(command) = command {
-            insert(command, setting.0, setting.1, value);
+            insert(command, setting, value);
         }
     }
 }
