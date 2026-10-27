@@ -345,6 +345,10 @@ behaviour, and UI compile contracts.
   and complex discovery and command-table functions. Consolidate these before
   rerunning the complete gates and CodeRabbit review.
 
+- [ ] 2026-10-27: A third implementation review requested workspace lint
+  inheritance, test-module placement, and clearer malformed-file guidance.
+  Apply these fixes and repeat the deterministic gates before reviewing again.
+
 ## Surprises & discoveries
 
 - The requested branch already exists locally and is checked out in another
