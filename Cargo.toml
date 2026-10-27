@@ -1,5 +1,5 @@
 [workspace]
-members = ["common", "crates/*", "installer", "suite", "vendor/dylint_testing"]
+members = ["cli", "common", "crates/*", "installer", "suite", "vendor/dylint_testing"]
 resolver = "2"
 
 # Dylint 6.3.0 must recognize rustc commands prefixed by Cargo's compiler
