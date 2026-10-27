@@ -14,9 +14,7 @@ pub(super) fn saturating_branch_count(branches: u64) -> u32 {
 
 /// Convert a snippet offset to the compiler's `u32` range, rejecting larger
 /// values so the caller can omit an unrepresentable source span.
-pub(super) fn span_byte_offset(offset: u64) -> Option<u32> {
-    u32::try_from(offset).ok()
-}
+pub(super) fn span_byte_offset(offset: u64) -> Option<u32> { u32::try_from(offset).ok() }
 
 /// Convert a production diagnostic argument to Fluent's signed integer range.
 pub(super) fn diagnostic_integer_argument(value: usize) -> i64 {
@@ -70,8 +68,12 @@ mod tests {
     //! Verify conversion behaviour at diagnostic and compiler integer limits.
 
     use super::{
-        diagnostic_integer_argument, line_range_byte_offsets, predicate_segment_weight,
-        saturating_branch_count, saturating_diagnostic_integer, span_byte_offset,
+        diagnostic_integer_argument,
+        line_range_byte_offsets,
+        predicate_segment_weight,
+        saturating_branch_count,
+        saturating_diagnostic_integer,
+        span_byte_offset,
         span_byte_offset_range,
     };
 

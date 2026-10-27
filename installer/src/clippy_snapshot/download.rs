@@ -6,12 +6,17 @@
 //! [`super::install_bundle`], which checks the digest again against the bytes
 //! it actually clones.
 
-use super::error::ClippySnapshotError;
-use super::install::BundleArtefact;
-use super::manifest::ClippySnapshotManifest;
-use crate::artefact::packaging::compute_sha256;
-use crate::dependency_binaries::DependencyArchiveDownloader;
 use camino::Utf8Path;
+
+use super::{
+    error::ClippySnapshotError,
+    install::BundleArtefact,
+    manifest::ClippySnapshotManifest,
+};
+use crate::{
+    artefact::packaging::compute_sha256,
+    dependency_binaries::DependencyArchiveDownloader,
+};
 
 /// Download the bundle `manifest` pins into `directory`.
 ///

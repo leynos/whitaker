@@ -14,9 +14,11 @@
 //! the full design rationale.
 
 use super::TypeMetrics;
-
 pub use super::diagnostic::{
-    BrainTypeDiagnostic, format_decomposition_note, format_help, format_note,
+    BrainTypeDiagnostic,
+    format_decomposition_note,
+    format_help,
+    format_note,
     format_primary_message,
 };
 
@@ -80,33 +82,23 @@ pub struct BrainTypeThresholds {
 impl BrainTypeThresholds {
     /// WMC at or above which the warn rule's WMC condition is met.
     #[must_use]
-    pub const fn wmc_warn(&self) -> usize {
-        self.wmc_warn
-    }
+    pub const fn wmc_warn(&self) -> usize { self.wmc_warn }
 
     /// WMC at or above which the deny rule triggers (OR-based).
     #[must_use]
-    pub const fn wmc_deny(&self) -> usize {
-        self.wmc_deny
-    }
+    pub const fn wmc_deny(&self) -> usize { self.wmc_deny }
 
     /// LCOM4 at or above which the warn rule's cohesion condition is met.
     #[must_use]
-    pub const fn lcom4_warn(&self) -> usize {
-        self.lcom4_warn
-    }
+    pub const fn lcom4_warn(&self) -> usize { self.lcom4_warn }
 
     /// LCOM4 at or above which the deny rule triggers (OR-based).
     #[must_use]
-    pub const fn lcom4_deny(&self) -> usize {
-        self.lcom4_deny
-    }
+    pub const fn lcom4_deny(&self) -> usize { self.lcom4_deny }
 
     /// Brain method count at or above which the deny rule triggers.
     #[must_use]
-    pub const fn brain_method_deny_count(&self) -> usize {
-        self.brain_method_deny_count
-    }
+    pub const fn brain_method_deny_count(&self) -> usize { self.brain_method_deny_count }
 }
 
 // ---------------------------------------------------------------------------
@@ -208,9 +200,7 @@ impl BrainTypeThresholdsBuilder {
 }
 
 impl Default for BrainTypeThresholdsBuilder {
-    fn default() -> Self {
-        Self::new()
-    }
+    fn default() -> Self { Self::new() }
 }
 
 // ---------------------------------------------------------------------------
@@ -243,10 +233,10 @@ const fn is_warn_triggered(metrics: &TypeMetrics, thresholds: &BrainTypeThreshol
 /// # Examples
 ///
 /// ```
-/// use whitaker_common::brain_type_metrics::evaluation::{
-///     BrainTypeThresholdsBuilder, evaluate_brain_type,
+/// use whitaker_common::brain_type_metrics::{
+///     TypeMetricsBuilder,
+///     evaluation::{BrainTypeThresholdsBuilder, evaluate_brain_type},
 /// };
-/// use whitaker_common::brain_type_metrics::TypeMetricsBuilder;
 ///
 /// let thresholds = BrainTypeThresholdsBuilder::new().build();
 /// let metrics = TypeMetricsBuilder::new("Safe", 25, 80).build();

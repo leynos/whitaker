@@ -8,8 +8,9 @@ use std::{
     time::Duration,
 };
 
-use super::{env_test_guard, with_env_var, with_env_var_removed, with_locale};
 use proptest::prelude::*;
+
+use super::{env_test_guard, with_env_var, with_env_var_removed, with_locale};
 
 const ABSENT_SET_KEY: &str = "WHITAKER_TEST_SUPPORT_ABSENT_SET";
 const REMOVED_KEY: &str = "WHITAKER_TEST_SUPPORT_REMOVED";

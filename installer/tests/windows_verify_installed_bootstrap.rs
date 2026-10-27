@@ -9,15 +9,13 @@
 
 mod windows_verify_support;
 
+use std::{fs, process::Output};
+
 use rstest::rstest;
-use std::fs;
-use std::process::Output;
 use windows_verify_support::Sandbox;
 
 /// Return the script's standard error as text.
-fn stderr(output: &Output) -> String {
-    String::from_utf8_lossy(&output.stderr).into_owned()
-}
+fn stderr(output: &Output) -> String { String::from_utf8_lossy(&output.stderr).into_owned() }
 
 #[test]
 fn a_healthy_installation_passes() {

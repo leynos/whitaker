@@ -7,10 +7,11 @@
 //! [`ClippySnapshotError::Io`]. They mirror `bootstrap::probe` for this
 //! module's own error type and are used only within `clippy_snapshot`.
 
-use super::error::ClippySnapshotError;
+use std::{fs::Metadata, io::ErrorKind};
+
 use camino::Utf8Path;
-use std::fs::Metadata;
-use std::io::ErrorKind;
+
+use super::error::ClippySnapshotError;
 
 /// Return `path`'s metadata, or `None` when nothing exists there.
 fn metadata_if_present(path: &Utf8Path) -> Result<Option<Metadata>, ClippySnapshotError> {

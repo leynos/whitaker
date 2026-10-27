@@ -5,12 +5,18 @@
 //! histories, and `dylint_internal` 6.3.0 itself run against a real Git
 //! fixture. An ignored test repeats the last check on the published snapshot.
 
-use super::*;
-use crate::clippy_snapshot::test_fixtures::{
-    DEFAULT_HISTORY, DEFAULT_SELECTED, FIXTURE_TOOLCHAIN, FixtureRepo, Step, git,
-};
 use proptest::prelude::*;
 use rstest::rstest;
+
+use super::*;
+use crate::clippy_snapshot::test_fixtures::{
+    DEFAULT_HISTORY,
+    DEFAULT_SELECTED,
+    FIXTURE_TOOLCHAIN,
+    FixtureRepo,
+    Step,
+    git,
+};
 
 /// Build a newest-first change list from `(commit, channel)` pairs.
 fn changes(pairs: &[(&str, &str)]) -> Vec<ToolchainChange> {

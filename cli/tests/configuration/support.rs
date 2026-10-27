@@ -15,6 +15,7 @@ pub(super) fn write(root: &TempDir, name: &str, contents: impl AsRef<[u8]>) -> s
 /// Allocate a private project root for each scenario.
 #[rstest::fixture]
 pub(super) fn root() -> std::io::Result<TempDir> {
+    // Keep the fixture body multiline for the rstest expansion.
     TempDir::new()
 }
 
@@ -29,7 +30,7 @@ pub(super) fn non_unicode_value() -> std::ffi::OsString {
 #[cfg(windows)]
 pub(super) fn non_unicode_value() -> std::ffi::OsString {
     use std::os::windows::ffi::OsStringExt;
-    std::ffi::OsString::from_wide(&[0xD800])
+    std::ffi::OsString::from_wide(&[0xd800])
 }
 
 /// Read the effective locale from one injected source bundle.

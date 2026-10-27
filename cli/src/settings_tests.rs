@@ -1,8 +1,9 @@
 //! Tests for source ordering in the OrthoConfig settings model.
 
-use super::Configuration;
 use ortho_config::MergeComposer;
 use serde_json::json;
+
+use super::Configuration;
 
 /// Preserve the precedence of explicit arguments over environment and files.
 #[test]

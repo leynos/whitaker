@@ -6,12 +6,19 @@
 //! 400-line module limit.
 
 use super::*;
-use crate::dependency_binaries::MockDependencyBinaryInstaller;
-use crate::error::InstallerError;
-use crate::test_utils::dependency_binary_helpers::{
-    binstall_install, binstall_version_check_with_result, cargo_dylint_check,
+use crate::{
+    dependency_binaries::MockDependencyBinaryInstaller,
+    error::InstallerError,
+    test_utils::{
+        StubExecutor,
+        dependency_binary_helpers::{
+            binstall_install,
+            binstall_version_check_with_result,
+            cargo_dylint_check,
+        },
+        success_output,
+    },
 };
-use crate::test_utils::{StubExecutor, success_output};
 
 /// Install options that refuse a source build, as CI sets them.
 fn strict_install_options(
@@ -134,8 +141,8 @@ fn an_unresolvable_repository_context_still_refuses_a_source_build() {
     );
     assert!(
         message.contains("base") && message.contains("directories"),
-        "the reason must say why no repository install was attempted, not \
-         repeat the generic one, got: {message}"
+        "the reason must say why no repository install was attempted, not repeat the generic one, \
+         got: {message}"
     );
     executor.assert_finished();
 }

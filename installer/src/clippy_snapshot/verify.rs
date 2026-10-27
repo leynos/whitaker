@@ -5,18 +5,19 @@
 //! the cheap subset a warm `whitaker` run repeats every time: it proves the
 //! generation is still the pinned one without re-hashing the object database.
 
-use super::error::ClippySnapshotError;
-use super::generation::GenerationMetadata;
-use super::git::SnapshotGit;
-use super::manifest::{ClippySnapshotManifest, SNAPSHOT_BRANCH};
-use super::probe::{is_present, is_present_dir};
-use super::selection::{channel_at, select_revision, toolchain_changes};
 use camino::Utf8Path;
 
+use super::{
+    error::ClippySnapshotError,
+    generation::GenerationMetadata,
+    git::SnapshotGit,
+    manifest::{ClippySnapshotManifest, SNAPSHOT_BRANCH},
+    probe::{is_present, is_present_dir},
+    selection::{channel_at, select_revision, toolchain_changes},
+};
+
 /// The only ref a snapshot may carry.
-fn main_ref() -> String {
-    format!("refs/heads/{SNAPSHOT_BRANCH}")
-}
+fn main_ref() -> String { format!("refs/heads/{SNAPSHOT_BRANCH}") }
 
 /// Prove that `path` holds exactly the history `manifest` pins.
 ///

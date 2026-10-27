@@ -3,10 +3,13 @@
 //! `run` calls this wherever Dylint may read the snapshot to build a driver:
 //! before every cold build, and after a warm run whose child rebuilt one.
 
-use super::error::BootstrapError;
-use crate::clippy_snapshot::{ClippySnapshotManifest, GenerationMetadata, verify_repository};
-use crate::git::CommitSha;
 use camino::Utf8Path;
+
+use super::error::BootstrapError;
+use crate::{
+    clippy_snapshot::{ClippySnapshotManifest, GenerationMetadata, verify_repository},
+    git::CommitSha,
+};
 
 /// Fully verify the snapshot against its own installation record.
 pub(super) fn verify_snapshot(snapshot: &Utf8Path) -> Result<(), BootstrapError> {

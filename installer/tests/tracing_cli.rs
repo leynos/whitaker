@@ -2,16 +2,17 @@
 
 #![cfg(unix)]
 
-use camino::{Utf8Path, Utf8PathBuf};
-use cap_std::{
-    ambient_authority,
-    fs_utf8::{Dir, Permissions, PermissionsExt},
-};
 use std::{
     error::Error,
     ffi::OsString,
     io,
     process::{Command, Output},
+};
+
+use camino::{Utf8Path, Utf8PathBuf};
+use cap_std::{
+    ambient_authority,
+    fs_utf8::{Dir, Permissions, PermissionsExt},
 };
 use whitaker_installer::test_utils::SnapshotFixture;
 
@@ -53,9 +54,7 @@ impl CliMode {
     }
 
     /// Report whether this mode enables debug diagnostics.
-    fn is_verbose(self) -> bool {
-        matches!(self, Self::Verbose)
-    }
+    fn is_verbose(self) -> bool { matches!(self, Self::Verbose) }
 }
 
 /// Identify one pinned installer dependency without passing package strings.
@@ -294,7 +293,8 @@ fn assert_cli_output(output: &Output, fixture: &TracingFixture, mode: CliMode) {
     );
     assert!(
         stderr.contains("toolchain nightly-test installation failed: controlled rustup failure"),
-        "{mode_label} mode must reach the controlled failure after dependency checks; stderr: {stderr}"
+        "{mode_label} mode must reach the controlled failure after dependency checks; stderr: \
+         {stderr}"
     );
     assert_eq!(
         stderr.contains(diagnostic),

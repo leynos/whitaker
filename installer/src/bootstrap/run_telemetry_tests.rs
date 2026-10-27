@@ -1,10 +1,12 @@
 //! How a run classifies its child and which spans it opens.
 
-use super::*;
-use crate::bootstrap::telemetry::RUN_TOTAL;
 use std::sync::{Arc, Mutex};
+
 use tracing::span::{Attributes, Id};
 use tracing_subscriber::layer::{Context, Layer, SubscriberExt};
+
+use super::*;
+use crate::bootstrap::telemetry::RUN_TOTAL;
 
 /// Records the name of every span opened while it is the subscriber.
 #[derive(Clone, Default)]
@@ -41,7 +43,8 @@ fn a_run_classifies_its_child_exit(#[case] code: i32, #[case] outcome: &str) {
         &installed,
         "cargo-exits",
         &format!(
-            "#!/usr/bin/env bash\n[[ \"$1 $2\" == \"dylint --version\" ]] && {{ echo 'cargo-dylint 6.3.0'; exit 0; }}\nexit {code}\n"
+            "#!/usr/bin/env bash\n[[ \"$1 $2\" == \"dylint --version\" ]] && {{ echo \
+             'cargo-dylint 6.3.0'; exit 0; }}\nexit {code}\n"
         ),
     );
     let prepared = prepare(&installed.layout, cargo.as_os_str()).expect("prepare");

@@ -6,11 +6,12 @@
 //! network fetch fails instead of silently reaching public Clippy. Only the
 //! producer's [`SnapshotGit::network`] runner may contact a remote.
 
+use std::{process::Output, time::Duration};
+
+use camino::Utf8Path;
+
 use super::error::ClippySnapshotError;
 use crate::git::{GitInvocation, run_git};
-use camino::Utf8Path;
-use std::process::Output;
-use std::time::Duration;
 
 /// Local operations are bounded so a wedged filesystem cannot hang an install.
 const LOCAL_TIMEOUT: Duration = Duration::from_secs(600);

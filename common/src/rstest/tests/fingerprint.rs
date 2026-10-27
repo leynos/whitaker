@@ -3,8 +3,14 @@
 use rstest::rstest;
 
 use crate::rstest::{
-    ArgAtom, ArgFingerprint, CalleeShape, ExprShape, LocalSlot, ParagraphFingerprint,
-    ParagraphNormalizer, StmtShape,
+    ArgAtom,
+    ArgFingerprint,
+    CalleeShape,
+    ExprShape,
+    LocalSlot,
+    ParagraphFingerprint,
+    ParagraphNormalizer,
+    StmtShape,
 };
 
 #[rstest]

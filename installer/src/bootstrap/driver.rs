@@ -11,12 +11,15 @@
 //! marker only after the driver exists. A driver without a marker, left by an
 //! interrupted build or by a tool outside Whitaker, is treated as cold.
 
-use super::error::BootstrapError;
-use super::probe::metadata_if_present;
+use std::{
+    fs::File,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
+
 use camino::{Utf8Path, Utf8PathBuf};
 use fs2::FileExt;
-use std::fs::File;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+use super::{error::BootstrapError, probe::metadata_if_present};
 
 /// The driver Dylint persists inside its toolchain directory.
 ///
@@ -129,15 +132,11 @@ impl DriverSlot {
 
     /// The toolchain channel whose driver this slot holds.
     #[must_use]
-    pub fn toolchain(&self) -> &str {
-        &self.toolchain
-    }
+    pub fn toolchain(&self) -> &str { &self.toolchain }
 
     /// The directory exported as `DYLINT_DRIVER_PATH`.
     #[must_use]
-    pub fn dir(&self) -> &Utf8Path {
-        &self.dir
-    }
+    pub fn dir(&self) -> &Utf8Path { &self.dir }
 
     /// Return whether the driver now present is the one recorded as ready.
     ///
@@ -209,9 +208,7 @@ impl DriverSlot {
     }
 
     /// The driver file Dylint builds and loads for this toolchain.
-    fn driver_path(&self) -> Utf8PathBuf {
-        self.dir.join(&self.toolchain).join(DRIVER_FILE)
-    }
+    fn driver_path(&self) -> Utf8PathBuf { self.dir.join(&self.toolchain).join(DRIVER_FILE) }
 
     /// Create the slot directory, which Dylint requires to exist.
     ///
@@ -302,14 +299,10 @@ impl DriverSlot {
     }
 
     /// The lock file; outside Dylint's toolchain directory so Dylint never sees it.
-    fn lock_path(&self) -> Utf8PathBuf {
-        self.dir.join(format!(".{}.lock", self.toolchain))
-    }
+    fn lock_path(&self) -> Utf8PathBuf { self.dir.join(format!(".{}.lock", self.toolchain)) }
 
     /// The ready marker beside the lock file.
-    fn marker_path(&self) -> Utf8PathBuf {
-        self.dir.join(format!(".{}.ready", self.toolchain))
-    }
+    fn marker_path(&self) -> Utf8PathBuf { self.dir.join(format!(".{}.ready", self.toolchain)) }
 }
 
 /// Remove the file at `path`, treating its absence as success.

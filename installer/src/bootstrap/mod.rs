@@ -42,8 +42,9 @@ pub use run::{RunOutcome, run, run_with_cargo};
 pub const BUILT_DRIVER_NOTICE: &str =
     "whitaker: built the Dylint driver on first use; later runs reuse it";
 
-use crate::dirs::BaseDirs;
 use camino::{Utf8Path, Utf8PathBuf};
+
+use crate::dirs::BaseDirs;
 
 /// Where one installation keeps its bootstrap, resolved from the data root.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -93,27 +94,19 @@ impl BootstrapLayout {
 
     /// The data root that relative metadata paths resolve against.
     #[must_use]
-    pub fn data_root(&self) -> &Utf8Path {
-        &self.data_root
-    }
+    pub fn data_root(&self) -> &Utf8Path { &self.data_root }
 
     /// The bootstrap directory itself.
     #[must_use]
-    pub fn root(&self) -> &Utf8Path {
-        &self.root
-    }
+    pub fn root(&self) -> &Utf8Path { &self.root }
 
     /// The directory holding snapshot generations.
     #[must_use]
-    pub fn clippy_root(&self) -> Utf8PathBuf {
-        self.root.join("clippy")
-    }
+    pub fn clippy_root(&self) -> Utf8PathBuf { self.root.join("clippy") }
 
     /// The snapshot generation for `commit`.
     #[must_use]
-    pub fn snapshot(&self, commit: &str) -> Utf8PathBuf {
-        self.clippy_root().join(commit)
-    }
+    pub fn snapshot(&self, commit: &str) -> Utf8PathBuf { self.clippy_root().join(commit) }
 
     /// The driver slot for one Dylint release and snapshot.
     #[must_use]
@@ -126,9 +119,7 @@ impl BootstrapLayout {
 
     /// The installation record.
     #[must_use]
-    pub fn metadata_path(&self) -> Utf8PathBuf {
-        self.root.join("bootstrap.json")
-    }
+    pub fn metadata_path(&self) -> Utf8PathBuf { self.root.join("bootstrap.json") }
 }
 
 #[cfg(test)]

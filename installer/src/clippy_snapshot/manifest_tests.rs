@@ -1,8 +1,9 @@
 //! Validates snapshot manifest parsing and its agreement with the repository.
 
+use rstest::rstest;
+
 use super::*;
 use crate::dependency_binaries::find_dependency_binary;
-use rstest::rstest;
 
 const VALID: &str = concat!(
     "schema_version = 1\n",

@@ -8,23 +8,33 @@
 //! snapshot comes from the release or from `--clippy-snapshot-bundle`, or
 //! installation stops.
 
+use std::{ffi::OsString, io::Write};
+
 use camino::{Utf8Path, Utf8PathBuf};
-use std::ffi::OsString;
-use std::io::Write;
-use whitaker_installer::bootstrap::{
-    BOOTSTRAP_SCHEMA, BUILT_DRIVER_NOTICE, BootstrapLayout, BootstrapMetadata, StoredPath,
-    is_present_dir,
-};
-use whitaker_installer::cli::InstallArgs;
-use whitaker_installer::clippy_snapshot::{
-    BundleSource, ClippySnapshotManifest, embedded_manifest, generation_path, provision,
-};
-use whitaker_installer::dirs::{BaseDirs, SystemBaseDirs};
-use whitaker_installer::error::{InstallerError, Result};
-use whitaker_installer::output::{ShellSnippet, write_stderr_line};
 #[cfg(debug_assertions)]
 use whitaker_installer::test_support::TEST_CLIPPY_SNAPSHOT_MANIFEST_ENV;
-use whitaker_installer::wrapper::{generate_wrapper_scripts, path_instructions};
+use whitaker_installer::{
+    bootstrap::{
+        BOOTSTRAP_SCHEMA,
+        BUILT_DRIVER_NOTICE,
+        BootstrapLayout,
+        BootstrapMetadata,
+        StoredPath,
+        is_present_dir,
+    },
+    cli::InstallArgs,
+    clippy_snapshot::{
+        BundleSource,
+        ClippySnapshotManifest,
+        embedded_manifest,
+        generation_path,
+        provision,
+    },
+    dirs::{BaseDirs, SystemBaseDirs},
+    error::{InstallerError, Result},
+    output::{ShellSnippet, write_stderr_line},
+    wrapper::{generate_wrapper_scripts, path_instructions},
+};
 
 /// The snapshot generation this installation provisioned.
 #[derive(Debug, Clone)]
@@ -36,9 +46,7 @@ pub(crate) struct InstalledSnapshot {
 
 impl InstalledSnapshot {
     /// The generation exported as `DYLINT_CLIPPY_REPO`.
-    pub(crate) fn generation(&self) -> &Utf8Path {
-        &self.generation
-    }
+    pub(crate) fn generation(&self) -> &Utf8Path { &self.generation }
 
     /// The driver slot exported as `DYLINT_DRIVER_PATH`.
     pub(crate) fn driver_dir(&self) -> Utf8PathBuf {

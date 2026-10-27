@@ -1,7 +1,10 @@
 //! Process-level checks for the release packaging command-line tools.
 
-use std::fs;
-use std::process::{Command, Output};
+use std::{
+    fs,
+    process::{Command, Output},
+};
+
 use tempfile::tempdir;
 use whitaker_installer::dependency_binaries::find_dependency_binary;
 

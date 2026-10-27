@@ -2,7 +2,8 @@
 
 use rstest::{fixture, rstest};
 use rustc_span::{
-    FileName, Span,
+    FileName,
+    Span,
     source_map::{FilePathMapping, SourceMap},
 };
 
@@ -30,9 +31,7 @@ fn span_to_snippet_failure_skips_diagnostic(unresolvable_span_fixture: (SourceMa
 
 #[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
-fn unresolvable_span_fixture() -> (SourceMap, Span) {
-    unresolvable_span()
-}
+fn unresolvable_span_fixture() -> (SourceMap, Span) { unresolvable_span() }
 
 /// Builds a cross-file span (start in "first.rs", end in "second.rs") with the
 /// root context so the `SourceMap` cannot resolve it to a single file. This

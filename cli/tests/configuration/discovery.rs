@@ -59,7 +59,12 @@ fn bridges_legacy_lint_tables(
     root: std::io::Result<TempDir>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let root = root?;
-    write(&root, "dylint.toml", "[module_max_lines]\nmax_lines = 123\n[other_lint]\nsetting = true\n[bumpy_road_function.weights]\ndepth = 2.0\n")?;
+    write(
+        &root,
+        "dylint.toml",
+        "[module_max_lines]\nmax_lines = 123\n[other_lint]\nsetting = \
+         true\n[bumpy_road_function.weights]\ndepth = 2.0\n",
+    )?;
     let loaded = load_with_sources(sources(&root, Arc::new(MapEnv::new()), json!({})))?;
     assert_eq!(loaded.settings.module_max_lines.max_lines, 123);
     assert_eq!(loaded.settings.bumpy_road_function.weights.depth, 2.0);

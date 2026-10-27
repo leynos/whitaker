@@ -21,7 +21,11 @@ use whitaker_installer::artefact::{
     manifest::GeneratedAt,
     naming::ArtefactName,
     packaging::{
-        PackageOutput, PackageParams, compute_sha256, generate_manifest_json, package_artefact,
+        PackageOutput,
+        PackageParams,
+        compute_sha256,
+        generate_manifest_json,
+        package_artefact,
     },
     packaging_error::PackagingError,
     target::TargetTriple,
@@ -47,9 +51,7 @@ struct PackagingWorld {
 
 #[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
-fn world() -> PackagingWorld {
-    PackagingWorld::default()
-}
+fn world() -> PackagingWorld { PackagingWorld::default() }
 
 /// Return the temp directory path, creating the directory if needed.
 fn temp_path(world: &mut PackagingWorld) -> Result<PathBuf, String> {
@@ -159,9 +161,7 @@ fn given_target(world: &mut PackagingWorld, triple: String) -> Result<(), String
 }
 
 #[when("the artefact is packaged")]
-fn when_packaged(world: &mut PackagingWorld) -> Result<(), String> {
-    run_packaging(world)
-}
+fn when_packaged(world: &mut PackagingWorld) -> Result<(), String> { run_packaging(world) }
 
 #[then("the archive exists with the expected ADR-001 filename")]
 fn then_archive_exists(world: &mut PackagingWorld) -> Result<(), String> {

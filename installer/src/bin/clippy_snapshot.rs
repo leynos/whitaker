@@ -5,12 +5,20 @@
 //! installer gives consumers, and `verify` re-runs the full check on a
 //! repository. All three share `whitaker_installer::clippy_snapshot`.
 
+use std::io::Write;
+
 use camino::Utf8PathBuf;
 use clap::{Parser, Subcommand};
-use std::io::Write;
 use whitaker_installer::clippy_snapshot::{
-    BuildRequest, BundleSource, ClippySnapshotError, ClippySnapshotManifest, build_bundle,
-    embedded_manifest, generation_path, provision, verify_repository,
+    BuildRequest,
+    BundleSource,
+    ClippySnapshotError,
+    ClippySnapshotManifest,
+    build_bundle,
+    embedded_manifest,
+    generation_path,
+    provision,
+    verify_repository,
 };
 
 /// Manage the published Clippy snapshot.

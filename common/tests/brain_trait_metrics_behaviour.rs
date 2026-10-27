@@ -28,9 +28,7 @@ struct TraitMetricsWorld {
 
 #[allow_fixture_expansion_lints]
 #[fixture]
-fn world() -> TraitMetricsWorld {
-    TraitMetricsWorld::default()
-}
+fn world() -> TraitMetricsWorld { TraitMetricsWorld::default() }
 
 fn with_metrics(world: &TraitMetricsWorld, assert_fn: impl FnOnce(&TraitMetrics)) {
     let metrics_ref = world.metrics.borrow();
@@ -183,31 +181,19 @@ fn then_implementor_burden(world: &TraitMetricsWorld, count: usize) {
 // `tests/features/brain_trait_metrics.feature`.
 
 #[scenario(path = "tests/features/brain_trait_metrics.feature", index = 0)]
-fn scenario_mixed_trait_items(world: TraitMetricsWorld) {
-    let _ = world;
-}
+fn scenario_mixed_trait_items(world: TraitMetricsWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/brain_trait_metrics.feature", index = 1)]
-fn scenario_without_default_methods(world: TraitMetricsWorld) {
-    let _ = world;
-}
+fn scenario_without_default_methods(world: TraitMetricsWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/brain_trait_metrics.feature", index = 2)]
-fn scenario_empty_trait(world: TraitMetricsWorld) {
-    let _ = world;
-}
+fn scenario_empty_trait(world: TraitMetricsWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/brain_trait_metrics.feature", index = 3)]
-fn scenario_expansion_filter(world: TraitMetricsWorld) {
-    let _ = world;
-}
+fn scenario_expansion_filter(world: TraitMetricsWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/brain_trait_metrics.feature", index = 4)]
-fn scenario_implementor_burden(world: TraitMetricsWorld) {
-    let _ = world;
-}
+fn scenario_implementor_burden(world: TraitMetricsWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/brain_trait_metrics.feature", index = 5)]
-fn scenario_only_default_methods(world: TraitMetricsWorld) {
-    let _ = world;
-}
+fn scenario_only_default_methods(world: TraitMetricsWorld) { let _ = world; }

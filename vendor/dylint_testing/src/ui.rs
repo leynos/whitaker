@@ -12,12 +12,18 @@
 //! `run_example_test`. The shared `Config` carries the extra compiler flags
 //! and `dylint.toml` contents set on the builder.
 
-use crate::{
-    ExampleTestContext, example_target, example_targets, initialize, run_example_test, run_tests,
-};
 use std::{
     env::current_dir,
     path::{Path, PathBuf},
+};
+
+use crate::{
+    ExampleTestContext,
+    example_target,
+    example_targets,
+    initialize,
+    run_example_test,
+    run_tests,
 };
 
 enum Target {
@@ -60,9 +66,7 @@ impl Test {
     ///
     /// [`ui_test_examples`]: crate::ui_test_examples
     #[must_use]
-    pub fn examples(name: &str) -> Self {
-        Self::new(name, Target::Examples)
-    }
+    pub fn examples(name: &str) -> Self { Self::new(name, Target::Examples) }
 
     /// Pass flags to the compiler when running the test.
     pub fn rustc_flags(
@@ -83,9 +87,7 @@ impl Test {
 
     /// Run the test.
     #[allow(clippy::needless_pass_by_ref_mut)]
-    pub fn run(&mut self) {
-        self.run_immutable();
-    }
+    pub fn run(&mut self) { self.run_immutable(); }
 
     fn new(name: &str, target: Target) -> Self {
         Self {
@@ -146,7 +148,5 @@ mod tests {
 
     // smoelius: Verify that `rustc_flags` compiles when used as intended.
     #[allow(dead_code)]
-    fn rustc_flags() {
-        let _ = Test::src_base("name", PathBuf::new()).rustc_flags(["--test"]);
-    }
+    fn rustc_flags() { let _ = Test::src_base("name", PathBuf::new()).rustc_flags(["--test"]); }
 }

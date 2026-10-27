@@ -5,24 +5,36 @@
 //! [`execute`], which creates the driver slot and holds its lock across the
 //! child process so concurrent cold runs build the driver once.
 
-use super::BootstrapLayout;
-use super::child::{check_cargo_dylint, exit_code};
-use super::driver::{DriverIdentity, DriverSlot};
-use super::error::BootstrapError;
-use super::metadata::BootstrapMetadata;
-use super::probe::is_present_dir;
-use super::snapshot_check::verify_snapshot;
-use super::telemetry::{
-    BuildOutcome, DriverPath, LockMode, child_label, failure_label, record_driver_build,
-    record_lock_failure, record_lock_wait, record_run,
+use std::{
+    ffi::{OsStr, OsString},
+    fs::File,
+    process::{Command, ExitStatus},
+    time::Instant,
 };
-use crate::clippy_snapshot::check_installed;
-use crate::dirs::BaseDirs;
+
 use camino::Utf8PathBuf;
-use std::ffi::{OsStr, OsString};
-use std::fs::File;
-use std::process::{Command, ExitStatus};
-use std::time::Instant;
+
+use super::{
+    BootstrapLayout,
+    child::{check_cargo_dylint, exit_code},
+    driver::{DriverIdentity, DriverSlot},
+    error::BootstrapError,
+    metadata::BootstrapMetadata,
+    probe::is_present_dir,
+    snapshot_check::verify_snapshot,
+    telemetry::{
+        BuildOutcome,
+        DriverPath,
+        LockMode,
+        child_label,
+        failure_label,
+        record_driver_build,
+        record_lock_failure,
+        record_lock_wait,
+        record_run,
+    },
+};
+use crate::{clippy_snapshot::check_installed, dirs::BaseDirs};
 
 /// A validated installation, ready to run.
 #[derive(Debug, Clone)]

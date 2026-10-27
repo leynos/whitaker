@@ -2,7 +2,9 @@
 
 use super::{build_suggestion, build_suggestions};
 use crate::decomposition_advice::{
-    DecompositionContext, MethodProfileBuilder, SubjectKind,
+    DecompositionContext,
+    MethodProfileBuilder,
+    SubjectKind,
     error::DecompositionError,
     vector::{build_feature_vector, minimal_feature_vector, test_feature_vector},
 };
@@ -15,9 +17,7 @@ fn valid_vector() -> crate::decomposition_advice::vector::MethodFeatureVector {
 }
 
 /// Return a representative type context for suggestion rendering.
-fn context() -> DecompositionContext {
-    DecompositionContext::new("Parser", SubjectKind::Type)
-}
+fn context() -> DecompositionContext { DecompositionContext::new("Parser", SubjectKind::Type) }
 
 /// Reject a community containing an index outside the feature-vector set.
 #[test]

@@ -8,8 +8,8 @@
 //! meta-list walker serves the documentation and case-mismatch checks, while
 //! each caller owns its identifier policy. Key helpers:
 //! - `skip_leading_whitespace`: advances a text cursor past Unicode whitespace.
-//! - `is_doc_comment`: recognizes leading doc comments or doc attributes,
-//!   including those wrapped in `cfg_attr`.
+//! - `is_doc_comment`: recognizes leading doc comments or doc attributes, including those wrapped
+//!   in `cfg_attr`.
 //!
 //! These utilities underpin the lint that determines whether a module has the
 //! required leading inner docs.
@@ -90,9 +90,7 @@ pub(super) fn is_doc_comment(rest: ParseInput<'_>) -> bool {
 }
 
 /// Recognize direct `doc` attributes and wrappers that contain a `doc` entry.
-fn is_doc_attr(attr_body: AttributeBody<'_>) -> bool {
-    is_doc_ident(ParseInput::from(*attr_body))
-}
+fn is_doc_attr(attr_body: AttributeBody<'_>) -> bool { is_doc_ident(ParseInput::from(*attr_body)) }
 
 /// Extract the leading identifier from the input, skipping any leading
 /// whitespace.
@@ -107,7 +105,9 @@ fn is_doc_attr(attr_body: AttributeBody<'_>) -> bool {
 /// # use module_must_have_inner_docs::ParseInput;
 /// # use module_must_have_inner_docs::parser::take_ident;
 /// let input = ParseInput::from("  foo_bar(baz)");
-/// let Some((ident, rest)) = take_ident(input) else { panic!() };
+/// let Some((ident, rest)) = take_ident(input) else {
+///     panic!()
+/// };
 /// assert_eq!(*ident, "foo_bar");
 /// assert_eq!(rest.as_str(), "(baz)");
 ///
@@ -160,9 +160,7 @@ const fn is_ident_start(ch: char) -> bool {
 }
 
 /// Recognize subsequent characters allowed in an attribute identifier.
-const fn is_ident_continue(ch: char) -> bool {
-    ch == '_' || ch.is_ascii_alphanumeric()
-}
+const fn is_ident_continue(ch: char) -> bool { ch == '_' || ch.is_ascii_alphanumeric() }
 
 /// Detect a `doc` item in a `cfg_attr` meta list.
 pub(super) fn cfg_attr_has_doc(tail: ParseInput<'_>) -> bool {
@@ -233,9 +231,9 @@ impl CfgAttrScanState {
         }
 
         match (ch, self.depth, self.condition_comma.is_none()) {
-            ('(', _, _) => self.depth += 1,
+            ('(', ..) => self.depth += 1,
             (')', 1, _) => return true,
-            (')', _, _) => self.depth = self.depth.saturating_sub(1),
+            (')', ..) => self.depth = self.depth.saturating_sub(1),
             (',', 1, true) => self.condition_comma = Some(idx),
             _ => {}
         }
@@ -330,9 +328,7 @@ fn meta_item_matches(
 }
 
 /// Match a meta-list segment against the module `doc` identifier policy.
-fn segment_is_doc(segment: &str) -> bool {
-    is_doc_ident(ParseInput::from(segment))
-}
+fn segment_is_doc(segment: &str) -> bool { is_doc_ident(ParseInput::from(segment)) }
 
 #[cfg(test)]
 mod tests;

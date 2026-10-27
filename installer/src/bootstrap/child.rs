@@ -1,8 +1,11 @@
 //! The child `cargo dylint` process: its release check and its exit status.
 
+use std::{
+    ffi::OsStr,
+    process::{Command, ExitStatus},
+};
+
 use super::error::BootstrapError;
-use std::ffi::OsStr;
-use std::process::{Command, ExitStatus};
 
 /// Require the `cargo-dylint` on `PATH` to be the bootstrapped release.
 #[tracing::instrument(name = "bootstrap.cargo_dylint_version", skip_all, fields(expected = %expected))]

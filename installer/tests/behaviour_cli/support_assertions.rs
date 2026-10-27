@@ -5,9 +5,8 @@
 //! the public assertion wrappers stay thin.
 use std::path::{Path, PathBuf};
 
-use crate::prebuilt_markers::PREBUILT_INSTALL_MARKER;
-
 use super::{CliWorld, PINNED_SUITE_REF, expected_prebuilt_target_dir, matching_files};
+use crate::prebuilt_markers::PREBUILT_INSTALL_MARKER;
 
 fn assert_exit_status(cli_world: &CliWorld, expected_success: bool) {
     if cli_world.skip_assertions.get() {

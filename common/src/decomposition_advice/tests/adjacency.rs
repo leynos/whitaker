@@ -5,12 +5,14 @@
 //! adjacency lists, and sorts each per-node neighbour list by neighbour
 //! index.
 
+use std::collections::BTreeSet;
+
+use proptest::{prelude::*, test_runner::TestRunner};
+
 use super::super::{
     community::{SimilarityEdge, build_adjacency},
     error::DecompositionError,
 };
-use proptest::{prelude::*, test_runner::TestRunner};
-use std::collections::BTreeSet;
 
 /// Create a test edge with the supplied endpoints and weight.
 fn edge(left: usize, right: usize, weight: u64) -> SimilarityEdge {

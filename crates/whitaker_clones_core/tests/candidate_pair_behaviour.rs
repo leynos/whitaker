@@ -18,9 +18,7 @@ struct CandidatePairWorld {
 
 #[allow_fixture_expansion_lints]
 #[fixture]
-fn world() -> CandidatePairWorld {
-    CandidatePairWorld::default()
-}
+fn world() -> CandidatePairWorld { CandidatePairWorld::default() }
 
 fn with_pair(world: &CandidatePairWorld, assert_fn: impl FnOnce(&CandidatePair)) {
     let borrowed_pair = world.pair.borrow();
@@ -73,21 +71,13 @@ fn then_no_candidate_pair_is_returned(world: &CandidatePairWorld) {
 }
 
 #[scenario(path = "tests/features/candidate_pair.feature", index = 0)]
-fn scenario_ordered_distinct_ids(world: CandidatePairWorld) {
-    let _ = world;
-}
+fn scenario_ordered_distinct_ids(world: CandidatePairWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/candidate_pair.feature", index = 1)]
-fn scenario_reversed_distinct_ids(world: CandidatePairWorld) {
-    let _ = world;
-}
+fn scenario_reversed_distinct_ids(world: CandidatePairWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/candidate_pair.feature", index = 2)]
-fn scenario_identical_ids(world: CandidatePairWorld) {
-    let _ = world;
-}
+fn scenario_identical_ids(world: CandidatePairWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/candidate_pair.feature", index = 3)]
-fn scenario_lexical_order_edge_case(world: CandidatePairWorld) {
-    let _ = world;
-}
+fn scenario_lexical_order_edge_case(world: CandidatePairWorld) { let _ = world; }

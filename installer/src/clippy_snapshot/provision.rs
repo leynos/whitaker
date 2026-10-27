@@ -5,14 +5,17 @@
 //! bundle comes from the Whitaker release or from an explicit local file.
 //! There is no third source: when neither works, provisioning fails.
 
-use super::download::download_bundle;
-use super::error::ClippySnapshotError;
-use super::install::{BundleArtefact, install_bundle, reuse_generation};
-use super::manifest::ClippySnapshotManifest;
-use super::probe::is_present;
-use super::telemetry::{Operation, ProvisionSource, record_provision, timed};
-use crate::dependency_binaries::{DependencyArchiveDownloader, RepositoryArchiveDownloader};
 use camino::{Utf8Path, Utf8PathBuf};
+
+use super::{
+    download::download_bundle,
+    error::ClippySnapshotError,
+    install::{BundleArtefact, install_bundle, reuse_generation},
+    manifest::ClippySnapshotManifest,
+    probe::is_present,
+    telemetry::{Operation, ProvisionSource, record_provision, timed},
+};
+use crate::dependency_binaries::{DependencyArchiveDownloader, RepositoryArchiveDownloader};
 
 /// Where a missing generation's bundle comes from.
 #[derive(Debug, Clone, PartialEq, Eq)]

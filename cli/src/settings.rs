@@ -1,13 +1,20 @@
 //! Persisted application settings and their defaults.
 
-use crate::lint_config::{
-    BumpyRoad, ConditionalMaxBranches, ModuleMaxLines, NoStdFs, NoUnwrapOrElsePanic, RstestHelper,
-    TestAttributes,
-};
+use std::collections::BTreeMap;
+
 use ortho_config::OrthoConfig;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::BTreeMap;
+
+use crate::lint_config::{
+    BumpyRoad,
+    ConditionalMaxBranches,
+    ModuleMaxLines,
+    NoStdFs,
+    NoUnwrapOrElsePanic,
+    RstestHelper,
+    TestAttributes,
+};
 
 /// Hold settings loaded by the application before domain validation.
 #[derive(Clone, Debug, Deserialize, Serialize, OrthoConfig)]

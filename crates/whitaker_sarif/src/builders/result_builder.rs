@@ -4,9 +4,13 @@ use std::collections::HashMap;
 
 use serde_json::Value;
 
-use crate::error::{Result, SarifError};
-use crate::model::location::{Location, RelatedLocation};
-use crate::model::result::{Level, Message, SarifResult};
+use crate::{
+    error::{Result, SarifError},
+    model::{
+        location::{Location, RelatedLocation},
+        result::{Level, Message, SarifResult},
+    },
+};
 
 /// Fluent builder for constructing a [`SarifResult`].
 ///
@@ -16,7 +20,7 @@ use crate::model::result::{Level, Message, SarifResult};
 /// # Examples
 ///
 /// ```
-/// use whitaker_sarif::{ResultBuilder, Level};
+/// use whitaker_sarif::{Level, ResultBuilder};
 ///
 /// let result = ResultBuilder::new("WHK001")
 ///     .with_message("Type-1 clone detected")
@@ -133,9 +137,10 @@ impl ResultBuilder {
 
 #[cfg(test)]
 mod tests {
+    use rstest::rstest;
+
     use super::*;
     use crate::merge::WHITAKER_FRAGMENT_KEY;
-    use rstest::rstest;
 
     #[rstest]
     #[case("WHK001", "msg", Level::Warning)]

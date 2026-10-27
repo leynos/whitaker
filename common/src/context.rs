@@ -1,7 +1,10 @@
 //! Context tracking utilities for analysing traversal stacks.
 
 use crate::attributes::{
-    Attribute, AttributePath, has_test_like_attribute, has_test_like_attribute_with,
+    Attribute,
+    AttributePath,
+    has_test_like_attribute,
+    has_test_like_attribute_with,
 };
 
 /// Categorizes a frame within the traversal stack.
@@ -31,13 +34,18 @@ impl ContextEntry {
     /// # Examples
     ///
     /// ```
-    /// use whitaker_common::attributes::{Attribute, AttributeKind, AttributePath};
-    /// use whitaker_common::context::{ContextEntry, ContextKind};
+    /// use whitaker_common::{
+    ///     attributes::{Attribute, AttributeKind, AttributePath},
+    ///     context::{ContextEntry, ContextKind},
+    /// };
     ///
     /// let entry = ContextEntry::new(
     ///     "demo",
     ///     ContextKind::Function,
-    ///     vec![Attribute::new(AttributePath::from("test"), AttributeKind::Outer)],
+    ///     vec![Attribute::new(
+    ///         AttributePath::from("test"),
+    ///         AttributeKind::Outer,
+    ///     )],
     /// );
     /// assert_eq!(entry.name(), "demo");
     /// ```
@@ -55,12 +63,17 @@ impl ContextEntry {
     /// # Examples
     ///
     /// ```
-    /// use whitaker_common::attributes::{Attribute, AttributeKind, AttributePath};
-    /// use whitaker_common::context::ContextEntry;
+    /// use whitaker_common::{
+    ///     attributes::{Attribute, AttributeKind, AttributePath},
+    ///     context::ContextEntry,
+    /// };
     ///
     /// let entry = ContextEntry::function(
     ///     "demo",
-    ///     vec![Attribute::new(AttributePath::from("test"), AttributeKind::Outer)],
+    ///     vec![Attribute::new(
+    ///         AttributePath::from("test"),
+    ///         AttributeKind::Outer,
+    ///     )],
     /// );
     /// assert!(entry.kind().matches_function());
     /// ```
@@ -71,40 +84,28 @@ impl ContextEntry {
 
     /// Returns the entry name.
     #[must_use]
-    pub fn name(&self) -> &str {
-        &self.name
-    }
+    pub fn name(&self) -> &str { &self.name }
 
     /// Returns the entry kind.
     #[must_use]
-    pub const fn kind(&self) -> &ContextKind {
-        &self.kind
-    }
+    pub const fn kind(&self) -> &ContextKind { &self.kind }
 
     /// Returns a snapshot of the entry attributes.
     #[must_use]
-    pub fn attributes(&self) -> &[Attribute] {
-        &self.attributes
-    }
+    pub fn attributes(&self) -> &[Attribute] { &self.attributes }
 
     /// Returns a mutable reference to the attributes for in-place updates.
     #[must_use]
-    pub const fn attributes_mut(&mut self) -> &mut Vec<Attribute> {
-        &mut self.attributes
-    }
+    pub const fn attributes_mut(&mut self) -> &mut Vec<Attribute> { &mut self.attributes }
 
     /// Adds an attribute to the entry.
-    pub fn push_attribute(&mut self, attribute: Attribute) {
-        self.attributes.push(attribute);
-    }
+    pub fn push_attribute(&mut self, attribute: Attribute) { self.attributes.push(attribute); }
 }
 
 impl ContextKind {
     /// Returns `true` when the kind is [`ContextKind::Function`].
     #[must_use]
-    pub const fn matches_function(&self) -> bool {
-        matches!(self, Self::Function)
-    }
+    pub const fn matches_function(&self) -> bool { matches!(self, Self::Function) }
 }
 
 /// Tests whether a slice of attributes marks an item as a test function.
@@ -112,16 +113,19 @@ impl ContextKind {
 /// # Examples
 ///
 /// ```
-/// use whitaker_common::attributes::{Attribute, AttributeKind, AttributePath};
-/// use whitaker_common::context::is_test_fn;
+/// use whitaker_common::{
+///     attributes::{Attribute, AttributeKind, AttributePath},
+///     context::is_test_fn,
+/// };
 ///
-/// let attrs = vec![Attribute::new(AttributePath::from("rstest"), AttributeKind::Outer)];
+/// let attrs = vec![Attribute::new(
+///     AttributePath::from("rstest"),
+///     AttributeKind::Outer,
+/// )];
 /// assert!(is_test_fn(&attrs));
 /// ```
 #[must_use]
-pub fn is_test_fn(attrs: &[Attribute]) -> bool {
-    has_test_like_attribute(attrs)
-}
+pub fn is_test_fn(attrs: &[Attribute]) -> bool { has_test_like_attribute(attrs) }
 
 /// Tests whether a slice of attributes marks an item as a test function while
 /// honouring custom attribute paths.
@@ -129,10 +133,15 @@ pub fn is_test_fn(attrs: &[Attribute]) -> bool {
 /// # Examples
 ///
 /// ```
-/// use whitaker_common::attributes::{Attribute, AttributeKind, AttributePath};
-/// use whitaker_common::context::is_test_fn_with;
+/// use whitaker_common::{
+///     attributes::{Attribute, AttributeKind, AttributePath},
+///     context::is_test_fn_with,
+/// };
 ///
-/// let attrs = vec![Attribute::new(AttributePath::from("custom::test"), AttributeKind::Outer)];
+/// let attrs = vec![Attribute::new(
+///     AttributePath::from("custom::test"),
+///     AttributeKind::Outer,
+/// )];
 /// let additional = vec![AttributePath::from("custom::test")];
 /// assert!(is_test_fn_with(&attrs, &additional));
 /// ```
@@ -146,11 +155,16 @@ pub fn is_test_fn_with(attrs: &[Attribute], additional: &[AttributePath]) -> boo
 /// # Examples
 ///
 /// ```
-/// use whitaker_common::attributes::{Attribute, AttributeKind, AttributePath};
-/// use whitaker_common::context::{in_test_like_context, ContextEntry};
+/// use whitaker_common::{
+///     attributes::{Attribute, AttributeKind, AttributePath},
+///     context::{ContextEntry, in_test_like_context},
+/// };
 ///
 /// let mut entry = ContextEntry::function("demo", Vec::new());
-/// entry.push_attribute(Attribute::new(AttributePath::from("test"), AttributeKind::Outer));
+/// entry.push_attribute(Attribute::new(
+///     AttributePath::from("test"),
+///     AttributeKind::Outer,
+/// ));
 /// assert!(in_test_like_context(&[entry]));
 /// ```
 #[must_use]
@@ -164,11 +178,16 @@ pub fn in_test_like_context(stack: &[ContextEntry]) -> bool {
 /// # Examples
 ///
 /// ```
-/// use whitaker_common::attributes::{Attribute, AttributeKind, AttributePath};
-/// use whitaker_common::context::{in_test_like_context_with, ContextEntry};
+/// use whitaker_common::{
+///     attributes::{Attribute, AttributeKind, AttributePath},
+///     context::{ContextEntry, in_test_like_context_with},
+/// };
 ///
 /// let mut entry = ContextEntry::function("demo", Vec::new());
-/// entry.push_attribute(Attribute::new(AttributePath::from("custom::test"), AttributeKind::Outer));
+/// entry.push_attribute(Attribute::new(
+///     AttributePath::from("custom::test"),
+///     AttributeKind::Outer,
+/// ));
 /// let additional = vec![AttributePath::from("custom::test")];
 /// assert!(in_test_like_context_with(&[entry], &additional));
 /// ```
@@ -187,7 +206,7 @@ pub fn in_test_like_context_with(stack: &[ContextEntry], additional: &[Attribute
 /// # Examples
 ///
 /// ```
-/// use whitaker_common::context::{is_in_main_fn, ContextEntry};
+/// use whitaker_common::context::{ContextEntry, is_in_main_fn};
 ///
 /// let stack = vec![ContextEntry::function("main", Vec::new())];
 /// assert!(is_in_main_fn(&stack));
@@ -202,9 +221,10 @@ pub fn is_in_main_fn(stack: &[ContextEntry]) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use rstest::rstest;
+
     use super::*;
     use crate::attributes::{Attribute, AttributeKind, AttributePath};
-    use rstest::rstest;
 
     fn test_attribute() -> Attribute {
         Attribute::new(AttributePath::from("test"), AttributeKind::Outer)

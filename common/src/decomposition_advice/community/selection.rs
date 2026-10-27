@@ -2,8 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use super::super::error::DecompositionError;
-use super::super::vector::MethodFeatureVector;
+use super::super::{error::DecompositionError, vector::MethodFeatureVector};
 
 /// Select the highest-scoring label among a node's neighbours.
 ///

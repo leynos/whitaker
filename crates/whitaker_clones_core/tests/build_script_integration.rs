@@ -77,7 +77,8 @@ fn build_script_rejects_invalid_parser_pins(
     }
     if !stderr.contains(expected_error) {
         return Err(format!(
-            "build-script failure for {pin_description} must explain the parser-pin rule:\n{stderr}"
+            "build-script failure for {pin_description} must explain the parser-pin \
+             rule:\n{stderr}"
         )
         .into());
     }

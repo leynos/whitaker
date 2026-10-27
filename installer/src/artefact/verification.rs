@@ -33,9 +33,7 @@ impl VerificationPolicy {
     /// digest of the downloaded archive and compare it against the digest
     /// recorded in the manifest before extracting any files.
     #[must_use]
-    pub const fn require_checksum(&self) -> bool {
-        self.require_checksum
-    }
+    pub const fn require_checksum(&self) -> bool { self.require_checksum }
 }
 
 impl Default for VerificationPolicy {

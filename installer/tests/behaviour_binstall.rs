@@ -8,8 +8,13 @@ use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use toml::Table;
 use whitaker_installer::binstall_metadata::{
-    BIN_DIR_TEMPLATE, PKG_URL_TEMPLATE, WINDOWS_OVERRIDE_TARGET, expand_bin_dir, expand_pkg_url,
-    extract_binstall_table, load_cargo_toml,
+    BIN_DIR_TEMPLATE,
+    PKG_URL_TEMPLATE,
+    WINDOWS_OVERRIDE_TARGET,
+    expand_bin_dir,
+    expand_pkg_url,
+    extract_binstall_table,
+    load_cargo_toml,
 };
 
 // ---------------------------------------------------------------------------
@@ -32,9 +37,7 @@ struct BinstallWorld {
 
 #[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
-fn world() -> BinstallWorld {
-    BinstallWorld::default()
-}
+fn world() -> BinstallWorld { BinstallWorld::default() }
 
 /// Fetch the binstall table, failing if it has not been loaded.
 fn binstall_table(world: &BinstallWorld) -> Result<&Table, String> {
@@ -217,54 +220,40 @@ fn then_no_invalid_placeholder(
     path = "tests/features/binstall_metadata.feature",
     name = "Binstall metadata section exists in Cargo.toml"
 )]
-fn scenario_binstall_metadata_exists(world: BinstallWorld) {
-    let _ = world;
-}
+fn scenario_binstall_metadata_exists(world: BinstallWorld) { let _ = world; }
 
 #[scenario(
     path = "tests/features/binstall_metadata.feature",
     name = "Windows override uses zip format"
 )]
-fn scenario_windows_override(world: BinstallWorld) {
-    let _ = world;
-}
+fn scenario_windows_override(world: BinstallWorld) { let _ = world; }
 
 #[scenario(
     path = "tests/features/binstall_metadata.feature",
     name = "URL template expands correctly for Linux"
 )]
-fn scenario_url_linux(world: BinstallWorld) {
-    let _ = world;
-}
+fn scenario_url_linux(world: BinstallWorld) { let _ = world; }
 
 #[scenario(
     path = "tests/features/binstall_metadata.feature",
     name = "URL template expands correctly for Windows"
 )]
-fn scenario_url_windows(world: BinstallWorld) {
-    let _ = world;
-}
+fn scenario_url_windows(world: BinstallWorld) { let _ = world; }
 
 #[scenario(
     path = "tests/features/binstall_metadata.feature",
     name = "Binary directory expands correctly for Unix"
 )]
-fn scenario_bin_dir_unix(world: BinstallWorld) {
-    let _ = world;
-}
+fn scenario_bin_dir_unix(world: BinstallWorld) { let _ = world; }
 
 #[scenario(
     path = "tests/features/binstall_metadata.feature",
     name = "Binary directory expands correctly for Windows"
 )]
-fn scenario_bin_dir_windows(world: BinstallWorld) {
-    let _ = world;
-}
+fn scenario_bin_dir_windows(world: BinstallWorld) { let _ = world; }
 
 #[scenario(
     path = "tests/features/binstall_metadata.feature",
     name = "No invalid placeholders in templates"
 )]
-fn scenario_no_invalid_placeholders(world: BinstallWorld) {
-    let _ = world;
-}
+fn scenario_no_invalid_placeholders(world: BinstallWorld) { let _ = world; }

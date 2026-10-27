@@ -93,9 +93,7 @@ impl PipelineContextProvider for TestContext {
 /// pipeline unit tests.
 #[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
-fn test_ctx() -> TestContext {
-    TestContext::new()
-}
+fn test_ctx() -> TestContext { TestContext::new() }
 
 // -------------------------------------------------------------------------
 // build_config_from_context tests

@@ -2,8 +2,12 @@
 
 use super::*;
 use crate::toolchain::tests::test_helpers::{
-    ToolchainInstallExpectation, expect_rustc_version, expect_toolchain_install,
-    matches_multi_component_add, output_with_status, output_with_stderr,
+    ToolchainInstallExpectation,
+    expect_rustc_version,
+    expect_toolchain_install,
+    matches_multi_component_add,
+    output_with_status,
+    output_with_stderr,
 };
 
 /// Describes the type of installation failure being tested.
@@ -35,9 +39,7 @@ pub(super) struct ToolchainChannel<'a>(pub(super) &'a str);
 
 impl<'a> ToolchainChannel<'a> {
     /// Returns the inner channel string slice (e.g. `"nightly-2026-05-28"`).
-    pub(super) fn as_str(self) -> &'a str {
-        self.0
-    }
+    pub(super) fn as_str(self) -> &'a str { self.0 }
 }
 
 /// The exact stderr string emitted by the mock when a toolchain installation

@@ -5,9 +5,14 @@
 
 use std::ops::Range;
 
-use super::features::for_each_node_at_depth;
 use super::{
-    ByteSpan, KindId, LeafClass, NormalizedNode, NormalizedTree, select_smallest_covering,
+    ByteSpan,
+    KindId,
+    LeafClass,
+    NormalizedNode,
+    NormalizedTree,
+    features::for_each_node_at_depth,
+    select_smallest_covering,
 };
 
 const KANI_AST_MAX_DEPTH: usize = 3;

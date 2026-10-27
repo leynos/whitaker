@@ -6,15 +6,13 @@
 //! "builds" a driver the first time it sees an empty slot, counting builds in
 //! a log, so tests can tell a cold run from a warm one.
 
-use camino::{Utf8Path, Utf8PathBuf};
 use std::process::{Command, Output};
-use tempfile::TempDir;
-use whitaker_installer::bootstrap::{
-    BOOTSTRAP_SCHEMA, BootstrapLayout, BootstrapMetadata, StoredPath,
-};
 
-use whitaker_installer::test_utils::{
-    FIXTURE_TOOLCHAIN as TOOLCHAIN_PIN, SnapshotFixture, fixture_git,
+use camino::{Utf8Path, Utf8PathBuf};
+use tempfile::TempDir;
+use whitaker_installer::{
+    bootstrap::{BOOTSTRAP_SCHEMA, BootstrapLayout, BootstrapMetadata, StoredPath},
+    test_utils::{FIXTURE_TOOLCHAIN as TOOLCHAIN_PIN, SnapshotFixture, fixture_git},
 };
 
 /// The nightly the fixture installation records.
@@ -169,9 +167,7 @@ fn install_snapshot(clippy_root: &Utf8Path) -> String {
 }
 
 /// Run fixture Git, failing the test on error.
-pub fn git(dir: &Utf8Path, args: &[&str]) -> String {
-    fixture_git(dir, args).expect("fixture git")
-}
+pub fn git(dir: &Utf8Path, args: &[&str]) -> String { fixture_git(dir, args).expect("fixture git") }
 
 /// Write an executable script.
 pub fn write_executable(path: &Utf8Path, contents: &str) {

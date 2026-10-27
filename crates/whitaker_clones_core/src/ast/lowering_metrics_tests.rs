@@ -4,12 +4,20 @@ use metrics_util::debugging::{DebugValue, DebuggingRecorder, Snapshot};
 use rstest::rstest;
 
 use super::{MAX_AST_DEPTH, MAX_AST_NODES, lower_span};
-use crate::ast::metrics::{
-    LOWER_SPAN_DURATION_SECONDS, LOWER_SPAN_PARSER_RECOVERY_TOTAL, LOWER_SPAN_TOTAL,
-    OUTCOME_DEPTH_BUDGET_EXHAUSTED, OUTCOME_INVALID_SPAN, OUTCOME_NODE_BUDGET_EXHAUSTED,
-    OUTCOME_SUCCESS, OUTCOME_UNPARSABLE_SPAN,
+use crate::{
+    AstError,
+    ByteSpan,
+    ast::metrics::{
+        LOWER_SPAN_DURATION_SECONDS,
+        LOWER_SPAN_PARSER_RECOVERY_TOTAL,
+        LOWER_SPAN_TOTAL,
+        OUTCOME_DEPTH_BUDGET_EXHAUSTED,
+        OUTCOME_INVALID_SPAN,
+        OUTCOME_NODE_BUDGET_EXHAUSTED,
+        OUTCOME_SUCCESS,
+        OUTCOME_UNPARSABLE_SPAN,
+    },
 };
-use crate::{AstError, ByteSpan};
 
 enum MetricsScenario {
     Success,

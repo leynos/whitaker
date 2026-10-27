@@ -4,13 +4,22 @@ mod failure_mocks;
 mod test_helpers;
 
 use failure_mocks::{
-    COMPONENT_INSTALL_FAILURE_MESSAGE, FailureSetup, InstallFailure, ToolchainChannel,
-    assert_failure_error, setup_failure_mocks,
+    COMPONENT_INSTALL_FAILURE_MESSAGE,
+    FailureSetup,
+    InstallFailure,
+    ToolchainChannel,
+    assert_failure_error,
+    setup_failure_mocks,
 };
 use rstest::rstest;
 use test_helpers::{
-    CapturingCommandRunner, ToolchainInstallExpectation, expect_rustc_version,
-    expect_toolchain_install, matches_multi_component_add, output_with_status, output_with_stderr,
+    CapturingCommandRunner,
+    ToolchainInstallExpectation,
+    expect_rustc_version,
+    expect_toolchain_install,
+    matches_multi_component_add,
+    output_with_status,
+    output_with_stderr,
     test_toolchain,
 };
 

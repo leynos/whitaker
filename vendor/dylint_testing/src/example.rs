@@ -5,12 +5,14 @@
 //! stays within the repository's 400-line limit. The functions are upstream's
 //! apart from the changes marked "Whitaker patch".
 
-use crate::{copy_with_extension, run_tests, snake_case, ui};
+use std::{fs::copy, io::BufRead, path::Path};
+
 use anyhow::{Context, Result, anyhow, ensure};
 use cargo_metadata::{Metadata, Package, Target, TargetKind};
 use dylint_internal::{CommandExt, env, rustup::is_rustc};
 use once_cell::sync::OnceCell;
-use std::{fs::copy, io::BufRead, path::Path};
+
+use crate::{copy_with_extension, run_tests, snake_case, ui};
 
 static LINKING_FLAGS: OnceCell<Vec<String>> = OnceCell::new();
 
@@ -251,8 +253,9 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::{running_command, rustc_invocation, select_ui_test_flags};
     use rstest::rstest;
+
+    use super::{running_command, rustc_invocation, select_ui_test_flags};
 
     /// Extract the rustc arguments after unwrapped and wrapped compiler
     /// commands.

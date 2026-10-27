@@ -25,7 +25,10 @@ const MAX_METHODS_PER_SUGGESTION: usize = 3;
 ///
 /// ```
 /// use whitaker_common::decomposition_advice::{
-///     DecompositionContext, MethodProfileBuilder, SubjectKind, format_diagnostic_note,
+///     DecompositionContext,
+///     MethodProfileBuilder,
+///     SubjectKind,
+///     format_diagnostic_note,
 ///     suggest_decomposition,
 /// };
 ///

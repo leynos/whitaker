@@ -9,7 +9,12 @@ use ra_ap_syntax::SyntaxKind;
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use whitaker_clones_core::{
-    AstError, AstHash, ByteSpan, NormalizedTree, canonical_hash, lower_span,
+    AstError,
+    AstHash,
+    ByteSpan,
+    NormalizedTree,
+    canonical_hash,
+    lower_span,
 };
 use whitaker_test_macros::allow_fixture_expansion_lints;
 
@@ -84,9 +89,7 @@ struct AstFeatureWorld {
 
 #[allow_fixture_expansion_lints]
 #[fixture]
-fn world() -> AstFeatureWorld {
-    AstFeatureWorld::default()
-}
+fn world() -> AstFeatureWorld { AstFeatureWorld::default() }
 
 fn whole_source_hash(source: &str) -> Result<AstHash, String> {
     let length = u32::try_from(source.len())

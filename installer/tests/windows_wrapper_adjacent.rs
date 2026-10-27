@@ -11,11 +11,13 @@
 //! also sees that it did not run.
 #![cfg(windows)]
 
-use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
+use std::{
+    path::{Path, PathBuf},
+    process::{Command, Output},
+};
+
 use tempfile::TempDir;
-use whitaker_installer::dirs::BaseDirs;
-use whitaker_installer::wrapper::generate_wrapper_scripts;
+use whitaker_installer::{dirs::BaseDirs, wrapper::generate_wrapper_scripts};
 
 /// A `PATH` stub that echoes each argument as `stub:<arg>` and exits with 7.
 const STUB_INSTALLER_CMD: &str = concat!(
@@ -36,19 +38,13 @@ struct TempBaseDirs {
 
 impl BaseDirs for TempBaseDirs {
     /// Return no home directory; the wrapper generator does not need one.
-    fn home(&self) -> Option<PathBuf> {
-        None
-    }
+    fn home(&self) -> Option<PathBuf> { None }
 
     /// Return the temporary bin directory.
-    fn executables(&self) -> Option<PathBuf> {
-        Some(self.bin.clone())
-    }
+    fn executables(&self) -> Option<PathBuf> { Some(self.bin.clone()) }
 
     /// Return no data directory; the wrapper generator does not need one.
-    fn whitaker_data(&self) -> Option<PathBuf> {
-        None
-    }
+    fn whitaker_data(&self) -> Option<PathBuf> { None }
 }
 
 /// Run `script` under PowerShell with `stub_dir` first on `PATH`, telling the

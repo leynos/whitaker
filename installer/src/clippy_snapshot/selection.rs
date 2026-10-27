@@ -12,9 +12,9 @@
 //! reproduced from the first-parent commits that touch `rust-toolchain` or
 //! `rust-toolchain.toml` rather than by checking out every commit.
 
-use super::error::ClippySnapshotError;
-use super::git::SnapshotGit;
 use camino::Utf8Path;
+
+use super::{error::ClippySnapshotError, git::SnapshotGit};
 
 /// The toolchain files Dylint reads, in rustup's precedence order.
 const TOOLCHAIN_FILES: [&str; 2] = ["rust-toolchain", "rust-toolchain.toml"];
@@ -53,8 +53,8 @@ impl std::fmt::Display for SelectionGap {
                 channel,
             } => write!(
                 formatter,
-                "the history ends at {oldest_commit} on {channel} without the \
-                 commit that introduced {channel}"
+                "the history ends at {oldest_commit} on {channel} without the commit that \
+                 introduced {channel}"
             ),
             Self::NoEarlierChannel {
                 oldest_channel: Some(channel),

@@ -6,12 +6,13 @@
 
 use core::fmt::Debug;
 
-use serde::Serialize;
-use serde::de::DeserializeOwned;
+use serde::{Serialize, de::DeserializeOwned};
 
-use crate::builders::{LocationBuilder, RegionBuilder, ResultBuilder};
-use crate::merge::WHITAKER_FRAGMENT_KEY;
-use crate::model::result::{Level, SarifResult};
+use crate::{
+    builders::{LocationBuilder, RegionBuilder, ResultBuilder},
+    merge::WHITAKER_FRAGMENT_KEY,
+    model::result::{Level, SarifResult},
+};
 
 /// Asserts that `value` survives a JSON serialize/deserialize round trip
 /// unchanged.
@@ -113,9 +114,7 @@ mod tests {
     /// Check that a changed value makes the JSON round-trip assertion fail.
     #[test]
     #[should_panic(expected = "JSON round trip changed")]
-    fn json_round_trip_rejects_changed_values() {
-        assert_json_round_trip(&ChangesOnRead(3));
-    }
+    fn json_round_trip_rejects_changed_values() { assert_json_round_trip(&ChangesOnRead(3)); }
 
     /// Check the serialized payload and verify that the callback runs.
     #[test]

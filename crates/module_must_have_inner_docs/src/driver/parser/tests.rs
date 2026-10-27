@@ -1,9 +1,10 @@
 //! Unit tests for the module-documentation parser.
 
-use super::{cfg_attr_has_meta_item, is_doc_comment, skip_leading_whitespace, take_ident};
-use crate::ParseInput;
 use proptest::{prelude::*, test_runner::TestRunner};
 use rstest::rstest;
+
+use super::{cfg_attr_has_meta_item, is_doc_comment, skip_leading_whitespace, take_ident};
+use crate::ParseInput;
 
 /// Verify that the byte offset and remainder account for Unicode whitespace.
 #[rstest]

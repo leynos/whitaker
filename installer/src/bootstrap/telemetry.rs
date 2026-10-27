@@ -4,8 +4,9 @@
 //! process provides one. Every label value is a fixed constant: no paths,
 //! toolchains, or error text reach a label.
 
-use super::error::BootstrapError;
 use std::time::Duration;
+
+use super::error::BootstrapError;
 
 pub(crate) const RUN_TOTAL: &str = "whitaker_installer.bootstrap.run.total";
 pub(crate) const RUN_SECONDS: &str = "whitaker_installer.bootstrap.run.duration_seconds";

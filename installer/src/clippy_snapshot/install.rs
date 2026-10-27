@@ -7,16 +7,18 @@
 //! existing generation is verified and reused, or rejected; it is never
 //! repaired in place.
 
-use super::error::ClippySnapshotError;
-use super::generation::GenerationMetadata;
-use super::git::SnapshotGit;
-use super::manifest::{ClippySnapshotManifest, SNAPSHOT_BRANCH};
-use super::probe::{is_present, is_present_file};
-use super::verify::verify_repository;
-use crate::artefact::packaging::compute_sha256;
-use crate::artefact::sha256_digest::Sha256Digest;
 use camino::{Utf8Path, Utf8PathBuf};
 use fs2::FileExt;
+
+use super::{
+    error::ClippySnapshotError,
+    generation::GenerationMetadata,
+    git::SnapshotGit,
+    manifest::{ClippySnapshotManifest, SNAPSHOT_BRANCH},
+    probe::{is_present, is_present_file},
+    verify::verify_repository,
+};
+use crate::artefact::{packaging::compute_sha256, sha256_digest::Sha256Digest};
 
 /// Serializes installers sharing one snapshot root.
 const ROOT_LOCK_FILE: &str = ".whitaker-clippy-snapshot.lock";

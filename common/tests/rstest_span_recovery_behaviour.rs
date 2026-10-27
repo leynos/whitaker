@@ -33,29 +33,19 @@ impl SpanRecoveryWorld {
 
 #[allow_fixture_expansion_lints]
 #[fixture]
-fn world() -> SpanRecoveryWorld {
-    SpanRecoveryWorld::default()
-}
+fn world() -> SpanRecoveryWorld { SpanRecoveryWorld::default() }
 
 #[given("a direct user-editable span at line {line}")]
-fn given_direct_span(world: &SpanRecoveryWorld, line: usize) {
-    world.push_frame(line, false);
-}
+fn given_direct_span(world: &SpanRecoveryWorld, line: usize) { world.push_frame(line, false); }
 
 #[given("a macro frame at line {line}")]
-fn given_macro_frame(world: &SpanRecoveryWorld, line: usize) {
-    world.push_frame(line, true);
-}
+fn given_macro_frame(world: &SpanRecoveryWorld, line: usize) { world.push_frame(line, true); }
 
 #[given("a user-editable frame at line {line}")]
-fn given_user_frame(world: &SpanRecoveryWorld, line: usize) {
-    world.push_frame(line, false);
-}
+fn given_user_frame(world: &SpanRecoveryWorld, line: usize) { world.push_frame(line, false); }
 
 #[when("I recover the user-editable span")]
-fn when_recover(world: &SpanRecoveryWorld) {
-    world.evaluate();
-}
+fn when_recover(world: &SpanRecoveryWorld) { world.evaluate(); }
 
 fn source_span(line: usize) -> SourceSpan {
     match SourceSpan::new(SourceLocation::new(line, 1), SourceLocation::new(line, 8)) {
@@ -90,21 +80,13 @@ fn then_macro_only(world: &SpanRecoveryWorld) {
 }
 
 #[scenario(path = "tests/features/rstest_span_recovery.feature", index = 0)]
-fn scenario_direct_span_is_kept(world: SpanRecoveryWorld) {
-    let _ = world;
-}
+fn scenario_direct_span_is_kept(world: SpanRecoveryWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/rstest_span_recovery.feature", index = 1)]
-fn scenario_nested_macro_chain_recovers(world: SpanRecoveryWorld) {
-    let _ = world;
-}
+fn scenario_nested_macro_chain_recovers(world: SpanRecoveryWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/rstest_span_recovery.feature", index = 2)]
-fn scenario_macro_only_is_skipped(world: SpanRecoveryWorld) {
-    let _ = world;
-}
+fn scenario_macro_only_is_skipped(world: SpanRecoveryWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/rstest_span_recovery.feature", index = 3)]
-fn scenario_first_user_frame_wins(world: SpanRecoveryWorld) {
-    let _ = world;
-}
+fn scenario_first_user_frame_wins(world: SpanRecoveryWorld) { let _ = world; }

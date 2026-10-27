@@ -7,10 +7,11 @@
 //! module and the installer's bootstrap step; other installer code keeps its
 //! own error types.
 
-use super::error::BootstrapError;
+use std::{fs::Metadata, io::ErrorKind};
+
 use camino::Utf8Path;
-use std::fs::Metadata;
-use std::io::ErrorKind;
+
+use super::error::BootstrapError;
 
 /// Return `path`'s metadata, or `None` when nothing exists there.
 ///

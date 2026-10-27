@@ -15,7 +15,11 @@ use whitaker_installer::{
     crate_name::CrateName,
     output::ShellSnippet,
     resolution::{
-        CrateResolutionOptions, EXPERIMENTAL_LINT_CRATES, LINT_CRATES, SUITE_CRATE, resolve_crates,
+        CrateResolutionOptions,
+        EXPERIMENTAL_LINT_CRATES,
+        LINT_CRATES,
+        SUITE_CRATE,
+        resolve_crates,
         validate_crate_names,
     },
     toolchain::parse_toolchain_channel,
@@ -35,9 +39,7 @@ struct CrateResolutionWorld {
 
 #[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
-fn crate_world() -> CrateResolutionWorld {
-    CrateResolutionWorld::default()
-}
+fn crate_world() -> CrateResolutionWorld { CrateResolutionWorld::default() }
 
 #[given("no specific lints are requested")]
 fn given_no_specific_lints(crate_world: &CrateResolutionWorld) {
@@ -143,9 +145,7 @@ struct ValidationWorld {
 
 #[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
-fn validation_world() -> ValidationWorld {
-    ValidationWorld::default()
-}
+fn validation_world() -> ValidationWorld { ValidationWorld::default() }
 
 #[given("a list of valid crate names")]
 fn given_valid_names(validation_world: &ValidationWorld) {
@@ -230,9 +230,7 @@ struct ToolchainWorld {
 
 #[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
-fn toolchain_world() -> ToolchainWorld {
-    ToolchainWorld::default()
-}
+fn toolchain_world() -> ToolchainWorld { ToolchainWorld::default() }
 
 #[given("a rust-toolchain.toml with standard format")]
 fn given_standard_toolchain(toolchain_world: &ToolchainWorld) {
@@ -299,9 +297,7 @@ struct SnippetWorld {
 
 #[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
-fn snippet_world() -> SnippetWorld {
-    SnippetWorld::default()
-}
+fn snippet_world() -> SnippetWorld { SnippetWorld::default() }
 
 #[given("a target library path")]
 fn given_library_path(snippet_world: &SnippetWorld) {
