@@ -38,13 +38,14 @@ default for a configurable field, use `cli_default_as_absent` so the default
 does not mask file or environment values.
 
 For one release, fall back to `dylint.toml` only when no canonical file is
-selected or found. Map root-level legacy `locale` to `diagnostics.locale`,
-preserve known lint tables, and tolerate other Dylint tables. Map
-`DYLINT_LOCALE` below `WHITAKER_DIAGNOSTICS_LOCALE`. Return deprecation notices
-that identify the replacement. A selected missing, unreadable, or malformed
-file is an error, not optional absence. Help and version are successful display
-requests; parse and configuration failures remain typed at the application
-boundary. Localize help and parse errors together with an `en-GB` fallback.
+selected or found; explicitly selecting `dylint.toml` also uses this bridge.
+Map root-level legacy `locale` to `diagnostics.locale`, preserve known lint
+tables, and tolerate other Dylint tables. Map `DYLINT_LOCALE` below
+`WHITAKER_DIAGNOSTICS_LOCALE`. Return deprecation notices that identify the
+replacement. A selected missing, unreadable, or malformed file is an error, not
+optional absence. Help and version are successful display requests; parse and
+configuration failures remain typed at the application boundary. Localize help
+and parse errors together with an `en-GB` fallback.
 
 The documented `WHITAKER_NO_SOURCE_FALLBACK` environment control and
 `--no-source-fallback` flag map to the inverse of

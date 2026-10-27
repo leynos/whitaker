@@ -93,6 +93,25 @@ inspect their executable payloads before publishing. `make test-glibc-baseline`
 runs the checker’s acceptance, rejection, and generated parser/invariant tests;
 the Linux CI lane executes that target.
 
+## CLI configuration boundary
+
+The `whitaker-cli` application package owns the OrthoConfig v0.10.0 source
+boundary. It is a configuration foundation, with no executable or command
+dispatch. The root CLI integration can construct `Sources` with its selected
+command, optional file selector, injected discovery and scan environments, and
+explicit CLI values; `load_with_sources` returns merged settings and notices.
+The executable owns localization, presentation, and exit statuses. Neither the
+configuration package nor reusable lint libraries print notices or terminate
+processes.
+
+`Sources` keeps environment lookup and enumeration separate so tests can use
+`MapEnv` and an isolated project root without changing the process environment.
+The loader resolves one file chain, maps legacy names to their canonical shape,
+and overlays each source in precedence order. A command namespace is applied
+within its own source before the next source is merged. Keep the application
+package on Rust 1.89.0 and the Dylint workspace on its separately pinned
+nightly. The release uses OrthoConfig's default features.
+
 ## Running Tests
 
 Run the test suite from the workspace root:
