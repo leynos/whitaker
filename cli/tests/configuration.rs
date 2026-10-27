@@ -14,6 +14,17 @@ fn write(root: &TempDir, name: &str, contents: impl AsRef<[u8]>) -> std::io::Res
     Dir::open_ambient_dir(root.path(), ambient_authority())?.write(name, contents)
 }
 
+/// Allocate a private project root for each scenario.
+#[rstest::fixture]
+fn root() -> std::io::Result<TempDir> {
+    TempDir::new()
+}
+
+/// Read the effective locale from one injected source bundle.
+fn locale(input: Sources) -> ortho_config::OrthoResult<String> {
+    Ok(load_with_sources(input)?.settings.diagnostics.locale)
+}
+
 /// Construct sources rooted in a private test directory.
 fn sources(root: &TempDir, env: Arc<MapEnv>, cli: serde_json::Value) -> Sources {
     Sources {
@@ -32,26 +43,16 @@ fn sources(root: &TempDir, env: Arc<MapEnv>, cli: serde_json::Value) -> Sources 
 }
 
 /// Exercise default, file, environment and explicit CLI precedence.
-#[test]
-fn merges_all_precedence_tiers() -> Result<(), Box<dyn std::error::Error>> {
-    let root = TempDir::new()?;
+#[rstest::rstest]
+fn merges_all_precedence_tiers(
+    root: std::io::Result<TempDir>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let root = root?;
     let empty = Arc::new(MapEnv::new());
-    assert_eq!(
-        load_with_sources(sources(&root, empty, json!({})))?
-            .settings
-            .diagnostics
-            .locale,
-        "en-GB"
-    );
+    assert_eq!(locale(sources(&root, empty, json!({})))?, "en-GB");
     write(&root, "whitaker.toml", "[diagnostics]\nlocale = 'cy'\n")?;
     let env = Arc::new(MapEnv::new().with_var("WHITAKER_DIAGNOSTICS_LOCALE", "fr"));
-    assert_eq!(
-        load_with_sources(sources(&root, env.clone(), json!({})))?
-            .settings
-            .diagnostics
-            .locale,
-        "fr"
-    );
+    assert_eq!(locale(sources(&root, env.clone(), json!({})))?, "fr");
     assert_eq!(
         load_with_sources(sources(
             &root,
@@ -67,9 +68,11 @@ fn merges_all_precedence_tiers() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 /// Translate both legacy locale sources and report their deprecation.
-#[test]
-fn reads_legacy_file_and_environment() -> Result<(), Box<dyn std::error::Error>> {
-    let root = TempDir::new()?;
+#[rstest::rstest]
+fn reads_legacy_file_and_environment(
+    root: std::io::Result<TempDir>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let root = root?;
     write(&root, "dylint.toml", "locale = 'cy'\n")?;
     let env = Arc::new(MapEnv::new().with_var("DYLINT_LOCALE", "fr"));
     let loaded = load_with_sources(sources(&root, env, json!({})))?;
@@ -85,9 +88,11 @@ fn reads_legacy_file_and_environment() -> Result<(), Box<dyn std::error::Error>>
 }
 
 /// Reject a missing explicit file and a malformed discovered file.
-#[test]
-fn rejects_unusable_files() -> Result<(), Box<dyn std::error::Error>> {
-    let root = TempDir::new()?;
+#[rstest::rstest]
+fn rejects_unusable_files(
+    root: std::io::Result<TempDir>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let root = root?;
     let env = Arc::new(MapEnv::new());
     let mut selected = sources(&root, env.clone(), json!({}));
     selected.config_path = Some(root.path().join("missing.toml"));
@@ -109,16 +114,14 @@ fn rejects_unusable_files() -> Result<(), Box<dyn std::error::Error>> {
 #[case("rewrite_apply", "REWRITE_APPLY")]
 #[case("rewrite_explain", "REWRITE_EXPLAIN")]
 fn command_precedence(
+    root: std::io::Result<TempDir>,
     #[case] command: &str,
     #[case] variable_command: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let root = TempDir::new()?;
+    let root = root?;
     let mut defaults = sources(&root, Arc::new(MapEnv::new()), json!({}));
     defaults.command = Some(command.to_owned());
-    assert_eq!(
-        load_with_sources(defaults)?.settings.diagnostics.locale,
-        "en-GB"
-    );
+    assert_eq!(locale(defaults)?, "en-GB");
     write(
         &root,
         "whitaker.toml",
@@ -126,24 +129,26 @@ fn command_precedence(
     )?;
     let mut file = sources(&root, Arc::new(MapEnv::new()), json!({}));
     file.command = Some(command.to_owned());
-    assert_eq!(load_with_sources(file)?.settings.diagnostics.locale, "cy");
+    assert_eq!(locale(file)?, "cy");
     let env = Arc::new(MapEnv::new().with_var(
         format!("WHITAKER_CMDS_{variable_command}_DIAGNOSTICS_LOCALE"),
         "fr",
     ));
     let mut args = sources(&root, env.clone(), json!({}));
     args.command = Some(command.to_owned());
-    assert_eq!(load_with_sources(args)?.settings.diagnostics.locale, "fr");
+    assert_eq!(locale(args)?, "fr");
     let mut args = sources(&root, env, json!({"diagnostics": {"locale": "de"}}));
     args.command = Some(command.to_owned());
-    assert_eq!(load_with_sources(args)?.settings.diagnostics.locale, "de");
+    assert_eq!(locale(args)?, "de");
     Ok(())
 }
 
 /// Preserve known legacy lint settings while tolerating unrelated Dylint tables.
-#[test]
-fn bridges_legacy_lint_tables() -> Result<(), Box<dyn std::error::Error>> {
-    let root = TempDir::new()?;
+#[rstest::rstest]
+fn bridges_legacy_lint_tables(
+    root: std::io::Result<TempDir>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let root = root?;
     write(&root, "dylint.toml", "[module_max_lines]\nmax_lines = 123\n[other_lint]\nsetting = true\n[bumpy_road_function.weights]\ndepth = 2.0\n")?;
     let loaded = load_with_sources(sources(&root, Arc::new(MapEnv::new()), json!({})))?;
     assert_eq!(loaded.settings.module_max_lines.max_lines, 123);
@@ -152,9 +157,11 @@ fn bridges_legacy_lint_tables() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 /// Reject malformed values and unknown canonical keys.
-#[test]
-fn rejects_invalid_values_and_unknown_keys() -> Result<(), Box<dyn std::error::Error>> {
-    let root = TempDir::new()?;
+#[rstest::rstest]
+fn rejects_invalid_values_and_unknown_keys(
+    root: std::io::Result<TempDir>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let root = root?;
     write(
         &root,
         "whitaker.toml",
@@ -167,9 +174,11 @@ fn rejects_invalid_values_and_unknown_keys() -> Result<(), Box<dyn std::error::E
 }
 
 /// Prefer the canonical file and apply canonical environment over legacy controls.
-#[test]
-fn canonical_sources_win_over_legacy() -> Result<(), Box<dyn std::error::Error>> {
-    let root = TempDir::new()?;
+#[rstest::rstest]
+fn canonical_sources_win_over_legacy(
+    root: std::io::Result<TempDir>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let root = root?;
     write(
         &root,
         "whitaker.toml",
@@ -189,9 +198,11 @@ fn canonical_sources_win_over_legacy() -> Result<(), Box<dyn std::error::Error>>
 }
 
 /// Replace selector lists when a higher-priority source supplies a value.
-#[test]
-fn selector_list_is_replaced() -> Result<(), Box<dyn std::error::Error>> {
-    let root = TempDir::new()?;
+#[rstest::rstest]
+fn selector_list_is_replaced(
+    root: std::io::Result<TempDir>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let root = root?;
     write(&root, "whitaker.toml", "[lint]\nselect = ['DOC']\n")?;
     let env = Arc::new(MapEnv::new().with_var("WHITAKER_LINT_SELECT", "PAN"));
     let loaded = load_with_sources(sources(&root, env, json!({})))?;
@@ -200,29 +211,27 @@ fn selector_list_is_replaced() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 /// Reject invalid presentation settings before returning application values.
-#[test]
-fn rejects_unknown_output_policy() -> Result<(), Box<dyn std::error::Error>> {
-    let root = TempDir::new()?;
+#[rstest::rstest]
+fn rejects_unknown_output_policy(
+    root: std::io::Result<TempDir>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let root = root?;
     let env = Arc::new(MapEnv::new().with_var("WHITAKER_OUTPUT_COLOUR", "sometimes"));
     assert!(load_with_sources(sources(&root, env, json!({}))).is_err());
     Ok(())
 }
 
 /// Prefer an explicit CLI file over an environment-selected file.
-#[test]
-fn explicit_selector_order() -> Result<(), Box<dyn std::error::Error>> {
-    let root = TempDir::new()?;
+#[rstest::rstest]
+fn explicit_selector_order(
+    root: std::io::Result<TempDir>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let root = root?;
     write(&root, "environment.toml", "[diagnostics]\nlocale = 'cy'\n")?;
     write(&root, "explicit.toml", "[diagnostics]\nlocale = 'fr'\n")?;
     let env =
         Arc::new(MapEnv::new().with_var("WHITAKER_CONFIG", root.path().join("environment.toml")));
-    assert_eq!(
-        load_with_sources(sources(&root, env.clone(), json!({})))?
-            .settings
-            .diagnostics
-            .locale,
-        "cy"
-    );
+    assert_eq!(locale(sources(&root, env.clone(), json!({})))?, "cy");
     let mut input = sources(&root, env, json!({}));
     input.config_path = Some(root.path().join("explicit.toml"));
     assert_eq!(load_with_sources(input)?.settings.diagnostics.locale, "fr");
@@ -230,9 +239,11 @@ fn explicit_selector_order() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 /// Fail closed for an unreadable selection or a malformed legacy file.
-#[test]
-fn rejects_unreadable_and_malformed_legacy() -> Result<(), Box<dyn std::error::Error>> {
-    let root = TempDir::new()?;
+#[rstest::rstest]
+fn rejects_unreadable_and_malformed_legacy(
+    root: std::io::Result<TempDir>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let root = root?;
     let env = Arc::new(MapEnv::new());
     let mut input = sources(&root, env.clone(), json!({}));
     input.config_path = Some(root.path().to_path_buf());
@@ -243,9 +254,11 @@ fn rejects_unreadable_and_malformed_legacy() -> Result<(), Box<dyn std::error::E
 }
 
 /// Do not treat absent CLI DTO fields as explicit overrides.
-#[test]
-fn omitted_cli_values_do_not_mask_file() -> Result<(), Box<dyn std::error::Error>> {
-    let root = TempDir::new()?;
+#[rstest::rstest]
+fn omitted_cli_values_do_not_mask_file(
+    root: std::io::Result<TempDir>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let root = root?;
     write(&root, "whitaker.toml", "[diagnostics]\nlocale = 'cy'\n")?;
     let loaded = load_with_sources(sources(
         &root,
@@ -257,9 +270,11 @@ fn omitted_cli_values_do_not_mask_file() -> Result<(), Box<dyn std::error::Error
 }
 
 /// Bridge a legacy file explicitly selected by the application.
-#[test]
-fn explicitly_selected_legacy_file_is_translated() -> Result<(), Box<dyn std::error::Error>> {
-    let root = TempDir::new()?;
+#[rstest::rstest]
+fn explicitly_selected_legacy_file_is_translated(
+    root: std::io::Result<TempDir>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let root = root?;
     write(&root, "dylint.toml", "locale = 'cy'\n")?;
     let mut input = sources(&root, Arc::new(MapEnv::new()), json!({}));
     input.config_path = Some(root.path().join("dylint.toml"));
@@ -273,9 +288,11 @@ fn explicitly_selected_legacy_file_is_translated() -> Result<(), Box<dyn std::er
 }
 
 /// Stack system, user, and project files in increasing precedence order.
-#[test]
-fn stacks_discovery_scopes() -> Result<(), Box<dyn std::error::Error>> {
-    let root = TempDir::new()?;
+#[rstest::rstest]
+fn stacks_discovery_scopes(
+    root: std::io::Result<TempDir>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let root = root?;
     let dir = Dir::open_ambient_dir(root.path(), ambient_authority())?;
     dir.create_dir_all("system/whitaker")?;
     dir.create_dir_all("user/whitaker")?;
@@ -284,24 +301,12 @@ fn stacks_discovery_scopes() -> Result<(), Box<dyn std::error::Error>> {
         "[diagnostics]\nlocale = 'cy'\n",
     )?;
     let env = Arc::new(MapEnv::new());
-    assert_eq!(
-        load_with_sources(sources(&root, env.clone(), json!({})))?
-            .settings
-            .diagnostics
-            .locale,
-        "cy"
-    );
+    assert_eq!(locale(sources(&root, env.clone(), json!({})))?, "cy");
     dir.write(
         "user/whitaker/whitaker.toml",
         "[diagnostics]\nlocale = 'fr'\n",
     )?;
-    assert_eq!(
-        load_with_sources(sources(&root, env.clone(), json!({})))?
-            .settings
-            .diagnostics
-            .locale,
-        "fr"
-    );
+    assert_eq!(locale(sources(&root, env.clone(), json!({})))?, "fr");
     write(&root, "whitaker.toml", "[diagnostics]\nlocale = 'de'\n")?;
     assert_eq!(
         load_with_sources(sources(&root, env, json!({})))?
@@ -314,9 +319,11 @@ fn stacks_discovery_scopes() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 /// Surface a malformed lower-priority file even if a later file is valid.
-#[test]
-fn rejects_malformed_lower_scope() -> Result<(), Box<dyn std::error::Error>> {
-    let root = TempDir::new()?;
+#[rstest::rstest]
+fn rejects_malformed_lower_scope(
+    root: std::io::Result<TempDir>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let root = root?;
     let dir = Dir::open_ambient_dir(root.path(), ambient_authority())?;
     dir.create_dir_all("system/whitaker")?;
     dir.write("system/whitaker/whitaker.toml", "[broken\n")?;
@@ -326,9 +333,11 @@ fn rejects_malformed_lower_scope() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 /// Load the hidden project file and prefer it when both project names exist.
-#[test]
-fn hidden_project_file_is_discovered() -> Result<(), Box<dyn std::error::Error>> {
-    let root = TempDir::new()?;
+#[rstest::rstest]
+fn hidden_project_file_is_discovered(
+    root: std::io::Result<TempDir>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let root = root?;
     write(&root, ".whitaker.toml", "[diagnostics]\nlocale = 'cy'\n")?;
     write(&root, "dylint.toml", "locale = 'fr'\n")?;
     let env = Arc::new(MapEnv::new());
@@ -347,9 +356,11 @@ fn hidden_project_file_is_discovered() -> Result<(), Box<dyn std::error::Error>>
 }
 
 /// Merge a parent file before the extending project configuration.
-#[test]
-fn loads_toml_extends_chain() -> Result<(), Box<dyn std::error::Error>> {
-    let root = TempDir::new()?;
+#[rstest::rstest]
+fn loads_toml_extends_chain(
+    root: std::io::Result<TempDir>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let root = root?;
     write(
         &root,
         "base.toml",
@@ -367,13 +378,15 @@ fn loads_toml_extends_chain() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 /// Reject misspelled command namespaces instead of silently discarding them.
-#[test]
-fn rejects_unknown_command_namespace() -> Result<(), Box<dyn std::error::Error>> {
-    let root = TempDir::new()?;
+#[rstest::rstest]
+fn rejects_unknown_command_namespace(
+    root: std::io::Result<TempDir>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let root = root?;
     write(
         &root,
         "whitaker.toml",
-        "[cmds.chekc.diagnostics]\nlocale = 'cy'\n",
+        "[cmds.not_a_command.diagnostics]\nlocale = 'cy'\n",
     )?;
     assert!(load_with_sources(sources(&root, Arc::new(MapEnv::new()), json!({}))).is_err());
     Ok(())

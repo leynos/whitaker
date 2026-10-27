@@ -497,6 +497,14 @@ progress = "plain"
 Use `WHITAKER_LINT_SELECT` and `WHITAKER_LINT_IGNORE` for comma-separated
 selectors, `WHITAKER_DIAGNOSTICS_LOCALE` for language, and
 `WHITAKER_OUTPUT_COLOUR` or `WHITAKER_OUTPUT_PROGRESS` for presentation.
+Boolean values use lower-case `true` or `false`; integer values are
+non-negative, and floating-point values must be finite. Lists are
+comma-separated: surrounding whitespace is trimmed and empty items are ignored.
+The existing `WHITAKER_NO_SOURCE_FALLBACK` control forbids source builds for
+any value other than an empty string, `0`, or `false` (ignoring surrounding
+whitespace and case); disabled values leave any file setting unchanged.
+Non-Unicode values also forbid fallback, as in the installer.
+
 Command-specific settings use `[cmds.<command>]` and the corresponding
 `WHITAKER_CMDS_<COMMAND>_*` environment prefix. The allowed presentation values
 are `auto`, `always`, and `never` for colour, and `auto`, `plain`, and `off`
