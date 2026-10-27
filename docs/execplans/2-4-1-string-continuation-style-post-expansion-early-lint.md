@@ -96,11 +96,12 @@ Hard invariants. Violating one requires escalation, not a workaround.
 
 ## Tolerances (exception triggers)
 
-- **Scope.** If implementation requires touching more than 30 files, or more
-  than 1800 net lines outside the two new crates, stop and escalate. The new
-  crates themselves are bounded by their milestone contents; if
-  `crates/string_continuation_style/src/` exceeds 900 lines in total, stop and
-  escalate, because the adapter was meant to be thin.
+- **Scope.** The repository owner authorized continuing the approved milestones
+  on 2026-10-27 after the branch exceeded the original limits of 30 files and
+  1800 net lines outside the two new crates. Escalate any scope outside the
+  approved milestones. The new crates remain bounded by their milestone
+  contents; if `crates/string_continuation_style/src/` exceeds 900 lines in
+  total, stop and escalate, because the adapter was meant to be thin.
 - **Dependencies.** Four changes are pre-authorized (`DEC-006`): add
   `googletest`, add `pretty_assertions`, promote `serial_test`, and add
   `log`/`tracing` dev-dependency edges to workspace pins that already exist.
@@ -245,8 +246,11 @@ Hard invariants. Violating one requires escalation, not a workaround.
       and `EV-M1-FULL-GATES`.
 - [x] (2026-10-26) Scope tolerance audit completed. Before EP-M1, the branch
       already changed 48 paths and added 3,252 net lines outside the two new
-      crates; the EP-M1 candidate reaches 51 paths and 3,507 net lines. Pause
-      before EP-M2 pending the repository owner's scope disposition.
+      crates; the EP-M1 candidate reaches 51 paths and 3,507 net lines.
+- [x] (2026-10-27) The repository owner instructed implementation to continue
+      after the scope audit. Proceed with the milestones already specified in
+      this plan despite the recorded branch-wide file and line counts. Retain
+      the adapter size limit and all other tolerances and constraints.
 - [x] Step 2: scaffold both crates. Commit `ea36d5e9`.
 - [x] EP-M1: pure domain crate.
 - [ ] EP-M2: plain cooked string literals.
