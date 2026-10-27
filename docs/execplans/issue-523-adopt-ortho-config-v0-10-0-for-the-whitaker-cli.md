@@ -4,7 +4,7 @@ This ExecPlan is a living document. Keep `Constraints`, `Tolerances`, `Risks`,
 `Progress`, `Surprises & Discoveries`, `Decision Log`, and
 `Outcomes & Retrospective` current as work proceeds.
 
-Status: implementation authorized by the issue request; design work in progress.
+Status: implementation in progress; draft PR 525 is open for design review.
 
 Issue: [leynos/whitaker#523](https://github.com/leynos/whitaker/issues/523)
 
@@ -321,6 +321,13 @@ behaviour, and UI compile contracts.
   command design and renumbering the configuration decision as ADR 008.
 - [x] The issue request explicitly authorizes implementation and draft PR
   delivery. Continue with the recorded design and sequential milestones.
+
+- [x] 2026-10-27: Opened draft PR 525 for ADR review. A separate agent owns
+  the root CLI binary; this branch supplies the configuration foundation.
+- [ ] 2026-10-27: Implementing source discovery, compatibility layers, typed
+  settings, and injected tests in `cli/`. Targeted nightly tests and Clippy
+  passed during iteration; Rust 1.89.0 tests passed before the latest changes.
+  Full gates and CodeRabbit remain pending for the implementation candidate.
 
 ## Surprises & discoveries
 

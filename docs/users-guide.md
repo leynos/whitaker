@@ -464,6 +464,51 @@ provider_param_attributes = ["case", "values", "files", "future", "context"]
 use_source_callee_fallback = false
 ```
 
+### Planned Whitaker CLI configuration
+
+The planned unified CLI uses `whitaker.toml` (or `.whitaker.toml`) for TOML
+settings. The configuration foundation is available to the CLI integration; the
+shipped `whitaker-installer` does not yet read these files. A selected
+`--config` file takes precedence over `WHITAKER_CONFIG` for choosing the file.
+Automatic discovery searches system, user, and project locations. If both
+project filenames exist, `.whitaker.toml` overrides `whitaker.toml`. Missing
+optional files are ignored, while an explicitly selected missing, unreadable,
+or malformed file is an error. TOML `extends` layers are supported.
+
+Within a selected file chain, later layers override earlier layers. Effective
+settings follow defaults, files, legacy environment values, `WHITAKER_*`
+environment values, then explicit CLI values. For example:
+
+```toml
+[lint]
+select = ["DEFAULT"]
+ignore = []
+experimental = false
+
+[diagnostics]
+locale = "en-GB"
+
+[output]
+colour = "auto"
+progress = "plain"
+```
+
+Use `WHITAKER_LINT_SELECT` and `WHITAKER_LINT_IGNORE` for comma-separated
+selectors, `WHITAKER_DIAGNOSTICS_LOCALE` for language, and
+`WHITAKER_OUTPUT_COLOUR` or `WHITAKER_OUTPUT_PROGRESS` for presentation.
+Command-specific settings use `[cmds.<command>]` and the corresponding
+`WHITAKER_CMDS_<COMMAND>_*` environment prefix. The allowed presentation values
+are `auto`, `always`, and `never` for colour, and `auto`, `plain`, and `off`
+for progress.
+
+For one release, when no canonical file is selected or found, the foundation
+falls back to `dylint.toml` and maps its root `locale` key to
+`diagnostics.locale`. An explicitly selected `dylint.toml` uses the same bridge.
+`DYLINT_LOCALE` remains a lower-priority environment fallback. Both legacy
+paths return a notice naming the replacement for the application to display.
+The existing installer continues to use its own configuration and
+source-fallback behaviour.
+
 ## Localized Diagnostics
 
 Whitaker supports multiple languages for diagnostic messages. Set the locale
