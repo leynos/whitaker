@@ -1,11 +1,11 @@
 //! Translate injected environment variables into OrthoConfig merge layers.
 
-use std::{ffi::OsStr, sync::Arc};
+use std::ffi::OsStr;
 
-use ortho_config::{OrthoError, OrthoResult, ScanEnvSource};
+use ortho_config::{OrthoResult, ScanEnvSource};
 use serde_json::{json, Map, Value};
 
-use crate::source_fallback_override;
+use crate::{error::invalid, source_fallback_override};
 
 /// Collect legacy and canonical environment layers without reading process state.
 ///
@@ -14,52 +14,83 @@ use crate::source_fallback_override;
 ///
 /// # Errors
 ///
-/// Returns an error if a recognised value is non-Unicode or cannot be parsed.
+/// Returns an error if a recognized value is non-Unicode or cannot be parsed.
 pub(crate) fn collect(source: &dyn ScanEnvSource) -> OrthoResult<(Value, Value, bool)> {
-    let mut legacy = Map::new();
-    let mut canonical = Map::new();
-    let mut has_legacy_locale = false;
+    let mut layers = EnvironmentLayers::default();
     for (key, value) in source.scan() {
-        let Some(key) = key.to_str() else { continue };
-        if key == "DYLINT_LOCALE" {
-            let text = text_value(key, &value)?;
-            insert(
-                &mut legacy,
-                "diagnostics",
-                "locale",
-                Value::String(text.to_owned()),
-            );
-            has_legacy_locale = true;
-        } else if key == "WHITAKER_NO_SOURCE_FALLBACK" {
-            if let Some(allow) = source_fallback_override(Some(&value)) {
-                insert(
-                    &mut legacy,
-                    "install",
-                    "allow_build_from_source",
-                    json!(allow),
-                );
-            }
-        } else if let Some((command, setting)) = command_key(key) {
-            let canonical_key = format!("WHITAKER_{setting}");
-            if let Some((section, field, kind)) = known_key(&canonical_key) {
-                let parsed = parse_value(key, text_value(key, &value)?, kind)?;
-                insert_command(&mut canonical, command, (section, field), parsed);
-            }
-        } else if let Some((section, field, kind)) = known_key(key) {
-            let text = text_value(key, &value)?;
-            let parsed = parse_value(key, text, kind)?;
-            insert(&mut canonical, section, field, parsed);
+        if let Some(key) = key.to_str() {
+            layers.insert_variable(key, &value)?;
         }
     }
     Ok((
-        Value::Object(legacy),
-        Value::Object(canonical),
-        has_legacy_locale,
+        Value::Object(layers.legacy),
+        Value::Object(layers.canonical),
+        layers.has_legacy_locale,
     ))
+}
+
+/// Accumulate separate precedence layers while classifying environment values.
+#[derive(Default)]
+struct EnvironmentLayers {
+    legacy: Map<String, Value>,
+    canonical: Map<String, Value>,
+    has_legacy_locale: bool,
+}
+
+impl EnvironmentLayers {
+    /// Map one recognized variable into its corresponding source layer.
+    fn insert_variable(&mut self, key: &str, value: &OsStr) -> OrthoResult<()> {
+        match key {
+            "DYLINT_LOCALE" => {
+                let text = text_value(key, value)?;
+                insert(
+                    &mut self.legacy,
+                    "diagnostics",
+                    "locale",
+                    Value::String(text.to_owned()),
+                );
+                self.has_legacy_locale = true;
+            }
+            "WHITAKER_NO_SOURCE_FALLBACK" => {
+                if let Some(allow) = source_fallback_override(Some(value)) {
+                    insert(
+                        &mut self.legacy,
+                        "install",
+                        "allow_build_from_source",
+                        json!(allow),
+                    );
+                }
+            }
+            _ => self.insert_canonical(key, value)?,
+        }
+        Ok(())
+    }
+
+    /// Map a canonical global or command-specific variable when recognized.
+    fn insert_canonical(&mut self, key: &str, value: &OsStr) -> OrthoResult<()> {
+        if let Some((command, setting)) = command_key(key) {
+            let canonical_key = format!("WHITAKER_{setting}");
+            if let Some((section, field, kind)) = known_key(&canonical_key) {
+                let parsed = parse_value(key, text_value(key, value)?, kind)?;
+                insert_command(&mut self.canonical, command, (section, field), parsed);
+            }
+        } else if let Some((section, field, kind)) = known_key(key) {
+            let parsed = parse_value(key, text_value(key, value)?, kind)?;
+            insert(&mut self.canonical, section, field, parsed);
+        }
+        Ok(())
+    }
 }
 
 /// Identify the currently specified global environment names.
 fn known_key(key: &str) -> Option<(&'static str, &'static str, Kind)> {
+    global_key(key)
+        .or_else(|| lint_key(key))
+        .or_else(|| tuning_key(key))
+}
+
+/// Map global application settings.
+fn global_key(key: &str) -> Option<(&'static str, &'static str, Kind)> {
     match key {
         "WHITAKER_LINT_SELECT" => Some(("lint", "select", Kind::List)),
         "WHITAKER_LINT_IGNORE" => Some(("lint", "ignore", Kind::List)),
@@ -72,6 +103,13 @@ fn known_key(key: &str) -> Option<(&'static str, &'static str, Kind)> {
         "WHITAKER_DIAGNOSTICS_LOCALE" => Some(("diagnostics", "locale", Kind::Text)),
         "WHITAKER_OUTPUT_COLOUR" => Some(("output", "colour", Kind::Text)),
         "WHITAKER_OUTPUT_PROGRESS" => Some(("output", "progress", Kind::Text)),
+        _ => None,
+    }
+}
+
+/// Map line, branch, and test-attribute lint settings.
+fn lint_key(key: &str) -> Option<(&'static str, &'static str, Kind)> {
+    match key {
         "WHITAKER_MODULE_MAX_LINES_MAX_LINES" => {
             Some(("module_max_lines", "max_lines", Kind::Integer))
         }
@@ -91,6 +129,13 @@ fn known_key(key: &str) -> Option<(&'static str, &'static str, Kind)> {
         "WHITAKER_NO_UNWRAP_OR_ELSE_PANIC_ALLOW_IN_MAIN" => {
             Some(("no_unwrap_or_else_panic", "allow_in_main", Kind::Bool))
         }
+        _ => None,
+    }
+}
+
+/// Map fixture, filesystem, and complexity tuning settings.
+fn tuning_key(key: &str) -> Option<(&'static str, &'static str, Kind)> {
+    match key {
         "WHITAKER_RSTEST_HELPER_SHOULD_BE_FIXTURE_MIN_CALLS" => Some((
             "rstest_helper_should_be_fixture",
             "min_calls",
@@ -203,14 +248,6 @@ fn insert(root: &mut Map<String, Value>, section: &str, field: &str, value: Valu
             fields.insert(field.to_owned(), value);
         }
     }
-}
-
-/// Build a typed configuration error for an invalid environment setting.
-fn invalid(key: &str, message: &str) -> Arc<OrthoError> {
-    Arc::new(OrthoError::Validation {
-        key: key.to_owned(),
-        message: message.to_owned(),
-    })
 }
 
 #[cfg(test)]

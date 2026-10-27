@@ -1,6 +1,7 @@
 //! Configuration boundary for the planned Whitaker application.
 
 mod environment;
+mod error;
 mod legacy;
 mod lint_config;
 mod loader;

@@ -30,7 +30,7 @@ impl Default for ConditionalMaxBranches {
     }
 }
 
-/// Configure extra test markers recognised by a lint.
+/// Configure extra test markers recognized by a lint.
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct TestAttributes {
