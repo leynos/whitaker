@@ -250,10 +250,6 @@ fn insert(root: &mut Map<String, Value>, section: &str, field: &str, value: Valu
     }
 }
 
-#[cfg(test)]
-#[path = "environment_tests.rs"]
-mod tests;
-
 /// Insert a value under its command and settings section.
 fn insert_command(
     root: &mut Map<String, Value>,
@@ -269,3 +265,7 @@ fn insert_command(
         }
     }
 }
+
+#[cfg(test)]
+#[path = "environment_tests.rs"]
+mod tests;

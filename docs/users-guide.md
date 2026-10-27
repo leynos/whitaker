@@ -473,8 +473,9 @@ shipped `whitaker-installer` does not yet read these files. A selected
 `--config` file takes precedence over `WHITAKER_CONFIG` for choosing the file.
 Automatic discovery searches system, user, and project locations. If both
 project filenames exist, `.whitaker.toml` overrides `whitaker.toml`. Missing
-optional files are ignored, while an explicitly selected missing, unreadable,
-or malformed file is an error. TOML `extends` layers are supported.
+optional files are ignored. An explicitly selected missing or unreadable file
+is an error; malformed files are errors whether selected or discovered. TOML
+`extends` layers are supported.
 
 Within a selected file chain, later layers override earlier layers. Effective
 settings follow defaults, files, legacy environment values, `WHITAKER_*`
