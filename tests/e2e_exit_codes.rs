@@ -165,6 +165,23 @@ fn legacy_dylint_invocations_forward_arguments_and_exit_status() {
         "cargo arguments should reach the fake process"
     );
 
+    // Bare `whitaker` must behave like the legacy wrapper's
+    // `exec cargo dylint "$@"`, not print Whitaker usage.
+    let bare_output = Command::new(env!("CARGO_BIN_EXE_whitaker"))
+        .env("PATH", bin_dir.path())
+        .output()
+        .expect("whitaker forwarding process should start");
+    assert_eq!(
+        bare_output.status.code(),
+        Some(23),
+        "bare whitaker should forward to cargo dylint"
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&bare_output.stdout),
+        "dylint\n",
+        "bare whitaker should pass no arguments beyond the dylint subcommand"
+    );
+
     let version_output = Command::new(env!("CARGO_BIN_EXE_whitaker"))
         .args(["--all", "--version"])
         .env("PATH", bin_dir.path())

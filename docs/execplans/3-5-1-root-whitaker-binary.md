@@ -149,8 +149,10 @@ test, and adds root-package validation to CI. The published candidate's local
 gates pass; the Windows-only test still awaits hosted Windows CI. A helper
 split clears CodeScene's complexity finding, and the short-cluster cases move
 into `tests/property_arg_parity/short_clusters.rs` to keep the parity test
-under the 400-line limit. The 130-file diff is +7,428 net lines, 428 above
-D-12's ceiling, and exceeds D-11's accepted 80 files. Resolve this scope with
+under the 400-line limit. D-23 moves `ortho_config` to 0.10.0, and an
+end-to-end assertion pins bare `whitaker` to `cargo dylint` forwarding. The
+130-file diff is +7,400 net lines, 400 above D-12's ceiling, and exceeds D-11's
+accepted 80 files. Resolve this scope with
 the owner before merge. Crates.io reservation remains unauthorized; the plan
 stays `IN PROGRESS`.
 
@@ -478,7 +480,7 @@ or every existing user. That is worth verifying properly.
 ### Axioms (assumed, not verified)
 
 - `clap` 4.5 parses argv per its documented derive semantics.
-- `ortho_config` 0.9.0's `LocalizedParse::try_parse_localized_from` and
+- `ortho_config` 0.10.0's `LocalizedParse::try_parse_localized_from` and
   `is_display_request` behave as documented. Repository-owned logic built on
   them **is** verified, against the real interface.
 - `cargo-binstall` resolves `pkg-url` by literal substitution of `{name}`,
@@ -886,7 +888,7 @@ captured with `tee`. Commit after each.
 Add to `[workspace.dependencies]`, caret-pinned:
 
 ```toml
-ortho_config = "0.9.0"
+ortho_config = "0.10.0"
 googletest = "0.14.3"
 pretty_assertions = "1.4.1"
 ```
@@ -997,11 +999,16 @@ let cli = match Cli::try_parse_localized_from(std::env::args_os(), &localizer) {
 
 Note `NoOpLocalizer::new()`, not a bare unit-struct reference, and
 `err.exit_code()` rather than a blanket failure code — otherwise usage errors
-exit 1 where the installer exits 2, breaking `EP-INV-PARITY`. Confirm the exact
-signature of `is_display_request` against
-`docs/ortho-config-users-guide.md:333` before Stage B writes red tests against
-it: if it takes `&OrthoError` rather than `&clap::Error`, the guard needs
-adjusting.
+exit 1 where the installer exits 2, breaking `EP-INV-PARITY`.
+
+Bare `whitaker` never reaches this parse. `classify(&[])` returns
+`Class::Forward`, so an empty argument vector runs `cargo dylint` with no
+further arguments and exits with its status, as the legacy wrapper's
+`exec cargo dylint "$@"` did. `is_display_request` matches only
+`DisplayHelp` and `DisplayVersion`; that is sufficient because routing never
+hands Clap an argument vector without a subcommand, help, or version token.
+The `empty` case in `src/cli/dispatch.rs` and the bare-invocation assertion in
+`tests/e2e_exit_codes.rs` hold that contract.
 
 This establishes the seam that 3.6.4 fills with a `FluentLocalizer` and an
 `en-GB` catalogue, without adopting a configuration model this plan does not
@@ -1394,6 +1401,14 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
   `bool`. Impact: the planned error guard can be implemented and tested against
   the library's real signature; no API adjustment is needed.
 
+- Observation: `ortho_config` 0.10.0 leaves the parsing surface unchanged.
+  Evidence: on 2026-10-25, `src/error/helpers.rs` and
+  `src/localizer/clap_command/parse.rs` were byte-identical between the 0.9.0
+  and 0.10.0 registry sources, and `NoOpLocalizer::new()` remains. The upgrade
+  adds `ortho_l10n` and moves `dirs` from 5 to 7, which drops `dirs-sys` and
+  nine `windows-*` 0.48 crates from `Cargo.lock`. Impact: D-23 bumps the pin
+  with no call-site change, and the lockfile shrinks.
+
 - Observation: Kani 0.67.0 omits the literal `Counterexample:` marker and its
   Ls negative-control report omits the satisfying model. The runner checks
   `VERIFICATION:- FAILED`, the named check, and the successful witness
@@ -1606,6 +1621,11 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
   `installed_paths` strict; successful install replaces malformed JSON. Derive
   snapshots from the pinned toolchain, gate XDG tests, and ship the vendored
   helper's selected MIT notice. Date/Author: 2026-10-17, following review.
+
+- **D-23: Pin `ortho_config` 0.10.0.** The repository requires current caret
+  requirements, and 0.10.0 keeps the `LocalizedParse` and
+  `is_display_request` interface used here while removing ten net lock entries.
+  Date/Author: 2026-10-25, following review.
 
 ## Outcomes & retrospective
 
