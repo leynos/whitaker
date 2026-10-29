@@ -126,45 +126,34 @@ fn runner_env_guard_preserves_rustc_wrapper() {
     assert_eq!(env::var_os("RUSTC_WRAPPER"), Some("sccache".into()));
 }
 
+/// The runner sees the copy-library flag set, and the caller's environment is
+/// restored afterwards.
+///
 /// Regression: without the flag, Dylint 6.3.0's `dylint_testing` copies the
 /// default-feature stub over the harness-built library, and the UI test fails
-/// with ``could not find `dylint_version` ``.
-#[test]
-fn runner_env_guard_marks_the_toolchain_library_as_prepared() {
+/// with ``could not find `dylint_version` ``. A caller's explicit value is
+/// neither replaced nor removed.
+#[rstest]
+#[case::absent_is_set_then_removed(None, "1")]
+#[case::explicit_value_is_kept(Some("0"), "0")]
+fn runner_env_guard_marks_the_toolchain_library_as_prepared(
+    #[case] caller_value: Option<&'static str>,
+    #[case] seen_by_runner: &'static str,
+) {
+    const FLAG: &str = "DYLINT_LINK_ENABLE_COPY_LIBRARY";
     let _serial_guard = runner_env_guard_test_lock();
-    let _absent = EnvVarGuard::remove("DYLINT_LINK_ENABLE_COPY_LIBRARY");
+    let _caller = caller_value.map_or_else(
+        || EnvVarGuard::remove(FLAG),
+        |value| EnvVarGuard::set(FLAG, value),
+    );
 
     run_with_runner("lint", "ui", |_, _| {
-        assert_eq!(
-            env::var_os("DYLINT_LINK_ENABLE_COPY_LIBRARY"),
-            Some("1".into())
-        );
+        assert_eq!(env::var_os(FLAG), Some(seen_by_runner.into()));
         Ok(())
     })
     .expect("runner should execute with the copy-library flag set");
 
-    assert_eq!(env::var_os("DYLINT_LINK_ENABLE_COPY_LIBRARY"), None);
-}
-
-/// A caller's explicit choice of the flag is neither replaced nor removed.
-#[test]
-fn runner_env_guard_preserves_an_explicit_copy_library_flag() {
-    let _serial_guard = runner_env_guard_test_lock();
-    let _explicit = EnvVarGuard::set("DYLINT_LINK_ENABLE_COPY_LIBRARY", "0");
-
-    run_with_runner("lint", "ui", |_, _| {
-        assert_eq!(
-            env::var_os("DYLINT_LINK_ENABLE_COPY_LIBRARY"),
-            Some("0".into())
-        );
-        Ok(())
-    })
-    .expect("runner should execute with the caller's flag preserved");
-
-    assert_eq!(
-        env::var_os("DYLINT_LINK_ENABLE_COPY_LIBRARY"),
-        Some("0".into())
-    );
+    assert_eq!(env::var_os(FLAG), caller_value.map(Into::into));
 }
 
 #[cfg(windows)]

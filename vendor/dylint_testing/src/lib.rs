@@ -209,17 +209,26 @@ fn example_targets(package: &Package) -> Result<Vec<Target>> {
         .collect())
 }
 
-#[allow(
-    clippy::too_many_arguments,
-    reason = "upstream dylint_testing 6.3.0 signature, kept verbatim to ease rebasing"
-)]
-fn run_example_test(
-    driver: &Path,
-    metadata: &Metadata,
-    package: &Package,
-    target: &Target,
-    config: &ui::Config,
-) -> Result<()> {
+/// The inputs for one example UI test.
+///
+/// Whitaker patch: upstream passes these as five arguments, which Whitaker's
+/// argument limit rejects; grouping them is the only change to the function.
+struct ExampleTestContext<'a> {
+    driver: &'a Path,
+    metadata: &'a Metadata,
+    package: &'a Package,
+    target: &'a Target,
+    config: &'a ui::Config,
+}
+
+fn run_example_test(context: &ExampleTestContext<'_>) -> Result<()> {
+    let ExampleTestContext {
+        driver,
+        metadata,
+        package,
+        target,
+        config,
+    } = *context;
     let linking_flags = linking_flags(metadata, package, target)?;
     let file_name = target
         .src_path

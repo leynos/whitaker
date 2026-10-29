@@ -585,8 +585,10 @@ dylint-env: ## Print the Dylint bootstrap variables as NAME=value lines
 dylint-tools: ## Install the pinned cargo-dylint and dylint-link into DYLINT_TOOLS_DIR
 	@# Reuses a cached install whose version marker matches, so it is cheap to
 	@# call before any step that must not reach github.com.
+	@# The script probes `cargo-dylint` through PATH, so the tools root must lead
+	@# it; otherwise a cached install is invisible and is downloaded again.
 	@mkdir -p "$(DYLINT_TOOLS_DIR)/bin"
-	@scripts/install-dylint-tools.sh "$(DYLINT_TOOLS_DIR)" "$(CARGO_DYLINT_VERSION)" "$(DYLINT_LINK_VERSION)" "$(CARGO)" "$(DYLINT_TOOLS_TOOLCHAIN)"
+	@PATH="$(DYLINT_TOOLS_DIR)/bin:$$PATH" scripts/install-dylint-tools.sh "$(DYLINT_TOOLS_DIR)" "$(CARGO_DYLINT_VERSION)" "$(DYLINT_LINK_VERSION)" "$(CARGO)" "$(DYLINT_TOOLS_TOOLCHAIN)"
 
 dylint-smoke: clippy-snapshot dylint-tools ## Build the Dylint driver cold, then reuse it warm, against real lints
 	@# Serial and ignored-tests-only: the integration tests run `cargo dylint`

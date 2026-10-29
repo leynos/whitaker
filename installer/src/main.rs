@@ -105,9 +105,9 @@ fn try_fast_path_installation(
 
 /// Runs the install command to build and stage lint libraries.
 ///
-/// Workflow: (1) check/install Dylint dependencies, (2) locate/clone workspace,
-/// (3) resolve crates from CLI flags, (4) build in release mode, (5) stage
-/// libraries with toolchain-suffixed names, (6) generate wrapper script.
+/// Workflow: (1) check/install Dylint dependencies, (2) install the Clippy
+/// snapshot, (3) locate/clone workspace, (4) stage the suite from a prebuilt
+/// artefact or a build, (5) record the bootstrap and generate wrapper scripts.
 ///
 /// # Errors
 ///
@@ -124,17 +124,52 @@ fn run_install(args: &InstallArgs, stdout: &mut dyn Write, stderr: &mut dyn Writ
         return run_dry(args, &dirs, stderr);
     }
     let install_started = Instant::now();
-    // Step 1: Check and install Dylint dependencies if needed
     if !args.skip_deps {
         ensure_dylint_tools(policy, stderr)?;
     }
-    // Step 1.5: Install the verified Clippy snapshot, with no fallback.
+    // Before any workspace or library work, with no fallback.
     let snapshot = install_clippy_snapshot(args, &dirs, stderr)?;
-    // Step 2: Ensure workspace is available (clone if needed)
     let workspace_root = ensure_whitaker_workspace(args, &dirs, stderr)?;
-    // Step 3: Resolve crates and toolchain
+    let request = SuiteRequest {
+        args,
+        policy,
+        dirs: &dirs,
+        workspace_root: &workspace_root,
+    };
+    let staged = stage_suite(&request, stderr)?;
+    report_suite_source(staged.install_mode, stdout)?;
+    let finish_context = FinishInstallContext {
+        args,
+        dirs: &dirs,
+        snapshot: &snapshot,
+        toolchain: staged.toolchain.channel(),
+        staging_path: &staged.staging_path,
+        install_mode: staged.install_mode,
+        install_started,
+    };
+    finish_install_and_record_metrics(&finish_context, stderr)
+}
+
+/// The inputs that decide which lint suite to stage, and from where.
+struct SuiteRequest<'a> {
+    args: &'a InstallArgs,
+    policy: SourcePolicy,
+    dirs: &'a dyn BaseDirs,
+    workspace_root: &'a Utf8Path,
+}
+
+/// A staged lint suite and how it was obtained.
+struct StagedSuite {
+    staging_path: Utf8PathBuf,
+    install_mode: InstallMode,
+    toolchain: Toolchain,
+}
+
+/// Resolve crates and toolchain, then stage the suite from a fast path or a build.
+fn stage_suite(request: &SuiteRequest<'_>, stderr: &mut dyn Write) -> Result<StagedSuite> {
+    let args = request.args;
     let requested_crates = resolve_requested_crates(args)?;
-    let toolchain = resolve_toolchain(&workspace_root, args.toolchain.as_deref())?;
+    let toolchain = resolve_toolchain(request.workspace_root, args.toolchain.as_deref())?;
     ensure_toolchain_installed(
         &toolchain,
         resolve_additional_components(args),
@@ -142,11 +177,10 @@ fn run_install(args: &InstallArgs, stdout: &mut dyn Write, stderr: &mut dyn Writ
         stderr,
     )?;
     let target_dir = determine_target_dir(args.target_dir.as_deref())?;
-    // Step 3.5: Attempt prebuilt download or staged-suite fast path.
     let fast_path_context = FastPathContext {
         args,
-        policy,
-        dirs: &dirs,
+        policy: request.policy,
+        dirs: request.dirs,
         requested_crates: &requested_crates,
         toolchain: &toolchain,
         target_dir: &target_dir,
@@ -154,20 +188,14 @@ fn run_install(args: &InstallArgs, stdout: &mut dyn Write, stderr: &mut dyn Writ
     if let Some((staging_path, install_mode)) =
         try_fast_path_installation(&fast_path_context, stderr)?
     {
-        report_suite_source(install_mode, stdout)?;
-        let finish_context = FinishInstallContext {
-            args,
-            dirs: &dirs,
-            snapshot: &snapshot,
-            toolchain: toolchain.channel(),
-            staging_path: &staging_path,
+        return Ok(StagedSuite {
+            staging_path,
             install_mode,
-            install_started,
-        };
-        return finish_install_and_record_metrics(&finish_context, stderr);
+            toolchain,
+        });
     }
     let context = PipelineContext {
-        workspace_root: &workspace_root,
+        workspace_root: request.workspace_root,
         toolchain: &toolchain,
         target_dir: &target_dir,
         jobs: args.jobs,
@@ -175,21 +203,13 @@ fn run_install(args: &InstallArgs, stdout: &mut dyn Write, stderr: &mut dyn Writ
         experimental: args.experimental,
         quiet: args.quiet,
     };
-    // Step 4: Build and stage
     let build_results = perform_build(&context, &requested_crates, stderr)?;
     let staging_path = stage_libraries(&context, &build_results, stderr)?;
-    // Step 5: Generate wrapper scripts if requested
-    report_suite_source(InstallMode::Build, stdout)?;
-    let finish_context = FinishInstallContext {
-        args,
-        dirs: &dirs,
-        snapshot: &snapshot,
-        toolchain: toolchain.channel(),
-        staging_path: &staging_path,
+    Ok(StagedSuite {
+        staging_path,
         install_mode: InstallMode::Build,
-        install_started,
-    };
-    finish_install_and_record_metrics(&finish_context, stderr)
+        toolchain,
+    })
 }
 
 /// Announce, on stdout, whether the suite came from a published artefact.

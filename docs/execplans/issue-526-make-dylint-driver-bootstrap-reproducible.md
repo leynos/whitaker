@@ -64,7 +64,8 @@ and public Clippy access is never needed or used.
   a `main`-only snapshot, with public Clippy denied.
 - [x] (2026-10-29) Bumped every Dylint pin to 6.3.0 and rebased the vendored
   `dylint_testing` patch onto upstream 6.3.0; `diff -ru` against the pristine
-  crate shows only the wrapper-parsing patch and one scoped Clippy allow.
+  crate shows only the wrapper-parsing patch and the `ExampleTestContext`
+  argument grouping that the 6.0.1 patch also carried.
 - [x] (2026-10-29) Fixed the UI-harness library clobber introduced by 6.3.0
   and the rebased call-site regression in the wrapper patch (see Surprises).
 - [x] (2026-10-29) Clippy snapshot module, manifest and
@@ -138,6 +139,15 @@ and public Clippy access is never needed or used.
 - 2026-10-29: Lody sets `BASH_ENV` to a script that defines `gh`, so bash
   test stubs for `gh` are bypassed and `tests/workflows` reports spurious
   failures here. Run those tests with `env -u BASH_ENV`.
+- 2026-10-29: The first hosted run of PR #528 failed in two places. First,
+  `make dylint-tools` called the install script without the tools root on
+  `PATH`; the script probes `cargo-dylint` through `PATH`, so on a fresh runner
+  it downloaded again after `github.com` was denied (a regression test now pins
+  this). Second, a Unix-only import broke the Windows test build. CodeScene
+  also flagged `run_install` (Large Method), duplicated harness tests, and the
+  five-argument `run_example_test` in the vendored crate. The 6.0.1 patch had
+  already grouped those arguments in a struct, so the rebase had regressed it;
+  all three were refactored rather than suppressed.
 - 2026-10-29: Clippy's early commits use a plain-text `rust-toolchain`
   file that Dylint's TOML parser cannot read. Dylint's walk never reaches them,
   but an eager reader does, so the reproduction stops at the first unreadable

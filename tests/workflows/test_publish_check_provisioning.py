@@ -293,3 +293,43 @@ def test_failed_download_aborts_before_clone_and_packaging(tmp_path: Path) -> No
     assert "build --release" not in log, (
         "no per-lint release build may run after a failed install"
     )
+
+
+def test_dylint_tools_reuses_a_cached_install_without_downloading(tmp_path: Path) -> None:
+    """A cached tools root is reused even when it is not already on PATH.
+
+    CI installs the tools, denies github.com, and then `dylint-smoke` runs
+    `dylint-tools` again. The script probes `cargo-dylint` through PATH, so
+    unless the target puts the tools root first it cannot see the cached copy,
+    downloads again, and fails against the denial.
+    """
+    stub_dir = tmp_path / "bin"
+    stub_dir.mkdir()
+    log = stub_dir / "invocations.log"
+    _write_stub(stub_dir, "curl", f'echo "curl $@" >> "{log}"\nexit 7')
+    tools_root = tmp_path / "tools"
+    tools_bin = tools_root / "bin"
+    tools_bin.mkdir(parents=True)
+    _write_stub(
+        tools_bin,
+        "cargo-dylint",
+        f'if [ "$1" = dylint ] && [ "$2" = --version ]; then '
+        f'echo "cargo-dylint {CARGO_DYLINT_VERSION}"; fi',
+    )
+    _write_stub(tools_bin, "dylint-link", "exit 0")
+    (tools_bin / ".dylint-link.version").write_text(f"{DYLINT_LINK_VERSION}\n")
+
+    env = os.environ.copy()
+    env["PATH"] = f"{stub_dir}:/usr/bin:/bin"
+    env["HOME"] = str(tmp_path / "home")
+    result = subprocess.run(
+        ["make", "--no-print-directory", "dylint-tools", f"DYLINT_TOOLS_DIR={tools_root}"],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=REPO_ROOT,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert not log.exists(), f"no download may run: {log.read_text() if log.exists() else ''}"

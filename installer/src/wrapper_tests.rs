@@ -1,6 +1,7 @@
 //! The generated scripts, executed against a stub `whitaker-installer`.
 
 use super::*;
+#[cfg(unix)]
 use std::process::Command;
 use tempfile::TempDir;
 
