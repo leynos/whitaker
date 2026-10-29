@@ -1,4 +1,4 @@
-.PHONY: help all clean test trybuild-contracts test-doc coverage build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke installer-msrv-check release-installer-dry-run package-lints workflow-test workflow-test-deps test-workflow-contracts test-markdown-format test-glibc-baseline test-sccache-health verus kani verus-clone-detector kani-clone-detector spelling skill-frontmatter-lint skill-manifest-validate skill-metadata-check skill-manifest-check test-skill-metadata-check clippy-snapshot clippy-snapshot-bundle dylint-env dylint-smoke
+.PHONY: help all clean test trybuild-contracts test-doc coverage build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke installer-msrv-check release-installer-dry-run package-lints workflow-test workflow-test-deps test-workflow-contracts test-markdown-format test-glibc-baseline test-sccache-health verus kani verus-clone-detector kani-clone-detector spelling skill-frontmatter-lint skill-manifest-validate skill-metadata-check skill-manifest-check test-skill-metadata-check clippy-snapshot clippy-snapshot-bundle dylint-env dylint-smoke dylint-tools
 
 # Make chooses the recipe shell itself, so the `shell: bash` default in the
 # workflows does not reach recipes; the `/bin/sh` it would otherwise use
@@ -582,16 +582,27 @@ clippy-snapshot-bundle: ## Build the Clippy snapshot bundle from upstream into C
 dylint-env: ## Print the Dylint bootstrap variables as NAME=value lines
 	@printf 'DYLINT_CLIPPY_REPO=%s\nDYLINT_DRIVER_PATH=%s\n' "$(DYLINT_CLIPPY_REPO)" "$(DYLINT_DRIVER_PATH)"
 
-dylint-smoke: clippy-snapshot ## Build the Dylint driver cold, then reuse it warm, against real lints
+dylint-tools: ## Install the pinned cargo-dylint and dylint-link into DYLINT_TOOLS_DIR
+	@# Reuses a cached install whose version marker matches, so it is cheap to
+	@# call before any step that must not reach github.com.
+	@mkdir -p "$(DYLINT_TOOLS_DIR)/bin"
+	@scripts/install-dylint-tools.sh "$(DYLINT_TOOLS_DIR)" "$(CARGO_DYLINT_VERSION)" "$(DYLINT_LINK_VERSION)" "$(CARGO)" "$(DYLINT_TOOLS_TOOLCHAIN)"
+
+dylint-smoke: clippy-snapshot dylint-tools ## Build the Dylint driver cold, then reuse it warm, against real lints
 	@# Serial and ignored-tests-only: the integration tests run `cargo dylint`
 	@# on fixtures with the real `no_std_fs_operations` library and assert its
 	@# named diagnostics. Running this before `make test` gives the parallel UI
-	@# tests a warm driver.
+	@# tests a warm driver. The cold run empties the driver slot, so any
+	@# DYLINT_DRIVER_PATH but the exact keyed slot is refused: an exported
+	@# shared driver root must survive.
 	@set -eu; \
-	mkdir -p "$(DYLINT_TOOLS_DIR)/bin"; \
 	export PATH="$(DYLINT_TOOLS_DIR)/bin:$$PATH"; \
-	scripts/install-dylint-tools.sh "$(DYLINT_TOOLS_DIR)" "$(CARGO_DYLINT_VERSION)" "$(DYLINT_LINK_VERSION)" "$(CARGO)" "$(DYLINT_TOOLS_TOOLCHAIN)"; \
-	rm -rf -- "$(DYLINT_DRIVER_PATH)"; \
+	keyed="$(call native_path,$(DYLINT_DRIVER_ROOT))/dylint-$(CARGO_DYLINT_VERSION)/clippy-$(CLIPPY_SNAPSHOT_COMMIT)"; \
+	[ "$(DYLINT_DRIVER_PATH)" = "$$keyed" ] || { \
+		echo "refusing to empty DYLINT_DRIVER_PATH=$(DYLINT_DRIVER_PATH); dylint-smoke owns only $$keyed" >&2; \
+		exit 1; \
+	}; \
+	rm -rf -- "$$keyed"; \
 	mkdir -p "$(DYLINT_DRIVER_PATH)"; \
 	smoke() { \
 		RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) test $(CARGO_LOCKED) -p no_std_fs_operations \
@@ -600,7 +611,7 @@ dylint-smoke: clippy-snapshot ## Build the Dylint driver cold, then reuse it war
 	digest() { \
 		driver=$$(find "$(DYLINT_DRIVER_PATH)" -type f -name dylint-driver | head -n 1); \
 		[ -n "$$driver" ] || { echo "no Dylint driver was built under $(DYLINT_DRIVER_PATH)" >&2; exit 1; }; \
-		sha256sum "$$driver"; \
+		{ sha256sum "$$driver" 2>/dev/null || shasum -a 256 "$$driver"; }; \
 	}; \
 	echo "Cold run: empty driver directory $(DYLINT_DRIVER_PATH)"; \
 	smoke; \

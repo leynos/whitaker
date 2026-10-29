@@ -497,6 +497,11 @@ jobs:
         with:
           globs: '**/*.md'
 
+      - name: Install the Dylint host tools
+        # Before the github.com denial below: on a cache miss the pinned
+        # archives download from the trailofbits/dylint GitHub release.
+        run: make dylint-tools
+
       - name: Prove the Dylint driver bootstrap without public Clippy
         # Deny github.com once the snapshot is provisioned, prove the denial
         # with a canary, then build the driver cold and reuse it warm against

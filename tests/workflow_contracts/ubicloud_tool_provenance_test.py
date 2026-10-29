@@ -287,6 +287,9 @@ def test_linux_full_proves_the_driver_bootstrap_with_github_denied() -> None:
     smoke_name = "Prove the Dylint driver bootstrap without public Clippy"
     assert names.index("Provision the Clippy snapshot") < names.index(smoke_name)
     assert names.index(smoke_name) < names.index("Lint")
+    assert names.index("Install the Dylint host tools") < names.index(smoke_name), (
+        "the pinned tools download from github.com, so they must precede the denial"
+    )
     run = str(steps_by_name(job)[smoke_name]["run"])
     assert "0.0.0.0 github.com" in run
     assert "git ls-remote https://github.com/rust-lang/rust-clippy" in run

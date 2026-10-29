@@ -700,12 +700,15 @@ before `Setup Rust`. After it, "Provision the Clippy snapshot" runs
 `coverage-upload` is the snapshot cache's only writer. The Windows lane cannot
 restore a Linux archive, so it bundles and verifies on every run.
 
-`linux-full` then denies `github.com` in `/etc/hosts`, proves the denial with a
-`git ls-remote` canary, and runs `make dylint-smoke` with the lane's sccache
-`RUSTC_WRAPPER` in force. That target empties the keyed driver directory, runs
-the ignored `no_std_fs_operations` `integration_exclusion` tests serially
-(cold), runs them again (warm), and fails unless the driver file is
-byte-identical across the two runs. The tests run real `cargo dylint` against
+`linux-full` then runs `make dylint-tools`, whose pinned archives download from
+GitHub, and only afterwards denies `github.com` in `/etc/hosts`, proves the
+denial with a `git ls-remote` canary, and runs `make dylint-smoke` with the
+lane's sccache `RUSTC_WRAPPER` in force. That target empties the keyed driver
+directory, runs the ignored `no_std_fs_operations` `integration_exclusion`
+tests serially (cold), runs them again (warm), and fails unless the driver file
+is byte-identical across the two runs. It refuses to empty any
+`DYLINT_DRIVER_PATH` other than the exact keyed slot, so an exported shared
+driver root is never deleted. The tests run real `cargo dylint` against
 fixtures and assert named `no_std_fs_operations` diagnostics. A warm driver
 also stops later parallel UI tests from racing to build it.
 
