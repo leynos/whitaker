@@ -60,8 +60,11 @@ original=$(od -An -tu1 -j "${offset}" -N1 "${work}/${asset}" | tr -d ' ')
 [[ -n "${original}" ]] || fail "the published bundle is shorter than ${offset} bytes"
 printf '%b' "\\$(printf '%03o' $((255 - original)))" |
     dd of="${work}/${asset}" bs=1 seek="${offset}" conv=notrunc status=none
-cmp -s "${work}/${asset}" <(curl --fail --location --silent "${base_url}/${asset}") &&
-    fail "the tampered copy still matches the published bundle"
+# Read the byte back locally: `github.com` is already denied, so the published
+# bundle is no longer reachable for comparison.
+tampered=$(od -An -tu1 -j "${offset}" -N1 "${work}/${asset}" | tr -d ' ')
+[[ "${tampered}" -eq $((255 - original)) ]] ||
+    fail "the byte at offset ${offset} was not inverted (${original} -> ${tampered})"
 status=0
 tool install --root "${work}/tampered" --bundle "${work}/${asset}" >"${work}/tampered.log" 2>&1 ||
     status=$?
