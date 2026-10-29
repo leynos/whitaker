@@ -3711,22 +3711,23 @@ thread-scoped subscriber and verify stderr routing in an isolated subprocess.
 
 ### Using installed lints
 
-After installation, set `DYLINT_LIBRARY_PATH` to the staged directory:
+Run the lints through the installed bootstrap, which supplies all three Dylint
+variables for each run and serializes the first driver build:
 
 ```sh
-export DYLINT_LIBRARY_PATH="$HOME/.local/share/dylint/lib/nightly-2025-01-15/release"
-cargo dylint --all
+whitaker --all                      # or: whitaker-installer run -- --all
 ```
 
-For prebuilt installs, use the toolchain-and-target-specific directory:
+Plain `cargo dylint` with only `DYLINT_LIBRARY_PATH` set does not use the
+bootstrap: Dylint would try to clone public Clippy to build its driver. To run
+`cargo dylint` directly, install with `--skip-wrapper` and apply the
+`DYLINT_LIBRARY_PATH`, `DYLINT_CLIPPY_REPO`, and `DYLINT_DRIVER_PATH` exports
+it prints. Nothing serializes the first driver build in that case, so let one
+`cargo dylint` run finish before starting others, and nothing re-verifies the
+snapshot after a rebuild; prefer `whitaker-installer run` where possible.
 
-```sh
-export DYLINT_LIBRARY_PATH="$HOME/.local/share/whitaker/lints/nightly-2025-01-15/x86_64-unknown-linux-gnu/lib"
-cargo dylint --all
-```
-
-Alternatively, configure workspace metadata to use the pre-built libraries
-directly:
+Workspace metadata can still point at the pre-built libraries, but the run
+still needs the bootstrap variables, so invoke it through `whitaker`:
 
 ```toml
 [workspace.metadata.dylint]
@@ -3734,8 +3735,6 @@ libraries = [
   { path = "/home/user/.local/share/whitaker/lints/nightly-2025-01-15/x86_64-unknown-linux-gnu/lib" }
 ]
 ```
-
-This skips building entirely, providing faster lint runs during development.
 
 ### Installer internal architecture
 
@@ -3913,29 +3912,42 @@ and their bounded labels. They follow the
 through the active recorder when recording, never install a recorder, and never
 put paths, commits, toolchains, or error text in a label.
 
-| Metric                                                              | Kind      | Labels                                                                                        |
-| ------------------------------------------------------------------- | --------- | --------------------------------------------------------------------------------------------- |
-| `whitaker_installer.bootstrap.run.total`                            | counter   | `driver`: `unresolved`, `warm`, `warm_after_wait`, `cold`; `outcome`: `ok` or a failure label |
-| `whitaker_installer.bootstrap.run.duration_seconds`                 | histogram | `driver`                                                                                      |
-| `whitaker_installer.bootstrap.lock_wait.duration_seconds`           | histogram | `mode`: `shared`, `exclusive`                                                                 |
-| `whitaker_installer.bootstrap.lock_failure.total`                   | counter   | `mode`                                                                                        |
-| `whitaker_installer.bootstrap.driver_build.duration_seconds`        | histogram | `outcome`                                                                                     |
-| `whitaker_installer.bootstrap.driver_build.total`                   | counter   | `outcome`: `built`, `not_built`, `unrecorded`, `verify_failed`, `spawn_failed`                |
-| `whitaker_installer.clippy_snapshot.provision.total`                | counter   | `source`: `existing`, `release`, `local`; `outcome`: `ok`, `failed`                           |
-| `whitaker_installer.clippy_snapshot.operation.total`                | counter   | `operation`: `reuse`, `download`, `install`; `outcome`: `ok` or a failure label               |
-| `whitaker_installer.clippy_snapshot.operation.duration_seconds`     | histogram | `operation`, `outcome`                                                                        |
-| `whitaker_installer.clippy_snapshot.clone_attempt.total`            | counter   | `outcome`: `ok`, `retry`, `exhausted`                                                         |
-| `whitaker_installer.clippy_snapshot.clone_attempt.duration_seconds` | histogram | `outcome`                                                                                     |
+| Metric                                                              | Kind      | Labels                                                                                                          |
+| ------------------------------------------------------------------- | --------- | --------------------------------------------------------------------------------------------------------------- |
+| `whitaker_installer.bootstrap.run.total`                            | counter   | `driver`: `unresolved`, `warm`, `warm_after_wait`, `cold`; `outcome`: `ok`, `child_nonzero`, or a failure label |
+| `whitaker_installer.bootstrap.run.duration_seconds`                 | histogram | `driver`                                                                                                        |
+| `whitaker_installer.bootstrap.lock_wait.duration_seconds`           | histogram | `mode`: `shared`, `exclusive`                                                                                   |
+| `whitaker_installer.bootstrap.lock_failure.total`                   | counter   | `mode`                                                                                                          |
+| `whitaker_installer.bootstrap.driver_build.duration_seconds`        | histogram | `outcome`                                                                                                       |
+| `whitaker_installer.bootstrap.driver_build.total`                   | counter   | `outcome`: `built`, `not_built`, `unrecorded`, `verify_failed`, `spawn_failed`                                  |
+| `whitaker_installer.clippy_snapshot.provision.total`                | counter   | `source`: `existing`, `release`, `local`; `outcome`: `ok`, `failed`                                             |
+| `whitaker_installer.clippy_snapshot.operation.total`                | counter   | `operation`: `reuse`, `download`, `install`; `outcome`: `ok` or a failure label                                 |
+| `whitaker_installer.clippy_snapshot.operation.duration_seconds`     | histogram | `operation`, `outcome`                                                                                          |
+| `whitaker_installer.clippy_snapshot.clone_attempt.total`            | counter   | `outcome`: `ok`, `retry`, `exhausted`                                                                           |
+| `whitaker_installer.clippy_snapshot.clone_attempt.duration_seconds` | histogram | `outcome`                                                                                                       |
 
 *Table: Installer bootstrap and snapshot metrics.*
 
-A failure label is one of a fixed set derived from the error variant
+`ok` and `child_nonzero` both mean the bootstrap worked; `child_nonzero`
+records a `cargo dylint` that exited non-zero, usually because lints fired. A
+failure label is one of a fixed set derived from the error variant
 (`bootstrap::telemetry::failure_label` and
 `clippy_snapshot::telemetry::failure_label`), such as `snapshot_invalid`,
 `spawn_failed`, `checksum_mismatch`, or `io`. A run that fails before it can
 tell whether the driver is ready is recorded with `driver="unresolved"`. A long
 `exclusive` lock wait is the signature of contended cold construction, and
 `warm_after_wait` counts runs that waited out another process's build.
+
+Spans bound each boundary: `bootstrap.run`, `bootstrap.cargo_dylint_version`,
+`bootstrap.child`, `clippy_snapshot.provision`, `clippy_snapshot.verify`, and
+`clippy_snapshot.git` (with its `operation`). Their fields are commits,
+expected versions, and operation names, never paths or arguments.
+
+The installer CLI installs no metrics recorder. It runs on developer machines
+and CI runners, where exporting telemetry nobody asked for would be unwelcome.
+The counters are for embedders and tests through the `metrics` facade, as in
+`whitaker_clones_core`, while the CLI's own diagnostics are the `tracing`
+events and spans, shown with `--verbose`.
 
 Structured `tracing` events mark the cold path, each finished or failed run and
 snapshot operation, and each failed clone attempt, with the same bounded

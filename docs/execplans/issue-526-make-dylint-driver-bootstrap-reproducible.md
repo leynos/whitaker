@@ -25,7 +25,11 @@ public network: the Dylint driver version, the Clippy history Dylint's
 selection algorithm reads, and the driver cache identity. After this change,
 the Clippy history is a committed, checksummed Git bundle published with each
 release, the driver is built on first use inside an identity-keyed directory,
-and public Clippy access is never needed or used.
+and the installed, CI, and driver-build paths never read public Clippy. Only
+the producer's snapshot-build step (`make clippy-snapshot-bundle`) reads
+upstream Clippy, or a local mirror of it, to create the bundle a release
+publishes. Release publication and post-publication verification on fresh
+runners remain pending until the next release (tracked in #530).
 
 ## Constraints
 
@@ -321,10 +325,12 @@ provisioning must export an absolute, already-populated clone path before any
 ## Outcomes & retrospective
 
 Whitaker now owns the Dylint bootstrap end to end. Dylint 6.3.0 builds its
-driver from a verified, commit-named Clippy bundle; no producer, CI, or
-consumer path reads public Clippy, and every failure says so. The driver is
-built on first use in an identity-keyed directory, with cold construction
-serialized by `whitaker-installer run`.
+driver from a verified, commit-named Clippy bundle; no installed, CI, or
+driver-build path reads public Clippy, and every failure says so. Only the
+producer's snapshot-build step reads upstream Clippy, or a local mirror, to
+create the bundle a release publishes. The driver is built on first use in an
+identity-keyed directory, with cold construction serialized by
+`whitaker-installer run`.
 
 Verified: local gates; hosted CI on Linux and Windows, including a
 GitHub-denied cold/warm smoke on a hosted runner; and an end-to-end
