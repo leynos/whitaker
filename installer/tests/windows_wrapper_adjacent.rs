@@ -47,14 +47,20 @@ impl BaseDirs for TempBaseDirs {
     }
 }
 
-/// Run `script` under PowerShell with `PATH` of `stub_dir` plus the system
-/// directories that hold `powershell.exe` and `cmd.exe`.
+/// Run `script` under PowerShell with `stub_dir` first on `PATH`.
+///
+/// The test's own `PATH` follows the stub directory. Windows resolves a
+/// program's DLLs through `PATH`, and the copied stand-in needs the ones Cargo
+/// put there for this test process: without them it dies with
+/// `STATUS_DLL_NOT_FOUND` before reading its arguments. That cannot weaken the
+/// test, because the stub precedes every inherited entry and the adjacent
+/// executable precedes `PATH` altogether.
 fn run_powershell(script: &Path, args: &[&str], stub_dir: &Path) -> Output {
-    let system_root = std::env::var_os("SystemRoot").expect("SystemRoot is set on Windows");
-    let system32 = Path::new(&system_root).join("System32");
-    let powershell_dir = system32.join("WindowsPowerShell").join("v1.0");
-    let path = std::env::join_paths([stub_dir.to_path_buf(), system32, powershell_dir])
-        .expect("join PATH entries");
+    let inherited = std::env::var_os("PATH").unwrap_or_default();
+    let path = std::env::join_paths(
+        std::iter::once(stub_dir.to_path_buf()).chain(std::env::split_paths(&inherited)),
+    )
+    .expect("join PATH entries");
     Command::new("powershell.exe")
         .args([
             "-NoProfile",
