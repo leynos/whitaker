@@ -11,6 +11,7 @@
 //!   expansion
 //! - [`builder`] - Cargo build orchestration for lint crates
 //! - [`cli`] - Command-line argument definitions
+//! - [`clippy_snapshot`] - Verified Clippy history for Dylint driver builds
 //! - [`crate_name`] - Semantic wrapper for lint crate names
 //! - [`deps`] - Dylint tool dependency management
 //! - [`dirs`] - Directory resolution abstraction for platform-specific paths
@@ -39,6 +40,7 @@ pub mod artefact;
 pub mod binstall_metadata;
 pub mod builder;
 pub mod cli;
+pub mod clippy_snapshot;
 pub mod crate_name;
 
 pub mod dependency_binaries;

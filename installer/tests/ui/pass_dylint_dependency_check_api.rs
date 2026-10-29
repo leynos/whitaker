@@ -35,6 +35,7 @@ fn error_kind(error: &InstallerError) -> &'static str {
         InstallerError::DependencyInstall { .. } => "dependency install",
         InstallerError::DependencyCheck { .. } => "dependency check",
         InstallerError::WrapperGeneration(_) => "wrapper",
+        InstallerError::ClippySnapshot(_) => "Clippy snapshot",
         InstallerError::ScanFailed { .. } => "scan",
         InstallerError::WriteFailed { .. } => "write",
     }

@@ -3518,6 +3518,7 @@ dependencies = [
  "cap-std",
  "clap",
  "directories-next",
+ "dylint_internal",
  "flate2",
  "fs2",
  "libc",

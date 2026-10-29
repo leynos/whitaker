@@ -26,6 +26,7 @@ fn legacy_error_kind(error: &InstallerError) -> &'static str {
         InstallerError::Git { .. } => "Git",
         InstallerError::DependencyInstall { .. } => "dependency install",
         InstallerError::WrapperGeneration(_) => "wrapper",
+        InstallerError::ClippySnapshot(_) => "Clippy snapshot",
         InstallerError::ScanFailed { .. } => "scan",
         InstallerError::WriteFailed { .. } => "write",
     }

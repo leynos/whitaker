@@ -67,7 +67,12 @@ and public Clippy access is never needed or used.
   crate shows only the wrapper-parsing patch and one scoped Clippy allow.
 - [x] (2026-10-29) Fixed the UI-harness library clobber introduced by 6.3.0
   and the rebased call-site regression in the wrapper patch (see Surprises).
-- [ ] Clippy snapshot module, manifest and `whitaker-clippy-snapshot` binary.
+- [x] (2026-10-29) Clippy snapshot module, manifest and
+  `whitaker-clippy-snapshot` binary. The real bundle (81 MB, SHA-256
+  `8b7e4716285185e9c799e48fe8f05096b73d31f0467806f0b8290476f408810c`) builds
+  from a local mirror, self-verifies, installs in about 21 s, and both Dylint's
+  own `Revs::channel_iter` and Whitaker's reproduction select `9fca3bc9` from
+  it.
 - [ ] Producer provisioning in the Makefile and CI, replacing the mirror.
 - [ ] Installed bootstrap: `run` subcommand, locks, thin wrappers.
 - [ ] Release publication and post-publication checks.
@@ -98,6 +103,13 @@ and public Clippy access is never needed or used.
 - 2026-10-29: `git bundle verify` needs a repository even for a bundle without
   prerequisites, and `-c protocol.allow=never -c protocol.file.allow=always`
   blocks network transports while still permitting bundle and local clones.
+- 2026-10-29: Clippy's early commits use a plain-text `rust-toolchain`
+  file that Dylint's TOML parser cannot read. Dylint's walk never reaches them,
+  but an eager reader does, so the reproduction stops at the first unreadable
+  toolchain file exactly as Dylint's walk would fail there.
+- 2026-10-29: Two builds of the bundle from the same mirror produced the same
+  digest. That is not guaranteed across Git versions or source packs, so the
+  installer still anchors trust in the commit object ID.
 - 2026-10-29: `git fsck --full` of the full Clippy history takes about 11 s,
   so it belongs on installation and cold driver construction, not on every warm
   run.

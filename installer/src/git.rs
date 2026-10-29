@@ -10,6 +10,7 @@ mod command;
 #[path = "git/commit_sha.rs"]
 mod commit_sha;
 
+pub(crate) use command::{GitInvocation, run_git};
 pub use commit_sha::CommitSha;
 
 use crate::artefact::suite_ref::SuiteRef;

@@ -17,16 +17,61 @@ struct OutputReaders {
     stderr: OutputReaderThread,
 }
 
+/// One bounded Git invocation.
+///
+/// The repository adapter uses the default timeout and the ambient
+/// environment; the Clippy snapshot boundary adds transport restrictions,
+/// `GIT_TERMINAL_PROMPT=0`, and its own bounds.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct GitInvocation<'a> {
+    /// Arguments after `git`.
+    pub(crate) args: &'a [&'a str],
+    /// The directory to run in, if not the current one.
+    pub(crate) working_dir: Option<&'a Utf8Path>,
+    /// The operation name used in logs and errors.
+    pub(crate) operation: &'static str,
+    /// How long the command may run before it is killed.
+    pub(crate) timeout: Duration,
+    /// Extra environment entries for the child.
+    pub(crate) envs: &'a [(&'a str, &'a str)],
+}
+
 /// Run one Git operation and retain its output for the repository adapter.
 pub(super) fn run_git_with_timeout(
     args: &[&str],
     working_dir: Option<&Utf8Path>,
     operation: &'static str,
 ) -> Result<Output> {
+    run_git(&GitInvocation {
+        args,
+        working_dir,
+        operation,
+        timeout: GIT_TIMEOUT,
+        envs: &[],
+    })
+}
+
+/// Run one bounded Git invocation and retain its output.
+///
+/// # Errors
+///
+/// Returns `InstallerError::Io` when Git cannot be started and
+/// `InstallerError::Git` when it times out or its output cannot be read.
+pub(crate) fn run_git(invocation: &GitInvocation<'_>) -> Result<Output> {
+    let GitInvocation {
+        args,
+        working_dir,
+        operation,
+        timeout,
+        envs,
+    } = *invocation;
     let started = Instant::now();
     debug!(operation, outcome = "started", "running Git operation");
     let mut cmd = Command::new("git");
-    cmd.args(args).stdout(Stdio::piped()).stderr(Stdio::piped());
+    cmd.args(args)
+        .envs(envs.iter().copied())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
 
     if let Some(dir) = working_dir {
         cmd.current_dir(dir.as_std_path());
@@ -35,7 +80,7 @@ pub(super) fn run_git_with_timeout(
     let mut child = cmd.spawn()?;
     let readers = spawn_output_readers(&mut child);
 
-    match child.wait_timeout(GIT_TIMEOUT)? {
+    match child.wait_timeout(timeout)? {
         Some(status) => collect_completed_output(status, readers, operation, started),
         None => {
             let _ = child.kill();
@@ -50,10 +95,7 @@ pub(super) fn run_git_with_timeout(
             );
             Err(InstallerError::Git {
                 operation,
-                message: format!(
-                    "operation timed out after {} seconds",
-                    GIT_TIMEOUT.as_secs()
-                ),
+                message: format!("operation timed out after {} seconds", timeout.as_secs()),
             })
         }
     }
