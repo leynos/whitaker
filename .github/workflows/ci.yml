@@ -497,6 +497,15 @@ jobs:
         with:
           globs: '**/*.md'
 
+      - name: Lint
+        run: make lint
+
+      - name: Workflow contract tests
+        run: make test-workflow-contracts
+
+      - name: Publish dry run
+        run: make publish-check PUBLISH_PACKAGES="whitaker-common whitaker-installer"
+
       - name: Install the Dylint host tools
         # Before the github.com denial below: on a cache miss the pinned
         # archives download from the trailofbits/dylint GitHub release.
@@ -507,25 +516,23 @@ jobs:
         # with a canary, then build the driver cold and reuse it warm against
         # the real `no_std_fs_operations` library. `setup-rust` has set
         # `RUSTC_WRAPPER` to sccache, so the compiler-wrapper path is covered.
+        # This is the job's last validation step: the resolver can keep the
+        # denial after the hosts entry is removed, and the steps above
+        # (`make lint` fetches skills-ref from GitHub) must not see it.
         run: |
           set -euo pipefail
           echo "0.0.0.0 github.com" | sudo tee -a /etc/hosts >/dev/null
-          trap 'sudo sed -i "/^0.0.0.0 github.com$/d" /etc/hosts' EXIT
+          restore() {
+            sudo sed -i "/^0.0.0.0 github.com$/d" /etc/hosts
+            sudo resolvectl flush-caches 2>/dev/null || true
+          }
+          trap restore EXIT
           if git ls-remote https://github.com/rust-lang/rust-clippy HEAD >/dev/null 2>&1; then
             echo "::error::the github.com canary still succeeds" >&2
             exit 1
           fi
           test -n "${RUSTC_WRAPPER:-}" || { echo "::error::RUSTC_WRAPPER is not set" >&2; exit 1; }
           make dylint-smoke
-
-      - name: Lint
-        run: make lint
-
-      - name: Workflow contract tests
-        run: make test-workflow-contracts
-
-      - name: Publish dry run
-        run: make publish-check PUBLISH_PACKAGES="whitaker-common whitaker-installer"
 
       - name: Discard the build target tree
         # The last consumer of `target` has run. No job caches a target tree,

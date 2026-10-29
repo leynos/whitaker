@@ -281,12 +281,19 @@ def test_windows_lane_provisions_the_snapshot_without_a_cache() -> None:
 
 
 def test_linux_full_proves_the_driver_bootstrap_with_github_denied() -> None:
-    """The smoke step denies github.com, checks a canary, and runs cold+warm."""
+    """The smoke step denies github.com, checks a canary, and runs cold+warm.
+
+    It runs after every other validation step, because the runner's resolver
+    can keep the denial after the hosts entry is removed (PR #528's second
+    run lost `make lint` that way).
+    """
     job = load_job("linux-full")
     names = step_names(job)
     smoke_name = "Prove the Dylint driver bootstrap without public Clippy"
     assert names.index("Provision the Clippy snapshot") < names.index(smoke_name)
-    assert names.index(smoke_name) < names.index("Lint")
+    # Last validation step: nothing after the github.com denial may need GitHub.
+    assert names.index("Publish dry run") < names.index(smoke_name)
+    assert names.index(smoke_name) < names.index("Discard the build target tree")
     assert names.index("Install the Dylint host tools") < names.index(smoke_name), (
         "the pinned tools download from github.com, so they must precede the denial"
     )
