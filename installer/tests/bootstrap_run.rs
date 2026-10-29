@@ -7,7 +7,7 @@
 
 mod bootstrap_support;
 
-use bootstrap_support::{Installation, git};
+use bootstrap_support::{Installation, TOOLCHAIN, git};
 use std::process::Stdio;
 use whitaker_installer::bootstrap::BUILT_DRIVER_NOTICE;
 
@@ -144,7 +144,7 @@ fn a_cold_run_rebuilds_an_unmarked_driver() {
     let slot = installation
         .layout()
         .driver_dir("6.3.0", &installation.commit);
-    std::fs::remove_file(slot.join(".nightly-2026-05-28.ready")).expect("forget readiness");
+    std::fs::remove_file(slot.join(format!(".{TOOLCHAIN}.ready"))).expect("forget readiness");
 
     let second = installation.run(&["--all"]);
 
@@ -163,7 +163,7 @@ fn replace_driver_mid_verification(installation: &Installation) {
     let toolchain_dir = installation
         .layout()
         .driver_dir("6.3.0", &installation.commit)
-        .join("nightly-2026-05-28");
+        .join(TOOLCHAIN);
     let partial = toolchain_dir.join("dylint-driver.partial");
     std::fs::write(&partial, "#!/bin/sh\n").expect("write the replacement");
     std::fs::rename(&partial, toolchain_dir.join("dylint-driver")).expect("persist it");
