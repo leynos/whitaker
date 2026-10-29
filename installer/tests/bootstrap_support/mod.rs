@@ -42,6 +42,12 @@ if [[ "${STUB_REPLACE_DRIVER:-}" == 1 && -s "${driver_dir}/dylint-driver" ]]; th
     mv "${driver_dir}/dylint-driver.partial" "${driver_dir}/dylint-driver"
 fi
 if [[ ! -s "${driver_dir}/dylint-driver" ]]; then
+    # STUB_FAIL_BUILD fails the build without leaving a driver. Failed
+    # attempts are logged apart so `builds` counts only completed builds.
+    if [[ "${STUB_FAIL_BUILD:-}" == 1 ]]; then
+        echo failed >>"${STUB_LOG}.failed"
+        exit 1
+    fi
     echo build >>"${STUB_LOG}.builds"
     sleep 1
     mkdir -p "${driver_dir}"

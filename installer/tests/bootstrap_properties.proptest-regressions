@@ -1,0 +1,8 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 6d83a961ac33901304d99ac6c33a9f1a28202a03f2a29a77089a81432c30441c # shrinks to rounds = [Round { perturbation: None, processes: 1, fails_build: false, lint_status: 0 }]
+cc f40cf2fe20184b36d034c4ff4189c3b08e9d567504274db67664d81a87025142 # shrinks to rounds = [Round { perturbation: None, processes: 1, fails_build: false, lint_status: 0 }, Round { perturbation: Relocate, processes: 1, fails_build: false, lint_status: 0 }]
