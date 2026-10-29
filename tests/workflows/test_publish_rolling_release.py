@@ -382,3 +382,57 @@ def test_a_rebuilt_archive_never_disagrees_with_its_checksum(
         "the order must be withdraw the checksum, replace the archive, then "
         f"publish the new checksum; got {run.commands}"
     )
+
+
+SNAPSHOT: str = "whitaker-clippy-snapshot-e4608a25c2e20116fbc1e97a51a73f094a1db7a1.bundle"
+
+
+def test_a_published_clippy_snapshot_is_never_replaced(
+    publish: typ.Callable[..., PublishRun],
+) -> None:
+    """A rebuilt snapshot under a published name leaves the original alone.
+
+    Bundles are content-identical under one name but not byte-identical, so
+    replacing one would change its digest under an installer mid-download.
+    """
+    run = publish(
+        local_assets=[
+            "whitaker-lints-0123456-linux.tar.zst",
+            "manifest-linux.json",
+            SNAPSHOT,
+            f"{SNAPSHOT}.sha256",
+        ],
+        published=["manifest-linux.json", SNAPSHOT, f"{SNAPSHOT}.sha256"],
+    )
+
+    assert run.returncode == 0, run.stdout
+    assert not run.matching(SNAPSHOT), "no command may touch a published snapshot"
+
+
+def test_a_new_clippy_snapshot_uploads_without_clobbering(
+    publish: typ.Callable[..., PublishRun],
+) -> None:
+    """A snapshot for a new pin is an ordinary new asset."""
+    run = publish(
+        local_assets=["manifest-linux.json", SNAPSHOT, f"{SNAPSHOT}.sha256"],
+        published=["manifest-linux.json"],
+    )
+
+    assert run.returncode == 0, run.stdout
+    uploads = run.matching("release upload", SNAPSHOT)
+    assert uploads, "the new snapshot must be uploaded"
+    assert not any("--clobber" in command for command in uploads)
+
+
+def test_snapshots_for_older_pins_are_retained(
+    publish: typ.Callable[..., PublishRun],
+) -> None:
+    """Installers built before a re-pin still download their own snapshot."""
+    older = "whitaker-clippy-snapshot-0000000000000000000000000000000000000001.bundle"
+    run = publish(
+        local_assets=["manifest-linux.json", SNAPSHOT, f"{SNAPSHOT}.sha256"],
+        published=["manifest-linux.json", older, f"{older}.sha256"],
+    )
+
+    assert run.returncode == 0, run.stdout
+    assert not run.matching("delete-asset", older), "an older snapshot must stay"

@@ -86,7 +86,10 @@ and public Clippy access is never needed or used.
   warm run reused it, of two simultaneous cold runs one built while the other
   waited and reused it, a relocated data root still linted, and a deleted
   snapshot failed with the no-fallback message.
-- [ ] Release publication and post-publication checks.
+- [x] (2026-10-29) Release publication and post-publication checks, written
+  and contract-tested. Shellcheck and actionlint pass; the rolling-publish
+  tests pass once Lody's `BASH_ENV` (which defines its own `gh`) is unset. They
+  cannot run for real until a release exists.
 - [ ] Documentation, ADR, and the draft pull request.
 
 ## Surprises & discoveries
@@ -132,6 +135,9 @@ and public Clippy access is never needed or used.
   fixture manifest (`WHITAKER_INSTALLER_TEST_CLIPPY_SNAPSHOT_MANIFEST`), the
   shared `SnapshotFixture` supplies a small real bundle, and the affected test
   isolates `XDG_DATA_HOME`.
+- 2026-10-29: Lody sets `BASH_ENV` to a script that defines `gh`, so bash
+  test stubs for `gh` are bypassed and `tests/workflows` reports spurious
+  failures here. Run those tests with `env -u BASH_ENV`.
 - 2026-10-29: Clippy's early commits use a plain-text `rust-toolchain`
   file that Dylint's TOML parser cannot read. Dylint's walk never reaches them,
   but an eager reader does, so the reproduction stops at the first unreadable

@@ -142,6 +142,44 @@ cargo publish -p whitaker-common
 cargo publish -p whitaker-installer
 ```
 
+## Clippy snapshot assets
+
+Every installer embeds `installer/clippy-snapshot.toml` and, at install time,
+downloads the Clippy history it pins from the `rolling` release. The release
+workflows publish it alongside the other assets:
+
+- **Naming.** `whitaker-clippy-snapshot-<commit>.bundle` and a
+  `whitaker-clippy-snapshot-<commit>.bundle.sha256` sidecar in `sha256sum`
+  format. The commit is the pinned Clippy `main` commit.
+- **One build per run, at most.** Each workflow's `clippy-snapshot` job checks
+  the target release first and builds with `make clippy-snapshot-bundle` only
+  when the bundle or its sidecar is missing. The build installs the bundle
+  through the consumer's verifier before uploading it.
+- **Publication order.** The bundle is uploaded with the other new assets,
+  before the rolling manifests are replaced, so no manifest is published
+  without the snapshot its installers need. `publish` refuses to run when the
+  pinned bundle was neither built nor already published.
+- **Retention.** A published snapshot is never replaced: bundles are
+  content-identical under one name but not byte-identical, and replacing one
+  would change the digest under an installer mid-download. Snapshots for older
+  pins are never deleted, because installers built before a re-pin still
+  download them.
+- **Post-publication checks.** `verify-published-bootstrap`, in both
+  workflows, installs the published suite, Dylint tools, and snapshot on a
+  fresh runner with `--no-source-fallback`. It then runs
+  `scripts/verify-published-snapshot.sh` (the published sidecar matches, the
+  generation verifies, and a tampered copy is refused with `github.com` denied)
+  and `scripts/verify-installed-bootstrap.sh`, which covers these cases:
+  - a cold run that must emit `no_std_fs_operations`;
+  - a warm run that must reuse the driver byte for byte;
+  - two simultaneous cold runs;
+  - a relocated data root;
+  - a deleted snapshot that must fail clearly.
+
+  In `release.yml`, `verify-binstall` repeats the installed-bootstrap check
+  with the released installer on Linux, macOS, and Windows, using the
+  PowerShell wrapper on Windows.
+
 ## After publishing
 
 - Confirm the new releases appear on crates.io for the

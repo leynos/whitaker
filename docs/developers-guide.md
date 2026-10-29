@@ -2203,7 +2203,7 @@ compatibility checks above keep validating it on that release.
 This section names the pinned channel on purpose. The rule treats an exception
 as current only while it names the channel in `rust-toolchain.toml`, so every
 toolchain bump must update the channel written here as part of the runbook
-(step 6 below). A stale exception stops exempting anything.
+(step 7 below). A stale exception stops exempting anything.
 
 ### Rust toolchain bump runbook
 
@@ -2214,18 +2214,41 @@ toolchain bump must update the channel written here as part of the runbook
    feature changes. Fix `clippy_utils`, lint-crate, and `rustc_private` API
    drift in the production code rather than suppressing warnings.
 4. Confirm `cargo-dylint` and `dylint-link` can drive the pinned nightly. If
-   no compatible Dylint release exists, stop and record the blocker.
-5. Run the UI tests and re-baseline `.stderr` fixtures only after reviewing the
+   no compatible Dylint release exists, stop and record the blocker. Prove it
+   with a cold probe, not `--version`: an empty `DYLINT_DRIVER_PATH`, the real
+   lint libraries, a deliberate violation that must emit its named diagnostic,
+   and public Clippy denied, repeated warm and with `RUSTC_WRAPPER` set.
+5. Re-pin the Clippy snapshot in `installer/clippy-snapshot.toml`:
+   - set `toolchain` to the new channel and, when Clippy has moved on, `commit`
+     to a newer `main` commit;
+   - choose a nightly that Clippy itself pinned (`rust-toolchain.toml` on
+     Clippy `main` names it), because verification requires the selected
+     revision to name exactly the pinned channel;
+   - set `selected_revision` to the first commit on `main`'s first-parent
+     history that introduced that channel, and `dylint_version` to the pinned
+     Dylint release;
+   - run `make clippy-snapshot-bundle`, which installs the bundle through the
+     consumer's verifier and fails if the recorded selection is wrong, then
+     run the ignored companion test against the result with
+     `WHITAKER_CLIPPY_SNAPSHOT_REPO=<generation> cargo nextest run -p
+     whitaker-installer --lib --run-ignored ignored-only -E
+     'test(the_published_snapshot_selects_the_recorded_revision)'`, which
+     checks Dylint's own walk as well as Whitaker's;
+   - run `make dylint-smoke` against the new generation.
+
+   The rolling release publishes the new bundle on the next push to `main`.
+   Older snapshot assets stay published for installers that pin them.
+6. Run the UI tests and re-baseline `.stderr` fixtures only after reviewing the
    diagnostic drift. Treat changed spans, wording, and suggestions as evidence
    to review, not as an automatic blessing.
-6. Update load-bearing toolchain references, including installer package
+7. Update load-bearing toolchain references, including installer package
    scripts, release workflow strings, ADR-001 notes, and any design or roadmap
    text that names the old channel, and the channel named in the "Toolchain
    policy exception" section above.
-7. Run the normal gates in order: `make check-fmt`, `make lint`, `make test`,
+8. Run the normal gates in order: `make check-fmt`, `make lint`, `make test`,
    and `make markdownlint`. Run relevant proof targets if the bump touches
    clone-detector or decomposition proof surfaces.
-8. Keep `CARGO_LOCKED` empty by default. Makefile Cargo recipes pass the value
+9. Keep `CARGO_LOCKED` empty by default. Makefile Cargo recipes pass the value
    through unchanged so callers can opt into `--locked` explicitly when they
    need Cargo to enforce the lockfile for a build, lint, package, or test
    command.
@@ -3493,10 +3516,18 @@ for the ordinary all-features test run. `make test` therefore excludes it from
 Nextest and runs its command-decoding unit tests separately with default
 features disabled. The decoder parses Cargo's quoted command line and selects
 the compiler arguments after any wrapper chain; do not clear the configured
-wrappers. On Windows the guard also sets `VCPKG_ROOT` to `C:\vcpkg` when that
-directory exists and the variable is otherwise absent. Restoration uses the
-same shared environment mutex, but the runner callback itself executes without
-holding that mutex to avoid nested-lock deadlocks.
+wrappers. The helper `rustc_invocation` applies the `Running` regex itself, so
+its call site must pass Cargo's whole line, never the regex's capture; the
+6.3.0 rebase broke every example UI test exactly that way, and a regression
+case now pins the contract. The guard also sets
+`DYLINT_LINK_ENABLE_COPY_LIBRARY=1` when it is absent: since Dylint 6.3.0,
+`dylint_testing` otherwise copies its own default-feature rebuild of
+`lib<crate>.so`, an empty `cdylib` for every Whitaker lint crate, over the
+toolchain-qualified library the harness built with `dylint-driver`. On Windows
+the guard also sets `VCPKG_ROOT` to `C:\vcpkg` when that directory exists and
+the variable is otherwise absent. Restoration uses the same shared environment
+mutex, but the runner callback itself executes without holding that mutex to
+avoid nested-lock deadlocks.
 
 Any UI test that holds `env_test_guard()` while invoking Dylint must use
 `run_test_runner_with_env_guard()`. It catches a runner panic before releasing

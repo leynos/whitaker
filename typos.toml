@@ -75,6 +75,7 @@ extend-ignore-re = [
     "(?m)^    let _ = normalise_settings\\(Default::default\\(\\)\\);$",
     "(?m)^    let _ = rasterise_signal\\(1\\.\\.=1, &\\[\\]\\);$",
     "(?m)^    pub fn categorise\\(input: i32\\) \\-> &'static str \\{$",
+    "(?m)^    return Start\\-Process \\-FilePath 'pwsh' \\-NoNewWindow \\-PassThru `$",
     "(?m)^    types: \\[opened, reopened, synchronize, labeled, ready_for_review\\]$",
     "(?m)^   = help: Cuir seachad `cap_std::fs::Dir` agus paramadairean `camino::Utf8Path`/`Utf8PathBuf` tron API seach std::fs a ghairm gu dìreach\\.$",
     "(?m)^   = note: The call originates within function `helper` which is not recognised as a test\\.$",
