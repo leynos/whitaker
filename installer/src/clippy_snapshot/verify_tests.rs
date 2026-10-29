@@ -149,3 +149,18 @@ fn verification_that_reaches_git_records_no_metrics(
     let recorded = snapshotter.snapshot().into_vec();
     assert!(recorded.is_empty(), "a query recorded {recorded:#?}");
 }
+
+/// Regression: snapshot Git commands inherited `GIT_DIR` and friends, so an
+/// ambient `GIT_DIR` made verification inspect another repository entirely.
+#[test]
+fn an_inherited_git_dir_cannot_redirect_verification() {
+    let (repo, bare, manifest) = damaged(Damage::None);
+    let elsewhere = repo.work.join(".git");
+    let _guard = whitaker_common::test_support::env_test_guard();
+
+    let result = temp_env::with_var("GIT_DIR", Some(elsewhere.as_str()), || {
+        verify_repository(&bare, &manifest)
+    });
+
+    result.expect("verification reads the snapshot, not the inherited GIT_DIR");
+}

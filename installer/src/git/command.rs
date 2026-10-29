@@ -34,6 +34,8 @@ pub(crate) struct GitInvocation<'a> {
     pub(crate) timeout: Duration,
     /// Extra environment entries for the child.
     pub(crate) envs: &'a [(&'a str, &'a str)],
+    /// Inherited variables to remove from the child's environment first.
+    pub(crate) env_remove: &'a [&'a str],
 }
 
 /// Run one Git operation and retain its output for the repository adapter.
@@ -48,6 +50,7 @@ pub(super) fn run_git_with_timeout(
         operation,
         timeout: GIT_TIMEOUT,
         envs: &[],
+        env_remove: &[],
     })
 }
 
@@ -64,10 +67,14 @@ pub(crate) fn run_git(invocation: &GitInvocation<'_>) -> Result<Output> {
         operation,
         timeout,
         envs,
+        env_remove,
     } = *invocation;
     let started = Instant::now();
     debug!(operation, outcome = "started", "running Git operation");
     let mut cmd = Command::new("git");
+    for name in env_remove {
+        cmd.env_remove(name);
+    }
     cmd.args(args)
         .envs(envs.iter().copied())
         .stdout(Stdio::piped())
