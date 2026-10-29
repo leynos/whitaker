@@ -109,7 +109,7 @@ impl Test {
                 let current_dir = current_dir().unwrap();
                 let package =
                     dylint_internal::cargo::package_with_root(&metadata, &current_dir).unwrap();
-                let targets = example_targets(&package).unwrap();
+                let targets = example_targets(&package);
 
                 for target in targets {
                     run_example_test(&ExampleTestContext {

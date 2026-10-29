@@ -53,7 +53,15 @@ if git ls-remote https://github.com/rust-lang/rust-clippy HEAD >/dev/null 2>&1; 
     fail "the github.com canary still succeeds; the denial did not take effect"
 fi
 
-printf '\x00' | dd of="${work}/${asset}" bs=1 seek=4096 conv=notrunc status=none
+# Invert one byte rather than overwrite it with a constant, which could leave
+# the file unchanged when the bundle already holds that value there.
+offset=4096
+original=$(od -An -tu1 -j "${offset}" -N1 "${work}/${asset}" | tr -d ' ')
+[[ -n "${original}" ]] || fail "the published bundle is shorter than ${offset} bytes"
+printf '%b' "\\$(printf '%03o' $((255 - original)))" |
+    dd of="${work}/${asset}" bs=1 seek="${offset}" conv=notrunc status=none
+cmp -s "${work}/${asset}" <(curl --fail --location --silent "${base_url}/${asset}") &&
+    fail "the tampered copy still matches the published bundle"
 status=0
 tool install --root "${work}/tampered" --bundle "${work}/${asset}" >"${work}/tampered.log" 2>&1 ||
     status=$?

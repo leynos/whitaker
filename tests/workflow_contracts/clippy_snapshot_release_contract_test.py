@@ -145,3 +145,27 @@ def test_the_wrapper_directory_reaches_path_natively(workflow: str, job: str) ->
     """Windows needs a native path in GITHUB_PATH for PowerShell to resolve it."""
     run = str(_step(_jobs(workflow)[job], "Put the wrapper directory on PATH")["run"])
     assert 'cygpath -w "$HOME/.local/bin"' in run
+
+
+@pytest.mark.parametrize(
+    ("workflow", "job"),
+    [
+        ("release.yml", "clippy-snapshot"),
+        ("release.yml", "verify-published-bootstrap"),
+        ("rolling-release.yml", "clippy-snapshot"),
+        ("rolling-release.yml", "verify-published-bootstrap"),
+    ],
+)
+def test_snapshot_jobs_pin_actions_and_drop_checkout_credentials(
+    workflow: str, job: str
+) -> None:
+    """New jobs run repository code, so their actions are SHA-pinned and the
+    checkout keeps no credentials."""
+    for step in _steps(_jobs(workflow)[job]):
+        uses = str(step.get("uses", ""))
+        if not uses.startswith("actions/"):
+            continue
+        reference = uses.split("@", 1)[1].split()[0]
+        assert len(reference) == 40, f"{workflow}:{job} {uses} is not SHA-pinned"
+        if uses.startswith("actions/checkout@"):
+            assert step["with"]["persist-credentials"] is False, f"{workflow}:{job}"

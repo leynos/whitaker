@@ -619,10 +619,14 @@ invalidated deliberately. Registry keys hash `rust-toolchain.toml` and
 `rust-toolchain.toml`; the Dylint host-tools key names the `cargo-dylint` and
 `dylint-link` versions the Makefile installs; and the Clippy snapshot key hashes
 `installer/clippy-snapshot.toml`, which pins both the snapshot commit and the
-Dylint release whose selection it records. Every key also carries `runner.os`,
-`runner.arch`, and `runner.environment`, and the compiled-tool keys add the
-Ubuntu release because a binary built on Ubuntu 24.04 must never be restored
-onto 22.04.
+Dylint release whose selection it records. Every key except the Clippy
+snapshot's also carries `runner.os`, `runner.arch`, and `runner.environment`,
+and the compiled-tool keys add the Ubuntu release because a binary built on
+Ubuntu 24.04 must never be restored onto 22.04.
+
+The Clippy snapshot key omits those discriminators on purpose. Its content is
+platform-independent Git history, its one writer (`coverage-upload`) and its
+readers all run on Ubicloud Linux, and the Windows lane never restores it.
 
 Restores run on every event. Saves are guarded by
 `github.ref == 'refs/heads/main'` and by a missed restore. A pull request

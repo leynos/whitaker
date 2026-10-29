@@ -190,7 +190,7 @@ and public Clippy access is never needed or used.
   revision and its parent, and a shallow cut is a failure mode to detect, not
   an optimization.
 - Build the driver on first use. Dylint links it with an absolute rpath to the
-  rustup toolchain, so it is host-specific and a prebuilt copy would not be
+  rustup toolchain, so it is host-specific, and a prebuilt copy would not be
   relocatable.
 - Place the bootstrap beside the managed clone, not inside it:
   `whitaker_data_dir()` is itself the Git clone.

@@ -137,4 +137,8 @@ to upstream's process ID, so a reused process ID cannot make Cargo skip the
 compiler invocation the parser needs. It also drops `-L native=` linker paths
 from the flags handed to `compiletest`, which flattens them into one
 space-delimited string: metadata-only UI tests do not need them, and on Windows
-they contain spaces (`C:\Program Files\...`).
+they contain spaces (`C:\Program Files\...`). The example-testing code lives in
+`src/example.rs` rather than upstream's `lib.rs`, keeping each file within
+Whitaker's 400-line limit; `example_targets` returns its list directly instead
+of an infallible `Result`; and Cargo's `Running` lines are parsed without a
+regex, removing a production `unwrap()` and the `regex` dependency.

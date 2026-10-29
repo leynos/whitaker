@@ -728,7 +728,6 @@ dependencies = [
  "dylint_internal",
  "env_logger",
  "once_cell",
- "regex",
  "rstest",
  "shlex",
  "tempfile",
