@@ -27,7 +27,7 @@ fn installer_missing_its_archive() -> MockDependencyBinaryInstaller {
     let mut repository_installer = MockDependencyBinaryInstaller::new();
     repository_installer.expect_install().returning(|_, _, _| {
         Err(DependencyBinaryInstallError::Download {
-            url: "https://example.test/cargo-dylint-x86_64-unknown-linux-gnu-v6.0.1.tgz".to_owned(),
+            url: "https://example.test/cargo-dylint-x86_64-unknown-linux-gnu-v6.3.0.tgz".to_owned(),
             reason: "not found".to_owned(),
         })
     });

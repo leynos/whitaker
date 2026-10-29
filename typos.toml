@@ -50,6 +50,8 @@ extend-ignore-re = [
     "(?m)^      \\- Upload artefact \\(actions/upload\\-artifact@v4,$",
     "(?m)^    #\\[serde\\(default, rename = \"artifacts\", skip_serializing_if = \"Vec::is_empty\"\\)\\]$",
     "(?m)^    #\\[serde\\(rename = \"artifactLocation\"\\)\\]$",
+    "(?m)^    // artifact without invoking rustc, making removal ineffective as a way to force recompilation\\.$",
+    "(?m)^    // metadata forces rustc to run for the selected example without removing artifacts or relying$",
     "(?m)^    /// Categorises the input with a single cluster of conditional logic\\.$",
     "(?m)^    /// executed \\(catches mis\\-specified scenarios missing the When step\\)\\.$",
     "(?m)^    \\.help = Cuir beachd doc ris a tha a’ mìneachadh giùlan \\{ \\$function \\}\\.$",

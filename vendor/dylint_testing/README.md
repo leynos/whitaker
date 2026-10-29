@@ -126,7 +126,7 @@ Additional documentation on `compiletest_rs` can be found in [its repository].
 
 ## Whitaker patch
 
-This source is based on `dylint_testing` 6.0.1. Whitaker's local patch makes
+This source is based on `dylint_testing` 6.3.0. Whitaker's local patch makes
 example-target discovery accept Cargo commands that place a compiler wrapper
 before `rustc`. The test runner can then keep configured compiler wrappers
 active while recovering the example's linking flags.

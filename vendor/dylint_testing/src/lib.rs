@@ -83,9 +83,9 @@
 //!   file, and is provided for context.
 //! - All other lines (e.g., `diff of stderr:`) contain `compiletest_rs` messages.
 //!
-//! **Note:** In the actual standard error, a blank line usually follows the `error: aborting due to
-//! N previous errors` line. So a correct `.stderr` file will typically contain one blank line at
-//! the end.
+//! **Note:** In the actual standard error, a blank line usually follows the
+//! `error: aborting due to N previous errors` line. So a correct `.stderr` file will typically
+//! contain one blank line at the end.
 //!
 //! In general, it is not too hard to update a `.stderr` file by hand. However, the `compiletest_rs`
 //! report should contain a line of the form `Actual stderr saved to PATH`. Copying `PATH` to your
@@ -95,35 +95,48 @@
 //!
 //! [Dylint]: https://github.com/trailofbits/dylint/tree/master
 //! [`compiletest_rs`]: https://github.com/Manishearth/compiletest-rs
-//! [`non_thread_safe_call_in_test`]: https://github.com/trailofbits/dylint/tree/master/examples/general/non_thread_safe_call_in_test/src/lib.rs
-//! [`question_mark_in_expression`]: https://github.com/trailofbits/dylint/tree/master/examples/restriction/question_mark_in_expression/Cargo.toml
-//! [`ui::Test::example`]: https://docs.rs/dylint_testing/latest/dylint_testing/ui/struct.Test.html#method.example
-//! [`ui::Test::examples`]: https://docs.rs/dylint_testing/latest/dylint_testing/ui/struct.Test.html#method.examples
-//! [`ui::Test::src_base`]: https://docs.rs/dylint_testing/latest/dylint_testing/ui/struct.Test.html#method.src_base
+//! [`non_thread_safe_call_in_test`]:
+//!   https://github.com/trailofbits/dylint/tree/master/examples/general/non_thread_safe_call_in_test/src/lib.rs
+//! [`question_mark_in_expression`]:
+//!   https://github.com/trailofbits/dylint/tree/master/examples/restriction/question_mark_in_expression/Cargo.toml
+//! [`ui::Test::example`]:
+//!   https://docs.rs/dylint_testing/latest/dylint_testing/ui/struct.Test.html#method.example
+//! [`ui::Test::examples`]:
+//!   https://docs.rs/dylint_testing/latest/dylint_testing/ui/struct.Test.html#method.examples
+//! [`ui::Test::src_base`]:
+//!   https://docs.rs/dylint_testing/latest/dylint_testing/ui/struct.Test.html#method.src_base
 //! [`ui::Test`]: https://docs.rs/dylint_testing/latest/dylint_testing/ui/struct.Test.html
-//! [`ui_test_example`]: https://docs.rs/dylint_testing/latest/dylint_testing/fn.ui_test_example.html
-//! [`ui_test_examples`]: https://docs.rs/dylint_testing/latest/dylint_testing/fn.ui_test_examples.html
+//! [`ui_test_example`]:
+//!   https://docs.rs/dylint_testing/latest/dylint_testing/fn.ui_test_example.html
+//! [`ui_test_examples`]:
+//!   https://docs.rs/dylint_testing/latest/dylint_testing/fn.ui_test_examples.html
 //! [`ui_test`]: https://docs.rs/dylint_testing/latest/dylint_testing/fn.ui_test.html
-//! [configurable libraries]: https://github.com/trailofbits/dylint/tree/master#configurable-libraries
+//! [configurable libraries]:
+//!   https://github.com/trailofbits/dylint/tree/master#configurable-libraries
 //! [docs.rs documentation]: https://docs.rs/dylint_testing/latest/dylint_testing/
 //! [examples]: https://github.com/trailofbits/dylint/tree/master/examples
 //! [its repository]: https://github.com/Manishearth/compiletest-rs
 
-use anyhow::Result;
+use anyhow::{Context, Result, anyhow, ensure};
+use cargo_metadata::{Metadata, Package, Target, TargetKind};
 use compiletest_rs as compiletest;
-use dylint_internal::{CommandExt, env, library_filename};
+use dylint_internal::{CommandExt, env, link::dylint_libs, rustup::is_rustc};
 use once_cell::sync::OnceCell;
+use regex::Regex;
 use std::{
     env::{remove_var, set_var, var_os},
     ffi::{OsStr, OsString},
+    fs::copy,
+    io::BufRead,
     path::{Path, PathBuf},
-    sync::Mutex,
+    sync::{LazyLock, Mutex},
 };
 
-mod example;
 pub mod ui;
 
 static DRIVER: OnceCell<Result<PathBuf>> = OnceCell::new();
+static LINKING_FLAGS: OnceCell<Vec<String>> = OnceCell::new();
+
 /// Test a library on all source files in a directory.
 ///
 /// - `name` is the name of a Dylint library to be tested. (Often, this is the same as the package
@@ -159,19 +172,10 @@ fn initialize(name: &str) -> &Result<PathBuf> {
 
         dylint_internal::cargo::build(&format!("library `{name}`"))
             .build()
+            .env(env::DYLINT_BUILDING_LIBRARIES, "1")
             .success()?;
 
-        // smoelius: `DYLINT_LIBRARY_PATH` must be set before `dylint_libs` is called.
-        // smoelius: This was true when `dylint_libs` called `name_toolchain_map`, but that is
-        // no longer the case. I am leaving the comment here for now in case removal
-        // of the `name_toolchain_map` call causes a regression.
-        let metadata = dylint_internal::cargo::current_metadata().unwrap();
-        let dylint_library_path = metadata.target_directory.join("debug");
-        unsafe {
-            set_var(env::DYLINT_LIBRARY_PATH, dylint_library_path);
-        }
-
-        let dylint_libs = dylint_libs(name)?;
+        let dylint_libs = dylint_libs(name, env!("RUSTUP_TOOLCHAIN"))?;
         let driver = dylint::driver_builder::get(
             &dylint::opts::Dylint::default(),
             env!("RUSTUP_TOOLCHAIN"),
@@ -186,19 +190,215 @@ fn initialize(name: &str) -> &Result<PathBuf> {
     })
 }
 
-#[doc(hidden)]
-pub fn dylint_libs(name: &str) -> Result<String> {
-    let metadata = dylint_internal::cargo::current_metadata().unwrap();
-    let rustup_toolchain = env::var(env::RUSTUP_TOOLCHAIN)?;
-    let filename = library_filename(name, &rustup_toolchain);
-    let path = metadata.target_directory.join("debug").join(filename);
-    let paths = vec![path];
-    serde_json::to_string(&paths).map_err(Into::into)
+fn example_target(package: &Package, example: &str) -> Result<Target> {
+    package
+        .targets
+        .iter()
+        .find(|target| target.kind == [TargetKind::Example] && target.name == example)
+        .cloned()
+        .ok_or_else(|| anyhow!("Could not find example `{example}`"))
+}
+
+#[allow(clippy::unnecessary_wraps)]
+fn example_targets(package: &Package) -> Result<Vec<Target>> {
+    Ok(package
+        .targets
+        .iter()
+        .filter(|target| target.kind == [TargetKind::Example])
+        .cloned()
+        .collect())
+}
+
+#[allow(
+    clippy::too_many_arguments,
+    reason = "upstream dylint_testing 6.3.0 signature, kept verbatim to ease rebasing"
+)]
+fn run_example_test(
+    driver: &Path,
+    metadata: &Metadata,
+    package: &Package,
+    target: &Target,
+    config: &ui::Config,
+) -> Result<()> {
+    let linking_flags = linking_flags(metadata, package, target)?;
+    let file_name = target
+        .src_path
+        .file_name()
+        .ok_or_else(|| anyhow!("Could not get file name"))?;
+
+    let tempdir = tempfile::tempdir().with_context(|| "`tempdir` failed")?;
+    let src_base = tempdir.path();
+    let to = src_base.join(file_name);
+
+    copy(&target.src_path, &to).with_context(|| {
+        format!(
+            "Could not copy `{}` to `{}`",
+            target.src_path,
+            to.to_string_lossy()
+        )
+    })?;
+    for extension in ["fixed", "stderr", "stdout"] {
+        copy_with_extension(&target.src_path, &to, extension)
+            .map(|_| ())
+            .unwrap_or_default();
+    }
+
+    let mut config = config.clone();
+    config.rustc_flags.extend(linking_flags.iter().cloned());
+
+    run_tests(driver, src_base, &config);
+
+    Ok(())
+}
+
+fn linking_flags(
+    metadata: &Metadata,
+    package: &Package,
+    target: &Target,
+) -> Result<&'static [String]> {
+    LINKING_FLAGS
+        .get_or_try_init(|| {
+            let rustc_flags = rustc_flags(metadata, package, target)?;
+
+            let mut linking_flags = Vec::new();
+
+            let mut iter = rustc_flags.into_iter();
+            while let Some(flag) = iter.next() {
+                if flag.starts_with("--edition=") {
+                    linking_flags.push(flag);
+                } else if flag == "--extern" || flag == "-L" {
+                    let arg = next(&flag, &mut iter)?;
+                    linking_flags.extend([flag, arg.trim_matches('\'').to_owned()]);
+                }
+            }
+
+            Ok(linking_flags)
+        })
+        .map(Vec::as_slice)
+}
+
+// smoelius: We need to recover the `rustc` flags used to build a target. I can see four options:
+//
+// * Use `cargo build --build-plan`
+//   - Pros: Easily parsable JSON output
+//   - Cons: Unstable and likely to be removed: https://github.com/rust-lang/cargo/issues/7614
+// * Parse the output of `cargo build --verbose`
+//   - Pros: ?
+//   - Cons: Not as easily parsable, requires synchronization (see below)
+// * Use a custom executor like Siderophile does: https://github.com/trailofbits/siderophile/blob/26c067306f6c2f66d9530dacef6b17dbf59cdf8c/src/trawl_source/mod.rs#L399
+//   - Pros: Ground truth
+//   - Cons: Seems a bit of a heavy lift (Note: I think Siderophile's approach was inspired by
+//     `cargo-geiger`.)
+// * Set `RUSTC_WORKSPACE_WRAPPER` to something that logs `rustc` invocations
+//   - Pros: Ground truth
+//   - Cons: Requires a separate executable/script, portability could be an issue
+//
+// I am going with the second option for now, because it seems to be the least of all evils. This
+// decision may need to be revisited.
+
+static RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^\s*Running\s*`(.*)`$").unwrap());
+
+fn rustc_flags(_metadata: &Metadata, package: &Package, target: &Target) -> Result<Vec<String>> {
+    // Previously, this function removed the example executable from `target/debug/examples` before
+    // running `cargo build --verbose`. With Cargo's legacy layout, that forced the example to be
+    // recompiled and exposed its rustc invocation in Cargo's verbose output. With the new
+    // build-directory layout, Cargo can restore the removed executable from its cached build
+    // artifact without invoking rustc, making removal ineffective as a way to force recompilation.
+    // So, use `cargo rustc` with a process-specific `-C metadata` value instead. The changed
+    // metadata forces rustc to run for the selected example without removing artifacts or relying
+    // on Cargo's internal layout.
+    let rustc_metadata = format!("metadata=dylint_testing_{}", std::process::id());
+    let output = {
+        // smoelius: Because of lazy initialization, `cargo rustc` is run only once. Seeing
+        // "Building example `target`" for one example but not for others is confusing. So instead
+        // say "Building `package` examples".
+        dylint_internal::cargo::rustc(&format!("`{}` examples", package.name))
+            .build()
+            .env_remove(env::CARGO_TERM_COLOR)
+            .args([
+                "--manifest-path",
+                package.manifest_path.as_ref(),
+                "--example",
+                &target.name,
+                "--verbose",
+                "--",
+                "-C",
+                &rustc_metadata,
+            ])
+            .logged_output(true)?
+    };
+
+    let matches = output
+        .stderr
+        .lines()
+        .map(|line| {
+            let line =
+                line.with_context(|| format!("Could not read from `{}`", package.manifest_path))?;
+            // `rustc_invocation` matches `RE` itself, so it takes the whole line.
+            Ok(rustc_invocation(&line, &snake_case(&target.name)))
+        })
+        .collect::<Result<Vec<Option<Vec<_>>>>>()?;
+
+    let mut matches = matches.into_iter().flatten().collect::<Vec<Vec<_>>>();
+    ensure!(
+        matches.len() <= 1,
+        "Found multiple `rustc` invocations for `{}`",
+        target.name
+    );
+    matches
+        .pop()
+        .ok_or_else(|| anyhow!("Found no `rustc` invocations for `{}`", target.name))
+}
+
+/// Extract the requested compiler arguments from Cargo's rendered command line.
+///
+/// Cargo may prefix the compiler with one or more configured wrappers, such as
+/// `sccache` or a cache-coordinating shim. Splitting the raw line on spaces
+/// attributes the wrapper's own arguments to `rustc`; `args.first()` then fails
+/// to recognize the compiler, no invocation is found, and the UI test aborts.
+/// Parse the displayed quoting instead, then return only the argument tail after
+/// the `rustc` preceding the crate name. For example, a wrapped
+/// `wrapper rustc --crate-name demo` command yields `--crate-name demo` without
+/// the wrapper arguments.
+///
+/// The last `rustc` before the crate name is chosen rather than the first, so a
+/// wrapper that is itself named `rustc` cannot shadow the compiler it wraps.
+fn rustc_invocation(line: &str, target_crate: &str) -> Option<Vec<String>> {
+    let command = (*RE).captures(line)?.get(1)?.as_str();
+    let arguments = shlex::split(command)?;
+    let crate_name_index = arguments
+        .windows(2)
+        .position(|window| window[0] == "--crate-name" && window[1] == target_crate)?;
+    let rustc_index = arguments[..crate_name_index].iter().rposition(is_rustc)?;
+    Some(
+        arguments
+            .into_iter()
+            .skip(rustc_index + 1)
+            .collect::<Vec<_>>(),
+    )
+}
+
+fn next<I, T>(flag: &str, iter: &mut I) -> Result<T>
+where
+    I: Iterator<Item = T>,
+{
+    iter.next()
+        .ok_or_else(|| anyhow!("Missing argument for `{flag}`"))
+}
+
+fn copy_with_extension<P: AsRef<Path>, Q: AsRef<Path>>(
+    from: P,
+    to: Q,
+    extension: &str,
+) -> Result<u64> {
+    let from = from.as_ref().with_extension(extension);
+    let to = to.as_ref().with_extension(extension);
+    copy(from, to).map_err(Into::into)
 }
 
 static MUTEX: Mutex<()> = Mutex::new(());
 
-pub(crate) fn run_tests(driver: &Path, src_base: &Path, config: &ui::Config) {
+fn run_tests(driver: &Path, src_base: &Path, config: &ui::Config) {
     let _lock = MUTEX.lock().unwrap();
 
     // smoelius: There doesn't seem to be a way to set environment variables using `compiletest`'s
@@ -267,4 +467,77 @@ impl Drop for VarGuard {
 
 fn snake_case(name: &str) -> String {
     name.replace('-', "_")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::rustc_invocation;
+    use rstest::rstest;
+
+    /// Extract the rustc arguments after unwrapped and wrapped compiler
+    /// commands.
+    #[rstest]
+    #[case::unwrapped(
+        r"Running `/toolchain/bin/rustc --crate-name target --edition=2024`",
+        &["--crate-name", "target", "--edition=2024"],
+    )]
+    #[case::single_wrapper(
+        r"Running `/cache/sccache /toolchain/bin/rustc --crate-name target --edition=2024`",
+        &["--crate-name", "target", "--edition=2024"],
+    )]
+    #[case::nested_wrappers(
+        r"Running `/cache/sccache /cache/build-limits-rustc /toolchain/bin/rustc --crate-name target --edition=2024`",
+        &["--crate-name", "target", "--edition=2024"],
+    )]
+    #[case::wrapper_named_rustc(
+        r"Running `/cache/rustc /toolchain/bin/rustc --crate-name target --edition=2024`",
+        &["--crate-name", "target", "--edition=2024"],
+    )]
+    #[case::quoted_paths(
+        r#"Running `"/tool chain/sccache" "/tool chain/bin/rustc" --crate-name target --extern "dependency=/build tree/libdependency.rlib"`"#,
+        &[
+            "--crate-name",
+            "target",
+            "--extern",
+            "dependency=/build tree/libdependency.rlib",
+        ],
+    )]
+    fn parses_rustc_arguments_after_wrappers(#[case] line: &str, #[case] expected: &[&str]) {
+        let parsed = rustc_invocation(line, "target");
+        let expected = expected
+            .iter()
+            .map(|argument| (*argument).to_owned())
+            .collect::<Vec<_>>();
+
+        assert_eq!(parsed, Some(expected));
+    }
+
+    /// Ignore unrelated Cargo output and commands for other compiler targets.
+    #[rstest]
+    #[case::not_a_cargo_command("Compiling target v0.1.0")]
+    #[case::not_a_compiler(r"Running `/toolchain/bin/cargo --crate-name target`")]
+    #[case::wrong_crate(r"Running `/toolchain/bin/rustc --crate-name another`")]
+    #[case::malformed_quotes(r#"Running `wrapper "/toolchain/bin/rustc --crate-name target`"#)]
+    // Regression: the 6.3.0 rebase passed the regex's inner capture here, so
+    // every example test found no invocation. The helper takes the whole line.
+    #[case::already_captured_command(r"/toolchain/bin/rustc --crate-name target")]
+    fn ignores_commands_without_the_requested_rustc_invocation(#[case] line: &str) {
+        assert_eq!(rustc_invocation(line, "target"), None);
+    }
+
+    /// Preserve backslashes while splitting quoted Windows executable paths.
+    #[test]
+    fn splits_windows_paths_without_losing_backslashes() {
+        assert_eq!(
+            shlex::split(
+                r#""C:\Program Files\sccache.exe" "C:\toolchain\bin\rustc.exe" --crate-name target"#
+            ),
+            Some(vec![
+                r"C:\Program Files\sccache.exe".to_owned(),
+                r"C:\toolchain\bin\rustc.exe".to_owned(),
+                "--crate-name".to_owned(),
+                "target".to_owned(),
+            ])
+        );
+    }
 }

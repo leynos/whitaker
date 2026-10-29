@@ -157,8 +157,8 @@ jobs:
         run: rustup target add "${{ matrix.target }}"
 
       # The dependency tools' locked dependencies can require a newer rustc
-      # than the repository's pinned nightly (cargo-dylint 6.0.1 locks
-      # cargo-util 0.2.28, which needs rustc 1.93), so host-tool installs run
+      # than the repository's pinned nightly (cargo-dylint 6.0.1 locked
+      # cargo-util 0.2.28, which needed rustc 1.93), so host-tool installs run
       # under a current stable toolchain.
       - name: Install stable toolchain for host tools
         run: |

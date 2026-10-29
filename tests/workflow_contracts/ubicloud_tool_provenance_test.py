@@ -225,12 +225,12 @@ def test_tools_cache_keys_name_every_pin_they_depend_on() -> None:
 def test_dylint_host_tool_key_matches_the_makefile_pins() -> None:
     """The cached archive must be invalidated by the versions the build installs."""
     makefile = (REPOSITORY_ROOT / "Makefile").read_text(encoding="utf-8")
-    assert "CARGO_DYLINT_VERSION ?= 6.0.1" in makefile
-    assert "DYLINT_LINK_VERSION ?= 6.0.1" in makefile
+    assert "CARGO_DYLINT_VERSION ?= 6.3.0" in makefile
+    assert "DYLINT_LINK_VERSION ?= 6.3.0" in makefile
     step = steps_by_name(load_job("linux-full"))["Restore the Dylint host tools"]
     key = str(step["with"]["key"])
-    assert "cargo-dylint6.0.1" in key
-    assert "dylint-link6.0.1" in key
+    assert "cargo-dylint6.3.0" in key
+    assert "dylint-link6.3.0" in key
     assert step["with"]["path"].strip() == "~/.cache/whitaker-dylint-tools", (
         "the Dylint host tools cache must own the durable Makefile directory"
     )

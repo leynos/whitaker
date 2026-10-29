@@ -361,8 +361,8 @@ mod tests {
     }
 
     #[rstest]
-    #[case::cargo_dylint("cargo-dylint", "cargo-dylint", "6.0.1")]
-    #[case::dylint_link("dylint-link", "dylint-link", "6.0.1")]
+    #[case::cargo_dylint("cargo-dylint", "cargo-dylint", "6.3.0")]
+    #[case::dylint_link("dylint-link", "dylint-link", "6.3.0")]
     fn find_dependency_binary_returns_matching_package(
         #[case] package: &str,
         #[case] binary: &str,

@@ -89,7 +89,7 @@ impl QueryFailure {
         ) {
             calls.push(ExpectedCall {
                 cmd: "cargo",
-                args: vec!["install", "--locked", "--version", "6.0.1", "cargo-dylint"],
+                args: vec!["install", "--locked", "--version", "6.3.0", "cargo-dylint"],
                 result: Ok(success_output()),
             });
         }
@@ -166,7 +166,7 @@ fn unverified_binstall_install_falls_back_to_cargo_install() {
         cargo_dylint_check_with_result(Ok(stdout_output("cargo-dylint 5.0.0\n"))),
         ExpectedCall {
             cmd: "cargo",
-            args: vec!["install", "--locked", "--version", "6.0.1", "cargo-dylint"],
+            args: vec!["install", "--locked", "--version", "6.3.0", "cargo-dylint"],
             result: Ok(success_output()),
         },
         cargo_dylint_check().expect("cargo-dylint verification should be configured"),

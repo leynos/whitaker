@@ -2,7 +2,7 @@
 members = ["common", "crates/*", "installer", "suite", "vendor/dylint_testing"]
 resolver = "2"
 
-# Dylint 6.0.1 must recognize rustc commands prefixed by Cargo's compiler
+# Dylint 6.3.0 must recognize rustc commands prefixed by Cargo's compiler
 # wrapper so UI tests can retain compiler admission.
 [patch.crates-io]
 dylint_testing = { path = "vendor/dylint_testing" }

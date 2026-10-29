@@ -447,8 +447,8 @@ fn cargo_reports_missing_subcommand(output: &Output) -> bool {
 
 /// Extracts the installed version of `package` from `cargo install --list`.
 ///
-/// Matches lines of the form `dylint-link v6.0.1:` (or
-/// `dylint-link v6.0.1 (/path):` for path installs), returning the version
+/// Matches lines of the form `dylint-link v6.3.0:` (or
+/// `dylint-link v6.3.0 (/path):` for path installs), returning the version
 /// with the leading `v` and trailing `:` stripped.
 fn cargo_installed_version(
     executor: &dyn CommandExecutor,

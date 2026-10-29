@@ -6,7 +6,6 @@
 //! This module centralizes input validation so lint crates can depend on a
 //! small helper rather than repeat the same checks.
 
-#[cfg(windows)]
 use std::env;
 use std::fmt;
 
@@ -15,7 +14,6 @@ use camino::{Utf8Path, Utf8PathBuf};
 mod toolchain;
 
 use self::toolchain::{CrateName, ensure_toolchain_library};
-#[cfg(windows)]
 use whitaker_common::test_support::env_test_guard;
 
 /// Errors produced when preparing or executing Dylint UI tests.
@@ -209,63 +207,77 @@ pub fn run_ui_test(
 
 /// Serializes environment mutations required by `run_with_runner`.
 ///
-/// On Windows, one additional environment variable needs temporary adjustment:
+/// Every platform needs one variable, and Windows needs a second:
 ///
-/// - `VCPKG_ROOT`: must be set to `C:\vcpkg` when that directory exists and the
-///   variable is otherwise absent, so downstream `cargo` invocations resolve vcpkg.
+/// - `DYLINT_LINK_ENABLE_COPY_LIBRARY`: set to `1` when absent. Since Dylint
+///   6.3.0, `dylint_testing` copies `lib<crate>.so` over the
+///   toolchain-qualified library unless this flag says the copy already
+///   exists. The harness has just built that copy with the `dylint-driver`
+///   feature, while `dylint_testing` first rebuilds the plain library with
+///   default features, which for every Whitaker lint crate is an empty
+///   `cdylib`. Without the flag the UI test loads that stub and fails with
+///   ``could not find `dylint_version` ``.
+/// - `VCPKG_ROOT` (Windows only): set to `C:\vcpkg` when that directory exists
+///   and the variable is otherwise absent, so downstream `cargo` invocations
+///   resolve vcpkg.
 ///
 /// Each mutation and restoration step acquires `env_test_guard()` only for the
 /// environment write itself. The guard deliberately does not hold that mutex
 /// across the UI runner callback, because runner closures can perform their
 /// own environment-guarded setup.
 struct RunnerEnvGuard {
-    #[cfg(windows)]
-    vcpkg_root_was_absent: bool,
+    /// Variables this guard set because they were absent, removed on drop.
+    set_while_absent: Vec<&'static str>,
 }
 
 impl Drop for RunnerEnvGuard {
     /// Restore temporary environment changes when the runner finishes.
     fn drop(&mut self) {
-        #[cfg(windows)]
-        {
-            let _env_guard = env_test_guard();
-
-            // SAFETY: `env_test_guard` serializes the restoration write below.
-            if self.vcpkg_root_was_absent {
-                unsafe {
-                    env::remove_var("VCPKG_ROOT");
-                }
+        let _env_guard = env_test_guard();
+        for key in &self.set_while_absent {
+            // SAFETY: `env_test_guard` serializes the restoration write.
+            unsafe {
+                env::remove_var(key);
             }
         }
     }
 }
 
-/// Prepare any platform-specific environment required by the UI runner.
-#[cfg(windows)]
-fn runner_env_guard() -> Option<RunnerEnvGuard> {
-    let vcpkg_candidate = Utf8Path::new(r"C:\vcpkg");
-    let vcpkg_applicable = vcpkg_candidate.is_dir();
+/// Tells `dylint_testing` that the toolchain-qualified library is prepared.
+const COPY_LIBRARY_FLAG: (&str, &str) = ("DYLINT_LINK_ENABLE_COPY_LIBRARY", "1");
 
-    if !vcpkg_applicable {
-        return None;
+/// List the variables the UI runner needs on this platform.
+fn runner_env_settings() -> Vec<(&'static str, &'static str)> {
+    #[cfg(windows)]
+    {
+        let mut settings = vec![COPY_LIBRARY_FLAG];
+        if Utf8Path::new(r"C:\vcpkg").is_dir() {
+            settings.push(("VCPKG_ROOT", r"C:\vcpkg"));
+        }
+        settings
     }
-    let _env_guard = env_test_guard();
-    if env::var_os("VCPKG_ROOT").is_some() {
-        return None;
+
+    #[cfg(not(windows))]
+    {
+        vec![COPY_LIBRARY_FLAG]
     }
-    // SAFETY: `_env_guard` serializes concurrent environment mutations.
-    unsafe {
-        env::set_var("VCPKG_ROOT", vcpkg_candidate.as_std_path());
-    }
-    Some(RunnerEnvGuard {
-        vcpkg_root_was_absent: true,
-    })
 }
 
-/// Prepare any platform-specific environment required by the UI runner.
-#[cfg(not(windows))]
-const fn runner_env_guard() -> Option<RunnerEnvGuard> {
-    None
+/// Prepare the environment required by the UI runner.
+fn runner_env_guard() -> RunnerEnvGuard {
+    let _env_guard = env_test_guard();
+    let set_while_absent = runner_env_settings()
+        .into_iter()
+        .filter(|(key, _)| env::var_os(key).is_none())
+        .map(|(key, value)| {
+            // SAFETY: `_env_guard` serializes concurrent environment mutations.
+            unsafe {
+                env::set_var(key, value);
+            }
+            key
+        })
+        .collect();
+    RunnerEnvGuard { set_while_absent }
 }
 
 fn directory_is_rooted(path: &Utf8Path) -> bool {
