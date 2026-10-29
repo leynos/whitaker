@@ -243,3 +243,45 @@ fn a_driver_replaced_with_identical_bytes_has_a_new_identity() {
 
     assert_ne!(slot.driver_identity().expect("inspect again"), before);
 }
+
+/// The marker names the driver whose snapshot was verified; a replacement,
+/// even with identical bytes, is not ready until it is marked in turn.
+#[test]
+fn a_replaced_driver_is_not_ready_until_marked_again() {
+    let (_dir, root) = temp_root();
+    let slot = DriverSlot::new(&root, "nightly-2026-05-28");
+    write_driver(&root, "nightly-2026-05-28", b"driver");
+    slot.mark_ready().expect("mark ready");
+    assert!(slot.is_ready().expect("inspect the slot"));
+    let toolchain_dir = root.join("nightly-2026-05-28");
+    // Keep the original alive so the replacement cannot reuse its inode.
+    std::fs::hard_link(
+        toolchain_dir.join("dylint-driver"),
+        toolchain_dir.join("dylint-driver.original"),
+    )
+    .expect("keep the original");
+    std::thread::sleep(std::time::Duration::from_millis(20));
+    std::fs::write(toolchain_dir.join("dylint-driver.partial"), b"driver").expect("write");
+    std::fs::rename(
+        toolchain_dir.join("dylint-driver.partial"),
+        toolchain_dir.join("dylint-driver"),
+    )
+    .expect("persist the replacement");
+
+    assert!(!slot.is_ready().expect("inspect the slot"));
+    slot.mark_ready().expect("mark the replacement ready");
+    assert!(slot.is_ready().expect("inspect the slot"));
+}
+
+/// Markers written before identities were recorded are empty; they make the
+/// slot cold once, and the cold run records a proper marker.
+#[test]
+fn an_empty_marker_from_an_earlier_release_is_not_ready() {
+    let (_dir, root) = temp_root();
+    let slot = DriverSlot::new(&root, "nightly-2026-05-28");
+    write_driver(&root, "nightly-2026-05-28", b"driver");
+    std::fs::write(root.join(".nightly-2026-05-28.ready"), b"").expect("write empty marker");
+
+    assert!(!slot.is_ready().expect("inspect the slot"));
+    assert_eq!(slot.ready_identity().expect("read the marker"), None);
+}

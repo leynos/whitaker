@@ -156,6 +156,63 @@ fn a_cold_run_rebuilds_an_unmarked_driver() {
     assert_eq!(installation.builds(), 2, "the unmarked driver is rebuilt");
 }
 
+/// Replace the ready driver with identical bytes, as a concurrent warm run's
+/// rebuild would, leaving the marker naming the driver it replaced. This is
+/// the state between that run's rebuild and its verification of the snapshot.
+fn replace_driver_mid_verification(installation: &Installation) {
+    let toolchain_dir = installation
+        .layout()
+        .driver_dir("6.3.0", &installation.commit)
+        .join("nightly-2026-05-28");
+    let partial = toolchain_dir.join("dylint-driver.partial");
+    std::fs::write(&partial, "#!/bin/sh\n").expect("write the replacement");
+    std::fs::rename(&partial, toolchain_dir.join("dylint-driver")).expect("persist it");
+}
+
+/// Regression: a run that started while another warm run was still verifying
+/// its rebuild used to accept the unverified driver. It must take the cold
+/// path instead, and so fail when the snapshot behind the rebuild is bad.
+#[rstest::rstest]
+#[case::snapshot_fails_verification(true)]
+#[case::snapshot_verifies(false)]
+fn a_run_never_uses_a_rebuild_another_run_has_not_verified(#[case] is_corrupt: bool) {
+    let installation = Installation::new();
+    let cold = installation.run(&["--all"]);
+    assert!(
+        cold.status.success(),
+        "{}",
+        String::from_utf8_lossy(&cold.stderr)
+    );
+    if is_corrupt {
+        let snapshot = installation.layout().snapshot(&installation.commit);
+        git(
+            &snapshot,
+            &[
+                "remote",
+                "add",
+                "upstream",
+                "https://example.invalid/clippy",
+            ],
+        );
+    }
+    replace_driver_mid_verification(&installation);
+
+    let next = installation.run(&["--all"]);
+
+    let stderr = String::from_utf8_lossy(&next.stderr);
+    if is_corrupt {
+        assert!(
+            !next.status.success(),
+            "the unverified driver was used: {stderr}"
+        );
+        assert!(stderr.contains("it has remotes"), "{stderr}");
+    } else {
+        assert!(next.status.success(), "{stderr}");
+        assert_eq!(installation.builds(), 2, "the unverified driver is rebuilt");
+        assert_eq!(stderr.matches(BUILT_DRIVER_NOTICE).count(), 1, "{stderr}");
+    }
+}
+
 #[test]
 fn exports_the_bootstrap_and_overwrites_stale_values() {
     let installation = Installation::new();

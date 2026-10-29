@@ -151,6 +151,13 @@ re-pin therefore selects a new slot.
   rebuilt the driver, `run` verifies the snapshot before reporting success. A
   snapshot that fails fails the run and clears the ready marker, and the next
   cold run removes that driver before rebuilding.
+- The ready marker records the identity of the driver whose snapshot was
+  verified, and a run shares the driver only while that identity still matches.
+  A run that starts while another is still verifying its rebuild therefore sees
+  an unverified driver and takes the cold path, whose exclusive lock waits for
+  that run, rather than using it. A successful warm-rebuild verification
+  records the new identity. A marker from an earlier release records none, so
+  the first run after an upgrade is cold.
 
 ### Installed layout and dispatch
 

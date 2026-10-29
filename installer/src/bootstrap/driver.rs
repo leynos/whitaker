@@ -16,7 +16,7 @@ use super::probe::metadata_if_present;
 use camino::{Utf8Path, Utf8PathBuf};
 use fs2::FileExt;
 use std::fs::File;
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 /// The driver Dylint persists inside its toolchain directory.
 ///
@@ -54,6 +54,60 @@ impl DriverIdentity {
             },
         }
     }
+
+    /// Render the identity as the ready marker's single line.
+    fn to_record(self) -> String {
+        let time = |t: Option<SystemTime>| {
+            t.and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+                .map_or_else(|| "-".to_owned(), |d| d.as_nanos().to_string())
+        };
+        #[cfg(unix)]
+        let file = format!("{}:{}", self.file.0, self.file.1);
+        #[cfg(not(unix))]
+        let file = "-".to_owned();
+        format!(
+            "len={} modified={} created={} file={file}",
+            self.len,
+            time(self.modified),
+            time(self.created)
+        )
+    }
+
+    /// Parse a ready marker's line, or `None` for any other content, such as
+    /// the empty marker an earlier release wrote.
+    fn from_record(record: &str) -> Option<Self> {
+        let mut fields = record.trim().split(' ').map(|field| field.split_once('='));
+        let mut next = |key: &str| match fields.next()? {
+            Some((name, value)) if name == key => Some(value.to_owned()),
+            _ => None,
+        };
+        let time = |value: &str| -> Option<Option<SystemTime>> {
+            if value == "-" {
+                return Some(None);
+            }
+            let nanos: u128 = value.parse().ok()?;
+            let nanos = u64::try_from(nanos).ok()?;
+            Some(Some(UNIX_EPOCH + Duration::from_nanos(nanos)))
+        };
+        let len = next("len")?.parse().ok()?;
+        let modified = time(&next("modified")?)?;
+        let created = time(&next("created")?)?;
+        let file = next("file")?;
+        #[cfg(unix)]
+        let file = {
+            let (dev, ino) = file.split_once(':')?;
+            (dev.parse().ok()?, ino.parse().ok()?)
+        };
+        #[cfg(not(unix))]
+        let _ = file;
+        Some(Self {
+            len,
+            modified,
+            created,
+            #[cfg(unix)]
+            file,
+        })
+    }
 }
 
 /// One toolchain's driver within an identity-keyed slot.
@@ -85,15 +139,33 @@ impl DriverSlot {
         &self.dir
     }
 
-    /// Return whether a complete driver is recorded as ready.
+    /// Return whether the driver now present is the one recorded as ready.
+    ///
+    /// The marker records the identity of the driver whose snapshot was
+    /// verified, so a driver replaced since, by a rebuild another run has not
+    /// yet verified, is not ready even though a marker exists.
     ///
     /// # Errors
     ///
     /// Returns [`BootstrapError::Io`] when the slot cannot be read for any
     /// reason other than not existing yet.
     pub fn is_ready(&self) -> Result<bool, BootstrapError> {
-        let is_marked = metadata_if_present(&self.marker_path())?.is_some_and(|m| m.is_file());
-        Ok(is_marked && self.has_driver()?)
+        let current = self.driver_identity()?;
+        Ok(current.is_some() && self.ready_identity()? == current)
+    }
+
+    /// Return the identity the ready marker records, if it holds a valid one.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`BootstrapError::Io`] when an existing marker cannot be read.
+    pub fn ready_identity(&self) -> Result<Option<DriverIdentity>, BootstrapError> {
+        let marker = self.marker_path();
+        match std::fs::read_to_string(&marker) {
+            Ok(record) => Ok(DriverIdentity::from_record(&record)),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(error) => Err(BootstrapError::io(&marker, &error)),
+        }
     }
 
     /// Return whether Dylint has written a driver for this toolchain.
@@ -174,15 +246,26 @@ impl DriverSlot {
         Ok(file)
     }
 
-    /// Record that a complete driver exists. Call only under the exclusive lock.
+    /// Record the driver now present as ready.
+    ///
+    /// Call under the exclusive lock after a cold build, or under the shared
+    /// lock once a warm run has verified the snapshot behind its rebuild. The
+    /// marker is replaced atomically, so readers see one record or the other.
     ///
     /// # Errors
     ///
     /// Returns [`BootstrapError::Io`] when the marker cannot be written.
     pub fn mark_ready(&self) -> Result<(), BootstrapError> {
         let marker = self.marker_path();
-        let file = tempfile::NamedTempFile::new_in(&self.dir)
+        // Record which driver is ready, so a later replacement is not.
+        let record = self
+            .driver_identity()?
+            .map(DriverIdentity::to_record)
+            .unwrap_or_default();
+        let mut file = tempfile::NamedTempFile::new_in(&self.dir)
             .map_err(|error| BootstrapError::io(&self.dir, &error))?;
+        std::io::Write::write_all(&mut file, record.as_bytes())
+            .map_err(|error| BootstrapError::io(file.path().display(), &error))?;
         file.persist(&marker)
             .map_err(|error| BootstrapError::io(&marker, &error.error))?;
         Ok(())

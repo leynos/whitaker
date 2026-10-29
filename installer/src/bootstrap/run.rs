@@ -11,15 +11,13 @@ use super::driver::{DriverIdentity, DriverSlot};
 use super::error::BootstrapError;
 use super::metadata::BootstrapMetadata;
 use super::probe::is_present_dir;
+use super::snapshot_check::verify_snapshot;
 use super::telemetry::{
     BuildOutcome, DriverPath, LockMode, OUTCOME_OK, failure_label, record_driver_build,
     record_lock_failure, record_lock_wait, record_run,
 };
-use crate::clippy_snapshot::{
-    ClippySnapshotManifest, GenerationMetadata, check_installed, verify_repository,
-};
+use crate::clippy_snapshot::check_installed;
 use crate::dirs::BaseDirs;
-use crate::git::CommitSha;
 use camino::Utf8PathBuf;
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
@@ -131,19 +129,38 @@ fn choose_and_run(prepared: &PreparedRun, cargo: &OsStr, args: &[OsString]) -> R
     let unresolved = |error| (DriverPath::Unresolved, error);
     slot.create().map_err(unresolved)?;
     if slot.is_ready().map_err(unresolved)? {
-        return reached(DriverPath::Warm, run_warm(prepared, cargo, args));
-    }
-    {
-        let _exclusive =
-            timed_lock(LockMode::Exclusive, || slot.lock_exclusive()).map_err(unresolved)?;
-        if !slot.is_ready().map_err(unresolved)? {
-            return reached(DriverPath::Cold, run_cold(prepared, cargo, args));
+        if let Some(outcome) = warm_or_none(DriverPath::Warm, prepared, cargo, args)? {
+            return Ok((DriverPath::Warm, outcome));
         }
     }
-    // Another process built the driver while this one waited. Readiness never
-    // reverts, so trade the exclusive lock for a shared one rather than make
-    // every run that queued behind the build wait for the others in turn.
-    reached(DriverPath::WarmAfterWait, run_warm(prepared, cargo, args))
+    let _exclusive =
+        timed_lock(LockMode::Exclusive, || slot.lock_exclusive()).map_err(unresolved)?;
+    if !slot.is_ready().map_err(unresolved)? {
+        return reached(DriverPath::Cold, run_cold(prepared, cargo, args));
+    }
+    // Another process built and verified the driver while this one waited.
+    // Trade the exclusive lock for a shared one rather than make every run
+    // that queued behind the build wait for the others in turn.
+    drop(_exclusive);
+    match warm_or_none(DriverPath::WarmAfterWait, prepared, cargo, args)? {
+        Some(outcome) => Ok((DriverPath::WarmAfterWait, outcome)),
+        // Replaced again in between: build under the exclusive lock.
+        None => {
+            let _exclusive = timed_lock(LockMode::Exclusive, || slot.lock_exclusive())
+                .map_err(|error| (DriverPath::Cold, error))?;
+            reached(DriverPath::Cold, run_cold(prepared, cargo, args))
+        }
+    }
+}
+
+/// [`run_warm`] tagged with `path`, keeping its "not ready after all" answer.
+fn warm_or_none(
+    path: DriverPath,
+    prepared: &PreparedRun,
+    cargo: &OsStr,
+    args: &[OsString],
+) -> Result<Option<RunOutcome>, (DriverPath, BootstrapError)> {
+    run_warm(prepared, cargo, args).map_err(|error| (path, error))
 }
 
 /// Record and log a finished run, then hand its result back.
@@ -188,46 +205,68 @@ fn timed_lock(
     Ok(lock)
 }
 
-/// Run the child under the shared lock against a driver that is ready.
+/// Run the child under the shared lock against the driver recorded as ready.
+///
+/// Returns `None`, having run nothing, when the driver present under the lock
+/// is not the one the marker records: another run has replaced it and not yet
+/// verified the snapshot behind the rebuild, so the caller must take the cold
+/// path, whose exclusive lock waits for that run to finish.
 fn run_warm(
     prepared: &PreparedRun,
     cargo: &OsStr,
     args: &[OsString],
-) -> Result<RunOutcome, BootstrapError> {
-    let _lock = timed_lock(LockMode::Shared, || prepared.slot.lock_shared())?;
-    tracing::debug!(
-        toolchain = prepared.slot.toolchain(),
-        "using the ready driver"
-    );
+) -> Result<Option<RunOutcome>, BootstrapError> {
+    let slot = &prepared.slot;
+    let _lock = timed_lock(LockMode::Shared, || slot.lock_shared())?;
+    // Read the identity first, then compare it with the marker: a replacement
+    // after this read changes the identity the child leaves, which the
+    // comparison below catches.
+    let before = slot.driver_identity()?;
+    if before.is_none() || slot.ready_identity()? != before {
+        tracing::debug!(
+            toolchain = slot.toolchain(),
+            "the driver changed since it was verified"
+        );
+        return Ok(None);
+    }
+    tracing::debug!(toolchain = slot.toolchain(), "using the ready driver");
     // Dylint re-probes a cached driver and rebuilds it if the probe fails, so
     // a warm run can still build; compare identities rather than assume.
-    let before = prepared.slot.driver_identity()?;
     let started = Instant::now();
     let status = spawn(prepared, cargo, args)?;
-    let built_driver = was_replaced(&prepared.slot, before);
+    let built_driver = was_replaced(slot, before);
     if built_driver {
         check_warm_rebuild(prepared, started)?;
     }
-    Ok(RunOutcome {
+    Ok(Some(RunOutcome {
         code: exit_code(status),
         built_driver,
-    })
+    }))
 }
 
 /// Verify the snapshot a warm run's rebuild just read, before trusting it.
 ///
 /// Full verification takes seconds on the real snapshot, so warm runs do not
 /// pay it up front; only the rare warm run whose child rebuilt the driver
-/// does. If the snapshot fails, the run fails with that error and the slot is
-/// marked cold, and the next cold run removes the driver before rebuilding,
-/// so nothing built from an unverified snapshot is reported or reused.
+/// does. Until it succeeds, the marker still names the old driver, so other
+/// runs treat the replacement as unverified and take the cold path. If the
+/// snapshot fails, the run fails with that error and the slot is marked cold,
+/// and the next cold run removes the driver before rebuilding, so nothing
+/// built from an unverified snapshot is reported or reused.
 fn check_warm_rebuild(prepared: &PreparedRun, started: Instant) -> Result<(), BootstrapError> {
     tracing::warn!(
         toolchain = prepared.slot.toolchain(),
         "Dylint rebuilt a ready driver; verifying the snapshot it read"
     );
-    let verified = verify_snapshot(prepared);
+    let verified = verify_snapshot(&prepared.snapshot);
     let outcome = if verified.is_ok() {
+        // Record the verified replacement, so other runs may share it.
+        if let Err(error) = prepared.slot.mark_ready() {
+            tracing::warn!(
+                failure = failure_label(&error),
+                "could not record the rebuilt driver as ready"
+            );
+        }
         BuildOutcome::Built
     } else {
         if let Err(error) = prepared.slot.clear_ready() {
@@ -276,7 +315,7 @@ fn run_cold(
     // a warm rebuild whose snapshot then failed verification. Remove it after
     // verifying, so Dylint always builds from the snapshot just checked.
     let before = prepared.slot.driver_identity()?;
-    let built = verify_snapshot(prepared)
+    let built = verify_snapshot(&prepared.snapshot)
         .and_then(|()| prepared.slot.remove_driver())
         .and_then(|()| spawn(prepared, cargo, args));
     let outcome = match &built {
@@ -320,28 +359,6 @@ fn record_readiness(slot: &DriverSlot) -> BuildOutcome {
             BuildOutcome::Unrecorded
         }
     }
-}
-
-/// Fully verify the snapshot against its own installation record.
-fn verify_snapshot(prepared: &PreparedRun) -> Result<(), BootstrapError> {
-    let generation = GenerationMetadata::read(&prepared.snapshot)?;
-    let invalid = |field: &str, error: &dyn std::fmt::Display| {
-        crate::clippy_snapshot::ClippySnapshotError::invalid(
-            &prepared.snapshot,
-            format!("its metadata {field} is not a commit: {error}"),
-        )
-    };
-    let manifest = ClippySnapshotManifest {
-        upstream: String::new(),
-        commit: CommitSha::try_from(generation.commit.as_str())
-            .map_err(|e| invalid("commit", &e))?,
-        toolchain: generation.toolchain.clone(),
-        selected_revision: CommitSha::try_from(generation.selected_revision.as_str())
-            .map_err(|e| invalid("selected_revision", &e))?,
-        dylint_version: generation.dylint_version.clone(),
-    };
-    verify_repository(&prepared.snapshot, &manifest)?;
-    Ok(())
 }
 
 /// Start `cargo dylint` with the bootstrap's variables and wait for it.

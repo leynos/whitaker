@@ -25,6 +25,7 @@ mod error;
 mod metadata;
 mod probe;
 mod run;
+mod snapshot_check;
 mod telemetry;
 
 pub use child::exit_code;
