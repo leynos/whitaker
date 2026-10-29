@@ -9,6 +9,7 @@ use super::download::download_bundle;
 use super::error::ClippySnapshotError;
 use super::install::{BundleArtefact, install_bundle, reuse_generation};
 use super::manifest::ClippySnapshotManifest;
+use super::telemetry::{ProvisionSource, record_provision};
 use crate::dependency_binaries::{DependencyArchiveDownloader, RepositoryArchiveDownloader};
 use camino::{Utf8Path, Utf8PathBuf};
 
@@ -55,27 +56,60 @@ pub fn provision_with(
         reason: "the path is not valid UTF-8".to_owned(),
     })?;
     let generation = super::generation_path(&root, manifest);
-    if generation.exists() {
-        return reuse_generation(&generation, manifest);
-    }
+    let (origin, result) = if generation.exists() {
+        tracing::debug!(commit = %manifest.commit, "reusing the installed Clippy snapshot");
+        (
+            ProvisionSource::Existing,
+            reuse_generation(&generation, manifest),
+        )
+    } else {
+        tracing::info!(commit = %manifest.commit, "installing the pinned Clippy snapshot");
+        install_from(source, manifest, &root, downloader)
+    };
+    record_provision(origin, result.is_ok());
+    result
+}
+
+/// Install a missing generation from `source`, naming the source it used.
+fn install_from(
+    source: &BundleSource,
+    manifest: &ClippySnapshotManifest,
+    root: &Utf8Path,
+    downloader: &dyn DependencyArchiveDownloader,
+) -> (ProvisionSource, Result<Utf8PathBuf, ClippySnapshotError>) {
     match source {
-        BundleSource::Local(bundle) => {
-            let artefact = BundleArtefact::from_sidecar(bundle, manifest)?;
-            install_bundle(&artefact, manifest, &root)
-        }
-        BundleSource::Release => {
-            // Download beside the generations so the clone stays on one filesystem.
-            let downloads = tempfile::Builder::new()
-                .prefix(".download-")
-                .tempdir_in(&root)
-                .map_err(|error| ClippySnapshotError::io(&root, &error))?;
-            let directory =
-                Utf8Path::from_path(downloads.path()).ok_or_else(|| ClippySnapshotError::Io {
-                    path: downloads.path().display().to_string(),
-                    reason: "the path is not valid UTF-8".to_owned(),
-                })?;
-            let artefact = download_bundle(downloader, manifest, directory)?;
-            install_bundle(&artefact, manifest, &root)
-        }
+        BundleSource::Local(bundle) => (
+            ProvisionSource::Local,
+            BundleArtefact::from_sidecar(bundle, manifest)
+                .and_then(|artefact| install_bundle(&artefact, manifest, root)),
+        ),
+        BundleSource::Release => (
+            ProvisionSource::Release,
+            install_release(manifest, root, downloader),
+        ),
     }
 }
+
+/// Download the release bundle beside the generations and install it.
+fn install_release(
+    manifest: &ClippySnapshotManifest,
+    root: &Utf8Path,
+    downloader: &dyn DependencyArchiveDownloader,
+) -> Result<Utf8PathBuf, ClippySnapshotError> {
+    // Download beside the generations so the clone stays on one filesystem.
+    let downloads = tempfile::Builder::new()
+        .prefix(".download-")
+        .tempdir_in(root)
+        .map_err(|error| ClippySnapshotError::io(root, &error))?;
+    let directory =
+        Utf8Path::from_path(downloads.path()).ok_or_else(|| ClippySnapshotError::Io {
+            path: downloads.path().display().to_string(),
+            reason: "the path is not valid UTF-8".to_owned(),
+        })?;
+    let artefact = download_bundle(downloader, manifest, directory)?;
+    install_bundle(&artefact, manifest, root)
+}
+
+#[cfg(test)]
+#[path = "provision_tests.rs"]
+mod tests;

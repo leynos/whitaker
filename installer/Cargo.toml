@@ -77,6 +77,7 @@ temp-env = { workspace = true, optional = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 toml = { workspace = true }
+metrics = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 ureq = { workspace = true }
@@ -90,6 +91,7 @@ whitaker_test_macros = { workspace = true }
 # oracle, and the selection they check belongs to this one release.
 dylint_internal = { version = "=6.3.0", features = ["clippy_utils"] }
 libc = { workspace = true }
+metrics-util = { workspace = true }
 proptest = { workspace = true }
 mockall = { workspace = true }
 rstest = { workspace = true }

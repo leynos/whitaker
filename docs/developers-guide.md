@@ -3886,6 +3886,45 @@ experimental crate without `--experimental`, validation returns
 error unchanged so the CLI reports the missing opt-in rather than treating the
 crate as unknown or silently building it.
 
+#### Bootstrap probes and operational metrics
+
+`whitaker-installer run` separates a query from a command. `prepare` reads
+`bootstrap.json`, checks the lint directory, the installed snapshot, and the
+`cargo-dylint` release, and resolves the driver slot without writing anything.
+`execute` creates the slot, takes the driver lock, and runs the child. Keep new
+filesystem writes on the `execute` side.
+
+Query paths in the bootstrap must not use `Path::is_file`, `is_dir`, or
+`exists`, which answer `false` for every I/O error and so turn a permission or
+storage fault into "not installed" or "cold". Use `bootstrap::probe`
+(`metadata_if_present`, and the public `is_present_dir`), which treats only
+`NotFound` as absence. `DriverSlot::is_ready` and `DriverSlot::has_driver`
+return `Result` for the same reason. The probe module serves the `bootstrap`
+module and the installer's bootstrap step (`report_bootstrap_plan`). Other
+installer code keeps its own error types rather than borrowing `BootstrapError`.
+
+`bootstrap::telemetry` and `clippy_snapshot::telemetry` own the metric names
+and their bounded labels. They follow the
+[AST operational metrics](#ast-operational-metrics) rules: describe metrics
+through the active recorder when recording, never install a recorder, and never
+put paths, commits, toolchains, or error text in a label.
+
+| Metric                                                       | Kind      | Labels                                                              |
+| ------------------------------------------------------------ | --------- | ------------------------------------------------------------------- |
+| `whitaker_installer.bootstrap.run.total`                     | counter   | `driver`: `warm`, `warm_after_wait`, `cold`                         |
+| `whitaker_installer.bootstrap.lock_wait.duration_seconds`    | histogram | `mode`: `shared`, `exclusive`                                       |
+| `whitaker_installer.bootstrap.driver_build.duration_seconds` | histogram | none                                                                |
+| `whitaker_installer.bootstrap.driver_build.total`            | counter   | `outcome`: `built`, `not_built`, `unrecorded`                       |
+| `whitaker_installer.clippy_snapshot.provision.total`         | counter   | `source`: `existing`, `release`, `local`; `outcome`: `ok`, `failed` |
+| `whitaker_installer.clippy_snapshot.clone_attempt.total`     | counter   | `outcome`: `ok`, `retry`, `exhausted`                               |
+
+*Table: Installer bootstrap and snapshot metrics.*
+
+A long `exclusive` lock wait is the signature of contended cold construction,
+and `warm_after_wait` counts runs that waited out another process's build.
+Structured `tracing` events accompany the cold path, a run that leaves no
+driver, and snapshot reuse or installation.
+
 ## Standard vs Experimental Lints
 
 Whitaker categorizes lints into two tiers:

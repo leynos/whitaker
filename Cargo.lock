@@ -3522,6 +3522,8 @@ dependencies = [
  "fs2",
  "libc",
  "log",
+ "metrics",
+ "metrics-util",
  "mockall",
  "parking_lot",
  "proptest",

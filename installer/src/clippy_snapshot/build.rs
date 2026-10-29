@@ -11,6 +11,7 @@ use super::error::ClippySnapshotError;
 use super::git::SnapshotGit;
 use super::install::{BundleArtefact, absolute, install_bundle};
 use super::manifest::{ClippySnapshotManifest, SNAPSHOT_BRANCH};
+use super::telemetry::record_clone_attempt;
 use crate::artefact::packaging::compute_sha256;
 use camino::{Utf8Path, Utf8PathBuf};
 use std::time::Duration;
@@ -145,12 +146,18 @@ fn clone_upstream(
             .with_env(&envs)
             .stdout("clone", None, &args)
         {
-            Ok(_) => return Ok(()),
+            Ok(_) => {
+                record_clone_attempt("ok");
+                return Ok(());
+            }
             Err(error) => {
                 tracing::warn!(attempt, error = %error, "Clippy clone attempt failed");
                 last_error = Some(error);
                 if attempt < CLONE_ATTEMPTS {
+                    record_clone_attempt("retry");
                     std::thread::sleep(CLONE_BACKOFF * attempt);
+                } else {
+                    record_clone_attempt("exhausted");
                 }
             }
         }

@@ -114,7 +114,7 @@ fn an_extension_suffixed_driver_is_not_dylints() {
     std::fs::write(dir.join("dylint-driver.exe"), b"driver").expect("write driver");
 
     assert!(
-        !slot.has_driver(),
+        !slot.has_driver().expect("inspect the slot"),
         "Dylint never persists `dylint-driver.exe`"
     );
 }
@@ -129,14 +129,14 @@ fn a_driver_without_a_marker_is_cold() {
         b"driver",
     );
 
-    assert!(slot.has_driver());
+    assert!(slot.has_driver().expect("inspect the slot"));
     assert!(
-        !slot.is_ready(),
+        !slot.is_ready().expect("inspect the slot"),
         "an unmarked driver may be partial or foreign"
     );
 
     slot.mark_ready().expect("mark ready");
-    assert!(slot.is_ready());
+    assert!(slot.is_ready().expect("inspect the slot"));
 }
 
 #[rstest]
@@ -147,7 +147,7 @@ fn ignores_drivers_that_are_not_this_toolchains(#[case] dir: &str, #[case] conte
     let slot = DriverSlot::new(&root, "nightly-2026-05-28");
     write_driver(&root, dir, contents);
 
-    assert!(!slot.has_driver());
+    assert!(!slot.has_driver().expect("inspect the slot"));
 }
 
 #[test]
@@ -161,4 +161,41 @@ fn shared_locks_coexist() {
     drop((first, second));
     slot.lock_exclusive()
         .expect("exclusive once shared locks are released");
+}
+
+#[test]
+fn a_slot_that_does_not_exist_yet_is_cold() {
+    let (_dir, root) = temp_root();
+    let slot = DriverSlot::new(&root.join("absent"), "nightly-2026-05-28");
+
+    assert!(!slot.has_driver().expect("absence is not an error"));
+    assert!(!slot.is_ready().expect("absence is not an error"));
+}
+
+/// Regression: an unreadable slot once read as cold, so a cold build would
+/// start against a slot it could not use.
+#[test]
+fn a_slot_that_cannot_be_read_is_an_error() {
+    let (_dir, root) = temp_root();
+    let path = root.join("slot");
+    std::fs::write(&path, b"a file, not a directory").expect("write a file");
+    let slot = DriverSlot::new(&path, "nightly-2026-05-28");
+
+    let error = slot
+        .has_driver()
+        .expect_err("a file is not a readable slot");
+
+    assert!(matches!(error, BootstrapError::Io { .. }), "{error:?}");
+}
+
+#[rstest]
+#[case::bare_channel("nightly-2026-05-28", true)]
+#[case::with_host("nightly-2026-05-28-x86_64-unknown-linux-gnu", true)]
+#[case::later_channel_sharing_a_prefix("nightly-2026-05-280", false)]
+fn recognizes_only_this_channels_toolchain_directories(#[case] dir: &str, #[case] expected: bool) {
+    let (_dir, root) = temp_root();
+    let slot = DriverSlot::new(&root, "nightly-2026-05-28");
+    write_driver(&root, dir, b"driver");
+
+    assert_eq!(slot.has_driver().expect("inspect the slot"), expected);
 }

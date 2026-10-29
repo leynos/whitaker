@@ -22,11 +22,14 @@
 mod driver;
 mod error;
 mod metadata;
+mod probe;
 mod run;
+mod telemetry;
 
 pub use driver::DriverSlot;
 pub use error::BootstrapError;
 pub use metadata::{BOOTSTRAP_SCHEMA, BootstrapMetadata, StoredPath};
+pub use probe::is_present_dir;
 pub use run::{exit_code, run, run_with_cargo};
 
 use crate::dirs::BaseDirs;

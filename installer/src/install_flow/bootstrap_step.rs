@@ -12,7 +12,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use std::ffi::OsString;
 use std::io::Write;
 use whitaker_installer::bootstrap::{
-    BOOTSTRAP_SCHEMA, BootstrapLayout, BootstrapMetadata, StoredPath,
+    BOOTSTRAP_SCHEMA, BootstrapLayout, BootstrapMetadata, StoredPath, is_present_dir,
 };
 use whitaker_installer::cli::InstallArgs;
 use whitaker_installer::clippy_snapshot::{
@@ -134,7 +134,8 @@ pub(crate) fn report_bootstrap_plan(dirs: &dyn BaseDirs, stderr: &mut dyn Write)
     let manifest = snapshot_manifest()?;
     let layout = layout(dirs)?;
     let generation = generation_path(&layout.clippy_root(), manifest);
-    let state = if generation.is_dir() {
+    // A probe failure is reported, not read as "to be installed".
+    let state = if is_present_dir(&generation)? {
         "installed"
     } else {
         "to be installed"
@@ -222,3 +223,7 @@ pub(crate) fn write_wrappers(dirs: &dyn BaseDirs, stderr: &mut dyn Write) -> Res
     write_stderr_line(stderr, "  whitaker-ls");
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "bootstrap_step_tests.rs"]
+mod tests;

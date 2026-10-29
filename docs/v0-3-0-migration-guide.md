@@ -153,3 +153,61 @@ matches on `InstallerError` to handle this query failure. A missing tool or a
 version mismatch remains a successful query with a `false` status field.
 Unexpected command failures or version output without a semantic version now
 return an error instead of being treated as permission to install.
+
+## Installer bootstrap and wrappers
+
+This release makes the Dylint driver bootstrap reproducible. Whitaker no longer
+lets Dylint clone public Clippy to build its driver; the installer provisions a
+verified Clippy snapshot instead, and never falls back to public Clippy. See
+[ADR 009](adr-009-verified-clippy-snapshot-for-dylint-driver-bootstrap.md) for
+the rationale and
+[the users' guide](users-guide.md#the-installed-dylint-bootstrap) for the
+behaviour.
+
+### Regenerate existing wrappers
+
+The `whitaker` and `whitaker-ls` wrappers no longer embed `DYLINT_LIBRARY_PATH`
+or toolchain paths. They call `whitaker-installer run -- ...`. Wrappers written
+by an earlier release do not do this, so re-run `whitaker-installer` to
+regenerate them. The run also provisions the verified Clippy snapshot and writes
+`bootstrap.json` beside it.
+
+### The `run` subcommand
+
+`whitaker-installer run -- ARGS...` runs `cargo dylint` with `ARGS` passed
+through unchanged. It overwrites `DYLINT_LIBRARY_PATH`, `DYLINT_CLIPPY_REPO`,
+and `DYLINT_DRIVER_PATH` for the child process, and passes every other
+variable, including `RUSTC_WRAPPER` and `RUSTFLAGS`, through. It requires the
+`cargo-dylint` on `PATH` to report the Dylint release the bootstrap was built
+for (6.3.0).
+
+### Offline installs
+
+Pass `--clippy-snapshot-bundle FILE` to install a Clippy snapshot bundle, with
+its `.sha256` sidecar beside it, instead of downloading the published one. The
+bundle is verified exactly as a downloaded one is, which allows offline and
+air-gapped installs.
+
+### Skipping the wrappers
+
+Users who relied on `--skip-wrapper` should use the `DYLINT_LIBRARY_PATH`,
+`DYLINT_CLIPPY_REPO`, and `DYLINT_DRIVER_PATH` exports that the installer now
+prints. Without the wrappers, let one `cargo dylint` run finish before starting
+others, because nothing else serializes the first driver build.
+
+### Library API changes
+
+Crates that depend on `whitaker_installer` see these changes:
+
+- The public `bootstrap` and `clippy_snapshot` modules are new.
+- `InstallerError` gains the `ClippySnapshot` and `Bootstrap` variants. Update
+  exhaustive matches.
+- The CLI gains `Command::Run(RunArgs)`. Update exhaustive matches on
+  `Command`.
+- `wrapper::generate_wrapper_scripts` takes one argument, `dirs`, instead of
+  two. The `library_path` argument is removed because the wrappers no longer
+  embed it:
+
+  ```rust
+  let result = generate_wrapper_scripts(&dirs)?;
+  ```

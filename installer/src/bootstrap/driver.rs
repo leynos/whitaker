@@ -12,6 +12,7 @@
 //! interrupted build or by a tool outside Whitaker, is treated as cold.
 
 use super::error::BootstrapError;
+use super::probe::metadata_if_present;
 use camino::{Utf8Path, Utf8PathBuf};
 use fs2::FileExt;
 use std::fs::File;
@@ -40,6 +41,12 @@ impl DriverSlot {
         }
     }
 
+    /// The toolchain channel whose driver this slot holds.
+    #[must_use]
+    pub fn toolchain(&self) -> &str {
+        &self.toolchain
+    }
+
     /// The directory exported as `DYLINT_DRIVER_PATH`.
     #[must_use]
     pub fn dir(&self) -> &Utf8Path {
@@ -47,9 +54,14 @@ impl DriverSlot {
     }
 
     /// Return whether a complete driver is recorded as ready.
-    #[must_use]
-    pub fn is_ready(&self) -> bool {
-        self.marker_path().is_file() && self.has_driver()
+    ///
+    /// # Errors
+    ///
+    /// Returns [`BootstrapError::Io`] when the slot cannot be read for any
+    /// reason other than not existing yet.
+    pub fn is_ready(&self) -> Result<bool, BootstrapError> {
+        let is_marked = metadata_if_present(&self.marker_path())?.is_some_and(|m| m.is_file());
+        Ok(is_marked && self.has_driver()?)
     }
 
     /// Return whether Dylint has written a driver for this toolchain.
@@ -58,19 +70,40 @@ impl DriverSlot {
     /// which carries the host triple (`nightly-2026-05-28-x86_64-...`), so any
     /// directory for this channel counts. Dylint persists the driver with a
     /// rename, so a present, non-empty file is a complete one.
-    #[must_use]
-    pub fn has_driver(&self) -> bool {
-        let Ok(entries) = std::fs::read_dir(&self.dir) else {
-            return false;
+    ///
+    /// # Errors
+    ///
+    /// Returns [`BootstrapError::Io`] when the slot cannot be read for any
+    /// reason other than not existing yet.
+    pub fn has_driver(&self) -> Result<bool, BootstrapError> {
+        let entries = match std::fs::read_dir(&self.dir) {
+            Ok(entries) => entries,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+            Err(error) => return Err(BootstrapError::io(&self.dir, &error)),
         };
-        let prefix = format!("{}-", self.toolchain);
-        entries.filter_map(Result::ok).any(|entry| {
-            let name = entry.file_name().to_string_lossy().into_owned();
-            let is_toolchain_dir = name == self.toolchain || name.starts_with(&prefix);
-            is_toolchain_dir
-                && std::fs::metadata(entry.path().join(DRIVER_FILE))
-                    .is_ok_and(|metadata| metadata.is_file() && metadata.len() > 0)
-        })
+        for entry in entries {
+            let entry = entry.map_err(|error| BootstrapError::io(&self.dir, &error))?;
+            // A name that is not UTF-8 cannot be Dylint's toolchain directory.
+            let Some(name) = entry.file_name().to_str().map(str::to_owned) else {
+                continue;
+            };
+            if self.is_toolchain_dir(&name) && self.holds_driver(&name)? {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
+    /// Return whether `name` is a toolchain directory for this channel.
+    fn is_toolchain_dir(&self, name: &str) -> bool {
+        name.strip_prefix(&self.toolchain)
+            .is_some_and(|rest| rest.is_empty() || rest.starts_with('-'))
+    }
+
+    /// Return whether the toolchain directory `name` holds a non-empty driver.
+    fn holds_driver(&self, name: &str) -> Result<bool, BootstrapError> {
+        let driver = self.dir.join(name).join(DRIVER_FILE);
+        Ok(metadata_if_present(&driver)?.is_some_and(|m| m.is_file() && m.len() > 0))
     }
 
     /// Create the slot directory, which Dylint requires to exist.

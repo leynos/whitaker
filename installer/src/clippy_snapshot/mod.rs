@@ -34,6 +34,7 @@ mod install;
 mod manifest;
 mod provision;
 mod selection;
+mod telemetry;
 mod verify;
 
 pub use build::{BuildRequest, BuiltBundle, build_bundle};

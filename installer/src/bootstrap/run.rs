@@ -1,14 +1,18 @@
 //! `whitaker-installer run`: validate the bootstrap and run `cargo dylint`.
 //!
 //! The run is split into a query, [`prepare`], which checks the installation
-//! and resolves the Dylint environment without side effects beyond creating
-//! the driver slot, and [`execute`], which holds the driver lock across the
+//! and resolves the Dylint environment without side effects, and a command,
+//! [`execute`], which creates the driver slot and holds its lock across the
 //! child process so concurrent cold runs build the driver once.
 
 use super::BootstrapLayout;
 use super::driver::DriverSlot;
 use super::error::BootstrapError;
 use super::metadata::BootstrapMetadata;
+use super::probe::is_present_dir;
+use super::telemetry::{
+    BuildOutcome, DriverPath, LockMode, record_driver_build, record_lock_wait, record_run,
+};
 use crate::clippy_snapshot::{
     ClippySnapshotManifest, GenerationMetadata, check_installed, verify_repository,
 };
@@ -16,7 +20,9 @@ use crate::dirs::BaseDirs;
 use crate::git::CommitSha;
 use camino::Utf8PathBuf;
 use std::ffi::{OsStr, OsString};
+use std::fs::File;
 use std::process::{Command, ExitStatus};
+use std::time::Instant;
 
 /// A validated installation, ready to run.
 #[derive(Debug, Clone)]
@@ -56,7 +62,7 @@ pub fn run_with_cargo(
 fn prepare(layout: &BootstrapLayout, cargo: &OsStr) -> Result<PreparedRun, BootstrapError> {
     let metadata = BootstrapMetadata::read(&layout.metadata_path())?;
     let library_dir = metadata.library_dir.resolve(layout.data_root());
-    if !library_dir.is_dir() {
+    if !is_present_dir(&library_dir)? {
         return Err(BootstrapError::LibrariesMissing {
             path: library_dir.to_string(),
         });
@@ -68,7 +74,6 @@ fn prepare(layout: &BootstrapLayout, cargo: &OsStr) -> Result<PreparedRun, Boots
         &layout.driver_dir(&metadata.dylint_version, &metadata.snapshot_commit),
         &metadata.toolchain,
     );
-    slot.create()?;
     Ok(PreparedRun {
         library_dir,
         snapshot,
@@ -88,22 +93,90 @@ fn execute(
     args: &[OsString],
 ) -> Result<i32, BootstrapError> {
     let slot = &prepared.slot;
-    if slot.is_ready() {
-        let _lock = slot.lock_shared()?;
-        return spawn(prepared, cargo, args).map(exit_code);
+    slot.create()?;
+    if slot.is_ready()? {
+        let _lock = timed_lock(LockMode::Shared, || slot.lock_shared())?;
+        return run_warm(prepared, cargo, args, DriverPath::Warm);
     }
-    let _lock = slot.lock_exclusive()?;
-    if slot.is_ready() {
-        return spawn(prepared, cargo, args).map(exit_code);
+    let _lock = timed_lock(LockMode::Exclusive, || slot.lock_exclusive())?;
+    if slot.is_ready()? {
+        return run_warm(prepared, cargo, args, DriverPath::WarmAfterWait);
     }
+    run_cold(prepared, cargo, args)
+}
+
+/// Take a driver lock, recording how long it took to acquire.
+fn timed_lock(
+    mode: LockMode,
+    acquire: impl FnOnce() -> Result<File, BootstrapError>,
+) -> Result<File, BootstrapError> {
+    let started = Instant::now();
+    let lock = acquire()?;
+    record_lock_wait(mode, started.elapsed());
+    Ok(lock)
+}
+
+/// Run the child against a driver that is already ready.
+fn run_warm(
+    prepared: &PreparedRun,
+    cargo: &OsStr,
+    args: &[OsString],
+    path: DriverPath,
+) -> Result<i32, BootstrapError> {
+    tracing::debug!(
+        driver = path.label(),
+        toolchain = prepared.slot.toolchain(),
+        "using the ready driver"
+    );
+    record_run(path);
+    spawn(prepared, cargo, args).map(exit_code)
+}
+
+/// Verify the snapshot, run the child so Dylint builds the driver, and record
+/// the driver as ready if it now exists. Call only under the exclusive lock.
+fn run_cold(
+    prepared: &PreparedRun,
+    cargo: &OsStr,
+    args: &[OsString],
+) -> Result<i32, BootstrapError> {
+    tracing::info!(
+        toolchain = prepared.slot.toolchain(),
+        "building the Dylint driver on first use"
+    );
+    record_run(DriverPath::Cold);
+    let started = Instant::now();
     verify_snapshot(prepared)?;
     let status = spawn(prepared, cargo, args)?;
-    if slot.has_driver() {
-        if let Err(error) = slot.mark_ready() {
+    let outcome = record_readiness(&prepared.slot);
+    record_driver_build(outcome, started.elapsed());
+    Ok(exit_code(status))
+}
+
+/// Mark the slot ready when the child left a driver behind.
+///
+/// Failures here are reported but not returned: the child has already run,
+/// and its exit status matters more than the marker. An unmarked slot is
+/// simply cold again next time.
+fn record_readiness(slot: &DriverSlot) -> BuildOutcome {
+    match slot.has_driver().and_then(|has_driver| {
+        has_driver
+            .then(|| slot.mark_ready())
+            .transpose()
+            .map(|marked| marked.is_some())
+    }) {
+        Ok(true) => BuildOutcome::Built,
+        Ok(false) => {
+            tracing::warn!(
+                toolchain = slot.toolchain(),
+                "cargo dylint exited without building a driver"
+            );
+            BuildOutcome::NotBuilt
+        }
+        Err(error) => {
             tracing::warn!(error = %error, "could not record the driver as ready");
+            BuildOutcome::Unrecorded
         }
     }
-    Ok(exit_code(status))
 }
 
 /// Fully verify the snapshot against its own installation record.
@@ -192,3 +265,7 @@ pub fn exit_code(status: ExitStatus) -> i32 {
     }
     1
 }
+
+#[cfg(all(test, unix))]
+#[path = "run_tests.rs"]
+mod tests;

@@ -1,3 +1,17 @@
+//! UI-test builder: `ui::Test` configures and runs one Dylint UI test.
+//!
+//! A test targets either a source directory (`Test::src_base`), one example
+//! (`Test::example`), or every example of the current package
+//! (`Test::examples`). `Test::run` initializes the driver with `initialize`,
+//! then dispatches on the target.
+//!
+//! Source-directory tests call the crate-level `run_tests` helper directly.
+//! Example tests resolve the package's example targets with `example_target`
+//! or `example_targets`, bundle the driver, metadata, package, target, and
+//! configuration into an `ExampleTestContext`, and pass it to
+//! `run_example_test`. The shared `Config` carries the extra compiler flags
+//! and `dylint.toml` contents set on the builder.
+
 use crate::{
     ExampleTestContext, example_target, example_targets, initialize, run_example_test, run_tests,
 };
