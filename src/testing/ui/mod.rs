@@ -225,16 +225,45 @@ pub fn run_ui_test(
 /// environment write itself. The guard deliberately does not hold that mutex
 /// across the UI runner callback, because runner closures can perform their
 /// own environment-guarded setup.
+///
+/// Runners in one test binary can overlap under plain `cargo test`, so the
+/// variables are shared: the first active runner sets whichever are absent and
+/// the last one to finish removes them. A per-runner record would let one
+/// runner remove the flag while another still relies on it.
 struct RunnerEnvGuard {
-    /// Variables this guard set because they were absent, removed on drop.
+    _shared: (),
+}
+
+/// Every active runner's view of the variables they set while absent.
+struct SharedRunnerEnv {
+    active: usize,
     set_while_absent: Vec<&'static str>,
 }
 
+/// The process-wide runner environment record, written under `env_test_guard`.
+static SHARED_RUNNER_ENV: std::sync::Mutex<SharedRunnerEnv> =
+    std::sync::Mutex::new(SharedRunnerEnv {
+        active: 0,
+        set_while_absent: Vec::new(),
+    });
+
+/// Lock the shared record, recovering it if a panicking test poisoned it.
+fn shared_runner_env() -> std::sync::MutexGuard<'static, SharedRunnerEnv> {
+    SHARED_RUNNER_ENV
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
 impl Drop for RunnerEnvGuard {
-    /// Restore temporary environment changes when the runner finishes.
+    /// Restore temporary environment changes when the last runner finishes.
     fn drop(&mut self) {
         let _env_guard = env_test_guard();
-        for key in &self.set_while_absent {
+        let mut shared = shared_runner_env();
+        shared.active = shared.active.saturating_sub(1);
+        if shared.active > 0 {
+            return;
+        }
+        for key in std::mem::take(&mut shared.set_while_absent) {
             // SAFETY: `env_test_guard` serializes the restoration write.
             unsafe {
                 env::remove_var(key);
@@ -266,18 +295,22 @@ fn runner_env_settings() -> Vec<(&'static str, &'static str)> {
 /// Prepare the environment required by the UI runner.
 fn runner_env_guard() -> RunnerEnvGuard {
     let _env_guard = env_test_guard();
-    let set_while_absent = runner_env_settings()
-        .into_iter()
-        .filter(|(key, _)| env::var_os(key).is_none())
-        .map(|(key, value)| {
-            // SAFETY: `_env_guard` serializes concurrent environment mutations.
-            unsafe {
-                env::set_var(key, value);
-            }
-            key
-        })
-        .collect();
-    RunnerEnvGuard { set_while_absent }
+    let mut shared = shared_runner_env();
+    if shared.active == 0 {
+        shared.set_while_absent = runner_env_settings()
+            .into_iter()
+            .filter(|(key, _)| env::var_os(key).is_none())
+            .map(|(key, value)| {
+                // SAFETY: `_env_guard` serializes concurrent environment mutations.
+                unsafe {
+                    env::set_var(key, value);
+                }
+                key
+            })
+            .collect();
+    }
+    shared.active += 1;
+    RunnerEnvGuard { _shared: () }
 }
 
 fn directory_is_rooted(path: &Utf8Path) -> bool {

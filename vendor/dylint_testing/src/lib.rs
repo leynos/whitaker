@@ -316,7 +316,13 @@ fn rustc_flags(_metadata: &Metadata, package: &Package, target: &Target) -> Resu
     // So, use `cargo rustc` with a process-specific `-C metadata` value instead. The changed
     // metadata forces rustc to run for the selected example without removing artifacts or relying
     // on Cargo's internal layout.
-    let rustc_metadata = format!("metadata=dylint_testing_{}", std::process::id());
+    // Whitaker patch: a process ID alone can repeat once a later test process
+    // reuses it, and Cargo then finds the example fresh, runs no `rustc`, and
+    // the parser finds no invocation. The clock makes the value unique.
+    let started = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |elapsed| elapsed.as_nanos());
+    let rustc_metadata = format!("metadata=dylint_testing_{}_{started}", std::process::id());
     let output = {
         // smoelius: Because of lazy initialization, `cargo rustc` is run only once. Seeing
         // "Building example `target`" for one example but not for others is confusing. So instead

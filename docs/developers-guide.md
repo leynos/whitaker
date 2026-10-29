@@ -3759,9 +3759,17 @@ commit detached. The detached checkout is intentional: it makes the chosen
 commit an immutable build input rather than a branch that a later pull could
 move.
 
-`git::command::run_git_with_timeout` is owned by the Git adapter and is the
-only permitted path for Git subprocess invocation; public operations compose
-through it.
+`git::command::run_git`, which takes a `GitInvocation` (arguments, working
+directory, operation name, timeout, and extra environment), is owned by the Git
+adapter and is the only permitted path for Git subprocess invocation. Every Git
+command is bounded by its timeout and has its output read concurrently.
+`run_git_with_timeout` is the repository adapter's wrapper that supplies the
+default five-minute timeout and the ambient environment; the public clone,
+update, and checkout operations compose through it. The Clippy snapshot's
+`clippy_snapshot::git::SnapshotGit` calls `run_git` directly, adding
+`GIT_TERMINAL_PROMPT=0`, its own bounds, and, for local operations, a
+`file`-only transport policy
+(`-c protocol.allow=never -c protocol.file.allow=always`).
 
 Workspace orchestration passes a `WorkspacePlan` to
 `ensure_workspace(dirs, plan)`:

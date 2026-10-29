@@ -326,7 +326,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
+        # The tag's manifest names the snapshot this release pins; on a
+        # dispatched re-release the default ref could pin another commit.
         uses: actions/checkout@v7
+        with:
+          ref: ${{ env.RELEASE_TAG }}
 
       - name: Check whether the pinned snapshot is published
         id: published
@@ -334,7 +338,7 @@ jobs:
           set -euo pipefail
           commit=$(awk -F '"' '/^commit = / {print $2}' installer/clippy-snapshot.toml)
           asset="whitaker-clippy-snapshot-${commit}.bundle"
-          names=$(gh release view "${{ env.RELEASE_TAG }}" --json assets --jq '.assets[].name' 2>/dev/null || true)
+          names=$(gh release view "${SNAPSHOT_RELEASE}" --json assets --jq '.assets[].name' 2>/dev/null || true)
           if grep -qxF "${asset}" <<<"${names}" && grep -qxF "${asset}.sha256" <<<"${names}"; then
             echo "published=true" >> "$GITHUB_OUTPUT"
           else
@@ -342,6 +346,9 @@ jobs:
           fi
         env:
           GH_TOKEN: ${{ github.token }}
+          # Through the environment, never template expansion: a dispatched
+          # `tag` input must not become shell source.
+          SNAPSHOT_RELEASE: ${{ env.RELEASE_TAG }}
 
       - name: Setup Rust
         if: steps.published.outputs.published != 'true'
@@ -454,6 +461,23 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SNAPSHOT_RELEASE: ${{ env.RELEASE_TAG }}
 
+      # Installers download the snapshot they pin from `rolling`, not from
+      # this tag, so a release whose snapshot is absent there installs nothing.
+      - name: Require the pinned Clippy snapshot on the rolling release
+        run: |
+          set -euo pipefail
+          commit=$(awk -F '"' '/^commit = / {print $2}' installer/clippy-snapshot.toml)
+          asset="whitaker-clippy-snapshot-${commit}.bundle"
+          names=$(gh release view rolling --json assets --jq '.assets[].name')
+          for name in "${asset}" "${asset}.sha256"; do
+            if ! grep -qxF "${name}" <<<"${names}"; then
+              echo "::error::${name} is not on the rolling release; installers from this release could not install it. Publish it from main first." >&2
+              exit 1
+            fi
+          done
+        env:
+          GH_TOKEN: ${{ github.token }}
+
       - name: Require at least one build archive
         run: |
           set -euo pipefail
@@ -557,7 +581,15 @@ jobs:
       # assets only: it installs the suite, the Dylint tools, and the Clippy
       # snapshot, and the checks below deny github.com before linting.
       - name: Put the wrapper directory on PATH
-        run: echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+        # Git Bash's `$HOME` is an MSYS path that PowerShell cannot resolve,
+        # so Windows needs the native form.
+        run: |
+          set -euo pipefail
+          if command -v cygpath >/dev/null 2>&1; then
+            cygpath -w "$HOME/.local/bin"
+          else
+            printf '%s\n' "$HOME/.local/bin"
+          fi >> "$GITHUB_PATH"
 
       - name: Install the suite with the released installer
         run: whitaker-installer --no-source-fallback
@@ -599,7 +631,15 @@ jobs:
         run: cargo install --locked --path installer --bin whitaker-installer
 
       - name: Put the wrapper directory on PATH
-        run: echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+        # Git Bash's `$HOME` is an MSYS path that PowerShell cannot resolve,
+        # so Windows needs the native form.
+        run: |
+          set -euo pipefail
+          if command -v cygpath >/dev/null 2>&1; then
+            cygpath -w "$HOME/.local/bin"
+          else
+            printf '%s\n' "$HOME/.local/bin"
+          fi >> "$GITHUB_PATH"
 
       - name: Install the published suite and bootstrap
         run: whitaker-installer --no-source-fallback

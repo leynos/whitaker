@@ -645,7 +645,15 @@ jobs:
         run: cargo install --locked --path installer --bin whitaker-installer
 
       - name: Put the wrapper directory on PATH
-        run: echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+        # Git Bash's `$HOME` is an MSYS path that PowerShell cannot resolve,
+        # so Windows needs the native form.
+        run: |
+          set -euo pipefail
+          if command -v cygpath >/dev/null 2>&1; then
+            cygpath -w "$HOME/.local/bin"
+          else
+            printf '%s\n' "$HOME/.local/bin"
+          fi >> "$GITHUB_PATH"
 
       - name: Install the published suite and bootstrap
         run: whitaker-installer --no-source-fallback

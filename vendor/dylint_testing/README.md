@@ -131,4 +131,7 @@ example-target discovery accept Cargo commands that place a compiler wrapper
 before `rustc`. The test runner can then keep configured compiler wrappers
 active while recovering the example's linking flags. It also groups the five
 `run_example_test` arguments into an `ExampleTestContext`, so the crate meets
-Whitaker's argument limit without a lint suppression.
+Whitaker's argument limit without a lint suppression. Finally, the
+`-C metadata` value that forces each example to recompile adds the current time
+to upstream's process ID, so a reused process ID cannot make Cargo skip the
+compiler invocation the parser needs.

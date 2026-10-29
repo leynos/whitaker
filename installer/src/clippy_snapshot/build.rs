@@ -18,6 +18,9 @@ use std::time::Duration;
 /// Attempts at the upstream clone before giving up.
 const CLONE_ATTEMPTS: u32 = 3;
 
+/// The URL-scoped config key that confines the retry token to GitHub.
+const GITHUB_HEADER_KEY: &str = "http.https://github.com/.extraHeader";
+
 /// Base delay between attempts; attempt `n` waits `n` times this.
 const CLONE_BACKOFF: Duration = Duration::from_secs(5);
 
@@ -94,8 +97,10 @@ pub fn build_bundle(request: &BuildRequest<'_>) -> Result<BuiltBundle, ClippySna
 ///
 /// GitHub intermittently refuses anonymous clones from shared CI egress
 /// ranges. Retrying with the job's token avoids that limit, but the token is
-/// only offered after an anonymous attempt fails, so a normal clone never
-/// sends it to an unrelated upstream.
+/// only offered after an anonymous attempt fails, and only to
+/// `https://github.com/` URLs: the header is keyed to that prefix, so a clone
+/// of a mirror or any other `--source` never receives it. Git matches the key
+/// against the URL it was given, not against hosts it is redirected to.
 fn clone_upstream(
     request: &BuildRequest<'_>,
     mirror: &Utf8Path,
@@ -107,11 +112,12 @@ fn clone_upstream(
             .then_some(request.token)
             .flatten()
             .map(|token| format!("Authorization: Bearer {token}"));
-        // `GIT_CONFIG_*` scopes the header to this one command.
+        // `GIT_CONFIG_*` scopes the header to this one command, and the URL in
+        // the key scopes it to GitHub.
         let envs: Vec<(&str, &str)> = header.as_deref().map_or_else(Vec::new, |value| {
             vec![
                 ("GIT_CONFIG_COUNT", "1"),
-                ("GIT_CONFIG_KEY_0", "http.extraHeader"),
+                ("GIT_CONFIG_KEY_0", GITHUB_HEADER_KEY),
                 ("GIT_CONFIG_VALUE_0", value),
             ]
         });

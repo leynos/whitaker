@@ -93,3 +93,25 @@ fn refuses_a_commit_that_is_not_on_mains_first_parent_history() {
         "{error}"
     );
 }
+
+/// The retry token reaches GitHub URLs and nothing else.
+#[rstest::rstest]
+#[case::upstream("https://github.com/rust-lang/rust-clippy", true)]
+#[case::mirror("https://mirror.example.invalid/rust-clippy", false)]
+#[case::lookalike_host("https://github.com.example.invalid/rust-clippy", false)]
+fn the_retry_header_is_scoped_to_github(#[case] url: &str, #[case] is_sent: bool) {
+    let output = std::process::Command::new("git")
+        .args(["config", "--get-urlmatch", "http.extraHeader", url])
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env(
+            "GIT_CONFIG_GLOBAL",
+            if cfg!(windows) { "NUL" } else { "/dev/null" },
+        )
+        .env("GIT_CONFIG_COUNT", "1")
+        .env("GIT_CONFIG_KEY_0", GITHUB_HEADER_KEY)
+        .env("GIT_CONFIG_VALUE_0", "Authorization: Bearer token")
+        .output()
+        .expect("run git config");
+    let header = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(header.contains("Bearer token"), is_sent, "{url}: {header}");
+}

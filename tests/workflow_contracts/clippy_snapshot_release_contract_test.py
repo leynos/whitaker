@@ -111,3 +111,35 @@ def test_the_released_installer_lints_offline_on_every_platform() -> None:
     windows = _step(job, "Verify the installed bootstrap through the PowerShell wrapper")
     assert windows["if"] == "runner.os == 'Windows'"
     assert "verify-installed-bootstrap.ps1" in str(windows["run"])
+
+
+def test_the_versioned_snapshot_job_uses_the_tag_and_no_template_shell() -> None:
+    """The tag's manifest decides the snapshot, and its name never becomes shell."""
+    job = _jobs("release.yml")["clippy-snapshot"]
+    assert _step(job, "Checkout")["with"]["ref"] == "${{ env.RELEASE_TAG }}"
+    probe = _step(job, "Check whether the pinned snapshot is published")
+    assert "${{" not in str(probe["run"]), "expressions must reach the shell via env"
+    assert probe["env"]["SNAPSHOT_RELEASE"] == "${{ env.RELEASE_TAG }}"
+
+
+def test_a_versioned_release_requires_the_snapshot_on_rolling() -> None:
+    """Installers download from `rolling`, so a tag cannot publish without it."""
+    publish = _jobs("release.yml")["publish"]
+    names = _step_names(publish)
+    gate = "Require the pinned Clippy snapshot on the rolling release"
+    assert names.index(gate) < names.index("Create GitHub Release")
+    assert "gh release view rolling" in str(_step(publish, gate)["run"])
+
+
+@pytest.mark.parametrize(
+    ("workflow", "job"),
+    [
+        ("release.yml", "verify-binstall"),
+        ("release.yml", "verify-published-bootstrap"),
+        ("rolling-release.yml", "verify-published-bootstrap"),
+    ],
+)
+def test_the_wrapper_directory_reaches_path_natively(workflow: str, job: str) -> None:
+    """Windows needs a native path in GITHUB_PATH for PowerShell to resolve it."""
+    run = str(_step(_jobs(workflow)[job], "Put the wrapper directory on PATH")["run"])
+    assert 'cygpath -w "$HOME/.local/bin"' in run

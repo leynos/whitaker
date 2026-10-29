@@ -156,6 +156,34 @@ fn runner_env_guard_marks_the_toolchain_library_as_prepared(
     assert_eq!(env::var_os(FLAG), caller_value.map(Into::into));
 }
 
+/// Overlapping runners keep the flag until the last one finishes.
+///
+/// Regression: each runner used to remove the variables it set, so under plain
+/// `cargo test` one runner could remove the flag while another still relied on
+/// it, and that UI test loaded the default-feature stub.
+#[test]
+fn overlapping_runner_guards_keep_the_flag_until_the_last_drops() {
+    const FLAG: &str = "DYLINT_LINK_ENABLE_COPY_LIBRARY";
+    let _serial_guard = runner_env_guard_test_lock();
+    let _absent = EnvVarGuard::remove(FLAG);
+
+    let first = super::runner_env_guard();
+    let second = super::runner_env_guard();
+    drop(first);
+    assert_eq!(
+        env::var_os(FLAG),
+        Some("1".into()),
+        "the second runner still needs it"
+    );
+
+    drop(second);
+    assert_eq!(
+        env::var_os(FLAG),
+        None,
+        "the last runner restores the environment"
+    );
+}
+
 #[cfg(windows)]
 #[test]
 fn windows_env_guard_leaves_absent_rustc_wrapper_untouched() {
