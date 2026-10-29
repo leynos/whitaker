@@ -78,7 +78,14 @@ and public Clippy access is never needed or used.
   (21 s, byte-identical driver `fa0b26c0…`) with public Clippy unreachable from
   this host (`git ls-remote` canary exit 128). ADR 009 and the developers'
   guide section were written alongside.
-- [ ] Installed bootstrap: `run` subcommand, locks, thin wrappers.
+- [x] (2026-10-29) Installed bootstrap: `run` subcommand, locks, thin
+  wrappers. An end-to-end run on this host installed the prebuilt suite from
+  the rolling release and the real snapshot via `--clippy-snapshot-bundle` into
+  isolated XDG directories, then `verify-installed-bootstrap.sh` passed: the
+  cold run compiled `dylint_driver` and failed with `no_std_fs_operations`, the
+  warm run reused it, of two simultaneous cold runs one built while the other
+  waited and reused it, a relocated data root still linted, and a deleted
+  snapshot failed with the no-fallback message.
 - [ ] Release publication and post-publication checks.
 - [ ] Documentation, ADR, and the draft pull request.
 
@@ -119,6 +126,12 @@ and public Clippy access is never needed or used.
 - 2026-10-29: ADR 008 is already taken on the unmerged
   `issue-523-adopt-ortho-config-v0-10-0-for-the-whitaker-cli` branch, so this
   work's ADR is 009.
+- 2026-10-29: Two end-to-end installer tests broke once installation began
+  requiring the snapshot, and one of them wrote to the developer's real data
+  directory. Rather than skip the step for tests, debug binaries accept a
+  fixture manifest (`WHITAKER_INSTALLER_TEST_CLIPPY_SNAPSHOT_MANIFEST`), the
+  shared `SnapshotFixture` supplies a small real bundle, and the affected test
+  isolates `XDG_DATA_HOME`.
 - 2026-10-29: Clippy's early commits use a plain-text `rust-toolchain`
   file that Dylint's TOML parser cannot read. Dylint's walk never reaches them,
   but an eager reader does, so the reproduction stops at the first unreadable

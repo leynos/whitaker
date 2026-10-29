@@ -13,6 +13,7 @@ use std::{
     io,
     process::{Command, Output},
 };
+use whitaker_installer::test_utils::SnapshotFixture;
 
 /// Keep an isolated workspace, PATH, and home directories alive for CLI runs.
 struct TracingFixture {
@@ -20,6 +21,8 @@ struct TracingFixture {
     root_path: Utf8PathBuf,
     workspace: Utf8PathBuf,
     environment: Vec<(OsString, OsString)>,
+    /// The Clippy snapshot installed before the toolchain step under test.
+    snapshot: SnapshotFixture,
 }
 
 /// Select one supported installer CLI verbosity mode for the fixture.
@@ -105,6 +108,7 @@ impl TracingFixture {
         let binary_directory = root_path.join("bin");
         create_workspace(&root_dir)?;
         create_binaries(&root_dir)?;
+        link_real_git(&binary_directory)?;
         let environment = create_environment(&root_dir, &root_path, &binary_directory)?;
 
         Ok(Self {
@@ -112,8 +116,42 @@ impl TracingFixture {
             root_path,
             workspace,
             environment,
+            snapshot: SnapshotFixture::new()?,
         })
     }
+}
+
+/// Expose the real `git` on the isolated PATH.
+///
+/// The installer verifies its Clippy snapshot with Git before it reaches the
+/// fake `rustup` this test is about, and the PATH otherwise holds only fakes.
+///
+/// # Errors
+///
+/// Returns an I/O error if `git` cannot be found or linked.
+fn link_real_git(binary_directory: &Utf8Path) -> io::Result<()> {
+    let git = std::env::var_os("PATH")
+        .into_iter()
+        .flat_map(|path| std::env::split_paths(&path).collect::<Vec<_>>())
+        .map(|directory| directory.join("git"))
+        .find(|candidate| runs_without_path(candidate))
+        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "no self-contained git on PATH"))?;
+    std::os::unix::fs::symlink(git, binary_directory.join("git"))
+}
+
+/// Return whether `candidate` runs with an empty PATH, as it must here.
+///
+/// Wrapper shims (for example one implemented in Node.js) resolve their
+/// interpreter through PATH, which this fixture replaces, so only a
+/// self-contained `git` is usable.
+fn runs_without_path(candidate: &std::path::Path) -> bool {
+    candidate.is_file()
+        && Command::new(candidate)
+            .arg("--version")
+            .env_clear()
+            .env("PATH", "")
+            .output()
+            .is_ok_and(|output| output.status.success())
 }
 
 /// Create the minimal workspace passed to the installer child process.
@@ -230,13 +268,15 @@ fn main_filters_path_scan_diagnostics_by_cli_verbosity() -> Result<(), Box<dyn E
 ///
 /// Returns an I/O error if the installer process cannot be started or read.
 fn run_cli_mode(fixture: &TracingFixture, mode: CliMode) -> io::Result<Output> {
-    Command::new(env!("CARGO_BIN_EXE_whitaker-installer"))
+    let mut command = Command::new(env!("CARGO_BIN_EXE_whitaker-installer"));
+    command
         .args(["--toolchain", "nightly-test"])
         .args(mode.arguments())
         .current_dir(fixture.workspace.as_std_path())
         .env_clear()
-        .envs(fixture.environment.iter().cloned())
-        .output()
+        .envs(fixture.environment.iter().cloned());
+    fixture.snapshot.configure(&mut command);
+    command.output()
 }
 
 /// Check the controlled failure and verbosity-filtered diagnostic contract.

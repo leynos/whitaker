@@ -47,7 +47,7 @@ pub(crate) fn run_dry(
         crates: &requested_crates,
     };
     write_stderr_line(stderr, info.display_text());
-    Ok(())
+    crate::install_flow::bootstrap_step::report_bootstrap_plan(dirs, stderr)
 }
 
 fn determine_dry_run_target_dir(

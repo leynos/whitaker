@@ -22,6 +22,7 @@ use whitaker_installer::prebuilt::{PrebuiltConfig, PrebuiltResult, attempt_prebu
 use whitaker_installer::prebuilt_path::prebuilt_library_dir;
 use whitaker_installer::resolution::{EXPERIMENTAL_LINT_CRATES, LINT_CRATES, SUITE_CRATE};
 
+pub(crate) mod bootstrap_step;
 mod dependency_check;
 #[cfg(all(test, unix))]
 pub(crate) use dependency_check::check_dylint_tools_for_command;

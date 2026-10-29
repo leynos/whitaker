@@ -64,12 +64,15 @@ This:
    subcommand. A release artefact is trusted once its checksum, extraction, and
    executable permissions have been established, and a Cargo-managed copy is
    checked by resolving it on `PATH` and comparing the version Cargo recorded.
-2. Clones the Whitaker repository to a platform-specific data directory
-3. Builds the lint libraries
-4. Creates `whitaker` and `whitaker-ls` wrapper scripts. `whitaker` invokes
-   `cargo dylint` with the correct `DYLINT_LIBRARY_PATH`, and `whitaker-ls`
-   lists installed Whitaker suite libraries
-5. Ensures the pinned Rust toolchain and components are installed via rustup
+2. Installs the verified Clippy snapshot that Dylint's driver build reads (see
+   [The installed Dylint bootstrap](#the-installed-dylint-bootstrap))
+3. Clones the Whitaker repository to a platform-specific data directory
+4. Builds or downloads the lint libraries
+5. Creates `whitaker` and `whitaker-ls` wrapper scripts. Both call
+   `whitaker-installer run`, which runs `cargo dylint` with the installed
+   libraries, Clippy snapshot, and driver directory; `whitaker-ls` lists the
+   installed Whitaker suite libraries
+6. Ensures the pinned Rust toolchain and components are installed via rustup
 
 After installation, run `whitaker --all` in any Rust project to lint it. Use
 `whitaker-ls` to list the installed Whitaker suite libraries.
@@ -104,8 +107,13 @@ environment-variable workaround.
   Cranelift back-end and would otherwise need an explicit
   `rustc-codegen-cranelift` component-add step before running the installer.
 - `--skip-deps` — Skip `cargo-dylint`/`dylint-link` installation check
-- `--skip-wrapper` — Skip wrapper script generation (prints
-  `DYLINT_LIBRARY_PATH` instructions instead)
+- `--skip-wrapper` — Skip wrapper script generation and print the
+  `DYLINT_LIBRARY_PATH`, `DYLINT_CLIPPY_REPO`, and `DYLINT_DRIVER_PATH` exports
+  instead. Without the wrappers nothing serializes the first driver build, so
+  let one `cargo dylint` run finish before starting others
+- `--clippy-snapshot-bundle FILE` — Install this Clippy snapshot bundle, with
+  its `.sha256` sidecar beside it, instead of downloading the published one. It
+  is verified exactly as a downloaded bundle is
 - `--no-update` — Don't update existing repository clone
 - `--suite-version REF` (alias `--suite-ref`) — Build the lint suite from a
   given tag, branch or commit rather than from the default branch tip. See
@@ -124,6 +132,64 @@ The installer scans `PATH` entries in order and uses the first regular
 executable candidate for `dylint-link`. It skips missing candidates and entries
 that cannot be represented as UTF-8 or opened, then continues searching later
 entries.
+
+### The installed Dylint bootstrap
+
+Running a Dylint lint library needs a driver binary built against the nightly
+compiler, and building it needs Clippy source at the revision matching that
+nightly. Dylint finds that revision in Clippy's Git history. Whitaker no longer
+lets it clone public Clippy for this: an upstream change to Clippy's history
+(the `master` to `main` rename, #526) broke every first run in every consumer.
+The installer instead installs a published, checksummed snapshot of the Clippy
+history the suite was verified against, and the driver is built from it on
+first use.
+
+Everything lives beside the managed Whitaker clone, in the platform data
+directory (`$XDG_DATA_HOME`, usually `~/.local/share`, on Linux):
+
+```text
+whitaker-bootstrap/
+  bootstrap.json                         what this installation provisioned
+  clippy/<commit>/                       the verified Clippy snapshot
+  drivers/dylint-<version>/clippy-<commit>/
+    <toolchain>-<host>/dylint-driver     built on the first run
+```
+
+`whitaker` and `whitaker-ls` contain no paths. They find `whitaker-installer`
+beside themselves, or else on `PATH`, and call `whitaker-installer run`, which:
+
+- checks that the installation is complete, that the snapshot is still the
+  pinned one (with `main` as its only branch), and that
+  `cargo dylint --version` reports the Dylint release the bootstrap was built
+  for;
+- sets `DYLINT_LIBRARY_PATH`, `DYLINT_CLIPPY_REPO`, and `DYLINT_DRIVER_PATH`,
+  overwriting any values already in the environment, and passes every other
+  variable (including `RUSTC_WRAPPER` and `RUSTFLAGS`) through unchanged;
+- builds the driver on the first run while other runs wait, so concurrent
+  first runs build it once, then lets later runs share it;
+- exits with `cargo dylint`'s own status, so lint failures still fail CI.
+
+Paths are worked out from the current data directory each time, so moving the
+data directory (or pointing `XDG_DATA_HOME` elsewhere) keeps an installation
+working. A source-built suite whose libraries live outside the data directory
+records their absolute path.
+
+Every snapshot failure names its remedy and says that Whitaker never falls back
+to public Clippy:
+
+- *is not installed* or *is invalid*: re-run `whitaker-installer`; for an
+  invalid generation, remove the named directory first, because the installer
+  never modifies an installed snapshot.
+- *was not found* during installation: that Whitaker release does not publish
+  the snapshot it pins. Use a release that does, or pass
+  `--clippy-snapshot-bundle`.
+- *failed SHA-256 verification*: the download is corrupt or was tampered with.
+  Delete it and download it again.
+- *cargo-dylint reports version …*: the `cargo-dylint` on `PATH` is not the
+  release this installation was bootstrapped for. Re-run `whitaker-installer`.
+
+`whitaker-installer --dry-run` prints the snapshot and driver directories,
+which is useful for caching them in CI.
 
 ### Adding Whitaker to a project
 

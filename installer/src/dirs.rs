@@ -58,6 +58,20 @@ pub trait BaseDirs {
     /// - macOS: `~/Library/Application Support/whitaker`
     /// - Windows: `%LOCALAPPDATA%\whitaker`
     fn whitaker_data_dir(&self) -> Option<PathBuf>;
+
+    /// Returns the directory holding the installed Dylint bootstrap.
+    ///
+    /// It sits beside [`Self::whitaker_data_dir`], never inside it, because
+    /// that directory is itself the managed Git clone. On Linux this is
+    /// `$XDG_DATA_HOME/whitaker-bootstrap`, falling back to
+    /// `~/.local/share/whitaker-bootstrap`.
+    fn bootstrap_dir(&self) -> Option<PathBuf> {
+        self.whitaker_data_dir().and_then(|data_dir| {
+            data_dir
+                .parent()
+                .map(|root| root.join("whitaker-bootstrap"))
+        })
+    }
 }
 
 /// Real implementation of [`BaseDirs`] using the `directories-next` crate.
@@ -148,6 +162,33 @@ mod tests {
                 .is_some_and(|p| p.to_string_lossy().contains("whitaker")),
             "expected path to contain 'whitaker'"
         );
+    }
+
+    #[test]
+    fn bootstrap_dir_sits_beside_the_managed_clone() {
+        let dirs = SystemBaseDirs::new().expect("failed to create SystemBaseDirs");
+        let data_dir = dirs.whitaker_data_dir().expect("data dir");
+        let bootstrap = dirs.bootstrap_dir().expect("bootstrap dir");
+
+        assert_eq!(bootstrap.parent(), data_dir.parent());
+        assert!(
+            !bootstrap.starts_with(&data_dir),
+            "never inside the Git clone"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn bootstrap_dir_honours_xdg_data_home() {
+        let _guard = env_test_guard();
+        temp_env::with_var("XDG_DATA_HOME", Some("/custom/share"), || {
+            let dirs = SystemBaseDirs::new().expect("failed to create SystemBaseDirs");
+
+            assert_eq!(
+                dirs.bootstrap_dir(),
+                Some(PathBuf::from("/custom/share/whitaker-bootstrap"))
+            );
+        });
     }
 
     #[test]

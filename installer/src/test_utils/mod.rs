@@ -13,6 +13,11 @@ use crate::deps::CommandExecutor;
 use crate::error::InstallerError;
 use crate::{dirs::BaseDirs, error::Result};
 
+#[cfg(any(test, feature = "test-support"))]
+mod snapshot_fixture;
+#[cfg(any(test, feature = "test-support"))]
+pub use snapshot_fixture::{FIXTURE_TOOLCHAIN, SnapshotFixture, git as fixture_git};
+
 /// Creates an `ExitStatus` from an exit code (Unix implementation).
 ///
 /// # Examples

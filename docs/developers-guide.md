@@ -3408,6 +3408,30 @@ Use this hook only for installer orchestration tests. Release validation,
 prebuilt-download coverage, and user-facing installation flows must continue to
 exercise the real build or download paths.
 
+### Fixture Clippy snapshots for installer tests
+
+An installation now provisions the Clippy snapshot before any workspace or
+library work, and the published snapshot is the full Clippy history.
+Integration tests therefore install a small, real snapshot instead:
+
+- `whitaker_installer::test_utils::SnapshotFixture` (behind `test-support`)
+  commits two rustups to a local repository, bundles it with a `.sha256`
+  sidecar, and writes a manifest pinning it. `configure(&mut Command)` points
+  an installer child process at it; `install(root)` installs it in process.
+- Debug installer binaries read that manifest from
+  `WHITAKER_INSTALLER_TEST_CLIPPY_SNAPSHOT_MANIFEST`
+  (`test_support::TEST_CLIPPY_SNAPSHOT_MANIFEST_ENV`) in place of the embedded
+  one. Release binaries ignore the variable.
+
+The fixture replaces only the manifest and the bundle: download-free
+installation, every integrity check, and Dylint's selection all run for real. A
+test that runs the installer with the real data directory must also set
+`XDG_DATA_HOME` to a temporary directory, because installation records
+`bootstrap.json` there. `installer/tests/bootstrap_run.rs` exercises
+`whitaker-installer run` the same way against a stub `cargo`, covering cold and
+warm runs, concurrent cold runs, relocation, overwritten variables, exit-status
+preservation, and each refusal.
+
 ### Test environment synchronization
 
 Installer regression helpers that mutate process-wide environment variables

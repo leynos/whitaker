@@ -60,7 +60,7 @@ path = "src/bin/clippy_snapshot.rs"
 test-support = ["dep:temp-env"]
 
 [dependencies]
-camino = { workspace = true }
+camino = { workspace = true, features = ["serde1"] }
 cap-std = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 whitaker-common = { workspace = true }
