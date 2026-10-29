@@ -148,6 +148,13 @@ and public Clippy access is never needed or used.
   five-argument `run_example_test` in the vendored crate. The 6.0.1 patch had
   already grouped those arguments in a struct, so the rebase had regressed it;
   all three were refactored rather than suppressed.
+- 2026-10-29: On the Windows runner, `$(shell awk -F '"' ...)` was mangled,
+  so the Makefile read an empty snapshot commit and exported the bare snapshot
+  root as `DYLINT_CLIPPY_REPO`. A `[ -d ]` guard accepted it and the driver
+  build failed. The lookup now uses a quote-free `sed` expression that
+  tolerates CRLF, and the guard requires the generation's metadata file; the
+  stricter guard also exposed three Makefile test harnesses that had passed
+  only because of the weak check.
 - 2026-10-29: Clippy's early commits use a plain-text `rust-toolchain`
   file that Dylint's TOML parser cannot read. Dylint's walk never reaches them,
   but an eager reader does, so the reproduction stops at the first unreadable

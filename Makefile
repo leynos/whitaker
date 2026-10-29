@@ -170,7 +170,10 @@ WHITAKER_SCRIPT ?= $(HOME)/.local/bin/whitaker
 # Dylint release and snapshot commit, so a re-pin never reuses a driver built
 # from other inputs.
 CLIPPY_SNAPSHOT_MANIFEST := installer/clippy-snapshot.toml
-CLIPPY_SNAPSHOT_COMMIT := $(shell awk -F '"' '/^commit = / {print $$2}' $(CLIPPY_SNAPSHOT_MANIFEST))
+# No double quotes in the program: Windows runners mangle them inside
+# `$(shell)`, which left the commit empty. `.` matches the TOML quote, and the
+# trailing `.*` absorbs a CRLF line ending.
+CLIPPY_SNAPSHOT_COMMIT := $(shell sed -n 's/^commit = .\([0-9a-f]*\).*/\1/p' $(CLIPPY_SNAPSHOT_MANIFEST))
 CLIPPY_SNAPSHOT_ROOT ?= $(HOME)/.cache/whitaker-clippy-snapshot
 # A local `whitaker-clippy-snapshot-<commit>.bundle`, with its `.sha256` sidecar
 # beside it, to install instead of the published asset.
@@ -564,9 +567,13 @@ clippy-snapshot: ## Install the pinned Clippy snapshot that Dylint driver builds
 	@# Reuses a generation that verifies; otherwise installs CLIPPY_SNAPSHOT_BUNDLE
 	@# or the published asset. There is no fallback to public Clippy.
 	@set -eu; \
+	[ -n "$(CLIPPY_SNAPSHOT_COMMIT)" ] || { \
+		echo "could not read the snapshot commit from $(CLIPPY_SNAPSHOT_MANIFEST)" >&2; \
+		exit 1; \
+	}; \
 	generation=$$($(CLIPPY_SNAPSHOT_TOOL) install --root "$(call native_path,$(CLIPPY_SNAPSHOT_ROOT))" \
 		$(if $(CLIPPY_SNAPSHOT_BUNDLE),--bundle "$(call native_path,$(CLIPPY_SNAPSHOT_BUNDLE))")); \
-	if [ ! -d "$(DYLINT_CLIPPY_REPO)" ]; then \
+	if [ ! -f "$(DYLINT_CLIPPY_REPO)/whitaker-clippy-snapshot.json" ]; then \
 		echo "DYLINT_CLIPPY_REPO=$(DYLINT_CLIPPY_REPO) is not the installed snapshot ($$generation)" >&2; \
 		exit 1; \
 	fi; \

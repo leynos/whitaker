@@ -230,7 +230,10 @@ def _run_publish_check(
     commit = next(
         line.split('"')[1] for line in manifest.splitlines() if line.startswith("commit = ")
     )
-    (isolated_home / ".cache/whitaker-clippy-snapshot" / commit).mkdir(parents=True)
+    generation = isolated_home / ".cache/whitaker-clippy-snapshot" / commit
+    generation.mkdir(parents=True)
+    # The recipe accepts only a directory carrying generation metadata.
+    (generation / "whitaker-clippy-snapshot.json").write_text("{}\n", encoding="utf-8")
     return subprocess.run(
         [
             "make",
