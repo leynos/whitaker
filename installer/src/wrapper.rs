@@ -148,7 +148,7 @@ fn write_unix_script(path: &Path, content: &str) -> Result<()> {
 
 /// PowerShell that sets `$installer` to the `whitaker-installer.exe` beside
 /// the script, or else the one on `PATH`.
-#[cfg(windows)]
+#[cfg(any(windows, test))]
 const WINDOWS_LOCATE_INSTALLER: &str = r#"$installer = Join-Path $PSScriptRoot 'whitaker-installer.exe'
 if (-not (Test-Path -LiteralPath $installer -PathType Leaf)) {
     $command = Get-Command whitaker-installer -CommandType Application -ErrorAction SilentlyContinue |
@@ -170,21 +170,30 @@ fn generate_windows_scripts(bin_dir: &Path) -> Result<(std::path::PathBuf, std::
         .map_err(|e| InstallerError::WrapperGeneration(format!("failed to write script: {e}")))?;
 
     let whitaker_ls_path = bin_dir.join("whitaker-ls.ps1");
-    let whitaker_ls_content = format!(
-        r#"{WINDOWS_LOCATE_INSTALLER}
-$suite = "{suite_crate}"
-& $installer run -- list --color never | Where-Object {{
-    $_ -match ("^\\s*" + [regex]::Escape($suite) + "(\\s|$)")
-}}
-exit $LASTEXITCODE
-"#,
-        suite_crate = SUITE_CRATE,
-    );
+    let whitaker_ls_content = windows_ls_script();
 
     std::fs::write(&whitaker_ls_path, whitaker_ls_content)
         .map_err(|e| InstallerError::WrapperGeneration(format!("failed to write script: {e}")))?;
 
     Ok((whitaker_path, whitaker_ls_path))
+}
+
+/// Render `whitaker-ls.ps1`, which keeps only the suite's `list` line.
+///
+/// Built on every platform under test so the PowerShell pattern is checked
+/// even where PowerShell cannot run.
+#[cfg(any(windows, test))]
+fn windows_ls_script() -> String {
+    format!(
+        r#"{WINDOWS_LOCATE_INSTALLER}
+$suite = "{suite_crate}"
+& $installer run -- list --color never | Where-Object {{
+    $_ -match ("^\s*" + [regex]::Escape($suite) + "(\s|$)")
+}}
+exit $LASTEXITCODE
+"#,
+        suite_crate = SUITE_CRATE,
+    )
 }
 
 /// Checks if a directory is in the PATH environment variable.
