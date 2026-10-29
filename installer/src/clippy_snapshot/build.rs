@@ -11,10 +11,12 @@ use super::error::ClippySnapshotError;
 use super::git::SnapshotGit;
 use super::install::{BundleArtefact, absolute, install_bundle};
 use super::manifest::{ClippySnapshotManifest, SNAPSHOT_BRANCH};
-use super::telemetry::record_clone_attempt;
+use super::telemetry::{
+    OUTCOME_OK, failed_attempt_label, failure_label, millis, record_clone_attempt,
+};
 use crate::artefact::packaging::compute_sha256;
 use camino::{Utf8Path, Utf8PathBuf};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 /// Attempts at the upstream clone before giving up.
 const CLONE_ATTEMPTS: u32 = 3;
@@ -142,22 +144,31 @@ fn clone_upstream(
             request.source,
             mirror.as_str(),
         ];
+        let started = Instant::now();
         match SnapshotGit::network()
             .with_env(&envs)
             .stdout("clone", None, &args)
         {
             Ok(_) => {
-                record_clone_attempt("ok");
+                record_clone_attempt(OUTCOME_OK, started.elapsed());
                 return Ok(());
             }
             Err(error) => {
-                tracing::warn!(attempt, error = %error, "Clippy clone attempt failed");
+                let outcome = failed_attempt_label(attempt, CLONE_ATTEMPTS);
+                let elapsed = started.elapsed();
+                record_clone_attempt(outcome, elapsed);
+                // The error reaches the caller once attempts run out; the log
+                // carries only bounded fields.
+                tracing::warn!(
+                    attempt,
+                    outcome,
+                    failure = failure_label(&error),
+                    elapsed_ms = millis(elapsed),
+                    "Clippy clone attempt failed"
+                );
                 last_error = Some(error);
                 if attempt < CLONE_ATTEMPTS {
-                    record_clone_attempt("retry");
                     std::thread::sleep(CLONE_BACKOFF * attempt);
-                } else {
-                    record_clone_attempt("exhausted");
                 }
             }
         }

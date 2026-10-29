@@ -7,9 +7,10 @@
 
 use super::download::download_bundle;
 use super::error::ClippySnapshotError;
-use super::install::{BundleArtefact, install_bundle, is_present, reuse_generation};
+use super::install::{BundleArtefact, install_bundle, reuse_generation};
 use super::manifest::ClippySnapshotManifest;
-use super::telemetry::{ProvisionSource, record_provision};
+use super::probe::is_present;
+use super::telemetry::{Operation, ProvisionSource, record_provision, timed};
 use crate::dependency_binaries::{DependencyArchiveDownloader, RepositoryArchiveDownloader};
 use camino::{Utf8Path, Utf8PathBuf};
 
@@ -61,7 +62,7 @@ pub fn provision_with(
         tracing::debug!(commit = %manifest.commit, "reusing the installed Clippy snapshot");
         (
             ProvisionSource::Existing,
-            reuse_generation(&generation, manifest),
+            timed(Operation::Reuse, || reuse_generation(&generation, manifest)),
         )
     } else {
         tracing::info!(commit = %manifest.commit, "installing the pinned Clippy snapshot");
@@ -81,8 +82,10 @@ fn install_from(
     match source {
         BundleSource::Local(bundle) => (
             ProvisionSource::Local,
-            BundleArtefact::from_sidecar(bundle, manifest)
-                .and_then(|artefact| install_bundle(&artefact, manifest, root)),
+            timed(Operation::Install, || {
+                BundleArtefact::from_sidecar(bundle, manifest)
+                    .and_then(|artefact| install_bundle(&artefact, manifest, root))
+            }),
         ),
         BundleSource::Release => (
             ProvisionSource::Release,
@@ -107,8 +110,12 @@ fn install_release(
             path: downloads.path().display().to_string(),
             reason: "the path is not valid UTF-8".to_owned(),
         })?;
-    let artefact = download_bundle(downloader, manifest, directory)?;
-    install_bundle(&artefact, manifest, root)
+    let artefact = timed(Operation::Download, || {
+        download_bundle(downloader, manifest, directory)
+    })?;
+    timed(Operation::Install, || {
+        install_bundle(&artefact, manifest, root)
+    })
 }
 
 #[cfg(test)]

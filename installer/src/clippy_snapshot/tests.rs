@@ -310,7 +310,7 @@ fn presence_distinguishes_absence_from_inspection_failure(
     let dir = tempfile::TempDir::new().expect("create temp dir");
     let root = Utf8Path::from_path(dir.path()).expect("UTF-8 temp path");
 
-    let result = super::install::is_present(&root.join(name));
+    let result = super::probe::is_present(&root.join(name));
 
     match expected {
         Some(is_there) => assert_eq!(result.expect("inspect"), is_there),

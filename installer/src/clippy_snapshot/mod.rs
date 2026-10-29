@@ -32,6 +32,7 @@ mod generation;
 mod git;
 mod install;
 mod manifest;
+mod probe;
 mod provision;
 mod selection;
 mod telemetry;

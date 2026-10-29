@@ -4,9 +4,11 @@
 //! are Unix-only; `installer/tests/bootstrap_run.rs` covers the binary.
 
 use super::*;
-use crate::bootstrap::telemetry::{DRIVER_BUILD_SECONDS, DRIVER_BUILD_TOTAL, RUN_TOTAL};
+use crate::bootstrap::telemetry::{
+    DRIVER_BUILD_SECONDS, DRIVER_BUILD_TOTAL, LOCK_WAIT_SECONDS, RUN_TOTAL,
+};
 use crate::bootstrap::{BOOTSTRAP_SCHEMA, StoredPath};
-use crate::test_utils::{FIXTURE_TOOLCHAIN, SnapshotFixture};
+use crate::test_utils::{FIXTURE_TOOLCHAIN, SnapshotFixture, fixture_git};
 use metrics_util::CompositeKey;
 use metrics_util::debugging::{DebugValue, DebuggingRecorder};
 use rstest::rstest;
@@ -207,5 +209,104 @@ fn a_run_after_the_build_is_warm() {
             .iter()
             .any(|(key, _, _, _)| key.key().name() == DRIVER_BUILD_TOTAL),
         "a warm run builds nothing"
+    );
+}
+
+/// How a cold run is made to fail before Dylint can build anything.
+#[derive(Clone, Copy)]
+enum ColdFailure {
+    /// The snapshot gains a `master` branch, which full verification refuses.
+    SnapshotTampered,
+    /// The `cargo` handed to the run does not exist.
+    CargoMissing,
+}
+
+#[rstest]
+#[case::snapshot_tampered(ColdFailure::SnapshotTampered, "verify_failed", "snapshot_invalid")]
+#[case::cargo_missing(ColdFailure::CargoMissing, "spawn_failed", "spawn_failed")]
+fn a_failed_cold_run_records_why(
+    #[case] failure: ColdFailure,
+    #[case] build_outcome: &str,
+    #[case] run_outcome: &str,
+) {
+    let installed = Installed::new();
+    let cargo = installed.cargo(true);
+    let prepared = prepare(&installed.layout, cargo.as_os_str()).expect("prepare");
+    let run_cargo = match failure {
+        ColdFailure::SnapshotTampered => {
+            fixture_git(&prepared.snapshot, &["branch", "master", "main"])
+                .expect("add a master branch");
+            cargo
+        }
+        ColdFailure::CargoMissing => installed.library_dir.join("no-such-cargo"),
+    };
+    let recorder = DebuggingRecorder::new();
+    let snapshotter = recorder.snapshotter();
+
+    metrics::with_local_recorder(&recorder, || execute(&prepared, run_cargo.as_os_str(), &[]))
+        .expect_err("the cold run fails");
+
+    let recorded = snapshotter.snapshot().into_vec();
+    assert!(
+        counted_once(&recorded, DRIVER_BUILD_TOTAL, ("outcome", build_outcome)),
+        "{recorded:#?}"
+    );
+    assert!(
+        counted_once(&recorded, RUN_TOTAL, ("outcome", run_outcome)),
+        "{recorded:#?}"
+    );
+    assert!(!prepared.slot.is_ready().expect("inspect the slot"));
+}
+
+/// A run that finds another holding the exclusive lock waits for it, and the
+/// wait is what `lock_wait` measures.
+#[test]
+fn a_contended_cold_run_records_its_lock_wait() {
+    const HELD: std::time::Duration = std::time::Duration::from_millis(400);
+    let installed = Installed::new();
+    let cargo = installed.cargo(true);
+    let prepared = prepare(&installed.layout, cargo.as_os_str()).expect("prepare");
+    prepared.slot.create().expect("create the slot");
+    let holder = prepared
+        .slot
+        .lock_exclusive()
+        .expect("hold the exclusive lock");
+
+    let worker = {
+        let prepared = prepared.clone();
+        let cargo = cargo.clone();
+        std::thread::spawn(move || {
+            let recorder = DebuggingRecorder::new();
+            let snapshotter = recorder.snapshotter();
+            metrics::with_local_recorder(&recorder, || execute(&prepared, cargo.as_os_str(), &[]))
+                .expect("the run completes once the lock is released");
+            snapshotter.snapshot().into_vec()
+        })
+    };
+    std::thread::sleep(HELD);
+    drop(holder);
+    let recorded = worker.join().expect("join the worker");
+
+    let exclusive_wait = recorded
+        .iter()
+        .filter(|(key, _, _, _)| {
+            key.key().name() == LOCK_WAIT_SECONDS
+                && key
+                    .key()
+                    .labels()
+                    .any(|l| l.key() == "mode" && l.value() == "exclusive")
+        })
+        .filter_map(|(_, _, _, value)| match value {
+            DebugValue::Histogram(samples) => samples.first().map(|s| s.into_inner()),
+            _ => None,
+        })
+        .next()
+        .expect("an exclusive lock wait was recorded");
+    // The hold is 400 ms; a worker that started within 350 ms of it waited at
+    // least 50 ms. A wait near zero would mean the lock was never contended.
+    assert!(exclusive_wait >= 0.05, "waited {exclusive_wait}s");
+    assert!(
+        counted_once(&recorded, RUN_TOTAL, ("driver", "cold")),
+        "{recorded:#?}"
     );
 }

@@ -8,6 +8,7 @@
 
 use super::error::ClippySnapshotError;
 use super::manifest::ClippySnapshotManifest;
+use super::probe::is_present_dir;
 use camino::Utf8Path;
 use serde::{Deserialize, Serialize};
 use std::io::Write;
@@ -54,10 +55,11 @@ impl GenerationMetadata {
     /// # Errors
     ///
     /// Returns [`ClippySnapshotError::NotInstalled`] when the generation is
-    /// absent and [`ClippySnapshotError::Invalid`] when its metadata is
-    /// missing, unreadable, or from an unknown schema.
+    /// absent, [`ClippySnapshotError::Io`] when it cannot be inspected, and
+    /// [`ClippySnapshotError::Invalid`] when its metadata is missing,
+    /// unreadable, or from an unknown schema.
     pub fn read(generation: &Utf8Path) -> Result<Self, ClippySnapshotError> {
-        if !generation.is_dir() {
+        if !is_present_dir(generation)? {
             return Err(ClippySnapshotError::NotInstalled {
                 path: generation.to_string(),
             });

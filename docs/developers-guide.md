@@ -3900,8 +3900,12 @@ storage fault into "not installed" or "cold". Use `bootstrap::probe`
 (`metadata_if_present`, and the public `is_present_dir`), which treats only
 `NotFound` as absence. `DriverSlot::is_ready` and `DriverSlot::has_driver`
 return `Result` for the same reason. The probe module serves the `bootstrap`
-module and the installer's bootstrap step (`report_bootstrap_plan`). Other
-installer code keeps its own error types rather than borrowing `BootstrapError`.
+module and the installer's bootstrap step (`report_bootstrap_plan`).
+`clippy_snapshot::probe` (`is_present`, `is_present_dir`, `is_present_file`)
+applies the same rule inside `clippy_snapshot`, returning
+`ClippySnapshotError::Io`: generation metadata, bundle discovery, generation
+reuse, and the repository and alternates checks all use it. Other installer
+code keeps its own error types rather than borrowing either.
 
 `bootstrap::telemetry` and `clippy_snapshot::telemetry` own the metric names
 and their bounded labels. They follow the
@@ -3909,21 +3913,34 @@ and their bounded labels. They follow the
 through the active recorder when recording, never install a recorder, and never
 put paths, commits, toolchains, or error text in a label.
 
-| Metric                                                       | Kind      | Labels                                                              |
-| ------------------------------------------------------------ | --------- | ------------------------------------------------------------------- |
-| `whitaker_installer.bootstrap.run.total`                     | counter   | `driver`: `warm`, `warm_after_wait`, `cold`                         |
-| `whitaker_installer.bootstrap.lock_wait.duration_seconds`    | histogram | `mode`: `shared`, `exclusive`                                       |
-| `whitaker_installer.bootstrap.driver_build.duration_seconds` | histogram | none                                                                |
-| `whitaker_installer.bootstrap.driver_build.total`            | counter   | `outcome`: `built`, `not_built`, `unrecorded`                       |
-| `whitaker_installer.clippy_snapshot.provision.total`         | counter   | `source`: `existing`, `release`, `local`; `outcome`: `ok`, `failed` |
-| `whitaker_installer.clippy_snapshot.clone_attempt.total`     | counter   | `outcome`: `ok`, `retry`, `exhausted`                               |
+| Metric                                                              | Kind      | Labels                                                                                        |
+| ------------------------------------------------------------------- | --------- | --------------------------------------------------------------------------------------------- |
+| `whitaker_installer.bootstrap.run.total`                            | counter   | `driver`: `unresolved`, `warm`, `warm_after_wait`, `cold`; `outcome`: `ok` or a failure label |
+| `whitaker_installer.bootstrap.run.duration_seconds`                 | histogram | `driver`                                                                                      |
+| `whitaker_installer.bootstrap.lock_wait.duration_seconds`           | histogram | `mode`: `shared`, `exclusive`                                                                 |
+| `whitaker_installer.bootstrap.lock_failure.total`                   | counter   | `mode`                                                                                        |
+| `whitaker_installer.bootstrap.driver_build.duration_seconds`        | histogram | `outcome`                                                                                     |
+| `whitaker_installer.bootstrap.driver_build.total`                   | counter   | `outcome`: `built`, `not_built`, `unrecorded`, `verify_failed`, `spawn_failed`                |
+| `whitaker_installer.clippy_snapshot.provision.total`                | counter   | `source`: `existing`, `release`, `local`; `outcome`: `ok`, `failed`                           |
+| `whitaker_installer.clippy_snapshot.operation.total`                | counter   | `operation`: `reuse`, `download`, `install`, `verify`; `outcome`: `ok` or a failure label     |
+| `whitaker_installer.clippy_snapshot.operation.duration_seconds`     | histogram | `operation`, `outcome`                                                                        |
+| `whitaker_installer.clippy_snapshot.clone_attempt.total`            | counter   | `outcome`: `ok`, `retry`, `exhausted`                                                         |
+| `whitaker_installer.clippy_snapshot.clone_attempt.duration_seconds` | histogram | `outcome`                                                                                     |
 
 *Table: Installer bootstrap and snapshot metrics.*
 
-A long `exclusive` lock wait is the signature of contended cold construction,
-and `warm_after_wait` counts runs that waited out another process's build.
-Structured `tracing` events accompany the cold path, a run that leaves no
-driver, and snapshot reuse or installation.
+A failure label is one of a fixed set derived from the error variant
+(`bootstrap::telemetry::failure_label` and
+`clippy_snapshot::telemetry::failure_label`), such as `snapshot_invalid`,
+`spawn_failed`, `checksum_mismatch`, or `io`. A run that fails before it can
+tell whether the driver is ready is recorded with `driver="unresolved"`. A long
+`exclusive` lock wait is the signature of contended cold construction, and
+`warm_after_wait` counts runs that waited out another process's build.
+
+Structured `tracing` events mark the cold path, each finished or failed run and
+snapshot operation, and each failed clone attempt, with the same bounded
+`outcome` and an `elapsed_ms` field. The logs never carry the raw error, which
+reaches the user through the returned result, nor a path, URL, or token.
 
 ## Standard vs Experimental Lints
 

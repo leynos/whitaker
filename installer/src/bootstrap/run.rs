@@ -11,7 +11,8 @@ use super::error::BootstrapError;
 use super::metadata::BootstrapMetadata;
 use super::probe::is_present_dir;
 use super::telemetry::{
-    BuildOutcome, DriverPath, LockMode, record_driver_build, record_lock_wait, record_run,
+    BuildOutcome, DriverPath, LockMode, OUTCOME_OK, failure_label, record_driver_build,
+    record_lock_failure, record_lock_wait, record_run,
 };
 use crate::clippy_snapshot::{
     ClippySnapshotManifest, GenerationMetadata, check_installed, verify_repository,
@@ -53,9 +54,11 @@ pub fn run_with_cargo(
     cargo: &OsStr,
     args: &[OsString],
 ) -> Result<i32, BootstrapError> {
-    let layout = BootstrapLayout::from_dirs(dirs)?;
-    let prepared = prepare(&layout, cargo)?;
-    execute(&prepared, cargo, args)
+    let started = Instant::now();
+    match BootstrapLayout::from_dirs(dirs).and_then(|layout| prepare(&layout, cargo)) {
+        Ok(prepared) => execute(&prepared, cargo, args),
+        Err(error) => finish(DriverPath::Unresolved, Err(error), started),
+    }
 }
 
 /// Check the installation and resolve the Dylint environment.
@@ -81,60 +84,108 @@ fn prepare(layout: &BootstrapLayout, cargo: &OsStr) -> Result<PreparedRun, Boots
     })
 }
 
-/// Run the child under the driver lock.
-///
-/// A ready driver is shared. Otherwise the exclusive lock is taken and the
-/// state re-checked, because another process may have finished the build
-/// while this one waited. The snapshot gets its full verification only on
-/// that cold path, the one place Dylint reads it.
+/// Run the child under the driver lock, recording the run's path and outcome.
 fn execute(
     prepared: &PreparedRun,
     cargo: &OsStr,
     args: &[OsString],
 ) -> Result<i32, BootstrapError> {
+    let started = Instant::now();
+    match choose_and_run(prepared, cargo, args) {
+        Ok((path, code)) => finish(path, Ok(code), started),
+        Err((path, error)) => finish(path, Err(error), started),
+    }
+}
+
+/// A result tagged with how far the run got towards the driver.
+type Reached<T> = Result<(DriverPath, T), (DriverPath, BootstrapError)>;
+
+/// Tag `result` with the driver path it was produced on.
+fn reached<T>(path: DriverPath, result: Result<T, BootstrapError>) -> Reached<T> {
+    result
+        .map(|value| (path, value))
+        .map_err(|error| (path, error))
+}
+
+/// Choose the driver path and run the child on it.
+///
+/// A ready driver is shared. Otherwise the exclusive lock is taken and the
+/// state re-checked, because another process may have finished the build
+/// while this one waited. The snapshot gets its full verification only on
+/// that cold path, the one place Dylint reads it.
+fn choose_and_run(prepared: &PreparedRun, cargo: &OsStr, args: &[OsString]) -> Reached<i32> {
     let slot = &prepared.slot;
-    slot.create()?;
-    if slot.is_ready()? {
-        let _lock = timed_lock(LockMode::Shared, || slot.lock_shared())?;
-        return run_warm(prepared, cargo, args, DriverPath::Warm);
+    let unresolved = |error| (DriverPath::Unresolved, error);
+    slot.create().map_err(unresolved)?;
+    if slot.is_ready().map_err(unresolved)? {
+        return reached(DriverPath::Warm, run_warm(prepared, cargo, args));
     }
     {
-        let _exclusive = timed_lock(LockMode::Exclusive, || slot.lock_exclusive())?;
-        if !slot.is_ready()? {
-            return run_cold(prepared, cargo, args);
+        let _exclusive =
+            timed_lock(LockMode::Exclusive, || slot.lock_exclusive()).map_err(unresolved)?;
+        if !slot.is_ready().map_err(unresolved)? {
+            return reached(DriverPath::Cold, run_cold(prepared, cargo, args));
         }
     }
     // Another process built the driver while this one waited. Readiness never
     // reverts, so trade the exclusive lock for a shared one rather than make
     // every run that queued behind the build wait for the others in turn.
-    let _lock = timed_lock(LockMode::Shared, || slot.lock_shared())?;
-    run_warm(prepared, cargo, args, DriverPath::WarmAfterWait)
+    reached(DriverPath::WarmAfterWait, run_warm(prepared, cargo, args))
 }
 
-/// Take a driver lock, recording how long it took to acquire.
+/// Record and log a finished run, then hand its result back.
+///
+/// The outcome is a bounded label; the error itself reaches the user through
+/// the returned result rather than the log.
+fn finish(
+    path: DriverPath,
+    result: Result<i32, BootstrapError>,
+    started: Instant,
+) -> Result<i32, BootstrapError> {
+    let elapsed = started.elapsed();
+    let outcome = result.as_ref().map_or_else(failure_label, |_| OUTCOME_OK);
+    record_run(path, outcome, elapsed);
+    let elapsed_ms = u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX);
+    if result.is_ok() {
+        tracing::debug!(
+            driver = path.label(),
+            outcome,
+            elapsed_ms,
+            "bootstrap run finished"
+        );
+    } else {
+        tracing::warn!(
+            driver = path.label(),
+            outcome,
+            elapsed_ms,
+            "bootstrap run failed"
+        );
+    }
+    result
+}
+
+/// Take a driver lock, recording how long it took or that it failed.
 fn timed_lock(
     mode: LockMode,
     acquire: impl FnOnce() -> Result<File, BootstrapError>,
 ) -> Result<File, BootstrapError> {
     let started = Instant::now();
-    let lock = acquire()?;
+    let lock = acquire().inspect_err(|_| record_lock_failure(mode))?;
     record_lock_wait(mode, started.elapsed());
     Ok(lock)
 }
 
-/// Run the child against a driver that is already ready.
+/// Run the child under the shared lock against a driver that is ready.
 fn run_warm(
     prepared: &PreparedRun,
     cargo: &OsStr,
     args: &[OsString],
-    path: DriverPath,
 ) -> Result<i32, BootstrapError> {
+    let _lock = timed_lock(LockMode::Shared, || prepared.slot.lock_shared())?;
     tracing::debug!(
-        driver = path.label(),
         toolchain = prepared.slot.toolchain(),
         "using the ready driver"
     );
-    record_run(path);
     spawn(prepared, cargo, args).map(exit_code)
 }
 
@@ -149,13 +200,15 @@ fn run_cold(
         toolchain = prepared.slot.toolchain(),
         "building the Dylint driver on first use"
     );
-    record_run(DriverPath::Cold);
     let started = Instant::now();
-    verify_snapshot(prepared)?;
-    let status = spawn(prepared, cargo, args)?;
-    let outcome = record_readiness(&prepared.slot);
+    let built = verify_snapshot(prepared).and_then(|()| spawn(prepared, cargo, args));
+    let outcome = match &built {
+        Ok(_) => record_readiness(&prepared.slot),
+        Err(BootstrapError::Spawn { .. }) => BuildOutcome::SpawnFailed,
+        Err(_) => BuildOutcome::VerifyFailed,
+    };
     record_driver_build(outcome, started.elapsed());
-    Ok(exit_code(status))
+    built.map(exit_code)
 }
 
 /// Mark the slot ready when the child left a driver behind.
@@ -179,7 +232,10 @@ fn record_readiness(slot: &DriverSlot) -> BuildOutcome {
             BuildOutcome::NotBuilt
         }
         Err(error) => {
-            tracing::warn!(error = %error, "could not record the driver as ready");
+            tracing::warn!(
+                failure = failure_label(&error),
+                "could not record the driver as ready"
+            );
             BuildOutcome::Unrecorded
         }
     }

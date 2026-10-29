@@ -11,6 +11,7 @@ use super::error::ClippySnapshotError;
 use super::generation::GenerationMetadata;
 use super::git::SnapshotGit;
 use super::manifest::{ClippySnapshotManifest, SNAPSHOT_BRANCH};
+use super::probe::{is_present, is_present_file};
 use super::verify::verify_repository;
 use crate::artefact::packaging::compute_sha256;
 use crate::artefact::sha256_digest::Sha256Digest;
@@ -41,7 +42,7 @@ impl BundleArtefact {
         bundle: &Utf8Path,
         manifest: &ClippySnapshotManifest,
     ) -> Result<Self, ClippySnapshotError> {
-        if !bundle.is_file() {
+        if !is_present_file(bundle)? {
             return Err(ClippySnapshotError::BundleMissing {
                 path: bundle.to_string(),
                 asset: manifest.bundle_asset_name(),
@@ -235,20 +236,6 @@ fn lock_root(root: &Utf8Path) -> Result<std::fs::File, ClippySnapshotError> {
     file.lock_exclusive()
         .map_err(|error| ClippySnapshotError::io(&path, &error))?;
     Ok(file)
-}
-
-/// Return whether anything exists at `path`.
-///
-/// Unlike `Path::exists`, an inspection failure such as a permission fault is
-/// returned rather than read as absence, so a generation or an alternates file
-/// that cannot be examined is never mistaken for one that is not there.
-///
-/// # Errors
-///
-/// Returns [`ClippySnapshotError::Io`] when `path` cannot be inspected.
-pub(crate) fn is_present(path: &Utf8Path) -> Result<bool, ClippySnapshotError> {
-    path.try_exists()
-        .map_err(|error| ClippySnapshotError::io(path, &error))
 }
 
 /// Resolve `path` against the current directory, as `DYLINT_CLIPPY_REPO` needs.

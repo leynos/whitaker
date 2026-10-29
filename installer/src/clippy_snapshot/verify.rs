@@ -8,9 +8,10 @@
 use super::error::ClippySnapshotError;
 use super::generation::GenerationMetadata;
 use super::git::SnapshotGit;
-use super::install::is_present;
 use super::manifest::{ClippySnapshotManifest, SNAPSHOT_BRANCH};
+use super::probe::{is_present, is_present_dir};
 use super::selection::{channel_at, select_revision, toolchain_changes};
+use super::telemetry::{Operation, timed};
 use camino::Utf8Path;
 
 /// The only ref a snapshot may carry.
@@ -33,11 +34,13 @@ pub fn verify_repository(
     path: &Utf8Path,
     manifest: &ClippySnapshotManifest,
 ) -> Result<(), ClippySnapshotError> {
-    let git = SnapshotGit::local();
-    check_structure(git, path, manifest.commit.as_str())?;
-    check_self_contained(git, path)?;
-    check_objects(git, path)?;
-    check_selection(git, path, manifest)
+    timed(Operation::Verify, || {
+        let git = SnapshotGit::local();
+        check_structure(git, path, manifest.commit.as_str())?;
+        check_self_contained(git, path)?;
+        check_objects(git, path)?;
+        check_selection(git, path, manifest)
+    })
 }
 
 /// Prove that an installed generation is still the one its metadata names.
@@ -66,7 +69,7 @@ fn check_structure(
     path: &Utf8Path,
     commit: &str,
 ) -> Result<(), ClippySnapshotError> {
-    if !path.is_dir() {
+    if !is_present_dir(path)? {
         return Err(ClippySnapshotError::NotInstalled {
             path: path.to_string(),
         });
