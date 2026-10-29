@@ -15,7 +15,7 @@ use rstest::rstest;
 use tempfile::TempDir;
 
 /// A stub `cargo` that reports Dylint 6.3.0 and, when `builds` is set,
-/// writes a driver into the exported slot as Dylint would.
+/// writes a driver into the exported slot if none exists, as Dylint would.
 fn stub_cargo(builds: bool) -> String {
     format!(
         r#"#!/usr/bin/env bash
@@ -23,9 +23,11 @@ if [[ "$1" == dylint && "$2" == --version ]]; then
     echo "cargo-dylint 6.3.0"
     exit 0
 fi
-if [[ {builds} == yes ]]; then
-    mkdir -p "$DYLINT_DRIVER_PATH/{FIXTURE_TOOLCHAIN}-x86_64-unknown-linux-gnu"
-    printf 'driver' >"$DYLINT_DRIVER_PATH/{FIXTURE_TOOLCHAIN}-x86_64-unknown-linux-gnu/dylint-driver"
+driver="$DYLINT_DRIVER_PATH/{FIXTURE_TOOLCHAIN}-x86_64-unknown-linux-gnu/dylint-driver"
+# Like Dylint, build only when no driver exists yet.
+if [[ {builds} == yes && ! -s "$driver" ]]; then
+    mkdir -p "$(dirname "$driver")"
+    printf 'driver' >"$driver"
 fi
 "#,
         builds = if builds { "yes" } else { "no" },

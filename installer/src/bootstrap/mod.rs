@@ -26,7 +26,7 @@ mod probe;
 mod run;
 mod telemetry;
 
-pub use driver::DriverSlot;
+pub use driver::{DriverIdentity, DriverSlot};
 pub use error::BootstrapError;
 pub use metadata::{BOOTSTRAP_SCHEMA, BootstrapMetadata, StoredPath};
 pub use probe::is_present_dir;

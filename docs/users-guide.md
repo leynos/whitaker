@@ -166,10 +166,11 @@ beside themselves, or else on `PATH`, and call `whitaker-installer run`, which:
   overwriting any values already in the environment, and passes every other
   variable (including `RUSTC_WRAPPER` and `RUSTFLAGS`) through unchanged;
 - builds the driver on the first run while other runs wait, so concurrent
-  first runs build it once, then lets later runs share it. The run that built
-  it ends with
+  first runs build it once, then lets later runs share it. Any run that left a
+  newly built driver, including a rare rebuild after Dylint finds a cached
+  driver unusable, ends with
   `whitaker: built the Dylint driver on first use; later runs reuse it`, which
-  explains a slow first run;
+  explains a slow run;
 - exits with `cargo dylint`'s own status, so lint failures still fail CI.
 
 Paths are worked out from the current data directory each time, so moving the

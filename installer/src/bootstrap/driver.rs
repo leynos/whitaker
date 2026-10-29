@@ -16,6 +16,7 @@ use super::probe::metadata_if_present;
 use camino::{Utf8Path, Utf8PathBuf};
 use fs2::FileExt;
 use std::fs::File;
+use std::time::SystemTime;
 
 /// The driver Dylint persists inside its toolchain directory.
 ///
@@ -23,6 +24,37 @@ use std::fs::File;
 /// persists the built binary to `driver_dir.join("dylint-driver")`, Windows
 /// included; only the intermediate build output carries `.exe`.
 const DRIVER_FILE: &str = "dylint-driver";
+
+/// What distinguishes one persisted driver file from its replacement.
+///
+/// On Unix the device and inode change with every rename into place. On
+/// Windows the creation time, kept to 100 ns, belongs to the new file. The
+/// length and modification time are kept as well, as a backstop on
+/// filesystems that report no creation time.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DriverIdentity {
+    len: u64,
+    modified: Option<SystemTime>,
+    created: Option<SystemTime>,
+    #[cfg(unix)]
+    file: (u64, u64),
+}
+
+impl DriverIdentity {
+    /// Capture the identity of the file described by `metadata`.
+    fn of(metadata: &std::fs::Metadata) -> Self {
+        Self {
+            len: metadata.len(),
+            modified: metadata.modified().ok(),
+            created: metadata.created().ok(),
+            #[cfg(unix)]
+            file: {
+                use std::os::unix::fs::MetadataExt;
+                (metadata.dev(), metadata.ino())
+            },
+        }
+    }
+}
 
 /// One toolchain's driver within an identity-keyed slot.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -76,9 +108,34 @@ impl DriverSlot {
     /// Returns [`BootstrapError::Io`] when the slot cannot be read for any
     /// reason other than not existing yet.
     pub fn has_driver(&self) -> Result<bool, BootstrapError> {
+        Ok(self.driver_metadata()?.is_some())
+    }
+
+    /// Identify the driver file now present, if any.
+    ///
+    /// Dylint persists a driver by renaming a new file into place, so a
+    /// rebuild changes the identity even when it writes identical bytes. That
+    /// makes the identity an independent signal of an actual build, whichever
+    /// path the run took to reach the driver.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`BootstrapError::Io`] when the slot cannot be read for any
+    /// reason other than not existing yet.
+    pub fn driver_identity(&self) -> Result<Option<DriverIdentity>, BootstrapError> {
+        Ok(self
+            .driver_metadata()?
+            .map(|metadata| DriverIdentity::of(&metadata)))
+    }
+
+    /// Return the metadata of this channel's complete driver, if one exists.
+    ///
+    /// Dylint persists with a rename, so a present, non-empty file is complete;
+    /// an empty one is not a driver.
+    fn driver_metadata(&self) -> Result<Option<std::fs::Metadata>, BootstrapError> {
         let entries = match std::fs::read_dir(&self.dir) {
             Ok(entries) => entries,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
             Err(error) => return Err(BootstrapError::io(&self.dir, &error)),
         };
         for entry in entries {
@@ -87,23 +144,23 @@ impl DriverSlot {
             let Some(name) = entry.file_name().to_str().map(str::to_owned) else {
                 continue;
             };
-            if self.is_toolchain_dir(&name) && self.holds_driver(&name)? {
-                return Ok(true);
+            if !self.is_toolchain_dir(&name) {
+                continue;
+            }
+            let driver = self.dir.join(&name).join(DRIVER_FILE);
+            if let Some(metadata) =
+                metadata_if_present(&driver)?.filter(|m| m.is_file() && m.len() > 0)
+            {
+                return Ok(Some(metadata));
             }
         }
-        Ok(false)
+        Ok(None)
     }
 
     /// Return whether `name` is a toolchain directory for this channel.
     fn is_toolchain_dir(&self, name: &str) -> bool {
         name.strip_prefix(&self.toolchain)
             .is_some_and(|rest| rest.is_empty() || rest.starts_with('-'))
-    }
-
-    /// Return whether the toolchain directory `name` holds a non-empty driver.
-    fn holds_driver(&self, name: &str) -> Result<bool, BootstrapError> {
-        let driver = self.dir.join(name).join(DRIVER_FILE);
-        Ok(metadata_if_present(&driver)?.is_some_and(|m| m.is_file() && m.len() > 0))
     }
 
     /// Create the slot directory, which Dylint requires to exist.

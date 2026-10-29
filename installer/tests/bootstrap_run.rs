@@ -49,6 +49,39 @@ fn cold_then_warm_runs_build_the_driver_once() {
     assert_eq!(notices(&warm), 0, "the warm run builds nothing to report");
 }
 
+/// Regression: the build notice once came from the dispatcher's own path
+/// choice, so a warm run whose child replaced the driver with identical bytes
+/// reported nothing and verification could not see the rebuild.
+#[test]
+fn a_warm_run_that_replaces_the_driver_reports_the_build() {
+    let installation = Installation::new();
+    let cold = installation.run(&["--all"]);
+    assert!(
+        cold.status.success(),
+        "{}",
+        String::from_utf8_lossy(&cold.stderr)
+    );
+
+    let warm = installation
+        .run_command(&["--all"])
+        .env("STUB_REPLACE_DRIVER", "1")
+        .output()
+        .expect("run whitaker-installer");
+
+    assert!(
+        warm.status.success(),
+        "{}",
+        String::from_utf8_lossy(&warm.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&warm.stderr)
+            .matches(BUILT_DRIVER_NOTICE)
+            .count(),
+        1,
+        "the replaced driver is reported although its bytes are unchanged"
+    );
+}
+
 #[test]
 fn exports_the_bootstrap_and_overwrites_stale_values() {
     let installation = Installation::new();

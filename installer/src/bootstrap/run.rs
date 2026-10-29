@@ -6,7 +6,7 @@
 //! child process so concurrent cold runs build the driver once.
 
 use super::BootstrapLayout;
-use super::driver::DriverSlot;
+use super::driver::{DriverIdentity, DriverSlot};
 use super::error::BootstrapError;
 use super::metadata::BootstrapMetadata;
 use super::probe::is_present_dir;
@@ -38,18 +38,11 @@ struct PreparedRun {
 pub struct RunOutcome {
     /// The exit code this process should end with: the child's own status.
     pub code: i32,
-    /// Whether this run built the Dylint driver, as a cold run does once.
+    /// Whether this run left a newly built driver in the slot.
+    ///
+    /// Judged from the driver file's identity before and after the child, so
+    /// it holds for a rebuild on a warm run too.
     pub built_driver: bool,
-}
-
-impl RunOutcome {
-    /// An outcome for a run that reused an existing driver.
-    const fn reused(code: i32) -> Self {
-        Self {
-            code,
-            built_driver: false,
-        }
-    }
 }
 
 /// Run `cargo dylint` with the installed bootstrap and report its outcome.
@@ -205,7 +198,32 @@ fn run_warm(
         toolchain = prepared.slot.toolchain(),
         "using the ready driver"
     );
-    spawn(prepared, cargo, args).map(|status| RunOutcome::reused(exit_code(status)))
+    // Dylint re-probes a cached driver and rebuilds it if the probe fails, so
+    // a warm run can still build; compare identities rather than assume.
+    let before = prepared.slot.driver_identity()?;
+    let status = spawn(prepared, cargo, args)?;
+    Ok(RunOutcome {
+        code: exit_code(status),
+        built_driver: was_replaced(&prepared.slot, before),
+    })
+}
+
+/// Return whether the child persisted a driver other than `before`.
+///
+/// A slot that cannot be re-read after the child counts as unchanged: the
+/// child's exit status is the result that matters, and the warning says why
+/// no build was reported.
+fn was_replaced(slot: &DriverSlot, before: Option<DriverIdentity>) -> bool {
+    match slot.driver_identity() {
+        Ok(after) => after.is_some() && after != before,
+        Err(error) => {
+            tracing::warn!(
+                failure = failure_label(&error),
+                "could not re-read the driver after the run"
+            );
+            false
+        }
+    }
 }
 
 /// Verify the snapshot, run the child so Dylint builds the driver, and record
@@ -220,6 +238,8 @@ fn run_cold(
         "building the Dylint driver on first use"
     );
     let started = Instant::now();
+    // An unmarked driver may already exist, left by an interrupted build.
+    let before = prepared.slot.driver_identity()?;
     let built = verify_snapshot(prepared).and_then(|()| spawn(prepared, cargo, args));
     let outcome = match &built {
         Ok(_) => record_readiness(&prepared.slot),
@@ -229,7 +249,7 @@ fn run_cold(
     record_driver_build(outcome, started.elapsed());
     built.map(|status| RunOutcome {
         code: exit_code(status),
-        built_driver: outcome == BuildOutcome::Built,
+        built_driver: was_replaced(&prepared.slot, before),
     })
 }
 

@@ -35,6 +35,12 @@ fi
     printf 'ARG=%s\n' "$@"
 } >>"${STUB_LOG}.env"
 driver_dir="${DYLINT_DRIVER_PATH}/nightly-2026-05-28-x86_64-unknown-linux-gnu"
+# STUB_REPLACE_DRIVER rebuilds a ready driver with identical bytes, as Dylint
+# does when its version probe of a cached driver fails. It says nothing.
+if [[ "${STUB_REPLACE_DRIVER:-}" == 1 && -s "${driver_dir}/dylint-driver" ]]; then
+    printf '#!/bin/sh\n' >"${driver_dir}/dylint-driver.partial"
+    mv "${driver_dir}/dylint-driver.partial" "${driver_dir}/dylint-driver"
+fi
 if [[ ! -s "${driver_dir}/dylint-driver" ]]; then
     echo build >>"${STUB_LOG}.builds"
     sleep 1

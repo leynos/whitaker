@@ -199,3 +199,50 @@ fn recognizes_only_this_channels_toolchain_directories(#[case] dir: &str, #[case
 
     assert_eq!(slot.has_driver().expect("inspect the slot"), expected);
 }
+
+#[test]
+fn a_slot_without_a_driver_has_no_identity() {
+    let (_dir, root) = temp_root();
+    let slot = DriverSlot::new(&root, "nightly-2026-05-28");
+
+    assert_eq!(slot.driver_identity().expect("inspect the slot"), None);
+}
+
+#[test]
+fn an_untouched_driver_keeps_its_identity() {
+    let (_dir, root) = temp_root();
+    let slot = DriverSlot::new(&root, "nightly-2026-05-28");
+    write_driver(
+        &root,
+        "nightly-2026-05-28-x86_64-unknown-linux-gnu",
+        b"driver",
+    );
+
+    let first = slot.driver_identity().expect("inspect the slot");
+
+    assert!(first.is_some());
+    assert_eq!(slot.driver_identity().expect("inspect again"), first);
+}
+
+/// Dylint persists a rebuilt driver by renaming a new file into place, which
+/// must register as a change even when the bytes are identical.
+#[test]
+fn a_driver_replaced_with_identical_bytes_has_a_new_identity() {
+    let (_dir, root) = temp_root();
+    let slot = DriverSlot::new(&root, "nightly-2026-05-28");
+    let toolchain_dir = "nightly-2026-05-28-x86_64-unknown-linux-gnu";
+    write_driver(&root, toolchain_dir, b"driver");
+    let before = slot.driver_identity().expect("inspect the slot");
+    // Keep the original alive so the replacement cannot reuse its inode.
+    let original = root.join(toolchain_dir).join("dylint-driver.original");
+    std::fs::hard_link(root.join(toolchain_dir).join("dylint-driver"), &original)
+        .expect("keep the original");
+    // Creation times have 100 ns resolution on Windows; make the gap certain.
+    std::thread::sleep(std::time::Duration::from_millis(20));
+    let partial = root.join(toolchain_dir).join("dylint-driver.partial");
+    std::fs::write(&partial, b"driver").expect("write the replacement");
+    std::fs::rename(&partial, root.join(toolchain_dir).join("dylint-driver"))
+        .expect("persist the replacement");
+
+    assert_ne!(slot.driver_identity().expect("inspect again"), before);
+}
