@@ -2,7 +2,10 @@
 # public Clippy on Windows, through the PowerShell wrapper.
 #
 # Usage:
-#   pwsh scripts/verify-installed-bootstrap.ps1 -WorkDir <dir>
+#   pwsh scripts/verify-installed-bootstrap.ps1 -WorkDir <dir> [-HostsFile <path>]
+#
+# -HostsFile names the file the github.com denial is appended to. It defaults
+# to the system hosts file; tests pass a scratch file so they never alter it.
 #
 # The Windows counterpart of verify-installed-bootstrap.sh: deny github.com,
 # confirm the denial with a canary, then require a cold and a warm run, two
@@ -10,7 +13,9 @@
 # root relocation is covered on Linux, where XDG_DATA_HOME selects it.
 param(
     [Parameter(Mandatory = $true)]
-    [string] $WorkDir
+    [string] $WorkDir,
+
+    [string] $HostsFile = "$env:SystemRoot\System32\drivers\etc\hosts"
 )
 
 $ErrorActionPreference = 'Stop'
@@ -38,7 +43,7 @@ function Test-Canary {
 
 function Deny-GitHub {
     if (Test-Canary) {
-        Add-Content -Path "$env:SystemRoot\System32\drivers\etc\hosts" -Value '0.0.0.0 github.com'
+        Add-Content -Path $HostsFile -Value '0.0.0.0 github.com'
     }
     if (Test-Canary) { Fail 'the github.com canary still succeeds; the denial did not take effect' }
     Write-Output 'github.com is unreachable; public Clippy cannot be read.'
