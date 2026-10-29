@@ -33,14 +33,33 @@ struct PreparedRun {
     slot: DriverSlot,
 }
 
-/// Run `cargo dylint` with the installed bootstrap and return its exit code.
+/// What a finished run reports to its caller.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RunOutcome {
+    /// The exit code this process should end with: the child's own status.
+    pub code: i32,
+    /// Whether this run built the Dylint driver, as a cold run does once.
+    pub built_driver: bool,
+}
+
+impl RunOutcome {
+    /// An outcome for a run that reused an existing driver.
+    const fn reused(code: i32) -> Self {
+        Self {
+            code,
+            built_driver: false,
+        }
+    }
+}
+
+/// Run `cargo dylint` with the installed bootstrap and report its outcome.
 ///
 /// # Errors
 ///
 /// Returns a [`BootstrapError`] when the installation is incomplete or
 /// invalid, or when `cargo dylint` cannot be started. Lint failures are not
 /// errors: they come back as the child's non-zero exit code.
-pub fn run(dirs: &dyn BaseDirs, args: &[OsString]) -> Result<i32, BootstrapError> {
+pub fn run(dirs: &dyn BaseDirs, args: &[OsString]) -> Result<RunOutcome, BootstrapError> {
     run_with_cargo(dirs, OsStr::new("cargo"), args)
 }
 
@@ -53,7 +72,7 @@ pub fn run_with_cargo(
     dirs: &dyn BaseDirs,
     cargo: &OsStr,
     args: &[OsString],
-) -> Result<i32, BootstrapError> {
+) -> Result<RunOutcome, BootstrapError> {
     let started = Instant::now();
     match BootstrapLayout::from_dirs(dirs).and_then(|layout| prepare(&layout, cargo)) {
         Ok(prepared) => execute(&prepared, cargo, args),
@@ -89,10 +108,10 @@ fn execute(
     prepared: &PreparedRun,
     cargo: &OsStr,
     args: &[OsString],
-) -> Result<i32, BootstrapError> {
+) -> Result<RunOutcome, BootstrapError> {
     let started = Instant::now();
     match choose_and_run(prepared, cargo, args) {
-        Ok((path, code)) => finish(path, Ok(code), started),
+        Ok((path, outcome)) => finish(path, Ok(outcome), started),
         Err((path, error)) => finish(path, Err(error), started),
     }
 }
@@ -113,7 +132,7 @@ fn reached<T>(path: DriverPath, result: Result<T, BootstrapError>) -> Reached<T>
 /// state re-checked, because another process may have finished the build
 /// while this one waited. The snapshot gets its full verification only on
 /// that cold path, the one place Dylint reads it.
-fn choose_and_run(prepared: &PreparedRun, cargo: &OsStr, args: &[OsString]) -> Reached<i32> {
+fn choose_and_run(prepared: &PreparedRun, cargo: &OsStr, args: &[OsString]) -> Reached<RunOutcome> {
     let slot = &prepared.slot;
     let unresolved = |error| (DriverPath::Unresolved, error);
     slot.create().map_err(unresolved)?;
@@ -139,9 +158,9 @@ fn choose_and_run(prepared: &PreparedRun, cargo: &OsStr, args: &[OsString]) -> R
 /// the returned result rather than the log.
 fn finish(
     path: DriverPath,
-    result: Result<i32, BootstrapError>,
+    result: Result<RunOutcome, BootstrapError>,
     started: Instant,
-) -> Result<i32, BootstrapError> {
+) -> Result<RunOutcome, BootstrapError> {
     let elapsed = started.elapsed();
     let outcome = result.as_ref().map_or_else(failure_label, |_| OUTCOME_OK);
     record_run(path, outcome, elapsed);
@@ -180,13 +199,13 @@ fn run_warm(
     prepared: &PreparedRun,
     cargo: &OsStr,
     args: &[OsString],
-) -> Result<i32, BootstrapError> {
+) -> Result<RunOutcome, BootstrapError> {
     let _lock = timed_lock(LockMode::Shared, || prepared.slot.lock_shared())?;
     tracing::debug!(
         toolchain = prepared.slot.toolchain(),
         "using the ready driver"
     );
-    spawn(prepared, cargo, args).map(exit_code)
+    spawn(prepared, cargo, args).map(|status| RunOutcome::reused(exit_code(status)))
 }
 
 /// Verify the snapshot, run the child so Dylint builds the driver, and record
@@ -195,7 +214,7 @@ fn run_cold(
     prepared: &PreparedRun,
     cargo: &OsStr,
     args: &[OsString],
-) -> Result<i32, BootstrapError> {
+) -> Result<RunOutcome, BootstrapError> {
     tracing::info!(
         toolchain = prepared.slot.toolchain(),
         "building the Dylint driver on first use"
@@ -208,7 +227,10 @@ fn run_cold(
         Err(_) => BuildOutcome::VerifyFailed,
     };
     record_driver_build(outcome, started.elapsed());
-    built.map(exit_code)
+    built.map(|status| RunOutcome {
+        code: exit_code(status),
+        built_driver: outcome == BuildOutcome::Built,
+    })
 }
 
 /// Mark the slot ready when the child left a driver behind.

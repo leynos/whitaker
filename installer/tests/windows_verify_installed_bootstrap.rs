@@ -34,6 +34,11 @@ fn a_healthy_installation_passes() {
 #[case::lint_passes("FAKE_SUCCEED", "succeeded on a std::fs violation")]
 #[case::crash_not_diagnostic("FAKE_NO_DIAGNOSTIC", "without a no_std_fs_operations diagnostic")]
 #[case::warm_rebuilds("FAKE_REBUILD_ALWAYS", "the warm run rebuilt the driver")]
+#[case::warm_rebuilds_identical_bytes("FAKE_REBUILD_IDENTICAL", "the warm run rebuilt the driver")]
+#[case::concurrent_builds_twice(
+    "FAKE_DOUBLE_BUILD",
+    "simultaneous cold runs built the driver 2 times"
+)]
 #[case::concurrent_fails("FAKE_CONCURRENT_FAILS", "concurrent-")]
 #[case::runs_without_snapshot("FAKE_SUCCEED_WITHOUT_SNAPSHOT", "ran without its Clippy snapshot")]
 #[case::no_fallback_message_missing(

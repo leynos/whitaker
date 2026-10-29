@@ -137,27 +137,45 @@ if [[ ! -d "${snapshot}" ]]; then
     exit 1
 fi
 driver="${driver_dir}/toolchain/dylint-driver"
+notice="whitaker: built the Dylint driver on first use; later runs reuse it"
 build_driver() {
     mkdir -p "${driver_dir}/toolchain"
     echo "driver-build" >>"${FAKE_CALLS}"
     sleep 0.5
     if [[ "${FAKE_REBUILD_ALWAYS:-}" == 1 ]]; then date +%s%N >"${driver}"; else echo v1 >"${driver}"; fi
+    echo "${notice}" >&2
 }
+# FAKE_REBUILD_IDENTICAL rebuilds on every run but writes the same bytes, so
+# only the build notice can tell a warm run from a rebuild.
+rebuild=${FAKE_REBUILD_ALWAYS:-${FAKE_REBUILD_IDENTICAL:-}}
+# The concurrent phase is the only cold build after the first one.
+is_second_cold=0
+if [[ ! -f "${driver}" ]] && grep -qx driver-build "${FAKE_CALLS}" 2>/dev/null; then
+    is_second_cold=1
+fi
 # FAKE_CONCURRENT_FAILS breaks the second cold build, which only the
 # concurrent phase performs, so the failure does not depend on both runs
 # landing inside one build window.
-if [[ ! -f "${driver}" && "${FAKE_CONCURRENT_FAILS:-}" == 1 ]] &&
-    grep -qx driver-build "${FAKE_CALLS}" 2>/dev/null; then
+if [[ "${is_second_cold}" == 1 && "${FAKE_CONCURRENT_FAILS:-}" == 1 ]]; then
     echo "error: the driver is being built by another process" >&2
     exit 1
 fi
-if [[ ! -f "${driver}" || "${FAKE_REBUILD_ALWAYS:-}" == 1 ]]; then
+built=0
+if [[ ! -f "${driver}" || "${rebuild}" == 1 ]]; then
     if mkdir "${driver_dir}.lock" 2>/dev/null; then
         build_driver
+        built=1
         rmdir "${driver_dir}.lock"
     else
         while [[ -d "${driver_dir}.lock" ]]; do sleep 0.1; done
     fi
+fi
+# FAKE_DOUBLE_BUILD makes the concurrent run that did not build report a
+# build too, as two unserialized cold builds would. Two builds have happened
+# by then whether or not the pair overlapped; the warm run sees only one.
+if [[ "${built}" == 0 && "${FAKE_DOUBLE_BUILD:-}" == 1 ]] &&
+    [[ "$(grep -cx driver-build "${FAKE_CALLS}")" -ge 2 ]]; then
+    echo "${notice}" >&2
 fi
 [[ "${FAKE_SUCCEED:-}" == 1 ]] && exit 0
 if [[ "${FAKE_NO_DIAGNOSTIC:-}" == 1 ]]; then

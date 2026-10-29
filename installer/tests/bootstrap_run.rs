@@ -9,6 +9,7 @@ mod bootstrap_support;
 
 use bootstrap_support::{Installation, git};
 use std::process::Stdio;
+use whitaker_installer::bootstrap::BUILT_DRIVER_NOTICE;
 
 /// The value the stub recorded for `key`, from its most recent invocation.
 fn last(recorded: &[String], key: &str) -> String {
@@ -39,6 +40,13 @@ fn cold_then_warm_runs_build_the_driver_once() {
     );
 
     assert_eq!(installation.builds(), 1, "the warm run reuses the driver");
+    let notices = |output: &std::process::Output| {
+        String::from_utf8_lossy(&output.stderr)
+            .matches(BUILT_DRIVER_NOTICE)
+            .count()
+    };
+    assert_eq!(notices(&cold), 1, "the cold run reports its build");
+    assert_eq!(notices(&warm), 0, "the warm run builds nothing to report");
 }
 
 #[test]

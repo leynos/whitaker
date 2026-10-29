@@ -171,11 +171,15 @@ fn a_cold_run_records_its_path_and_outcome(#[case] builds: bool, #[case] outcome
     let recorder = DebuggingRecorder::new();
     let snapshotter = recorder.snapshotter();
 
-    let code =
+    let finished =
         metrics::with_local_recorder(&recorder, || execute(&prepared, cargo.as_os_str(), &[]))
             .expect("execute");
 
-    assert_eq!(code, 0);
+    assert_eq!(finished.code, 0);
+    assert_eq!(
+        finished.built_driver, builds,
+        "only a run that built the driver says so"
+    );
     let recorded = snapshotter.snapshot().into_vec();
     assert!(counted_once(&recorded, RUN_TOTAL, ("driver", "cold")));
     assert!(counted_once(
@@ -199,8 +203,11 @@ fn a_run_after_the_build_is_warm() {
     let recorder = DebuggingRecorder::new();
     let snapshotter = recorder.snapshotter();
 
-    metrics::with_local_recorder(&recorder, || execute(&prepared, cargo.as_os_str(), &[]))
-        .expect("warm run");
+    let finished =
+        metrics::with_local_recorder(&recorder, || execute(&prepared, cargo.as_os_str(), &[]))
+            .expect("warm run");
+
+    assert!(!finished.built_driver, "a warm run reuses the driver");
 
     let recorded = snapshotter.snapshot().into_vec();
     assert!(counted_once(&recorded, RUN_TOTAL, ("driver", "warm")));

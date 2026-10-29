@@ -12,7 +12,8 @@ use camino::{Utf8Path, Utf8PathBuf};
 use std::ffi::OsString;
 use std::io::Write;
 use whitaker_installer::bootstrap::{
-    BOOTSTRAP_SCHEMA, BootstrapLayout, BootstrapMetadata, StoredPath, is_present_dir,
+    BOOTSTRAP_SCHEMA, BUILT_DRIVER_NOTICE, BootstrapLayout, BootstrapMetadata, StoredPath,
+    is_present_dir,
 };
 use whitaker_installer::cli::InstallArgs;
 use whitaker_installer::clippy_snapshot::{
@@ -160,7 +161,14 @@ pub(crate) fn run_bootstrap(args: &[OsString], stderr: &mut dyn Write) -> i32 {
         return 1;
     };
     match whitaker_installer::bootstrap::run(&dirs, args) {
-        Ok(code) => code,
+        Ok(outcome) => {
+            // After the child's output, so it is the last thing a slow first
+            // run shows and verification can count it.
+            if outcome.built_driver {
+                write_stderr_line(stderr, BUILT_DRIVER_NOTICE);
+            }
+            outcome.code
+        }
         Err(error) => {
             write_stderr_line(stderr, format!("whitaker: {error}"));
             1

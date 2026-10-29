@@ -77,6 +77,16 @@ def test_an_existing_denial_is_not_reapplied(sandbox: Sandbox) -> None:
             id="warm-rebuilds",
         ),
         pytest.param(
+            {"FAKE_REBUILD_IDENTICAL": "1"},
+            "warm run rebuilt the driver",
+            id="warm-rebuilds-identical-bytes",
+        ),
+        pytest.param(
+            {"FAKE_DOUBLE_BUILD": "1"},
+            "simultaneous cold runs built the driver 2 times",
+            id="concurrent-builds-twice",
+        ),
+        pytest.param(
             {"FAKE_CONCURRENT_FAILS": "1"},
             "concurrent run did not report the diagnostic",
             id="concurrent-fails",
@@ -141,6 +151,8 @@ def _scenarios(path: Path) -> dict[str, bool]:
         "diagnostic": "no_std_fs_operations" in text,
         "no-fallback": "never falls back to cloning public Clippy" in text,
         "warm-rebuild": "the warm run rebuilt the driver" in text,
+        "build-notice": "built the Dylint driver on first use" in text,
+        "single-concurrent-build": "simultaneous cold runs built the driver" in text,
         "lints-ran": "lints ran although the snapshot was missing" in text,
     }
 

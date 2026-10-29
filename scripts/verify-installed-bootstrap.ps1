@@ -90,6 +90,23 @@ function Assert-Diagnostic([System.Diagnostics.Process] $process, [string] $log)
     }
 }
 
+# `whitaker-installer run` prints this once a run has built the driver (see
+# `BUILT_DRIVER_NOTICE` in installer/src/bootstrap/mod.rs).
+$builtNotice = 'built the Dylint driver on first use'
+
+# Count the build notices across both streams of the given logs.
+function Get-BuildCount([string[]] $logs) {
+    $count = 0
+    foreach ($log in $logs) {
+        foreach ($path in @("$log.out", $log)) {
+            if (Test-Path -LiteralPath $path) {
+                $count += @(Select-String -LiteralPath $path -SimpleMatch -Pattern $builtNotice).Count
+            }
+        }
+    }
+    return $count
+}
+
 function Get-DriverDigest([string] $driverDir) {
     # Dylint persists the driver without an extension, on Windows too.
     $driver = Get-ChildItem -Recurse -File -Path $driverDir -Filter 'dylint-driver' |
@@ -111,10 +128,15 @@ Write-Output 'Cold run with an empty driver directory.'
 if (Test-Path $driverDir) { Remove-Item -Recurse -Force $driverDir }
 Assert-Diagnostic (Start-Whitaker $fixture (Join-Path $WorkDir 'cold.log')) (Join-Path $WorkDir 'cold.log')
 $cold = Get-DriverDigest $driverDir
+if ((Get-BuildCount @((Join-Path $WorkDir 'cold.log'))) -ne 1) {
+    Fail "the cold run did not report building the driver once; see $(Join-Path $WorkDir 'cold.log')"
+}
 
 Write-Output 'Warm run reusing the driver.'
 Assert-Diagnostic (Start-Whitaker $fixture (Join-Path $WorkDir 'warm.log')) (Join-Path $WorkDir 'warm.log')
+# The notice also catches a rebuild that happens to write identical bytes.
 if ((Get-DriverDigest $driverDir) -ne $cold) { Fail 'the warm run rebuilt the driver' }
+if ((Get-BuildCount @((Join-Path $WorkDir 'warm.log'))) -ne 0) { Fail 'the warm run rebuilt the driver' }
 
 Write-Output 'Two simultaneous cold runs.'
 Remove-Item -Recurse -Force $driverDir
@@ -122,6 +144,8 @@ $first = Start-Whitaker $fixture (Join-Path $WorkDir 'concurrent-a.log')
 $second = Start-Whitaker $fixture (Join-Path $WorkDir 'concurrent-b.log')
 Assert-Diagnostic $first (Join-Path $WorkDir 'concurrent-a.log')
 Assert-Diagnostic $second (Join-Path $WorkDir 'concurrent-b.log')
+$builds = Get-BuildCount @((Join-Path $WorkDir 'concurrent-a.log'), (Join-Path $WorkDir 'concurrent-b.log'))
+if ($builds -ne 1) { Fail "the simultaneous cold runs built the driver $builds times" }
 
 Write-Output 'Deleted snapshot generation.'
 Rename-Item -Path $snapshot -NewName ((Split-Path -Leaf $snapshot) + '.removed')

@@ -30,7 +30,14 @@ pub use driver::DriverSlot;
 pub use error::BootstrapError;
 pub use metadata::{BOOTSTRAP_SCHEMA, BootstrapMetadata, StoredPath};
 pub use probe::is_present_dir;
-pub use run::{exit_code, run, run_with_cargo};
+pub use run::{RunOutcome, exit_code, run, run_with_cargo};
+
+/// What `whitaker-installer run` prints once a run has built the driver.
+///
+/// The release verification scripts count this line to prove a cold run built
+/// the driver once and a warm run not at all, so keep its wording stable.
+pub const BUILT_DRIVER_NOTICE: &str =
+    "whitaker: built the Dylint driver on first use; later runs reuse it";
 
 use crate::dirs::BaseDirs;
 use camino::{Utf8Path, Utf8PathBuf};

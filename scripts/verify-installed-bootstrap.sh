@@ -85,6 +85,15 @@ expect_diagnostic() {
         fail "whitaker failed (${status}) without a ${diagnostic} diagnostic; see ${log}"
 }
 
+# `whitaker-installer run` prints this once a run has built the driver (see
+# `BUILT_DRIVER_NOTICE` in installer/src/bootstrap/mod.rs).
+built_notice="built the Dylint driver on first use"
+
+# Count the build notices across the given logs.
+build_count() {
+    cat -- "$@" | grep -c -- "${built_notice}" || true
+}
+
 driver_digest() {
     local driver_dir=$1 driver
     driver=$(find "${driver_dir}" -type f -name dylint-driver | head -n 1)
@@ -108,10 +117,14 @@ echo "Cold run with an empty driver directory."
 rm -rf -- "${driver_dir}"
 expect_diagnostic "${fixture}" "${work}/cold.log"
 cold=$(driver_digest "${driver_dir}")
+[[ "$(build_count "${work}/cold.log")" -eq 1 ]] ||
+    fail "the cold run did not report building the driver once; see ${work}/cold.log"
 
 echo "Warm run reusing the driver."
 expect_diagnostic "${fixture}" "${work}/warm.log"
+# The notice also catches a rebuild that happens to write identical bytes.
 [[ "$(driver_digest "${driver_dir}")" == "${cold}" ]] || fail "the warm run rebuilt the driver"
+[[ "$(build_count "${work}/warm.log")" -eq 0 ]] || fail "the warm run rebuilt the driver"
 
 echo "Two simultaneous cold runs."
 rm -rf -- "${driver_dir}"
@@ -121,6 +134,8 @@ expect_diagnostic "${fixture}" "${work}/concurrent-b.log" &
 second=$!
 wait "${first}" || fail "the first concurrent run did not report the diagnostic"
 wait "${second}" || fail "the second concurrent run did not report the diagnostic"
+builds=$(build_count "${work}/concurrent-a.log" "${work}/concurrent-b.log")
+[[ "${builds}" -eq 1 ]] || fail "the simultaneous cold runs built the driver ${builds} times"
 
 if [[ "$(uname -s)" == Linux ]]; then
     echo "Relocated data root."
