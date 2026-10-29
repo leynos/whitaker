@@ -186,6 +186,14 @@ pub enum InstallerError {
     #[error("wrapper script generation failed: {0}")]
     WrapperGeneration(String),
 
+    /// The Clippy snapshot could not be provisioned or trusted.
+    #[error(transparent)]
+    ClippySnapshot(#[from] crate::clippy_snapshot::ClippySnapshotError),
+
+    /// The installed Dylint bootstrap could not be recorded or used.
+    #[error(transparent)]
+    Bootstrap(#[from] crate::bootstrap::BootstrapError),
+
     /// Failed to scan the staging directory for installed lints.
     #[error("failed to scan staging directory")]
     ScanFailed {
@@ -335,6 +343,8 @@ impl Clone for InstallerError {
                 reason: reason.clone(),
             },
             Self::WrapperGeneration(message) => Self::WrapperGeneration(message.clone()),
+            Self::ClippySnapshot(error) => Self::ClippySnapshot(error.clone()),
+            Self::Bootstrap(error) => Self::Bootstrap(error.clone()),
             Self::ConflictingSourceOptions { .. }
             | Self::SourceFallbackForbidden { .. }
             | Self::ToolchainDetection { .. }

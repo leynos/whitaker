@@ -12,7 +12,7 @@
 [package]
 edition = "2024"
 name = "dylint_testing"
-version = "6.0.1"
+version = "6.3.0"
 authors = ["Samuel E. Moelius III <sam@moeli.us>"]
 build = false
 autolib = false
@@ -44,10 +44,11 @@ version = "0.23"
 version = "0.11"
 
 [dependencies.dylint]
-version = "=6.0.1"
+version = "=6.3.0"
 
 [dependencies.dylint_internal]
-version = "=6.0.1"
+version = "=6.3.0"
+features = ["link"]
 
 [dependencies.env_logger]
 version = "0.11"
@@ -55,14 +56,8 @@ version = "0.11"
 [dependencies.once_cell]
 version = "1.21"
 
-[dependencies.regex]
-version = "1.12"
-
 [dependencies.shlex]
 workspace = true
-
-[dependencies.serde_json]
-version = "1.0"
 
 [dependencies.tempfile]
 version = "3.27"
@@ -71,11 +66,12 @@ version = "3.27"
 workspace = true
 
 [lints.clippy]
-missing-errors-doc = "allow"
-missing-panics-doc = "allow"
-option-if-let-else = "allow"
-significant-drop-tightening = "allow"
-struct-field-names = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+option_if_let_else = "allow"
+redundant_pub_crate = "allow"
+significant_drop_tightening = "allow"
+struct_field_names = "allow"
 
 [lints.clippy.nursery]
 level = "warn"

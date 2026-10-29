@@ -1,6 +1,19 @@
+//! UI-test builder: `ui::Test` configures and runs one Dylint UI test.
+//!
+//! A test targets either a source directory (`Test::src_base`), one example
+//! (`Test::example`), or every example of the current package
+//! (`Test::examples`). `Test::run` initializes the driver with `initialize`,
+//! then dispatches on the target.
+//!
+//! Source-directory tests call the crate-level `run_tests` helper directly.
+//! Example tests resolve the package's example targets with `example_target`
+//! or `example_targets`, bundle the driver, metadata, package, target, and
+//! configuration into an `ExampleTestContext`, and pass it to
+//! `run_example_test`. The shared `Config` carries the extra compiler flags
+//! and `dylint.toml` contents set on the builder.
+
 use crate::{
-    example::{ExampleTestContext, example_target, example_targets, run_example_test},
-    initialize, run_tests,
+    ExampleTestContext, example_target, example_targets, initialize, run_example_test, run_tests,
 };
 use std::{
     env::current_dir,
@@ -96,7 +109,7 @@ impl Test {
                     dylint_internal::cargo::package_with_root(&metadata, &current_dir).unwrap();
                 let target = example_target(&package, example).unwrap();
 
-                run_example_test(ExampleTestContext {
+                run_example_test(&ExampleTestContext {
                     driver,
                     metadata: &metadata,
                     package: &package,
@@ -110,10 +123,10 @@ impl Test {
                 let current_dir = current_dir().unwrap();
                 let package =
                     dylint_internal::cargo::package_with_root(&metadata, &current_dir).unwrap();
-                let targets = example_targets(&package).unwrap();
+                let targets = example_targets(&package);
 
                 for target in targets {
-                    run_example_test(ExampleTestContext {
+                    run_example_test(&ExampleTestContext {
                         driver,
                         metadata: &metadata,
                         package: &package,
@@ -128,7 +141,7 @@ impl Test {
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use super::*;
 
     // smoelius: Verify that `rustc_flags` compiles when used as intended.

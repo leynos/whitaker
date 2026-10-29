@@ -137,12 +137,15 @@ jobs:
             ~/.local/share/uv
           key: tools-coverage-v1-${{ runner.os }}-${{ runner.arch }}-${{ runner.environment }}-ubuntu2404-nextest0.9.114-llvmcov0.6.24-${{ hashFiles('rust-toolchain.toml') }}
 
-      - name: Restore the Clippy source mirror
-        id: clippy-mirror-cache
+      - name: Restore the Clippy snapshot
+        id: clippy-snapshot-cache
+        # The verified Clippy history every Dylint driver build reads through
+        # `DYLINT_CLIPPY_REPO`. The manifest pins the snapshot commit and the
+        # Dylint release, so hashing it keys the cache by both.
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
-          path: ~/.cache/whitaker-mirrors
-          key: clippy-mirror-v1-dylint6.0.1-${{ hashFiles('rust-toolchain.toml') }}
+          path: ~/.cache/whitaker-clippy-snapshot
+          key: clippy-snapshot-v1-${{ hashFiles('installer/clippy-snapshot.toml') }}
 
       - name: Record cache observations
         if: always()
@@ -153,17 +156,10 @@ jobs:
           RUST_TOOLS_KEY: ${{ steps.rust-tools.outputs.cache-primary-key }}
           RUST_TOOLS_MATCHED: ${{ steps.rust-tools.outputs.cache-matched-key }}
           RUST_TOOLS_HIT: ${{ steps.rust-tools.outputs.cache-hit }}
-          CLIPPY_MIRROR_KEY: ${{ steps.clippy-mirror-cache.outputs.cache-primary-key }}
-          CLIPPY_MIRROR_MATCHED: ${{ steps.clippy-mirror-cache.outputs.cache-matched-key }}
-          CLIPPY_MIRROR_HIT: ${{ steps.clippy-mirror-cache.outputs.cache-hit }}
+          CLIPPY_SNAPSHOT_KEY: ${{ steps.clippy-snapshot-cache.outputs.cache-primary-key }}
+          CLIPPY_SNAPSHOT_MATCHED: ${{ steps.clippy-snapshot-cache.outputs.cache-matched-key }}
+          CLIPPY_SNAPSHOT_HIT: ${{ steps.clippy-snapshot-cache.outputs.cache-hit }}
         run: bash scripts/record-cache-observations.sh
-
-      - name: Provision the Clippy source mirror
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          bash scripts/provision-clippy-mirror.sh \
-            "$HOME/.cache/whitaker-mirrors/rust-clippy.git"
 
       - name: Setup Rust
         id: setup-rust
@@ -173,6 +169,25 @@ jobs:
           # letting sccache compile against local disk unnoticed.
           expect-cache: ubicloud
           cache-provider: external
+
+      - name: Provision the Clippy snapshot
+        # The only producer step that may read public Clippy, and only on a
+        # cache miss: it bundles the pinned history, installs it through the
+        # verifier consumers use, and exports both Dylint paths for later
+        # steps. A hit reuses the restored generation after full verification.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CLIPPY_SNAPSHOT_HIT: ${{ steps.clippy-snapshot-cache.outputs.cache-hit }}
+        run: |
+          set -euo pipefail
+          bundle=()
+          if [[ "${CLIPPY_SNAPSHOT_HIT}" != "true" ]]; then
+            dist="${RUNNER_TEMP}/clippy-snapshot"
+            make clippy-snapshot-bundle CLIPPY_SNAPSHOT_DIST="${dist}"
+            bundle=(CLIPPY_SNAPSHOT_BUNDLE="$(echo "${dist}"/whitaker-clippy-snapshot-*.bundle)")
+          fi
+          make clippy-snapshot "${bundle[@]}"
+          make --no-print-directory dylint-env >> "$GITHUB_ENV"
 
       - name: Install cargo-nextest
         uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
@@ -354,14 +369,17 @@ jobs:
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: ~/.cache/whitaker-dylint-tools
-          key: dylint-tools-v1-${{ runner.os }}-${{ runner.arch }}-${{ runner.environment }}-ubuntu2404-cargo-dylint6.0.1-dylint-link6.0.1
+          key: dylint-tools-v1-${{ runner.os }}-${{ runner.arch }}-${{ runner.environment }}-ubuntu2404-cargo-dylint6.3.0-dylint-link6.3.0
 
-      - name: Restore the Clippy source mirror
-        id: clippy-mirror-cache
+      - name: Restore the Clippy snapshot
+        id: clippy-snapshot-cache
+        # The verified Clippy history every Dylint driver build reads through
+        # `DYLINT_CLIPPY_REPO`. The manifest pins the snapshot commit and the
+        # Dylint release, so hashing it keys the cache by both.
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
-          path: ~/.cache/whitaker-mirrors
-          key: clippy-mirror-v1-dylint6.0.1-${{ hashFiles('rust-toolchain.toml') }}
+          path: ~/.cache/whitaker-clippy-snapshot
+          key: clippy-snapshot-v1-${{ hashFiles('installer/clippy-snapshot.toml') }}
 
       - name: Record cache observations
         if: always()
@@ -375,17 +393,10 @@ jobs:
           DYLINT_TOOLS_KEY: ${{ steps.dylint-tools.outputs.cache-primary-key }}
           DYLINT_TOOLS_MATCHED: ${{ steps.dylint-tools.outputs.cache-matched-key }}
           DYLINT_TOOLS_HIT: ${{ steps.dylint-tools.outputs.cache-hit }}
-          CLIPPY_MIRROR_KEY: ${{ steps.clippy-mirror-cache.outputs.cache-primary-key }}
-          CLIPPY_MIRROR_MATCHED: ${{ steps.clippy-mirror-cache.outputs.cache-matched-key }}
-          CLIPPY_MIRROR_HIT: ${{ steps.clippy-mirror-cache.outputs.cache-hit }}
+          CLIPPY_SNAPSHOT_KEY: ${{ steps.clippy-snapshot-cache.outputs.cache-primary-key }}
+          CLIPPY_SNAPSHOT_MATCHED: ${{ steps.clippy-snapshot-cache.outputs.cache-matched-key }}
+          CLIPPY_SNAPSHOT_HIT: ${{ steps.clippy-snapshot-cache.outputs.cache-hit }}
         run: bash scripts/record-cache-observations.sh
-
-      - name: Provision the Clippy source mirror
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          bash scripts/provision-clippy-mirror.sh \
-            "$HOME/.cache/whitaker-mirrors/rust-clippy.git"
 
       - name: Check Verus FragmentId bridge
         run: scripts/check-verus-fragment-id-bridge.sh
@@ -398,6 +409,25 @@ jobs:
           # letting sccache compile against local disk unnoticed.
           expect-cache: ubicloud
           cache-provider: external
+
+      - name: Provision the Clippy snapshot
+        # The only producer step that may read public Clippy, and only on a
+        # cache miss: it bundles the pinned history, installs it through the
+        # verifier consumers use, and exports both Dylint paths for later
+        # steps. A hit reuses the restored generation after full verification.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CLIPPY_SNAPSHOT_HIT: ${{ steps.clippy-snapshot-cache.outputs.cache-hit }}
+        run: |
+          set -euo pipefail
+          bundle=()
+          if [[ "${CLIPPY_SNAPSHOT_HIT}" != "true" ]]; then
+            dist="${RUNNER_TEMP}/clippy-snapshot"
+            make clippy-snapshot-bundle CLIPPY_SNAPSHOT_DIST="${dist}"
+            bundle=(CLIPPY_SNAPSHOT_BUNDLE="$(echo "${dist}"/whitaker-clippy-snapshot-*.bundle)")
+          fi
+          make clippy-snapshot "${bundle[@]}"
+          make --no-print-directory dylint-env >> "$GITHUB_ENV"
 
       - name: Setup Rust for installer MSRV
         uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772  # master
@@ -475,6 +505,34 @@ jobs:
 
       - name: Publish dry run
         run: make publish-check PUBLISH_PACKAGES="whitaker-common whitaker-installer"
+
+      - name: Install the Dylint host tools
+        # Before the github.com denial below: on a cache miss the pinned
+        # archives download from the trailofbits/dylint GitHub release.
+        run: make dylint-tools
+
+      - name: Prove the Dylint driver bootstrap without public Clippy
+        # Deny github.com once the snapshot is provisioned, prove the denial
+        # with a canary, then build the driver cold and reuse it warm against
+        # the real `no_std_fs_operations` library. `setup-rust` has set
+        # `RUSTC_WRAPPER` to sccache, so the compiler-wrapper path is covered.
+        # This is the job's last validation step: the resolver can keep the
+        # denial after the hosts entry is removed, and the steps above
+        # (`make lint` fetches skills-ref from GitHub) must not see it.
+        run: |
+          set -euo pipefail
+          echo "0.0.0.0 github.com" | sudo tee -a /etc/hosts >/dev/null
+          restore() {
+            sudo sed -i "/^0.0.0.0 github.com$/d" /etc/hosts
+            sudo resolvectl flush-caches 2>/dev/null || true
+          }
+          trap restore EXIT
+          if git ls-remote https://github.com/rust-lang/rust-clippy HEAD >/dev/null 2>&1; then
+            echo "::error::the github.com canary still succeeds" >&2
+            exit 1
+          fi
+          test -n "${RUSTC_WRAPPER:-}" || { echo "::error::RUSTC_WRAPPER is not set" >&2; exit 1; }
+          make dylint-smoke
 
       - name: Discard the build target tree
         # The last consumer of `target` has run. No job caches a target tree,
@@ -612,6 +670,27 @@ jobs:
         uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
         with:
           cache-provider: external
+
+      - name: Provision the Clippy snapshot
+        # The only producer step that may read public Clippy, and only on a
+        # cache miss: it bundles the pinned history, installs it through the
+        # verifier consumers use, and exports both Dylint paths for later
+        # steps. A hit reuses the restored generation after full verification.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # No restore here: a Windows runner cannot unpack the Linux archive,
+          # so this lane bundles and verifies the snapshot on every run.
+          CLIPPY_SNAPSHOT_HIT: 'false'
+        run: |
+          set -euo pipefail
+          bundle=()
+          if [[ "${CLIPPY_SNAPSHOT_HIT}" != "true" ]]; then
+            dist="${RUNNER_TEMP}/clippy-snapshot"
+            make clippy-snapshot-bundle CLIPPY_SNAPSHOT_DIST="${dist}"
+            bundle=(CLIPPY_SNAPSHOT_BUNDLE="$(echo "${dist}"/whitaker-clippy-snapshot-*.bundle)")
+          fi
+          make clippy-snapshot "${bundle[@]}"
+          make --no-print-directory dylint-env >> "$GITHUB_ENV"
 
       - name: Install cargo-nextest
         uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3

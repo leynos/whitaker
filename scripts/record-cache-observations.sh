@@ -45,7 +45,7 @@ CACHE_STEPS=(
     'Cargo registry and Git index:CARGO_REGISTRY'
     'Rust toolchain and installed tools:RUST_TOOLS'
     'Dylint host tools:DYLINT_TOOLS'
-    'Clippy source mirror:CLIPPY_MIRROR'
+    'Clippy snapshot:CLIPPY_SNAPSHOT'
 )
 
 summary=${GITHUB_STEP_SUMMARY:-/dev/stdout}

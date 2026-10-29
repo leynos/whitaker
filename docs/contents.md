@@ -102,6 +102,12 @@
   substrate](adr-007-rust-rewrite-materialization-substrate.md) defines a
   bounded comparative spike between ast-grep and `ra_ap_syntax::SyntaxEditor`,
   with source-fidelity gates and an evidence-based backend selection rule.
+- [Architectural decision record (ADR) 009: verified Clippy snapshot for the
+  Dylint driver
+  bootstrap](adr-009-verified-clippy-snapshot-for-dylint-driver-bootstrap.md)
+  records the move to Dylint 6.3.0, the commit-named Clippy bundle that driver
+  builds read instead of public Clippy, first-use driver construction in an
+  identity-keyed directory, and the `whitaker-installer run` dispatcher.
 
 ## Requests for comments
 

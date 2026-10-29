@@ -8,6 +8,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from tests.workflows.clippy_snapshot_harness import provide_clippy_snapshot
+
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -26,6 +28,7 @@ def test_coverage_shares_target_and_profile_policy_with_nested_cargo(
     workspace.mkdir()
     bin_directory.mkdir()
     shutil.copy2(REPOSITORY_ROOT / "Makefile", workspace / "Makefile")
+    snapshot_arguments = provide_clippy_snapshot(workspace)
 
     cargo = bin_directory / "cargo"
     _write_executable(
@@ -58,6 +61,7 @@ def test_coverage_shares_target_and_profile_policy_with_nested_cargo(
             "coverage",
             f"CARGO={cargo}",
             f"WHITAKER_SCRIPT={tmp_path / 'whitaker'}",
+            *snapshot_arguments,
         ],
         cwd=workspace,
         capture_output=True,
@@ -89,13 +93,20 @@ def _cargo_arguments(tmp_path: Path, *targets: str) -> list[str]:
     workspace.mkdir()
     bin_directory.mkdir()
     shutil.copy2(REPOSITORY_ROOT / "Makefile", workspace / "Makefile")
+    snapshot_arguments = provide_clippy_snapshot(workspace)
     arguments_log = tmp_path / "cargo-arguments.log"
     cargo = bin_directory / "cargo"
     _write_executable(cargo, 'printf "%s\\n" "$*" >> "$CARGO_ARGUMENTS_LOG"')
     _write_executable(bin_directory / "cargo-llvm-cov", "exit 0")
     _write_executable(bin_directory / "cargo-nextest", "exit 0")
     result = subprocess.run(
-        ["make", *targets, f"CARGO={cargo}", f"WHITAKER_SCRIPT={tmp_path / 'whitaker'}"],
+        [
+            "make",
+            *targets,
+            f"CARGO={cargo}",
+            f"WHITAKER_SCRIPT={tmp_path / 'whitaker'}",
+            *snapshot_arguments,
+        ],
         cwd=workspace,
         capture_output=True,
         check=False,

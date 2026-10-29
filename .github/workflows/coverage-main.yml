@@ -132,17 +132,15 @@ jobs:
             ~/.local/share/uv
           key: tools-coverage-v1-${{ runner.os }}-${{ runner.arch }}-${{ runner.environment }}-ubuntu2404-nextest0.9.114-llvmcov0.6.24-${{ hashFiles('rust-toolchain.toml') }}
 
-      - name: Restore the Clippy source mirror
-        id: clippy-mirror-cache
-        # `dylint_driver`'s build script clones rust-lang/rust-clippy while
-        # building. Run 33704041072 failed three times because GitHub
-        # rejected that unauthenticated clone. Give the fetch one cache
-        # owner, keyed by the Dylint version whose build script performs it
-        # and by the pinned nightly whose revision it needs.
+      - name: Restore the Clippy snapshot
+        id: clippy-snapshot-cache
+        # The verified Clippy history every Dylint driver build reads through
+        # `DYLINT_CLIPPY_REPO`. The manifest pins the snapshot commit and the
+        # Dylint release, so hashing it keys the cache by both.
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
-          path: ~/.cache/whitaker-mirrors
-          key: clippy-mirror-v1-dylint6.0.1-${{ hashFiles('rust-toolchain.toml') }}
+          path: ~/.cache/whitaker-clippy-snapshot
+          key: clippy-snapshot-v1-${{ hashFiles('installer/clippy-snapshot.toml') }}
 
       - name: Record cache observations
         if: always()
@@ -153,17 +151,10 @@ jobs:
           RUST_TOOLS_KEY: ${{ steps.rust-tools.outputs.cache-primary-key }}
           RUST_TOOLS_MATCHED: ${{ steps.rust-tools.outputs.cache-matched-key }}
           RUST_TOOLS_HIT: ${{ steps.rust-tools.outputs.cache-hit }}
-          CLIPPY_MIRROR_KEY: ${{ steps.clippy-mirror-cache.outputs.cache-primary-key }}
-          CLIPPY_MIRROR_MATCHED: ${{ steps.clippy-mirror-cache.outputs.cache-matched-key }}
-          CLIPPY_MIRROR_HIT: ${{ steps.clippy-mirror-cache.outputs.cache-hit }}
+          CLIPPY_SNAPSHOT_KEY: ${{ steps.clippy-snapshot-cache.outputs.cache-primary-key }}
+          CLIPPY_SNAPSHOT_MATCHED: ${{ steps.clippy-snapshot-cache.outputs.cache-matched-key }}
+          CLIPPY_SNAPSHOT_HIT: ${{ steps.clippy-snapshot-cache.outputs.cache-hit }}
         run: bash scripts/record-cache-observations.sh
-
-      - name: Provision the Clippy source mirror
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          bash scripts/provision-clippy-mirror.sh \
-            "$HOME/.cache/whitaker-mirrors/rust-clippy.git"
 
       - name: Setup Rust
         id: setup-rust
@@ -173,6 +164,25 @@ jobs:
           # letting sccache compile against local disk unnoticed.
           expect-cache: ubicloud
           cache-provider: external
+
+      - name: Provision the Clippy snapshot
+        # The only producer step that may read public Clippy, and only on a
+        # cache miss: it bundles the pinned history, installs it through the
+        # verifier consumers use, and exports both Dylint paths for later
+        # steps. A hit reuses the restored generation after full verification.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CLIPPY_SNAPSHOT_HIT: ${{ steps.clippy-snapshot-cache.outputs.cache-hit }}
+        run: |
+          set -euo pipefail
+          bundle=()
+          if [[ "${CLIPPY_SNAPSHOT_HIT}" != "true" ]]; then
+            dist="${RUNNER_TEMP}/clippy-snapshot"
+            make clippy-snapshot-bundle CLIPPY_SNAPSHOT_DIST="${dist}"
+            bundle=(CLIPPY_SNAPSHOT_BUNDLE="$(echo "${dist}"/whitaker-clippy-snapshot-*.bundle)")
+          fi
+          make clippy-snapshot "${bundle[@]}"
+          make --no-print-directory dylint-env >> "$GITHUB_ENV"
 
       - name: Install cargo-nextest
         uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
@@ -297,7 +307,7 @@ jobs:
         run: bash scripts/record-cache-observations.sh headroom
 
       # This job is the sole writer for the coverage-lane keys and for the
-      # shared Clippy mirror. `ci.yml` restores them and never saves, so two
+      # shared Clippy snapshot. `ci.yml` restores them and never saves, so two
       # lanes can never race to populate the same cold key.
       - name: Save Cargo registry
         if: github.ref == 'refs/heads/main' && steps.cargo-registry.outputs.cache-hit != 'true'
@@ -320,12 +330,12 @@ jobs:
             ~/.local/share/uv
           key: ${{ steps.rust-tools.outputs.cache-primary-key }}
 
-      - name: Save the Clippy source mirror
-        if: github.ref == 'refs/heads/main' && steps.clippy-mirror-cache.outputs.cache-hit != 'true'
+      - name: Save the Clippy snapshot
+        if: github.ref == 'refs/heads/main' && steps.clippy-snapshot-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
-          path: ~/.cache/whitaker-mirrors
-          key: ${{ steps.clippy-mirror-cache.outputs.cache-primary-key }}
+          path: ~/.cache/whitaker-clippy-snapshot
+          key: ${{ steps.clippy-snapshot-cache.outputs.cache-primary-key }}
 
       - name: Check sccache health
         if: steps.setup-rust.outputs.sccache-status != 'fallback'

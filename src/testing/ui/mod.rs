@@ -6,7 +6,6 @@
 //! This module centralizes input validation so lint crates can depend on a
 //! small helper rather than repeat the same checks.
 
-#[cfg(windows)]
 use std::env;
 use std::fmt;
 
@@ -15,7 +14,6 @@ use camino::{Utf8Path, Utf8PathBuf};
 mod toolchain;
 
 use self::toolchain::{CrateName, ensure_toolchain_library};
-#[cfg(windows)]
 use whitaker_common::test_support::env_test_guard;
 
 /// Errors produced when preparing or executing Dylint UI tests.
@@ -209,63 +207,110 @@ pub fn run_ui_test(
 
 /// Serializes environment mutations required by `run_with_runner`.
 ///
-/// On Windows, one additional environment variable needs temporary adjustment:
+/// Every platform needs one variable, and Windows needs a second:
 ///
-/// - `VCPKG_ROOT`: must be set to `C:\vcpkg` when that directory exists and the
-///   variable is otherwise absent, so downstream `cargo` invocations resolve vcpkg.
+/// - `DYLINT_LINK_ENABLE_COPY_LIBRARY`: set to `1` when absent. Since Dylint
+///   6.3.0, `dylint_testing` copies `lib<crate>.so` over the
+///   toolchain-qualified library unless this flag says the copy already
+///   exists. The harness has just built that copy with the `dylint-driver`
+///   feature, while `dylint_testing` first rebuilds the plain library with
+///   default features, which for every Whitaker lint crate is an empty
+///   `cdylib`. Without the flag the UI test loads that stub and fails with
+///   ``could not find `dylint_version` ``.
+/// - `VCPKG_ROOT` (Windows only): set to `C:\vcpkg` when that directory exists
+///   and the variable is otherwise absent, so downstream `cargo` invocations
+///   resolve vcpkg.
 ///
 /// Each mutation and restoration step acquires `env_test_guard()` only for the
 /// environment write itself. The guard deliberately does not hold that mutex
 /// across the UI runner callback, because runner closures can perform their
 /// own environment-guarded setup.
+///
+/// Runners in one test binary can overlap under plain `cargo test`, so the
+/// variables are shared: the first active runner sets whichever are absent and
+/// the last one to finish removes them. A per-runner record would let one
+/// runner remove the flag while another still relies on it.
 struct RunnerEnvGuard {
-    #[cfg(windows)]
-    vcpkg_root_was_absent: bool,
+    _shared: (),
+}
+
+/// Every active runner's view of the variables they set while absent.
+struct SharedRunnerEnv {
+    active: usize,
+    set_while_absent: Vec<&'static str>,
+}
+
+/// The process-wide runner environment record, written under `env_test_guard`.
+static SHARED_RUNNER_ENV: std::sync::Mutex<SharedRunnerEnv> =
+    std::sync::Mutex::new(SharedRunnerEnv {
+        active: 0,
+        set_while_absent: Vec::new(),
+    });
+
+/// Lock the shared record, recovering it if a panicking test poisoned it.
+fn shared_runner_env() -> std::sync::MutexGuard<'static, SharedRunnerEnv> {
+    SHARED_RUNNER_ENV
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 impl Drop for RunnerEnvGuard {
-    /// Restore temporary environment changes when the runner finishes.
+    /// Restore temporary environment changes when the last runner finishes.
     fn drop(&mut self) {
-        #[cfg(windows)]
-        {
-            let _env_guard = env_test_guard();
-
-            // SAFETY: `env_test_guard` serializes the restoration write below.
-            if self.vcpkg_root_was_absent {
-                unsafe {
-                    env::remove_var("VCPKG_ROOT");
-                }
+        let _env_guard = env_test_guard();
+        let mut shared = shared_runner_env();
+        shared.active = shared.active.saturating_sub(1);
+        if shared.active > 0 {
+            return;
+        }
+        for key in std::mem::take(&mut shared.set_while_absent) {
+            // SAFETY: `env_test_guard` serializes the restoration write.
+            unsafe {
+                env::remove_var(key);
             }
         }
     }
 }
 
-/// Prepare any platform-specific environment required by the UI runner.
-#[cfg(windows)]
-fn runner_env_guard() -> Option<RunnerEnvGuard> {
-    let vcpkg_candidate = Utf8Path::new(r"C:\vcpkg");
-    let vcpkg_applicable = vcpkg_candidate.is_dir();
+/// Tells `dylint_testing` that the toolchain-qualified library is prepared.
+const COPY_LIBRARY_FLAG: (&str, &str) = ("DYLINT_LINK_ENABLE_COPY_LIBRARY", "1");
 
-    if !vcpkg_applicable {
-        return None;
+/// List the variables the UI runner needs on this platform.
+fn runner_env_settings() -> Vec<(&'static str, &'static str)> {
+    #[cfg(windows)]
+    {
+        let mut settings = vec![COPY_LIBRARY_FLAG];
+        if Utf8Path::new(r"C:\vcpkg").is_dir() {
+            settings.push(("VCPKG_ROOT", r"C:\vcpkg"));
+        }
+        settings
     }
-    let _env_guard = env_test_guard();
-    if env::var_os("VCPKG_ROOT").is_some() {
-        return None;
+
+    #[cfg(not(windows))]
+    {
+        vec![COPY_LIBRARY_FLAG]
     }
-    // SAFETY: `_env_guard` serializes concurrent environment mutations.
-    unsafe {
-        env::set_var("VCPKG_ROOT", vcpkg_candidate.as_std_path());
-    }
-    Some(RunnerEnvGuard {
-        vcpkg_root_was_absent: true,
-    })
 }
 
-/// Prepare any platform-specific environment required by the UI runner.
-#[cfg(not(windows))]
-const fn runner_env_guard() -> Option<RunnerEnvGuard> {
-    None
+/// Prepare the environment required by the UI runner.
+fn runner_env_guard() -> RunnerEnvGuard {
+    let _env_guard = env_test_guard();
+    let mut shared = shared_runner_env();
+    if shared.active == 0 {
+        shared.set_while_absent = runner_env_settings()
+            .into_iter()
+            .filter(|(key, _)| env::var_os(key).is_none())
+            .map(|(key, value)| {
+                // SAFETY: `_env_guard` serializes concurrent environment mutations.
+                unsafe {
+                    env::set_var(key, value);
+                }
+                key
+            })
+            .collect();
+    }
+    shared.active += 1;
+    RunnerEnvGuard { _shared: () }
 }
 
 fn directory_is_rooted(path: &Utf8Path) -> bool {

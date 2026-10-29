@@ -1,23 +1,20 @@
-//! Example-target discovery and compiler-flag extraction for Dylint UI tests.
+//! Example-target UI tests: recover each example's compiler flags from Cargo.
+//!
+//! Whitaker patch: upstream `dylint_testing` 6.3.0 keeps this in `lib.rs`;
+//! Whitaker keeps it in its own module, as its 6.0.1 patch did, so each file
+//! stays within the repository's 400-line limit. The functions are upstream's
+//! apart from the changes marked "Whitaker patch".
 
+use crate::{copy_with_extension, run_tests, snake_case, ui};
 use anyhow::{Context, Result, anyhow, ensure};
 use cargo_metadata::{Metadata, Package, Target, TargetKind};
 use dylint_internal::{CommandExt, env, rustup::is_rustc};
-use regex::Regex;
-use std::{
-    env::consts,
-    fs::{copy, read_dir, remove_file},
-    io::BufRead,
-    path::Path,
-    sync::LazyLock,
-};
+use once_cell::sync::OnceCell;
+use std::{fs::copy, io::BufRead, path::Path};
 
-use crate::{run_tests, snake_case, ui};
+static LINKING_FLAGS: OnceCell<Vec<String>> = OnceCell::new();
 
-static UI_TEST_FLAGS: once_cell::sync::OnceCell<Vec<String>> = once_cell::sync::OnceCell::new();
-
-/// Find the example target named `example` in `package`.
-pub fn example_target(package: &Package, example: &str) -> Result<Target> {
+pub(crate) fn example_target(package: &Package, example: &str) -> Result<Target> {
     package
         .targets
         .iter()
@@ -26,42 +23,40 @@ pub fn example_target(package: &Package, example: &str) -> Result<Target> {
         .ok_or_else(|| anyhow!("Could not find example `{example}`"))
 }
 
-/// Return every example target in `package`.
-#[allow(clippy::unnecessary_wraps)]
-pub fn example_targets(package: &Package) -> Result<Vec<Target>> {
-    Ok(package
+/// List the package's example targets.
+///
+/// Whitaker patch: returns the list directly; upstream wraps it in a `Result`
+/// that cannot fail and silences `clippy::unnecessary_wraps`.
+pub(crate) fn example_targets(package: &Package) -> Vec<Target> {
+    package
         .targets
         .iter()
         .filter(|target| target.kind == [TargetKind::Example])
         .cloned()
-        .collect())
+        .collect()
 }
 
-/// Context for running a UI test against one Cargo example target.
-#[derive(Clone, Copy)]
-pub struct ExampleTestContext<'a> {
-    /// Dylint driver used to execute compiler tests.
-    pub driver: &'a Path,
-    /// Cargo metadata for the workspace under test.
-    pub metadata: &'a Metadata,
-    /// Package that owns the selected example target.
-    pub package: &'a Package,
-    /// Example target whose compiler flags are reused.
-    pub target: &'a Target,
-    /// Configuration applied to the UI test.
-    pub config: &'a ui::Config,
+/// The inputs for one example UI test.
+///
+/// Whitaker patch: upstream passes these as five arguments, which Whitaker's
+/// argument limit rejects; grouping them is the only change to the function.
+pub(crate) struct ExampleTestContext<'a> {
+    pub(crate) driver: &'a Path,
+    pub(crate) metadata: &'a Metadata,
+    pub(crate) package: &'a Package,
+    pub(crate) target: &'a Target,
+    pub(crate) config: &'a ui::Config,
 }
 
-/// Run a UI test using compiler flags from the selected example target.
-pub fn run_example_test(context: ExampleTestContext<'_>) -> Result<()> {
+pub(crate) fn run_example_test(context: &ExampleTestContext<'_>) -> Result<()> {
     let ExampleTestContext {
         driver,
         metadata,
         package,
         target,
         config,
-    } = context;
-    let ui_test_flags = ui_test_flags(metadata, package, target)?;
+    } = *context;
+    let linking_flags = linking_flags(metadata, package, target)?;
     let file_name = target
         .src_path
         .file_name()
@@ -85,31 +80,29 @@ pub fn run_example_test(context: ExampleTestContext<'_>) -> Result<()> {
     }
 
     let mut config = config.clone();
-    config.rustc_flags.extend(ui_test_flags.iter().cloned());
+    config.rustc_flags.extend(linking_flags.iter().cloned());
 
     run_tests(driver, src_base, &config);
 
     Ok(())
 }
 
-fn ui_test_flags(
+fn linking_flags(
     metadata: &Metadata,
     package: &Package,
     target: &Target,
 ) -> Result<&'static [String]> {
-    UI_TEST_FLAGS
-        .get_or_try_init(|| {
-            let rustc_flags = rustc_flags(metadata, package, target)?;
-            select_ui_test_flags(rustc_flags)
-        })
+    LINKING_FLAGS
+        .get_or_try_init(|| select_ui_test_flags(rustc_flags(metadata, package, target)?))
         .map(Vec::as_slice)
 }
 
 /// Retain the Cargo flags needed to compile UI tests without forwarding linker paths.
 ///
-/// `compiletest` flattens its rustc flags into a space-delimited string. Native
-/// linker paths are not needed for metadata-only UI tests and can contain spaces
-/// on Windows, where flattening would split them into multiple arguments.
+/// Whitaker patch: `compiletest` flattens its rustc flags into a
+/// space-delimited string. Native linker paths are not needed for
+/// metadata-only UI tests and can contain spaces on Windows (`C:\Program
+/// Files\...`), where flattening would split them into extra input files.
 ///
 /// # Errors
 ///
@@ -121,9 +114,10 @@ fn select_ui_test_flags(rustc_flags: Vec<String>) -> Result<Vec<String>> {
         if flag.starts_with("--edition=") {
             ui_test_flags.push(flag);
         } else if flag == "--extern" || flag == "-L" {
-            let argument = next(&flag, &mut iter)?;
-            if flag != "-L" || !argument.starts_with("native=") {
-                ui_test_flags.extend([flag, argument]);
+            let arg = next(&flag, &mut iter)?;
+            let arg = arg.trim_matches('\'').to_owned();
+            if flag != "-L" || !arg.starts_with("native=") {
+                ui_test_flags.extend([flag, arg]);
             }
         }
     }
@@ -149,22 +143,39 @@ fn select_ui_test_flags(rustc_flags: Vec<String>) -> Result<Vec<String>> {
 // I am going with the second option for now, because it seems to be the least of all evils. This
 // decision may need to be revisited.
 
-static RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^\s*Running\s*`(.*)`$").unwrap());
+/// Return the command inside one of Cargo's ``Running `...` `` lines.
+///
+/// Whitaker patch: matches what upstream's `^\s*Running\s*`(.*)`$` regex
+/// matched, without a fallible regex initialization.
+fn running_command(line: &str) -> Option<&str> {
+    line.trim_start()
+        .strip_prefix("Running")?
+        .trim_start()
+        .strip_prefix('`')?
+        .strip_suffix('`')
+}
 
-fn rustc_flags(metadata: &Metadata, package: &Package, target: &Target) -> Result<Vec<String>> {
-    // smoelius: The following comments are old and retained for posterity. The linking flags are
-    // now initialized using a `OnceCell`, which makes the mutex unnecessary.
-    //   smoelius: Force rebuilding of the example by removing it. This is kind of messy. The
-    //   example is a shared resource that may be needed by multiple tests. For now, I lock a mutex
-    //   while the example is removed and put back.
-    //   smoelius: Should we use a temporary target directory here?
+fn rustc_flags(_metadata: &Metadata, package: &Package, target: &Target) -> Result<Vec<String>> {
+    // Previously, this function removed the example executable from `target/debug/examples` before
+    // running `cargo build --verbose`. With Cargo's legacy layout, that forced the example to be
+    // recompiled and exposed its rustc invocation in Cargo's verbose output. With the new
+    // build-directory layout, Cargo can restore the removed executable from its cached build
+    // artifact without invoking rustc, making removal ineffective as a way to force recompilation.
+    // So, use `cargo rustc` with a process-specific `-C metadata` value instead. The changed
+    // metadata forces rustc to run for the selected example without removing artifacts or relying
+    // on Cargo's internal layout.
+    // Whitaker patch: a process ID alone can repeat once a later test process
+    // reuses it, and Cargo then finds the example fresh, runs no `rustc`, and
+    // the parser finds no invocation. The clock makes the value unique.
+    let started = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |elapsed| elapsed.as_nanos());
+    let rustc_metadata = format!("metadata=dylint_testing_{}_{started}", std::process::id());
     let output = {
-        remove_example(metadata, package, target)?;
-
-        // smoelius: Because of lazy initialization, `cargo build` is run only once. Seeing
+        // smoelius: Because of lazy initialization, `cargo rustc` is run only once. Seeing
         // "Building example `target`" for one example but not for others is confusing. So instead
         // say "Building `package` examples".
-        dylint_internal::cargo::build(&format!("`{}` examples", package.name))
+        dylint_internal::cargo::rustc(&format!("`{}` examples", package.name))
             .build()
             .env_remove(env::CARGO_TERM_COLOR)
             .args([
@@ -173,6 +184,9 @@ fn rustc_flags(metadata: &Metadata, package: &Package, target: &Target) -> Resul
                 "--example",
                 &target.name,
                 "--verbose",
+                "--",
+                "-C",
+                &rustc_metadata,
             ])
             .logged_output(true)?
     };
@@ -183,6 +197,7 @@ fn rustc_flags(metadata: &Metadata, package: &Package, target: &Target) -> Resul
         .map(|line| {
             let line =
                 line.with_context(|| format!("Could not read from `{}`", package.manifest_path))?;
+            // `rustc_invocation` matches `RE` itself, so it takes the whole line.
             Ok(rustc_invocation(&line, &snake_case(&target.name)))
         })
         .collect::<Result<Vec<Option<Vec<_>>>>>()?;
@@ -200,46 +215,30 @@ fn rustc_flags(metadata: &Metadata, package: &Package, target: &Target) -> Resul
 
 /// Extract the requested compiler arguments from Cargo's rendered command line.
 ///
-/// Cargo may prefix the compiler with one or more configured wrappers. Parse
-/// the displayed quoting, then return only the argument tail after the actual
-/// `rustc` executable. For example, a wrapped `rustc --crate-name demo` command
-/// yields `--crate-name demo`, without the wrapper arguments.
+/// Cargo may prefix the compiler with one or more configured wrappers, such as
+/// `sccache` or a cache-coordinating shim. Splitting the raw line on spaces
+/// attributes the wrapper's own arguments to `rustc`; `args.first()` then fails
+/// to recognize the compiler, no invocation is found, and the UI test aborts.
+/// Parse the displayed quoting instead, then return only the argument tail after
+/// the `rustc` preceding the crate name. For example, a wrapped
+/// `wrapper rustc --crate-name demo` command yields `--crate-name demo` without
+/// the wrapper arguments.
+///
+/// The last `rustc` before the crate name is chosen rather than the first, so a
+/// wrapper that is itself named `rustc` cannot shadow the compiler it wraps.
 fn rustc_invocation(line: &str, target_crate: &str) -> Option<Vec<String>> {
-    let command = RE.captures(line)?.get(1)?.as_str();
+    let command = running_command(line)?;
     let arguments = shlex::split(command)?;
     let crate_name_index = arguments
         .windows(2)
         .position(|window| window[0] == "--crate-name" && window[1] == target_crate)?;
     let rustc_index = arguments[..crate_name_index].iter().rposition(is_rustc)?;
-    let rustc_arguments = arguments
-        .into_iter()
-        .skip(rustc_index + 1)
-        .collect::<Vec<_>>();
-
-    Some(rustc_arguments)
-}
-
-fn remove_example(metadata: &Metadata, _package: &Package, target: &Target) -> Result<()> {
-    let examples = metadata.target_directory.join("debug/examples");
-    for entry in
-        read_dir(&examples).with_context(|| format!("`read_dir` failed for `{examples}`"))?
-    {
-        let entry = entry.with_context(|| format!("`read_dir` failed for `{examples}`"))?;
-        let path = entry.path();
-
-        let file_name = entry.file_name();
-        let s = file_name.to_string_lossy();
-        let target_name = snake_case(&target.name);
-        if s == target_name.clone() + consts::EXE_SUFFIX
-            || s.starts_with(&(target_name.clone() + "-"))
-        {
-            remove_file(&path).with_context(|| {
-                format!("`remove_file` failed for `{}`", path.to_string_lossy())
-            })?;
-        }
-    }
-
-    Ok(())
+    Some(
+        arguments
+            .into_iter()
+            .skip(rustc_index + 1)
+            .collect::<Vec<_>>(),
+    )
 }
 
 fn next<I, T>(flag: &str, iter: &mut I) -> Result<T>
@@ -250,29 +249,20 @@ where
         .ok_or_else(|| anyhow!("Missing argument for `{flag}`"))
 }
 
-fn copy_with_extension<P: AsRef<Path>, Q: AsRef<Path>>(
-    from: P,
-    to: Q,
-    extension: &str,
-) -> Result<u64> {
-    let from = from.as_ref().with_extension(extension);
-    let to = to.as_ref().with_extension(extension);
-    copy(from, to).map_err(Into::into)
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{rustc_invocation, select_ui_test_flags};
+    use super::{running_command, rustc_invocation, select_ui_test_flags};
     use rstest::rstest;
 
-    /// Extract the rustc arguments after unwrapped and wrapped compiler commands.
+    /// Extract the rustc arguments after unwrapped and wrapped compiler
+    /// commands.
     #[rstest]
     #[case::unwrapped(
         r"Running `/toolchain/bin/rustc --crate-name target --edition=2024`",
         &["--crate-name", "target", "--edition=2024"],
     )]
     #[case::single_wrapper(
-        r"Running `/cache/build-limits-rustc /toolchain/bin/rustc --crate-name target --edition=2024`",
+        r"Running `/cache/sccache /toolchain/bin/rustc --crate-name target --edition=2024`",
         &["--crate-name", "target", "--edition=2024"],
     )]
     #[case::nested_wrappers(
@@ -284,8 +274,13 @@ mod tests {
         &["--crate-name", "target", "--edition=2024"],
     )]
     #[case::quoted_paths(
-        r#"Running `"/tool chain/build-limits-rustc" "/tool chain/bin/rustc" --crate-name target --extern "dependency=/build tree/libdependency.rlib"`"#,
-        &["--crate-name", "target", "--extern", "dependency=/build tree/libdependency.rlib"],
+        r#"Running `"/tool chain/sccache" "/tool chain/bin/rustc" --crate-name target --extern "dependency=/build tree/libdependency.rlib"`"#,
+        &[
+            "--crate-name",
+            "target",
+            "--extern",
+            "dependency=/build tree/libdependency.rlib",
+        ],
     )]
     fn parses_rustc_arguments_after_wrappers(#[case] line: &str, #[case] expected: &[&str]) {
         let parsed = rustc_invocation(line, "target");
@@ -303,6 +298,9 @@ mod tests {
     #[case::not_a_compiler(r"Running `/toolchain/bin/cargo --crate-name target`")]
     #[case::wrong_crate(r"Running `/toolchain/bin/rustc --crate-name another`")]
     #[case::malformed_quotes(r#"Running `wrapper "/toolchain/bin/rustc --crate-name target`"#)]
+    // Regression: the 6.3.0 rebase passed the regex's inner capture here, so
+    // every example test found no invocation. The helper takes the whole line.
+    #[case::already_captured_command(r"/toolchain/bin/rustc --crate-name target")]
     fn ignores_commands_without_the_requested_rustc_invocation(#[case] line: &str) {
         assert_eq!(rustc_invocation(line, "target"), None);
     }
@@ -312,10 +310,10 @@ mod tests {
     fn splits_windows_paths_without_losing_backslashes() {
         assert_eq!(
             shlex::split(
-                r#""C:\Program Files\wrapper.exe" "C:\toolchain\bin\rustc.exe" --crate-name target"#
+                r#""C:\Program Files\sccache.exe" "C:\toolchain\bin\rustc.exe" --crate-name target"#
             ),
             Some(vec![
-                r"C:\Program Files\wrapper.exe".to_owned(),
+                r"C:\Program Files\sccache.exe".to_owned(),
                 r"C:\toolchain\bin\rustc.exe".to_owned(),
                 "--crate-name".to_owned(),
                 "target".to_owned(),
@@ -323,9 +321,11 @@ mod tests {
         );
     }
 
-    /// Preserve dependency flags while omitting a spaced Windows linker path.
+    /// Regression: the 6.3.0 rebase dropped this filter, and Windows example
+    /// tests failed with "multiple input filenames provided" because a
+    /// `native=C:\Program Files\...` path was split at its space.
     #[test]
-    fn omits_native_search_paths_from_metadata_only_ui_flags() {
+    fn selects_ui_flags_without_native_linker_paths() {
         let flags = select_ui_test_flags(vec![
             "--edition=2024".to_owned(),
             "--extern".to_owned(),
@@ -347,5 +347,18 @@ mod tests {
                 "dependency=target/debug/deps",
             ]
         );
+    }
+
+    /// The parser accepts exactly the lines upstream's regex accepted.
+    #[rstest]
+    #[case::plain("Running `cargo build`", Some("cargo build"))]
+    #[case::indented("     Running `rustc --crate-name x`", Some("rustc --crate-name x"))]
+    #[case::no_space("Running`rustc`", Some("rustc"))]
+    #[case::inner_backticks("Running `a `b` c`", Some("a `b` c"))]
+    #[case::unterminated("Running `rustc", None)]
+    #[case::trailing_text("Running `rustc` now", None)]
+    #[case::other_verb("Compiling `rustc`", None)]
+    fn parses_cargo_running_lines(#[case] line: &str, #[case] expected: Option<&str>) {
+        assert_eq!(running_command(line), expected);
     }
 }

@@ -157,8 +157,8 @@ jobs:
         run: rustup target add "${{ matrix.target }}"
 
       # The dependency tools' locked dependencies can require a newer rustc
-      # than the repository's pinned nightly (cargo-dylint 6.0.1 locks
-      # cargo-util 0.2.28, which needs rustc 1.93), so host-tool installs run
+      # than the repository's pinned nightly (cargo-dylint 6.0.1 locked
+      # cargo-util 0.2.28, which needed rustc 1.93), so host-tool installs run
       # under a current stable toolchain.
       - name: Install stable toolchain for host tools
         run: |
@@ -318,6 +318,43 @@ jobs:
           RUSTUP_TOOLCHAIN="${{ steps.toolchain.outputs.channel }}" \
             "$dylint_link" --version
 
+  clippy-snapshot:
+    # Stage the pinned bundle and sidecar as one integrity pair: build both
+    # when neither is published, derive a missing sidecar from the published
+    # bundle's own bytes, and refuse an orphaned sidecar. A published bundle
+    # is never replaced, since installers that pin it may be downloading it
+    # right now. This is the only job in the workflow that reads public Clippy.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        # The tag's manifest names the snapshot this release pins; on a
+        # dispatched re-release the default ref could pin another commit.
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          persist-credentials: false
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: Setup Rust
+        uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
+
+      - name: Prepare the Clippy snapshot assets
+        id: prepare
+        run: bash scripts/prepare-clippy-snapshot-assets.sh "${SNAPSHOT_RELEASE}" "$PWD/dist"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
+          # Through the environment, never template expansion: a dispatched
+          # `tag` input must not become shell source.
+          SNAPSHOT_RELEASE: ${{ env.RELEASE_TAG }}
+
+      - name: Upload the Clippy snapshot assets
+        if: steps.prepare.outputs.state != 'published'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7
+        with:
+          name: clippy-snapshot
+          path: dist/whitaker-clippy-snapshot-*
+          if-no-files-found: error
+
   publish:
     # Publish whatever the build legs produced instead of discarding the
     # successful legs when one fails: !cancelled() keeps this job running
@@ -328,6 +365,7 @@ jobs:
       - build-installer
       - build-dependency-binaries
       - release-compatibility
+      - clippy-snapshot
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -379,6 +417,58 @@ jobs:
           merge-multiple: true
           path: dist
 
+      - name: Download the Clippy snapshot assets
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8
+        with:
+          name: clippy-snapshot
+          path: dist
+
+      # Every installer that embeds this checkout's manifest downloads the
+      # pinned bundle, so a release without it would install nothing.
+      - name: Require the pinned Clippy snapshot
+        run: |
+          set -euo pipefail
+          commit=$(awk -F '"' '/^commit = / {print $2}' installer/clippy-snapshot.toml)
+          asset="whitaker-clippy-snapshot-${commit}.bundle"
+          names=$(gh release view "${SNAPSHOT_RELEASE}" --json assets --jq '.assets[].name' 2>/dev/null || true)
+          published() { grep -qxF "$1" <<<"${names}"; }
+          # The bundle and its sidecar are one pair: a rebuilt bundle must
+          # never sit beside a published one, and each half must exist.
+          if [[ -f "dist/${asset}" ]] && published "${asset}"; then
+            echo "::error::${asset} is already published; a rebuilt copy must not replace it." >&2
+            exit 1
+          fi
+          if [[ -f "dist/${asset}" ]]; then
+            (cd dist && sha256sum --check --strict "${asset}.sha256")
+          fi
+          for name in "${asset}" "${asset}.sha256"; do
+            if [[ ! -f "dist/${name}" ]] && ! published "${name}"; then
+              echo "::error::${name} was neither staged nor published; refusing to publish." >&2
+              exit 1
+            fi
+          done
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SNAPSHOT_RELEASE: ${{ env.RELEASE_TAG }}
+
+      # Installers download the snapshot they pin from `rolling`, not from
+      # this tag, so a release whose snapshot is absent there installs nothing.
+      - name: Require the pinned Clippy snapshot on the rolling release
+        run: |
+          set -euo pipefail
+          commit=$(awk -F '"' '/^commit = / {print $2}' installer/clippy-snapshot.toml)
+          asset="whitaker-clippy-snapshot-${commit}.bundle"
+          names=$(gh release view rolling --json assets --jq '.assets[].name')
+          for name in "${asset}" "${asset}.sha256"; do
+            if ! grep -qxF "${name}" <<<"${names}"; then
+              echo "::error::${name} is not on the rolling release; installers from this release could not install it. Publish it from main first." >&2
+              exit 1
+            fi
+          done
+        env:
+          GH_TOKEN: ${{ github.token }}
+
       - name: Require at least one build archive
         run: |
           set -euo pipefail
@@ -417,8 +507,9 @@ jobs:
           TAG="${RELEASE_TAG}"
           shopt -s nullglob
           # Archive patterns must be kept in sync with ARCHIVE_PATTERNS
-          # in scripts/generate_checksums.py
-          ASSETS=(dist/*.tgz dist/*.zip dist/*.sha256 dist/*.md)
+          # in scripts/generate_checksums.py. The Clippy snapshot bundle
+          # arrives with the sidecar its producer wrote.
+          ASSETS=(dist/*.tgz dist/*.zip dist/*.bundle dist/*.sha256 dist/*.md)
           if [[ "${#ASSETS[@]}" -eq 0 ]]; then
             echo "No release assets found."
             exit 1
@@ -454,7 +545,14 @@ jobs:
     # release's own archive is the only thing this step can install.
     needs: publish
     if: ${{ !cancelled() && needs.publish.result == 'success' }}
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
     steps:
       - name: Install cargo-binstall
         uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
@@ -469,3 +567,78 @@ jobs:
 
       - name: Run the installed installer
         run: whitaker-installer --version
+
+      # The released installer, not this checkout's, against published
+      # assets only: it installs the suite, the Dylint tools, and the Clippy
+      # snapshot, and the checks below deny github.com before linting.
+      - name: Put the wrapper directory on PATH
+        # Git Bash's `$HOME` is an MSYS path that PowerShell cannot resolve,
+        # so Windows needs the native form.
+        run: |
+          set -euo pipefail
+          if command -v cygpath >/dev/null 2>&1; then
+            cygpath -w "$HOME/.local/bin"
+          else
+            printf '%s\n' "$HOME/.local/bin"
+          fi >> "$GITHUB_PATH"
+
+      - name: Install the suite with the released installer
+        run: whitaker-installer --no-source-fallback
+
+      - name: Checkout the verification scripts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          persist-credentials: false
+          ref: ${{ env.RELEASE_TAG }}
+          path: whitaker-checkout
+
+      - name: Verify the installed bootstrap without public Clippy
+        if: runner.os != 'Windows'
+        run: bash whitaker-checkout/scripts/verify-installed-bootstrap.sh "$RUNNER_TEMP/installed-bootstrap"
+
+      - name: Verify the installed bootstrap through the PowerShell wrapper
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./whitaker-checkout/scripts/verify-installed-bootstrap.ps1 -WorkDir "$env:RUNNER_TEMP/installed-bootstrap"
+
+  verify-published-bootstrap:
+    # Fresh hosted runner, published assets only: install the released suite,
+    # Dylint tools, and Clippy snapshot through the installer built from this
+    # checkout, deny github.com, then prove cold, warm, concurrent, relocated,
+    # and missing-snapshot behaviour against a real std::fs violation, and
+    # that a tampered snapshot is refused offline.
+    needs: publish
+    if: ${{ !cancelled() && needs.publish.result == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          persist-credentials: false
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: Setup Rust
+        uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
+
+      - name: Install the installer from this checkout
+        run: cargo install --locked --path installer --bin whitaker-installer
+
+      - name: Put the wrapper directory on PATH
+        # Git Bash's `$HOME` is an MSYS path that PowerShell cannot resolve,
+        # so Windows needs the native form.
+        run: |
+          set -euo pipefail
+          if command -v cygpath >/dev/null 2>&1; then
+            cygpath -w "$HOME/.local/bin"
+          else
+            printf '%s\n' "$HOME/.local/bin"
+          fi >> "$GITHUB_PATH"
+
+      - name: Install the published suite and bootstrap
+        run: whitaker-installer --no-source-fallback
+
+      - name: Verify the published Clippy snapshot
+        run: bash scripts/verify-published-snapshot.sh "$RUNNER_TEMP/published-snapshot"
+
+      - name: Verify the installed bootstrap without public Clippy
+        run: bash scripts/verify-installed-bootstrap.sh "$RUNNER_TEMP/installed-bootstrap"

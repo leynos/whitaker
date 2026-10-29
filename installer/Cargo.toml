@@ -27,6 +27,10 @@ path = "src/bin/package_installer_bin.rs"
 name = "whitaker-package-dependency-binary"
 path = "src/bin/package_dependency_binary.rs"
 
+[[bin]]
+name = "whitaker-clippy-snapshot"
+path = "src/bin/clippy_snapshot.rs"
+
 [features]
 ## Exposes test utilities for use by external test suites.
 ##
@@ -56,7 +60,7 @@ path = "src/bin/package_dependency_binary.rs"
 test-support = ["dep:temp-env"]
 
 [dependencies]
-camino = { workspace = true }
+camino = { workspace = true, features = ["serde1"] }
 cap-std = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 whitaker-common = { workspace = true }
@@ -73,6 +77,7 @@ temp-env = { workspace = true, optional = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 toml = { workspace = true }
+metrics = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 ureq = { workspace = true }
@@ -82,7 +87,11 @@ zstd = { workspace = true }
 
 [dev-dependencies]
 whitaker_test_macros = { workspace = true }
+# Pinned exactly: the snapshot tests use Dylint's own revision walk as an
+# oracle, and the selection they check belongs to this one release.
+dylint_internal = { version = "=6.3.0", features = ["clippy_utils"] }
 libc = { workspace = true }
+metrics-util = { workspace = true }
 proptest = { workspace = true }
 mockall = { workspace = true }
 rstest = { workspace = true }

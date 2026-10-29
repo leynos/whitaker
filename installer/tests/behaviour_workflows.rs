@@ -12,6 +12,7 @@ use std::{
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use tempfile::TempDir;
+use whitaker_installer::test_utils::SnapshotFixture;
 use whitaker_installer::{test_support::TEST_STAGE_SUITE_ENV, toolchain::parse_toolchain_channel};
 
 #[derive(Default)]
@@ -207,8 +208,18 @@ fn when_installer_cli_run(world: &WorkflowWorld) -> Result<(), String> {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_whitaker-installer"));
     cmd.args(args.iter());
     cmd.current_dir(workspace_root()?);
-    if world.use_test_staged_suite.get() {
+    // Kept alive until the command finishes; it owns the bundle and data root.
+    let isolation = world.use_test_staged_suite.get().then(|| {
+        let snapshot = SnapshotFixture::new()?;
+        let data_home = TempDir::new().map_err(|error| error.to_string())?;
+        Ok::<_, String>((snapshot, data_home))
+    });
+    let isolation = isolation.transpose()?;
+    if let Some((snapshot, data_home)) = &isolation {
         cmd.env(TEST_STAGE_SUITE_ENV, "1");
+        // An installation records its bootstrap; keep it out of the real data root.
+        cmd.env("XDG_DATA_HOME", data_home.path());
+        snapshot.configure(&mut cmd);
     }
 
     let output = cmd

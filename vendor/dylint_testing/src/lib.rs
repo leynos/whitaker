@@ -83,9 +83,9 @@
 //!   file, and is provided for context.
 //! - All other lines (e.g., `diff of stderr:`) contain `compiletest_rs` messages.
 //!
-//! **Note:** In the actual standard error, a blank line usually follows the `error: aborting due to
-//! N previous errors` line. So a correct `.stderr` file will typically contain one blank line at
-//! the end.
+//! **Note:** In the actual standard error, a blank line usually follows the
+//! `error: aborting due to N previous errors` line. So a correct `.stderr` file will typically
+//! contain one blank line at the end.
 //!
 //! In general, it is not too hard to update a `.stderr` file by hand. However, the `compiletest_rs`
 //! report should contain a line of the form `Actual stderr saved to PATH`. Copying `PATH` to your
@@ -95,27 +95,36 @@
 //!
 //! [Dylint]: https://github.com/trailofbits/dylint/tree/master
 //! [`compiletest_rs`]: https://github.com/Manishearth/compiletest-rs
-//! [`non_thread_safe_call_in_test`]: https://github.com/trailofbits/dylint/tree/master/examples/general/non_thread_safe_call_in_test/src/lib.rs
-//! [`question_mark_in_expression`]: https://github.com/trailofbits/dylint/tree/master/examples/restriction/question_mark_in_expression/Cargo.toml
-//! [`ui::Test::example`]: https://docs.rs/dylint_testing/latest/dylint_testing/ui/struct.Test.html#method.example
-//! [`ui::Test::examples`]: https://docs.rs/dylint_testing/latest/dylint_testing/ui/struct.Test.html#method.examples
-//! [`ui::Test::src_base`]: https://docs.rs/dylint_testing/latest/dylint_testing/ui/struct.Test.html#method.src_base
+//! [`non_thread_safe_call_in_test`]:
+//!   https://github.com/trailofbits/dylint/tree/master/examples/general/non_thread_safe_call_in_test/src/lib.rs
+//! [`question_mark_in_expression`]:
+//!   https://github.com/trailofbits/dylint/tree/master/examples/restriction/question_mark_in_expression/Cargo.toml
+//! [`ui::Test::example`]:
+//!   https://docs.rs/dylint_testing/latest/dylint_testing/ui/struct.Test.html#method.example
+//! [`ui::Test::examples`]:
+//!   https://docs.rs/dylint_testing/latest/dylint_testing/ui/struct.Test.html#method.examples
+//! [`ui::Test::src_base`]:
+//!   https://docs.rs/dylint_testing/latest/dylint_testing/ui/struct.Test.html#method.src_base
 //! [`ui::Test`]: https://docs.rs/dylint_testing/latest/dylint_testing/ui/struct.Test.html
-//! [`ui_test_example`]: https://docs.rs/dylint_testing/latest/dylint_testing/fn.ui_test_example.html
-//! [`ui_test_examples`]: https://docs.rs/dylint_testing/latest/dylint_testing/fn.ui_test_examples.html
+//! [`ui_test_example`]:
+//!   https://docs.rs/dylint_testing/latest/dylint_testing/fn.ui_test_example.html
+//! [`ui_test_examples`]:
+//!   https://docs.rs/dylint_testing/latest/dylint_testing/fn.ui_test_examples.html
 //! [`ui_test`]: https://docs.rs/dylint_testing/latest/dylint_testing/fn.ui_test.html
-//! [configurable libraries]: https://github.com/trailofbits/dylint/tree/master#configurable-libraries
+//! [configurable libraries]:
+//!   https://github.com/trailofbits/dylint/tree/master#configurable-libraries
 //! [docs.rs documentation]: https://docs.rs/dylint_testing/latest/dylint_testing/
 //! [examples]: https://github.com/trailofbits/dylint/tree/master/examples
 //! [its repository]: https://github.com/Manishearth/compiletest-rs
 
 use anyhow::Result;
 use compiletest_rs as compiletest;
-use dylint_internal::{CommandExt, env, library_filename};
+use dylint_internal::{CommandExt, env, link::dylint_libs};
 use once_cell::sync::OnceCell;
 use std::{
     env::{remove_var, set_var, var_os},
     ffi::{OsStr, OsString},
+    fs::copy,
     path::{Path, PathBuf},
     sync::Mutex,
 };
@@ -123,7 +132,10 @@ use std::{
 mod example;
 pub mod ui;
 
+pub(crate) use example::{ExampleTestContext, example_target, example_targets, run_example_test};
+
 static DRIVER: OnceCell<Result<PathBuf>> = OnceCell::new();
+
 /// Test a library on all source files in a directory.
 ///
 /// - `name` is the name of a Dylint library to be tested. (Often, this is the same as the package
@@ -159,19 +171,10 @@ fn initialize(name: &str) -> &Result<PathBuf> {
 
         dylint_internal::cargo::build(&format!("library `{name}`"))
             .build()
+            .env(env::DYLINT_BUILDING_LIBRARIES, "1")
             .success()?;
 
-        // smoelius: `DYLINT_LIBRARY_PATH` must be set before `dylint_libs` is called.
-        // smoelius: This was true when `dylint_libs` called `name_toolchain_map`, but that is
-        // no longer the case. I am leaving the comment here for now in case removal
-        // of the `name_toolchain_map` call causes a regression.
-        let metadata = dylint_internal::cargo::current_metadata().unwrap();
-        let dylint_library_path = metadata.target_directory.join("debug");
-        unsafe {
-            set_var(env::DYLINT_LIBRARY_PATH, dylint_library_path);
-        }
-
-        let dylint_libs = dylint_libs(name)?;
+        let dylint_libs = dylint_libs(name, env!("RUSTUP_TOOLCHAIN"))?;
         let driver = dylint::driver_builder::get(
             &dylint::opts::Dylint::default(),
             env!("RUSTUP_TOOLCHAIN"),
@@ -186,19 +189,19 @@ fn initialize(name: &str) -> &Result<PathBuf> {
     })
 }
 
-#[doc(hidden)]
-pub fn dylint_libs(name: &str) -> Result<String> {
-    let metadata = dylint_internal::cargo::current_metadata().unwrap();
-    let rustup_toolchain = env::var(env::RUSTUP_TOOLCHAIN)?;
-    let filename = library_filename(name, &rustup_toolchain);
-    let path = metadata.target_directory.join("debug").join(filename);
-    let paths = vec![path];
-    serde_json::to_string(&paths).map_err(Into::into)
+fn copy_with_extension<P: AsRef<Path>, Q: AsRef<Path>>(
+    from: P,
+    to: Q,
+    extension: &str,
+) -> Result<u64> {
+    let from = from.as_ref().with_extension(extension);
+    let to = to.as_ref().with_extension(extension);
+    copy(from, to).map_err(Into::into)
 }
 
 static MUTEX: Mutex<()> = Mutex::new(());
 
-pub(crate) fn run_tests(driver: &Path, src_base: &Path, config: &ui::Config) {
+fn run_tests(driver: &Path, src_base: &Path, config: &ui::Config) {
     let _lock = MUTEX.lock().unwrap();
 
     // smoelius: There doesn't seem to be a way to set environment variables using `compiletest`'s

@@ -602,7 +602,7 @@ Table: Cache ownership for the Ubicloud Linux lanes.
 | `tools-coverage-v1-`          | `~/.rustup`, `~/.cargo/bin`, `~/.local/bin`, `~/.cache/uv`, `~/.local/share/uv` | `coverage-upload` | `coverage-check`               |
 | `tools-lint-v1-`              | the same paths plus `~/.bun/install/cache` and `~/.cache/merman`                | `linux-full`      | `linux-full`                   |
 | `dylint-tools-v1-`            | `~/.cache/whitaker-dylint-tools`                                                | `linux-full`      | `linux-full`                   |
-| `clippy-mirror-v1-`           | `~/.cache/whitaker-mirrors`                                                     | `coverage-upload` | `linux-full`, `coverage-check` |
+| `clippy-snapshot-v1-`         | `~/.cache/whitaker-clippy-snapshot`                                             | `coverage-upload` | `linux-full`, `coverage-check` |
 
 No Ubicloud leg archives a compiler cache, and no `sccache-*` family may appear
 in the table. Every Ubicloud job's sccache reads and writes Ubicloud's cache
@@ -617,11 +617,16 @@ Each key carries an explicit `v1` schema generation so the whole family can be
 invalidated deliberately. Registry keys hash `rust-toolchain.toml` and
 `Cargo.lock`; tool keys spell out each pinned tool version and hash
 `rust-toolchain.toml`; the Dylint host-tools key names the `cargo-dylint` and
-`dylint-link` versions the Makefile installs; and the Clippy mirror key names
-the Dylint version whose build script performs the clone. Every key also carries
-`runner.os`, `runner.arch`, and `runner.environment`, and the compiled-tool
-keys add the Ubuntu release because a binary built on Ubuntu 24.04 must never
-be restored onto 22.04.
+`dylint-link` versions the Makefile installs; and the Clippy snapshot key hashes
+`installer/clippy-snapshot.toml`, which pins both the snapshot commit and the
+Dylint release whose selection it records. Every key except the Clippy
+snapshot's also carries `runner.os`, `runner.arch`, and `runner.environment`,
+and the compiled-tool keys add the Ubuntu release because a binary built on
+Ubuntu 24.04 must never be restored onto 22.04.
+
+The Clippy snapshot key omits those discriminators on purpose. Its content is
+platform-independent Git history, its one writer (`coverage-upload`) and its
+readers all run on Ubicloud Linux, and the Windows lane never restores it.
 
 Restores run on every event. Saves are guarded by
 `github.ref == 'refs/heads/main'` and by a missed restore. A pull request
@@ -636,12 +641,12 @@ compiler cache" below explains what that means for a pull request's first push.
 only its registry families are archives, and those follow the rule above.
 
 `coverage-main.yml`'s `coverage-upload` is the writer for the coverage-lane
-keys and for the shared Clippy mirror. `ci.yml`'s `linux-full` runs on push to
-`main` as well as on pull requests, and on that push it publishes the lint-lane
-keys. A merge that `GITHUB_TOKEN` performs, as the Dependabot automerge does,
-starts no push-event workflow, so after one, or after changing a lint-lane tool
-pin, the pinned toolchain, or a cache generation, dispatch both writers against
-`main`:
+keys and for the shared Clippy snapshot. `ci.yml`'s `linux-full` runs on push to
+`main` as well as on pull requests, and on that push it publishes the
+lint-lane keys. A merge that `GITHUB_TOKEN` performs, as the Dependabot
+automerge does, starts no push-event workflow, so after one, or after changing
+a lint-lane tool pin, the pinned toolchain, or a cache generation, dispatch
+both writers against `main`:
 
 ```sh
 gh workflow run ci.yml --repo leynos/whitaker --ref main
@@ -657,46 +662,67 @@ point for a populated cache. That hazard belonged to the Namespace cache
 volume, which appeared as an existing directory whether or not it held a
 generation.
 
-The Clippy source fetch needs a single cache owner. `dylint_driver` 6.0.1's
-build script reads `clippy_utils/src/sym.rs` at the revision matching the
-pinned dated nightly and obtains it by running a full
-`git clone https://github.com/rust-lang/rust-clippy` into a temporary
-directory. The build script performs that clone for any dated nightly on or
-after 2025-05-06, and Whitaker pins `nightly-2026-05-28`, so every cold build of
-`dylint_driver` repeats an unowned multi-hundred-megabyte network clone. That
-clone is intermittent rather than merely occasionally broken: run 33692863541
-hit `fatal: could not read Username for 'https://github.com'` on nextest tries
-1 and 2 and passed only on try 3, while run 33704041072 failed all three tries
-and failed the job. `scripts/provision-clippy-mirror.sh` gives that fetch one
-owner. It maintains a bare mirror and rewrites the upstream URL to it with
-`url.<mirror>.insteadOf`, so the build script's clone becomes a local,
-hard-linking copy. The mirror sits below the cached directory rather than at
-the cache path itself, so discarding a stale generation can never attempt to
-remove the directory the cache action manages. A cold clone is authenticated
-with the job token when one is present and retried with backoff; a refresh
-failure on a warm mirror is only a warning because the revision the build
-script needs is historical and is already present. All three Linux lanes now
-restore the mirror and provision it before any Cargo invocation.
+Dylint's driver build reads Clippy history, and Whitaker owns that history.
+`dylint_driver`'s build script reads `clippy_utils/src/sym.rs` at the revision
+Dylint selects for the pinned nightly, and Dylint selects it by walking
+first-parent history from the `HEAD` of the repository named by
+`DYLINT_CLIPPY_REPO`. Left unset, Dylint clones public Clippy for every cold
+driver build: an unowned network fetch that failed intermittently (runs
+33692863541 and 33704041072) and then permanently, when Clippy renamed `master`
+to `main` (#526).
+[ADR 009](adr-009-verified-clippy-snapshot-for-dylint-driver-bootstrap.md)
+records the decision; this section is the producer's side of it.
 
-The script owns a deletion, so it proves what it is deleting. It resolves both
-its argument and its trusted cache root (`CLIPPY_MIRROR_ROOT`, defaulting to
-`~/.cache/whitaker-mirrors`) to physical paths and refuses anything that is not
-the one `rust-clippy.git` inside that root. A suffix match such as
-`/tmp/project/rust-clippy.git` no longer authorizes a removal.
+`installer/clippy-snapshot.toml` pins the snapshot. `make clippy-snapshot`
+installs the verified generation at `$(CLIPPY_SNAPSHOT_ROOT)/<commit>` (default
+`~/.cache/whitaker-clippy-snapshot`), reusing a generation that verifies and
+otherwise installing `CLIPPY_SNAPSHOT_BUNDLE` or the published release asset.
+The Makefile exports `DYLINT_CLIPPY_REPO` at that path and `DYLINT_DRIVER_PATH`
+at `$(DYLINT_DRIVER_ROOT)/dylint-<version>/clippy-<commit>` for every recipe,
+and `test` and `publish-check` depend on `clippy-snapshot`, so a missing
+snapshot fails the gate before any build. Nothing falls back to public Clippy.
 
-It also classifies the restored path rather than reducing it to one boolean. A
-generation is reused only when git reports it bare and its `remote.origin.url`
-is the pinned upstream because a non-bare directory or a mirror of some other
-repository would leave `dylint_driver` without the Clippy revision it needs. A
-non-bare or wrongly pointed generation is rebuilt. An unreadable path, a
-non-directory, or an unparsable verdict from git is an environment fault: the
-script aborts and never repairs it by deleting the path.
+`make clippy-snapshot-bundle` is the only target that reads public Clippy. It
+clones `main` (anonymously first, then with `GITHUB_TOKEN` passed through scoped
+`GIT_CONFIG_*` variables), proves the pinned commit is on `main`'s
+first-parent history, writes `whitaker-clippy-snapshot-<commit>.bundle` and its
+`.sha256` sidecar into `CLIPPY_SNAPSHOT_DIST`, and installs the result into a
+scratch root through the consumer's own verifier before reporting success. Pass
+`CLIPPY_SNAPSHOT_SOURCE` to bundle from a local mirror instead. Before the
+first release that publishes the snapshot, provision a local checkout with:
+
+```sh
+make clippy-snapshot-bundle CLIPPY_SNAPSHOT_DIST="$PWD/dist"
+make clippy-snapshot \
+  CLIPPY_SNAPSHOT_BUNDLE="$PWD/dist/whitaker-clippy-snapshot-$(awk -F '"' '/^commit = / {print $2}' installer/clippy-snapshot.toml).bundle"
+```
+
+In CI, the three Linux suite lanes restore `~/.cache/whitaker-clippy-snapshot`
+before `Setup Rust`. After it, "Provision the Clippy snapshot" runs
+`make clippy-snapshot-bundle` only on a cache miss, installs with
+`make clippy-snapshot`, and appends `make dylint-env` to `GITHUB_ENV`.
+`coverage-upload` is the snapshot cache's only writer. The Windows lane cannot
+restore a Linux archive, so it bundles and verifies on every run.
+
+As its last validation step, `linux-full` runs `make dylint-tools`, whose
+pinned archives download from GitHub, and only afterwards denies `github.com` in
+`/etc/hosts` (later steps would otherwise inherit the denial through the
+resolver cache), proves the denial with a `git ls-remote` canary, and runs
+`make dylint-smoke` with the lane's sccache `RUSTC_WRAPPER` in force. That
+target empties the keyed driver directory, runs the ignored
+`no_std_fs_operations` `integration_exclusion` tests serially (cold), runs them
+again (warm), and fails unless the driver file is byte-identical across the two
+runs. It refuses to empty any `DYLINT_DRIVER_PATH` other than the exact keyed
+slot, so an exported shared driver root is never deleted. The tests run real
+`cargo dylint` against fixtures and assert named `no_std_fs_operations`
+diagnostics. A warm driver also stops later parallel UI tests from racing to
+build it.
 
 The pinned Dylint host tools follow the same rule.
 `scripts/install-dylint-tools.sh` once ran `cargo install --locked` for
 `cargo-dylint` and `dylint-link` into a `mktemp -d` root, so both were
 recompiled on every run and never cached. It now downloads the upstream
-`trailofbits/dylint` v6.0.1 prebuilt Linux release archives, verifies each
+`trailofbits/dylint` v6.3.0 prebuilt Linux release archives, verifies each
 against a SHA-256 digest pinned in the script, and installs the executables
 into the caller's root. Only a version with a pinned digest can be installed;
 any other version is a hard error rather than an unverified download or a
@@ -2183,7 +2209,7 @@ compatibility checks above keep validating it on that release.
 This section names the pinned channel on purpose. The rule treats an exception
 as current only while it names the channel in `rust-toolchain.toml`, so every
 toolchain bump must update the channel written here as part of the runbook
-(step 6 below). A stale exception stops exempting anything.
+(step 7 below). A stale exception stops exempting anything.
 
 ### Rust toolchain bump runbook
 
@@ -2194,18 +2220,41 @@ toolchain bump must update the channel written here as part of the runbook
    feature changes. Fix `clippy_utils`, lint-crate, and `rustc_private` API
    drift in the production code rather than suppressing warnings.
 4. Confirm `cargo-dylint` and `dylint-link` can drive the pinned nightly. If
-   no compatible Dylint release exists, stop and record the blocker.
-5. Run the UI tests and re-baseline `.stderr` fixtures only after reviewing the
+   no compatible Dylint release exists, stop and record the blocker. Prove it
+   with a cold probe, not `--version`: an empty `DYLINT_DRIVER_PATH`, the real
+   lint libraries, a deliberate violation that must emit its named diagnostic,
+   and public Clippy denied, repeated warm and with `RUSTC_WRAPPER` set.
+5. Re-pin the Clippy snapshot in `installer/clippy-snapshot.toml`:
+   - set `toolchain` to the new channel and, when Clippy has moved on, `commit`
+     to a newer `main` commit;
+   - choose a nightly that Clippy itself pinned (`rust-toolchain.toml` on
+     Clippy `main` names it), because verification requires the selected
+     revision to name exactly the pinned channel;
+   - set `selected_revision` to the first commit on `main`'s first-parent
+     history that introduced that channel, and `dylint_version` to the pinned
+     Dylint release;
+   - run `make clippy-snapshot-bundle`, which installs the bundle through the
+     consumer's verifier and fails if the recorded selection is wrong, then
+     run the ignored companion test against the result with
+     `WHITAKER_CLIPPY_SNAPSHOT_REPO=<generation> cargo nextest run -p
+     whitaker-installer --lib --run-ignored ignored-only -E
+     'test(the_published_snapshot_selects_the_recorded_revision)'`, which
+     checks Dylint's own walk as well as Whitaker's;
+   - run `make dylint-smoke` against the new generation.
+
+   The rolling release publishes the new bundle on the next push to `main`.
+   Older snapshot assets stay published for installers that pin them.
+6. Run the UI tests and re-baseline `.stderr` fixtures only after reviewing the
    diagnostic drift. Treat changed spans, wording, and suggestions as evidence
    to review, not as an automatic blessing.
-6. Update load-bearing toolchain references, including installer package
+7. Update load-bearing toolchain references, including installer package
    scripts, release workflow strings, ADR-001 notes, and any design or roadmap
    text that names the old channel, and the channel named in the "Toolchain
    policy exception" section above.
-7. Run the normal gates in order: `make check-fmt`, `make lint`, `make test`,
+8. Run the normal gates in order: `make check-fmt`, `make lint`, `make test`,
    and `make markdownlint`. Run relevant proof targets if the bump touches
    clone-detector or decomposition proof surfaces.
-8. Keep `CARGO_LOCKED` empty by default. Makefile Cargo recipes pass the value
+9. Keep `CARGO_LOCKED` empty by default. Makefile Cargo recipes pass the value
    through unchanged so callers can opt into `--locked` explicitly when they
    need Cargo to enforce the lockfile for a build, lint, package, or test
    command.
@@ -2565,7 +2614,7 @@ Example entry:
 [[dependency_binaries]]
 package = "cargo-dylint"
 binary = "cargo-dylint"
-version = "6.0.1"
+version = "6.3.0"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/trailofbits/dylint"
 ```
@@ -2690,7 +2739,7 @@ underlying linker. It therefore has no reliable self-reporting subcommand.
 toolchain are present in the ambient environment, so it reports on the
 environment rather than on the artefact. Executing it as a health check
 rejected valid, checksum-verified release artefacts and forced a
-`cargo install --locked --version 6.0.1 dylint-link` fallback that cannot
+`cargo install --locked --version 6.3.0 dylint-link` fallback that cannot
 compile on toolchains below the crate's rustc floor, breaking consumers pinned
 to older toolchains.
 
@@ -3388,6 +3437,30 @@ Use this hook only for installer orchestration tests. Release validation,
 prebuilt-download coverage, and user-facing installation flows must continue to
 exercise the real build or download paths.
 
+### Fixture Clippy snapshots for installer tests
+
+An installation now provisions the Clippy snapshot before any workspace or
+library work, and the published snapshot is the full Clippy history.
+Integration tests therefore install a small, real snapshot instead:
+
+- `whitaker_installer::test_utils::SnapshotFixture` (behind `test-support`)
+  commits two rustups to a local repository, bundles it with a `.sha256`
+  sidecar, and writes a manifest pinning it. `configure(&mut Command)` points
+  an installer child process at it; `install(root)` installs it in process.
+- Debug installer binaries read that manifest from
+  `WHITAKER_INSTALLER_TEST_CLIPPY_SNAPSHOT_MANIFEST`
+  (`test_support::TEST_CLIPPY_SNAPSHOT_MANIFEST_ENV`) in place of the embedded
+  one. Release binaries ignore the variable.
+
+The fixture replaces only the manifest and the bundle: download-free
+installation, every integrity check, and Dylint's selection all run for real. A
+test that runs the installer with the real data directory must also set
+`XDG_DATA_HOME` to a temporary directory, because installation records
+`bootstrap.json` there. `installer/tests/bootstrap_run.rs` exercises
+`whitaker-installer run` the same way against a stub `cargo`, covering cold and
+warm runs, concurrent cold runs, relocation, overwritten variables, exit-status
+preservation, and each refusal.
+
 ### Test environment synchronization
 
 Installer regression helpers that mutate process-wide environment variables
@@ -3449,10 +3522,18 @@ for the ordinary all-features test run. `make test` therefore excludes it from
 Nextest and runs its command-decoding unit tests separately with default
 features disabled. The decoder parses Cargo's quoted command line and selects
 the compiler arguments after any wrapper chain; do not clear the configured
-wrappers. On Windows the guard also sets `VCPKG_ROOT` to `C:\vcpkg` when that
-directory exists and the variable is otherwise absent. Restoration uses the
-same shared environment mutex, but the runner callback itself executes without
-holding that mutex to avoid nested-lock deadlocks.
+wrappers. The helper `rustc_invocation` applies the `Running` regex itself, so
+its call site must pass Cargo's whole line, never the regex's capture; the
+6.3.0 rebase broke every example UI test exactly that way, and a regression
+case now pins the contract. The guard also sets
+`DYLINT_LINK_ENABLE_COPY_LIBRARY=1` when it is absent: since Dylint 6.3.0,
+`dylint_testing` otherwise copies its own default-feature rebuild of
+`lib<crate>.so`, an empty `cdylib` for every Whitaker lint crate, over the
+toolchain-qualified library the harness built with `dylint-driver`. On Windows
+the guard also sets `VCPKG_ROOT` to `C:\vcpkg` when that directory exists and
+the variable is otherwise absent. Restoration uses the same shared environment
+mutex, but the runner callback itself executes without holding that mutex to
+avoid nested-lock deadlocks.
 
 Any UI test that holds `env_test_guard()` while invoking Dylint must use
 `run_test_runner_with_env_guard()`. It catches a runner panic before releasing
@@ -3630,22 +3711,23 @@ thread-scoped subscriber and verify stderr routing in an isolated subprocess.
 
 ### Using installed lints
 
-After installation, set `DYLINT_LIBRARY_PATH` to the staged directory:
+Run the lints through the installed bootstrap, which supplies all three Dylint
+variables for each run and serializes the first driver build:
 
 ```sh
-export DYLINT_LIBRARY_PATH="$HOME/.local/share/dylint/lib/nightly-2025-01-15/release"
-cargo dylint --all
+whitaker --all                      # or: whitaker-installer run -- --all
 ```
 
-For prebuilt installs, use the toolchain-and-target-specific directory:
+Plain `cargo dylint` with only `DYLINT_LIBRARY_PATH` set does not use the
+bootstrap: Dylint would try to clone public Clippy to build its driver. To run
+`cargo dylint` directly, install with `--skip-wrapper` and apply the
+`DYLINT_LIBRARY_PATH`, `DYLINT_CLIPPY_REPO`, and `DYLINT_DRIVER_PATH` exports
+it prints. Nothing serializes the first driver build in that case, so let one
+`cargo dylint` run finish before starting others, and nothing re-verifies the
+snapshot after a rebuild; prefer `whitaker-installer run` where possible.
 
-```sh
-export DYLINT_LIBRARY_PATH="$HOME/.local/share/whitaker/lints/nightly-2025-01-15/x86_64-unknown-linux-gnu/lib"
-cargo dylint --all
-```
-
-Alternatively, configure workspace metadata to use the pre-built libraries
-directly:
+Workspace metadata can still point at the pre-built libraries, but the run
+still needs the bootstrap variables, so invoke it through `whitaker`:
 
 ```toml
 [workspace.metadata.dylint]
@@ -3653,8 +3735,6 @@ libraries = [
   { path = "/home/user/.local/share/whitaker/lints/nightly-2025-01-15/x86_64-unknown-linux-gnu/lib" }
 ]
 ```
-
-This skips building entirely, providing faster lint runs during development.
 
 ### Installer internal architecture
 
@@ -3682,9 +3762,17 @@ commit detached. The detached checkout is intentional: it makes the chosen
 commit an immutable build input rather than a branch that a later pull could
 move.
 
-`git::command::run_git_with_timeout` is owned by the Git adapter and is the
-only permitted path for Git subprocess invocation; public operations compose
-through it.
+`git::command::run_git`, which takes a `GitInvocation` (arguments, working
+directory, operation name, timeout, and extra environment), is owned by the Git
+adapter and is the only permitted path for Git subprocess invocation. Every Git
+command is bounded by its timeout and has its output read concurrently.
+`run_git_with_timeout` is the repository adapter's wrapper that supplies the
+default five-minute timeout and the ambient environment; the public clone,
+update, and checkout operations compose through it. The Clippy snapshot's
+`clippy_snapshot::git::SnapshotGit` calls `run_git` directly, adding
+`GIT_TERMINAL_PROMPT=0`, its own bounds, and, for local operations, a
+`file`-only transport policy
+(`-c protocol.allow=never -c protocol.file.allow=always`).
 
 Workspace orchestration passes a `WorkspacePlan` to
 `ensure_workspace(dirs, plan)`:
@@ -3796,6 +3884,77 @@ experimental crate without `--experimental`, validation returns
 `InstallerError::ExperimentalLintRequiresFlag`; callers should surface that
 error unchanged so the CLI reports the missing opt-in rather than treating the
 crate as unknown or silently building it.
+
+#### Bootstrap probes and operational metrics
+
+`whitaker-installer run` separates a query from a command. `prepare` reads
+`bootstrap.json`, checks the lint directory, the installed snapshot, and the
+`cargo-dylint` release, and resolves the driver slot without writing anything.
+`execute` creates the slot, takes the driver lock, and runs the child. Keep new
+filesystem writes on the `execute` side.
+
+Query paths in the bootstrap must not use `Path::is_file`, `is_dir`, or
+`exists`, which answer `false` for every I/O error and so turn a permission or
+storage fault into "not installed" or "cold". Use `bootstrap::probe`
+(`metadata_if_present`, and the public `is_present_dir`), which treats only
+`NotFound` as absence. `DriverSlot::is_ready` and `DriverSlot::has_driver`
+return `Result` for the same reason. The probe module serves the `bootstrap`
+module and the installer's bootstrap step (`report_bootstrap_plan`).
+`clippy_snapshot::probe` (`is_present`, `is_present_dir`, `is_present_file`)
+applies the same rule inside `clippy_snapshot`, returning
+`ClippySnapshotError::Io`: generation metadata, bundle discovery, generation
+reuse, and the repository and alternates checks all use it. Other installer
+code keeps its own error types rather than borrowing either.
+
+`bootstrap::telemetry` and `clippy_snapshot::telemetry` own the metric names
+and their bounded labels. They follow the
+[AST operational metrics](#ast-operational-metrics) rules: describe metrics
+through the active recorder when recording, never install a recorder, and never
+put paths, commits, toolchains, or error text in a label.
+
+| Metric                                                              | Kind      | Labels                                                                                                          |
+| ------------------------------------------------------------------- | --------- | --------------------------------------------------------------------------------------------------------------- |
+| `whitaker_installer.bootstrap.run.total`                            | counter   | `driver`: `unresolved`, `warm`, `warm_after_wait`, `cold`; `outcome`: `ok`, `child_nonzero`, or a failure label |
+| `whitaker_installer.bootstrap.run.duration_seconds`                 | histogram | `driver`                                                                                                        |
+| `whitaker_installer.bootstrap.lock_wait.duration_seconds`           | histogram | `mode`: `shared`, `exclusive`                                                                                   |
+| `whitaker_installer.bootstrap.lock_failure.total`                   | counter   | `mode`                                                                                                          |
+| `whitaker_installer.bootstrap.driver_build.duration_seconds`        | histogram | `outcome`                                                                                                       |
+| `whitaker_installer.bootstrap.driver_build.total`                   | counter   | `outcome`: `built`, `not_built`, `unrecorded`, `verify_failed`, `spawn_failed`                                  |
+| `whitaker_installer.clippy_snapshot.provision.total`                | counter   | `source`: `existing`, `release`, `local`; `outcome`: `ok`, `failed`                                             |
+| `whitaker_installer.clippy_snapshot.operation.total`                | counter   | `operation`: `reuse`, `download`, `install`; `outcome`: `ok` or a failure label                                 |
+| `whitaker_installer.clippy_snapshot.operation.duration_seconds`     | histogram | `operation`, `outcome`                                                                                          |
+| `whitaker_installer.clippy_snapshot.clone_attempt.total`            | counter   | `outcome`: `ok`, `retry`, `exhausted`                                                                           |
+| `whitaker_installer.clippy_snapshot.clone_attempt.duration_seconds` | histogram | `outcome`                                                                                                       |
+
+*Table: Installer bootstrap and snapshot metrics.*
+
+`ok` and `child_nonzero` both mean the bootstrap worked; `child_nonzero`
+records a `cargo dylint` that exited non-zero, usually because lints fired. A
+failure label is one of a fixed set derived from the error variant
+(`bootstrap::telemetry::failure_label` and
+`clippy_snapshot::telemetry::failure_label`), such as `snapshot_invalid`,
+`spawn_failed`, `checksum_mismatch`, or `io`. A run that fails before it can
+tell whether the driver is ready is recorded with `driver="unresolved"`. A long
+`exclusive` lock wait is the signature of contended cold construction, and
+`warm_after_wait` counts runs that waited out another process's build.
+
+Spans bound each boundary: `bootstrap.run`, `bootstrap.cargo_dylint_version`,
+`bootstrap.child`, `clippy_snapshot.provision`, `clippy_snapshot.verify`, and
+`clippy_snapshot.git` (with its `operation`). Their fields are commits,
+expected versions, and operation names, never paths or arguments.
+
+The installer CLI installs no metrics recorder. It runs on developer machines
+and CI runners, where exporting telemetry nobody asked for would be unwelcome.
+The counters are for embedders and tests through the `metrics` facade, as in
+`whitaker_clones_core`, while the CLI's own diagnostics are the `tracing`
+events and spans, shown with `--verbose`.
+
+Structured `tracing` events mark the cold path, each finished or failed run and
+snapshot operation, and each failed clone attempt, with the same bounded
+`outcome` and an `elapsed_ms` field. Queries such as `verify_repository` record
+nothing themselves; the commands that call them do. The logs never carry the
+raw error, which reaches the user through the returned result, nor a path, URL,
+or token.
 
 ## Standard vs Experimental Lints
 

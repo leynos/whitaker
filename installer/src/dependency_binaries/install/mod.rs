@@ -18,6 +18,7 @@ mod http_test_server;
 mod tests;
 
 pub use downloader::DependencyArchiveDownloader;
+pub(crate) use downloader::RepositoryArchiveDownloader;
 pub use extractor::DependencyArchiveExtractor;
 #[cfg(test)]
 pub use installer::MockDependencyBinaryInstaller;

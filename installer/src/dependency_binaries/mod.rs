@@ -9,6 +9,7 @@ mod manifest;
 
 #[cfg(test)]
 pub use install::MockDependencyBinaryInstaller;
+pub(crate) use install::RepositoryArchiveDownloader;
 pub use install::{
     DependencyArchiveDownloader, DependencyArchiveExtractor, DependencyBinaryInstallError,
     DependencyBinaryInstaller, RepositoryDependencyBinaryInstaller, archive_filename,

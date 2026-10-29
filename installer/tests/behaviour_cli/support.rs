@@ -11,7 +11,7 @@ use tempfile::TempDir;
 use whitaker_installer::cli::NO_SOURCE_FALLBACK_ENV;
 use whitaker_installer::{
     dirs::SystemBaseDirs, prebuilt_path::prebuilt_library_dir, test_support::TEST_STAGE_SUITE_ENV,
-    toolchain::parse_toolchain_channel,
+    test_utils::SnapshotFixture, toolchain::parse_toolchain_channel,
 };
 
 #[derive(Default)]
@@ -207,10 +207,27 @@ pub(super) fn run_installer_cli(cli_world: &CliWorld) {
     for (name, value) in cli_world.environment.borrow().iter() {
         command.env(name, value);
     }
+    // Installation provisions the Clippy snapshot before anything else and
+    // records the bootstrap in the data root, so give it a small real
+    // snapshot and a data root of its own. A dry run installs nothing and its
+    // assertions read the real data root, so it keeps the ambient one.
+    let is_dry_run = args.iter().any(|arg| arg == "--dry-run");
+    let isolation = (!is_dry_run).then(|| {
+        let Ok(snapshot) = SnapshotFixture::new() else {
+            panic!("the fixture Clippy snapshot should build");
+        };
+        let Ok(data_home) = TempDir::new() else {
+            panic!("an isolated data home should be created");
+        };
+        snapshot.configure(&mut command);
+        command.env("XDG_DATA_HOME", data_home.path());
+        (snapshot, data_home)
+    });
 
     let Ok(output) = command.output() else {
         panic!("whitaker-installer should run");
     };
+    drop(isolation);
     cli_world.output.replace(Some(output));
 }
 

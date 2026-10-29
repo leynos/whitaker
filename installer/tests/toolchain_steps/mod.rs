@@ -14,6 +14,7 @@ use scenario_setup::{
     ensure_toolchain_installed_in_isolated_env, get_combined_output_string, get_output,
     get_stderr_string, setup_auto_install_scenario, setup_dry_run_scenario, setup_failure_scenario,
 };
+use whitaker_installer::test_utils::SnapshotFixture;
 
 use super::{prebuilt_markers::PREBUILT_INSTALL_MARKER, support::workspace_root};
 
@@ -166,6 +167,13 @@ pub fn when_installer_cli_run(world: &ToolchainWorld) -> Result<(), String> {
     if let Some(ref cargo_home) = *world.cargo_home.borrow() {
         cmd.env("CARGO_HOME", cargo_home.path());
     }
+
+    // The snapshot step precedes the toolchain step under test; give it a
+    // small real snapshot and keep the bootstrap out of the real data root.
+    let snapshot = SnapshotFixture::new()?;
+    let data_home = tempfile::TempDir::new().map_err(|error| error.to_string())?;
+    snapshot.configure(&mut cmd);
+    cmd.env("XDG_DATA_HOME", data_home.path());
 
     let output = cmd
         .output()

@@ -44,7 +44,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "scripts" / "install-dylint-tools.sh"
 
-PINNED_VERSION = "6.0.1"
+PINNED_VERSION = "6.3.0"
 CARGO_DYLINT_VERSION = PINNED_VERSION
 DYLINT_LINK_VERSION = PINNED_VERSION
 TOOLCHAIN = "stable"

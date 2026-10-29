@@ -13,6 +13,12 @@ accepted = []
 [patterns]
 ignore = [
   "(?m)^            \\.env_remove\\(env::CARGO_TERM_COLOR\\)$",
+  # PowerShell's `Start-Process -PassThru` parameter, an external API name.
+  "(?m)^    return Start\\-Process \\-FilePath 'pwsh' \\-NoNewWindow \\-PassThru `$",
+  # Upstream `dylint_testing` 6.3.0 comments, vendored verbatim so the patch
+  # stays a minimal diff against the release it rebases onto.
+  "(?m)^    // artifact without invoking rustc, making removal ineffective as a way to force recompilation\\.$",
+  "(?m)^    // metadata forces rustc to run for the selected example without removing artifacts or relying$",
   # SARIF 2.1.0 (OASIS) spells these properties `artifactLocation` and
   # `artifacts`. The Rust fields use the repository's Oxford spelling and pin
   # the wire names with `serde(rename)`, so these two literals are serialized

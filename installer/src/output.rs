@@ -55,6 +55,51 @@ impl ShellSnippet {
         }
     }
 
+    /// Create snippets that export the whole Dylint bootstrap.
+    ///
+    /// `--skip-wrapper` users run `cargo dylint` themselves, so they need the
+    /// Clippy snapshot and driver directory as well as the libraries.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use camino::Utf8Path;
+    /// use whitaker_installer::output::ShellSnippet;
+    ///
+    /// let snippet = ShellSnippet::for_bootstrap(
+    ///     Utf8Path::new("/data/whitaker/lints/lib"),
+    ///     Utf8Path::new("/data/whitaker-bootstrap/clippy/e4608a25"),
+    ///     Utf8Path::new("/data/whitaker-bootstrap/drivers/dylint-6.3.0/clippy-e4608a25"),
+    /// );
+    ///
+    /// assert!(snippet.bash.contains("export DYLINT_CLIPPY_REPO="));
+    /// assert!(snippet.fish.contains("set -gx DYLINT_DRIVER_PATH"));
+    /// ```
+    #[must_use]
+    pub fn for_bootstrap(
+        library_path: &Utf8Path,
+        clippy_repo: &Utf8Path,
+        driver_path: &Utf8Path,
+    ) -> Self {
+        let variables = [
+            ("DYLINT_LIBRARY_PATH", library_path),
+            ("DYLINT_CLIPPY_REPO", clippy_repo),
+            ("DYLINT_DRIVER_PATH", driver_path),
+        ];
+        let lines = |render: &dyn Fn(&str, &Utf8Path) -> String| {
+            variables
+                .iter()
+                .map(|(name, path)| render(name, path))
+                .collect::<Vec<_>>()
+                .join("\n  ")
+        };
+        Self {
+            bash: lines(&|name, path| format!("export {name}=\"{path}\"")),
+            fish: lines(&|name, path| format!("set -gx {name} \"{path}\"")),
+            powershell: lines(&|name, path| format!("$env:{name} = \"{path}\"")),
+        }
+    }
+
     /// Format the snippet for display to the user.
     #[must_use]
     pub fn display_text(&self) -> String {

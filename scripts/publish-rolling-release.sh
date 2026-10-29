@@ -121,6 +121,31 @@ for path in "${assets[@]}"; do
     name=$(basename -- "${path}")
     case "${name}" in
         manifest-*.json) manifest_assets+=("${path}") ;;
+        whitaker-clippy-snapshot-*)
+            # Named by commit and content-identical whenever the name matches,
+            # but not byte-identical across builds. Replacing a published one
+            # would change the digest under an installer mid-download, so the
+            # first upload stands.
+            if is_published "${name}"; then
+                echo "Keeping the published ${name}."
+                continue
+            fi
+            # A bundle and its sidecar are one pair. A sidecar computed from a
+            # rebuilt bundle must never be attached to a different published
+            # bundle; only a sidecar derived from the published bytes (staged
+            # without a bundle) may join it.
+            case "${name}" in
+                *.bundle.sha256)
+                    if is_published "${name%.sha256}" && is_wanted "${name%.sha256}"; then
+                        echo "::error::${name} belongs to a rebuilt bundle, but" \
+                            "${name%.sha256} is already published; refusing to" \
+                            "pair them." >&2
+                        exit 1
+                    fi
+                    ;;
+            esac
+            new_assets+=("${path}")
+            ;;
         *)
             if is_published "${name}"; then
                 replacement_assets+=("${path}")
@@ -181,7 +206,10 @@ gh release edit "${tag}" --title "${title}" --notes "${notes}" >/dev/null
 
 # Superseded lint archives only. A dependency archive absent from this run's
 # set is not stale, it is unchanged and deliberately left in place; deleting it
-# here would recreate the very gap this script exists to close.
+# here would recreate the very gap this script exists to close. Clippy
+# snapshots are never removed either: every installer release downloads the
+# generation it pins from this tag, including installers built before a
+# re-pin.
 for name in ${published_names+"${published_names[@]}"}; do
     case "${name}" in
         whitaker-lints-*) ;;

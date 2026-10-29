@@ -71,6 +71,26 @@ pub enum Command {
 
     /// List installed lints.
     List(ListArgs),
+
+    /// Run `cargo dylint` through the installed bootstrap.
+    ///
+    /// The `whitaker` and `whitaker-ls` wrappers call this. It checks the
+    /// installation, exports `DYLINT_LIBRARY_PATH`, `DYLINT_CLIPPY_REPO`,
+    /// and `DYLINT_DRIVER_PATH`, serializes the first driver build, and exits
+    /// with `cargo dylint`'s status.
+    Run(RunArgs),
+}
+
+/// Arguments for the run command.
+#[derive(Parser, Debug, Clone)]
+pub struct RunArgs {
+    /// Arguments passed to `cargo dylint` unchanged, after `--`.
+    #[arg(
+        trailing_var_arg = true,
+        allow_hyphen_values = true,
+        value_name = "ARGS"
+    )]
+    pub args: Vec<std::ffi::OsString>,
 }
 
 /// Arguments for the install command.
@@ -148,6 +168,14 @@ pub struct InstallArgs {
     /// Skip prebuilt artefact download and build from source.
     #[arg(long = "build-only")]
     pub is_build_only: bool,
+
+    /// Install this Clippy snapshot bundle instead of downloading it.
+    ///
+    /// The bundle's `.sha256` sidecar must sit beside it. The bundle is
+    /// verified exactly as a downloaded one is; there is no fallback to
+    /// public Clippy when it is missing or invalid.
+    #[arg(long = "clippy-snapshot-bundle", value_name = "FILE")]
+    pub clippy_snapshot_bundle: Option<Utf8PathBuf>,
 
     /// Fail rather than build from source when a published artefact is absent.
     ///
@@ -272,6 +300,7 @@ impl Default for InstallArgs {
             suite_version: None,
             no_source_fallback: false,
             is_build_only: false,
+            clippy_snapshot_bundle: None,
         }
     }
 }
@@ -312,7 +341,7 @@ impl Cli {
     pub fn install_args(&self) -> &InstallArgs {
         match &self.command {
             Some(Command::Install(args)) => args,
-            Some(Command::List(_)) | None => &self.install,
+            Some(Command::List(_) | Command::Run(_)) | None => &self.install,
         }
     }
 }

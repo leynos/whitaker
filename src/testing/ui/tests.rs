@@ -126,6 +126,64 @@ fn runner_env_guard_preserves_rustc_wrapper() {
     assert_eq!(env::var_os("RUSTC_WRAPPER"), Some("sccache".into()));
 }
 
+/// The runner sees the copy-library flag set, and the caller's environment is
+/// restored afterwards.
+///
+/// Regression: without the flag, Dylint 6.3.0's `dylint_testing` copies the
+/// default-feature stub over the harness-built library, and the UI test fails
+/// with ``could not find `dylint_version` ``. A caller's explicit value is
+/// neither replaced nor removed.
+#[rstest]
+#[case::absent_is_set_then_removed(None, "1")]
+#[case::explicit_value_is_kept(Some("0"), "0")]
+fn runner_env_guard_marks_the_toolchain_library_as_prepared(
+    #[case] caller_value: Option<&'static str>,
+    #[case] seen_by_runner: &'static str,
+) {
+    const FLAG: &str = "DYLINT_LINK_ENABLE_COPY_LIBRARY";
+    let _serial_guard = runner_env_guard_test_lock();
+    let _caller = caller_value.map_or_else(
+        || EnvVarGuard::remove(FLAG),
+        |value| EnvVarGuard::set(FLAG, value),
+    );
+
+    run_with_runner("lint", "ui", |_, _| {
+        assert_eq!(env::var_os(FLAG), Some(seen_by_runner.into()));
+        Ok(())
+    })
+    .expect("runner should execute with the copy-library flag set");
+
+    assert_eq!(env::var_os(FLAG), caller_value.map(Into::into));
+}
+
+/// Overlapping runners keep the flag until the last one finishes.
+///
+/// Regression: each runner used to remove the variables it set, so under plain
+/// `cargo test` one runner could remove the flag while another still relied on
+/// it, and that UI test loaded the default-feature stub.
+#[test]
+fn overlapping_runner_guards_keep_the_flag_until_the_last_drops() {
+    const FLAG: &str = "DYLINT_LINK_ENABLE_COPY_LIBRARY";
+    let _serial_guard = runner_env_guard_test_lock();
+    let _absent = EnvVarGuard::remove(FLAG);
+
+    let first = super::runner_env_guard();
+    let second = super::runner_env_guard();
+    drop(first);
+    assert_eq!(
+        env::var_os(FLAG),
+        Some("1".into()),
+        "the second runner still needs it"
+    );
+
+    drop(second);
+    assert_eq!(
+        env::var_os(FLAG),
+        None,
+        "the last runner restores the environment"
+    );
+}
+
 #[cfg(windows)]
 #[test]
 fn windows_env_guard_leaves_absent_rustc_wrapper_untouched() {

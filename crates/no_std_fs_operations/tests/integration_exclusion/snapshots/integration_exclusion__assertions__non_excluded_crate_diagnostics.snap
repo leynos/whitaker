@@ -1,5 +1,5 @@
 ---
-source: crates/no_std_fs_operations/tests/integration_exclusion.rs
+source: crates/no_std_fs_operations/tests/integration_exclusion/assertions.rs
 expression: redacted
 ---
 [
