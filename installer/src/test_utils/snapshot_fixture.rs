@@ -84,19 +84,19 @@ impl SnapshotFixture {
         self.manifest.commit.as_str()
     }
 
-    /// The fixture's bundle, with its `.sha256` sidecar beside it.
+    /// Return the fixture's bundle, with its `.sha256` sidecar beside it.
     #[must_use]
     pub fn bundle(&self) -> &Utf8Path {
         &self.bundle
     }
 
-    /// The fixture's manifest file, for the test manifest override.
+    /// Return the fixture's manifest file, for the test manifest override.
     #[must_use]
     pub fn manifest_path(&self) -> &Utf8Path {
         &self.manifest_path
     }
 
-    /// The fixture's source repository, from which a producer build clones.
+    /// Return the fixture's source repository, from which a producer build clones.
     #[must_use]
     pub fn source(&self) -> Utf8PathBuf {
         self.manifest_path.with_file_name("work")
@@ -162,11 +162,18 @@ fn write(path: &Utf8Path, contents: &str) -> Result<(), String> {
 
 /// Run fixture Git with a fixed identity and no ambient configuration.
 ///
+/// Inherited repository-selection variables such as `GIT_DIR` are removed,
+/// as `SnapshotGit` removes them, so every command targets `dir`.
+///
 /// # Errors
 ///
 /// Returns Git's standard error when the command fails.
 pub fn git(dir: &Utf8Path, args: &[&str]) -> Result<String, String> {
-    let output = Command::new("git")
+    let mut command = Command::new("git");
+    for name in crate::clippy_snapshot::REPOSITORY_SELECTION_VARIABLES {
+        command.env_remove(name);
+    }
+    let output = command
         .args([
             "-c",
             "user.name=Fixture",

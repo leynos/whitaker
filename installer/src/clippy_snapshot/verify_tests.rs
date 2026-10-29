@@ -150,6 +150,8 @@ fn verification_that_reaches_git_records_no_metrics(
     assert!(recorded.is_empty(), "a query recorded {recorded:#?}");
 }
 
+/// Verify that an inherited `GIT_DIR` cannot redirect snapshot verification.
+///
 /// Regression: snapshot Git commands inherited `GIT_DIR` and friends, so an
 /// ambient `GIT_DIR` made verification inspect another repository entirely.
 #[test]

@@ -61,12 +61,12 @@ impl Cli {
     }
 }
 
-/// The process's standard output as text.
+/// Return the process's standard output as text.
 fn stdout(output: &Output) -> String {
     String::from_utf8_lossy(&output.stdout).into_owned()
 }
 
-/// The process's standard error as text.
+/// Return the process's standard error as text.
 fn stderr(output: &Output) -> String {
     String::from_utf8_lossy(&output.stderr).into_owned()
 }
@@ -86,6 +86,7 @@ fn assert_fails_with(output: &Output, expected: &str) {
     );
 }
 
+/// Check that `path` prints the generation and creates nothing.
 #[test]
 fn path_prints_the_generation_without_installing_it() {
     let cli = Cli::new();
@@ -101,6 +102,7 @@ fn path_prints_the_generation_without_installing_it() {
     assert!(!root.exists(), "`path` is a query and creates nothing");
 }
 
+/// Check that `install` persists a verified generation and prints its path.
 #[test]
 fn install_persists_a_verified_generation_and_prints_its_path() {
     let cli = Cli::new();
@@ -117,6 +119,7 @@ fn install_persists_a_verified_generation_and_prints_its_path() {
     assert_eq!(head.trim(), cli.fixture.commit());
 }
 
+/// Check that installing twice reuses the first generation.
 #[test]
 fn a_second_install_reuses_the_generation() {
     let cli = Cli::new();
@@ -128,6 +131,7 @@ fn a_second_install_reuses_the_generation() {
     assert_eq!(first, second);
 }
 
+/// Check that `verify` accepts an installed generation without output.
 #[test]
 fn verify_accepts_an_installed_generation_silently() {
     let cli = Cli::new();
@@ -139,6 +143,7 @@ fn verify_accepts_an_installed_generation_silently() {
     assert!(stdout(&output).is_empty() && stderr(&output).is_empty());
 }
 
+/// Check that `verify` rejects a generation that gained a remote.
 #[test]
 fn verify_rejects_a_generation_that_gained_a_remote() {
     let cli = Cli::new();
@@ -154,6 +159,7 @@ fn verify_rejects_a_generation_that_gained_a_remote() {
     assert_fails_with(&output, "it has remotes");
 }
 
+/// Check that `install` reports a missing bundle and installs nothing.
 #[test]
 fn install_reports_a_missing_bundle() {
     let cli = Cli::new();
@@ -168,8 +174,16 @@ fn install_reports_a_missing_bundle() {
     ]);
 
     assert_fails_with(&output, "is missing");
+    assert!(
+        !cli.scratch
+            .join("clippy")
+            .join(cli.fixture.commit())
+            .exists(),
+        "nothing is installed"
+    );
 }
 
+/// Check that `install` refuses a bundle whose sidecar disagrees.
 #[test]
 fn install_rejects_a_bundle_whose_sidecar_disagrees() {
     let cli = Cli::new();
@@ -197,6 +211,7 @@ fn install_rejects_a_bundle_whose_sidecar_disagrees() {
     );
 }
 
+/// Check that `build` writes a bundle and sidecar that `install` accepts.
 #[test]
 fn build_writes_a_bundle_and_sidecar_that_install_accepts() {
     let cli = Cli::new();
@@ -226,6 +241,7 @@ fn build_writes_a_bundle_and_sidecar_that_install_accepts() {
     assert!(installed.status.success(), "{}", stderr(&installed));
 }
 
+/// Check that an unknown subcommand is a usage error.
 #[test]
 fn an_unknown_subcommand_is_a_usage_error() {
     let cli = Cli::new();
@@ -234,4 +250,42 @@ fn an_unknown_subcommand_is_a_usage_error() {
 
     assert_eq!(output.status.code(), Some(2), "{}", stderr(&output));
     assert!(stderr(&output).contains("Usage:"), "{}", stderr(&output));
+}
+
+/// Check that `path` resolves a relative root, as `install` does.
+#[test]
+fn path_resolves_a_relative_root() {
+    let cli = Cli::new();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_whitaker-clippy-snapshot"))
+        .args(["path", "--root", "clippy"])
+        .current_dir(&cli.scratch)
+        .env(
+            TEST_CLIPPY_SNAPSHOT_MANIFEST_ENV,
+            cli.fixture.manifest_path(),
+        )
+        .output()
+        .expect("run whitaker-clippy-snapshot");
+
+    assert!(output.status.success(), "{}", stderr(&output));
+    let printed = Utf8PathBuf::from(stdout(&output).trim());
+    assert!(printed.is_absolute(), "{printed}");
+    assert_eq!(
+        printed,
+        cli.scratch.join("clippy").join(cli.fixture.commit())
+    );
+}
+
+/// Check that the fixture's Git ignores an inherited `GIT_DIR`.
+#[test]
+fn the_fixture_ignores_an_inherited_git_dir() {
+    let elsewhere = TempDir::new().expect("create a decoy directory");
+    let decoy = Utf8PathBuf::from_path_buf(elsewhere.path().join("decoy.git")).expect("UTF-8");
+    let _guard = whitaker_installer::test_support::env_test_guard();
+
+    let fixture = temp_env::with_var("GIT_DIR", Some(decoy.as_str()), SnapshotFixture::new);
+
+    let fixture = fixture.expect("the fixture builds in its own work tree");
+    assert!(!decoy.exists(), "the inherited GIT_DIR was not used");
+    assert_eq!(fixture.commit().len(), 40);
 }

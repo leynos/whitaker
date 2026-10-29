@@ -115,7 +115,10 @@ fn run(command: Command) -> Result<Option<String>, ClippySnapshotError> {
             provision(&source, manifest, &root).map(|path| Some(path.to_string()))
         }
         Command::Verify { repo } => verify_repository(&repo, manifest).map(|()| None),
-        Command::Path { root } => Ok(Some(generation_path(&root, manifest).to_string())),
+        // Resolve a relative root as `install` does, so both print one path.
+        Command::Path { root } => Ok(Some(
+            generation_path(&absolute(&root)?, manifest).to_string(),
+        )),
     }
 }
 
@@ -136,6 +139,16 @@ fn snapshot_manifest() -> Result<&'static ClippySnapshotManifest, ClippySnapshot
         return Ok(Box::leak(Box::new(manifest)));
     }
     embedded_manifest()
+}
+
+/// Resolve `path` against the current directory.
+fn absolute(path: &Utf8PathBuf) -> Result<Utf8PathBuf, ClippySnapshotError> {
+    let resolved =
+        std::path::absolute(path).map_err(|error| ClippySnapshotError::io(path, &error))?;
+    Utf8PathBuf::from_path_buf(resolved).map_err(|resolved| ClippySnapshotError::Io {
+        path: resolved.display().to_string(),
+        reason: "the path is not valid UTF-8".to_owned(),
+    })
 }
 
 /// View a temporary directory as UTF-8, falling back to a relative scratch path.
