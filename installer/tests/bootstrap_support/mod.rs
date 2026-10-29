@@ -34,7 +34,7 @@ fi
     printf 'WRAPPER=%s\n' "${RUSTC_WRAPPER:-}"
     printf 'ARG=%s\n' "$@"
 } >>"${STUB_LOG}.env"
-driver_dir="${DYLINT_DRIVER_PATH}/nightly-2026-05-28-x86_64-unknown-linux-gnu"
+driver_dir="${DYLINT_DRIVER_PATH}/nightly-2026-05-28"
 # STUB_REPLACE_DRIVER rebuilds a ready driver with identical bytes, as Dylint
 # does when its version probe of a cached driver fails. It says nothing.
 if [[ "${STUB_REPLACE_DRIVER:-}" == 1 && -s "${driver_dir}/dylint-driver" ]]; then

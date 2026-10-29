@@ -23,7 +23,7 @@ if [[ "$1" == dylint && "$2" == --version ]]; then
     echo "cargo-dylint 6.3.0"
     exit 0
 fi
-driver="$DYLINT_DRIVER_PATH/{FIXTURE_TOOLCHAIN}-x86_64-unknown-linux-gnu/dylint-driver"
+driver="$DYLINT_DRIVER_PATH/{FIXTURE_TOOLCHAIN}/dylint-driver"
 # Like Dylint, build only when no driver exists yet.
 if [[ {builds} == yes && ! -s "$driver" ]]; then
     mkdir -p "$(dirname "$driver")"

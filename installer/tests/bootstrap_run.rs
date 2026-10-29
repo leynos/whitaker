@@ -82,6 +82,80 @@ fn a_warm_run_that_replaces_the_driver_reports_the_build() {
     );
 }
 
+/// A warm run's rebuild reads the snapshot without the cold path's full
+/// verification, so the installer verifies it afterwards: a snapshot that
+/// fails fails the run and leaves the slot cold.
+#[test]
+fn a_warm_rebuild_from_an_unverifiable_snapshot_fails_and_goes_cold() {
+    let installation = Installation::new();
+    let cold = installation.run(&["--all"]);
+    assert!(
+        cold.status.success(),
+        "{}",
+        String::from_utf8_lossy(&cold.stderr)
+    );
+    let snapshot = installation.layout().snapshot(&installation.commit);
+    // Full verification refuses remotes; the cheaper installed check does not.
+    git(
+        &snapshot,
+        &[
+            "remote",
+            "add",
+            "upstream",
+            "https://example.invalid/clippy",
+        ],
+    );
+
+    let warm = installation
+        .run_command(&["--all"])
+        .env("STUB_REPLACE_DRIVER", "1")
+        .output()
+        .expect("run whitaker-installer");
+
+    assert!(
+        !warm.status.success(),
+        "the unverified rebuild must not succeed"
+    );
+    let stderr = String::from_utf8_lossy(&warm.stderr);
+    assert!(stderr.contains("it has remotes"), "{stderr}");
+    let next = installation.run(&["--all"]);
+    assert!(
+        !next.status.success(),
+        "the slot is cold and verification refuses it"
+    );
+    assert!(
+        String::from_utf8_lossy(&next.stderr).contains("it has remotes"),
+        "{}",
+        String::from_utf8_lossy(&next.stderr)
+    );
+}
+
+/// A cold run removes an unmarked driver, so it builds from the snapshot it
+/// has just verified rather than adopting a leftover.
+#[test]
+fn a_cold_run_rebuilds_an_unmarked_driver() {
+    let installation = Installation::new();
+    let first = installation.run(&["--all"]);
+    assert!(
+        first.status.success(),
+        "{}",
+        String::from_utf8_lossy(&first.stderr)
+    );
+    let slot = installation
+        .layout()
+        .driver_dir("6.3.0", &installation.commit);
+    std::fs::remove_file(slot.join(".nightly-2026-05-28.ready")).expect("forget readiness");
+
+    let second = installation.run(&["--all"]);
+
+    assert!(
+        second.status.success(),
+        "{}",
+        String::from_utf8_lossy(&second.stderr)
+    );
+    assert_eq!(installation.builds(), 2, "the unmarked driver is rebuilt");
+}
+
 #[test]
 fn exports_the_bootstrap_and_overwrites_stale_values() {
     let installation = Installation::new();

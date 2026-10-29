@@ -152,7 +152,7 @@ whitaker-bootstrap/
   bootstrap.json                         what this installation provisioned
   clippy/<commit>/                       the verified Clippy snapshot
   drivers/dylint-<version>/clippy-<commit>/
-    <toolchain>-<host>/dylint-driver     built on the first run
+    <toolchain>/dylint-driver            built on the first run
 ```
 
 `whitaker` and `whitaker-ls` contain no paths. They find `whitaker-installer`
@@ -170,7 +170,8 @@ beside themselves, or else on `PATH`, and call `whitaker-installer run`, which:
   newly built driver, including a rare rebuild after Dylint finds a cached
   driver unusable, ends with
   `whitaker: built the Dylint driver on first use; later runs reuse it`, which
-  explains a slow run;
+  explains a slow run. A warm run whose driver Dylint rebuilt also re-verifies
+  the snapshot before it succeeds;
 - exits with `cargo dylint`'s own status, so lint failures still fail CI.
 
 Paths are worked out from the current data directory each time, so moving the

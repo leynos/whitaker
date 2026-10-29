@@ -6,6 +6,7 @@
 //! child process so concurrent cold runs build the driver once.
 
 use super::BootstrapLayout;
+use super::child::{check_cargo_dylint, exit_code};
 use super::driver::{DriverIdentity, DriverSlot};
 use super::error::BootstrapError;
 use super::metadata::BootstrapMetadata;
@@ -201,11 +202,44 @@ fn run_warm(
     // Dylint re-probes a cached driver and rebuilds it if the probe fails, so
     // a warm run can still build; compare identities rather than assume.
     let before = prepared.slot.driver_identity()?;
+    let started = Instant::now();
     let status = spawn(prepared, cargo, args)?;
+    let built_driver = was_replaced(&prepared.slot, before);
+    if built_driver {
+        check_warm_rebuild(prepared, started)?;
+    }
     Ok(RunOutcome {
         code: exit_code(status),
-        built_driver: was_replaced(&prepared.slot, before),
+        built_driver,
     })
+}
+
+/// Verify the snapshot a warm run's rebuild just read, before trusting it.
+///
+/// Full verification takes seconds on the real snapshot, so warm runs do not
+/// pay it up front; only the rare warm run whose child rebuilt the driver
+/// does. If the snapshot fails, the run fails with that error and the slot is
+/// marked cold, and the next cold run removes the driver before rebuilding,
+/// so nothing built from an unverified snapshot is reported or reused.
+fn check_warm_rebuild(prepared: &PreparedRun, started: Instant) -> Result<(), BootstrapError> {
+    tracing::warn!(
+        toolchain = prepared.slot.toolchain(),
+        "Dylint rebuilt a ready driver; verifying the snapshot it read"
+    );
+    let verified = verify_snapshot(prepared);
+    let outcome = if verified.is_ok() {
+        BuildOutcome::Built
+    } else {
+        if let Err(error) = prepared.slot.clear_ready() {
+            tracing::warn!(
+                failure = failure_label(&error),
+                "could not mark the driver cold after a failed verification"
+            );
+        }
+        BuildOutcome::VerifyFailed
+    };
+    record_driver_build(outcome, started.elapsed());
+    verified
 }
 
 /// Return whether the child persisted a driver other than `before`.
@@ -238,13 +272,18 @@ fn run_cold(
         "building the Dylint driver on first use"
     );
     let started = Instant::now();
-    // An unmarked driver may already exist, left by an interrupted build.
+    // An unmarked driver may already exist, left by an interrupted build or by
+    // a warm rebuild whose snapshot then failed verification. Remove it after
+    // verifying, so Dylint always builds from the snapshot just checked.
     let before = prepared.slot.driver_identity()?;
-    let built = verify_snapshot(prepared).and_then(|()| spawn(prepared, cargo, args));
+    let built = verify_snapshot(prepared)
+        .and_then(|()| prepared.slot.remove_driver())
+        .and_then(|()| spawn(prepared, cargo, args));
     let outcome = match &built {
         Ok(_) => record_readiness(&prepared.slot),
+        Err(BootstrapError::Snapshot(_)) => BuildOutcome::VerifyFailed,
         Err(BootstrapError::Spawn { .. }) => BuildOutcome::SpawnFailed,
-        Err(_) => BuildOutcome::VerifyFailed,
+        Err(_) => BuildOutcome::Unrecorded,
     };
     record_driver_build(outcome, started.elapsed());
     built.map(|status| RunOutcome {
@@ -324,50 +363,6 @@ fn spawn(
         .map_err(|error| BootstrapError::Spawn {
             reason: error.to_string(),
         })
-}
-
-/// Require the `cargo-dylint` on `PATH` to be the bootstrapped release.
-fn check_cargo_dylint(cargo: &OsStr, expected: &str) -> Result<(), BootstrapError> {
-    let output = Command::new(cargo)
-        .args(["dylint", "--version"])
-        .output()
-        .map_err(|error| BootstrapError::CargoDylint {
-            reason: error.to_string(),
-        })?;
-    if !output.status.success() {
-        return Err(BootstrapError::CargoDylint {
-            reason: String::from_utf8_lossy(&output.stderr).trim().to_owned(),
-        });
-    }
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let found = stdout.split_whitespace().last().unwrap_or_default();
-    if found == expected {
-        Ok(())
-    } else {
-        Err(BootstrapError::DylintVersion {
-            expected: expected.to_owned(),
-            found: found.to_owned(),
-        })
-    }
-}
-
-/// Map a child's status to the code this process should exit with.
-///
-/// A normal exit keeps its code exactly. A Unix process killed by a signal
-/// has no code, so it maps to `128 + signal`, the value a shell reports.
-#[must_use]
-pub fn exit_code(status: ExitStatus) -> i32 {
-    if let Some(code) = status.code() {
-        return code;
-    }
-    #[cfg(unix)]
-    {
-        use std::os::unix::process::ExitStatusExt;
-        if let Some(signal) = status.signal() {
-            return 128 + signal;
-        }
-    }
-    1
 }
 
 #[cfg(all(test, unix))]

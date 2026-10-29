@@ -140,8 +140,17 @@ re-pin therefore selects a new slot.
 - If the driver exists and its ready marker is written, `run` takes the lock
   shared.
 - Otherwise it takes the lock exclusively, re-checks, fully verifies the
-  snapshot, runs, and writes the marker once the driver exists.
+  snapshot, removes any unmarked driver so Dylint builds from the snapshot just
+  checked, runs, and writes the marker once the driver exists.
 - A driver without a marker counts as cold.
+- Dylint 6.3.0 re-probes a cached driver with `-V` and rebuilds it if the probe
+  fails, so a warm run can still read the snapshot. Full verification takes
+  seconds on the real snapshot, so warm runs do not pay it up front. Instead
+  `run` compares the driver file's identity before and after the child, since
+  Dylint persists a rebuild by renaming a new file into place. When a warm run
+  rebuilt the driver, `run` verifies the snapshot before reporting success. A
+  snapshot that fails fails the run and clears the ready marker, and the next
+  cold run removes that driver before rebuilding.
 
 ### Installed layout and dispatch
 

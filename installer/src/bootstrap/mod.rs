@@ -10,7 +10,7 @@
 //!   clippy/<commit>/                      verified Clippy snapshot
 //!   drivers/dylint-<version>/clippy-<commit>/
 //!     .<toolchain>.lock, .<toolchain>.ready
-//!     <toolchain>-<host>/dylint-driver    built by Dylint on first use
+//!     <toolchain>/dylint-driver           built by Dylint on first use
 //! ```
 //!
 //! Every path is derived from the current platform data directory when a
@@ -19,6 +19,7 @@
 //! the Dylint variables, serializes cold driver construction, and returns the
 //! child's exit status unchanged.
 
+mod child;
 mod driver;
 mod error;
 mod metadata;
@@ -26,11 +27,12 @@ mod probe;
 mod run;
 mod telemetry;
 
+pub use child::exit_code;
 pub use driver::{DriverIdentity, DriverSlot};
 pub use error::BootstrapError;
 pub use metadata::{BOOTSTRAP_SCHEMA, BootstrapMetadata, StoredPath};
 pub use probe::is_present_dir;
-pub use run::{RunOutcome, exit_code, run, run_with_cargo};
+pub use run::{RunOutcome, run, run_with_cargo};
 
 /// What `whitaker-installer run` prints once a run has built the driver.
 ///

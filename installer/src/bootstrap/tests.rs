@@ -109,7 +109,7 @@ fn write_driver(slot: &Utf8Path, toolchain_dir: &str, contents: &[u8]) {
 fn an_extension_suffixed_driver_is_not_dylints() {
     let (_dir, root) = temp_root();
     let slot = DriverSlot::new(&root, "nightly-2026-05-28");
-    let dir = root.join("nightly-2026-05-28-x86_64-pc-windows-msvc");
+    let dir = root.join("nightly-2026-05-28");
     std::fs::create_dir_all(&dir).expect("create toolchain dir");
     std::fs::write(dir.join("dylint-driver.exe"), b"driver").expect("write driver");
 
@@ -123,11 +123,7 @@ fn an_extension_suffixed_driver_is_not_dylints() {
 fn a_driver_without_a_marker_is_cold() {
     let (_dir, root) = temp_root();
     let slot = DriverSlot::new(&root, "nightly-2026-05-28");
-    write_driver(
-        &root,
-        "nightly-2026-05-28-x86_64-unknown-linux-gnu",
-        b"driver",
-    );
+    write_driver(&root, "nightly-2026-05-28", b"driver");
 
     assert!(slot.has_driver().expect("inspect the slot"));
     assert!(
@@ -140,8 +136,8 @@ fn a_driver_without_a_marker_is_cold() {
 }
 
 #[rstest]
-#[case::other_channel("nightly-2026-06-11-x86_64-unknown-linux-gnu", b"driver".as_slice())]
-#[case::empty_file("nightly-2026-05-28-x86_64-unknown-linux-gnu", b"".as_slice())]
+#[case::other_channel("nightly-2026-06-11", b"driver".as_slice())]
+#[case::empty_file("nightly-2026-05-28", b"".as_slice())]
 fn ignores_drivers_that_are_not_this_toolchains(#[case] dir: &str, #[case] contents: &[u8]) {
     let (_dir, root) = temp_root();
     let slot = DriverSlot::new(&root, "nightly-2026-05-28");
@@ -173,26 +169,31 @@ fn a_slot_that_does_not_exist_yet_is_cold() {
 }
 
 /// Regression: an unreadable slot once read as cold, so a cold build would
-/// start against a slot it could not use.
+/// start against a slot it could not use. A NUL byte makes every platform
+/// refuse the path with `InvalidInput`; a file standing in for the slot would
+/// not, because Windows reports a path through a file as `NotFound`.
 #[test]
 fn a_slot_that_cannot_be_read_is_an_error() {
     let (_dir, root) = temp_root();
-    let path = root.join("slot");
-    std::fs::write(&path, b"a file, not a directory").expect("write a file");
-    let slot = DriverSlot::new(&path, "nightly-2026-05-28");
+    let slot = DriverSlot::new(&root.join("uninspectable\0slot"), "nightly-2026-05-28");
 
     let error = slot
         .has_driver()
-        .expect_err("a file is not a readable slot");
+        .expect_err("an uninspectable slot is an error");
 
     assert!(matches!(error, BootstrapError::Io { .. }), "{error:?}");
 }
 
+/// Dylint 6.3.0 keys the driver by the toolchain in the library file names,
+/// which is the bare channel, so only that directory is its driver.
 #[rstest]
 #[case::bare_channel("nightly-2026-05-28", true)]
-#[case::with_host("nightly-2026-05-28-x86_64-unknown-linux-gnu", true)]
+#[case::host_suffixed("nightly-2026-05-28-x86_64-unknown-linux-gnu", false)]
 #[case::later_channel_sharing_a_prefix("nightly-2026-05-280", false)]
-fn recognizes_only_this_channels_toolchain_directories(#[case] dir: &str, #[case] expected: bool) {
+fn recognizes_only_the_toolchain_directory_dylint_selects(
+    #[case] dir: &str,
+    #[case] expected: bool,
+) {
     let (_dir, root) = temp_root();
     let slot = DriverSlot::new(&root, "nightly-2026-05-28");
     write_driver(&root, dir, b"driver");
@@ -212,11 +213,7 @@ fn a_slot_without_a_driver_has_no_identity() {
 fn an_untouched_driver_keeps_its_identity() {
     let (_dir, root) = temp_root();
     let slot = DriverSlot::new(&root, "nightly-2026-05-28");
-    write_driver(
-        &root,
-        "nightly-2026-05-28-x86_64-unknown-linux-gnu",
-        b"driver",
-    );
+    write_driver(&root, "nightly-2026-05-28", b"driver");
 
     let first = slot.driver_identity().expect("inspect the slot");
 
@@ -230,7 +227,7 @@ fn an_untouched_driver_keeps_its_identity() {
 fn a_driver_replaced_with_identical_bytes_has_a_new_identity() {
     let (_dir, root) = temp_root();
     let slot = DriverSlot::new(&root, "nightly-2026-05-28");
-    let toolchain_dir = "nightly-2026-05-28-x86_64-unknown-linux-gnu";
+    let toolchain_dir = "nightly-2026-05-28";
     write_driver(&root, toolchain_dir, b"driver");
     let before = slot.driver_identity().expect("inspect the slot");
     // Keep the original alive so the replacement cannot reuse its inode.

@@ -127,7 +127,10 @@ pub(crate) fn record_lock_failure(mode: LockMode) {
     metrics::counter!(LOCK_FAILURE_TOTAL, "mode" => mode.label()).increment(1);
 }
 
-/// Record a cold run's duration and what it left behind.
+/// Record a driver build's duration and what it left behind.
+///
+/// Cold runs always build; a warm run counts only when Dylint rebuilt its
+/// driver, which `run` then re-verifies.
 pub(crate) fn record_driver_build(outcome: BuildOutcome, elapsed: Duration) {
     describe_metrics();
     metrics::histogram!(DRIVER_BUILD_SECONDS, "outcome" => outcome.label())
@@ -160,10 +163,10 @@ fn describe_metrics() {
     metrics::describe_histogram!(
         DRIVER_BUILD_SECONDS,
         metrics::Unit::Seconds,
-        "Elapsed time of cold runs, which verify the snapshot and build the driver"
+        "Elapsed time of driver builds: cold runs, and warm runs whose driver Dylint rebuilt"
     );
     metrics::describe_counter!(
         DRIVER_BUILD_TOTAL,
-        "Cold bootstrap runs categorized by what they left in the driver slot"
+        "Driver builds, cold or warm, categorized by what they left in the driver slot"
     );
 }

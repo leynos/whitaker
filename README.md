@@ -26,13 +26,17 @@ libraries = [
 ]
 ```
 
-Install Whitaker with
-`cargo binstall whitaker-installer && whitaker-installer`, then run the lints
-through the installed bootstrap:
+Install the standalone installer and let it set up the lints and their Dylint
+bootstrap, then run the lints through it:
 
 ```sh
+cargo install whitaker-installer
+whitaker-installer
 whitaker --all
 ```
+
+With [cargo-binstall](https://github.com/cargo-bins/cargo-binstall) installed,
+`cargo binstall whitaker-installer` fetches the prebuilt installer instead.
 
 `whitaker` is shorthand for `whitaker-installer run -- --all`, which supplies
 the verified Clippy snapshot and driver directory Dylint needs. Plain

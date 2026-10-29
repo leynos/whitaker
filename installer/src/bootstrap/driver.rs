@@ -98,11 +98,6 @@ impl DriverSlot {
 
     /// Return whether Dylint has written a driver for this toolchain.
     ///
-    /// Dylint names the toolchain directory after the library's toolchain,
-    /// which carries the host triple (`nightly-2026-05-28-x86_64-...`), so any
-    /// directory for this channel counts. Dylint persists the driver with a
-    /// rename, so a present, non-empty file is a complete one.
-    ///
     /// # Errors
     ///
     /// Returns [`BootstrapError::Io`] when the slot cannot be read for any
@@ -130,37 +125,20 @@ impl DriverSlot {
 
     /// Return the metadata of this channel's complete driver, if one exists.
     ///
-    /// Dylint persists with a rename, so a present, non-empty file is complete;
-    /// an empty one is not a driver.
+    /// Dylint 6.3.0 keeps the driver at exactly
+    /// `DYLINT_DRIVER_PATH/<toolchain>/dylint-driver`, keyed by the toolchain in
+    /// the lint libraries' file names (`lib<crate>@<toolchain>`), which is the
+    /// channel this slot records. Looking anywhere else could describe a driver
+    /// Dylint never selects. Dylint persists with a rename, so a present,
+    /// non-empty file is complete; an empty one is not a driver.
     fn driver_metadata(&self) -> Result<Option<std::fs::Metadata>, BootstrapError> {
-        let entries = match std::fs::read_dir(&self.dir) {
-            Ok(entries) => entries,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-            Err(error) => return Err(BootstrapError::io(&self.dir, &error)),
-        };
-        for entry in entries {
-            let entry = entry.map_err(|error| BootstrapError::io(&self.dir, &error))?;
-            // A name that is not UTF-8 cannot be Dylint's toolchain directory.
-            let Some(name) = entry.file_name().to_str().map(str::to_owned) else {
-                continue;
-            };
-            if !self.is_toolchain_dir(&name) {
-                continue;
-            }
-            let driver = self.dir.join(&name).join(DRIVER_FILE);
-            if let Some(metadata) =
-                metadata_if_present(&driver)?.filter(|m| m.is_file() && m.len() > 0)
-            {
-                return Ok(Some(metadata));
-            }
-        }
-        Ok(None)
+        let driver = self.driver_path();
+        Ok(metadata_if_present(&driver)?.filter(|m| m.is_file() && m.len() > 0))
     }
 
-    /// Return whether `name` is a toolchain directory for this channel.
-    fn is_toolchain_dir(&self, name: &str) -> bool {
-        name.strip_prefix(&self.toolchain)
-            .is_some_and(|rest| rest.is_empty() || rest.starts_with('-'))
+    /// The driver file Dylint builds and loads for this toolchain.
+    fn driver_path(&self) -> Utf8PathBuf {
+        self.dir.join(&self.toolchain).join(DRIVER_FILE)
     }
 
     /// Create the slot directory, which Dylint requires to exist.
@@ -210,6 +188,25 @@ impl DriverSlot {
         Ok(())
     }
 
+    /// Forget that the driver is ready, so the next run takes the cold path.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`BootstrapError::Io`] when an existing marker cannot be removed.
+    pub fn clear_ready(&self) -> Result<(), BootstrapError> {
+        remove_if_present(&self.marker_path())
+    }
+
+    /// Remove the driver Dylint built, so the next build starts afresh. Call
+    /// only under the exclusive lock.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`BootstrapError::Io`] when an existing driver cannot be removed.
+    pub fn remove_driver(&self) -> Result<(), BootstrapError> {
+        remove_if_present(&self.driver_path())
+    }
+
     /// Open (creating if needed) the lock file without truncating it.
     fn open_lock(&self) -> Result<File, BootstrapError> {
         let path = self.lock_path();
@@ -229,5 +226,14 @@ impl DriverSlot {
     /// The ready marker beside the lock file.
     fn marker_path(&self) -> Utf8PathBuf {
         self.dir.join(format!(".{}.ready", self.toolchain))
+    }
+}
+
+/// Remove the file at `path`, treating its absence as success.
+fn remove_if_present(path: &Utf8Path) -> Result<(), BootstrapError> {
+    match std::fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(BootstrapError::io(path, &error)),
     }
 }
