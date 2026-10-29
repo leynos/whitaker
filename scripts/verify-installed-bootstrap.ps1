@@ -115,49 +115,76 @@ function Get-DriverDigest([string] $driverDir) {
     return (Get-FileHash -Algorithm SHA256 $driver.FullName).Hash
 }
 
-$env:RUSTFLAGS = '-D warnings'
-$snapshot = Get-DryRunValue 'Clippy snapshot'
-$driverDir = Get-DryRunValue 'Dylint driver directory'
-if (-not $snapshot -or -not (Test-Path $snapshot)) { Fail "the installed snapshot '$snapshot' is missing" }
-if (-not $driverDir) { Fail 'the dry run did not name a driver directory' }
-
-Deny-GitHub
-$fixture = New-Fixture
-
-Write-Output 'Cold run with an empty driver directory.'
-if (Test-Path $driverDir) { Remove-Item -Recurse -Force $driverDir }
-Assert-Diagnostic (Start-Whitaker $fixture (Join-Path $WorkDir 'cold.log')) (Join-Path $WorkDir 'cold.log')
-$cold = Get-DriverDigest $driverDir
-if ((Get-BuildCount @((Join-Path $WorkDir 'cold.log'))) -ne 1) {
-    Fail "the cold run did not report building the driver once; see $(Join-Path $WorkDir 'cold.log')"
+# Require exactly $expected build notices across $logs.
+function Assert-BuildCount([string[]] $logs, [int] $expected, [string] $message) {
+    $builds = Get-BuildCount $logs
+    if ($builds -ne $expected) { Fail ($message -f $builds) }
 }
 
-Write-Output 'Warm run reusing the driver.'
-Assert-Diagnostic (Start-Whitaker $fixture (Join-Path $WorkDir 'warm.log')) (Join-Path $WorkDir 'warm.log')
-# The notice also catches a rebuild that happens to write identical bytes.
-if ((Get-DriverDigest $driverDir) -ne $cold) { Fail 'the warm run rebuilt the driver' }
-if ((Get-BuildCount @((Join-Path $WorkDir 'warm.log'))) -ne 0) { Fail 'the warm run rebuilt the driver' }
-
-Write-Output 'Two simultaneous cold runs.'
-Remove-Item -Recurse -Force $driverDir
-$first = Start-Whitaker $fixture (Join-Path $WorkDir 'concurrent-a.log')
-$second = Start-Whitaker $fixture (Join-Path $WorkDir 'concurrent-b.log')
-Assert-Diagnostic $first (Join-Path $WorkDir 'concurrent-a.log')
-Assert-Diagnostic $second (Join-Path $WorkDir 'concurrent-b.log')
-$builds = Get-BuildCount @((Join-Path $WorkDir 'concurrent-a.log'), (Join-Path $WorkDir 'concurrent-b.log'))
-if ($builds -ne 1) { Fail "the simultaneous cold runs built the driver $builds times" }
-
-Write-Output 'Deleted snapshot generation.'
-Rename-Item -Path $snapshot -NewName ((Split-Path -Leaf $snapshot) + '.removed')
-$log = Join-Path $WorkDir 'deleted.log'
-$process = Start-Whitaker $fixture $log
-$process.WaitForExit()
-Rename-Item -Path "$snapshot.removed" -NewName (Split-Path -Leaf $snapshot)
-$text = (Get-Content -Raw "$log.out") + (Get-Content -Raw $log)
-if ($process.ExitCode -eq 0) { Fail 'whitaker ran without its Clippy snapshot' }
-if ($text -notmatch 'never falls back to cloning public Clippy') {
-    Fail "a missing snapshot did not fail clearly; see $log"
+# Read the installed snapshot and driver locations from the installer's dry run.
+function Get-Installation {
+    $snapshot = Get-DryRunValue 'Clippy snapshot'
+    $driverDir = Get-DryRunValue 'Dylint driver directory'
+    if (-not $snapshot -or -not (Test-Path $snapshot)) { Fail "the installed snapshot '$snapshot' is missing" }
+    if (-not $driverDir) { Fail 'the dry run did not name a driver directory' }
+    return [pscustomobject]@{ Snapshot = $snapshot; DriverDir = $driverDir }
 }
-if ($text -match $diagnostic) { Fail 'lints ran although the snapshot was missing' }
 
-Write-Output 'The installed bootstrap lints without public Clippy.'
+# A cold run builds the driver once; a warm run then reuses it untouched.
+function Test-ColdThenWarm([string] $fixture, [string] $driverDir) {
+    Write-Output 'Cold run with an empty driver directory.'
+    if (Test-Path $driverDir) { Remove-Item -Recurse -Force $driverDir }
+    $coldLog = Join-Path $WorkDir 'cold.log'
+    Assert-Diagnostic (Start-Whitaker $fixture $coldLog) $coldLog
+    $cold = Get-DriverDigest $driverDir
+    Assert-BuildCount @($coldLog) 1 "the cold run did not report building the driver once (it reported {0}); see $coldLog"
+
+    Write-Output 'Warm run reusing the driver.'
+    $warmLog = Join-Path $WorkDir 'warm.log'
+    Assert-Diagnostic (Start-Whitaker $fixture $warmLog) $warmLog
+    # The notice also catches a rebuild that happens to write identical bytes.
+    if ((Get-DriverDigest $driverDir) -ne $cold) { Fail 'the warm run rebuilt the driver' }
+    Assert-BuildCount @($warmLog) 0 'the warm run rebuilt the driver'
+}
+
+# Two simultaneous cold runs both lint, and only one of them builds.
+function Test-ConcurrentColdRuns([string] $fixture, [string] $driverDir) {
+    Write-Output 'Two simultaneous cold runs.'
+    Remove-Item -Recurse -Force $driverDir
+    $logs = @((Join-Path $WorkDir 'concurrent-a.log'), (Join-Path $WorkDir 'concurrent-b.log'))
+    $first = Start-Whitaker $fixture $logs[0]
+    $second = Start-Whitaker $fixture $logs[1]
+    Assert-Diagnostic $first $logs[0]
+    Assert-Diagnostic $second $logs[1]
+    Assert-BuildCount $logs 1 'the simultaneous cold runs built the driver {0} times'
+}
+
+# A deleted snapshot fails clearly, before any lint runs, and is restored.
+function Test-DeletedSnapshot([string] $fixture, [string] $snapshot) {
+    Write-Output 'Deleted snapshot generation.'
+    Rename-Item -Path $snapshot -NewName ((Split-Path -Leaf $snapshot) + '.removed')
+    $log = Join-Path $WorkDir 'deleted.log'
+    $process = Start-Whitaker $fixture $log
+    $process.WaitForExit()
+    Rename-Item -Path "$snapshot.removed" -NewName (Split-Path -Leaf $snapshot)
+    $text = (Get-Content -Raw "$log.out") + (Get-Content -Raw $log)
+    if ($process.ExitCode -eq 0) { Fail 'whitaker ran without its Clippy snapshot' }
+    if ($text -notmatch 'never falls back to cloning public Clippy') {
+        Fail "a missing snapshot did not fail clearly; see $log"
+    }
+    if ($text -match $diagnostic) { Fail 'lints ran although the snapshot was missing' }
+}
+
+# Run every check in order; any failure exits through Fail.
+function Invoke-Verification {
+    $env:RUSTFLAGS = '-D warnings'
+    $installation = Get-Installation
+    Deny-GitHub
+    $fixture = New-Fixture
+    Test-ColdThenWarm $fixture $installation.DriverDir
+    Test-ConcurrentColdRuns $fixture $installation.DriverDir
+    Test-DeletedSnapshot $fixture $installation.Snapshot
+    Write-Output 'The installed bootstrap lints without public Clippy.'
+}
+
+Invoke-Verification
