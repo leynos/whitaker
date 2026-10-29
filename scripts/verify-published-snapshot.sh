@@ -56,7 +56,9 @@ fi
 # Invert one byte rather than overwrite it with a constant, which could leave
 # the file unchanged when the bundle already holds that value there.
 offset=4096
-original=$(od -An -tu1 -j "${offset}" -N1 "${work}/${asset}" | tr -d ' ')
+# `od` fails when the offset is past the end; let the empty result reach the
+# check below rather than abort under `set -e` without saying why.
+original=$(od -An -tu1 -j "${offset}" -N1 "${work}/${asset}" 2>/dev/null | tr -d ' ' || true)
 [[ -n "${original}" ]] || fail "the published bundle is shorter than ${offset} bytes"
 printf '%b' "\\$(printf '%03o' $((255 - original)))" |
     dd of="${work}/${asset}" bs=1 seek="${offset}" conv=notrunc status=none
