@@ -187,9 +187,37 @@ to public Clippy:
   Delete it and download it again.
 - *cargo-dylint reports version …*: the `cargo-dylint` on `PATH` is not the
   release this installation was bootstrapped for. Re-run `whitaker-installer`.
+- *I/O failed* or *git … failed*: check the permissions and free space at the
+  named path, or that `git` is installed and on `PATH`, then re-run
+  `whitaker-installer`.
+- *invalid Clippy snapshot manifest*: the installer's embedded manifest is
+  damaged. Reinstall `whitaker-installer`.
 
 `whitaker-installer --dry-run` prints the snapshot and driver directories,
 which is useful for caching them in CI.
+
+#### Running the lints directly
+
+`whitaker --all` is shorthand for `whitaker-installer run -- --all`. Call the
+installer directly where the wrappers are not on `PATH`, for example in a CI
+step:
+
+```sh
+whitaker-installer run -- --all
+```
+
+Everything after `--` is passed to `cargo dylint` unchanged, the three
+bootstrap variables are supplied for that one run, and the command exits with
+`cargo dylint`'s status. Plain `cargo dylint` without them does not use the
+bootstrap: Dylint would try to clone public Clippy to build its driver, which
+is exactly what the bootstrap replaces.
+
+An installation made with `--skip-wrapper` prints the three variables as
+`export` (bash and zsh), `set -gx` (fish), and `$env:` (PowerShell) lines.
+Apply them in the shell or CI step before running `cargo dylint` directly.
+Nothing serializes the first driver build in that case, so let one
+`cargo dylint` run finish, building the driver, before starting others in
+parallel; later runs reuse it.
 
 ### Adding Whitaker to a project
 
@@ -202,10 +230,12 @@ libraries = [
 ]
 ```
 
-Then run the lints:
+Then run the lints through the installed bootstrap, which supplies the Clippy
+snapshot and driver directory that Dylint needs (see
+[Running the lints directly](#running-the-lints-directly)):
 
 ```sh
-cargo dylint --all
+whitaker --all
 ```
 
 ### Pinning the lint suite

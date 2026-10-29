@@ -14,7 +14,11 @@ const NO_FALLBACK: &str = "Whitaker never falls back to cloning public Clippy";
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum ClippySnapshotError {
     /// The embedded or supplied snapshot manifest is malformed.
-    #[error("invalid Clippy snapshot manifest: {reason}")]
+    #[error(
+        "invalid Clippy snapshot manifest: {reason}; reinstall whitaker-installer, \
+         whose release embeds a valid manifest. {NO_FALLBACK}",
+        NO_FALLBACK = NO_FALLBACK
+    )]
     Manifest {
         /// Why the manifest was rejected.
         reason: String,
@@ -64,8 +68,10 @@ pub enum ClippySnapshotError {
 
     /// The release does not publish the snapshot for this commit.
     #[error(
-        "Clippy snapshot asset {url} was not found; this Whitaker release \
-         does not publish the snapshot it pins. {NO_FALLBACK}",
+        "Clippy snapshot asset {url} was not found, so this Whitaker release \
+         does not publish the snapshot it pins; install a release that does, or \
+         pass --clippy-snapshot-bundle with the bundle and its .sha256 sidecar. \
+         {NO_FALLBACK}",
         NO_FALLBACK = NO_FALLBACK
     )]
     AssetNotFound {
@@ -127,7 +133,11 @@ pub enum ClippySnapshotError {
     },
 
     /// A Git subprocess failed.
-    #[error("git {operation} failed for the Clippy snapshot: {message}")]
+    #[error(
+        "git {operation} failed for the Clippy snapshot: {message}; check that git \
+         is installed and on PATH, then re-run whitaker-installer. {NO_FALLBACK}",
+        NO_FALLBACK = NO_FALLBACK
+    )]
     Git {
         /// The Git operation.
         operation: &'static str,
@@ -136,7 +146,11 @@ pub enum ClippySnapshotError {
     },
 
     /// A filesystem operation on the snapshot root failed.
-    #[error("Clippy snapshot I/O failed for {path}: {reason}")]
+    #[error(
+        "Clippy snapshot I/O failed for {path}: {reason}; check the permissions \
+         and free space there, then re-run whitaker-installer. {NO_FALLBACK}",
+        NO_FALLBACK = NO_FALLBACK
+    )]
     Io {
         /// The path being accessed.
         path: String,
@@ -164,3 +178,7 @@ impl ClippySnapshotError {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "error_tests.rs"]
+mod tests;
