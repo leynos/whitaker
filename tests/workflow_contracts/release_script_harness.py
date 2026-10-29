@@ -17,13 +17,19 @@ and the `git ls-remote` canary succeeds only while that file lacks a
 from __future__ import annotations
 
 import dataclasses as dc
+import hashlib
 import os
-import subprocess
+import shutil
+import subprocess  # noqa: S404  # The scripts under test run as subprocesses.
 import typing as typ
 from pathlib import Path
 
 REPOSITORY_ROOT: typ.Final[Path] = Path(__file__).resolve().parents[2]
 SCRIPTS: typ.Final[Path] = REPOSITORY_ROOT / "scripts"
+
+#: The `bash` that runs the scripts, resolved once so no call uses a partial
+#: executable path.
+BASH: typ.Final[str] = shutil.which("bash") or "/bin/bash"
 COMMIT: typ.Final[str] = "0123456789abcdef0123456789abcdef01234567"
 ASSET: typ.Final[str] = f"whitaker-clippy-snapshot-{COMMIT}.bundle"
 
@@ -235,9 +241,7 @@ def make_sandbox(root: Path) -> Sandbox:
     release.mkdir()
     bundle = release / ASSET
     bundle.write_bytes(bytes(range(256)) * 32)
-    digest = subprocess.run(
-        ["sha256sum", str(bundle)], capture_output=True, text=True, check=True
-    ).stdout.split()[0]
+    digest = hashlib.sha256(bundle.read_bytes()).hexdigest()
     (release / f"{ASSET}.sha256").write_text(f"{digest}  {ASSET}\n", encoding="utf-8")
     hosts = root / "hosts"
     hosts.write_text("127.0.0.1 localhost\n", encoding="utf-8")
@@ -287,8 +291,8 @@ def run_script(
         FAKE_DATA_ROOT=str(sandbox.data_root),
         **toggles,
     )
-    return subprocess.run(  # noqa: S603 - the script path is repository-owned
-        ["bash", str(SCRIPTS / script), str(sandbox.work)],
+    return subprocess.run(  # noqa: S603  # Fixed argument list of repository-owned paths.
+        [BASH, str(SCRIPTS / script), str(sandbox.work)],
         cwd=sandbox.repository,
         env=env,
         capture_output=True,

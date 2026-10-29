@@ -149,8 +149,9 @@ def test_the_powershell_script_mirrors_the_bash_scenarios() -> None:
     """The Windows script checks every property the bash script does."""
     bash = _scenarios(SCRIPTS / "verify-installed-bootstrap.sh")
     powershell = _scenarios(SCRIPTS / "verify-installed-bootstrap.ps1")
-    assert all(bash.values()), bash
-    assert powershell == bash
+    assert all(bash.values()), f"the bash script lacks a scenario: {bash}"
+    assert powershell == bash, f"PowerShell {powershell} differs from bash {bash}"
     # Relocation is Linux-only by design: the PowerShell script says so.
     ps_text = (SCRIPTS / "verify-installed-bootstrap.ps1").read_text(encoding="utf-8")
-    assert "Data" in ps_text and "relocation" in ps_text
+    assert "Data" in ps_text, "the PowerShell script names the data root"
+    assert "relocation" in ps_text, "the PowerShell script explains the relocation gap"

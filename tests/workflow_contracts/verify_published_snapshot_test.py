@@ -10,12 +10,19 @@ Run via ``make test-workflow-contracts``.
 from __future__ import annotations
 
 import hashlib
-import subprocess
+import subprocess  # noqa: S404  # The script under test runs as a subprocess.
 import typing as typ
 from pathlib import Path
 
 import pytest
-from release_script_harness import ASSET, SCRIPTS, Sandbox, make_sandbox, run_script
+from release_script_harness import (
+    ASSET,
+    BASH,
+    SCRIPTS,
+    Sandbox,
+    make_sandbox,
+    run_script,
+)
 
 SCRIPT: typ.Final[str] = "verify-published-snapshot.sh"
 
@@ -100,12 +107,12 @@ def test_a_bundle_too_short_to_tamper_is_reported(sandbox: Sandbox) -> None:
 
 def test_a_missing_work_directory_argument_is_a_usage_error(sandbox: Sandbox) -> None:
     """The script refuses to run without its WORK_DIR argument."""
-    result = subprocess.run(
-        ["bash", str(SCRIPTS / SCRIPT)],
+    result = subprocess.run(  # noqa: S603  # Fixed argument list of repository-owned paths.
+        [BASH, str(SCRIPTS / SCRIPT)],
         capture_output=True,
         text=True,
         cwd=sandbox.repository,
         check=False,
     )
-    assert result.returncode == 2
-    assert "usage" in result.stderr
+    assert result.returncode == 2, result.stderr
+    assert "usage" in result.stderr, result.stderr

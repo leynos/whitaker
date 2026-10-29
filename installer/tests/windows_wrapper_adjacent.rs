@@ -1,11 +1,10 @@
 //! The generated Windows wrapper prefers the installer beside it over `PATH`.
 //!
 //! A `.cmd` stub cannot stand in for the adjacent `whitaker-installer.exe`, so
-//! this copies the real installer binary beside `whitaker.ps1` and puts a
-//! stub on `PATH`. The stub exits with status 7 and prints `stub:` lines; the
-//! real installer does neither, so their absence proves the adjacent
-//! executable ran. The real installer is only ever invoked as
-//! `run -- <args>`, which reads the bootstrap and never installs anything.
+//! this copies a real executable from this package beside `whitaker.ps1` and
+//! puts a stub on `PATH`. The stub exits with status 7 and prints `stub:`
+//! lines; the adjacent executable answers with its own usage error, so the
+//! test sees which one ran.
 #![cfg(windows)]
 
 use std::path::{Path, PathBuf};
@@ -13,9 +12,6 @@ use std::process::{Command, Output};
 use tempfile::TempDir;
 use whitaker_installer::dirs::BaseDirs;
 use whitaker_installer::wrapper::generate_wrapper_scripts;
-
-/// Status the `PATH` stub exits with; the real installer must not produce it.
-const STUB_EXIT_CODE: i32 = 7;
 
 /// A `PATH` stub that echoes each argument as `stub:<arg>` and exits with 7.
 const STUB_INSTALLER_CMD: &str = concat!(
@@ -74,6 +70,12 @@ fn run_powershell(script: &Path, args: &[&str], stub_dir: &Path) -> Output {
         .expect("run wrapper")
 }
 
+/// The adjacent stand-in is the package's `whitaker-clippy-snapshot`
+/// binary: invoked as `whitaker-installer run -- ...`, clap refuses the
+/// unknown `run` subcommand with a fixed message and status 2, whatever the
+/// host has installed. Neither the PATH stub, the wrapper's own lookup
+/// failure (status 127), nor the real installer (which has `run`) can produce
+/// that, so it is positive evidence the adjacent executable ran.
 #[test]
 fn windows_whitaker_prefers_the_adjacent_installer_over_path() {
     let bin = TempDir::new().expect("create bin dir");
@@ -83,10 +85,10 @@ fn windows_whitaker_prefers_the_adjacent_installer_over_path() {
     };
     let result = generate_wrapper_scripts(&dirs).expect("generate wrapper scripts");
     std::fs::copy(
-        env!("CARGO_BIN_EXE_whitaker-installer"),
+        env!("CARGO_BIN_EXE_whitaker-clippy-snapshot"),
         bin.path().join("whitaker-installer.exe"),
     )
-    .expect("copy the real installer beside the wrapper");
+    .expect("copy a stand-in installer beside the wrapper");
     std::fs::write(
         stub.path().join("whitaker-installer.cmd"),
         STUB_INSTALLER_CMD,
@@ -96,13 +98,18 @@ fn windows_whitaker_prefers_the_adjacent_installer_over_path() {
     let output = run_powershell(&result.whitaker_path, &["--version"], stub.path());
 
     let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         !stdout.lines().any(|line| line.starts_with("stub:")),
         "the PATH stub ran instead of the adjacent installer: {stdout}"
     );
-    assert_ne!(
+    assert_eq!(
         output.status.code(),
-        Some(STUB_EXIT_CODE),
-        "the PATH stub's exit status leaked through"
+        Some(2),
+        "the adjacent stand-in's clap usage status is kept; stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("unrecognized subcommand 'run'"),
+        "the adjacent stand-in received `run`: {stderr}"
     );
 }
