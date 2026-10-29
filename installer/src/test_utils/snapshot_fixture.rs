@@ -84,6 +84,24 @@ impl SnapshotFixture {
         self.manifest.commit.as_str()
     }
 
+    /// The fixture's bundle, with its `.sha256` sidecar beside it.
+    #[must_use]
+    pub fn bundle(&self) -> &Utf8Path {
+        &self.bundle
+    }
+
+    /// The fixture's manifest file, for the test manifest override.
+    #[must_use]
+    pub fn manifest_path(&self) -> &Utf8Path {
+        &self.manifest_path
+    }
+
+    /// The fixture's source repository, from which a producer build clones.
+    #[must_use]
+    pub fn source(&self) -> Utf8PathBuf {
+        self.manifest_path.with_file_name("work")
+    }
+
     /// Point a debug installer at this fixture instead of the published snapshot.
     pub fn configure(&self, command: &mut Command) {
         command

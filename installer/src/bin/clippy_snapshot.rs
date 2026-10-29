@@ -9,8 +9,8 @@ use camino::Utf8PathBuf;
 use clap::{Parser, Subcommand};
 use std::io::Write;
 use whitaker_installer::clippy_snapshot::{
-    BuildRequest, BundleSource, ClippySnapshotError, build_bundle, embedded_manifest,
-    generation_path, provision, verify_repository,
+    BuildRequest, BundleSource, ClippySnapshotError, ClippySnapshotManifest, build_bundle,
+    embedded_manifest, generation_path, provision, verify_repository,
 };
 
 /// Manage the published Clippy snapshot.
@@ -87,7 +87,7 @@ fn main() {
 
 /// Run one subcommand, returning the line it prints on success.
 fn run(command: Command) -> Result<Option<String>, ClippySnapshotError> {
-    let manifest = embedded_manifest()?;
+    let manifest = snapshot_manifest()?;
     match command {
         Command::Build {
             output_dir,
@@ -117,6 +117,25 @@ fn run(command: Command) -> Result<Option<String>, ClippySnapshotError> {
         Command::Verify { repo } => verify_repository(&repo, manifest).map(|()| None),
         Command::Path { root } => Ok(Some(generation_path(&root, manifest).to_string())),
     }
+}
+
+/// Return the manifest this binary pins.
+///
+/// Debug builds honour the installer's test manifest override, so the
+/// end-to-end tests can drive every subcommand against a small fixture
+/// snapshot; release builds always use the manifest compiled into the binary.
+fn snapshot_manifest() -> Result<&'static ClippySnapshotManifest, ClippySnapshotError> {
+    #[cfg(debug_assertions)]
+    if let Some(path) =
+        std::env::var_os(whitaker_installer::test_support::TEST_CLIPPY_SNAPSHOT_MANIFEST_ENV)
+    {
+        let contents = std::fs::read_to_string(&path)
+            .map_err(|error| ClippySnapshotError::io(path.to_string_lossy(), &error))?;
+        let manifest = whitaker_installer::clippy_snapshot::parse_manifest(&contents)?;
+        // One manifest per process, read once, like the embedded one.
+        return Ok(Box::leak(Box::new(manifest)));
+    }
+    embedded_manifest()
 }
 
 /// View a temporary directory as UTF-8, falling back to a relative scratch path.
