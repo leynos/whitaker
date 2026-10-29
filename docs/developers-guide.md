@@ -602,7 +602,7 @@ Table: Cache ownership for the Ubicloud Linux lanes.
 | `tools-coverage-v1-`          | `~/.rustup`, `~/.cargo/bin`, `~/.local/bin`, `~/.cache/uv`, `~/.local/share/uv` | `coverage-upload` | `coverage-check`               |
 | `tools-lint-v1-`              | the same paths plus `~/.bun/install/cache` and `~/.cache/merman`                | `linux-full`      | `linux-full`                   |
 | `dylint-tools-v1-`            | `~/.cache/whitaker-dylint-tools`                                                | `linux-full`      | `linux-full`                   |
-| `clippy-mirror-v1-`           | `~/.cache/whitaker-mirrors`                                                     | `coverage-upload` | `linux-full`, `coverage-check` |
+| `clippy-snapshot-v1-`         | `~/.cache/whitaker-clippy-snapshot`                                             | `coverage-upload` | `linux-full`, `coverage-check` |
 
 No Ubicloud leg archives a compiler cache, and no `sccache-*` family may appear
 in the table. Every Ubicloud job's sccache reads and writes Ubicloud's cache
@@ -617,11 +617,12 @@ Each key carries an explicit `v1` schema generation so the whole family can be
 invalidated deliberately. Registry keys hash `rust-toolchain.toml` and
 `Cargo.lock`; tool keys spell out each pinned tool version and hash
 `rust-toolchain.toml`; the Dylint host-tools key names the `cargo-dylint` and
-`dylint-link` versions the Makefile installs; and the Clippy mirror key names
-the Dylint version whose build script performs the clone. Every key also carries
-`runner.os`, `runner.arch`, and `runner.environment`, and the compiled-tool
-keys add the Ubuntu release because a binary built on Ubuntu 24.04 must never
-be restored onto 22.04.
+`dylint-link` versions the Makefile installs; and the Clippy snapshot key hashes
+`installer/clippy-snapshot.toml`, which pins both the snapshot commit and the
+Dylint release whose selection it records. Every key also carries `runner.os`,
+`runner.arch`, and `runner.environment`, and the compiled-tool keys add the
+Ubuntu release because a binary built on Ubuntu 24.04 must never be restored
+onto 22.04.
 
 Restores run on every event. Saves are guarded by
 `github.ref == 'refs/heads/main'` and by a missed restore. A pull request
@@ -636,12 +637,12 @@ compiler cache" below explains what that means for a pull request's first push.
 only its registry families are archives, and those follow the rule above.
 
 `coverage-main.yml`'s `coverage-upload` is the writer for the coverage-lane
-keys and for the shared Clippy mirror. `ci.yml`'s `linux-full` runs on push to
-`main` as well as on pull requests, and on that push it publishes the lint-lane
-keys. A merge that `GITHUB_TOKEN` performs, as the Dependabot automerge does,
-starts no push-event workflow, so after one, or after changing a lint-lane tool
-pin, the pinned toolchain, or a cache generation, dispatch both writers against
-`main`:
+keys and for the shared Clippy snapshot. `ci.yml`'s `linux-full` runs on push to
+`main` as well as on pull requests, and on that push it publishes the
+lint-lane keys. A merge that `GITHUB_TOKEN` performs, as the Dependabot
+automerge does, starts no push-event workflow, so after one, or after changing
+a lint-lane tool pin, the pinned toolchain, or a cache generation, dispatch
+both writers against `main`:
 
 ```sh
 gh workflow run ci.yml --repo leynos/whitaker --ref main
@@ -657,40 +658,56 @@ point for a populated cache. That hazard belonged to the Namespace cache
 volume, which appeared as an existing directory whether or not it held a
 generation.
 
-The Clippy source fetch needs a single cache owner. `dylint_driver` 6.0.1's
-build script reads `clippy_utils/src/sym.rs` at the revision matching the
-pinned dated nightly and obtains it by running a full
-`git clone https://github.com/rust-lang/rust-clippy` into a temporary
-directory. The build script performs that clone for any dated nightly on or
-after 2025-05-06, and Whitaker pins `nightly-2026-05-28`, so every cold build of
-`dylint_driver` repeats an unowned multi-hundred-megabyte network clone. That
-clone is intermittent rather than merely occasionally broken: run 33692863541
-hit `fatal: could not read Username for 'https://github.com'` on nextest tries
-1 and 2 and passed only on try 3, while run 33704041072 failed all three tries
-and failed the job. `scripts/provision-clippy-mirror.sh` gives that fetch one
-owner. It maintains a bare mirror and rewrites the upstream URL to it with
-`url.<mirror>.insteadOf`, so the build script's clone becomes a local,
-hard-linking copy. The mirror sits below the cached directory rather than at
-the cache path itself, so discarding a stale generation can never attempt to
-remove the directory the cache action manages. A cold clone is authenticated
-with the job token when one is present and retried with backoff; a refresh
-failure on a warm mirror is only a warning because the revision the build
-script needs is historical and is already present. All three Linux lanes now
-restore the mirror and provision it before any Cargo invocation.
+Dylint's driver build reads Clippy history, and Whitaker owns that history.
+`dylint_driver`'s build script reads `clippy_utils/src/sym.rs` at the revision
+Dylint selects for the pinned nightly, and Dylint selects it by walking
+first-parent history from the `HEAD` of the repository named by
+`DYLINT_CLIPPY_REPO`. Left unset, Dylint clones public Clippy for every cold
+driver build: an unowned network fetch that failed intermittently (runs
+33692863541 and 33704041072) and then permanently, when Clippy renamed `master`
+to `main` (#526).
+[ADR 009](adr-009-verified-clippy-snapshot-for-dylint-driver-bootstrap.md)
+records the decision; this section is the producer's side of it.
 
-The script owns a deletion, so it proves what it is deleting. It resolves both
-its argument and its trusted cache root (`CLIPPY_MIRROR_ROOT`, defaulting to
-`~/.cache/whitaker-mirrors`) to physical paths and refuses anything that is not
-the one `rust-clippy.git` inside that root. A suffix match such as
-`/tmp/project/rust-clippy.git` no longer authorizes a removal.
+`installer/clippy-snapshot.toml` pins the snapshot. `make clippy-snapshot`
+installs the verified generation at `$(CLIPPY_SNAPSHOT_ROOT)/<commit>` (default
+`~/.cache/whitaker-clippy-snapshot`), reusing a generation that verifies and
+otherwise installing `CLIPPY_SNAPSHOT_BUNDLE` or the published release asset.
+The Makefile exports `DYLINT_CLIPPY_REPO` at that path and `DYLINT_DRIVER_PATH`
+at `$(DYLINT_DRIVER_ROOT)/dylint-<version>/clippy-<commit>` for every recipe,
+and `test` and `publish-check` depend on `clippy-snapshot`, so a missing
+snapshot fails the gate before any build. Nothing falls back to public Clippy.
 
-It also classifies the restored path rather than reducing it to one boolean. A
-generation is reused only when git reports it bare and its `remote.origin.url`
-is the pinned upstream because a non-bare directory or a mirror of some other
-repository would leave `dylint_driver` without the Clippy revision it needs. A
-non-bare or wrongly pointed generation is rebuilt. An unreadable path, a
-non-directory, or an unparsable verdict from git is an environment fault: the
-script aborts and never repairs it by deleting the path.
+`make clippy-snapshot-bundle` is the only target that reads public Clippy. It
+clones `main` (anonymously first, then with `GITHUB_TOKEN` passed through scoped
+`GIT_CONFIG_*` variables), proves the pinned commit is on `main`'s
+first-parent history, writes `whitaker-clippy-snapshot-<commit>.bundle` and its
+`.sha256` sidecar into `CLIPPY_SNAPSHOT_DIST`, and installs the result into a
+scratch root through the consumer's own verifier before reporting success. Pass
+`CLIPPY_SNAPSHOT_SOURCE` to bundle from a local mirror instead. Before the
+first release that publishes the snapshot, provision a local checkout with:
+
+```sh
+make clippy-snapshot-bundle CLIPPY_SNAPSHOT_DIST="$PWD/dist"
+make clippy-snapshot \
+  CLIPPY_SNAPSHOT_BUNDLE="$PWD/dist/whitaker-clippy-snapshot-$(awk -F '"' '/^commit = / {print $2}' installer/clippy-snapshot.toml).bundle"
+```
+
+In CI, the three Linux suite lanes restore `~/.cache/whitaker-clippy-snapshot`
+before `Setup Rust`. After it, "Provision the Clippy snapshot" runs
+`make clippy-snapshot-bundle` only on a cache miss, installs with
+`make clippy-snapshot`, and appends `make dylint-env` to `GITHUB_ENV`.
+`coverage-upload` is the snapshot cache's only writer. The Windows lane cannot
+restore a Linux archive, so it bundles and verifies on every run.
+
+`linux-full` then denies `github.com` in `/etc/hosts`, proves the denial with a
+`git ls-remote` canary, and runs `make dylint-smoke` with the lane's sccache
+`RUSTC_WRAPPER` in force. That target empties the keyed driver directory, runs
+the ignored `no_std_fs_operations` `integration_exclusion` tests serially
+(cold), runs them again (warm), and fails unless the driver file is
+byte-identical across the two runs. The tests run real `cargo dylint` against
+fixtures and assert named `no_std_fs_operations` diagnostics. A warm driver
+also stops later parallel UI tests from racing to build it.
 
 The pinned Dylint host tools follow the same rule.
 `scripts/install-dylint-tools.sh` once ran `cargo install --locked` for

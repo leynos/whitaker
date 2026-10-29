@@ -221,6 +221,16 @@ def _run_publish_check(
     isolated_home.mkdir()
     env["HOME"] = str(isolated_home)
     env.pop("WHITAKER", None)
+    # publish-check requires the pinned Clippy snapshot, and the stub Cargo's
+    # `run` installs nothing, so pre-create the generation under the isolated
+    # home's default root and let the Makefile derive both Dylint paths.
+    for name in ("DYLINT_CLIPPY_REPO", "DYLINT_DRIVER_PATH"):
+        env.pop(name, None)
+    manifest = (REPO_ROOT / "installer/clippy-snapshot.toml").read_text(encoding="utf-8")
+    commit = next(
+        line.split('"')[1] for line in manifest.splitlines() if line.startswith("commit = ")
+    )
+    (isolated_home / ".cache/whitaker-clippy-snapshot" / commit).mkdir(parents=True)
     return subprocess.run(
         [
             "make",

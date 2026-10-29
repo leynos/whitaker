@@ -64,7 +64,7 @@ UBICLOUD_JOBS: dict[str, str] = {
 #: Every job that runs this repository's own gates: the suite, the lints, the
 #: coverage run. They share a shape that a build job does not have, so the
 #: rules about that shape are keyed here rather than on every Ubicloud job.
-#: Nextest concurrency, the Clippy source mirror and the tools cache are all
+#: Nextest concurrency, the Clippy snapshot and the tools cache are all
 #: rules about running the gates, and `build-lints` runs none of them; it
 #: cross-compiles the lint crates for five targets and packages them.
 SUITE_JOBS: dict[str, str] = {
@@ -85,7 +85,7 @@ CACHE_KEY_WRITERS: dict[str, str] = {
     "tools-coverage-v1-": "coverage-upload",
     "tools-lint-v1-": "linux-full",
     "dylint-tools-v1-": "linux-full",
-    "clippy-mirror-v1-": "coverage-upload",
+    "clippy-snapshot-v1-": "coverage-upload",
     # No `sccache-*` family is listed, and none may be. `setup-rust` points
     # every Ubicloud lane's sccache at Ubicloud's cache proxy, so no lane
     # archives `~/.cache/sccache` and there is no directory for a family to

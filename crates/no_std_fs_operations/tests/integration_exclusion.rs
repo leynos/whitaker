@@ -82,10 +82,7 @@ fn run_lint_crate_build(workspace_root: &Path) -> anyhow::Result<Vec<u8>> {
 
 /// Copies the built library to a toolchain-qualified filename for Dylint discovery.
 fn stage_toolchain_qualified_library(cdylib_path: &Path, release_dir: &Path) -> anyhow::Result<()> {
-    let toolchain = env::var("RUSTUP_TOOLCHAIN")
-        .ok()
-        .or_else(|| option_env!("RUSTUP_TOOLCHAIN").map(String::from))
-        .unwrap_or_else(|| "unknown-toolchain".to_owned());
+    let toolchain = pinned_toolchain();
 
     let file_name = cdylib_path
         .file_name()
@@ -161,6 +158,17 @@ struct CargoDylintResult {
     stderr: String,
 }
 
+/// Returns the toolchain the lint library is built with.
+///
+/// `cargo dylint` is told the same toolchain explicitly, so the fixture
+/// directory's own toolchain resolution cannot pick a different nightly.
+fn pinned_toolchain() -> String {
+    env::var("RUSTUP_TOOLCHAIN")
+        .ok()
+        .or_else(|| option_env!("RUSTUP_TOOLCHAIN").map(String::from))
+        .unwrap_or_else(|| "unknown-toolchain".to_owned())
+}
+
 /// Runs `cargo dylint` on the given fixture project directory.
 fn run_cargo_dylint(fixture_dir: &Path, library_path: &Path) -> anyhow::Result<CargoDylintResult> {
     let output = Command::new("cargo")
@@ -172,6 +180,7 @@ fn run_cargo_dylint(fixture_dir: &Path, library_path: &Path) -> anyhow::Result<C
         .current_dir(fixture_dir)
         .env("DYLINT_LIBRARY_PATH", library_path)
         .env("DYLINT_RUSTFLAGS", "-D warnings")
+        .env("RUSTUP_TOOLCHAIN", pinned_toolchain())
         .output()
         .context("failed to execute cargo dylint")?;
 

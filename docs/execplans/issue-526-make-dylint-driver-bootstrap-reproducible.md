@@ -73,7 +73,11 @@ and public Clippy access is never needed or used.
   from a local mirror, self-verifies, installs in about 21 s, and both Dylint's
   own `Revs::channel_iter` and Whitaker's reproduction select `9fca3bc9` from
   it.
-- [ ] Producer provisioning in the Makefile and CI, replacing the mirror.
+- [x] (2026-10-29) Producer provisioning in the Makefile and CI, replacing the
+  mirror. `make dylint-smoke` built the driver cold (68 s) and reused it warm
+  (21 s, byte-identical driver `fa0b26c0…`) with public Clippy unreachable from
+  this host (`git ls-remote` canary exit 128). ADR 009 and the developers'
+  guide section were written alongside.
 - [ ] Installed bootstrap: `run` subcommand, locks, thin wrappers.
 - [ ] Release publication and post-publication checks.
 - [ ] Documentation, ADR, and the draft pull request.
@@ -103,6 +107,18 @@ and public Clippy access is never needed or used.
 - 2026-10-29: `git bundle verify` needs a repository even for a bundle without
   prerequisites, and `-c protocol.allow=never -c protocol.file.allow=always`
   blocks network transports while still permitting bundle and local clones.
+- 2026-10-29: The ignored `integration_exclusion` snapshot test had silently
+  broken on `main`: the test moved into an `assertions` submodule, so insta
+  looked for a new snapshot path. The stored diagnostics were byte-identical to
+  a fresh run, so the snapshot was moved rather than re-blessed.
+- 2026-10-29: `tests/workflows` has 20 failures on unmodified `HEAD` in this
+  environment (a host `rustup` shadows stubs, the `gh` stub is bypassed, and
+  some harnesses lack scripts). The candidate was compared against a `HEAD`
+  worktree baseline: no new failures, after teaching two Makefile harnesses to
+  provide the snapshot generation.
+- 2026-10-29: ADR 008 is already taken on the unmerged
+  `issue-523-adopt-ortho-config-v0-10-0-for-the-whitaker-cli` branch, so this
+  work's ADR is 009.
 - 2026-10-29: Clippy's early commits use a plain-text `rust-toolchain`
   file that Dylint's TOML parser cannot read. Dylint's walk never reaches them,
   but an eager reader does, so the reproduction stops at the first unreadable

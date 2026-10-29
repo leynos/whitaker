@@ -235,6 +235,20 @@ def _run_make(
     # are inert for the other targets.
     shutil.copy2(REPO_ROOT / "rust-toolchain.toml", workspace / "rust-toolchain.toml")
     _write_stub(scripts_directory, "install-dylint-tools.sh", "exit 0")
+    # `test` and `publish-check` require the pinned Clippy snapshot. The stub
+    # Cargo's `run` installs nothing, so pre-create the generation the
+    # manifest names under a scratch root.
+    installer_directory = workspace / "installer"
+    installer_directory.mkdir(exist_ok=True)
+    manifest = REPO_ROOT / "installer/clippy-snapshot.toml"
+    shutil.copy2(manifest, installer_directory / "clippy-snapshot.toml")
+    commit = next(
+        line.split('"')[1]
+        for line in manifest.read_text(encoding="utf-8").splitlines()
+        if line.startswith("commit = ")
+    )
+    snapshot_root = workspace / "clippy-snapshot"
+    (snapshot_root / commit).mkdir(parents=True, exist_ok=True)
 
     log = environment.stub_dir / f"{target}-{environment.locked or 'unlocked'}.log"
     process_env = os.environ | {
@@ -242,7 +256,13 @@ def _run_make(
         "PATH": _stub_path(target, environment.stub_dir),
     }
     process_env.pop("CARGO_LOCKED", None)
-    make_arguments = ["make", target, f"CARGO={environment.cargo}"]
+    make_arguments = [
+        "make",
+        target,
+        f"CARGO={environment.cargo}",
+        f"CLIPPY_SNAPSHOT_ROOT={snapshot_root}",
+        f"DYLINT_DRIVER_ROOT={workspace / 'dylint-drivers'}",
+    ]
     if environment.locked:
         make_arguments.append(f"CARGO_LOCKED={environment.locked}")
     if extra_make_args:

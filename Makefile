@@ -1,4 +1,4 @@
-.PHONY: help all clean test trybuild-contracts test-doc coverage build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke installer-msrv-check release-installer-dry-run package-lints workflow-test workflow-test-deps test-workflow-contracts test-markdown-format test-glibc-baseline test-sccache-health verus kani verus-clone-detector kani-clone-detector spelling skill-frontmatter-lint skill-manifest-validate skill-metadata-check skill-manifest-check test-skill-metadata-check
+.PHONY: help all clean test trybuild-contracts test-doc coverage build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke installer-msrv-check release-installer-dry-run package-lints workflow-test workflow-test-deps test-workflow-contracts test-markdown-format test-glibc-baseline test-sccache-health verus kani verus-clone-detector kani-clone-detector spelling skill-frontmatter-lint skill-manifest-validate skill-metadata-check skill-manifest-check test-skill-metadata-check clippy-snapshot clippy-snapshot-bundle dylint-env dylint-smoke
 
 # Make chooses the recipe shell itself, so the `shell: bash` default in the
 # workflows does not reach recipes; the `/bin/sh` it would otherwise use
@@ -163,6 +163,34 @@ DYLINT_TOOLS_DIR ?= $(HOME)/.cache/whitaker-dylint-tools
 # toolchain participates in their installation.
 DYLINT_TOOLS_TOOLCHAIN ?= stable
 WHITAKER_SCRIPT ?= $(HOME)/.local/bin/whitaker
+# The Clippy history Dylint's driver build reads. `installer/clippy-snapshot.toml`
+# pins it; `make clippy-snapshot` installs the verified generation, and every
+# target that can build a driver reads it through `DYLINT_CLIPPY_REPO`, so no
+# local build ever clones public Clippy. The driver directory is keyed by the
+# Dylint release and snapshot commit, so a re-pin never reuses a driver built
+# from other inputs.
+CLIPPY_SNAPSHOT_MANIFEST := installer/clippy-snapshot.toml
+CLIPPY_SNAPSHOT_COMMIT := $(shell awk -F '"' '/^commit = / {print $$2}' $(CLIPPY_SNAPSHOT_MANIFEST))
+CLIPPY_SNAPSHOT_ROOT ?= $(HOME)/.cache/whitaker-clippy-snapshot
+# A local `whitaker-clippy-snapshot-<commit>.bundle`, with its `.sha256` sidecar
+# beside it, to install instead of the published asset.
+CLIPPY_SNAPSHOT_BUNDLE ?=
+CLIPPY_SNAPSHOT_DIST ?= $(CURDIR)/dist
+DYLINT_DRIVER_ROOT ?= $(HOME)/.cache/whitaker-dylint-drivers
+# Dylint requires absolute native paths; under Git Bash on Windows `$(HOME)`
+# is `/c/Users/...`, which Windows does not treat as absolute.
+ifeq ($(OS),Windows_NT)
+native_path = $(shell cygpath -m '$(1)')
+else
+native_path = $(1)
+endif
+DYLINT_CLIPPY_REPO ?= $(call native_path,$(CLIPPY_SNAPSHOT_ROOT))/$(CLIPPY_SNAPSHOT_COMMIT)
+DYLINT_DRIVER_PATH ?= $(call native_path,$(DYLINT_DRIVER_ROOT))/dylint-$(CARGO_DYLINT_VERSION)/clippy-$(CLIPPY_SNAPSHOT_COMMIT)
+export DYLINT_CLIPPY_REPO DYLINT_DRIVER_PATH
+# The snapshot tool builds in its own target directory: the test lane's
+# `RUSTFLAGS` differ, and sharing `target/` would rebuild one for the other.
+CLIPPY_SNAPSHOT_TOOL = CARGO_TARGET_DIR="$(CURDIR)/target/clippy-snapshot-tool" \
+	$(CARGO) run $(CARGO_LOCKED) --quiet -p whitaker-installer --bin whitaker-clippy-snapshot --
 
 # Markdown sources checked by `check-fmt`. Keep generated output and local tool
 # caches out of this list; the checker itself never writes to these sources.
@@ -181,7 +209,7 @@ clean: ## Remove build artefacts
 	$(CARGO) clean
 	rm -rf .uv-cache .uv-tools
 
-test: ## Run tests with warnings treated as errors
+test: clippy-snapshot ## Run tests with warnings treated as errors
 	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v cargo-nextest >/dev/null || { echo "Install cargo-nextest (cargo install cargo-nextest)"; exit 1; }
 	@# Prefer dynamic linking during local `cargo test` runs to avoid rustc_private
 	@# linkage pitfalls when building cdylib-based lints; `publish-check` omits
@@ -479,7 +507,7 @@ release-installer-dry-run: ## Build and package the host-platform installer arch
 # The Rust suite is executed once per pull request, by the coverage lane.
 # This target therefore builds and validates the packages without re-running
 # it; see "One gate per executed test set" in the developers' guide.
-publish-check: ## Build and validate packages before publishing
+publish-check: clippy-snapshot ## Build and validate packages before publishing
 	set -eu; \
 	export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; \
 	PINNED_TOOLCHAIN=$$(awk -F '\"' '/^channel/ {print $$2}' rust-toolchain.toml); \
@@ -531,6 +559,56 @@ package-lints: ## Build lint crates and package as .tar.zst archives
 		--target "$$HOST_TRIPLE" \
 		--output-dir "$$DIST_DIR" \
 		--release-dir target/release
+
+clippy-snapshot: ## Install the pinned Clippy snapshot that Dylint driver builds read
+	@# Reuses a generation that verifies; otherwise installs CLIPPY_SNAPSHOT_BUNDLE
+	@# or the published asset. There is no fallback to public Clippy.
+	@set -eu; \
+	generation=$$($(CLIPPY_SNAPSHOT_TOOL) install --root "$(call native_path,$(CLIPPY_SNAPSHOT_ROOT))" \
+		$(if $(CLIPPY_SNAPSHOT_BUNDLE),--bundle "$(call native_path,$(CLIPPY_SNAPSHOT_BUNDLE))")); \
+	if [ ! -d "$(DYLINT_CLIPPY_REPO)" ]; then \
+		echo "DYLINT_CLIPPY_REPO=$(DYLINT_CLIPPY_REPO) is not the installed snapshot ($$generation)" >&2; \
+		exit 1; \
+	fi; \
+	mkdir -p "$(DYLINT_DRIVER_PATH)"; \
+	echo "Clippy snapshot: $$generation"
+
+clippy-snapshot-bundle: ## Build the Clippy snapshot bundle from upstream into CLIPPY_SNAPSHOT_DIST
+	@# The only local target that reads public Clippy. Pass
+	@# CLIPPY_SNAPSHOT_SOURCE to bundle from a local mirror instead.
+	$(CLIPPY_SNAPSHOT_TOOL) build --output-dir "$(CLIPPY_SNAPSHOT_DIST)" \
+		$(if $(CLIPPY_SNAPSHOT_SOURCE),--source "$(CLIPPY_SNAPSHOT_SOURCE)")
+
+dylint-env: ## Print the Dylint bootstrap variables as NAME=value lines
+	@printf 'DYLINT_CLIPPY_REPO=%s\nDYLINT_DRIVER_PATH=%s\n' "$(DYLINT_CLIPPY_REPO)" "$(DYLINT_DRIVER_PATH)"
+
+dylint-smoke: clippy-snapshot ## Build the Dylint driver cold, then reuse it warm, against real lints
+	@# Serial and ignored-tests-only: the integration tests run `cargo dylint`
+	@# on fixtures with the real `no_std_fs_operations` library and assert its
+	@# named diagnostics. Running this before `make test` gives the parallel UI
+	@# tests a warm driver.
+	@set -eu; \
+	mkdir -p "$(DYLINT_TOOLS_DIR)/bin"; \
+	export PATH="$(DYLINT_TOOLS_DIR)/bin:$$PATH"; \
+	scripts/install-dylint-tools.sh "$(DYLINT_TOOLS_DIR)" "$(CARGO_DYLINT_VERSION)" "$(DYLINT_LINK_VERSION)" "$(CARGO)" "$(DYLINT_TOOLS_TOOLCHAIN)"; \
+	rm -rf -- "$(DYLINT_DRIVER_PATH)"; \
+	mkdir -p "$(DYLINT_DRIVER_PATH)"; \
+	smoke() { \
+		RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) test $(CARGO_LOCKED) -p no_std_fs_operations \
+			--test integration_exclusion -- --ignored --test-threads=1; \
+	}; \
+	digest() { \
+		driver=$$(find "$(DYLINT_DRIVER_PATH)" -type f -name dylint-driver | head -n 1); \
+		[ -n "$$driver" ] || { echo "no Dylint driver was built under $(DYLINT_DRIVER_PATH)" >&2; exit 1; }; \
+		sha256sum "$$driver"; \
+	}; \
+	echo "Cold run: empty driver directory $(DYLINT_DRIVER_PATH)"; \
+	smoke; \
+	cold=$$(digest); \
+	echo "Warm run: reusing $$cold"; \
+	smoke; \
+	[ "$$(digest)" = "$$cold" ] || { echo "the warm run rebuilt the Dylint driver" >&2; exit 1; }; \
+	echo "Dylint driver built once and reused: $$cold"
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?##' $(MAKEFILE_LIST) | \

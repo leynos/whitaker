@@ -236,16 +236,63 @@ def test_dylint_host_tool_key_matches_the_makefile_pins() -> None:
     )
 
 
-def test_clippy_mirror_is_owned_and_provisioned_after_its_restore() -> None:
-    """The mirror removes an unowned multi-hundred-megabyte upstream clone."""
+def test_clippy_snapshot_is_restored_then_provisioned_after_setup_rust() -> None:
+    """The snapshot is the only Clippy source a gate lane may read.
+
+    The restore comes before the first expensive step, like every restore.
+    Provisioning needs a Rust toolchain, because it runs the installer's own
+    verifier, so it follows `Setup Rust`; it exports `DYLINT_CLIPPY_REPO`
+    and `DYLINT_DRIVER_PATH` for every later step.
+    """
     for job_name in SUITE_JOBS:
         job = load_job(job_name)
         names = step_names(job)
-        mirror = steps_by_name(job)["Restore the Clippy source mirror"]
-        assert "clippy-mirror-v1-dylint6.0.1" in str(mirror["with"]["key"])
-        assert names.index("Restore the Clippy source mirror") < names.index(
-            "Provision the Clippy source mirror"
-        ), f"{job_name} must restore the mirror before provisioning it"
+        steps = steps_by_name(job)
+        restore = steps["Restore the Clippy snapshot"]
+        assert str(restore["with"]["key"]) == (
+            "clippy-snapshot-v1-${{ hashFiles('installer/clippy-snapshot.toml') }}"
+        ), f"{job_name} must key the snapshot by its manifest"
+        assert restore["with"]["path"].strip() == "~/.cache/whitaker-clippy-snapshot"
+        assert names.index("Setup Rust") < names.index(
+            "Provision the Clippy snapshot"
+        ), f"{job_name} must provision the snapshot after Setup Rust"
+        provision = str(steps["Provision the Clippy snapshot"]["run"])
+        assert "make clippy-snapshot " in provision
+        assert 'make --no-print-directory dylint-env >> "$GITHUB_ENV"' in provision
+
+
+def test_no_lane_redirects_public_clippy() -> None:
+    """The mirror's `insteadOf` rewrite is gone and nothing replaces it."""
+    for job_name in [*SUITE_JOBS, "windows-compat"]:
+        for step in load_job(job_name).get("steps") or []:
+            run = str(step.get("run", ""))
+            assert "insteadOf" not in run, f"{job_name}: {step.get('name')}"
+            assert "provision-clippy-mirror" not in run, f"{job_name}: {step.get('name')}"
+
+
+def test_windows_lane_provisions_the_snapshot_without_a_cache() -> None:
+    """Windows cannot restore a Linux archive, so it builds and verifies."""
+    job = load_job("windows-compat")
+    names = step_names(job)
+    assert names.index("Setup Rust") < names.index("Provision the Clippy snapshot")
+    assert names.index("Provision the Clippy snapshot") < names.index("Test")
+    provision = steps_by_name(job)["Provision the Clippy snapshot"]
+    assert provision["env"]["CLIPPY_SNAPSHOT_HIT"] == "false"
+
+
+def test_linux_full_proves_the_driver_bootstrap_with_github_denied() -> None:
+    """The smoke step denies github.com, checks a canary, and runs cold+warm."""
+    job = load_job("linux-full")
+    names = step_names(job)
+    smoke_name = "Prove the Dylint driver bootstrap without public Clippy"
+    assert names.index("Provision the Clippy snapshot") < names.index(smoke_name)
+    assert names.index(smoke_name) < names.index("Lint")
+    run = str(steps_by_name(job)[smoke_name]["run"])
+    assert "0.0.0.0 github.com" in run
+    assert "git ls-remote https://github.com/rust-lang/rust-clippy" in run
+    assert "RUSTC_WRAPPER" in run
+    assert "make dylint-smoke" in run
+
 
 
 def test_nested_cargo_builds_share_one_absolute_target_directory() -> None:
