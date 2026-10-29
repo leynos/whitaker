@@ -154,11 +154,19 @@
   coverage](rfcs/0012-state-machine-adt-amendment.md) normatively broadens the
   RFC 0012 rule contracts and establishes mdtablefix issues 443–449 as the
   acceptance corpus.
+- [RFC 0013: minimal dynamic lint driver after CLI
+  completion](rfcs/0013-minimal-dynamic-lint-driver.md) proposes the post-CLI
+  native runner, verified compiler driver, and evidence-led reduction of the
+  `whitaker-dylint` compatibility fork.
 - [Phase 17 DOMAIN roadmap amendment](roadmap-phase-17-domain-amendment.md)
   supersedes conflicting Phase 17 state-space tasks with the expanded RFC 0012
   rule catalogue and the mdtablefix 443–449 acceptance corpus.
 
 ## Planning material
 
+- [Phase 3 minimal dynamic driver roadmap
+  supplement](roadmap-phase-3-minimal-dynamic-driver.md) adds dependency-gated
+  tasks 3.10 to 3.14 after full core CLI delivery, without replacing the #496
+  provisioning work or renumbering existing roadmap steps.
 - [docs/execplans/](execplans/) stores execution plans for branch-scoped
   implementation work and larger follow-up tasks.
