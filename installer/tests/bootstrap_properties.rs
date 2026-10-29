@@ -165,7 +165,8 @@ fn check_schedule(rounds: &[Round]) -> Result<(), TestCaseError> {
             for output in &outputs {
                 prop_assert!(!output.status.success(), "round {}: {}", index, stderr());
             }
-            is_ready = false;
+            check_recovery(&installation, round.lint_status, index)?;
+            is_ready = true;
         }
     }
     if is_ready {
@@ -176,6 +177,47 @@ fn check_schedule(rounds: &[Round]) -> Result<(), TestCaseError> {
         prop_assert_eq!(installation.builds(), before);
     }
     check_environment_and_snapshot(&installation)
+}
+
+/// Prove a failed build left the slot retryable, on the unchanged slot.
+///
+/// A later generated round might relocate or perturb the slot first, or
+/// there might be none, so recovery is checked here rather than left to the
+/// schedule: a successful retry builds once and keeps the child's status, and
+/// a further run is warm.
+fn check_recovery(
+    installation: &Installation,
+    lint_status: i32,
+    index: usize,
+) -> Result<(), TestCaseError> {
+    let before = installation.builds();
+    let retry = installation
+        .run_command(&["--all"])
+        .env("STUB_EXIT", lint_status.to_string())
+        .output()
+        .expect("retry after the failed build");
+    prop_assert_eq!(
+        retry.status.code(),
+        Some(lint_status),
+        "round {} retry: {}",
+        index,
+        String::from_utf8_lossy(&retry.stderr)
+    );
+    prop_assert_eq!(
+        installation.builds() - before,
+        1,
+        "round {}: the retry builds once",
+        index
+    );
+    let warm = installation.run(&["--all"]);
+    prop_assert!(warm.status.code().is_some(), "round {}: warm run", index);
+    prop_assert_eq!(
+        installation.builds() - before,
+        1,
+        "round {}: the slot is ready after the retry",
+        index
+    );
+    Ok(())
 }
 
 /// Check what every schedule must leave behind, however it went.
