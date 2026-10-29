@@ -12,12 +12,12 @@ license = "ISC"
 repository = "https://github.com/leynos/whitaker"
 homepage = "https://df12.studio/docs.html"
 documentation = "https://github.com/leynos/whitaker/tree/main/docs/users-guide.md"
-version = "0.2.10"
+version = "0.2.11"
 
 [workspace.dependencies]
-whitaker-common = { path = "common", version = "0.2.10" }
-whitaker-installer = { path = "installer", version = "0.2.10" }
-whitaker = { path = ".", version = "0.2.10" }
+whitaker-common = { path = "common", version = "0.2.11" }
+whitaker-installer = { path = "installer", version = "0.2.11" }
+whitaker = { path = ".", version = "0.2.11" }
 camino = "1.2.1"
 cap-std = { version = "4.0.2", features = ["fs_utf8"] }
 cargo_metadata = "0.23.0"
@@ -60,8 +60,8 @@ rustc_lexer = "0.1.0"
 # the parser schema. Whenever the nightly toolchain changes, bump this version
 # in lockstep to prevent AST hash drift.
 ra_ap_syntax = "=0.0.334"
-whitaker_clones_core = { path = "crates/whitaker_clones_core", version = "0.2.10" }
-whitaker_sarif = { path = "crates/whitaker_sarif", version = "0.2.10" }
+whitaker_clones_core = { path = "crates/whitaker_clones_core", version = "0.2.11" }
+whitaker_sarif = { path = "crates/whitaker_sarif", version = "0.2.11" }
 # Path-only (no `version`): the crate is `publish = false`, and Cargo strips
 # versionless dev-dependencies when packaging, so the published crates do not
 # gain an unresolvable requirement.
@@ -70,18 +70,18 @@ temp-env = "0.3.6"
 tempfile = "3.19.1"
 wait-timeout = "0.2.1"
 mockall = "0.15.0"
-clippy_utils = { path = "crates/clippy_utils", version = "0.2.10" }
-rustc_ast = { path = "crates/rustc_ast", version = "0.2.10" }
-rustc_attr_data_structures = { path = "crates/rustc_attr_data_structures", version = "0.2.10" }
-rustc_hir = { path = "crates/rustc_hir", version = "0.2.10" }
-rustc_lint = { path = "crates/rustc_lint", version = "0.2.10" }
-rustc_middle = { path = "crates/rustc_middle", version = "0.2.10" }
-rustc_session = { path = "crates/rustc_session", version = "0.2.10" }
-rustc_span = { path = "crates/rustc_span", version = "0.2.10" }
+clippy_utils = { path = "crates/clippy_utils", version = "0.2.11" }
+rustc_ast = { path = "crates/rustc_ast", version = "0.2.11" }
+rustc_attr_data_structures = { path = "crates/rustc_attr_data_structures", version = "0.2.11" }
+rustc_hir = { path = "crates/rustc_hir", version = "0.2.11" }
+rustc_lint = { path = "crates/rustc_lint", version = "0.2.11" }
+rustc_middle = { path = "crates/rustc_middle", version = "0.2.11" }
+rustc_session = { path = "crates/rustc_session", version = "0.2.11" }
+rustc_span = { path = "crates/rustc_span", version = "0.2.11" }
 
 [package]
 name = "whitaker"
-version = "0.2.10"
+version = "0.2.11"
 edition = "2024"
 
 [features]
