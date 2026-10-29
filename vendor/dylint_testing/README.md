@@ -134,4 +134,7 @@ active while recovering the example's linking flags. It also groups the five
 Whitaker's argument limit without a lint suppression. Finally, the
 `-C metadata` value that forces each example to recompile adds the current time
 to upstream's process ID, so a reused process ID cannot make Cargo skip the
-compiler invocation the parser needs.
+compiler invocation the parser needs. It also drops `-L native=` linker paths
+from the flags handed to `compiletest`, which flattens them into one
+space-delimited string: metadata-only UI tests do not need them, and on Windows
+they contain spaces (`C:\Program Files\...`).

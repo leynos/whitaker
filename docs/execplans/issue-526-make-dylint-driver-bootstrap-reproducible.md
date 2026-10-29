@@ -155,6 +155,15 @@ and public Clippy access is never needed or used.
   tolerates CRLF, and the guard requires the generation's metadata file; the
   stricter guard also exposed three Makefile test harnesses that had passed
   only because of the weak check.
+- 2026-10-29: The 6.3.0 rebase had also dropped the 6.0.1 patch's
+  `select_ui_test_flags`, which removes `-L native=` linker paths before
+  `compiletest` flattens flags into one space-delimited string. Windows example
+  UI tests then failed with "multiple input filenames provided" because
+  `C:\Program Files\...` was split at its space. CodeRabbit had flagged the
+  spaces problem; it was first dismissed as upstream-only, and Windows CI
+  showed it was a lost Whitaker patch. A function-by-function comparison of the
+  6.0.1 patch against the vendored crate found no other casualty
+  (`remove_example` was intentionally replaced by 6.3.0's metadata approach).
 - 2026-10-29: Clippy's early commits use a plain-text `rust-toolchain`
   file that Dylint's TOML parser cannot read. Dylint's walk never reaches them,
   but an eager reader does, so the reproduction stops at the first unreadable

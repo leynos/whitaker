@@ -266,24 +266,35 @@ fn linking_flags(
     target: &Target,
 ) -> Result<&'static [String]> {
     LINKING_FLAGS
-        .get_or_try_init(|| {
-            let rustc_flags = rustc_flags(metadata, package, target)?;
-
-            let mut linking_flags = Vec::new();
-
-            let mut iter = rustc_flags.into_iter();
-            while let Some(flag) = iter.next() {
-                if flag.starts_with("--edition=") {
-                    linking_flags.push(flag);
-                } else if flag == "--extern" || flag == "-L" {
-                    let arg = next(&flag, &mut iter)?;
-                    linking_flags.extend([flag, arg.trim_matches('\'').to_owned()]);
-                }
-            }
-
-            Ok(linking_flags)
-        })
+        .get_or_try_init(|| select_ui_test_flags(rustc_flags(metadata, package, target)?))
         .map(Vec::as_slice)
+}
+
+/// Retain the Cargo flags needed to compile UI tests without forwarding linker paths.
+///
+/// Whitaker patch: `compiletest` flattens its rustc flags into a
+/// space-delimited string. Native linker paths are not needed for
+/// metadata-only UI tests and can contain spaces on Windows (`C:\Program
+/// Files\...`), where flattening would split them into extra input files.
+///
+/// # Errors
+///
+/// Returns an error if a value-taking compiler flag is missing its value.
+fn select_ui_test_flags(rustc_flags: Vec<String>) -> Result<Vec<String>> {
+    let mut ui_test_flags = Vec::new();
+    let mut iter = rustc_flags.into_iter();
+    while let Some(flag) = iter.next() {
+        if flag.starts_with("--edition=") {
+            ui_test_flags.push(flag);
+        } else if flag == "--extern" || flag == "-L" {
+            let arg = next(&flag, &mut iter)?;
+            let arg = arg.trim_matches('\'').to_owned();
+            if flag != "-L" || !arg.starts_with("native=") {
+                ui_test_flags.extend([flag, arg]);
+            }
+        }
+    }
+    Ok(ui_test_flags)
 }
 
 // smoelius: We need to recover the `rustc` flags used to build a target. I can see four options:
@@ -486,7 +497,7 @@ fn snake_case(name: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::rustc_invocation;
+    use super::{rustc_invocation, select_ui_test_flags};
     use rstest::rstest;
 
     /// Extract the rustc arguments after unwrapped and wrapped compiler
@@ -553,6 +564,34 @@ mod tests {
                 "--crate-name".to_owned(),
                 "target".to_owned(),
             ])
+        );
+    }
+
+    /// Regression: the 6.3.0 rebase dropped this filter, and Windows example
+    /// tests failed with "multiple input filenames provided" because a
+    /// `native=C:\Program Files\...` path was split at its space.
+    #[test]
+    fn selects_ui_flags_without_native_linker_paths() {
+        let flags = select_ui_test_flags(vec![
+            "--edition=2024".to_owned(),
+            "--extern".to_owned(),
+            "dependency=target/debug/deps/libdependency.rlib".to_owned(),
+            "-L".to_owned(),
+            "dependency=target/debug/deps".to_owned(),
+            "-L".to_owned(),
+            r"native=C:\Program Files\Microsoft Visual Studio\VC\Tools\MSVC\lib\x64".to_owned(),
+        ])
+        .expect("complete Cargo flags should be selected");
+
+        assert_eq!(
+            flags,
+            [
+                "--edition=2024",
+                "--extern",
+                "dependency=target/debug/deps/libdependency.rlib",
+                "-L",
+                "dependency=target/debug/deps",
+            ]
         );
     }
 }
