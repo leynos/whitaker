@@ -29,6 +29,7 @@ fn main_ref() -> String {
 /// [`ClippySnapshotError::InsufficientHistory`] when Dylint's walk could not
 /// reach the pinned revision, and [`ClippySnapshotError::Invalid`] for any
 /// other failed check.
+#[tracing::instrument(name = "clippy_snapshot.verify", skip_all, fields(commit = %manifest.commit))]
 pub fn verify_repository(
     path: &Utf8Path,
     manifest: &ClippySnapshotManifest,

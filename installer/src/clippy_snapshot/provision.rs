@@ -44,6 +44,7 @@ pub fn provision(
 /// # Errors
 ///
 /// As for [`provision`].
+#[tracing::instrument(name = "clippy_snapshot.provision", skip_all, fields(commit = %manifest.commit))]
 pub fn provision_with(
     source: &BundleSource,
     manifest: &ClippySnapshotManifest,

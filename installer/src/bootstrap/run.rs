@@ -13,7 +13,7 @@ use super::metadata::BootstrapMetadata;
 use super::probe::is_present_dir;
 use super::snapshot_check::verify_snapshot;
 use super::telemetry::{
-    BuildOutcome, DriverPath, LockMode, OUTCOME_OK, failure_label, record_driver_build,
+    BuildOutcome, DriverPath, LockMode, child_label, failure_label, record_driver_build,
     record_lock_failure, record_lock_wait, record_run,
 };
 use crate::clippy_snapshot::check_installed;
@@ -60,6 +60,7 @@ pub fn run(dirs: &dyn BaseDirs, args: &[OsString]) -> Result<RunOutcome, Bootstr
 /// # Errors
 ///
 /// As for [`run`].
+#[tracing::instrument(name = "bootstrap.run", skip_all)]
 pub fn run_with_cargo(
     dirs: &dyn BaseDirs,
     cargo: &OsStr,
@@ -173,7 +174,9 @@ fn finish(
     started: Instant,
 ) -> Result<RunOutcome, BootstrapError> {
     let elapsed = started.elapsed();
-    let outcome = result.as_ref().map_or_else(failure_label, |_| OUTCOME_OK);
+    let outcome = result
+        .as_ref()
+        .map_or_else(failure_label, |run| child_label(run.code));
     record_run(path, outcome, elapsed);
     let elapsed_ms = u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX);
     if result.is_ok() {
@@ -365,6 +368,7 @@ fn record_readiness(slot: &DriverSlot) -> BuildOutcome {
 ///
 /// Only the three Dylint variables are overwritten; everything else,
 /// including `RUSTC_WRAPPER` and `RUSTFLAGS`, reaches the child unchanged.
+#[tracing::instrument(name = "bootstrap.child", skip_all)]
 fn spawn(
     prepared: &PreparedRun,
     cargo: &OsStr,

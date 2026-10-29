@@ -99,6 +99,7 @@ impl<'env> SnapshotGit<'env> {
     /// # Errors
     ///
     /// Returns [`ClippySnapshotError::Git`] when Git cannot start or times out.
+    #[tracing::instrument(name = "clippy_snapshot.git", skip_all, fields(operation = operation))]
     pub(crate) fn output(
         self,
         operation: &'static str,

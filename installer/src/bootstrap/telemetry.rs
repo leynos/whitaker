@@ -16,8 +16,21 @@ pub(crate) const DRIVER_BUILD_SECONDS: &str =
     "whitaker_installer.bootstrap.driver_build.duration_seconds";
 pub(crate) const DRIVER_BUILD_TOTAL: &str = "whitaker_installer.bootstrap.driver_build.total";
 
-/// The outcome label of a run that succeeded, whatever the child's status.
+/// The outcome label of a run whose `cargo dylint` exited successfully.
 pub(crate) const OUTCOME_OK: &str = "ok";
+
+/// The outcome label of a run whose `cargo dylint` exited non-zero, usually
+/// because lints fired: the bootstrap worked, the child reported failure.
+pub(crate) const OUTCOME_CHILD_NONZERO: &str = "child_nonzero";
+
+/// Classify a finished child by its exit code.
+pub(crate) const fn child_label(code: i32) -> &'static str {
+    if code == 0 {
+        OUTCOME_OK
+    } else {
+        OUTCOME_CHILD_NONZERO
+    }
+}
 
 /// How a run found the driver.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

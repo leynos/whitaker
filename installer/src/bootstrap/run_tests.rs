@@ -319,3 +319,6 @@ fn a_contended_cold_run_records_its_lock_wait() {
         "{recorded:#?}"
     );
 }
+
+#[path = "run_telemetry_tests.rs"]
+mod telemetry;
