@@ -128,9 +128,23 @@ for path in "${assets[@]}"; do
             # first upload stands.
             if is_published "${name}"; then
                 echo "Keeping the published ${name}."
-            else
-                new_assets+=("${path}")
+                continue
             fi
+            # A bundle and its sidecar are one pair. A sidecar computed from a
+            # rebuilt bundle must never be attached to a different published
+            # bundle; only a sidecar derived from the published bytes (staged
+            # without a bundle) may join it.
+            case "${name}" in
+                *.bundle.sha256)
+                    if is_published "${name%.sha256}" && is_wanted "${name%.sha256}"; then
+                        echo "::error::${name} belongs to a rebuilt bundle, but" \
+                            "${name%.sha256} is already published; refusing to" \
+                            "pair them." >&2
+                        exit 1
+                    fi
+                    ;;
+            esac
+            new_assets+=("${path}")
             ;;
         *)
             if is_published "${name}"; then

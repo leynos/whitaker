@@ -16,12 +16,12 @@ use camino::{Utf8Path, Utf8PathBuf};
 use fs2::FileExt;
 use std::fs::File;
 
-/// The driver executable Dylint writes inside its toolchain directory.
-const DRIVER_FILE: &str = if cfg!(windows) {
-    "dylint-driver.exe"
-} else {
-    "dylint-driver"
-};
+/// The driver Dylint persists inside its toolchain directory.
+///
+/// Extensionless on every platform: Dylint 6.3.0's `driver_builder::get`
+/// persists the built binary to `driver_dir.join("dylint-driver")`, Windows
+/// included; only the intermediate build output carries `.exe`.
+const DRIVER_FILE: &str = "dylint-driver";
 
 /// One toolchain's driver within an identity-keyed slot.
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -269,3 +269,29 @@ fn assert_rejected(published: &Published, error: &ClippySnapshotError, expected:
         "a failed install must not leave a generation"
     );
 }
+
+/// Regression: a relative bundle path was resolved by Git from a scratch
+/// repository, so `--clippy-snapshot-bundle ./dist/x.bundle` was rejected.
+#[cfg(unix)]
+#[rstest]
+fn installs_a_bundle_named_by_a_relative_path(published: Published) {
+    let scratch = super::test_fixtures::build_tree_scratch();
+    let local = super::test_fixtures::utf8(scratch.path()).join("snapshot.bundle");
+    std::fs::copy(&published.bundle, &local).expect("copy bundle");
+    std::fs::copy(
+        format!("{}.sha256", published.bundle),
+        format!("{local}.sha256"),
+    )
+    .expect("copy sidecar");
+    let relative = super::test_fixtures::relative_to_cwd(&local);
+    assert!(
+        !relative.as_str().starts_with("../../../../../.."),
+        "{relative} must not climb to the root"
+    );
+
+    let artefact = BundleArtefact::from_sidecar(&relative, &published.manifest).expect("sidecar");
+    let generation = install_bundle(&artefact, &published.manifest, &published.root)
+        .expect("a relative bundle path installs");
+
+    assert_eq!(generation, published.generation());
+}

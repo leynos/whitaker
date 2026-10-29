@@ -9,7 +9,7 @@
 
 use super::error::ClippySnapshotError;
 use super::git::SnapshotGit;
-use super::install::{BundleArtefact, install_bundle};
+use super::install::{BundleArtefact, absolute, install_bundle};
 use super::manifest::{ClippySnapshotManifest, SNAPSHOT_BRANCH};
 use crate::artefact::packaging::compute_sha256;
 use camino::{Utf8Path, Utf8PathBuf};
@@ -57,6 +57,15 @@ pub struct BuiltBundle {
 /// not on `main`'s first-parent history, and any error [`install_bundle`]
 /// raises when the result fails the consumer's checks.
 pub fn build_bundle(request: &BuildRequest<'_>) -> Result<BuiltBundle, ClippySnapshotError> {
+    // Git runs inside the mirror below, so the caller's relative directories
+    // must be fixed against the caller's directory first.
+    let work_dir = absolute(request.work_dir)?;
+    let output_dir = absolute(request.output_dir)?;
+    let request = &BuildRequest {
+        work_dir: &work_dir,
+        output_dir: &output_dir,
+        ..request.clone()
+    };
     let mirror = request.work_dir.join("upstream.git");
     clone_upstream(request, &mirror)?;
     pin_main(&mirror, request.manifest)?;

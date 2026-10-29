@@ -43,14 +43,16 @@ def _step(job: dict[str, typ.Any], name: str) -> dict[str, typ.Any]:
 
 
 @pytest.mark.parametrize("workflow", WORKFLOWS)
-def test_the_snapshot_is_built_only_when_unpublished(workflow: str) -> None:
-    """A published bundle is never rebuilt, so it is never replaced."""
+def test_the_snapshot_pair_is_staged_by_the_pair_aware_script(workflow: str) -> None:
+    """One script decides build, repair, or refusal for the bundle and sidecar."""
     job = _jobs(workflow)["clippy-snapshot"]
-    probe = _step(job, "Check whether the pinned snapshot is published")
-    assert "gh release view" in str(probe["run"])
-    for name in ("Build the Clippy snapshot bundle", "Upload the Clippy snapshot bundle"):
-        assert _step(job, name)["if"] == "steps.published.outputs.published != 'true'"
-    assert "make clippy-snapshot-bundle" in str(_step(job, "Build the Clippy snapshot bundle")["run"])
+    prepare = _step(job, "Prepare the Clippy snapshot assets")
+    assert prepare["id"] == "prepare"
+    assert "scripts/prepare-clippy-snapshot-assets.sh" in str(prepare["run"])
+    assert "${{" not in str(prepare["run"]), "expressions must reach the shell via env"
+    upload = _step(job, "Upload the Clippy snapshot assets")
+    assert upload["if"] == "steps.prepare.outputs.state != 'published'"
+    assert upload["with"]["path"] == "dist/whitaker-clippy-snapshot-*"
 
 
 @pytest.mark.parametrize("workflow", WORKFLOWS)
@@ -60,10 +62,11 @@ def test_publication_requires_the_pinned_snapshot(workflow: str) -> None:
     assert "clippy-snapshot" in publish["needs"]
     names = _step_names(publish)
     require = "Require the pinned Clippy snapshot"
-    assert names.index("Download the Clippy snapshot bundle") < names.index(require)
+    assert names.index("Download the Clippy snapshot assets") < names.index(require)
     run = str(_step(publish, require)["run"])
     assert "sha256sum --check --strict" in run
     assert "refusing to publish" in run
+    assert "must not replace it" in run, "a rebuilt bundle never joins a published pair"
 
 
 def test_the_rolling_release_lists_the_bundle_and_keeps_its_sidecar() -> None:
@@ -117,9 +120,8 @@ def test_the_versioned_snapshot_job_uses_the_tag_and_no_template_shell() -> None
     """The tag's manifest decides the snapshot, and its name never becomes shell."""
     job = _jobs("release.yml")["clippy-snapshot"]
     assert _step(job, "Checkout")["with"]["ref"] == "${{ env.RELEASE_TAG }}"
-    probe = _step(job, "Check whether the pinned snapshot is published")
-    assert "${{" not in str(probe["run"]), "expressions must reach the shell via env"
-    assert probe["env"]["SNAPSHOT_RELEASE"] == "${{ env.RELEASE_TAG }}"
+    prepare = _step(job, "Prepare the Clippy snapshot assets")
+    assert prepare["env"]["SNAPSHOT_RELEASE"] == "${{ env.RELEASE_TAG }}"
 
 
 def test_a_versioned_release_requires_the_snapshot_on_rolling() -> None:

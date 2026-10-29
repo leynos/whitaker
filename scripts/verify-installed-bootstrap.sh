@@ -87,7 +87,7 @@ expect_diagnostic() {
 
 driver_digest() {
     local driver_dir=$1 driver
-    driver=$(find "${driver_dir}" -type f \( -name dylint-driver -o -name dylint-driver.exe \) | head -n 1)
+    driver=$(find "${driver_dir}" -type f -name dylint-driver | head -n 1)
     [[ -n "${driver}" ]] || fail "no driver was built under ${driver_dir}"
     if command -v sha256sum >/dev/null; then
         sha256sum "${driver}" | cut -d ' ' -f 1

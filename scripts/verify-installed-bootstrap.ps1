@@ -86,7 +86,8 @@ function Assert-Diagnostic([System.Diagnostics.Process] $process, [string] $log)
 }
 
 function Get-DriverDigest([string] $driverDir) {
-    $driver = Get-ChildItem -Recurse -File -Path $driverDir -Filter 'dylint-driver.exe' |
+    # Dylint persists the driver without an extension, on Windows too.
+    $driver = Get-ChildItem -Recurse -File -Path $driverDir -Filter 'dylint-driver' |
         Select-Object -First 1
     if (-not $driver) { Fail "no driver was built under $driverDir" }
     return (Get-FileHash -Algorithm SHA256 $driver.FullName).Hash

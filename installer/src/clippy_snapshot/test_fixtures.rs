@@ -175,3 +175,39 @@ pub(super) fn git(dir: &Utf8Path, args: &[&str]) -> String {
 pub(super) fn utf8(path: &std::path::Path) -> Utf8PathBuf {
     Utf8PathBuf::from_path_buf(path.to_path_buf()).expect("temporary paths are UTF-8")
 }
+
+/// Express absolute `path` relative to the current directory.
+///
+/// The path climbs only to the deepest directory shared with the current
+/// directory, so it resolves correctly from here and wrongly from anywhere
+/// else, which is what the relative-input regressions need. A path that
+/// climbed to `/` would resolve identically from every directory.
+#[cfg(unix)]
+pub(super) fn relative_to_cwd(path: &Utf8Path) -> Utf8PathBuf {
+    let cwd = utf8(&std::env::current_dir().expect("current directory"));
+    let shared = cwd
+        .components()
+        .zip(path.components())
+        .take_while(|(left, right)| left == right)
+        .count();
+    let mut relative = Utf8PathBuf::new();
+    for _ in shared..cwd.components().count() {
+        relative.push("..");
+    }
+    for component in path.components().skip(shared) {
+        relative.push(component.as_str());
+    }
+    relative
+}
+
+/// A scratch directory inside the build tree, which shares an ancestor with
+/// the current directory, unlike the system temporary directory.
+#[cfg(unix)]
+pub(super) fn build_tree_scratch() -> TempDir {
+    let exe = std::env::current_exe().expect("test executable path");
+    let parent = exe.parent().expect("test executable has a parent");
+    tempfile::Builder::new()
+        .prefix("clippy-snapshot-relative-")
+        .tempdir_in(parent)
+        .expect("create scratch directory in the build tree")
+}

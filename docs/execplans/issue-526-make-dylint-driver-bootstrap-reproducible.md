@@ -4,7 +4,7 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
 and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: IN PROGRESS
+Status: COMPLETE (pending release-time verification)
 
 Issue: [leynos/whitaker#526](https://github.com/leynos/whitaker/issues/526)
 
@@ -91,7 +91,11 @@ and public Clippy access is never needed or used.
   and contract-tested. Shellcheck and actionlint pass; the rolling-publish
   tests pass once Lody's `BASH_ENV` (which defines its own `gh`) is unset. They
   cannot run for real until a release exists.
-- [ ] Documentation, ADR, and the draft pull request.
+- [x] (2026-10-29) Documentation, ADR 009, and draft pull request #528.
+- [x] (2026-10-29) PR #528 hosted CI repaired to green on every lane, and the
+  CodeRabbit ExecPlan assessment's three defects fixed: Dylint's extensionless
+  Windows driver filename, relative bundle and output paths, and incomplete
+  published snapshot pairs.
 
 ## Surprises & discoveries
 
@@ -316,4 +320,24 @@ provisioning must export an absolute, already-populated clone path before any
 
 ## Outcomes & retrospective
 
-To be completed when the work lands.
+Whitaker now owns the Dylint bootstrap end to end. Dylint 6.3.0 builds its
+driver from a verified, commit-named Clippy bundle; no producer, CI, or
+consumer path reads public Clippy, and every failure says so. The driver is
+built on first use in an identity-keyed directory, with cold construction
+serialized by `whitaker-installer run`.
+
+Verified: local gates; hosted CI on Linux and Windows, including a
+GitHub-denied cold/warm smoke on a hosted runner; and an end-to-end
+installed-bootstrap run on a development host. Not yet verified: the
+release-publication and post-publication jobs and the Linux/macOS/Windows
+`verify-binstall` matrix, which first run on the next release.
+
+Lessons:
+
+- Rebasing a vendored patch can lose behaviour silently. Two pieces of the
+  6.0.1 `dylint_testing` patch went missing, and each surfaced only in a
+  different CI lane. Compare the patch function by function after a rebase.
+- A guard that accepts "a directory exists" hides misconfiguration; check for
+  the artefact the next step needs.
+- Hosted runners differ from development hosts in quoting, resolver caching,
+  nextest profiles, and driver filenames; each produced one CI round.

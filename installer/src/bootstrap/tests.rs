@@ -99,12 +99,24 @@ fn rejects_metadata_from_another_schema() {
 fn write_driver(slot: &Utf8Path, toolchain_dir: &str, contents: &[u8]) {
     let dir = slot.join(toolchain_dir);
     std::fs::create_dir_all(&dir).expect("create toolchain dir");
-    let name = if cfg!(windows) {
-        "dylint-driver.exe"
-    } else {
-        "dylint-driver"
-    };
-    std::fs::write(dir.join(name), contents).expect("write driver");
+    // Dylint persists the driver without an extension on every platform.
+    std::fs::write(dir.join("dylint-driver"), contents).expect("write driver");
+}
+
+/// Regression: the slot once looked for `dylint-driver.exe` on Windows, where
+/// Dylint writes `dylint-driver`, so a Windows driver was never marked ready.
+#[test]
+fn an_extension_suffixed_driver_is_not_dylints() {
+    let (_dir, root) = temp_root();
+    let slot = DriverSlot::new(&root, "nightly-2026-05-28");
+    let dir = root.join("nightly-2026-05-28-x86_64-pc-windows-msvc");
+    std::fs::create_dir_all(&dir).expect("create toolchain dir");
+    std::fs::write(dir.join("dylint-driver.exe"), b"driver").expect("write driver");
+
+    assert!(
+        !slot.has_driver(),
+        "Dylint never persists `dylint-driver.exe`"
+    );
 }
 
 #[test]

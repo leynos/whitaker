@@ -47,6 +47,9 @@ impl BundleArtefact {
                 asset: manifest.bundle_asset_name(),
             });
         }
+        // Git later runs from other directories, so a caller's relative path
+        // must be fixed against the caller's directory now.
+        let bundle = absolute(bundle)?;
         let sidecar = Utf8PathBuf::from(format!("{bundle}.sha256"));
         let sidecar_error = |reason: String| ClippySnapshotError::Sidecar {
             path: sidecar.to_string(),
@@ -60,10 +63,7 @@ impl BundleArtefact {
             .ok_or_else(|| sidecar_error("it is empty".to_owned()))?;
         let sha256 =
             Sha256Digest::try_from(token).map_err(|error| sidecar_error(error.to_string()))?;
-        Ok(Self {
-            bundle: bundle.to_owned(),
-            sha256,
-        })
+        Ok(Self { bundle, sha256 })
     }
 }
 
@@ -83,7 +83,10 @@ pub fn install_bundle(
     root: &Utf8Path,
 ) -> Result<Utf8PathBuf, ClippySnapshotError> {
     verify_bundle_digest(artefact)?;
-    verify_bundle_heads(&artefact.bundle, manifest)?;
+    // `git bundle verify` runs inside a scratch repository and the clone in
+    // the snapshot root, so a relative bundle path would resolve wrongly.
+    let bundle = absolute(&artefact.bundle)?;
+    verify_bundle_heads(&bundle, manifest)?;
     std::fs::create_dir_all(root).map_err(|error| ClippySnapshotError::io(root, &error))?;
     let root = absolute(root)?;
     let _lock = lock_root(&root)?;
@@ -96,7 +99,7 @@ pub fn install_bundle(
         .tempdir_in(&root)
         .map_err(|error| ClippySnapshotError::io(&root, &error))?;
     let staged = utf8(staging.path())?.join("snapshot.git");
-    clone_bundle(&artefact.bundle, &staged)?;
+    clone_bundle(&bundle, &staged)?;
     verify_repository(&staged, manifest)?;
     GenerationMetadata::for_manifest(manifest, artefact.sha256.as_str()).write(&staged)?;
     std::fs::rename(&staged, &generation)
@@ -235,7 +238,7 @@ fn lock_root(root: &Utf8Path) -> Result<std::fs::File, ClippySnapshotError> {
 }
 
 /// Resolve `path` against the current directory, as `DYLINT_CLIPPY_REPO` needs.
-fn absolute(path: &Utf8Path) -> Result<Utf8PathBuf, ClippySnapshotError> {
+pub(crate) fn absolute(path: &Utf8Path) -> Result<Utf8PathBuf, ClippySnapshotError> {
     let resolved =
         std::path::absolute(path).map_err(|error| ClippySnapshotError::io(path, &error))?;
     Ok(utf8(&resolved)?.to_owned())

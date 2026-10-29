@@ -151,10 +151,16 @@ workflows publish it alongside the other assets:
 - **Naming.** `whitaker-clippy-snapshot-<commit>.bundle` and a
   `whitaker-clippy-snapshot-<commit>.bundle.sha256` sidecar in `sha256sum`
   format. The commit is the pinned Clippy `main` commit.
-- **One build per run, at most.** Each workflow's `clippy-snapshot` job checks
-  the target release first and builds with `make clippy-snapshot-bundle` only
-  when the bundle or its sidecar is missing. The build installs the bundle
-  through the consumer's verifier before uploading it.
+- **One integrity pair.** Each workflow's `clippy-snapshot` job runs
+  `scripts/prepare-clippy-snapshot-assets.sh`, which treats the bundle and its
+  sidecar as one pair. It does nothing when both are published, and builds both
+  with `make clippy-snapshot-bundle` when neither is. When only the bundle is
+  published (an interrupted publication), it derives the sidecar from those
+  published bytes, verifies them fully, and stages only the sidecar. When only
+  the sidecar is published, it refuses and names the `gh release delete-asset`
+  command that clears the orphan. The publish step and
+  `publish-rolling-release.sh` both refuse to pair a rebuilt bundle with a
+  published one.
 - **Publication order.** The bundle is uploaded with the other new assets,
   before the rolling manifests are replaced, so no manifest is published
   without the snapshot its installers need. `publish` refuses to run when the

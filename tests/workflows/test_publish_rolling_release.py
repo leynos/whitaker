@@ -436,3 +436,36 @@ def test_snapshots_for_older_pins_are_retained(
 
     assert run.returncode == 0, run.stdout
     assert not run.matching("delete-asset", older), "an older snapshot must stay"
+
+
+def test_a_rebuilt_snapshot_sidecar_is_not_paired_with_a_published_bundle(
+    publish: typ.Callable[..., PublishRun],
+) -> None:
+    """A rebuilt bundle's checksum must never sit beside a different bundle.
+
+    Bundles are content-identical but not byte-identical, so after an
+    interrupted publication left only the bundle, a rebuild's sidecar would
+    give consumers a permanent checksum mismatch.
+    """
+    run = publish(
+        local_assets=["manifest-linux.json", SNAPSHOT, f"{SNAPSHOT}.sha256"],
+        published=["manifest-linux.json", SNAPSHOT],
+    )
+
+    assert run.returncode != 0, run.stdout
+    assert "refusing to pair" in run.stdout
+    assert not run.matching("release upload", f"{SNAPSHOT}.sha256")
+
+
+def test_a_sidecar_derived_from_the_published_bundle_joins_it(
+    publish: typ.Callable[..., PublishRun],
+) -> None:
+    """A repaired sidecar, staged without a bundle, completes the pair."""
+    run = publish(
+        local_assets=["manifest-linux.json", f"{SNAPSHOT}.sha256"],
+        published=["manifest-linux.json", SNAPSHOT],
+    )
+
+    assert run.returncode == 0, run.stdout
+    assert run.matching("release upload", f"{SNAPSHOT}.sha256")
+    assert not run.matching("delete-asset", SNAPSHOT)

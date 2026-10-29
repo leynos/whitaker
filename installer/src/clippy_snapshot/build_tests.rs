@@ -115,3 +115,29 @@ fn the_retry_header_is_scoped_to_github(#[case] url: &str, #[case] is_sent: bool
     let header = String::from_utf8_lossy(&output.stdout);
     assert_eq!(header.contains("Bearer token"), is_sent, "{url}: {header}");
 }
+
+/// Regression: a relative `--output-dir` was handed to Git running inside the
+/// mirror, so the bundle was written somewhere else or not at all.
+#[cfg(unix)]
+#[test]
+fn writes_the_bundle_into_a_relative_output_directory() {
+    use crate::clippy_snapshot::test_fixtures::{build_tree_scratch, relative_to_cwd, utf8};
+    let repo = FixtureRepo::new(&DEFAULT_HISTORY);
+    let manifest = repo.manifest(repo.tip(), &repo.commits[DEFAULT_SELECTED]);
+    let scratch = build_tree_scratch();
+    let output = utf8(scratch.path()).join("relative-dist");
+    let relative_output = relative_to_cwd(&output);
+    let relative_work = relative_to_cwd(&utf8(scratch.path()).join("w"));
+
+    let built = build_bundle(&BuildRequest {
+        manifest: &manifest,
+        source: repo.work.as_str(),
+        work_dir: &relative_work,
+        output_dir: &relative_output,
+        token: None,
+    })
+    .expect("the producer build succeeds with relative directories");
+
+    assert!(output.join(manifest.bundle_asset_name()).is_file());
+    assert!(built.artefact.bundle.is_absolute());
+}
