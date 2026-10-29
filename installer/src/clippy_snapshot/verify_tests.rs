@@ -128,3 +128,24 @@ fn rejects_a_work_tree() {
         "{error}"
     );
 }
+
+/// Verification is a query whether it passes or fails after reaching Git:
+/// it records no metrics. The Git adapter's own debug events describe the
+/// subprocesses it runs, which is the command boundary, and stay.
+#[rstest]
+#[case::passes(Damage::None, true)]
+#[case::fails_in_fsck(Damage::CorruptObject, false)]
+fn verification_that_reaches_git_records_no_metrics(
+    #[case] damage: Damage,
+    #[case] is_valid: bool,
+) {
+    let (_repo, bare, manifest) = damaged(damage);
+    let recorder = metrics_util::debugging::DebuggingRecorder::new();
+    let snapshotter = recorder.snapshotter();
+
+    let result = metrics::with_local_recorder(&recorder, || verify_repository(&bare, &manifest));
+
+    assert_eq!(result.is_ok(), is_valid, "{result:?}");
+    let recorded = snapshotter.snapshot().into_vec();
+    assert!(recorded.is_empty(), "a query recorded {recorded:#?}");
+}
