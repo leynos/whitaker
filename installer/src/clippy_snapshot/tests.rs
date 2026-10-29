@@ -295,3 +295,28 @@ fn installs_a_bundle_named_by_a_relative_path(published: Published) {
 
     assert_eq!(generation, published.generation());
 }
+
+/// Regression: `Path::exists` once read an uninspectable generation or
+/// alternates file as absent, so provisioning downloaded instead of failing
+/// and verification accepted a repository it could not examine.
+#[rstest]
+#[case::absent("missing", Some(false))]
+#[case::present("", Some(true))]
+#[case::uninspectable("nul\0byte", None)]
+fn presence_distinguishes_absence_from_inspection_failure(
+    #[case] name: &str,
+    #[case] expected: Option<bool>,
+) {
+    let dir = tempfile::TempDir::new().expect("create temp dir");
+    let root = Utf8Path::from_path(dir.path()).expect("UTF-8 temp path");
+
+    let result = super::install::is_present(&root.join(name));
+
+    match expected {
+        Some(is_there) => assert_eq!(result.expect("inspect"), is_there),
+        None => assert!(
+            matches!(result, Err(ClippySnapshotError::Io { .. })),
+            "{result:?}"
+        ),
+    }
+}

@@ -98,11 +98,17 @@ fn execute(
         let _lock = timed_lock(LockMode::Shared, || slot.lock_shared())?;
         return run_warm(prepared, cargo, args, DriverPath::Warm);
     }
-    let _lock = timed_lock(LockMode::Exclusive, || slot.lock_exclusive())?;
-    if slot.is_ready()? {
-        return run_warm(prepared, cargo, args, DriverPath::WarmAfterWait);
+    {
+        let _exclusive = timed_lock(LockMode::Exclusive, || slot.lock_exclusive())?;
+        if !slot.is_ready()? {
+            return run_cold(prepared, cargo, args);
+        }
     }
-    run_cold(prepared, cargo, args)
+    // Another process built the driver while this one waited. Readiness never
+    // reverts, so trade the exclusive lock for a shared one rather than make
+    // every run that queued behind the build wait for the others in turn.
+    let _lock = timed_lock(LockMode::Shared, || slot.lock_shared())?;
+    run_warm(prepared, cargo, args, DriverPath::WarmAfterWait)
 }
 
 /// Take a driver lock, recording how long it took to acquire.

@@ -40,13 +40,13 @@ fn the_plan_names_an_absent_snapshot_as_to_be_installed() {
 #[test]
 fn the_plan_reports_a_snapshot_it_cannot_inspect() {
     let temp = TempDir::new().expect("create temp dir");
-    let bootstrap = temp.path().join("whitaker-bootstrap");
-    std::fs::create_dir_all(&bootstrap).expect("create bootstrap dir");
-    // A file where the generations directory belongs.
-    std::fs::write(bootstrap.join("clippy"), b"not a directory").expect("write file");
+    // A NUL byte makes every platform refuse the path with `InvalidInput`.
+    // A file standing in for a directory would not do: Windows reports a
+    // path through a file as `NotFound`, which is genuine absence.
+    let dirs = TempDirs(temp.path().join("uninspectable\0root"));
     let mut stderr = Vec::new();
 
-    let error = report_bootstrap_plan(&TempDirs(temp.path().to_path_buf()), &mut stderr)
+    let error = report_bootstrap_plan(&dirs, &mut stderr)
         .expect_err("an uninspectable generation is an error");
 
     assert!(

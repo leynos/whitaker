@@ -7,7 +7,7 @@
 
 use super::download::download_bundle;
 use super::error::ClippySnapshotError;
-use super::install::{BundleArtefact, install_bundle, reuse_generation};
+use super::install::{BundleArtefact, install_bundle, is_present, reuse_generation};
 use super::manifest::ClippySnapshotManifest;
 use super::telemetry::{ProvisionSource, record_provision};
 use crate::dependency_binaries::{DependencyArchiveDownloader, RepositoryArchiveDownloader};
@@ -56,7 +56,8 @@ pub fn provision_with(
         reason: "the path is not valid UTF-8".to_owned(),
     })?;
     let generation = super::generation_path(&root, manifest);
-    let (origin, result) = if generation.exists() {
+    // An uninspectable generation is an error, not a reason to download.
+    let (origin, result) = if is_present(&generation)? {
         tracing::debug!(commit = %manifest.commit, "reusing the installed Clippy snapshot");
         (
             ProvisionSource::Existing,

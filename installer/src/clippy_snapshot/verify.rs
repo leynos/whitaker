@@ -8,6 +8,7 @@
 use super::error::ClippySnapshotError;
 use super::generation::GenerationMetadata;
 use super::git::SnapshotGit;
+use super::install::is_present;
 use super::manifest::{ClippySnapshotManifest, SNAPSHOT_BRANCH};
 use super::selection::{channel_at, select_revision, toolchain_changes};
 use camino::Utf8Path;
@@ -142,7 +143,7 @@ fn check_self_contained(git: SnapshotGit<'_>, path: &Utf8Path) -> Result<(), Cli
     if shallow != "false" {
         return Err(ClippySnapshotError::invalid(path, "its history is shallow"));
     }
-    if path.join("objects/info/alternates").exists() {
+    if is_present(&path.join("objects/info/alternates"))? {
         return Err(ClippySnapshotError::invalid(
             path,
             "it borrows objects through objects/info/alternates",

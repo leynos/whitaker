@@ -91,7 +91,7 @@ pub fn install_bundle(
     let root = absolute(root)?;
     let _lock = lock_root(&root)?;
     let generation = root.join(manifest.commit.as_str());
-    if generation.exists() {
+    if is_present(&generation)? {
         return reuse_generation(&generation, manifest);
     }
     let staging = tempfile::Builder::new()
@@ -235,6 +235,20 @@ fn lock_root(root: &Utf8Path) -> Result<std::fs::File, ClippySnapshotError> {
     file.lock_exclusive()
         .map_err(|error| ClippySnapshotError::io(&path, &error))?;
     Ok(file)
+}
+
+/// Return whether anything exists at `path`.
+///
+/// Unlike `Path::exists`, an inspection failure such as a permission fault is
+/// returned rather than read as absence, so a generation or an alternates file
+/// that cannot be examined is never mistaken for one that is not there.
+///
+/// # Errors
+///
+/// Returns [`ClippySnapshotError::Io`] when `path` cannot be inspected.
+pub(crate) fn is_present(path: &Utf8Path) -> Result<bool, ClippySnapshotError> {
+    path.try_exists()
+        .map_err(|error| ClippySnapshotError::io(path, &error))
 }
 
 /// Resolve `path` against the current directory, as `DYLINT_CLIPPY_REPO` needs.
