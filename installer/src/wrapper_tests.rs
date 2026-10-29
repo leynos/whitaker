@@ -306,3 +306,39 @@ fn windows_ls_pattern_uses_regex_whitespace_classes() {
     );
     assert!(script.contains(&format!("$suite = \"{SUITE_CRATE}\"")));
 }
+
+/// Both lookup branches only choose `$installer`, and one shared line then
+/// forwards the arguments and status. The PATH-branch tests therefore cover
+/// forwarding for the adjacent branch too, which
+/// `windows_wrapper_adjacent` proves is selected.
+#[test]
+fn windows_wrapper_branches_share_one_forwarding_line() {
+    let script = windows_whitaker_script();
+    let invocations: Vec<_> = script
+        .lines()
+        .filter(|line| line.trim_start().starts_with('&'))
+        .collect();
+
+    assert_eq!(invocations, ["& $installer run -- @args"]);
+    let (lookup, rest) = script
+        .split_once("& $installer run -- @args")
+        .expect("the forwarding line follows the lookup");
+    assert_eq!(
+        rest.trim(),
+        "exit $LASTEXITCODE",
+        "the status is the installer's"
+    );
+    let assignments: Vec<_> = lookup
+        .lines()
+        .filter(|line| line.contains("$installer ="))
+        .map(str::trim)
+        .collect();
+    assert_eq!(
+        assignments,
+        [
+            "$installer = Join-Path $PSScriptRoot 'whitaker-installer.exe'",
+            "$installer = $command.Source",
+        ],
+        "each branch only chooses the installer"
+    );
+}

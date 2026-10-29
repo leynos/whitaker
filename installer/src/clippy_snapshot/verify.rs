@@ -11,7 +11,6 @@ use super::git::SnapshotGit;
 use super::manifest::{ClippySnapshotManifest, SNAPSHOT_BRANCH};
 use super::probe::{is_present, is_present_dir};
 use super::selection::{channel_at, select_revision, toolchain_changes};
-use super::telemetry::{Operation, timed};
 use camino::Utf8Path;
 
 /// The only ref a snapshot may carry.
@@ -34,13 +33,13 @@ pub fn verify_repository(
     path: &Utf8Path,
     manifest: &ClippySnapshotManifest,
 ) -> Result<(), ClippySnapshotError> {
-    timed(Operation::Verify, || {
-        let git = SnapshotGit::local();
-        check_structure(git, path, manifest.commit.as_str())?;
-        check_self_contained(git, path)?;
-        check_objects(git, path)?;
-        check_selection(git, path, manifest)
-    })
+    // A query: telemetry belongs to the commands that call it (reuse,
+    // install, and the cold bootstrap path), not here.
+    let git = SnapshotGit::local();
+    check_structure(git, path, manifest.commit.as_str())?;
+    check_self_contained(git, path)?;
+    check_objects(git, path)?;
+    check_selection(git, path, manifest)
 }
 
 /// Prove that an installed generation is still the one its metadata names.

@@ -82,3 +82,22 @@ fn an_absent_bundle_is_still_missing() {
         "{error:?}"
     );
 }
+
+/// `verify_repository` is a query: timing and metrics belong to the commands
+/// that call it, so verifying records nothing even when it fails.
+#[test]
+fn verifying_a_repository_records_no_telemetry() {
+    let recorder = metrics_util::debugging::DebuggingRecorder::new();
+    let snapshotter = recorder.snapshotter();
+    let dir = tempfile::TempDir::new().expect("create temp dir");
+    let absent = Utf8Path::from_path(dir.path())
+        .expect("UTF-8 temp path")
+        .join(COMMIT);
+
+    let result =
+        metrics::with_local_recorder(&recorder, || verify_repository(&absent, &manifest()));
+
+    assert!(result.is_err(), "nothing is installed");
+    let recorded = snapshotter.snapshot().into_vec();
+    assert!(recorded.is_empty(), "a query recorded {recorded:#?}");
+}

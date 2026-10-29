@@ -34,7 +34,7 @@ fn recorded_outcome(run: impl FnOnce()) -> String {
 #[test]
 fn a_successful_operation_records_ok() {
     let outcome = recorded_outcome(|| {
-        timed(Operation::Verify, || Ok(())).expect("succeeds");
+        timed(Operation::Install, || Ok(())).expect("succeeds");
     });
 
     assert_eq!(outcome, OUTCOME_OK);

@@ -163,8 +163,7 @@ if (-not (Test-Path -LiteralPath $installer -PathType Leaf)) {
 #[cfg(windows)]
 fn generate_windows_scripts(bin_dir: &Path) -> Result<(std::path::PathBuf, std::path::PathBuf)> {
     let whitaker_path = bin_dir.join("whitaker.ps1");
-    let whitaker_content =
-        format!("{WINDOWS_LOCATE_INSTALLER}\n& $installer run -- @args\nexit $LASTEXITCODE\n");
+    let whitaker_content = windows_whitaker_script();
 
     std::fs::write(&whitaker_path, whitaker_content)
         .map_err(|e| InstallerError::WrapperGeneration(format!("failed to write script: {e}")))?;
@@ -176,6 +175,15 @@ fn generate_windows_scripts(bin_dir: &Path) -> Result<(std::path::PathBuf, std::
         .map_err(|e| InstallerError::WrapperGeneration(format!("failed to write script: {e}")))?;
 
     Ok((whitaker_path, whitaker_ls_path))
+}
+
+/// Render `whitaker.ps1`: locate the installer, then forward every argument.
+///
+/// The two lookup branches only choose `$installer`; the one invocation line
+/// after them forwards the arguments and status for both.
+#[cfg(any(windows, test))]
+fn windows_whitaker_script() -> String {
+    format!("{WINDOWS_LOCATE_INSTALLER}\n& $installer run -- @args\nexit $LASTEXITCODE\n")
 }
 
 /// Render `whitaker-ls.ps1`, which keeps only the suite's `list` line.

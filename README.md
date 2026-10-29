@@ -26,11 +26,18 @@ libraries = [
 ]
 ```
 
-Then run:
+Install Whitaker with
+`cargo binstall whitaker-installer && whitaker-installer`, then run the lints
+through the installed bootstrap:
 
 ```sh
-cargo dylint --all
+whitaker --all
 ```
+
+`whitaker` is shorthand for `whitaker-installer run -- --all`, which supplies
+the verified Clippy snapshot and driver directory Dylint needs. Plain
+`cargo dylint --all` does not use them and would try to clone public Clippy; see
+[Running the lints directly](docs/users-guide.md#running-the-lints-directly).
 
 For version pinning, installation details, and configuration options, see the
 [User's Guide](docs/users-guide.md).

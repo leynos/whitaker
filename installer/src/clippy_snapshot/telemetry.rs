@@ -27,8 +27,6 @@ pub(crate) enum Operation {
     Download,
     /// Clone a bundle into a new generation and verify it.
     Install,
-    /// Fully verify a generation.
-    Verify,
 }
 
 impl Operation {
@@ -38,7 +36,6 @@ impl Operation {
             Self::Reuse => "reuse",
             Self::Download => "download",
             Self::Install => "install",
-            Self::Verify => "verify",
         }
     }
 }

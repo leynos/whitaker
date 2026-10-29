@@ -3922,7 +3922,7 @@ put paths, commits, toolchains, or error text in a label.
 | `whitaker_installer.bootstrap.driver_build.duration_seconds`        | histogram | `outcome`                                                                                     |
 | `whitaker_installer.bootstrap.driver_build.total`                   | counter   | `outcome`: `built`, `not_built`, `unrecorded`, `verify_failed`, `spawn_failed`                |
 | `whitaker_installer.clippy_snapshot.provision.total`                | counter   | `source`: `existing`, `release`, `local`; `outcome`: `ok`, `failed`                           |
-| `whitaker_installer.clippy_snapshot.operation.total`                | counter   | `operation`: `reuse`, `download`, `install`, `verify`; `outcome`: `ok` or a failure label     |
+| `whitaker_installer.clippy_snapshot.operation.total`                | counter   | `operation`: `reuse`, `download`, `install`; `outcome`: `ok` or a failure label               |
 | `whitaker_installer.clippy_snapshot.operation.duration_seconds`     | histogram | `operation`, `outcome`                                                                        |
 | `whitaker_installer.clippy_snapshot.clone_attempt.total`            | counter   | `outcome`: `ok`, `retry`, `exhausted`                                                         |
 | `whitaker_installer.clippy_snapshot.clone_attempt.duration_seconds` | histogram | `outcome`                                                                                     |
@@ -3939,8 +3939,10 @@ tell whether the driver is ready is recorded with `driver="unresolved"`. A long
 
 Structured `tracing` events mark the cold path, each finished or failed run and
 snapshot operation, and each failed clone attempt, with the same bounded
-`outcome` and an `elapsed_ms` field. The logs never carry the raw error, which
-reaches the user through the returned result, nor a path, URL, or token.
+`outcome` and an `elapsed_ms` field. Queries such as `verify_repository` record
+nothing themselves; the commands that call them do. The logs never carry the
+raw error, which reaches the user through the returned result, nor a path, URL,
+or token.
 
 ## Standard vs Experimental Lints
 
