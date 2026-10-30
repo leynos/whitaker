@@ -119,6 +119,18 @@ applied within its own source before the next source is merged. Keep the
 application package on Rust 1.89.0 and the Dylint workspace on its separately
 pinned nightly. The release uses OrthoConfig's default features.
 
+## Shared diagnostic localization
+
+`whitaker-common::i18n` owns shared label and message resolution, fallback
+reporting, and Fluent output normalization. Lint crates own their message keys,
+arguments, and fallback wording; use `LabelResolution` to pair the message
+context with an attribute for `safe_resolve_label`, and use
+`safe_resolve_message_set` for a primary/note/help set. These
+helpers remove Fluent's U+2068 and U+2069 isolation marks while preserving
+U+FFFD, which signals an unresolved placeable. Add lint-specific fallback text
+at the call site, and extend the common helpers only for policy reused across
+lint crates.
+
 ## Running Tests
 
 Run the test suite from the workspace root:

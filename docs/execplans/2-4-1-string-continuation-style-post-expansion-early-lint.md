@@ -228,6 +228,10 @@ Hard invariants. Violating one requires escalation, not a workaround.
 - [x] (2026-10-18) Plan approved as a whole; implementation commenced under
       the implementation skill.
 - [x] (2026-10-25) Approval status reaffirmed before resuming implementation.
+- [x] (2026-10-30) Approval status reaffirmed before rebasing onto the pull
+      request target (`harden-lint-config`) and continuing implementation.
+      The target already contains this branch's merge-base, so no replay was
+      required.
 - [x] (2026-10-18) EP-M0a: expansion-shape probe. `EV-M0-transcript` recorded;
       `SURP-012` reproduced in the identifier-control form, so `DEC-002`'s
       depth gate proceeds unchanged. One refinement recorded as `SURP-017`.

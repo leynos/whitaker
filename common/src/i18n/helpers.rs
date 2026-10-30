@@ -1,8 +1,8 @@
 //! Helper functions for localization workflows.
 //!
 //! This module provides high-level conveniences for constructing localizers,
-//! rendering locale-aware phrases, and safely resolving diagnostic message sets
-//! with fallback support.
+//! rendering locale-aware phrases, and safely resolving diagnostic messages and
+//! labels with fallback support.
 
 use std::env;
 
@@ -10,9 +10,12 @@ use log::debug;
 
 use super::{
     Arguments,
+    AttrKey,
+    BundleLookup,
     DiagnosticMessageSet,
     Localizer,
     MessageKey,
+    normalize_fluent_output,
     resolve_localizer,
     resolve_message_set,
 };
@@ -205,7 +208,78 @@ pub fn safe_resolve_message_set(
     }
 }
 
-/// Parameters supplied to [`safe_resolve_message_set`].
+/// Resolve one localized diagnostic attribute with deterministic fallback.
+///
+/// A lookup failure is logged and passed to `report_bug`; the fallback is
+/// normalized using the same Fluent output policy as a successful result.
+/// The lint supplies its own fallback wording because that text belongs to the
+/// diagnostic it owns.
+///
+/// # Examples
+///
+/// ```
+/// use whitaker_common::i18n::{
+///     Arguments,
+///     AttrKey,
+///     LabelResolution,
+///     Localizer,
+///     MessageKey,
+///     MessageResolution,
+///     noop_reporter,
+///     safe_resolve_label,
+/// };
+///
+/// let args: Arguments<'static> = Arguments::default();
+/// let resolution = MessageResolution {
+///     lint_name: "demo-lint",
+///     key: MessageKey::new("missing-key"),
+///     args: &args,
+/// };
+/// let label = safe_resolve_label(
+///     &Localizer::new(Some("en-GB")),
+///     LabelResolution {
+///         message: resolution,
+///         attribute: AttrKey::new("label"),
+///     },
+///     noop_reporter,
+///     || String::from("Fallback label"),
+/// );
+/// assert_eq!(label, "Fallback label");
+/// ```
+#[must_use]
+pub fn safe_resolve_label(
+    localizer: &Localizer,
+    resolution: LabelResolution<'_>,
+    report_bug: impl FnOnce(String),
+    fallback: impl FnOnce() -> String,
+) -> String {
+    let message = resolution.message;
+    let attribute = resolution.attribute;
+    match BundleLookup::attribute(localizer, message.key, attribute, message.args) {
+        Ok(label) => normalize_fluent_output(label),
+        Err(error) => {
+            debug!(
+                target: message.lint_name,
+                "localization error for key `{}` attribute `{}` in locale `{}`: {error}; using fallback",
+                message.key,
+                attribute,
+                localizer.locale(),
+            );
+
+            report_bug(format!(
+                "Localization error for `{}` key `{}` attribute `{}` in locale `{}`: {error}",
+                message.lint_name,
+                message.key,
+                attribute,
+                localizer.locale(),
+            ));
+
+            normalize_fluent_output(fallback())
+        }
+    }
+}
+
+/// Parameters supplied to [`safe_resolve_message_set`] and [`LabelResolution`].
 #[derive(Clone, Copy)]
 pub struct MessageResolution<'a> {
     /// Target lint identifier used for logging and error context.
@@ -214,6 +288,37 @@ pub struct MessageResolution<'a> {
     pub key: MessageKey<'a>,
     /// Fluent argument map supplied to the lookup.
     pub args: &'a Arguments<'a>,
+}
+
+/// Message context and attribute to resolve for one diagnostic label.
+///
+/// # Examples
+///
+/// ```
+/// use whitaker_common::i18n::{
+///     Arguments,
+///     AttrKey,
+///     LabelResolution,
+///     MessageKey,
+///     MessageResolution,
+/// };
+/// let args = Arguments::default();
+/// let label = LabelResolution {
+///     message: MessageResolution {
+///         lint_name: "demo",
+///         key: MessageKey::new("demo"),
+///         args: &args,
+///     },
+///     attribute: AttrKey::new("label"),
+/// };
+/// assert_eq!(label.attribute.as_ref(), "label");
+/// ```
+#[derive(Clone, Copy)]
+pub struct LabelResolution<'a> {
+    /// Lint identity, message key, and interpolation arguments.
+    pub message: MessageResolution<'a>,
+    /// Attribute containing the label text.
+    pub attribute: AttrKey<'a>,
 }
 
 #[cfg(test)]
