@@ -19,13 +19,17 @@ proof_files_for_group() {
                 "${REPO_ROOT}/verus/clone_detector_candidate_pair.rs" \
                 "${REPO_ROOT}/verus/clone_detector_ast_features.rs"
             ;;
+        string-literals)
+            printf '%s\n' "${REPO_ROOT}/verus/string_continuation_rewrite.rs"
+            ;;
         all)
             printf '%s\n' \
                 "${REPO_ROOT}/verus/decomposition_cosine_threshold.rs" \
                 "${REPO_ROOT}/verus/decomposition_vector_algebra.rs" \
                 "${REPO_ROOT}/verus/clone_detector_lsh_config.rs" \
                 "${REPO_ROOT}/verus/clone_detector_candidate_pair.rs" \
-                "${REPO_ROOT}/verus/clone_detector_ast_features.rs"
+                "${REPO_ROOT}/verus/clone_detector_ast_features.rs" \
+                "${REPO_ROOT}/verus/string_continuation_rewrite.rs"
             ;;
         *)
             printf 'unknown Verus proof group: %s\n' "$1" >&2
@@ -51,7 +55,7 @@ set_proof_files_for_group all
 
 if [ $# -gt 0 ] && [ "${1:0:1}" != "-" ]; then
     case "$1" in
-        all|decomposition|clone-detector)
+        all|decomposition|clone-detector|string-literals)
             set_proof_files_for_group "$1"
             shift
             ;;

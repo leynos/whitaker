@@ -56,6 +56,11 @@ temp-env = "0.3.6"
 tempfile = "3.19.1"
 wait-timeout = "0.2.1"
 mockall = "0.15.0"
+googletest = "0.14.3"
+pretty_assertions = "1.4.1"
+# Promoted from four identical per-crate pins (`SURP-008`); the version here
+# matches them exactly so the migration is a no-op resolution-wise.
+serial_test = "4.0.1"
 clippy_utils = { path = "crates/clippy_utils", version = "0.2.7" }
 rustc_ast = { path = "crates/rustc_ast", version = "0.2.7" }
 rustc_attr_data_structures = { path = "crates/rustc_attr_data_structures", version = "0.2.7" }
@@ -86,6 +91,7 @@ camino = { workspace = true }
 cargo_metadata = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 serde = { workspace = true }
+tempfile = { workspace = true }
 toml = { workspace = true }
 thiserror = { workspace = true }
 whitaker-common = { workspace = true }
@@ -187,3 +193,13 @@ bare_urls = "deny"
 invalid_html_tags = "deny"
 invalid_codeblock_attributes = "deny"
 unescaped_backticks = "deny"
+
+# Lint libraries are shipped as release builds (`installer/src/builder.rs`
+# passes `--release`), while UI tests build in debug. For a lint whose
+# correctness is byte-offset arithmetic, that difference decides whether an
+# underflow panics or wraps silently in the artefact users actually load.
+# `checked_*` arithmetic in the source is the primary defence; this makes the
+# fallback fail loudly too. See `Risk: release builds have overflow checks
+# off` in the 2.4.1 plan.
+[profile.release]
+overflow-checks = true

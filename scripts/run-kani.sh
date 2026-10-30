@@ -5,11 +5,13 @@
 # Usage:
 #   scripts/run-kani.sh
 #   scripts/run-kani.sh clone-detector [EXTRA_KANI_FLAGS...]
+#   scripts/run-kani.sh string-literals [EXTRA_KANI_FLAGS...]
 #   scripts/run-kani.sh decomposition [HARNESS_FILTER]
 #   scripts/run-kani.sh [HARNESS_FILTER]
 #
 # Arguments:
 #   clone-detector  Run the explicit clone-detector harness list.
+#   string-literals Run bounded continuation-scanner harnesses.
 #   decomposition   Run the existing decomposition/common harnesses.
 #   HARNESS_FILTER  When no group is given, treat the first positional
 #                   argument as a decomposition/common harness filter.
@@ -25,6 +27,7 @@ REPO_ROOT=$(CDPATH= cd -- "${SCRIPT_DIR}/.." && pwd)
 KANI_INSTALL_DIR=$("${SCRIPT_DIR}/install-kani.sh")
 CARGO_KANI_BIN="${KANI_INSTALL_DIR}/bin/cargo-kani"
 CLONE_DETECTOR_MANIFEST="${REPO_ROOT}/crates/whitaker_clones_core/Cargo.toml"
+STRING_LITERAL_MANIFEST="${REPO_ROOT}/crates/whitaker_string_literals/Cargo.toml"
 
 # kani-compiler is dynamically linked against the toolchain's libLLVM.
 # On macOS use DYLD_LIBRARY_PATH, on Linux use LD_LIBRARY_PATH.
@@ -71,6 +74,16 @@ run_clone_detector_harnesses() {
     done
 }
 
+run_string_literal_harnesses() {
+    for harness in verify_scanner_matches_bounded_parity_reference; do
+        "${CARGO_KANI_BIN}" kani \
+            --manifest-path "${STRING_LITERAL_MANIFEST}" \
+            --default-unwind 9 \
+            --harness "${harness}" \
+            "$@"
+    done
+}
+
 run_decomposition_harnesses() {
     cd "${REPO_ROOT}/common"
     if [ $# -gt 0 ]; then
@@ -83,6 +96,7 @@ run_decomposition_harnesses() {
 if [ $# -eq 0 ]; then
     run_decomposition_harnesses
     run_clone_detector_harnesses
+    run_string_literal_harnesses
     exit 0
 fi
 
@@ -94,6 +108,10 @@ case "$1" in
     clone-detector)
         shift
         run_clone_detector_harnesses "$@"
+        ;;
+    string-literals)
+        shift
+        run_string_literal_harnesses "$@"
         ;;
     *)
         run_decomposition_harnesses "$@"

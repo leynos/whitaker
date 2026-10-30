@@ -19,6 +19,7 @@ use std::{
 use dylint_testing::ui::Test;
 use harness_lock::ExampleHarnessLock;
 use rstest::rstest;
+use whitaker::testing::ui::stage_example;
 use whitaker_common::test_support::{run_test_runner, with_env_var};
 
 // Internal test-only hook mirrored in the lint driver. It asks
@@ -95,9 +96,11 @@ impl ExampleHarness {
         let directory = "examples";
         let lock_path = self.lock.path().display();
         whitaker::testing::ui::run_with_runner(crate_name, directory, |runner_crate, _| {
+            let staged = stage_example(runner_crate, example).map_err(|error| error.to_string())?;
             run_test_runner(example, || {
-                let mut test = Test::example(runner_crate, example);
-                test.rustc_flags(["--test"]);
+                let mut test = Test::src_base(runner_crate, staged.directory());
+                test.rustc_flags(staged.linking_flags())
+                    .rustc_flags(["--test"]);
                 test.run();
             })
         })
