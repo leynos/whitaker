@@ -12,9 +12,11 @@ use whitaker_common::{
     Arguments,
     Localizer,
     MessageResolution,
-    i18n::DiagnosticMessageSet,
     noop_reporter,
     safe_resolve_message_set,
+    LabelResolution,
+    i18n::{AttrKey, DiagnosticMessageSet},
+    safe_resolve_label,
 };
 
 use super::{
@@ -24,6 +26,14 @@ use super::{
     numeric::{diagnostic_integer_argument, line_range_byte_offsets},
 };
 use crate::analysis::{BumpInterval, Settings, top_two_bumps};
+
+
+//! Diagnostic emission for the bumpy road lint.
+//!
+//! The lint warns when it detects two or more separated bump intervals in the
+//! smoothed signal and highlights the two most severe bumps.
+};
+};
 
 /// Payload describing a lint diagnostic to emit.
 pub(super) struct DiagnosticInput<'a> {
@@ -186,15 +196,20 @@ fn resolve_bump_label(localizer: &Localizer, index: i64, lines: i64) -> String {
     args.insert(Cow::Borrowed("index"), FluentValue::from(index));
     args.insert(Cow::Borrowed("lines"), FluentValue::from(lines));
 
-    // Fluent may inject bidi-safe directional isolates. We strip the resulting
-    // control characters (plus replacement characters) to keep output stable in
-    // diagnostics and UI golden files.
-    localizer
-        .attribute_with_args(LINT_NAME, "label", &args)
-        .unwrap_or_else(|_| format!("Complexity bump {index} spans {lines} lines."))
-        .chars()
-        .filter(|ch| !matches!(ch, '\u{2068}' | '\u{2069}' | '\u{FFFD}'))
-        .collect()
+    let resolution = MessageResolution {
+        lint_name: LINT_NAME,
+        key: MESSAGE_KEY,
+        args: &args,
+    };
+    safe_resolve_label(
+        localizer,
+        LabelResolution {
+            message: resolution,
+            attribute: AttrKey::new("label"),
+        },
+        noop_reporter,
+        || format!("Complexity bump {index} spans {lines} lines."),
+    )
 }
 
 fn fallback_messages(name: &str, count: usize, threshold: f64) -> DiagnosticMessageSet {
