@@ -22,6 +22,18 @@ CI also installs or provides job-specific tools such as `cargo-nextest`, `bun`,
 `uv`, Mermaid CLI, and Nixie before running the targets that need them. Local
 runs of those targets require the same tools on `PATH`.
 
+## Shared diagnostic localization
+
+`whitaker-common::i18n` owns shared label and message resolution, fallback
+reporting, and Fluent output normalization. Lint crates own their message keys,
+arguments, and fallback wording; use `LabelResolution` to pair the message
+context with an attribute for `safe_resolve_label`, and use
+`safe_resolve_message_set` for a primary/note/help set. These
+helpers remove Fluent's U+2068 and U+2069 isolation marks while preserving
+U+FFFD, which signals an unresolved placeable. Add lint-specific fallback text
+at the call site, and extend the common helpers only for policy reused across
+lint crates.
+
 ## Running Tests
 
 Run the test suite from the workspace root:

@@ -90,6 +90,7 @@ pub use i18n::{
     Arguments,
     FALLBACK_LOCALE,
     I18nError,
+    LabelResolution,
     LocaleSelection,
     LocaleSource,
     Localizer,
@@ -98,8 +99,10 @@ pub use i18n::{
     branch_phrase,
     get_localizer_for_lint,
     noop_reporter,
+    normalize_fluent_output,
     normalize_locale,
     resolve_localizer,
+    safe_resolve_label,
     safe_resolve_message_set,
     supports_locale,
 };

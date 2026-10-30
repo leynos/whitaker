@@ -1,4 +1,4 @@
-//! Resolve localized diagnostic strings (primary/note/help) from Fluent bundles.
+//! Resolve localized diagnostic strings and normalize rendered Fluent output.
 //!
 //! # Examples
 //!
@@ -93,6 +93,30 @@ impl BundleLookup for Localizer {
     }
 }
 
+/// Remove Fluent's Unicode isolation marks from rendered diagnostic text.
+///
+/// Fluent uses U+2068 and U+2069 to isolate interpolated values in
+/// bidirectional text. U+FFFD is retained because Fluent uses it to mark an
+/// unresolved placeable.
+///
+/// # Examples
+///
+/// ```
+/// use whitaker_common::i18n::normalize_fluent_output;
+///
+/// let rendered = String::from("before\u{2068}value\u{2069}\u{FFFD}after");
+/// assert_eq!(
+///     normalize_fluent_output(rendered),
+///     "beforevalue\u{FFFD}after"
+/// );
+/// ```
+#[must_use]
+pub fn normalize_fluent_output(mut text: String) -> String {
+    const ISOLATING_MARKS: [char; 2] = ['\u{2068}', '\u{2069}'];
+    text.retain(|ch| !ISOLATING_MARKS.contains(&ch));
+    text
+}
+
 /// Container holding the standard trio of lint diagnostic messages.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DiagnosticMessageSet {
@@ -170,16 +194,10 @@ impl DiagnosticMessageSet {
 
     /// Remove Unicode isolating marks inserted by Fluent placeholders.
     pub(crate) fn strip_isolating_marks(self) -> Self {
-        fn strip(mut text: String) -> String {
-            const ISOLATING_MARKS: [char; 2] = ['\u{2068}', '\u{2069}'];
-            text.retain(|ch| !ISOLATING_MARKS.contains(&ch));
-            text
-        }
-
         Self {
-            primary: strip(self.primary),
-            note: strip(self.note),
-            help: strip(self.help),
+            primary: normalize_fluent_output(self.primary),
+            note: normalize_fluent_output(self.note),
+            help: normalize_fluent_output(self.help),
         }
     }
 }
