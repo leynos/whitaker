@@ -81,7 +81,8 @@ impl std::fmt::Display for SuggestedExtractionKind {
 /// let suggestions = suggest_decomposition(
 ///     &context,
 ///     &[load.build(), save.build(), encode.build(), decode.build()],
-/// );
+/// )
+/// .expect("well-formed method profiles should analyse");
 ///
 /// assert_eq!(suggestions.len(), 2);
 /// assert_eq!(suggestions[0].extraction_kind(), SuggestedExtractionKind::Module);
