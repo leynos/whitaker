@@ -123,12 +123,16 @@ fn serial_dylint_ui_filter_captures_integration_and_nested_cargo_ui_tests(
         "expected at least one lint crate with tests/ui.rs"
     );
 
-    // The integration-test pattern produces binary=ui, test=ui.  The filter
-    // must contain a clause that matches this pattern — historically
-    // `test(ui::ui)` missed it because the test name is plain `ui`.
+    // The integration-test pattern produces binary=ui, test=ui. The filter
+    // must constrain that test to the `ui` binary — historically
+    // `test(ui::ui)` missed it because the test name is plain `ui`. The binary
+    // clause may group this exact test with other tests from the same binary.
+    let matches_ui_binary_test = filter.contains("(binary(ui) & test(=ui))")
+        || filter.contains("(binary(ui) & (test(=ui) | ");
+
     assert!(
-        filter.contains("(binary(ui) & test(=ui))"),
-        "the serial-dylint-ui filter must contain `(binary(ui) & test(=ui))` to capture \
+        matches_ui_binary_test,
+        "the serial-dylint-ui filter must constrain `test(=ui)` to the `ui` binary to capture \
          integration test binaries named `ui` with a top-level `fn ui()` (e.g. {crates:?}); found \
          filter: {filter}"
     );

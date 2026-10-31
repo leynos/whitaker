@@ -3462,7 +3462,7 @@ interleaving a mutation or restoring stale state. Because this guard is
 re-entrant, code on the same thread may still use nested helpers that acquire
 the shared protocol.
 
-`whitaker::testing::ui::run_with_runner` applies a specialized guard before
+`whitaker_lint_core::testing::ui::run_with_runner` applies a specialized guard before
 invoking the Dylint UI runner. It preserves `RUSTC_WRAPPER` so nested Cargo
 builds retain compiler admission; the workspace's patched `dylint_testing`
 recognizes wrapped `rustc` commands when recovering example flags. The vendored
@@ -3679,11 +3679,39 @@ libraries = [
 
 This skips building entirely, providing faster lint runs during development.
 
+### Root `whitaker` CLI boundary
+
+The root package owns the `whitaker` command. Its application policy is kept in
+`src/cli/`, ports are declared in `src/ports.rs`, and system-backed adapters
+live in `src/adapters/`. The CLI decides which operation to run and when;
+`whitaker-installer` owns how dependency installation and lint staging work.
+Keep filesystem discovery and installer orchestration behind those ports so the
+routing and exit policy can be tested without invoking system tools.
+
+`installer/src/main.rs` remains the small composition root for
+`whitaker-installer`. Shared installation behaviour lives in
+`installer/src/orchestration/mod.rs`; the root CLI calls
+`run_install_for_whitaker` so it does not create a `whitaker` wrapper that
+would overwrite the executable. The legacy installer continues using `run`,
+which retains its existing wrapper policy. Installed-lint scanning is shared
+through `whitaker_installer::list::collect_installed`, while each executable
+chooses its own presentation.
+
+The root CLI tests are split by contract: unit tests cover pure routing and
+exit policy, the BDD feature exercises process behaviour, and
+`tests/property_arg_parity.rs` checks root/installer option parity. Keep
+`#[gtest]` before `#[rstest]` when combining the macros; reversing them makes
+the parameterized test register twice. The Kani harnesses in
+`src/cli/dispatch.rs` cover bounded routing totality, disjointness, and class
+reachability. The Verus sidecar is `verus/whitaker_cli_dispatch.rs`; its
+unbounded routing claim and verifier outcome are recorded in the ExecPlan.
+
 ### Installer internal architecture
 
-`installer/src/main.rs` coordinates the installation workflow through a small
-set of focused private helpers. Understanding them is useful when extending the
-installation pipeline.
+`installer/src/orchestration/mod.rs` coordinates the installation workflow
+through a small set of focused private helpers. Understanding them is useful
+when extending the installation pipeline. `installer/src/main.rs` only parses
+the legacy CLI, constructs adapters, and maps the result to a process exit code.
 
 #### Public Git operation APIs
 

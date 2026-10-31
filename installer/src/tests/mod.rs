@@ -7,7 +7,7 @@ use std::{path::PathBuf, time::Duration};
 use rstest::{fixture, rstest};
 
 use crate::{
-    cli::InstallArgs,
+    cli::{InstallArgs, LintSelectionFlags},
     crate_name::CrateName,
     dependency_binaries::DependencyBinaryInstaller,
     deps::{DependencyInstallOptions, SourcePolicy, install_dylint_tools_with_options},
@@ -80,7 +80,10 @@ fn exit_code_for_run_result_prints_error_and_returns_one() {
 #[case::default_suite_only(InstallArgs::default(), false, true)]
 #[case::individual_lints(
     InstallArgs {
-        individual_lints: true,
+        lint_selection: LintSelectionFlags {
+            individual_lints: true,
+            ..LintSelectionFlags::default()
+        },
         ..InstallArgs::default()
     },
     true,

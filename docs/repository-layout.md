@@ -26,7 +26,7 @@ formal verification helpers.
 | `installer/` | The `whitaker-installer` crate, packaging logic, and installer-specific behaviour tests.                                                                                                                          |
 | `scripts/`   | Repository automation for checksums, Markdown formatting, Kani, and Verus setup and execution.                                                                                                                    |
 | `skills/`    | Agent-facing skills that document repeatable maintenance and remediation workflows. Each skill is a directory whose `SKILL.md` frontmatter is an Agent Skills manifest, validated by `make skill-manifest-check`. |
-| `src/`       | Root library code that assembles shared lint registration and workspace-facing APIs.                                                                                                                              |
+| `src/`       | Root `whitaker` CLI: parsing and routing in `src/cli/`, the application boundary in `src/ports.rs`, and installer and process adapters in `src/adapters/`.                                                      |
 | `suite/`     | The suite crate used to package and expose the lint set coherently.                                                                                                                                               |
 | `tests/`     | Workspace-level integration, behaviour, UI harness, and workflow tests.                                                                                                                                           |
 | `vendor/`    | Locally patched third-party crates whose tests and linting are part of the workspace gates.                                                                                                                       |
@@ -89,14 +89,18 @@ minimum supported Rust version; the root `Makefile` target
 
 ### `src/` and `suite/`
 
-The repository root `src/` directory holds the top-level library entry points
-and shared lint-registration glue. The `suite/` crate packages the lint set as
-an integrated suite and carries its own source and tests.
+The repository root `src/` directory contains the `whitaker` executable and the
+CLI library. `src/cli/` owns parsing, routing, and exit policy; `src/ports.rs`
+defines the application boundary; and `src/adapters/` connects that boundary to
+installer and process operations. The compiler-private Dylint driver lives
+separately in `crates/whitaker_lint_core/`. The `suite/` crate packages the
+lint set as an integrated suite and carries its own source and tests.
 
 ## Testing and verification assets
 
-- `tests/` holds workspace-level integration tests, behaviour-driven tests,
-  feature files, UI harness coverage, and workflow validation support.
+- `tests/` holds workspace-level integration tests, behaviour-driven tests for
+  the root CLI and packaging metadata, feature files, UI harness coverage, and
+  workflow validation support.
 - `common/tests/` and the per-crate `tests/` directories hold crate-scoped
   behavioural and integration coverage.
 - `scripts/check-markdown-format.sh` verifies the canonical Markdown formatter

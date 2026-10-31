@@ -44,7 +44,6 @@ pub mod crate_name;
 pub mod dependency_binaries;
 pub mod deps;
 pub mod dirs;
-pub(crate) mod dry_run;
 pub mod error;
 pub mod git;
 mod hex;

@@ -1,32 +1,30 @@
-//! The dry run: report what an install would do, and change nothing.
-//!
-//! Separated from `orchestration.rs` because it shares none of the install
-//! pipeline's state and answers a different question, and because the
-//! entry point had reached the repository's file-size limit.
+//! Renders installer configuration without performing installation side effects.
 
-use camino::Utf8PathBuf;
 use std::io::Write;
 
-use crate::artefact::suite_ref::SuiteRef;
-use crate::cli::InstallArgs;
-use crate::crate_name::CrateName;
-use crate::dirs::BaseDirs;
-use crate::error::Result;
-use crate::install_flow::detect_host_target;
-use crate::list::determine_target_dir;
-use crate::orchestration::{resolve_requested_crates, resolve_toolchain};
-use crate::output::{DryRunInfo, write_stderr_line};
-use crate::prebuilt_path::prebuilt_library_dir;
-use crate::toolchain::Toolchain;
+use camino::Utf8PathBuf;
+
+use super::{resolve_requested_crates, resolve_toolchain};
+use crate::{
+    artefact::suite_ref::SuiteRef,
+    cli::InstallArgs,
+    crate_name::CrateName,
+    dirs::BaseDirs,
+    error::Result,
+    install_flow::detect_host_target,
+    list::determine_target_dir,
+    output::{DryRunInfo, DryRunSkips, write_stderr_line},
+    prebuilt_path::prebuilt_library_dir,
+    toolchain::Toolchain,
+    workspace::resolve_workspace_path,
+};
 
 /// Runs in dry-run mode, showing configuration without side effects.
-pub(crate) fn run_dry(
+pub(super) fn run_dry(
     args: &InstallArgs,
     dirs: &dyn BaseDirs,
     stderr: &mut dyn Write,
 ) -> Result<()> {
-    use crate::workspace::resolve_workspace_path;
-
     let workspace_root = resolve_workspace_path(dirs)?;
     let requested_crates = resolve_requested_crates(args)?;
     let toolchain = resolve_toolchain(&workspace_root, args.toolchain.as_deref())?;
@@ -38,9 +36,11 @@ pub(crate) fn run_dry(
         target_dir: &target_dir,
         verbosity: args.verbosity,
         quiet: args.quiet,
-        skip_deps: args.skip_deps,
-        skip_wrapper: args.skip_wrapper,
-        no_update: args.no_update,
+        skips: DryRunSkips {
+            deps: args.skip.skip_deps,
+            wrapper: args.skip.skip_wrapper,
+            update: args.skip.no_update,
+        },
         suite_ref: args.suite_version.as_ref().map(SuiteRef::as_str),
         jobs: args.jobs,
         crates: &requested_crates,
@@ -49,6 +49,8 @@ pub(crate) fn run_dry(
     Ok(())
 }
 
+/// Selects the install target, falling back to the build directory when host
+/// detection or prebuilt-path resolution fails.
 fn determine_dry_run_target_dir(
     args: &InstallArgs,
     dirs: &dyn BaseDirs,

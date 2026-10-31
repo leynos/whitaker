@@ -18,6 +18,9 @@ version = "0.2.10"
 whitaker-common = { path = "common", version = "0.2.10" }
 whitaker-installer = { path = "installer", version = "0.2.10" }
 whitaker_lint_core = { path = "crates/whitaker_lint_core", version = "0.2.10" }
+ortho_config = "0.10.0"
+googletest = "0.14.3"
+pretty_assertions = "1.4.1"
 camino = "1.2.1"
 cap-std = { version = "4.0.2", features = ["fs_utf8"] }
 cargo_metadata = "0.23.0"
@@ -88,8 +91,45 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 documentation.workspace = true
+autobins = false
+
+[[bin]]
+name = "whitaker"
+path = "src/main.rs"
 
 [dependencies]
+camino.workspace = true
+clap.workspace = true
+ortho_config.workspace = true
+thiserror.workspace = true
+whitaker-installer.workspace = true
+
+[dev-dependencies]
+cap-std.workspace = true
+googletest.workspace = true
+insta.workspace = true
+pretty_assertions.workspace = true
+proptest.workspace = true
+rstest.workspace = true
+rstest-bdd.workspace = true
+rstest-bdd-macros.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tempfile.workspace = true
+toml.workspace = true
+whitaker-installer = { workspace = true, features = ["test-support"] }
+whitaker_test_macros.workspace = true
+
+[package.metadata.binstall]
+pkg-url = "https://github.com/leynos/whitaker/releases/download/v{version}/{name}-{target}-v{version}.{archive-format}"
+bin-dir = "{name}-{target}-v{version}/{bin}"
+pkg-fmt = "tgz"
+
+[package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
+pkg-fmt = "zip"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }
 
 [lints.clippy]
 pedantic = { level = "warn", priority = -1 }

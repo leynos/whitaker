@@ -1,7 +1,7 @@
 //! Tests for the no-source-fallback policy and its contradictions.
 
 use super::NO_SOURCE_FALLBACK_ENV;
-use crate::cli::InstallArgs;
+use crate::cli::{InstallArgs, LintSelectionFlags};
 use whitaker_common::test_support::env_test_guard;
 
 /// The rule, as one table.
@@ -103,7 +103,10 @@ fn the_environment_conflicts_with_a_source_only_option() {
         (
             "--experimental",
             InstallArgs {
-                experimental: true,
+                lint_selection: LintSelectionFlags {
+                    experimental: true,
+                    ..LintSelectionFlags::default()
+                },
                 ..InstallArgs::default()
             },
         ),
@@ -171,7 +174,10 @@ fn the_flag_conflicts_with_every_source_only_option() {
             "--experimental",
             InstallArgs {
                 no_source_fallback: true,
-                experimental: true,
+                lint_selection: LintSelectionFlags {
+                    experimental: true,
+                    ..LintSelectionFlags::default()
+                },
                 ..InstallArgs::default()
             },
         ),

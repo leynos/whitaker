@@ -1,6 +1,7 @@
 //! Tests for fast-path installer helper behaviour.
 
 use crate::{
+    cli::ExecutionFlags,
     crate_name::CrateName,
     deps::SourcePolicy,
     install_metrics::InstallMode,
@@ -59,7 +60,10 @@ fn fast_path_fixture() -> FastPathFixture {
 #[case::with_cranelift(true, &["rustc-codegen-cranelift"])]
 fn resolve_additional_components_parametrized(#[case] cranelift: bool, #[case] expected: &[&str]) {
     let args = InstallArgs {
-        cranelift,
+        execution: ExecutionFlags {
+            cranelift,
+            ..ExecutionFlags::default()
+        },
         ..InstallArgs::default()
     };
 

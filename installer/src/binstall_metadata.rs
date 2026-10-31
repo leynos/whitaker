@@ -43,13 +43,31 @@ pub const WINDOWS_OVERRIDE_TARGET: &str = "x86_64-pc-windows-msvc";
 /// ```
 #[must_use]
 pub fn expand_pkg_url(version: &str, target: &str) -> String {
+    expand_pkg_url_for("whitaker-installer", version, target)
+}
+
+/// Expand the `pkg-url` template for any package name, version, and target.
+///
+/// The archive format follows the same target override as
+/// [`expand_pkg_url`].
+///
+/// # Examples
+///
+/// ```
+/// use whitaker_installer::binstall_metadata::expand_pkg_url_for;
+///
+/// let url = expand_pkg_url_for("whitaker", "0.2.7", "x86_64-unknown-linux-gnu");
+/// assert!(url.contains("/whitaker-x86_64-unknown-linux-gnu-v0.2.7.tgz"));
+/// ```
+#[must_use]
+pub fn expand_pkg_url_for(package: &str, version: &str, target: &str) -> String {
     let archive_format = if target == WINDOWS_OVERRIDE_TARGET {
         WINDOWS_PKG_FMT
     } else {
         DEFAULT_PKG_FMT
     };
     PKG_URL_TEMPLATE
-        .replace("{name}", "whitaker-installer")
+        .replace("{name}", package)
         .replace("{version}", version)
         .replace("{target}", target)
         .replace("{archive-format}", archive_format)
@@ -71,16 +89,33 @@ pub fn expand_pkg_url(version: &str, target: &str) -> String {
 /// ```
 #[must_use]
 pub fn expand_bin_dir(version: &str, target: &str) -> String {
+    expand_bin_dir_for("whitaker-installer", version, target)
+}
+
+/// Expand the `bin-dir` template for any package name, version, and target.
+///
+/// The binary name is the package name, with `.exe` appended for Windows.
+///
+/// # Examples
+///
+/// ```
+/// use whitaker_installer::binstall_metadata::expand_bin_dir_for;
+///
+/// let dir = expand_bin_dir_for("whitaker", "0.2.7", "x86_64-unknown-linux-gnu");
+/// assert_eq!(dir, "whitaker-x86_64-unknown-linux-gnu-v0.2.7/whitaker");
+/// ```
+#[must_use]
+pub fn expand_bin_dir_for(package: &str, version: &str, target: &str) -> String {
     let bin = if target == WINDOWS_OVERRIDE_TARGET {
-        "whitaker-installer.exe"
+        format!("{package}.exe")
     } else {
-        "whitaker-installer"
+        package.to_owned()
     };
     BIN_DIR_TEMPLATE
-        .replace("{name}", "whitaker-installer")
+        .replace("{name}", package)
         .replace("{version}", version)
         .replace("{target}", target)
-        .replace("{bin}", bin)
+        .replace("{bin}", &bin)
 }
 
 // ---------------------------------------------------------------------------
@@ -97,15 +132,39 @@ pub fn expand_bin_dir(version: &str, target: &str) -> String {
 #[must_use]
 pub fn load_cargo_toml() -> toml::Table {
     let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let cargo_toml_path = manifest_dir.join("Cargo.toml");
-    let content = std::fs::read_to_string(&cargo_toml_path)
-        .unwrap_or_else(|err| panic!("failed to read {}: {err}", cargo_toml_path.display()));
-    content.parse::<toml::Table>().unwrap_or_else(|err| {
-        panic!(
-            "failed to parse {} as TOML: {err}",
-            cargo_toml_path.display()
-        )
-    })
+    load_cargo_toml_from(&manifest_dir.join("Cargo.toml"))
+        .expect("installer/Cargo.toml should be readable and parse as TOML")
+}
+
+/// Load and parse a Cargo manifest from an explicit path.
+///
+/// This variant lets package-level integration tests inspect another workspace
+/// member's manifest while keeping [`load_cargo_toml`] compatible for existing
+/// installer tests.
+///
+/// # Examples
+///
+/// ```
+/// use std::path::Path;
+///
+/// use whitaker_installer::binstall_metadata::load_cargo_toml_from;
+///
+/// let manifest = load_cargo_toml_from(Path::new("Cargo.toml"))?;
+/// assert!(manifest.contains_key("package"));
+/// # Ok::<(), String>(())
+/// ```
+///
+/// # Errors
+///
+/// Returns a description of the failure if the manifest cannot be read or
+/// does not parse as TOML.
+#[cfg(any(test, feature = "test-support"))]
+pub fn load_cargo_toml_from(manifest_path: &std::path::Path) -> Result<toml::Table, String> {
+    let content = std::fs::read_to_string(manifest_path)
+        .map_err(|err| format!("failed to read {}: {err}", manifest_path.display()))?;
+    content
+        .parse::<toml::Table>()
+        .map_err(|err| format!("failed to parse {} as TOML: {err}", manifest_path.display()))
 }
 
 /// Extract the `[package.metadata.binstall]` sub-table from a parsed
