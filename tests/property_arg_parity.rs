@@ -56,7 +56,9 @@ impl OptionKind {
         Self::BuildOnly,
     ];
 
-    const fn bit(self) -> u16 { self as u16 }
+    const fn bit(self) -> u16 {
+        self as u16
+    }
 
     const fn name(self) -> &'static str {
         match self {

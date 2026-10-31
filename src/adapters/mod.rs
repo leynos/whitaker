@@ -9,21 +9,16 @@ use camino::Utf8PathBuf;
 use whitaker_installer::{
     dependency_binaries::host_target,
     dirs::SystemBaseDirs,
+    installation_record::installed_paths,
     list::{collect_installed, detect_active_toolchain},
     orchestration::run_install_for_whitaker,
     prebuilt_path::prebuilt_library_dir,
     stager::default_target_dir,
-    installation_record::installed_paths,
 };
 
 use crate::ports::{
     CliError, InstallRequest, InstallService, LintInventory, LintRunner, ListRequest, Services,
     StagedInventory,
-};
-
-
-//! Production adapters for installer, inventory, and Dylint subprocess ports.
-};
 };
 
 /// The system-backed adapters used by the `whitaker` executable.
@@ -117,17 +112,16 @@ fn child_exit_code(status: ExitStatus) -> i32 {
         .unwrap_or(1)
 }
 
-
 #[cfg(unix)]
 fn signal_exit_code(status: ExitStatus) -> Option<i32> {
     use std::os::unix::process::ExitStatusExt as _;
     status.signal().map(|signal| 128 + signal)
 }
 
-
 #[cfg(not(unix))]
-const fn signal_exit_code(_status: ExitStatus) -> Option<i32> { None }
-
+const fn signal_exit_code(_status: ExitStatus) -> Option<i32> {
+    None
+}
 
 /// Resolves the library path used when forwarding a command to cargo-dylint.
 fn active_library_path() -> Option<OsString> {

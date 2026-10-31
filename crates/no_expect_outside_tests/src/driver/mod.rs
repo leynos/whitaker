@@ -19,9 +19,9 @@ use rustc_lint::{LateContext, LateLintPass};
 use rustc_middle::ty::{self, Ty};
 use rustc_span::{RemapPathScopeComponents, sym};
 use serde::Deserialize;
+use whitaker_common::{AttributePath, Localizer, get_localizer_for_lint};
 use whitaker_lint_core::SharedConfig;
 use whitaker_lint_core::hir::has_test_like_hir_attributes;
-use whitaker_common::{AttributePath, Localizer, get_localizer_for_lint};
 
 use crate::context::{collect_context, is_cfg_test_attribute, summarize_context};
 use crate::diagnostics::{DiagnosticContext, emit_diagnostic};

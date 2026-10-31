@@ -20,10 +20,10 @@ use rustc_span::Span;
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::io::Write;
-use whitaker_lint_core::SharedConfig;
 use whitaker_common::attributes::AttributePath;
 use whitaker_common::i18n::{Localizer, get_localizer_for_lint};
 use whitaker_common::rstest::{RstestDetectionOptions, is_rstest_test_with};
+use whitaker_lint_core::SharedConfig;
 
 const LINT_NAME: &str = "rstest_helper_should_be_fixture";
 /// Internal test-only hook used by the UI harness to assert passive collection.

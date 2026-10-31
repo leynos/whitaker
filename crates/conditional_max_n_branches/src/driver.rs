@@ -14,12 +14,12 @@ use rustc_hir::{BinOpKind, ExprKind, LoopSource, UnOp};
 use rustc_lint::{LateContext, LateLintPass, LintContext};
 use rustc_span::{DesugaringKind, Span};
 use serde::Deserialize;
-use whitaker_lint_core::SharedConfig;
 use whitaker_common::i18n::{DiagnosticMessageSet, MessageKey};
 use whitaker_common::{
     Arguments, FALLBACK_LOCALE, Localizer, MessageResolution, branch_phrase,
     get_localizer_for_lint, noop_reporter, safe_resolve_message_set,
 };
+use whitaker_lint_core::SharedConfig;
 
 mod numeric;
 use self::numeric::diagnostic_integer_argument;

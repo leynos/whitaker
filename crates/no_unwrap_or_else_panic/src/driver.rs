@@ -11,8 +11,8 @@ use rustc_hir::ExprKind;
 use rustc_lint::{LateContext, LateLintPass};
 use serde::Deserialize;
 use std::collections::HashSet;
-use whitaker_lint_core::SharedConfig;
 use whitaker_common::i18n::{Localizer, get_localizer_for_lint};
+use whitaker_lint_core::SharedConfig;
 
 /// Dylint lint declaration and registration glue.
 ///
