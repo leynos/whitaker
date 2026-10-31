@@ -97,6 +97,40 @@ a compiler-aware tool is needed, because the relevant facts (what a `Command`
 was built from, which value reaches `CARGO_TARGET_DIR`) live in typed
 expressions rather than in text.
 
+### Known positives in the estate
+
+Concordat's repository-level checks cannot judge these sites, because they sit
+in test source rather than in configuration. A survey of every active Rust
+repository's default branch on 31 October 2026 (the `check.py` estate script
+that backs the Concordat rules, reading local clones) found the following. They
+are the lints' expected first positives, and each lint's UI fixtures should
+include the shape it names. Each file was read, not only matched; a site marked
+"deliberate" is a design choice that needs an `#[expect]` with a reason once
+the lint lands.
+
+| Lint                          | Repository        | Site                                                                 | Shape                                                                                     |
+| ----------------------------- | ----------------- | -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `nested_cargo_private_target` | repovec-appliance | `crates/repovec-ci/tests/environment_policy_lint_ui.rs`              | `CARGO_TARGET_DIR` from a `TempDir` per run                                               |
+| `nested_cargo_private_target` | whitaker          | `common/tests/i18n_packaging.rs`                                     | `CARGO_TARGET_DIR` from a `tempdir_in` the target root, with an unbounded `cargo package` |
+| `nested_cargo_private_target` | netsuke           | `tests/packaging_smoke_tests.rs`                                     | `tempdir_in(target)` per run; kept deliberately as a fresh-crate verification             |
+| `test_spawns_rustc`           | netsuke           | `tests/kani_cfg_ui_tests.rs`, `tests/ninja_gen_escape_ui_tests.rs`   | `Command::new(rustc())` in a timed test                                                   |
+| `test_spawns_rustc`           | mxd               | `test-util/src/server/readiness.rs`                                  | `Command::new("rustc")` in a test module                                                  |
+| `test_spawns_rustc`           | ortho-config      | `examples/hello_world/tests/rstest_bdd/behaviour/harness/process.rs` | `Command::new("rustc")` compiling a helper binary in a test harness                       |
+| `test_spawns_rustc`           | theoremc          | `src/arg_lowering_compile_fail_tests.rs`                             | `Command::new("rustc")` in a `#[cfg(test)]` module                                        |
+| `unbounded_child_cargo`       | whitaker          | `common/tests/i18n_packaging.rs`                                     | `cargo package` with no time bound                                                        |
+| `unbounded_child_cargo`       | netsuke           | `tests/packaging_smoke_tests.rs`                                     | child `cargo` with no time bound                                                          |
+| `unbounded_child_cargo`       | repovec-appliance | `crates/repovec-ci/tests/environment_policy_lint_ui.rs`              | `env!("CARGO")` lint fixture run with no time bound                                       |
+
+Two sites in the same survey are not positives and should stay silent:
+whitaker's `installer/tests/behaviour_cli/support.rs` runs `rustc -vV`, a query
+argument, and ortho-config's
+`cargo-orthohelp/tests/rstest_bdd_support/behaviour/steps_cmd.rs` sets
+`CARGO_TARGET_DIR` from a context value, which a text scan reads as a
+per-scenario directory. Since ortho-config issue 452 that value is the shared
+`target/orthohelp-bdd` tree resolved through `cargo metadata`, and the child is
+bounded by a deadline. This is the reason Lint 1 follows the value's origin
+rather than the name of the variable that holds it.
+
 ## 5. Goals and non-goals
 
 - Goals:
