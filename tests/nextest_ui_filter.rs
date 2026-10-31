@@ -66,7 +66,7 @@ fn find_serial_dylint_ui_overrides(config: &Value) -> Vec<&Value> {
 }
 
 /// Returns the filter expression from each `serial-dylint-ui` override.
-fn extract_filters(ui_overrides: &[&Value]) -> Vec<&str> {
+fn extract_filters<'a>(ui_overrides: &[&'a Value]) -> Vec<&'a str> {
     ui_overrides
         .iter()
         .map(|ui_override| {
