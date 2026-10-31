@@ -223,7 +223,6 @@ dependencies = [
  "serde",
  "tempfile",
  "toml 1.1.8+spec-1.1.0",
- "trybuild",
  "whitaker",
  "whitaker-common",
  "whitaker_test_macros",
