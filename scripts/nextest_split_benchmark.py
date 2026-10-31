@@ -1,4 +1,4 @@
-"""Prepare and summarise comparable Nextest runs for the issue-513 split.
+"""Prepare and summarize comparable Nextest runs for the issue-513 split.
 
 The benchmark compares two configurations that differ in exactly one thing:
 which capacity-one test group the seven trybuild compile contracts belong to.
@@ -12,7 +12,7 @@ Usage
 -----
 Run ``python scripts/nextest_split_benchmark.py --help``. The benchmark
 workflow drives the ``prepare``, ``union-filter``, ``membership``, and
-``summarise`` subcommands; ``scripts/tests`` exercises the same functions.
+``summarize`` subcommands; ``scripts/tests`` exercises the same functions.
 """
 
 from __future__ import annotations
@@ -454,7 +454,7 @@ def _nextest_seconds(log_text: str) -> float | None:
     return None if match is None else float(match.group(1))
 
 
-def summarise(
+def summarize(
     junit_text: str,
     membership: dict[str, typ.Any],
     log_text: str = "",
@@ -599,12 +599,12 @@ def _membership(args: argparse.Namespace) -> int:
     return 0
 
 
-def _summarise(args: argparse.Namespace) -> int:
+def _summarize(args: argparse.Namespace) -> int:
     """Write the summary for one measured run and report a failed repetition."""
     membership = _read_json(args.membership)
     log_text = "" if args.log is None else args.log.read_text(errors="replace")
     meta = {} if args.meta is None else _read_json(args.meta)
-    summary = summarise(args.junit.read_text(), membership, log_text, meta)
+    summary = summarize(args.junit.read_text(), membership, log_text, meta)
     _write_json(args.output, summary)
     failed = summary["counts"]["failed"]
     status = summary["exit_status"]
@@ -643,13 +643,13 @@ def _build_parser() -> argparse.ArgumentParser:
     membership.add_argument("--output", type=pathlib.Path, required=True)
     membership.set_defaults(handler=_membership)
 
-    summary = commands.add_parser("summarise", help="summarise a measured run")
+    summary = commands.add_parser("summarize", help="summarize a measured run")
     summary.add_argument("--junit", type=pathlib.Path, required=True)
     summary.add_argument("--membership", type=pathlib.Path, required=True)
     summary.add_argument("--log", type=pathlib.Path)
     summary.add_argument("--meta", type=pathlib.Path)
     summary.add_argument("--output", type=pathlib.Path, required=True)
-    summary.set_defaults(handler=_summarise)
+    summary.set_defaults(handler=_summarize)
     return parser
 
 
