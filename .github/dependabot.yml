@@ -81,8 +81,10 @@ updates:
           - "minor"
           - "patch"
     open-pull-requests-limit: 5
+    # No `dependencies` label: the automerge workflow merges a green Dependabot
+    # pull request that carries it, and a bare toolchain bump needs hand-moved
+    # revisions (see the developers guide).
     labels:
-      - "dependencies"
       - "rust-toolchain"
     schedule:
       interval: "daily"
