@@ -383,7 +383,7 @@ class TestSummary:
                 seconds=90,
             ),
         )
-        summary = benchmark.summarise(
+        summary = benchmark.summarize(
             xml,
             _membership(benchmark),
             "Summary [  92.125s] 2 tests run: 2 passed",
@@ -399,15 +399,15 @@ class TestSummary:
         assert summary["counts"] == {"total": 2, "passed": 2, "failed": 0, "skipped": 0}
 
     def test_coloured_summary_is_readable(self, benchmark: types.ModuleType) -> None:
-        # CI sets CARGO_TERM_COLOR=always; the reset escape sits between the
+        # CI forces coloured output; the reset escape sits between the
         # heading and the duration.
         log = "\x1b[32;1m     Summary\x1b[0m [   0.406s] \x1b[1m1\x1b[0m test run"
-        summary = benchmark.summarise(_report(), {"groups": {}, "ignored": [], "selection": []}, log)
+        summary = benchmark.summarize(_report(), {"groups": {}, "ignored": [], "selection": []}, log)
         assert summary["nextest_seconds"] == 0.406
 
     def test_selected_but_absent_tests_are_reported(self, benchmark: types.ModuleType) -> None:
         xml = _report(
             _testcase(benchmark, name="ui", start="2026-10-31T10:00:00.000Z", seconds=1)
         )
-        summary = benchmark.summarise(xml, _membership(benchmark))
+        summary = benchmark.summarize(xml, _membership(benchmark))
         assert summary["selected_not_run"] == ["crate::api_contract::contract_a"]

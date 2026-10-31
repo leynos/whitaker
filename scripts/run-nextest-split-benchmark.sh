@@ -109,9 +109,9 @@ run_measured() {
   return 0
 }
 
-summarise_run() {
+summarize_run() {
   local name=$1
-  benchmark summarise \
+  benchmark summarize \
     --junit "$OUT/junit/$name.xml" \
     --membership "$OUT/membership.json" \
     --log "$OUT/logs/$name.log" \
@@ -128,7 +128,7 @@ nextest_run() {
   run_measured "$label" make -C "$REPO_ROOT" test \
     TEST_RUNNER="nextest run --config-file $config $*"
   if [ -f "$OUT/membership.json" ]; then
-    summarise_run "$label"
+    summarize_run "$label"
   fi
 }
 

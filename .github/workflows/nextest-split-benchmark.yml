@@ -31,7 +31,7 @@ permissions:
   contents: read
 
 # An in-progress measurement is never cancelled: a cancelled repetition is a
-# lost sample, and the uploaded artifacts are the evidence.
+# lost sample, and the uploaded artefacts are the evidence.
 concurrency:
   group: nextest-split-benchmark-${{ inputs.mode }}
   cancel-in-progress: false
