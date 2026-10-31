@@ -1185,7 +1185,7 @@ exclude what cannot run rather than what is not worth running.
 carries the `compile_fail,E0432` contract for the removed legacy spelling. The
 five doctested packages, `whitaker-common`, `whitaker-installer`,
 `whitaker_sarif`, `whitaker_clones_core`, and `bumpy_road_function`, hold the
-documented public API and contribute 339 doctests in about 18 seconds warm.
+documented public API and contribute 375 doctests in about 18 seconds warm.
 
 `linux-full` executes no tests. It survives as a job because
 `main-required-checks` requires that context by name, and it carries the
