@@ -29,7 +29,39 @@ def test_coverage_shares_target_and_profile_policy_with_nested_cargo(
     bin_directory.mkdir()
     shutil.copy2(REPOSITORY_ROOT / "Makefile", workspace / "Makefile")
     snapshot_arguments = provide_clippy_snapshot(workspace)
+    cargo = bin_directory / "cargo"
+    _write_coverage_environment_stubs(bin_directory)
 
+    environment_log = tmp_path / "coverage-environment.log"
+    environment = os.environ | {
+        "COVERAGE_ENV_LOG": str(environment_log),
+        "PATH": f"{bin_directory}:{os.environ['PATH']}",
+    }
+    result = subprocess.run(
+        [
+            "make",
+            "coverage",
+            f"CARGO={cargo}",
+            f"CARGO_TEST_WRAPPER={cargo}",
+            f"CARGO_LLVM_COV={bin_directory / 'cargo-llvm-cov'}",
+            f"CARGO_TEST_METADATA_ROOT={workspace}",
+            "TEST_RUSTUP_TOOLCHAIN=nightly-test",
+            f"WHITAKER_SCRIPT={tmp_path / 'whitaker'}",
+            *snapshot_arguments,
+        ],
+        cwd=workspace,
+        capture_output=True,
+        check=False,
+        env=environment,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    _assert_coverage_environment(environment_log, workspace, bin_directory)
+
+
+def _write_coverage_environment_stubs(bin_directory: Path) -> None:
+    """Write Cargo, cargo-llvm-cov, and Nextest stubs that log their environment."""
     cargo = bin_directory / "cargo"
     _write_executable(
         cargo,
@@ -74,31 +106,14 @@ def test_coverage_shares_target_and_profile_policy_with_nested_cargo(
     )
     _write_executable(bin_directory / "cargo-nextest", "exit 0")
 
-    environment_log = tmp_path / "coverage-environment.log"
-    environment = os.environ | {
-        "COVERAGE_ENV_LOG": str(environment_log),
-        "PATH": f"{bin_directory}:{os.environ['PATH']}",
-    }
-    result = subprocess.run(
-        [
-            "make",
-            "coverage",
-            f"CARGO={cargo}",
-            f"CARGO_TEST_WRAPPER={cargo}",
-            f"CARGO_LLVM_COV={bin_directory / 'cargo-llvm-cov'}",
-            f"CARGO_TEST_METADATA_ROOT={workspace}",
-            "TEST_RUSTUP_TOOLCHAIN=nightly-test",
-            f"WHITAKER_SCRIPT={tmp_path / 'whitaker'}",
-            *snapshot_arguments,
-        ],
-        cwd=workspace,
-        capture_output=True,
-        check=False,
-        env=environment,
-        text=True,
-    )
 
-    assert result.returncode == 0, result.stderr
+def _assert_coverage_environment(
+    environment_log: Path,
+    workspace: Path,
+    bin_directory: Path,
+) -> None:
+    """Check the recorded runner arguments and per-recipe environments."""
+    cargo = bin_directory / "cargo"
     expected_target = workspace / "target" / "llvm-cov-target"
     recorded = environment_log.read_text(encoding="utf-8").splitlines()
     runner_arguments = next(

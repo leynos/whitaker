@@ -426,29 +426,14 @@ def _has_locked_flag(invocation: str) -> bool:
     return "--locked" in invocation.split()
 
 
-@pytest.mark.parametrize(
-    ("locked", "should_use_locked"),
-    [(None, True), ("", False), ("--locked", True)],
-)
-def test_make_test_forwards_cargo_locked(
-    cargo_stub: tuple[Path, Path],
-    locked: str | None,
+def _assert_make_test_invocations(
+    cargo_calls: list[str],
+    recorded: list[str],
+    *,
     should_use_locked: bool,
+    log_name: str,
 ) -> None:
-    """Prepare dependencies before tests and honour the requested lock mode."""
-    stub_dir, cargo = cargo_stub
-    _write_tool_stubs(stub_dir)
-
-    # Point the whitaker-script backup safeguard at an absent temp path so the
-    # recipe never touches the real `$(HOME)/.local/bin/whitaker`.
-    whitaker_script = stub_dir.parent / "whitaker-script"
-    recorded = _run_make(
-        "test",
-        MakeRunEnvironment(cargo=cargo, locked=locked, stub_dir=stub_dir),
-        extra_make_args=[f"WHITAKER_SCRIPT={whitaker_script}"],
-    )
-
-    cargo_calls = [line for line in recorded if _is_lock_relevant_invocation(line)]
+    """Check that preparation precedes both test commands and honours the lock mode."""
     assert [_cargo_head(line) for line in cargo_calls] == [
         "run",
         "fetch",
@@ -465,11 +450,17 @@ def test_make_test_forwards_cargo_locked(
     )
     for line in cargo_calls:
         assert _has_locked_flag(line) is should_use_locked, (
-            f"make test must use {_make_log_name(MakeRunEnvironment(cargo, locked, stub_dir))} "
-            f"mode; invocation: {line!r}"
+            f"make test must use {log_name} mode; invocation: {line!r}"
         )
 
-    environment_log = stub_dir / f"test-{_make_log_name(MakeRunEnvironment(cargo, locked, stub_dir))}.env"
+
+def _assert_make_test_environments(
+    environment_log: Path,
+    *,
+    cargo: Path,
+    expected_driver_path: str,
+) -> None:
+    """Check the offline, toolchain, and driver environment of each recipe."""
     recorded_environments = [
         line.split("\t", maxsplit=5) for line in environment_log.read_text().splitlines()
     ]
@@ -497,14 +488,52 @@ def test_make_test_forwards_cargo_locked(
     ], "test processes need the active Rustup toolchain environment"
     # The warm-up and both test commands share the keyed driver directory the
     # Makefile exports, so the driver is built once and then reused.
-    expected_driver_path = str(
-        stub_dir.parent / "workspace" / "dylint-drivers" / "test-driver"
-    )
     assert [record[3] for record in recorded_environments] == [expected_driver_path] * 8, (
         "every recipe must see the same Dylint driver directory"
     )
     for record in recorded_environments[6:]:
         assert record[1] == str(cargo), "tests must inherit the selected Cargo executable"
+
+
+@pytest.mark.parametrize(
+    ("locked", "should_use_locked"),
+    [(None, True), ("", False), ("--locked", True)],
+)
+def test_make_test_forwards_cargo_locked(
+    cargo_stub: tuple[Path, Path],
+    locked: str | None,
+    should_use_locked: bool,
+) -> None:
+    """Prepare dependencies before tests and honour the requested lock mode."""
+    stub_dir, cargo = cargo_stub
+    _write_tool_stubs(stub_dir)
+
+    # Point the whitaker-script backup safeguard at an absent temp path so the
+    # recipe never touches the real `$(HOME)/.local/bin/whitaker`.
+    whitaker_script = stub_dir.parent / "whitaker-script"
+    environment = MakeRunEnvironment(cargo=cargo, locked=locked, stub_dir=stub_dir)
+    recorded = _run_make(
+        "test",
+        environment,
+        extra_make_args=[f"WHITAKER_SCRIPT={whitaker_script}"],
+    )
+
+    log_name = _make_log_name(environment)
+    cargo_calls = [line for line in recorded if _is_lock_relevant_invocation(line)]
+    _assert_make_test_invocations(
+        cargo_calls,
+        recorded,
+        should_use_locked=should_use_locked,
+        log_name=log_name,
+    )
+    expected_driver_path = str(
+        stub_dir.parent / "workspace" / "dylint-drivers" / "test-driver"
+    )
+    _assert_make_test_environments(
+        stub_dir / f"test-{log_name}.env",
+        cargo=cargo,
+        expected_driver_path=expected_driver_path,
+    )
 
 
 @pytest.mark.parametrize(
