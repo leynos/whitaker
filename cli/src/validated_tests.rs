@@ -1,11 +1,9 @@
 //! Unit tests for validated settings conversion.
 
-use std::collections::BTreeSet;
-
 use proptest::prelude::*;
 
 use super::{is_valid_window, normalize, normalize_provider_attributes, validate_output};
-use crate::lint_config::RstestHelper;
+use crate::lint_config::{BumpyWeights, RstestHelper};
 use crate::settings::Configuration;
 
 /// Normalize invalid bumpy-road tuning to the lint's documented defaults.
@@ -81,31 +79,108 @@ fn canonicalizes_provider_attributes(#[case] input: Vec<String>, #[case] expecte
     assert_eq!(normalize_provider_attributes(input), expected);
 }
 
+/// Generate provider attributes that mix arbitrary text with the cases the
+/// canonicalizer must handle: surrounding whitespace, `rstest::` prefixes,
+/// empty names, and duplicates.
+fn attribute_strategy() -> impl Strategy<Value = String> {
+    prop_oneof![
+        3 => any::<String>(),
+        1 => prop::sample::select(vec![
+            String::new(),
+            " ".to_owned(),
+            "\tcase\n".to_owned(),
+            "case".to_owned(),
+            "rstest::case".to_owned(),
+            " rstest::rstest::values ".to_owned(),
+            "future".to_owned(),
+            "future".to_owned(),
+        ]),
+    ]
+}
+
+/// Derive the canonical attributes independently of the implementation.
+fn expected_provider_attributes(attributes: &[String]) -> Vec<String> {
+    let mut expected: Vec<String> = Vec::new();
+    for attribute in attributes {
+        let canonical = attribute.trim().trim_start_matches("rstest::").to_owned();
+        if !canonical.is_empty() && !expected.contains(&canonical) {
+            expected.push(canonical);
+        }
+    }
+    if expected.is_empty() {
+        RstestHelper::default().provider_param_attributes
+    } else {
+        expected
+    }
+}
+
 proptest! {
-    /// Keep normalized provider attributes non-empty, prefix-free, and unique.
+    /// Keep provider attributes complete, ordered, unique, and idempotent.
     #[test]
     fn normalized_provider_attributes_are_canonical(
-        attributes in prop::collection::vec(any::<String>(), 0..16)
+        attributes in prop::collection::vec(attribute_strategy(), 0..16)
     ) {
         let normalized = normalize_provider_attributes(attributes.clone());
-        prop_assert!(!normalized.is_empty());
-        for attribute in &normalized {
-            prop_assert_eq!(attribute.as_str(), attribute.trim());
-            prop_assert!(!attribute.is_empty());
-            prop_assert!(!attribute.starts_with("rstest::"));
+        prop_assert_eq!(&normalized, &expected_provider_attributes(&attributes));
+        prop_assert_eq!(
+            normalize_provider_attributes(normalized.clone()),
+            normalized
+        );
+    }
+
+    /// Clamp every bumpy-road tuning value into the lint's valid range.
+    #[test]
+    fn normalizes_bumpy_road_tuning_to_valid_ranges(
+        threshold in any::<f64>(),
+        window in any::<usize>(),
+        min_bump_lines in any::<usize>(),
+        depth in any::<f64>(),
+        predicate in any::<f64>(),
+        flow in any::<f64>(),
+    ) {
+        let mut configuration = Configuration::default();
+        let bumpy = &mut configuration.bumpy_road_function;
+        bumpy.threshold = threshold;
+        bumpy.window = window;
+        bumpy.min_bump_lines = min_bump_lines;
+        bumpy.weights = BumpyWeights { depth, predicate, flow };
+        let normalized = normalize(configuration).bumpy_road_function;
+        prop_assert!(normalized.threshold.is_finite());
+        prop_assert!(normalized.threshold >= 0.0);
+        prop_assert!(is_valid_window(normalized.window));
+        prop_assert!(normalized.min_bump_lines >= 1);
+        for weight in [
+            normalized.weights.depth,
+            normalized.weights.predicate,
+            normalized.weights.flow,
+        ] {
+            prop_assert!(weight.is_finite());
+            prop_assert!(weight >= 0.0);
         }
-        let distinct: BTreeSet<&String> = normalized.iter().collect();
-        prop_assert_eq!(distinct.len(), normalized.len());
-        let canonical: BTreeSet<String> = attributes
-            .iter()
-            .map(|attribute| attribute.trim().trim_start_matches("rstest::").to_owned())
-            .filter(|attribute| !attribute.is_empty())
-            .collect();
-        if canonical.is_empty() {
-            let defaults = RstestHelper::default().provider_param_attributes;
-            prop_assert_eq!(normalized, defaults);
-        } else {
-            prop_assert!(normalized.iter().all(|attribute| canonical.contains(attribute)));
-        }
+    }
+
+    /// Preserve bumpy-road tuning that is already inside the valid range.
+    #[test]
+    fn preserves_valid_bumpy_road_tuning(
+        threshold in 0.0f64..1.0e6,
+        window in any::<usize>().prop_map(|window| window | 1),
+        min_bump_lines in 1usize..1024,
+        depth in 0.0f64..1.0e6,
+        predicate in 0.0f64..1.0e6,
+        flow in 0.0f64..1.0e6,
+    ) {
+        let mut configuration = Configuration::default();
+        let bumpy = &mut configuration.bumpy_road_function;
+        bumpy.threshold = threshold;
+        bumpy.window = window;
+        bumpy.min_bump_lines = min_bump_lines;
+        bumpy.weights = BumpyWeights { depth, predicate, flow };
+        let normalized = normalize(configuration).bumpy_road_function;
+        prop_assert_eq!(normalized.threshold, threshold);
+        prop_assert_eq!(normalized.window, window);
+        prop_assert_eq!(normalized.min_bump_lines, min_bump_lines);
+        prop_assert_eq!(normalized.weights.depth, depth);
+        prop_assert_eq!(normalized.weights.predicate, predicate);
+        prop_assert_eq!(normalized.weights.flow, flow);
     }
 }
