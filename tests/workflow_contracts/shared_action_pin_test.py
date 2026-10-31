@@ -33,7 +33,13 @@ SETUP_RUST_PREFIX: Final[str] = "leynos/shared-actions/.github/actions/setup-rus
 #: new caller has to be added deliberately. `test_every_setup_rust_call_is_in_a
 #: _listed_workflow` is what makes the list load-bearing.
 PINNED_WORKFLOWS: Final[frozenset[str]] = frozenset(
-    {"ci.yml", "coverage-main.yml", "release.yml", "rolling-release.yml"}
+    {
+        "ci.yml",
+        "coverage-main.yml",
+        "nextest-split-benchmark.yml",
+        "release.yml",
+        "rolling-release.yml",
+    }
 )
 
 

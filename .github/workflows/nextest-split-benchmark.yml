@@ -1,0 +1,147 @@
+name: Nextest split benchmark
+
+# Evidence collection for issue #513. This workflow is not a gate: it runs on
+# demand, only on the benchmark branch, and exists because the shared developer
+# hosts cannot provide a quiet run. It measures the delivered split against a
+# serial control that rewrites only the trybuild tests' `test-group`
+# assignments, so the two configurations differ in group assignment alone.
+#
+# Dispatch `filtered` for five serial-control and five split repetitions of
+# both capacity-one groups in one Nextest invocation, and `full` for warm and
+# edited `make test` comparisons plus five clean post-split runs. Every run
+# uploads its configuration copy, log, JUnit report, meta record, and summary.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Which measurement set to run
+        required: true
+        type: choice
+        default: filtered
+        options:
+          - filtered
+          - full
+      repetitions:
+        description: Repetitions per configuration
+        required: true
+        default: "5"
+
+permissions:
+  contents: read
+
+# An in-progress measurement is never cancelled: a cancelled repetition is a
+# lost sample, and the uploaded artifacts are the evidence.
+concurrency:
+  group: nextest-split-benchmark-${{ inputs.mode }}
+  cancel-in-progress: false
+
+env:
+  CARGO_INCREMENTAL: 0
+  CARGO_TERM_COLOR: always
+  LINUX_RUNNER_VCPUS: '2'
+  RUSTFLAGS: -D warnings
+  RUSTDOCFLAGS: -D warnings
+
+jobs:
+  measure:
+    runs-on: ubuntu-24.04
+    # Two five-repetition sets plus warm-ups, on the runner shape CI uses.
+    timeout-minutes: 340
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Free preinstalled toolchains the job does not use
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          df -m /
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet
+          df -m /
+
+      - name: Bound concurrency to the runner shape
+        run: |
+          {
+            printf 'CARGO_BUILD_JOBS=%s\n' "${LINUX_RUNNER_VCPUS}"
+            printf 'NEXTEST_TEST_THREADS=%s\n' "${LINUX_RUNNER_VCPUS}"
+          } >> "$GITHUB_ENV"
+
+      - name: Restore Cargo registry
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cargo-registry-coverage-v1-${{ runner.os }}-${{ runner.arch }}-${{ runner.environment }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
+          restore-keys: |
+            cargo-registry-coverage-v1-${{ runner.os }}-${{ runner.arch }}-${{ runner.environment }}-
+
+      - name: Restore the Rust toolchain and installed tools
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: |
+            ~/.rustup
+            ~/.cargo/bin
+            ~/.local/bin
+            ~/.cache/uv
+            ~/.local/share/uv
+          key: tools-coverage-v1-${{ runner.os }}-${{ runner.arch }}-${{ runner.environment }}-ubuntu2404-nextest0.9.114-llvmcov0.6.24-${{ hashFiles('rust-toolchain.toml') }}
+
+      - name: Restore the Clippy snapshot
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: ~/.cache/whitaker-clippy-snapshot
+          key: clippy-snapshot-v1-${{ hashFiles('installer/clippy-snapshot.toml') }}
+
+      - name: Setup Rust
+        id: setup-rust
+        uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
+        with:
+          # GitHub-hosted: the Actions cache service is the only backend, so
+          # there is no proxy to assert against.
+          cache-provider: external
+
+      - name: Provision the Clippy snapshot
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          make clippy-snapshot
+          make --no-print-directory dylint-env >> "$GITHUB_ENV"
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
+        with:
+          tool: nextest@0.9.114
+          fallback: none
+
+      - name: Test the measurement helpers
+        run: |
+          python3 -m pytest scripts/tests/test_nextest_split_benchmark.py -q \
+            -p no:cacheprovider
+
+      - name: Measure
+        env:
+          MODE: ${{ inputs.mode }}
+          REPETITIONS: ${{ inputs.repetitions }}
+        run: |
+          set -euo pipefail
+          bash scripts/run-nextest-split-benchmark.sh \
+            "$MODE" "$REPETITIONS" "$RUNNER_TEMP/bench-$MODE"
+
+      - name: Upload the measurements
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
+        with:
+          name: nextest-split-benchmark-${{ inputs.mode }}
+          path: ${{ runner.temp }}/bench-${{ inputs.mode }}
+          if-no-files-found: error
+          retention-days: 90
