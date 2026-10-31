@@ -112,24 +112,24 @@ proptest! {
 /// Run Dylint 6.3.0's own selection against the repository at `repo`.
 ///
 /// `clippy_repository` caches its clone per thread, so each call gets a fresh
-/// thread; the variable is set under the shared environment lock.
+/// thread. The variable is scoped to the selection and restored afterwards.
 fn dylint_selection(repo: &Utf8Path, toolchain: &str) -> Option<String> {
     let repo = repo.to_owned();
     let toolchain = toolchain.to_owned();
-    let _guard =
-        whitaker_common::test_support::EnvVarGuard::set("DYLINT_CLIPPY_REPO", repo.as_str());
-    std::thread::spawn(move || {
-        let revs = dylint_internal::clippy_utils::Revs::new(true).expect("open the repository");
-        let mut iter = revs.channel_iter().expect("walk the history");
-        iter.find(|rev| {
-            rev.as_ref()
-                .map_or(true, |rev| rev.channel.as_str() <= toolchain.as_str())
+    whitaker_common::test_support::with_env_var("DYLINT_CLIPPY_REPO", repo.as_str(), || {
+        std::thread::spawn(move || {
+            let revs = dylint_internal::clippy_utils::Revs::new(true).expect("open the repository");
+            let mut iter = revs.channel_iter().expect("walk the history");
+            iter.find(|rev| {
+                rev.as_ref()
+                    .map_or(true, |rev| rev.channel.as_str() <= toolchain.as_str())
+            })
+            .and_then(Result::ok)
+            .map(|rev| rev.oid.to_string())
         })
-        .and_then(Result::ok)
-        .map(|rev| rev.oid.to_string())
+        .join()
+        .expect("the selection thread completes")
     })
-    .join()
-    .expect("the selection thread completes")
 }
 
 /// Read and select through the Git layer, as verification does.

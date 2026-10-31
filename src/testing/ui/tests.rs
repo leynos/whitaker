@@ -4,7 +4,9 @@ use super::{HarnessError, run_ui_test, run_with_runner};
 use camino::{Utf8Path, Utf8PathBuf};
 use rstest::rstest;
 use std::env;
-use whitaker_common::test_support::{EnvTestGuard, EnvVarGuard, env_test_guard};
+use whitaker_common::test_support::{
+    EnvTestGuard, env_test_guard, with_env_var, with_env_var_removed,
+};
 
 #[rstest]
 #[case(
@@ -115,15 +117,17 @@ fn run_ui_test_panics_with_context_from_runner_failure() {
 #[test]
 fn runner_env_guard_preserves_rustc_wrapper() {
     let _serial_guard = runner_env_guard_test_lock();
-    let _guard = EnvVarGuard::set("RUSTC_WRAPPER", "sccache");
 
-    run_with_runner("lint", "ui", |_, _| {
+    with_env_var("RUSTC_WRAPPER", "sccache", || {
+        run_with_runner("lint", "ui", |_, _| {
+            assert_eq!(env::var_os("RUSTC_WRAPPER"), Some("sccache".into()));
+            Ok(())
+        })
+        .expect("runner should execute with RUSTC_WRAPPER preserved");
+
+        // The runner may not clobber a caller-supplied value when it finishes.
         assert_eq!(env::var_os("RUSTC_WRAPPER"), Some("sccache".into()));
-        Ok(())
-    })
-    .expect("runner should execute with RUSTC_WRAPPER preserved");
-
-    assert_eq!(env::var_os("RUSTC_WRAPPER"), Some("sccache".into()));
+    });
 }
 
 /// The runner sees the copy-library flag set, and the caller's environment is
@@ -142,18 +146,19 @@ fn runner_env_guard_marks_the_toolchain_library_as_prepared(
 ) {
     const FLAG: &str = "DYLINT_LINK_ENABLE_COPY_LIBRARY";
     let _serial_guard = runner_env_guard_test_lock();
-    let _caller = caller_value.map_or_else(
-        || EnvVarGuard::remove(FLAG),
-        |value| EnvVarGuard::set(FLAG, value),
-    );
+    let scenario = || {
+        run_with_runner("lint", "ui", |_, _| {
+            assert_eq!(env::var_os(FLAG), Some(seen_by_runner.into()));
+            Ok(())
+        })
+        .expect("runner should execute with the copy-library flag set");
 
-    run_with_runner("lint", "ui", |_, _| {
-        assert_eq!(env::var_os(FLAG), Some(seen_by_runner.into()));
-        Ok(())
-    })
-    .expect("runner should execute with the copy-library flag set");
-
-    assert_eq!(env::var_os(FLAG), caller_value.map(Into::into));
+        assert_eq!(env::var_os(FLAG), caller_value.map(Into::into));
+    };
+    match caller_value {
+        Some(value) => with_env_var(FLAG, value, scenario),
+        None => with_env_var_removed(FLAG, scenario),
+    }
 }
 
 /// Overlapping runners keep the flag until the last one finishes.
@@ -165,39 +170,42 @@ fn runner_env_guard_marks_the_toolchain_library_as_prepared(
 fn overlapping_runner_guards_keep_the_flag_until_the_last_drops() {
     const FLAG: &str = "DYLINT_LINK_ENABLE_COPY_LIBRARY";
     let _serial_guard = runner_env_guard_test_lock();
-    let _absent = EnvVarGuard::remove(FLAG);
 
-    let first = super::runner_env_guard();
-    let second = super::runner_env_guard();
-    drop(first);
-    assert_eq!(
-        env::var_os(FLAG),
-        Some("1".into()),
-        "the second runner still needs it"
-    );
+    with_env_var_removed(FLAG, || {
+        let first = super::runner_env_guard();
+        let second = super::runner_env_guard();
+        drop(first);
+        assert_eq!(
+            env::var_os(FLAG),
+            Some("1".into()),
+            "the second runner still needs it"
+        );
 
-    drop(second);
-    assert_eq!(
-        env::var_os(FLAG),
-        None,
-        "the last runner restores the environment"
-    );
+        drop(second);
+        assert_eq!(
+            env::var_os(FLAG),
+            None,
+            "the last runner restores the environment"
+        );
+    });
 }
 
 #[cfg(windows)]
 #[test]
 fn windows_env_guard_leaves_absent_rustc_wrapper_untouched() {
     let _serial_guard = runner_env_guard_test_lock();
-    let _vcpkg_root = EnvVarGuard::set("VCPKG_ROOT", r"C:\vcpkg");
-    let _rustc_wrapper = EnvVarGuard::remove("RUSTC_WRAPPER");
 
-    run_with_runner("lint", "ui", |_, _| {
-        assert_eq!(env::var_os("RUSTC_WRAPPER"), None);
-        Ok(())
-    })
-    .expect("runner should execute without installing RUSTC_WRAPPER");
+    with_env_var("VCPKG_ROOT", r"C:\vcpkg", || {
+        with_env_var_removed("RUSTC_WRAPPER", || {
+            run_with_runner("lint", "ui", |_, _| {
+                assert_eq!(env::var_os("RUSTC_WRAPPER"), None);
+                Ok(())
+            })
+            .expect("runner should execute without installing RUSTC_WRAPPER");
 
-    assert_eq!(env::var_os("RUSTC_WRAPPER"), None);
+            assert_eq!(env::var_os("RUSTC_WRAPPER"), None);
+        });
+    });
 }
 
 #[test]

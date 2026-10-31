@@ -28,7 +28,8 @@ struct ExpectedTraitMetrics {
     burden: usize,
 }
 
-fn assert_trait_metrics(metrics: &TraitMetrics, expected: ExpectedTraitMetrics) {
+/// Compare every exposed trait metric with its expected value.
+fn assert_trait_metrics(metrics: &TraitMetrics, expected: &ExpectedTraitMetrics) {
     assert_eq!(metrics.trait_name(), expected.name);
     assert_eq!(metrics.total_item_count(), expected.total);
     assert_eq!(metrics.required_method_count(), expected.required);
@@ -115,12 +116,14 @@ fn default_method_cc_sum_is_zero_without_default_methods() {
     assert_eq!(default_method_cc_sum(&items), 0);
 }
 
+/// Check that a new builder starts without trait items.
 #[rstest]
 fn builder_starts_empty() {
     let builder = TraitMetricsBuilder::new("Parser");
     assert!(builder.is_empty());
 }
 
+/// Check that a builder reports metrics for mixed trait items.
 #[rstest]
 fn builder_builds_mixed_trait_metrics() {
     let mut builder = TraitMetricsBuilder::new("Parser");
@@ -133,7 +136,7 @@ fn builder_builds_mixed_trait_metrics() {
 
     assert_trait_metrics(
         &metrics,
-        ExpectedTraitMetrics {
+        &ExpectedTraitMetrics {
             name: "Parser",
             total: 4,
             required: 1,
@@ -144,6 +147,7 @@ fn builder_builds_mixed_trait_metrics() {
     );
 }
 
+/// Check that a builder accepts prebuilt trait metric entries.
 #[rstest]
 fn builder_add_item_supports_prebuilt_entries() {
     let mut builder = TraitMetricsBuilder::new("Renderer");
@@ -154,7 +158,7 @@ fn builder_add_item_supports_prebuilt_entries() {
 
     assert_trait_metrics(
         &metrics,
-        ExpectedTraitMetrics {
+        &ExpectedTraitMetrics {
             name: "Renderer",
             total: 2,
             required: 1,
@@ -165,6 +169,7 @@ fn builder_add_item_supports_prebuilt_entries() {
     );
 }
 
+/// Check that macro-expanded default methods are excluded from metrics.
 #[rstest]
 fn builder_filters_macro_expanded_default_methods() {
     let mut builder = TraitMetricsBuilder::new("Parser");
@@ -176,7 +181,7 @@ fn builder_filters_macro_expanded_default_methods() {
 
     assert_trait_metrics(
         &metrics,
-        ExpectedTraitMetrics {
+        &ExpectedTraitMetrics {
             name: "Parser",
             total: 2,
             required: 1,
@@ -202,13 +207,14 @@ fn implementor_burden_equals_required_method_count() {
     assert_eq!(metrics.implementor_burden(), 2);
 }
 
+/// Check that an empty trait produces zero-valued metrics.
 #[rstest]
 fn empty_trait_has_zeroed_metrics() {
     let metrics = TraitMetricsBuilder::new("EmptyTrait").build();
 
     assert_trait_metrics(
         &metrics,
-        ExpectedTraitMetrics {
+        &ExpectedTraitMetrics {
             name: "EmptyTrait",
             total: 0,
             required: 0,

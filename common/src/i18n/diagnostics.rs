@@ -33,7 +33,7 @@ impl<'a> MessageKey<'a> {
     }
 }
 
-impl<'a> AsRef<str> for MessageKey<'a> {
+impl AsRef<str> for MessageKey<'_> {
     fn as_ref(&self) -> &str {
         self.0
     }
@@ -57,7 +57,7 @@ impl<'a> AttrKey<'a> {
     }
 }
 
-impl<'a> AsRef<str> for AttrKey<'a> {
+impl AsRef<str> for AttrKey<'_> {
     fn as_ref(&self) -> &str {
         self.0
     }
@@ -72,9 +72,19 @@ impl fmt::Display for AttrKey<'_> {
 /// Lookup trait used by lint crates to resolve translated diagnostic strings.
 pub trait BundleLookup {
     /// Resolve the primary message for `key` using `args`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`I18nError::MissingMessage`] when `key` is not defined for the
+    /// resolved locale.
     fn message(&self, key: MessageKey<'_>, args: &Arguments<'_>) -> Result<String, I18nError>;
 
     /// Resolve an attribute message for `key.attribute` using `args`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`I18nError::MissingMessage`] when `key.attribute` is not
+    /// defined for the resolved locale.
     fn attribute(
         &self,
         key: MessageKey<'_>,
@@ -121,7 +131,7 @@ impl DiagnosticMessageSet {
     /// );
     /// assert_eq!(messages.primary(), "primary");
     /// ```
-    pub fn new(primary: String, note: String, help: String) -> Self {
+    pub const fn new(primary: String, note: String, help: String) -> Self {
         Self {
             primary,
             note,
@@ -199,10 +209,15 @@ impl DiagnosticMessageSet {
     }
 }
 
-/// Resolve the primary, note, and help messages for a lint diagnostic.
 const NOTE_ATTR: AttrKey<'static> = AttrKey::new("note");
 const HELP_ATTR: AttrKey<'static> = AttrKey::new("help");
 
+/// Resolve the primary, note, and help messages for a lint diagnostic.
+///
+/// # Errors
+///
+/// Returns [`I18nError::MissingMessage`] when the primary message, its `note`
+/// attribute, or its `help` attribute is not defined for the resolved locale.
 #[must_use = "Use the resolved localization messages when emitting diagnostics"]
 pub fn resolve_message_set(
     lookup: &impl BundleLookup,

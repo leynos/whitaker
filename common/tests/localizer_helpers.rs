@@ -13,7 +13,7 @@ use whitaker_common::{
         Arguments, DiagnosticMessageSet, FluentValue, Localizer, MessageKey, MessageResolution,
         get_localizer_for_lint, noop_reporter, safe_resolve_message_set, testing::RecordingEmitter,
     },
-    test_support::{EnvTestGuard, env_test_guard, with_locale},
+    test_support::with_locale,
 };
 use whitaker_test_macros::allow_fixture_expansion_lints;
 
@@ -33,16 +33,11 @@ struct HelperWorld {
     result: RefCell<Option<DiagnosticMessageSet>>,
     emitter: RecordingEmitter,
     environment_locale: RefCell<Option<String>>,
-    _guard: EnvTestGuard,
 }
 
 impl HelperWorld {
     /// Creates a scenario world that holds the shared environment protocol.
     fn new() -> Self {
-        // Keep the shared guard for the scenario lifetime so locale changes
-        // cannot interleave with other process-environment test helpers.
-        let guard = env_test_guard();
-
         Self {
             configuration: RefCell::new(None),
             localizer: RefCell::new(None),
@@ -52,7 +47,6 @@ impl HelperWorld {
             result: RefCell::new(None),
             emitter: RecordingEmitter::default(),
             environment_locale: RefCell::new(None),
-            _guard: guard,
         }
     }
 

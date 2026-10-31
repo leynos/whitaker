@@ -16,7 +16,8 @@ pub(super) fn fingerprint(hash: u64, range: std::ops::Range<usize>) -> Fingerpri
     Fingerprint::new(hash, range)
 }
 
-pub(super) fn fragment(input: FragmentInput<'_>) -> TokenFragment {
+/// Build a token fragment and attach each retained fingerprint range.
+pub(super) fn fragment(input: &FragmentInput<'_>) -> TokenFragment {
     TokenFragment::new(
         FragmentId::from(input.id),
         input.profile,

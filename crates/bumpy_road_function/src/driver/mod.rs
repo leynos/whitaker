@@ -29,12 +29,31 @@ use self::config::load_configuration;
 use self::diagnostic::{DiagnosticInput, emit_diagnostic};
 use self::segment_builder::{SegmentBuilder, span_line_range};
 
-dylint_linting::impl_late_lint! {
-    pub BUMPY_ROAD_FUNCTION,
-    Warn,
-    "functions should avoid multiple separated clusters of complex conditional logic",
-    BumpyRoadFunction::default()
+/// Dylint lint declaration and registration glue.
+///
+/// `impl_late_lint!` expands to the Dylint ABI entry point and the
+/// `impl_lint_pass!` accessor, neither of which has a source location that
+/// could carry documentation. Isolating the invocation keeps the expectation
+/// scoped to exactly those generated items.
+mod declaration {
+    #![expect(
+        missing_docs,
+        reason = "dylint_linting macro expansion emits items with no documentable source location"
+    )]
+
+    use super::BumpyRoadFunction;
+
+    dylint_linting::impl_late_lint! {
+        /// Lint flagging functions with multiple separated clusters of complex
+        /// conditional logic ("bumpy road" complexity profiles).
+        pub BUMPY_ROAD_FUNCTION,
+        Warn,
+        "functions should avoid multiple separated clusters of complex conditional logic",
+        BumpyRoadFunction::default()
+    }
 }
+
+pub use declaration::BUMPY_ROAD_FUNCTION;
 
 /// Lint pass that caches configuration and localization for a crate.
 pub struct BumpyRoadFunction {
@@ -67,7 +86,7 @@ impl<'tcx> LateLintPass<'tcx> for BumpyRoadFunction {
             return;
         };
 
-        self.analyse_if_not_expanded(cx, item.span, target);
+        self.analyse_if_not_expanded(cx, item.span, &target);
     }
 
     fn check_impl_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx hir::ImplItem<'tcx>) {
@@ -75,7 +94,7 @@ impl<'tcx> LateLintPass<'tcx> for BumpyRoadFunction {
             return;
         };
 
-        self.analyse_if_not_expanded(cx, item.span, target);
+        self.analyse_if_not_expanded(cx, item.span, &target);
     }
 
     fn check_trait_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx hir::TraitItem<'tcx>) {
@@ -83,7 +102,7 @@ impl<'tcx> LateLintPass<'tcx> for BumpyRoadFunction {
             return;
         };
 
-        self.analyse_if_not_expanded(cx, item.span, target);
+        self.analyse_if_not_expanded(cx, item.span, &target);
     }
 
     fn check_expr(&mut self, cx: &LateContext<'tcx>, expr: &'tcx hir::Expr<'tcx>) {
@@ -95,12 +114,13 @@ impl<'tcx> LateLintPass<'tcx> for BumpyRoadFunction {
             return;
         };
 
-        self.analyse_if_not_expanded(cx, expr.span, target);
+        self.analyse_if_not_expanded(cx, expr.span, &target);
     }
 }
 
 impl BumpyRoadFunction {
-    fn analyse_if_not_expanded(&self, cx: &LateContext<'_>, span: Span, target: AnalysisTarget) {
+    /// Analyse a function body when it originates in user-written source.
+    fn analyse_if_not_expanded(&self, cx: &LateContext<'_>, span: Span, target: &AnalysisTarget) {
         if span.from_expansion() {
             return;
         }
@@ -109,7 +129,8 @@ impl BumpyRoadFunction {
     }
 }
 
-fn extract_item_target(item: &hir::Item<'_>) -> Option<AnalysisTarget> {
+/// Extract an analysis target from a free function item.
+const fn extract_item_target(item: &hir::Item<'_>) -> Option<AnalysisTarget> {
     let hir::ItemKind::Fn { ident, body, .. } = item.kind else {
         return None;
     };
@@ -117,7 +138,8 @@ fn extract_item_target(item: &hir::Item<'_>) -> Option<AnalysisTarget> {
     Some(make_ident_target(ident, body))
 }
 
-fn extract_impl_item_target(item: &hir::ImplItem<'_>) -> Option<AnalysisTarget> {
+/// Extract an analysis target from a provided implementation method.
+const fn extract_impl_item_target(item: &hir::ImplItem<'_>) -> Option<AnalysisTarget> {
     if let hir::ImplItemKind::Fn(_, body_id) = item.kind {
         return Some(make_analysis_target(
             item.ident.name,
@@ -129,7 +151,8 @@ fn extract_impl_item_target(item: &hir::ImplItem<'_>) -> Option<AnalysisTarget> 
     None
 }
 
-fn extract_trait_item_target(item: &hir::TraitItem<'_>) -> Option<AnalysisTarget> {
+/// Extract an analysis target from a provided trait method.
+const fn extract_trait_item_target(item: &hir::TraitItem<'_>) -> Option<AnalysisTarget> {
     let hir::TraitItemKind::Fn(_, trait_fn) = item.kind else {
         return None;
     };
@@ -157,7 +180,12 @@ fn extract_expr_target(expr: &hir::Expr<'_>) -> Option<AnalysisTarget> {
     ))
 }
 
-fn make_analysis_target(name: Symbol, primary_span: Span, body_id: hir::BodyId) -> AnalysisTarget {
+/// Build a target from its name, source span, and body identifier.
+const fn make_analysis_target(
+    name: Symbol,
+    primary_span: Span,
+    body_id: hir::BodyId,
+) -> AnalysisTarget {
     AnalysisTarget {
         name,
         primary_span,
@@ -165,7 +193,8 @@ fn make_analysis_target(name: Symbol, primary_span: Span, body_id: hir::BodyId) 
     }
 }
 
-fn make_ident_target(ident: Ident, body_id: hir::BodyId) -> AnalysisTarget {
+/// Build a target from an identifier and its body identifier.
+const fn make_ident_target(ident: Ident, body_id: hir::BodyId) -> AnalysisTarget {
     make_analysis_target(ident.name, ident.span, body_id)
 }
 
@@ -182,7 +211,7 @@ struct AnalysisTarget {
 /// smoothing failures are reported as delayed compiler bugs and stop analysis.
 fn analyse_body(
     cx: &LateContext<'_>,
-    target: AnalysisTarget,
+    target: &AnalysisTarget,
     settings: &Settings,
     localizer: &Localizer,
 ) {
@@ -213,7 +242,7 @@ fn analyse_body(
     };
 
     let smoothed = match smooth_moving_average(&signal, settings.window) {
-        Ok(signal) => signal,
+        Ok(smoothed) => smoothed,
         Err(error) => {
             cx.tcx.sess.dcx().span_delayed_bug(
                 body_span,

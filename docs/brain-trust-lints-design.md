@@ -529,40 +529,26 @@ further decomposition analysis was omitted.
   `common` crate, running all harnesses by default; passing a harness name as
   an argument filters to that specific harness. `make kani` exposes the
   workflow as a top-level quality gate.
-- **Bounded symbolic model uses fixed-size edge arrays**: each Kani harness
-  generates symbolic `SimilarityEdge` values from a fixed-size array of up to 3
-  edges with an active-length field. The maximum node count is 3 (with
-  `unwind(7)`), giving at most C(3,2) = 3 possible unique undirected edges.
-  These bounds are kept deliberately small because Rust's standard `sort_by`
-  generates deeply nested loops that cause the C Bounded Model Checker (CBMC)
-  state-space explosion at higher bounds. This keeps the search space tractable
-  and avoids requiring `kani::Arbitrary` for `Vec`.
-- **Harness inputs constrained to the production edge contract**:
+- **Generated graph tests cover adjacency invariants**: the Proptest calls the
+  production `build_adjacency` function and checks row count, sorted rows,
+  exact directed edge tuples, symmetry, bounds, edge preservation, and the
+  absence of spurious entries. Exact tuple-set equality against valid input
+  endpoints plus the output-entry count catches missing and duplicate entries.
+- **Kani does not model `build_adjacency` output invariants**: the row-count,
+  edge-preservation, and bounds harnesses each exhausted the fixed 8 GiB
+  process-tree cap. CBMC generated 16,317, 25,092, and 19,611 verification
+  conditions respectively; Kissat also exhausted the cap on the bounds proof.
+  No-spurious and symmetry properties had already moved to Proptest after the
+  same failure, and Kani sorting had previously timed out unwinding Rust's
+  stable-sort internals. Kani still verifies label-propagation properties.
+- **Generated adjacency inputs follow the edge contract**:
   `build_similarity_edges` guarantees `left < right < node_count`,
-  `weight > 0`, and no duplicate unordered pairs. The Kani harnesses enforce
-  these same `kani::assume` preconditions, so the proof covers exactly the
-  inputs that production code can generate.
-- **Six separate proof harnesses for failure localization**: the six
-  properties (correct length, edge preservation, in-bounds indices, symmetry,
-  no spurious edges, sorted neighbours) each have a dedicated harness. This
-  simplifies root-cause analysis when a single property fails. The sixth harness
-  (`verify_build_adjacency_no_spurious_edges`) closes an exclusion gap:
-  without it, a buggy implementation that injected extra symmetric, in-bounds
-  edges would pass the other five proofs.
-- **Sort-coverage limitation is a conscious bound trade-off**: with
-  `MAX_NODES = 3`, no node can have more than 2 neighbours, so the sorted
-  neighbours harness only exercises 0-, 1-, and 2-element bucket sorts. Raising
-  `MAX_NODES` to 4 (C(4,2) = 6 edges, degree-3 lists) would expose sort defects
-  at 3+ elements, but Rust's standard `sort_by` generates deeply nested
-  control-flow paths that cause CBMC state-space explosion at that scale. The
-  current bound is retained as a conscious engineering trade-off.
-- **`kani::assume(node_count > 0)` documents intent**: the guard in
-  `verify_build_adjacency_preserves_edges` and
-  `verify_build_adjacency_symmetry` is technically redundant — when
-  `node_count = 0`, the `right < node_count` constraint inside
-  `constrained_edges` is unsatisfiable, so `edges` is always empty and the
-  assertion loops never execute. The assumption is retained for readability and
-  is documented in the harness doc-comments.
+  `weight > 0`, and no duplicate unordered pairs. The generated test creates
+  unique, in-range endpoints and derives its oracle from those edges.
+  `build_adjacency_rows_unordered` is private to `community` and is called only
+  by the ordered production wrapper; sorting is checked through
+  `build_adjacency` itself. Propagation proofs use arbitrary neighbour order
+  because score aggregation and tie-breaking do not depend on that order.
 - **`build_adjacency` promoted to `pub(crate)`**: the function was private;
   promoting it to `pub(crate)` aligns with `build_similarity_edges` and allows
   unit tests and the `test_support::decomposition` adjacency report helper to
@@ -602,10 +588,11 @@ further decomposition analysis was omitted.
   for Kani because it pulled `BTreeMap` comparison into the proof path. The
   shipped runtime now breaks equal-score ties by lexical method name, with the
   label index as a deterministic fallback when names match.
-- **The Kani proof file is split by concern**:
-  `community_kani/adjacency.rs` keeps the completed 6.4.5 harnesses, while
-  `community_kani/propagate_labels.rs` holds the new 6.4.6 harness family and
-  `community_kani/shared.rs` holds the shared adjacency model for 6.4.5.
+- **The Kani proof files are scoped by concern**:
+  `community_kani/propagate_labels.rs` holds the label-propagation harnesses;
+  `community_kani/shared.rs` provides their bounded iteration model. Adjacency
+  invariants are covered through the generated production-builder property test
+  because CBMC exceeded the configured memory cap on the Vec models.
 - **The Kani install sidecar had a warm-cache trap bug**:
   `scripts/install-kani.sh` originally exited with status `1` after printing
   the cached install directory because the `trap` cleanup function returned the
@@ -625,6 +612,29 @@ further decomposition analysis was omitted.
   (`detect_communities`), unit tests, and Kani harnesses call
   `propagate_labels_report` directly. The `#[expect(dead_code)]` annotation was
   therefore unjustified and the function was deleted.
+
+### Review hardening
+
+- **Community detection keeps its implementation modules private to
+  decomposition advice**: `community.rs` coordinates detection and retains the
+  checked adjacency constructor used by the generated property tests;
+  `community/propagation.rs` owns pass limits and convergence; and
+  `community/selection.rs` owns neighbour scoring and deterministic
+  tie-breaking. The private `PropagationPlan` groups the active-node set and
+  iteration bound for one propagation call; it is constructed and consumed
+  within `community/propagation.rs`. These modules are internal to
+  decomposition advice. Other lints should use the decomposition API rather
+  than reuse graph internals.
+- **Similarity-edge construction stays private to decomposition advice**:
+  `decomposition_advice::graph` owns vector-pair scoring and weighted edge
+  creation. This boundary keeps the graph representation and its propagation
+  rules local to the diagnostic that consumes them.
+- **Malformed intermediate state fails closed**: adjacency construction,
+  propagation, and suggestion rendering return typed internal errors. The
+  fallible `suggest_decomposition` boundary reports those errors to its caller,
+  so callers cannot publish a partial decomposition as valid output.
+  Observability belongs to the diagnostic adapters that consume the query,
+  keeping the domain free of logging and metrics side effects.
 
 ## SARIF output
 

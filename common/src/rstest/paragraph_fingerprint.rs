@@ -64,14 +64,14 @@ impl ParagraphNormalizer {
     /// reuse the original slot.
     #[must_use]
     pub fn local_slot(&mut self, local_name: impl Into<String>) -> LocalSlot {
-        let local_name = local_name.into();
-        if let Some(slot) = self.slots.get(&local_name) {
+        let owned_name = local_name.into();
+        if let Some(slot) = self.slots.get(&owned_name) {
             return *slot;
         }
 
         let slot = LocalSlot::new(self.next_slot);
         self.next_slot += 1;
-        self.slots.insert(local_name, slot);
+        self.slots.insert(owned_name, slot);
         slot
     }
 }
@@ -120,9 +120,19 @@ impl CalleeShape {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum ExprShape {
     /// A function call with known or unknown callee identity and arity.
-    Call { callee: CalleeShape, argc: usize },
+    Call {
+        /// The normalized callee identity.
+        callee: CalleeShape,
+        /// The number of call arguments.
+        argc: usize,
+    },
     /// A method call with method name and arity.
-    MethodCall { method: String, argc: usize },
+    MethodCall {
+        /// The method name as written at the call site.
+        method: String,
+        /// The number of call arguments, excluding the receiver.
+        argc: usize,
+    },
     /// A stable path expression.
     Path,
     /// A stable literal expression.
@@ -185,10 +195,16 @@ impl ExprShape {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum StmtShape {
     /// A `let` statement represented by its initializer shape.
-    Let { init: ExprShape },
+    Let {
+        /// The normalized shape of the initializer expression.
+        init: ExprShape,
+    },
     /// A mutating call, optionally tied to a normalized local receiver slot.
     MutCall {
+        /// The normalized slot of the local receiver, when the receiver is a
+        /// known local binding.
         receiver: Option<LocalSlot>,
+        /// The normalized callee identity.
         callee: CalleeShape,
     },
 }

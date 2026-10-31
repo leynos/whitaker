@@ -30,7 +30,9 @@ pub(super) fn assert_suggestion(
 pub(super) fn assert_type_decomposition_is_empty(subject: &str, methods: &[MethodProfile]) {
     let context = DecompositionContext::new(subject, SubjectKind::Type);
     assert!(
-        suggest_decomposition(&context, methods).is_empty(),
+        suggest_decomposition(&context, methods)
+            .expect("fixture profiles should analyse")
+            .is_empty(),
         "expected no decomposition suggestions for {subject}"
     );
 }

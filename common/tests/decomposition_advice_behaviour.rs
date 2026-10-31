@@ -208,7 +208,9 @@ fn when_suggestions_are_generated(world: &DecompositionWorld) -> Result<(), Stri
         .into_iter()
         .map(MethodProfileBuilder::build)
         .collect::<Vec<_>>();
-    *world.suggestions.borrow_mut() = Some(suggest_decomposition(&context, &profiles));
+    let suggestions =
+        suggest_decomposition(&context, &profiles).map_err(|error| error.to_string())?;
+    *world.suggestions.borrow_mut() = Some(suggestions);
     Ok(())
 }
 

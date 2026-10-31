@@ -16,16 +16,16 @@ use whitaker_common::i18n::{BundleLookup, I18nError, resolve_message_set};
 pub(crate) fn emit_diagnostic(
     cx: &LateContext<'_>,
     span: Span,
-    usage: StdFsUsage,
+    usage: &StdFsUsage,
     localizer: &Localizer,
 ) {
     let mut args: Arguments<'static> = Arguments::default();
     args.insert(
         Cow::Borrowed("operation"),
-        FluentValue::from(usage.operation().to_string()),
+        FluentValue::from(usage.operation().to_owned()),
     );
 
-    let fallback_operation = usage.operation().to_string();
+    let fallback_operation = usage.operation().to_owned();
     let resolution = MessageResolution {
         lint_name: "no_std_fs_operations",
         key: MESSAGE_KEY,
@@ -40,9 +40,9 @@ pub(crate) fn emit_diagnostic(
         NO_STD_FS_OPERATIONS,
         span,
         rustc_lint::errors::DiagDecorator(move |lint| {
-            lint.primary_message(sanitize_message(messages.primary().to_string()));
-            lint.note(sanitize_message(messages.note().to_string()));
-            lint.help(sanitize_message(messages.help().to_string()));
+            lint.primary_message(sanitize_message(messages.primary()));
+            lint.note(sanitize_message(messages.note()));
+            lint.help(sanitize_message(messages.help()));
         }),
     );
 }
@@ -51,6 +51,7 @@ const MESSAGE_KEY: MessageKey<'static> = MessageKey::new("no_std_fs_operations")
 
 pub(crate) type StdFsMessages = DiagnosticMessageSet;
 
+/// Build default diagnostic messages when localization lookup fails.
 fn fallback_messages(operation: &str) -> StdFsMessages {
     let primary = format!(
         "Avoid using std::fs operation `{operation}`; require capability-bearing handles instead."
@@ -59,16 +60,16 @@ fn fallback_messages(operation: &str) -> StdFsMessages {
         "std::fs reads the ambient working directory, ",
         "so it bypasses the capability model enforced by cap-std and camino."
     )
-    .to_string();
+    .to_owned();
     let help = concat!(
         "Pass `cap_std::fs::Dir` handles and camino::Utf8Path/Utf8PathBuf arguments down to the call ",
         "so only explicit capabilities touch the filesystem."
-    )
-    .to_string();
+    ).to_owned();
     DiagnosticMessageSet::new(primary, note, help)
 }
 
-fn sanitize_message(text: String) -> String {
+/// Remove directional isolation marks before embedding localized text.
+fn sanitize_message(text: &str) -> String {
     text.chars()
         .filter(|ch| !matches!(ch, '\u{2068}' | '\u{2069}'))
         .collect()
@@ -83,7 +84,7 @@ pub(crate) fn localized_messages(
     let mut args: Arguments<'static> = Arguments::default();
     args.insert(
         Cow::Borrowed("operation"),
-        FluentValue::from(operation.to_string()),
+        FluentValue::from(operation.to_owned()),
     );
     resolve_message_set(lookup, MESSAGE_KEY, &args)
 }
@@ -94,15 +95,17 @@ mod tests {
 
     use super::sanitize_message;
 
+    /// Check that directional isolation marks are removed from messages.
     #[test]
     fn removes_isolation_marks() {
-        let raw = String::from("\u{2068}std::fs::read\u{2069}");
+        let raw = "\u{2068}std::fs::read\u{2069}";
         assert_eq!(sanitize_message(raw), "std::fs::read");
     }
 
+    /// Check that sanitizing plain text leaves it unchanged.
     #[test]
     fn preserves_clean_text() {
-        let raw = String::from("std::fs::File::open");
-        assert_eq!(sanitize_message(raw.clone()), raw);
+        let raw = "std::fs::File::open";
+        assert_eq!(sanitize_message(raw), raw);
     }
 }

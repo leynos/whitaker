@@ -202,7 +202,8 @@ fn decomposition_note_delegates_to_shared_renderer_for_types() {
         diagnostic.type_name(),
         SubjectKind::Type,
         &parser_serde_fs_fixture(),
-    );
+    )
+    .expect("fixture profiles should analyse");
 
     assert_eq!(
         format_decomposition_note(&diagnostic, &suggestions),

@@ -55,6 +55,7 @@ pub(crate) fn detect_example_violation(doc_text: &str) -> Option<DocExampleViola
     None
 }
 
+/// Check whether a Markdown heading introduces an examples section.
 fn is_examples_heading(line: &str) -> bool {
     let trimmed = line.trim_start();
     let heading_level = trimmed.chars().take_while(|ch| *ch == '#').count();
@@ -62,7 +63,10 @@ fn is_examples_heading(line: &str) -> bool {
         return false;
     }
 
-    let remainder = trimmed[heading_level..].trim_start();
+    let Some(after_hashes) = trimmed.get(heading_level..) else {
+        return false;
+    };
+    let remainder = after_hashes.trim_start();
     matches!(
         remainder
             .trim_end_matches(|ch: char| ch.is_ascii_whitespace())

@@ -7,6 +7,7 @@ use super::shared::bounded_iteration_count;
 
 const NODE_COUNT: usize = 3;
 
+/// Create fixed vectors with distinct names for deterministic tie-breaking.
 fn symbolic_vectors() -> [crate::decomposition_advice::vector::MethodFeatureVector; NODE_COUNT] {
     [
         minimal_feature_vector("gamma"),
@@ -15,6 +16,12 @@ fn symbolic_vectors() -> [crate::decomposition_advice::vector::MethodFeatureVect
     ]
 }
 
+/// Generate a valid graph without ordering rows that propagation reads as sets.
+///
+/// Label scores aggregate in a `BTreeMap`, and equal scores use an explicit
+/// method-name tie-break. The generated row order therefore does not affect
+/// these proofs; sorted rows are checked through production adjacency in the
+/// property suite.
 fn symbolic_adjacency() -> [Vec<(usize, u64)>; NODE_COUNT] {
     let mut node_0 = Vec::new();
     let mut node_1 = Vec::new();
@@ -24,13 +31,10 @@ fn symbolic_adjacency() -> [Vec<(usize, u64)>; NODE_COUNT] {
     add_symbolic_edge(&mut node_0, 0, &mut node_2, 2);
     add_symbolic_edge(&mut node_1, 1, &mut node_2, 2);
 
-    node_0.sort_by_key(|(neighbour, _)| *neighbour);
-    node_1.sort_by_key(|(neighbour, _)| *neighbour);
-    node_2.sort_by_key(|(neighbour, _)| *neighbour);
-
     [node_0, node_1, node_2]
 }
 
+/// Add a symbolic undirected edge when its activation bit is set.
 fn add_symbolic_edge(
     left: &mut Vec<(usize, u64)>,
     left_index: usize,
@@ -55,7 +59,8 @@ fn verify_propagate_labels_returns_vector_per_input() {
     let adjacency = symbolic_adjacency();
     let vectors = symbolic_vectors();
 
-    let report = propagate_labels_report(&vectors, &adjacency, bounded_iteration_count());
+    let report = propagate_labels_report(&vectors, &adjacency, bounded_iteration_count())
+        .expect("symbolic adjacency rows match the vector count");
 
     assert_eq!(report.labels.len(), NODE_COUNT);
 }
@@ -67,7 +72,8 @@ fn verify_propagate_labels_preserves_label_indices() {
     let adjacency = symbolic_adjacency();
     let vectors = symbolic_vectors();
 
-    let report = propagate_labels_report(&vectors, &adjacency, bounded_iteration_count());
+    let report = propagate_labels_report(&vectors, &adjacency, bounded_iteration_count())
+        .expect("symbolic adjacency rows match the vector count");
 
     for &label in &report.labels {
         assert!(label < NODE_COUNT);
@@ -81,7 +87,8 @@ fn verify_propagate_labels_zero_iterations_keeps_initial_labels() {
     let adjacency = symbolic_adjacency();
     let vectors = symbolic_vectors();
 
-    let report = propagate_labels_report(&vectors, &adjacency, 0);
+    let report = propagate_labels_report(&vectors, &adjacency, 0)
+        .expect("symbolic adjacency rows match the vector count");
 
     assert_eq!(report.iteration_count, 0);
     for (index, &label) in report.labels.iter().enumerate() {
@@ -98,7 +105,8 @@ fn verify_propagate_labels_bounded_return_for_any_max_iterations() {
     let vectors = symbolic_vectors();
     let max_iterations = bounded_iteration_count();
 
-    let report = propagate_labels_report(&vectors, &adjacency, max_iterations);
+    let report = propagate_labels_report(&vectors, &adjacency, max_iterations)
+        .expect("symbolic adjacency rows match the vector count");
 
     assert_eq!(report.labels.len(), NODE_COUNT);
     assert!(report.iteration_count <= max_iterations);

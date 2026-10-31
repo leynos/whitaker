@@ -67,7 +67,7 @@ impl PathExclusions {
     ///
     /// The driver consults this before resolving an item's path so the common
     /// case pays no lookup cost.
-    pub(crate) fn is_empty(&self) -> bool {
+    pub(crate) const fn is_empty(&self) -> bool {
         self.prefixes.is_empty()
     }
 
@@ -77,10 +77,9 @@ impl PathExclusions {
     /// `std::fs` usage.
     pub(crate) fn excludes(&self, item_path: &SimplePath) -> bool {
         let item = item_path.segments();
-        self.prefixes.iter().any(|prefix| {
-            let prefix = prefix.segments();
-            prefix.len() <= item.len() && item[..prefix.len()] == *prefix
-        })
+        self.prefixes
+            .iter()
+            .any(|prefix| item.starts_with(prefix.segments()))
     }
 }
 
@@ -105,7 +104,8 @@ fn bounded_entry(entry: &str) -> String {
     while !entry.is_char_boundary(end) {
         end -= 1;
     }
-    format!("{:?}… ({} bytes total)", &entry[..end], entry.len())
+    let truncated = entry.get(..end).unwrap_or(entry);
+    format!("{truncated:?}… ({} bytes total)", entry.len())
 }
 
 #[cfg(test)]
@@ -227,6 +227,7 @@ mod tests {
     }
 
     proptest! {
+        /// Check that configured exclusions match only complete path segments.
         #[test]
         fn excludes_matches_segment_wise_prefix_oracle(
             configured in prop::collection::vec(
@@ -247,9 +248,9 @@ mod tests {
 
             // Oracle: excluded iff some configured prefix is a genuine
             // segment-wise prefix of the item path.
-            let expected = configured.iter().any(|prefix| {
-                prefix.len() <= item.len() && item[..prefix.len()] == prefix[..]
-            });
+            let expected = configured
+                .iter()
+                .any(|prefix| item.starts_with(prefix.as_slice()));
 
             prop_assert_eq!(exclusions.excludes(&item_path), expected);
         }

@@ -98,7 +98,8 @@ pub fn normalize_settings(settings: Settings) -> Settings {
         }
     }
 
-    fn is_valid_window(window: usize) -> bool {
+    /// Check whether a smoothing window is positive and odd.
+    const fn is_valid_window(window: usize) -> bool {
         window != 0 && (window & 1) == 1
     }
 
@@ -239,6 +240,11 @@ pub fn detect_bumps(smoothed: &[f64], threshold: f64, min_bump_lines: usize) -> 
     context.into_intervals()
 }
 
+#[expect(
+    clippy::float_arithmetic,
+    reason = "bump areas accumulate smoothed complexity samples, which are inherently \
+              floating-point"
+)]
 fn process_sample_value(value: f64, index: usize, context: &mut BumpDetectionContext) {
     if value >= context.threshold {
         if context.current_start.is_none() {
@@ -260,7 +266,8 @@ fn process_sample_value(value: f64, index: usize, context: &mut BumpDetectionCon
     context.area = 0.0;
 }
 
-fn finalize_bump(
+/// Finish a bump interval when it meets the configured line threshold.
+const fn finalize_bump(
     start: usize,
     end: usize,
     area: f64,

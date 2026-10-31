@@ -165,7 +165,8 @@ fn decomposition_note_delegates_to_shared_renderer_for_traits() {
         diagnostic.trait_name(),
         SubjectKind::Trait,
         &transport_trait_fixture(),
-    );
+    )
+    .expect("fixture profiles should analyse");
 
     assert_eq!(
         format_decomposition_note(&diagnostic, &suggestions),

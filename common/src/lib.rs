@@ -9,6 +9,7 @@ pub mod complexity_signal;
 pub mod context;
 pub mod decomposition_advice;
 pub mod diagnostics;
+pub mod dylint_entry;
 pub mod expr;
 pub mod i18n;
 pub mod lcom4;
@@ -42,8 +43,9 @@ pub use context::{
     is_test_fn, is_test_fn_with,
 };
 pub use decomposition_advice::{
-    DecompositionContext, DecompositionSuggestion, MethodProfile, MethodProfileBuilder,
-    SubjectKind, SuggestedExtractionKind, format_diagnostic_note, suggest_decomposition,
+    DecompositionContext, DecompositionError, DecompositionSuggestion, MethodProfile,
+    MethodProfileBuilder, SubjectKind, SuggestedExtractionKind, format_diagnostic_note,
+    suggest_decomposition,
 };
 pub use diagnostics::{Applicability, Diagnostic, DiagnosticBuilder, Suggestion, span_lint};
 pub use expr::{Expr, def_id_of_expr_callee, is_path_to, recv_is_option_or_result};

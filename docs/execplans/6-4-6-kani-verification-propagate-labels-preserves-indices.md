@@ -268,17 +268,16 @@ Repository areas likely to change during implementation:
 
 1. `common/src/decomposition_advice/community.rs`
 2. `common/src/decomposition_advice/community_kani/mod.rs`
-3. `common/src/decomposition_advice/community_kani/adjacency.rs`
-4. `common/src/decomposition_advice/community_kani/shared.rs`
-5. `common/src/decomposition_advice/community_kani/propagate_labels.rs`
-6. `common/src/decomposition_advice/tests.rs` and a new or expanded
+3. `common/src/decomposition_advice/community_kani/shared.rs`
+4. `common/src/decomposition_advice/community_kani/propagate_labels.rs`
+5. `common/src/decomposition_advice/tests.rs` and a new or expanded
    label-propagation-focused unit-test file
-7. `common/src/test_support/decomposition_label_propagation.rs`
-8. `common/tests/decomposition_label_propagation_behaviour.rs`
-9. `common/tests/features/decomposition_label_propagation.feature`
-10. `docs/brain-trust-lints-design.md`
-11. `docs/roadmap.md`
-12. this ExecPlan
+6. `common/src/test_support/decomposition_label_propagation.rs`
+7. `common/tests/decomposition_label_propagation_behaviour.rs`
+8. `common/tests/features/decomposition_label_propagation.feature`
+9. `docs/brain-trust-lints-design.md`
+10. `docs/roadmap.md`
+11. this ExecPlan
 
 Relevant local documentation to consult while implementing:
 

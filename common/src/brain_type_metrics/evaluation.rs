@@ -80,31 +80,31 @@ pub struct BrainTypeThresholds {
 impl BrainTypeThresholds {
     /// WMC at or above which the warn rule's WMC condition is met.
     #[must_use]
-    pub fn wmc_warn(&self) -> usize {
+    pub const fn wmc_warn(&self) -> usize {
         self.wmc_warn
     }
 
     /// WMC at or above which the deny rule triggers (OR-based).
     #[must_use]
-    pub fn wmc_deny(&self) -> usize {
+    pub const fn wmc_deny(&self) -> usize {
         self.wmc_deny
     }
 
     /// LCOM4 at or above which the warn rule's cohesion condition is met.
     #[must_use]
-    pub fn lcom4_warn(&self) -> usize {
+    pub const fn lcom4_warn(&self) -> usize {
         self.lcom4_warn
     }
 
     /// LCOM4 at or above which the deny rule triggers (OR-based).
     #[must_use]
-    pub fn lcom4_deny(&self) -> usize {
+    pub const fn lcom4_deny(&self) -> usize {
         self.lcom4_deny
     }
 
     /// Brain method count at or above which the deny rule triggers.
     #[must_use]
-    pub fn brain_method_deny_count(&self) -> usize {
+    pub const fn brain_method_deny_count(&self) -> usize {
         self.brain_method_deny_count
     }
 }
@@ -149,7 +149,7 @@ pub struct BrainTypeThresholdsBuilder {
 impl BrainTypeThresholdsBuilder {
     /// Creates a builder with all thresholds set to their defaults.
     #[must_use]
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             wmc_warn: DEFAULT_WMC_WARN,
             wmc_deny: DEFAULT_WMC_DENY,
@@ -161,42 +161,42 @@ impl BrainTypeThresholdsBuilder {
 
     /// Sets the WMC warn threshold.
     #[must_use]
-    pub fn wmc_warn(mut self, value: usize) -> Self {
+    pub const fn wmc_warn(mut self, value: usize) -> Self {
         self.wmc_warn = value;
         self
     }
 
     /// Sets the WMC deny threshold.
     #[must_use]
-    pub fn wmc_deny(mut self, value: usize) -> Self {
+    pub const fn wmc_deny(mut self, value: usize) -> Self {
         self.wmc_deny = value;
         self
     }
 
     /// Sets the LCOM4 warn threshold.
     #[must_use]
-    pub fn lcom4_warn(mut self, value: usize) -> Self {
+    pub const fn lcom4_warn(mut self, value: usize) -> Self {
         self.lcom4_warn = value;
         self
     }
 
     /// Sets the LCOM4 deny threshold.
     #[must_use]
-    pub fn lcom4_deny(mut self, value: usize) -> Self {
+    pub const fn lcom4_deny(mut self, value: usize) -> Self {
         self.lcom4_deny = value;
         self
     }
 
     /// Sets the brain method count deny threshold.
     #[must_use]
-    pub fn brain_method_deny_count(mut self, value: usize) -> Self {
+    pub const fn brain_method_deny_count(mut self, value: usize) -> Self {
         self.brain_method_deny_count = value;
         self
     }
 
     /// Consumes the builder and returns the completed thresholds.
     #[must_use]
-    pub fn build(self) -> BrainTypeThresholds {
+    pub const fn build(self) -> BrainTypeThresholds {
         BrainTypeThresholds {
             wmc_warn: self.wmc_warn,
             wmc_deny: self.wmc_deny,
@@ -219,7 +219,7 @@ impl Default for BrainTypeThresholdsBuilder {
 
 /// Returns `true` when any single deny condition holds (OR-based).
 #[must_use]
-fn is_deny_triggered(metrics: &TypeMetrics, thresholds: &BrainTypeThresholds) -> bool {
+const fn is_deny_triggered(metrics: &TypeMetrics, thresholds: &BrainTypeThresholds) -> bool {
     metrics.wmc() >= thresholds.wmc_deny
         || metrics.brain_method_count() >= thresholds.brain_method_deny_count
         || metrics.lcom4() >= thresholds.lcom4_deny
@@ -227,7 +227,7 @@ fn is_deny_triggered(metrics: &TypeMetrics, thresholds: &BrainTypeThresholds) ->
 
 /// Returns `true` when all warn conditions hold simultaneously (AND-based).
 #[must_use]
-fn is_warn_triggered(metrics: &TypeMetrics, thresholds: &BrainTypeThresholds) -> bool {
+const fn is_warn_triggered(metrics: &TypeMetrics, thresholds: &BrainTypeThresholds) -> bool {
     metrics.wmc() >= thresholds.wmc_warn
         && metrics.brain_method_count() >= 1
         && metrics.lcom4() >= thresholds.lcom4_warn
@@ -257,7 +257,7 @@ fn is_warn_triggered(metrics: &TypeMetrics, thresholds: &BrainTypeThresholds) ->
 /// );
 /// ```
 #[must_use]
-pub fn evaluate_brain_type(
+pub const fn evaluate_brain_type(
     metrics: &TypeMetrics,
     thresholds: &BrainTypeThresholds,
 ) -> BrainTypeDisposition {

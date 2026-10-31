@@ -1,4 +1,4 @@
-# Verify `build_adjacency` with Kani (roadmap 6.4.5)
+# Verify `build_adjacency` properties (roadmap 6.4.5)
 
 This Execution Plan (ExecPlan) is a living document. The sections `Constraints`,
 `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
@@ -10,23 +10,21 @@ This document must be maintained in accordance with `AGENTS.md`.
 
 ## Purpose / big picture
 
-Roadmap item 6.4.5 adds a machine-checked Kani verification pass for
-`build_adjacency` in `common/src/decomposition_advice/community.rs`. After this
-change, Whitaker will not rely only on local reasoning and example-driven tests
-to justify the adjacency builder that feeds label propagation. It will also
-ship a repeatable bounded model check showing that, for valid similarity edges
-produced by `build_similarity_edges`, adjacency construction preserves every
-edge, never emits out-of-bounds neighbour indices, and always produces
-symmetric neighbour lists.
+Roadmap item 6.4.5 verifies `build_adjacency` in
+`common/src/decomposition_advice/community.rs` with generated tests. After this
+change, Whitaker will not rely only on local reasoning and examples to justify
+the adjacency builder that feeds label propagation. A generated property test
+checks the production builder across valid graphs. Bounded Kani models were
+also attempted, but every adjacency `Vec` proof exhausted the fixed 8 GiB
+process-tree cap; the exact evidence and test boundary are recorded below.
 
 Observable success after implementation:
 
-1. `make kani` installs or reuses a pinned Kani toolchain and completes full
-   Kani/C Bounded Model Checker (CBMC) verification of the new adjacency
-   harnesses with zero failures.
-2. Unit tests exercise the shipped Rust adjacency construction directly,
-   covering happy paths, absence-of-edge paths, and edge cases such as isolated
-   nodes and sorted neighbour order.
+1. `make kani` installs or reuses a pinned Kani toolchain and completes the
+   remaining Kani proof groups. It does not model adjacency `Vec` invariants.
+2. Unit and property tests exercise the shipped Rust adjacency construction
+   directly, covering edge preservation, absence of spurious edges, symmetry,
+   row bounds, isolated nodes, and sorted neighbour order.
 3. Behaviour tests using `rstest-bdd` `0.5.0` cover the same observable
    adjacency outcomes through a narrow `common::test_support::decomposition`
    seam, including an unhappy-path validation case in the test helper.
@@ -150,13 +148,33 @@ Observable success after implementation:
   limitation on `verify_build_adjacency_sorted_neighbours`, document
   `kani::assume(node_count > 0)` intent in harness doc-comments, and update
   design and developer documentation.
+- [x] 2026-10-26: Reconcile the no-spurious Kani proof with review-gate
+  resource limits. Repeated focused model reductions still exceeded the 8 GiB
+  process-tree cap. Move no-spurious and exact-multiplicity coverage into the
+  generated production-builder Proptest; keep the other three Kani harnesses
+  and require the full Kani gate to pass.
+- [x] 2026-10-26: The full Kani gate then reached the symmetry harness, which
+  generated 48,955 VCCs and hit the same 8 GiB cap. Move symmetry coverage into
+  the generated property as well; keep the then-remaining Kani row-count,
+  edge-preservation, and in-bounds harnesses pending the focused bounds run.
+- [x] 2026-10-26: The remaining in-bounds Kani harness generated 19,611 VCCs
+  and exhausted the 8 GiB cap with both CaDiCaL and Kissat. Move this property
+  into the generated production-builder Proptest, whose exact directed-edge
+  comparison also verifies that every emitted neighbour index is below
+  `node_count`.
+- [x] 2026-10-26: The edge-preservation Kani harness generated 25,092 VCCs
+  and exhausted the same cap after 99 seconds. Move edge-preservation coverage
+  into the generated production-builder Proptest.
+- [x] 2026-10-26: The remaining row-count Kani harness generated 16,317 VCCs
+  and exhausted the cap after 74 seconds. Move row-count coverage to the same
+  Proptest and remove the adjacency-only Kani model. Kani remains enabled for
+  the propagation and clone-detector proof groups.
 
 ## Surprises & Discoveries
 
-- `build_adjacency` is a private helper inside
-  `common/src/decomposition_advice/community.rs`. It is currently only reached
-  from `detect_communities`, which makes colocated verification harnesses the
-  least invasive way to call it.
+- `build_adjacency` is crate-internal inside
+  `common/src/decomposition_advice/community.rs`; unit and property tests reach
+  it through the narrow test-support seam without widening the public API.
 - `build_similarity_edges` already enforces the key input invariants that make
   6.4.5 tractable: each edge is unique, `left < right`, the endpoints are within
   `vectors.len()`, and `weight > 0`.
@@ -198,6 +216,22 @@ Observable success after implementation:
   to `MAX_NODES=3` / `MAX_EDGES=3` / `unwind(7)` makes the model tractable at
   the cost of a smaller verification envelope. Full CBMC runs should target CI
   runners with dedicated resources.
+- The no-spurious property remained intractable even after replacing symbolic
+  graphs with a fixed triangle, checking one symbolic row, and reducing the
+  assertions to direct expected-row comparisons. Each focused run reached the 8
+  GiB process-tree cap during propositional reduction. Generated property tests
+  now cover this relation and exact edge multiplicity through the production
+  builder. The symmetry harness also reached the 8 GiB cap after generating
+  48,955 VCCs (20,710 after simplification) and 289 seconds. The property test
+  covers symmetry; the full Kani gate no longer contains adjacency proofs. The
+  in-bounds Kani harness reached the cap with both CaDiCaL and Kissat after
+  generating 19,611 VCCs (8,496 after simplification). The edge-preservation
+  harness generated 25,092 VCCs (11,366 after simplification) and reached the
+  cap after 99 seconds. The row-count harness generated 16,317 VCCs (6,929
+  after simplification) and hit the cap after 74 seconds. The generated
+  property compares every emitted tuple with a set derived from valid endpoints
+  and checks total entry count, so out-of-range, missing, or duplicate entries
+  fail independently of the Kani model.
 
 ## Decision Log
 
@@ -229,6 +263,16 @@ Observable success after implementation:
   runtime helper. Rationale: the user asked for unhappy-path coverage, and a
   validated test helper can provide that without changing production semantics.
   Date/Author: 2026-04-02 / Codex.
+- Decision: move no-spurious-edge and symmetry properties from Kani to
+  generated Proptest checks after bounded proofs reached the fixed 8 GiB memory
+  cap. Rationale: the property test exercises the shipped builder over
+  generated valid graphs and compares exact directed edge tuples. The
+  in-bounds, edge-preservation, and row-count Kani harnesses all exhausted the
+  cap; the bounds run also failed with Kissat. Their properties are covered by
+  tuple-set and count checks against valid endpoints. No adjacency Kani model
+  remains; the Kani suite still checks label propagation and clone detection.
+  Failed resource-limited proofs are not reported as successful verification.
+  Date/Author: 2026-10-26 / Codex.
 
 ## Context and orientation
 
@@ -466,12 +510,16 @@ The repository now ships:
 - A pinned `make kani` workflow (`scripts/install-kani.sh`,
   `scripts/run-kani.sh`) that downloads Kani 0.67.0, configures the required
   nightly toolchain, and runs bounded model checking against the `common` crate.
-- Six bounded Kani harnesses (`MAX_NODES=3`, `MAX_EDGES=3`,
-  `unwind(7)`) verifying that `build_adjacency` preserves valid similarity
-  edges, keeps neighbour indices in bounds, produces symmetric adjacency lists,
-  emits no spurious edges, and sorts neighbours. `make kani` runs the shipped
-  full Kani/CBMC verification flow for these harnesses and succeeds with zero
-  failing proofs at the documented bounds.
+- No adjacency Kani harness remains. The generated Proptest checks row count,
+  edge preservation, bounds, symmetry, exact edge tuples, absence of spurious
+  entries, and sorted order through the production builder. The row-count,
+  edge-preservation, and bounds harnesses exceeded the fixed 8 GiB cap; Kissat
+  also exhausted the cap on the bounds harness. The Kani sorted-neighbour
+  harness was removed after two fixed, three-node models still exhausted the
+  ten-minute proof budget unwinding Rust's stable-sort internals before
+  reaching the assertion; the property test retains the production call and
+  checks every generated row. Kani remains enabled for label-propagation and
+  clone-detector proofs.
 - Five focused unit tests for `build_adjacency` covering empty edges,
   single-edge both-directions, multiple edges sorted, sparse graph isolated
   nodes, and multi-edge symmetry.

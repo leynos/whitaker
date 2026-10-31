@@ -31,6 +31,7 @@ import typing as typ
 
 import pytest
 from nextest_config import nextest_config_text
+from runner_lanes import SUITE_LANE_TIMEOUT_MINUTES
 from timeout_budgets import (
     Profile,
     CEILING_MARGIN_SECONDS,
@@ -58,6 +59,7 @@ from suite_lanes import (
     _declared_jobs,
     _lanes_in_job,
     _workflow_documents,
+    read_suite_lanes,
 )
 
 
@@ -87,11 +89,7 @@ def suite_lanes() -> tuple[SuiteLane, ...]:
     tuple[SuiteLane, ...]
         One entry per suite-running step.
     """
-    return tuple(
-        lane
-        for job in _declared_jobs(_workflow_documents())
-        for lane in _lanes_in_job(job)
-    )
+    return read_suite_lanes()
 
 
 def test_the_suite_runs_somewhere(suite_lanes: tuple[SuiteLane, ...]) -> None:

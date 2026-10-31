@@ -182,32 +182,34 @@ fn hash_canonical_identifier_bytes(mut hash: u64, index: usize) -> u64 {
     hash_byte(hash, b'>')
 }
 
-fn hash_usize_bytes(mut hash: u64, value: usize) -> u64 {
+/// Hash a `usize` as its decimal ASCII representation.
+fn hash_usize_bytes(mut hash: u64, mut value: usize) -> u64 {
+    const ASCII_DIGITS: [u8; 10] = *b"0123456789";
     let mut buffer = [0_u8; 20];
-    let mut value = value;
-    let mut remaining = buffer.as_mut_slice();
 
     if value == 0 {
         return hash_byte(hash, b'0');
     }
 
-    while value > 0 {
-        let (slot, rest) = match remaining.split_last_mut() {
-            Some(parts) => parts,
-            None => unreachable!("usize decimal digits always fit within the buffer"),
-        };
-        #[expect(
-            clippy::cast_possible_truncation,
-            reason = "a decimal digit always fits in u8"
-        )]
-        {
-            *slot = b'0' + (value % 10) as u8;
+    // Write digits least-significant first from the end of the buffer. A
+    // 64-bit `usize` has at most 20 decimal digits, so the reverse iterator
+    // never runs out before `value` reaches zero.
+    let mut digits = 0_usize;
+    for slot in buffer.iter_mut().rev() {
+        if value == 0 {
+            break;
         }
-        remaining = rest;
-        value /= 10;
+        // `rem_euclid(10)` is always below 10, so the lookup never falls
+        // through to the fallback digit.
+        *slot = ASCII_DIGITS
+            .get(value.rem_euclid(10))
+            .copied()
+            .unwrap_or(b'0');
+        value = value.div_euclid(10);
+        digits = digits.saturating_add(1);
     }
 
-    let start = remaining.len();
+    let start = buffer.len().saturating_sub(digits);
     for byte in buffer.iter().skip(start) {
         hash = hash_byte(hash, *byte);
     }
@@ -215,7 +217,8 @@ fn hash_usize_bytes(mut hash: u64, value: usize) -> u64 {
     hash
 }
 
-fn token_kind_tag(token: &NormalizedToken) -> u8 {
+/// Return the stable fingerprint tag for a normalized token kind.
+const fn token_kind_tag(token: &NormalizedToken) -> u8 {
     match token.kind {
         super::types::NormalizedTokenKind::Atom(_) => b'a',
         super::types::NormalizedTokenKind::Identifier(_) => b'i',
@@ -243,4 +246,26 @@ fn rightmost_minimum_index(window: &[Fingerprint]) -> usize {
     }
 
     best_index
+}
+
+#[cfg(test)]
+mod tests {
+    //! Property checks for the canonical identifier digit encoding.
+
+    use proptest::prelude::*;
+
+    use super::{FNV_OFFSET_BASIS, hash_byte, hash_usize_bytes};
+
+    proptest! {
+        /// Check that `usize` hashing matches mixing its decimal ASCII digits.
+        #[test]
+        fn usize_hashing_matches_decimal_ascii(value in any::<usize>()) {
+            let mut reference = FNV_OFFSET_BASIS;
+            for byte in value.to_string().as_bytes() {
+                reference = hash_byte(reference, *byte);
+            }
+
+            prop_assert_eq!(hash_usize_bytes(FNV_OFFSET_BASIS, value), reference);
+        }
+    }
 }

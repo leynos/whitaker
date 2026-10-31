@@ -57,7 +57,8 @@ pub(super) struct SegmentBuilder<'a, 'tcx> {
 }
 
 impl<'a, 'tcx> SegmentBuilder<'a, 'tcx> {
-    pub(super) fn new(
+    /// Create a builder for collecting segments within a function range.
+    pub(super) const fn new(
         cx: &'a LateContext<'tcx>,
         settings: &'a Settings,
         function_lines: RangeInclusive<usize>,
@@ -235,7 +236,7 @@ impl<'a, 'tcx> SegmentBuilder<'a, 'tcx> {
     }
 }
 
-impl<'a, 'tcx> rustc_hir::intravisit::Visitor<'tcx> for SegmentBuilder<'a, 'tcx> {
+impl<'tcx> rustc_hir::intravisit::Visitor<'tcx> for SegmentBuilder<'_, 'tcx> {
     fn visit_expr(&mut self, expr: &'tcx hir::Expr<'tcx>) {
         Self::visit_expr(self, expr);
     }

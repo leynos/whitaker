@@ -22,7 +22,7 @@ impl Attribute {
     /// assert!(attribute.is_outer());
     /// ```
     #[must_use]
-    pub fn new(path: AttributePath, kind: AttributeKind) -> Self {
+    pub const fn new(path: AttributePath, kind: AttributeKind) -> Self {
         Self {
             path,
             kind,
@@ -87,7 +87,7 @@ impl Attribute {
     /// assert!(attribute.path().is_doc());
     /// ```
     #[must_use]
-    pub fn path(&self) -> &AttributePath {
+    pub const fn path(&self) -> &AttributePath {
         &self.path
     }
 

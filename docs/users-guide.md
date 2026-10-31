@@ -8,9 +8,10 @@ the [Developer's Guide](developers-guide.md).
 
 ## Upgrading library consumers
 
-Version 0.3.0 includes source-breaking spelling changes to public Rust APIs.
-Existing library consumers must update imports, field access, and builder calls
-to the names listed in the
+Version 0.3.0 includes source-breaking changes to public Rust APIs, covering
+spelling, crate re-exports, the `whitaker_suite` entry point, and the fallible
+`suggest_decomposition` query. Existing library consumers must update imports,
+field access, and call sites as described in the
 [Whitaker 0.3.0 migration guide](v0-3-0-migration-guide.md). The changes affect
 Rust source only: SARIF 2.1.0 JSON keys retain their schema-defined spellings,
 so existing serialized data requires no migration.
@@ -997,7 +998,11 @@ the Pass B substrate only — it does not yet report clones (see below).
 supplied source, and lowers the smallest syntax subtree that covers the span
 into a parser-independent `NormalizedTree`. Working from the smallest covering
 subtree keeps the representation tied to the candidate rather than the whole
-file.
+file. Lowering stops when the selected subtree exceeds 256 levels of depth or
+10,000 normalized nodes. Non-trivia token leaves count towards the node budget.
+The operation returns `AstError::TreeTooDeep` or `AstError::TreeTooLarge` when
+it exceeds either limit, so callers can handle oversized candidates without
+accepting a partial tree.
 
 **Feature vectors.** From a `NormalizedTree`, extraction derives a
 deterministic set of features:

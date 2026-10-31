@@ -1,4 +1,4 @@
-//! Locality-sensitive hashing over fixed-width MinHash signatures.
+//! Locality-sensitive hashing over fixed-width `MinHash` signatures.
 //!
 //! This module contains [`LshIndex`], the token-pass index that groups
 //! [`MinHashSignature`] band slices into locality-sensitive hashing (LSH)
@@ -34,6 +34,7 @@ struct BandBucketKey {
 
 #[cfg(not(kani))]
 impl BandBucketKey {
+    /// Build a lookup key from a band index and its row values.
     fn new(band_index: usize, values: &[u64]) -> Self {
         Self {
             band_index,
@@ -66,7 +67,7 @@ impl LshIndex {
     /// # Ok::<(), whitaker_clones_core::IndexError>(())
     /// ```
     #[must_use]
-    pub fn new(config: LshConfig) -> Self {
+    pub const fn new(config: LshConfig) -> Self {
         Self {
             config,
             #[cfg(not(kani))]
@@ -228,6 +229,7 @@ const fn empty_recorded_bands_for_kani() -> [Option<BandBucketKeyForKani>; KANI_
 
 #[cfg(kani)]
 impl InsertedFragmentsForKani {
+    /// Create an empty fixed-capacity insertion model for Kani proofs.
     const fn new() -> Self {
         Self {
             items: empty_inserted_fragments_for_kani(),
@@ -258,6 +260,7 @@ impl InsertedFragmentsForKani {
 
 #[cfg(kani)]
 impl BandBucketKeyForKani {
+    /// Copy a bounded band key into its fixed-size Kani representation.
     fn new(band_index: usize, values: &[u64]) -> Self {
         let mut arr = [0u64; KANI_MAX_ROWS_PER_BAND];
         let rows_len = values.len().min(KANI_MAX_ROWS_PER_BAND);

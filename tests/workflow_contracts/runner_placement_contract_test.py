@@ -23,6 +23,7 @@ from runner_lanes import (
     GITHUB_HOSTED_LABELS,
     LEG_DISCRIMINATOR,
     MAXIMUM_LANE_TIMEOUT_MINUTES,
+    SUITE_LANE_TIMEOUT_MINUTES,
     billable_labels,
     declared_labels,
     GLIBC_BASELINE_IMAGE,
@@ -45,6 +46,16 @@ from ubicloud_workflow_support import (
     restore_steps,
     steps_by_name,
 )
+from suite_lanes import read_suite_lanes
+
+
+@pytest.fixture(scope="module")
+def suite_job_keys() -> frozenset[tuple[str, str]]:
+    """Return the workflow jobs that execute the Nextest suite."""
+    return frozenset(
+        (lane.workflow, lane.job)
+        for lane in read_suite_lanes()
+    )
 
 
 @pytest.mark.parametrize("lane", UBICLOUD_LANES, ids=str)
@@ -227,7 +238,9 @@ def test_the_actionlint_registry_matches_the_labels_in_use() -> None:
 
 
 @pytest.mark.parametrize("lane", UBICLOUD_LANES, ids=str)
-def test_every_ubicloud_lane_declares_a_timeout(lane: RunnerLane) -> None:
+def test_every_ubicloud_lane_declares_a_timeout(
+    lane: RunnerLane, suite_job_keys: frozenset[tuple[str, str]]
+) -> None:
     """A hung Ubicloud job bills until something stops it.
 
     Ubicloud runners register as self-hosted just-in-time runners, so GitHub's
@@ -246,9 +259,14 @@ def test_every_ubicloud_lane_declares_a_timeout(lane: RunnerLane) -> None:
         f"{lane} runs on a paid runner and must declare timeout-minutes; "
         f"got {timeout!r}"
     )
-    assert 0 < timeout <= MAXIMUM_LANE_TIMEOUT_MINUTES, (
+    maximum = (
+        SUITE_LANE_TIMEOUT_MINUTES
+        if (lane.workflow, lane.job) in suite_job_keys
+        else MAXIMUM_LANE_TIMEOUT_MINUTES
+    )
+    assert 0 < timeout <= maximum, (
         f"{lane} declares timeout-minutes {timeout}, outside the reviewed "
-        f"range of 1 to {MAXIMUM_LANE_TIMEOUT_MINUTES}"
+        f"range of 1 to {maximum}"
     )
 
 
