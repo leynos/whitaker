@@ -59,6 +59,16 @@ class BenchmarkError(ValueError):
     """Raised when a configuration or report cannot support a comparison."""
 
 
+def _assigns_group(config_text: str, group: str) -> bool:
+    """Return whether any profile override assigns ``group``."""
+    document = tomllib.loads(config_text)
+    return any(
+        override.get("test-group") == group
+        for section in document.get("profile", {}).values()
+        for override in section.get("overrides") or []
+    )
+
+
 def serial_control_text(config_text: str) -> str:
     """Return the configuration with the trybuild group folded into the UI group.
 
@@ -66,11 +76,35 @@ def serial_control_text(config_text: str) -> str:
     policy and profile name stays as delivered. That is what makes the control
     comparable: the two runs differ in group assignment and nothing else.
 
+    Parameters
+    ----------
+    config_text
+        The delivered ``nextest.toml`` text.
+
+    Returns
+    -------
+    str
+        The same configuration with every trybuild ``test-group`` assignment
+        naming ``serial-dylint-ui`` instead.
+
     Raises
     ------
     BenchmarkError
-        If the file names no trybuild group, so a control that silently ran the
-        deliverable configuration is never mistaken for a comparison.
+        If the file names no trybuild group, or an assignment survives the
+        rewrite in a form the substitution does not match. Either case would
+        make the control a partial or equal copy of the deliverable, so a
+        comparison against it would silently measure the wrong thing.
+
+    Examples
+    --------
+    >>> config = (
+    ...     "[profile.default]\\n"
+    ...     '[[profile.default.overrides]]\\n'
+    ...     'filter = "test(contract_a)"\\n'
+    ...     'test-group = "serial-trybuild-contracts"\\n'
+    ... )
+    >>> "serial-dylint-ui" in serial_control_text(config)
+    True
     """
     rewritten, replacements = _TRYBUILD_ASSIGNMENT.subn(
         rf'\g<lead>"{SERIAL_DYLINT_UI}"\g<trail>', config_text
@@ -81,6 +115,12 @@ def serial_control_text(config_text: str) -> str:
             "the control would equal the deliverable"
         )
         raise BenchmarkError(message)
+    if _assigns_group(rewritten, SERIAL_TRYBUILD_CONTRACTS):
+        message = (
+            f"a test-group assignment of {SERIAL_TRYBUILD_CONTRACTS!r} survived "
+            "the rewrite; the control would be a partial split"
+        )
+        raise BenchmarkError(message)
     return rewritten
 
 
@@ -88,7 +128,28 @@ def with_junit(config_text: str, profile: str, junit_path: pathlib.Path) -> str:
     """Return the configuration with a JUnit report path for one profile.
 
     The path is absolute so Nextest writes it wherever the caller collected the
-    measurement, not relative to the workspace root.
+    measurement, not relative to the workspace root. An existing section is
+    replaced rather than duplicated, so preparing a run twice stays idempotent.
+
+    Parameters
+    ----------
+    config_text
+        The configuration to extend.
+    profile
+        The Nextest profile that should write the report.
+    junit_path
+        Where the report belongs.
+    Returns
+    -------
+    str
+        The configuration with one ``[profile.<profile>.junit]`` section.
+    Examples
+    --------
+    >>> document = with_junit(
+    ...     "[profile.default]\\n", "default", pathlib.Path("/tmp/run.xml")
+    ... )
+    >>> document.count("[profile.default.junit]")
+    1
     """
     section = f"[profile.{profile}.junit]"
     block = f'{section}\npath = "{junit_path}"\n'
@@ -107,8 +168,39 @@ def with_junit(config_text: str, profile: str, junit_path: pathlib.Path) -> str:
 def profile_overrides(
     config_text: str, profile: str, groups: typ.Sequence[str] = BENCHMARK_GROUPS
 ) -> list[dict[str, typ.Any]]:
-    """Return the overrides in one profile that name a benchmark group."""
-    document = tomllib.loads(config_text)
+    """Return the overrides in one profile that name a benchmark group.
+
+    Parameters
+    ----------
+    config_text
+        The configuration to read.
+    profile
+        The Nextest profile whose overrides are wanted.
+    groups
+        The test-group names that select an override.
+    Returns
+    -------
+    list of dict
+        The matching overrides, in the order the profile declares them.
+    Raises
+    ------
+    BenchmarkError
+        If the text is not valid TOML, or the profile is not declared.
+    Examples
+    --------
+    >>> config = (
+    ...     "[profile.default]\\n"
+    ...     "[[profile.default.overrides]]\\n"
+    ...     'filter = "test(a)"\\n'
+    ...     'test-group = "serial-dylint-ui"\\n'
+    ... )
+    >>> [override["filter"] for override in profile_overrides(config, "default")]
+    ['test(a)']
+    """
+    try:
+        document = tomllib.loads(config_text)
+    except tomllib.TOMLDecodeError as error:
+        raise BenchmarkError(f"configuration is not valid TOML: {error}") from error
     section = document.get("profile", {}).get(profile)
     if section is None:
         raise BenchmarkError(f"profile {profile!r} is not declared")
@@ -129,14 +221,48 @@ def union_filter(
     of all their filters. Both configurations produce the same expression: the
     control changes group assignment, not filters, and the benchmark verifies
     that by listing both selections.
+
+    Parameters
+    ----------
+    config_text
+        The configuration to read.
+    profile
+        The Nextest profile that carries the group overrides.
+    groups
+        The test-group names to include in the union.
+    Returns
+    -------
+    str
+        One Nextest filter expression, ready for ``-E``.
+    Raises
+    ------
+    BenchmarkError
+        If no override in the profile selects one of the groups, which means
+        the benchmark is being dispatched against a ref that does not carry the
+        split.
+    Examples
+    --------
+    >>> config = (
+    ...     "[profile.default]\\n"
+    ...     "[[profile.default.overrides]]\\n"
+    ...     'filter = "test(a)"\\n'
+    ...     'test-group = "serial-dylint-ui"\\n'
+    ... )
+    >>> union_filter(config, "default")
+    '(test(a))'
     """
+    wanted = set(groups)
     clauses = [
         f"({override['filter']})"
         for override in profile_overrides(config_text, profile, groups)
         if override.get("filter")
     ]
     if not clauses:
-        raise BenchmarkError(f"no override in profile {profile!r} carries a filter")
+        message = (
+            f"no override in profile {profile!r} selects any of {sorted(wanted)}; "
+            "dispatch the benchmark against a ref that contains the split"
+        )
+        raise BenchmarkError(message)
     return " | ".join(clauses)
 
 
@@ -190,6 +316,42 @@ def _ignored_names(listing: dict[str, typ.Any]) -> set[str]:
     }
 
 
+def _disjoint_selection(memberships: typ.Mapping[str, list[str]]) -> list[str]:
+    """Return every member, raising when two groups share one."""
+    counts = collections.Counter(
+        test for names in memberships.values() for test in names
+    )
+    overlaps = sorted(test for test, count in counts.items() if count > 1)
+    if overlaps:
+        raise BenchmarkError(f"test groups share members: {overlaps}")
+    return sorted(counts)
+
+
+def _check_expected_counts(
+    memberships: typ.Mapping[str, list[str]],
+    expected_counts: typ.Mapping[str, int] | None,
+) -> None:
+    """Raise when a group's member count differs from its pinned size."""
+    for name, expected in (expected_counts or {}).items():
+        actual = len(memberships.get(name, ()))
+        if actual != expected:
+            raise BenchmarkError(
+                f"group {name!r} selects {actual} tests, expected {expected}"
+            )
+
+
+def _check_control_selection(selection: list[str], control: set[str]) -> None:
+    """Raise when the control configuration selects a different test set."""
+    if control == set(selection):
+        return
+    message = (
+        "the control configuration selects a different test set: "
+        f"missing={sorted(set(selection) - control)} "
+        f"extra={sorted(control - set(selection))}"
+    )
+    raise BenchmarkError(message)
+
+
 def membership_report(
     groups: typ.Mapping[str, dict[str, typ.Any]],
     control_selection: set[str] | None = None,
@@ -197,11 +359,36 @@ def membership_report(
 ) -> dict[str, typ.Any]:
     """Return the group membership a JUnit report is classified against.
 
-    ``groups`` maps a group name to a parsed ``cargo nextest list`` report.
     Memberships must be disjoint: a test counted in two groups would make the
-    overlap measurement mean two things at once. ``expected_counts`` pins the
-    size of a group, so a filter that silently stops selecting one of the seven
-    compile contracts cannot become evidence.
+    overlap measurement mean two things at once. The control selection is
+    compared with the split selection so a control that selects a different set
+    is rejected before any timing is compared.
+
+    Parameters
+    ----------
+    groups
+        Maps a group name to a parsed ``cargo nextest list`` report.
+    control_selection
+        The qualified names the control configuration selects, when the caller
+        wants that equality checked.
+    expected_counts
+        Pins the size of a group, so a filter that silently stops selecting one
+        of the seven compile contracts cannot become evidence.
+    Returns
+    -------
+    dict
+        ``groups``, ``ignored``, and ``selection``, plus
+        ``control_selection_matches`` when a control was checked.
+    Raises
+    ------
+    BenchmarkError
+        If two groups share a member, a pinned count does not match, or the
+        control selects a different test set.
+    Examples
+    --------
+    >>> listing = {"rust-suites": {"crate::ui": {"testcases": {"ui": {}}}}}
+    >>> membership_report({SERIAL_DYLINT_UI: listing})["selection"]
+    ['crate::ui::ui']
     """
     memberships = {name: sorted(_qualified_names(report)) for name, report in groups.items()}
     # An ignored test appears in every listing whose binary was built, so the
@@ -209,38 +396,26 @@ def membership_report(
     ignored = sorted(
         {test for report in groups.values() for test in _ignored_names(report)}
     )
-    counts = collections.Counter(
-        test for names in memberships.values() for test in names
-    )
-    overlaps = sorted(test for test, count in counts.items() if count > 1)
-    if overlaps:
-        raise BenchmarkError(f"test groups share members: {overlaps}")
-    selection = sorted(counts)
-    for name, expected in (expected_counts or {}).items():
-        actual = len(memberships.get(name, ()))
-        if actual != expected:
-            raise BenchmarkError(
-                f"group {name!r} selects {actual} tests, expected {expected}"
-            )
+    selection = _disjoint_selection(memberships)
+    _check_expected_counts(memberships, expected_counts)
     report: dict[str, typ.Any] = {
         "groups": memberships,
         "ignored": ignored,
         "selection": selection,
     }
     if control_selection is not None:
-        if control_selection != set(selection):
-            message = (
-                "the control configuration selects a different test set: "
-                f"missing={sorted(set(selection) - control_selection)} "
-                f"extra={sorted(control_selection - set(selection))}"
-            )
-            raise BenchmarkError(message)
+        _check_control_selection(selection, control_selection)
         report["control_selection_matches"] = True
     return report
 
 
 def group_of(membership: dict[str, typ.Any], qualified_name: str) -> str:
-    """Return the originating group of a test, or [`UNCLASSIFIED`]."""
+    """Return the originating group of a test, or ``UNCLASSIFIED``.
+
+    A JUnit report also carries tests outside both benchmark groups. They are
+    reported as ``UNCLASSIFIED`` rather than dropped, so the summary keeps a
+    total that matches Nextest's own count.
+    """
     for group, names in membership["groups"].items():
         if qualified_name in names:
             return group
@@ -347,8 +522,44 @@ def _attempts_of(testcase: ET.Element, name: str) -> tuple[Attempt, ...]:
 def measure_junit(
     xml_text: str, membership: dict[str, typ.Any]
 ) -> list[MeasuredTest]:
-    """Return every testcase in a JUnit report, classified by group."""
-    root = ET.fromstring(xml_text)
+    """Return every testcase in a JUnit report, classified by group.
+
+    Nextest writes one ``testcase`` per test, so a repeated ``(classname,
+    name)`` pair means the same test was reported twice; the last element
+    decides the recorded outcome. Rerun elements inside a testcase are kept as
+    separate attempts, so a retried test occupies the time it really ran.
+
+    Parameters
+    ----------
+    xml_text
+        The JUnit XML a Nextest run wrote.
+    membership
+        The group membership produced by :func:`membership_report`.
+
+    Returns
+    -------
+    list of MeasuredTest
+        One entry per reported test, in the order the report declared them.
+
+    Raises
+    ------
+    BenchmarkError
+        If the XML does not parse, or a testcase carries no readable
+        timestamp, which would make its interval unusable for overlap.
+    Examples
+    --------
+    >>> xml = (
+    ...     '<testsuite><testcase classname="crate::ui" name="ui" '
+    ...     'time="1.5" timestamp="2026-01-01T00:00:00.000Z"/></testsuite>'
+    ... )
+    >>> membership = {"groups": {SERIAL_DYLINT_UI: ["crate::ui::ui"]}}
+    >>> measure_junit(xml, membership)[0].group
+    'serial-dylint-ui'
+    """
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError as error:
+        raise BenchmarkError(f"JUnit report is not valid XML: {error}") from error
     attempts: collections.Counter[tuple[str, str]] = collections.Counter()
     cases: dict[tuple[str, str], ET.Element] = {}
     for testcase in root.iter("testcase"):
@@ -359,9 +570,7 @@ def measure_junit(
         # Nextest writes one testcase per test, so duplicates would mean two
         # attempts were reported as separate cases; the last one decides.
         cases[key] = testcase
-    retried = {
-        key for key, count in attempts.items() if count > 1
-    } | {
+    retried = {key for key, count in attempts.items() if count > 1} | {
         key
         for key, testcase in cases.items()
         if any(child.tag in _RERUN_TAGS for child in testcase)
@@ -391,26 +600,15 @@ def _overlaps(earlier: Attempt, later: Attempt) -> bool:
     return earlier.started < later.finished and later.started < earlier.finished
 
 
-def overlap_report(tests: typ.Sequence[MeasuredTest]) -> dict[str, typ.Any]:
-    """Return cross-group and within-group interval overlaps.
+#: One measured execution: its group, a label identifying the attempt, and the
+#: interval it occupied.
+_Window: typ.TypeAlias = tuple[str, str, Attempt]
 
-    Strict overlap is the point of the split: the two capacity-one groups may
-    run at the same time, while two tests from one group may not. A zero cross
-    figure on a split run means the split brought no concurrency, and a
-    non-zero within figure means the group capacity did not hold.
 
-    Intervals are per attempt, so a retried test occupies the time it really
-    ran rather than only the attempt that decided its outcome. Tests outside
-    both groups are excluded: a whole-suite run contains thousands of them, and
-    their overlaps say nothing about either capacity-one group.
-    """
-    windows = [
-        (test.group, f"{test.name} (attempt {index})", attempt)
-        for test in tests
-        if test.group != UNCLASSIFIED
-        for index, attempt in enumerate(test.intervals, start=1)
-    ]
-    ordered = sorted(windows, key=lambda window: window[2].started)
+def _overlap_pairs(
+    ordered: typ.Sequence[_Window],
+) -> tuple[list[tuple[str, str]], list[tuple[str, str]]]:
+    """Return the cross-group and within-group overlapping label pairs."""
     cross_pairs: list[tuple[str, str]] = []
     within_pairs: list[tuple[str, str]] = []
     for index, (group, label, attempt) in enumerate(ordered):
@@ -422,7 +620,11 @@ def overlap_report(tests: typ.Sequence[MeasuredTest]) -> dict[str, typ.Any]:
                 within_pairs.append(pair)
             else:
                 cross_pairs.append(pair)
+    return cross_pairs, within_pairs
 
+
+def _peak_concurrency(windows: typ.Sequence[_Window]) -> int:
+    """Return the greatest number of benchmark groups running at one instant."""
     events: list[tuple[datetime, int, str]] = []
     for group, _, attempt in windows:
         events.append((attempt.started, 1, group))
@@ -438,11 +640,56 @@ def overlap_report(tests: typ.Sequence[MeasuredTest]) -> dict[str, typ.Any]:
         else:
             active[group] -= 1
         peak = max(peak, sum(1 for count in active.values() if count > 0))
+    return peak
 
+
+def overlap_report(tests: typ.Sequence[MeasuredTest]) -> dict[str, typ.Any]:
+    """Return cross-group and within-group interval overlaps.
+
+    Strict overlap is the point of the split: the two capacity-one groups may
+    run at the same time, while two tests from one group may not. A zero cross
+    figure on a split run means the split brought no concurrency, and a
+    non-zero within figure means the group capacity did not hold. Intervals are
+    per attempt, so a retried test occupies the time it really ran rather than
+    only the attempt that decided its outcome.
+
+    Parameters
+    ----------
+    tests
+        The measured tests to inspect. Tests outside both benchmark groups are
+        excluded: a whole-suite run contains thousands of them, and their
+        overlaps say nothing about either capacity-one group.
+
+    Returns
+    -------
+    dict
+        Pair counts and the maximum concurrency, plus up to five example pairs
+        from each direction.
+
+    Examples
+    --------
+    >>> start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    >>> tests = [
+    ...     MeasuredTest("a", SERIAL_DYLINT_UI, start, 10, "passed", False),
+    ...     MeasuredTest("b", SERIAL_TRYBUILD_CONTRACTS,
+    ...                  start + timedelta(seconds=5), 10, "passed", False),
+    ... ]
+    >>> report = overlap_report(tests)
+    >>> report["cross_group_pairs"], report["within_group_pairs"]
+    (1, 0)
+    """
+    windows: list[_Window] = [
+        (test.group, f"{test.name} (attempt {index})", attempt)
+        for test in tests
+        if test.group != UNCLASSIFIED
+        for index, attempt in enumerate(test.intervals, start=1)
+    ]
+    ordered = sorted(windows, key=lambda window: window[2].started)
+    cross_pairs, within_pairs = _overlap_pairs(ordered)
     return {
         "cross_group_pairs": len(cross_pairs),
         "within_group_pairs": len(within_pairs),
-        "max_cross_group_concurrency": peak,
+        "max_cross_group_concurrency": _peak_concurrency(windows),
         "cross_group_examples": cross_pairs[:5],
         "within_group_examples": within_pairs[:5],
     }
@@ -454,6 +701,53 @@ def _nextest_seconds(log_text: str) -> float | None:
     return None if match is None else float(match.group(1))
 
 
+def _counts(tests: typ.Sequence[MeasuredTest]) -> dict[str, int]:
+    """Return the outcome counts a Nextest summary reports."""
+    statuses = collections.Counter(test.status for test in tests)
+    return {
+        "total": len(tests),
+        "passed": statuses.get("passed", 0),
+        # Nextest writes a failed assertion as ``failure`` and a harness error
+        # as ``error``; both are failed repetitions for the benchmark.
+        "failed": statuses.get("failure", 0) + statuses.get("error", 0),
+        "skipped": statuses.get("skipped", 0),
+    }
+
+
+def _slowest(
+    tests: typ.Sequence[MeasuredTest], limit: int = 15
+) -> list[dict[str, typ.Any]]:
+    """Return the longest tests, ranked by their longest attempt."""
+    ranked = sorted(tests, key=lambda test: test.longest_attempt, reverse=True)
+    return [
+        {
+            "name": test.name,
+            "group": test.group,
+            "seconds": test.longest_attempt,
+            "status": test.status,
+            "attempts": len(test.intervals),
+        }
+        for test in ranked[:limit]
+    ]
+
+
+def _test_records(tests: typ.Sequence[MeasuredTest]) -> list[dict[str, typ.Any]]:
+    """Return every measured test in start order, ready for JSON."""
+    return [
+        {
+            "name": test.name,
+            "group": test.group,
+            "started": test.started.isoformat(),
+            "finished": test.finished.isoformat(),
+            "seconds": test.seconds,
+            "status": test.status,
+            "retried": test.retried,
+            "attempts": len(test.intervals),
+        }
+        for test in sorted(tests, key=lambda test: test.started)
+    ]
+
+
 def summarize(
     junit_text: str,
     membership: dict[str, typ.Any],
@@ -462,27 +756,56 @@ def summarize(
 ) -> dict[str, typ.Any]:
     """Return a machine-readable summary of one measured run.
 
-    The summary keeps every test interval, the fifteen slowest tests, the
-    outcome counts, retry evidence, and the overlap report. Failed attempts are
-    part of the record: a repetition that failed is reported, never replaced by
-    a later one.
+    Failed attempts are part of the record: a repetition that failed is
+    reported, never replaced by a later one. A test in the selection that the
+    report never mentions is listed as ``selected_not_run``, so an interrupted
+    run cannot look complete.
+
+    Parameters
+    ----------
+    junit_text
+        The JUnit XML the run wrote.
+    membership
+        The group membership produced by :func:`membership_report`.
+    log_text
+        The captured Nextest output, used only for its summary duration.
+    meta
+        The wall-clock and exit-status record the driver wrote.
+
+    Returns
+    -------
+    dict
+        Meta, durations, outcome counts, retry evidence, missing tests, the
+        fifteen slowest tests, the overlap report, and every test interval.
+
+    Raises
+    ------
+    BenchmarkError
+        If the JUnit report does not parse or a testcase has no readable
+        timestamp.
+    Examples
+    --------
+    >>> xml = (
+    ...     '<testsuite><testcase classname="crate::ui" name="ui" '
+    ...     'time="1.5" timestamp="2026-01-01T00:00:00.000Z"/></testsuite>'
+    ... )
+    >>> membership = {
+    ...     "groups": {SERIAL_DYLINT_UI: ["crate::ui::ui"]},
+    ...     "selection": ["crate::ui::ui"],
+    ... }
+    >>> summarize(xml, membership)["counts"]["passed"]
+    1
     """
     tests = measure_junit(junit_text, membership)
-    counts = collections.Counter(test.status for test in tests)
     selection = set(membership["selection"])
     observed = {test.name for test in tests}
-    slowest = sorted(tests, key=lambda test: test.longest_attempt, reverse=True)[:15]
-    summary: dict[str, typ.Any] = {
-        "meta": meta or {},
+    record = meta or {}
+    return {
+        "meta": record,
         "nextest_seconds": _nextest_seconds(log_text),
-        "wall_seconds": (meta or {}).get("wall_seconds"),
-        "exit_status": (meta or {}).get("exit_status"),
-        "counts": {
-            "total": len(tests),
-            "passed": counts.get("passed", 0),
-            "failed": counts.get("failure", 0) + counts.get("error", 0),
-            "skipped": counts.get("skipped", 0),
-        },
+        "wall_seconds": record.get("wall_seconds"),
+        "exit_status": record.get("exit_status"),
+        "counts": _counts(tests),
         "retried": sorted({test.name for test in tests if test.retried}),
         "selected_not_run": sorted(selection - observed),
         "unclassified": sorted(
@@ -490,40 +813,28 @@ def summarize(
             for test in tests
             if test.group == UNCLASSIFIED and test.name in selection
         ),
-        "slowest": [
-            {
-                "name": test.name,
-                "group": test.group,
-                "seconds": test.longest_attempt,
-                "status": test.status,
-                "attempts": len(test.intervals),
-            }
-            for test in slowest
-        ],
+        "slowest": _slowest(tests),
+        # A skipped test records no execution window, so it would otherwise
+        # contribute a zero-length interval wherever it happens to sit.
         "overlap": overlap_report(
             [test for test in tests if test.status != "skipped"]
         ),
-        "tests": [
-            {
-                "name": test.name,
-                "group": test.group,
-                "started": test.started.isoformat(),
-                "finished": test.finished.isoformat(),
-                "seconds": test.seconds,
-                "status": test.status,
-                "retried": test.retried,
-                "attempts": len(test.intervals),
-            }
-            for test in sorted(tests, key=lambda test: test.started)
-        ],
+        "tests": _test_records(tests),
     }
-    return summary
 
 
 def _write_json(path: pathlib.Path, payload: typ.Any) -> None:
     """Write a JSON document, creating its directory."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+
+def _read_text(path: pathlib.Path, kind: str, errors: str = "strict") -> str:
+    """Read a text input, naming the file and its kind when it cannot be read."""
+    try:
+        return path.read_text(errors=errors)
+    except OSError as error:
+        raise BenchmarkError(f"cannot read the {kind} {path}: {error}") from error
 
 
 def _read_json(path: pathlib.Path) -> typ.Any:
@@ -533,15 +844,12 @@ def _read_json(path: pathlib.Path) -> typ.Any:
     captured through ``make test``, whose later steps write after it, so the
     reader also accepts a document embedded among other output.
     """
+    text = _read_text(path, "JSON report")
     try:
-        return json.loads(path.read_text())
-    except (OSError, json.JSONDecodeError) as error:
+        return json.loads(text)
+    except json.JSONDecodeError as error:
         message = f"cannot read {path}: {error}"
-    try:
-        lines = path.read_text().splitlines()
-    except OSError as read_error:
-        raise BenchmarkError(f"cannot read {path}: {read_error}") from read_error
-    for line in lines:
+    for line in text.splitlines():
         stripped = line.strip()
         if not stripped.startswith("{"):
             continue
@@ -570,7 +878,7 @@ def _parse_count_argument(value: str) -> tuple[str, int]:
 
 def _prepare(args: argparse.Namespace) -> int:
     """Write one generated configuration for a measured run."""
-    config_text = args.config.read_text()
+    config_text = _read_text(args.config, "nextest configuration")
     if args.serial_control:
         config_text = serial_control_text(config_text)
     config_text = with_junit(config_text, args.profile, args.junit.resolve())
@@ -582,7 +890,8 @@ def _prepare(args: argparse.Namespace) -> int:
 def _union_filter(args: argparse.Namespace) -> int:
     """Print the filter selecting every benchmark test."""
     groups = tuple(args.group) if args.group else BENCHMARK_GROUPS
-    print(union_filter(args.config.read_text(), args.profile, groups))
+    config_text = _read_text(args.config, "nextest configuration")
+    print(union_filter(config_text, args.profile, groups))
     return 0
 
 
@@ -602,9 +911,12 @@ def _membership(args: argparse.Namespace) -> int:
 def _summarize(args: argparse.Namespace) -> int:
     """Write the summary for one measured run and report a failed repetition."""
     membership = _read_json(args.membership)
-    log_text = "" if args.log is None else args.log.read_text(errors="replace")
+    log_text = (
+        "" if args.log is None else _read_text(args.log, "run log", errors="replace")
+    )
     meta = {} if args.meta is None else _read_json(args.meta)
-    summary = summarize(args.junit.read_text(), membership, log_text, meta)
+    junit_text = _read_text(args.junit, "JUnit report")
+    summary = summarize(junit_text, membership, log_text, meta)
     _write_json(args.output, summary)
     failed = summary["counts"]["failed"]
     status = summary["exit_status"]
@@ -654,11 +966,15 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: typ.Sequence[str] | None = None) -> int:
-    """Run the requested subcommand."""
+    """Run the requested subcommand and return its process exit status.
+
+    A malformed input exits ``2`` with one diagnostic rather than a traceback,
+    so a workflow step fails naming the file it could not use.
+    """
     args = _build_parser().parse_args(argv)
     try:
         return int(args.handler(args))
-    except BenchmarkError as error:
+    except (BenchmarkError, OSError, ET.ParseError, tomllib.TOMLDecodeError) as error:
         print(f"nextest-split-benchmark: {error}", file=sys.stderr)
         return 2
 

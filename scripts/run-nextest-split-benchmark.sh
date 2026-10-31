@@ -21,6 +21,13 @@ readonly REPO_ROOT
 readonly MODE="${1:?usage: $0 filtered|full REPETITIONS OUTPUT_DIR}"
 readonly REPETITIONS="${2:-5}"
 readonly OUT="${3:?usage: $0 filtered|full REPETITIONS OUTPUT_DIR}"
+
+# A non-numeric repetition count would make `seq` produce nothing and the run
+# would pass with no measurement at all.
+if ! [[ $REPETITIONS =~ ^[1-9][0-9]*$ ]]; then
+  printf 'repetitions must be a positive integer, got %q\n' "$REPETITIONS" >&2
+  exit 2
+fi
 readonly PROFILE=default
 readonly CONFIG="$REPO_ROOT/.config/nextest.toml"
 readonly EDITED_SOURCE="$REPO_ROOT/crates/bumpy_road_function/src/lib.rs"
@@ -109,14 +116,25 @@ run_measured() {
   return 0
 }
 
+# A repetition without a summary is not evidence, even when the run itself
+# exited zero, so a missing or refused summary counts as a failure. An exit
+# status of 1 means summarize recorded failed tests; `run_measured` already
+# counted that, and counting it twice would overstate the failures.
 summarize_run() {
-  local name=$1
+  local name=$1 status=0
   benchmark summarize \
     --junit "$OUT/junit/$name.xml" \
     --membership "$OUT/membership.json" \
     --log "$OUT/logs/$name.log" \
     --meta "$OUT/meta/$name.json" \
-    --output "$OUT/summaries/$name.json" || true
+    --output "$OUT/summaries/$name.json" || status=$?
+  if [ ! -f "$OUT/summaries/$name.json" ]; then
+    printf 'no summary was written for %s\n' "$name" >&2
+    failures=$((failures + 1))
+  elif [ "$status" -gt 1 ]; then
+    printf 'summarize refused %s with status %s\n' "$name" "$status" >&2
+    failures=$((failures + 1))
+  fi
 }
 
 # nextest_run MODE LABEL [EXTRA...] runs `make test` with a generated config.
@@ -188,10 +206,25 @@ edit_lint_crate() {
 }
 
 restore_lint_crate() {
-  git -C "$REPO_ROOT" checkout -- "$EDITED_SOURCE"
+  git -C "$REPO_ROOT" checkout -- "$EDITED_SOURCE" ||
+    printf 'could not restore %s\n' "$EDITED_SOURCE" >&2
+}
+
+# The measurement edits a tracked file and restores it with `git checkout`.
+# Refuse to start when that file already carries work the restore would discard.
+require_clean_edited_source() {
+  local changes
+  changes=$(git -C "$REPO_ROOT" status --porcelain -- "$EDITED_SOURCE")
+  if [ -n "$changes" ]; then
+    printf '%s has uncommitted changes; refusing to edit and restore it\n' \
+      "$EDITED_SOURCE" >&2
+    printf '%s\n' "$changes" >&2
+    exit 2
+  fi
 }
 
 run_full() {
+  require_clean_edited_source
   trap restore_lint_crate EXIT
   write_membership
   nextest_run split warmup-split
