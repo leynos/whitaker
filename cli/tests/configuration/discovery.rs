@@ -30,17 +30,25 @@ fn reads_legacy_file_and_environment(
     Ok(())
 }
 
-/// Reject a missing explicit file and a malformed discovered file.
+/// Reject an unusable explicit selection and a malformed discovered file.
 #[rstest::rstest]
+#[case(Some("missing.toml"), "whitaker.toml", "[diagnostics\n")]
+#[case(None, "dylint.toml", "[broken\n")]
 fn rejects_unusable_files(
     root: std::io::Result<TempDir>,
+    #[case] explicit_child: Option<&str>,
+    #[case] discovered_name: &str,
+    #[case] discovered_contents: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let root = root?;
+    // `None` selects the project directory itself, which cannot be read as a file.
+    let explicit =
+        explicit_child.map_or_else(|| root.path().to_path_buf(), |name| root.path().join(name));
     let env = Arc::new(MapEnv::new());
     let mut selected = sources(&root, env.clone(), json!({}));
-    selected.config_path = Some(root.path().join("missing.toml"));
+    selected.config_path = Some(explicit);
     assert!(load_with_sources(selected).is_err());
-    write(&root, "whitaker.toml", "[diagnostics\n")?;
+    write(&root, discovered_name, discovered_contents)?;
     assert!(load_with_sources(sources(&root, env, json!({}))).is_err());
     Ok(())
 }
@@ -55,21 +63,6 @@ fn bridges_legacy_lint_tables(
     let loaded = load_with_sources(sources(&root, Arc::new(MapEnv::new()), json!({})))?;
     assert_eq!(loaded.settings.module_max_lines.max_lines, 123);
     assert_eq!(loaded.settings.bumpy_road_function.weights.depth, 2.0);
-    Ok(())
-}
-
-/// Fail closed for an unreadable selection or a malformed legacy file.
-#[rstest::rstest]
-fn rejects_unreadable_and_malformed_legacy(
-    root: std::io::Result<TempDir>,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let root = root?;
-    let env = Arc::new(MapEnv::new());
-    let mut input = sources(&root, env.clone(), json!({}));
-    input.config_path = Some(root.path().to_path_buf());
-    assert!(load_with_sources(input).is_err());
-    write(&root, "dylint.toml", "[broken\n")?;
-    assert!(load_with_sources(sources(&root, env, json!({}))).is_err());
     Ok(())
 }
 
