@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import re
+import shlex
 import subprocess
 from pathlib import Path
 
@@ -193,6 +195,44 @@ def test_nixie_selects_each_hardcoded_candidate(tmp_path: Path, candidate: str) 
     output = _run_nixie_target(tmp_path, environment)
 
     assert f"NIXIE_TMPDIR={candidate}\n" in output, output
+
+
+def _nixie_recipe() -> str:
+    """Return the Makefile recipe body for the ``nixie`` target."""
+    makefile = (REPOSITORY_ROOT / "Makefile").read_text(encoding="utf-8")
+    match = re.search(r"^nixie:\n((?:\t.*\n)*)", makefile, re.MULTILINE)
+    assert match is not None, "the Makefile must define the nixie target"
+    return match.group(1)
+
+
+def _nixie_probe_candidates() -> list[str]:
+    """Return the probe sequence the recipe walks, as make expands it.
+
+    The per-candidate selection cases each enable one candidate at a time, so
+    they cannot notice a permutation of the list they walk. Asserting the
+    sequence itself closes that gap without depending on which host
+    directories happen to exist.
+    """
+    # `$$` is the Makefile's escaping for a literal `$`; collapse it the way
+    # make does before tokenizing the shell word list.
+    recipe = _nixie_recipe().replace("$$", "$")
+    match = re.search(r"for candidate in (.*?);\s*do", recipe, re.DOTALL)
+    assert match is not None, recipe
+    return shlex.split(match.group(1).replace("\\\n", " "))
+
+
+def test_nixie_probes_candidates_in_documented_order() -> None:
+    """Walk the candidate list in the documented order."""
+    assert _nixie_probe_candidates() == [
+        "${XDG_RUNTIME_DIR:-}",
+        "${TMPDIR:-}",
+        "/run/user/$(id -u)",
+        "${HOME:-}",
+        "/tmp",
+        "/var/tmp",
+        "/usr/tmp",
+        ".",
+    ]
 
 
 def test_nixie_fails_when_no_candidate_can_create_scratch(tmp_path: Path) -> None:
