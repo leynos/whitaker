@@ -464,6 +464,70 @@ provider_param_attributes = ["case", "values", "files", "future", "context"]
 use_source_callee_fallback = false
 ```
 
+### Planned Whitaker CLI configuration
+
+The planned unified CLI uses `whitaker.toml` (or `.whitaker.toml`) for TOML
+settings. The configuration foundation is available to the CLI integration; the
+shipped `whitaker-installer` does not yet read these files. A selected
+`--config` file takes precedence over `WHITAKER_CONFIG` for choosing the file.
+Automatic discovery searches system, user, and project locations. If both
+project filenames exist, `.whitaker.toml` overrides `whitaker.toml`. Missing
+optional files are ignored. An explicitly selected missing or unreadable file
+is an error; malformed files are errors whether selected or discovered. TOML
+`extends` layers are supported.
+
+Within a selected file chain, later layers override earlier layers. Effective
+settings follow defaults, files, legacy environment values, `WHITAKER_*`
+environment values, then explicit CLI values. For example:
+
+```toml
+[lint]
+select = ["DEFAULT"]
+ignore = []
+experimental = false
+
+[diagnostics]
+locale = "en-GB"
+
+[output]
+colour = "auto"
+progress = "plain"
+```
+
+Use `WHITAKER_LINT_SELECT` and `WHITAKER_LINT_IGNORE` for comma-separated
+selectors, `WHITAKER_DIAGNOSTICS_LOCALE` for language, and
+`WHITAKER_OUTPUT_COLOUR` or `WHITAKER_OUTPUT_PROGRESS` for presentation.
+Boolean values use lower-case `true` or `false`; integer values are
+non-negative, and floating-point values must be finite. Lists are
+comma-separated: surrounding whitespace is trimmed and empty items are ignored.
+
+Out-of-range tuning values keep the lints' existing normalization policy rather
+than failing the load. A finite non-negative bumpy-road threshold is kept, and
+any other value falls back to `2.5`; the smoothing window must be non-zero and
+odd, so other values fall back to `3`; `min_bump_lines` is raised to at least
+`1`; bumpy-road weights that are not finite and non-negative fall back to their
+defaults; `max_branches` is raised to at least `1`; and `min_calls` and
+`min_distinct_tests` are raised to at least `2`. Provider attribute names are
+trimmed, lose a leading `rstest::`, and are deduplicated. Non-numeric values
+and unknown keys remain errors. The existing `WHITAKER_NO_SOURCE_FALLBACK`
+control forbids source builds for any value other than an empty string, `0`, or
+`false` (ignoring surrounding whitespace and case); disabled values leave any
+file setting unchanged. Non-Unicode values also forbid fallback, as in the
+installer.
+
+Command-specific settings use `[cmds.<command>]` and the corresponding
+`WHITAKER_CMDS_<COMMAND>_*` environment prefix. The allowed presentation values
+are `auto`, `always`, and `never` for colour, and `auto`, `plain`, and `off`
+for progress.
+
+For one release, when no canonical file is selected or found, the foundation
+falls back to `dylint.toml` and maps its root `locale` key to
+`diagnostics.locale`. An explicitly selected `dylint.toml` uses the same bridge.
+`DYLINT_LOCALE` remains a lower-priority environment fallback. Both legacy
+paths return a notice naming the replacement for the application to display.
+The existing installer continues to use its own configuration and
+source-fallback behaviour.
+
 ## Localized Diagnostics
 
 Whitaker supports multiple languages for diagnostic messages. Set the locale

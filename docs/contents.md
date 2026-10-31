@@ -41,6 +41,18 @@
 - [Whitaker command-line interface (CLI) design](whitaker-cli-design.md)
   defines the unified `whitaker` binary, its configuration model, and the
   installation and diagnostic workflows behind it.
+- [OrthoConfig v0.10.0 provenance](ortho-config-provenance.md) records the
+  immutable upstream source and checksums for the imported OrthoConfig guides.
+- [OrthoConfig v0.10.0 user's guide](ortho-config-users-guide.md) is the
+  byte-preserved upstream guide used to design the CLI configuration spine.
+- [OrthoConfig v0.10.0 migration guide](ortho-config-v0-10-0-migration-guide.md)
+  is a compatibility entry point to the byte-preserved release guide, stored
+  under `ortho-config/` so its relative links resolve to the correct guide.
+- [OrthoConfig v0.10.0 legacy migration link target](v0-10-0-migration-guide.md)
+  preserves the original relative link in the imported user's guide.
+- [OrthoConfig ADR 0004 compatibility entry point](adrs/adr-0004-cargo-external-subcommand-entry-point.md)
+  links to the upstream Cargo external-subcommand decision; it is not a
+  Whitaker design decision.
 - [Whitaker clone detector design](whitaker-clone-detector-design.md)
   documents the clone detector architecture, data flow, and supporting
   reasoning.
@@ -102,6 +114,9 @@
   substrate](adr-007-rust-rewrite-materialization-substrate.md) defines a
   bounded comparative spike between ast-grep and `ra_ap_syntax::SyntaxEditor`,
   with source-fidelity gates and an evidence-based backend selection rule.
+- [Architectural decision record (ADR) 008: OrthoConfig CLI boundary](adr-008-ortho-config-cli-boundary.md)
+  records the configuration sources, compatibility bridge, and application
+  boundary for the planned CLI.
 - [Architectural decision record (ADR) 009: verified Clippy snapshot for the
   Dylint driver
   bootstrap](adr-009-verified-clippy-snapshot-for-dylint-driver-bootstrap.md)
@@ -162,3 +177,5 @@
 
 - [docs/execplans/](execplans/) stores execution plans for branch-scoped
   implementation work and larger follow-up tasks.
+- [Issue #523 OrthoConfig adoption plan](execplans/issue-523-adopt-ortho-config-v0-10-0-for-the-whitaker-cli.md)
+  records the proposed scope, baseline, implementation sequence, and gates.
