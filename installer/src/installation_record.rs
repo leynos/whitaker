@@ -126,8 +126,10 @@ pub fn installed_paths(dirs: &dyn BaseDirs) -> Result<Vec<Utf8PathBuf>, Installa
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
         Err(source) => return Err(record_io_error("open", &record_path, source)),
     };
-    file.lock_shared()
-        .map_err(|source| record_io_error("lock", &record_path, source))?;
+    // `File::lock_shared` is stable only from Rust 1.89; naming the trait
+    // keeps the 1.85-compatible implementation selected where the inherent
+    // method would otherwise shadow it.
+    FileExt::lock_shared(&file).map_err(|source| record_io_error("lock", &record_path, source))?;
     let paths = read_paths(&record_path, &mut file)?;
     Ok(paths
         .into_values()

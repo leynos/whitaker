@@ -165,23 +165,6 @@ fn legacy_dylint_invocations_forward_arguments_and_exit_status() {
         "cargo arguments should reach the fake process"
     );
 
-    // Bare `whitaker` must behave like the legacy wrapper's
-    // `exec cargo dylint "$@"`, not print Whitaker usage.
-    let bare_output = Command::new(env!("CARGO_BIN_EXE_whitaker"))
-        .env("PATH", bin_dir.path())
-        .output()
-        .expect("whitaker forwarding process should start");
-    assert_eq!(
-        bare_output.status.code(),
-        Some(23),
-        "bare whitaker should forward to cargo dylint"
-    );
-    assert_eq!(
-        String::from_utf8_lossy(&bare_output.stdout),
-        "dylint\n",
-        "bare whitaker should pass no arguments beyond the dylint subcommand"
-    );
-
     let version_output = Command::new(env!("CARGO_BIN_EXE_whitaker"))
         .args(["--all", "--version"])
         .env("PATH", bin_dir.path())
@@ -210,5 +193,45 @@ fn legacy_dylint_invocations_forward_arguments_and_exit_status() {
         interrupted.status.code(),
         Some(130),
         "a signal-terminated child should preserve the shell status"
+    );
+}
+
+/// Bare `whitaker` must behave like the legacy wrapper's
+/// `exec cargo dylint "$@"`, not print Whitaker usage.
+#[cfg(unix)]
+#[test]
+fn a_bare_invocation_forwards_to_dylint_without_arguments() {
+    use cap_std::{
+        ambient_authority,
+        fs_utf8::{Dir, Permissions, PermissionsExt},
+    };
+    use tempfile::TempDir;
+
+    let bin_dir = TempDir::new().expect("fake cargo directory should be created");
+    let bin_dir_handle = Dir::open_ambient_dir(
+        camino::Utf8Path::from_path(bin_dir.path()).expect("temporary path should be UTF-8"),
+        ambient_authority(),
+    )
+    .expect("fake cargo directory should be opened");
+    bin_dir_handle
+        .write("cargo", "#!/bin/sh\nprintf '%s\\n' \"$@\"\nexit 23\n")
+        .expect("fake cargo command should be written");
+    bin_dir_handle
+        .set_permissions("cargo", Permissions::from_mode(0o755))
+        .expect("fake cargo should be executable");
+
+    let bare_output = Command::new(env!("CARGO_BIN_EXE_whitaker"))
+        .env("PATH", bin_dir.path())
+        .output()
+        .expect("whitaker forwarding process should start");
+    assert_eq!(
+        bare_output.status.code(),
+        Some(23),
+        "bare whitaker should forward to cargo dylint"
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&bare_output.stdout),
+        "dylint\n",
+        "bare whitaker should pass no arguments beyond the dylint subcommand"
     );
 }
