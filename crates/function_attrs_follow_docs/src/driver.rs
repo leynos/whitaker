@@ -32,12 +32,30 @@ impl Default for FunctionAttrsFollowDocs {
     }
 }
 
-dylint_linting::impl_late_lint! {
-    pub FUNCTION_ATTRS_FOLLOW_DOCS,
-    Warn,
-    "doc comments on functions must precede other outer attributes",
-    FunctionAttrsFollowDocs::default()
+/// Dylint lint declaration and registration glue.
+///
+/// `impl_late_lint!` expands to the Dylint ABI entry point and the
+/// `impl_lint_pass!` accessor, neither of which has a source location that
+/// could carry documentation. Isolating the invocation keeps the expectation
+/// scoped to exactly those generated items.
+mod declaration {
+    #![expect(
+        missing_docs,
+        reason = "dylint_linting macro expansion emits items with no documentable source location"
+    )]
+
+    use super::FunctionAttrsFollowDocs;
+
+    dylint_linting::impl_late_lint! {
+        /// Warns when outer attributes on a function precede its doc comments.
+        pub FUNCTION_ATTRS_FOLLOW_DOCS,
+        Warn,
+        "doc comments on functions must precede other outer attributes",
+        FunctionAttrsFollowDocs::default()
+    }
 }
+
+pub use declaration::FUNCTION_ATTRS_FOLLOW_DOCS;
 
 impl<'tcx> LateLintPass<'tcx> for FunctionAttrsFollowDocs {
     fn check_crate(&mut self, _cx: &LateContext<'tcx>) {
@@ -50,7 +68,7 @@ impl<'tcx> LateLintPass<'tcx> for FunctionAttrsFollowDocs {
         if let hir::ItemKind::Fn { .. } = item.kind {
             self.check_item_attributes(
                 cx,
-                ItemInfo::new(item.hir_id(), item.span, FunctionKind::Function),
+                &ItemInfo::new(item.hir_id(), item.span, FunctionKind::Function),
             );
         }
     }
@@ -59,7 +77,7 @@ impl<'tcx> LateLintPass<'tcx> for FunctionAttrsFollowDocs {
         if let hir::ImplItemKind::Fn(..) = item.kind {
             self.check_item_attributes(
                 cx,
-                ItemInfo::new(item.hir_id(), item.span, FunctionKind::Method),
+                &ItemInfo::new(item.hir_id(), item.span, FunctionKind::Method),
             );
         }
     }
@@ -68,7 +86,7 @@ impl<'tcx> LateLintPass<'tcx> for FunctionAttrsFollowDocs {
         if let hir::TraitItemKind::Fn(..) = item.kind {
             self.check_item_attributes(
                 cx,
-                ItemInfo::new(item.hir_id(), item.span, FunctionKind::TraitMethod),
+                &ItemInfo::new(item.hir_id(), item.span, FunctionKind::TraitMethod),
             );
         }
     }
@@ -82,15 +100,17 @@ struct ItemInfo {
 }
 
 impl ItemInfo {
-    fn new(hir_id: hir::HirId, span: Span, kind: FunctionKind) -> Self {
+    /// Capture the HIR identity, source span, and function kind.
+    const fn new(hir_id: hir::HirId, span: Span, kind: FunctionKind) -> Self {
         Self { hir_id, span, kind }
     }
 }
 
 impl<'tcx> FunctionAttrsFollowDocs {
-    fn check_item_attributes(&self, cx: &LateContext<'tcx>, item: ItemInfo) {
+    /// Check the attributes attached to one function-like item.
+    fn check_item_attributes(&self, cx: &LateContext<'tcx>, item: &ItemInfo) {
         let attrs = cx.tcx.hir_attrs(item.hir_id);
-        check_function_attributes(FunctionAttributeCheck {
+        check_function_attributes(&FunctionAttributeCheck {
             cx,
             attrs,
             item_span: item.span,
@@ -195,7 +215,8 @@ impl AttrInfo {
         (span.lo(), span.hi())
     }
 
-    fn user_editable_span(&self) -> Option<Span> {
+    /// Return the span that can be edited in user-written source.
+    const fn user_editable_span(&self) -> Option<Span> {
         self.user_editable_span
     }
 }
@@ -223,7 +244,8 @@ struct FunctionAttributeCheck<'tcx, 'a> {
     localizer: &'a Localizer,
 }
 
-fn check_function_attributes(check: FunctionAttributeCheck<'_, '_>) {
+/// Report function attributes that appear after the item's documentation.
+fn check_function_attributes(check: &FunctionAttributeCheck<'_, '_>) {
     let item_user_editable_span = recover_user_editable_hir_span(check.item_span);
     let mut infos: Vec<AttrInfo> = check
         .attrs
@@ -238,14 +260,15 @@ fn check_function_attributes(check: FunctionAttributeCheck<'_, '_>) {
         )
     });
     // Attribute macros can reorder attributes in HIR; rely on source order instead.
-    infos.sort_by_key(|info| info.source_order_key());
+    infos.sort_by_key(AttrInfo::source_order_key);
 
     let Some((doc_index, offending_index)) = detect_misordered_doc(infos.as_slice()) else {
         return;
     };
 
-    let doc = &infos[doc_index];
-    let offending = &infos[offending_index];
+    let (Some(doc), Some(offending)) = (infos.get(doc_index), infos.get(offending_index)) else {
+        return;
+    };
     let diagnostic_context = DiagnosticContext {
         doc_span: doc.span(),
         offending_span: offending.span(),
@@ -265,7 +288,7 @@ fn attribute_within_item(
     item_span: Option<Span>,
     raw_item_span: Span,
 ) -> bool {
-    let Some(attribute_span) = attribute_span else {
+    let Some(editable_attribute_span) = attribute_span else {
         return false;
     };
 
@@ -273,14 +296,15 @@ fn attribute_within_item(
         return true;
     }
 
-    let item_span = item_span.unwrap_or(raw_item_span);
+    let bounding_item_span = item_span.unwrap_or(raw_item_span);
 
     // Modern nightlies exclude attributes from the item span, so outer
     // attributes sit immediately before it. Accept spans contained in the
     // item (older behaviour and inner attributes) or preceding it (outer
     // attributes on current nightlies).
-    let contained = attribute_span.lo() >= item_span.lo() && attribute_span.hi() <= item_span.hi();
-    let precedes = attribute_span.hi() <= item_span.lo();
+    let contained = editable_attribute_span.lo() >= bounding_item_span.lo()
+        && editable_attribute_span.hi() <= bounding_item_span.hi();
+    let precedes = editable_attribute_span.hi() <= bounding_item_span.lo();
     contained || precedes
 }
 
@@ -291,6 +315,7 @@ struct DiagnosticContext {
     kind: FunctionKind,
 }
 
+/// Emit a localized diagnostic for an attribute that follows documentation.
 fn emit_diagnostic(cx: &LateContext<'_>, context: DiagnosticContext, localizer: &Localizer) {
     let attribute = attribute_label(cx, context.offending_span, localizer);
     let mut args: Arguments<'static> = Arguments::default();
@@ -312,9 +337,9 @@ fn emit_diagnostic(cx: &LateContext<'_>, context: DiagnosticContext, localizer: 
         let kind = context.kind;
         move || fallback_messages(kind, attribute.as_str())
     });
-    let primary = messages.primary().to_string();
-    let note = messages.note().to_string();
-    let help = messages.help().to_string();
+    let primary = messages.primary().to_owned();
+    let note = messages.note().to_owned();
+    let help = messages.help().to_owned();
 
     cx.emit_span_lint(
         FUNCTION_ATTRS_FOLLOW_DOCS,
@@ -342,36 +367,39 @@ fn localized_messages(
     args.insert(Cow::Borrowed("subject"), FluentValue::from(kind.subject()));
     args.insert(
         Cow::Borrowed("attribute"),
-        FluentValue::from(attribute.to_string()),
+        FluentValue::from(attribute.to_owned()),
     );
 
     resolve_message_set(lookup, MESSAGE_KEY, &args)
 }
 
+/// Build diagnostic text when localized messages cannot be loaded.
 fn fallback_messages(kind: FunctionKind, attribute: &str) -> FunctionAttrsMessages {
     let primary = format!(
         "Doc comments on {} must precede other outer attributes.",
         kind.subject()
     );
-    let note = format!("The outer attribute {attribute} appears before the doc comment.",);
-    let help = format!("Move the doc comment so it appears before {attribute} on the item.",);
+    let note = format!("The outer attribute {attribute} appears before the doc comment.");
+    let help = format!("Move the doc comment so it appears before {attribute} on the item.");
 
     FunctionAttrsMessages::new(primary, note, help)
 }
 
+/// Read the attribute spelling at its source span or return a fallback label.
 fn attribute_label(cx: &LateContext<'_>, span: Span, localizer: &Localizer) -> String {
-    match cx.sess().source_map().span_to_snippet(span) {
-        Ok(snippet) => snippet.trim().to_string(),
-        Err(_) => attribute_fallback(localizer),
-    }
+    cx.sess().source_map().span_to_snippet(span).map_or_else(
+        |_| attribute_fallback(localizer),
+        |snippet| snippet.trim().to_owned(),
+    )
 }
 
+/// Resolve the shared fallback label for an unavailable attribute snippet.
 fn attribute_fallback(lookup: &impl BundleLookup) -> String {
     let args: Arguments<'static> = Arguments::default();
 
     lookup
         .message(MessageKey::new("common-attribute-fallback"), &args)
-        .unwrap_or_else(|_| "the preceding attribute".to_string())
+        .unwrap_or_else(|_| "the preceding attribute".to_owned())
 }
 
 /// Recover the source span of a parsed attribute kind.
@@ -386,7 +414,7 @@ fn attribute_fallback(lookup: &impl BundleLookup) -> String {
 /// deliberately not recovered until the ordering check needs them. Only
 /// variants whose shape is identical on the currently supported nightlies
 /// are matched; further kinds can be added as the pin advances.
-fn parsed_attribute_span(kind: &AttributeKind) -> Option<Span> {
+const fn parsed_attribute_span(kind: &AttributeKind) -> Option<Span> {
     match kind {
         AttributeKind::DocComment { span, .. }
         | AttributeKind::Ignore { span, .. }
@@ -402,6 +430,7 @@ fn parsed_attribute_span(kind: &AttributeKind) -> Option<Span> {
         _ => None,
     }
 }
+
 fn detect_misordered_doc<A>(attrs: &[A]) -> Option<(usize, usize)>
 where
     A: OrderedAttribute,

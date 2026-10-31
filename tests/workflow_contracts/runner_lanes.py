@@ -196,10 +196,12 @@ def leg_guard_selects(condition: object, leg: str) -> bool:
 LEG_DISCRIMINATOR: Final[str] = "${{ runner.arch }}"
 
 
-#: The longest `timeout-minutes` any lane here may declare. The 335-minute
-#: suite jobs need room above the 300-minute nextest budget; five more minutes
-#: cap their enclosing work while keeping unrelated lanes on measured values.
-MAXIMUM_LANE_TIMEOUT_MINUTES: Final[int] = 340
+#: The ordinary lane ceiling limits the cost of a hung paid runner.
+MAXIMUM_LANE_TIMEOUT_MINUTES: Final[int] = 120
+
+#: The test-suite lanes have a separately derived ceiling because their
+#: nextest budgets exceed the ordinary Ubicloud build-lane limit.
+SUITE_LANE_TIMEOUT_MINUTES: Final[int] = 335
 
 
 #: Every lane whose runner image sets the glibc floor for a consumer of

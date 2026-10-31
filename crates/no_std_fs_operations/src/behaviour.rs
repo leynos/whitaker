@@ -20,11 +20,13 @@ impl LocalizationWorld {
         self.localizer = Some(Localizer::new(Some(locale)));
     }
 
+    /// Store the operation used to select localized diagnostics.
     fn set_operation(&mut self, operation: &str) {
-        self.operation = operation.to_owned();
+        operation.clone_into(&mut self.operation);
     }
 
-    fn mark_failure(&mut self) {
+    /// Mark message resolution as failed so the fallback can be used.
+    const fn mark_failure(&mut self) {
         self.failing = true;
     }
 
@@ -34,26 +36,28 @@ impl LocalizationWorld {
         let result = if self.failing {
             localized_messages(&FailingLookup::new("no_std_fs_operations"), &op)
         } else {
-            let localizer = self.localizer.as_ref().expect("a locale must be selected");
+            let Some(localizer) = self.localizer.as_ref() else {
+                panic!("a locale must be selected before resolving messages")
+            };
             localized_messages(localizer, &op)
         };
         self.result = Some(result);
     }
 
+    /// Return the resolved messages, or the fallback after a lookup failure.
     fn messages(&self) -> &StdFsMessages {
-        self.result
-            .as_ref()
-            .expect("localization result should be recorded")
-            .as_ref()
-            .expect("localization should succeed")
+        let Some(Ok(messages)) = self.result.as_ref().map(Result::as_ref) else {
+            panic!("localization should have been resolved successfully")
+        };
+        messages
     }
 
+    /// Return the localization error recorded during message resolution.
     fn error(&self) -> &I18nError {
-        self.result
-            .as_ref()
-            .expect("localization result should be recorded")
-            .as_ref()
-            .expect_err("localization should fail")
+        let Some(Err(error)) = self.result.as_ref().map(Result::as_ref) else {
+            panic!("localization should have been resolved to a failure")
+        };
+        error
     }
 }
 
@@ -90,33 +94,50 @@ fn when_localize(world: &WorldCell) {
     world.borrow_mut().resolve();
 }
 
+/// Check that the resolved primary diagnostic contains the requested text.
 #[then("the primary mentions {snippet}")]
 fn then_primary(world: &WorldCell, snippet: String) {
     let needle = snippet.trim_matches('"');
     let borrow = world.borrow();
-    assert!(borrow.messages().primary().contains(needle));
+    assert!(
+        borrow.messages().primary().contains(needle),
+        "primary message should mention `{needle}`"
+    );
 }
 
+/// Check that the resolved diagnostic note contains the requested text.
 #[then("the note references {snippet}")]
 fn then_note(world: &WorldCell, snippet: String) {
     let needle = snippet.trim_matches('"');
     let borrow = world.borrow();
-    assert!(borrow.messages().note().contains(needle));
+    assert!(
+        borrow.messages().note().contains(needle),
+        "note message should mention `{needle}`"
+    );
 }
 
+/// Check that the resolved diagnostic help contains the requested text.
 #[then("the help references {snippet}")]
 fn then_help(world: &WorldCell, snippet: String) {
     let needle = snippet.trim_matches('"');
     let borrow = world.borrow();
-    assert!(borrow.messages().help().contains(needle));
+    assert!(
+        borrow.messages().help().contains(needle),
+        "help message should mention `{needle}`"
+    );
 }
 
+/// Check that diagnostic resolution records the requested localization failure.
 #[then("localization fails for {key}")]
 fn then_failure(world: &WorldCell, key: String) {
     let borrow = world.borrow();
     match borrow.error() {
         I18nError::MissingMessage { key: missing, .. } => {
-            assert_eq!(missing, &key.trim_matches('"'))
+            assert_eq!(
+                missing,
+                &key.trim_matches('"'),
+                "localization should fail for the requested key"
+            );
         }
     }
 }

@@ -109,7 +109,7 @@ impl MethodInfo {
     /// assert!(m.accessed_fields().contains("buf"));
     /// ```
     #[must_use]
-    pub fn accessed_fields(&self) -> &BTreeSet<String> {
+    pub const fn accessed_fields(&self) -> &BTreeSet<String> {
         &self.accessed_fields
     }
 
@@ -129,7 +129,7 @@ impl MethodInfo {
     /// assert!(m.called_methods().contains("validate"));
     /// ```
     #[must_use]
-    pub fn called_methods(&self) -> &BTreeSet<String> {
+    pub const fn called_methods(&self) -> &BTreeSet<String> {
         &self.called_methods
     }
 }
@@ -152,18 +152,34 @@ impl UnionFind {
         }
     }
 
+    /// Find and compress the root of the component containing `x`.
     fn find(&mut self, x: usize) -> usize {
-        if self.parent[x] != x {
-            self.parent[x] = self.find(self.parent[x]);
+        // Out-of-range nodes are treated as their own root; callers only pass
+        // indices from `0..n`, so the fallback never fires in practice.
+        let parent = self.parent.get(x).copied().unwrap_or(x);
+        if parent == x {
+            return x;
         }
-        self.parent[x]
+        let root = self.find(parent);
+        self.set_parent(x, root);
+        root
     }
 
     /// Returns `true` when the first root has strictly lower rank.
     fn lower_rank(&self, root_a: usize, root_b: usize) -> bool {
-        self.rank[root_a] < self.rank[root_b]
+        let rank_a = self.rank.get(root_a).copied().unwrap_or(0);
+        let rank_b = self.rank.get(root_b).copied().unwrap_or(0);
+        rank_a < rank_b
     }
 
+    /// Repoints `node` at `root`, ignoring out-of-range nodes.
+    fn set_parent(&mut self, node: usize, root: usize) {
+        if let Some(parent_slot) = self.parent.get_mut(node) {
+            *parent_slot = root;
+        }
+    }
+
+    /// Join the components containing `x` and `y` by rank.
     fn union(&mut self, x: usize, y: usize) {
         let root_x = self.find(x);
         let root_y = self.find(y);
@@ -171,22 +187,25 @@ impl UnionFind {
             return;
         }
         if self.lower_rank(root_x, root_y) {
-            self.parent[root_x] = root_y;
+            self.set_parent(root_x, root_y);
         } else if self.lower_rank(root_y, root_x) {
-            self.parent[root_y] = root_x;
+            self.set_parent(root_y, root_x);
         } else {
-            self.parent[root_y] = root_x;
-            self.rank[root_x] += 1;
+            self.set_parent(root_y, root_x);
+            if let Some(rank_slot) = self.rank.get_mut(root_x) {
+                *rank_slot += 1;
+            }
         }
     }
 
+    /// Count the distinct roots after compressing every component path.
     fn component_count(&mut self) -> usize {
-        let n = self.parent.len();
+        let node_count = self.parent.len();
         // Flatten the forest so every node points directly to its root.
-        for i in 0..n {
-            self.find(i);
+        for node in 0..node_count {
+            self.find(node);
         }
-        let mut roots: Vec<usize> = self.parent[..n].to_vec();
+        let mut roots = self.parent.clone();
         roots.sort_unstable();
         roots.dedup();
         roots.len()

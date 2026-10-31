@@ -33,7 +33,7 @@ fn hir_attribute_from_segments(segments: &[&str]) -> hir::Attribute {
     hir::Attribute::Unparsed(Box::new(attr_item))
 }
 
-fn parsed_must_use_attribute() -> hir::Attribute {
+const fn parsed_must_use_attribute() -> hir::Attribute {
     hir::Attribute::Parsed(HirAttributeKind::MustUse {
         span: DUMMY_SP,
         reason: None,
@@ -100,6 +100,7 @@ fn integration_test_crate_root_is_anchored_to_the_source_root(
 // Tests for has_test_like_hir_attributes
 // -------------------------------------------------------------------------
 
+/// Assert whether the supplied attribute paths are recognized as test-like.
 fn assert_has_test_like_attributes(
     attr_segments: &[&[&str]],
     additional_test_attributes: &[AttributePath],
@@ -113,10 +114,12 @@ fn assert_has_test_like_attributes(
         assert_eq!(
             has_test_like_hir_attributes(&attrs, additional_test_attributes),
             expected,
+            "attribute segments {attr_segments:?} should report test-like as {expected}",
         );
     });
 }
 
+/// Check that every supported test attribute shape is recognized.
 #[rstest]
 #[case::inline_and_test(0)]
 #[case::rstest_only(1)]
@@ -129,7 +132,10 @@ fn has_test_like_hir_attributes_detects_test_attributes(#[case] case_index: usiz
         &[&["tokio", "test"]],
         &[&["core", "prelude", "v1", "test"]],
     ];
-    assert_has_test_like_attributes(test_cases[case_index], &[], true);
+    let segments = test_cases
+        .get(case_index)
+        .expect("case index should address a declared test case");
+    assert_has_test_like_attributes(segments, &[], true);
 }
 
 #[test]

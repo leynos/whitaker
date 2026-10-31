@@ -52,7 +52,8 @@ impl Default for Config {
 }
 
 impl Config {
-    pub(super) fn into_settings(self) -> Settings {
+    /// Convert parsed configuration into the settings used by analysis.
+    pub(super) const fn into_settings(self) -> Settings {
         Settings {
             threshold: self.threshold,
             window: self.window,

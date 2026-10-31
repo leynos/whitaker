@@ -57,6 +57,9 @@ pub enum AdjacencyError {
         /// Edge index within the declarative input slice.
         index: usize,
     },
+    /// An internal graph invariant failed after declarative validation.
+    #[error("validated edge input did not produce a valid graph")]
+    InvalidInternalState,
 }
 
 /// Observable adjacency-construction results for a set of edges.
@@ -81,7 +84,7 @@ pub struct AdjacencyReport {
 }
 
 impl AdjacencyReport {
-    /// Returns the number of nodes in the adjacency graph.
+    /// Return the number of nodes in the adjacency graph.
     ///
     /// ```rust
     /// use whitaker_common::test_support::decomposition::{EdgeInput, adjacency_report};
@@ -94,7 +97,7 @@ impl AdjacencyReport {
         self.node_count
     }
 
-    /// Returns the neighbour list for `node`, sorted by neighbour index.
+    /// Return the neighbour list for `node`, sorted by neighbour index.
     ///
     /// Returns `None` if `node` is out of range.
     ///
@@ -118,7 +121,7 @@ impl AdjacencyReport {
         self.neighbours.get(node).map(Vec::as_slice)
     }
 
-    /// Returns `true` if all neighbour indices are within bounds.
+    /// Check whether every neighbour index lies within the graph bounds.
     ///
     /// ```rust
     /// use whitaker_common::test_support::decomposition::{EdgeInput, adjacency_report};
@@ -143,7 +146,7 @@ impl AdjacencyReport {
         })
     }
 
-    /// Returns `true` if the adjacency lists are symmetric: for every entry
+    /// Check whether the adjacency lists are symmetric: for every entry
     /// `(node -> neighbour, weight)`, the mirrored entry exists.
     ///
     /// ```rust
@@ -169,7 +172,7 @@ impl AdjacencyReport {
         })
     }
 
-    /// Returns `true` if each per-node neighbour list is sorted by neighbour
+    /// Check whether each per-node neighbour list is sorted by neighbour
     /// index.
     ///
     /// ```rust
@@ -203,6 +206,7 @@ impl AdjacencyReport {
     }
 }
 
+/// Check whether the reverse edge appears in the neighbour list.
 #[expect(
     clippy::unnecessary_map_or,
     reason = "Keep the explicit non-panicking fallback requested in review."
@@ -226,7 +230,7 @@ fn has_mirror(
     })
 }
 
-/// Builds an [`AdjacencyReport`] from declarative edge input.
+/// Build an [`AdjacencyReport`] from declarative edge input.
 ///
 /// Returns `Err` if any edge endpoint is out of range for the given
 /// `node_count` or if `left >= right` (violating the production
@@ -252,13 +256,14 @@ fn has_mirror(
 /// # Errors
 ///
 /// Returns a typed validation error when an edge violates the production
-/// input contract.
+/// input contract or validated data violates an internal graph invariant.
 pub fn adjacency_report(
     node_count: usize,
     edges: &[EdgeInput],
 ) -> Result<AdjacencyReport, AdjacencyError> {
     let similarity_edges = validate_edges(node_count, edges)?;
-    let neighbours = build_adjacency(node_count, &similarity_edges);
+    let neighbours = build_adjacency(node_count, &similarity_edges)
+        .map_err(|_| AdjacencyError::InvalidInternalState)?;
 
     Ok(AdjacencyReport {
         node_count,
@@ -266,7 +271,7 @@ pub fn adjacency_report(
     })
 }
 
-/// Validates declarative [`EdgeInput`] entries against adjacency invariants and
+/// Validate declarative [`EdgeInput`] entries against adjacency invariants and
 /// converts valid edges into [`SimilarityEdge`] values.
 ///
 /// # Errors
@@ -309,6 +314,7 @@ mod tests {
 
     use super::{AdjacencyError, EdgeInput, adjacency_report};
 
+    /// Reject an edge whose endpoints are not in canonical order.
     #[test]
     fn adjacency_report_rejects_non_canonical_edges_with_structured_error() {
         let result = adjacency_report(
@@ -330,6 +336,7 @@ mod tests {
         );
     }
 
+    /// Reject an edge endpoint outside the declared graph size.
     #[test]
     fn adjacency_report_rejects_out_of_range_endpoints_with_structured_error() {
         let result = adjacency_report(
@@ -351,6 +358,7 @@ mod tests {
         );
     }
 
+    /// Reject an edge with zero weight.
     #[test]
     fn adjacency_report_rejects_zero_weight_with_structured_error() {
         let result = adjacency_report(

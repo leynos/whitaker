@@ -40,7 +40,14 @@ const CRATE: &str = "no_std_fs_operations";
 #[test]
 fn crate_builds_without_dylint_driver_feature() -> anyhow::Result<()> {
     let workspace_root = workspace_root()?;
-    let target_dir = TempDir::new().context("failed to create isolated target directory")?;
+    let workspace = Dir::open_ambient_dir(&workspace_root, ambient_authority())
+        .context("failed to open workspace for isolated target directory")?;
+    workspace
+        .create_dir_all("target/tests/no_default_features_build")
+        .context("failed to create isolated target directory parent")?;
+    let target_root = workspace_root.join("target/tests/no_default_features_build");
+    let target_dir =
+        TempDir::new_in(&target_root).context("failed to create isolated target directory")?;
 
     let output = Command::new("cargo")
         .arg("check")

@@ -37,7 +37,7 @@ impl RstestParameter {
     /// assert_eq!(parameter.attributes().len(), 1);
     /// ```
     #[must_use]
-    pub fn new(binding: ParameterBinding, attributes: Vec<Attribute>) -> Self {
+    pub const fn new(binding: ParameterBinding, attributes: Vec<Attribute>) -> Self {
         Self {
             binding,
             attributes,
@@ -70,7 +70,7 @@ impl RstestParameter {
     /// assert_eq!(parameter.binding_name(), None);
     /// ```
     #[must_use]
-    pub fn unsupported() -> Self {
+    pub const fn unsupported() -> Self {
         Self::new(ParameterBinding::Unsupported, Vec::new())
     }
 
@@ -100,7 +100,10 @@ impl RstestParameter {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RstestParameterKind {
     /// A fixture-local identifier binding.
-    FixtureLocal { name: String },
+    FixtureLocal {
+        /// The identifier bound by the fixture parameter.
+        name: String,
+    },
     /// A provider-driven input such as `#[case]` or `#[values]`.
     Provider,
     /// A binding shape that version one does not support.

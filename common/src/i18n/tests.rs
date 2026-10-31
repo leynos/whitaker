@@ -1,3 +1,5 @@
+//! Test locale selection, support, enumeration, and message interpolation.
+
 use std::borrow::Cow;
 
 use super::FluentValue;
@@ -17,12 +19,13 @@ fn resolves_locales(#[case] input: Option<&str>, #[case] expected: &str, #[case]
     assert_eq!(localizer.used_fallback(), fallback);
 }
 
+/// Check that the available locale list includes every bundled language.
 #[test]
 fn enumerates_available_locales() {
     let locales = available_locales();
-    assert!(locales.contains(&"en-GB".to_string()));
-    assert!(locales.contains(&"cy".to_string()));
-    assert!(locales.contains(&"gd".to_string()));
+    assert!(locales.contains(&"en-GB".to_owned()));
+    assert!(locales.contains(&"cy".to_owned()));
+    assert!(locales.contains(&"gd".to_owned()));
 }
 
 #[test]

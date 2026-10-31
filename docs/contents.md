@@ -162,3 +162,16 @@
 
 - [docs/execplans/](execplans/) stores execution plans for branch-scoped
   implementation work and larger follow-up tasks.
+
+## Verification evidence
+
+- [Clone-detector proof run for PR 365 (2026-10-25)](
+  verification/clone-detector/pr365-2026-10-25/README.md) records bounded
+  exact-head Kani runs for candidates `bf9aa109` and `e100b422`, with harness
+  results and limits on what the proofs establish.
+- [Earlier clone-detector proof run for PR 365 (2026-10-19)](
+  verification/clone-detector/pr365-2026-10-19/README.md) retains the earlier
+  Kani transcripts, the unwind-5 negative control, and the related Verus
+  record. The 2026-10-25 record supersedes it for later exact-head Kani
+  candidate results; the earlier control and Verus evidence remain distinct
+  records.

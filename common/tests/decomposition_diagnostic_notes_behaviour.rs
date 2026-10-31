@@ -214,7 +214,8 @@ fn when_note_is_rendered(world: &DiagnosticNoteWorld) -> Result<(), String> {
         .into_iter()
         .map(MethodProfileBuilder::build)
         .collect::<Vec<_>>();
-    let suggestions = suggest_decomposition(&context, &profiles);
+    let suggestions =
+        suggest_decomposition(&context, &profiles).map_err(|error| error.to_string())?;
     *world.render_attempted.borrow_mut() = true;
     *world.rendered_note.borrow_mut() = format_diagnostic_note(&context, &suggestions);
     Ok(())

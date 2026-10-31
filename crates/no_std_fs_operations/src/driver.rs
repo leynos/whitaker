@@ -16,6 +16,8 @@ use whitaker_common::SimplePath;
 use whitaker_common::i18n::Localizer;
 use whitaker_common::i18n::get_localizer_for_lint;
 
+/// Lint pass that tracks localization and exclusion state while checking
+/// `std::fs` usage.
 pub struct NoStdFsOperations {
     localizer: Localizer,
     excluded: bool,
@@ -32,12 +34,30 @@ impl Default for NoStdFsOperations {
     }
 }
 
-dylint_linting::impl_late_lint! {
-    pub NO_STD_FS_OPERATIONS,
-    Deny,
-    "std::fs operations bypass Whitaker's capability-based filesystem policy",
-    NoStdFsOperations::default()
+/// Dylint lint declaration and registration glue.
+///
+/// `impl_late_lint!` expands to the Dylint ABI entry point and the
+/// `impl_lint_pass!` accessor, neither of which has a source location that
+/// could carry documentation. Isolating the invocation keeps the expectation
+/// scoped to exactly those generated items.
+mod declaration {
+    #![expect(
+        missing_docs,
+        reason = "dylint_linting macro expansion emits items with no documentable source location"
+    )]
+
+    use super::NoStdFsOperations;
+
+    dylint_linting::impl_late_lint! {
+        /// Denies direct `std::fs` use that bypasses the capability policy.
+        pub NO_STD_FS_OPERATIONS,
+        Deny,
+        "std::fs operations bypass Whitaker's capability-based filesystem policy",
+        NoStdFsOperations::default()
+    }
 }
+
+pub use declaration::NO_STD_FS_OPERATIONS;
 
 impl<'tcx> LateLintPass<'tcx> for NoStdFsOperations {
     fn check_crate(&mut self, cx: &LateContext<'tcx>) {
@@ -113,7 +133,7 @@ impl<'tcx> LateLintPass<'tcx> for NoStdFsOperations {
                     .and_then(|def_id| classify_def_id(cx, def_id));
 
                 if usage.is_none() {
-                    usage = self.receiver_usage_for_method(cx, receiver, segment.ident.as_str());
+                    usage = Self::receiver_usage_for_method(cx, receiver, segment.ident.as_str());
                 }
 
                 self.emit_optional(cx, site, usage);
@@ -157,15 +177,16 @@ struct LintSite {
 impl NoStdFsOperations {
     /// Centralizes exclusion logic for all lint pass methods.
     #[inline]
-    fn should_skip(&self) -> bool {
+    const fn should_skip(&self) -> bool {
         self.excluded
     }
 
+    /// Emit a diagnostic when the site contains a recognized filesystem use.
     fn emit_optional(&self, cx: &LateContext<'_>, site: LintSite, usage: Option<StdFsUsage>) {
         if self.should_skip() {
             return;
         }
-        let Some(usage) = usage else {
+        let Some(detected) = usage else {
             return;
         };
         // Resolve the enclosing item's path only for genuine `std::fs` hits
@@ -174,7 +195,7 @@ impl NoStdFsOperations {
         if self.is_path_excluded(cx, site.hir_id) {
             return;
         }
-        self.emit(cx, site.span, usage);
+        self.emit(cx, site.span, &detected);
     }
 
     /// Returns `true` when the item enclosing `hir_id` falls within a
@@ -187,7 +208,8 @@ impl NoStdFsOperations {
             .excludes(&enclosing_item_path(cx, hir_id))
     }
 
-    fn emit(&self, cx: &LateContext<'_>, span: Span, usage: StdFsUsage) {
+    /// Emit the diagnostic for a detected standard filesystem operation.
+    fn emit(&self, cx: &LateContext<'_>, span: Span, usage: &StdFsUsage) {
         emit_diagnostic(cx, span, usage, &self.localizer);
     }
 
@@ -196,7 +218,6 @@ impl NoStdFsOperations {
     /// Returns `None` for non-ADT receivers, types outside `std`, or standard
     /// types outside `std::fs`; otherwise returns the qualified operation label.
     fn receiver_usage_for_method(
-        &self,
         cx: &LateContext<'_>,
         receiver: &hir::Expr<'_>,
         method: &str,

@@ -82,15 +82,25 @@ fn rejects_invalid_dependency_forms(#[case] manifest: &str, #[case] expected: &s
 #[case::caret("0.0.334")]
 #[case::caret_explicit("^0.0.334")]
 #[case::empty_exact("=")]
+#[case::partial_major("=1")]
+#[case::partial_minor("=1.2")]
+#[case::additional_comparator("=1.2.3, <1.2.4")]
+#[case::double_equality("==1.2.3")]
+#[case::whitespace("=1.2.3 ")]
 fn rejects_non_exact_requirements(#[case] requirement: &str) {
     assert!(exact_version(requirement).is_err());
 }
 
+/// Accept exact release, prerelease and build-metadata versions unchanged.
 #[rstest]
-fn accepts_exact_requirement() {
+#[case::release("0.0.334")]
+#[case::prerelease("1.2.3-alpha.1")]
+#[case::build_metadata("1.2.3+build.7")]
+fn accepts_exact_requirement(#[case] expected: &str) {
+    let requirement = format!("={expected}");
     assert_eq!(
-        exact_version("=0.0.334").expect("exact requirement should parse"),
-        "0.0.334"
+        exact_version(&requirement).expect("exact requirement should parse"),
+        expected
     );
 }
 
@@ -192,14 +202,29 @@ fn read_of_absent_manifest_reports_not_found() -> Result<(), Box<dyn std::error:
 }
 
 proptest! {
+    /// Check that complete generated semantic versions are accepted as exact pins.
     #[test]
-    fn exact_version_accepts_only_non_empty_exact_pins(
-        prefix in prop_oneof![Just("=".to_owned()), Just("^".to_owned()), Just(String::new())],
-        suffix in "[A-Za-z0-9._-]{0,32}",
+    fn exact_version_accepts_generated_complete_release_pins(
+        major in 0_u64..u64::MAX,
+        minor in 0_u64..u64::MAX,
+        patch in 0_u64..u64::MAX,
     ) {
-        let requirement = format!("{prefix}{suffix}");
-        let is_exact_pin = prefix == "=" && !suffix.is_empty();
+        let version = format!("{major}.{minor}.{patch}");
+        let requirement = format!("={version}");
 
-        prop_assert_eq!(exact_version(&requirement).is_ok(), is_exact_pin);
+        prop_assert_eq!(exact_version(&requirement).ok(), Some(version.as_str()));
+    }
+
+    /// Reject generated complete versions with non-exact requirement operators.
+    #[test]
+    fn exact_version_rejects_generated_non_exact_requirements(
+        operator in proptest::sample::select(vec!["", "^", "~", ">", ">=", "<", "<="]),
+        major in 0_u64..u64::MAX,
+        minor in 0_u64..u64::MAX,
+        patch in 0_u64..u64::MAX,
+    ) {
+        let requirement = format!("{operator}{major}.{minor}.{patch}");
+
+        prop_assert!(exact_version(&requirement).is_err(), "accepted {}", requirement);
     }
 }

@@ -147,7 +147,7 @@ impl TraitItemMetrics {
     /// assert_eq!(item.kind(), TraitItemKind::RequiredMethod);
     /// ```
     #[must_use]
-    pub fn kind(&self) -> TraitItemKind {
+    pub const fn kind(&self) -> TraitItemKind {
         self.kind
     }
 
@@ -162,7 +162,7 @@ impl TraitItemMetrics {
     /// assert_eq!(item.default_method_cc(), Some(9));
     /// ```
     #[must_use]
-    pub fn default_method_cc(&self) -> Option<usize> {
+    pub const fn default_method_cc(&self) -> Option<usize> {
         self.default_method_cc
     }
 
@@ -211,7 +211,7 @@ impl TraitItemMetrics {
 /// assert_eq!(trait_item_count(&items), 2);
 /// ```
 #[must_use]
-pub fn trait_item_count(items: &[TraitItemMetrics]) -> usize {
+pub const fn trait_item_count(items: &[TraitItemMetrics]) -> usize {
     items.len()
 }
 

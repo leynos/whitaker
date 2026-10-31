@@ -14,10 +14,12 @@ fn parser_serde_fs_suggestions() -> (
     Vec<crate::decomposition_advice::DecompositionSuggestion>,
 ) {
     decomposition_suggestions("Foo", SubjectKind::Type, &parser_serde_fs_fixture())
+        .expect("fixture profiles should analyse")
 }
 
 fn render_note(subject: &str, kind: SubjectKind, methods: &[MethodProfile]) -> String {
-    let (context, suggestions) = decomposition_suggestions(subject, kind, methods);
+    let (context, suggestions) =
+        decomposition_suggestions(subject, kind, methods).expect("fixture profiles should analyse");
     format_diagnostic_note(&context, &suggestions).unwrap_or_default()
 }
 

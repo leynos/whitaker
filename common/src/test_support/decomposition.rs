@@ -17,9 +17,9 @@ pub use self::{
     vector_algebra::{MethodVectorAlgebraReport, method_vector_algebra},
 };
 use crate::decomposition_advice::{
-    DecompositionContext, DecompositionSuggestion, MethodProfile, MethodProfileBuilder,
-    SubjectKind, methods_meet_cosine_threshold as runtime_methods_meet_cosine_threshold,
-    suggest_decomposition,
+    DecompositionContext, DecompositionError, DecompositionSuggestion, MethodProfile,
+    MethodProfileBuilder, SubjectKind,
+    methods_meet_cosine_threshold as runtime_methods_meet_cosine_threshold, suggest_decomposition,
 };
 
 /// Input data for building a [`MethodProfile`] in tests.
@@ -192,6 +192,11 @@ pub fn transport_trait_fixture() -> Vec<MethodProfile> {
 
 /// Computes decomposition suggestions for `methods`.
 ///
+/// # Errors
+///
+/// Returns the analysis error when the supplied profiles describe inconsistent
+/// graph or feature state.
+///
 /// # Examples
 ///
 /// ```ignore
@@ -203,18 +208,17 @@ pub fn transport_trait_fixture() -> Vec<MethodProfile> {
 ///
 /// let methods = parser_serde_fs_fixture();
 /// let (_context, suggestions) =
-///     decomposition_suggestions("Foo", SubjectKind::Type, &methods);
+///     decomposition_suggestions("Foo", SubjectKind::Type, &methods)?;
 /// assert!(!suggestions.is_empty());
 /// ```
-#[must_use]
 pub fn decomposition_suggestions(
     subject: &str,
     kind: SubjectKind,
     methods: &[MethodProfile],
-) -> (DecompositionContext, Vec<DecompositionSuggestion>) {
+) -> Result<(DecompositionContext, Vec<DecompositionSuggestion>), DecompositionError> {
     let context = DecompositionContext::new(subject, kind);
-    let suggestions = suggest_decomposition(&context, methods);
-    (context, suggestions)
+    let suggestions = suggest_decomposition(&context, methods)?;
+    Ok((context, suggestions))
 }
 
 /// Evaluates whether two methods satisfy Whitaker's cosine threshold.
