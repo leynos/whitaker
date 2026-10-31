@@ -613,4 +613,3 @@ def test_release_dry_run_forwards_cargo_locked_to_metadata_and_builds(
         f"release-installer-dry-run should use {locked or 'unlocked'} mode; "
         f"recorded invocations: {recorded!r}"
     )
-# weave: run 'weave explain tests/workflows/test_cargo_locked_makefile.py' for per-hunk detail, 'weave check' to verify your resolution
