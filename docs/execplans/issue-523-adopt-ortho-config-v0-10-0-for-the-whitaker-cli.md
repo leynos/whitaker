@@ -4,18 +4,22 @@ This ExecPlan is a living document. Keep `Constraints`, `Tolerances`, `Risks`,
 `Progress`, `Surprises & Discoveries`, `Decision Log`, and
 `Outcomes & Retrospective` current as work proceeds.
 
-Status: configuration foundation implemented and validated; draft PR 525 is
-open.
+Status: configuration foundation implemented and validated, completing roadmap
+item 3.6.3; the root executable integration and its binary-level checks remain
+outstanding under roadmap item 3.5.1. Draft PR 525 is open.
 
 Issue: [leynos/whitaker#523](https://github.com/leynos/whitaker/issues/523)
 
 ## Purpose / big picture
 
 Whitaker's unified CLI remains planned; the shipped command-line programs are
-the clap-based `whitaker-installer` binaries. This change will deliver roadmap
-item 3.6.3 by adding an OrthoConfig-backed configuration spine to a separate
-`whitaker-cli` application package. It will not add a `whitaker` executable,
-start command execution workflows, or alter installer behaviour.
+the clap-based `whitaker-installer` binaries. This change delivers roadmap item
+3.6.3 by adding an OrthoConfig-backed configuration spine to a separate
+`whitaker-cli` application package. It does not add a `whitaker` executable,
+start command execution workflows, or alter installer behaviour. The root
+binary, command dispatch, and binary-level parse, stream, and exit-status
+checks belong to roadmap item 3.5.1 and its integration work; this plan does
+not claim them.
 
 The configuration spine will make the CLI's future precedence and migration
 contract executable: defaults, discovered TOML, environment, and explicit CLI
@@ -343,9 +347,21 @@ behaviour, and UI compile contracts.
 - [x] 2026-10-27: Draft PR 525's CodeScene check found string-heavy arguments
   in the environment adapter. Private environment-name and setting-path types
   resolved the local check, with a 10.00 score. Full gates passed again, and
-  CodeRabbit reviewed `f9589fbe` with zero findings. Hosted CI on the preceding
-  head passed Linux, coverage, and Windows; the revised head requires its own
-  hosted check results.
+  CodeRabbit reviewed `f9589fbe` with zero findings. Hosted CI run 40577413196
+  passed `linux-full`, `coverage-check`, and `windows-compat` on exact head
+  `41a00266`; CodeScene passed all six quality gates on that same head.
+- [x] 2026-10-30: Closed the validated-settings boundary gap.
+  `ValidatedSettings::from_configuration` now rejects unsupported output
+  policies and applies the lints' normalization policy (bumpy-road threshold,
+  window, minimum bump lines, and weights; the conditional branch minimum;
+  fixture thresholds and provider attributes) before `load_with_sources`
+  returns. Regression tests cover file, environment, and explicit CLI tuning
+  values, an explicit `false` overriding a lower-priority `true`, and
+  non-Unicode canonical environment values. Roadmap item 3.6.3 is recorded as
+  complete for the configuration foundation, with 3.5.1's executable
+  integration and binary-level checks explicitly outstanding. Rust 1.89.0
+  package Clippy passed; package tests passed 21 unit tests, 34 integration
+  tests, and three doctests (one ignored).
 
 ## Surprises & discoveries
 
@@ -379,6 +395,11 @@ behaviour, and UI compile contracts.
 - Decision: canonical-first `whitaker.toml` discovery, one-release
   `dylint.toml` fallback, legacy locale alias below `WHITAKER_*`, and explicit
   returned deprecation notices. Date: 2026-10-26.
+- Decision: return a distinct `ValidatedSettings` value from the loader and
+  normalize out-of-range tuning with the lints' existing policy rather than
+  rejecting it. Unsupported presentation enums remain typed errors. This keeps
+  file, environment, and CLI behaviour consistent with direct `dylint.toml`
+  use. Date: 2026-10-30.
 - Process: request CodeRabbit only after deterministic gates pass for each
   major milestone; treat a rate limit as a workflow wait and use the requested
   `vsleep` cooldown if it occurs.
@@ -386,6 +407,13 @@ behaviour, and UI compile contracts.
 ## Outcomes & Retrospective
 
 The configuration foundation and its source-level tests are complete and
-validated. The separately developed root CLI must wire its parser and command
-execution to this package; that integration and its binary-level localized
-parse and stream checks are outside this branch. Draft PR 525 remains open.
+validated, so roadmap item 3.6.3 is complete for the configuration-only scope
+the design assigns it. The separately developed root CLI must wire its parser
+and command execution to this package; roadmap item 3.5.1 owns that integration
+and its binary-level localized parse, stream, and exit-status checks, which
+remain outstanding. Draft PR 525 remains open.
+
+Returning validated settings rather than the merge DTO removes the last
+package-boundary ambiguity: callers can no longer observe out-of-range tuning
+values that the lints would silently clamp. Normalizing rather than rejecting
+preserves the behaviour users already get from `dylint.toml`.

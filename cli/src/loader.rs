@@ -8,7 +8,7 @@ use ortho_config::{
 };
 use serde_json::{json, Value};
 
-use crate::{commands::is_command, environment, error::invalid, Configuration};
+use crate::{commands::is_command, environment, error::invalid, Configuration, ValidatedSettings};
 
 /// Inputs needed to resolve one invocation without mutating the environment.
 #[derive(Clone)]
@@ -29,8 +29,8 @@ pub struct Sources {
 
 /// Configuration and compatibility notices for the application to present.
 pub struct LoadedConfiguration {
-    /// Effective merged settings.
-    pub settings: Configuration,
+    /// Effective settings after validation and domain normalization.
+    pub settings: ValidatedSettings,
     /// Deprecation notices; presentation belongs to the executable.
     pub notices: Vec<String>,
 }
@@ -202,8 +202,8 @@ fn compose_sources(sources: Sources, files: FileLayers) -> OrthoResult<LoadedCon
     let mut cli = ortho_config::sanitize_value(&sources.cli)?;
     apply_command(&mut cli, sources.command.as_deref())?;
     composer.push_cli(cli);
-    let settings = Configuration::merge_from_layers(composer.layers())?;
-    validate(&settings)?;
+    let configuration = Configuration::merge_from_layers(composer.layers())?;
+    let settings = ValidatedSettings::from_configuration(configuration)?;
     Ok(LoadedConfiguration { settings, notices })
 }
 
@@ -329,15 +329,4 @@ fn overlay(target: &mut serde_json::Map<String, Value>, source: &Value) {
             }
         }
     }
-}
-
-/// Validate application presentation values before passing settings onward.
-fn validate(settings: &Configuration) -> OrthoResult<()> {
-    if !["auto", "always", "never"].contains(&settings.output.colour.as_str()) {
-        return Err(invalid("output.colour", "expected auto, always, or never"));
-    }
-    if !["auto", "plain", "off"].contains(&settings.output.progress.as_str()) {
-        return Err(invalid("output.progress", "expected auto, plain, or off"));
-    }
-    Ok(())
 }

@@ -7,6 +7,7 @@ mod legacy;
 mod lint_config;
 mod loader;
 mod settings;
+mod validated;
 
 pub use legacy::source_fallback_override;
 pub use lint_config::{
@@ -15,3 +16,4 @@ pub use lint_config::{
 };
 pub use loader::{load_with_sources, LoadedConfiguration, Sources};
 pub use settings::{Configuration, Diagnostics, Install, Lint, Output};
+pub use validated::ValidatedSettings;
