@@ -118,6 +118,7 @@ def test_coverage_shares_target_and_profile_policy_with_nested_cargo(
     )
     assert f"-E {expected_filter}" in runner_arguments
     assert [line for line in recorded if not line.startswith("runner|")] == [
+        f"preparation|run|<unset>|{workspace / 'target/clippy-snapshot-tool'}",
         f"preparation|fetch|<unset>|{expected_target}",
         f"preparation|run|<unset>|{workspace / 'target/dylint-warmup'}",
         f"preparation|metadata|<unset>|{expected_target}",
@@ -210,4 +211,3 @@ def test_contracts_target_runs_all_seven_under_the_ci_profile(tmp_path: Path) ->
     assert f"-E {expected}" in line, f"expected the seven contract tests; got: {line}"
     assert "--profile ci" in line, f"expected the ci profile; got: {line}"
     assert "llvm-cov" not in line, f"expected no instrumentation; got: {line}"
-# weave: run 'weave explain tests/workflows/test_coverage_target_makefile.py' for per-hunk detail, 'weave check' to verify your resolution
