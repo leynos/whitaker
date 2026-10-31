@@ -1,8 +1,8 @@
-error[E0004]: non-exhaustive patterns: `&InstallerError::DependencyCheck { .. }` not covered
+error[E0004]: non-exhaustive patterns: `&InstallerError::DependencyCheck { .. }` and `&InstallerError::InstallationRecord { .. }` not covered
   --> tests/ui/legacy_installer_error_match.rs:7:11
    |
  7 |     match error {
-   |           ^^^^^ pattern `&InstallerError::DependencyCheck { .. }` not covered
+   |           ^^^^^ patterns `&InstallerError::DependencyCheck { .. }` and `&InstallerError::InstallationRecord { .. }` not covered
    |
 note: `InstallerError` defined here
   --> src/error.rs
@@ -12,9 +12,12 @@ note: `InstallerError` defined here
 ...
    |     DependencyCheck {
    |     --------------- not covered
+...
+   |     InstallationRecord {
+   |     ------------------ not covered
    = note: the matched value is of type `&InstallerError`
-help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern, a match arm with multiple or-patterns as shown, or multiple match arms
    |
 30 ~         InstallerError::WriteFailed { .. } => "write",
-31 ~         &InstallerError::DependencyCheck { .. } => todo!(),
+31 ~         &InstallerError::DependencyCheck { .. } | &InstallerError::InstallationRecord { .. } => todo!(),
    |
