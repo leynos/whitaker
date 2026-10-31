@@ -1665,6 +1665,32 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
   D-12's 7,000-line ceiling). The later proof-comment correction reduced the
   current diff to +7,264 net (264 above). Owner approval remains outstanding;
   plan stays `IN PROGRESS`; crates.io reservation remains unauthorized.
+- **Rebase and validation follow-up, 2026-10-31.** Rebased onto `41a00266`
+  ("Record code health review results"). All 29 branch commits were replayed;
+  conflicts were resolved by adopting the target wherever it already delivered
+  the branch's intent, and by keeping both sides where each contributed
+  something the other lacked. The three decisions worth recording:
+
+  - `vendor/dylint_testing` is an add/add collision: the target had already
+    vendored upstream `dylint_testing` 6.0.1, including the wrapper-aware
+    `rustc_invocation`/`select_ui_test_flags` parsing that the branch's
+    `examples.rs` split was reaching for. The target's copy is adopted
+    wholesale, which retires the branch's vendored helper split as redundant.
+    The branch-only `README.md` caveat and `LICENSE-MIT` are retained.
+  - `Cargo.lock` takes the target's content, then is rebuilt. The rebuild
+    surfaced a genuinely stale edge (`filetime` for
+    `rstest_helper_should_be_fixture`); `cargo metadata --locked` now passes.
+  - `InstallerError` gained a variant on each side — `DependencyCheck` from the
+    target and `InstallationRecord` from the branch. The two installer
+    `trybuild` fixtures pin exhaustive matching over the *merged* variant set,
+    so both were updated: the compile-pass fixture gains the missing arm and
+    the compile-fail fixture's expected diagnostic names both uncovered
+    variants.
+
+  `make check-fmt`, `make test` (1,958 passed, 5 skipped; the secondary suite
+  and doctests passed), `make typecheck`, and `make lint` all pass.
+  `cargo metadata --locked` passes on the committed index. Plan stays
+  `IN PROGRESS`; crates.io reservation remains unauthorized.
 
 To be completed at each milestone boundary and at completion. Before setting
 this plan to `COMPLETE`, reconcile every entry in `Surprises & discoveries`
