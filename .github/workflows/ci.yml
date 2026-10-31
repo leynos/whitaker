@@ -201,6 +201,9 @@ jobs:
           tool: cargo-llvm-cov@0.6.24
           fallback: none
 
+      - name: Fetch dependencies and warm Dylint driver
+        run: make fetch
+
       - name: Remove stale LCOV report
         run: rm -f lcov.info
 
@@ -697,6 +700,9 @@ jobs:
         with:
           tool: nextest@0.9.114
           fallback: none
+
+      - name: Fetch dependencies and warm Dylint driver
+        run: make fetch
 
       - name: Reset sccache statistics
         run: sccache --zero-stats

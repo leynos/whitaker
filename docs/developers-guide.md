@@ -104,6 +104,62 @@ make test
 This executes unit, behaviour, and UI harness tests. The shared target enables
 `rstest` fixtures and `rstest-bdd` scenarios.
 
+`make test` first runs `make fetch`. That online preparation step uses
+`cargo fetch --locked` for the workspace, then prepares the pinned Dylint
+driver via `dylint_testing`'s `warm_driver` example. It also saves full
+workspace metadata for Nextest and `--no-deps` metadata for `cargo-llvm-cov`.
+`make coverage` inherits the same preparation through its `make test` call. The
+test recipe repeats preparation on a warm cache so direct local invocations and
+CI follow the same path.
+
+For a direct Nextest run, prepare first and pass the saved metadata file. Keep
+the test process tree offline and invoke the `cargo-nextest` binary directly.
+Pass the Cargo executable and active Rustup toolchain explicitly so nested
+tests use the same toolchain. A direct invocation can use:
+
+```sh
+eval "$(make dylint-env)"
+make fetch
+CARGO="$(command -v cargo)" \
+RUSTUP_TOOLCHAIN="$(rustup show active-toolchain | cut -d' ' -f1)" \
+CARGO_NET_OFFLINE=true cargo-nextest nextest run --locked \
+    --cargo-metadata target/dylint-warmup/nextest-cargo-metadata.json
+```
+
+`make dylint-env` exports the keyed `DYLINT_CLIPPY_REPO` and
+`DYLINT_DRIVER_PATH` the Makefile uses. Without them the warm-up writes to a
+default driver directory the direct run would not read, and the offline test
+process would try to build a second driver with no network access.
+
+The Make test recipe uses the same offline environment. Directly owned nested
+Cargo calls use `--frozen`; trybuild and similar tools inherit
+`CARGO_NET_OFFLINE=true`, which lets them create temporary lockfiles without
+network access. Nextest reads the prepared metadata file instead of starting a
+Cargo metadata process during test execution. For coverage, the small test
+driver serves the prepared `--no-deps` metadata to `cargo-llvm-cov` and routes
+its Nextest request to the standalone executable.
+
+If a nested command needs an unfetched crate, Cargo fails with an error like:
+
+```text
+error: failed to download `some-crate v1.2.3`
+Caused by:
+  attempting to make an HTTP request, but --offline was specified
+```
+
+That error means the preparation step missed a required crate. Add its manifest
+to `make fetch`; standalone fixture workspaces with dependencies need their own
+committed `Cargo.lock` and a separate
+`cargo fetch --locked --manifest-path <m>` command. Do not let tests resolve
+missing dependencies online. The warm-up builds the driver into the keyed
+`DYLINT_DRIVER_PATH` the Makefile already exports, so later test processes
+reuse it without building or downloading anything.
+
+Makefile Cargo recipes use `CARGO_LOCKED=--locked` by default, so they cannot
+rewrite the workspace lockfile. Set `CARGO_LOCKED=` only when a deliberate
+lockfile update is intended. Preparation explicitly clears `CARGO_NET_OFFLINE`;
+the test recipes set it only for test execution.
+
 ### Fixture expansion lint macro
 
 The workspace-owned `whitaker_test_macros` crate provides
@@ -157,8 +213,11 @@ root and does not resolve upwards to the enclosing Whitaker workspace.
 
 The harness centres on `run_cargo_dylint`, which executes
 `cargo dylint --all -- --message-format json` with `DYLINT_LIBRARY_PATH` set to
-the built lint library and `DYLINT_RUSTFLAGS=-D warnings` set to deny warnings
-during the run. `diagnostic_count` then parses the JSON message stream with
+the built lint library, `DYLINT_RUSTFLAGS=-D warnings` set to deny warnings, and
+`CARGO_NET_OFFLINE=true` set for Dylint's internal Cargo calls. Its
+lockfile-free fixture has no dependencies; the driver is prepared before the
+suite starts. The lint-library build and metadata queries use `--frozen`.
+`diagnostic_count` then parses the JSON message stream with
 `cargo_metadata::Message` and counts only `CompilerMessage` entries whose
 `code.code` is `no_std_fs_operations`, which keeps the assertions tied to the
 lint's structured diagnostics instead of brittle text matching.
@@ -181,13 +240,18 @@ for correct serialized execution because nextest runs each test in a separate
 process, so the in-process `#[serial]` mutex alone is not sufficient. They are
 also marked `#[ignore]` by default because they depend on external tooling and
 a buildable workspace. Before running them, install `cargo-dylint` and
-`dylint-link`. The harness calls `build_lint_library()` before running
-`cargo dylint`, so the workspace build is handled automatically. Run them with
-one of the following commands:
+`dylint-link`, export the prepared driver environment with
+`eval "$(make dylint-env)"`, then run `make fetch` to prepare the locked
+workspace and Dylint driver. The harness calls `build_lint_library()` before
+running `cargo dylint`, so the workspace build is handled automatically. Run
+them with one of the following commands:
 
 ```sh
-cargo test -p no_std_fs_operations --test integration_exclusion -- --ignored
-cargo nextest run -p no_std_fs_operations --test integration_exclusion --run-ignored ignored-only
+eval "$(make dylint-env)"
+CARGO_NET_OFFLINE=true cargo test --frozen -p no_std_fs_operations \
+    --test integration_exclusion -- --ignored
+CARGO_NET_OFFLINE=true cargo nextest run --frozen -p no_std_fs_operations \
+    --test integration_exclusion --run-ignored ignored-only
 ```
 
 Each parametrized case asserts the subprocess exit status and the
@@ -326,13 +390,14 @@ are never silently skipped in the pipeline.
 ### Coverage and nested Cargo builds
 
 `make coverage` uses the same selected crate set and warning policy as
-`make test`, but runs it through `cargo llvm-cov nextest` and skips six
-trybuild contract tests (see the lane table below). The Makefile assigns the
-absolute `COVERAGE_TARGET_DIR` (by default, `$(CURDIR)/target/llvm-cov-target`)
-to both `CARGO_LLVM_COV_TARGET_DIR` and `CARGO_TARGET_DIR`. It also sets
-`LLVM_PROFILE_FILE_NAME` to `whitaker-%m.profraw`, so LLVM merges each
-instrumented binary's counters online instead of retaining a separate raw
-profile for every Nextest process.
+`make test`, but runs it through cargo-llvm-cov's Nextest integration and skips
+six trybuild contract tests (see the lane table below). The Makefile invokes
+`cargo-llvm-cov` directly, passes the coverage filter to Nextest, and assigns
+the absolute `COVERAGE_TARGET_DIR` (by default,
+`$(CURDIR)/target/llvm-cov-target`) to both `CARGO_LLVM_COV_TARGET_DIR` and
+`CARGO_TARGET_DIR`. It also sets `LLVM_PROFILE_FILE_NAME` to
+`whitaker-%m.profraw`, so LLVM merges each instrumented binary's counters
+online instead of retaining a separate raw profile for every Nextest process.
 
 The first variable makes `cargo-llvm-cov` instrument its output in that
 directory. The second is inherited by nested Cargo commands that Dylint UI
@@ -340,6 +405,20 @@ harnesses start while compiling examples. Both values must remain identical:
 `cargo-llvm-cov` otherwise passes its target only as a Nextest argument, and a
 nested Cargo process falls back to the ordinary `target/debug` tree. That can
 mix instrumented and non-instrumented dependency artefacts.
+
+Both `make test` and `make coverage` run the online `make fetch` preparation
+before starting tests. It fetches the workspace and any committed standalone
+fixture lockfiles, prepares the pinned Dylint driver, and writes the Cargo
+metadata files used by Nextest and cargo-llvm-cov. Test commands then run with
+`CARGO_NET_OFFLINE=true`. The Make recipe also passes the active
+`RUSTUP_TOOLCHAIN` so Dylint's UI harness selects the matching driver. The
+coverage test driver answers cargo-llvm-cov's workspace metadata query from the
+prepared file and routes its Nextest call to the standalone binary.
+Harness-owned Cargo commands specify `--frozen`, except trybuild-generated
+projects and the lockfile-free Dylint fixture, which inherit offline mode so
+Cargo can write any temporary lockfile without accessing the network. The
+fresh-home production installer path stays online: its isolated Cargo home
+starts with an empty registry and must download the dependencies it builds.
 
 When isolating a coverage run, override `COVERAGE_TARGET_DIR` rather than
 either environment variable individually. Fixture workspaces that intentionally
@@ -2254,10 +2333,10 @@ toolchain bump must update the channel written here as part of the runbook
 8. Run the normal gates in order: `make check-fmt`, `make lint`, `make test`,
    and `make markdownlint`. Run relevant proof targets if the bump touches
    clone-detector or decomposition proof surfaces.
-9. Keep `CARGO_LOCKED` empty by default. Makefile Cargo recipes pass the value
-   through unchanged so callers can opt into `--locked` explicitly when they
-   need Cargo to enforce the lockfile for a build, lint, package, or test
-   command.
+9. Keep the Makefile's `CARGO_LOCKED=--locked` default. Use the explicit
+   `CARGO_LOCKED=` opt-out only for a deliberate lockfile update. Nested test
+   Cargo calls remain offline after preparation; directly owned calls use
+   `--frozen`, while generated trybuild manifests may write local lockfiles.
 
 ### `ra_ap_syntax` re-pinning runbook
 

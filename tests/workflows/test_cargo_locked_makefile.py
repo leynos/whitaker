@@ -17,10 +17,13 @@ from tests.workflows.clippy_snapshot_harness import provide_clippy_snapshot
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # A lock-relevant Cargo call: `$(CARGO)` (optionally `+<toolchain>`) followed by
-# a build/test/package subcommand. `dylint list` and similar read-only calls are
-# intentionally excluded because they do not resolve the dependency graph.
+# a dependency-fetch, metadata, build, test, package, or run subcommand. `dylint list`
+# and similar read-only calls are excluded because they do not resolve the
+# dependency graph.
 _LOCK_RELEVANT_CARGO = re.compile(
-    r"\$\(CARGO\)(?:\s+\+\S+)?\s+(?:\$\(TEST_RUNNER\)|build|package|nextest\s+run)"
+    r"(?:\$\(CARGO\)(?:\s+\+\S+)?\s+"
+    r"(?:build|fetch|metadata|package|run|test)|"
+    r"\$\(TEST_RUNNER\))"
 )
 
 
@@ -58,24 +61,32 @@ def test_coverage_recipe_exports_one_explicit_nested_cargo_target() -> None:
     assert 'CARGO_TARGET_DIR="$(COVERAGE_TARGET_DIR)"' in recipe, (
         "coverage must expose the shared target directory to nested Cargo commands"
     )
-    assert '$(MAKE) test TEST_RUNNER="llvm-cov nextest' in recipe, (
+    assert "$(MAKE) test" in recipe and (
+        'TEST_RUNNER="$(CARGO_LLVM_COV) llvm-cov nextest' in recipe
+    ), (
         "coverage must invoke the nested test runner through cargo-llvm-cov"
     )
+
+
 def _cargo_invocation(recipe_line: str) -> str:
-    """Return the `$(CARGO) ...` call in a recipe line, trimmed at its terminator.
+    """Return the Cargo or test-runner call, trimmed at its terminator.
 
     Isolating the invocation from any environment prefix or later command on the
     same line means a `$(CARGO_LOCKED)` sitting outside this Cargo call is not
-    mistaken for a flag threaded into it. `$(CARGO)` is matched exactly, so the
-    `$(CARGO_LOCKED)` variable (no closing paren after `CARGO`) never matches.
+    mistaken for a flag threaded into it. Match `$(CARGO)` exactly so the
+    `$(CARGO_LOCKED)` variable never becomes a false start.
     """
-    invocation = recipe_line[recipe_line.index("$(CARGO)") :]
+    if "$(TEST_RUNNER)" in recipe_line:
+        call_start = recipe_line.index("$(TEST_RUNNER)")
+    else:
+        call_start = recipe_line.index("$(CARGO)")
+    invocation = recipe_line[call_start:]
     for terminator in (";", "&&"):
         invocation = invocation.split(terminator, 1)[0]
     return invocation
 
 
-@pytest.mark.parametrize("target", ["test", "publish-check"])
+@pytest.mark.parametrize("target", ["fetch", "test", "publish-check"])
 def test_recipe_cargo_calls_thread_cargo_locked(target: str) -> None:
     """Lock-relevant Cargo calls in the recipe forward `$(CARGO_LOCKED)`.
 
@@ -124,13 +135,16 @@ def _write_stub(directory: Path, name: str, body: str) -> Path:
 
 
 def _write_cargo_stub(directory: Path) -> Path:
-    """Write a Cargo stand-in that records metadata and build invocations."""
+    """Write a Cargo stand-in that records arguments and selected environment."""
     return _write_stub(
         directory,
         "cargo",
         '''echo "$@" >> "$CARGO_LOCKED_LOG"
+printf '%s\t%s\t%s\t%s\t%s\t%s\n' "${CARGO_NET_OFFLINE-<unset>}" "${CARGO-<unset>}" \
+    "${CARGO_REAL-<unset>}" "${DYLINT_DRIVER_PATH-<unset>}" "$*" "${RUSTUP_TOOLCHAIN-<unset>}" \
+    >> "$CARGO_LOCKED_ENV_LOG"
 case "$1" in
-metadata) echo '{{"packages":[{{"name":"whitaker-installer","version":"0.2.5"}}]}}' ;;
+metadata) echo '{"packages":[{"name":"whitaker-installer","version":"0.2.5"}]}' ;;
 build)
     target=""
     for argument in "$@"; do
@@ -195,14 +209,12 @@ class MakeRunEnvironment:
     """Inputs shared by one stubbed Make invocation."""
 
     cargo: Path
-    locked: str
+    locked: str | None
     stub_dir: Path
 
 
-# Targets whose recipes run a repository script through its `uv run --script`
-# shebang. Only these get `uv` on the stubbed PATH, so the other targets keep
-# the minimal environment they were written against.
-_TARGETS_REQUIRING_UV = frozenset({"release-installer-dry-run"})
+# Targets whose recipes invoke `uv` directly or through a repository script.
+_TARGETS_REQUIRING_UV = frozenset({"lint", "release-installer-dry-run"})
 
 
 def _stub_path(target: str, stub_dir: Path) -> str:
@@ -215,6 +227,13 @@ def _stub_path(target: str, stub_dir: Path) -> str:
         entries.append(str(Path(uv).parent))
     entries.extend(["/usr/bin", "/bin"])
     return ":".join(entries)
+
+
+def _make_log_name(environment: MakeRunEnvironment) -> str:
+    """Return the stable suffix used for one lock-mode run's logs."""
+    if environment.locked is None:
+        return "default"
+    return environment.locked or "unlocked"
 
 
 def _run_make(
@@ -231,6 +250,10 @@ def _run_make(
         REPO_ROOT / "scripts/generate_checksums.py",
         scripts_directory / "generate_checksums.py",
     )
+    shutil.copy2(
+        REPO_ROOT / "scripts/check_skill_metadata.py",
+        scripts_directory / "check_skill_metadata.py",
+    )
     # `publish-check` reads `rust-toolchain.toml` for the channel and shells out
     # to `scripts/install-dylint-tools.sh`; provide the manifest and a no-op
     # stub so the recipe runs without a real toolchain or network access. Both
@@ -239,19 +262,40 @@ def _run_make(
     _write_stub(scripts_directory, "install-dylint-tools.sh", "exit 0")
     snapshot_arguments = provide_clippy_snapshot(workspace)
 
-    log = environment.stub_dir / f"{target}-{environment.locked or 'unlocked'}.log"
+    log_name = _make_log_name(environment)
+    log = environment.stub_dir / f"{target}-{log_name}.log"
+    # Keep the driver inside the scratch workspace. The Makefile would
+    # otherwise default it into the real user cache, and an inherited value
+    # from an outer `make` could be written to.
+    driver_path = workspace / "dylint-drivers" / "test-driver"
     process_env = os.environ | {
         "CARGO_LOCKED_LOG": str(log),
+        "CARGO_LOCKED_ENV_LOG": str(log.with_suffix(".env")),
+        "DYLINT_DRIVER_PATH": str(driver_path),
         "PATH": _stub_path(target, environment.stub_dir),
     }
     process_env.pop("CARGO_LOCKED", None)
+    process_env.pop("CARGO_NET_OFFLINE", None)
+    process_env.pop("RUSTUP_TOOLCHAIN", None)
+    process_env.pop("BASH_ENV", None)
     make_arguments = [
         "make",
         target,
         f"CARGO={environment.cargo}",
         *snapshot_arguments,
     ]
-    if environment.locked:
+    # Command-line PATH keeps Make's HOME-based prefix from shadowing stubs.
+    make_arguments.append(f"PATH={process_env['PATH']}")
+    if target == "test":
+        make_arguments.append(f"CARGO_NEXTEST={environment.stub_dir / 'cargo-nextest'}")
+        make_arguments.append(f"CARGO_TEST_WRAPPER={environment.cargo}")
+        make_arguments.append(f"CARGO_TEST_METADATA_ROOT={workspace}")
+        make_arguments.append("TEST_RUSTUP_TOOLCHAIN=nightly-test")
+    if target == "lint":
+        # This test isolates Cargo flag forwarding; the isolated fixture does
+        # not contain the repository's skills needed by the lint prerequisite.
+        make_arguments.extend(["-o", "skill-manifest-check"])
+    if environment.locked is not None:
         make_arguments.append(f"CARGO_LOCKED={environment.locked}")
     if extra_make_args:
         make_arguments.extend(extra_make_args)
@@ -266,7 +310,7 @@ def _run_make(
     assert result.returncode == 0, result.stderr
     assert log.exists(), (
         f"{target} succeeded without recording any Cargo calls to the "
-        f"{environment.locked or 'unlocked'} log at {log}\n"
+        f"{log_name} log at {log}\n"
         f"stdout: {result.stdout}\nstderr: {result.stderr}"
     )
     return log.read_text(encoding="utf-8").splitlines()
@@ -302,7 +346,15 @@ def test_installer_msrv_check_runs_the_packaged_crate(tmp_path: Path) -> None:
 
 def _write_tool_stubs(stub_dir: Path) -> None:
     """Write stand-ins for the non-Cargo tools `test`/`publish-check` invoke."""
-    _write_stub(stub_dir, "cargo-nextest", "exit 0")
+    _write_stub(
+        stub_dir,
+        "cargo-nextest",
+        'echo "$@" >> "$CARGO_LOCKED_LOG"\n'
+        'printf \'%s\\t%s\\t%s\\t%s\\t%s\\t%s\\n\' "${CARGO_NET_OFFLINE-<unset>}" '
+        '"${CARGO-<unset>}" "${CARGO_REAL-<unset>}" '
+        '"${DYLINT_DRIVER_PATH-<unset>}" "$*" "${RUSTUP_TOOLCHAIN-<unset>}" '
+        '>> "$CARGO_LOCKED_ENV_LOG"',
+    )
     _write_stub(stub_dir, "rustup", "exit 0")
     _write_stub(
         stub_dir,
@@ -356,7 +408,15 @@ def _cargo_head(invocation: str) -> str:
 
 def _is_lock_relevant_invocation(invocation: str) -> bool:
     """Whether a recorded Cargo call resolves the dependency graph (needs --locked)."""
-    return _cargo_head(invocation) in {"build", "nextest run", "package"}
+    return _cargo_head(invocation) in {
+        "build",
+        "fetch",
+        "metadata",
+        "nextest run",
+        "package",
+        "run",
+        "test",
+    }
 
 
 def _has_locked_flag(invocation: str) -> bool:
@@ -366,9 +426,16 @@ def _has_locked_flag(invocation: str) -> bool:
     return "--locked" in invocation.split()
 
 
-@pytest.mark.parametrize("locked", ["", "--locked"])
-def test_make_test_forwards_cargo_locked(cargo_stub: tuple[Path, Path], locked: str) -> None:
-    """`make test` threads the requested lock mode into its nextest invocation."""
+@pytest.mark.parametrize(
+    ("locked", "should_use_locked"),
+    [(None, True), ("", False), ("--locked", True)],
+)
+def test_make_test_forwards_cargo_locked(
+    cargo_stub: tuple[Path, Path],
+    locked: str | None,
+    should_use_locked: bool,
+) -> None:
+    """Prepare dependencies before tests and honour the requested lock mode."""
     stub_dir, cargo = cargo_stub
     _write_tool_stubs(stub_dir)
 
@@ -382,16 +449,70 @@ def test_make_test_forwards_cargo_locked(cargo_stub: tuple[Path, Path], locked: 
     )
 
     cargo_calls = [line for line in recorded if _is_lock_relevant_invocation(line)]
-    assert cargo_calls, f"make test should invoke Cargo; recorded: {recorded!r}"
+    assert [_cargo_head(line) for line in cargo_calls] == [
+        "run",
+        "fetch",
+        "run",
+        "metadata",
+        "metadata",
+        "build",
+        "nextest run",
+        "test",
+    ], f"make test must prepare before running both test commands; recorded: {recorded!r}"
+    nextest_call = next(line for line in cargo_calls if _cargo_head(line) == "nextest run")
+    assert "--cargo-metadata" in nextest_call and "nextest-cargo-metadata.json" in nextest_call, (
+        "Nextest must use metadata produced during preparation"
+    )
     for line in cargo_calls:
-        assert _has_locked_flag(line) == bool(locked), (
-            f"make test must use {locked or 'unlocked'} mode; invocation: {line!r}"
+        assert _has_locked_flag(line) is should_use_locked, (
+            f"make test must use {_make_log_name(MakeRunEnvironment(cargo, locked, stub_dir))} "
+            f"mode; invocation: {line!r}"
         )
 
+    environment_log = stub_dir / f"test-{_make_log_name(MakeRunEnvironment(cargo, locked, stub_dir))}.env"
+    recorded_environments = [
+        line.split("\t", maxsplit=5) for line in environment_log.read_text().splitlines()
+    ]
+    # The snapshot install (`run`) precedes the fetch preparation, which
+    # precedes both test commands. Only the last two run offline.
+    assert [record[0] for record in recorded_environments] == [
+        "<unset>",
+        "<unset>",
+        "<unset>",
+        "<unset>",
+        "<unset>",
+        "<unset>",
+        "true",
+        "true",
+    ], "preparation stays online while both test Cargo commands run offline"
+    assert [record[5] for record in recorded_environments] == [
+        "<unset>",
+        "<unset>",
+        "<unset>",
+        "<unset>",
+        "<unset>",
+        "<unset>",
+        "nightly-test",
+        "nightly-test",
+    ], "test processes need the active Rustup toolchain environment"
+    # The warm-up and both test commands share the keyed driver directory the
+    # Makefile exports, so the driver is built once and then reused.
+    expected_driver_path = str(
+        stub_dir.parent / "workspace" / "dylint-drivers" / "test-driver"
+    )
+    assert [record[3] for record in recorded_environments] == [expected_driver_path] * 8, (
+        "every recipe must see the same Dylint driver directory"
+    )
+    for record in recorded_environments[6:]:
+        assert record[1] == str(cargo), "tests must inherit the selected Cargo executable"
 
-@pytest.mark.parametrize("locked", ["", "--locked"])
+
+@pytest.mark.parametrize(
+    ("locked", "should_use_locked"),
+    [(None, True), ("", False), ("--locked", True)],
+)
 def test_publish_check_forwards_cargo_locked_to_every_invocation(
-    tmp_path: Path, locked: str
+    tmp_path: Path, locked: str | None, should_use_locked: bool
 ) -> None:
     """Every lock-relevant Cargo call in `publish-check` honours the lock mode."""
     stub_dir = tmp_path / "bin"
@@ -421,8 +542,9 @@ def test_publish_check_forwards_cargo_locked_to_every_invocation(
     )
     assert "package" in heads, f"publish-check should package crates; recorded: {recorded!r}"
     for line in lock_relevant:
-        assert _has_locked_flag(line) == bool(locked), (
-            f"publish-check must use {locked or 'unlocked'} mode; invocation: {line!r}"
+        assert _has_locked_flag(line) is should_use_locked, (
+            f"publish-check must use {_make_log_name(MakeRunEnvironment(cargo, locked, stub_dir))} "
+            f"mode; invocation: {line!r}"
         )
 
 
@@ -438,9 +560,12 @@ def cargo_stub(tmp_path: Path) -> tuple[Path, Path]:
     return stub_dir, cargo
 
 
-@pytest.mark.parametrize("locked", ["", "--locked"])
+@pytest.mark.parametrize(
+    ("locked", "should_use_locked"),
+    [(None, True), ("", False), ("--locked", True)],
+)
 def test_representative_targets_forward_cargo_locked(
-    cargo_stub: tuple[Path, Path], locked: str
+    cargo_stub: tuple[Path, Path], locked: str | None, should_use_locked: bool
 ) -> None:
     """Ordinary Cargo targets include the requested lock mode and no other one."""
     stub_dir, cargo = cargo_stub
@@ -456,7 +581,7 @@ def test_representative_targets_forward_cargo_locked(
         f"typecheck/lint should invoke Cargo in {'locked' if locked else 'unlocked'} mode; "
         f"recorded invocations: {recorded!r}"
     )
-    assert all(_has_locked_flag(invocation) == bool(locked) for invocation in recorded), (
+    assert all(_has_locked_flag(invocation) is should_use_locked for invocation in recorded), (
         f"typecheck/lint should use {locked or 'unlocked'} mode; "
         f"recorded invocations: {recorded!r}"
     )
