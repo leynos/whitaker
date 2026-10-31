@@ -31,6 +31,7 @@ RECLAIMING_JOBS = frozenset(
         ("ci.yml", "coverage-check"),
         ("ci.yml", "linux-full"),
         ("coverage-main.yml", "coverage-upload"),
+        ("nextest-split-benchmark.yml", "measure"),
     }
 )
 
