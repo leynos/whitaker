@@ -94,7 +94,7 @@ def _read_atom(filter_expression: str, start: int, tokens: list[Token]) -> int:
     return end + 1
 
 
-def _tokenise(filter_expression: str) -> list[Token]:
+def _tokenize(filter_expression: str) -> list[Token]:
     """Split a Nextest filter expression into operators and atoms."""
     tokens: list[Token] = []
     position = 0
@@ -146,7 +146,7 @@ class _FilterReader:
     """Evaluate one Nextest filter expression against a test name."""
 
     def __init__(self, expression: str, test_name: str) -> None:
-        self._tokens = _tokenise(expression)
+        self._tokens = _tokenize(expression)
         self._test_name = test_name
         self._position = 0
 
