@@ -4,14 +4,11 @@
 //! from the main entrypoint to keep the binary small and focused on
 //! orchestration.
 
+use crate::artefact::suite_ref::SuiteRef;
+use crate::crate_name::CrateName;
+use crate::resolution::EXPERIMENTAL_LINT_CRATES;
 use camino::Utf8PathBuf;
 use clap::{Parser, Subcommand};
-
-use crate::{
-    artefact::suite_ref::SuiteRef,
-    crate_name::CrateName,
-    resolution::EXPERIMENTAL_LINT_CRATES,
-};
 
 /// Install Whitaker Dylint lint libraries.
 #[derive(Parser, Debug)]
@@ -97,7 +94,7 @@ pub struct RunArgs {
 }
 
 /// Arguments for the install command.
-#[derive(Parser, Debug, Clone)]
+#[derive(Parser, Debug, Clone, PartialEq, Eq)]
 pub struct InstallArgs {
     /// Staging directory for built libraries [default: platform-specific].
     #[arg(short, long, value_name = "DIR")]
@@ -185,7 +182,7 @@ pub struct InstallArgs {
 /// Flags selecting which lint crates are built.
 ///
 /// Flattened into [`InstallArgs`] so the command-line surface is unchanged.
-#[derive(clap::Args, Debug, Clone, Default)]
+#[derive(clap::Args, Debug, Clone, Default, PartialEq, Eq)]
 pub struct LintSelectionFlags {
     /// Build all individual lint crates instead of the aggregated suite.
     #[arg(long, conflicts_with = "lint")]
@@ -199,7 +196,7 @@ pub struct LintSelectionFlags {
 /// Flags adjusting how the installer executes the build.
 ///
 /// Flattened into [`InstallArgs`] so the command-line surface is unchanged.
-#[derive(clap::Args, Debug, Clone, Default)]
+#[derive(clap::Args, Debug, Clone, Default, PartialEq, Eq)]
 pub struct ExecutionFlags {
     /// Install rustc-codegen-cranelift via rustup.
     #[arg(long, default_value_t = false)]
@@ -213,166 +210,4 @@ pub struct ExecutionFlags {
 /// Flags that skip individual installation steps.
 ///
 /// Flattened into [`InstallArgs`] so the command-line surface is unchanged.
-#[derive(clap::Args, Debug, Clone, Default)]
-pub struct SkipFlags {
-    /// Skip installation of cargo-dylint and dylint-link.
-    #[arg(long)]
-    pub skip_deps: bool,
-
-    /// Skip wrapper script generation.
-    #[arg(long)]
-    pub skip_wrapper: bool,
-
-    /// Do not update existing repository clone.
-    #[arg(long)]
-    pub no_update: bool,
-}
-
-/// Arguments for the list command.
-#[derive(Parser, Debug, Clone)]
-pub struct ListArgs {
-    /// Output in JSON format for scripting.
-    #[arg(long)]
-    pub json: bool,
-
-    /// Staging directory to scan [default: platform-specific].
-    #[arg(short, long, value_name = "DIR")]
-    pub target_dir: Option<Utf8PathBuf>,
-}
-
-mod source_policy;
-
-pub use source_policy::NO_SOURCE_FALLBACK_ENV;
-
-impl InstallArgs {
-    /// Whether the arguments alone rule out a prebuilt artefact.
-    ///
-    /// Three unrelated reasons, so they are named here rather than read as one
-    /// condition: the caller asked to build, the caller asked for experimental
-    /// lints which are never published, or the caller pinned a suite that the
-    /// rolling release cannot carry.
-    fn arguments_force_a_source_build(&self) -> bool {
-        self.is_build_only || self.lint_selection.experimental || self.suite_version.is_some()
-    }
-
-    /// Return true when installer settings permit a prebuilt download attempt.
-    ///
-    /// Prebuilt artefacts are skipped when:
-    /// - `--build-only` is set,
-    /// - `--suite-version` pins the suite, because prebuilt artefacts are published only for the
-    ///   branch tip and so can never satisfy a pin, or
-    /// - experimental lint behaviour is requested, either via `--experimental` (suite build) or
-    ///   explicit experimental crates when the experimental crate list is non-empty.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use whitaker_installer::{cli::InstallArgs, crate_name::CrateName};
-    ///
-    /// let requested = vec![CrateName::from("whitaker_suite")];
-    ///
-    /// let default_args = InstallArgs::default();
-    /// assert!(default_args.should_attempt_prebuilt(&requested));
-    ///
-    /// let build_only_args = InstallArgs {
-    ///     is_build_only: true,
-    ///     ..InstallArgs::default()
-    /// };
-    /// assert!(!build_only_args.should_attempt_prebuilt(&requested));
-    ///
-    /// let pinned_args = InstallArgs {
-    ///     suite_version: Some("v0.2.7".try_into().expect("valid reference")),
-    ///     ..InstallArgs::default()
-    /// };
-    /// assert!(!pinned_args.should_attempt_prebuilt(&requested));
-    /// ```
-    #[must_use]
-    pub fn should_attempt_prebuilt(&self, requested_crates: &[CrateName]) -> bool {
-        if self.arguments_force_a_source_build() {
-            return false;
-        }
-        !requested_crates
-            .iter()
-            .any(|crate_name| EXPERIMENTAL_LINT_CRATES.contains(&crate_name.as_str()))
-    }
-}
-
-impl Default for InstallArgs {
-    /// Creates an `InstallArgs` instance with all flags disabled and no lints selected.
-    ///
-    /// This is useful for testing or programmatic construction where only
-    /// specific fields need to be set.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use whitaker_installer::cli::InstallArgs;
-    ///
-    /// let args = InstallArgs::default();
-    /// assert!(!args.lint_selection.individual_lints);
-    /// assert!(!args.skip.skip_deps);
-    /// assert!(args.lint.is_empty());
-    /// ```
-    fn default() -> Self {
-        Self {
-            target_dir: None,
-            lint: Vec::new(),
-            lint_selection: LintSelectionFlags::default(),
-            jobs: None,
-            toolchain: None,
-            execution: ExecutionFlags::default(),
-            verbosity: 0,
-            quiet: false,
-            skip: SkipFlags::default(),
-            suite_version: None,
-            no_source_fallback: false,
-            is_build_only: false,
-            clippy_snapshot_bundle: None,
-        }
-    }
-}
-
-impl Default for ListArgs {
-    /// Creates a `ListArgs` instance with default settings.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use whitaker_installer::cli::ListArgs;
-    ///
-    /// let args = ListArgs::default();
-    /// assert!(!args.json);
-    /// assert!(args.target_dir.is_none());
-    /// ```
-    fn default() -> Self {
-        Self {
-            json: false,
-            target_dir: None,
-        }
-    }
-}
-
-impl Cli {
-    /// Returns the effective install arguments.
-    ///
-    /// If an `Install` subcommand was provided, returns those arguments.
-    /// Otherwise returns the flattened install arguments for backwards
-    /// compatibility.
-    ///
-    /// # Note
-    ///
-    /// When `Command::List` is active, this returns the default flattened
-    /// install arguments. Callers should check `self.command` before calling
-    /// this method if the `List` case needs different handling.
-    #[must_use]
-    pub fn install_args(&self) -> &InstallArgs {
-        match &self.command {
-            Some(Command::Install(args)) => args,
-            Some(Command::List(_) | Command::Run(_)) | None => &self.install,
-        }
-    }
-}
-
-#[cfg(test)]
-#[path = "cli_tests.rs"]
-mod tests;
+#[derive(clap::Args, Debug, Clone, Default, PartialEq, Eq)]

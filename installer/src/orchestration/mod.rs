@@ -4,9 +4,15 @@
 //! staging, and wrapper adapters. It deliberately owns the operational flow,
 //! while callers own command-line parsing and process termination.
 
-use std::{ffi::OsString, io::Write, time::Instant};
+use std::{io::Write, time::Instant};
 
 use camino::{Utf8Path, Utf8PathBuf};
+
+mod dry_run;
+mod exit;
+
+use dry_run::run_dry;
+pub use exit::exit_code_for_run_result;
 
 use crate::{
     cli::{Cli, Command, InstallArgs},
@@ -20,7 +26,7 @@ use crate::{
     },
     install_flow::bootstrap_step::{
         InstalledSnapshot, install_clippy_snapshot, record_bootstrap, run_bootstrap,
-        write_shell_snippet, write_wrappers,
+        write_shell_snippet,
     },
     install_metrics::InstallMode,
     list::{determine_target_dir, run_list},
@@ -29,12 +35,23 @@ use crate::{
     resolution::{CrateResolutionOptions, resolve_crates, validate_crate_names},
     staged_suite,
     toolchain::Toolchain,
+    wrapper::{WrapperScripts, generate_wrapper_scripts_with, path_instructions},
 };
 
 /// Routes CLI commands to their respective handlers.
 ///
-/// `Run` is normally dispatched by the composition root before this function,
-/// because it exits with the child's status rather than returning a `Result`.
+/// # Examples
+///
+/// ```no_run
+/// use std::io;
+///
+/// use clap::Parser as _;
+/// use whitaker_installer::{cli::Cli, orchestration::run};
+///
+/// let cli = Cli::try_parse_from(["whitaker-installer", "--dry-run"])?;
+/// run(&cli, &mut io::sink(), &mut io::sink())?;
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 ///
 /// # Errors
 ///
@@ -42,8 +59,13 @@ use crate::{
 pub fn run(cli: &Cli, stdout: &mut dyn Write, stderr: &mut dyn Write) -> Result<()> {
     match &cli.command {
         Some(Command::List(args)) => run_list(args, stdout),
-        Some(Command::Install(args)) => run_install(args, stdout, stderr),
-        Some(Command::Run(_)) | None => run_install(cli.install_args(), stdout, stderr),
+        Some(Command::Install(args)) => run_install(args, stdout, stderr, WrapperScripts::Both),
+        // `Run` is normally dispatched by the composition root before this
+        // point, because it exits with the child's status rather than a
+        // `Result`.
+        Some(Command::Run(_)) | None => {
+            run_install(cli.install_args(), stdout, stderr, WrapperScripts::Both)
+        }
     }
 }
 
@@ -51,13 +73,43 @@ pub fn run(cli: &Cli, stdout: &mut dyn Write, stderr: &mut dyn Write) -> Result<
 ///
 /// Returns the child's exit status so a composition root can exit with it
 /// unchanged; `whitaker-installer run` forwards lint statuses this way.
-pub fn run_bootstrap_command(arguments: &[OsString], stderr: &mut dyn Write) -> i32 {
+pub fn run_bootstrap_command(arguments: &[std::ffi::OsString], stderr: &mut dyn Write) -> i32 {
     run_bootstrap(arguments, stderr)
+}
+
+/// Runs a root-CLI install without replacing its `whitaker` executable.
+///
+/// The legacy installer continues to use [`run`] and creates both scripts.
+/// The root binary creates only `whitaker-ls`, preserving the executable name
+/// that the user invoked.
+///
+/// # Examples
+///
+/// ```no_run
+/// use std::io;
+///
+/// use whitaker_installer::{cli::InstallArgs, orchestration::run_install_for_whitaker};
+///
+/// let arguments = InstallArgs::default();
+/// let mut diagnostics = io::stderr();
+/// run_install_for_whitaker(&arguments, &mut diagnostics)?;
+/// # Ok::<(), whitaker_installer::error::InstallerError>(())
+/// ```
+///
+/// # Errors
+///
+/// Returns an error when the selected installation operation cannot complete.
+pub fn run_install_for_whitaker(
+    args: &InstallArgs,
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> Result<()> {
+    run_install(args, stdout, stderr, WrapperScripts::WhitakerLsOnly)
 }
 
 /// Returns the set of additional rustup components requested by the CLI flags.
 const fn resolve_additional_components(args: &InstallArgs) -> &'static [&'static str] {
-    if args.cranelift {
+    if args.execution.cranelift {
         &["rustc-codegen-cranelift"]
     } else {
         &[]
@@ -94,14 +146,19 @@ fn try_fast_path_installation(
 
 /// Runs the install command to build and stage lint libraries.
 ///
-/// Workflow: (1) check/install Dylint dependencies, (2) install the Clippy
-/// snapshot, (3) locate/clone workspace, (4) stage the suite from a prebuilt
-/// artefact or a build, (5) record the bootstrap and generate wrapper scripts.
+/// Workflow: (1) check/install Dylint dependencies, (2) locate/clone workspace,
+/// (3) resolve crates from CLI flags, (4) build in release mode, (5) stage
+/// libraries with toolchain-suffixed names, (6) generate wrapper script.
 ///
 /// # Errors
 ///
 /// Returns an error if any step fails.
-fn run_install(args: &InstallArgs, stdout: &mut dyn Write, stderr: &mut dyn Write) -> Result<()> {
+fn run_install(
+    args: &InstallArgs,
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+    wrapper_scripts: WrapperScripts,
+) -> Result<()> {
     // The one environment read for the whole run. Everything below consults
     // this answer, so validation and installation cannot disagree.
     let policy = args.source_policy();
@@ -109,56 +166,23 @@ fn run_install(args: &InstallArgs, stdout: &mut dyn Write, stderr: &mut dyn Writ
     let dirs = SystemBaseDirs::new().ok_or_else(|| InstallerError::WorkspaceNotFound {
         reason: "could not determine platform directories".to_owned(),
     })?;
-    if args.dry_run {
-        return crate::dry_run::run_dry(args, &dirs, stderr);
+    if args.execution.dry_run {
+        return run_dry(args, &dirs, stderr);
     }
     let install_started = Instant::now();
-    if !args.skip_deps {
+    // Step 1: Check and install Dylint dependencies if needed
+    if !args.skip.skip_deps {
         ensure_dylint_tools(policy, stderr)?;
     }
-    // Before any workspace or library work, with no fallback.
+    // Install the verified Clippy snapshot before any workspace or library
+    // work, with no fallback: a release that does not publish its snapshot
+    // fails here rather than after minutes of other work.
     let snapshot = install_clippy_snapshot(args, &dirs, stderr)?;
+    // Step 2: Ensure workspace is available (clone if needed)
     let workspace_root = ensure_whitaker_workspace(args, &dirs, stderr)?;
-    let request = SuiteRequest {
-        args,
-        policy,
-        dirs: &dirs,
-        workspace_root: &workspace_root,
-    };
-    let staged = stage_suite(&request, stderr)?;
-    report_suite_source(staged.install_mode, stdout)?;
-    let finish_context = FinishInstallContext {
-        args,
-        dirs: &dirs,
-        snapshot: &snapshot,
-        toolchain: staged.toolchain.channel(),
-        staging_path: &staged.staging_path,
-        install_mode: staged.install_mode,
-        install_started,
-    };
-    finish_install_and_record_metrics(&finish_context, stderr)
-}
-
-/// The inputs that decide which lint suite to stage, and from where.
-struct SuiteRequest<'a> {
-    args: &'a InstallArgs,
-    policy: SourcePolicy,
-    dirs: &'a dyn BaseDirs,
-    workspace_root: &'a Utf8Path,
-}
-
-/// A staged lint suite and how it was obtained.
-struct StagedSuite {
-    staging_path: Utf8PathBuf,
-    install_mode: InstallMode,
-    toolchain: Toolchain,
-}
-
-/// Resolve crates and toolchain, then stage the suite from a fast path or a build.
-fn stage_suite(request: &SuiteRequest<'_>, stderr: &mut dyn Write) -> Result<StagedSuite> {
-    let args = request.args;
+    // Step 3: Resolve crates and toolchain
     let requested_crates = resolve_requested_crates(args)?;
-    let toolchain = resolve_toolchain(request.workspace_root, args.toolchain.as_deref())?;
+    let toolchain = resolve_toolchain(&workspace_root, args.toolchain.as_deref())?;
     ensure_toolchain_installed(
         &toolchain,
         resolve_additional_components(args),
@@ -166,10 +190,11 @@ fn stage_suite(request: &SuiteRequest<'_>, stderr: &mut dyn Write) -> Result<Sta
         stderr,
     )?;
     let target_dir = determine_target_dir(args.target_dir.as_deref())?;
+    // Step 3.5: Attempt prebuilt download or staged-suite fast path.
     let fast_path_context = FastPathContext {
         args,
-        policy: request.policy,
-        dirs: request.dirs,
+        policy,
+        dirs: &dirs,
         requested_crates: &requested_crates,
         toolchain: &toolchain,
         target_dir: &target_dir,
@@ -177,27 +202,51 @@ fn stage_suite(request: &SuiteRequest<'_>, stderr: &mut dyn Write) -> Result<Sta
     if let Some((staging_path, install_mode)) =
         try_fast_path_installation(&fast_path_context, stderr)?
     {
-        return Ok(StagedSuite {
-            staging_path,
+        report_suite_source(install_mode, stdout)?;
+        let finish_context = FinishInstallContext {
+            args,
+            dirs: &dirs,
+            snapshot: &snapshot,
+            toolchain: toolchain.channel(),
+            staging_path: &staging_path,
+            wrapper_scripts,
             install_mode,
-            toolchain,
-        });
+            install_started,
+        };
+        return finish_install_and_record_metrics(&finish_context, stderr);
     }
     let context = PipelineContext {
-        workspace_root: request.workspace_root,
+        workspace_root: &workspace_root,
         toolchain: &toolchain,
         target_dir: &target_dir,
         jobs: args.jobs,
         verbosity: args.verbosity,
-        experimental: args.experimental,
+        experimental: args.lint_selection.experimental,
         quiet: args.quiet,
     };
+    // Step 4: Build and stage
     let build_results = perform_build(&context, &requested_crates, stderr)?;
     let staging_path = stage_libraries(&context, &build_results, stderr)?;
-    Ok(StagedSuite {
-        staging_path,
+    // Step 5: Generate wrapper scripts if requested
+    report_suite_source(InstallMode::Build, stdout)?;
+    let finish_context = FinishInstallContext {
+        args,
+        dirs: &dirs,
+        snapshot: &snapshot,
+        toolchain: toolchain.channel(),
+        staging_path: &staging_path,
+        wrapper_scripts,
         install_mode: InstallMode::Build,
-        toolchain,
+        install_started,
+    };
+    finish_install_and_record_metrics(&finish_context, stderr)
+}
+
+/// Checks for and installs Dylint tools if missing.
+fn ensure_dylint_tools(policy: SourcePolicy, stderr: &mut dyn Write) -> Result<()> {
+    let executor = SystemCommandExecutor;
+    ensure_dylint_tools_with_executor(&executor, policy, stderr, |status, stderr| {
+        install_dylint_tools_with_output(&executor, status, policy, stderr)
     })
 }
 
@@ -216,14 +265,6 @@ fn report_suite_source(install_mode: InstallMode, stdout: &mut dyn Write) -> Res
         .map_err(|source| InstallerError::WriteFailed { source })
 }
 
-/// Checks for and installs Dylint tools if missing.
-fn ensure_dylint_tools(policy: SourcePolicy, stderr: &mut dyn Write) -> Result<()> {
-    let executor = SystemCommandExecutor;
-    ensure_dylint_tools_with_executor(&executor, policy, stderr, |status, stderr| {
-        install_dylint_tools_with_output(&executor, status, policy, stderr)
-    })
-}
-
 /// Ensures a Whitaker workspace is available.
 fn ensure_whitaker_workspace(
     args: &InstallArgs,
@@ -235,32 +276,32 @@ fn ensure_whitaker_workspace(
     };
 
     let plan = WorkspacePlan {
-        should_update: !args.no_update,
+        should_update: !args.skip.no_update,
         suite_ref: args.suite_version.clone(),
     };
 
-    if !args.quiet {
-        if let Some(clone_dir) = clone_directory(dirs) {
-            let utf8_cwd = std::env::current_dir()
-                .ok()
-                .and_then(|p| Utf8PathBuf::try_from(p).ok());
+    if !args.quiet
+        && let Some(clone_dir) = clone_directory(dirs)
+    {
+        let utf8_cwd = std::env::current_dir()
+            .ok()
+            .and_then(|p| Utf8PathBuf::try_from(p).ok());
 
-            let Some(cwd) = utf8_cwd else {
-                return ensure_workspace(dirs, &plan);
-            };
+        let Some(cwd) = utf8_cwd else {
+            return ensure_workspace(dirs, &plan);
+        };
 
-            match decide_workspace_action(&cwd, &clone_dir, !args.no_update) {
-                WorkspaceAction::CloneTo(dir) => {
-                    write_stderr_line(stderr, format!("Cloning Whitaker repository to {dir}..."));
-                }
-                WorkspaceAction::UpdateAt(dir) => {
-                    write_stderr_line(stderr, format!("Updating Whitaker repository at {dir}..."));
-                }
-                WorkspaceAction::UseCurrentDir(_) | WorkspaceAction::UseExisting(_) => {}
+        match decide_workspace_action(&cwd, &clone_dir, !args.skip.no_update) {
+            WorkspaceAction::CloneTo(dir) => {
+                write_stderr_line(stderr, format!("Cloning Whitaker repository to {dir}..."));
             }
-            if let Some(reference) = plan.suite_ref.as_ref() {
-                write_stderr_line(stderr, format!("Pinning lint suite to {reference}..."));
+            WorkspaceAction::UpdateAt(dir) => {
+                write_stderr_line(stderr, format!("Updating Whitaker repository at {dir}..."));
             }
+            WorkspaceAction::UseCurrentDir(_) | WorkspaceAction::UseExisting(_) => {}
+        }
+        if let Some(reference) = plan.suite_ref.as_ref() {
+            write_stderr_line(stderr, format!("Pinning lint suite to {reference}..."));
         }
     }
 
@@ -268,7 +309,7 @@ fn ensure_whitaker_workspace(
 }
 
 /// Detects or overrides the toolchain, then verifies it is installed.
-pub(crate) fn resolve_toolchain(
+pub(super) fn resolve_toolchain(
     workspace_root: &Utf8Path,
     override_channel: Option<&str>,
 ) -> Result<Toolchain> {
@@ -295,15 +336,18 @@ fn ensure_toolchain_installed(
     Ok(())
 }
 
-/// Common final steps: record the bootstrap, then write wrappers or a snippet.
+/// Record the installation, then generate wrappers or print a shell snippet.
+///
+/// The record is written after the libraries are staged and before any wrapper
+/// exists, so a wrapper never points at a half-recorded installation.
 fn finish_install(context: &FinishInstallContext<'_>, stderr: &mut dyn Write) -> Result<()> {
     record_bootstrap(context.snapshot, context.toolchain, context.staging_path)?;
-    if context.args.skip_wrapper {
+    if context.args.skip.skip_wrapper {
         write_shell_snippet(context.snapshot, context.staging_path, stderr);
-        Ok(())
     } else {
-        write_wrappers(context.dirs, stderr)
+        generate_and_report_wrapper(context.dirs, context.wrapper_scripts, stderr)?;
     }
+    Ok(())
 }
 
 /// Aggregates final-step inputs required after a successful install run.
@@ -315,6 +359,7 @@ struct FinishInstallContext<'a> {
     /// The toolchain the staged libraries were built for.
     toolchain: &'a str,
     staging_path: &'a Utf8Path,
+    wrapper_scripts: WrapperScripts,
     install_mode: InstallMode,
     install_started: Instant,
 }
@@ -352,7 +397,7 @@ fn finish_install_and_record_metrics(
 }
 
 /// Resolves requested crates from the CLI flags.
-pub(crate) fn resolve_requested_crates(args: &InstallArgs) -> Result<Vec<CrateName>> {
+pub(super) fn resolve_requested_crates(args: &InstallArgs) -> Result<Vec<CrateName>> {
     let lint_crates: Vec<CrateName> = args
         .lint
         .iter()
@@ -360,8 +405,8 @@ pub(crate) fn resolve_requested_crates(args: &InstallArgs) -> Result<Vec<CrateNa
         .collect();
 
     let options = CrateResolutionOptions {
-        individual_lints: args.individual_lints,
-        experimental: args.experimental,
+        individual_lints: args.lint_selection.individual_lints,
+        experimental: args.lint_selection.experimental,
     };
     if !lint_crates.is_empty() {
         validate_crate_names(&lint_crates, &options)?;
@@ -370,17 +415,42 @@ pub(crate) fn resolve_requested_crates(args: &InstallArgs) -> Result<Vec<CrateNa
     Ok(resolve_crates(&lint_crates, &options))
 }
 
-/// Writes an installation error and maps the result to a process exit code.
-pub fn exit_code_for_run_result(result: Result<()>, stderr: &mut dyn Write) -> i32 {
-    match result {
-        Ok(()) => 0,
-        Err(err) => {
-            write_stderr_line(stderr, err);
-            1
-        }
+/// Generates wrapper scripts and reports the result.
+fn generate_and_report_wrapper(
+    dirs: &dyn BaseDirs,
+    scripts: WrapperScripts,
+    stderr: &mut dyn Write,
+) -> Result<()> {
+    let result = generate_wrapper_scripts_with(dirs, scripts)?;
+    write_stderr_line(stderr, "");
+    write_stderr_line(stderr, "Wrapper scripts created:");
+    if scripts == WrapperScripts::Both {
+        write_stderr_line(stderr, format!("  - {}", result.whitaker_path.display()));
     }
+    write_stderr_line(stderr, format!("  - {}", result.whitaker_ls_path.display()));
+    write_stderr_line(stderr, "");
+
+    if result.in_path {
+        write_stderr_line(stderr, "You can now run:");
+        write_stderr_line(stderr, "  whitaker --all");
+        write_stderr_line(stderr, "  whitaker-ls");
+    } else {
+        let bin_dir =
+            result
+                .whitaker_path
+                .parent()
+                .ok_or_else(|| InstallerError::StagingFailed {
+                    reason: "wrapper script path has no parent directory".to_owned(),
+                })?;
+        write_stderr_line(stderr, path_instructions(bin_dir));
+        write_stderr_line(stderr, "");
+        write_stderr_line(stderr, "Then run:");
+        write_stderr_line(stderr, "  whitaker --all");
+        write_stderr_line(stderr, "  whitaker-ls");
+    }
+    Ok(())
 }
 
 #[cfg(test)]
-#[path = "tests/mod.rs"]
+#[path = "../tests/mod.rs"]
 mod tests;

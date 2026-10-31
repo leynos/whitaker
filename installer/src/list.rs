@@ -3,20 +3,17 @@
 //! This module provides the `run_list` command handler and supporting functions
 //! for querying and displaying installed lint libraries.
 
-use std::io::Write;
-
 use camino::{Utf8Path, Utf8PathBuf};
 use log::trace;
+use std::io::Write;
 
-use crate::{
-    cli::ListArgs,
-    dirs::{BaseDirs, SystemBaseDirs},
-    error::{InstallerError, Result},
-    list_output::{format_human, format_json},
-    scanner::{InstalledLints, scan_installed},
-    stager::default_target_dir,
-    toolchain::Toolchain,
-};
+use crate::cli::ListArgs;
+use crate::dirs::{BaseDirs, SystemBaseDirs};
+use crate::error::{InstallerError, Result};
+use crate::list_output::{format_human, format_json};
+use crate::scanner::InstalledLints;
+use crate::stager::default_target_dir;
+use crate::toolchain::Toolchain;
 
 /// Lists installed lint libraries and their associated lints.
 ///
@@ -25,6 +22,19 @@ use crate::{
 /// and formats the output for display.
 ///
 /// Output is written to stdout (human-readable by default, JSON with `--json`).
+///
+/// # Examples
+///
+/// ```no_run
+/// use std::io;
+///
+/// use clap::Parser as _;
+/// use whitaker_installer::{cli::ListArgs, list::run_list};
+///
+/// let arguments = ListArgs::try_parse_from(["whitaker-installer"])?;
+/// run_list(&arguments, &mut io::stdout())?;
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 ///
 /// # Errors
 ///
@@ -35,19 +45,48 @@ pub fn run_list(args: &ListArgs, stdout: &mut dyn Write) -> Result<()> {
     run_list_with(args, stdout, detect_active_toolchain)
 }
 
+/// Collects installed lint metadata without formatting or writing output.
+///
+/// This is the inventory boundary used by the root `whitaker ls` command.
+/// Callers can select their own stable or evolving presentation while sharing
+/// the installer's scan-root and ordering rules.
+///
+/// # Examples
+///
+/// ```no_run
+/// use clap::Parser;
+/// use whitaker_installer::{cli::ListArgs, list::collect_installed};
+///
+/// let arguments = ListArgs::try_parse_from(["whitaker"])?;
+/// let installed = collect_installed(&arguments)?;
+/// println!(
+///     "{} toolchains have staged lints",
+///     installed.by_toolchain.len()
+/// );
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+///
+/// # Errors
+///
+/// Returns an error if a selected staging directory cannot be scanned.
+pub fn collect_installed(args: &ListArgs) -> Result<crate::scanner::InstalledLints> {
+    let scan_roots = determine_scan_roots(args.target_dir.as_deref())?;
+    let mut installed = crate::scanner::InstalledLints::default();
+    for root in scan_roots {
+        let discovered = crate::scanner::scan_installed(&root)
+            .map_err(|source| InstallerError::ScanFailed { source })?;
+        merge_installed(&mut installed, discovered);
+    }
+    sort_installed_libraries(&mut installed);
+    Ok(installed)
+}
+
 /// Internal implementation with injectable toolchain detection for testability.
 fn run_list_with<F>(args: &ListArgs, stdout: &mut dyn Write, detect_toolchain: F) -> Result<()>
 where
     F: FnOnce() -> Option<String>,
 {
-    let scan_roots = determine_scan_roots(args.target_dir.as_deref())?;
-    let mut installed = InstalledLints::default();
-    for root in scan_roots {
-        let discovered =
-            scan_installed(&root).map_err(|e| InstallerError::ScanFailed { source: e })?;
-        merge_installed(&mut installed, discovered);
-    }
-    sort_installed_libraries(&mut installed);
+    let installed = collect_installed(args)?;
 
     let active_toolchain = detect_toolchain();
 

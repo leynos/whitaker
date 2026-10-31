@@ -129,6 +129,9 @@ compatibility entry points. Local ADR filenames follow
   records the move to Dylint 6.3.0, the commit-named Clippy bundle that driver
   builds read instead of public Clippy, first-use driver construction in an
   identity-keyed directory, and the `whitaker-installer run` dispatcher.
+- [Architectural decision record (ADR): root Whitaker CLI boundary](adr-005-whitaker-cli-boundary.md)
+  records the executable namespace, installer API boundary, Dylint forwarding,
+  and staged publication decision for the unified CLI.
 
 ## Requests for comments
 
