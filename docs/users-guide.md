@@ -501,10 +501,20 @@ selectors, `WHITAKER_DIAGNOSTICS_LOCALE` for language, and
 Boolean values use lower-case `true` or `false`; integer values are
 non-negative, and floating-point values must be finite. Lists are
 comma-separated: surrounding whitespace is trimmed and empty items are ignored.
-The existing `WHITAKER_NO_SOURCE_FALLBACK` control forbids source builds for
-any value other than an empty string, `0`, or `false` (ignoring surrounding
-whitespace and case); disabled values leave any file setting unchanged.
-Non-Unicode values also forbid fallback, as in the installer.
+
+Out-of-range tuning values keep the lints' existing normalization policy rather
+than failing the load. A finite non-negative bumpy-road threshold is kept, and
+any other value falls back to `2.5`; the smoothing window must be non-zero and
+odd, so other values fall back to `3`; `min_bump_lines` is raised to at least
+`1`; bumpy-road weights that are not finite and non-negative fall back to their
+defaults; `max_branches` is raised to at least `1`; and `min_calls` and
+`min_distinct_tests` are raised to at least `2`. Provider attribute names are
+trimmed, lose a leading `rstest::`, and are deduplicated. Non-numeric values
+and unknown keys remain errors. The existing `WHITAKER_NO_SOURCE_FALLBACK`
+control forbids source builds for any value other than an empty string, `0`, or
+`false` (ignoring surrounding whitespace and case); disabled values leave any
+file setting unchanged. Non-Unicode values also forbid fallback, as in the
+installer.
 
 Command-specific settings use `[cmds.<command>]` and the corresponding
 `WHITAKER_CMDS_<COMMAND>_*` environment prefix. The allowed presentation values

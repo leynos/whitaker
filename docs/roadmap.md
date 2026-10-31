@@ -220,10 +220,13 @@ published-GPUI workspace invocation.
   including the curated `--experimental` behaviour for implicit and explicit
   selections. See [Whitaker CLI design](whitaker-cli-design.md) §Rule
   identifiers and selection model. Requires 3.6.1 and 3.6.3.
-- [ ] 3.6.3. Adopt `ortho_config` for CLI, environment, and `whitaker.toml`
+- [x] 3.6.3. Adopt `ortho_config` for CLI, environment, and `whitaker.toml`
   loading, while retaining one-release compatibility with `dylint.toml` and
-  legacy environment keys. See [Whitaker CLI design](whitaker-cli-design.md)
-  §Configuration model. Requires 3.5.1.
+  legacy environment keys. The configuration-only `whitaker-cli` package
+  delivers this item without an executable, as the design specifies. Roadmap
+  item 3.5.1 owns the root binary and its command integration, including the
+  binary-level parse, stream and exit-status checks that this item does not
+  claim. See [Whitaker CLI design](whitaker-cli-design.md) §Configuration model.
 - [ ] 3.6.4. Add shared `--locale`, `--colour`, and `--progress` controls, and
   ensure the merged config surface remains localizable and accessible. See
   [Whitaker CLI design](whitaker-cli-design.md) §Accessibility and localization
