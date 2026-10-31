@@ -3747,6 +3747,7 @@ dependencies = [
  "cap-std",
  "clap",
  "ortho_config",
+ "proptest",
  "rstest",
  "serde",
  "serde_json",

@@ -362,6 +362,15 @@ behaviour, and UI compile contracts.
   integration and binary-level checks explicitly outstanding. Rust 1.89.0
   package Clippy passed; package tests passed 21 unit tests, 34 integration
   tests, and three doctests (one ignored).
+- [x] 2026-10-31: Rebasing onto `e3701732` kept the configuration foundation
+  and the base RFC change. Split the 530-line configuration integration test
+  into `support`, `discovery`, `precedence`, and `validation` modules, then
+  deduplicated the discovery rejection cases after CodeScene flagged an
+  advisory Code Duplication. Sequential gates on `99ccee92` passed `check-fmt`,
+  `typecheck`, `lint`, and `test`; the workspace suite passed 2,071 tests with
+  six skips, followed by 19 Dylint tests. Hosted CI run 41208290221 passed
+  `linux-full`, `coverage-check`, and `windows-compat` on that head, and
+  CodeScene passed all six quality gates.
 
 ## Surprises & discoveries
 
