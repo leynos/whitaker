@@ -4791,19 +4791,20 @@ that agrees with them and with nothing else.
 `rust-toolchain.toml` pins `nightly-2026-05-28`. Dependabot's `rust-toolchain`
 entry in `.github/dependabot.yml` (directory `/`, daily, the `rust-toolchain`
 label alone, one `minor-and-patch` catch-all group) opens a pull request when a
-newer toolchain exists. Review it like any other change: CI builds and tests the
-project on the new toolchain. Dated nightly versions carry no SemVer meaning, so
-whether Dependabot groups a bump or opens it alone depends on how it classifies
-the version; both are normal. The entry sets no cooldown: Dependabot's toolchain
-fetcher publishes no release date, so a cooldown would delay nothing.
+newer toolchain exists. Review it like any other change: CI builds and tests
+the project on the new toolchain. Dated nightly versions carry no SemVer
+meaning, so whether Dependabot groups a bump or opens it alone depends on how
+it classifies the version; both are normal. The entry sets no cooldown:
+Dependabot's toolchain fetcher publishes no release date, so a cooldown would
+delay nothing.
 
 The whitaker pin is coupled to more than the toolchain file.
 `nightly-2026-05-28` goes with the `ra_ap_syntax` parser snapshot, the Dylint
-and `clippy_utils` revisions, `installer/clippy-snapshot.toml` and the documents
-that name it. A bare Dependabot bump therefore will not build on its own: when
-the pull request appears, move those revisions and files in the same change.
-Dependabot cannot express the coupling, so the pull request is the signal that a
-coordinated update is due.
+and `clippy_utils` revisions, `installer/clippy-snapshot.toml` and the
+documents that name it. A bare Dependabot bump therefore will not build on its
+own: when the pull request appears, move those revisions and files in the same
+change. Dependabot cannot express the coupling, so the pull request is the
+signal that a coordinated update is due.
 
 The entry carries no `dependencies` label on purpose. The Dependabot automerge
 workflow requires that label (`required-label` defaults to `dependencies`) and
