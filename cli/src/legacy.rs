@@ -33,6 +33,9 @@ pub fn source_fallback_override(value: Option<&OsStr>) -> Option<bool> {
 
 #[cfg(test)]
 mod tests {
+    //! Test the installer's source-fallback compatibility mapping, including
+    //! disabled, enabled, and non-Unicode values.
+
     use super::source_fallback_override;
     use rstest::rstest;
     use std::ffi::OsStr;

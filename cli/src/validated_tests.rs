@@ -1,6 +1,11 @@
 //! Unit tests for validated settings conversion.
 
+use std::collections::BTreeSet;
+
+use proptest::prelude::*;
+
 use super::{is_valid_window, normalize, normalize_provider_attributes, validate_output};
+use crate::lint_config::RstestHelper;
 use crate::settings::Configuration;
 
 /// Normalize invalid bumpy-road tuning to the lint's documented defaults.
@@ -74,4 +79,33 @@ fn recognizes_valid_windows(#[case] window: usize, #[case] expected: bool) {
 )]
 fn canonicalizes_provider_attributes(#[case] input: Vec<String>, #[case] expected: Vec<String>) {
     assert_eq!(normalize_provider_attributes(input), expected);
+}
+
+proptest! {
+    /// Keep normalized provider attributes non-empty, prefix-free, and unique.
+    #[test]
+    fn normalized_provider_attributes_are_canonical(
+        attributes in prop::collection::vec(any::<String>(), 0..16)
+    ) {
+        let normalized = normalize_provider_attributes(attributes.clone());
+        prop_assert!(!normalized.is_empty());
+        for attribute in &normalized {
+            prop_assert_eq!(attribute.as_str(), attribute.trim());
+            prop_assert!(!attribute.is_empty());
+            prop_assert!(!attribute.starts_with("rstest::"));
+        }
+        let distinct: BTreeSet<&String> = normalized.iter().collect();
+        prop_assert_eq!(distinct.len(), normalized.len());
+        let canonical: BTreeSet<String> = attributes
+            .iter()
+            .map(|attribute| attribute.trim().trim_start_matches("rstest::").to_owned())
+            .filter(|attribute| !attribute.is_empty())
+            .collect();
+        if canonical.is_empty() {
+            let defaults = RstestHelper::default().provider_param_attributes;
+            prop_assert_eq!(normalized, defaults);
+        } else {
+            prop_assert!(normalized.iter().all(|attribute| canonical.contains(attribute)));
+        }
+    }
 }
