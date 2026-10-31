@@ -378,6 +378,18 @@ behaviour, and UI compile contracts.
   `check-fmt`, `typecheck`, `lint`, and `test`; the workspace suite passed
   2,072 tests with six skips, followed by 19 Dylint tests, and CodeScene
   approved the head.
+- [x] 2026-10-31: Strengthened the property coverage the formal review left
+  open. The provider-attribute property now compares the complete result in
+  first-occurrence order against an independent oracle, asserts idempotence,
+  and draws from a generator weighted toward whitespace, `rstest::` prefixes,
+  empty names, and duplicates. Two new properties cover bumpy-road
+  normalization: arbitrary tuning is clamped to finite non-negative values, an
+  odd non-zero window, and at least one bump line, while already-valid tuning
+  is preserved unchanged. `check-fmt`, `typecheck`, and `lint` passed on this
+  tree. The workspace suite reached 2,067 passes with six skips and one test
+  cut short by the harness time limit; a targeted `nextest` run then passed the
+  nine remaining tests, including the interrupted `trybuild` case, and the
+  separate Dylint lane passed 19 tests.
 
 ## Surprises & discoveries
 
