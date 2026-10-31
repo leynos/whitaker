@@ -11,8 +11,8 @@ use rustc_hir::ExprKind;
 use rustc_lint::{LateContext, LateLintPass};
 use serde::Deserialize;
 use std::collections::HashSet;
-use whitaker_lint_core::SharedConfig;
 use whitaker_common::i18n::{Localizer, get_localizer_for_lint};
+use whitaker_lint_core::SharedConfig;
 
 dylint_linting::impl_late_lint! {
     pub NO_UNWRAP_OR_ELSE_PANIC,

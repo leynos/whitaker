@@ -26,9 +26,9 @@ formal verification helpers.
 | `installer/` | The `whitaker-installer` crate, packaging logic, and installer-specific behaviour tests.                                                                                                                          |
 | `scripts/`   | Repository automation for checksums, Markdown formatting, Kani, and Verus setup and execution.                                                                                                                    |
 | `skills/`    | Agent-facing skills that document repeatable maintenance and remediation workflows. Each skill is a directory whose `SKILL.md` frontmatter is an Agent Skills manifest, validated by `make skill-manifest-check`. |
-| `src/`       | Root `whitaker` CLI: parsing and routing in `src/cli/`, the application boundary in `src/ports.rs`, and installer and process adapters in `src/adapters/`.                                                      |
+| `src/`       | Root `whitaker` CLI: parsing and routing in `src/cli/`, the application boundary in `src/ports.rs`, and installer and process adapters in `src/adapters/`.                                                        |
 | `suite/`     | The suite crate used to package and expose the lint set coherently.                                                                                                                                               |
-| `tests/`     | Root CLI integration, behaviour, packaging, and workflow tests.                                                                       |
+| `tests/`     | Root CLI integration, behaviour, packaging, and workflow tests.                                                                                                                                                   |
 | `vendor/`    | Locally patched third-party crates whose tests and linting are part of the workspace gates.                                                                                                                       |
 | `verus/`     | Verus proof sidecars and formal verification experiments.                                                                                                                                                         |
 

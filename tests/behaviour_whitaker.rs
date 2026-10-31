@@ -321,4 +321,6 @@ fn scenario_legacy_lint_invocations_are_forwarded(world: CliWorld) {
     let _ = world;
 }
 
-fn workspace_root() -> PathBuf { PathBuf::from(env!("CARGO_MANIFEST_DIR")) }
+fn workspace_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+}

@@ -152,9 +152,8 @@ into `tests/property_arg_parity/short_clusters.rs` to keep the parity test
 under the 400-line limit. D-23 moves `ortho_config` to 0.10.0, and an
 end-to-end assertion pins bare `whitaker` to `cargo dylint` forwarding. The
 130-file diff is +7,400 net lines, 400 above D-12's ceiling, and exceeds D-11's
-accepted 80 files. Resolve this scope with
-the owner before merge. Crates.io reservation remains unauthorized; the plan
-stays `IN PROGRESS`.
+accepted 80 files. Resolve this scope with the owner before merge. Crates.io
+reservation remains unauthorized; the plan stays `IN PROGRESS`.
 
 ## Constraints
 
@@ -1004,10 +1003,10 @@ exit 1 where the installer exits 2, breaking `EP-INV-PARITY`.
 Bare `whitaker` never reaches this parse. `classify(&[])` returns
 `Class::Forward`, so an empty argument vector runs `cargo dylint` with no
 further arguments and exits with its status, as the legacy wrapper's
-`exec cargo dylint "$@"` did. `is_display_request` matches only
-`DisplayHelp` and `DisplayVersion`; that is sufficient because routing never
-hands Clap an argument vector without a subcommand, help, or version token.
-The `empty` case in `src/cli/dispatch.rs` and the bare-invocation assertion in
+`exec cargo dylint "$@"` did. `is_display_request` matches only `DisplayHelp`
+and `DisplayVersion`; that is sufficient because routing never hands Clap an
+argument vector without a subcommand, help, or version token. The `empty` case
+in `src/cli/dispatch.rs` and the bare-invocation assertion in
 `tests/e2e_exit_codes.rs` hold that contract.
 
 This establishes the seam that 3.6.4 fills with a `FluentLocalizer` and an
@@ -1623,9 +1622,9 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
   helper's selected MIT notice. Date/Author: 2026-10-17, following review.
 
 - **D-23: Pin `ortho_config` 0.10.0.** The repository requires current caret
-  requirements, and 0.10.0 keeps the `LocalizedParse` and
-  `is_display_request` interface used here while removing ten net lock entries.
-  Date/Author: 2026-10-25, following review.
+  requirements, and 0.10.0 keeps the `LocalizedParse` and `is_display_request`
+  interface used here while removing ten net lock entries. Date/Author:
+  2026-10-25, following review.
 
 ## Outcomes & retrospective
 

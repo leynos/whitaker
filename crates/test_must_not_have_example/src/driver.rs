@@ -8,13 +8,13 @@ use rustc_lint::{LateContext, LateLintPass, LintContext};
 use rustc_span::{Ident, Span, Symbol};
 use serde::Deserialize;
 use std::borrow::Cow;
-use whitaker_lint_core::SharedConfig;
-use whitaker_lint_core::hir::has_test_like_hir_attributes;
 use whitaker_common::AttributePath;
 use whitaker_common::i18n::{
     Arguments, DiagnosticMessageSet, FluentValue, Localizer, MessageKey, MessageResolution,
     get_localizer_for_lint, noop_reporter, safe_resolve_message_set,
 };
+use whitaker_lint_core::SharedConfig;
+use whitaker_lint_core::hir::has_test_like_hir_attributes;
 
 const LINT_NAME: &str = "test_must_not_have_example";
 const MESSAGE_KEY: MessageKey<'static> = MessageKey::new("test_must_not_have_example");

@@ -17,11 +17,11 @@ use rustc_span::DUMMY_SP;
 use rustc_span::source_map::SourceMap;
 use rustc_span::symbol::Ident;
 use rustc_span::{BytePos, Span};
-use whitaker_lint_core::{SharedConfig, module_body_span, module_header_span};
 use whitaker_common::i18n::{
     Arguments, DiagnosticMessageSet, FluentValue, Localizer, MessageKey, MessageResolution,
     get_localizer_for_lint, noop_reporter, safe_resolve_message_set,
 };
+use whitaker_lint_core::{SharedConfig, module_body_span, module_header_span};
 
 mod inner_attr;
 mod parser;
