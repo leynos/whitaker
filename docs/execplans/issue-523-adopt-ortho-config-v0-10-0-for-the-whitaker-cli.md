@@ -371,6 +371,13 @@ behaviour, and UI compile contracts.
   six skips, followed by 19 Dylint tests. Hosted CI run 41208290221 passed
   `linux-full`, `coverage-check`, and `windows-compat` on that head, and
   CodeScene passed all six quality gates.
+- [x] 2026-10-31: Addressed the formal review's readiness findings on
+  `3857730e`: documented the inline installer compatibility test module, added a
+  `proptest` invariant for provider-attribute normalization with its committed
+  regression seed, and recorded the final validation. Sequential gates passed
+  `check-fmt`, `typecheck`, `lint`, and `test`; the workspace suite passed
+  2,072 tests with six skips, followed by 19 Dylint tests, and CodeScene
+  approved the head.
 
 ## Surprises & discoveries
 
