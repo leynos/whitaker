@@ -390,6 +390,26 @@ behaviour, and UI compile contracts.
   cut short by the harness time limit; a targeted `nextest` run then passed the
   nine remaining tests, including the interrupted `trybuild` case, and the
   separate Dylint lane passed 19 tests.
+- [x] 2026-10-31: Rebased the 28-commit series onto `304bb531`, the new
+  `origin/main` tip, replaying `00cf1a19..0dac0a61` with `zdiff3`. The host's
+  global attributes file still enrols `*.rs` in Weave, contrary to the
+  documented estate baseline, so the unattended replay bypassed the ambient
+  driver with `core.attributesFile=/dev/null` rather than inheriting an
+  unconsented merge driver. One conflict arose in `docs/contents.md` between
+  main's new "Verification evidence" section and this branch's issue-523 plan
+  link; both were kept, with the plan link under "Planning material". The lock
+  file was rebuilt from main's version by resolving the manifests again, and
+  the result was byte-identical to the replayed lock. `range-diff` shows every
+  commit unchanged except that one conflict resolution.
+- [x] 2026-10-31: Fixed a provider-attribute normalization defect the formal
+  review found on `0dac0a61`. Trimming before stripping `rstest::` left a
+  leading space when the prefix was followed by whitespace, so
+  `"rstest:: case"` normalized to `" case"` and a second pass produced
+  `"case"`, breaking the idempotence property. The normalizer now repeats trim
+  and prefix removal until the name is stable; the expected-vector oracle
+  expresses the same contract independently, and deterministic cases cover
+  whitespace after one prefix, after two prefixes, and after a tab. The
+  targeted generator draws those shapes as well.
 
 ## Surprises & discoveries
 
