@@ -413,12 +413,15 @@ metadata files used by Nextest and cargo-llvm-cov. Test commands then run with
 `CARGO_NET_OFFLINE=true`. The Make recipe also passes the active
 `RUSTUP_TOOLCHAIN` so Dylint's UI harness selects the matching driver. The
 coverage test driver answers cargo-llvm-cov's workspace metadata query from the
-prepared file and routes its Nextest call to the standalone binary.
-Harness-owned Cargo commands specify `--frozen`, except trybuild-generated
-projects and the lockfile-free Dylint fixture, which inherit offline mode so
-Cargo can write any temporary lockfile without accessing the network. The
-fresh-home production installer path stays online: its isolated Cargo home
-starts with an empty registry and must download the dependencies it builds.
+prepared file and routes its Nextest call to the standalone binary. The routing
+removes the workspace `--manifest-path` that cargo-llvm-cov adds, because
+Nextest rejects that flag alongside `--cargo-metadata`; a manifest naming any
+other workspace is forwarded unchanged. Harness-owned Cargo commands specify
+`--frozen`, except trybuild-generated projects and the lockfile-free Dylint
+fixture, which inherit offline mode so Cargo can write any temporary lockfile
+without accessing the network. The fresh-home production installer path stays
+online: its isolated Cargo home starts with an empty registry and must download
+the dependencies it builds.
 
 When isolating a coverage run, override `COVERAGE_TARGET_DIR` rather than
 either environment variable individually. Fixture workspaces that intentionally
