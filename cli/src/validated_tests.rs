@@ -64,6 +64,9 @@ fn recognizes_valid_windows(#[case] window: usize, #[case] expected: bool) {
 /// Canonicalize provider attribute names and restore defaults when empty.
 #[rstest::rstest]
 #[case(vec![" rstest::case ".to_owned(), "case".to_owned()], vec!["case".to_owned()])]
+#[case(vec!["rstest:: case".to_owned()], vec!["case".to_owned()])]
+#[case(vec![" rstest:: rstest::case ".to_owned()], vec!["case".to_owned()])]
+#[case(vec!["rstest::\t rstest:: values ".to_owned()], vec!["values".to_owned()])]
 #[case(vec![String::new(), " values ".to_owned()], vec!["values".to_owned()])]
 #[case(
     Vec::new(),
@@ -92,17 +95,34 @@ fn attribute_strategy() -> impl Strategy<Value = String> {
             "case".to_owned(),
             "rstest::case".to_owned(),
             " rstest::rstest::values ".to_owned(),
+            "rstest:: case".to_owned(),
+            " rstest:: rstest::case ".to_owned(),
+            "rstest::\tvalues".to_owned(),
             "future".to_owned(),
             "future".to_owned(),
         ]),
     ]
 }
 
+/// Remove surrounding whitespace and every leading `rstest::` prefix.
+///
+/// The loop re-trims after each prefix so whitespace revealed by removal is
+/// handled in the same pass, matching the documented canonical contract.
+fn canonicalize(attribute: &str) -> String {
+    let mut canonical = attribute.trim();
+    loop {
+        match canonical.strip_prefix("rstest::") {
+            Some(stripped) => canonical = stripped.trim(),
+            None => return canonical.to_owned(),
+        }
+    }
+}
+
 /// Derive the canonical attributes independently of the implementation.
 fn expected_provider_attributes(attributes: &[String]) -> Vec<String> {
     let mut expected: Vec<String> = Vec::new();
     for attribute in attributes {
-        let canonical = attribute.trim().trim_start_matches("rstest::").to_owned();
+        let canonical = canonicalize(attribute);
         if !canonical.is_empty() && !expected.contains(&canonical) {
             expected.push(canonical);
         }

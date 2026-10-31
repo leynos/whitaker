@@ -142,12 +142,24 @@ fn normalize_rstest_helper(helper: &mut RstestHelper) {
         normalize_provider_attributes(std::mem::take(&mut helper.provider_param_attributes));
 }
 
+/// Remove surrounding whitespace and every leading `rstest::` prefix.
+///
+/// Each prefix may expose further whitespace or another prefix, so the two
+/// steps repeat until the name is stable.
+fn canonical_attribute(attribute: &str) -> &str {
+    let mut canonical = attribute.trim();
+    while let Some(stripped) = canonical.strip_prefix("rstest::") {
+        canonical = stripped.trim();
+    }
+    canonical
+}
+
 /// Trim, de-duplicate, and prefix-free provider attribute names.
 fn normalize_provider_attributes(attributes: Vec<String>) -> Vec<String> {
     let mut normalized = Vec::new();
     for attribute in attributes
         .into_iter()
-        .map(|attribute| attribute.trim().trim_start_matches("rstest::").to_owned())
+        .map(|attribute| canonical_attribute(&attribute).to_owned())
         .filter(|attribute| !attribute.is_empty())
     {
         if !normalized.contains(&attribute) {
