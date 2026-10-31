@@ -355,3 +355,20 @@ fn result_sort_key(
         })
         .then_with(|| result.message.text.cmp(&other.message.text))
 }
+
+#[cfg(test)]
+mod tests {
+    //! Property checks for the digest byte-order helper.
+
+    use proptest::prelude::*;
+
+    use super::u64_big_endian_bytes;
+
+    proptest! {
+        /// Check that the digest serializer matches `u64::to_be_bytes`.
+        #[test]
+        fn big_endian_bytes_match_to_be_bytes(value in any::<u64>()) {
+            prop_assert_eq!(u64_big_endian_bytes(value), value.to_be_bytes());
+        }
+    }
+}

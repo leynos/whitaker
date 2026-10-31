@@ -48,6 +48,23 @@ use whitaker_common::complexity_signal::rasterize_signal;
 let signal = rasterize_signal(function_lines, segments)?;
 ```
 
+### `suggest_decomposition` now reports analysis failures
+
+`suggest_decomposition` previously suppressed malformed intermediate state and
+returned no advice. It now returns `Result` so callers choose their own
+reporting policy:
+
+```rust
+use whitaker_common::{DecompositionContext, suggest_decomposition};
+
+let suggestions = suggest_decomposition(&context, &methods)?;
+```
+
+The failure type is `whitaker_common::DecompositionError`, which is newly
+re-exported at the crate root. Callers that treated the query as infallible
+should propagate the error or map it onto their own diagnostic. Observability
+for the failure now belongs to the calling adapter, not the domain query.
+
 ## `bumpy_road_function` API
 
 Rename the settings normalizer at its import and call sites:
@@ -67,6 +84,44 @@ The complete settings mapping is:
 | 0.2.x name           | 0.3.0 name           |
 | -------------------- | -------------------- |
 | `normalise_settings` | `normalize_settings` |
+
+## Lint crate exports
+
+Every lint crate previously re-exported its whole driver module with
+`pub use driver::*;`. That glob also exposed Dylint macro expansion glue, which
+has no documentable source location, so each crate now re-exports only its
+documented lint surface:
+
+```rust
+use no_expect_outside_tests::{NO_EXPECT_OUTSIDE_TESTS, NoExpectOutsideTests};
+```
+
+The lint constant and lint type keep their names and stay behind the same
+`dylint-driver` feature gate. Loading the compiled lint library through Dylint
+is unaffected; only the undocumented compiler-internal items that the glob used
+to expose are gone.
+
+In `module_must_have_inner_docs`, the parser snippet newtypes (`StrWrapper`,
+`SourceSnippet`, `AttributeBody`, `MetaList`, and `ParseInput`) are now crate
+private. They were parser plumbing rather than a supported consumer interface.
+The lint declaration and lint type remain exported.
+
+## `whitaker_suite` entry point
+
+`whitaker_suite::register_lints` was a `pub unsafe extern "C"` function. The
+exported `register_lints` symbol is still present in the cdylib, which is what
+Dylint resolves when it loads the suite, but the Rust function is no longer
+part of the crate's public surface. Library code that registered the suite
+itself should call the safe helper instead:
+
+```rust
+use whitaker_suite::register_suite_lints;
+
+register_suite_lints(&mut store);
+```
+
+`whitaker_suite::suite_lint_decls` is also now a `const fn`, so callers may use
+it in constant contexts.
 
 ## `whitaker_sarif` APIs
 

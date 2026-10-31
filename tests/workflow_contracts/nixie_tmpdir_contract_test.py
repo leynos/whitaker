@@ -153,6 +153,48 @@ def test_nixie_uses_later_candidate_after_other_probes_fail(
     assert f"NIXIE_TMPDIR={expected}\n" in output, output
 
 
+@pytest.mark.parametrize(
+    "candidate",
+    [
+        f"/run/user/{os.getuid()}",
+        "/tmp",
+        "/var/tmp",
+        "/usr/tmp",
+    ],
+)
+def test_nixie_selects_each_hardcoded_candidate(tmp_path: Path, candidate: str) -> None:
+    """Select every hard-coded candidate once all earlier probes are disabled."""
+    if not os.path.isdir(candidate) or not os.access(candidate, os.W_OK):
+        pytest.skip(f"host has no writable {candidate} directory")
+
+    bin_directory = tmp_path / "bin"
+    bin_directory.mkdir()
+    mktemp = bin_directory / "mktemp"
+    # Only the candidate under test may create a scratch directory, so the
+    # recipe must skip every earlier probe before selecting it.
+    mktemp.write_text(
+        "#!/bin/sh\n"
+        f'case "$2" in {candidate}/nixie.*) exec /usr/bin/mktemp "$@" ;; esac\n'
+        "exit 1\n",
+        encoding="utf-8",
+    )
+    mktemp.chmod(0o755)
+
+    environment = os.environ.copy()
+    environment.update(
+        {
+            "HOME": str(tmp_path / "missing-home"),
+            "XDG_RUNTIME_DIR": str(tmp_path / "missing-runtime"),
+            "TMPDIR": str(tmp_path / "missing-tmp"),
+            "PATH": os.pathsep.join([str(bin_directory), environment.get("PATH", "")]),
+        }
+    )
+
+    output = _run_nixie_target(tmp_path, environment)
+
+    assert f"NIXIE_TMPDIR={candidate}\n" in output, output
+
+
 def test_nixie_fails_when_no_candidate_can_create_scratch(tmp_path: Path) -> None:
     """Fail without starting Nixie when every scratch probe fails."""
     bin_directory = tmp_path / "bin"

@@ -210,7 +210,8 @@ fn suggest_decomposition_returns_empty_for_single_community() {
 #[test]
 fn suggest_decomposition_for_type_prefers_domain_module_and_field_helper_struct() {
     let context = DecompositionContext::new("Foo", SubjectKind::Type);
-    let suggestions = suggest_decomposition(&context, &parser_serde_fs_fixture());
+    let suggestions = suggest_decomposition(&context, &parser_serde_fs_fixture())
+        .expect("fixture profiles should analyse");
 
     assert_eq!(suggestions.len(), 3);
     let suggestion_at = |index: usize| {
@@ -279,7 +280,8 @@ fn suggest_decomposition_for_trait_returns_sub_trait_suggestions() {
         }),
     ];
 
-    let suggestions = suggest_decomposition(&context, &methods);
+    let suggestions =
+        suggest_decomposition(&context, &methods).expect("fixture profiles should analyse");
 
     assert_eq!(suggestions.len(), 2);
     assert!(
@@ -333,8 +335,8 @@ fn suggest_decomposition_is_order_invariant_for_duplicate_method_names() {
     let reordered = vec![method_at(2), method_at(0), method_at(3), method_at(1)];
 
     assert_eq!(
-        suggest_decomposition(&context, &methods),
-        suggest_decomposition(&context, &reordered)
+        suggest_decomposition(&context, &methods).expect("fixture profiles should analyse"),
+        suggest_decomposition(&context, &reordered).expect("fixture profiles should analyse")
     );
 }
 
@@ -351,7 +353,8 @@ fn suggestions_drop_singleton_noise_methods() {
         domains: &[],
     }));
 
-    let suggestions = suggest_decomposition(&context, &methods);
+    let suggestions =
+        suggest_decomposition(&context, &methods).expect("fixture profiles should analyse");
 
     assert_eq!(suggestions.len(), 3);
     assert!(

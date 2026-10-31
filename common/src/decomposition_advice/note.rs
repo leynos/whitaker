@@ -43,13 +43,13 @@ const MAX_METHODS_PER_SUGGESTION: usize = 3;
 /// let mut decode = MethodProfileBuilder::new("decode");
 /// decode.record_external_domain("serde::json");
 ///
-/// let note = format_diagnostic_note(
+/// let suggestions = suggest_decomposition(
 ///     &context,
-///     &suggest_decomposition(
-///         &context,
-///         &[load.build(), save.build(), encode.build(), decode.build()],
-///     ),
-/// );
+///     &[load.build(), save.build(), encode.build(), decode.build()],
+/// )
+/// .expect("well-formed method profiles should analyse");
+///
+/// let note = format_diagnostic_note(&context, &suggestions);
 ///
 /// assert!(note.is_some());
 /// assert!(note.unwrap_or_default().contains("Potential decomposition"));

@@ -631,9 +631,10 @@ further decomposition analysis was omitted.
   rules local to the diagnostic that consumes them.
 - **Malformed intermediate state fails closed**: adjacency construction,
   propagation, and suggestion rendering return typed internal errors. The
-  infallible `suggest_decomposition` boundary logs a warning, increments a
-  fixed-cardinality counter, and returns no advice, so callers cannot publish a
-  partial decomposition as valid output.
+  fallible `suggest_decomposition` boundary reports those errors to its caller,
+  so callers cannot publish a partial decomposition as valid output.
+  Observability belongs to the diagnostic adapters that consume the query,
+  keeping the domain free of logging and metrics side effects.
 
 ## SARIF output
 

@@ -1,11 +1,13 @@
 //! Typed failures for malformed decomposition-analysis state.
 //!
-//! Keep error reasons finite so diagnostics and metrics remain useful without
-//! exposing method names, feature keys, or other unbounded values.
+//! The analysis queries return these errors to their callers rather than
+//! logging or metering them inside the domain, so a diagnostic adapter can
+//! choose its own observability policy. Keep the reasons finite; they must not
+//! expose method names, feature keys, or other unbounded values.
 
 /// Identifies invalid graph or feature state rejected during advice analysis.
 #[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
-pub(crate) enum DecompositionError {
+pub enum DecompositionError {
     /// An edge endpoint lies outside the graph's node range.
     #[error("similarity edge endpoint is outside the graph's node range")]
     InvalidEdgeEndpoint {
@@ -49,81 +51,3 @@ pub(crate) enum DecompositionError {
         vector_count: usize,
     },
 }
-
-impl DecompositionError {
-    /// Return finite metric labels and bounded context for this failure.
-    const fn context(&self) -> (&'static str, &'static str, Option<usize>, Option<usize>) {
-        match self {
-            Self::InvalidEdgeEndpoint {
-                node_count,
-                edge_count,
-            } => (
-                "build_adjacency",
-                "invalid_edge_endpoint",
-                Some(*node_count),
-                Some(*edge_count),
-            ),
-            Self::AdjacencyRowCountMismatch {
-                expected_rows,
-                actual_rows,
-            } => (
-                "propagate_labels",
-                "adjacency_row_count_mismatch",
-                Some(*expected_rows),
-                Some(*actual_rows),
-            ),
-            Self::InvalidNeighbourLabel { node_count } => (
-                "propagate_labels",
-                "invalid_neighbour_label",
-                Some(*node_count),
-                None,
-            ),
-            Self::InvalidLabelSlot { node_count } => (
-                "propagate_labels",
-                "invalid_label_slot",
-                Some(*node_count),
-                None,
-            ),
-            Self::InvalidCommunityIndex {
-                vector_count,
-                community_count,
-            } => (
-                "build_suggestion",
-                "invalid_community_index",
-                Some(*vector_count),
-                Some(*community_count),
-            ),
-            Self::MissingFeatureMetadata { vector_count } => (
-                "aggregate_features",
-                "missing_feature_metadata",
-                Some(*vector_count),
-                None,
-            ),
-        }
-    }
-}
-
-/// Emit a warning and fixed-cardinality counter for rejected analysis state.
-pub(crate) fn report_decomposition_error(error: &DecompositionError) {
-    let (operation, reason, node_count, item_count) = error.context();
-    metrics::describe_counter!(
-        "whitaker.decomposition.invalid_state",
-        "Invalid decomposition analysis state rejected before advice is rendered"
-    );
-    metrics::counter!(
-        "whitaker.decomposition.invalid_state",
-        "operation" => operation,
-        "reason" => reason
-    )
-    .increment(1);
-    tracing::warn!(
-        operation,
-        reason,
-        node_count = ?node_count,
-        item_count = ?item_count,
-        "decomposition analysis rejected invalid state"
-    );
-}
-
-#[cfg(test)]
-mod tests;

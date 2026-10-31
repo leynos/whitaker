@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 
 use super::community::detect_communities;
-use super::error::{DecompositionError, report_decomposition_error};
+use super::error::DecompositionError;
 use super::profile::{DecompositionContext, MethodProfile, SubjectKind};
 use super::vector::{FeatureCategory, MethodFeatureVector, build_feature_vector};
 
@@ -130,9 +130,13 @@ struct AggregatedFeature {
 /// Generate decomposition suggestions for the provided methods.
 ///
 /// Returns an empty vector when the method set does not yield at least two
-/// non-singleton communities. Invalid intermediate graph or feature state is
-/// logged and metered, and also returns an empty vector instead of partial
-/// advice.
+/// non-singleton communities. The query is free of logging, metrics, and other
+/// side effects; a diagnostic adapter decides how to report malformed state.
+///
+/// # Errors
+///
+/// Returns [`DecompositionError`] when community detection or feature
+/// aggregation receives inconsistent graph or feature metadata.
 ///
 /// # Examples
 ///
@@ -151,31 +155,12 @@ struct AggregatedFeature {
 ///
 /// let methods = vec![parse_tokens.build(), parse_nodes.build()];
 ///
-/// let suggestions = suggest_decomposition(&context, &methods);
+/// let suggestions = suggest_decomposition(&context, &methods)
+///     .expect("well-formed method profiles should analyse");
 ///
 /// assert!(suggestions.is_empty());
 /// ```
-#[must_use]
 pub fn suggest_decomposition(
-    context: &DecompositionContext,
-    methods: &[MethodProfile],
-) -> Vec<DecompositionSuggestion> {
-    match try_suggest_decomposition(context, methods) {
-        Ok(suggestions) => suggestions,
-        Err(error) => {
-            report_decomposition_error(&error);
-            Vec::new()
-        }
-    }
-}
-
-/// Build all suggestions or return the first malformed intermediate state.
-///
-/// # Errors
-///
-/// Returns an error when community detection or feature aggregation receives
-/// inconsistent graph or feature metadata.
-fn try_suggest_decomposition(
     context: &DecompositionContext,
     methods: &[MethodProfile],
 ) -> Result<Vec<DecompositionSuggestion>, DecompositionError> {

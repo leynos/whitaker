@@ -247,3 +247,25 @@ fn rightmost_minimum_index(window: &[Fingerprint]) -> usize {
 
     best_index
 }
+
+#[cfg(test)]
+mod tests {
+    //! Property checks for the canonical identifier digit encoding.
+
+    use proptest::prelude::*;
+
+    use super::{FNV_OFFSET_BASIS, hash_byte, hash_usize_bytes};
+
+    proptest! {
+        /// Check that `usize` hashing matches mixing its decimal ASCII digits.
+        #[test]
+        fn usize_hashing_matches_decimal_ascii(value in any::<usize>()) {
+            let mut reference = FNV_OFFSET_BASIS;
+            for byte in value.to_string().as_bytes() {
+                reference = hash_byte(reference, *byte);
+            }
+
+            prop_assert_eq!(hash_usize_bytes(FNV_OFFSET_BASIS, value), reference);
+        }
+    }
+}
