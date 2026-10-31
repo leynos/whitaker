@@ -1,4 +1,8 @@
 //! Serve prepared workspace metadata and route Cargo's Nextest call directly.
+//!
+//! Routing drops a `--manifest-path` that names the prepared workspace, because
+//! Nextest rejects that flag alongside `--cargo-metadata`, and the prepared
+//! metadata already describes the same workspace.
 
 use std::{
     env,
@@ -29,8 +33,8 @@ fn run() -> io::Result<()> {
     let metadata_root = env::var_os("CARGO_METADATA_ROOT").map(PathBuf::from);
     let metadata_cache = env::var_os("CARGO_METADATA_CACHE").map(PathBuf::from);
 
-    if let (Some(root), Some(cache)) = (metadata_root, metadata_cache)
-        && is_workspace_metadata_query(&arguments, &current_directory, &root)?
+    if let (Some(root), Some(cache)) = (metadata_root.as_deref(), metadata_cache.as_deref())
+        && is_workspace_metadata_query(&arguments, &current_directory, root)?
     {
         io::stdout().lock().write_all(&fs::read(cache)?)?;
         return Ok(());
@@ -44,7 +48,13 @@ fn run() -> io::Result<()> {
     })?;
     let nextest_executable =
         env::var_os("CARGO_NEXTEST_REAL").unwrap_or_else(|| OsString::from("cargo-nextest"));
-    let status = routed_command(&cargo_executable, &nextest_executable, &arguments).status()?;
+    let status = routed_command(
+        &cargo_executable,
+        &nextest_executable,
+        &arguments,
+        metadata_root.as_deref(),
+    )
+    .status()?;
     process::exit(status.code().unwrap_or(1));
 }
 
@@ -127,6 +137,7 @@ fn routed_command(
     cargo_executable: &OsStr,
     nextest_executable: &OsStr,
     arguments: &[OsString],
+    workspace_root: Option<&Path>,
 ) -> Command {
     let command_index = cargo_command_index(arguments);
     if arguments
@@ -136,10 +147,50 @@ fn routed_command(
             .get(command_index + 1)
             .is_some_and(|argument| argument == OsStr::new("run"))
     {
-        return nextest_command(nextest_executable, &arguments[command_index + 2..]);
+        let forwarded = without_prepared_manifest(&arguments[command_index + 2..], workspace_root);
+        return nextest_command(nextest_executable, &forwarded);
     }
 
     cargo_command(cargo_executable, arguments)
+}
+
+/// Drop a `--manifest-path` naming the workspace the metadata describes.
+///
+/// Nextest refuses `--manifest-path` together with `--cargo-metadata`, and
+/// `cargo llvm-cov` adds the flag when it invokes Cargo, so the routed call
+/// must not forward that pair. A manifest naming any other workspace is kept,
+/// because the prepared metadata would describe the wrong workspace.
+fn without_prepared_manifest(
+    arguments: &[OsString],
+    workspace_root: Option<&Path>,
+) -> Vec<OsString> {
+    let Some(workspace_root) = workspace_root else {
+        return arguments.to_vec();
+    };
+
+    let mut forwarded = Vec::with_capacity(arguments.len());
+    let mut arguments = arguments.iter();
+    while let Some(argument) = arguments.next() {
+        if argument == OsStr::new("--manifest-path") {
+            match arguments.next() {
+                Some(manifest) if manifest_path_is_workspace_root(manifest, workspace_root) => {}
+                Some(manifest) => {
+                    forwarded.push(argument.clone());
+                    forwarded.push(manifest.clone());
+                }
+                None => forwarded.push(argument.clone()),
+            }
+            continue;
+        }
+        if let Some(manifest) = argument.to_string_lossy().strip_prefix("--manifest-path=")
+            && manifest_path_is_workspace_root(OsStr::new(manifest), workspace_root)
+        {
+            continue;
+        }
+        forwarded.push(argument.clone());
+    }
+
+    forwarded
 }
 
 /// Run the standalone Nextest executable without changing its Cargo flags.
@@ -197,18 +248,98 @@ mod tests {
     #[test]
     fn routes_nextest_without_adding_frozen_mode() {
         let arguments = ["nextest", "run", "--locked", "--workspace"].map(OsString::from);
-        let command = routed_command(OsStr::new("cargo"), OsStr::new("cargo-nextest"), &arguments);
+        let command = routed_command(
+            OsStr::new("cargo"),
+            OsStr::new("cargo-nextest"),
+            &arguments,
+            None,
+        );
         let actual: Vec<_> = command.get_args().collect();
 
         assert_eq!(command.get_program(), OsStr::new("cargo-nextest"));
         assert_eq!(actual, ["nextest", "run", "--locked", "--workspace"]);
     }
 
+    /// Drop the manifest flag Cargo's coverage driver adds for the workspace.
+    #[test]
+    fn drops_the_prepared_workspace_manifest_from_the_nextest_call() {
+        let arguments = [
+            "nextest",
+            "run",
+            "--manifest-path",
+            "/workspace/Cargo.toml",
+            "--target-dir",
+            "/workspace/target/llvm-cov-target",
+            "--cargo-metadata",
+            "/workspace/target/metadata.json",
+        ]
+        .map(OsString::from);
+        let command = routed_command(
+            OsStr::new("cargo"),
+            OsStr::new("cargo-nextest"),
+            &arguments,
+            Some(Path::new("/workspace")),
+        );
+        let actual: Vec<_> = command.get_args().collect();
+
+        assert_eq!(
+            actual,
+            [
+                "nextest",
+                "run",
+                "--target-dir",
+                "/workspace/target/llvm-cov-target",
+                "--cargo-metadata",
+                "/workspace/target/metadata.json",
+            ]
+        );
+    }
+
+    /// Drop the joined form of the prepared workspace manifest flag.
+    #[test]
+    fn drops_the_joined_prepared_workspace_manifest() {
+        let arguments =
+            ["nextest", "run", "--manifest-path=/workspace/Cargo.toml"].map(OsString::from);
+        let command = routed_command(
+            OsStr::new("cargo"),
+            OsStr::new("cargo-nextest"),
+            &arguments,
+            Some(Path::new("/workspace")),
+        );
+        let actual: Vec<_> = command.get_args().collect();
+
+        assert_eq!(actual, ["nextest", "run"]);
+    }
+
+    /// Keep a manifest that describes some other workspace.
+    #[test]
+    fn keeps_a_manifest_for_another_workspace() {
+        let arguments =
+            ["nextest", "run", "--manifest-path", "/other/Cargo.toml"].map(OsString::from);
+        let command = routed_command(
+            OsStr::new("cargo"),
+            OsStr::new("cargo-nextest"),
+            &arguments,
+            Some(Path::new("/workspace")),
+        );
+        let actual: Vec<_> = command.get_args().collect();
+
+        assert_eq!(
+            actual,
+            ["nextest", "run", "--manifest-path", "/other/Cargo.toml"]
+        );
+    }
+
     /// Pass ordinary Cargo calls through without forcing a lockfile policy.
     #[test]
     fn preserves_offline_trybuild_arguments() {
         let arguments = ["build", "--offline"].map(OsString::from);
-        let command = routed_command(OsStr::new("cargo"), OsStr::new("cargo-nextest"), &arguments);
+        let command = routed_command(
+            OsStr::new("cargo"),
+            OsStr::new("cargo-nextest"),
+            &arguments,
+            None,
+        );
         let actual: Vec<_> = command.get_args().collect();
 
         assert_eq!(command.get_program(), OsStr::new("cargo"));

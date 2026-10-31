@@ -148,4 +148,6 @@ Whitaker also exposes `prepare_driver()` so the Makefile can warm the driver
 before tests run with Cargo offline, plus two examples it invokes:
 `warm_driver`, which prepares the driver during `make fetch`, and
 `cargo_test_driver`, which serves prepared metadata to `cargo-llvm-cov` during
-`make coverage` and routes its Nextest call to the standalone binary.
+`make coverage` and routes its Nextest call to the standalone binary. The
+routing drops the workspace `--manifest-path` that Cargo's coverage driver
+adds, because Nextest rejects that flag alongside `--cargo-metadata`.
