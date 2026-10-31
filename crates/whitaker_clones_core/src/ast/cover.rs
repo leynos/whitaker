@@ -19,18 +19,41 @@ pub fn select_smallest_covering(
     candidates: &[std::ops::Range<u32>],
     target: &std::ops::Range<u32>,
 ) -> Option<usize> {
-    if target.end < target.start {
-        return None;
+    let mut selected: Option<usize> = None;
+    for (index, candidate) in candidates.iter().enumerate() {
+        let selected_width = selected.map(|selected_index| {
+            let selected = &candidates[selected_index];
+            selected.end - selected.start
+        });
+        if should_select_covering_candidate(candidate, target, selected_width) {
+            selected = Some(index);
+        }
     }
 
-    candidates
-        .iter()
-        .enumerate()
-        .filter(|(_, candidate)| {
-            candidate.end >= candidate.start
-                && candidate.start <= target.start
-                && candidate.end >= target.end
-        })
-        .min_by_key(|(_, candidate)| candidate.end - candidate.start)
-        .map(|(index, _)| index)
+    selected
+}
+
+/// Return whether `candidate` covers a valid `target` range.
+pub(super) fn candidate_covers_target(
+    candidate: &std::ops::Range<u32>,
+    target: &std::ops::Range<u32>,
+) -> bool {
+    candidate.end >= candidate.start
+        && target.end >= target.start
+        && candidate.start <= target.start
+        && candidate.end >= target.end
+}
+
+/// Decide whether production selection should replace its current candidate.
+///
+/// Sharing this predicate keeps the parser adapter's pruned traversal and the
+/// parser-independent Kani helper on the same coverage and minimal-width
+/// rules. Equal-width candidates retain the first candidate encountered.
+pub(super) fn should_select_covering_candidate(
+    candidate: &std::ops::Range<u32>,
+    target: &std::ops::Range<u32>,
+    selected_width: Option<u32>,
+) -> bool {
+    candidate_covers_target(candidate, target)
+        && selected_width.is_none_or(|width| candidate.end - candidate.start < width)
 }

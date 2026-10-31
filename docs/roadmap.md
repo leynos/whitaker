@@ -385,8 +385,10 @@ published-GPUI workspace invocation.
   behaviour when vectors have no overlapping positive features. See
   [brain trust lints design](brain-trust-lints-design.md) §Decomposition
   advice. Requires 6.4.1.
-- [x] 6.4.5. Use Kani to verify `build_adjacency` preserves similarity edges,
-  keeps neighbour indices in bounds, and produces symmetric adjacency lists. See
+- [x] 6.4.5. Verify `build_adjacency` preserves similarity edges, keeps
+  neighbour indices in bounds, and produces symmetric, sorted adjacency lists.
+  A generated Proptest checks these invariants through the production builder;
+  adjacency Kani models exceeded the 8 GiB proof cap. See
   [brain trust lints design](brain-trust-lints-design.md) §Decomposition
   advice. Requires 6.4.1.
 - [x] 6.4.6. Use Kani to verify `propagate_labels` preserves valid label

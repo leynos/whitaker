@@ -392,7 +392,24 @@ spelling: ## Enforce en-GB-oxendict in tracked text
 nixie:
 	# CI currently requires --no-sandbox; remove once nixie supports
 	# environment variable control for this option
-	export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; $(NIXIE) --no-sandbox
+	# Probe candidates by creating a directory: writable permissions alone do
+	# not show whether the filesystem still has space for Nixie's scratch files.
+	export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; \
+	nixie_tmpdir=""; \
+	for candidate in "$${XDG_RUNTIME_DIR:-}" "$${TMPDIR:-}" \
+		"/run/user/$$(id -u)" "$${HOME:-}" /tmp /var/tmp /usr/tmp .; do \
+		[ -n "$$candidate" ] || continue; \
+		[ -d "$$candidate" ] && [ -w "$$candidate" ] && [ -x "$$candidate" ] || continue; \
+		probe="$$(mktemp -d "$$candidate/nixie.XXXXXX" 2>/dev/null)" || continue; \
+		rmdir "$$probe" || continue; \
+		nixie_tmpdir="$$candidate"; \
+		break; \
+	done; \
+	if [ -z "$$nixie_tmpdir" ]; then \
+		echo "nixie: no usable temporary directory is available" >&2; \
+		exit 1; \
+	fi; \
+	TMPDIR="$$nixie_tmpdir" $(NIXIE) --no-sandbox
 
 typecheck:
 	RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS)" $(CARGO) check $(CARGO_LOCKED) $(CARGO_FLAGS)

@@ -40,12 +40,30 @@ const DEFAULT_PROVIDER_PARAM_ATTRIBUTES: &[&str] =
 
 type ConfigLoadResult = Result<Config, String>;
 
-dylint_linting::impl_late_lint! {
-    pub RSTEST_HELPER_SHOULD_BE_FIXTURE,
-    Warn,
-    "repeated rstest helper calls should be extracted into fixtures",
-    RstestHelperShouldBeFixture::default()
+/// Dylint lint declaration and registration glue.
+///
+/// `impl_late_lint!` expands to the Dylint ABI entry point and the
+/// `impl_lint_pass!` accessor, neither of which has a source location that
+/// could carry documentation. Isolating the invocation keeps the expectation
+/// scoped to exactly those generated items.
+mod declaration {
+    #![expect(
+        missing_docs,
+        reason = "dylint_linting macro expansion emits items with no documentable source location"
+    )]
+
+    use super::RstestHelperShouldBeFixture;
+
+    dylint_linting::impl_late_lint! {
+        /// Warns when repeated rstest helper calls should become fixtures.
+        pub RSTEST_HELPER_SHOULD_BE_FIXTURE,
+        Warn,
+        "repeated rstest helper calls should be extracted into fixtures",
+        RstestHelperShouldBeFixture::default()
+    }
 }
+
+pub use declaration::RSTEST_HELPER_SHOULD_BE_FIXTURE;
 
 /// Configuration for the `rstest_helper_should_be_fixture` lint.
 ///
@@ -128,13 +146,14 @@ impl Default for RstestHelperShouldBeFixture {
 }
 
 impl RstestHelperShouldBeFixture {
+    /// Apply parsed crate configuration, falling back when parsing failed.
     fn apply_loaded_crate_configuration(
         &mut self,
         config: ConfigLoadResult,
-        shared_config: SharedConfig,
+        shared_config: &SharedConfig,
     ) {
-        let config = match config {
-            Ok(config) => config,
+        let resolved = match config {
+            Ok(loaded) => loaded,
             Err(error) => {
                 debug!(
                     target: LINT_NAME,
@@ -144,10 +163,11 @@ impl RstestHelperShouldBeFixture {
             }
         };
 
-        self.apply_crate_configuration(config, shared_config);
+        self.apply_crate_configuration(resolved, shared_config);
     }
 
-    fn apply_crate_configuration(&mut self, config: Config, shared_config: SharedConfig) {
+    /// Apply the crate-level configuration resolved by the driver.
+    fn apply_crate_configuration(&mut self, config: Config, shared_config: &SharedConfig) {
         debug!(
             target: LINT_NAME,
             "applying `{LINT_NAME}` configuration: min_calls={}, min_distinct_tests={}, \
@@ -167,6 +187,7 @@ impl RstestHelperShouldBeFixture {
         self.localizer = get_localizer_for_lint(LINT_NAME, shared_config.locale());
     }
 
+    /// Collect helper calls in an rstest body and its fixture locals.
     fn collect_call_sites<'tcx>(
         &mut self,
         cx: &LateContext<'tcx>,
@@ -185,8 +206,7 @@ impl RstestHelperShouldBeFixture {
         {
             debug!(
                 target: LINT_NAME,
-                "skipping helper call-site collection for non-rstest function: def_id={:?}",
-                def_id,
+                "skipping helper call-site collection for non-rstest function: def_id={def_id:?}",
             );
             return;
         }
@@ -204,7 +224,7 @@ impl RstestHelperShouldBeFixture {
 
 impl<'tcx> LateLintPass<'tcx> for RstestHelperShouldBeFixture {
     fn check_crate(&mut self, cx: &LateContext<'tcx>) {
-        self.apply_loaded_crate_configuration(load_configuration(), load_shared_config());
+        self.apply_loaded_crate_configuration(load_configuration(), &load_shared_config());
         self.rstest_collection_roots = whitaker::hir::collect_rstest_companion_test_functions(cx);
     }
 
@@ -241,8 +261,7 @@ impl<'tcx> LateLintPass<'tcx> for RstestHelperShouldBeFixture {
         if let Err(error) = self.write_collection_summary() {
             debug!(
                 target: LINT_NAME,
-                "failed to write rstest helper call-site collection summary: {}",
-                error,
+                "failed to write rstest helper call-site collection summary: {error}",
             );
         }
         debug!(
@@ -255,6 +274,7 @@ impl<'tcx> LateLintPass<'tcx> for RstestHelperShouldBeFixture {
 }
 
 impl RstestHelperShouldBeFixture {
+    /// Render the bounded summary of collected callees and fingerprints.
     fn collection_summary(&self) -> String {
         let mut summary = format!(
             "callee_count={}\nrecord_count={}\n",
@@ -262,12 +282,15 @@ impl RstestHelperShouldBeFixture {
             self.collector.record_count(),
         );
         for (callee, records) in self.collector.iter() {
-            summary.push_str(&format!("callee={callee};records={}\n", records.len()));
+            summary.push_str("callee=");
+            summary.push_str(callee);
+            summary.push_str(";records=");
+            summary.push_str(&records.len().to_string());
+            summary.push('\n');
             for record in records {
-                summary.push_str(&format!(
-                    "fingerprint={}\n",
-                    redacted_fingerprint_shape(&record.fingerprint)
-                ));
+                summary.push_str("fingerprint=");
+                summary.push_str(&redacted_fingerprint_shape(&record.fingerprint));
+                summary.push('\n');
             }
         }
         summary

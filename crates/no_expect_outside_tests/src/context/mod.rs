@@ -48,8 +48,8 @@ pub(crate) struct ContextSummary {
 ///     collect_context(cx, expr.hir_id, additional_test_attributes);
 /// assert!(!entries.is_empty() || !has_test_context_ancestry);
 /// ```
-pub(crate) fn collect_context<'tcx>(
-    cx: &LateContext<'tcx>,
+pub(crate) fn collect_context(
+    cx: &LateContext<'_>,
     hir_id: hir::HirId,
     additional_test_attributes: &[AttributePath],
 ) -> (Vec<ContextEntry>, bool) {
@@ -116,7 +116,7 @@ pub(crate) fn summarize_context(
         entry
             .kind()
             .matches_function()
-            .then(|| entry.name().to_string())
+            .then(|| entry.name().to_owned())
     });
 
     ContextSummary {
@@ -125,6 +125,7 @@ pub(crate) fn summarize_context(
     }
 }
 
+/// Convert a HIR node with its attributes into a context stack entry.
 fn context_entry_for(node: Node<'_>, attrs: &[hir::Attribute]) -> Option<ContextEntry> {
     match node {
         Node::Item(item) => match &item.kind {
@@ -135,7 +136,7 @@ fn context_entry_for(node: Node<'_>, attrs: &[hir::Attribute]) -> Option<Context
                 ContextEntry::new(name, ContextKind::Module, convert_attributes(attrs))
             }),
             hir::ItemKind::Impl(..) => Some(ContextEntry::new(
-                "impl".to_string(),
+                "impl".to_owned(),
                 ContextKind::Impl,
                 convert_attributes(attrs),
             )),
@@ -156,7 +157,7 @@ fn context_entry_for(node: Node<'_>, attrs: &[hir::Attribute]) -> Option<Context
             _ => None,
         },
         Node::Block(_) => Some(ContextEntry::new(
-            "block".to_string(),
+            "block".to_owned(),
             ContextKind::Block,
             convert_attributes(attrs),
         )),
@@ -168,6 +169,7 @@ fn convert_attributes(attrs: &[hir::Attribute]) -> Vec<Attribute> {
     attrs.iter().map(convert_attribute).collect()
 }
 
+/// Convert a rustc attribute into the shared attribute representation.
 fn convert_attribute(attr: &hir::Attribute) -> Attribute {
     let kind = match attribute_style(attr) {
         AttrStyle::Inner => AttributeKind::Inner,
@@ -182,16 +184,16 @@ fn convert_attribute(attr: &hir::Attribute) -> Attribute {
             return Attribute::new(AttributePath::from(PARSED_ATTRIBUTE_PLACEHOLDER), kind);
         };
         let mut names = attr.path().into_iter().map(|symbol| symbol.to_string());
-        match names.next() {
-            Some(first) => AttributePath::new(std::iter::once(first).chain(names)),
-            None => AttributePath::from("unknown"),
-        }
+        names.next().map_or_else(
+            || AttributePath::from("unknown"),
+            |first| AttributePath::new(std::iter::once(first).chain(names)),
+        )
     };
 
     Attribute::new(path, kind)
 }
 
-/// Check if a cfg_attr has a test condition and contains nested cfg(test).
+/// Check if a `cfg_attr` has a test condition and contains nested cfg(test).
 fn check_cfg_attr_for_test<I>(items: I) -> bool
 where
     I: IntoIterator<Item = MetaItemInner>,
@@ -249,24 +251,21 @@ pub(crate) fn is_cfg_test_attribute(attr: &hir::Attribute) -> bool {
     };
 
     let path = attr.path();
-    if path.len() != 1 {
+    let [name] = path.as_slice() else {
         return false;
-    }
+    };
 
-    if path[0] == sym::cfg {
+    if *name == sym::cfg {
         return attr
             .meta_item_list()
-            .map(|items| items.iter().cloned().any(meta_item_inner_contains_test))
-            .unwrap_or(false);
+            .is_some_and(|items| items.iter().cloned().any(meta_item_inner_contains_test));
     }
 
-    if path[0] != sym::cfg_attr {
+    if *name != sym::cfg_attr {
         return false;
     }
 
-    attr.meta_item_list()
-        .map(check_cfg_attr_for_test)
-        .unwrap_or(false)
+    attr.meta_item_list().is_some_and(check_cfg_attr_for_test)
 }
 
 /// Report whether an evaluated `cfg` predicate can hold only under `cfg(test)`.
@@ -301,39 +300,35 @@ fn meta_item_inner_contains_test_with_polarity(item: MetaItemInner, is_positive:
     }
 }
 
+/// Check whether a meta item expresses a positive or negated test condition.
 fn meta_contains_test_with_polarity(meta: &MetaItem, is_positive: bool) -> bool {
     if path_is_ident(&meta.path, sym::test) || path_is_ident(&meta.path, sym::doctest) {
         return is_positive;
     }
 
     if path_is_ident(&meta.path, sym::not) {
-        return meta
-            .meta_item_list()
-            .map(|items| {
-                items
-                    .iter()
-                    .cloned()
-                    .any(|item| meta_item_inner_contains_test_with_polarity(item, !is_positive))
-            })
-            .unwrap_or(false);
-    }
-
-    meta.meta_item_list()
-        .map(|items| {
+        return meta.meta_item_list().is_some_and(|items| {
             items
                 .iter()
                 .cloned()
-                .any(|item| meta_item_inner_contains_test_with_polarity(item, is_positive))
-        })
-        .unwrap_or(false)
+                .any(|item| meta_item_inner_contains_test_with_polarity(item, !is_positive))
+        });
+    }
+
+    meta.meta_item_list().is_some_and(|items| {
+        items
+            .iter()
+            .cloned()
+            .any(|item| meta_item_inner_contains_test_with_polarity(item, is_positive))
+    })
 }
 
+/// Check whether a meta item names the built-in test configuration.
 fn meta_contains_test_cfg(meta: &MetaItem) -> bool {
     if path_is_ident(&meta.path, sym::cfg) {
         return meta
             .meta_item_list()
-            .map(|items| items.iter().cloned().any(meta_item_inner_contains_test))
-            .unwrap_or(false);
+            .is_some_and(|items| items.iter().cloned().any(meta_item_inner_contains_test));
     }
 
     if !path_is_ident(&meta.path, sym::cfg_attr) {
@@ -341,24 +336,25 @@ fn meta_contains_test_cfg(meta: &MetaItem) -> bool {
     }
 
     meta.meta_item_list()
-        .map(|items| check_cfg_attr_for_test(items.iter().cloned()))
-        .unwrap_or(false)
+        .is_some_and(|items| check_cfg_attr_for_test(items.iter().cloned()))
 }
 
 fn item_name(item: &hir::Item<'_>) -> Option<String> {
     item.kind.ident().map(|ident| ident.name.to_string())
 }
 
+/// Return the shared outer or inner style of a rustc attribute.
 fn attribute_style(attr: &hir::Attribute) -> AttrStyle {
     match attr {
         hir::Attribute::Unparsed(item) => item.style,
         hir::Attribute::Parsed(HirAttributeKind::DocComment { style, .. }) => *style,
-        _ => AttrStyle::Outer,
+        hir::Attribute::Parsed(_) => AttrStyle::Outer,
     }
 }
 
+/// Check whether a one-segment AST path names the supplied identifier.
 fn path_is_ident(path: &rustc_ast::Path, symbol: rustc_span::Symbol) -> bool {
-    path.segments.len() == 1 && path.segments[0].ident.name == symbol
+    matches!(&*path.segments, [segment] if segment.ident.name == symbol)
 }
 
 #[cfg(test)]

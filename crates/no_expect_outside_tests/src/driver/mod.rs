@@ -26,12 +26,30 @@ use whitaker_common::{AttributePath, Localizer, get_localizer_for_lint};
 use crate::context::{collect_context, is_cfg_test_attribute, summarize_context};
 use crate::diagnostics::{DiagnosticContext, emit_diagnostic};
 
-dylint_linting::impl_late_lint! {
-    pub NO_EXPECT_OUTSIDE_TESTS,
-    Deny,
-    "`.expect(..)` must not be used outside of test or doctest contexts",
-    NoExpectOutsideTests::default()
+/// Dylint lint declaration and registration glue.
+///
+/// `impl_late_lint!` expands to the Dylint ABI entry point and the
+/// `impl_lint_pass!` accessor, neither of which has a source location that
+/// could carry documentation. Isolating the invocation keeps the expectation
+/// scoped to exactly those generated items.
+mod declaration {
+    #![expect(
+        missing_docs,
+        reason = "dylint_linting macro expansion emits items with no documentable source location"
+    )]
+
+    use super::NoExpectOutsideTests;
+
+    dylint_linting::impl_late_lint! {
+        /// Denies `.expect(..)` calls outside test and doctest contexts.
+        pub NO_EXPECT_OUTSIDE_TESTS,
+        Deny,
+        "`.expect(..)` must not be used outside of test or doctest contexts",
+        NoExpectOutsideTests::default()
+    }
 }
+
+pub use declaration::NO_EXPECT_OUTSIDE_TESTS;
 
 #[derive(Default, Deserialize)]
 struct Config {
@@ -157,13 +175,14 @@ fn receiver_is_option_or_result<'tcx>(
     ty_is_option_or_result(cx, ty)
 }
 
+/// Check whether the receiver type is the standard `Option` or `Result` ADT.
 fn ty_is_option_or_result<'tcx>(cx: &LateContext<'tcx>, ty: Ty<'tcx>) -> bool {
-    let ty = cx
+    let normalized = cx
         .tcx
         .normalize_erasing_regions(cx.typing_env(), ty::Unnormalized::new_wip(ty))
         .peel_refs();
 
-    let Some(adt) = ty.ty_adt_def() else {
+    let Some(adt) = normalized.ty_adt_def() else {
         return false;
     };
 
@@ -198,12 +217,14 @@ fn ancestor_function_is_test<'tcx>(
         })
 }
 
-fn is_in_tests_directory<'tcx>(cx: &LateContext<'tcx>) -> bool {
+/// Check whether the current crate root is under Cargo's `tests` directory.
+fn is_in_tests_directory(cx: &LateContext<'_>) -> bool {
     cx.tcx.sess.local_crate_source_file().is_some_and(|source| {
         is_integration_test_crate_root(source.path(RemapPathScopeComponents::DIAGNOSTICS))
     })
 }
 
+/// Check whether a crate root is a direct or multi-file Cargo integration test.
 fn is_integration_test_crate_root(crate_root: &Path) -> bool {
     let is_direct_test = crate_root
         .parent()
@@ -218,6 +239,7 @@ fn is_integration_test_crate_root(crate_root: &Path) -> bool {
 
     is_direct_test || is_multi_file_test
 }
+
 fn is_likely_test_function<'tcx>(
     cx: &LateContext<'tcx>,
     expr: &hir::Expr<'tcx>,
@@ -238,7 +260,8 @@ fn is_likely_test_function<'tcx>(
         || is_in_tests_directory(cx)
 }
 
-fn is_in_cfg_test_module<'tcx>(cx: &LateContext<'tcx>, hir_id: hir::HirId) -> bool {
+/// Check whether a HIR node is nested in a module marked `cfg(test)`.
+fn is_in_cfg_test_module(cx: &LateContext<'_>, hir_id: hir::HirId) -> bool {
     cx.tcx.hir_parent_iter(hir_id).any(|(ancestor_id, node)| {
         let hir::Node::Item(item) = node else {
             return false;

@@ -63,11 +63,14 @@ fn t2_canonicalizes_identifiers_literals_and_lifetimes() {
     );
 }
 
+/// Check that normalized token ranges point into the original source.
 #[test]
 fn byte_ranges_point_to_original_source() {
     let source = "fn demo() { value + 1 }";
     let tokens = normalize(source, NormProfile::T1).expect("normalization should succeed");
-    let value = &tokens[5];
+    let value = tokens
+        .get(5)
+        .expect("token stream should contain the `value` identifier");
 
     assert_eq!(value.range, 12..17);
     assert_eq!(source.get(value.range.clone()), Some("value"));
@@ -93,6 +96,7 @@ fn shorter_than_k_yields_no_hashes() {
     assert!(hashes.is_empty());
 }
 
+/// Check that exactly one shingle is produced when input length equals `k`.
 #[test]
 fn exact_k_tokens_yields_one_hash() {
     let tokens = normalize("fn demo() {}", NormProfile::T2).expect("normalization should succeed");
@@ -102,7 +106,8 @@ fn exact_k_tokens_yields_one_hash() {
     );
 
     assert_eq!(hashes.len(), 1);
-    assert_eq!(hashes[0].range, 0..12);
+    let only = hashes.first().expect("exactly one hash should be present");
+    assert_eq!(only.range, 0..12);
 }
 
 #[test]
@@ -217,6 +222,7 @@ fn normalized_kinds_are_readable() {
     );
 }
 
+/// Check that normalization ignores a shebang when producing token hashes.
 #[test]
 fn shebang_is_stripped_equivalently_to_shebang_free_source() {
     let source_with_shebang = "#!/usr/bin/env rustc\nfn main() { let x = 1; }";
@@ -232,7 +238,11 @@ fn shebang_is_stripped_equivalently_to_shebang_free_source() {
         "shebang should not affect the normalized token kinds"
     );
     assert_eq!(
-        with_shebang[0].range.start,
+        with_shebang
+            .first()
+            .expect("normalized stream should not be empty")
+            .range
+            .start,
         source_with_shebang.find("fn").expect("fn present")
     );
 }
@@ -281,6 +291,7 @@ fn raw_ident_keyword_is_treated_as_identifier_not_keyword() {
     );
 }
 
+/// Check that literal forms are terminated and mapped to canonical tokens.
 #[rstest]
 #[case(
     r#"fn main() { let _ = r"foo"; let _ = r"foo"; }"#,
@@ -300,7 +311,13 @@ fn literal_variants_are_terminated_and_canonicalized(
         literal_syms.len() >= 2,
         "expected at least two literal tokens for the repeated literal pair"
     );
-    assert_eq!(literal_syms[0], literal_syms[1], "{assertion_message}");
+    let first = literal_syms
+        .first()
+        .expect("first literal symbol should be present");
+    let second = literal_syms
+        .get(1)
+        .expect("second literal symbol should be present");
+    assert_eq!(first, second, "{assertion_message}");
 }
 
 #[test]

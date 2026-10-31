@@ -14,12 +14,30 @@ use std::collections::HashSet;
 use whitaker::SharedConfig;
 use whitaker_common::i18n::{Localizer, get_localizer_for_lint};
 
-dylint_linting::impl_late_lint! {
-    pub NO_UNWRAP_OR_ELSE_PANIC,
-    Deny,
-    "forbid `unwrap_or_else` whose closure panics (directly or via unwrap/expect)",
-    NoUnwrapOrElsePanic::default()
+/// Dylint lint declaration and registration glue.
+///
+/// `impl_late_lint!` expands to the Dylint ABI entry point and the
+/// `impl_lint_pass!` accessor, neither of which has a source location that
+/// could carry documentation. Isolating the invocation keeps the expectation
+/// scoped to exactly those generated items.
+mod declaration {
+    #![expect(
+        missing_docs,
+        reason = "dylint_linting macro expansion emits items with no documentable source location"
+    )]
+
+    use super::NoUnwrapOrElsePanic;
+
+    dylint_linting::impl_late_lint! {
+        /// Denies `unwrap_or_else` fallbacks whose closure panics.
+        pub NO_UNWRAP_OR_ELSE_PANIC,
+        Deny,
+        "forbid `unwrap_or_else` whose closure panics (directly or via unwrap/expect)",
+        NoUnwrapOrElsePanic::default()
+    }
 }
+
+pub use declaration::NO_UNWRAP_OR_ELSE_PANIC;
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -110,7 +128,7 @@ impl<'tcx> LateLintPass<'tcx> for NoUnwrapOrElsePanic {
         );
 
         let panic_info = closure_panics(cx, body_id);
-        if !should_flag(&self.policy, &summary, &panic_info, self.is_doctest) {
+        if !should_flag(self.policy, summary, panic_info, self.is_doctest) {
             return;
         }
 
@@ -118,8 +136,9 @@ impl<'tcx> LateLintPass<'tcx> for NoUnwrapOrElsePanic {
     }
 }
 
-fn is_inside_harness_test_function<'tcx>(
-    cx: &LateContext<'tcx>,
+/// Check whether a HIR node belongs to a test-harness function.
+fn is_inside_harness_test_function(
+    cx: &LateContext<'_>,
     hir_id: hir::HirId,
     harness_test_functions: &HashSet<hir::HirId>,
 ) -> bool {
@@ -138,8 +157,8 @@ fn is_inside_harness_test_function<'tcx>(
 
 /// Summarizes the lint context for an expression, merging attribute-based and
 /// harness-based test detection into a single immutable result.
-fn summarize_context_with_harness<'tcx>(
-    cx: &LateContext<'tcx>,
+fn summarize_context_with_harness(
+    cx: &LateContext<'_>,
     hir_id: hir::HirId,
     is_test_harness: bool,
     harness_test_functions: &HashSet<hir::HirId>,
@@ -151,12 +170,14 @@ fn summarize_context_with_harness<'tcx>(
     summary
 }
 
-fn closure_body(expr: &hir::Expr<'_>) -> Option<hir::BodyId> {
+/// Return a closure expression's body identifier when it is a closure.
+const fn closure_body(expr: &hir::Expr<'_>) -> Option<hir::BodyId> {
     match expr.kind {
         ExprKind::Closure(hir::Closure { body, .. }) => Some(*body),
         _ => None,
     }
 }
+
 fn load_configuration() -> Config {
     match dylint_linting::config::<Config>(LINT_NAME) {
         Ok(Some(config)) => config,

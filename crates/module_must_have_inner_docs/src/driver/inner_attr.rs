@@ -8,6 +8,7 @@ use crate::{AttributeBody, ParseInput};
 
 use super::parser;
 
+/// Check whether one meta-list segment names `doc` with incorrect casing.
 fn segment_has_case_incorrect_doc(segment: &str) -> bool {
     let Some((ident, tail)) = parser::take_ident(ParseInput::from(segment)) else {
         return false;
@@ -24,76 +25,12 @@ fn segment_has_case_incorrect_doc(segment: &str) -> bool {
     false
 }
 
-struct ParserState {
-    depth: usize,
-    start: usize,
-}
-
-fn has_case_incorrect_doc_in_meta_list(list: &str) -> bool {
-    let mut state = ParserState { depth: 0, start: 0 };
-
-    for (idx, ch) in list.char_indices() {
-        if handle_character(ch, &mut state, list, idx) {
-            return true;
-        }
-    }
-
-    segment_has_case_incorrect_doc(&list[state.start..])
-}
-
-// Extracted to reduce nested complexity in `has_case_incorrect_doc_in_meta_list`.
-fn handle_character(ch: char, state: &mut ParserState, list: &str, idx: usize) -> bool {
-    match ch {
-        '(' => state.depth += 1,
-        ')' => state.depth = state.depth.saturating_sub(1),
-        ',' if state.depth == 0 => {
-            if segment_has_case_incorrect_doc(&list[state.start..idx]) {
-                return true;
-            }
-            state.start = idx + 1;
-        }
-        _ => {}
-    }
-    false
-}
-
+/// Search a `cfg_attr` meta-list for a case-mismatched documentation key.
 fn cfg_attr_has_case_incorrect_doc(rest: ParseInput<'_>) -> bool {
-    let (_, trimmed) = parser::skip_leading_whitespace(rest);
-    let Some(content) = trimmed.strip_prefix('(') else {
-        return false;
-    };
-
-    let mut depth: usize = 1;
-    let mut first_comma = None;
-    let mut closing_paren = None;
-
-    for (idx, ch) in content.char_indices() {
-        match ch {
-            '(' => depth += 1,
-            ')' => {
-                depth = depth.saturating_sub(1);
-                if depth == 0 {
-                    closing_paren = Some(idx);
-                    break;
-                }
-            }
-            ',' if depth == 1 && first_comma.is_none() => first_comma = Some(idx),
-            _ => {}
-        }
-    }
-
-    let Some(attr_section_start) = first_comma else {
-        return false;
-    };
-    let Some(close_idx) = closing_paren else {
-        return false;
-    };
-
-    let args = &content[..close_idx];
-    let attr_section = &args[attr_section_start + 1..];
-    has_case_incorrect_doc_in_meta_list(attr_section)
+    parser::cfg_attr_has_meta_item(rest, segment_has_case_incorrect_doc)
 }
 
+/// Extract the contents of a well-formed inner attribute prefix.
 fn inner_attribute_body(rest: ParseInput<'_>) -> Option<AttributeBody<'_>> {
     let after_bang = rest.strip_prefix("#!")?;
 
@@ -103,7 +40,7 @@ fn inner_attribute_body(rest: ParseInput<'_>) -> Option<AttributeBody<'_>> {
     // Missing `]` is tolerated here: downstream identifier parsing will
     // gracefully reject malformed content by failing to match expected patterns.
     let attr_end = body.find(']').unwrap_or(body.len());
-    Some(AttributeBody::from(&body[..attr_end]))
+    body.get(..attr_end).map(AttributeBody::from)
 }
 
 /// Detects inner attributes like `#![DOC = ...]` or `#![cfg_attr(..., Doc = ...)]`
@@ -159,4 +96,43 @@ pub(super) fn is_cfg_attr_without_doc(rest: ParseInput<'_>) -> bool {
     // A doc-less `cfg_attr` wrapper leaves the module undocumented even when
     // the condition holds, so treat it the same as having no inner attributes.
     *ident == "cfg_attr" && !parser::cfg_attr_has_doc(tail)
+}
+
+#[cfg(test)]
+mod tests {
+    //! Tests for inner attribute parsing.
+
+    use super::is_case_incorrect_doc_inner_attr;
+    use crate::ParseInput;
+    use rstest::rstest;
+
+    /// Detect case-mismatched documentation attributes inside `cfg_attr`.
+    #[rstest]
+    #[case(
+        "#![cfg_attr(all(feature = \"x\", unix), Doc = \"example\", allow(dead_code))]",
+        true
+    )]
+    #[case(
+        "#![cfg_attr(all(feature = \"x\", unix), doc = \"example\", allow(dead_code))]",
+        false
+    )]
+    #[case(
+        "#![cfg_attr(feature = \"x\", cfg_attr(unix, DOC = \"example\"))]",
+        true
+    )]
+    #[case(
+        r#"#![cfg_attr(feature = "x", deprecated(note = ")"), Doc = "example")]"#,
+        true
+    )]
+    #[case("#![cfg_attr(feature = \"x\", allow(dead_code))]", false)]
+    fn detects_case_mismatched_doc_attributes_inside_cfg_attr(
+        #[case] attribute: &str,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(
+            is_case_incorrect_doc_inner_attr(ParseInput::from(attribute)),
+            expected,
+            "unexpected result for {attribute}"
+        );
+    }
 }

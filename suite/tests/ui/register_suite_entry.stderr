@@ -1,0 +1,16 @@
+warning: Module undocumented must start with an inner doc comment.
+  --> $DIR/register_suite_entry.rs:3:19
+   |
+LL | mod undocumented {}
+   |                   ^
+   |
+note: The first item in the module is not a `//!` style comment.
+  --> $DIR/register_suite_entry.rs:3:1
+   |
+LL | mod undocumented {}
+   | ^^^^^^^^^^^^^^^^
+   = help: Explain the purpose of undocumented by adding an inner doc comment at the top.
+   = note: `#[warn(module_must_have_inner_docs)]` on by default
+
+warning: 1 warning emitted
+

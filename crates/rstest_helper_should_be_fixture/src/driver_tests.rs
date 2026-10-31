@@ -145,6 +145,7 @@ fn loaded_configuration_normalizes_present_config() {
     );
 }
 
+/// Check that applying crate configuration initializes the lint pass state.
 #[rstest]
 fn applying_crate_configuration_initializes_pass_state() {
     let mut pass = RstestHelperShouldBeFixture::default();
@@ -154,13 +155,14 @@ fn applying_crate_configuration_initializes_pass_state() {
         ..Config::default()
     };
 
-    pass.apply_crate_configuration(config.clone(), SharedConfig::default());
+    pass.apply_crate_configuration(config.clone(), &SharedConfig::default());
 
     assert_eq!(pass.config, config.normalized());
     assert!(pass.detection_options.use_expansion_trace_fallback());
     assert_eq!(pass.detection_options.provider_param_attributes().len(), 2);
 }
 
+/// Check that crate configuration is loaded and normalized before use.
 #[rstest]
 fn check_crate_configuration_loads_and_normalizes_config() {
     let mut pass = RstestHelperShouldBeFixture::default();
@@ -174,7 +176,7 @@ fn check_crate_configuration_loads_and_normalizes_config() {
 
     pass.apply_loaded_crate_configuration(
         loaded_configuration::<String>(Ok(Some(config))),
-        SharedConfig::default(),
+        &SharedConfig::default(),
     );
 
     assert_eq!(pass.config.min_calls, 2);

@@ -27,7 +27,8 @@ pub(crate) enum FeatureCategory {
 }
 
 impl FeatureCategory {
-    fn prefix(self) -> &'static str {
+    /// Return the stable prefix used to identify this feature category.
+    const fn prefix(self) -> &'static str {
         match self {
             Self::Domain => "domain",
             Self::Field => "field",
@@ -37,7 +38,8 @@ impl FeatureCategory {
         }
     }
 
-    fn weight(self) -> u64 {
+    /// Return the feature weight assigned to this category.
+    const fn weight(self) -> u64 {
         match self {
             Self::Domain => DOMAIN_WEIGHT,
             Self::Field => FIELD_WEIGHT,
@@ -47,7 +49,8 @@ impl FeatureCategory {
         }
     }
 
-    pub(crate) fn label_priority(self) -> usize {
+    /// Return the stable ordering priority used when choosing labels.
+    pub(crate) const fn label_priority(self) -> usize {
         match self {
             Self::Domain => 0,
             Self::Field => 1,
@@ -70,7 +73,8 @@ struct FeatureIdentity {
 }
 
 impl FeatureMetadata {
-    pub(crate) fn category(&self) -> FeatureCategory {
+    /// Return the category that produced this feature.
+    pub(crate) const fn category(&self) -> FeatureCategory {
         self.category
     }
 
@@ -91,11 +95,13 @@ impl MethodFeatureVector {
         &self.method_name
     }
 
-    pub(crate) fn weights(&self) -> &BTreeMap<String, u64> {
+    /// Return the weighted feature map used for similarity comparisons.
+    pub(crate) const fn weights(&self) -> &BTreeMap<String, u64> {
         &self.weights
     }
 
-    pub(crate) fn metadata(&self) -> &BTreeMap<String, FeatureMetadata> {
+    /// Return display metadata keyed by canonical feature name.
+    pub(crate) const fn metadata(&self) -> &BTreeMap<String, FeatureMetadata> {
         &self.metadata
     }
 
@@ -341,17 +347,22 @@ fn type_identity(type_name: &str) -> FeatureIdentity {
     }
 }
 
+/// Check whether an uppercase character begins a new identifier word.
 fn should_split_before(chars: &[char], index: usize) -> bool {
-    if index == 0 {
+    let Some(previous_index) = index.checked_sub(1) else {
         return false;
-    }
+    };
 
-    let current = chars[index];
+    let Some(&current) = chars.get(index) else {
+        return false;
+    };
     if !current.is_uppercase() {
         return false;
     }
 
-    let previous = chars[index - 1];
+    let Some(&previous) = chars.get(previous_index) else {
+        return false;
+    };
     previous.is_lowercase()
         || chars
             .get(index + 1)

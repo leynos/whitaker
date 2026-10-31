@@ -19,12 +19,14 @@ use super::{
     vector::{build_feature_vector, dot_product, identifier_keywords},
 };
 
+/// Split camel-case identifiers and discard stop words.
 #[test]
 fn identifier_keywords_split_camel_case_and_remove_stop_words() {
     let keywords = identifier_keywords("buildRenderTree");
     assert_eq!(keywords, ["tree"]);
 }
 
+/// Accept both documented spellings of the sub-trait extraction kind.
 #[test]
 fn suggested_extraction_kind_accepts_both_sub_trait_spellings() {
     assert_eq!(
@@ -38,6 +40,7 @@ fn suggested_extraction_kind_accepts_both_sub_trait_spellings() {
     assert_eq!(SuggestedExtractionKind::SubTrait.to_string(), "sub-trait");
 }
 
+/// Split acronym boundaries in mixed-case identifiers.
 #[test]
 fn identifier_keywords_handle_acronyms_and_mixed_case() {
     assert_eq!(identifier_keywords("HTTPRequest"), ["http", "request"]);
@@ -47,18 +50,21 @@ fn identifier_keywords_handle_acronyms_and_mixed_case() {
     );
 }
 
+/// Split identifiers at non-alphanumeric separators.
 #[test]
 fn identifier_keywords_split_on_non_alphanumeric_separators() {
     assert_eq!(identifier_keywords("build_render_tree"), ["tree"]);
     assert_eq!(identifier_keywords("build-render-tree"), ["tree"]);
 }
 
+/// Remove stop words and handle empty identifiers.
 #[test]
 fn identifier_keywords_only_stop_words_or_empty_input_yield_empty() {
     assert!(identifier_keywords("build_render").is_empty());
     assert!(identifier_keywords("").is_empty());
 }
 
+/// Prefix feature keys with their category names.
 #[test]
 fn feature_vector_prefixes_categories() {
     let vector = build_feature_vector(&profile(MethodInput {
@@ -73,6 +79,7 @@ fn feature_vector_prefixes_categories() {
     assert!(vector.weights().contains_key("keyword:state"));
 }
 
+/// Return zero for feature vectors with disjoint keys.
 #[test]
 fn dot_product_is_zero_for_disjoint_profiles() {
     let left = build_feature_vector(&profile(MethodInput {
@@ -93,6 +100,7 @@ fn dot_product_is_zero_for_disjoint_profiles() {
     assert_eq!(dot_product(left.weights(), right.weights()), 0);
 }
 
+/// Connect only profiles that share enough feature weight.
 #[test]
 fn similarity_edges_include_related_methods_only() {
     let vectors = vec![
@@ -129,6 +137,7 @@ fn similarity_edges_include_related_methods_only() {
     assert!(edge.weight() > 0);
 }
 
+/// Preserve community output when method input order changes.
 #[test]
 fn detect_communities_is_order_invariant() {
     let fixture = parser_serde_fs_fixture();
@@ -154,11 +163,12 @@ fn detect_communities_is_order_invariant() {
     reordered_vectors.sort();
 
     assert_eq!(
-        detect_communities(&original_vectors),
-        detect_communities(&reordered_vectors)
+        detect_communities(&original_vectors).expect("original vectors form a valid graph"),
+        detect_communities(&reordered_vectors).expect("reordered vectors form a valid graph")
     );
 }
 
+/// Return no advice when methods form fewer than two communities.
 #[test]
 fn suggest_decomposition_returns_empty_for_single_community() {
     assert_type_decomposition_is_empty(
@@ -196,6 +206,7 @@ fn suggest_decomposition_returns_empty_for_single_community() {
     );
 }
 
+/// Choose module and helper-struct advice for type communities.
 #[test]
 fn suggest_decomposition_for_type_prefers_domain_module_and_field_helper_struct() {
     let context = DecompositionContext::new("Foo", SubjectKind::Type);
@@ -233,6 +244,7 @@ fn suggest_decomposition_for_type_prefers_domain_module_and_field_helper_struct(
     );
 }
 
+/// Suggest focused sub-traits for trait communities.
 #[test]
 fn suggest_decomposition_for_trait_returns_sub_trait_suggestions() {
     let context = DecompositionContext::new("Transport", SubjectKind::Trait);
@@ -277,6 +289,7 @@ fn suggest_decomposition_for_trait_returns_sub_trait_suggestions() {
     );
 }
 
+/// Preserve suggestions when duplicate method names arrive in a new order.
 #[test]
 fn suggest_decomposition_is_order_invariant_for_duplicate_method_names() {
     let context = DecompositionContext::new("Importer", SubjectKind::Type);
@@ -325,6 +338,7 @@ fn suggest_decomposition_is_order_invariant_for_duplicate_method_names() {
     );
 }
 
+/// Exclude singleton methods that do not belong to a useful group.
 #[test]
 fn suggestions_drop_singleton_noise_methods() {
     let context = DecompositionContext::new("Foo", SubjectKind::Type);
@@ -347,6 +361,7 @@ fn suggestions_drop_singleton_noise_methods() {
     );
 }
 
+/// Drop groups that have no extractable feature label.
 #[test]
 fn suggestions_skip_degenerate_groups_without_features() {
     assert_type_decomposition_is_empty(

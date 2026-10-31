@@ -1928,11 +1928,12 @@ tests and Kani:
 - The BDD harness in
   `crates/whitaker_clones_core/tests/min_hash_lsh_behaviour.rs` includes a
   duplicate-retained-hash candidate-generation scenario.
-- The Kani harnesses in `crates/whitaker_clones_core/src/index/kani.rs` call
-  real `MinHasher::sketch` for the empty-input, deterministic-output, and
-  duplicate-hash properties. They use a private `cfg(kani)` seed fixture and
-  fixed-width signature builder so the proof focuses on sketch semantics rather
-  than seed-stream array construction.
+- Kani checks the empty-input error through `MinHasher::sketch`, the lane
+  minimum for the fixed mixed hashes of `0` and `u64::MAX` through
+  `minimum_mixed_hash`, and sorting/deduplication of four fixed fingerprints
+  through `unique_hashes`. These bounded proofs do not establish non-empty
+  full-signature determinism or general duplicate-hash insensitivity; ordinary
+  tests retain those broader runtime obligations.
 
 The direct `LshIndex` invariant coverage is also split between ordinary tests
 and Kani:
@@ -1943,11 +1944,18 @@ and Kani:
 - The BDD harness in
   `crates/whitaker_clones_core/tests/min_hash_lsh_behaviour.rs` exercises LSH
   candidate generation as part of the token-pass behaviour surface.
-- The Kani harnesses in `crates/whitaker_clones_core/src/index/kani.rs` verify
-  bounded `LshIndex` states for the same invariants. Kani builds use a private
-  fixed-size insertion log and compact band keys so the proof checks the LSH
-  state transition and `CandidatePair::new` policy without modelling `BTreeMap`
-  and `BTreeSet` allocator internals.
+- The Kani harnesses in `crates/whitaker_clones_core/src/index/kani.rs` use a
+  proof-specific candidate-generation model. In Kani builds, `insert` records
+  up to four fragments and their compact band keys;
+  `candidate_pair_summary_for_kani` compares each recorded fragment pair
+  directly, emits it when any recorded band matches, and applies
+  `CandidatePair::new`. This model does not execute production
+  `candidate_pairs` or `add_bucket_pairs`, nor the production B-tree bucket
+  enumeration and cross-bucket deduplication. Runtime tests and the BDD
+  scenario cover those production paths. The canonical-order harness uses
+  `CandidatePair::new` for both its modelled and expected pairs, so it checks
+  reversal invariance but is not an independent oracle for that constructor's
+  ordering rule.
 
 ### Clone-detector AST structure
 
@@ -1980,6 +1988,14 @@ parent-child and parent-child-grandchild production counts, and
 `canonical_hash` emits an `AstHash` seeded with `PARSER_SCHEMA_VERSION`.
 Changing the parser pin, normalization rules, hash algorithm, or schema string
 must produce a reviewable snapshot change.
+
+Parser-backed lowering enforces a 10,000-node budget over every emitted
+`NormalizedNode`, including non-trivia token leaves, and a depth limit of 256.
+Those bounds keep parser-produced per-kind counts within `u32` and depths within
+`u16`, so the production saturating operations cannot saturate for lowered
+parser trees. Public callers can construct larger `NormalizedTree` values
+directly; the Verus sidecar's mathematical-`nat` accumulator proof does not
+establish saturation behaviour for those arbitrary trees.
 
 #### AST operational metrics
 
@@ -2077,7 +2093,11 @@ tracked source.
 
 `make nixie` validates the repository's Mermaid diagrams. Continuous
 Integration installs Nixie 1.1.0 and its Merman 0.7.0 dependency on the Linux
-documentation leg through the SHA-pinned shared `install-nixie` action.
+documentation leg through the SHA-pinned shared `install-nixie` action. When
+`XDG_RUNTIME_DIR` exists and is writable, the target uses it for Nixie's
+temporary working files; otherwise it falls back to the system temporary
+directory. This keeps those files off the shared `/tmp` volume while nested
+Cargo fixture builds may also be using it.
 
 ### Verus scope and trust boundary
 
@@ -2107,27 +2127,47 @@ For the current clone-detector constructors, the split is:
 - Kani executes the real constructor with one concrete acceptance harness, one
   bounded symbolic harness over `[0, 128]²`, and one overflow harness that
   forces the `checked_mul(None)` branch.
-- Kani executes real `MinHasher::sketch` calls for empty input, deterministic
-  output, and duplicate retained hashes. The non-empty harnesses keep their
-  symbolic domains intentionally bounded: determinism proves equality at an
-  arbitrary signature lane for a fixed retained hash, while duplicate-hash
-  insensitivity proves a symbolic bounded retained hash at the first signature
-  lane.
-- Kani verifies bounded `LshIndex` states for no self-pairs, canonical pair
-  ordering, repeated-band deduplication, and insertion-order independence. In
-  `#[cfg(kani)]` builds, `LshIndex` records inserted fragments in a fixed
-  four-slot proof log with compact two-band keys; normal builds keep the
-  production `BTreeMap`/`BTreeSet` implementation and public API.
+- Kani checks the empty-input error through `MinHasher::sketch`, the lane
+  minimum for fixed mixed hashes through `minimum_mixed_hash`, and sorting and
+  deduplication of fixed fingerprints through `unique_hashes`. These bounded
+  proofs do not establish non-empty full-signature determinism or general
+  duplicate-hash insensitivity; ordinary tests retain those broader runtime
+  obligations.
+- Kani checks no self-pairs, canonical pair ordering, bounded shared-band
+  scenarios, and insertion-order independence through a proof-specific model. In
+  `#[cfg(kani)]` builds, `insert` records up to four fragments with at most
+  two compact band keys. `candidate_pair_summary_for_kani` checks each recorded
+  pair for any shared band, then uses `CandidatePair::new` and a fixed-array
+  pair summary. It does not run production `candidate_pairs` or
+  `add_bucket_pairs`, so the production B-tree bucket emissions and final
+  cross-band deduplication remain covered by runtime tests and BDD scenarios.
 - Kani verifies AST span-cover selection and bounded AST feature invariants
-  over synthetic `NormalizedTree` values. It calls the production
-  `select_smallest_covering` helper for covering-node minimality and root
-  fallback, and uses compact bounded tree fixtures for feature invariants so
-  the proof does not compile or model `ra_ap_syntax`.
+  over synthetic `NormalizedTree` values. The missing-cover harness checks that
+  empty and concrete non-covering candidate lists return `None`; it does not
+  execute parser-root fallback. The parser adapter's pruned tree walk and the
+  parser-independent `select_smallest_covering` helper share the same covering
+  and minimal-width decision predicate, which Kani checks without compiling or
+  modelling `ra_ap_syntax`. Compact bounded tree fixtures keep feature proofs
+  independent of parser internals. The full-range `u16` `KindId` round trip has
+  its own harness. The depth-only harness uses fixed kinds and checks the
+  shared preorder depth visitor with a four-slot array tally, so it proves the
+  five-node depth counts without entering production `BTreeMap` internals. Its
+  unwind bound of six covers five node visits and the loop's final termination
+  check; the child loop has at most two children plus exhaustion. Unwinding
+  assertions remain enabled. A separate scalar harness checks `KindId` equality
+  and ordering against raw `u16` comparisons for each pair among the root, two
+  child labels, and query label. Four values from two symbolic bits represent
+  every equality partition and relative ordering those four roles can have. It
+  has no loops to unwind and does not model map operations. Unit tests and
+  proptest cover the production traversal and `BTreeMap` count accumulator. A
+  generated-source property also varies identifier and integer-literal payloads
+  while checking normalized AST-hash equality.
 - Verus proves the AST feature-count accumulator algebra for supplied
-  `(kind, depth)` contributions. The proof establishes adjacent two-item order
-  independence for exact counts; ordinary tests and proptest remain responsible
-  for proving that production traversal supplies the intended contribution
-  multiset.
+  `(kind, depth)` contributions. `lemma_fold_count_is_permutation_invariant`
+  establishes that equal contribution multisets yield equal exact counts for
+  every queried bucket. It does not prove that production traversal emits those
+  multisets; Rust unit tests and `proptest` exercise that traversal
+  correspondence.
 - Ordinary unit tests and `rstest-bdd` scenarios pin the concrete lexical
   `FragmentId` ordering contract that the `CandidatePair` proof's bridge still
   trusts rather than proving from `String` internals, and they pin the AST
@@ -2154,7 +2194,30 @@ The proof targets are thin wrappers over repository scripts:
   harness for `LshConfig::new`, the bounded `MinHasher::sketch` harnesses, and
   the bounded `LshIndex` candidate-pair invariant harnesses. Clone-detector
   Kani invocations use `--no-default-features` so parser-independent proofs do
-  not compile `ra_ap_syntax`.
+  not compile `ra_ap_syntax`. Every invocation runs through
+  `scripts/run-kani-limited.sh`, which applies an 8 GiB process-tree memory
+  cap, disables swap for that cgroup, and enforces a ten-minute timeout. It
+  records peak memory and duration. A timeout, resource failure, or missing
+  resource measurement is a failed or inconclusive proof, never a pass. The
+  `WHITAKER_KANI_MEMORY_MAX_BYTES` and `WHITAKER_KANI_TIMEOUT_SECONDS`
+  overrides can lower these limits but cannot raise them.
+
+The limited runner requires Linux, a running user systemd session,
+`systemd-run`, `systemctl`, GNU `timeout`, and cgroup v2 with its memory
+controller enabled. It stops before starting a proof when any prerequisite is
+unavailable. Kani runs through this wrapper are unsupported on macOS; use a
+Linux host for Kani proofs. On systemd 258 and later, the wrapper disables
+systemd's command environment expansion so the child Bash receives its script
+unchanged
+([`systemd-run` manual](https://man7.org/linux/man-pages/man1/systemd-run.1.html)).
+
+The workflow contract tests keep preflight-failure inputs in the private
+`_PreflightCase` rows in
+[`kani_runner_contract_test.py`](../tests/workflow_contracts/kani_runner_contract_test.py).
+The type is local to that module: each row pairs runner arguments, stubbed
+prerequisites, environment overrides, and the expected diagnostic for one
+parameterized test. Keep this case shape local unless another contract module
+needs to exercise the same runner boundary.
 
 The installer scripts are idempotent. The first proof run may take longer while
 toolchains and verifier binaries are downloaded; later runs reuse the cached
@@ -2176,12 +2239,18 @@ Run a Verus group directly through the wrapper:
 ./scripts/run-verus.sh all --time
 ```
 
+Run one clone-detector Kani harness while iterating:
+
+```sh
+./scripts/run-kani.sh clone-detector-harness verify_kind_counts_stop_at_max_depth
+```
+
 Run all Kani groups, a specific decomposition harness, or the clone-detector
 group directly:
 
 ```sh
 ./scripts/run-kani.sh
-./scripts/run-kani.sh verify_build_adjacency_preserves_edges
+./scripts/run-kani.sh decomposition verify_propagate_labels_preserves_label_indices
 ./scripts/run-kani.sh clone-detector
 ```
 
@@ -2266,11 +2335,11 @@ toolchain bump must update the channel written here as part of the runbook
    explicitly requires that trade-off.
 2. Exact-pin the parser dependency in the workspace `Cargo.toml` under
    `[workspace.dependencies]`. The accepted outcome is an entry such as
-   `ra_ap_syntax = "=0.0.334"` with the `parser` feature wired through
-   `whitaker_clones_core`. Loose pins, invalid specifiers, or a missing
-   workspace dependency must fail the re-pin attempt. If more than three
-   transitive crates need manual `cargo update --precise` pins, stop and record
-   the mismatch.
+   `ra_ap_syntax = "=0.0.334"` with one equality comparator and a complete
+   major/minor/patch version. The build guard parses the version and rejects
+   partial versions, extra comparators, loose pins, and a missing workspace
+   dependency. If more than three transitive crates need manual
+   `cargo update --precise` pins, stop and record the mismatch.
 3. Keep parser imports confined to `src/ast/lowering.rs`. If a parser API
    change tempts domain code to import `ra_ap_syntax`, update the lowered
    `NormalizedTree` boundary instead.
@@ -2371,17 +2440,18 @@ to `pub(crate)` visibility:
   `SimilarityEdge` and `build_adjacency`.
 - **`build_adjacency` function**
   (`common/src/decomposition_advice/community.rs`): Promoted from `fn` to
-  `pub(crate) fn` so that colocated Kani harnesses and the test-support
-  adjacency report can call it directly without widening the crate's public API
-  surface.
+  `pub(crate) fn` so that unit tests and the test-support adjacency report can
+  call it directly without widening the crate's public API surface. Adjacency
+  invariants are checked through generated property tests; CBMC's Vec models
+  exceeded the configured process-tree memory cap.
 - **`SimilarityEdge::new(left, right, weight)`**
-  (`common/src/decomposition_advice/community.rs`): A `pub(crate)` constructor
-  added to allow Kani harnesses and test-support modules to create edge values
-  without exposing a public constructor on the production type. It is used
-  internally by `adjacency_report` to convert validated `EdgeInput` values into
-  `SimilarityEdge` instances before delegating to `build_adjacency`. External
-  callers should use `adjacency_report` rather than constructing
-  `SimilarityEdge` directly.
+  (`common/src/decomposition_advice/graph.rs`): A `pub(crate)` constructor in
+  the private `graph` module, re-exported through `community` for
+  crate-internal tests and test-support code. It creates edge values without
+  exposing a public constructor on the production type. `adjacency_report` uses
+  it to convert validated `EdgeInput` values before delegating to
+  `build_adjacency`, which remains in `community.rs`. External callers should
+  use `adjacency_report` rather than constructing `SimilarityEdge` directly.
 
 This pattern keeps the runtime API narrow while giving verification and test
 code the access it needs.
@@ -3475,17 +3545,19 @@ must coordinate through `installer/src/test_support.rs`.
   guard, create the temporary target directory, then run the env-mutating test
   body.
 
+The guard is re-entrant, so a guarded callback can call another helper that
+acquires it. It serializes the broader test protocol; it does not replace the
+separate lock used by `temp_env`.
+
 For a single variable or locale override, prefer
 `whitaker_common::test_support::{with_env_var, with_env_var_removed,
 with_locale}`.
-Each helper holds the shared guard for its complete callback, including
-restoration, so it also coordinates with `EnvVarGuard`. Do not acquire a
-separate mutex around those helpers. `env_test_guard()` is the sole shared
-synchronization mechanism and is reentrant: a callback may safely call a UI
-runner or another helper that acquires it for nested setup. The common
-test-support module owns this lock; callers must reuse it rather than adding
-crate-local environment locks. `EnvTestGuard` is the corresponding façade type
-when a test fixture must retain the guard beyond local scope.
+Each scoped helper delegates to `temp_env`'s re-entrant global lock, scopes
+restoration to its callback, and permits nested overrides from the same thread.
+That lock is independent of `env_test_guard()`: participants using only one
+lock do not serialize with participants using only the other. Use
+`EnvTestGuard` when a fixture must retain the explicit guard beyond local
+scope, and keep all participants in that protocol on the same guard.
 
 For example:
 
@@ -3501,16 +3573,17 @@ the regression suite: `temp-env` provides scoped environment overrides,
 `tempfile` provides isolated target directories, and `rstest` powers the
 fixture-based test setup used by the staged-suite coverage.
 
-#### Shared UI harness environment guards
+#### Shared UI harness environment overrides
 
 Workspace-level UI harness tests that mutate process-wide environment variables
-must use `whitaker_common::test_support::EnvVarGuard`. Use `EnvVarGuard::set`
-to install a temporary value and `EnvVarGuard::remove` to make a variable
-absent for the duration of a test. The guard retains `env_test_guard()` from
-construction through restoration in `Drop`, preventing another thread from
-interleaving a mutation or restoring stale state. Because this guard is
-re-entrant, code on the same thread may still use nested helpers that acquire
-the shared protocol.
+must use the scoped helpers in `whitaker_common::test_support`: `with_env_var`
+installs a temporary value, `with_env_var_removed` makes a variable absent, and
+`with_locale` overrides or clears `DYLINT_LOCALE` for the duration of a
+callback. The helpers delegate to `temp_env`, whose re-entrant global lock
+serializes scoped mutations while permitting nesting from the same thread. Each
+prior value is restored when the callback returns or panics. The workspace
+forbids `unsafe` code, so tests must not call `std::env::set_var` or
+`std::env::remove_var` directly.
 
 `whitaker::testing::ui::run_with_runner` applies a specialized guard before
 invoking the Dylint UI runner. It preserves `RUSTC_WRAPPER` so nested Cargo
@@ -4048,6 +4121,16 @@ It can be promoted to standard by:
    `suite/Cargo.toml`
 3. Updating documentation to reflect the change
 
+### Suite entry point
+
+Dylint resolves a library's lints through an exported `register_lints` symbol,
+which requires `#[unsafe(no_mangle)]`. The workspace forbids in-crate `unsafe`
+code, so the suite declares its entry point through
+`whitaker_common::declare_dylint_register_entry!`, which expands the unsafe
+attribute from an external macro, just as `dylint_linting::impl_late_lint!`
+does for single-lint crates. Reserve this macro for Dylint driver crates; do
+not use it for other symbol exports.
+
 ## Creating a New Lint
 
 ### Generating from the template
@@ -4376,12 +4459,12 @@ of the rule lives in the `generate-coverage` README in
 this repository sets, what each value is sized against, and where the third
 tier went.
 
-| Tier                     | What it bounds                     | Where it is set                             | Current value                                                                                                                                                                                                                                                                                                                 |
-| ------------------------ | ---------------------------------- | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`, both profiles       | 300 s default; 20 m for ordinary serialized UI and no-default-feature builds; 75 m for parser-pin, most trybuild, nested example-build, alias UI and whole UI harness fixtures; 120 m for `rstest_helper_should_be_fixture::ui::trybuild_fixtures_compile_without_diagnostics`; 30 m for toolchain-installing behaviour tests |
-| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, both profiles       | 300 m                                                                                                                                                                                                                                                                                                                         |
-| Cargo watchdog           | one `cargo` invocation, wall clock | not used here, see below                    | absent                                                                                                                                                                                                                                                                                                                        |
-| Job `timeout-minutes`    | the whole job                      | `ci.yml` and `coverage-main.yml`, job level | 335 m for every lane that runs the suite                                                                                                                                                                                                                                                                                      |
+| Tier                     | What it bounds                     | Where it is set                             | Current value                                                                                                                                                                                                                                                                                                                                                   |
+| ------------------------ | ---------------------------------- | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`, both profiles       | 300 s default; 20 m for ordinary serialized UI and no-default-feature builds; 30 m for isolated package checks; 75 m for parser-pin, most trybuild, nested example-build, alias UI and whole UI harness fixtures; 120 m for `rstest_helper_should_be_fixture::ui::trybuild_fixtures_compile_without_diagnostics`; 30 m for toolchain-installing behaviour tests |
+| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, both profiles       | 300 m                                                                                                                                                                                                                                                                                                                                                           |
+| Cargo watchdog           | one `cargo` invocation, wall clock | not used here, see below                    | absent                                                                                                                                                                                                                                                                                                                                                          |
+| Job `timeout-minutes`    | the whole job                      | `ci.yml` and `coverage-main.yml`, job level | 335 m for every lane that runs the suite                                                                                                                                                                                                                                                                                                                        |
 
 *Table: the timers that can end a run, innermost first.*
 
@@ -4431,6 +4514,12 @@ instead of reusing artefacts from the workspace test run. It exceeded the
 20-minute allowance and shared nested-Cargo test group leave room for a cold
 build without letting it compete with the parser-pin fixtures.
 
+The package-isolated checks also invoke Cargo with separate targets: one checks
+that a crate builds without the Dylint driver feature, and the other checks
+that Fluent bundles reach the package tarball. Their 30-minute allowance puts
+them in the same serial nested-Cargo group as the parser-pin and
+no-default-feature builds.
+
 The contract holds that policy, and its failure messages say so rather than
 claiming nextest requires it.
 
@@ -4478,7 +4567,7 @@ queues. The other discovered compile contracts therefore share a 75-minute
 allowance and disable retries, leaving one build more time to reach its
 fixtures without repeating the same work.
 
-The three parser-pin build-script integration cases run in the same serial
+The six parser-pin build-script integration cases run in the serial
 nested-Cargo group and each use a fresh temporary target directory. The
 exact-pin case performs both `cargo check` and `cargo run`; a traced run
 completed in 591 seconds after waiting on the shared package-cache lock. A

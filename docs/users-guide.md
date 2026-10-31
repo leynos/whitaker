@@ -997,7 +997,11 @@ the Pass B substrate only — it does not yet report clones (see below).
 supplied source, and lowers the smallest syntax subtree that covers the span
 into a parser-independent `NormalizedTree`. Working from the smallest covering
 subtree keeps the representation tied to the candidate rather than the whole
-file.
+file. Lowering stops when the selected subtree exceeds 256 levels of depth or
+10,000 normalized nodes. Non-trivia token leaves count towards the node budget.
+The operation returns `AstError::TreeTooDeep` or `AstError::TreeTooLarge` when
+it exceeds either limit, so callers can handle oversized candidates without
+accepting a partial tree.
 
 **Feature vectors.** From a `NormalizedTree`, extraction derives a
 deterministic set of features:

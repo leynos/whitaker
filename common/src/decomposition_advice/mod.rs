@@ -8,6 +8,8 @@
 //! `rustc_private` dependencies to `common`.
 
 pub(crate) mod community;
+mod error;
+mod graph;
 mod note;
 mod profile;
 mod suggestion;
