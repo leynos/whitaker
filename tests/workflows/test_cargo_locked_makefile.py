@@ -211,7 +211,6 @@ class MakeRunEnvironment:
     cargo: Path
     locked: str | None
     stub_dir: Path
-    dylint_driver_path: str = ""
 
 
 # Targets whose recipes invoke `uv` directly or through a repository script.
@@ -265,10 +264,14 @@ def _run_make(
 
     log_name = _make_log_name(environment)
     log = environment.stub_dir / f"{target}-{log_name}.log"
+    # Keep the driver inside the scratch workspace. The Makefile would
+    # otherwise default it into the real user cache, and an inherited value
+    # from an outer `make` could be written to.
+    driver_path = workspace / "dylint-drivers" / "test-driver"
     process_env = os.environ | {
         "CARGO_LOCKED_LOG": str(log),
         "CARGO_LOCKED_ENV_LOG": str(log.with_suffix(".env")),
-        "DYLINT_DRIVER_PATH": environment.dylint_driver_path,
+        "DYLINT_DRIVER_PATH": str(driver_path),
         "PATH": _stub_path(target, environment.stub_dir),
     }
     process_env.pop("CARGO_LOCKED", None)
@@ -427,12 +430,10 @@ def _has_locked_flag(invocation: str) -> bool:
     ("locked", "should_use_locked"),
     [(None, True), ("", False), ("--locked", True)],
 )
-@pytest.mark.parametrize("dylint_driver_path", ["", "/caller/dylint-drivers"])
 def test_make_test_forwards_cargo_locked(
     cargo_stub: tuple[Path, Path],
     locked: str | None,
     should_use_locked: bool,
-    dylint_driver_path: str,
 ) -> None:
     """Prepare dependencies before tests and honour the requested lock mode."""
     stub_dir, cargo = cargo_stub
@@ -443,17 +444,13 @@ def test_make_test_forwards_cargo_locked(
     whitaker_script = stub_dir.parent / "whitaker-script"
     recorded = _run_make(
         "test",
-        MakeRunEnvironment(
-            cargo=cargo,
-            locked=locked,
-            stub_dir=stub_dir,
-            dylint_driver_path=dylint_driver_path,
-        ),
+        MakeRunEnvironment(cargo=cargo, locked=locked, stub_dir=stub_dir),
         extra_make_args=[f"WHITAKER_SCRIPT={whitaker_script}"],
     )
 
     cargo_calls = [line for line in recorded if _is_lock_relevant_invocation(line)]
     assert [_cargo_head(line) for line in cargo_calls] == [
+        "run",
         "fetch",
         "run",
         "metadata",
@@ -476,7 +473,10 @@ def test_make_test_forwards_cargo_locked(
     recorded_environments = [
         line.split("\t", maxsplit=5) for line in environment_log.read_text().splitlines()
     ]
+    # The snapshot install (`run`) precedes the fetch preparation, which
+    # precedes both test commands. Only the last two run offline.
     assert [record[0] for record in recorded_environments] == [
+        "<unset>",
         "<unset>",
         "<unset>",
         "<unset>",
@@ -491,20 +491,19 @@ def test_make_test_forwards_cargo_locked(
         "<unset>",
         "<unset>",
         "<unset>",
+        "<unset>",
         "nightly-test",
         "nightly-test",
     ], "test processes need the active Rustup toolchain environment"
-    expected_driver_path = dylint_driver_path or "<unset>"
-    assert [record[3] for record in recorded_environments] == [
-        dylint_driver_path,
-        expected_driver_path,
-        dylint_driver_path,
-        dylint_driver_path,
-        dylint_driver_path,
-        expected_driver_path,
-        expected_driver_path,
-    ], "Dylint warm-up and test processes use the default only for an empty override"
-    for record in recorded_environments[5:]:
+    # The warm-up and both test commands share the keyed driver directory the
+    # Makefile exports, so the driver is built once and then reused.
+    expected_driver_path = str(
+        stub_dir.parent / "workspace" / "dylint-drivers" / "test-driver"
+    )
+    assert [record[3] for record in recorded_environments] == [expected_driver_path] * 8, (
+        "every recipe must see the same Dylint driver directory"
+    )
+    for record in recorded_environments[6:]:
         assert record[1] == str(cargo), "tests must inherit the selected Cargo executable"
 
 

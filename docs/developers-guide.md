@@ -145,9 +145,9 @@ That error means the preparation step missed a required crate. Add its manifest
 to `make fetch`; standalone fixture workspaces with dependencies need their own
 committed `Cargo.lock` and a separate
 `cargo fetch --locked --manifest-path <m>` command. Do not let tests resolve
-missing dependencies online. The Dylint warm-up preserves any non-empty
-caller-supplied `DYLINT_DRIVER_PATH`. An empty value is treated as unset
-because Dylint interprets it as an explicit directory path.
+missing dependencies online. The warm-up builds the driver into the keyed
+`DYLINT_DRIVER_PATH` the Makefile already exports, so later test processes
+reuse it without building or downloading anything.
 
 Makefile Cargo recipes use `CARGO_LOCKED=--locked` by default, so they cannot
 rewrite the workspace lockfile. Set `CARGO_LOCKED=` only when a deliberate

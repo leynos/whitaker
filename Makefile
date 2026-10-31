@@ -75,9 +75,6 @@ COVERAGE_OUTPUT ?= lcov.info
 COVERAGE_TARGET_DIR ?= $(CURDIR)/target/llvm-cov-target
 DYLINT_WARMUP_TARGET_DIR ?= $(CURDIR)/target/dylint-warmup
 CARGO_EXE_SUFFIX ?= $(if $(filter Windows_NT,$(OS)),.exe,)
-# Dylint treats an empty override as an invalid path, so use its default only
-# for empty values while preserving every non-empty caller-supplied path.
-DYLINT_DRIVER_PATH_UNSET = $(if $(DYLINT_DRIVER_PATH),,env -u DYLINT_DRIVER_PATH)
 # Nextest runs each test case in a separate process. Keep one online-merged
 # profile per instrumented binary instead of one raw profile per process, as
 # cargo-llvm-cov's default `%p` pattern does.
@@ -228,7 +225,7 @@ clean: ## Remove build artefacts
 fetch: clippy-snapshot ## Fetch dependencies and warm Dylint before tests
 	# Fetch each future committed standalone fixture with `cargo fetch --locked --manifest-path <m>`.
 	env -u CARGO_NET_OFFLINE $(CARGO) fetch $(CARGO_LOCKED)
-	env -u CARGO_NET_OFFLINE $(DYLINT_DRIVER_PATH_UNSET) CARGO_TARGET_DIR="$(DYLINT_WARMUP_TARGET_DIR)" $(CARGO) run $(CARGO_LOCKED) -p dylint_testing --example warm_driver
+	env -u CARGO_NET_OFFLINE CARGO_TARGET_DIR="$(DYLINT_WARMUP_TARGET_DIR)" $(CARGO) run $(CARGO_LOCKED) -p dylint_testing --example warm_driver
 	mkdir -p "$(DYLINT_WARMUP_TARGET_DIR)"
 	env -u CARGO_NET_OFFLINE $(CARGO) metadata --format-version 1 $(CARGO_LOCKED) > "$(NEXTTEST_CARGO_METADATA)"
 	env -u CARGO_NET_OFFLINE $(CARGO) metadata --no-deps --format-version 1 $(CARGO_LOCKED) > "$(LLVM_COV_CARGO_METADATA)"
@@ -277,8 +274,8 @@ test: fetch ## Run tests with warnings treated as errors
 		rm -f "$$WHITAKER_BACKUP"; \
 		WHITAKER_BACKUP=""; \
 	fi; \
-	$(DYLINT_DRIVER_PATH_UNSET) RUSTUP_TOOLCHAIN="$(TEST_RUSTUP_TOOLCHAIN)" CARGO="$(CARGO_TEST_CARGO)" CARGO_REAL="$(CARGO)" CARGO_NEXTEST_REAL="$(CARGO_NEXTEST)" CARGO_METADATA_CACHE="$(CARGO_TEST_METADATA_CACHE)" CARGO_METADATA_ROOT="$(CARGO_TEST_METADATA_ROOT)" CARGO_NET_OFFLINE=true RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS)" $(TEST_RUNNER) $(CARGO_LOCKED) $(TEST_CARGO_FLAGS) $(BUILD_JOBS) $(if $(NEXTEST_PROFILE),--profile $(NEXTEST_PROFILE)) --cargo-metadata "$(NEXTTEST_CARGO_METADATA)"; \
-	$(DYLINT_DRIVER_PATH_UNSET) RUSTUP_TOOLCHAIN="$(TEST_RUSTUP_TOOLCHAIN)" CARGO_NET_OFFLINE=true RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS)" $(CARGO) test $(CARGO_LOCKED) -p dylint_testing --lib --example cargo_test_driver --no-default-features $(BUILD_JOBS); \
+	RUSTUP_TOOLCHAIN="$(TEST_RUSTUP_TOOLCHAIN)" CARGO="$(CARGO_TEST_CARGO)" CARGO_REAL="$(CARGO)" CARGO_NEXTEST_REAL="$(CARGO_NEXTEST)" CARGO_METADATA_CACHE="$(CARGO_TEST_METADATA_CACHE)" CARGO_METADATA_ROOT="$(CARGO_TEST_METADATA_ROOT)" CARGO_NET_OFFLINE=true RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS)" $(TEST_RUNNER) $(CARGO_LOCKED) $(TEST_CARGO_FLAGS) $(BUILD_JOBS) $(if $(NEXTEST_PROFILE),--profile $(NEXTEST_PROFILE)) --cargo-metadata "$(NEXTTEST_CARGO_METADATA)"; \
+	RUSTUP_TOOLCHAIN="$(TEST_RUSTUP_TOOLCHAIN)" CARGO_NET_OFFLINE=true RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS)" $(CARGO) test $(CARGO_LOCKED) -p dylint_testing --lib --example cargo_test_driver --no-default-features $(BUILD_JOBS); \
 	if [ "$${ACT_WORKFLOW_TESTS:-0}" = "1" ]; then \
 		$(MAKE) workflow-test; \
 	fi
