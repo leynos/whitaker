@@ -70,6 +70,26 @@ def _argument_end(filter_expression: str, argument_start: int) -> int | None:
     return None
 
 
+def _skip_whitespace(text: str, position: int) -> int:
+    """Return the first position at or after ``position`` that is not space."""
+    while position < len(text) and text[position].isspace():
+        position += 1
+    return position
+
+
+def _read_argument(
+    filter_expression: str, name: str, after_name: int
+) -> tuple[str, int]:
+    """Read a predicate's parenthesised argument and the position after it."""
+    opening = _skip_whitespace(filter_expression, after_name)
+    if opening >= len(filter_expression) or filter_expression[opening] != "(":
+        raise ValueError(f"predicate {name!r} has no argument in {filter_expression!r}")
+    end = _argument_end(filter_expression, opening + 1)
+    if end is None:
+        raise ValueError(f"predicate {name!r} is unterminated in {filter_expression!r}")
+    return filter_expression[opening + 1 : end], end + 1
+
+
 def _read_atom(filter_expression: str, start: int, tokens: list[Token]) -> int:
     """Read one identifier atom and append its token."""
     keyword = _IDENTIFIER.match(filter_expression, start)
@@ -82,16 +102,9 @@ def _read_atom(filter_expression: str, start: int, tokens: list[Token]) -> int:
     if name in {"and", "or", "not"}:
         tokens.append((name, "", ""))
         return keyword.end()
-    opening = keyword.end()
-    while opening < len(filter_expression) and filter_expression[opening].isspace():
-        opening += 1
-    if opening >= len(filter_expression) or filter_expression[opening] != "(":
-        raise ValueError(f"predicate {name!r} has no argument in {filter_expression!r}")
-    end = _argument_end(filter_expression, opening + 1)
-    if end is None:
-        raise ValueError(f"predicate {name!r} is unterminated in {filter_expression!r}")
-    tokens.append(("atom", name, filter_expression[opening + 1 : end]))
-    return end + 1
+    argument, position = _read_argument(filter_expression, name, keyword.end())
+    tokens.append(("atom", name, argument))
+    return position
 
 
 def _tokenize(filter_expression: str) -> list[Token]:
