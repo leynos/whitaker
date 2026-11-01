@@ -310,6 +310,46 @@ crate.[^4] That gives Whitaker a consistent model for merging CLI flags,
 environment variables, and TOML configuration, including subcommand helpers and
 comma-separated environment values.
 
+The application configuration boundary is specified by
+[ADR 008](adr-008-ortho-config-cli-boundary.md). Roadmap item 3.6.3 introduces
+a configuration-only `whitaker-cli` package; later items add command execution
+and the shared presentation flags. The package owns OrthoConfig DTOs, source
+selection, compatibility notices, and conversion to validated settings. Domain
+and reusable library crates do not depend on OrthoConfig.
+
+The package targets Rust 1.89.0, while the Dylint and `rustc` private crates
+retain their separately pinned nightly. It enables OrthoConfig v0.10.0's
+default features. Configuration is TOML, with `whitaker.toml` and the hidden
+project form `.whitaker.toml` discovered in system, user, and project scopes.
+When both project filenames exist, `.whitaker.toml` takes precedence. An
+explicit `--config` or `WHITAKER_CONFIG` selects a file. Automatic discovery
+may ignore a missing file. An explicitly selected file must exist and be
+readable and well-formed; otherwise loading fails.
+
+Precedence is defaults, selected file layers, legacy environment aliases,
+`WHITAKER_*` environment values, then explicit CLI values. Clap defaults for
+configurable fields remain below files and environment through
+`cli_default_as_absent`. Command-specific configuration uses `[cmds.<name>]` and
+`WHITAKER_CMDS_<NAME>_*`. Rewrite subcommands use `rewrite_check`,
+`rewrite_diff`, `rewrite_apply`, and `rewrite_explain` as their namespace
+names. Help, version, the file selector, verbosity, JSON, offline mode,
+forwarded Cargo arguments and one-run controls remain CLI-only. Named profiles
+and Cargo external-subcommand invocation are not offered.
+
+For one release, discovery falls back to `dylint.toml` only when no canonical
+file is selected or found. An explicitly selected `dylint.toml` uses the same
+bridge. Its root `locale` maps to `diagnostics.locale`; known lint tables are
+preserved and unrelated Dylint tables are tolerated. `DYLINT_LOCALE` falls back
+below `WHITAKER_DIAGNOSTICS_LOCALE`. Each legacy path returns a deprecation
+notice naming its replacement. The application boundary presents notices and
+errors; configuration libraries do not print or terminate the process. Help and
+parse failures use the same localized parse path, with `en-GB` as the fallback.
+The existing `WHITAKER_NO_SOURCE_FALLBACK` environment control and
+`--no-source-fallback` flag map to the inverse of
+`install.allow_build_from_source`. An enabled environment control sets that
+field to false; a disabled value leaves any file setting in place. Empty, `0`,
+and `false` values use the installer’s existing interpretation.
+
 The canonical configuration should look like this:
 
 ```toml
