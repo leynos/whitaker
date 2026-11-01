@@ -190,6 +190,16 @@ contract, and the `rstest_helper_should_be_fixture` UI contract, which took
 `cargo test -p dylint_testing --lib --no-default-features` lane also passed its
 19 tests.
 
+The branch was then rebased onto `main` (`bd4c93a8`) to clear a conflict in
+`docs/contents.md`. The only conflict was that file's index, resolved by
+keeping both entries. After the rebase `make check-fmt` reported 111 files
+unchanged, and `make markdownlint` and `make nixie` passed. CI run
+[41265262329](https://github.com/leynos/whitaker/actions/runs/41265262329)
+passed all three lanes at head `554a828f`: `linux-full` (format, spelling,
+Mermaid, Markdown lint, `make lint`, workflow contracts) in 11m45s,
+`coverage-check` (including `make test-doc`) in 9m20s, and `windows-compat`
+(`make test NEXTEST_PROFILE=ci`) in 28m35s.
+
 ## Follow-up
 
 PR #522 replaces the grouping that #519 proposed. It still lists the removed
