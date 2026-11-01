@@ -149,8 +149,9 @@ project:
     RUSTDOCFLAGS="--cfg docsrs -D warnings" cargo doc --workspace --no-deps
     cargo clippy --workspace --lib --bins --tests --benches --all-features \
         -- -D warnings
-    whitaker --all -- -p whitaker-common -p whitaker-installer \
-        -p whitaker_clones_core -p whitaker_sarif --all-targets --all-features
+    RUSTFLAGS="-D warnings" whitaker --lib whitaker_suite -- \
+        -p whitaker-common -p whitaker-installer -p whitaker_clones_core \
+        -p whitaker_sarif --all-targets --all-features
     ```
 
     building rustdoc with warnings denied, linting every target except the
@@ -166,12 +167,23 @@ project:
     then the workspace doctests:
 
     ```sh
-    RUSTFLAGS="-D warnings" cargo test --workspace --doc --all-features
+    RUSTFLAGS="-D warnings" cargo test --workspace --doc --all-features \
+      --exclude rustc_ast --exclude rustc_attr_data_structures \
+      --exclude rustc_hir --exclude rustc_lint --exclude rustc_middle \
+      --exclude rustc_session --exclude rustc_span --exclude whitaker \
+      --exclude rstest_helper_should_be_fixture \
+      --exclude bumpy_road_function --exclude conditional_max_n_branches \
+      --exclude function_attrs_follow_docs --exclude module_max_lines \
+      --exclude module_must_have_inner_docs --exclude no_expect_outside_tests \
+      --exclude test_must_not_have_example --exclude no_std_fs_operations \
+      --exclude no_unwrap_or_else_panic --exclude whitaker_suite
     ```
 
-    running the full workspace test suite including doctests. Use `make fmt`
-    (`cargo fmt --workspace`) to apply formatting fixes reported by the
-    formatter check.
+    running the workspace doctests for every package except those named in
+    `DOCTEST_EXCLUDES`. The excluded crates need `rustc_private` plumbing that
+    a doctest crate cannot link, so their examples are covered by the unit and
+    UI suites instead. Use `make fmt` (`cargo fmt --workspace`) to apply
+    formatting fixes reported by the formatter check.
 - Clippy warnings MUST be disallowed.
 - Fix any warnings emitted during tests in the code itself rather than
   silencing them.

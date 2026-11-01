@@ -180,9 +180,14 @@ lint-clippy: ## Run rustdoc and Clippy with warnings denied
 	RUSTDOCFLAGS="$(RUSTDOC_FLAGS)" $(CARGO) doc $(CARGO_LOCKED) --workspace --no-deps
 	$(CARGO) clippy $(CARGO_LOCKED) $(CLIPPY_FLAGS) -- $(RUST_FLAGS)
 
+# `--lib whitaker_suite` rather than `--all`: cargo-dylint warns and exits 0
+# when it discovers no libraries, so `--all` would let a missing or
+# partially-installed suite pass the gate silently. Naming the aggregate
+# library makes that case an error. `whitaker_suite` aggregates every lint
+# crate, so it covers the same lints `--all` would have run.
 lint-whitaker: ## Run the Whitaker Dylint suite with warnings denied
 	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; \
-	RUSTFLAGS="$(RUST_FLAGS)" $(WHITAKER) --all -- $(WHITAKER_PACKAGES) --all-targets --all-features
+	RUSTFLAGS="$(RUST_FLAGS)" $(WHITAKER) --lib whitaker_suite -- $(WHITAKER_PACKAGES) --all-targets --all-features
 
 fmt: ## Format Rust and Markdown sources
 	$(CARGO) fmt --all
