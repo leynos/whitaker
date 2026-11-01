@@ -205,9 +205,15 @@ edit_lint_crate() {
   printf '\n// benchmark rebuild marker %s\n' "$(date +%s)" >>"$EDITED_SOURCE"
 }
 
+# Restore the edited file. A restored source is a precondition for every later
+# measurement, so a failed checkout stops the run: exiting here also makes the
+# EXIT trap fail the job rather than let a benchmark report success with the
+# source still edited.
 restore_lint_crate() {
-  git -C "$REPO_ROOT" checkout -- "$EDITED_SOURCE" ||
-    printf 'could not restore %s\n' "$EDITED_SOURCE" >&2
+  if ! git -C "$REPO_ROOT" checkout -- "$EDITED_SOURCE"; then
+    printf 'could not restore %s; aborting\n' "$EDITED_SOURCE" >&2
+    exit 1
+  fi
 }
 
 # The measurement edits a tracked file and restores it with `git checkout`.
