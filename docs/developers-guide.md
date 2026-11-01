@@ -160,6 +160,27 @@ rewrite the workspace lockfile. Set `CARGO_LOCKED=` only when a deliberate
 lockfile update is intended. Preparation explicitly clears `CARGO_NET_OFFLINE`;
 the test recipes set it only for test execution.
 
+### Cargo's package-cache lock
+
+Every dependency-resolving Cargo command takes an exclusive lock on
+`$CARGO_HOME/.package-cache`, and that lock is shared by every repository and
+worktree on the host. Offline mode does not avoid it: `--offline`, `--frozen`,
+and `CARGO_NET_OFFLINE=true` all still acquire the lock, so a test that runs
+Cargo can still wait behind another agent's build. Measured on the development
+host, a held lock stalled `--frozen` calls for as long as the hold lasted:
+`cargo package --frozen` in `common/tests/i18n_packaging.rs` hit its 300 s
+timeout with `Blocking waiting for file lock on package cache`, and a plain
+`CARGO_NET_OFFLINE=true cargo metadata` did not finish within 10 s.
+
+Run `make fetch` before the tests. Preparation is the one place allowed to wait
+on the lock, and it usually finishes long before the suite reaches the
+Cargo-touching tests. Beyond that, the remedy is concurrency rather than flags:
+keep long lock holders out of the test window, or give the run its own
+`CARGO_HOME`. A private `CARGO_HOME` overlay removes the contention, but
+alternating homes invalidates build fingerprints and forces rebuilds (measured
+at 220 s and 123 s), so the shared home stays and this repository does not use
+an overlay.
+
 ### Fixture expansion lint macro
 
 The workspace-owned `whitaker_test_macros` crate provides
