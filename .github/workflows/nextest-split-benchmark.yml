@@ -123,10 +123,19 @@ jobs:
           tool: nextest@0.9.114
           fallback: none
 
+      # The runner's system Python has no pytest, so the helpers run under the
+      # same uv-managed interpreter the repository's own Python gates use.
+      - name: Setup uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d  # v10.0.1
+        with:
+          version: '0.11.19'
+
       - name: Test the measurement helpers
         run: |
-          python3 -m pytest scripts/tests/test_nextest_split_benchmark.py -q \
-            -p no:cacheprovider
+          set -euo pipefail
+          uv run --no-project --python 3.14 --with pytest==9.0.2 \
+            python -m pytest scripts/tests/test_nextest_split_benchmark.py \
+            -c /dev/null --rootdir=. -q -p no:cacheprovider
 
       - name: Measure
         env:
