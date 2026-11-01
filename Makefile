@@ -1,4 +1,4 @@
-.PHONY: help all clean test trybuild-contracts test-doc coverage build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke installer-msrv-check release-installer-dry-run package-lints workflow-test workflow-test-deps test-workflow-contracts test-markdown-format test-glibc-baseline test-sccache-health verus kani verus-clone-detector kani-clone-detector spelling skill-frontmatter-lint skill-manifest-validate skill-metadata-check skill-manifest-check test-skill-metadata-check clippy-snapshot clippy-snapshot-bundle dylint-env dylint-smoke dylint-tools
+.PHONY: help all clean fetch test trybuild-contracts test-doc coverage build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke installer-msrv-check release-installer-dry-run package-lints workflow-test workflow-test-deps test-workflow-contracts test-markdown-format test-glibc-baseline test-sccache-health verus kani verus-clone-detector kani-clone-detector spelling skill-frontmatter-lint skill-manifest-validate skill-metadata-check skill-manifest-check test-skill-metadata-check clippy-snapshot clippy-snapshot-bundle dylint-env dylint-smoke dylint-tools
 
 # Make chooses the recipe shell itself, so the `shell: bash` default in the
 # workflows does not reach recipes; the `/bin/sh` it would otherwise use
@@ -13,7 +13,16 @@ TOOL_PATH_SUFFIX = $$HOME/.cargo/bin:$$HOME/.bun/bin:$$HOME/.local/bin
 APP ?= whitaker-installer
 PATH := $(HOME)/.cargo/bin:$(HOME)/.bun/bin:$(PATH)
 CARGO ?= $(or $(shell command -v cargo 2>/dev/null),$(shell [ -x "$(HOME)/.cargo/bin/cargo" ] && echo "$(HOME)/.cargo/bin/cargo"))
-CARGO_LOCKED ?=
+CARGO_LOCKED ?= --locked
+CARGO_NEXTEST ?= cargo-nextest
+CARGO_LLVM_COV ?= cargo-llvm-cov
+CARGO_TEST_CARGO ?= $(CARGO)
+CARGO_TEST_WRAPPER ?= $(DYLINT_WARMUP_TARGET_DIR)/debug/examples/cargo_test_driver$(CARGO_EXE_SUFFIX)
+CARGO_TEST_METADATA_CACHE ?=
+CARGO_TEST_METADATA_ROOT ?= $(CURDIR)
+TEST_RUSTUP_TOOLCHAIN ?= $(shell rustup show active-toolchain 2>/dev/null | cut -d' ' -f1)
+NEXTTEST_CARGO_METADATA ?= $(DYLINT_WARMUP_TARGET_DIR)/nextest-cargo-metadata.json
+LLVM_COV_CARGO_METADATA ?= $(DYLINT_WARMUP_TARGET_DIR)/llvm-cov-cargo-metadata.json
 BUILD_JOBS ?=
 CARGO_FLAGS ?= --workspace --all-targets --all-features
 # The patched UI helper has a `deny_warnings` feature that changes fixture
@@ -40,10 +49,9 @@ DOCTEST_EXCLUDES ?= --exclude bumpy_road_function --exclude clippy_utils \
 	--exclude whitaker --exclude whitaker_suite
 DOCTEST_CARGO_FLAGS ?= --workspace --all-features $(DOCTEST_EXCLUDES)
 NEXTEST_PROFILE ?=
-# The cargo test driver. `test` runs `cargo nextest run`; `coverage`
-# overrides this with `cargo llvm-cov nextest ...` so instrumentation runs
-# over the exact same crate subset (TEST_CARGO_FLAGS) and RUSTFLAGS.
-TEST_RUNNER ?= nextest run
+# Invoke Nextest directly so Cargo does not replace the selected Cargo
+# executable in its test environment. Coverage uses cargo-llvm-cov instead.
+TEST_RUNNER ?= $(CARGO_NEXTEST) nextest run
 # The trybuild contract tests assert that small fixtures compile or fail to
 # compile; they run no workspace code the coverage report attributes. Under
 # instrumentation they only cost build time (about 250 s of the 616 s test
@@ -65,6 +73,8 @@ COVERAGE_OUTPUT ?= lcov.info
 # exact directory. cargo-llvm-cov otherwise passes its target only as a
 # Nextest argument, which Dylint's nested Cargo build cannot observe.
 COVERAGE_TARGET_DIR ?= $(CURDIR)/target/llvm-cov-target
+DYLINT_WARMUP_TARGET_DIR ?= $(CURDIR)/target/dylint-warmup
+CARGO_EXE_SUFFIX ?= $(if $(filter Windows_NT,$(OS)),.exe,)
 # Nextest runs each test case in a separate process. Keep one online-merged
 # profile per instrumented binary instead of one raw profile per process, as
 # cargo-llvm-cov's default `%p` pattern does.
@@ -212,8 +222,17 @@ clean: ## Remove build artefacts
 	$(CARGO) clean
 	rm -rf .uv-cache .uv-tools
 
-test: clippy-snapshot ## Run tests with warnings treated as errors
-	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v cargo-nextest >/dev/null || { echo "Install cargo-nextest (cargo install cargo-nextest)"; exit 1; }
+fetch: clippy-snapshot ## Fetch dependencies and warm Dylint before tests
+	# Fetch each future committed standalone fixture with `cargo fetch --locked --manifest-path <m>`.
+	env -u CARGO_NET_OFFLINE $(CARGO) fetch $(CARGO_LOCKED)
+	env -u CARGO_NET_OFFLINE CARGO_TARGET_DIR="$(DYLINT_WARMUP_TARGET_DIR)" $(CARGO) run $(CARGO_LOCKED) -p dylint_testing --example warm_driver
+	mkdir -p "$(DYLINT_WARMUP_TARGET_DIR)"
+	env -u CARGO_NET_OFFLINE $(CARGO) metadata --format-version 1 $(CARGO_LOCKED) > "$(NEXTTEST_CARGO_METADATA)"
+	env -u CARGO_NET_OFFLINE $(CARGO) metadata --no-deps --format-version 1 $(CARGO_LOCKED) > "$(LLVM_COV_CARGO_METADATA)"
+	env -u CARGO_NET_OFFLINE CARGO_TARGET_DIR="$(DYLINT_WARMUP_TARGET_DIR)" $(CARGO) build $(CARGO_LOCKED) -p dylint_testing --example cargo_test_driver
+
+test: fetch ## Run tests with warnings treated as errors
+	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v "$(CARGO_NEXTEST)" >/dev/null || { echo "Install cargo-nextest (cargo install cargo-nextest)"; exit 1; }
 	@# Prefer dynamic linking during local `cargo test` runs to avoid rustc_private
 	@# linkage pitfalls when building cdylib-based lints; `publish-check` omits
 	@# this flag to exercise production-like linking behaviour.
@@ -255,8 +274,8 @@ test: clippy-snapshot ## Run tests with warnings treated as errors
 		rm -f "$$WHITAKER_BACKUP"; \
 		WHITAKER_BACKUP=""; \
 	fi; \
-	RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS)" $(CARGO) $(TEST_RUNNER) $(CARGO_LOCKED) $(TEST_CARGO_FLAGS) $(BUILD_JOBS) $(if $(NEXTEST_PROFILE),--profile $(NEXTEST_PROFILE)); \
-	RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS)" $(CARGO) test $(CARGO_LOCKED) -p dylint_testing --lib --no-default-features $(BUILD_JOBS); \
+	RUSTUP_TOOLCHAIN="$(TEST_RUSTUP_TOOLCHAIN)" CARGO="$(CARGO_TEST_CARGO)" CARGO_REAL="$(CARGO)" CARGO_NEXTEST_REAL="$(CARGO_NEXTEST)" CARGO_METADATA_CACHE="$(CARGO_TEST_METADATA_CACHE)" CARGO_METADATA_ROOT="$(CARGO_TEST_METADATA_ROOT)" CARGO_NET_OFFLINE=true RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS)" $(TEST_RUNNER) $(CARGO_LOCKED) $(TEST_CARGO_FLAGS) $(BUILD_JOBS) $(if $(NEXTEST_PROFILE),--profile $(NEXTEST_PROFILE)) --cargo-metadata "$(NEXTTEST_CARGO_METADATA)"; \
+	RUSTUP_TOOLCHAIN="$(TEST_RUSTUP_TOOLCHAIN)" CARGO_NET_OFFLINE=true RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS)" $(CARGO) test $(CARGO_LOCKED) -p dylint_testing --lib --example cargo_test_driver --no-default-features $(BUILD_JOBS); \
 	if [ "$${ACT_WORKFLOW_TESTS:-0}" = "1" ]; then \
 		$(MAKE) workflow-test; \
 	fi
@@ -272,18 +291,20 @@ coverage: ## Generate LCOV coverage over the CI-tested crate subset
 	@# cannot support.
 	@# LLVM coverage maps carry source locations without DWARF debug info.
 	@# Omit optional symbols from this throwaway target to limit runner disk use.
-	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v cargo-llvm-cov >/dev/null || { echo "Install cargo-llvm-cov (cargo install cargo-llvm-cov)"; exit 1; }
+	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v "$(CARGO_LLVM_COV)" >/dev/null || { echo "Install cargo-llvm-cov (cargo install cargo-llvm-cov)"; exit 1; }
 	@CARGO_LLVM_COV_TARGET_DIR="$(COVERAGE_TARGET_DIR)" \
 		CARGO_TARGET_DIR="$(COVERAGE_TARGET_DIR)" \
 		LLVM_PROFILE_FILE_NAME="$(COVERAGE_PROFILE_FILE_NAME)" \
 		CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 \
-		$(MAKE) test TEST_RUNNER="llvm-cov nextest --lcov --output-path $(COVERAGE_OUTPUT) -E '$(COVERAGE_NEXTEST_FILTER)'"
+		$(MAKE) test CARGO_TEST_CARGO="$(CARGO_TEST_WRAPPER)" \
+			CARGO_TEST_METADATA_CACHE="$(LLVM_COV_CARGO_METADATA)" \
+			TEST_RUNNER="$(CARGO_LLVM_COV) llvm-cov nextest --lcov --output-path $(COVERAGE_OUTPUT) -E '$(COVERAGE_NEXTEST_FILTER)'"
 
 trybuild-contracts: ## Run the trybuild compile-contract tests, which `make coverage` skips
 	@# `make coverage` leaves seven of these out (see TRYBUILD_CONTRACT_FILTER), so
 	@# a developer runs them here, plain and uninstrumented, under the `ci`
 	@# profile that gives them their serial group and build-sized allowance.
-	@$(MAKE) test NEXTEST_PROFILE=ci TEST_RUNNER="nextest run -E '$(TRYBUILD_CONTRACT_FILTER)'"
+	@$(MAKE) test NEXTEST_PROFILE=ci TEST_RUNNER="$(CARGO_NEXTEST) nextest run -E '$(TRYBUILD_CONTRACT_FILTER)'"
 
 test-doc: ## Run the workspace doctests, which no other lane executes
 	@# `cargo llvm-cov nextest` runs no doctests and `--all-targets` excludes

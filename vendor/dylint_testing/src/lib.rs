@@ -4,11 +4,12 @@
 //! **Note: If your test has dependencies, you must use `ui_test_example` or `ui_test_examples`.**
 //! See the [`question_mark_in_expression`] example in this repository.
 //!
-//! This crate provides the following three functions:
+//! This crate provides three UI test functions and one driver preparation function:
 //!
 //! - [`ui_test`] - test a library on all source files in a directory
 //! - [`ui_test_example`] - test a library on one example target
 //! - [`ui_test_examples`] - test a library on all example targets
+//! - [`prepare_driver`] - prepare and return the driver for the pinned toolchain
 //!
 //! For most situations, you can add the following to your library's `lib.rs` file:
 //!
@@ -130,6 +131,7 @@ use std::{
 };
 
 mod example;
+
 pub mod ui;
 
 pub(crate) use example::{ExampleTestContext, example_target, example_targets, run_example_test};
@@ -162,6 +164,27 @@ pub fn ui_test_examples(name: &str) {
     ui::Test::examples(name).run();
 }
 
+/// Prepare and return the Dylint driver for the pinned toolchain.
+///
+/// This lets build setup warm the driver before tests run with Cargo offline.
+/// The function leaves `DYLINT_DRIVER_PATH` unchanged and lets Dylint choose
+/// its default when the variable is absent.
+///
+/// # Errors
+///
+/// Return an error if the pinned driver cannot be found or built.
+///
+/// # Examples
+///
+/// ```no_run
+/// let driver = dylint_testing::prepare_driver()?;
+/// assert!(driver.is_absolute());
+/// # Ok::<(), anyhow::Error>(())
+/// ```
+pub fn prepare_driver() -> Result<PathBuf> {
+    dylint::driver_builder::get(&dylint::opts::Dylint::default(), env!("RUSTUP_TOOLCHAIN"))
+}
+
 fn initialize(name: &str) -> &Result<PathBuf> {
     DRIVER.get_or_init(|| {
         let _ = env_logger::try_init();
@@ -175,10 +198,7 @@ fn initialize(name: &str) -> &Result<PathBuf> {
             .success()?;
 
         let dylint_libs = dylint_libs(name, env!("RUSTUP_TOOLCHAIN"))?;
-        let driver = dylint::driver_builder::get(
-            &dylint::opts::Dylint::default(),
-            env!("RUSTUP_TOOLCHAIN"),
-        )?;
+        let driver = prepare_driver()?;
 
         unsafe {
             set_var(env::CLIPPY_DISABLE_DOCS_LINKS, "true");

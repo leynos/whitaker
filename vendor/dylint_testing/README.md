@@ -11,11 +11,12 @@ testing [Dylint] libraries.
 `ui_test_examples`.** See the [`question_mark_in_expression`] example in this
 repository.
 
-This crate provides the following three functions:
+This crate provides three UI test functions and one driver preparation function:
 
 - [`ui_test`] - test a library on all source files in a directory
 - [`ui_test_example`] - test a library on one example target
 - [`ui_test_examples`] - test a library on all example targets
+- `prepare_driver` - prepare and return the driver for the pinned toolchain
 
 For most situations, you can add the following to your library's `lib.rs` file:
 
@@ -142,3 +143,11 @@ they contain spaces (`C:\Program Files\...`). The example-testing code lives in
 Whitaker's 400-line limit; `example_targets` returns its list directly instead
 of an infallible `Result`; and Cargo's `Running` lines are parsed without a
 regex, removing a production `unwrap()` and the `regex` dependency.
+
+Whitaker also exposes `prepare_driver()` so the Makefile can warm the driver
+before tests run with Cargo offline, plus two examples it invokes:
+`warm_driver`, which prepares the driver during `make fetch`, and
+`cargo_test_driver`, which serves prepared metadata to `cargo-llvm-cov` during
+`make coverage` and routes its Nextest call to the standalone binary. The
+routing drops the workspace `--manifest-path` that Cargo's coverage driver
+adds, because Nextest rejects that flag alongside `--cargo-metadata`.
