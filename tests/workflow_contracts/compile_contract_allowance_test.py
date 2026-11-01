@@ -21,8 +21,7 @@ import pathlib
 import typing as typ
 
 import pytest
-from nextest_profile_test import REQUIRED_OVERRIDES
-from nextest_durations import seconds
+from nextest_overrides import REQUIRED_OVERRIDES
 from rust_functions import compile_contracts_in
 from nextest_config import load_nextest_config
 from ubicloud_workflow_support import REPOSITORY_ROOT

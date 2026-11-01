@@ -87,7 +87,7 @@ retries = 0
 # Keep them under one build-sized allowance and avoid retries that repeat work.
 filter = "test(dependency_check_result_contract_is_public) | test(fixture_expansion_lint_attribute_contract) | test(normalize_settings_is_public_and_the_legacy_name_stays_removed) | test(renamed_common_apis_are_public_and_legacy_names_stay_removed) | test(renamed_sarif_api_is_public_and_legacy_names_stay_removed) | test(sha2_0_11_pre_migration_patterns_fail_to_compile)"
 slow-timeout = { period = "75m", terminate-after = 1, grace-period = "5s" }
-test-group = "serial-dylint-ui"
+test-group = "serial-trybuild-contracts"
 retries = 0
 
 [[profile.ci.overrides]]
@@ -95,7 +95,7 @@ retries = 0
 # but busy compiler queue. Allow one longer build without retrying it.
 filter = "package(rstest_helper_should_be_fixture) & test(trybuild_fixtures_compile_without_diagnostics)"
 slow-timeout = { period = "120m", terminate-after = 1, grace-period = "5s" }
-test-group = "serial-dylint-ui"
+test-group = "serial-trybuild-contracts"
 retries = 0
 
 [[profile.ci.overrides]]
@@ -124,8 +124,12 @@ test-group = "serial-nested-cargo-builds"
 # `serial_test` crate's in-process mutex has no effect.  A test-group
 # with max-threads = 1 prevents concurrent lint-library builds from
 # racing on the shared target directory.
+#
+# Trybuild writes to `target/tests/trybuild`, separate from Dylint's `debug` and
+# `debug/examples`; `ExampleHarnessLock` serializes the rstest-helper pair.
 [test-groups]
 serial-dylint-ui = { max-threads = 1 }
+serial-trybuild-contracts = { max-threads = 1 }
 serial-toolchain-installs = { max-threads = 1 }
 serial-nested-cargo-builds = { max-threads = 1 }
 
@@ -144,15 +148,15 @@ serial-nested-cargo-builds = { max-threads = 1 }
 # name reported to nextest is plain `ui`, not `ui::ui`, so the substring
 # match `test(ui::ui)` does not capture them (e.g. bumpy_road_function).
 #
-# `example_harness_collects_call_site_evidence` and
-# `trybuild_fixtures_compile_without_diagnostics` use nested Cargo UI harnesses
-# in `rstest_helper_should_be_fixture`. They must share this group with the
-# other Dylint UI tests: constrained Namespace coverage runners otherwise
-# compile them concurrently against the shared target directory. The direct
-# acquisition and cross-process lock tests use this target lock and share the
-# serial group with the fixture builds they verify.
-# example-compilation override below gives its library and example builds a
-# 75-minute allowance after its earlier 20-minute limit expired in the queue.
+# `example_harness_collects_call_site_evidence` uses a nested Cargo UI harness
+# in `rstest_helper_should_be_fixture`. It must share this group with the other
+# Dylint UI tests: constrained Namespace coverage runners otherwise compile it
+# concurrently against the shared target directory. The direct acquisition and
+# cross-process lock tests use this target lock and share the serial group with
+# the fixture builds they verify. The example-compilation override below gives
+# its library and example builds a 75-minute allowance after its earlier
+# 20-minute limit expired in the queue. The trybuild compile contracts write to
+# `target/tests/trybuild` and hold their own `serial-trybuild-contracts` group.
 #
 # `ui::example_compiles_under_test_harness`,
 # `ui::hand_written_test_companion_does_not_exempt_parent_function`,
@@ -206,7 +210,7 @@ slow-timeout = { period = "75m", terminate-after = 1, grace-period = "5s" }
 # Keep them under one build-sized allowance and avoid retries that repeat work.
 filter = "test(dependency_check_result_contract_is_public) | test(fixture_expansion_lint_attribute_contract) | test(normalize_settings_is_public_and_the_legacy_name_stays_removed) | test(renamed_common_apis_are_public_and_legacy_names_stay_removed) | test(renamed_sarif_api_is_public_and_legacy_names_stay_removed) | test(sha2_0_11_pre_migration_patterns_fail_to_compile)"
 slow-timeout = { period = "75m", terminate-after = 1, grace-period = "5s" }
-test-group = "serial-dylint-ui"
+test-group = "serial-trybuild-contracts"
 retries = 0
 
 [[profile.default.overrides]]
@@ -214,7 +218,7 @@ retries = 0
 # but busy compiler queue. Allow one longer build without retrying it.
 filter = "package(rstest_helper_should_be_fixture) & test(trybuild_fixtures_compile_without_diagnostics)"
 slow-timeout = { period = "120m", terminate-after = 1, grace-period = "5s" }
-test-group = "serial-dylint-ui"
+test-group = "serial-trybuild-contracts"
 retries = 0
 
 [[profile.default.overrides]]
