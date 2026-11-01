@@ -118,7 +118,7 @@ Pass the Cargo executable and active Rustup toolchain explicitly so nested
 tests use the same toolchain. A direct invocation can use:
 
 ```sh
-eval "$(make dylint-env)"
+eval "$(make dylint-env | sed 's/^/export /')"
 make fetch
 CARGO="$(command -v cargo)" \
 RUSTUP_TOOLCHAIN="$(rustup show active-toolchain | cut -d' ' -f1)" \
@@ -126,10 +126,11 @@ CARGO_NET_OFFLINE=true cargo-nextest nextest run --locked \
     --cargo-metadata target/dylint-warmup/nextest-cargo-metadata.json
 ```
 
-`make dylint-env` exports the keyed `DYLINT_CLIPPY_REPO` and
-`DYLINT_DRIVER_PATH` the Makefile uses. Without them the warm-up writes to a
-default driver directory the direct run would not read, and the offline test
-process would try to build a second driver with no network access.
+`make dylint-env` prints the keyed `DYLINT_CLIPPY_REPO` and
+`DYLINT_DRIVER_PATH` the Makefile uses; the `export` in the snippet puts them
+in the environment Nextest passes to its children. Without them the warm-up
+writes to a default driver directory the direct run would not read, and the
+offline test process would try to build a second driver with no network access.
 
 The Make test recipe uses the same offline environment. Directly owned nested
 Cargo calls use `--frozen`; trybuild and similar tools inherit
@@ -262,13 +263,13 @@ process, so the in-process `#[serial]` mutex alone is not sufficient. They are
 also marked `#[ignore]` by default because they depend on external tooling and
 a buildable workspace. Before running them, install `cargo-dylint` and
 `dylint-link`, export the prepared driver environment with
-`eval "$(make dylint-env)"`, then run `make fetch` to prepare the locked
-workspace and Dylint driver. The harness calls `build_lint_library()` before
-running `cargo dylint`, so the workspace build is handled automatically. Run
-them with one of the following commands:
+`eval "$(make dylint-env | sed 's/^/export /')"`, then run `make fetch` to
+prepare the locked workspace and Dylint driver. The harness calls
+`build_lint_library()` before running `cargo dylint`, so the workspace build is
+handled automatically. Run them with one of the following commands:
 
 ```sh
-eval "$(make dylint-env)"
+eval "$(make dylint-env | sed 's/^/export /')"
 CARGO_NET_OFFLINE=true cargo test --frozen -p no_std_fs_operations \
     --test integration_exclusion -- --ignored
 CARGO_NET_OFFLINE=true cargo nextest run --frozen -p no_std_fs_operations \
