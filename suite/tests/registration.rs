@@ -119,6 +119,6 @@ fn scenario_double_registration(world: RegistrationWorld) { let _ = world; }
 /// Verify that Dylint loads the suite through its exported `register_lints` entry point.
 #[test]
 fn exported_entry_point_registers_suite_lints() {
-    whitaker::run_ui_tests!("tests/ui")
+    whitaker_lint_core::run_ui_tests!("tests/ui")
         .expect("Dylint should load the suite and satisfy its registered lint expectation");
 }
