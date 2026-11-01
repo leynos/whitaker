@@ -8,6 +8,7 @@ the helpers misread fails before it can become evidence.
 from __future__ import annotations
 
 import importlib.util
+import json
 import pathlib
 import sys
 import types
@@ -180,6 +181,43 @@ class TestMembership:
         listing = _single_test_listing()
         with pytest.raises(benchmark.BenchmarkError, match="share members"):
             benchmark.membership_report({"a": listing, "b": listing})
+
+    def test_listing_survives_appended_build_output(
+        self, benchmark: types.ModuleType, tmp_path: pathlib.Path
+    ) -> None:
+        # Observed on a benchmark runner: Nextest writes its report without a
+        # trailing newline, so cargo's next "Compiling" line is appended to the
+        # report's line and the whole line no longer parses as one document.
+        listing = _single_test_listing()
+        log = tmp_path / "membership-trybuild.log"
+        log.write_text(
+            "make: Entering directory\n"
+            + json.dumps(listing)
+            + "\x1b[1m\x1b[92m   Compiling\x1b[0m memchr v2.8.3\n"
+        )
+        assert benchmark._read_listing(log) == listing
+
+    def test_pretty_printed_listing_spans_lines(
+        self, benchmark: types.ModuleType, tmp_path: pathlib.Path
+    ) -> None:
+        # ``--message-format json-pretty`` is valid Nextest output whose report
+        # occupies many lines, so decoding one line at a time would reject it.
+        listing = _single_test_listing()
+        log = tmp_path / "membership-trybuild.log"
+        log.write_text(
+            "make: Entering directory\n"
+            + json.dumps(listing, indent=2)
+            + "\n\x1b[1m\x1b[92m   Compiling\x1b[0m memchr v2.8.3\n"
+        )
+        assert benchmark._read_listing(log) == listing
+
+    def test_log_without_a_listing_is_an_error(
+        self, benchmark: types.ModuleType, tmp_path: pathlib.Path
+    ) -> None:
+        log = tmp_path / "membership-trybuild.log"
+        log.write_text("error: could not compile `ui`\n")
+        with pytest.raises(benchmark.BenchmarkError, match="no Nextest list report"):
+            benchmark._read_listing(log)
 
     def test_report_rejects_a_control_selecting_other_tests(
         self, benchmark: types.ModuleType
