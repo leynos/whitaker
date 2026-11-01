@@ -67,7 +67,9 @@ pub trait BaseDirs {
     /// `~/.local/share/whitaker-bootstrap`.
     fn bootstrap_dir(&self) -> Option<PathBuf> {
         self.whitaker_data().and_then(|data_dir| {
-            data_dir.parent().map(|root| root.join("whitaker-bootstrap"))
+            data_dir
+                .parent()
+                .map(|root| root.join("whitaker-bootstrap"))
         })
     }
 }
