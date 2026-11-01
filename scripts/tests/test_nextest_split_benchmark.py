@@ -52,7 +52,6 @@ def benchmark() -> types.ModuleType:
 
 
 def _testcase(
-    benchmark: types.ModuleType,
     *,
     name: str,
     classname: str = "crate::ui",
@@ -144,15 +143,18 @@ class TestConfiguration:
         with pytest.raises(benchmark.BenchmarkError, match="survived the rewrite"):
             benchmark.serial_control_text(wrapped)
 
-    def test_junit_section_is_appended_once(self, benchmark: types.ModuleType) -> None:
-        once = benchmark.with_junit(CONFIG, "default", pathlib.Path("/tmp/a.xml"))
-        twice = benchmark.with_junit(once, "default", pathlib.Path("/tmp/b.xml"))
+    def test_junit_section_is_appended_once(
+        self, benchmark: types.ModuleType, tmp_path: pathlib.Path
+    ) -> None:
+        first, second = tmp_path / "a.xml", tmp_path / "b.xml"
+        once = benchmark.with_junit(CONFIG, "default", first)
+        twice = benchmark.with_junit(once, "default", second)
         sections = twice.count("[profile.default.junit]")
         assert sections == 1, f"preparing twice must keep one section; got:\n{twice}"
-        assert 'path = "/tmp/b.xml"' in twice, (
+        assert f'path = "{second}"' in twice, (
             f"the second path must replace the first; got:\n{twice}"
         )
-        assert "/tmp/a.xml" not in twice, (
+        assert str(first) not in twice, (
             f"the earlier path must not survive; got:\n{twice}"
         )
 
@@ -258,10 +260,9 @@ class TestMeasurement:
     ) -> None:
         xml = _report(
             _testcase(
-                benchmark, name="ui", start="2026-10-31T10:00:00.000Z", seconds=10
+                name="ui", start="2026-10-31T10:00:00.000Z", seconds=10
             ),
             _testcase(
-                benchmark,
                 name="contract_a",
                 classname="crate::api_contract",
                 start="2026-10-31T10:00:20.000Z",
@@ -281,14 +282,13 @@ class TestMeasurement:
         self, benchmark: types.ModuleType
     ) -> None:
         first = _testcase(
-            benchmark,
             name="ui",
             start="2026-10-31T10:00:00.000Z",
             seconds=5,
             status="failure",
         )
         second = _testcase(
-            benchmark, name="ui", start="2026-10-31T10:01:00.000Z", seconds=2
+            name="ui", start="2026-10-31T10:01:00.000Z", seconds=2
         )
         tests = benchmark.measure_junit(_report(first, second), _membership(benchmark))
         assert len(tests) == 1, (
@@ -340,10 +340,9 @@ class TestOverlap:
     def test_cross_group_overlap_is_counted(self, benchmark: types.ModuleType) -> None:
         xml = _report(
             _testcase(
-                benchmark, name="ui", start="2026-10-31T10:00:00.000Z", seconds=60
+                name="ui", start="2026-10-31T10:00:00.000Z", seconds=60
             ),
             _testcase(
-                benchmark,
                 name="contract_a",
                 classname="crate::api_contract",
                 start="2026-10-31T10:00:30.000Z",
@@ -371,11 +370,11 @@ class TestOverlap:
         }
         xml = _report(
             _testcase(
-                benchmark, name="one", classname="c::ui",
+                name="one", classname="c::ui",
                 start="2026-10-31T10:00:00.000Z", seconds=60,
             ),
             _testcase(
-                benchmark, name="two", classname="c::ui",
+                name="two", classname="c::ui",
                 start="2026-10-31T10:00:10.000Z", seconds=60,
             ),
         )
@@ -389,10 +388,9 @@ class TestOverlap:
     ) -> None:
         xml = _report(
             _testcase(
-                benchmark, name="ui", start="2026-10-31T10:00:00.000Z", seconds=60
+                name="ui", start="2026-10-31T10:00:00.000Z", seconds=60
             ),
             _testcase(
-                benchmark,
                 name="contract_a",
                 classname="crate::api_contract",
                 start="2026-10-31T10:01:00.000Z",
@@ -442,17 +440,15 @@ class TestOverlap:
         # are not subject to capacity one and must not be compared.
         xml = _report(
             _testcase(
-                benchmark, name="ui", start="2026-10-31T10:00:00.000Z", seconds=60
+                name="ui", start="2026-10-31T10:00:00.000Z", seconds=60
             ),
             _testcase(
-                benchmark,
                 name="elsewhere",
                 classname="crate::unit",
                 start="2026-10-31T10:00:10.000Z",
                 seconds=60,
             ),
             _testcase(
-                benchmark,
                 name="elsewhere_too",
                 classname="crate::unit",
                 start="2026-10-31T10:00:20.000Z",
@@ -477,7 +473,6 @@ class TestOverlap:
     ) -> None:
         xml = _report(
             _testcase(
-                benchmark,
                 name="ui",
                 start="2026-10-31T10:00:00.000Z",
                 seconds=60,
@@ -506,10 +501,9 @@ class TestSummary:
     ) -> None:
         xml = _report(
             _testcase(
-                benchmark, name="ui", start="2026-10-31T10:00:00.000Z", seconds=60
+                name="ui", start="2026-10-31T10:00:00.000Z", seconds=60
             ),
             _testcase(
-                benchmark,
                 name="contract_a",
                 classname="crate::api_contract",
                 start="2026-10-31T10:00:10.000Z",
@@ -559,7 +553,7 @@ class TestSummary:
     ) -> None:
         xml = _report(
             _testcase(
-                benchmark, name="ui", start="2026-10-31T10:00:00.000Z", seconds=1
+                name="ui", start="2026-10-31T10:00:00.000Z", seconds=1
             )
         )
         summary = benchmark.summarize(xml, _membership(benchmark))
@@ -572,7 +566,10 @@ class TestCommandLine:
     """A malformed input must exit 2 with one diagnostic, not a traceback."""
 
     def test_invalid_configuration_exits_two(
-        self, benchmark: types.ModuleType, tmp_path: pathlib.Path, capsys: object
+        self,
+        benchmark: types.ModuleType,
+        tmp_path: pathlib.Path,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         config = tmp_path / "nextest.toml"
         config.write_text("[profile.default")

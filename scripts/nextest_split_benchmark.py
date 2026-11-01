@@ -922,7 +922,7 @@ def _summarize(args: argparse.Namespace) -> int:
     status = summary["exit_status"]
     if failed or (status is not None and status != 0):
         print(
-            f"{args.junit.parent.name}: {failed} failed tests, exit status {status}",
+            f"{args.junit.stem}: {failed} failed tests, exit status {status}",
             file=sys.stderr,
         )
         return 1
