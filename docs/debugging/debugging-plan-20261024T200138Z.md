@@ -1,9 +1,9 @@
 # Debugging plan: slow Bumpy Road API contract
 
 - **Generated:** 2026-10-24T20:01:38Z
-- **Updated:** 2026-10-31
+- **Updated:** 2026-11-01
 - **Issue:** [#514](https://github.com/leynos/whitaker/issues/514)
-- **Status:** Option 3 implemented; validation in progress.
+- **Status:** Option 3 implemented and validated.
 
 ## Problem statement
 
@@ -159,6 +159,36 @@ appears in `make test` or in `windows-compat`.
 immediately before `make test-doc`, so the doctest lane starts with the
 non-coverage target rather than the instrumented one. The doctest there costs
 the ordinary library build that `make lint` and `cargo doc` already require.
+
+## Validation
+
+Every gate ran sequentially on the candidate worktree.
+
+| Gate                            | Result                                 |
+| ------------------------------- | -------------------------------------- |
+| `make check-fmt`                | pass, 98 files unchanged               |
+| `make lint`                     | pass, no warnings or errors            |
+| `make test-doc`                 | pass, all four Bumpy Road doctests ran |
+| `make markdownlint` (spelling)  | pass, no errors                        |
+| `make nixie`                    | pass, all diagrams valid               |
+| `make test-workflow-contracts`  | 748 passed                             |
+| `nextest_profile_test.py` et al | 82 passed                              |
+
+The full `make test` run is long on this host because the shared compile queue
+is heavily loaded, and the local command ceiling stopped two attempts short.
+Both attempts were clean as far as they got: run 1 passed 1995 of 2015 tests,
+run 2 passed 2008, and neither reported a failure.
+
+The denominator is 2015 rather than the 2021 nextest lists because six tests
+carry `#[ignore]`: five in `no_std_fs_operations::integration_exclusion` and
+one in the `whitaker-installer` clippy snapshot.
+
+The seven non-ignored tests that neither run reached were then run one at a
+time. All seven pass: five dylint UI contracts, the `whitaker_test_macros`
+contract, and the `rstest_helper_should_be_fixture` UI contract, which took
+1017 seconds of nested trybuild builds behind the compile queue. The trailing
+`cargo test -p dylint_testing --lib --no-default-features` lane also passed its
+19 tests.
 
 ## Follow-up
 
