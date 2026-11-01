@@ -33,7 +33,7 @@ fn xdg_bin_home() -> Option<PathBuf> {
 /// use whitaker_installer::dirs::{BaseDirs, SystemBaseDirs};
 ///
 /// let dirs = SystemBaseDirs::new().expect("failed to initialize directories");
-/// if let Some(bin_dir) = dirs.bin_dir() {
+/// if let Some(bin_dir) = dirs.executables() {
 ///     println!("Executables go in: {}", bin_dir.display());
 /// }
 /// ```
@@ -43,30 +43,30 @@ pub trait BaseDirs {
     ///
     /// - Unix: `$HOME` or `/home/<user>`
     /// - Windows: `%USERPROFILE%` or `C:\Users\<user>`
-    fn home_dir(&self) -> Option<PathBuf>;
+    fn home(&self) -> Option<PathBuf>;
 
     /// Returns the directory for user executables.
     ///
     /// On Unix, respects `XDG_BIN_HOME` if set, otherwise falls back to
     /// `~/.local/bin`. On Windows, returns `~/.local/bin`. This follows the
     /// XDG Base Directory Specification convention.
-    fn bin_dir(&self) -> Option<PathBuf>;
+    fn executables(&self) -> Option<PathBuf>;
 
     /// Returns the directory for cloning the Whitaker repository.
     ///
     /// - Linux: `~/.local/share/whitaker`
     /// - macOS: `~/Library/Application Support/whitaker`
     /// - Windows: `%LOCALAPPDATA%\whitaker`
-    fn whitaker_data_dir(&self) -> Option<PathBuf>;
+    fn whitaker_data(&self) -> Option<PathBuf>;
 
     /// Returns the directory holding the installed Dylint bootstrap.
     ///
-    /// It sits beside [`Self::whitaker_data_dir`], never inside it, because
+    /// It sits beside [`Self::whitaker_data`], never inside it, because
     /// that directory is itself the managed Git clone. On Linux this is
     /// `$XDG_DATA_HOME/whitaker-bootstrap`, falling back to
     /// `~/.local/share/whitaker-bootstrap`.
     fn bootstrap_dir(&self) -> Option<PathBuf> {
-        self.whitaker_data_dir().and_then(|data_dir| {
+        self.whitaker_data().and_then(|data_dir| {
             data_dir
                 .parent()
                 .map(|root| root.join("whitaker-bootstrap"))
@@ -87,7 +87,7 @@ pub trait BaseDirs {
 /// use whitaker_installer::dirs::{BaseDirs, SystemBaseDirs};
 ///
 /// let dirs = SystemBaseDirs::new().expect("failed to initialize directories");
-/// let data_dir = dirs.whitaker_data_dir()
+/// let data_dir = dirs.whitaker_data()
 ///     .expect("could not determine data directory");
 /// println!("Whitaker data at: {}", data_dir.display());
 /// ```
@@ -115,25 +115,27 @@ impl SystemBaseDirs {
 }
 
 impl BaseDirs for SystemBaseDirs {
-    fn home_dir(&self) -> Option<PathBuf> {
+    fn home(&self) -> Option<PathBuf> {
         Some(self.user_dirs.home_dir().to_owned())
     }
 
-    fn bin_dir(&self) -> Option<PathBuf> {
+    fn executables(&self) -> Option<PathBuf> {
         #[cfg(unix)]
         if let Some(path) = xdg_bin_home() {
             return Some(path);
         }
-        self.home_dir().map(|h| h.join(".local").join("bin"))
+        self.home().map(|h| h.join(".local").join("bin"))
     }
 
-    fn whitaker_data_dir(&self) -> Option<PathBuf> {
+    fn whitaker_data(&self) -> Option<PathBuf> {
         Some(self.project_dirs.data_dir().to_owned())
     }
 }
 
 #[cfg(test)]
 mod tests {
+    //! Tests for base-directory resolution.
+
     use super::*;
     use crate::test_support::env_test_guard;
 
@@ -141,16 +143,13 @@ mod tests {
     fn system_base_dirs_returns_some_on_supported_platforms() {
         let dirs = SystemBaseDirs::new().expect("failed to create SystemBaseDirs");
 
-        assert!(
-            dirs.home_dir().is_some(),
-            "expected home_dir to return Some"
-        );
+        assert!(dirs.home().is_some(), "expected home_dir to return Some");
     }
 
     #[test]
     fn whitaker_data_dir_contains_whitaker() {
         let dirs = SystemBaseDirs::new().expect("failed to create SystemBaseDirs");
-        let data_dir = dirs.whitaker_data_dir();
+        let data_dir = dirs.whitaker_data();
 
         assert!(
             data_dir.is_some(),
@@ -167,7 +166,7 @@ mod tests {
     #[test]
     fn bootstrap_dir_sits_beside_the_managed_clone() {
         let dirs = SystemBaseDirs::new().expect("failed to create SystemBaseDirs");
-        let data_dir = dirs.whitaker_data_dir().expect("data dir");
+        let data_dir = dirs.whitaker_data().expect("data dir");
         let bootstrap = dirs.bootstrap_dir().expect("bootstrap dir");
 
         assert_eq!(bootstrap.parent(), data_dir.parent());
@@ -197,7 +196,7 @@ mod tests {
         // Temporarily unset XDG_BIN_HOME to test the fallback
         temp_env::with_var_unset("XDG_BIN_HOME", || {
             let dirs = SystemBaseDirs::new().expect("failed to create SystemBaseDirs");
-            let bin_dir = dirs.bin_dir();
+            let bin_dir = dirs.executables();
 
             assert!(bin_dir.is_some(), "expected bin_dir to return Some");
             assert!(
@@ -215,7 +214,7 @@ mod tests {
         let _guard = env_test_guard();
         temp_env::with_var("XDG_BIN_HOME", Some("/custom/bin"), || {
             let dirs = SystemBaseDirs::new().expect("failed to create SystemBaseDirs");
-            let bin_dir = dirs.bin_dir().expect("expected bin_dir to return Some");
+            let bin_dir = dirs.executables().expect("expected bin_dir to return Some");
 
             assert_eq!(bin_dir, PathBuf::from("/custom/bin"));
         });
@@ -227,7 +226,7 @@ mod tests {
         let _guard = env_test_guard();
         temp_env::with_var("XDG_BIN_HOME", Some("relative/path"), || {
             let dirs = SystemBaseDirs::new().expect("failed to create SystemBaseDirs");
-            let bin_dir = dirs.bin_dir().expect("expected bin_dir to return Some");
+            let bin_dir = dirs.executables().expect("expected bin_dir to return Some");
 
             // Should fall back to ~/.local/bin since XDG_BIN_HOME is relative
             assert!(

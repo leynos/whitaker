@@ -68,7 +68,7 @@ fn run(cli: &Cli, stdout: &mut dyn Write, stderr: &mut dyn Write) -> Result<()> 
 
 /// Returns the set of additional rustup components requested by the CLI flags.
 fn resolve_additional_components(args: &InstallArgs) -> &'static [&'static str] {
-    if args.cranelift {
+    if args.execution.cranelift {
         &["rustc-codegen-cranelift"]
     } else {
         &[]
@@ -120,11 +120,11 @@ fn run_install(args: &InstallArgs, stdout: &mut dyn Write, stderr: &mut dyn Writ
     let dirs = SystemBaseDirs::new().ok_or_else(|| InstallerError::WorkspaceNotFound {
         reason: "could not determine platform directories".to_owned(),
     })?;
-    if args.dry_run {
+    if args.execution.dry_run {
         return run_dry(args, &dirs, stderr);
     }
     let install_started = Instant::now();
-    if !args.skip_deps {
+    if !args.skip.skip_deps {
         ensure_dylint_tools(policy, stderr)?;
     }
     // Before any workspace or library work, with no fallback.
@@ -200,7 +200,7 @@ fn stage_suite(request: &SuiteRequest<'_>, stderr: &mut dyn Write) -> Result<Sta
         target_dir: &target_dir,
         jobs: args.jobs,
         verbosity: args.verbosity,
-        experimental: args.experimental,
+        experimental: args.lint_selection.experimental,
         quiet: args.quiet,
     };
     let build_results = perform_build(&context, &requested_crates, stderr)?;
@@ -250,7 +250,7 @@ fn ensure_whitaker_workspace(
     };
 
     let plan = WorkspacePlan {
-        should_update: !args.no_update,
+        should_update: !args.skip.no_update,
         suite_ref: args.suite_version.clone(),
     };
 
@@ -264,7 +264,7 @@ fn ensure_whitaker_workspace(
                 return ensure_workspace(dirs, &plan);
             };
 
-            match decide_workspace_action(&cwd, &clone_dir, !args.no_update) {
+            match decide_workspace_action(&cwd, &clone_dir, !args.skip.no_update) {
                 WorkspaceAction::CloneTo(dir) => {
                     write_stderr_line(stderr, format!("Cloning Whitaker repository to {dir}..."));
                 }
@@ -313,7 +313,7 @@ fn ensure_toolchain_installed(
 /// Common final steps: record the bootstrap, then write wrappers or a snippet.
 fn finish_install(context: &FinishInstallContext<'_>, stderr: &mut dyn Write) -> Result<()> {
     record_bootstrap(context.snapshot, context.toolchain, context.staging_path)?;
-    if context.args.skip_wrapper {
+    if context.args.skip.skip_wrapper {
         write_shell_snippet(context.snapshot, context.staging_path, stderr);
         Ok(())
     } else {
@@ -375,8 +375,8 @@ fn resolve_requested_crates(args: &InstallArgs) -> Result<Vec<CrateName>> {
         .collect();
 
     let options = CrateResolutionOptions {
-        individual_lints: args.individual_lints,
-        experimental: args.experimental,
+        individual_lints: args.lint_selection.individual_lints,
+        experimental: args.lint_selection.experimental,
     };
     if !lint_crates.is_empty() {
         validate_crate_names(&lint_crates, &options)?;

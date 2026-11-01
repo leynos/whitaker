@@ -36,17 +36,17 @@ struct TempBaseDirs {
 
 impl BaseDirs for TempBaseDirs {
     /// Return no home directory; the wrapper generator does not need one.
-    fn home_dir(&self) -> Option<PathBuf> {
+    fn home(&self) -> Option<PathBuf> {
         None
     }
 
     /// Return the temporary bin directory.
-    fn bin_dir(&self) -> Option<PathBuf> {
+    fn executables(&self) -> Option<PathBuf> {
         Some(self.bin.clone())
     }
 
     /// Return no data directory; the wrapper generator does not need one.
-    fn whitaker_data_dir(&self) -> Option<PathBuf> {
+    fn whitaker_data(&self) -> Option<PathBuf> {
         None
     }
 }

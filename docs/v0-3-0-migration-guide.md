@@ -266,3 +266,86 @@ Crates that depend on `whitaker_installer` see these changes:
   ```rust
   let result = generate_wrapper_scripts(&dirs)?;
   ```
+
+## Installer Rust APIs
+
+The installer API also changes in 0.3.0. Update implementations of `BaseDirs`
+to use its shorter method names:
+
+| 0.2.x method          | 0.3.0 method      |
+| --------------------- | ----------------- |
+| `home_dir()`          | `home()`          |
+| `bin_dir()`           | `executables()`   |
+| `whitaker_data_dir()` | `whitaker_data()` |
+
+`InstallArgs` groups related fields into `lint_selection`, `execution` and
+`skip` values:
+
+| 0.2.x field        | 0.3.0 field                       |
+| ------------------ | --------------------------------- |
+| `individual_lints` | `lint_selection.individual_lints` |
+| `experimental`     | `lint_selection.experimental`     |
+| `cranelift`        | `execution.cranelift`             |
+| `dry_run`          | `execution.dry_run`               |
+| `skip_deps`        | `skip.skip_deps`                  |
+| `skip_wrapper`     | `skip.skip_wrapper`               |
+| `no_update`        | `skip.no_update`                  |
+
+The clap groups are flattened, so command-line flags and their spellings are
+unchanged.
+
+The install metrics rate accessors now return integer permille (`u64`, from 0
+to 1000) instead of floating-point rates:
+
+| 0.2.x method      | 0.3.0 method               |
+| ----------------- | -------------------------- |
+| `download_rate()` | `download_rate_permille()` |
+| `build_rate()`    | `build_rate_permille()`    |
+
+Each unit is a tenth of a percentage point: 333 permille represents 33.3%.
+Packaging functions now borrow their parameter structs. Pass a reference to
+`package_artefact`, `package_installer` and `package_dependency_binary`:
+
+```rust
+// Before 0.3.0
+package_artefact(artefact_params)?;
+package_installer(installer_params)?;
+package_dependency_binary(dependency_params)?;
+
+// From 0.3.0
+package_artefact(&artefact_params)?;
+package_installer(&installer_params)?;
+package_dependency_binary(&dependency_params)?;
+```
+
+The binstall metadata helpers `load_cargo_toml()` and
+`extract_binstall_table()` (available to tests and the `test-support` feature)
+now return `Result<toml::Table, String>`. Propagate or handle these errors
+instead of assuming the manifest and metadata table are present:
+
+```rust
+// Before 0.3.0
+let manifest = load_cargo_toml();
+let binstall = extract_binstall_table(&manifest);
+
+// From 0.3.0; the caller returns Result<_, String>.
+let manifest = load_cargo_toml()?;
+let binstall = extract_binstall_table(&manifest)?;
+```
+
+For example, update method names, field access and packaging calls at the
+caller:
+
+```rust
+// Before 0.3.0
+let home = base_dirs.home_dir();
+let experimental = args.experimental;
+let rate_percent = metrics.download_rate() * 100.0;
+package_installer(params)?;
+
+// From 0.3.0
+let home = base_dirs.home();
+let experimental = args.lint_selection.experimental;
+let rate_permille = metrics.download_rate_permille(); // 333 represents 33.3%.
+package_installer(&params)?;
+```

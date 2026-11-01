@@ -18,6 +18,7 @@ use std::path::Path;
 use std::process::{Command, Output};
 
 mod install;
+mod install_repository;
 use install::*;
 
 /// Abstraction for running external commands.

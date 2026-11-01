@@ -57,6 +57,7 @@ COMPILE_CONTRACT_FILTER: typ.Final[str] = (
     "test(dependency_check_result_contract_is_public) | "
     "test(fixture_expansion_lint_attribute_contract) | "
     "test(normalize_settings_is_public_and_the_legacy_name_stays_removed) | "
+    "test(public_const_api_works_in_const_context) | "
     "test(renamed_common_apis_are_public_and_legacy_names_stay_removed) | "
     "test(renamed_sarif_api_is_public_and_legacy_names_stay_removed) | "
     "test(sha2_0_11_pre_migration_patterns_fail_to_compile)"
@@ -561,9 +562,9 @@ COVERAGE_KEPT_CONTRACT_TEST: typ.Final[str] = (
 def test_coverage_skips_the_override_contracts_but_the_one_that_counts() -> None:
     """The Makefile lists track the nextest override, less the one test that counts.
 
-    ``TRYBUILD_CONTRACT_FILTER`` combines the six standard compile-contract
+    ``TRYBUILD_CONTRACT_FILTER`` combines the seven standard compile-contract
     overrides with the separately budgeted nested trybuild test.
-    ``COVERAGE_SKIPPED_TRYBUILD_FILTER`` lists those seven tests less the one
+    ``COVERAGE_SKIPPED_TRYBUILD_FILTER`` lists those eight tests less the one
     that moves coverage, so adding a contract test to one place and not the
     other fails here instead of silently changing the coverage lane.
     """
