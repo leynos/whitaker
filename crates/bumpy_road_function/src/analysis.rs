@@ -68,7 +68,13 @@ impl Default for Settings {
 ///
 /// # Examples
 ///
+/// The hidden lines opt the doctest crate into `rustc_private`, matching the
+/// library when it is built with `dylint-driver`. Without them the doctest
+/// cannot link the transitive `rustc_*` dependencies.
+///
 /// ```
+/// # #![cfg_attr(feature = "dylint-driver", feature(rustc_private))]
+/// # #[cfg(feature = "dylint-driver")] extern crate rustc_driver;
 /// use bumpy_road_function::analysis::{normalize_settings, Settings, Weights};
 ///
 /// let settings = Settings {
@@ -86,6 +92,17 @@ impl Default for Settings {
 /// assert_eq!(normalized.threshold, Settings::default().threshold);
 /// assert_eq!(normalized.window, Settings::default().window);
 /// assert_eq!(normalized.weights, Settings::default().weights);
+/// ```
+///
+/// The Oxford spelling is the only public name. The legacy spelling stays
+/// removed, so importing it fails to compile with `E0432`:
+///
+/// ```compile_fail,E0432
+/// # #![cfg_attr(feature = "dylint-driver", feature(rustc_private))]
+/// # #[cfg(feature = "dylint-driver")] extern crate rustc_driver;
+/// use bumpy_road_function::analysis::normalise_settings;
+///
+/// let _ = normalise_settings(Default::default());
 /// ```
 #[must_use]
 pub fn normalize_settings(settings: Settings) -> Settings {
@@ -209,6 +226,8 @@ impl BumpDetectionContext {
 /// # Examples
 ///
 /// ```
+/// # #![cfg_attr(feature = "dylint-driver", feature(rustc_private))]
+/// # #[cfg(feature = "dylint-driver")] extern crate rustc_driver;
 /// use bumpy_road_function::analysis::detect_bumps;
 ///
 /// let signal = [0.0, 3.0, 3.2, 0.0, 3.1, 3.0];
@@ -291,6 +310,8 @@ const fn finalize_bump(
 /// # Examples
 ///
 /// ```
+/// # #![cfg_attr(feature = "dylint-driver", feature(rustc_private))]
+/// # #[cfg(feature = "dylint-driver")] extern crate rustc_driver;
 /// use bumpy_road_function::analysis::{detect_bumps, top_two_bumps};
 ///
 /// let signal = [0.0, 6.0, 0.0, 4.0, 4.0, 0.0, 5.0, 0.0, 4.0, 4.0];

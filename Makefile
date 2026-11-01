@@ -24,12 +24,15 @@ TEST_EXCLUDES ?= --exclude rustc_ast --exclude rustc_attr_data_structures \
 	--exclude function_attrs_follow_docs --exclude module_max_lines \
 	--exclude no_expect_outside_tests --exclude dylint_testing
 TEST_CARGO_FLAGS ?= $(CARGO_FLAGS) $(TEST_EXCLUDES)
-# Doctests cannot run for a crate that links `rustc_private`. A doctest is
-# compiled as its own crate without `#![feature(rustc_private)]`, so every
-# lint crate, the `rustc_*` proxy shims, `clippy_utils`, the `whitaker` root,
-# and the suite fail at `E0658` before a single assertion runs. The remaining
-# four packages hold the documented public API and are the doctest lane.
-DOCTEST_EXCLUDES ?= --exclude bumpy_road_function --exclude clippy_utils \
+# Doctests cannot run for a crate that links `rustc_private` unless the example
+# opts into it. A doctest is compiled as its own crate without
+# `#![feature(rustc_private)]`, so most lint crates, the `rustc_*` proxy shims,
+# `clippy_utils`, the `whitaker` root, and the suite fail at `E0658` before a
+# single assertion runs. The remaining packages hold the documented public API
+# and are the doctest lane. `bumpy_road_function` is doctested: its examples
+# carry hidden `rustc_private` setup lines, including the compile-fail contract
+# for the removed legacy settings name.
+DOCTEST_EXCLUDES ?= --exclude clippy_utils \
 	--exclude conditional_max_n_branches --exclude function_attrs_follow_docs \
 	--exclude module_max_lines --exclude module_must_have_inner_docs \
 	--exclude no_expect_outside_tests --exclude no_std_fs_operations \
@@ -47,8 +50,8 @@ TEST_RUNNER ?= nextest run
 # The trybuild contract tests assert that small fixtures compile or fail to
 # compile; they run no workspace code the coverage report attributes. Under
 # instrumentation they only cost build time (about 250 s of the 616 s test
-# phase), so `make coverage` leaves six of the seven out and `make trybuild-contracts`
-# runs all seven in a plain, uninstrumented run (the `windows-compat` lane's
+# phase), so `make coverage` leaves five of the six out and `make trybuild-contracts`
+# runs all six in a plain, uninstrumented run (the `windows-compat` lane's
 # `make test` runs them in CI; this target is for running them locally).
 # The names are the ones `.config/nextest.toml` gives its compile-contract
 # override. `fixture_expansion_lint_attribute_contract` stays in the coverage
@@ -56,8 +59,8 @@ TEST_RUNNER ?= nextest run
 # it out lowers that crate's line coverage by 4 lines. A workflow contract keeps
 # the lists in step. Naming a filterset replaces the profile's
 # `default-filter`, so COVERAGE_BASE_FILTER repeats the default profile's.
-TRYBUILD_CONTRACT_FILTER ?= test(dependency_check_result_contract_is_public) | test(fixture_expansion_lint_attribute_contract) | test(normalize_settings_is_public_and_the_legacy_name_stays_removed) | test(renamed_common_apis_are_public_and_legacy_names_stay_removed) | test(renamed_sarif_api_is_public_and_legacy_names_stay_removed) | test(sha2_0_11_pre_migration_patterns_fail_to_compile) | test(trybuild_fixtures_compile_without_diagnostics)
-COVERAGE_SKIPPED_TRYBUILD_FILTER ?= test(dependency_check_result_contract_is_public) | test(normalize_settings_is_public_and_the_legacy_name_stays_removed) | test(renamed_common_apis_are_public_and_legacy_names_stay_removed) | test(renamed_sarif_api_is_public_and_legacy_names_stay_removed) | test(sha2_0_11_pre_migration_patterns_fail_to_compile) | test(trybuild_fixtures_compile_without_diagnostics)
+TRYBUILD_CONTRACT_FILTER ?= test(dependency_check_result_contract_is_public) | test(fixture_expansion_lint_attribute_contract) | test(renamed_common_apis_are_public_and_legacy_names_stay_removed) | test(renamed_sarif_api_is_public_and_legacy_names_stay_removed) | test(sha2_0_11_pre_migration_patterns_fail_to_compile) | test(trybuild_fixtures_compile_without_diagnostics)
+COVERAGE_SKIPPED_TRYBUILD_FILTER ?= test(dependency_check_result_contract_is_public) | test(renamed_common_apis_are_public_and_legacy_names_stay_removed) | test(renamed_sarif_api_is_public_and_legacy_names_stay_removed) | test(sha2_0_11_pre_migration_patterns_fail_to_compile) | test(trybuild_fixtures_compile_without_diagnostics)
 COVERAGE_BASE_FILTER ?= not (binary(behaviour_toolchain) | binary(behaviour_cli) | kind(example))
 COVERAGE_NEXTEST_FILTER ?= $(COVERAGE_BASE_FILTER) & not ($(COVERAGE_SKIPPED_TRYBUILD_FILTER))
 COVERAGE_OUTPUT ?= lcov.info

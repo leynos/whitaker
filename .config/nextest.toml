@@ -85,7 +85,7 @@ retries = 0
 [[profile.ci.overrides]]
 # The other trybuild compile contracts build fixtures through nested Cargo.
 # Keep them under one build-sized allowance and avoid retries that repeat work.
-filter = "test(dependency_check_result_contract_is_public) | test(fixture_expansion_lint_attribute_contract) | test(normalize_settings_is_public_and_the_legacy_name_stays_removed) | test(renamed_common_apis_are_public_and_legacy_names_stay_removed) | test(renamed_sarif_api_is_public_and_legacy_names_stay_removed) | test(sha2_0_11_pre_migration_patterns_fail_to_compile)"
+filter = "test(dependency_check_result_contract_is_public) | test(fixture_expansion_lint_attribute_contract) | test(renamed_common_apis_are_public_and_legacy_names_stay_removed) | test(renamed_sarif_api_is_public_and_legacy_names_stay_removed) | test(sha2_0_11_pre_migration_patterns_fail_to_compile)"
 slow-timeout = { period = "75m", terminate-after = 1, grace-period = "5s" }
 test-group = "serial-dylint-ui"
 retries = 0
@@ -204,7 +204,7 @@ slow-timeout = { period = "75m", terminate-after = 1, grace-period = "5s" }
 [[profile.default.overrides]]
 # The other trybuild compile contracts build fixtures through nested Cargo.
 # Keep them under one build-sized allowance and avoid retries that repeat work.
-filter = "test(dependency_check_result_contract_is_public) | test(fixture_expansion_lint_attribute_contract) | test(normalize_settings_is_public_and_the_legacy_name_stays_removed) | test(renamed_common_apis_are_public_and_legacy_names_stay_removed) | test(renamed_sarif_api_is_public_and_legacy_names_stay_removed) | test(sha2_0_11_pre_migration_patterns_fail_to_compile)"
+filter = "test(dependency_check_result_contract_is_public) | test(fixture_expansion_lint_attribute_contract) | test(renamed_common_apis_are_public_and_legacy_names_stay_removed) | test(renamed_sarif_api_is_public_and_legacy_names_stay_removed) | test(sha2_0_11_pre_migration_patterns_fail_to_compile)"
 slow-timeout = { period = "75m", terminate-after = 1, grace-period = "5s" }
 test-group = "serial-dylint-ui"
 retries = 0
