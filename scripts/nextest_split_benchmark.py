@@ -851,13 +851,7 @@ _LISTING_KEYS: typ.Final = ("rust-suites", "suites")
 
 
 def _read_listing(path: pathlib.Path) -> dict[str, typ.Any]:
-    """Read a Nextest list report captured inside a ``make test`` log.
-
-    Nextest writes its report without a trailing newline, so whatever the build
-    prints next is appended to the report's line. Requiring the whole line to
-    parse therefore loses the report, so the document's end is found with the
-    raw decoder instead.
-    """
+    """Read a Nextest list report captured inside a ``make test`` log."""
     text = _read_text(path, "JSON report")
     listing = _decode_listing(text)
     if listing is None:
@@ -868,12 +862,14 @@ def _read_listing(path: pathlib.Path) -> dict[str, typ.Any]:
 def _decode_listing(text: str) -> dict[str, typ.Any] | None:
     """Return the first Nextest list report in ``text``, if any."""
     decoder = json.JSONDecoder()
-    for line in text.splitlines():
-        stripped = line.strip()
-        if not stripped.startswith("{"):
-            continue
+    # Decode from every ``{`` in the text rather than from each line. Nextest
+    # writes its report without a trailing newline, so whatever the build
+    # prints next is appended to the report's last line; and a pretty-printed
+    # report spans many lines. Decoding from an offset handles both, because
+    # ``raw_decode`` stops at the document's end and ignores what follows.
+    for candidate in re.finditer(r"\{", text):
         try:
-            value, _ = decoder.raw_decode(stripped)
+            value, _ = decoder.raw_decode(text, candidate.start())
         except json.JSONDecodeError:
             continue
         if isinstance(value, dict) and any(key in value for key in _LISTING_KEYS):

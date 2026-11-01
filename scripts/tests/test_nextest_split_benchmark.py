@@ -197,6 +197,20 @@ class TestMembership:
         )
         assert benchmark._read_listing(log) == listing
 
+    def test_pretty_printed_listing_spans_lines(
+        self, benchmark: types.ModuleType, tmp_path: pathlib.Path
+    ) -> None:
+        # ``--message-format json-pretty`` is valid Nextest output whose report
+        # occupies many lines, so decoding one line at a time would reject it.
+        listing = _single_test_listing()
+        log = tmp_path / "membership-trybuild.log"
+        log.write_text(
+            "make: Entering directory\n"
+            + json.dumps(listing, indent=2)
+            + "\n\x1b[1m\x1b[92m   Compiling\x1b[0m memchr v2.8.3\n"
+        )
+        assert benchmark._read_listing(log) == listing
+
     def test_log_without_a_listing_is_an_error(
         self, benchmark: types.ModuleType, tmp_path: pathlib.Path
     ) -> None:
