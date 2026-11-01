@@ -1682,7 +1682,7 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
     `rstest_helper_should_be_fixture`); `cargo metadata --locked` now passes.
   - `InstallerError` gained a variant on each side — `DependencyCheck` from the
     target and `InstallationRecord` from the branch. The two installer
-    `trybuild` fixtures pin exhaustive matching over the *merged* variant set,
+    `trybuild` fixtures pin exhaustive matching over the _merged_ variant set,
     so both were updated: the compile-pass fixture gains the missing arm and
     the compile-fail fixture's expected diagnostic names both uncovered
     variants.

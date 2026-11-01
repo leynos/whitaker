@@ -3670,20 +3670,20 @@ prior value is restored when the callback returns or panics. The workspace
 forbids `unsafe` code, so tests must not call `std::env::set_var` or
 `std::env::remove_var` directly.
 
-`whitaker_lint_core::testing::ui::run_with_runner` applies a specialized guard before
-invoking the Dylint UI runner. It preserves `RUSTC_WRAPPER` so nested Cargo
-builds retain compiler admission; the workspace's patched `dylint_testing`
-recognizes wrapped `rustc` commands when recovering example flags. The vendored
-crate is a workspace member so Clippy checks its parser, but its
-`deny_warnings` feature changes UI fixture diagnostics and must not be enabled
-for the ordinary all-features test run. `make test` therefore excludes it from
-Nextest and runs its command-decoding unit tests separately with default
-features disabled. The decoder parses Cargo's quoted command line and selects
-the compiler arguments after any wrapper chain; do not clear the configured
-wrappers. The helper `rustc_invocation` applies the `Running` regex itself, so
-its call site must pass Cargo's whole line, never the regex's capture; the
-6.3.0 rebase broke every example UI test exactly that way, and a regression
-case now pins the contract. The guard also sets
+`whitaker_lint_core::testing::ui::run_with_runner` applies a specialized guard
+before invoking the Dylint UI runner. It preserves `RUSTC_WRAPPER` so nested
+Cargo builds retain compiler admission; the workspace's patched
+`dylint_testing` recognizes wrapped `rustc` commands when recovering example
+flags. The vendored crate is a workspace member so Clippy checks its parser,
+but its `deny_warnings` feature changes UI fixture diagnostics and must not be
+enabled for the ordinary all-features test run. `make test` therefore excludes
+it from Nextest and runs its command-decoding unit tests separately with
+default features disabled. The decoder parses Cargo's quoted command line and
+selects the compiler arguments after any wrapper chain; do not clear the
+configured wrappers. The helper `rustc_invocation` applies the `Running` regex
+itself, so its call site must pass Cargo's whole line, never the regex's
+capture; the 6.3.0 rebase broke every example UI test exactly that way, and a
+regression case now pins the contract. The guard also sets
 `DYLINT_LINK_ENABLE_COPY_LIBRARY=1` when it is absent: since Dylint 6.3.0,
 `dylint_testing` otherwise copies its own default-feature rebuild of
 `lib<crate>.so`, an empty `cdylib` for every Whitaker lint crate, over the

@@ -64,10 +64,7 @@ pub(super) fn finish_install_and_record_metrics(
 /// a silent failure would leave it pointing at a stale or missing library
 /// directory. The legacy installer can still be invoked from within the
 /// repository, where the default target is discoverable, so it warns instead.
-fn record_installed_path(
-    context: &FinishInstallContext<'_>,
-    stderr: &mut dyn Write,
-) -> Result<()> {
+fn record_installed_path(context: &FinishInstallContext<'_>, stderr: &mut dyn Write) -> Result<()> {
     if let Err(record_error) =
         record_installation(context.dirs, context.toolchain, context.staging_path)
     {

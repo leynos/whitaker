@@ -8,9 +8,6 @@
 //! snapshot comes from the release or from `--clippy-snapshot-bundle`, or
 //! installation stops.
 
-use camino::{Utf8Path, Utf8PathBuf};
-use std::ffi::OsString;
-use std::io::Write;
 use crate::bootstrap::{
     BOOTSTRAP_SCHEMA, BUILT_DRIVER_NOTICE, BootstrapLayout, BootstrapMetadata, StoredPath,
     is_present_dir,
@@ -24,6 +21,9 @@ use crate::error::{InstallerError, Result};
 use crate::output::{ShellSnippet, write_stderr_line};
 #[cfg(debug_assertions)]
 use crate::test_support::TEST_CLIPPY_SNAPSHOT_MANIFEST_ENV;
+use camino::{Utf8Path, Utf8PathBuf};
+use std::ffi::OsString;
+use std::io::Write;
 
 /// The snapshot generation this installation provisioned.
 #[derive(Debug, Clone)]

@@ -22,10 +22,10 @@ use crate::{
     deps::{SourcePolicy, SystemCommandExecutor, install_dylint_tools_with_output},
     dirs::{BaseDirs, SystemBaseDirs},
     error::{InstallerError, Result},
+    install_flow::bootstrap_step::{install_clippy_snapshot, run_bootstrap},
     install_flow::{
         PrebuiltInstallationContext, ensure_dylint_tools_with_executor, try_prebuilt_installation,
     },
-    install_flow::bootstrap_step::{install_clippy_snapshot, run_bootstrap},
     install_metrics::InstallMode,
     list::{determine_target_dir, run_list},
     output::write_stderr_line,
