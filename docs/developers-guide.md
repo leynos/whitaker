@@ -4678,6 +4678,26 @@ fixture dependencies, and its `trybuild000` compile request was 50 slots back
 in a healthy admission queue. Give this test one 120-minute attempt with no
 retries so the same queued build can finish without repeating its setup.
 
+#### Each setting's first match wins
+
+Overrides are consulted in file order, not by specificity. For a given test and
+a given setting, nextest applies the first override that both matches the test
+and configures that setting, and precedence is evaluated separately for every
+setting, so an override that says nothing about a setting does not shadow it.
+That is a per-setting rule rather than a per-test one, and it is easy to get
+backwards when reading a long override table.
+
+A later allowance is therefore inert for any test an earlier override already
+names. The 120-minute allowance above and the 75-minute allowance for
+`example_compiles_without_diagnostics` were both shadowed in the default
+profile by the 20-minute override for the ordinary serial UI harnesses, because
+that filter still listed them and also configured `slow-timeout`. The `ci`
+profile was unaffected only because its ordinary override never named the two
+tests, so their specific overrides were reached first. A dedicated allowance
+only takes effect when every broader filter for the same setting omits the
+test; both long `rstest_helper_should_be_fixture` cases are deliberately absent
+from the 20-minute filter for that reason.
+
 Every other discovered trybuild compile contract rebuilds fixture crates
 through nested Cargo. In a cold workspace, the Bumpy Road public API contract
 timed out on three 20-minute attempts; the final attempt reached its pass
