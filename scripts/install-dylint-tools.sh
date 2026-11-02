@@ -9,7 +9,7 @@
 # When TOOLCHAIN is given, installs run under `cargo +TOOLCHAIN`. The
 # host tools are toolchain-independent, but their locked dependencies
 # can require a newer rustc than a repository's pinned nightly (e.g.
-# cargo-dylint 6.0.1 locks cargo-util 0.2.28, which needs rustc 1.93),
+# cargo-dylint 6.3.0 locks cargo-util 0.2.32, which needs rustc 1.97),
 # so callers pass a modern toolchain such as `stable`.
 #
 # TOOLS_ROOT is used as the cargo install --root; binaries land in

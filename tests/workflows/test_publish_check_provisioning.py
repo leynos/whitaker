@@ -31,8 +31,8 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
-CARGO_DYLINT_VERSION = "6.0.1"
-DYLINT_LINK_VERSION = "6.0.1"
+CARGO_DYLINT_VERSION = "6.3.0"
+DYLINT_LINK_VERSION = "6.3.0"
 
 
 def _write_stub(directory: Path, name: str, body: str) -> Path:
@@ -166,15 +166,25 @@ def _write_harness(stub_dir: Path, *, install_exit: int = 0) -> Path:
 
 
 def _run_publish_check(stub_dir: Path) -> subprocess.CompletedProcess[str]:
-    """Run the real publish-check target with stubs first on PATH."""
+    """Run the real publish-check target with stubs first on PATH.
+
+    ``PATH`` is passed as a make command-line override, not only exported
+    through the environment: the Makefile sets ``PATH :=`` at parse time, and
+    a makefile assignment beats the inherited environment. Without the
+    override, a host that already has the pinned ``cargo-dylint`` in
+    ``$(HOME)/.cargo/bin`` satisfies the version probe and the stale-
+    tool stubs this harness depends on are never consulted.
+    """
+    stub_path = f"{stub_dir}:/usr/bin:/bin"
     env = os.environ.copy()
-    env["PATH"] = f"{stub_dir}:/usr/bin:/bin"
+    env["PATH"] = stub_path
     env.pop("WHITAKER", None)
     return subprocess.run(
         [
             "make",
             "publish-check",
             f"CARGO={stub_dir}/cargo",
+            f"PATH={stub_path}",
             "LINT_CRATES=test_lint",
             "PUBLISH_PACKAGES=pkg_one",
         ],

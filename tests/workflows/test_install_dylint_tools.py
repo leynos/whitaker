@@ -28,8 +28,8 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "scripts" / "install-dylint-tools.sh"
 
-CARGO_DYLINT_VERSION = "6.0.1"
-DYLINT_LINK_VERSION = "6.0.1"
+CARGO_DYLINT_VERSION = "6.3.0"
+DYLINT_LINK_VERSION = "6.3.0"
 TOOLCHAIN = "stable"
 
 

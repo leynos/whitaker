@@ -172,7 +172,7 @@ fn ensure_dylint_tools_installs_missing_tools(
             },
             ExpectedCall {
                 cmd: "cargo",
-                args: vec!["install", "--locked", "--version", "6.0.1", "cargo-dylint"],
+                args: vec!["install", "--locked", "--version", "6.3.0", "cargo-dylint"],
                 result: Ok(success_output()),
             },
             cargo_dylint_check(),
@@ -223,7 +223,7 @@ fn ensure_dylint_tools_propagates_install_failures(test_base_dirs: TestBaseDirs)
             },
             ExpectedCall {
                 cmd: "cargo",
-                args: vec!["install", "--locked", "--version", "6.0.1", "cargo-dylint"],
+                args: vec!["install", "--locked", "--version", "6.3.0", "cargo-dylint"],
                 result: Ok(failure_output("cargo install failed")),
             },
         ]);

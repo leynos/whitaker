@@ -12,7 +12,12 @@ env:
   BUILD_PROFILE: debug
   CARGO_INCREMENTAL: 0
   CARGO_TERM_COLOR: always
-  WHITAKER_INSTALLER_VERSION: '0.2.7'
+  # 0.2.11 is the first published installer whose bundled
+  # `dependency-binaries.toml` pins `cargo-dylint` and `dylint-link` at 6.3.0
+  # and whose embedded Clippy snapshot matches the 6.3.2 libraries this
+  # workspace resolves. Earlier releases embed 6.0.1 and would reinstall the
+  # superseded tools over the Makefile pins.
+  WHITAKER_INSTALLER_VERSION: '0.2.11'
   RUSTFLAGS: -D warnings
   RUSTDOCFLAGS: -D warnings
   SCCACHE_GHA_ENABLED: "true"

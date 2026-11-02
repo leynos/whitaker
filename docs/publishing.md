@@ -39,7 +39,7 @@ continuing with a partially built or stale toolchain.
 Before building the lint libraries, `publish-check` provisions the pinned
 Dylint tools by delegating to `scripts/install-dylint-tools.sh`. Host-tool
 installs run under the toolchain named by `DYLINT_TOOLS_TOOLCHAIN` (default
-`stable`), because the dylint 6.0.1 lockfile requires a newer rustc than the
+`stable`), because the dylint 6.3.0 lockfile requires a newer rustc than the
 repository's pinned nightly provides. The script compares any installed
 `cargo-dylint` against `CARGO_DYLINT_VERSION`, and checks `dylint-link` via
 `cargo install --list` (`dylint-link` is a linker shim whose `--version` is

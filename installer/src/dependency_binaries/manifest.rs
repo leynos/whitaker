@@ -145,7 +145,7 @@ pub const fn manifest_contents() -> &'static str { include_str!("../../dependenc
 ///     [[dependency_binaries]]
 ///     package = "cargo-dylint"
 ///     binary = "cargo-dylint"
-///     version = "6.0.1"
+///     version = "6.3.0"
 ///     license = "MIT OR Apache-2.0"
 ///     repository = "https://github.com/trailofbits/dylint"
 /// "#;
@@ -164,7 +164,7 @@ pub const fn manifest_contents() -> &'static str { include_str!("../../dependenc
 ///     [[dependency_binaries]]
 ///     package = "cargo-dylint"
 ///     binary = "cargo-dylint"
-///     version = "6.0.1"
+///     version = "6.3.0"
 ///     license = "MIT OR Apache-2.0"
 ///     repository = "https://github.com/trailofbits/dylint"
 ///
@@ -289,7 +289,7 @@ mod tests {
             [[dependency_binaries]]
             package = "cargo-dylint"
             binary = "cargo-dylint"
-            version = "6.0.1"
+            version = "6.3.0"
             license = "MIT OR Apache-2.0"
         "#
     }
@@ -300,7 +300,7 @@ mod tests {
             [[dependency_binaries]]
             package = "cargo-dylint"
             binary = "cargo-dylint"
-            version = "6.0.1"
+            version = "6.3.0"
             license = "MIT OR Apache-2.0"
             repository = "https://github.com/trailofbits/dylint"
 
@@ -348,8 +348,8 @@ mod tests {
     }
 
     #[rstest]
-    #[case::cargo_dylint("cargo-dylint", "cargo-dylint", "6.0.1")]
-    #[case::dylint_link("dylint-link", "dylint-link", "6.0.1")]
+    #[case::cargo_dylint("cargo-dylint", "cargo-dylint", "6.3.0")]
+    #[case::dylint_link("dylint-link", "dylint-link", "6.3.0")]
     fn find_dependency_binary_returns_matching_package(
         #[case] package: &str,
         #[case] binary: &str,

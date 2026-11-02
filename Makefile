@@ -66,10 +66,13 @@ DOCTEST_EXCLUDES ?= --exclude rustc_ast --exclude rustc_attr_data_structures \
 	--exclude rustc_session --exclude rustc_span --exclude whitaker \
 	--exclude rstest_helper_should_be_fixture \
 	$(foreach crate,$(LINT_CRATES),--exclude $(crate))
-CARGO_DYLINT_VERSION ?= 6.0.1
-DYLINT_LINK_VERSION ?= 6.0.1
-# Host-tool installs run under this toolchain: the dylint 6.0.1 lockfile
-# needs a newer rustc than the repository's pinned nightly provides.
+CARGO_DYLINT_VERSION ?= 6.3.0
+DYLINT_LINK_VERSION ?= 6.3.0
+# Host-tool installs run under this toolchain. The Dylint libraries are pinned
+# at 6.3.2, and a 6.3.x `cargo-dylint` builds its compiler driver against the
+# same 6.3.x release, so both halves must match. Their locked dependencies can
+# still require a newer rustc than the repository's pinned nightly provides, so
+# the tools are installed with a current stable toolchain.
 DYLINT_TOOLS_TOOLCHAIN ?= stable
 WHITAKER_SCRIPT ?= $(HOME)/.local/bin/whitaker
 WHITAKER ?= whitaker

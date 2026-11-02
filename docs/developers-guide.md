@@ -1019,7 +1019,7 @@ Example entry:
 [[dependency_binaries]]
 package = "cargo-dylint"
 binary = "cargo-dylint"
-version = "6.0.1"
+version = "6.3.0"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/trailofbits/dylint"
 ```
@@ -1144,7 +1144,7 @@ underlying linker. It therefore has no reliable self-reporting subcommand.
 toolchain are present in the ambient environment, so it reports on the
 environment rather than on the artefact. Executing it as a health check
 rejected valid, checksum-verified release artefacts and forced a
-`cargo install --locked --version 6.0.1 dylint-link` fallback that cannot
+`cargo install --locked --version 6.3.0 dylint-link` fallback that cannot
 compile on toolchains below the crate's rustc floor, breaking consumers pinned
 to older toolchains.
 
