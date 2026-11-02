@@ -4900,10 +4900,9 @@ seconds on the Windows lane, cancelling the run. A handwritten list would have
 had the same hole, and a discovery that stops recognizing the call would sweep
 a smaller set silently, so finding nothing is a failure rather than a pass.
 
-The seven tests are members of the capacity-one `serial-trybuild-contracts`
+The six tests are members of the capacity-one `serial-trybuild-contracts`
 group: `dependency_check_result_contract_is_public`,
 `fixture_expansion_lint_attribute_contract`,
-`normalize_settings_is_public_and_the_legacy_name_stays_removed`,
 `renamed_common_apis_are_public_and_legacy_names_stay_removed`,
 `renamed_sarif_api_is_public_and_legacy_names_stay_removed`,
 `sha2_0_11_pre_migration_patterns_fail_to_compile`, and
