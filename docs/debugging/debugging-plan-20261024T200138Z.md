@@ -200,6 +200,21 @@ Mermaid, Markdown lint, `make lint`, workflow contracts) in 11m45s,
 `coverage-check` (including `make test-doc`) in 9m20s, and `windows-compat`
 (`make test NEXTEST_PROFILE=ci`) in 28m35s.
 
+The branch was rebased a second time, onto `main` at `00186d43`, because the
+target had advanced past `bd4c93a8`. Four files conflicted, all on the same
+theme: the target added a new compile contract,
+`public_const_api_works_in_const_context`, to the filter lists this branch was
+editing to remove
+`normalize_settings_is_public_and_the_legacy_name_stays_removed`. Each conflict
+was resolved by keeping the target's new clause and dropping the removed one,
+so the merged lists hold six standard compile contracts plus the separately
+budgeted nested trybuild test. The counts that depend on those lists were
+recomputed rather than carried over: `make coverage` now skips six of the seven,
+`make trybuild-contracts` runs all seven, and discovery finds seven tests
+across five files. The rebase used Git's text merge with `zdiff3`; the host's
+ambient `*.py merge=weave` rule is not repository consent, so the unattended
+replay bypassed it with `-c core.attributesFile=/dev/null`.
+
 ## Follow-up
 
 PR #522 replaces the grouping that #519 proposed. It still lists the removed

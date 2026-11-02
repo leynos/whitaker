@@ -1141,15 +1141,15 @@ minus the eleven CI-excluded crates. Both coverage lanes run identical flags,
 so the pull-request gate and the trunk baseline are comparable.
 
 It differs from `make test` in one respect: it passes nextest a filterset
-(`COVERAGE_NEXTEST_FILTER`) that skips five of the six trybuild
+(`COVERAGE_NEXTEST_FILTER`) that skips six of the seven trybuild
 compile-contract tests, which assert that fixtures compile and add no coverage
-(about 250 s of the instrumented test phase). The sixth,
+(about 250 s of the instrumented test phase). The seventh,
 `fixture_expansion_lint_attribute_contract`, stays in because it expands the
 `whitaker_test_macros` proc macro inside rustc and is worth four lines of that
 crate's coverage. Naming a filterset replaces the profile's `default-filter`, so
 `COVERAGE_BASE_FILTER` repeats the default profile's. The skipped contracts
 run in the `windows-compat` lane, whose `make test NEXTEST_PROFILE=ci` includes
-all six; they are compile-time API contracts, not platform-specific. No Linux
+all seven; they are compile-time API contracts, not platform-specific. No Linux
 lane runs them: `linux-full` builds no test binaries, so a step there would pay
 for a cold, uninstrumented workspace test build (a trial added 1,693 s and took
 `linux-full` from about 10 to 37 minutes). To run them yourself, use
@@ -4839,7 +4839,8 @@ failure and `tests/nextest_ui_filter.rs` requires the key.
 It discovers the compile-contract tests rather than listing them. A test that
 drives `trybuild` invokes a nested cargo build, so it costs what a build costs
 and the base per-test allowance is the wrong order of magnitude for it. The
-current discovery finds seven tests across `common/tests/public_api_contract.rs`,
+current discovery finds seven tests across
+`common/tests/public_api_contract.rs`,
 `crates/whitaker_sarif/tests/api_contract.rs`, `installer/tests/ui.rs`,
 `crates/whitaker_test_macros/tests/ui.rs`, and
 `crates/rstest_helper_should_be_fixture/tests/ui.rs`. Three of those binaries

@@ -50,8 +50,8 @@ TEST_RUNNER ?= nextest run
 # The trybuild contract tests assert that small fixtures compile or fail to
 # compile; they run no workspace code the coverage report attributes. Under
 # instrumentation they only cost build time (about 250 s of the 616 s test
-# phase), so `make coverage` leaves five of the six out and `make trybuild-contracts`
-# runs all six in a plain, uninstrumented run (the `windows-compat` lane's
+# phase), so `make coverage` leaves six of the seven out and `make trybuild-contracts`
+# runs all seven in a plain, uninstrumented run (the `windows-compat` lane's
 # `make test` runs them in CI; this target is for running them locally).
 # The names are the ones `.config/nextest.toml` gives its compile-contract
 # override. `fixture_expansion_lint_attribute_contract` stays in the coverage
