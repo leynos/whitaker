@@ -92,10 +92,13 @@ retries = 0
 
 [[profile.ci.overrides]]
 # This fixture suite had not finished compiling after 75 minutes in a healthy
-# but busy compiler queue. Allow one longer build without retrying it.
+# but busy compiler queue. Allow one longer build without retrying it. It stays
+# in `serial-dylint-ui` because it shares `ExampleHarnessLock` with the example
+# tests in the same crate; a separate group would let the two contend, and the
+# lock's six-minute ceiling expires while a queued nested build holds it.
 filter = "package(rstest_helper_should_be_fixture) & test(trybuild_fixtures_compile_without_diagnostics)"
 slow-timeout = { period = "120m", terminate-after = 1, grace-period = "5s" }
-test-group = "serial-trybuild-contracts"
+test-group = "serial-dylint-ui"
 retries = 0
 
 [[profile.ci.overrides]]
@@ -155,8 +158,10 @@ serial-nested-cargo-builds = { max-threads = 1 }
 # cross-process lock tests use this target lock and share the serial group with
 # the fixture builds they verify. The example-compilation override below gives
 # its library and example builds a 75-minute allowance after its earlier
-# 20-minute limit expired in the queue. The trybuild compile contracts write to
-# `target/tests/trybuild` and hold their own `serial-trybuild-contracts` group.
+# 20-minute limit expired in the queue. The five trybuild compile contracts in
+# other crates write to `target/tests/trybuild` and hold their own
+# `serial-trybuild-contracts` group; the nested trybuild test in this crate
+# stays here because it shares `ExampleHarnessLock` with the example tests.
 #
 # `ui::example_compiles_under_test_harness`,
 # `ui::hand_written_test_companion_does_not_exempt_parent_function`,
@@ -215,10 +220,13 @@ retries = 0
 
 [[profile.default.overrides]]
 # This fixture suite had not finished compiling after 75 minutes in a healthy
-# but busy compiler queue. Allow one longer build without retrying it.
+# but busy compiler queue. Allow one longer build without retrying it. It stays
+# in `serial-dylint-ui` because it shares `ExampleHarnessLock` with the example
+# tests in the same crate; a separate group would let the two contend, and the
+# lock's six-minute ceiling expires while a queued nested build holds it.
 filter = "package(rstest_helper_should_be_fixture) & test(trybuild_fixtures_compile_without_diagnostics)"
 slow-timeout = { period = "120m", terminate-after = 1, grace-period = "5s" }
-test-group = "serial-trybuild-contracts"
+test-group = "serial-dylint-ui"
 retries = 0
 
 [[profile.default.overrides]]

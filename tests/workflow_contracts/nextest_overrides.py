@@ -132,7 +132,7 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
                 "terminate-after": 1,
                 "grace-period": "5s",
             },
-            test_group="serial-trybuild-contracts",
+            test_group="serial-dylint-ui",
             retries=0,
         ),
         NESTED_EXAMPLE_FILTER: Allowance(
@@ -237,7 +237,7 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
                 "terminate-after": 1,
                 "grace-period": "5s",
             },
-            test_group="serial-trybuild-contracts",
+            test_group="serial-dylint-ui",
             retries=0,
         ),
         NESTED_EXAMPLE_FILTER: Allowance(
