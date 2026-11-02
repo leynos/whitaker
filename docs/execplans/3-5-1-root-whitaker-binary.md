@@ -146,14 +146,15 @@ The assessment on `41e3f52f` found parser value-boundary and repeated-quiet
 parity gaps. The candidate validates install arguments through the installer
 parser, adds regression coverage for both legacy forms and a Windows child-exit
 test, and adds root-package validation to CI. The published candidate's local
-gates pass; the Windows-only test still awaits hosted Windows CI. A helper
-split clears CodeScene's complexity finding, and the short-cluster cases move
-into `tests/property_arg_parity/short_clusters.rs` to keep the parity test
-under the 400-line limit. D-23 moves `ortho_config` to 0.10.0, and an
-end-to-end assertion pins bare `whitaker` to `cargo dylint` forwarding. The
-130-file diff is +7,400 net lines, 400 above D-12's ceiling, and exceeds D-11's
-accepted 80 files. Resolve this scope with the owner before merge. Crates.io
-reservation remains unauthorized; the plan stays `IN PROGRESS`.
+gates pass, and the Windows child-exit regression returned 256 in hosted
+Windows CI on `ff2d4f67` (Actions run `40220275632`). A helper split clears
+CodeScene's complexity finding, and the short-cluster cases move into
+`tests/property_arg_parity/short_clusters.rs` to keep the parity test under the
+400-line limit. D-23 moves `ortho_config` to 0.10.0, and an end-to-end
+assertion pins bare `whitaker` to `cargo dylint` forwarding. The 130-file diff
+is +7,400 net lines, 400 above D-12's ceiling, and exceeds D-11's accepted 80
+files. Resolve this scope with the owner before merge. Crates.io reservation
+remains unauthorized; the plan stays `IN PROGRESS`.
 
 ## Constraints
 
@@ -1789,6 +1790,39 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
   `make test` all pass. The test gate ran 2,186 tests with 2,186 passed and 6
   skipped, the secondary suite passed 84, and the workspace doctests passed.
   Plan stays `IN PROGRESS`; crates.io reservation remains unauthorized.
+
+- **Hosted-review repairs on the rebased head, 2026-11-02.** The first push of
+  `cd67d26a` failed three hosted checks, and each failure had a different
+  cause. All three are repaired in the working tree rather than suppressed.
+
+  CodeScene reported a large `InstallerError::clone` and a large `run_install`,
+  and module-level duplication between the two root help tests.
+  `InstallerError` now keeps one private `clone_simple_variant` for the
+  ordinary owned payloads and expresses `Clone` as a short chain over the
+  existing per-family helpers; the `unreachable!` arm lists the variants those
+  helpers already handle, so a new variant fails loudly instead of silently
+  cloning incorrectly. `run_install` now resolves its build inputs through a new
+  `plan_install`, which returns an `InstallPlan` of the Clippy snapshot,
+  workspace root, requested crates, toolchain and target directory. The two
+  root help tests share a `run_whitaker` helper that returns
+  `io::Result<Output>`, leaving the `.expect(...)` calls inside the tests so
+  that the strict `expect_used` policy is satisfied without a suppression.
+  `cs check` reports 10.00 for all three files.
+
+  The MSRV check rejected a let-chain in `ensure_whitaker_workspace`, which
+  Rust 1.85 predates. The notice is extracted to `report_workspace_action`,
+  whose early returns for an unavailable clone directory or working directory
+  reproduce the original control flow without the unstable syntax. The same
+  extraction removes a nested block that CodeScene scored as a large method.
+
+  The coverage job failed on the `run_install_for_whitaker` doctest, which
+  still called the two-argument form after the `stdout` parameter was added.
+  The example now declares and passes its own `stdout`, and `make test-doc`
+  joins the local gate set because `make test` does not execute doctests.
+
+  One install-order point is unchanged: the Clippy snapshot is still installed
+  before the workspace and toolchain are resolved, so a release that omits its
+  snapshot fails early rather than after minutes of other work.
 
 To be completed at each milestone boundary and at completion. Before setting
 this plan to `COMPLETE`, reconcile every entry in `Surprises & discoveries`

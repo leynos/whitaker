@@ -22,7 +22,7 @@ use crate::{
     deps::{SourcePolicy, SystemCommandExecutor, install_dylint_tools_with_output},
     dirs::{BaseDirs, SystemBaseDirs},
     error::{InstallerError, Result},
-    install_flow::bootstrap_step::{install_clippy_snapshot, run_bootstrap},
+    install_flow::bootstrap_step::{InstalledSnapshot, install_clippy_snapshot, run_bootstrap},
     install_flow::{
         PrebuiltInstallationContext, ensure_dylint_tools_with_executor, try_prebuilt_installation,
     },
@@ -33,6 +33,7 @@ use crate::{
     resolution::{CrateResolutionOptions, resolve_crates, validate_crate_names},
     staged_suite,
     toolchain::Toolchain,
+    workspace::WorkspacePlan,
     wrapper::WrapperScripts,
 };
 
@@ -89,8 +90,9 @@ pub fn run_bootstrap_command(arguments: &[std::ffi::OsString], stderr: &mut dyn 
 /// use whitaker_installer::{cli::InstallArgs, orchestration::run_install_for_whitaker};
 ///
 /// let arguments = InstallArgs::default();
+/// let mut output = io::stdout();
 /// let mut diagnostics = io::stderr();
-/// run_install_for_whitaker(&arguments, &mut diagnostics)?;
+/// run_install_for_whitaker(&arguments, &mut output, &mut diagnostics)?;
 /// # Ok::<(), whitaker_installer::error::InstallerError>(())
 /// ```
 ///
@@ -172,12 +174,90 @@ fn run_install(
     if !args.skip.skip_deps {
         ensure_dylint_tools(policy, stderr)?;
     }
-    // Install the verified Clippy snapshot before any workspace or library
-    // work, with no fallback: a release that does not publish its snapshot
-    // fails here rather than after minutes of other work.
-    let snapshot = install_clippy_snapshot(args, &dirs, stderr)?;
+    let plan = plan_install(args, &dirs, stderr)?;
+    // Step 3.5: Attempt prebuilt download or staged-suite fast path.
+    let fast_path_context = FastPathContext {
+        args,
+        policy,
+        dirs: &dirs,
+        requested_crates: &plan.requested_crates,
+        toolchain: &plan.toolchain,
+        target_dir: &plan.target_dir,
+    };
+    if let Some((staging_path, install_mode)) =
+        try_fast_path_installation(&fast_path_context, stderr)?
+    {
+        report_suite_source(install_mode, stdout)?;
+        let finish_context = FinishInstallContext {
+            args,
+            dirs: &dirs,
+            snapshot: &plan.snapshot,
+            toolchain: plan.toolchain.channel(),
+            staging_path: &staging_path,
+            wrapper_scripts,
+            install_mode,
+            install_started,
+        };
+        return finish_install_and_record_metrics(&finish_context, stderr);
+    }
+    let context = PipelineContext {
+        workspace_root: &plan.workspace_root,
+        toolchain: &plan.toolchain,
+        target_dir: &plan.target_dir,
+        jobs: args.jobs,
+        verbosity: args.verbosity,
+        experimental: args.lint_selection.experimental,
+        quiet: args.quiet,
+    };
+    // Step 4: Build and stage
+    let build_results = perform_build(&context, &plan.requested_crates, stderr)?;
+    let staging_path = stage_libraries(&context, &build_results, stderr)?;
+    // Step 5: Generate wrapper scripts if requested
+    report_suite_source(InstallMode::Build, stdout)?;
+    let finish_context = FinishInstallContext {
+        args,
+        dirs: &dirs,
+        snapshot: &plan.snapshot,
+        toolchain: plan.toolchain.channel(),
+        staging_path: &staging_path,
+        wrapper_scripts,
+        install_mode: InstallMode::Build,
+        install_started,
+    };
+    finish_install_and_record_metrics(&finish_context, stderr)
+}
+
+/// Build inputs resolved before any compilation or staging work.
+struct InstallPlan {
+    /// The Clippy snapshot installed ahead of all other installation steps.
+    snapshot: InstalledSnapshot,
+    /// Root of the Whitaker workspace the libraries are built from.
+    workspace_root: Utf8PathBuf,
+    /// Crates selected by the command-line request.
+    requested_crates: Vec<CrateName>,
+    /// Toolchain that will build and run the staged libraries.
+    toolchain: Toolchain,
+    /// Directory the build artefacts are written to.
+    target_dir: Utf8PathBuf,
+}
+
+/// Installs the Clippy snapshot and resolves everything the build needs.
+///
+/// The snapshot is installed first, with no fallback: a release that does not
+/// publish its snapshot fails here rather than after minutes of other work.
+///
+/// # Errors
+///
+/// Returns an error when the snapshot, workspace, crate selection, toolchain,
+/// or target directory cannot be resolved.
+fn plan_install(
+    args: &InstallArgs,
+    dirs: &dyn BaseDirs,
+    stderr: &mut dyn Write,
+) -> Result<InstallPlan> {
+    let snapshot = install_clippy_snapshot(args, dirs, stderr)?;
     // Step 2: Ensure workspace is available (clone if needed)
-    let workspace_root = ensure_whitaker_workspace(args, &dirs, stderr)?;
+    let workspace_root = ensure_whitaker_workspace(args, dirs, stderr)?;
     // Step 3: Resolve crates and toolchain
     let requested_crates = resolve_requested_crates(args)?;
     let toolchain = resolve_toolchain(&workspace_root, args.toolchain.as_deref())?;
@@ -188,56 +268,13 @@ fn run_install(
         stderr,
     )?;
     let target_dir = determine_target_dir(args.target_dir.as_deref())?;
-    // Step 3.5: Attempt prebuilt download or staged-suite fast path.
-    let fast_path_context = FastPathContext {
-        args,
-        policy,
-        dirs: &dirs,
-        requested_crates: &requested_crates,
-        toolchain: &toolchain,
-        target_dir: &target_dir,
-    };
-    if let Some((staging_path, install_mode)) =
-        try_fast_path_installation(&fast_path_context, stderr)?
-    {
-        report_suite_source(install_mode, stdout)?;
-        let finish_context = FinishInstallContext {
-            args,
-            dirs: &dirs,
-            snapshot: &snapshot,
-            toolchain: toolchain.channel(),
-            staging_path: &staging_path,
-            wrapper_scripts,
-            install_mode,
-            install_started,
-        };
-        return finish_install_and_record_metrics(&finish_context, stderr);
-    }
-    let context = PipelineContext {
-        workspace_root: &workspace_root,
-        toolchain: &toolchain,
-        target_dir: &target_dir,
-        jobs: args.jobs,
-        verbosity: args.verbosity,
-        experimental: args.lint_selection.experimental,
-        quiet: args.quiet,
-    };
-    // Step 4: Build and stage
-    let build_results = perform_build(&context, &requested_crates, stderr)?;
-    let staging_path = stage_libraries(&context, &build_results, stderr)?;
-    // Step 5: Generate wrapper scripts if requested
-    report_suite_source(InstallMode::Build, stdout)?;
-    let finish_context = FinishInstallContext {
-        args,
-        dirs: &dirs,
-        snapshot: &snapshot,
-        toolchain: toolchain.channel(),
-        staging_path: &staging_path,
-        wrapper_scripts,
-        install_mode: InstallMode::Build,
-        install_started,
-    };
-    finish_install_and_record_metrics(&finish_context, stderr)
+    Ok(InstallPlan {
+        snapshot,
+        workspace_root,
+        requested_crates,
+        toolchain,
+        target_dir,
+    })
 }
 
 /// Checks for and installs Dylint tools if missing.
@@ -269,41 +306,48 @@ fn ensure_whitaker_workspace(
     dirs: &dyn BaseDirs,
     stderr: &mut dyn Write,
 ) -> Result<Utf8PathBuf> {
-    use crate::workspace::{
-        WorkspaceAction, WorkspacePlan, clone_directory, decide_workspace_action, ensure_workspace,
-    };
+    use crate::workspace::ensure_workspace;
 
     let plan = WorkspacePlan {
         should_update: !args.skip.no_update,
         suite_ref: args.suite_version.clone(),
     };
 
-    if !args.quiet
-        && let Some(clone_dir) = clone_directory(dirs)
-    {
-        let utf8_cwd = std::env::current_dir()
-            .ok()
-            .and_then(|p| Utf8PathBuf::try_from(p).ok());
-
-        let Some(cwd) = utf8_cwd else {
-            return ensure_workspace(dirs, &plan);
-        };
-
-        match decide_workspace_action(&cwd, &clone_dir, !args.skip.no_update) {
-            WorkspaceAction::CloneTo(dir) => {
-                write_stderr_line(stderr, format!("Cloning Whitaker repository to {dir}..."));
-            }
-            WorkspaceAction::UpdateAt(dir) => {
-                write_stderr_line(stderr, format!("Updating Whitaker repository at {dir}..."));
-            }
-            WorkspaceAction::UseCurrentDir(_) | WorkspaceAction::UseExisting(_) => {}
-        }
-        if let Some(reference) = plan.suite_ref.as_ref() {
-            write_stderr_line(stderr, format!("Pinning lint suite to {reference}..."));
-        }
+    if !args.quiet {
+        report_workspace_action(dirs, &plan, stderr);
     }
-
     ensure_workspace(dirs, &plan)
+}
+
+/// Announce, on stderr, the workspace action `ensure_workspace` will take.
+///
+/// The notice is advisory, so an unavailable clone directory or working
+/// directory suppresses it rather than failing the run.
+fn report_workspace_action(dirs: &dyn BaseDirs, plan: &WorkspacePlan, stderr: &mut dyn Write) {
+    use crate::workspace::{WorkspaceAction, clone_directory, decide_workspace_action};
+
+    let Some(clone_dir) = clone_directory(dirs) else {
+        return;
+    };
+    let Some(cwd) = std::env::current_dir()
+        .ok()
+        .and_then(|p| Utf8PathBuf::try_from(p).ok())
+    else {
+        return;
+    };
+
+    match decide_workspace_action(&cwd, &clone_dir, plan.should_update) {
+        WorkspaceAction::CloneTo(dir) => {
+            write_stderr_line(stderr, format!("Cloning Whitaker repository to {dir}..."));
+        }
+        WorkspaceAction::UpdateAt(dir) => {
+            write_stderr_line(stderr, format!("Updating Whitaker repository at {dir}..."));
+        }
+        WorkspaceAction::UseCurrentDir(_) | WorkspaceAction::UseExisting(_) => {}
+    }
+    if let Some(reference) = plan.suite_ref.as_ref() {
+        write_stderr_line(stderr, format!("Pinning lint suite to {reference}..."));
+    }
 }
 
 /// Detect the workspace toolchain or apply an explicit channel override.

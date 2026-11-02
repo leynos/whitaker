@@ -299,17 +299,9 @@ impl InstallerError {
     }
 }
 
-impl Clone for InstallerError {
-    /// Clone every error variant while preserving its displayable details.
-    fn clone(&self) -> Self {
-        if let Some(value) = self
-            .clone_toolchain_variant()
-            .or_else(|| self.clone_io_variant())
-            .or_else(|| self.clone_source_policy_variant())
-        {
-            return value;
-        }
-
+impl InstallerError {
+    /// Clone the variants whose payloads are ordinary owned values.
+    fn clone_simple_variant(&self) -> Self {
         match self {
             Self::BuildFailed { crate_name, reason } => Self::BuildFailed {
                 crate_name: crate_name.clone(),
@@ -373,6 +365,16 @@ impl Clone for InstallerError {
                 message: message.clone(),
             },
         }
+    }
+}
+
+impl Clone for InstallerError {
+    /// Clone every error variant while preserving its displayable details.
+    fn clone(&self) -> Self {
+        self.clone_toolchain_variant()
+            .or_else(|| self.clone_io_variant())
+            .or_else(|| self.clone_source_policy_variant())
+            .unwrap_or_else(|| self.clone_simple_variant())
     }
 }
 

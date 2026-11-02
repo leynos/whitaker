@@ -1,13 +1,17 @@
 //! End-to-end assertions for the root binary's process exit contract.
 
-use std::process::Command;
+use std::process::{Command, Output};
+
+/// Run the root binary with the supplied arguments and capture its output.
+fn run_whitaker(arguments: &[&str]) -> std::io::Result<Output> {
+    Command::new(env!("CARGO_BIN_EXE_whitaker"))
+        .args(arguments)
+        .output()
+}
 
 #[test]
 fn root_help_exits_successfully() {
-    let output = Command::new(env!("CARGO_BIN_EXE_whitaker"))
-        .arg("--help")
-        .output()
-        .expect("whitaker help process should start");
+    let output = run_whitaker(&["--help"]).expect("whitaker help process should start");
     assert_eq!(
         output.status.code(),
         Some(0),
@@ -20,10 +24,7 @@ fn root_help_exits_successfully() {
 
 #[test]
 fn root_help_subcommand_is_not_forwarded_to_dylint() {
-    let output = Command::new(env!("CARGO_BIN_EXE_whitaker"))
-        .arg("help")
-        .output()
-        .expect("whitaker help process should start");
+    let output = run_whitaker(&["help"]).expect("whitaker help process should start");
     assert_eq!(
         output.status.code(),
         Some(0),
@@ -39,15 +40,13 @@ fn root_help_subcommand_is_not_forwarded_to_dylint() {
 
 #[test]
 fn install_usage_errors_use_clap_exit_code_two() {
-    let output = Command::new(env!("CARGO_BIN_EXE_whitaker"))
-        .args([
-            "install",
-            "--lint",
-            "module_max_lines",
-            "--individual-lints",
-        ])
-        .output()
-        .expect("whitaker install process should start");
+    let output = run_whitaker(&[
+        "install",
+        "--lint",
+        "module_max_lines",
+        "--individual-lints",
+    ])
+    .expect("whitaker install process should start");
     assert_eq!(
         output.status.code(),
         Some(2),
