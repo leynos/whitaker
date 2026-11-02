@@ -89,7 +89,7 @@ jobs:
           persist-credentials: false
 
       - name: Start CI telemetry
-        uses: leynos/shared-actions/.github/actions/ci-telemetry-start@81374b6f183e59f0570ad36217ded90d3240fda6
+        uses: leynos/shared-actions/.github/actions/ci-telemetry-start@872f59f53717b5bebe8e24b2f4a7496b089a939a
 
       # The preinstalled Android SDK and .NET are 16.9 GB on a 73 GB volume and
       # nothing here uses them. A change that misses every Rust compiler-cache
@@ -163,7 +163,7 @@ jobs:
 
       - name: Setup Rust
         id: setup-rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
+        uses: leynos/shared-actions/.github/actions/setup-rust@872f59f53717b5bebe8e24b2f4a7496b089a939a
         with:
           # Ubicloud only, so a missing cache proxy fails the job rather than
           # letting sccache compile against local disk unnoticed.
@@ -294,7 +294,7 @@ jobs:
 
       - name: Report CI telemetry
         if: always()
-        uses: leynos/shared-actions/.github/actions/ci-telemetry-finish@81374b6f183e59f0570ad36217ded90d3240fda6
+        uses: leynos/shared-actions/.github/actions/ci-telemetry-finish@872f59f53717b5bebe8e24b2f4a7496b089a939a
         with:
           sccache-status: ${{ steps.setup-rust.outputs.sccache-status }}
 
@@ -314,7 +314,7 @@ jobs:
           persist-credentials: false
 
       - name: Start CI telemetry
-        uses: leynos/shared-actions/.github/actions/ci-telemetry-start@81374b6f183e59f0570ad36217ded90d3240fda6
+        uses: leynos/shared-actions/.github/actions/ci-telemetry-start@872f59f53717b5bebe8e24b2f4a7496b089a939a
 
       # The preinstalled Android SDK and .NET are 16.9 GB on a 73 GB volume and
       # nothing here uses them. A change that misses every Rust compiler-cache
@@ -403,7 +403,7 @@ jobs:
 
       - name: Setup Rust
         id: setup-rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
+        uses: leynos/shared-actions/.github/actions/setup-rust@872f59f53717b5bebe8e24b2f4a7496b089a939a
         with:
           # Ubicloud only, so a missing cache proxy fails the job rather than
           # letting sccache compile against local disk unnoticed.
@@ -453,7 +453,7 @@ jobs:
         # canonical Markdown output, even when the cache restores an older
         # binary; the shared action installs the pinned release and puts it on
         # PATH.
-        uses: leynos/shared-actions/.github/actions/install-mdtablefix@d0c2585d9e144775e4ec9fe26e7eeb03c14844dd
+        uses: leynos/shared-actions/.github/actions/install-mdtablefix@872f59f53717b5bebe8e24b2f4a7496b089a939a
         with:
           version: ${{ env.MDTABLEFIX_VERSION }}
           sha256: ${{ env.MDTABLEFIX_LINUX_X64_SHA256 }}
@@ -480,7 +480,7 @@ jobs:
         run: make test-sccache-health
 
       - name: Install Nixie
-        uses: leynos/shared-actions/.github/actions/install-nixie@ff1dd759dfffc0db3459e30e833f52437ee62b57
+        uses: leynos/shared-actions/.github/actions/install-nixie@872f59f53717b5bebe8e24b2f4a7496b089a939a
         with:
           nixie-version: '1.1.0'
           merman-version: '0.7.0'
@@ -566,7 +566,7 @@ jobs:
 
       - name: Report CI telemetry
         if: always()
-        uses: leynos/shared-actions/.github/actions/ci-telemetry-finish@81374b6f183e59f0570ad36217ded90d3240fda6
+        uses: leynos/shared-actions/.github/actions/ci-telemetry-finish@872f59f53717b5bebe8e24b2f4a7496b089a939a
         with:
           sccache-status: ${{ steps.setup-rust.outputs.sccache-status }}
 
@@ -637,7 +637,7 @@ jobs:
           persist-credentials: false
 
       - name: Start CI telemetry
-        uses: leynos/shared-actions/.github/actions/ci-telemetry-start@81374b6f183e59f0570ad36217ded90d3240fda6
+        uses: leynos/shared-actions/.github/actions/ci-telemetry-start@872f59f53717b5bebe8e24b2f4a7496b089a939a
 
       - name: Restore Cargo registry
         id: cargo-registry
@@ -667,7 +667,7 @@ jobs:
         # This lane keeps the shared action's sccache setup, which installs
         # the binary and exports the Actions cache credentials that a
         # GitHub-hosted `run:` step can already see anyway.
-        uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
+        uses: leynos/shared-actions/.github/actions/setup-rust@872f59f53717b5bebe8e24b2f4a7496b089a939a
         with:
           cache-provider: external
 
@@ -734,7 +734,7 @@ jobs:
 
       - name: Report CI telemetry
         if: always()
-        uses: leynos/shared-actions/.github/actions/ci-telemetry-finish@81374b6f183e59f0570ad36217ded90d3240fda6
+        uses: leynos/shared-actions/.github/actions/ci-telemetry-finish@872f59f53717b5bebe8e24b2f4a7496b089a939a
         with:
           sccache-status: ${{ steps.setup-rust.outputs.sccache-status }}
 
