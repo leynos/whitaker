@@ -80,7 +80,7 @@ def _skip_whitespace(text: str, position: int) -> int:
 def _read_argument(
     filter_expression: str, name: str, after_name: int
 ) -> tuple[str, int]:
-    """Read a predicate's parenthesised argument and the position after it."""
+    """Read a predicate's parenthesized argument and the position after it."""
     opening = _skip_whitespace(filter_expression, after_name)
     if opening >= len(filter_expression) or filter_expression[opening] != "(":
         raise ValueError(f"predicate {name!r} has no argument in {filter_expression!r}")
