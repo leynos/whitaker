@@ -188,8 +188,8 @@ pub fn load_cargo_toml() -> Result<toml::Table, String> {
 /// Load and parse a Cargo manifest from an explicit path.
 ///
 /// This variant lets package-level integration tests inspect another workspace
-/// member's manifest while keeping [`load_cargo_toml`] compatible for existing
-/// installer tests.
+/// member's manifest while keeping the installer-facing `load_cargo_toml`
+/// helper compatible for existing installer tests.
 ///
 /// # Examples
 ///

@@ -139,7 +139,7 @@ pub fn installed_paths(dirs: &dyn BaseDirs) -> Result<Vec<Utf8PathBuf>, Installa
 }
 
 fn record_path(dirs: &dyn BaseDirs) -> Result<PathBuf, InstallationRecordError> {
-    dirs.whitaker_data_dir()
+    dirs.whitaker_data()
         .map(|directory| directory.join(RECORD_FILENAME))
         .ok_or(InstallationRecordError::MissingDataDirectory)
 }
@@ -221,7 +221,7 @@ mod tests {
 
     fn mock_dirs(data: PathBuf) -> MockBaseDirs {
         let mut dirs = MockBaseDirs::new();
-        dirs.expect_whitaker_data_dir().return_const(Some(data));
+        dirs.expect_whitaker_data().return_const(Some(data));
         dirs
     }
 
@@ -339,9 +339,7 @@ mod tests {
         )
         .expect("staging path should be recorded");
 
-        let data_dir = dirs
-            .whitaker_data_dir()
-            .expect("data directory should exist");
+        let data_dir = dirs.whitaker_data().expect("data directory should exist");
         assert!(data_dir.join("installed_lint_paths.json").is_file());
     }
 }

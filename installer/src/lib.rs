@@ -85,8 +85,6 @@ mod archive_entry_type_tests;
 mod dependency_packaging_tests;
 #[cfg(test)]
 mod install_metrics_tests;
-#[cfg(test)]
-mod tests;
 
 /// Test utilities for stubbing command execution in integration tests.
 ///

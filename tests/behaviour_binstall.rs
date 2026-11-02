@@ -32,7 +32,7 @@ fn whitaker_package_metadata_matches_binstall_templates() {
         .expect("package version");
     assert_eq!(package_name, "whitaker");
 
-    let binstall = metadata::extract_binstall_table(&manifest);
+    let binstall = metadata::extract_binstall_table(&manifest).expect("root binstall table");
     for (key, expected) in [
         ("pkg-url", metadata::PKG_URL_TEMPLATE),
         ("bin-dir", metadata::BIN_DIR_TEMPLATE),

@@ -41,3 +41,28 @@ pub(super) fn run_dry(
             wrapper: args.skip.skip_wrapper,
             update: args.skip.no_update,
         },
+        suite_ref: args.suite_version.as_ref().map(SuiteRef::as_str),
+        jobs: args.jobs,
+        crates: &requested_crates,
+    };
+    write_stderr_line(stderr, info.display_text());
+    crate::install_flow::bootstrap_step::report_bootstrap_plan(dirs, stderr)
+}
+
+/// Selects the install target, falling back to the build directory when host
+/// detection or prebuilt-path resolution fails.
+fn determine_dry_run_target_dir(
+    args: &InstallArgs,
+    dirs: &dyn BaseDirs,
+    toolchain: &Toolchain,
+    requested_crates: &[CrateName],
+) -> Result<Utf8PathBuf> {
+    let build_target_dir = determine_target_dir(args.target_dir.as_deref())?;
+    if !args.should_attempt_prebuilt(requested_crates) {
+        return Ok(build_target_dir);
+    }
+    let Ok(host_target) = detect_host_target() else {
+        return Ok(build_target_dir);
+    };
+    Ok(prebuilt_library_dir(dirs, toolchain.channel(), &host_target).unwrap_or(build_target_dir))
+}

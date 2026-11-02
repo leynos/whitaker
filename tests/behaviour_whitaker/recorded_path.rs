@@ -41,15 +41,15 @@ struct TestBaseDirs {
 }
 
 impl BaseDirs for TestBaseDirs {
-    fn home_dir(&self) -> Option<PathBuf> {
+    fn home(&self) -> Option<PathBuf> {
         None
     }
 
-    fn bin_dir(&self) -> Option<PathBuf> {
+    fn executables(&self) -> Option<PathBuf> {
         None
     }
 
-    fn whitaker_data_dir(&self) -> Option<PathBuf> {
+    fn whitaker_data(&self) -> Option<PathBuf> {
         Some(self.data.clone())
     }
 }

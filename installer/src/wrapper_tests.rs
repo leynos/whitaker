@@ -363,7 +363,7 @@ fn lister_only_generation_preserves_an_existing_whitaker_binary() {
 
     let mut dirs = crate::dirs::MockBaseDirs::new();
     let expected_bin_dir = bin_dir.clone();
-    dirs.expect_bin_dir()
+    dirs.expect_executables()
         .return_once(move || Some(expected_bin_dir));
 
     let result = generate_wrapper_scripts_with(&dirs, WrapperScripts::WhitakerLsOnly)
