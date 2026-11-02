@@ -47,7 +47,12 @@ env:
   # release's mdtablefix-linux-x86_64.sha256. The shared action verifies the
   # installed executable against it, so a replaced release cannot pass.
   MDTABLEFIX_LINUX_X64_SHA256: e166e2daecd8b8820a521840ee363acfd38af7c53968ec9e65d2223aa0c272e1
-  WHITAKER_INSTALLER_VERSION: '0.2.7'
+  # 0.2.11 is the first published installer whose bundled
+  # `dependency-binaries.toml` pins `cargo-dylint` and `dylint-link` at 6.3.0
+  # and whose embedded Clippy snapshot matches the 6.3.x libraries this
+  # workspace resolves. Earlier releases embed 6.0.1 and would reinstall the
+  # superseded tools over the Makefile pins.
+  WHITAKER_INSTALLER_VERSION: '0.2.11'
   RUSTFLAGS: -D warnings
   RUSTDOCFLAGS: -D warnings
 # CodeScene coverage: `coverage-main.yml` owns it entirely. It uploads
