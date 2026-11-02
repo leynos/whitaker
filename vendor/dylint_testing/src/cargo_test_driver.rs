@@ -293,7 +293,7 @@ mod tests {
         assert!(!is_fixture_query);
     }
 
-    /// Recognise the metadata query behind a rustup toolchain selector.
+    /// Recognize the metadata query behind a rustup toolchain selector.
     #[test]
     fn uses_cached_metadata_behind_a_toolchain_selector() {
         let arguments = ["+nightly", "metadata"].map(OsString::from);
