@@ -214,8 +214,15 @@ DYLINT_DRIVER_PATH ?= $(call native_path,$(DYLINT_DRIVER_ROOT))/dylint-$(CARGO_D
 export DYLINT_CLIPPY_REPO DYLINT_DRIVER_PATH
 # The snapshot tool builds in its own target directory: the test lane's
 # `RUSTFLAGS` differ, and sharing `target/` would rebuild one for the other.
-CLIPPY_SNAPSHOT_TOOL = CARGO_TARGET_DIR="$(CURDIR)/target/clippy-snapshot-tool" \
+# It is preparation, so it must not inherit a caller's offline mode: its own
+# build can need the registry before `fetch` has populated it.
+CLIPPY_SNAPSHOT_TOOL = env -u CARGO_NET_OFFLINE \
+	CARGO_TARGET_DIR="$(CURDIR)/target/clippy-snapshot-tool" \
 	$(CARGO) run $(CARGO_LOCKED) --quiet -p whitaker-installer --bin whitaker-clippy-snapshot --
+# The driver build is preparation, so it runs online. `dylint-smoke` reuses
+# this after emptying the keyed slot, which is why it cannot lean on `fetch`.
+WARM_DRIVER = env -u CARGO_NET_OFFLINE CARGO_TARGET_DIR="$(DYLINT_WARMUP_TARGET_DIR)" \
+	$(CARGO) run $(CARGO_LOCKED) -p dylint_testing --example warm_driver
 
 # Markdown sources checked by `check-fmt`. Keep generated output and local tool
 # caches out of this list; the checker itself never writes to these sources.
@@ -237,7 +244,7 @@ clean: ## Remove build artefacts
 fetch: clippy-snapshot ## Fetch dependencies and warm Dylint before tests
 	# Fetch each future committed standalone fixture with `cargo fetch --locked --manifest-path <m>`.
 	env -u CARGO_NET_OFFLINE $(CARGO) fetch $(CARGO_LOCKED)
-	env -u CARGO_NET_OFFLINE CARGO_TARGET_DIR="$(DYLINT_WARMUP_TARGET_DIR)" $(CARGO) run $(CARGO_LOCKED) -p dylint_testing --example warm_driver
+	$(WARM_DRIVER)
 	mkdir -p "$(DYLINT_WARMUP_TARGET_DIR)"
 	env -u CARGO_NET_OFFLINE $(CARGO) metadata --format-version 1 $(CARGO_LOCKED) > "$(NEXTTEST_CARGO_METADATA)"
 	env -u CARGO_NET_OFFLINE $(CARGO) metadata --no-deps --format-version 1 $(CARGO_LOCKED) > "$(LLVM_COV_CARGO_METADATA)"
@@ -654,6 +661,10 @@ dylint-smoke: clippy-snapshot dylint-tools ## Build the Dylint driver cold, then
 	@# tests a warm driver. The cold run empties the driver slot, so any
 	@# DYLINT_DRIVER_PATH but the exact keyed slot is refused: an exported
 	@# shared driver root must survive.
+	@# The driver build is preparation and runs online; the exclusion tests
+	@# force Dylint offline, so the smoke runs then prove the prepared driver is
+	@# reused without a rebuild. `fetch` cannot stand in for the warm-up: it
+	@# runs before this target empties the slot.
 	@set -eu; \
 	export PATH="$(DYLINT_TOOLS_DIR)/bin:$$PATH"; \
 	keyed="$(call native_path,$(DYLINT_DRIVER_ROOT))/dylint-$(CARGO_DYLINT_VERSION)/clippy-$(CLIPPY_SNAPSHOT_COMMIT)"; \
@@ -672,12 +683,15 @@ dylint-smoke: clippy-snapshot dylint-tools ## Build the Dylint driver cold, then
 		[ -n "$$driver" ] || { echo "no Dylint driver was built under $(DYLINT_DRIVER_PATH)" >&2; exit 1; }; \
 		{ sha256sum "$$driver" 2>/dev/null || shasum -a 256 "$$driver"; }; \
 	}; \
-	echo "Cold run: empty driver directory $(DYLINT_DRIVER_PATH)"; \
-	smoke; \
+	echo "Cold run: building the driver online into empty $(DYLINT_DRIVER_PATH)"; \
+	$(WARM_DRIVER); \
 	cold=$$(digest); \
-	echo "Warm run: reusing $$cold"; \
+	echo "Warm run: reusing $$cold offline"; \
 	smoke; \
-	[ "$$(digest)" = "$$cold" ] || { echo "the warm run rebuilt the Dylint driver" >&2; exit 1; }; \
+	[ "$$(digest)" = "$$cold" ] || { echo "the offline run rebuilt the Dylint driver" >&2; exit 1; }; \
+	echo "Second offline run: reusing $$cold"; \
+	smoke; \
+	[ "$$(digest)" = "$$cold" ] || { echo "the second offline run rebuilt the Dylint driver" >&2; exit 1; }; \
 	echo "Dylint driver built once and reused: $$cold"
 
 help: ## Show available targets

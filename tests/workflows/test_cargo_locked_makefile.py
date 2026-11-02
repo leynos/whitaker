@@ -240,8 +240,13 @@ def _run_make(
     target: str,
     environment: MakeRunEnvironment,
     extra_make_args: list[str] | None = None,
+    extra_env: dict[str, str] | None = None,
 ) -> list[str]:
-    """Run one target with stubbed tools and return recorded Cargo arguments."""
+    """Run one target with stubbed tools and return recorded Cargo arguments.
+
+    `extra_env` is applied after the defaults are cleared, so a test can hand
+    the recipe an inherited value the harness would otherwise remove.
+    """
     workspace = environment.stub_dir.parent / "workspace"
     scripts_directory = workspace / "scripts"
     scripts_directory.mkdir(parents=True, exist_ok=True)
@@ -278,6 +283,8 @@ def _run_make(
     process_env.pop("CARGO_NET_OFFLINE", None)
     process_env.pop("RUSTUP_TOOLCHAIN", None)
     process_env.pop("BASH_ENV", None)
+    if extra_env:
+        process_env.update(extra_env)
     make_arguments = [
         "make",
         target,
@@ -444,6 +451,27 @@ def _assert_make_test_invocations(
         "nextest run",
         "test",
     ], f"make test must prepare before running both test commands; recorded: {recorded!r}"
+    snapshot_call, fetch_call, warm_up_call, *prepared = cargo_calls
+    assert "whitaker-clippy-snapshot" in snapshot_call, (
+        "the snapshot install must precede the fetch it depends on"
+    )
+    assert fetch_call.split()[:1] == ["fetch"], (
+        f"preparation must fetch dependencies; recorded: {fetch_call!r}"
+    )
+    assert "warm_driver" in warm_up_call, (
+        f"preparation must warm the Dylint driver; recorded: {warm_up_call!r}"
+    )
+    metadata_calls = [line for line in prepared if _cargo_head(line) == "metadata"]
+    assert len(metadata_calls) == 2, (
+        f"preparation must write both metadata files; recorded: {metadata_calls!r}"
+    )
+    assert sum("--no-deps" in line.split() for line in metadata_calls) == 1, (
+        "the two metadata files must come from distinct queries"
+    )
+    driver_build = next(line for line in prepared if _cargo_head(line) == "build")
+    assert "cargo_test_driver" in driver_build, (
+        f"preparation must build the test driver; recorded: {driver_build!r}"
+    )
     nextest_call = next(line for line in cargo_calls if _cargo_head(line) == "nextest run")
     assert "--cargo-metadata" in nextest_call and "nextest-cargo-metadata.json" in nextest_call, (
         "Nextest must use metadata produced during preparation"
@@ -533,6 +561,40 @@ def test_make_test_forwards_cargo_locked(
         stub_dir / f"test-{log_name}.env",
         cargo=cargo,
         expected_driver_path=expected_driver_path,
+    )
+
+
+def test_fetch_clears_an_inherited_offline_mode(
+    cargo_stub: tuple[Path, Path],
+) -> None:
+    """Preparation runs online even when the caller exported offline mode.
+
+    `fetch` is the step that populates an empty registry, so inheriting
+    `CARGO_NET_OFFLINE=true` would make preparation fail before it did any
+    work. The snapshot tool is the first Cargo call of the prerequisite, so it
+    is the one that proves the policy starts before the `fetch` recipe body.
+    """
+    stub_dir, cargo = cargo_stub
+    environment = MakeRunEnvironment(cargo=cargo, locked=None, stub_dir=stub_dir)
+
+    recorded = _run_make(
+        "fetch",
+        environment,
+        extra_env={"CARGO_NET_OFFLINE": "true"},
+    )
+
+    heads = [_cargo_head(line) for line in recorded]
+    assert heads == ["run", "fetch", "run", "metadata", "metadata", "build"], (
+        f"fetch must install the snapshot, fetch, warm the driver, then write "
+        f"metadata; recorded: {recorded!r}"
+    )
+    offline_modes = [
+        line.split("\t", maxsplit=1)[0]
+        for line in (stub_dir / "fetch-default.env").read_text(encoding="utf-8").splitlines()
+    ]
+    assert offline_modes == ["<unset>"] * len(heads), (
+        "every preparation call, including the snapshot tool build, must clear "
+        f"an inherited CARGO_NET_OFFLINE; recorded: {offline_modes!r}"
     )
 
 
