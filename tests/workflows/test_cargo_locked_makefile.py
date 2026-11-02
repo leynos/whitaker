@@ -236,76 +236,114 @@ def _make_log_name(environment: MakeRunEnvironment) -> str:
     return environment.locked or "unlocked"
 
 
-def _run_make(
+def _prepare_workspace(environment: MakeRunEnvironment) -> Path:
+    """Create the scratch workspace holding the Makefile, scripts, and stubs."""
+    workspace = environment.stub_dir.parent / "workspace"
+    scripts_directory = workspace / "scripts"
+    scripts_directory.mkdir(parents=True, exist_ok=True)
+    for source, destination in (
+        (REPO_ROOT / "Makefile", workspace / "Makefile"),
+        (
+            REPO_ROOT / "scripts/generate_checksums.py",
+            scripts_directory / "generate_checksums.py",
+        ),
+        (
+            REPO_ROOT / "scripts/check_skill_metadata.py",
+            scripts_directory / "check_skill_metadata.py",
+        ),
+        # `publish-check` reads `rust-toolchain.toml` for the channel and shells
+        # out to `scripts/install-dylint-tools.sh`; provide the manifest and a
+        # no-op stub so the recipe runs without a real toolchain or network
+        # access. Both are inert for the other targets.
+        (REPO_ROOT / "rust-toolchain.toml", workspace / "rust-toolchain.toml"),
+    ):
+        shutil.copy2(source, destination)
+    _write_stub(scripts_directory, "install-dylint-tools.sh", "exit 0")
+    return workspace
+
+
+def _process_environment(
     target: str,
     environment: MakeRunEnvironment,
-    extra_make_args: list[str] | None = None,
-    extra_env: dict[str, str] | None = None,
-) -> list[str]:
-    """Run one target with stubbed tools and return recorded Cargo arguments.
+    log: Path,
+    driver_path: Path,
+    extra_env: dict[str, str] | None,
+) -> dict[str, str]:
+    """Return the environment for one stubbed `make` run.
 
     `extra_env` is applied after the defaults are cleared, so a test can hand
     the recipe an inherited value the harness would otherwise remove.
     """
-    workspace = environment.stub_dir.parent / "workspace"
-    scripts_directory = workspace / "scripts"
-    scripts_directory.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(REPO_ROOT / "Makefile", workspace / "Makefile")
-    shutil.copy2(
-        REPO_ROOT / "scripts/generate_checksums.py",
-        scripts_directory / "generate_checksums.py",
-    )
-    shutil.copy2(
-        REPO_ROOT / "scripts/check_skill_metadata.py",
-        scripts_directory / "check_skill_metadata.py",
-    )
-    # `publish-check` reads `rust-toolchain.toml` for the channel and shells out
-    # to `scripts/install-dylint-tools.sh`; provide the manifest and a no-op
-    # stub so the recipe runs without a real toolchain or network access. Both
-    # are inert for the other targets.
-    shutil.copy2(REPO_ROOT / "rust-toolchain.toml", workspace / "rust-toolchain.toml")
-    _write_stub(scripts_directory, "install-dylint-tools.sh", "exit 0")
-    snapshot_arguments = provide_clippy_snapshot(workspace)
-
-    log_name = _make_log_name(environment)
-    log = environment.stub_dir / f"{target}-{log_name}.log"
-    # Keep the driver inside the scratch workspace. The Makefile would
-    # otherwise default it into the real user cache, and an inherited value
-    # from an outer `make` could be written to.
-    driver_path = workspace / "dylint-drivers" / "test-driver"
     process_env = os.environ | {
         "CARGO_LOCKED_LOG": str(log),
         "CARGO_LOCKED_ENV_LOG": str(log.with_suffix(".env")),
         "DYLINT_DRIVER_PATH": str(driver_path),
         "PATH": _stub_path(target, environment.stub_dir),
     }
-    process_env.pop("CARGO_LOCKED", None)
-    process_env.pop("CARGO_NET_OFFLINE", None)
-    process_env.pop("RUSTUP_TOOLCHAIN", None)
-    process_env.pop("BASH_ENV", None)
+    for name in ("CARGO_LOCKED", "CARGO_NET_OFFLINE", "RUSTUP_TOOLCHAIN", "BASH_ENV"):
+        process_env.pop(name, None)
     if extra_env:
         process_env.update(extra_env)
-    make_arguments = [
-        "make",
-        target,
-        f"CARGO={environment.cargo}",
-        *snapshot_arguments,
-    ]
-    # Command-line PATH keeps Make's HOME-based prefix from shadowing stubs.
-    make_arguments.append(f"PATH={process_env['PATH']}")
+    return process_env
+
+
+def _target_arguments(
+    target: str, environment: MakeRunEnvironment, workspace: Path
+) -> list[str]:
+    """Return the Make variable overrides one target's recipe needs."""
     if target == "test":
-        make_arguments.append(f"CARGO_NEXTEST={environment.stub_dir / 'cargo-nextest'}")
-        make_arguments.append(f"CARGO_TEST_WRAPPER={environment.cargo}")
-        make_arguments.append(f"CARGO_TEST_METADATA_ROOT={workspace}")
-        make_arguments.append("TEST_RUSTUP_TOOLCHAIN=nightly-test")
+        return [
+            f"CARGO_NEXTEST={environment.stub_dir / 'cargo-nextest'}",
+            f"CARGO_TEST_WRAPPER={environment.cargo}",
+            f"CARGO_TEST_METADATA_ROOT={workspace}",
+            "TEST_RUSTUP_TOOLCHAIN=nightly-test",
+        ]
     if target == "lint":
         # This test isolates Cargo flag forwarding; the isolated fixture does
         # not contain the repository's skills needed by the lint prerequisite.
-        make_arguments.extend(["-o", "skill-manifest-check"])
+        return ["-o", "skill-manifest-check"]
+    return []
+
+
+def _make_arguments(
+    target: str,
+    environment: MakeRunEnvironment,
+    workspace: Path,
+    snapshot_arguments: list[str],
+    process_env: dict[str, str],
+    extra_make_args: list[str] | None,
+) -> list[str]:
+    """Return the `make` command line for one stubbed run."""
+    arguments = ["make", target, f"CARGO={environment.cargo}", *snapshot_arguments]
+    # Command-line PATH keeps Make's HOME-based prefix from shadowing stubs.
+    arguments.append(f"PATH={process_env['PATH']}")
+    arguments.extend(_target_arguments(target, environment, workspace))
     if environment.locked is not None:
-        make_arguments.append(f"CARGO_LOCKED={environment.locked}")
+        arguments.append(f"CARGO_LOCKED={environment.locked}")
     if extra_make_args:
-        make_arguments.extend(extra_make_args)
+        arguments.extend(extra_make_args)
+    return arguments
+
+
+def _run_make(
+    target: str,
+    environment: MakeRunEnvironment,
+    extra_make_args: list[str] | None = None,
+    extra_env: dict[str, str] | None = None,
+) -> list[str]:
+    """Run one target with stubbed tools and return recorded Cargo arguments."""
+    workspace = _prepare_workspace(environment)
+    snapshot_arguments = provide_clippy_snapshot(workspace)
+    log_name = _make_log_name(environment)
+    log = environment.stub_dir / f"{target}-{log_name}.log"
+    # Keep the driver inside the scratch workspace. The Makefile would
+    # otherwise default it into the real user cache, and an inherited value
+    # from an outer `make` could be written to.
+    driver_path = workspace / "dylint-drivers" / "test-driver"
+    process_env = _process_environment(target, environment, log, driver_path, extra_env)
+    make_arguments = _make_arguments(
+        target, environment, workspace, snapshot_arguments, process_env, extra_make_args
+    )
     result = subprocess.run(
         make_arguments,
         cwd=workspace,
