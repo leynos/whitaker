@@ -4688,15 +4688,22 @@ That is a per-setting rule rather than a per-test one, and it is easy to get
 backwards when reading a long override table.
 
 A later allowance is therefore inert for any test an earlier override already
-names. The 120-minute allowance above and the 75-minute allowance for
-`example_compiles_without_diagnostics` were both shadowed in the default
-profile by the 20-minute override for the ordinary serial UI harnesses, because
-that filter still listed them and also configured `slow-timeout`. The `ci`
-profile was unaffected only because its ordinary override never named the two
-tests, so their specific overrides were reached first. A dedicated allowance
-only takes effect when every broader filter for the same setting omits the
-test; both long `rstest_helper_should_be_fixture` cases are deliberately absent
-from the 20-minute filter for that reason.
+names *and configures that setting for*. The 120-minute allowance above, the
+75-minute allowance for `example_compiles_without_diagnostics`, and the
+75-minute alias-fixture allowance were all shadowed in the default profile by
+the 20-minute override for the ordinary serial UI harnesses, because that
+filter still listed them and also configured `slow-timeout`. The `ci` profile
+was unaffected only because its ordinary override never named those tests, so
+their specific overrides were reached first.
+
+The `serial-dylint-ui` filter must keep naming the nested Cargo harnesses: its
+contract test looks them up in that table, and naming them there is what
+serializes them. The long allowances therefore sit *above* that filter and
+configure only `slow-timeout` and `retries`. Serialization still comes from the
+first override that configures `test-group`, and because precedence is
+per-setting the earlier tables do not shadow it. Adding an allowance below the
+filter, or removing the named test from it, reintroduces the bug in one
+direction or the other.
 
 Every other discovered trybuild compile contract rebuilds fixture crates
 through nested Cargo. In a cold workspace, the Bumpy Road public API contract

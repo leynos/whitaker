@@ -1728,6 +1728,19 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
   default profile's broad 20-minute override, whose first-match precedence had
   been shadowing their dedicated 75- and 120-minute allowances.
 
+  That last change was itself wrong, and `make test`'s second pass caught it:
+  `whitaker_lint_core::nextest_ui_filter` requires the first override that
+  configures `serial-dylint-ui` to keep naming the nested Cargo harnesses, so
+  removing them broke the contract even though it unshadowed the allowances.
+  The filter is restored to name every harness, and the long allowances now sit
+  _above_ it, configuring only `slow-timeout` and `retries`. Precedence is
+  per-setting, so the earlier tables are reached for their own settings while
+  serialization still comes from the first override that configures
+  `test-group`. The alias fixture's 75-minute allowance was shadowed the same
+  way and is moved with them, and the developers' guide section on per-setting
+  precedence now describes the arrangement that actually exists. This
+  correction is the commit that carries this entry.
+
   Validation: `make check-fmt` and `make markdownlint` pass on `277a58c9`;
   `make lint`, `make typecheck`, and `make test` were started against that head
   and their results are recorded below when they complete. Plan stays
