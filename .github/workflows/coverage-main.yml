@@ -158,7 +158,7 @@ jobs:
 
       - name: Setup Rust
         id: setup-rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
+        uses: leynos/shared-actions/.github/actions/setup-rust@872f59f53717b5bebe8e24b2f4a7496b089a939a
         with:
           # Ubicloud only, so a missing cache proxy fails the job rather than
           # letting sccache compile against local disk unnoticed.
@@ -295,7 +295,7 @@ jobs:
         # `workflow_dispatch` can name any branch, so the trigger filter does
         # not confine this upload to the trunk; the ref test here does.
         if: steps.codescene_token.outputs.available == 'true' && github.ref == 'refs/heads/main'
-        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@a5765019912a8ab6882b12db049c7cde635f3a85
+        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@872f59f53717b5bebe8e24b2f4a7496b089a939a
         with:
           format: lcov
           mode: upload
