@@ -1745,6 +1745,50 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
   `make lint`, `make typecheck`, and `make test` were started against that head
   and their results are recorded below when they complete. Plan stays
   `IN PROGRESS`; crates.io reservation remains unauthorized.
+- **Second rebase onto `main` and replay repair, 2026-11-02.** `origin/main`
+  advanced again, to `00186d43`, and the branch was replayed onto it from
+  `eaccfe83` with the exclusive boundary `395f1d3f` and 39 commits under the
+  unattended policy (the Weave driver replaced by `git merge-file --zdiff3` for
+  the operation).
+
+  The replay is the lesson of this entry. Conflicts in `installer/src/cli.rs`,
+  its `source_policy` tests, `wrapper.rs` and `orchestration/dry_run.rs` were
+  resolved by truncating each file at the marker instead of merging, and the
+  truncated blobs were then carried into every later replayed commit. Nothing in
+  `range-diff`, in the end-of-series diff, or in the first pass of
+  `cargo check` pointed at the cause: the damage appeared as a handful of
+  unrelated compile and dead-code errors, two of which named files that the
+  truncation had not even touched. The reliable detector was a scripted audit
+  comparing, for every path in the branch diff, a three-way
+  `git merge-file --zdiff3` of the pre-rebase blob, its base and the target
+  against the replayed `HEAD` blob. That found all four files; fixing only the
+  two the compiler named would have left two silently short files.
+
+  Each of the four is reconstructed from that three-way merge, keeping the
+  target where it already delivered the branch's intent and keeping both sides
+  where each contributed something the other lacked. `cli.rs` keeps the
+  target's nested flag structs and the branch's equality derives, extended
+  `Default` values and `install_args` accessor. The source-policy tests keep
+  the target's `super::super::` paths and import only the type they construct.
+  `wrapper.rs` keeps the target's path-free wrapper plus the branch's
+  `WrapperScripts` selection, so the installer writes `whitaker-ls` alone when
+  the root binary owns that name. `dry_run.rs` restores the target's
+  bootstrap-plan reporting call, without which `report_bootstrap_plan` is dead
+  code and the dry-run snapshot loses its Clippy-snapshot lines.
+
+  The rest follows the target's renames and signatures: `BaseDirs` accessors are
+  `home`, `executables` and `whitaker_data`; `load_cargo_toml` and
+  `extract_binstall_table` return `Result`; the root package tests use both. A
+  duplicate `#[cfg(test)] mod tests` in `lib.rs` is removed, because
+  `orchestration/mod.rs` already wires the installer tests by path and the
+  duplicate made those items inaccessible from the test crate. One doc comment
+  drops an intra-doc link to a cfg-gated item that `cargo doc` cannot resolve.
+  `Cargo.lock` is regenerated from the manifests.
+
+  Validation on `0e7413f3`: `make check-fmt`, `make lint`, `make typecheck` and
+  `make test` all pass. The test gate ran 2,186 tests with 2,186 passed and 6
+  skipped, the secondary suite passed 84, and the workspace doctests passed.
+  Plan stays `IN PROGRESS`; crates.io reservation remains unauthorized.
 
 To be completed at each milestone boundary and at completion. Before setting
 this plan to `COMPLETE`, reconcile every entry in `Surprises & discoveries`
