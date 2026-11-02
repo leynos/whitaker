@@ -42,6 +42,10 @@ path = "examples/warm_driver.rs"
 name = "cargo_test_driver"
 path = "examples/cargo_test_driver.rs"
 
+[[test]]
+name = "cargo_test_driver"
+path = "tests/cargo_test_driver.rs"
+
 [dependencies.anyhow]
 version = "1.0"
 

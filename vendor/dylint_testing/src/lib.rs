@@ -131,9 +131,13 @@ use compiletest_rs as compiletest;
 use dylint_internal::{CommandExt, env, link::dylint_libs};
 use once_cell::sync::OnceCell;
 
+pub mod cargo_test_driver;
+
 mod example;
 
 pub mod ui;
+
+pub mod warm_driver;
 
 pub(crate) use example::{ExampleTestContext, example_target, example_targets, run_example_test};
 

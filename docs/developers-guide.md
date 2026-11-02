@@ -166,6 +166,16 @@ Cargo metadata process during test execution. For coverage, the small test
 driver serves the prepared `--no-deps` metadata to `cargo-llvm-cov` and routes
 its Nextest request to the standalone executable.
 
+The driver's routing lives in `dylint_testing::cargo_test_driver`, so it is
+tested as a library rather than only through the example binary.
+`vendor/dylint_testing/tests/cargo_test_driver.rs` runs the entry point against
+real child processes: it checks the served metadata bytes, the exit status
+propagated from Cargo, and the failures for a missing cache or a missing
+`CARGO_REAL`. The module's unit tests cover command construction, including
+joined, separate, repeated, and malformed `--manifest-path` arguments.
+`make test` runs the library tests, the integration test, and the example
+together.
+
 If a nested command needs an unfetched crate, Cargo fails with an error like:
 
 ```text

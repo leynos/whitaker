@@ -151,3 +151,12 @@ before tests run with Cargo offline, plus two examples it invokes:
 `make coverage` and routes its Nextest call to the standalone binary. The
 routing drops the workspace `--manifest-path` that Cargo's coverage driver
 adds, because Nextest rejects that flag alongside `--cargo-metadata`.
+
+Both examples are thin shims over library modules, so the behaviour is testable
+without spawning the binaries. `src/warm_driver.rs` reports a preparation
+failure with the step that failed. `src/cargo_test_driver.rs` holds the routing
+and metadata logic, and `tests/cargo_test_driver.rs` exercises it at the
+process boundary: served metadata bytes, exit-status propagation, and the
+missing-cache and missing-`CARGO_REAL` failures. The routing treats every
+`--manifest-path` occurrence as significant, so a repeated flag naming another
+workspace keeps the query away from the prepared metadata.
