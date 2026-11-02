@@ -16,20 +16,39 @@ fn pinned_toolchain_channel() -> Result<String, Box<dyn Error>> {
         .ok_or_else(|| io::Error::other("workspace toolchain channel is missing or invalid").into())
 }
 
+/// Lines whose value depends on the machine or checkout running the test.
+///
+/// The bootstrap paths are absolute and the snapshot state depends on what a
+/// developer has already installed, so neither can be asserted verbatim.
+/// Their labels are the stable interface, and the values they carry are
+/// covered by the injected-directory unit tests.
+const NORMALIZED_PREFIXES: [(&str, &str); 6] = [
+    ("Workspace root: ", "Workspace root: [workspace]"),
+    (
+        "Target directory: ",
+        "Target directory: [staging directory]",
+    ),
+    ("Toolchain: ", "Toolchain: [pinned toolchain]"),
+    ("Clippy snapshot: ", "Clippy snapshot: [generation]"),
+    ("Clippy snapshot state: ", "Clippy snapshot state: [state]"),
+    (
+        "Dylint driver directory: ",
+        "Dylint driver directory: [driver directory]",
+    ),
+];
+
+/// Replace a machine-dependent line's value with its placeholder.
+fn normalize_line(line: &str) -> &str {
+    NORMALIZED_PREFIXES
+        .iter()
+        .find_map(|(prefix, placeholder)| line.starts_with(prefix).then_some(*placeholder))
+        .unwrap_or(line)
+}
+
 fn normalized_dry_run_output(output: &str) -> String {
     output
         .lines()
-        .map(|line| {
-            if line.starts_with("Workspace root: ") {
-                "Workspace root: [workspace]"
-            } else if line.starts_with("Target directory: ") {
-                "Target directory: [staging directory]"
-            } else if line.starts_with("Toolchain: ") {
-                "Toolchain: [pinned toolchain]"
-            } else {
-                line
-            }
-        })
+        .map(normalize_line)
         .collect::<Vec<_>>()
         .join("\n")
 }
