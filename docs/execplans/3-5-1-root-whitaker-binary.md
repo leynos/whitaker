@@ -1443,6 +1443,19 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
   Impact: reclaim immediately when that lock is free, while preserving active
   owners; regression tests cover both states.
 
+- Observation: a later, more specific nextest override does not win. For a
+  given test and setting, nextest applies the first override in file order that
+  matches the test _and_ configures that setting, evaluated separately per
+  setting. Evidence: the default profile's broad 20-minute UI override also
+  named `trybuild_fixtures_compile_without_diagnostics`, so the test was
+  terminated at 1,200 s on all three attempts while its own 120-minute override
+  sat later in the file; the `ci` profile passed because its broad filter never
+  named the test. Impact: an allowance only takes effect when every earlier
+  filter for the same setting omits the test. Both long
+  `rstest_helper_should_be_fixture` cases are now absent from the 20-minute
+  filter, and the rule is recorded in the developers' guide beside the timeout
+  budgets.
+
 ## Decision log
 
 - **D-1: Extract the Dylint driver library into `crates/whitaker_lint_core` as
@@ -1690,6 +1703,34 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
   `make check-fmt`, `make test` (1,958 passed, 5 skipped; the secondary suite
   and doctests passed), `make typecheck`, and `make lint` all pass.
   `cargo metadata --locked` passes on the committed index. Plan stays
+  `IN PROGRESS`; crates.io reservation remains unauthorized.
+- **Rebase onto the current `main`, 2026-11-02.** The PR target advanced one
+  commit while the previous rebase was being validated: `origin/main` moved from
+  `bd4c93a8` to `395f1d3f` ("Add an on-demand Nextest split benchmark (#513)
+  (#536)"), which only adds benchmark scripts, a workflow, and their contract
+  tests. The branch was replayed onto it with the exclusive boundary `bd4c93a8`
+  and 37 commits, under the unattended policy that replaces the Weave driver
+  with `git merge-file` for the operation; there were no conflicts. The audit
+  is exact: `range-diff` marks all 37 commits `=`, and
+  `git diff bd4c93a8 395f1d3f` is byte-identical to the diff between the
+  pre-rebase and post-rebase heads, so the replay changed nothing except the
+  inherited target commit. New head `277a58c9`.
+
+  Two candidate defects found while validating the merged result are fixed in
+  this candidate rather than worked around. `3bd22456` points the suite's
+  `exported_entry_point_registers_suite_lints` test at
+  `whitaker_lint_core::run_ui_tests!` and swaps the suite dev-dependency,
+  because main's new test still assumed the root package was the shared lint
+  library. `84ca4f46` makes the legacy installer's dry-run snapshot
+  machine-independent by normalizing the absolute workspace, staging-target and
+  Dylint-driver paths and the Clippy-snapshot state that the merged bootstrap
+  reporting now prints. `277a58c9` removes two long fixture tests from the
+  default profile's broad 20-minute override, whose first-match precedence had
+  been shadowing their dedicated 75- and 120-minute allowances.
+
+  Validation: `make check-fmt` and `make markdownlint` pass on `277a58c9`;
+  `make lint`, `make typecheck`, and `make test` were started against that head
+  and their results are recorded below when they complete. Plan stays
   `IN PROGRESS`; crates.io reservation remains unauthorized.
 
 To be completed at each milestone boundary and at completion. Before setting
