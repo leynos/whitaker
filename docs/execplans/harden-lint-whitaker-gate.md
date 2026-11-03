@@ -506,9 +506,13 @@ each push rather than copying an earlier lease into the command.
   deleting the standalone `whitaker-installer` execution, unpinning the
   `cargo install` version, dropping `--all-targets`, dropping
   `-p whitaker_sarif`, and removing the new target from `make test`.
-- [ ] Exact-head CI for the head carrying the finding-3 contract repairs and
-  the finding-4 plan corrections. Run `41604896975` covers only `5934827f`,
-  which predates them.
+- [x] (2026-11-03) The finding-3 contract repairs and finding-4 plan
+  corrections are published as `615d3bd7`, pushed over the verified SSH route
+  and confirmed at the remote head; local HEAD, `refs/remotes/origin/...` and
+  `ls-remote` all read `615d3bd7f7bf8a8b0138d89fc51ba86e929de8d7`. Run
+  `41604896975` covers only `5934827f`, which predates them.
+- [ ] Exact-head CI for `615d3bd7`. Dispatched as run `41606198130`; its
+  conclusion is owed, not assumed.
 - [x] (2026-11-03) ExecPlan completeness/correctness assessment posted as issue
   comment
   [6598161483](https://github.com/leynos/whitaker/pull/372#issuecomment-6598161483)
@@ -673,7 +677,9 @@ each push rather than copying an earlier lease into the command.
   (13 passed); the `/tmp/redcheck.py` mutation harness (11 red, 1 green
   allow-probe); and `make markdownlint` including `spelling` and
   `spelling-phrase-check`. No gate was run in parallel with another, and
-  `RUSTC_WRAPPER` was left in place throughout.
+  `RUSTC_WRAPPER` was left in place throughout. The contract suite has since
+  grown two tests, so that run's `13 passed` predates them; `615d3bd7` re-ran
+  it at 14 passed.
 - [x] (2026-11-03) One unrelated reflow, excluded from the commit.
   `make fmt` rewrites a Rust snippet in `docs/whitaker-dylint-suite-design.md`
   (line 1034) that `mdtablefix` wants to join onto one line and wrap mid-path.
@@ -1186,10 +1192,10 @@ checked out `adc974c9`, before the finding-3 and finding-4 repairs — the
 `test-root-lib` target, the rewritten nextest filters in both profiles, the new
 contract suite and the corrections to this plan — were written. Those were
 uncommitted at that point and are now published in `126ffa86`, `5934827f` and
-the commit that follows them. They are a new candidate, and the green result
-belongs to the old one. M4 therefore closes when a `workflow_dispatch` run on
-the published head is green, not before; run `41604896975` is the current
-attempt, and its conclusion is reported rather than assumed.
+`615d3bd7`. They are a new candidate, and the green result belongs to the old
+one. M4 therefore closes when a `workflow_dispatch` run on the published head
+is green, not before; run `41606198130` is the attempt against `615d3bd7`, and
+its conclusion is reported rather than assumed.
 
 ## Conformance basis
 
