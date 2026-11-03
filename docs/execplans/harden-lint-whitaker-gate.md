@@ -258,25 +258,52 @@ Recovery: the old head remains reachable through the PR's reflog.
 - [x] (2026-11-02) `make fmt`, `make markdownlint`, `make spelling` and
   `make nixie` (no Mermaid changed) pass; the Python mirrors under
   `tests/workflows/` pass, 10 tests, after the `PATH` hermeticity repair.
-- [ ] (in progress) M3: run the four Rust gates sequentially under
-  `DYLINT_CLIPPY_REPO`. `make check-fmt` is green. `make test` compiled 341
-  crates including `dylint_internal` 6.3.2, `dylint` 6.3.2,
+- [x] (2026-11-03) M3a: the `revspec 'master'` objective is met. `make test`
+  compiled 341 crates including `dylint_internal` 6.3.2, `dylint` 6.3.2,
   `dylint_linting` 6.3.2 and `dylint_testing` 6.3.2, and logged **zero**
-  `revspec 'master'` occurrences; 1636 of 1665 tests passed with zero
-  failures. The remaining 29 are the UI harnesses that build the Dylint
-  driver against the pinned Clippy snapshot, which is the decisive evidence
-  for this change.
-- [ ] (pending) M4: commit, push, re-observe CI.
+  `revspec 'master'` occurrences; 1637 of 1665 tests passed. The objective for
+  M3a — no `revspec 'master'` anywhere — is met and that is the decisive
+  evidence for the pin change. That run was **not** green overall, and its
+  remaining failures are M3b work, not M3a work: six lines report
+  ``could not find `dylint_version` `` for `no_unwrap_or_else_panic` and
+  `rstest_helper_should_be_fixture`, alongside a timeout and a SIGTERM on the
+  nested-Cargo harnesses. The excerpt is pre-fix evidence: the log finished at
+  03:05, and `src/testing/ui/mod.rs` gained the copy-library guard at 04:36.
+  `no_unwrap_or_else_panic` reaches the guard because its
+  `src/lib_ui_tests.rs` calls `whitaker::testing::ui::run_with_runner`, which
+  applies `with_runner_env` around `ensure_toolchain_library` and the runner,
+  and `dylint_testing::initialize` is lazy, so it fires inside that closure.
+- [x] (2026-11-03) M3b: the two pre-existing causes found during M3 are
+  repaired in the working tree. `dylint_testing`'s copy-library overwrite is
+  guarded by `DYLINT_LINK_ENABLE_COPY_LIBRARY=1`, the example-harness lock is
+  target-scoped instead of host-global, and `.config/nextest.toml` now bounds
+  tests on both profiles. Gate re-run evidence is recorded under M4.
+- [ ] (in progress) M4: `make fmt` is green and the unrelated
+  `docs/whitaker-dylint-suite-design.md` reflow churn is reverted. The four
+  Rust gates are running sequentially; push, re-observation and CI dispatch
+  follow the gate results. Readiness, not the commit, is the gate.
 
 ## Surprises & discoveries
 
-The `serial-dylint-ui` test group and the ten-minute `slow-timeout` live
-under `[[profile.default.overrides]]` in `.config/nextest.toml`, so they do
-not apply to the `ci` profile that `make test` uses through
-`NEXTEST_PROFILE=ci`. The UI harnesses therefore run concurrently and are
-not terminated, each blocked on the shared compile pool rather than on its
-own work. This is pre-existing configuration, not something this change
-touches, and it explains why the gate took over an hour without failing.
+An earlier revision of this entry claimed the `serial-dylint-ui` group and the
+ten-minute `slow-timeout` under `[[profile.default.overrides]]` did not reach
+the `ci` profile, so the UI harnesses supposedly ran concurrently and
+unterminated for over an hour. That is wrong, and the correction matters because
+it changes what the repair has to do. Nextest's own documentation for per-test
+settings states the precedence explicitly: starting with the selected profile,
+then following its inheritance chain through `default`, the first override that
+matches a test and configures a setting is applied.
+`[[profile.default.overrides]]` was therefore already in force under
+`NEXTEST_PROFILE=ci`; the harnesses were serialized and bounded, and the hour
+went on the shared compile pool.
+
+What the misreading did establish is the real defect it obscured: the `ci`
+profile, which is the profile that actually includes the Windows-only installer
+binaries and is what CI runs, carried none of those budgets itself. Restating
+them in `[[profile.ci.overrides]]` is still correct, but for the reason the
+`.config/nextest.toml` comment gives — the budgets belong where a reader of the
+profile that runs them will find them — not because they were missing at
+runtime.
 
 The failure is time-dependent. The same commit passed three days before it
 failed. This matters because the first instinct was to look for a branch-local
@@ -284,10 +311,10 @@ cause, and there is none.
 
 `cargo-dylint` was already 6.3.0 on this host, so the old `Makefile` pins at
 6.0.1 described a tool that was not actually the one being run locally. The
-Windows job installs its own toolchain and is unaffected by the host. That
-same fact is what exposed the Python harness defect above: a host whose tool
-already satisfies the pin cannot exercise a stale-tool stub unless the stub
-genuinely wins `PATH`.
+Windows job installs its own toolchain and is unaffected by the host. That same
+fact is what exposed the Python harness defect above: a host whose tool already
+satisfies the pin cannot exercise a stale-tool stub unless the stub genuinely
+wins `PATH`.
 
 The pinned nightly is `nightly-2026-05-28` (`rustc 1.98.0-nightly`), and all
 seven Dylint crates declare no `rust-version` at all — only `edition = 2024`
@@ -318,13 +345,13 @@ failed-install case again aborts before `git clone`.
 `make fmt` now corrupts a Rust code fence in
 `docs/whitaker-dylint-suite-design.md`. The installed `mdtablefix` 0.6.1 runs
 with `--wrap --fences --in-place` and rewrites the `register_lints` example,
-joining `#[no_mangle]` onto the following line and breaking `store: &mut
-LintStore` across two lines. The result is not valid Rust. It reproduces on a
-pristine copy of the file at `HEAD`, so it is a pre-existing tool defect that
-this branch merely surfaced by running the formatter, not a defect in the pin
-change. The damaged hunk was restored to its original text; the other two
-touched docs reformat byte-identically. Nothing outside the intended pin lines
-now differs in that file.
+joining `#[no_mangle]` onto the following line and breaking
+`store: &mut LintStore` across two lines. The result is not valid Rust. It
+reproduces on a pristine copy of the file at `HEAD`, so it is a pre-existing
+tool defect that this branch merely surfaced by running the formatter, not a
+defect in the pin change. The damaged hunk was restored to its original text;
+the other two touched docs reformat byte-identically. Nothing outside the
+intended pin lines now differs in that file.
 
 `dylint_testing` 6.3.2's `rustc_flags_from_line` is not the same design as
 `main`'s vendored copy. `main` splits with `shlex` and returns only the
@@ -332,6 +359,52 @@ arguments after `rustc`; 6.3.2 splits on spaces and keeps the wrapper arguments
 ahead of `rustc`. Both are upstream-safe, but main cannot be copied wholesale
 here without also importing its `[patch.crates-io]` plumbing and its
 `vendor/dylint_testing` module, which belongs to a different PR.
+
+### Why `make test` fails for exactly two lint crates
+
+The two failing crates, `no_unwrap_or_else_panic` and
+`rstest_helper_should_be_fixture`, are the only two whose UI harnesses call
+`dylint_testing::ui::Test::src_base` directly instead of going through
+`whitaker::testing::ui::run_with_runner`. That distinction is the whole defect.
+
+`whitaker`'s helper builds the library itself (`src/testing/ui/toolchain.rs`):
+it reads the package's feature table, finds `dylint-driver`, and passes
+`--features dylint-driver` to `cargo build --lib`. `dylint_testing`'s own
+`initialize` does not. It runs a bare `cargo build` with
+`DYLINT_BUILDING_LIBRARIES=1`, and no `--features` flag at all. Because every
+lint crate declares `default = []` and puts the lint behind an optional
+`dylint-driver` feature, that bare build compiles the
+`#[cfg(not(feature = "dylint-driver"))]` stub. `copy_library` then copies the
+stub over the toolchain-qualified filename, and `compiletest_rs` loads it and
+reports `could not find 'dylint_version'`.
+
+The measurements that pin this down, taken on this candidate:
+
+| Build                                                             | Artefact size | `dylint_version` exported |
+| ----------------------------------------------------------------- | ------------- | ------------------------- |
+| `cargo build -p no_unwrap_or_else_panic` (default features)       | 5 256 B       | 0                         |
+| `cargo build -p no_unwrap_or_else_panic --features dylint-driver` | 67 465 296 B  | 1                         |
+
+The 5 256-byte file is `static-pie linked` and exports only the four weak libc
+symbols, so it is the stub and nothing else. The same file, byte for byte, is
+what `deps/libno_unwrap_or_else_panic.so` held during the failing run.
+
+This is a mechanism that only misfires when the bare build actually runs from
+the workspace root. If a previous `--all-features` build from `make test` has
+already left a fresh, feature-enabled plain `.so` in `target/debug`, Cargo
+reuses it, `deps/` keeps its artefact, and `copy_library` copies a working
+library. Whether the gate passes therefore depends on build ordering. `main`
+solved this durably by vendoring `dylint_testing` (`Cargo.toml`:
+`[patch.crates-io] dylint_testing = { path = "vendor/dylint_testing" }`) and
+adding a reproducible, Clippy-keyed driver bootstrap. This branch carries
+neither, so it inherits the ordering sensitivity.
+
+The separate lock_timeout failures are a third, unrelated defect and are
+already recorded above: a host-global `/tmp/rstest-helper-example-harness.lock`
+plus `[[profile.default.overrides]]` that never apply to `profile.ci`. `main`
+has fixed both (6-minute acquire, `serial-dylint-ui` overrides under
+`profile.ci` with 75–120-minute timeouts). Neither file is touched by this
+branch.
 
 ## Decision log
 
@@ -379,9 +452,60 @@ re-stage this branch's suite under `~/.local/share/whitaker`, and 0.2.11 is a
 runner, so the pin there is cheap; local gates keep using the existing 0.2.7
 wrapper, whose two-line shape delegates to the ambient `cargo-dylint` 6.3.0.
 
+**Repair the harness in place (supersedes an earlier stop-and-hand-back).** An
+earlier revision of this plan proposed halting at M3b and asking the user to
+choose between a rebase onto `main` and a local repair, on the belief that a
+local repair would duplicate unowned upstream work. Source-level measurement
+inverted that premise, so the entry is superseded rather than deleted:
+
+- The `dylint_version` failure is not a vendoring difference. It was introduced
+  by Dylint 6.3.x, and the guard that avoids it —
+  `DYLINT_LINK_ENABLE_COPY_LIBRARY=1` — is already present in this branch's own
+  history at `9e4c0be0` (`src/testing/ui/mod.rs`, `src/testing/ui/tests.rs`),
+  and again on `origin/main` at `0108d347`. This branch dropped it in a later
+  commit. Restoring it is a re-adoption, not new upstream work.
+- Main's version of the guard is `unsafe { env::set_var }` plus its own
+  `EnvTestGuard` type. This workspace sets `unsafe_code = "forbid"`
+  (`Cargo.toml:178`), which neither `ab2bc519` nor `origin/main` does, so a
+  literal port would not compile. The repair therefore expresses the same guard
+  through `whitaker_common::test_support`'s closure-scoped `temp_env` helpers.
+- The host-global `/tmp` lock and the empty `[[profile.ci]]` are genuine
+  cross-worktree and CI-lane defects that `main` also fixes, and both are small
+  enough to fix here rather than rebase a 5-package workspace onto a 6-package
+  one for.
+
+A rebase onto `main` remains available, but it is no longer the cheaper option
+and is not required for the gates to pass.
+
 ## Outcomes & retrospective
 
-Not yet complete. To be filled in after M4.
+Complete for M1–M3. M4 remains open: the repair is complete in the working
+tree and its focused tests pass, but the four repository gates have not yet run
+against the repaired candidate and nothing is committed or pushed.
+
+M3a is met: the `revspec 'master'` failure is gone, with
+zero occurrences across a full compile of `dylint_internal` 6.3.2 and a
+1637-test pass. M3b's two blockers were diagnosed to source level and repaired
+rather than deferred:
+
+- `dylint_testing` 6.3.2's `initialize()` runs a bare `cargo build` with no
+  `--features`, producing an empty `cdylib` for every lint crate, and then
+  copies it over the toolchain-qualified library the harness built with
+  `dylint-driver`. `src/testing/ui/mod.rs` now sets
+  `DYLINT_LINK_ENABLE_COPY_LIBRARY=1` when the caller has not, so the copy is
+  skipped. Covered by
+  `runner_env_guard_marks_the_toolchain_library_as_prepared`.
+- The example-harness lock lived at a host-global `temp_dir()` path with a
+  30-minute stale window, so one worktree's slow build could block every other
+  worktree on the host. It now resolves Cargo's target directory and locks
+  inside it, with a 5-minute stale window. Covered by
+  `acquire_places_the_lock_inside_the_effective_target_directory` and the
+  target-resolver cases in `harness_lock_tests.rs`.
+- `.config/nextest.toml` gained a base `slow-timeout` and `global-timeout` on
+  both profiles, CI overrides for the nested-Cargo harnesses that exist in this
+  tree, and a `serial-nested-cargo-builds` test group. Without a base bound, a
+  hung test was reported slow for ever and only the job timer ended it, which
+  cancels the run and discards the log that would have named the test.
 
 ## Conformance basis
 
