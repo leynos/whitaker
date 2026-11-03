@@ -4156,14 +4156,14 @@ fn serial_dylint_ui_override() -> Value {
 
 #[rstest]
 fn serial_dylint_ui_filter_captures_integration_ui_binaries(
-    serial_dylint_ui_override: Value
+    serial_dylint_ui_override: Value,
 ) {
     let filter = extract_filter(&serial_dylint_ui_override);
-    let crates = crates_with_integration_ui_test();
 
     assert!(
-        filter.contains("(binary(ui) & test(=ui))"),
-        "filter must capture integration test binaries: {crates:?}"
+        filter.0.contains("(binary(ui) & test(=ui))"),
+        "filter must capture integration test binaries: {}",
+        filter.0
     );
 }
 ```

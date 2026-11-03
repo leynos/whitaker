@@ -338,10 +338,54 @@ Recovery: the old head remains reachable through the PR's reflog.
   period, and serialize into `serial-dylint-ui`. Two seeded-fault controls
   confirm it can fail: reintroducing the name-list defect fails both profiles,
   and reintroducing the shadowing clause fails the default profile at
-  `overrides[0]`. The file is 371 lines, within the 400-line cap.
-- [ ] Re-run gate 2 (`make test NEXTEST_PROFILE=ci`) after the config fix;
-  gates 3 and 4 (`make typecheck`, `make lint`) follow. Logs are
-  `/tmp/{check-fmt,test-ci,typecheck,lint}-harden-lint-whitaker-gate.out`.
+  `overrides[0]`. The file was 371 lines at that point, within the 400-line
+  cap.
+- [x] (2026-11-03) CodeScene advisory repair. The hosted check's String Heavy
+  Function Arguments finding on `tests/nextest_ui_filter.rs` is cleared
+  locally: `cs review tests/nextest_ui_filter.rs` reports
+  `{"score":10.0,"review":[]}` with no findings, and
+  `cs delta origin/harden-lint-workspace-config` on the working tree produces
+  empty output. `cargo nextest run --test nextest_ui_filter` passes 5/5.
+- [x] (2026-11-03) Seeded-fault negative control on the refactored test:
+  reverting the `ci` profile's override filter to the old `test(ui::ui)` name
+  list made
+  `harness_allowances_are_governed_by_a_whole_package_override::case_2_ci`
+  fail with "profile.ci: no override with a slow-timeout positively selects
+  no_unwrap_or_else_panic", proving the test still detects the original defect
+  after the refactor. The fault was then reverted and the suite re-ran green
+  (5/5), with `git diff --quiet .config/nextest.toml` clean and the test file
+  byte-identical to its pre-control copy.
+- [x] (2026-11-03) `tests/nextest_ui_filter.rs` is now exactly 400 lines, at
+  the `AGENTS.md` per-file cap (`module_max_lines.max_lines = 400`), after
+  `cargo fmt --all`.
+- [x] (2026-11-03) All five gates pass sequentially against the refactored
+  working tree, each started once and each exiting 0: `make check-fmt`
+  (3 s), `make typecheck` (1 s), `make test NEXTEST_PROFILE=ci` (138 s;
+  `Summary [117.309s] 1673 tests run: 1673 passed, 5 skipped`, doctests 41
+  passed / 0 failed), `make lint` (3 s), and `make markdownlint` (10 s, 78
+  files, 0 errors). Logs are
+  `/tmp/{check-fmt,test,typecheck,lint,markdownlint}-*-harden-lint-whitaker-gate.out`.
+- [x] (2026-11-03) The typed-newtype refactor invalidated the worked example
+  in `docs/developers-guide.md` § "Nextest filter validation", which quoted
+  `tests/nextest_ui_filter.rs`. The excerpt had already drifted on `main` — it
+  called `crates_with_integration_ui_test()`, a symbol that exists in no
+  revision of this repository — and the refactor made it wrong in one further
+  way, since `extract_filter` now returns `FilterExpression` rather than
+  `&str`. The excerpt is corrected to the current signature and body.
+  `mdtablefix --diff docs/developers-guide.md` reports "1 file left unchanged".
+- [x] (2026-11-03) Hash-bound evidence for the one changed code file, which
+  the gates do not cover. `make test` excludes the root `whitaker` package
+  (`Makefile:23` `TEST_EXCLUDES`), and `make test` is exactly what
+  `.github/workflows/ci.yml:187` runs, so `tests/nextest_ui_filter.rs` — a
+  root-crate integration test — runs in neither the local gate nor hosted CI.
+  That exclusion predates this branch: it arrived with `98170cf9`, which is
+  an ancestor of `origin/main`. A targeted
+  `cargo nextest run --test nextest_ui_filter` against the working tree
+  therefore supplies the missing evidence directly: 5 tests run, 5 passed,
+  0 skipped, exit 0, with the file's sha256 identical
+  (`554d98e797769dfab86a86aae5c29f11e2e1c180973032c59ae580fcf945eda2`)
+  before and after the run. Log:
+  `/tmp/test-nuf-hashbound-harden-lint-whitaker-gate.out`.
 - [ ] Push, tracking-ref refresh and `ls-remote` confirmation, CI dispatch
   (`refs/pull/372/merge` is stale at `39b4757f`, so no `pull_request` run fires
   on a new head), and the `comenq` CodeRabbit review are all still ahead.
@@ -460,6 +504,34 @@ crates from the broad clause. The regression test in
 merely finding one that mentions the package, and two seeded-fault controls
 confirm it fails when either defect is reintroduced.
 
+### CodeScene measures the delta, not the file
+
+A hosted CodeScene check, `CodeScene Code Health Review (main)`, concluded
+`failure` on head `7f4429581cf4e3da0c339b03fc9f727a911674d6`. The failing gate
+was "Enforce advisory code health rules (1 file with String Heavy Function
+Arguments)", and the detail row read
+`nextest_ui_filter.rs | 1 advisory rule | 10.00 -> 9.69`.
+
+The hosted check-run API supplied no per-function annotation — its annotations
+list is empty — so the threshold had to be recovered another way. The local
+CodeScene CLI (`cs`, version 1.0.52) reproduced the finding exactly and gave
+the number the API withheld. Its delta command was run as:
+
+    cs delta origin/harden-lint-workspace-config --output-format json
+
+That command reported "In this module, 53.3% of all arguments to its 16
+functions are strings. The threshold for string arguments is 39.0%". An
+independent hand census of the file reproduced the same figures: 16 functions,
+15 arguments, 8 of them string-typed, ratio 0.5333. CodeScene's measurement
+was therefore confirmed rather than merely accepted.
+
+The root cause is that the file is pre-existing; it exists on `origin/main`
+and on this PR's base branch. This branch's delta grew it from 137 to about
+378 lines (+300/−59), which pushed the module's string-argument ratio from
+below the threshold to 53.3%, above the 39.0% warning threshold. CodeScene
+analyses only the delta, which is why pre-existing higher-ratio files
+elsewhere in the repository were not flagged.
+
 ### Why `make test` fails for exactly two lint crates
 
 The two failing crates, `no_unwrap_or_else_panic` and
@@ -577,6 +649,20 @@ inverted that premise, so the entry is superseded rather than deleted:
 A rebase onto `main` remains available, but it is no longer the cheaper option
 and is not required for the gates to pass.
 
+**Answer the CodeScene advisory with typed domain values, not suppression.**
+The String Heavy Function Arguments finding in `tests/nextest_ui_filter.rs`
+is repaired by introducing three domain newtypes: `ProfileName<'a>(&'a str)`,
+`PackageName<'a>(&'a str)` with a `Display` implementation, and
+`FilterExpression<'a>(&'a str)` with a `mentions(PackageName)` method that
+absorbs the former free function
+`mentions_package(filter: &str, package: &str)`. A small helper
+`filter_of(&Value) -> Option<FilterExpression>` replaces two duplicated
+`get("filter").and_then(Value::as_str).map(...)` chains. The refactor removes
+the stringly-typed signature that allowed a swapped `(filter, package)`
+argument pair to compile and silently answer `false`. A `.codescene` rule
+suppression or directive was rejected: the stringly-typed signature was a
+genuine design weakness, and the advisory identified it correctly.
+
 ## Outcomes & retrospective
 
 Complete for M1–M3. M4 remains open: the repair is complete in the working tree
@@ -616,6 +702,12 @@ two blockers were diagnosed to source level and repaired rather than deferred:
   tree, and a `serial-nested-cargo-builds` test group. Without a base bound, a
   hung test was reported slow for ever and only the job timer ended it, which
   cancels the run and discards the log that would have named the test.
+
+The hosted CodeScene advisory is cleared locally, with the evidence recorded
+under Progress: the CLI reproduces the finding, the hand census confirms its
+figures, and the typed-newtype refactor drives `cs review` back to a score of
+10.0 with no findings, with `cs delta` producing empty output. Hosted
+confirmation on a new head is still pending, as is the full four-gate re-run.
 
 ## Conformance basis
 
