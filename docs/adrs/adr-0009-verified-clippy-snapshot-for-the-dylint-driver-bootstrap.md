@@ -1,4 +1,4 @@
-# Architectural decision record (ADR) 009: verified Clippy snapshot for the Dylint driver bootstrap
+# Architectural decision record (ADR) 0009: verified Clippy snapshot for the Dylint driver bootstrap
 
 ## Status
 

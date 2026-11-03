@@ -81,7 +81,7 @@ runners remain pending until the next release (tracked in #530).
 - [x] (2026-10-29) Producer provisioning in the Makefile and CI, replacing the
   mirror. `make dylint-smoke` built the driver cold (68 s) and reused it warm
   (21 s, byte-identical driver `fa0b26c0…`) with public Clippy unreachable from
-  this host (`git ls-remote` canary exit 128). ADR 009 and the developers'
+  this host (`git ls-remote` canary exit 128). ADR 0009 and the developers'
   guide section were written alongside.
 - [x] (2026-10-29) Installed bootstrap: `run` subcommand, locks, thin
   wrappers. An end-to-end run on this host installed the prebuilt suite from
@@ -95,7 +95,7 @@ runners remain pending until the next release (tracked in #530).
   and contract-tested. Shellcheck and actionlint pass; the rolling-publish
   tests pass once Lody's `BASH_ENV` (which defines its own `gh`) is unset. They
   cannot run for real until a release exists.
-- [x] (2026-10-29) Documentation, ADR 009, and draft pull request #528.
+- [x] (2026-10-29) Documentation, ADR 0009, and draft pull request #528.
 - [x] (2026-10-29) PR #528 hosted CI repaired to green on every lane, and the
   CodeRabbit ExecPlan assessment's three defects fixed: Dylint's extensionless
   Windows driver filename, relative bundle and output paths, and incomplete
@@ -135,7 +135,7 @@ runners remain pending until the next release (tracked in #530).
   some harnesses lack scripts). The candidate was compared against a `HEAD`
   worktree baseline: no new failures, after teaching two Makefile harnesses to
   provide the snapshot generation.
-- 2026-10-29: ADR 008 is already taken on the unmerged
+- 2026-10-29: ADR 0008 is already taken on the unmerged
   `issue-523-adopt-ortho-config-v0-10-0-for-the-whitaker-cli` branch, so this
   work's ADR is 009.
 - 2026-10-29: Two end-to-end installer tests broke once installation began

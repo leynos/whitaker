@@ -1091,4 +1091,4 @@ evidence supports promotion.
     <https://rust-lang.github.io/rust-project-goals/2026/polonius.html>
 
 [^4]: RFC 0007, compiler-validated rewrite checking:
-    `0007-compiler-validated-rewrite-checking.md`
+    `rfc-0007-compiler-validated-rewrite-checking.md`

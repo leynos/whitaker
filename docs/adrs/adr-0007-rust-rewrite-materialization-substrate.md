@@ -1,4 +1,4 @@
-# Architectural decision record (ADR) 007: Rust source rewrite substrate
+# Architectural decision record (ADR) 0007: Rust source rewrite substrate
 
 ## Status
 
@@ -737,9 +737,9 @@ brochure.
 
 ## References
 
-[rfc-0007]: rfcs/0007-compiler-validated-rewrite-checking.md
-[rfc-0008]: rfcs/0008-borrow-workaround-lint-family.md
-[rfc-0009]: rfcs/0009-validated-ownership-and-borrow-rewriter.md
+[rfc-0007]: ../rfcs/rfc-0007-compiler-validated-rewrite-checking.md
+[rfc-0008]: ../rfcs/rfc-0008-borrow-workaround-lint-family.md
+[rfc-0009]: ../rfcs/rfc-0009-validated-ownership-and-borrow-rewriter.md
 
 [^1]: `ast-grep-core` crate documentation, parsing, traversal, search, and
     replacement APIs: <https://docs.rs/ast-grep-core/latest/ast_grep_core/>.

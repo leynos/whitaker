@@ -399,7 +399,7 @@ requires the publisher to run `make coverage`.
 `tests/workflow_contracts/cv005_wiring_test.py` fails if the pin is not a full
 commit, the target stops running the pinned checker, the repository parameter
 is wrong, or CI stops running the target. The decision is recorded in
-[ADR 005](adr-005-adopt-the-shared-cv005-contract-library.md).
+[ADR 0005](adrs/adr-0005-adopt-the-shared-cv-005-contract-library.md).
 
 "Every workflow a pull request can reach" is a closure, not a trigger list. The
 shared checker computes its own, wider closure: it also follows local composite
@@ -696,7 +696,7 @@ first-parent history from the `HEAD` of the repository named by
 driver build: an unowned network fetch that failed intermittently (runs
 33692863541 and 33704041072) and then permanently, when Clippy renamed `master`
 to `main` (#526).
-[ADR 009](adr-009-verified-clippy-snapshot-for-dylint-driver-bootstrap.md)
+[ADR 0009](adrs/adr-0009-verified-clippy-snapshot-for-the-dylint-driver-bootstrap.md)
 records the decision; this section is the producer's side of it.
 
 `installer/clippy-snapshot.toml` pins the snapshot. `make clippy-snapshot`
@@ -1538,7 +1538,7 @@ the module, not by raising the threshold.
 
 The reasoning behind the layout rules below, including the alternatives that
 were rejected, is recorded in
-[ADR 006](./adr-006-directory-based-module-layout.md).
+[ADR 0006](./adrs/adr-0006-directory-based-module-layout.md).
 
 ### Directory modules
 
@@ -1657,7 +1657,7 @@ The threshold, when self-linting arrives, is set as TOML under
 [`docs/whitaker-cli-design.md`](./whitaker-cli-design.md).
 
 The layout convention itself is recorded in
-[ADR 006](./adr-006-directory-based-module-layout.md).
+[ADR 0006](./adrs/adr-0006-directory-based-module-layout.md).
 
 ## Python script interpreter convention
 
@@ -1848,8 +1848,8 @@ caller declares the best approximation of the CI scope it safely can, rather
 than a `--test-workspace` run that mirrors `make test` crate-for-crate, and the
 contract test asserts only that this declared configuration holds — not that a
 full workspace mutation baseline passes.
-[ADR 004](adr-004-pin-only-mutation-testing-contract.md) records this decision,
-its alternatives, and the accepted limitations.
+[ADR 0004](adrs/adr-0004-pin-only-mutation-testing-contract.md) records this
+decision, its alternatives, and the accepted limitations.
 
 The `uses:` reference pins the shared workflow to a full 40-character commit
 SHA rather than a branch or tag, so a force-push upstream cannot silently
