@@ -14,15 +14,97 @@ fn uri_strategy() -> impl Strategy<Value = String> {
 
 /// Check the canonical physical-location key and reject Rust-name variants.
 fn assert_physical_location_wire_keys(json: &Value) {
-    assert!(json.get("artifactLocation").is_some());
-    assert!(json.get("artefactLocation").is_none());
-    assert!(json.get("artefact_location").is_none());
+    assert!(
+        json.get("artifactLocation").is_some(),
+        "the canonical `artifactLocation` key should be present"
+    );
+    assert!(
+        json.get("artefactLocation").is_none(),
+        "the Rust-spelled `artefactLocation` key should be absent"
+    );
+    assert!(
+        json.get("artefact_location").is_none(),
+        "the Rust-spelled `artefact_location` key should be absent"
+    );
 }
 
 /// Check the canonical run artefact key and reject the Rust field spelling.
 fn assert_run_wire_keys(json: &Value) {
-    assert!(json.get("artifacts").is_some());
-    assert!(json.get("artefacts").is_none());
+    assert!(
+        json.get("artifacts").is_some(),
+        "the canonical `artifacts` key should be present"
+    );
+    assert!(
+        json.get("artefacts").is_none(),
+        "the Rust-spelled `artefacts` key should be absent"
+    );
+}
+
+/// Check a serialized location matches the canonical SARIF shape.
+fn assert_serialized_location(serialized: &Value, expected: &Value) {
+    assert_eq!(
+        serialized.get("artifactLocation"),
+        Some(expected),
+        "the serialized location should use the canonical key"
+    );
+}
+
+/// Check a decoded physical location reproduced every canonical field.
+fn assert_decoded_physical_location(decoded: &PhysicalLocation) {
+    assert_eq!(
+        decoded.artefact_location.uri, "src/fixed.rs",
+        "the decoded URI should come from the canonical key"
+    );
+    assert_eq!(
+        decoded.artefact_location.uri_base_id.as_deref(),
+        Some("%SRCROOT%"),
+        "the decoded base identifier should survive the canonical key"
+    );
+    assert_eq!(
+        decoded.region.as_ref().map(|region| region.start_line),
+        Some(7),
+        "the decoded region should retain its start line"
+    );
+}
+
+/// Check the first decoded artefact matches the canonical SARIF shape.
+fn assert_decoded_run(run: &Run, expected: &[Artefact]) {
+    assert_eq!(
+        run.artefacts.as_slice(),
+        expected,
+        "the decoded artefacts should come from the canonical key"
+    );
+}
+
+/// Check the builder retained the artefact it was given.
+fn assert_builder_retained_artefact(run: &Run, expected: &Artefact) {
+    assert_eq!(
+        run.artefacts,
+        vec![expected.clone()],
+        "the builder should retain the artefact it was given"
+    );
+}
+
+/// Check the serialized artefact nest uses the canonical keys throughout.
+fn assert_serialized_artefact_uses_canonical_keys(serialized: &Value) {
+    let artefact_list = serialized.get("artifacts").and_then(Value::as_array);
+    assert_eq!(
+        artefact_list
+            .and_then(|artefacts| artefacts.first())
+            .and_then(|entry| entry.get("location"))
+            .and_then(|location| location.get("uri"))
+            .and_then(Value::as_str),
+        Some("src/main.rs"),
+        "the serialized artefact should use the canonical keys"
+    );
+}
+
+/// Check a re-serialized value reproduces the canonical JSON exactly.
+fn assert_reserializes_to(actual: &Value, canonical: &Value) {
+    assert_eq!(
+        actual, canonical,
+        "re-serializing the decoded model should reproduce the canonical JSON"
+    );
 }
 
 /// Verify populated locations use the SARIF key and decode canonical JSON.
@@ -46,9 +128,9 @@ fn populated_physical_location_uses_the_canonical_sarif_property() -> Result<(),
 
     let serialized = serde_json::to_value(&physical)?;
     assert_physical_location_wire_keys(&serialized);
-    assert_eq!(
-        serialized["artifactLocation"],
-        json!({"uri": "src/main.rs", "uriBaseId": "%SRCROOT%"})
+    assert_serialized_location(
+        &serialized,
+        &json!({"uri": "src/main.rs", "uriBaseId": "%SRCROOT%"}),
     );
 
     let canonical = json!({
@@ -56,16 +138,10 @@ fn populated_physical_location_uses_the_canonical_sarif_property() -> Result<(),
         "region": {"startLine": 7, "endLine": 8}
     });
     let decoded: PhysicalLocation = serde_json::from_value(canonical.clone())?;
-    assert_eq!(decoded.artefact_location.uri, "src/fixed.rs");
-    assert_eq!(
-        decoded.artefact_location.uri_base_id.as_deref(),
-        Some("%SRCROOT%")
-    );
-    assert_eq!(
-        decoded.region.as_ref().map(|region| region.start_line),
-        Some(7)
-    );
-    assert_eq!(serde_json::to_value(decoded)?, canonical);
+    assert_decoded_physical_location(&decoded);
+
+    let round_trip = serde_json::to_value(&decoded)?;
+    assert_reserializes_to(&round_trip, &canonical);
     Ok(())
 }
 
@@ -82,11 +158,11 @@ fn populated_run_builder_preserves_the_canonical_sarif_property() -> Result<(), 
     let run = RunBuilder::new("whitaker", "0.3.0")
         .with_artefact(artefact.clone())
         .build();
-    assert_eq!(run.artefacts, vec![artefact]);
+    assert_builder_retained_artefact(&run, &artefact);
 
     let serialized = serde_json::to_value(&run)?;
     assert_run_wire_keys(&serialized);
-    assert_eq!(serialized["artifacts"][0]["location"]["uri"], "src/main.rs");
+    assert_serialized_artefact_uses_canonical_keys(&serialized);
 
     let canonical = json!({
         "tool": {"driver": {"name": "whitaker", "version": "0.3.0"}},
@@ -96,17 +172,17 @@ fn populated_run_builder_preserves_the_canonical_sarif_property() -> Result<(), 
         }]
     });
     let decoded: Run = serde_json::from_value(canonical.clone())?;
-    assert_eq!(
-        decoded.artefacts,
-        vec![Artefact {
-            location: ArtefactLocation {
-                uri: "src/fixed.rs".into(),
-                uri_base_id: Some("%SRCROOT%".into()),
-            },
-            mime_type: Some("text/x-rust".into()),
-        }]
-    );
-    assert_eq!(serde_json::to_value(decoded)?, canonical);
+    let expected_artefacts = [Artefact {
+        location: ArtefactLocation {
+            uri: "src/fixed.rs".into(),
+            uri_base_id: Some("%SRCROOT%".into()),
+        },
+        mime_type: Some("text/x-rust".into()),
+    }];
+    assert_decoded_run(&decoded, &expected_artefacts);
+
+    let round_trip = serde_json::to_value(&decoded)?;
+    assert_reserializes_to(&round_trip, &canonical);
     Ok(())
 }
 
@@ -132,19 +208,19 @@ proptest! {
         };
         let serialized = serde_json::to_value(&physical);
         prop_assert!(serialized.is_ok());
-        let serialized = serialized.unwrap_or(Value::Null);
-        prop_assert!(serialized.get("artifactLocation").is_some());
-        prop_assert!(serialized.get("artefactLocation").is_none());
-        prop_assert!(serialized.get("artefact_location").is_none());
+        let serialized_json = serialized.unwrap_or(Value::Null);
+        prop_assert!(serialized_json.get("artifactLocation").is_some());
+        prop_assert!(serialized_json.get("artefactLocation").is_none());
+        prop_assert!(serialized_json.get("artefact_location").is_none());
 
-        let decoded = serde_json::from_value::<PhysicalLocation>(serialized.clone());
+        let decoded = serde_json::from_value::<PhysicalLocation>(serialized_json.clone());
         prop_assert!(decoded.is_ok());
-        let decoded = decoded.unwrap_or_else(|_| physical.clone());
-        prop_assert_eq!(decoded.clone(), physical);
-        let round_trip = serde_json::to_value(decoded);
+        let decoded_location = decoded.unwrap_or_else(|_| physical.clone());
+        prop_assert_eq!(decoded_location.clone(), physical);
+        let round_trip = serde_json::to_value(decoded_location);
         prop_assert!(round_trip.is_ok());
-        let round_trip = round_trip.unwrap_or(Value::Null);
-        prop_assert_eq!(round_trip, serialized);
+        let round_trip_json = round_trip.unwrap_or(Value::Null);
+        prop_assert_eq!(round_trip_json, serialized_json);
     }
 
     /// Check non-empty artefact lists with optional base IDs and MIME types
@@ -174,21 +250,22 @@ proptest! {
 
         let serialized = serde_json::to_value(&run);
         prop_assert!(serialized.is_ok());
-        let serialized = serialized.unwrap_or(Value::Null);
-        prop_assert!(serialized.get("artifacts").is_some());
-        prop_assert!(serialized.get("artefacts").is_none());
+        let serialized_json = serialized.unwrap_or(Value::Null);
+        prop_assert!(serialized_json.get("artifacts").is_some());
+        prop_assert!(serialized_json.get("artefacts").is_none());
+        let serialized_artefacts = serialized_json.get("artifacts");
         prop_assert_eq!(
-            serialized["artifacts"].as_array().map(|artefacts| artefacts.len()),
+            serialized_artefacts.and_then(Value::as_array).map(Vec::len),
             Some(run.artefacts.len())
         );
 
-        let decoded = serde_json::from_value::<Run>(serialized.clone());
+        let decoded = serde_json::from_value::<Run>(serialized_json.clone());
         prop_assert!(decoded.is_ok());
-        let decoded = decoded.unwrap_or_else(|_| run.clone());
-        prop_assert_eq!(decoded.artefacts.as_slice(), expected_artefacts.as_slice());
-        let round_trip = serde_json::to_value(decoded);
+        let decoded_run = decoded.unwrap_or_else(|_| run.clone());
+        prop_assert_eq!(decoded_run.artefacts.as_slice(), expected_artefacts.as_slice());
+        let round_trip = serde_json::to_value(decoded_run);
         prop_assert!(round_trip.is_ok());
-        let round_trip = round_trip.unwrap_or(Value::Null);
-        prop_assert_eq!(round_trip, serialized);
+        let round_trip_json = round_trip.unwrap_or(Value::Null);
+        prop_assert_eq!(round_trip_json, serialized_json);
     }
 }

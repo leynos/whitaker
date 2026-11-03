@@ -20,6 +20,7 @@ const SCOPED_KEY: &str = "WHITAKER_TEST_SUPPORT_SCOPED";
 const OVERLAPPING_KEY: &str = "WHITAKER_TEST_SUPPORT_OVERLAPPING";
 const PROPERTY_KEY: &str = "WHITAKER_TEST_SUPPORT_PROPERTY";
 
+#[derive(Clone, Copy)]
 enum NestedMutation {
     Set,
     Remove,
@@ -29,20 +30,23 @@ struct ReleaseOnDrop(Option<mpsc::Sender<()>>);
 
 impl ReleaseOnDrop {
     /// Release a worker blocked inside a scoped mutation.
-    fn release(mut self) {
+    fn release(mut self) { self.signal_worker(); }
+
+    /// Unblock the worker, tolerating one that has already finished.
+    ///
+    /// Both the explicit release and the unwind-time drop send the same
+    /// signal, so the outcome is discarded rather than propagated: a closed
+    /// channel only means the worker left first.
+    fn signal_worker(&mut self) {
         if let Some(sender) = self.0.take() {
-            let _ = sender.send(());
+            let _send_outcome = sender.send(());
         }
     }
 }
 
 impl Drop for ReleaseOnDrop {
     /// Unblock a worker if an earlier assertion unwinds the test.
-    fn drop(&mut self) {
-        if let Some(sender) = self.0.take() {
-            let _ = sender.send(());
-        }
-    }
+    fn drop(&mut self) { self.signal_worker(); }
 }
 
 struct ScopedMutationThread {
@@ -265,7 +269,7 @@ fn locale_scopes_restore_set_and_removed_values() {
         );
 
         with_locale(None, || {
-            assert!(std::env::var_os("DYLINT_LOCALE").is_none())
+            assert!(std::env::var_os("DYLINT_LOCALE").is_none());
         });
         assert_eq!(
             std::env::var_os("DYLINT_LOCALE").as_deref(),
@@ -328,7 +332,11 @@ fn run_transitions(initial: Option<&str>, transitions: &[u8]) -> Result<(), Test
             3 => transition_restores_outer_value_after_nested_mutation(NestedMutation::Set),
             4 => transition_restores_value_after_set_callback_panic(),
             5 => transition_restores_value_after_remove_callback_panic(),
-            _ => unreachable!("the transition strategy only yields values below six"),
+            other => {
+                return Err(TestCaseError::fail(format!(
+                    "the transition strategy only yields values below six, got {other}"
+                )));
+            }
         };
         prop_assert!(transition_succeeded);
 
@@ -345,10 +353,10 @@ proptest! {
         initial in prop_oneof![Just(None), Just(Some("first")), Just(Some("second"))],
         transitions in prop::collection::vec(0_u8..6, 1..8),
     ) {
-        let result = match initial {
-            Some(value) => with_env_var(PROPERTY_KEY, value, || run_transitions(Some(value), &transitions)),
-            None => with_env_var_removed(PROPERTY_KEY, || run_transitions(None, &transitions)),
-        };
+        let result = initial.map_or_else(
+            || with_env_var_removed(PROPERTY_KEY, || run_transitions(None, &transitions)),
+            |value| with_env_var(PROPERTY_KEY, value, || run_transitions(Some(value), &transitions)),
+        );
         result?;
     }
 }

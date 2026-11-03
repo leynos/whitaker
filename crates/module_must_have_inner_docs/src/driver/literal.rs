@@ -121,12 +121,11 @@ fn next_block_comment_state(
 }
 
 /// Advance an escaped quoted string by one character.
-fn next_quoted_state(is_escaped: bool, ch: char) -> State {
+const fn next_quoted_state(is_escaped: bool, ch: char) -> State {
     match (is_escaped, ch) {
-        (true, _) => State::Quoted { is_escaped: false },
         (false, '\\') => State::Quoted { is_escaped: true },
         (false, '"') => State::Outside,
-        (false, _) => State::Quoted { is_escaped: false },
+        _ => State::Quoted { is_escaped: false },
     }
 }
 

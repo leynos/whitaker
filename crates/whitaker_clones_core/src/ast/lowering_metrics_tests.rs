@@ -48,7 +48,7 @@ fn lower_span_records_bounded_outcome_and_latency(
 ) -> Result<(), AstError> {
     let recorder = DebuggingRecorder::new();
     let snapshotter = recorder.snapshotter();
-    metrics::with_local_recorder(&recorder, || run_metrics_scenario(scenario))?;
+    metrics::with_local_recorder(&recorder, || run_metrics_scenario(&scenario))?;
 
     assert_lower_span_metrics(snapshotter.snapshot(), expected_outcome, recovered);
     Ok(())
@@ -57,23 +57,24 @@ fn lower_span_records_bounded_outcome_and_latency(
 #[rstest]
 fn parser_recovery_is_recorded_alongside_success() -> Result<(), AstError> {
     let source = "fn valid() {} trailing";
-    let span = ByteSpan::new(source, 0, "fn valid() {}".len() as u32)?;
+    let span = ByteSpan::new(source, 0, span_offset("fn valid() {}".len())?)?;
     let recorder = DebuggingRecorder::new();
     let snapshotter = recorder.snapshotter();
-    let result = metrics::with_local_recorder(&recorder, || lower_span(source, span));
 
-    assert!(result.is_ok(), "the selected valid function should lower");
+    // Propagating the error keeps the success expectation in the type: a
+    // failed lowering ends the test with the error rather than a panic.
+    metrics::with_local_recorder(&recorder, || lower_span(source, span))?;
     assert_lower_span_metrics(snapshotter.snapshot(), OUTCOME_SUCCESS, true);
     Ok(())
 }
 
-fn run_metrics_scenario(scenario: MetricsScenario) -> Result<(), AstError> {
+fn run_metrics_scenario(scenario: &MetricsScenario) -> Result<(), AstError> {
     let (source, span) = metrics_scenario_input(scenario)?;
     let _result = lower_span(&source, span);
     Ok(())
 }
 
-fn metrics_scenario_input(scenario: MetricsScenario) -> Result<(String, ByteSpan), AstError> {
+fn metrics_scenario_input(scenario: &MetricsScenario) -> Result<(String, ByteSpan), AstError> {
     match scenario {
         MetricsScenario::Success => source_and_whole_span("fn f() {}".to_owned()),
         MetricsScenario::InvalidSpan => {
@@ -100,13 +101,18 @@ fn metrics_scenario_input(scenario: MetricsScenario) -> Result<(String, ByteSpan
 }
 
 fn source_and_whole_span(source: String) -> Result<(String, ByteSpan), AstError> {
-    let span = ByteSpan::new(&source, 0, source.len() as u32)?;
+    let span = ByteSpan::new(&source, 0, span_offset(source.len())?)?;
     Ok((source, span))
 }
 
+/// Convert a byte offset in test source text to the span type's width.
+fn span_offset(offset: usize) -> Result<u32, AstError> {
+    u32::try_from(offset).map_err(|_| AstError::OffsetTooLarge(offset))
+}
+
 fn assert_lower_span_metrics(snapshot: Snapshot, expected_outcome: &str, recovered: bool) {
-    let snapshot = snapshot.into_vec();
-    let has_outcome = snapshot.iter().any(|(key, _, _, value)| {
+    let entries = snapshot.into_vec();
+    let has_outcome = entries.iter().any(|(key, _, _, value)| {
         key.key().name() == LOWER_SPAN_TOTAL
             && key
                 .key()
@@ -114,25 +120,22 @@ fn assert_lower_span_metrics(snapshot: Snapshot, expected_outcome: &str, recover
                 .any(|label| label.key() == "outcome" && label.value() == expected_outcome)
             && matches!(value, DebugValue::Counter(1))
     });
-    let has_latency = snapshot.iter().any(|(key, _, _, value)| {
+    let has_latency = entries.iter().any(|(key, _, _, value)| {
         key.key().name() == LOWER_SPAN_DURATION_SECONDS
             && matches!(value, DebugValue::Histogram(samples) if samples.len() == 1)
     });
-    let has_recovery = snapshot.iter().any(|(key, _, _, value)| {
+    let has_recovery = entries.iter().any(|(key, _, _, value)| {
         key.key().name() == LOWER_SPAN_PARSER_RECOVERY_TOTAL
             && matches!(value, DebugValue::Counter(1))
     });
 
     assert!(
         has_outcome,
-        "expected outcome {expected_outcome}; got {snapshot:#?}"
+        "expected outcome {expected_outcome}; got {entries:#?}"
     );
-    assert!(
-        has_latency,
-        "expected one latency sample; got {snapshot:#?}"
-    );
+    assert!(has_latency, "expected one latency sample; got {entries:#?}");
     assert_eq!(
         has_recovery, recovered,
-        "unexpected recovery metric: {snapshot:#?}"
+        "unexpected recovery metric: {entries:#?}"
     );
 }
