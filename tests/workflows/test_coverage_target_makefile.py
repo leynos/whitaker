@@ -122,8 +122,12 @@ def _assert_coverage_environment(
     assert " -- " not in f" {runner_arguments} ", (
         "cargo-llvm-cov must receive Nextest options before any test-binary separator"
     )
-    assert "--lcov --output-path lcov.info" in runner_arguments
-    assert "--locked --workspace" in runner_arguments
+    assert "--lcov --output-path lcov.info" in runner_arguments, (
+        "cargo-llvm-cov must write the LCOV report to the repository root"
+    )
+    assert "--locked --workspace" in runner_arguments, (
+        "coverage must keep the locked workspace flags of the plain test run"
+    )
     assert "--cargo-metadata " in runner_arguments, (
         "cargo-llvm-cov must forward Nextest's prepared metadata option"
     )
@@ -131,7 +135,9 @@ def _assert_coverage_environment(
         f"{_makefile_variable('COVERAGE_BASE_FILTER')} & "
         f"not ({_makefile_variable('COVERAGE_SKIPPED_TRYBUILD_FILTER')})"
     )
-    assert f"-E {expected_filter}" in runner_arguments
+    assert f"-E {expected_filter}" in runner_arguments, (
+        f"coverage must pass the composed filter; got: {runner_arguments}"
+    )
     assert [line for line in recorded if not line.startswith("runner|")] == [
         f"preparation|run|<unset>|{workspace / 'target/clippy-snapshot-tool'}",
         f"preparation|fetch|<unset>|{expected_target}",
