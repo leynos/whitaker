@@ -437,9 +437,9 @@ each push rather than copying an earlier lease into the command.
   `make test NEXTEST_PROFILE=ci`, and `Installer release dry run`).
   `coverage-check` is `skipped`, which is its configured lane selection, not a
   gap. The run checked out `adc974c9`, so it certifies the committed tree at
-  that commit: it does **not** cover the `test-root-lib` target, the
-  two-profile nextest filter rewrite, or the new contract suite, all of which
-  are still in the working tree.
+  that commit. It did **not** cover the `test-root-lib` target, the two-profile
+  nextest filter rewrite, or the new contract suite at the time; those were
+  uncommitted then and have since been published in `126ffa86`.
 - [x] (2026-11-03) Exact-head CI dispatched as run `41602487492`
   (`workflow_dispatch`, head `57312cfe…`). `linux-full` **failed**, and the
   failing step is `Enforce en-GB-oxendict spelling` — no other step failed. The
@@ -474,9 +474,41 @@ each push rather than copying an earlier lease into the command.
   `126ffa86` is now confirmed by SSH `ls-remote`, an SSH fetch with a leading
   `+` refspec, `origin/harden-lint-whitaker-gate`, and `git rev-parse HEAD`,
   which all agree.
-- [ ] Exact-head CI for `126ffa86`, dispatched as run `41604232779`. This is
-  the candidate that carries all four assessment repairs plus the spelling fix,
-  so neither `adc974c9`'s green result nor `41602487492` transfers to it.
+- [x] (2026-11-03) Hosted confirmation of the spelling repair. Run
+  `41604232779` on `126ffa86` passed `Enforce en-GB-oxendict spelling`,
+  `Check formatting`, `Nixie` and `Markdown lint` — the step that failed on
+  `57312cfe` now succeeds on the same job. The run was superseded by the next
+  head before its `Lint` step finished, so this certifies the Markdown half of
+  that head, not the whole of it.
+- [x] (2026-11-03) Plan corrections committed as `5934827f` and published over
+  SSH. Two things are recorded there: the push-transport correction above, and
+  the discovery that a spelling gate sees only what Git tracks.
+- [x] (2026-11-03) CodeRabbit's scoped disposition received on the assessment
+  reply (issue comment
+  [6599065986](https://github.com/leynos/whitaker/pull/372#issuecomment-6599065986)).
+  It closes findings 1 and 2 and keeps 3 and 4 open on named gaps. Each gap
+  was checked against live source before being accepted; all of them were real.
+- [x] (2026-11-03) Finding 3's remaining gaps closed.
+  `tests/nextest_ui_filter.rs` is an integration binary of the `whitaker` root
+  package, so `TEST_EXCLUDES` skipped it *and* `test-root-lib`'s `--lib` did
+  not reach it: no gate ran the regression test that guards the timeout
+  configuration. A `test-nextest-filter` target now names it, `make test`
+  invokes it, and it is in `.PHONY`. It runs 10 of 10 against the repaired
+  configuration and 4 of 10 against `adc974c9`'s, exiting 2 — so the gate
+  detects the defect rather than merely executing.
+- [x] (2026-11-03) Finding 3's contract gaps closed in
+  `tests/workflow_contracts/lint_makefile_test.py`. The install step is now
+  *executed* against stubs in three cases (cached, binstall, cargo install)
+  instead of having its text searched; the lint contract asserts
+  `--all-targets` and `--all-features`; and `WHITAKER_PACKAGES` must contain
+  the four intended support crates rather than merely avoid a banned set. Five
+  discrimination probes each fail exactly one test for the intended reason:
+  deleting the standalone `whitaker-installer` execution, unpinning the
+  `cargo install` version, dropping `--all-targets`, dropping
+  `-p whitaker_sarif`, and removing the new target from `make test`.
+- [ ] Exact-head CI for the head carrying the finding-3 contract repairs and
+  the finding-4 plan corrections. Run `41604896975` covers only `5934827f`,
+  which predates them.
 - [x] (2026-11-03) ExecPlan completeness/correctness assessment posted as issue
   comment
   [6598161483](https://github.com/leynos/whitaker/pull/372#issuecomment-6598161483)
@@ -491,7 +523,8 @@ each push rather than copying an earlier lease into the command.
   `6598194983`, Assessment-ID
   `EP-372-harden-lint-whitaker-gate-20261103-a7f3`). It reports four findings.
   All four were verified against live source before any edit; findings 1 and 2
-  are repaired in the working tree, 3 and 4 remain.
+  were repaired first, and 3 and 4 followed. The state recorded here is that
+  point in time; the repairs were published in `126ffa86` and `5934827f`.
 - [x] (2026-11-03) Finding 1 repaired, with a wider scope than reported. The
   assessment named one clause,
   `test(example_harness_collects_call_site_evidence)`. A workspace grep showed
@@ -691,12 +724,12 @@ tolerance was written for; the repair increment, at net 481, is the
 review-driven overrun.
 
 The figures above deliberately stop at `adc974c9`. The finding-3 and finding-4
-repairs in the working tree add two new files and edit five, and no smaller
-scope would discharge the findings, so the final head is larger again. Sizing
-that increment precisely in this document would require a figure that this
-document's own commit changes — a self-reference with no stable answer. The
-last row is therefore the honest, reproducible measurement, and the statement
-of *direction* is what the disposition rests on.
+repairs add two new files and edit five, and no smaller scope would discharge
+the findings, so the published head is larger again. Sizing that increment
+precisely in this document would require a figure that this document's own
+commit changes — a self-reference with no stable answer. The last row is
+therefore the honest, reproducible measurement, and the statement of
+*direction* is what the disposition rests on.
 
 ## Surprises & discoveries
 
@@ -853,6 +886,28 @@ already recorded for this repository, and the discovery is that it applied to a
 The practical rule is to run the spelling gate after staging, or at minimum to
 expect a first-commit surprise for any newly added file with prose in it. CI
 caught it, which is the gate working, but one dispatch was spent learning it.
+
+### A text assertion cannot see which branch runs
+
+The install-step contract originally searched the workflow script for
+`whitaker-installer` and for an install command. Both searches pass whether or
+not the step ever *executes* the installed binary, and whether or not either
+download branch can actually run: deleting the standalone `whitaker-installer`
+line, or unpinning the `cargo install` version, left the suite green. The fix
+was to stop reading the script and run it under stubs, then assert the calls it
+made.
+
+Writing that harness surfaced a second trap. `command -v` is a shell builtin,
+so a stub on `PATH` cannot intercept the cache probe — the probe has to be
+answered by whether the binary exists at all. And the probe itself
+(`cargo binstall --version`) had to be distinguishable from the download
+(`cargo binstall pkg@ver`), which a `$1`-only match could not do, because `$1`
+is `binstall` in both. Matching on `$*` for `--version` separates them.
+
+The general lesson is that a contract test's *non-vacuity* is a property of the
+mutation it rejects, not of the interface it covers. "The test mentions the
+step" and "the test would fail if the step were removed" are different claims,
+and only the second one is worth recording as evidence.
 
 ### CodeScene measures the delta, not the file
 
@@ -1127,12 +1182,14 @@ and successful, with `Check formatting`, the spelling, Nixie and Markdown gates,
 `coverage-check` skipped by its configured lane selection.
 
 What that does not certify is the tree described in this document. The run
-checked out `adc974c9`; the finding-3 and finding-4 repairs — the
+checked out `adc974c9`, before the finding-3 and finding-4 repairs — the
 `test-root-lib` target, the rewritten nextest filters in both profiles, the new
-contract suite and the corrections to this plan — are uncommitted. They are a
-new candidate, and the green result belongs to the old one. M4 therefore closes
-when a fresh `workflow_dispatch` run on the pushed repair head is green, not
-before.
+contract suite and the corrections to this plan — were written. Those were
+uncommitted at that point and are now published in `126ffa86`, `5934827f` and
+the commit that follows them. They are a new candidate, and the green result
+belongs to the old one. M4 therefore closes when a `workflow_dispatch` run on
+the published head is green, not before; run `41604896975` is the current
+attempt, and its conclusion is reported rather than assumed.
 
 ## Conformance basis
 
