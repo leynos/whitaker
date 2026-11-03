@@ -538,33 +538,37 @@ each push rather than copying an earlier lease into the command.
 - [x] (2026-11-03) CodeScene confirmed cleared **hosted**, not only locally.
   `CodeScene Code Health Review (main)` concludes `pass` on the head after the
   repair; it had concluded `fail` on `8af0fb2b` and earlier.
-- [x] (2026-11-03) Exact-head CI concluded **`success`** on `1ae7b8c9`, the
-  current head. Dispatched as run `41611150392` (`workflow_dispatch`, for the
-  same frozen-merge-ref reason as every earlier run). `windows-compat` and
+- [x] (2026-11-03) Exact-head CI concluded **`success`** on `d4bf692a`, the
+  current head, as run `41614932937` (`workflow_dispatch`, for the same
+  frozen-merge-ref reason as every earlier run). `windows-compat` and
   `linux-full` both pass; `coverage-check` is `skipped` by its configured lane
-  selection. Inside `linux-full`, every step succeeded — `Check formatting`,
-  `Enforce en-GB-oxendict spelling`, `Nixie`, `Markdown lint`,
-  `Install Whitaker`, `Lint`, `Workflow contract tests` and `Publish dry run` —
-  so the contract suite and the nextest-filter guard run hosted as well as
-  locally. Four earlier dispatched runs also concluded `success`: `41606198130`
-  on `615d3bd7`, `41606387238` on `8af0fb2b`, `41607603679` on `b660e777` and
-  `41607827636` on `ebbabd5b`. Each certifies its own head only.
-- [x] (2026-11-03) CodeScene re-confirmed on `1ae7b8c9`:
+  selection. This head changes only the ExecPlan, so the run certifies the
+  documentation state rather than new code; run `41611150392` on `1ae7b8c9` is
+  the one that certifies the code, with every `linux-full` step green —
+  `Check formatting`, `Enforce en-GB-oxendict spelling`, `Nixie`,
+  `Markdown lint`, `Install Whitaker`, `Lint`, `Workflow contract tests` and
+  `Publish dry run`. Five dispatched runs have now concluded `success`:
+  `41606198130` on `615d3bd7`, `41606387238` on `8af0fb2b`, `41607603679` on
+  `b660e777`, `41607827636` on `ebbabd5b` and `41611150392` on `1ae7b8c9`. Each
+  certifies its own head only.
+- [x] (2026-11-03) CodeScene re-confirmed on `d4bf692a`:
   `CodeScene Code Health Review (main)` concludes `success` with zero
   annotations. `Gecko Security Review` also `success`; `Sourcery review` is
   `skipped` because the PR exceeds its 150,000 diff-character limit, an
   external limiter rather than a finding; `automerge` is `skipped` because the
   PR is a stack member.
-- [ ] CodeRabbit review of `1ae7b8c9`. `0711dcad` is still queued, now 2h44m
-  old, with seven other requests ahead of it. CodeRabbit reports
-  `Review paused` on the head's check run — its title is `Review paused`, its
-  summary says `Result: Skipped - Review paused`, and every step, including
-  `Prepare review scope`, is skipped. The pause is an automatic one after an
-  influx of commits, not a rate limit, and the notices offering
-  `@coderabbitai resume` and a "Resume reviews" checkbox are the bot's own
-  shortcut. The queue entry is the authorized route, a pause is a wait rather
-  than an impasse, and a second entry for the same PR is forbidden, so the
-  queue is allowed to deliver.
+- [ ] CodeRabbit review of `d4bf692a`. `0711dcad` is still queued with three
+  other requests ahead of it; `comenq list` reports a declining ETA, from 2h44m
+  to 1h49m as the queue drained, so it is advancing rather than stalled. The
+  ETA is a prediction of remaining wait, not the request's age. CodeRabbit
+  reports `Review paused` on the head's check run — its title is
+  `Review paused`, its summary says `Result: Skipped - Review paused`, and
+  every step, including `Prepare review scope`, is skipped. The pause is an
+  automatic one after an influx of commits, not a rate limit, and the notices
+  offering `@coderabbitai resume` and a "Resume reviews" checkbox are the bot's
+  own shortcut. The queue entry is the authorized route, a pause is a wait
+  rather than an impasse, and a second entry for the same PR is forbidden, so
+  the queue is allowed to deliver.
 - [x] (2026-11-03) ExecPlan completeness/correctness assessment posted as issue
   comment
   [6598161483](https://github.com/leynos/whitaker/pull/372#issuecomment-6598161483)
