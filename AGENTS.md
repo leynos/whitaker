@@ -156,7 +156,12 @@ project:
     ```
 
     linting every target with all features enabled and denying all Clippy
-    warnings.
+    warnings. The Dylint lint crates keep their UI fixtures under `examples/`
+    because `dylint_testing::Test::example` builds them with each crate's
+    dev-dependencies, which standalone `ui/` fixtures cannot carry. Each
+    fixture scopes the diagnostics its own anti-pattern raises with a
+    narrowly targeted `#[expect(..., reason = "...")]`, so the workspace
+    policy still applies to every other line.
   - `make test` executes:
 
     ```sh

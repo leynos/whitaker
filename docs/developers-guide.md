@@ -1666,12 +1666,17 @@ files contain a `#[path = "` anchor.
 
 Be precise about this, because the current answer is narrower than it looks.
 
-`make lint` runs
-`cargo clippy --workspace --all-targets --all-features -- -D warnings`,
-preceded by a `cargo doc` pass. Neither runs the 400-line budget. The budget is
-implemented by `module_max_lines`, one of Whitaker's own dylint lints, and a
-dylint lint is not a rustc or Clippy built-in: it is a separate compiler plugin
-that runs only when a workspace loads it deliberately. This workspace does not.
+`make lint` runs Clippy with `--workspace --all-targets --all-features` and
+`-D warnings`, preceded by a `cargo doc` pass. The Dylint lint crates keep
+their UI fixtures under `examples/`, where every file deliberately contains the
+anti-pattern its lint detects; each fixture scopes those diagnostics with a
+narrowly targeted `#[expect(..., reason = "...")]` so the workspace policy
+still applies to every other line (see
+[the repository's assistant instructions](../AGENTS.md)). Neither `lint`
+command runs the 400-line budget. The budget is implemented by
+`module_max_lines`, one of Whitaker's own dylint lints, and a dylint lint is
+not a rustc or Clippy built-in: it is a separate compiler plugin that runs only
+when a workspace loads it deliberately. This workspace does not.
 `rg 'dylint run' Makefile scripts/` finds nothing, and the root `dylint.toml`
 configures `[no_std_fs_operations]` alone. The `[workspace.lints.rust]` and
 `[workspace.lints.rustdoc]` tables in `Cargo.toml` do not change this: they

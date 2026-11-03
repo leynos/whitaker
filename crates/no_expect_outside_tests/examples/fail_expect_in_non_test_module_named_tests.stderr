@@ -1,5 +1,5 @@
 error: Avoid calling expect on `std::result::Result<u32, std::num::ParseIntError>` outside test-only code.
-  --> $DIR/fail_expect_in_non_test_module_named_tests.rs:15:9
+  --> $DIR/fail_expect_in_non_test_module_named_tests.rs:19:9
    |
 LL | /         "7".parse::<u32>()
 LL | |             .expect("a module named tests is not test-only code")
@@ -10,7 +10,7 @@ LL | |             .expect("a module named tests is not test-only code")
    = note: requested on the command line with `-D no-expect-outside-tests`
 
 error: Avoid calling expect on `std::option::Option<u32>` outside test-only code.
-  --> $DIR/fail_expect_in_non_test_module_named_tests.rs:22:5
+  --> $DIR/fail_expect_in_non_test_module_named_tests.rs:30:5
    |
 LL | /     std::iter::once(7_u32)
 LL | |         .next()
@@ -21,7 +21,7 @@ LL | |         .expect("ordinary production code")
    = help: Handle the `None` variant of `std::option::Option<u32>` or move the code into a test.
 
 error: Avoid calling expect on `std::option::Option<u32>` outside test-only code.
-  --> $DIR/fail_expect_in_non_test_module_named_tests.rs:33:9
+  --> $DIR/fail_expect_in_non_test_module_named_tests.rs:45:9
    |
 LL | /         std::iter::once(7_u32)
 LL | |             .next()
