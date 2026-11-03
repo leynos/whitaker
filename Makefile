@@ -1,4 +1,4 @@
-.PHONY: help all clean test coverage build release lint lint-clippy lint-whitaker fmt check-fmt markdownlint nixie publish-check typecheck install-smoke release-installer-dry-run package-lints workflow-test workflow-test-deps test-workflow-contracts verus kani verus-clone-detector kani-clone-detector spelling spelling-config spelling-config-write spelling-phrase-check spelling-helper-test
+.PHONY: help all clean test test-root-lib coverage build release lint lint-clippy lint-whitaker fmt check-fmt markdownlint nixie publish-check typecheck install-smoke release-installer-dry-run package-lints workflow-test workflow-test-deps test-workflow-contracts verus kani verus-clone-detector kani-clone-detector spelling spelling-config spelling-config-write spelling-phrase-check spelling-helper-test
 
 # Appended only on targets that invoke binaries commonly installed under these
 # prefixes (cargo/bun/user-local), so the default recipe environment stays
@@ -137,9 +137,33 @@ test: ## Run tests with warnings treated as errors
 	fi; \
 	RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS)" $(CARGO) $(TEST_RUNNER) $(CARGO_LOCKED) $(TEST_CARGO_FLAGS) $(BUILD_JOBS) $(if $(NEXTEST_PROFILE),--profile $(NEXTEST_PROFILE)); \
 	RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) test --workspace --doc --all-features $(DOCTEST_EXCLUDES) $(BUILD_JOBS); \
+	$(MAKE) test-root-lib; \
 	if [ "$${ACT_WORKFLOW_TESTS:-0}" = "1" ]; then \
 		$(MAKE) workflow-test; \
 	fi
+
+# `TEST_EXCLUDES` names the `whitaker` root package because its test binaries
+# cannot build under `--all-features`: the `dylint-driver` feature pulls
+# `rustc_private`, and rustc then reports "cannot satisfy dependencies so
+# `std` only shows up once" for the 19 prelude crates. The root library does
+# build, so its unit tests run here instead, and `--lib` is what keeps this
+# target inside that buildable shape. Dropping the package exclusion alone
+# would trade a passing gate for that link error.
+#
+# This gate exists because `src/testing/ui/tests.rs` carries the regression
+# tests for the Dylint copy-library guard: without a target that runs them,
+# nothing would notice if the guard silently stopped setting
+# `DYLINT_LINK_ENABLE_COPY_LIBRARY`, and the UI harnesses would fail with
+# `` could not find `dylint_version` `` in CI instead.
+#
+# `nextest run` is spelled out rather than taken from `TEST_RUNNER` so that
+# `make coverage` still exercises these tests without instrumenting them: the
+# coverage run already writes `lcov.info` through its own `--output-path`, and
+# a second instrumented invocation would replace that file instead of adding
+# to it.
+test-root-lib: ## Run the whitaker root library tests nextest skips by exclusion
+	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v cargo-nextest >/dev/null || { echo "Install cargo-nextest (cargo install cargo-nextest)"; exit 1; }
+	RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) nextest run $(CARGO_LOCKED) -p whitaker --lib --all-features $(BUILD_JOBS) $(if $(NEXTEST_PROFILE),--profile $(NEXTEST_PROFILE))
 
 coverage: ## Generate LCOV coverage over the CI-tested crate subset
 	@# Reuse the `test` recipe verbatim (same TEST_CARGO_FLAGS excludes,

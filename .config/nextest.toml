@@ -58,7 +58,21 @@ test-group = "serial-toolchain-installs"
 # cargo's dev-dependency resolution on Windows CI regardless of whether any
 # example source uses rstest, so all Dylint example compilation for that crate
 # is compiled away on Windows.
-filter = "test(driver::ui::) | test(tests::ui::) | (test(ui::ui) & not package(no_unwrap_or_else_panic)) | test(acquire_places_the_lock_inside_the_effective_target_directory) | (binary(ui) & test(=ui))"
+#
+# This profile carries the same clauses as the default profile's copy, with the
+# exclusion wrapped around the whole disjunction for the same reason: a bare
+# `test(<name>)` matches that name in every package, so
+# `test(ui::example_compiles_under_test_harness)` reaches
+# `no_unwrap_or_else_panic` and `rstest_helper_should_be_fixture` too. It also
+# reaches `no_expect_outside_tests`, which declares a harness of that name, has
+# no override of its own, and previously had *no* build-sized allowance in this
+# profile at all.
+#
+# The lock test is joined outside the guard because, unlike the harnesses, it
+# belongs to the excluded package and still needs serializing: it takes the
+# target-scoped file lock rather than rebuilding anything, so it needs the group
+# but not a longer timeout.
+filter = "((test(driver::ui::) | test(tests::ui::) | test(ui::ui) | test(example_harness_collects_call_site_evidence) | test(ui::example_compiles_under_test_harness) | test(ui::rstest_unwrap_outside_tests_still_fails_in_non_harness_code) | test(ui::rstest_empty_companion_does_not_exempt_parent_function) | (binary(ui) & test(=ui))) & not package(no_unwrap_or_else_panic) & not package(rstest_helper_should_be_fixture)) | test(acquire_places_the_lock_inside_the_effective_target_directory)"
 slow-timeout = { period = "20m", terminate-after = 1, grace-period = "5s" }
 test-group = "serial-dylint-ui"
 retries = { backoff = "exponential", count = 2, delay = "5s" }
@@ -148,7 +162,27 @@ serial-nested-cargo-builds = { max-threads = 1 }
 # resolves from the *first* matching override that configures it, so a
 # broader clause placed above those would shadow their longer allowance and
 # their `retries = 0`.
-filter = "test(driver::ui::) | test(tests::ui::) | (test(ui::ui) & not package(no_unwrap_or_else_panic) & not package(rstest_helper_should_be_fixture)) | test(example_harness_collects_call_site_evidence) | test(ui::example_compiles_under_test_harness) | test(ui::rstest_unwrap_outside_tests_still_fails_in_non_harness_code) | test(ui::rstest_empty_companion_does_not_exempt_parent_function) | (binary(ui) & test(=ui))"
+#
+# The exclusion wraps the whole disjunction rather than one clause, because
+# *any* disjunct can capture these packages. A bare `test(<name>)` matches that
+# name in every package, so `test(example_harness_collects_call_site_evidence)`
+# reaches `rstest_helper_should_be_fixture`'s harness, and
+# `test(ui::example_compiles_under_test_harness)` reaches
+# `no_unwrap_or_else_panic`'s; both were held to this 20-minute allowance
+# instead of the 75-minute ones below. Guarding each clause separately fixed
+# that symptom but left the next clause free to reintroduce it, and the
+# shadowing is invisible to inspection because every clause reads as belonging
+# to the crate it was written for.
+#
+# The clauses cannot simply be deleted instead. `no_expect_outside_tests`
+# declares `ui::example_compiles_under_test_harness` too, has no override of
+# its own, and needs this clause to be serialized with a build-sized bound.
+#
+# The lock test is joined outside the guard because, unlike the harnesses, it
+# belongs to the excluded package and still needs serializing: it takes the
+# target-scoped file lock rather than rebuilding anything, so it needs the group
+# but not a longer timeout.
+filter = "((test(driver::ui::) | test(tests::ui::) | test(ui::ui) | test(example_harness_collects_call_site_evidence) | test(ui::example_compiles_under_test_harness) | test(ui::rstest_unwrap_outside_tests_still_fails_in_non_harness_code) | test(ui::rstest_empty_companion_does_not_exempt_parent_function) | (binary(ui) & test(=ui))) & not package(no_unwrap_or_else_panic) & not package(rstest_helper_should_be_fixture)) | test(acquire_places_the_lock_inside_the_effective_target_directory)"
 test-group = "serial-dylint-ui"
 retries = { backoff = "exponential", count = 2, delay = "5s" }
 slow-timeout = { period = "20m", terminate-after = 1, grace-period = "5s" }
