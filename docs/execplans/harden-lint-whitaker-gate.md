@@ -511,8 +511,32 @@ each push rather than copying an earlier lease into the command.
   and confirmed at the remote head; local HEAD, `refs/remotes/origin/...` and
   `ls-remote` all read `615d3bd7f7bf8a8b0138d89fc51ba86e929de8d7`. Run
   `41604896975` covers only `5934827f`, which predates them.
-- [ ] Exact-head CI for `615d3bd7`. Dispatched as run `41606198130`; its
-  conclusion is owed, not assumed.
+- [x] (2026-11-03) Run `41604232779` concluded **`success`** on `126ffa86`, the
+  head CodeRabbit inspected. It certifies that candidate only.
+- [x] (2026-11-03) CodeScene regression found and repaired. The
+  `CodeScene Code Health Review (main)` check went from `success` on `adc974c9`
+  to `failure` on this head: one advisory rule, "String Heavy Function
+  Arguments", in `tests/nextest_ui_filter/filter_model.rs` at 9.69 code health.
+  The cause was the finding-2 repair's own module, so the violation was
+  introduced here and repaired here rather than suppressed; no
+  `code-health-rules.json` override was added, and the repository has none.
+  `TestIdentity::matches` and `split_leaf` each carried an adjacent pair of bare
+  `&str` values, which the type system cannot tell apart. `Operator` and
+  `FilterArgument` now name them. Local `cs review` scores the file 10.0 with
+  no findings, and `cs delta 5a08c6ff` reports no issues. Published as
+  `06e33c04`.
+- [x] (2026-11-03) The CodeScene repair re-ran every gate on its own bytes:
+  `make check-fmt`, `make typecheck`, `make test-nextest-filter` (10/10),
+  `make test NEXTEST_PROFILE=ci` (1673 tests, 56 root-lib, 10 filter,
+  doctests), and `make lint` (rustdoc, Clippy and the Whitaker suite all
+  reached) — all exit 0. The first `make lint` attempt failed on a denied
+  `clippy::shadow-reuse` from rebinding rather than destructuring, which
+  `make typecheck` and the tests could not see; the fix destructures in the
+  pattern. The negative control was re-run after the refactor and still yields
+  6 passed / 4 failed against `adc974c9`'s configuration, so detection survives
+  the change.
+- [ ] Exact-head CI for `06e33c04`. Run `41606198130` covers `615d3bd7` and
+  run `41606387238` covers `8af0fb2b`; both predate the CodeScene repair.
 - [x] (2026-11-03) ExecPlan completeness/correctness assessment posted as issue
   comment
   [6598161483](https://github.com/leynos/whitaker/pull/372#issuecomment-6598161483)
