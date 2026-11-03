@@ -168,8 +168,11 @@ shared workspace build that every doctest in the lane pays. On that reading the
 target is met: the contract's execution is 0.50 seconds in CI and about a
 second locally, and the nested trybuild project that used to be rebuilt for it
 is gone. An idle-host measurement is not obtainable on this shared host, which
-other agents keep saturated; the CI figure is the end-to-end reference because
-it starts from a target the workflow has just removed.
+other agents keep saturated. The CI figure is the end-to-end reference not
+because the workflow clears the doctest target — it does not — but because the
+`coverage-check` job restores no `target/` cache and runs `make coverage` into
+`target/llvm-cov-target`, which leaves the plain `target/` empty until
+`make test-doc` builds it.
 
 The investigation did not capture per-test sccache deltas, target-size deltas,
 or a compiler-invocation comparison. Those checks are superseded by the harness
@@ -177,9 +180,10 @@ replacement: the nested trybuild project and its separate target directory no
 longer exist, so there is no per-test build left to attribute.
 
 `ci.yml` and `coverage-main.yml` both run `rm -rf target/llvm-cov-target`
-immediately before `make test-doc`, so the doctest lane starts with the
-non-coverage target rather than the instrumented one. The doctest there costs
-the ordinary library build that `make lint` and `cargo doc` already require.
+immediately before `make test-doc`. That removes only the instrumented tree, so
+the doctest lane builds into the separate, non-coverage `target/`, which the
+job restores from no cache. The doctest there costs the ordinary library build
+that `make lint` and `cargo doc` already require.
 
 ## Validation
 
