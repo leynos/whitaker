@@ -286,12 +286,24 @@ Recovery: the old head remains reachable through the PR's reflog.
   ("Guard the Dylint copy step and scope the harness lock"). It sits on
   unpushed `55da1e23`, on top of remote `d10469fd`. Nine files, 740
   insertions, 177 deletions.
-- [ ] A focused re-run of the three nested-Cargo harnesses is in flight
-  (`rstest_helper_should_be_fixture`, four tests across one binary). It
-  started at 06:22 and had spent 33 minutes inside the 75-minute
-  `example_compiles_without_diagnostics` allowance, with 29 new build
-  artefacts measured per 90 s, so it is compiling rather than stalled. Its
-  log is `/tmp/test-rshf-harness-harden-lint-whitaker-gate.out`.
+- [x] (2026-11-03) A focused re-run of the three nested-Cargo harnesses
+  produced one decisive result before its supervisor timed it out:
+  `example_compiles_without_diagnostics::case_1` passed in 2386.964 s
+  (39.8 min) against the 75-minute allowance. That is direct proof the
+  override reaches the test and the nested build completes; the earlier
+  readings of "stalled" were an artefact of sampling a 300 s window during
+  a ~100-deep compile queue. The run then hit the background supervisor's
+  wall-clock limit at 39:55 and was SIGTERMed mid-way through `case_2`,
+  which nextest recorded as a `SIGTERM` abort and one retry, not as a
+  timeout. Log: `/tmp/test-rshf-harness-harden-lint-whitaker-gate.out`.
+  The run was not restarted: gate 2 below runs the same three harnesses
+  under the `ci` profile and supersedes it as evidence.
+- [x] (2026-11-03) `make check-fmt` passed. Its log holds only the echoed
+  command, which is `cargo fmt --check`'s success output.
+- [ ] `NEXTEST_PROFILE=ci make test` is running as gate 2. It is the
+  authoritative harness run and is compiling under the same ~100-deep
+  queue, so expect hours rather than minutes; the profile's global timeout
+  is 300 minutes.
 - [ ] The four repository gates run behind it under a `scrutineer`, which
   waits for that process to exit before starting. Logs are
   `/tmp/{check-fmt,test-ci,typecheck,lint}-harden-lint-whitaker-gate.out`.
