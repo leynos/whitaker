@@ -17,12 +17,14 @@ pub static DOC_TOML_BLOCKS: LazyLock<Vec<String>> = LazyLock::new(|| {
     let Some(workspace_root) = manifest_dir.parent() else {
         panic!("installer crate should be in workspace");
     };
-    let workspace_root = Dir::open_ambient_dir(workspace_root, ambient_authority())
-        .expect("workspace root should be accessible");
+    // A lazy static cannot return a `Result`, so a missing workspace root is a
+    // test-support failure rather than something a caller can recover from.
+    let workspace_dir = Dir::open_ambient_dir(workspace_root, ambient_authority())
+        .unwrap_or_else(|error| panic!("workspace root should be accessible: {error}"));
 
     let mut all_blocks = Vec::new();
     for path in DOC_PATHS {
-        let Ok(content) = workspace_root.read_to_string(path) else {
+        let Ok(content) = workspace_dir.read_to_string(path) else {
             panic!("documentation file {path} should be readable");
         };
         all_blocks.extend(extract_toml_blocks(&content));

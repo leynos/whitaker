@@ -73,24 +73,19 @@ pub(super) fn get_stderr_string(world: &ToolchainWorld) -> Result<String, String
 }
 
 /// Reports a skipped scenario through the test tracing stream.
-fn report_skip(reason: &str) -> Result<(), String> {
+fn report_skip(reason: &str) {
     tracing::info!(%reason, "skipping toolchain scenario");
-    Ok(())
 }
 
 /// Skip the scenario when its requested toolchain is not installed.
-fn skip_scenario_when_toolchain_missing(
-    world: &ToolchainWorld,
-    channel: &str,
-) -> Result<(), String> {
+fn skip_scenario_when_toolchain_missing(world: &ToolchainWorld, channel: &str) {
     if !is_toolchain_installed(channel) {
         report_skip(&format!(
             "Skipping scenario: toolchain '{channel}' not installed."
-        ))?;
+        ));
         world.should_skip_assertions.set(true);
         rstest_bdd::skip!("toolchain '{channel}' is not installed.", channel = channel);
     }
-    Ok(())
 }
 
 /// Create and retain a temporary target directory for the scenario.
@@ -116,7 +111,7 @@ pub(super) fn setup_dry_run_scenario(
     extra_args: &[&str],
 ) -> Result<(), String> {
     let channel = pinned_toolchain_channel()?;
-    skip_scenario_when_toolchain_missing(world, &channel)?;
+    skip_scenario_when_toolchain_missing(world, &channel);
     world.pinned_channel.replace(channel.clone());
 
     let target_dir = setup_temp_dir(world)?;
@@ -216,7 +211,7 @@ pub(super) fn setup_auto_install_scenario(world: &ToolchainWorld) -> Result<(), 
     // due to Windows Defender scanning and larger binaries. The code path is
     // identical to Linux; we're testing rustup behaviour rather than installer logic.
     if cfg!(windows) {
-        report_skip("Skipping auto-install scenario on Windows (toolchain downloads too slow).")?;
+        report_skip("Skipping auto-install scenario on Windows (toolchain downloads too slow).");
         world.should_skip_assertions.set(true);
         rstest_bdd::skip!("auto-install tests skipped on Windows");
     }

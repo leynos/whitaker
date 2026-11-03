@@ -24,6 +24,7 @@ use crate::{
     dependency_binaries::find_dependency_binary,
     dependency_packaging::{DependencyPackageParams, package_dependency_binary},
     installer_packaging::{InstallerPackageParams, TargetTriple, Version, package_installer},
+    output::write_stderr_line,
 };
 
 /// The hole's length: large enough that every Linux filesystem allocates no
@@ -67,9 +68,9 @@ fn entry_types(reader: impl Read) -> Vec<(String, EntryType)> {
         .entries()
         .expect("entries")
         .map(|entry| {
-            let entry = entry.expect("valid tar entry");
-            let path = entry.path().expect("entry path").display().to_string();
-            (path, entry.header().entry_type())
+            let parsed = entry.expect("valid tar entry");
+            let path = parsed.path().expect("entry path").display().to_string();
+            (path, parsed.header().entry_type())
         })
         .collect()
 }
@@ -105,7 +106,11 @@ fn the_fixture_is_stored_sparse_by_a_default_builder(holey_binary: HoleyBinary) 
     // mounts) legitimately yields a regular entry, so there is no sparse case
     // to prove on that host. Every filesystem CI runs on keeps the hole.
     if !holey_binary.has_allocated_hole() {
-        eprintln!("skipping the sparse proof: the filesystem does not preserve holes");
+        let mut stderr = std::io::stderr();
+        write_stderr_line(
+            &mut stderr,
+            "skipping the sparse proof: the filesystem does not preserve holes",
+        );
         return;
     }
     let entries = entry_types(bytes.as_slice());

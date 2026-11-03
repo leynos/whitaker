@@ -91,25 +91,77 @@ pub(crate) fn run_git(invocation: &GitInvocation<'_>) -> Result<Output> {
     let mut child = cmd.spawn()?;
     let readers = spawn_output_readers(&mut child);
 
-    match child.wait_timeout(timeout)? {
-        Some(status) => collect_completed_output(status, readers, operation, started),
-        None => {
-            let _ = child.kill();
-            let _ = child.wait();
-            let _ = readers.stdout.join();
-            let _ = readers.stderr.join();
-            warn!(
-                operation,
-                outcome = "timeout",
-                elapsed_ms = started.elapsed().as_millis() as u64,
-                "Git operation timed out"
-            );
-            Err(InstallerError::Git {
-                operation,
-                message: format!("operation timed out after {} seconds", timeout.as_secs()),
-            })
-        }
+    if let Some(status) = child.wait_timeout(timeout)? {
+        return collect_completed_output(status, readers, operation, started);
     }
+
+    reap_timed_out_child(&mut child, readers);
+    log_git_timeout(operation, elapsed_millis(started));
+    Err(timed_out_error(operation, timeout))
+}
+
+/// Build the timeout error reported when a Git process is abandoned.
+fn timed_out_error(operation: &'static str, timeout: Duration) -> InstallerError {
+    InstallerError::Git {
+        operation,
+        message: format!("operation timed out after {} seconds", timeout.as_secs()),
+    }
+}
+
+/// Stop a Git process that outlived the timeout and release its readers.
+///
+/// The process is already being abandoned, so every step here is best-effort:
+/// a failure to kill or reap it is reported for diagnosis but cannot change
+/// the timeout outcome the caller has already decided.
+fn reap_timed_out_child(child: &mut std::process::Child, readers: OutputReaders) {
+    stop_timed_out_child(child);
+    join_output_reader(readers.stdout, "stdout");
+    join_output_reader(readers.stderr, "stderr");
+}
+
+/// Kill and reap an abandoned Git process, reporting each best-effort failure.
+fn stop_timed_out_child(child: &mut std::process::Child) {
+    if let Err(error) = child.kill() {
+        log_kill_failure(&error);
+    }
+    if let Err(error) = child.wait() {
+        log_reap_failure(&error);
+    }
+}
+
+/// Report a failed attempt to kill a timed-out Git process.
+fn log_kill_failure(error: &std::io::Error) {
+    debug!(%error, "failed to kill a timed-out Git process");
+}
+
+/// Report a failed attempt to reap a timed-out Git process.
+fn log_reap_failure(error: &std::io::Error) {
+    debug!(%error, "failed to reap a timed-out Git process");
+}
+
+/// Reclaim an output reader, reporting a panic in the reader thread.
+fn join_output_reader(reader: OutputReaderThread, stream: &'static str) {
+    if reader.join().is_err() {
+        debug!(stream, "output reader panicked after a Git timeout");
+    }
+}
+
+/// Report a Git operation that exceeded its timeout budget.
+fn log_git_timeout(operation: &'static str, elapsed_ms: u64) {
+    warn!(
+        operation,
+        outcome = "timeout",
+        elapsed_ms,
+        "Git operation timed out"
+    );
+}
+
+/// Milliseconds elapsed since `started`, saturating at the `u64` range.
+///
+/// A duration that cannot fit in a `u64` of milliseconds represents centuries
+/// of execution; reporting the maximum is more useful than wrapping.
+fn elapsed_millis(started: Instant) -> u64 {
+    u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX)
 }
 
 /// Start concurrent readers for a child's captured output streams.
@@ -123,13 +175,13 @@ fn spawn_output_readers(child: &mut std::process::Child) -> OutputReaders {
         stdout_pipe
             .map(std::io::read_to_string)
             .transpose()
-            .map(|opt| opt.unwrap_or_default())
+            .map(Option::unwrap_or_default)
     });
     let stderr = std::thread::spawn(move || -> std::io::Result<String> {
         stderr_pipe
             .map(std::io::read_to_string)
             .transpose()
-            .map(|opt| opt.unwrap_or_default())
+            .map(Option::unwrap_or_default)
     });
 
     OutputReaders { stdout, stderr }
@@ -166,7 +218,7 @@ fn collect_completed_output(
     debug!(
         operation,
         outcome,
-        elapsed_ms = started.elapsed().as_millis() as u64,
+        elapsed_ms = elapsed_millis(started),
         "Git operation completed"
     );
     Ok(Output {

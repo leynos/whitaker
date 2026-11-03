@@ -47,7 +47,7 @@ impl Drop for ProbeCleanup {
     fn drop(&mut self) {
         // A correct run never writes the probe into this directory, so a
         // missing file is the expected case.
-        let _ = self.dir.remove_file(&self.name);
+        drop(self.dir.remove_file(&self.name));
     }
 }
 

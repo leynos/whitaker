@@ -73,7 +73,7 @@ fn run(cli: &Cli, stdout: &mut dyn Write, stderr: &mut dyn Write) -> Result<()> 
 }
 
 /// Returns the set of additional rustup components requested by the CLI flags.
-fn resolve_additional_components(args: &InstallArgs) -> &'static [&'static str] {
+const fn resolve_additional_components(args: &InstallArgs) -> &'static [&'static str] {
     if args.execution.cranelift {
         &["rustc-codegen-cranelift"]
     } else {
@@ -230,7 +230,7 @@ fn report_suite_source(install_mode: InstallMode, stdout: &mut dyn Write) -> Res
         InstallMode::Build => "source",
     };
     writeln!(stdout, "whitaker-installer: suite-source={source}")
-        .map_err(|source| InstallerError::WriteFailed { source })
+        .map_err(|error| InstallerError::WriteFailed { source: error })
 }
 
 mod dry_run;
@@ -240,9 +240,16 @@ use dry_run::run_dry;
 /// Checks for and installs Dylint tools if missing.
 fn ensure_dylint_tools(policy: SourcePolicy, stderr: &mut dyn Write) -> Result<()> {
     let executor = SystemCommandExecutor;
-    ensure_dylint_tools_with_executor(&executor, policy, stderr, |status, stderr| {
-        install_dylint_tools_with_output(&executor, status, policy, stderr)
+    ensure_dylint_tools_with_executor(&executor, policy, stderr, |status, output| {
+        install_dylint_tools_with_output(&executor, status, policy, output)
     })
+}
+
+/// The process's working directory as UTF-8, when it can be determined.
+fn current_directory() -> Option<Utf8PathBuf> {
+    std::env::current_dir()
+        .ok()
+        .and_then(|path| Utf8PathBuf::try_from(path).ok())
 }
 
 /// Ensures a Whitaker workspace is available.
@@ -266,11 +273,7 @@ fn ensure_whitaker_workspace(
 
     if !args.quiet {
         if let Some(clone_dir) = clone_directory(dirs) {
-            let cwd = std::env::current_dir()
-                .ok()
-                .and_then(|p| Utf8PathBuf::try_from(p).ok());
-
-            let Some(cwd) = cwd else {
+            let Some(cwd) = current_directory() else {
                 return ensure_workspace(dirs, &plan);
             };
 
@@ -297,10 +300,10 @@ fn resolve_toolchain(
     workspace_root: &Utf8Path,
     override_channel: Option<&str>,
 ) -> Result<Toolchain> {
-    match override_channel {
-        Some(channel) => Ok(Toolchain::with_override(workspace_root, channel)),
-        None => Toolchain::detect(workspace_root),
-    }
+    override_channel.map_or_else(
+        || Toolchain::detect(workspace_root),
+        |channel| Ok(Toolchain::with_override(workspace_root, channel)),
+    )
 }
 
 fn ensure_toolchain_installed(

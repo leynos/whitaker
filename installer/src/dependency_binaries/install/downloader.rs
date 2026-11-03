@@ -105,7 +105,7 @@ pub(super) fn download_from_urls(
     checksum_url: &str,
     destination: &Path,
 ) -> Result<(), DependencyBinaryInstallError> {
-    debug!("starting dependency archive download");
+    log_download_start();
 
     // Acquire the parent-directory capability up front so every archive read and
     // write flows through it (never ambient `std::fs`); validation happens here,
@@ -114,45 +114,98 @@ pub(super) fn download_from_urls(
     destination_handle.download_archive(agent, archive_url)?;
     // Any failure after the archive is written removes it, so a retry never sees
     // a partial or unverified file.
-    let expected_checksum = fetch_expected_checksum(agent, checksum_url)
-        .inspect_err(|_| destination_handle.remove_partial_archive())?;
+    let expected_checksum =
+        fetch_checksum_discarding_archive(agent, checksum_url, &destination_handle)?;
+    verify_downloaded_archive(archive_url, &destination_handle, &expected_checksum)
+}
 
-    // Re-open the written archive and verify it; `verify_archive_checksum`
-    // consumes the reader, closing the handle before any cleanup below.
-    let archive = destination_handle.open_archive().inspect_err(|error| {
-        warn!(
-            category = CATEGORY_CAPABILITY,
-            archive_name = %destination_handle.archive_name,
-            error = %error,
-            "failed to reopen archive for verification",
-        );
-        destination_handle.remove_partial_archive();
-    })?;
-    let verification = verify_archive_checksum(
-        archive,
-        destination_handle.path.as_std_path(),
-        &expected_checksum,
+/// Report that a dependency archive download is starting.
+fn log_download_start() {
+    debug!("starting dependency archive download");
+}
+
+/// Fetch the expected checksum, removing the written archive if it fails.
+fn fetch_checksum_discarding_archive(
+    agent: &ureq::Agent,
+    checksum_url: &str,
+    destination: &DownloadDestination,
+) -> Result<String, DependencyBinaryInstallError> {
+    fetch_expected_checksum(agent, checksum_url)
+        .inspect_err(|_| destination.remove_partial_archive())
+}
+
+/// Re-open the written archive, verify it, and remove it on any failure.
+///
+/// `verify_archive_checksum` consumes the reader, so the handle is closed
+/// before the cleanup below runs.
+fn verify_downloaded_archive(
+    archive_url: &str,
+    destination: &DownloadDestination,
+    expected_checksum: &str,
+) -> Result<(), DependencyBinaryInstallError> {
+    let archive = open_for_verification(destination)?;
+    let verification =
+        verify_archive_checksum(archive, destination.path.as_std_path(), expected_checksum);
+    report_verification(archive_url, destination, verification)
+}
+
+/// Re-open the archive for verification, removing it when it cannot be read.
+fn open_for_verification(
+    destination: &DownloadDestination,
+) -> Result<File, DependencyBinaryInstallError> {
+    reopen_for_verification(destination).inspect_err(|_| destination.remove_partial_archive())
+}
+
+/// Report the checksum outcome, removing the archive when it does not verify.
+fn report_verification(
+    archive_url: &str,
+    destination: &DownloadDestination,
+    verification: Result<(), DependencyBinaryInstallError>,
+) -> Result<(), DependencyBinaryInstallError> {
+    if let Err(error) = verification {
+        log_checksum_mismatch(archive_url, &error);
+        // Remove the unverified archive so a retry never observes stale data.
+        destination.remove_partial_archive();
+        return Err(error);
+    }
+    log_checksum_verified();
+    Ok(())
+}
+
+/// Report an archive whose checksum did not match.
+fn log_checksum_mismatch(archive_url: &str, error: &DependencyBinaryInstallError) {
+    warn!(
+        category = CATEGORY_CHECKSUM,
+        checksum_state = CHECKSUM_STATE_MISMATCH,
+        url = %archive_url,
+        error = %error,
+        "archive checksum verification failed",
     );
-    match verification {
-        Ok(()) => {
-            debug!(
-                category = CATEGORY_CHECKSUM,
-                checksum_state = CHECKSUM_STATE_VERIFIED,
-                "archive checksum verified",
-            );
-            Ok(())
-        }
+}
+
+/// Report an archive that verified against its published checksum.
+fn log_checksum_verified() {
+    debug!(
+        category = CATEGORY_CHECKSUM,
+        checksum_state = CHECKSUM_STATE_VERIFIED,
+        "archive checksum verified",
+    );
+}
+
+/// Re-open the written archive, reporting why it could not be read.
+fn reopen_for_verification(
+    destination: &DownloadDestination,
+) -> Result<cap_std::fs_utf8::File, DependencyBinaryInstallError> {
+    match destination.open_archive() {
+        Ok(archive) => Ok(archive),
         Err(error) => {
             warn!(
-                category = CATEGORY_CHECKSUM,
-                checksum_state = CHECKSUM_STATE_MISMATCH,
-                url = %archive_url,
+                category = CATEGORY_CAPABILITY,
+                archive_name = %destination.archive_name,
                 error = %error,
-                "archive checksum verification failed",
+                "failed to reopen archive for verification",
             );
-            // Remove the unverified archive so a retry never observes stale data.
-            destination_handle.remove_partial_archive();
-            Err(error)
+            Err(error.into())
         }
     }
 }
