@@ -74,6 +74,9 @@ workspace = true
 [dependencies.tempfile]
 version = "3.27"
 
+[dev-dependencies.proptest]
+workspace = true
+
 [dev-dependencies.rstest]
 workspace = true
 
