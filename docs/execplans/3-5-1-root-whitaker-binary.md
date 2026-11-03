@@ -1824,6 +1824,37 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
   before the workspace and toolchain are resolved, so a release that omits its
   snapshot fails early rather than after minutes of other work.
 
+- **Workflow-contract repair on `8b6d0113`, 2026-11-02.** The `linux-full` job
+  failed five assertions in `tests/workflow_contracts`, all caused by the
+  rebase: `main` had since tightened the nextest-profile and lane-deduplication
+  contracts, and this branch's `.config/nextest.toml` and `Makefile` predated
+  them.
+
+  The three default-profile long-allowance overrides for the nested Cargo
+  fixtures now name `test-group = "serial-dylint-ui"` themselves. That is what
+  the contract requires, and it is also the correct mechanism: the group, not
+  the broad filter, is what prevents those builds from racing on the shared
+  target directory. The broad default override's filter is restored to the
+  contract's exact string, so it no longer lists those three tests; listing
+  them there was only ever a way to inherit serialization, and it forced the
+  longer allowances to be declared first to avoid the 20-minute cap shadowing
+  them. The overrides are restored to `main`'s order, with the broad filter
+  first, and the comments state that arrangement.
+
+  `crates/whitaker_lint_core/tests/nextest_ui_filter.rs` selected the first
+  override naming the group and required every nested-Cargo clause in its
+  filter. That only held while the broad filter listed those tests. The guard
+  now collects every group-naming override and requires each clause to appear
+  in at least one of them, which is the property that actually keeps the builds
+  serialized; the `(binary(ui) & test(=ui))` and retry checks still target the
+  broad override, identified by its `test(driver::ui::)` clause.
+
+  The `coverage` recipe now writes `$(MAKE) test TEST_RUNNER=...` on one line.
+  The recipe already delegated to the test recipe; the contract matches the
+  literal prefix, and the line break had hidden it.
+
+  `make test-workflow-contracts` passes 793 tests.
+
 To be completed at each milestone boundary and at completion. Before setting
 this plan to `COMPLETE`, reconcile every entry in `Surprises & discoveries`
 against `docs/whitaker-cli-design.md`. In particular, `CLI-REQ-FWD` has no

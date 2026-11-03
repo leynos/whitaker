@@ -303,8 +303,7 @@ coverage: ## Generate LCOV coverage over the CI-tested crate subset
 		LLVM_PROFILE_FILE_NAME="$(COVERAGE_PROFILE_FILE_NAME)" \
 		CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0; \
 		$(CARGO) llvm-cov clean --workspace && \
-		$(MAKE) test \
-			TEST_RUNNER="llvm-cov nextest --no-report -E '$(COVERAGE_NEXTEST_FILTER)'" \
+		$(MAKE) test TEST_RUNNER="llvm-cov nextest --no-report -E '$(COVERAGE_NEXTEST_FILTER)'" \
 			CORE_TEST_RUNNER="llvm-cov nextest --no-report" && \
 		$(CARGO) llvm-cov report --lcov --output-path $(COVERAGE_OUTPUT)
 

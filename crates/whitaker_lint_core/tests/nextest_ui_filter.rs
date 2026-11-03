@@ -41,8 +41,13 @@ fn load_nextest_config() -> Value {
         .unwrap_or_else(|err| panic!(".config/nextest.toml should parse as TOML: {err}"))
 }
 
-/// Returns the `serial-dylint-ui` override table from the config.
-fn find_serial_dylint_ui_override(config: &Value) -> &Value {
+/// Returns every override that names the `serial-dylint-ui` group.
+///
+/// The group is declared by more than one override: the broad UI filter and
+/// the narrower nested-Cargo allowances that need a longer timeout than the
+/// broad filter's 20 minutes. A test is serialized when *any* override that
+/// matches it names the group, so the guard must consider them together.
+fn find_serial_dylint_ui_overrides(config: &Value) -> Vec<&Value> {
     let Some(all_overrides) = config
         .get("profile")
         .and_then(|p| p.get("default"))
@@ -52,22 +57,41 @@ fn find_serial_dylint_ui_override(config: &Value) -> &Value {
         panic!("profile.default.overrides should be an array");
     };
 
-    all_overrides
+    let overrides: Vec<&Value> = all_overrides
         .iter()
-        .find(|o| {
+        .filter(|o| {
             o.get("test-group")
                 .and_then(Value::as_str)
                 .is_some_and(|group| group == "serial-dylint-ui")
         })
-        .unwrap_or_else(|| panic!("serial-dylint-ui override should exist"))
+        .collect();
+
+    assert!(
+        !overrides.is_empty(),
+        "at least one override should name the serial-dylint-ui group"
+    );
+    overrides
 }
 
-/// Returns the filter expression from the `serial-dylint-ui` override.
+/// Returns the filter expression from an override.
 fn extract_filter(ui_override: &Value) -> &str {
     ui_override
         .get("filter")
         .and_then(Value::as_str)
         .unwrap_or_else(|| panic!("serial-dylint-ui override should have a filter string"))
+}
+
+/// Returns the broad UI override, identified by its `driver::ui` clause.
+///
+/// The broad override is the one that carries the retry policy and the
+/// `(binary(ui) & test(=ui))` clause; the narrower allowances below it exist
+/// only to extend a timeout.
+fn find_broad_ui_override<'a>(overrides: &'a [&'a Value]) -> &'a Value {
+    overrides
+        .iter()
+        .copied()
+        .find(|o| extract_filter(o).contains("test(driver::ui::)"))
+        .unwrap_or_else(|| panic!("the broad serial-dylint-ui override should exist"))
 }
 
 /// Discovers lint crates under `crates/` whose UI test is an integration test
@@ -104,18 +128,23 @@ fn crates_with_integration_ui_test() -> Vec<String> {
     crate_names
 }
 
-/// Fixture providing the `serial-dylint-ui` override from nextest config.
+/// Fixture providing every `serial-dylint-ui` override from nextest config.
 #[fixture]
-fn serial_dylint_ui_override() -> Value {
+fn serial_dylint_ui_overrides() -> Vec<Value> {
     let config = load_nextest_config();
-    find_serial_dylint_ui_override(&config).clone()
+    find_serial_dylint_ui_overrides(&config)
+        .into_iter()
+        .cloned()
+        .collect()
 }
 
 #[rstest]
 fn serial_dylint_ui_filter_captures_integration_and_nested_cargo_ui_tests(
-    serial_dylint_ui_override: Value,
+    serial_dylint_ui_overrides: Vec<Value>,
 ) {
-    let filter = extract_filter(&serial_dylint_ui_override);
+    let overrides: Vec<&Value> = serial_dylint_ui_overrides.iter().collect();
+    let broad = find_broad_ui_override(&overrides);
+    let filter = extract_filter(broad);
     let crates = crates_with_integration_ui_test();
 
     assert!(
@@ -138,20 +167,30 @@ fn serial_dylint_ui_filter_captures_integration_and_nested_cargo_ui_tests(
     );
 
     for filter_clause in NESTED_CARGO_UI_FILTER_CLAUSES {
+        let captured = overrides
+            .iter()
+            .any(|o| extract_filter(o).contains(filter_clause));
         assert!(
-            filter.contains(filter_clause),
-            "the serial-dylint-ui filter must capture nested Cargo UI test `{filter_clause}` so \
-             its compiler resources are serialized on constrained runners; found filter: {filter}"
+            captured,
+            "some serial-dylint-ui override must capture nested Cargo UI test \
+             `{filter_clause}` so its compiler resources are serialized on \
+             constrained runners; found filters: {:?}",
+            overrides
+                .iter()
+                .map(|o| extract_filter(o))
+                .collect::<Vec<_>>()
         );
     }
 }
 
 #[rstest]
-fn serial_dylint_ui_filter_has_retry_configuration(serial_dylint_ui_override: Value) {
+fn serial_dylint_ui_filter_has_retry_configuration(serial_dylint_ui_overrides: Vec<Value>) {
+    let overrides: Vec<&Value> = serial_dylint_ui_overrides.iter().collect();
+    let broad = find_broad_ui_override(&overrides);
     // On Windows, dylint_testing::initialize() can transiently fail with
     // "Access is denied (os error 5)" during NamedTempFile::persist().
     // Retries are essential for reliable CI on Windows.
-    let Some(retries) = serial_dylint_ui_override.get("retries") else {
+    let Some(retries) = broad.get("retries") else {
         panic!("serial-dylint-ui override must configure retries for Windows CI reliability");
     };
 
