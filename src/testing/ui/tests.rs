@@ -7,7 +7,7 @@ use std::{
 
 use camino::{Utf8Path, Utf8PathBuf};
 use rstest::rstest;
-use whitaker_common::test_support::with_env_var;
+use whitaker_common::test_support::{with_env_var, with_env_var_removed};
 
 use super::{HarnessError, run_with_runner};
 
@@ -112,11 +112,40 @@ fn runner_env_guard_clears_and_restores_rustc_wrapper() {
     });
 }
 
+/// The runner sees the copy-library flag set, and the caller's environment is
+/// restored afterwards.
+///
+/// Regression: without the flag, Dylint 6.3.0's `dylint_testing` copies its
+/// own default-feature rebuild — an empty `cdylib` — over the library this
+/// harness built with `dylint-driver`, and the UI test fails with
+/// ``could not find `dylint_version` ``.
+#[rstest]
+#[case::absent_is_set_then_removed(None, "1")]
+#[case::explicit_value_is_kept(Some("0"), "0")]
+fn runner_env_guard_marks_the_toolchain_library_as_prepared(
+    #[case] caller_value: Option<&'static str>,
+    #[case] seen_by_runner: &'static str,
+) {
+    const FLAG: &str = "DYLINT_LINK_ENABLE_COPY_LIBRARY";
+    let _serial_guard = runner_env_guard_test_lock();
+    let scenario = || {
+        run_with_runner("lint", "ui", |_, _| {
+            assert_eq!(env::var_os(FLAG), Some(seen_by_runner.into()));
+            Ok(())
+        })
+        .expect("runner should execute with the copy-library flag set");
+
+        assert_eq!(env::var_os(FLAG), caller_value.map(Into::into));
+    };
+    match caller_value {
+        Some(value) => with_env_var(FLAG, value, scenario),
+        None => with_env_var_removed(FLAG, scenario),
+    }
+}
+
 #[cfg(windows)]
 #[test]
 fn windows_env_guard_leaves_absent_rustc_wrapper_untouched() {
-    use whitaker_common::test_support::with_env_var_removed;
-
     let _serial_guard = runner_env_guard_test_lock();
     with_env_var("VCPKG_ROOT", r"C:\vcpkg", || {
         with_env_var_removed("RUSTC_WRAPPER", || {

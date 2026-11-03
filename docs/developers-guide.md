@@ -159,6 +159,37 @@ make test NEXTEST_PROFILE=ci
 Continuous Integration (CI) always uses the `ci` profile, so installer tests
 are never silently skipped in the pipeline.
 
+#### Test timeouts: four tiers, outermost last
+
+Both profiles set the same four bounds, in increasing scope. A test is only
+allowed to exceed a bound if a more specific override raises it, so the tiers
+must be read as a floor scheme rather than as independent budgets.
+
+1. `slow-timeout.period = "300s"` on `[profile.default]` and `[profile.ci]`.
+   This bounds an ordinary test. Without it a hung test is reported as slow for
+   ever and only the job timer ends it, which cancels the whole run and
+   discards the log that would have named the culprit.
+2. The per-harness `[[profile.*.overrides]]` blocks. Nested-Cargo harnesses get
+   20–120 minutes depending on how much they rebuild, because they queue behind
+   the shared compiler admission and package-cache locks.
+3. `global-timeout = "300m"` on both profiles. This is the whole-run ceiling.
+4. The workflow job timeout, which sits outside nextest and is not ours to
+   tune from this file.
+
+`terminate-after = 1` with `grace-period = "5s"` means a test that trips the
+period is killed once, then reported, rather than being retried indefinitely.
+Overrides that wrap a single expensive build set `retries = 0`: repeating a
+75-minute build to discover the same compile error only lengthens the queue for
+every other agent on the host.
+
+Nested-Cargo fixtures are also serialized by `test-group` so they cannot race
+each other for one target directory. `serial-dylint-ui` covers the Dylint UI
+harnesses that rebuild lint libraries, `serial-toolchain-installs` covers the
+rustup installs, and `serial-nested-cargo-builds` covers the package-isolated
+and feature-disabled builds. `#[serial]` from `serial_test` does not substitute
+for these groups: nextest runs each test in its own process, so an in-process
+mutex has no effect.
+
 The CI workflow is split by purpose rather than running the same stack on every
 operating system. `linux-full` is the authoritative gate for formatting,
 Mermaid/Nixie/Markdown validation, `make lint`, and `make publish-check`.
@@ -1768,18 +1799,39 @@ needs bare `rustc` invocations for `dylint_testing::Test::example`. On Windows
 it also sets `VCPKG_ROOT` to `C:\vcpkg` when that directory exists and the
 variable is otherwise absent.
 
+It also sets `DYLINT_LINK_ENABLE_COPY_LIBRARY=1` when the variable is absent.
+Since Dylint 6.3.0, `dylint_testing::initialize` runs a bare `cargo build` with
+no `--features` and then copies the result over the toolchain-qualified
+library. Every Whitaker lint crate keeps its lint behind the optional
+`dylint-driver` feature, so that rebuild produces an empty `cdylib`, and the UI
+test fails with ``could not find `dylint_version` ``. The flag makes
+`dylint_internal::link::debug_path_with_toolchain` return the library the
+harness built instead of copying over it. Any value other than `0` enables it,
+so an explicit `DYLINT_LINK_ENABLE_COPY_LIBRARY=0` still opts out.
+
 Example-based UI tests in `rstest_helper_should_be_fixture` also use a
-cross-process directory lock under the system temporary directory. `nextest`
-can run test binaries in separate processes, so a plain in-process `Mutex` is
-not sufficient for those examples. A directory becomes eligible for stale
-recovery only after it has aged past 30 minutes, and stale cleanup removes that
-age-eligible lock directory only after successfully acquiring the lifetime
-owner-liveness lock. If stale cleanup sees `NotFound`, it treats the directory
-as already removed rather than as a failed recovery attempt, and the live lock
-path still waits indefinitely in production while the tests keep the bounded
-timeout. A sidecar advisory lock serializes ownership transitions, and the
-directory's owner token prevents an original holder from deleting a successor
-after stale recovery.
+cross-process directory lock, resolved inside Cargo's target directory.
+`nextest` can run test binaries in separate processes, so a plain in-process
+`Mutex` is not sufficient for those examples. The lock must be target-scoped,
+not host-global: a `temp_dir()` path would make every worktree on the host
+serialize against one lock, so one worktree's slow build could block another
+for the whole stale window. Cargo's `.rustc_info.json` marker is authoritative
+when present because it records the directory the toolchain actually wrote to.
+Without it, the executable's profile directory is used, so marker-free
+processes still agree on one lock identity; an absolute `CARGO_TARGET_DIR` is
+last, and a relative one is ignored because Cargo resolves it from its
+invocation directory, which the test process cannot observe.
+
+A directory becomes eligible for stale recovery after it has aged past five
+minutes, and stale cleanup removes that age-eligible lock directory only after
+successfully acquiring the lifetime owner-liveness lock. If stale cleanup sees
+`NotFound`, it treats the directory as already removed rather than as a failed
+recovery attempt. The live lock path waits up to six minutes in production —
+longer than the stale window, so an abandoned lock is reclaimed before the
+ceiling is reached — and the tests keep shorter bounded timeouts of their own.
+A sidecar advisory lock serializes ownership transitions, and the directory's
+owner token prevents an original holder from deleting a successor after stale
+recovery.
 
 ### Configuration constant patterns
 

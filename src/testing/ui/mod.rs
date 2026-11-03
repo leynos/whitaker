@@ -12,7 +12,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 
 mod toolchain;
 
-use whitaker_common::test_support::with_env_var_removed;
+use whitaker_common::test_support::{with_env_var, with_env_var_removed};
 
 use self::toolchain::{CrateName, ensure_toolchain_library};
 
@@ -176,31 +176,51 @@ pub fn run_with_runner(
     })
 }
 
+/// Tells `dylint_testing` that the toolchain-qualified library is prepared.
+///
+/// Since Dylint 6.3.0, `dylint_testing::initialize` rebuilds the library with
+/// default features and then copies the result over the toolchain-qualified
+/// file. Every Whitaker lint crate keeps its lint behind the optional
+/// `dylint-driver` feature, so that rebuild yields an empty `cdylib`, and the
+/// UI test then fails with ``could not find `dylint_version` ``. Setting this
+/// flag makes `dylint_internal::link::debug_path_with_toolchain` return the
+/// path [`ensure_toolchain_library`] just wrote instead of copying over it.
+/// Any value other than `0` counts as enabled.
+const COPY_LIBRARY_FLAG: (&str, &str) = ("DYLINT_LINK_ENABLE_COPY_LIBRARY", "1");
+
 /// Runs `callback` with the environment `run_with_runner` requires.
 ///
-/// `RUSTC_WRAPPER` must be cleared on every platform when set (for example to
-/// `sccache`), because `dylint_testing::Test::example` scans
-/// `cargo build --message-format=json` output for bare `rustc` invocations.
-/// When a wrapper is active, Cargo invokes `<wrapper> rustc ...` instead, and
-/// `dylint_testing` finds zero invocations, causing a panic.
+/// Three variables need temporary adjustment, on every platform unless noted:
 ///
-/// On Windows, one additional environment variable needs temporary adjustment:
+/// - `RUSTC_WRAPPER` is removed, because `dylint_testing::Test::example` scans `cargo build
+///   --message-format=json` output for bare `rustc` invocations. When a wrapper such as `sccache`
+///   is active, Cargo invokes `<wrapper> rustc ...` instead, `dylint_testing` finds zero
+///   invocations, and the example test panics.
+/// - [`COPY_LIBRARY_FLAG`] is set when absent, so `dylint_testing` keeps the library this harness
+///   built rather than replacing it with a stub. A value the caller already set is left untouched,
+///   so an explicit `DYLINT_LINK_ENABLE_COPY_LIBRARY=0` still opts out.
+/// - `VCPKG_ROOT` (Windows only) is set to `C:\vcpkg` when that directory exists and the variable
+///   is otherwise absent, so downstream `cargo` invocations resolve vcpkg.
 ///
-/// - `VCPKG_ROOT`: must be set to `C:\vcpkg` when that directory exists and the variable is
-///   otherwise absent, so downstream `cargo` invocations resolve vcpkg.
-///
-/// The scoped mutations are serialized by `temp_env`'s re-entrant global lock,
-/// so runner closures that perform their own scoped environment setup nest
-/// without deadlocking, and every prior value is restored when the callback
-/// returns or panics.
+/// The mutations are scoped to the callback and restored afterwards, even on
+/// panic. `temp_env`'s re-entrant global lock serializes them, so runner
+/// closures that perform their own scoped environment setup nest without
+/// deadlocking.
 fn with_runner_env<R>(callback: impl FnOnce() -> R) -> R {
-    with_vcpkg_root(|| with_env_var_removed("RUSTC_WRAPPER", callback))
+    with_vcpkg_root(|| with_copy_library_flag(|| with_env_var_removed("RUSTC_WRAPPER", callback)))
+}
+
+/// Sets [`COPY_LIBRARY_FLAG`] when the caller has not set it already.
+fn with_copy_library_flag<R>(callback: impl FnOnce() -> R) -> R {
+    if std::env::var_os(COPY_LIBRARY_FLAG.0).is_some() {
+        callback()
+    } else {
+        with_env_var(COPY_LIBRARY_FLAG.0, COPY_LIBRARY_FLAG.1, callback)
+    }
 }
 
 #[cfg(windows)]
 fn with_vcpkg_root<R>(callback: impl FnOnce() -> R) -> R {
-    use whitaker_common::test_support::with_env_var;
-
     let candidate = Utf8Path::new(r"C:\vcpkg");
     if candidate.is_dir() && std::env::var_os("VCPKG_ROOT").is_none() {
         with_env_var("VCPKG_ROOT", candidate.as_std_path(), callback)
