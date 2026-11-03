@@ -538,23 +538,33 @@ each push rather than copying an earlier lease into the command.
 - [x] (2026-11-03) CodeScene confirmed cleared **hosted**, not only locally.
   `CodeScene Code Health Review (main)` concludes `pass` on the head after the
   repair; it had concluded `fail` on `8af0fb2b` and earlier.
-- [x] (2026-11-03) Exact-head CI concluded **`success`** on `ebbabd5b`, the
-  current head. `windows-compat` and `linux-full` both pass; `coverage-check` is
-  `skipped` by its configured lane selection. Inside `linux-full`, `Lint`,
-  `Enforce en-GB-oxendict spelling`, `Markdown lint`, `Nixie`,
-  `Workflow contract tests` and `Publish dry run` all succeeded, so the new
-  contract suite runs hosted as well as locally. Three earlier dispatched runs
-  also concluded `success`: `41606198130` on `615d3bd7`, `41606387238` on
-  `8af0fb2b` and `41607603679` on `b660e777`. Each certifies its own head only.
-- [ ] CodeRabbit review of `ebbabd5b`. `0711dcad` is still queued. CodeRabbit
-  reports `Review paused` on the head's commit status; its summary comment
-  names the cause as an automatic pause after an influx of commits, names
-  `b6be553d` as the last reviewed commit and `ebbabd5b` as unreviewed, and
-  offers `@coderabbitai resume` plus a "Resume reviews" checkbox. Both are the
-  bot's own shortcut. The queue entry is the authorized route, the skill's
-  guidance is to await the automatic review rather than respond to a pause
-  reflexively, and a second entry for the same PR is forbidden, so the queue is
-  allowed to deliver.
+- [x] (2026-11-03) Exact-head CI concluded **`success`** on `1ae7b8c9`, the
+  current head. Dispatched as run `41611150392` (`workflow_dispatch`, for the
+  same frozen-merge-ref reason as every earlier run). `windows-compat` and
+  `linux-full` both pass; `coverage-check` is `skipped` by its configured lane
+  selection. Inside `linux-full`, every step succeeded — `Check formatting`,
+  `Enforce en-GB-oxendict spelling`, `Nixie`, `Markdown lint`,
+  `Install Whitaker`, `Lint`, `Workflow contract tests` and `Publish dry run` —
+  so the contract suite and the nextest-filter guard run hosted as well as
+  locally. Four earlier dispatched runs also concluded `success`: `41606198130`
+  on `615d3bd7`, `41606387238` on `8af0fb2b`, `41607603679` on `b660e777` and
+  `41607827636` on `ebbabd5b`. Each certifies its own head only.
+- [x] (2026-11-03) CodeScene re-confirmed on `1ae7b8c9`:
+  `CodeScene Code Health Review (main)` concludes `success` with zero
+  annotations. `Gecko Security Review` also `success`; `Sourcery review` is
+  `skipped` because the PR exceeds its 150,000 diff-character limit, an
+  external limiter rather than a finding; `automerge` is `skipped` because the
+  PR is a stack member.
+- [ ] CodeRabbit review of `1ae7b8c9`. `0711dcad` is still queued, now 2h44m
+  old, with seven other requests ahead of it. CodeRabbit reports
+  `Review paused` on the head's check run — its title is `Review paused`, its
+  summary says `Result: Skipped - Review paused`, and every step, including
+  `Prepare review scope`, is skipped. The pause is an automatic one after an
+  influx of commits, not a rate limit, and the notices offering
+  `@coderabbitai resume` and a "Resume reviews" checkbox are the bot's own
+  shortcut. The queue entry is the authorized route, a pause is a wait rather
+  than an impasse, and a second entry for the same PR is forbidden, so the
+  queue is allowed to deliver.
 - [x] (2026-11-03) ExecPlan completeness/correctness assessment posted as issue
   comment
   [6598161483](https://github.com/leynos/whitaker/pull/372#issuecomment-6598161483)
