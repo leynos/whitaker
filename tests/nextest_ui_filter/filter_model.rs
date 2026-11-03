@@ -40,6 +40,18 @@ pub struct TestName<'a>(pub &'a str);
 #[derive(Clone, Copy, Debug)]
 pub struct FilterExpression<'a>(pub &'a str);
 
+/// The operator of a leaf filter term, such as `package` or `test`.
+///
+/// Named separately from [`FilterArgument`] because the two are adjacent in
+/// [`TestIdentity::matches`] and [`split_leaf`], where a plain pair of `&str`
+/// would let a caller transpose them and still compile.
+#[derive(Clone, Copy, Debug)]
+pub struct Operator<'a>(pub &'a str);
+
+/// The argument of a leaf filter term, such as `no_unwrap_or_else_panic`.
+#[derive(Clone, Copy, Debug)]
+pub struct FilterArgument<'a>(pub &'a str);
+
 /// One test as nextest identifies it when it evaluates an override.
 #[derive(Clone, Copy, Debug)]
 pub struct TestIdentity<'a> {
@@ -60,8 +72,8 @@ impl TestIdentity<'_> {
     /// `binary` follow the same rule. An operator this repository does not use
     /// panics rather than answering `false`, so a filter that grows a new
     /// operator fails loudly instead of silently matching nothing.
-    fn matches(self, operator: &str, argument: &str) -> bool {
-        match operator {
+    fn matches(self, operator: Operator<'_>, argument: FilterArgument<'_>) -> bool {
+        match operator.0 {
             "package" => names(self.package.0, argument),
             "binary" => names(self.binary.0, argument),
             "test" => names(self.name.0, argument),
@@ -82,7 +94,7 @@ impl FilterExpression<'_> {
 }
 
 /// Returns whether `actual` is selected by a single filter argument.
-fn names(actual: &str, argument: &str) -> bool {
+fn names(actual: &str, FilterArgument(argument): FilterArgument<'_>) -> bool {
     argument
         .strip_prefix('=')
         .map_or_else(|| actual.contains(argument), |exact| actual == exact)
@@ -160,7 +172,7 @@ fn strip_wrapping_parens(mut term: &str) -> &str {
 }
 
 /// Splits a leaf term such as `binary(ui)` into its operator and argument.
-fn split_leaf(term: &str) -> (&str, &str) {
+fn split_leaf(term: &str) -> (Operator<'_>, FilterArgument<'_>) {
     let Some(open) = term.find('(') else {
         panic!("nextest filter term {term:?} should be of the form `operator(argument)`");
     };
@@ -172,5 +184,5 @@ fn split_leaf(term: &str) -> (&str, &str) {
         panic!("nextest filter term {term:?} should end with a closing parenthesis");
     };
 
-    (operator.trim(), argument)
+    (Operator(operator.trim()), FilterArgument(argument))
 }
