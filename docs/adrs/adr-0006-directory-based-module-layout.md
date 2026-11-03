@@ -65,6 +65,11 @@ and `crates/conditional_max_n_branches/src/driver.rs` resolves `mod numeric;` to
 convention anyone is expected to follow. Adopting the form deliberately would
 make a module's location depend on which convention its author happened to use.
 
+Since this record was accepted, both outliers have been converted:
+`installer/src/cli.rs` became `installer/src/cli/mod.rs`, and
+`crates/conditional_max_n_branches/src/driver.rs` became `driver/mod.rs`. No
+path in the tree now has both `name.rs` and `name/mod.rs`.
+
 ### Option C: `mod.rs` directory modules with `#[path]` sibling test files
 
 Accepted.

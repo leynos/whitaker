@@ -1586,11 +1586,10 @@ A module that has grown into submodules becomes a directory whose root file is
 `mod.rs`, for example `installer/src/install_flow/mod.rs` and
 `installer/src/toolchain/mod.rs`. The self-named-sibling form, where
 `install_flow.rs` sits next to an `install_flow/` directory, is not the
-convention here: 46 `mod.rs` files are tracked outside `vendor/`, and no path
-has both `name.rs` and `name/mod.rs`. Two file modules do reach a child that
-way — `installer/src/cli.rs` and
-`crates/conditional_max_n_branches/src/driver.rs` — but they are single-child
-outliers, not the pattern to copy.
+convention here: 48 `mod.rs` files are tracked outside `vendor/`, and no path
+has both `name.rs` and `name/mod.rs`. The last two single-child outliers,
+`installer/src/cli.rs` and `crates/conditional_max_n_branches/src/driver.rs`,
+were converted, so the form is now absent rather than merely discouraged.
 
 Directory modules nest. `installer/src/toolchain/tests/` is a `tests/`
 directory module with its own `mod.rs`, holding `test_helpers.rs` and a further
@@ -4537,12 +4536,12 @@ of the rule lives in the `generate-coverage` README in
 this repository sets, what each value is sized against, and where the third
 tier went.
 
-| Tier                     | What it bounds                     | Where it is set                             | Current value                                                                                                                                                                                                                                                                                                                                                   |
-| ------------------------ | ---------------------------------- | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Tier                     | What it bounds                     | Where it is set                             | Current value                                                                                                                                                                                                                                                                                                                                                                                        |
+| ------------------------ | ---------------------------------- | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`, both profiles       | 300 s default; 20 m for ordinary serialized UI and no-default-feature builds; 30 m for isolated package checks; 75 m for parser-pin, most trybuild, nested example-build, alias UI and whole UI harness fixtures; 120 m for `rstest_helper_should_be_fixture::ui::trybuild_fixtures_compile_without_diagnostics`; 30 m for toolchain-installing behaviour tests |
-| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, both profiles       | 300 m                                                                                                                                                                                                                                                                                                                                                           |
-| Cargo watchdog           | one `cargo` invocation, wall clock | not used here, see below                    | absent                                                                                                                                                                                                                                                                                                                                                          |
-| Job `timeout-minutes`    | the whole job                      | `ci.yml` and `coverage-main.yml`, job level | 335 m for every lane that runs the suite                                                                                                                                                                                                                                                                                                                        |
+| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, both profiles       | 300 m                                                                                                                                                                                                                                                                                                                                                                                                |
+| Cargo watchdog           | one `cargo` invocation, wall clock | not used here, see below                    | absent                                                                                                                                                                                                                                                                                                                                                                                               |
+| Job `timeout-minutes`    | the whole job                      | `ci.yml` and `coverage-main.yml`, job level | 335 m for every lane that runs the suite                                                                                                                                                                                                                                                                                                                                                             |
 
 *Table: the timers that can end a run, innermost first.*
 
