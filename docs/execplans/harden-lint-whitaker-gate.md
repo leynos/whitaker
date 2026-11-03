@@ -440,9 +440,22 @@ each push rather than copying an earlier lease into the command.
   that commit: it does **not** cover the `test-root-lib` target, the
   two-profile nextest filter rewrite, or the new contract suite, all of which
   are still in the working tree.
-- [ ] Exact-head CI for the repair head. Those changes form a new candidate,
-  so `adc974c9`'s green result does not transfer to it; a fresh
-  `workflow_dispatch` run is required once the repair commit is pushed.
+- [x] (2026-11-03) Exact-head CI dispatched as run `41602487492`
+  (`workflow_dispatch`, head `57312cfe…`). `linux-full` **failed**, and the
+  failing step is `Enforce en-GB-oxendict spelling` — no other step failed. The
+  cause was a real defect in the pushed head, not a false positive:
+  `tests/nextest_ui_filter/filter_model.rs` said `parenthesised`. It passed the
+  same gate locally while the file was untracked, because `typos` scans tracked
+  files, and the commit that added it made it visible. Fixed with a one-word
+  change; `make spelling` and `make markdownlint` are green afterwards. The red
+  result is retained as the evidence for the fix rather than rerun away.
+  `windows-compat` does not run the spelling gate and was still in progress at
+  that point; the run is superseded on its `linux-full` half by the next
+  dispatch on the corrected head.
+- [ ] Exact-head CI for the corrected repair head. The spelling repair and the
+  plan additions form a new candidate, so neither `adc974c9`'s green result nor
+  `41602487492` transfers to it; a fresh `workflow_dispatch` is required once
+  the commit is pushed.
 - [x] (2026-11-03) ExecPlan completeness/correctness assessment posted as issue
   comment
   [6598161483](https://github.com/leynos/whitaker/pull/372#issuecomment-6598161483)
@@ -508,6 +521,28 @@ each push rather than copying an earlier lease into the command.
   same run is 10 of 10. The red log is
   `/tmp/red-nuf-harden-lint-whitaker-gate.out`, the green log
   `/tmp/green-nuf-harden-lint-whitaker-gate.out`.
+- [x] (2026-11-03) The same guard re-proved against the real pre-repair file
+  rather than a seeded reversion. Checking out `adc974c9:.config/nextest.toml`
+  over the working copy and running
+  `cargo nextest run --locked -p whitaker --test nextest_ui_filter --all-features`
+  gives 4 of 10 failing: `case_1_default_package_override` and
+  `case_3_default_rstest_helper` both report `left: 1200, right: 4500`, with
+  the message naming first-matching-override precedence;
+  `case_6_ci_shared_name` reports that no `ci` override selects the shared name
+  at all; and
+  `nested_cargo_harnesses_are_governed_by_the_whole_package_override::case_1_default`
+  reports that `overrides[0]` governs by name list instead of the package
+  binary. Restoring the committed file and running the identical command gives
+  10 of 10 passing, exit 0. Logs:
+  `/tmp/nuf-negctl2-harden-lint-whitaker-gate.out` (red) and
+  `/tmp/nuf-posctl-harden-lint-whitaker-gate.out` (green).
+- [x] (2026-11-03) The first attempt at that control proved nothing and was
+  discarded rather than recorded as evidence. It selected cases with
+  `-E 'test(effective_slow_timeout_follows_override_precedence)'`; nextest's
+  `test(...)` matcher compares against the full test *name*, which for an
+  `rstest` case carries a `::case_N_<label>` suffix, so the expression matched
+  nothing and nextest exited 4 with `0 tests run`. See "A discrimination probe
+  can report a false clean" under Surprises & discoveries.
 - [x] (2026-11-03) The repair obeys the 400-line file cap without weakening the
   guard: `tests/nextest_ui_filter.rs` is 294 lines and the model is 172. The
   first draft was 450 lines in one file and was split rather than trimmed.
@@ -757,6 +792,29 @@ crates from the broad clause. The regression test in
 `tests/nextest_ui_filter.rs` evaluates the governing override rather than
 merely finding one that mentions the package, and two seeded-fault controls
 confirm it fails when either defect is reintroduced.
+
+### A discrimination probe can report a false clean
+
+The non-vacuity check for the config guard was first run as:
+
+```sh
+cargo nextest run --locked -p whitaker_suite \
+  -E 'test(effective_slow_timeout_follows_override_precedence)'
+```
+
+It exited 4 with `0 tests run: 0 passed, 0 skipped`. The expression matched no
+test. `rstest` appends `::case_N_<label>` to each parameterized case's name, so
+the bare function name is not a complete test identity, and nextest's
+`test(...)` matcher compares against the whole name. A run that selects nothing
+cannot fail, so an exit status read without the summary would have looked like
+a pass.
+
+Three habits avoid the trap: read the `N tests run` count before believing any
+verdict, prefer selecting the test binary (`--test nextest_ui_filter`) over
+writing a matcher when the goal is to run the whole set, and require the red
+step to name the defect it caught. The corrected run failed 4 of 10 cases with
+`left: 1200, right: 4500` and messages citing first-matching-override
+precedence — that is a detection, where `0 tests run` was the absence of one.
 
 ### CodeScene measures the delta, not the file
 

@@ -88,7 +88,7 @@ fn names(actual: &str, argument: &str) -> bool {
         .map_or_else(|| actual.contains(argument), |exact| actual == exact)
 }
 
-/// Evaluates one term, which may be negated, compound, or parenthesised.
+/// Evaluates one term, which may be negated, compound, or parenthesized.
 fn term_holds(term: &str, identity: TestIdentity<'_>) -> bool {
     let bare = strip_wrapping_parens(term.trim());
 
