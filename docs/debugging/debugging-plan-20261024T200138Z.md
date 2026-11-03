@@ -1,7 +1,7 @@
 # Debugging plan: slow Bumpy Road API contract
 
 - **Generated:** 2026-10-24T20:01:38Z
-- **Updated:** 2026-11-01
+- **Updated:** 2026-11-03
 - **Issue:** [#514](https://github.com/leynos/whitaker/issues/514)
 - **Status:** Option 3 implemented and validated.
 
@@ -239,6 +239,18 @@ recomputed rather than carried over: `make coverage` now skips six of the seven,
 across five files. The rebase used Git's text merge with `zdiff3`; the host's
 ambient `*.py merge=weave` rule is not repository consent, so the unattended
 replay bypassed it with `-c core.attributesFile=/dev/null`.
+
+The branch was rebased a third time, onto `main` at `bb6dab1a`, whose single
+new commit standardized Rust formatting across the workspace. One file
+conflicted, `crates/bumpy_road_function/src/analysis.rs`, where that
+reformatting met this branch's doctest examples. The resolution kept the
+target's formatting as well as this branch's examples, so the file now differs
+from the target only by the examples. CI run
+[41666046140](https://github.com/leynos/whitaker/actions/runs/41666046140)
+passed at head `f203d997`: `coverage-check` in 13m37s, `windows-compat` in
+19m52s, and `linux-full` in 16m16s. The first `linux-full` attempt failed while
+installing the Mermaid CLI on an npm registry 404 for `@tanstack/virtual-core`,
+before any project check ran; the rerun of the unmodified candidate passed.
 
 ## Follow-up
 
