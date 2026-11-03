@@ -282,6 +282,23 @@ Recovery: the old head remains reachable through the PR's reflog.
   `docs/whitaker-dylint-suite-design.md` reflow churn is reverted. The four
   Rust gates are running sequentially; push, re-observation and CI dispatch
   follow the gate results. Readiness, not the commit, is the gate.
+- [x] (2026-11-03) The repair is committed as `f19408ff`
+  ("Guard the Dylint copy step and scope the harness lock"). It sits on
+  unpushed `55da1e23`, on top of remote `d10469fd`. Nine files, 740
+  insertions, 177 deletions.
+- [ ] A focused re-run of the three nested-Cargo harnesses is in flight
+  (`rstest_helper_should_be_fixture`, four tests across one binary). It
+  started at 06:22 and had spent 33 minutes inside the 75-minute
+  `example_compiles_without_diagnostics` allowance, with 29 new build
+  artefacts measured per 90 s, so it is compiling rather than stalled. Its
+  log is `/tmp/test-rshf-harness-harden-lint-whitaker-gate.out`.
+- [ ] The four repository gates run behind it under a `scrutineer`, which
+  waits for that process to exit before starting. Logs are
+  `/tmp/{check-fmt,test-ci,typecheck,lint}-harden-lint-whitaker-gate.out`.
+- [ ] Push, tracking-ref refresh and `ls-remote` confirmation, CI dispatch
+  (`refs/pull/372/merge` is stale at `39b4757f`, so no `pull_request` run
+  fires on a new head), and the `comenq` CodeRabbit review are all still
+  ahead.
 
 ## Surprises & discoveries
 
