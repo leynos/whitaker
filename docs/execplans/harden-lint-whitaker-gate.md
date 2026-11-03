@@ -538,28 +538,29 @@ each push rather than copying an earlier lease into the command.
 - [x] (2026-11-03) CodeScene confirmed cleared **hosted**, not only locally.
   `CodeScene Code Health Review (main)` concludes `pass` on the head after the
   repair; it had concluded `fail` on `8af0fb2b` and earlier.
-- [x] (2026-11-03) Exact-head CI concluded **`success`** on `d4bf692a`, the
-  current head, as run `41614932937` (`workflow_dispatch`, for the same
+- [x] (2026-11-03) Exact-head CI concluded **`success`** on `9863d842`, the
+  current head, as run `41618871744` (`workflow_dispatch`, for the same
   frozen-merge-ref reason as every earlier run). `windows-compat` and
   `linux-full` both pass; `coverage-check` is `skipped` by its configured lane
-  selection. This head changes only the ExecPlan, so the run certifies the
-  documentation state rather than new code; run `41611150392` on `1ae7b8c9` is
-  the one that certifies the code, with every `linux-full` step green —
-  `Check formatting`, `Enforce en-GB-oxendict spelling`, `Nixie`,
+  selection. Every head since `1ae7b8c9` changes only this ExecPlan, so those
+  runs certify documentation state rather than new code; run `41611150392` on
+  `1ae7b8c9` is the one that certifies the code, with every `linux-full` step
+  green — `Check formatting`, `Enforce en-GB-oxendict spelling`, `Nixie`,
   `Markdown lint`, `Install Whitaker`, `Lint`, `Workflow contract tests` and
-  `Publish dry run`. Five dispatched runs have now concluded `success`:
+  `Publish dry run`. Seven dispatched runs have now concluded `success`:
   `41606198130` on `615d3bd7`, `41606387238` on `8af0fb2b`, `41607603679` on
-  `b660e777`, `41607827636` on `ebbabd5b` and `41611150392` on `1ae7b8c9`. Each
-  certifies its own head only.
-- [x] (2026-11-03) CodeScene re-confirmed on `d4bf692a`:
+  `b660e777`, `41607827636` on `ebbabd5b`, `41611150392` on `1ae7b8c9`,
+  `41614932937` on `d4bf692a` and `41618871744` on `9863d842`. Each certifies
+  its own head only.
+- [x] (2026-11-03) CodeScene re-confirmed on `9863d842`:
   `CodeScene Code Health Review (main)` concludes `success` with zero
   annotations. `Gecko Security Review` also `success`; `Sourcery review` is
   `skipped` because the PR exceeds its 150,000 diff-character limit, an
   external limiter rather than a finding; `automerge` is `skipped` because the
   PR is a stack member.
-- [ ] CodeRabbit review of `d4bf692a`. `0711dcad` is still queued with three
+- [ ] CodeRabbit review of `9863d842`. `0711dcad` is still queued with three
   other requests ahead of it; `comenq list` reports a declining ETA, from 2h44m
-  to 1h49m as the queue drained, so it is advancing rather than stalled. The
+  to 1h19m as the queue drained, so it is advancing rather than stalled. The
   ETA is a prediction of remaining wait, not the request's age. CodeRabbit
   reports `Review paused` on the head's check run — its title is
   `Review paused`, its summary says `Result: Skipped - Review paused`, and
