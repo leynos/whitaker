@@ -7,10 +7,12 @@
 //! working installation. Only a library directory outside the data root, such
 //! as a source build's target directory, is stored absolute.
 
-use super::error::BootstrapError;
+use std::io::Write;
+
 use camino::{Utf8Path, Utf8PathBuf};
 use serde::{Deserialize, Serialize};
-use std::io::Write;
+
+use super::error::BootstrapError;
 
 /// The metadata schema this installer writes and accepts.
 pub const BOOTSTRAP_SCHEMA: u32 = 1;
@@ -35,11 +37,20 @@ impl StoredPath {
     /// use whitaker_installer::bootstrap::StoredPath;
     ///
     /// let root = Utf8Path::new("/home/user/.local/share");
-    /// let inside = StoredPath::new(Utf8Path::new("/home/user/.local/share/whitaker/lints"), root);
-    /// assert_eq!(inside, StoredPath::DataRootRelative("whitaker/lints".into()));
+    /// let inside = StoredPath::new(
+    ///     Utf8Path::new("/home/user/.local/share/whitaker/lints"),
+    ///     root,
+    /// );
+    /// assert_eq!(
+    ///     inside,
+    ///     StoredPath::DataRootRelative("whitaker/lints".into())
+    /// );
     ///
     /// let moved = Utf8Path::new("/srv/share");
-    /// assert_eq!(inside.resolve(moved), Utf8Path::new("/srv/share/whitaker/lints"));
+    /// assert_eq!(
+    ///     inside.resolve(moved),
+    ///     Utf8Path::new("/srv/share/whitaker/lints")
+    /// );
     /// ```
     #[must_use]
     pub fn new(path: &Utf8Path, data_root: &Utf8Path) -> Self {

@@ -5,15 +5,18 @@
 //! when they disagree with the sidecar, and records every request so reuse
 //! can be shown to download nothing.
 
-use super::*;
-use crate::clippy_snapshot::check_installed;
-use crate::clippy_snapshot::test_fixtures::{
-    DEFAULT_HISTORY, DEFAULT_SELECTED, FixtureRepo, write_sidecar,
-};
-use crate::dependency_binaries::DependencyBinaryInstallError;
+use std::{path::Path, sync::Mutex};
+
 use rstest::{fixture, rstest};
-use std::path::Path;
-use std::sync::Mutex;
+
+use super::*;
+use crate::{
+    clippy_snapshot::{
+        check_installed,
+        test_fixtures::{DEFAULT_HISTORY, DEFAULT_SELECTED, FixtureRepo, write_sidecar},
+    },
+    dependency_binaries::DependencyBinaryInstallError,
+};
 
 const PINNED_REFS: [&str; 2] = ["refs/heads/main", "HEAD"];
 
@@ -46,9 +49,7 @@ impl FakeDownloader {
     }
 
     /// The asset names requested so far, in order.
-    fn requests(&self) -> Vec<String> {
-        self.requests.lock().expect("lock requests").clone()
-    }
+    fn requests(&self) -> Vec<String> { self.requests.lock().expect("lock requests").clone() }
 }
 
 impl DependencyArchiveDownloader for FakeDownloader {
@@ -263,8 +264,9 @@ impl MetricScenario {
 #[case::fails_to_download(MetricScenario::FailDownload)]
 #[case::reuses_the_generation(MetricScenario::Reuse)]
 fn provisioning_records_its_source_and_outcome(release: Release, #[case] scenario: MetricScenario) {
-    use crate::clippy_snapshot::telemetry::PROVISION_TOTAL;
     use metrics_util::debugging::{DebugValue, DebuggingRecorder};
+
+    use crate::clippy_snapshot::telemetry::PROVISION_TOTAL;
 
     if matches!(scenario, MetricScenario::Reuse) {
         release

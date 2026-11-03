@@ -13,8 +13,10 @@ use whitaker_installer::{
     installer_packaging::TargetTriple,
     test_utils::{
         dependency_binary_helpers::{
-            AlwaysNotFoundRepositoryInstaller, cargo_dylint_check,
-            cargo_dylint_stale_version_check, dylint_link_install_list_check,
+            AlwaysNotFoundRepositoryInstaller,
+            cargo_dylint_check,
+            cargo_dylint_stale_version_check,
+            dylint_link_install_list_check,
             with_fake_binary_on_path,
         },
         *,
@@ -287,17 +289,11 @@ struct TestBaseDirs {
 }
 
 impl BaseDirs for TestBaseDirs {
-    fn home(&self) -> Option<PathBuf> {
-        self.home.clone()
-    }
+    fn home(&self) -> Option<PathBuf> { self.home.clone() }
 
-    fn executables(&self) -> Option<PathBuf> {
-        self.bin.clone()
-    }
+    fn executables(&self) -> Option<PathBuf> { self.bin.clone() }
 
-    fn whitaker_data(&self) -> Option<PathBuf> {
-        self.data.clone()
-    }
+    fn whitaker_data(&self) -> Option<PathBuf> { self.data.clone() }
 }
 
 #[test]

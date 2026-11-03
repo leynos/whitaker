@@ -1,8 +1,9 @@
 //! Layout, metadata, and driver-slot behaviour of the installed bootstrap.
 
-use super::*;
 use rstest::rstest;
 use tempfile::TempDir;
+
+use super::*;
 
 /// A temporary directory viewed as UTF-8.
 fn temp_root() -> (TempDir, Utf8PathBuf) {

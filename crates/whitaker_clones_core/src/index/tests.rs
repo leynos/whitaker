@@ -3,12 +3,18 @@
 use rstest::{fixture, rstest};
 use whitaker_test_macros::allow_fixture_expansion_lints;
 
-use crate::token::Fingerprint;
-
 use super::{
-    CandidatePair, FragmentId, IndexError, LshConfig, LshIndex, MINHASH_SIZE, MinHashSignature,
-    MinHasher, minhash::unique_hashes,
+    CandidatePair,
+    FragmentId,
+    IndexError,
+    LshConfig,
+    LshIndex,
+    MINHASH_SIZE,
+    MinHashSignature,
+    MinHasher,
+    minhash::unique_hashes,
 };
+use crate::token::Fingerprint;
 
 fn fingerprints(values: &[u64]) -> Vec<Fingerprint> {
     values
@@ -37,23 +43,17 @@ fn multi_band_config() -> LshConfig {
 /// Create a deterministic signature shared by fixtures using `[1, 2, 3, 4]`.
 #[allow_fixture_expansion_lints]
 #[fixture]
-fn shared_signature() -> MinHashSignature {
-    sketch(&[1, 2, 3, 4])
-}
+fn shared_signature() -> MinHashSignature { sketch(&[1, 2, 3, 4]) }
 
 /// Create a signature distinct from the shared fixture.
 #[allow_fixture_expansion_lints]
 #[fixture]
-fn distinct_signature() -> MinHashSignature {
-    sketch(&[8, 9, 10, 11])
-}
+fn distinct_signature() -> MinHashSignature { sketch(&[8, 9, 10, 11]) }
 
 /// Create the repeated signature used to test identical fragments.
 #[allow_fixture_expansion_lints]
 #[fixture]
-fn identical_signature() -> MinHashSignature {
-    sketch(&[5, 7, 11, 13])
-}
+fn identical_signature() -> MinHashSignature { sketch(&[5, 7, 11, 13]) }
 
 struct FragmentIds {
     alpha: FragmentId,

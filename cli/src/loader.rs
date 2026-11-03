@@ -3,8 +3,15 @@
 use std::path::PathBuf;
 
 use ortho_config::{
-    AutomaticMode, ConfigDiscovery, ConfigFilePolicy, ConfigPathSelector, MergeComposer,
-    MergeLayer, OrthoResult, SharedEnvSource, SharedScanEnvSource,
+    AutomaticMode,
+    ConfigDiscovery,
+    ConfigFilePolicy,
+    ConfigPathSelector,
+    MergeComposer,
+    MergeLayer,
+    OrthoResult,
+    SharedEnvSource,
+    SharedScanEnvSource,
 };
 use serde_json::{json, Value};
 
@@ -46,12 +53,19 @@ pub struct LoadedConfiguration {
 ///
 /// ```no_run
 /// use std::{path::PathBuf, sync::Arc};
+///
 /// use ortho_config::MapEnv;
 /// use serde_json::json;
-/// use whitaker_cli::{Sources, load_with_sources};
+/// use whitaker_cli::{load_with_sources, Sources};
 /// let env = Arc::new(MapEnv::new());
-/// let sources = Sources { project_root: PathBuf::from("."), config_path: None,
-///     discovery: env.clone(), environment: env, command: None, cli: json!({}) };
+/// let sources = Sources {
+///     project_root: PathBuf::from("."),
+///     config_path: None,
+///     discovery: env.clone(),
+///     environment: env,
+///     command: None,
+///     cli: json!({}),
+/// };
 /// let loaded = load_with_sources(sources)?;
 /// assert_eq!(loaded.settings.diagnostics.locale, "en-GB");
 /// # Ok::<(), std::sync::Arc<ortho_config::OrthoError>>(())
@@ -167,9 +181,7 @@ fn discover_legacy(sources: &Sources) -> OrthoResult<FileLayers> {
 }
 
 /// Name the replacement for the legacy file.
-fn legacy_file_notice() -> String {
-    String::from("dylint.toml is deprecated; use whitaker.toml")
-}
+fn legacy_file_notice() -> String { String::from("dylint.toml is deprecated; use whitaker.toml") }
 
 /// Compose the discovered files, environment layers, and explicit CLI values.
 fn compose_sources(sources: Sources, files: FileLayers) -> OrthoResult<LoadedConfiguration> {

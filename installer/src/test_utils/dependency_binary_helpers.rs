@@ -1,9 +1,12 @@
 //! Test helpers for dependency binary installation tests.
 
-use crate::dependency_binaries::find_dependency_binary;
-use crate::error::Result;
-use crate::test_utils::{ExpectedCall, failure_output, stdout_output, success_output};
 use std::process::Output;
+
+use crate::{
+    dependency_binaries::find_dependency_binary,
+    error::Result,
+    test_utils::{ExpectedCall, failure_output, stdout_output, success_output},
+};
 
 type HelperResult<T> = std::result::Result<T, String>;
 
@@ -12,8 +15,12 @@ type HelperResult<T> = std::result::Result<T, String>;
 mod fake_binaries;
 #[cfg(any(test, feature = "test-support"))]
 pub use fake_binaries::{
-    AlwaysNotFoundRepositoryInstaller, path_binary_location, with_fake_binary_on_path,
-    with_fake_path, write_fake_binary, write_fake_binary_with_status,
+    AlwaysNotFoundRepositoryInstaller,
+    path_binary_location,
+    with_fake_binary_on_path,
+    with_fake_path,
+    write_fake_binary,
+    write_fake_binary_with_status,
 };
 
 /// Expected outcome of repository-install verification in a test scenario.

@@ -4,9 +4,8 @@
 //! tied to the main lint flow, such as detecting case-mismatched `doc`
 //! identifiers and filtering `cfg_attr` wrappers that never supply docs.
 
-use crate::{AttributeBody, ParseInput};
-
 use super::parser;
+use crate::{AttributeBody, ParseInput};
 
 /// Check whether one meta-list segment names `doc` with incorrect casing.
 fn segment_has_case_incorrect_doc(segment: &str) -> bool {
@@ -102,9 +101,10 @@ pub(super) fn is_cfg_attr_without_doc(rest: ParseInput<'_>) -> bool {
 mod tests {
     //! Tests for inner attribute parsing.
 
+    use rstest::rstest;
+
     use super::is_case_incorrect_doc_inner_attr;
     use crate::ParseInput;
-    use rstest::rstest;
 
     /// Detect case-mismatched documentation attributes inside `cfg_attr`.
     #[rstest]

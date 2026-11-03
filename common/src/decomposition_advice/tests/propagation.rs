@@ -31,9 +31,7 @@ fn adjacency(node_count: usize, edges: &[SimilarityEdge]) -> Vec<Vec<(usize, u64
 /// Return three named vectors for the connected-triplet cases.
 #[allow_fixture_expansion_lints]
 #[fixture]
-fn connected_triplet_vectors() -> Vec<MethodFeatureVector> {
-    vectors(&["alpha", "beta", "gamma"])
-}
+fn connected_triplet_vectors() -> Vec<MethodFeatureVector> { vectors(&["alpha", "beta", "gamma"]) }
 
 /// Return a three-node path adjacency graph.
 #[fixture]
@@ -56,23 +54,17 @@ fn linear_quartet_adjacency() -> Vec<Vec<(usize, u64)>> {
 /// Return three named vectors for isolated-tail cases.
 #[allow_fixture_expansion_lints]
 #[fixture]
-fn isolated_tail_vectors() -> Vec<MethodFeatureVector> {
-    vectors(&["alpha", "beta", "gamma"])
-}
+fn isolated_tail_vectors() -> Vec<MethodFeatureVector> { vectors(&["alpha", "beta", "gamma"]) }
 
 /// Return an edge and one isolated node.
 #[allow_fixture_expansion_lints]
 #[fixture]
-fn isolated_tail_adjacency() -> Vec<Vec<(usize, u64)>> {
-    adjacency(3, &[edge(0, 1, 5)])
-}
+fn isolated_tail_adjacency() -> Vec<Vec<(usize, u64)>> { adjacency(3, &[edge(0, 1, 5)]) }
 
 /// Return names whose lexical order breaks a propagation tie.
 #[allow_fixture_expansion_lints]
 #[fixture]
-fn lexical_tie_vectors() -> Vec<MethodFeatureVector> {
-    vectors(&["gamma", "alpha", "beta"])
-}
+fn lexical_tie_vectors() -> Vec<MethodFeatureVector> { vectors(&["gamma", "alpha", "beta"]) }
 
 /// Return a star graph for lexical tie-breaking cases.
 #[fixture]

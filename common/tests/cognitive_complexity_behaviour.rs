@@ -24,9 +24,7 @@ impl Default for CcWorld {
 
 #[allow_fixture_expansion_lints]
 #[fixture]
-fn world() -> CcWorld {
-    CcWorld::default()
-}
+fn world() -> CcWorld { CcWorld::default() }
 
 // --- Helpers ---
 
@@ -120,41 +118,25 @@ fn then_score_is(world: &CcWorld, expected: usize) {
 // here.
 
 #[scenario(path = "tests/features/cognitive_complexity.feature", index = 0)]
-fn scenario_empty_function(world: CcWorld) {
-    let _ = world;
-}
+fn scenario_empty_function(world: CcWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/cognitive_complexity.feature", index = 1)]
-fn scenario_single_if(world: CcWorld) {
-    let _ = world;
-}
+fn scenario_single_if(world: CcWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/cognitive_complexity.feature", index = 2)]
-fn scenario_nested_if(world: CcWorld) {
-    let _ = world;
-}
+fn scenario_nested_if(world: CcWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/cognitive_complexity.feature", index = 3)]
-fn scenario_macro_structural_excluded(world: CcWorld) {
-    let _ = world;
-}
+fn scenario_macro_structural_excluded(world: CcWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/cognitive_complexity.feature", index = 4)]
-fn scenario_macro_nesting_no_inflate(world: CcWorld) {
-    let _ = world;
-}
+fn scenario_macro_nesting_no_inflate(world: CcWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/cognitive_complexity.feature", index = 5)]
-fn scenario_boolean_operators(world: CcWorld) {
-    let _ = world;
-}
+fn scenario_boolean_operators(world: CcWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/cognitive_complexity.feature", index = 6)]
-fn scenario_mixed_real_and_expansion(world: CcWorld) {
-    let _ = world;
-}
+fn scenario_mixed_real_and_expansion(world: CcWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/cognitive_complexity.feature", index = 7)]
-fn scenario_fundamental_from_expansion_excluded(world: CcWorld) {
-    let _ = world;
-}
+fn scenario_fundamental_from_expansion_excluded(world: CcWorld) { let _ = world; }

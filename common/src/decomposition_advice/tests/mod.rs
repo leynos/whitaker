@@ -9,8 +9,12 @@ mod vector_algebra;
 use std::str::FromStr;
 
 use self::test_fixtures::{
-    ExpectedSuggestion, MethodInput, assert_suggestion, assert_type_decomposition_is_empty,
-    parser_serde_fs_fixture, profile,
+    ExpectedSuggestion,
+    MethodInput,
+    assert_suggestion,
+    assert_type_decomposition_is_empty,
+    parser_serde_fs_fixture,
+    profile,
 };
 use super::{
     community::{build_similarity_edges, detect_communities},

@@ -1,10 +1,11 @@
 //! Installation and verification of snapshot bundles against local fixtures.
 
-use super::test_fixtures::{
-    DEFAULT_HISTORY, DEFAULT_SELECTED, FixtureRepo, Step, git, write_sidecar,
-};
-use super::*;
 use rstest::{fixture, rstest};
+
+use super::{
+    test_fixtures::{DEFAULT_HISTORY, DEFAULT_SELECTED, FixtureRepo, Step, git, write_sidecar},
+    *,
+};
 
 const PINNED_REFS: [&str; 2] = ["refs/heads/main", "HEAD"];
 
@@ -25,9 +26,7 @@ impl Published {
     }
 
     /// Where the pinned generation would be installed.
-    fn generation(&self) -> Utf8PathBuf {
-        generation_path(&self.root, &self.manifest)
-    }
+    fn generation(&self) -> Utf8PathBuf { generation_path(&self.root, &self.manifest) }
 }
 
 #[fixture]

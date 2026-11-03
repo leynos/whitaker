@@ -7,12 +7,15 @@
 //! touches the network: `install` takes the fixture bundle, and `build`
 //! clones the fixture's local source repository.
 
-use camino::{Utf8Path, Utf8PathBuf};
 use std::process::{Command, Output};
+
+use camino::{Utf8Path, Utf8PathBuf};
 use tempfile::TempDir;
-use whitaker_installer::clippy_snapshot::METADATA_FILE;
-use whitaker_installer::test_support::TEST_CLIPPY_SNAPSHOT_MANIFEST_ENV;
-use whitaker_installer::test_utils::{SnapshotFixture, fixture_git};
+use whitaker_installer::{
+    clippy_snapshot::METADATA_FILE,
+    test_support::TEST_CLIPPY_SNAPSHOT_MANIFEST_ENV,
+    test_utils::{SnapshotFixture, fixture_git},
+};
 
 /// A fixture snapshot and a scratch directory for the binary's output.
 struct Cli {
@@ -62,14 +65,10 @@ impl Cli {
 }
 
 /// Return the process's standard output as text.
-fn stdout(output: &Output) -> String {
-    String::from_utf8_lossy(&output.stdout).into_owned()
-}
+fn stdout(output: &Output) -> String { String::from_utf8_lossy(&output.stdout).into_owned() }
 
 /// Return the process's standard error as text.
-fn stderr(output: &Output) -> String {
-    String::from_utf8_lossy(&output.stderr).into_owned()
-}
+fn stderr(output: &Output) -> String { String::from_utf8_lossy(&output.stderr).into_owned() }
 
 /// Require a failed run that names the binary and `expected` on stderr.
 fn assert_fails_with(output: &Output, expected: &str) {

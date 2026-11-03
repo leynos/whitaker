@@ -13,10 +13,11 @@
 
 mod bootstrap_support;
 
+use std::process::{Child, Stdio};
+
 use bootstrap_support::{Installation, TOOLCHAIN, git};
 use camino::Utf8PathBuf;
 use proptest::prelude::*;
-use std::process::{Child, Stdio};
 
 /// What happens to the driver slot before a round starts.
 #[derive(Clone, Copy, Debug)]

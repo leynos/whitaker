@@ -3,8 +3,10 @@
 use proptest::prelude::*;
 
 use super::{is_valid_window, normalize, normalize_provider_attributes, validate_output};
-use crate::lint_config::{BumpyWeights, RstestHelper};
-use crate::settings::Configuration;
+use crate::{
+    lint_config::{BumpyWeights, RstestHelper},
+    settings::Configuration,
+};
 
 /// Normalize invalid bumpy-road tuning to the lint's documented defaults.
 #[test]

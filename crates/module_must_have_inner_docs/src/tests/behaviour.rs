@@ -17,9 +17,7 @@ struct ModuleWorld {
 }
 
 impl ModuleWorld {
-    fn push(&self, text: &str) {
-        self.prefix.borrow_mut().push_str(text);
-    }
+    fn push(&self, text: &str) { self.prefix.borrow_mut().push_str(text); }
 
     fn evaluate(&self) {
         let snippet = self.prefix.borrow();
@@ -38,29 +36,19 @@ impl ModuleWorld {
 
 #[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
-fn world() -> ModuleWorld {
-    ModuleWorld::default()
-}
+fn world() -> ModuleWorld { ModuleWorld::default() }
 
 #[given("the module begins with an inner doc comment")]
-fn given_inner_doc(world: &ModuleWorld) {
-    world.push("//! module docs\n");
-}
+fn given_inner_doc(world: &ModuleWorld) { world.push("//! module docs\n"); }
 
 #[given("the module body starts with code only")]
-fn given_no_attributes(world: &ModuleWorld) {
-    world.push("pub fn demo() {}\n");
-}
+fn given_no_attributes(world: &ModuleWorld) { world.push("pub fn demo() {}\n"); }
 
 #[given("the module contains an inner configuration attribute")]
-fn given_inner_allow(world: &ModuleWorld) {
-    world.push("#![allow(dead_code)]\n");
-}
+fn given_inner_allow(world: &ModuleWorld) { world.push("#![allow(dead_code)]\n"); }
 
 #[given("documentation follows that attribute")]
-fn given_doc_after(world: &ModuleWorld) {
-    world.push("//! trailing docs\n");
-}
+fn given_doc_after(world: &ModuleWorld) { world.push("//! trailing docs\n"); }
 
 #[given("the module contains an inner configuration attribute and inline documentation")]
 fn given_inline_attr_doc(world: &ModuleWorld) {
@@ -68,14 +56,10 @@ fn given_inline_attr_doc(world: &ModuleWorld) {
 }
 
 #[given("the module declares only outer documentation")]
-fn given_outer_doc(world: &ModuleWorld) {
-    world.push("/// outer docs\n");
-}
+fn given_outer_doc(world: &ModuleWorld) { world.push("/// outer docs\n"); }
 
 #[when("I validate the module documentation requirements")]
-fn when_detect(world: &ModuleWorld) {
-    world.evaluate();
-}
+fn when_detect(world: &ModuleWorld) { world.evaluate(); }
 
 #[then("the module is accepted")]
 fn then_accept(world: &ModuleWorld) {
@@ -96,31 +80,19 @@ fn then_misordered(world: &ModuleWorld) {
 }
 
 #[scenario(path = "tests/features/module_docs.feature", index = 0)]
-fn scenario_docs_first(world: ModuleWorld) {
-    let _ = world;
-}
+fn scenario_docs_first(world: ModuleWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/module_docs.feature", index = 1)]
-fn scenario_missing_docs(world: ModuleWorld) {
-    let _ = world;
-}
+fn scenario_missing_docs(world: ModuleWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/module_docs.feature", index = 2)]
-fn scenario_misordered_docs(world: ModuleWorld) {
-    let _ = world;
-}
+fn scenario_misordered_docs(world: ModuleWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/module_docs.feature", index = 3)]
-fn scenario_inline_attr_doc(world: ModuleWorld) {
-    let _ = world;
-}
+fn scenario_inline_attr_doc(world: ModuleWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/module_docs.feature", index = 4)]
-fn scenario_inner_attribute_only(world: ModuleWorld) {
-    let _ = world;
-}
+fn scenario_inner_attribute_only(world: ModuleWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/module_docs.feature", index = 5)]
-fn scenario_outer_docs(world: ModuleWorld) {
-    let _ = world;
-}
+fn scenario_outer_docs(world: ModuleWorld) { let _ = world; }

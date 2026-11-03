@@ -1,11 +1,16 @@
 //! Each structural check rejects the repository shape it exists to catch.
 
-use super::*;
-use crate::clippy_snapshot::test_fixtures::{
-    DEFAULT_HISTORY, DEFAULT_SELECTED, FixtureRepo, git, utf8,
-};
 use camino::Utf8PathBuf;
 use rstest::rstest;
+
+use super::*;
+use crate::clippy_snapshot::test_fixtures::{
+    DEFAULT_HISTORY,
+    DEFAULT_SELECTED,
+    FixtureRepo,
+    git,
+    utf8,
+};
 
 /// A bare clone of the default fixture, damaged by `damage`.
 fn damaged(damage: Damage) -> (FixtureRepo, Utf8PathBuf, ClippySnapshotManifest) {

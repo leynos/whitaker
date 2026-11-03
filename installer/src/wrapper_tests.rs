@@ -1,9 +1,11 @@
 //! The generated scripts, executed against a stub `whitaker-installer`.
 
-use super::*;
 #[cfg(any(unix, windows))]
 use std::process::Command;
+
 use tempfile::TempDir;
+
+use super::*;
 
 /// A stub installer that echoes its arguments, one per line, and exits with
 /// `STUB_EXIT`.

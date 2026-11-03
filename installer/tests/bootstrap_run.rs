@@ -7,8 +7,9 @@
 
 mod bootstrap_support;
 
-use bootstrap_support::{Installation, TOOLCHAIN, git};
 use std::process::Stdio;
+
+use bootstrap_support::{Installation, TOOLCHAIN, git};
 use whitaker_installer::bootstrap::BUILT_DRIVER_NOTICE;
 
 /// The value the stub recorded for `key`, from its most recent invocation.

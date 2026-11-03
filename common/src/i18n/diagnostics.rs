@@ -8,18 +8,15 @@
 //! # };
 //! # fn demo(localizer: &Localizer) -> Result<(), whitaker_common::i18n::I18nError> {
 //! #     let args = Arguments::default();
-//! let messages = resolve_message_set(
-//!     localizer,
-//!     MessageKey::new("my-lint.message"),
-//!     &args,
-//! )?;
+//! let messages = resolve_message_set(localizer, MessageKey::new("my-lint.message"), &args)?;
 //! #     assert!(!messages.primary().is_empty());
 //! #     Ok(())
 //! # }
 //! ```
 
-use super::{Arguments, I18nError, Localizer};
 use std::fmt;
+
+use super::{Arguments, I18nError, Localizer};
 
 /// Identifier for a Fluent message within a localization bundle.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -28,21 +25,15 @@ pub struct MessageKey<'a>(&'a str);
 impl<'a> MessageKey<'a> {
     /// Construct a new message key wrapper.
     #[must_use]
-    pub const fn new(value: &'a str) -> Self {
-        Self(value)
-    }
+    pub const fn new(value: &'a str) -> Self { Self(value) }
 }
 
 impl AsRef<str> for MessageKey<'_> {
-    fn as_ref(&self) -> &str {
-        self.0
-    }
+    fn as_ref(&self) -> &str { self.0 }
 }
 
 impl fmt::Display for MessageKey<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.0)
-    }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { f.write_str(self.0) }
 }
 
 /// Identifier for a Fluent attribute attached to a message.
@@ -52,21 +43,15 @@ pub struct AttrKey<'a>(&'a str);
 impl<'a> AttrKey<'a> {
     /// Construct a new attribute key wrapper.
     #[must_use]
-    pub const fn new(value: &'a str) -> Self {
-        Self(value)
-    }
+    pub const fn new(value: &'a str) -> Self { Self(value) }
 }
 
 impl AsRef<str> for AttrKey<'_> {
-    fn as_ref(&self) -> &str {
-        self.0
-    }
+    fn as_ref(&self) -> &str { self.0 }
 }
 
 impl fmt::Display for AttrKey<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.0)
-    }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { f.write_str(self.0) }
 }
 
 /// Lookup trait used by lint crates to resolve translated diagnostic strings.
@@ -124,11 +109,7 @@ impl DiagnosticMessageSet {
     ///
     /// ```
     /// # use whitaker_common::i18n::DiagnosticMessageSet;
-    /// let messages = DiagnosticMessageSet::new(
-    ///     "primary".into(),
-    ///     "note".into(),
-    ///     "help".into(),
-    /// );
+    /// let messages = DiagnosticMessageSet::new("primary".into(), "note".into(), "help".into());
     /// assert_eq!(messages.primary(), "primary");
     /// ```
     pub const fn new(primary: String, note: String, help: String) -> Self {
@@ -153,9 +134,7 @@ impl DiagnosticMessageSet {
     /// # );
     /// assert_eq!(messages.primary(), "primary");
     /// ```
-    pub fn primary(&self) -> &str {
-        &self.primary
-    }
+    pub fn primary(&self) -> &str { &self.primary }
 
     /// Access the note attached to the diagnostic.
     #[must_use]
@@ -171,9 +150,7 @@ impl DiagnosticMessageSet {
     /// # );
     /// assert_eq!(messages.note(), "note");
     /// ```
-    pub fn note(&self) -> &str {
-        &self.note
-    }
+    pub fn note(&self) -> &str { &self.note }
 
     /// Access the help text attached to the diagnostic.
     #[must_use]
@@ -189,9 +166,7 @@ impl DiagnosticMessageSet {
     /// # );
     /// assert_eq!(messages.help(), "help");
     /// ```
-    pub fn help(&self) -> &str {
-        &self.help
-    }
+    pub fn help(&self) -> &str { &self.help }
 
     /// Remove Unicode isolating marks inserted by Fluent placeholders.
     pub(crate) fn strip_isolating_marks(self) -> Self {

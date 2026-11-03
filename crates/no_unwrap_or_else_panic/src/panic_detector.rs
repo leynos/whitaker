@@ -1,8 +1,7 @@
 //! Detect panics inside `unwrap_or_else` fallback closures.
 
 use rustc_hir as hir;
-use rustc_hir::def_id::DefId;
-use rustc_hir::{Expr, ExprKind};
+use rustc_hir::{Expr, ExprKind, def_id::DefId};
 use rustc_lint::LateContext;
 use rustc_middle::ty;
 use rustc_span::sym;

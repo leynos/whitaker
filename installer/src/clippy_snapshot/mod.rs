@@ -13,13 +13,13 @@
 //! the same identity, history, and integrity checks:
 //!
 //! - [`build_bundle`] clones upstream once and writes the bundle and sidecar.
-//! - [`provision`] installs the pinned generation from the release or a
-//!   local bundle, reusing one that already verifies.
+//! - [`provision`] installs the pinned generation from the release or a local bundle, reusing one
+//!   that already verifies.
 //! - [`download_bundle`] fetches a published bundle, checksum first.
-//! - [`install_bundle`] verifies a bundle and materializes it as an immutable
-//!   generation at `<root>/<commit>/`.
-//! - [`verify_repository`] and [`check_installed`] are the full and warm-path
-//!   checks on an installed generation.
+//! - [`install_bundle`] verifies a bundle and materializes it as an immutable generation at
+//!   `<root>/<commit>/`.
+//! - [`verify_repository`] and [`check_installed`] are the full and warm-path checks on an
+//!   installed generation.
 //!
 //! Nothing here falls back to public Clippy. Only [`build_bundle`] may contact
 //! a Git remote; [`provision`] downloads nothing but Whitaker's own release
@@ -39,6 +39,7 @@ mod telemetry;
 mod verify;
 
 pub use build::{BuildRequest, BuiltBundle, build_bundle};
+use camino::{Utf8Path, Utf8PathBuf};
 pub use download::download_bundle;
 pub use error::ClippySnapshotError;
 pub use generation::{GenerationMetadata, METADATA_FILE};
@@ -47,14 +48,16 @@ pub use generation::{GenerationMetadata, METADATA_FILE};
 pub(crate) use git::REPOSITORY_SELECTION_VARIABLES;
 pub use install::{BundleArtefact, install_bundle, reuse_generation};
 pub use manifest::{
-    ClippySnapshotManifest, SCHEMA_VERSION, SNAPSHOT_BRANCH, embedded_manifest, manifest_contents,
+    ClippySnapshotManifest,
+    SCHEMA_VERSION,
+    SNAPSHOT_BRANCH,
+    embedded_manifest,
+    manifest_contents,
     parse_manifest,
 };
 pub use provision::{BundleSource, provision, provision_with};
 pub use selection::{SelectionGap, ToolchainChange, select_revision};
 pub use verify::{check_installed, verify_repository};
-
-use camino::{Utf8Path, Utf8PathBuf};
 
 /// Return where the generation `manifest` pins lives under `root`.
 ///

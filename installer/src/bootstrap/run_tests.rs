@@ -3,16 +3,22 @@
 //! These run against a real installed snapshot and a stub `cargo`, so they
 //! are Unix-only; `installer/tests/bootstrap_run.rs` covers the binary.
 
-use super::*;
-use crate::bootstrap::telemetry::{
-    DRIVER_BUILD_SECONDS, DRIVER_BUILD_TOTAL, LOCK_WAIT_SECONDS, RUN_TOTAL,
+use metrics_util::{
+    CompositeKey,
+    debugging::{DebugValue, DebuggingRecorder},
 };
-use crate::bootstrap::{BOOTSTRAP_SCHEMA, StoredPath};
-use crate::test_utils::{FIXTURE_TOOLCHAIN, SnapshotFixture, fixture_git};
-use metrics_util::CompositeKey;
-use metrics_util::debugging::{DebugValue, DebuggingRecorder};
 use rstest::rstest;
 use tempfile::TempDir;
+
+use super::*;
+use crate::{
+    bootstrap::{
+        BOOTSTRAP_SCHEMA,
+        StoredPath,
+        telemetry::{DRIVER_BUILD_SECONDS, DRIVER_BUILD_TOTAL, LOCK_WAIT_SECONDS, RUN_TOTAL},
+    },
+    test_utils::{FIXTURE_TOOLCHAIN, SnapshotFixture, fixture_git},
+};
 
 /// A stub `cargo` that reports Dylint 6.3.0 and, when `builds` is set,
 /// writes a driver into the exported slot if none exists, as Dylint would.
@@ -87,9 +93,7 @@ impl Installed {
     }
 
     /// The driver slot this installation resolves to.
-    fn slot_dir(&self) -> Utf8PathBuf {
-        self.layout.driver_dir("6.3.0", &self.commit)
-    }
+    fn slot_dir(&self) -> Utf8PathBuf { self.layout.driver_dir("6.3.0", &self.commit) }
 }
 
 /// One recorded metric, as a debugging snapshot lists it.
@@ -216,7 +220,7 @@ fn a_run_after_the_build_is_warm() {
     assert!(
         !recorded
             .iter()
-            .any(|(key, _, _, _)| key.key().name() == DRIVER_BUILD_TOTAL),
+            .any(|(key, ..)| key.key().name() == DRIVER_BUILD_TOTAL),
         "a warm run builds nothing"
     );
 }
@@ -298,7 +302,7 @@ fn a_contended_cold_run_records_its_lock_wait() {
 
     let exclusive_wait = recorded
         .iter()
-        .filter(|(key, _, _, _)| {
+        .filter(|(key, ..)| {
             key.key().name() == LOCK_WAIT_SECONDS
                 && key
                     .key()

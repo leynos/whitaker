@@ -3,8 +3,9 @@
 //! As in `bootstrap`, the installer installs no recorder, and every label is a
 //! fixed constant rather than a path, commit, or error message.
 
-use super::error::ClippySnapshotError;
 use std::time::{Duration, Instant};
+
+use super::error::ClippySnapshotError;
 
 pub(crate) const PROVISION_TOTAL: &str = "whitaker_installer.clippy_snapshot.provision.total";
 pub(crate) const OPERATION_TOTAL: &str = "whitaker_installer.clippy_snapshot.operation.total";

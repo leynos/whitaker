@@ -1,8 +1,9 @@
 //! Tests for the no-source-fallback policy and its contradictions.
 
+use whitaker_common::test_support::env_test_guard;
+
 use super::NO_SOURCE_FALLBACK_ENV;
 use crate::cli::InstallArgs;
-use whitaker_common::test_support::env_test_guard;
 
 /// The rule, as one table.
 ///
@@ -72,8 +73,7 @@ fn a_non_unicode_environment_value_enables_the_rule() {
     // sibling test running concurrently would otherwise observe this one's
     // value and fail intermittently.
     let _guard = env_test_guard();
-    use std::ffi::OsString;
-    use std::os::unix::ffi::OsStringExt;
+    use std::{ffi::OsString, os::unix::ffi::OsStringExt};
 
     let invalid = OsString::from_vec(vec![0x66, 0x61, 0x6c, 0xff]);
     temp_env::with_var(NO_SOURCE_FALLBACK_ENV, Some(invalid), || {

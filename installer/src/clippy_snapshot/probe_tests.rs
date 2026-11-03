@@ -5,12 +5,18 @@
 //! an inspection failure rather than absence on Linux, macOS, and Windows
 //! alike.
 
-use super::super::{
-    BundleArtefact, ClippySnapshotError, ClippySnapshotManifest, GenerationMetadata,
-    check_installed, parse_manifest, verify_repository,
-};
 use camino::Utf8Path;
 use rstest::rstest;
+
+use super::super::{
+    BundleArtefact,
+    ClippySnapshotError,
+    ClippySnapshotManifest,
+    GenerationMetadata,
+    check_installed,
+    parse_manifest,
+    verify_repository,
+};
 
 const COMMIT: &str = "e4608a25c2e20116fbc1e97a51a73f094a1db7a1";
 

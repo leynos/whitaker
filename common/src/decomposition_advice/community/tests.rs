@@ -1,7 +1,9 @@
 //! Tests for propagation failures that cannot arise from validated graphs.
 
 use crate::decomposition_advice::{
-    community::run_propagation_pass, error::DecompositionError, minimal_feature_vector,
+    community::run_propagation_pass,
+    error::DecompositionError,
+    minimal_feature_vector,
 };
 
 /// Reject a propagation pass whose active node has no label slot.

@@ -6,12 +6,12 @@
 //! merely has the right name. It is written through a temporary file and
 //! persisted with a rename, so a reader never sees half a record.
 
-use super::error::ClippySnapshotError;
-use super::manifest::ClippySnapshotManifest;
-use super::probe::is_present_dir;
+use std::io::Write;
+
 use camino::Utf8Path;
 use serde::{Deserialize, Serialize};
-use std::io::Write;
+
+use super::{error::ClippySnapshotError, manifest::ClippySnapshotManifest, probe::is_present_dir};
 
 /// The metadata file name inside a generation.
 pub const METADATA_FILE: &str = "whitaker-clippy-snapshot.json";

@@ -6,15 +6,15 @@
 //! This module centralizes input validation so lint crates can depend on a
 //! small helper rather than repeat the same checks.
 
-use std::env;
-use std::fmt;
+use std::{env, fmt};
 
 use camino::{Utf8Path, Utf8PathBuf};
 
 mod toolchain;
 
-use self::toolchain::{CrateName, ensure_toolchain_library};
 use whitaker_common::test_support::env_test_guard;
+
+use self::toolchain::{CrateName, ensure_toolchain_library};
 
 /// Errors produced when preparing or executing Dylint UI tests.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -209,17 +209,14 @@ pub fn run_ui_test(
 ///
 /// Every platform needs one variable, and Windows needs a second:
 ///
-/// - `DYLINT_LINK_ENABLE_COPY_LIBRARY`: set to `1` when absent. Since Dylint
-///   6.3.0, `dylint_testing` copies `lib<crate>.so` over the
-///   toolchain-qualified library unless this flag says the copy already
-///   exists. The harness has just built that copy with the `dylint-driver`
-///   feature, while `dylint_testing` first rebuilds the plain library with
-///   default features, which for every Whitaker lint crate is an empty
-///   `cdylib`. Without the flag the UI test loads that stub and fails with
-///   ``could not find `dylint_version` ``.
-/// - `VCPKG_ROOT` (Windows only): set to `C:\vcpkg` when that directory exists
-///   and the variable is otherwise absent, so downstream `cargo` invocations
-///   resolve vcpkg.
+/// - `DYLINT_LINK_ENABLE_COPY_LIBRARY`: set to `1` when absent. Since Dylint 6.3.0,
+///   `dylint_testing` copies `lib<crate>.so` over the toolchain-qualified library unless this flag
+///   says the copy already exists. The harness has just built that copy with the `dylint-driver`
+///   feature, while `dylint_testing` first rebuilds the plain library with default features, which
+///   for every Whitaker lint crate is an empty `cdylib`. Without the flag the UI test loads that
+///   stub and fails with ``could not find `dylint_version` ``.
+/// - `VCPKG_ROOT` (Windows only): set to `C:\vcpkg` when that directory exists and the variable is
+///   otherwise absent, so downstream `cargo` invocations resolve vcpkg.
 ///
 /// Each mutation and restoration step acquires `env_test_guard()` only for the
 /// environment write itself. The guard deliberately does not hold that mutex

@@ -5,13 +5,13 @@ use std::collections::BTreeMap;
 mod propagation;
 mod selection;
 
-use super::error::DecompositionError;
-pub(crate) use super::graph::{SimilarityEdge, build_similarity_edges};
-use super::vector::MethodFeatureVector;
 use propagation::labels_are_stable;
 #[cfg(test)]
 use propagation::run_propagation_pass;
 pub(crate) use propagation::{LabelPropagationReport, propagate_labels_report};
+
+pub(crate) use super::graph::{SimilarityEdge, build_similarity_edges};
+use super::{error::DecompositionError, vector::MethodFeatureVector};
 
 /// Detect communities and reject malformed intermediate graph state.
 ///

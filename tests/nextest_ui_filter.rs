@@ -125,17 +125,16 @@ fn serial_dylint_ui_filter_captures_integration_and_nested_cargo_ui_tests(
     // `test(ui::ui)` missed it because the test name is plain `ui`.
     assert!(
         filter.contains("(binary(ui) & test(=ui))"),
-        "the serial-dylint-ui filter must contain `(binary(ui) & test(=ui))` \
-         to capture integration test binaries named `ui` with a top-level \
-         `fn ui()` (e.g. {crates:?}); found filter: {filter}"
+        "the serial-dylint-ui filter must contain `(binary(ui) & test(=ui))` to capture \
+         integration test binaries named `ui` with a top-level `fn ui()` (e.g. {crates:?}); found \
+         filter: {filter}"
     );
 
     for filter_clause in NESTED_CARGO_UI_FILTER_CLAUSES {
         assert!(
             filter.contains(filter_clause),
-            "the serial-dylint-ui filter must capture nested Cargo UI test \
-             `{filter_clause}` so its compiler resources are serialized on \
-             constrained runners; found filter: {filter}"
+            "the serial-dylint-ui filter must capture nested Cargo UI test `{filter_clause}` so \
+             its compiler resources are serialized on constrained runners; found filter: {filter}"
         );
     }
 }

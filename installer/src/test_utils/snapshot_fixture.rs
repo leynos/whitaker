@@ -8,12 +8,17 @@
 //! bundle through `--clippy-snapshot-bundle`, so the real verification and
 //! installation code runs without network access.
 
-use crate::clippy_snapshot::{
-    BundleArtefact, ClippySnapshotManifest, install_bundle, parse_manifest,
-};
-use camino::{Utf8Path, Utf8PathBuf};
 use std::process::Command;
+
+use camino::{Utf8Path, Utf8PathBuf};
 use tempfile::TempDir;
+
+use crate::clippy_snapshot::{
+    BundleArtefact,
+    ClippySnapshotManifest,
+    install_bundle,
+    parse_manifest,
+};
 
 /// The nightly the fixture snapshot pins.
 pub const FIXTURE_TOOLCHAIN: &str = "nightly-2026-05-28";
@@ -80,27 +85,19 @@ impl SnapshotFixture {
 
     /// The pinned commit.
     #[must_use]
-    pub fn commit(&self) -> &str {
-        self.manifest.commit.as_str()
-    }
+    pub fn commit(&self) -> &str { self.manifest.commit.as_str() }
 
     /// Return the fixture's bundle, with its `.sha256` sidecar beside it.
     #[must_use]
-    pub fn bundle(&self) -> &Utf8Path {
-        &self.bundle
-    }
+    pub fn bundle(&self) -> &Utf8Path { &self.bundle }
 
     /// Return the fixture's manifest file, for the test manifest override.
     #[must_use]
-    pub fn manifest_path(&self) -> &Utf8Path {
-        &self.manifest_path
-    }
+    pub fn manifest_path(&self) -> &Utf8Path { &self.manifest_path }
 
     /// Return the fixture's source repository, from which a producer build clones.
     #[must_use]
-    pub fn source(&self) -> Utf8PathBuf {
-        self.manifest_path.with_file_name("work")
-    }
+    pub fn source(&self) -> Utf8PathBuf { self.manifest_path.with_file_name("work") }
 
     /// Point a debug installer at this fixture instead of the published snapshot.
     pub fn configure(&self, command: &mut Command) {

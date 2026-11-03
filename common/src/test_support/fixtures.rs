@@ -172,7 +172,8 @@ mod tests {
     //! Tests for fixture staging helpers used by lint test suites.
 
     use std::{
-        fs, io,
+        fs,
+        io,
         path::{Path, PathBuf},
     };
 

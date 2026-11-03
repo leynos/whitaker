@@ -1,8 +1,9 @@
 //! Snapshot operation and clone-attempt metrics carry bounded outcomes.
 
-use super::*;
 use metrics_util::debugging::{DebugValue, DebuggingRecorder};
 use rstest::rstest;
+
+use super::*;
 
 /// Return the `outcome` label of the one operation counter `run` recorded.
 fn recorded_outcome(run: impl FnOnce()) -> String {

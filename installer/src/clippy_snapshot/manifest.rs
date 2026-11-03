@@ -7,10 +7,12 @@
 //! repository whose `main` is this commit and which passes `git fsck --full`
 //! holds exactly the pinned history, whatever bytes the bundle used.
 
+use std::sync::OnceLock;
+
+use serde::Deserialize;
+
 use super::error::ClippySnapshotError;
 use crate::git::CommitSha;
-use serde::Deserialize;
-use std::sync::OnceLock;
 
 /// The only manifest schema this installer understands.
 pub const SCHEMA_VERSION: u32 = 1;
@@ -64,22 +66,16 @@ impl ClippySnapshotManifest {
     /// # Ok::<(), whitaker_installer::clippy_snapshot::ClippySnapshotError>(())
     /// ```
     #[must_use]
-    pub fn bundle_asset_name(&self) -> String {
-        format!("{ASSET_PREFIX}{}.bundle", self.commit)
-    }
+    pub fn bundle_asset_name(&self) -> String { format!("{ASSET_PREFIX}{}.bundle", self.commit) }
 
     /// Name the `.sha256` sidecar published beside the bundle.
     #[must_use]
-    pub fn sidecar_asset_name(&self) -> String {
-        format!("{}.sha256", self.bundle_asset_name())
-    }
+    pub fn sidecar_asset_name(&self) -> String { format!("{}.sha256", self.bundle_asset_name()) }
 }
 
 /// Return the manifest text compiled into the installer.
 #[must_use]
-pub fn manifest_contents() -> &'static str {
-    include_str!("../../clippy-snapshot.toml")
-}
+pub fn manifest_contents() -> &'static str { include_str!("../../clippy-snapshot.toml") }
 
 /// Parse and validate a snapshot manifest.
 ///

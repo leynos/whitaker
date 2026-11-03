@@ -3,7 +3,9 @@
 use std::{io, path::Path, time::Duration};
 
 use super::super::{
-    EXAMPLE_HARNESS_LOCK_ACQUIRE_TIMEOUT, ExampleHarnessLock, effective_target_directory,
+    EXAMPLE_HARNESS_LOCK_ACQUIRE_TIMEOUT,
+    ExampleHarnessLock,
+    effective_target_directory,
 };
 
 const CHILD_LOCK_MODE_ENV: &str = "WHITAKER_EXAMPLE_HARNESS_LOCK_CHILD_MODE";

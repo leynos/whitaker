@@ -5,9 +5,12 @@
 //! from `FAKE_*` environment variables, and never touches the network or the
 //! real hosts file. `FAKE_*` toggles make one stub violate one property.
 
-use std::fs;
-use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    process::{Command, Output},
+};
+
 use tempfile::TempDir;
 
 /// Answers the dry run with the fixture's snapshot and driver locations.
@@ -48,7 +51,8 @@ const STUB_WHITAKER: &str = concat!(
     "$rebuild = $env:FAKE_REBUILD_ALWAYS -eq '1' -or $env:FAKE_REBUILD_IDENTICAL -eq '1'\n",
     "$didBuild = $false\n",
     "# FAKE_CONCURRENT_FAILS breaks any cold build after the first one ever made.\n",
-    "if (-not (Test-Path $driver) -and $env:FAKE_CONCURRENT_FAILS -eq '1' -and (Test-Path $built)) {\n",
+    "if (-not (Test-Path $driver) -and $env:FAKE_CONCURRENT_FAILS -eq '1' -and (Test-Path \
+     $built)) {\n",
     "    Say 'error: the driver is being built by another process'\n",
     "    exit 1\n",
     "}\n",
@@ -59,7 +63,8 @@ const STUB_WHITAKER: &str = concat!(
     "            New-Item -ItemType Directory -Force -Path (Split-Path $driver) | Out-Null\n",
     "            Add-Content -Path $built -Value 'built'\n",
     "            Start-Sleep -Milliseconds 500\n",
-    "            $content = if ($env:FAKE_REBUILD_ALWAYS -eq '1') { \"$([DateTime]::UtcNow.Ticks)\" } else { 'v1' }\n",
+    "            $content = if ($env:FAKE_REBUILD_ALWAYS -eq '1') { \
+     \"$([DateTime]::UtcNow.Ticks)\" } else { 'v1' }\n",
     "            Set-Content -Path $driver -Value $content\n",
     "            Say $notice\n",
     "            $didBuild = $true\n",
@@ -78,7 +83,8 @@ const STUB_WHITAKER: &str = concat!(
     "    Say $notice\n",
     "}\n",
     "if ($env:FAKE_SUCCEED -eq '1') { exit 0 }\n",
-    "if ($env:FAKE_NO_DIAGNOSTIC -eq '1') { Say 'error: crash' } else { Say 'error: no_std_fs_operations' }\n",
+    "if ($env:FAKE_NO_DIAGNOSTIC -eq '1') { Say 'error: crash' } else { Say 'error: \
+     no_std_fs_operations' }\n",
     "exit 1\n",
 );
 
@@ -108,14 +114,10 @@ impl Default for Sandbox {
 
 impl Sandbox {
     /// Return the scratch hosts file standing in for the system one.
-    pub fn hosts(&self) -> PathBuf {
-        self.root.path().join("hosts")
-    }
+    pub fn hosts(&self) -> PathBuf { self.root.path().join("hosts") }
 
     /// Return the installed snapshot directory.
-    pub fn snapshot(&self) -> PathBuf {
-        self.root.path().join("snapshot")
-    }
+    pub fn snapshot(&self) -> PathBuf { self.root.path().join("snapshot") }
 
     /// Run the real script with `FAKE_*` toggles set, returning its output.
     pub fn run(&self, toggles: &[(&str, &str)]) -> Output {

@@ -15,9 +15,11 @@
 //! the full design rationale.
 
 use super::TraitMetrics;
-
 pub use super::diagnostic::{
-    BrainTraitDiagnostic, format_decomposition_note, format_help, format_note,
+    BrainTraitDiagnostic,
+    format_decomposition_note,
+    format_help,
+    format_note,
     format_primary_message,
 };
 
@@ -68,9 +70,7 @@ pub enum BrainTraitDisposition {
 /// ```
 /// use whitaker_common::brain_trait_metrics::evaluation::BrainTraitThresholdsBuilder;
 ///
-/// let thresholds = BrainTraitThresholdsBuilder::new()
-///     .methods_warn(25)
-///     .build();
+/// let thresholds = BrainTraitThresholdsBuilder::new().methods_warn(25).build();
 /// assert_eq!(thresholds.methods_warn(), 25);
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -84,22 +84,16 @@ impl BrainTraitThresholds {
     /// Total method count at or above which the warn rule's method
     /// condition is met.
     #[must_use]
-    pub const fn methods_warn(&self) -> usize {
-        self.methods_warn
-    }
+    pub const fn methods_warn(&self) -> usize { self.methods_warn }
 
     /// Total method count at or above which the deny rule triggers.
     #[must_use]
-    pub const fn methods_deny(&self) -> usize {
-        self.methods_deny
-    }
+    pub const fn methods_deny(&self) -> usize { self.methods_deny }
 
     /// Default method CC sum at or above which the warn rule's
     /// complexity condition is met.
     #[must_use]
-    pub const fn default_cc_warn(&self) -> usize {
-        self.default_cc_warn
-    }
+    pub const fn default_cc_warn(&self) -> usize { self.default_cc_warn }
 }
 
 // ---------------------------------------------------------------------------
@@ -179,9 +173,7 @@ impl BrainTraitThresholdsBuilder {
 }
 
 impl Default for BrainTraitThresholdsBuilder {
-    fn default() -> Self {
-        Self::new()
-    }
+    fn default() -> Self { Self::new() }
 }
 
 // ---------------------------------------------------------------------------
@@ -219,10 +211,10 @@ const fn is_warn_triggered(metrics: &TraitMetrics, thresholds: &BrainTraitThresh
 /// # Examples
 ///
 /// ```
-/// use whitaker_common::brain_trait_metrics::evaluation::{
-///     BrainTraitThresholdsBuilder, evaluate_brain_trait,
+/// use whitaker_common::brain_trait_metrics::{
+///     TraitMetricsBuilder,
+///     evaluation::{BrainTraitThresholdsBuilder, evaluate_brain_trait},
 /// };
-/// use whitaker_common::brain_trait_metrics::TraitMetricsBuilder;
 ///
 /// let thresholds = BrainTraitThresholdsBuilder::new().build();
 /// let metrics = TraitMetricsBuilder::new("Safe").build();

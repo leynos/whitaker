@@ -1,7 +1,8 @@
 //! Failures of the installed Dylint bootstrap, each with its remedy.
 
-use crate::clippy_snapshot::ClippySnapshotError;
 use thiserror::Error;
+
+use crate::clippy_snapshot::ClippySnapshotError;
 
 /// The installed bootstrap could not prepare or run `cargo dylint`.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
@@ -12,8 +13,8 @@ pub enum BootstrapError {
 
     /// The installer has not recorded a bootstrap here.
     #[error(
-        "Whitaker bootstrap metadata {path} is missing; run whitaker-installer to \
-         install the lint suite and its Clippy snapshot"
+        "Whitaker bootstrap metadata {path} is missing; run whitaker-installer to install the \
+         lint suite and its Clippy snapshot"
     )]
     NotInstalled {
         /// The expected metadata file.
@@ -22,8 +23,8 @@ pub enum BootstrapError {
 
     /// The recorded bootstrap metadata cannot be used.
     #[error(
-        "Whitaker bootstrap metadata {path} is unusable: {reason}; re-run \
-         whitaker-installer to rewrite it"
+        "Whitaker bootstrap metadata {path} is unusable: {reason}; re-run whitaker-installer to \
+         rewrite it"
     )]
     Metadata {
         /// The metadata file.
@@ -34,8 +35,7 @@ pub enum BootstrapError {
 
     /// The recorded lint-library directory no longer exists.
     #[error(
-        "Whitaker lint libraries are missing from {path}; re-run whitaker-installer \
-         to stage them"
+        "Whitaker lint libraries are missing from {path}; re-run whitaker-installer to stage them"
     )]
     LibrariesMissing {
         /// The resolved library directory.
@@ -55,9 +55,8 @@ pub enum BootstrapError {
 
     /// The installed `cargo-dylint` is not the release the bootstrap was built for.
     #[error(
-        "cargo-dylint reports version {found}, but this Whitaker installation was \
-         bootstrapped for {expected}; re-run whitaker-installer so the driver, \
-         snapshot, and tools agree"
+        "cargo-dylint reports version {found}, but this Whitaker installation was bootstrapped \
+         for {expected}; re-run whitaker-installer so the driver, snapshot, and tools agree"
     )]
     DylintVersion {
         /// The version recorded at installation.

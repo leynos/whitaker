@@ -11,8 +11,18 @@ use rstest_bdd_macros::{given, then, when};
 #[path = "sarif_behaviour/scenarios.rs"]
 mod scenarios;
 use whitaker_sarif::{
-    Level, LocationBuilder, RegionBuilder, ResultBuilder, RunBuilder, SarifLog, SarifLogBuilder,
-    SarifResult, WhitakerProperties, WhitakerPropertiesBuilder, all_rules, merge_runs,
+    Level,
+    LocationBuilder,
+    RegionBuilder,
+    ResultBuilder,
+    RunBuilder,
+    SarifLog,
+    SarifLogBuilder,
+    SarifResult,
+    WhitakerProperties,
+    WhitakerPropertiesBuilder,
+    all_rules,
+    merge_runs,
     model::{descriptor::ReportingDescriptor, run::Run},
     token_pass_path,
 };
@@ -37,9 +47,7 @@ struct SarifWorld {
 
 #[allow_fixture_expansion_lints]
 #[fixture]
-fn world() -> SarifWorld {
-    SarifWorld::default()
-}
+fn world() -> SarifWorld { SarifWorld::default() }
 
 // -- Helper functions (match-based to avoid expect/unwrap) --
 
@@ -246,9 +254,7 @@ fn when_json_deserialized(world: &SarifWorld) {
 }
 
 #[when("all Whitaker rules are retrieved")]
-fn when_rules_retrieved(world: &SarifWorld) {
-    *world.rules.borrow_mut() = all_rules();
-}
+fn when_rules_retrieved(world: &SarifWorld) { *world.rules.borrow_mut() = all_rules(); }
 
 #[when("the token pass path is requested")]
 fn when_token_path_requested(world: &SarifWorld) {

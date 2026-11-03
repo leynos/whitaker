@@ -195,8 +195,9 @@ mod tests {
     //! rstest-based unit tests for [`super::MethodInfoBuilder`] and
     //! [`super::collect_method_infos`].
 
-    use super::*;
     use rstest::rstest;
+
+    use super::*;
 
     /// Applies field and call records to a builder and asserts against
     /// expected sets.

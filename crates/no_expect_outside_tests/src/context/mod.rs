@@ -2,18 +2,24 @@
 //! guards (for example, `cfg(test)`), supporting the lint's context
 //! summarization.
 
-use rustc_ast::AttrStyle;
-use rustc_ast::ast::{MetaItem, MetaItemInner};
-use rustc_ast::attr::data_structures::CfgEntry;
+use rustc_ast::{
+    AttrStyle,
+    ast::{MetaItem, MetaItemInner},
+    attr::data_structures::CfgEntry,
+};
 use rustc_hir as hir;
-use rustc_hir::Node;
-use rustc_hir::attrs::AttributeKind as HirAttributeKind;
+use rustc_hir::{Node, attrs::AttributeKind as HirAttributeKind};
 use rustc_lint::LateContext;
 use rustc_span::sym;
 use whitaker::hir::has_test_like_hir_attributes;
 use whitaker_common::{
-    Attribute, AttributeKind, AttributePath, ContextEntry, ContextKind,
-    PARSED_ATTRIBUTE_PLACEHOLDER, in_test_like_context_with,
+    Attribute,
+    AttributeKind,
+    AttributePath,
+    ContextEntry,
+    ContextKind,
+    PARSED_ATTRIBUTE_PLACEHOLDER,
+    in_test_like_context_with,
 };
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
@@ -32,8 +38,8 @@ pub(crate) struct ContextSummary {
 ///
 /// - `cx`: Lint context used to walk the HIR and inspect ancestor attributes.
 /// - `hir_id`: The HIR node whose ancestor chain should be summarized.
-/// - `additional_test_attributes`: Extra user-configured attribute paths that
-///   should be treated as test markers alongside Whitaker's built-in list.
+/// - `additional_test_attributes`: Extra user-configured attribute paths that should be treated as
+///   test markers alongside Whitaker's built-in list.
 ///
 /// # Returns
 ///

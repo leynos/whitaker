@@ -17,9 +17,14 @@ pub use self::{
     vector_algebra::{MethodVectorAlgebraReport, method_vector_algebra},
 };
 use crate::decomposition_advice::{
-    DecompositionContext, DecompositionError, DecompositionSuggestion, MethodProfile,
-    MethodProfileBuilder, SubjectKind,
-    methods_meet_cosine_threshold as runtime_methods_meet_cosine_threshold, suggest_decomposition,
+    DecompositionContext,
+    DecompositionError,
+    DecompositionSuggestion,
+    MethodProfile,
+    MethodProfileBuilder,
+    SubjectKind,
+    methods_meet_cosine_threshold as runtime_methods_meet_cosine_threshold,
+    suggest_decomposition,
 };
 
 /// Input data for building a [`MethodProfile`] in tests.

@@ -10,17 +10,21 @@
 //! hole, and the fixture is proved to produce a sparse entry under a default
 //! builder, so these tests cannot pass on a fixture that never builds the case.
 
-use crate::artefact::packaging::create_archive;
-use crate::dependency_binaries::find_dependency_binary;
-use crate::dependency_packaging::{DependencyPackageParams, package_dependency_binary};
-use crate::installer_packaging::{
-    InstallerPackageParams, TargetTriple, Version, package_installer,
+use std::{
+    fs,
+    io::{Read, Seek, SeekFrom, Write},
+    path::{Path, PathBuf},
 };
+
 use rstest::{fixture, rstest};
-use std::fs;
-use std::io::{Read, Seek, SeekFrom, Write};
-use std::path::{Path, PathBuf};
 use tar::EntryType;
+
+use crate::{
+    artefact::packaging::create_archive,
+    dependency_binaries::find_dependency_binary,
+    dependency_packaging::{DependencyPackageParams, package_dependency_binary},
+    installer_packaging::{InstallerPackageParams, TargetTriple, Version, package_installer},
+};
 
 /// The hole's length: large enough that every Linux filesystem allocates no
 /// blocks for it, so `SEEK_HOLE` reports it.

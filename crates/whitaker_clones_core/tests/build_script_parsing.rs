@@ -4,7 +4,10 @@
 mod build_support;
 
 use build_support::{
-    exact_version, find_workspace_manifest, is_workspace_manifest, parser_dependency_requirement,
+    exact_version,
+    find_workspace_manifest,
+    is_workspace_manifest,
+    parser_dependency_requirement,
     read_workspace_manifest,
 };
 use camino::{Utf8Path, Utf8PathBuf};

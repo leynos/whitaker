@@ -5,19 +5,21 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use camino::Utf8Path;
+#[cfg(unix)]
+use cap_std::fs::PermissionsExt;
+use cap_std::{ambient_authority, fs_utf8::Dir};
+
 use crate::{
     dependency_binaries::{
-        DependencyBinary, DependencyBinaryInstallError, DependencyBinaryInstaller,
+        DependencyBinary,
+        DependencyBinaryInstallError,
+        DependencyBinaryInstaller,
     },
     dirs::BaseDirs,
     installer_packaging::TargetTriple,
     test_support::env_test_guard,
 };
-use camino::Utf8Path;
-use cap_std::{ambient_authority, fs_utf8::Dir};
-
-#[cfg(unix)]
-use cap_std::fs::PermissionsExt;
 
 /// Repository installer test double that always reports a missing archive.
 pub struct AlwaysNotFoundRepositoryInstaller;

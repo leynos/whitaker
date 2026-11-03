@@ -1,8 +1,7 @@
 //! Public input and output types for token-pass Run 0 emission.
 
-use crate::{CandidatePair, Fingerprint, FragmentId, NormProfile};
-
 use super::score::{SimilarityRatio, SimilarityThreshold};
+use crate::{CandidatePair, Fingerprint, FragmentId, NormProfile};
 
 const DEFAULT_SHINGLE_SIZE: usize = 25;
 const DEFAULT_WINNOW_WINDOW: usize = 16;
@@ -61,27 +60,19 @@ impl TokenFragment {
 
     /// Returns the stable fragment identifier.
     #[must_use]
-    pub const fn id(&self) -> &FragmentId {
-        &self.id
-    }
+    pub const fn id(&self) -> &FragmentId { &self.id }
 
     /// Returns the normalization profile used to produce this fragment.
     #[must_use]
-    pub const fn profile(&self) -> NormProfile {
-        self.profile
-    }
+    pub const fn profile(&self) -> NormProfile { self.profile }
 
     /// Returns the source artefact URI used in SARIF output.
     #[must_use]
-    pub const fn file_uri(&self) -> &str {
-        self.file_uri.as_str()
-    }
+    pub const fn file_uri(&self) -> &str { self.file_uri.as_str() }
 
     /// Returns the original source text used for byte-range mapping.
     #[must_use]
-    pub const fn source_text(&self) -> &str {
-        self.source_text.as_str()
-    }
+    pub const fn source_text(&self) -> &str { self.source_text.as_str() }
 
     /// Returns the retained token fingerprints for this fragment.
     #[must_use]
@@ -160,39 +151,27 @@ impl TokenPassConfig {
 
     /// Returns the SARIF producer name.
     #[must_use]
-    pub const fn tool_name(&self) -> &str {
-        self.tool_name.as_str()
-    }
+    pub const fn tool_name(&self) -> &str { self.tool_name.as_str() }
 
     /// Returns the SARIF producer version.
     #[must_use]
-    pub const fn tool_version(&self) -> &str {
-        self.tool_version.as_str()
-    }
+    pub const fn tool_version(&self) -> &str { self.tool_version.as_str() }
 
     /// Returns the configured shingle size.
     #[must_use]
-    pub const fn shingle_size(&self) -> usize {
-        self.shingle_size
-    }
+    pub const fn shingle_size(&self) -> usize { self.shingle_size }
 
     /// Returns the configured winnow window.
     #[must_use]
-    pub const fn winnow_window(&self) -> usize {
-        self.winnow_window
-    }
+    pub const fn winnow_window(&self) -> usize { self.winnow_window }
 
     /// Returns the Type-1 acceptance threshold.
     #[must_use]
-    pub const fn type1_threshold(&self) -> SimilarityThreshold {
-        self.type1_threshold
-    }
+    pub const fn type1_threshold(&self) -> SimilarityThreshold { self.type1_threshold }
 
     /// Returns the Type-2 acceptance threshold.
     #[must_use]
-    pub const fn type2_threshold(&self) -> SimilarityThreshold {
-        self.type2_threshold
-    }
+    pub const fn type2_threshold(&self) -> SimilarityThreshold { self.type2_threshold }
 }
 
 /// An accepted token-pass candidate pair and its final rule classification.
@@ -201,16 +180,16 @@ impl TokenPassConfig {
 ///
 /// ```
 /// use whitaker_clones_core::{
-///     AcceptedPair, CandidatePair, FragmentId, NormProfile, SimilarityRatio,
+///     AcceptedPair,
+///     CandidatePair,
+///     FragmentId,
+///     NormProfile,
+///     SimilarityRatio,
 /// };
 ///
 /// let pair = CandidatePair::new(FragmentId::from("alpha"), FragmentId::from("beta"))
 ///     .expect("distinct fragments");
-/// let accepted = AcceptedPair::new(
-///     pair,
-///     NormProfile::T1,
-///     SimilarityRatio::new(4, 4),
-/// );
+/// let accepted = AcceptedPair::new(pair, NormProfile::T1, SimilarityRatio::new(4, 4));
 ///
 /// assert_eq!(accepted.profile(), NormProfile::T1);
 /// ```
@@ -234,19 +213,13 @@ impl AcceptedPair {
 
     /// Returns the canonical fragment pair.
     #[must_use]
-    pub const fn pair(&self) -> &CandidatePair {
-        &self.pair
-    }
+    pub const fn pair(&self) -> &CandidatePair { &self.pair }
 
     /// Returns the rule profile to emit for this pair.
     #[must_use]
-    pub const fn profile(&self) -> NormProfile {
-        self.profile
-    }
+    pub const fn profile(&self) -> NormProfile { self.profile }
 
     /// Returns the accepted Jaccard score.
     #[must_use]
-    pub const fn score(&self) -> SimilarityRatio {
-        self.score
-    }
+    pub const fn score(&self) -> SimilarityRatio { self.score }
 }

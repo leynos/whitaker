@@ -1,7 +1,8 @@
 //! Feature step and scenario bindings for complexity-signal behaviour tests.
 
-use super::{LineSegment, SignalWorld, assert_vec_approx_eq, parse_f64_list, world};
 use rstest_bdd_macros::{given, scenario, then, when};
+
+use super::{LineSegment, SignalWorld, assert_vec_approx_eq, parse_f64_list, world};
 
 /// Set the function line range from the feature step.
 #[given("a function spanning lines {start} to {end}")]
@@ -35,21 +36,15 @@ fn given_raw_signal(world: &SignalWorld, values: String) -> Result<(), String> {
 
 /// Store the smoothing window provided by the feature step.
 #[given("the smoothing window is {window}")]
-fn given_window(world: &SignalWorld, window: usize) {
-    world.set_smoothing_window(window);
-}
+fn given_window(world: &SignalWorld, window: usize) { world.set_smoothing_window(window); }
 
 /// Build and record the per-line signal for the scenario.
 #[when("I build the per-line signal")]
-fn when_build(world: &SignalWorld) {
-    world.build_signal();
-}
+fn when_build(world: &SignalWorld) { world.build_signal(); }
 
 /// Smooth and record the configured signal for the scenario.
 #[when("I smooth the signal")]
-fn when_smooth(world: &SignalWorld) {
-    world.smooth();
-}
+fn when_smooth(world: &SignalWorld) { world.smooth(); }
 
 /// Compare the built signal with the feature's expected values.
 ///
@@ -101,30 +96,20 @@ fn then_smoothing_fails(world: &SignalWorld) {
 
 /// Exercise overlapping signal segments through the feature scenario.
 #[scenario(path = "tests/features/complexity_signal.feature", index = 0)]
-fn scenario_overlapping_segments(world: SignalWorld) {
-    let _ = world;
-}
+fn scenario_overlapping_segments(world: SignalWorld) { let _ = world; }
 
 /// Exercise out-of-range signal segments through the feature scenario.
 #[scenario(path = "tests/features/complexity_signal.feature", index = 1)]
-fn scenario_out_of_range_segments(world: SignalWorld) {
-    let _ = world;
-}
+fn scenario_out_of_range_segments(world: SignalWorld) { let _ = world; }
 
 /// Exercise successful moving-average smoothing through the feature scenario.
 #[scenario(path = "tests/features/complexity_signal.feature", index = 2)]
-fn scenario_smoothing_happy_path(world: SignalWorld) {
-    let _ = world;
-}
+fn scenario_smoothing_happy_path(world: SignalWorld) { let _ = world; }
 
 /// Exercise rejection of an even smoothing window through the feature scenario.
 #[scenario(path = "tests/features/complexity_signal.feature", index = 3)]
-fn scenario_smoothing_even_window(world: SignalWorld) {
-    let _ = world;
-}
+fn scenario_smoothing_even_window(world: SignalWorld) { let _ = world; }
 
 /// Exercise rejection of a zero smoothing window through the feature scenario.
 #[scenario(path = "tests/features/complexity_signal.feature", index = 4)]
-fn scenario_smoothing_zero_window(world: SignalWorld) {
-    let _ = world;
-}
+fn scenario_smoothing_zero_window(world: SignalWorld) { let _ = world; }

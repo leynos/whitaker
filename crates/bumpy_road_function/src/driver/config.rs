@@ -3,11 +3,11 @@
 //! The lint reads optional configuration from `dylint.toml`, applies defaults,
 //! and relies on `analysis::normalize_settings` to clamp invalid values.
 
-use crate::analysis::{Settings, Weights};
 use log::debug;
 use serde::Deserialize;
 
 use super::LINT_NAME;
+use crate::analysis::{Settings, Weights};
 
 #[derive(Clone, Copy, Debug, Deserialize)]
 #[serde(default, deny_unknown_fields)]

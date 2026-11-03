@@ -3,7 +3,12 @@
 use rstest::rstest;
 
 use super::{
-    ContextLabel, Localizer, NoExpectMessages, ReceiverCategory, ReceiverLabel, localized_messages,
+    ContextLabel,
+    Localizer,
+    NoExpectMessages,
+    ReceiverCategory,
+    ReceiverLabel,
+    localized_messages,
 };
 
 /// Check that unusual receiver labels still produce useful messages.

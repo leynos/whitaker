@@ -11,9 +11,13 @@ use std::ffi::OsStr;
 ///
 /// ```
 /// use std::ffi::OsStr;
+///
 /// use whitaker_cli::source_fallback_override;
 ///
-/// assert_eq!(source_fallback_override(Some(OsStr::new("true"))), Some(false));
+/// assert_eq!(
+///     source_fallback_override(Some(OsStr::new("true"))),
+///     Some(false)
+/// );
 /// assert_eq!(source_fallback_override(Some(OsStr::new("false"))), None);
 /// ```
 #[must_use]
@@ -36,9 +40,11 @@ mod tests {
     //! Test the installer's source-fallback compatibility mapping, including
     //! disabled, enabled, and non-Unicode values.
 
-    use super::source_fallback_override;
-    use rstest::rstest;
     use std::ffi::OsStr;
+
+    use rstest::rstest;
+
+    use super::source_fallback_override;
 
     /// Preserve the installer's interpretation of text values.
     #[rstest]

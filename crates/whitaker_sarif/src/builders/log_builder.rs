@@ -1,7 +1,9 @@
 //! Builder for [`SarifLog`] objects.
 
-use crate::model::log::{SARIF_SCHEMA, SARIF_VERSION, SarifLog};
-use crate::model::run::Run;
+use crate::model::{
+    log::{SARIF_SCHEMA, SARIF_VERSION, SarifLog},
+    run::Run,
+};
 
 /// Fluent builder for constructing a [`SarifLog`].
 ///
@@ -47,7 +49,7 @@ impl SarifLogBuilder {
     /// # Examples
     ///
     /// ```
-    /// use whitaker_sarif::{SarifLogBuilder, RunBuilder};
+    /// use whitaker_sarif::{RunBuilder, SarifLogBuilder};
     ///
     /// let run = RunBuilder::new("tool", "1.0").build();
     /// let log = SarifLogBuilder::new().with_run(run).build();
@@ -81,9 +83,7 @@ impl SarifLogBuilder {
 }
 
 impl Default for SarifLogBuilder {
-    fn default() -> Self {
-        Self::new()
-    }
+    fn default() -> Self { Self::new() }
 }
 
 #[cfg(test)]

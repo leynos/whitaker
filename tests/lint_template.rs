@@ -16,17 +16,11 @@ struct TemplateWorld {
 }
 
 impl TemplateWorld {
-    fn set_crate_name(&self, value: String) {
-        *self.crate_name.borrow_mut() = value;
-    }
+    fn set_crate_name(&self, value: String) { *self.crate_name.borrow_mut() = value; }
 
-    fn crate_name(&self) -> String {
-        self.crate_name.borrow().clone()
-    }
+    fn crate_name(&self) -> String { self.crate_name.borrow().clone() }
 
-    fn set_ui_directory(&self, value: String) {
-        *self.ui_directory.borrow_mut() = value;
-    }
+    fn set_ui_directory(&self, value: String) { *self.ui_directory.borrow_mut() = value; }
 
     fn render(&self) {
         let crate_name = self.crate_name.borrow().clone();
@@ -62,29 +56,21 @@ impl TemplateWorld {
 struct StepString(String);
 
 impl StepString {
-    fn into_inner(self) -> String {
-        self.0
-    }
+    fn into_inner(self) -> String { self.0 }
 }
 
 impl From<String> for StepString {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
+    fn from(value: String) -> Self { Self(value) }
 }
 
 impl From<StepString> for String {
-    fn from(value: StepString) -> Self {
-        value.0
-    }
+    fn from(value: StepString) -> Self { value.0 }
 }
 
 impl std::str::FromStr for StepString {
     type Err = std::convert::Infallible;
 
-    fn from_str(input: &str) -> Result<Self, Self::Err> {
-        Ok(Self(input.to_owned()))
-    }
+    fn from_str(input: &str) -> Result<Self, Self::Err> { Ok(Self(input.to_owned())) }
 }
 
 #[fixture]
@@ -96,9 +82,7 @@ fn world() -> TemplateWorld {
 }
 
 #[given("the lint crate name is blank")]
-fn given_blank_name(world: &TemplateWorld) {
-    world.set_crate_name(String::new());
-}
+fn given_blank_name(world: &TemplateWorld) { world.set_crate_name(String::new()); }
 
 #[given("the lint crate name is {name}")]
 fn given_crate_name(world: &TemplateWorld, name: StepString) {
@@ -111,14 +95,10 @@ fn given_ui_directory(world: &TemplateWorld, directory: StepString) {
 }
 
 #[given("the UI tests directory is blank")]
-fn given_blank_ui_directory(world: &TemplateWorld) {
-    world.set_ui_directory(String::new());
-}
+fn given_blank_ui_directory(world: &TemplateWorld) { world.set_ui_directory(String::new()); }
 
 #[when("I render the lint crate template")]
-fn when_render(world: &TemplateWorld) {
-    world.render();
-}
+fn when_render(world: &TemplateWorld) { world.render(); }
 
 #[then("the manifest declares a cdylib crate type")]
 fn then_manifest_declares_cdylib(world: &TemplateWorld) {
@@ -294,71 +274,43 @@ fn then_parent_directory_error(world: &TemplateWorld) {
 }
 
 #[scenario(path = "tests/features/lint_template.feature", index = 0)]
-fn scenario_renders_manifest_and_source(world: TemplateWorld) {
-    let _ = world;
-}
+fn scenario_renders_manifest_and_source(world: TemplateWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/lint_template.feature", index = 1)]
-fn scenario_renders_nested_ui_directory(world: TemplateWorld) {
-    let _ = world;
-}
+fn scenario_renders_nested_ui_directory(world: TemplateWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/lint_template.feature", index = 2)]
-fn scenario_renders_windows_ui_directory(world: TemplateWorld) {
-    let _ = world;
-}
+fn scenario_renders_windows_ui_directory(world: TemplateWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/lint_template.feature", index = 3)]
-fn scenario_rejects_blank_name(world: TemplateWorld) {
-    let _ = world;
-}
+fn scenario_rejects_blank_name(world: TemplateWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/lint_template.feature", index = 4)]
-fn scenario_rejects_non_letter_start(world: TemplateWorld) {
-    let _ = world;
-}
+fn scenario_rejects_non_letter_start(world: TemplateWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/lint_template.feature", index = 5)]
-fn scenario_rejects_trailing_separator(world: TemplateWorld) {
-    let _ = world;
-}
+fn scenario_rejects_trailing_separator(world: TemplateWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/lint_template.feature", index = 6)]
-fn scenario_rejects_absolute_directory(world: TemplateWorld) {
-    let _ = world;
-}
+fn scenario_rejects_absolute_directory(world: TemplateWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/lint_template.feature", index = 7)]
-fn scenario_rejects_absolute_windows_directory(world: TemplateWorld) {
-    let _ = world;
-}
+fn scenario_rejects_absolute_windows_directory(world: TemplateWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/lint_template.feature", index = 8)]
-fn scenario_rejects_unc_directory(world: TemplateWorld) {
-    let _ = world;
-}
+fn scenario_rejects_unc_directory(world: TemplateWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/lint_template.feature", index = 9)]
-fn scenario_rejects_drive_relative_windows_ui_directory(world: TemplateWorld) {
-    let _ = world;
-}
+fn scenario_rejects_drive_relative_windows_ui_directory(world: TemplateWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/lint_template.feature", index = 10)]
-fn scenario_rejects_parent_directory(world: TemplateWorld) {
-    let _ = world;
-}
+fn scenario_rejects_parent_directory(world: TemplateWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/lint_template.feature", index = 11)]
-fn scenario_rejects_invalid_character(world: TemplateWorld) {
-    let _ = world;
-}
+fn scenario_rejects_invalid_character(world: TemplateWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/lint_template.feature", index = 12)]
-fn scenario_rejects_blank_ui_directory(world: TemplateWorld) {
-    let _ = world;
-}
+fn scenario_rejects_blank_ui_directory(world: TemplateWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/lint_template.feature", index = 13)]
-fn scenario_rejects_trailing_underscore(world: TemplateWorld) {
-    let _ = world;
-}
+fn scenario_rejects_trailing_underscore(world: TemplateWorld) { let _ = world; }

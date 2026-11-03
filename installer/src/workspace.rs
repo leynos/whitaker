@@ -3,10 +3,13 @@
 //! This module provides utilities for detecting whether the current directory
 //! is a Whitaker workspace and for resolving platform-specific clone locations.
 
-use crate::artefact::suite_ref::SuiteRef;
-use crate::dirs::BaseDirs;
-use crate::error::{InstallerError, Result};
 use camino::{Utf8Path, Utf8PathBuf};
+
+use crate::{
+    artefact::suite_ref::SuiteRef,
+    dirs::BaseDirs,
+    error::{InstallerError, Result},
+};
 
 /// Repository URL for cloning Whitaker.
 pub const WHITAKER_REPO_URL: &str = "https://github.com/leynos/whitaker";
@@ -231,7 +234,7 @@ fn reuse_existing_clone(dir: &Utf8Path, plan: &WorkspacePlan) -> Result<()> {
 ///
 /// ```
 /// use camino::Utf8Path;
-/// use whitaker_installer::workspace::{plan_workspace_action, WorkspacePlan};
+/// use whitaker_installer::workspace::{WorkspacePlan, plan_workspace_action};
 ///
 /// let plan = WorkspacePlan::updating(false);
 /// let action = plan_workspace_action(

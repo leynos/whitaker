@@ -70,8 +70,8 @@ fn normalizes_invalid_file_tuning(
     write(
         &root,
         "whitaker.toml",
-        "[bumpy_road_function]\nthreshold = -1.0\nwindow = 2\nmin_bump_lines = 0\n\
-         [bumpy_road_function.weights]\ndepth = -1.0\n",
+        "[bumpy_road_function]\nthreshold = -1.0\nwindow = 2\nmin_bump_lines = \
+         0\n[bumpy_road_function.weights]\ndepth = -1.0\n",
     )?;
     let loaded = load_with_sources(sources(&root, Arc::new(MapEnv::new()), json!({})))?;
     assert_bumpy_road_normalized(&loaded.settings.bumpy_road_function);
@@ -124,9 +124,9 @@ fn normalizes_other_domain_tuning(
     write(
         &root,
         "whitaker.toml",
-        "[conditional_max_n_branches]\nmax_branches = 0\n\
-         [rstest_helper_should_be_fixture]\nmin_calls = 0\nmin_distinct_tests = 1\n\
-         provider_param_attributes = [' rstest::case ', 'case', '', 'values']\n",
+        "[conditional_max_n_branches]\nmax_branches = \
+         0\n[rstest_helper_should_be_fixture]\nmin_calls = 0\nmin_distinct_tests = \
+         1\nprovider_param_attributes = [' rstest::case ', 'case', '', 'values']\n",
     )?;
     let loaded = load_with_sources(sources(&root, Arc::new(MapEnv::new()), json!({})))?;
     assert_eq!(loaded.settings.conditional_max_n_branches.max_branches, 1);

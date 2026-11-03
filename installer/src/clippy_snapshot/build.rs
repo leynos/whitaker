@@ -7,16 +7,18 @@
 //! then installed into a scratch root through [`install_bundle`], so a bundle
 //! is only published after the consumer's own checks have accepted it.
 
-use super::error::ClippySnapshotError;
-use super::git::SnapshotGit;
-use super::install::{BundleArtefact, absolute, install_bundle};
-use super::manifest::{ClippySnapshotManifest, SNAPSHOT_BRANCH};
-use super::telemetry::{
-    OUTCOME_OK, failed_attempt_label, failure_label, millis, record_clone_attempt,
+use std::time::{Duration, Instant};
+
+use camino::{Utf8Path, Utf8PathBuf};
+
+use super::{
+    error::ClippySnapshotError,
+    git::SnapshotGit,
+    install::{BundleArtefact, absolute, install_bundle},
+    manifest::{ClippySnapshotManifest, SNAPSHOT_BRANCH},
+    telemetry::{OUTCOME_OK, failed_attempt_label, failure_label, millis, record_clone_attempt},
 };
 use crate::artefact::packaging::compute_sha256;
-use camino::{Utf8Path, Utf8PathBuf};
-use std::time::{Duration, Instant};
 
 /// Attempts at the upstream clone before giving up.
 const CLONE_ATTEMPTS: u32 = 3;

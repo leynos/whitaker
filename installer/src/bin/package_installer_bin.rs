@@ -4,14 +4,15 @@
 //! [`whitaker_installer::installer_packaging::package_installer`] invoked
 //! by the release CI workflow to create binstall-compatible archives.
 
-use clap::Parser;
 use std::path::PathBuf;
+
+use clap::Parser;
 use thiserror::Error;
-use whitaker_installer::artefact::error::ArtefactError;
-use whitaker_installer::installer_packaging::{
-    InstallerPackagingError, TargetTriple, Version, package_installer,
+use whitaker_installer::{
+    artefact::error::ArtefactError,
+    installer_packaging::{InstallerPackagingError, TargetTriple, Version, package_installer},
+    output::write_stderr_line,
 };
-use whitaker_installer::output::write_stderr_line;
 
 /// Package the `whitaker-installer` binary into a release archive.
 ///
@@ -63,9 +64,7 @@ fn main() {
 }
 
 /// Validate inputs and delegate to the packaging library.
-fn run(cli: Cli) -> Result<(), CliError> {
-    run_with_stdout(cli, &mut std::io::stdout())
-}
+fn run(cli: Cli) -> Result<(), CliError> { run_with_stdout(cli, &mut std::io::stdout()) }
 
 /// Package the installer and write the success report to `stdout`.
 ///
@@ -89,10 +88,12 @@ fn run_with_stdout<W: std::io::Write>(cli: Cli, stdout: &mut W) -> Result<(), Cl
 mod tests {
     //! Tests for the installer packaging command.
 
-    use super::*;
+    use std::io::Write;
+
     use clap::Parser;
     use rstest::rstest;
-    use std::io::Write;
+
+    use super::*;
 
     struct BrokenPipeWriter;
 
@@ -101,9 +102,7 @@ mod tests {
             Err(std::io::Error::from(std::io::ErrorKind::BrokenPipe))
         }
 
-        fn flush(&mut self) -> std::io::Result<()> {
-            Ok(())
-        }
+        fn flush(&mut self) -> std::io::Result<()> { Ok(()) }
     }
 
     const BASE_ARGS: [&str; 9] = [

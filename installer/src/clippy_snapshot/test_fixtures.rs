@@ -5,10 +5,12 @@
 //! build bundles from it, corrupt them, and check what installation and
 //! verification make of the result, all without network access.
 
-use super::manifest::{ClippySnapshotManifest, parse_manifest};
-use camino::{Utf8Path, Utf8PathBuf};
 use std::process::Command;
+
+use camino::{Utf8Path, Utf8PathBuf};
 use tempfile::TempDir;
+
+use super::manifest::{ClippySnapshotManifest, parse_manifest};
 
 /// The nightly the fixtures pin, as Whitaker pins its own.
 pub(super) const FIXTURE_TOOLCHAIN: &str = "nightly-2026-05-28";
@@ -67,14 +69,10 @@ impl FixtureRepo {
     }
 
     /// The newest commit.
-    pub(super) fn tip(&self) -> &str {
-        self.commits.last().expect("fixture has commits")
-    }
+    pub(super) fn tip(&self) -> &str { self.commits.last().expect("fixture has commits") }
 
     /// A scratch path inside the fixture directory.
-    pub(super) fn path(&self, name: &str) -> Utf8PathBuf {
-        utf8(self.dir.path()).join(name)
-    }
+    pub(super) fn path(&self, name: &str) -> Utf8PathBuf { utf8(self.dir.path()).join(name) }
 
     /// Write a bundle of `refs` (for example `["refs/heads/main", "HEAD"]`)
     /// and its sidecar, returning the bundle path.

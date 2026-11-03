@@ -4,8 +4,11 @@
 //! construction; adjacency storage and propagation remain in `community`.
 
 use super::vector::{
-    MIN_COSINE_THRESHOLD_DENOMINATOR_SQUARED, MIN_COSINE_THRESHOLD_NUMERATOR_SQUARED,
-    MethodFeatureVector, cosine_threshold_met, dot_product,
+    MIN_COSINE_THRESHOLD_DENOMINATOR_SQUARED,
+    MIN_COSINE_THRESHOLD_NUMERATOR_SQUARED,
+    MethodFeatureVector,
+    cosine_threshold_met,
+    dot_product,
 };
 
 /// Weighted connection between two method feature vectors.
@@ -28,21 +31,15 @@ impl SimilarityEdge {
 
     /// Return the left endpoint.
     #[cfg(test)]
-    pub(crate) const fn left(&self) -> usize {
-        self.left
-    }
+    pub(crate) const fn left(&self) -> usize { self.left }
 
     /// Return the right endpoint.
     #[cfg(test)]
-    pub(crate) const fn right(&self) -> usize {
-        self.right
-    }
+    pub(crate) const fn right(&self) -> usize { self.right }
 
     /// Return the edge weight.
     #[cfg(test)]
-    pub(crate) const fn weight(&self) -> u64 {
-        self.weight
-    }
+    pub(crate) const fn weight(&self) -> u64 { self.weight }
 }
 
 /// Connect vector pairs that meet the configured cosine similarity threshold.

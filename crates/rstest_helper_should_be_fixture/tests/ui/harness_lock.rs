@@ -39,9 +39,7 @@ pub(crate) struct ExampleHarnessLock {
 
 impl ExampleHarnessLock {
     /// Return the directory serializing UI fixture compilation for this target.
-    pub(crate) fn path(&self) -> &Path {
-        &self.path
-    }
+    pub(crate) fn path(&self) -> &Path { &self.path }
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct ExampleHarnessLockOwner(String);

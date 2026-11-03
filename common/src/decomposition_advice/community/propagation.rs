@@ -1,8 +1,9 @@
 //! Run deterministic weighted label propagation over checked adjacency rows.
 
-use super::super::error::DecompositionError;
-use super::super::vector::MethodFeatureVector;
-use super::selection::best_neighbour_label;
+use super::{
+    super::{error::DecompositionError, vector::MethodFeatureVector},
+    selection::best_neighbour_label,
+};
 
 /// Report the final labels and number of propagation passes.
 ///
@@ -106,7 +107,8 @@ fn run_iterations(
 
     if iteration_count == plan.max_iterations {
         log::debug!(
-            "label propagation reached iteration limit: nodes={}, active_nodes={}, max_iterations={}",
+            "label propagation reached iteration limit: nodes={}, active_nodes={}, \
+             max_iterations={}",
             vectors.len(),
             plan.active_nodes.len(),
             plan.max_iterations,

@@ -11,9 +11,7 @@ pub struct ModuleMaxLines {
 }
 impl Default for ModuleMaxLines {
     /// Apply the documented threshold.
-    fn default() -> Self {
-        Self { max_lines: 400 }
-    }
+    fn default() -> Self { Self { max_lines: 400 } }
 }
 
 /// Configure the maximum number of branches in a conditional.
@@ -25,9 +23,7 @@ pub struct ConditionalMaxBranches {
 }
 impl Default for ConditionalMaxBranches {
     /// Apply the documented threshold.
-    fn default() -> Self {
-        Self { max_branches: 2 }
-    }
+    fn default() -> Self { Self { max_branches: 2 } }
 }
 
 /// Configure extra test markers recognized by a lint.

@@ -4,8 +4,14 @@
 //! keeping repository-download orchestration out of the Cargo fallback path.
 
 use super::{
-    CommandExecutor, DYLINT_LINK_TOOL, DependencyTool, InstallerError, RepositoryInstallContext,
-    Result, find_dependency_binary, is_tool_installed,
+    CommandExecutor,
+    DYLINT_LINK_TOOL,
+    DependencyTool,
+    InstallerError,
+    RepositoryInstallContext,
+    Result,
+    find_dependency_binary,
+    is_tool_installed,
 };
 use crate::dependency_binaries::DependencyBinary;
 
