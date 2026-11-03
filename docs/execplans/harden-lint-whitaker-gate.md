@@ -269,59 +269,93 @@ Recovery: the old head remains reachable through the PR's reflog.
   `rstest_helper_should_be_fixture`, alongside a timeout and a SIGTERM on the
   nested-Cargo harnesses. The excerpt is pre-fix evidence: the log finished at
   03:05, and `src/testing/ui/mod.rs` gained the copy-library guard at 04:36.
-  `no_unwrap_or_else_panic` reaches the guard because its
-  `src/lib_ui_tests.rs` calls `whitaker::testing::ui::run_with_runner`, which
-  applies `with_runner_env` around `ensure_toolchain_library` and the runner,
-  and `dylint_testing::initialize` is lazy, so it fires inside that closure.
+  `no_unwrap_or_else_panic` reaches the guard because its `src/lib_ui_tests.rs`
+  calls `whitaker::testing::ui::run_with_runner`, which applies
+  `with_runner_env` around `ensure_toolchain_library` and the runner, and
+  `dylint_testing::initialize` is lazy, so it fires inside that closure.
 - [x] (2026-11-03) M3b: the two pre-existing causes found during M3 are
   repaired in the working tree. `dylint_testing`'s copy-library overwrite is
   guarded by `DYLINT_LINK_ENABLE_COPY_LIBRARY=1`, the example-harness lock is
   target-scoped instead of host-global, and `.config/nextest.toml` now bounds
   tests on both profiles. Gate re-run evidence is recorded under M4.
 - [ ] (in progress) M4: `make fmt` is green and the unrelated
-  `docs/whitaker-dylint-suite-design.md` reflow churn is reverted. The four
-  Rust gates are running sequentially; push, re-observation and CI dispatch
-  follow the gate results. Readiness, not the commit, is the gate.
+  `docs/whitaker-dylint-suite-design.md` reflow churn is reverted again after
+  the second `make fmt` pass re-damaged the same `<pre><code>` block. The
+  remaining Rust gates re-run after the gate-2 fix; push, re-observation and CI
+  dispatch follow the gate results. Readiness, not the commit, is the gate.
 - [x] (2026-11-03) The repair is committed as `f19408ff`
-  ("Guard the Dylint copy step and scope the harness lock"). It sits on
-  unpushed `55da1e23`, on top of remote `d10469fd`. Nine files, 740
-  insertions, 177 deletions.
+  ("Guard the Dylint copy step and scope the harness lock"). It sits on unpushed
+  `55da1e23`, on top of remote `d10469fd`. Nine files, 740 insertions, 177
+  deletions.
 - [x] (2026-11-03) A focused re-run of the three nested-Cargo harnesses
   produced one decisive result before its supervisor timed it out:
-  `example_compiles_without_diagnostics::case_1` passed in 2386.964 s
-  (39.8 min) against the 75-minute allowance. That is direct proof the
-  override reaches the test and the nested build completes; the earlier
-  readings of "stalled" were an artefact of sampling a 300 s window during
-  a ~100-deep compile queue. The run then hit the background supervisor's
-  wall-clock limit at 39:55 and was SIGTERMed mid-way through `case_2`,
-  which nextest recorded as a `SIGTERM` abort and one retry, not as a
-  timeout. Log: `/tmp/test-rshf-harness-harden-lint-whitaker-gate.out`.
-  The run was not restarted: gate 2 below runs the same three harnesses
-  under the `ci` profile and supersedes it as evidence.
+  `example_compiles_without_diagnostics::case_1` passed in 2386.964 s (39.8
+  min) against the 75-minute allowance. That is direct proof the override
+  reaches the test and the nested build completes; the earlier readings of
+  "stalled" were an artefact of sampling a 300 s window during a ~100-deep
+  compile queue. The run then hit the background supervisor's wall-clock limit
+  at 39:55 and was SIGTERMed mid-way through `case_2`, which nextest recorded
+  as a `SIGTERM` abort and one retry, not as a timeout. Log:
+  `/tmp/test-rshf-harness-harden-lint-whitaker-gate.out`. The run was not
+  restarted: gate 2 below runs the same three harnesses under the `ci` profile
+  and supersedes it as evidence.
 - [x] (2026-11-03) `make check-fmt` passed. Its log holds only the echoed
   command, which is `cargo fmt --check`'s success output.
-- [ ] `NEXTEST_PROFILE=ci make test` is running as gate 2. It is the
-  authoritative harness run and is compiling under the same ~100-deep
-  queue, so expect hours rather than minutes; the profile's global timeout
-  is 300 minutes.
-- [ ] The four repository gates run behind it under a `scrutineer`, which
-  waits for that process to exit before starting. Logs are
+- [x] (2026-11-03) Gate 2, `make test NEXTEST_PROFILE=ci`, **failed** with
+  two `TIMEOUT [ 300.006s]` lines and a cascade cancellation:
+  `no_unwrap_or_else_panic ui::hand_written_test_companion_does_not_exempt_parent_function`
+  and `ui::aliased_test_crate_non_companion_does_not_exempt_parent_function`
+  at 1642/1673 and 1643/1673, then
+  `Cancelling due to test failure: 3 tests still running`. 1671 of 1673 tests
+  had already passed. Log: `/tmp/test-ci-harden-lint-whitaker-gate.out`.
+- [x] (2026-11-03) The `300.006 s` figure is the diagnosis, not merely the
+  duration: it is exactly the base `slow-timeout = 300s`, so those tests
+  matched **no** longer override. The cause is a filter that could never match.
+  The override used `package(no_unwrap_or_else_panic) & test(ui::ui)`, but
+  nextest reports those tests as `ui`, `ui::hand_written_…`, and so on —
+  `ui::ui` appears **zero** times in the gate log. The filter named a test that
+  does not exist.
+- [x] (2026-11-03) Found a second, latent defect of the same family in the
+  default profile. The broad 20-minute `serial-dylint-ui` override lists an
+  unqualified `test(ui::ui)`, which matches `rstest_helper_should_be_fixture`
+  and — because nextest resolves each setting from the *first* matching
+  override that configures it — shadowed both the 75-minute and the 120-minute
+  overrides below it. Those longer allowances had therefore never taken effect
+  in that profile.
+- [x] (2026-11-03) Both profiles now select the whole package binary,
+  `package(no_unwrap_or_else_panic) & binary(no_unwrap_or_else_panic)`, which
+  covers every test in the crate's own binary without an enumerable name list
+  that can silently rot as harnesses are added. The default profile's broad
+  clause gained
+  `& not package(no_unwrap_or_else_panic) &
+  not package(rstest_helper_should_be_fixture)`
+  so it no longer wins a setting it was never meant to govern.
+- [x] (2026-11-03) `tests/nextest_ui_filter.rs` was rewritten from a
+  single-string assertion into a rule that would have caught both defects. It
+  scans `crates/no_unwrap_or_else_panic/src/lib_ui_tests.rs` for the tests that
+  rebuild through nested Cargo, then requires the *governing* (first matching)
+  override in each profile to select the package binary, carry a build-sized
+  period, and serialize into `serial-dylint-ui`. Two seeded-fault controls
+  confirm it can fail: reintroducing the name-list defect fails both profiles,
+  and reintroducing the shadowing clause fails the default profile at
+  `overrides[0]`. The file is 371 lines, within the 400-line cap.
+- [ ] Re-run gate 2 (`make test NEXTEST_PROFILE=ci`) after the config fix;
+  gates 3 and 4 (`make typecheck`, `make lint`) follow. Logs are
   `/tmp/{check-fmt,test-ci,typecheck,lint}-harden-lint-whitaker-gate.out`.
 - [ ] Push, tracking-ref refresh and `ls-remote` confirmation, CI dispatch
-  (`refs/pull/372/merge` is stale at `39b4757f`, so no `pull_request` run
-  fires on a new head), and the `comenq` CodeRabbit review are all still
-  ahead.
+  (`refs/pull/372/merge` is stale at `39b4757f`, so no `pull_request` run fires
+  on a new head), and the `comenq` CodeRabbit review are all still ahead.
 
 ## Surprises & discoveries
 
 An earlier revision of this entry claimed the `serial-dylint-ui` group and the
 ten-minute `slow-timeout` under `[[profile.default.overrides]]` did not reach
 the `ci` profile, so the UI harnesses supposedly ran concurrently and
-unterminated for over an hour. That is wrong, and the correction matters because
-it changes what the repair has to do. Nextest's own documentation for per-test
-settings states the precedence explicitly: starting with the selected profile,
-then following its inheritance chain through `default`, the first override that
-matches a test and configures a setting is applied.
+unterminated for over an hour. That is wrong, and the correction matters
+because it changes what the repair has to do. Nextest's own documentation for
+per-test settings states the precedence explicitly: starting with the selected
+profile, then following its inheritance chain through `default`, the first
+override that matches a test and configures a setting is applied.
 `[[profile.default.overrides]]` was therefore already in force under
 `NEXTEST_PROFILE=ci`; the harnesses were serialized and bounded, and the hour
 went on the shared compile pool.
@@ -388,6 +422,43 @@ arguments after `rustc`; 6.3.2 splits on spaces and keeps the wrapper arguments
 ahead of `rustc`. Both are upstream-safe, but main cannot be copied wholesale
 here without also importing its `[patch.crates-io]` plumbing and its
 `vendor/dylint_testing` module, which belongs to a different PR.
+
+### A timeout override can match nothing and still look correct
+
+The gate-2 failure is worth recording separately because the configuration
+looked right and the failure did not resemble a configuration problem. The
+override read:
+
+    filter = "package(no_unwrap_or_else_panic) & test(ui::ui)"
+
+but nextest reports the crate's tests as `ui`, `ui::hand_written_…`,
+`ui::example_compiles_under_test_harness`, and so on. No test has the name
+`ui::ui`, so the clause matched nothing, the tests fell to the 300 s base, and
+two of them were killed at 300.006 s among 1,673 tests. `ui::ui` appears zero
+times in the gate log; that absence, not the duration, is the proof.
+
+Two properties make this class of defect hard to see without a test that reads
+the configuration:
+
+- **`test(…)` matches test names, not module paths.** `ui::ui` reads like "the
+  `ui` test in the `ui` module", but for a test declared at the top of the
+  crate's own binary the runtime name is bare `ui`. The integration-binary form
+  does produce `ui`, and the filter's `(binary(ui) & test(=ui))` clause covers
+  it; conflating the two leaves the inline-module case unreachable.
+- **A setting resolves from the first matching override that configures it.**
+  Precedence is evaluated per setting, and an override that does not configure
+  a setting is ignored for that setting. So a broad clause placed above a
+  specific one silently wins the timeout while looking like a fallback. The
+  default profile had exactly that shape: `test(ui::ui)` matched
+  `rstest_helper_should_be_fixture`, so the 75- and 120-minute allowances below
+  it had never applied.
+
+The repair selects the whole package binary (`package(X) & binary(X)`), which
+cannot rot as harnesses are added, and excludes both specifically-governed
+crates from the broad clause. The regression test in
+`tests/nextest_ui_filter.rs` evaluates the governing override rather than
+merely finding one that mentions the package, and two seeded-fault controls
+confirm it fails when either defect is reintroduced.
 
 ### Why `make test` fails for exactly two lint crates
 
@@ -508,14 +579,24 @@ and is not required for the gates to pass.
 
 ## Outcomes & retrospective
 
-Complete for M1–M3. M4 remains open: the repair is complete in the working
-tree and its focused tests pass, but the four repository gates have not yet run
+Complete for M1–M3. M4 remains open: the repair is complete in the working tree
+and its focused tests pass, but the four repository gates have not yet all run
 against the repaired candidate and nothing is committed or pushed.
 
-M3a is met: the `revspec 'master'` failure is gone, with
-zero occurrences across a full compile of `dylint_internal` 6.3.2 and a
-1637-test pass. M3b's two blockers were diagnosed to source level and repaired
-rather than deferred:
+Gate 2 has now run once and failed, and the failure was informative in a way
+the earlier design did not anticipate. The nextest overrides carried a filter
+that matched no test, so two real harnesses were killed at the 300 s base among
+1,671 passing tests. The defect was invisible to inspection because
+`test(ui::ui)` reads like a valid path and because nextest's per-setting
+first-match precedence let an earlier broad clause shadow a later specific one.
+The lesson for the remaining work is that a configuration change of this kind
+needs a test that evaluates the *governing* override, not one that merely finds
+an override mentioning the package, and that such a test needs a seeded-fault
+control to show it can fail. Both are now in place.
+
+M3a is met: the `revspec 'master'` failure is gone, with zero occurrences
+across a full compile of `dylint_internal` 6.3.2 and a 1637-test pass. M3b's
+two blockers were diagnosed to source level and repaired rather than deferred:
 
 - `dylint_testing` 6.3.2's `initialize()` runs a bare `cargo build` with no
   `--features`, producing an empty `cdylib` for every lint crate, and then
