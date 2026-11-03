@@ -59,12 +59,14 @@ script. The build script calls
 hard-codes `clone(RUST_CLIPPY_URL, "master", …)`. rust-clippy renamed its
 default branch to `main`, so the clone succeeds and the checkout fails:
 
-    Cloning into '/tmp/.tmpvF8ofW'...
-    Error: `revparse_ext` failed for `master`
-    revspec 'master' not found; class=Reference (4); code=NotFound (-3)
-      9: dylint_internal::clippy_utils::repository::clippy_repository
-     10: <dylint_internal::clippy_utils::revs_no_preinstall::Revs>::new
-     11: build_script_main::extra_symbols::rev_from_channel
+```plaintext
+Cloning into '/tmp/.tmpvF8ofW'...
+Error: `revparse_ext` failed for `master`
+revspec 'master' not found; class=Reference (4); code=NotFound (-3)
+  9: dylint_internal::clippy_utils::repository::clippy_repository
+ 10: <dylint_internal::clippy_utils::revs_no_preinstall::Revs>::new
+ 11: build_script_main::extra_symbols::rev_from_channel
+```
 
 `make test` on Windows fails identically, four times, once per UI test that
 reaches the harness, and stops the build with
@@ -232,14 +234,42 @@ in-process, and without the variable `clippy_repository` clones upstream
 `main` — mutable state that could differ between two runs of the same commit.
 The supplied path is a real, non-shallow Git repository whose `HEAD` is
 `e4608a25c2e20116fbc1e97a51a73f094a1db7a1`, whose `HEAD` is `refs/heads/main`,
-and which contains the `selected_revision` `9fca3bc9…` on its first-parent
-history. `clippy_repository` clones from that object database into a tempdir
-and leaves the source untouched.
+and which contains the `selected_revision`
+`9fca3bc9fc2bc83c60bde26d18ed68f11564b228` ("Rustup (#17109)") on its
+first-parent history. `clippy_repository` clones from that object database into
+a tempdir and leaves the source untouched.
+
+That revision is not inferred from history alone. The snapshot directory
+carries a manifest, `whitaker-clippy-snapshot.json`, which is what the
+installer publishes alongside the bundle:
+
+```json
+{
+  "schema_version": 1,
+  "commit": "e4608a25c2e20116fbc1e97a51a73f094a1db7a1",
+  "toolchain": "nightly-2026-05-28",
+  "selected_revision": "9fca3bc9fc2bc83c60bde26d18ed68f11564b228",
+  "dylint_version": "6.3.0",
+  "bundle_sha256": "8b7e4716285185e9c799e48fe8f05096b73d31f0467806f0b8290476f408810c"
+}
+```
+
+Three independent checks agree on it: the manifest names it, the directory's own
+`git rev-parse HEAD` returns the `commit` field, and
+`git rev-list --first-parent` over the 8010-commit history contains
+`9fca3bc9fc2bc83c60bde26d18ed68f11564b228` exactly once. This file lives on the
+host cache, not in the repository; the repository's copy is the installer's
+published `clippy-snapshot.toml` at tag `v0.2.11`.
 
 **M4 — Commit, push, and re-observe.** Commit as one atomic change, push over
-SSH with a lease bound to `d10469fd`, refresh the tracking ref, and dispatch CI
-on the new head. End state: the PR's checks are green for the new head.
-Recovery: the old head remains reachable through the PR's reflog.
+SSH with a lease bound to the head the previous push left, refresh the tracking
+ref, and dispatch CI on the new head. End state: the PR's checks are green for
+the new head. Recovery: the old head remains reachable through the PR's reflog.
+
+The lease target is a leaf value, not a constant. It was `d10469fd` when this
+milestone was written; by 2026-11-03 the remote head had moved to `adc974c9`,
+so the last push leased `adc974c9..adc974c9`. Re-read `git ls-remote` before
+each push rather than copying an earlier lease into the command.
 
 ## Progress
 
@@ -283,6 +313,10 @@ Recovery: the old head remains reachable through the PR's reflog.
   the second `make fmt` pass re-damaged the same `<pre><code>` block. The
   remaining Rust gates re-run after the gate-2 fix; push, re-observation and CI
   dispatch follow the gate results. Readiness, not the commit, is the gate.
+  Status at 2026-11-03: the publication and re-observation halves are done (see
+  the Progress entries below through the assessment reply). What M4 still owes
+  is a completed, green exact-head CI result for the head that carries the
+  finding-3 and finding-4 repairs.
 - [x] (2026-11-03) The repair is committed as `f19408ff`
   ("Guard the Dylint copy step and scope the harness lock"). It sits on unpushed
   `55da1e23`, on top of remote `d10469fd`. Nine files, 740 insertions, 177
@@ -338,19 +372,18 @@ Recovery: the old head remains reachable through the PR's reflog.
   period, and serialize into `serial-dylint-ui`. Two seeded-fault controls
   confirm it can fail: reintroducing the name-list defect fails both profiles,
   and reintroducing the shadowing clause fails the default profile at
-  `overrides[0]`. The file was 371 lines at that point, within the 400-line
-  cap.
+  `overrides[0]`. The file was 371 lines at that point, within the 400-line cap.
 - [x] (2026-11-03) CodeScene advisory repair. The hosted check's String Heavy
-  Function Arguments finding on `tests/nextest_ui_filter.rs` is cleared
-  locally: `cs review tests/nextest_ui_filter.rs` reports
-  `{"score":10.0,"review":[]}` with no findings, and
-  `cs delta origin/harden-lint-workspace-config` on the working tree produces
-  empty output. `cargo nextest run --test nextest_ui_filter` passes 5/5.
+  Function Arguments finding on `tests/nextest_ui_filter.rs` is cleared locally:
+  `cs review tests/nextest_ui_filter.rs` reports `{"score":10.0,"review":[]}`
+  with no findings, and `cs delta origin/harden-lint-workspace-config` on the
+  working tree produces empty output.
+  `cargo nextest run --test nextest_ui_filter` passes 5/5.
 - [x] (2026-11-03) Seeded-fault negative control on the refactored test:
   reverting the `ci` profile's override filter to the old `test(ui::ui)` name
   list made
-  `harness_allowances_are_governed_by_a_whole_package_override::case_2_ci`
-  fail with "profile.ci: no override with a slow-timeout positively selects
+  `harness_allowances_are_governed_by_a_whole_package_override::case_2_ci` fail
+  with "profile.ci: no override with a slow-timeout positively selects
   no_unwrap_or_else_panic", proving the test still detects the original defect
   after the refactor. The fault was then reverted and the suite re-ran green
   (5/5), with `git diff --quiet .config/nextest.toml` clean and the test file
@@ -359,8 +392,8 @@ Recovery: the old head remains reachable through the PR's reflog.
   the `AGENTS.md` per-file cap (`module_max_lines.max_lines = 400`), after
   `cargo fmt --all`.
 - [x] (2026-11-03) All five gates pass sequentially against the refactored
-  working tree, each started once and each exiting 0: `make check-fmt`
-  (3 s), `make typecheck` (1 s), `make test NEXTEST_PROFILE=ci` (138 s;
+  working tree, each started once and each exiting 0: `make check-fmt` (3 s),
+  `make typecheck` (1 s), `make test NEXTEST_PROFILE=ci` (138 s;
   `Summary [117.309s] 1673 tests run: 1673 passed, 5 skipped`, doctests 41
   passed / 0 failed), `make lint` (3 s), and `make markdownlint` (10 s, 78
   files, 0 errors). Logs are
@@ -378,17 +411,236 @@ Recovery: the old head remains reachable through the PR's reflog.
   (`Makefile:23` `TEST_EXCLUDES`), and `make test` is exactly what
   `.github/workflows/ci.yml:187` runs, so `tests/nextest_ui_filter.rs` — a
   root-crate integration test — runs in neither the local gate nor hosted CI.
-  That exclusion predates this branch: it arrived with `98170cf9`, which is
-  an ancestor of `origin/main`. A targeted
+  That exclusion predates this branch: it arrived with `98170cf9`, which is an
+  ancestor of `origin/main`. A targeted
   `cargo nextest run --test nextest_ui_filter` against the working tree
-  therefore supplies the missing evidence directly: 5 tests run, 5 passed,
-  0 skipped, exit 0, with the file's sha256 identical
-  (`554d98e797769dfab86a86aae5c29f11e2e1c180973032c59ae580fcf945eda2`)
-  before and after the run. Log:
+  therefore supplies the missing evidence directly: 5 tests run, 5 passed, 0
+  skipped, exit 0, with the file's sha256 identical
+  (`554d98e797769dfab86a86aae5c29f11e2e1c180973032c59ae580fcf945eda2`) before
+  and after the run. Log:
   `/tmp/test-nuf-hashbound-harden-lint-whitaker-gate.out`.
-- [ ] Push, tracking-ref refresh and `ls-remote` confirmation, CI dispatch
-  (`refs/pull/372/merge` is stale at `39b4757f`, so no `pull_request` run fires
-  on a new head), and the `comenq` CodeRabbit review are all still ahead.
+- [x] (2026-11-03) Published as `adc974c9` and confirmed remote parity. The
+  push over SSH reported `7f442958..adc974c9`; the tracking ref fetched with a
+  leading `+` refspec and `ls-remote` both report
+  `adc974c95b4aaf70966d74822abd9a45f4f6cfca`, matching `git rev-parse HEAD`.
+  The branch's upstream is the named remote `origin`, not a raw URL.
+- [x] (2026-11-03) Hosted CodeScene confirmation, which the local CLI could not
+  give. `CodeScene Code Health Review (main)` concludes `success` with zero
+  annotations on `adc974c9`; the advisory is cleared remotely, not only in the
+  working tree.
+- [x] (2026-11-03) CI dispatched as run `41598023070` (`workflow_dispatch`,
+  because `refs/pull/372/merge` is frozen at `39b4757f` and no `pull_request`
+  run fires on a new head).
+- [x] (2026-11-03) Run `41598023070` concluded **`success`** on `adc974c9`.
+  Both real jobs are green — `linux-full` (including `Lint` and
+  `Publish dry run`) and `windows-compat` (including `Test`,
+  `make test NEXTEST_PROFILE=ci`, and `Installer release dry run`).
+  `coverage-check` is `skipped`, which is its configured lane selection, not a
+  gap. The run checked out `adc974c9`, so it certifies the committed tree at
+  that commit: it does **not** cover the `test-root-lib` target, the
+  two-profile nextest filter rewrite, or the new contract suite, all of which
+  are still in the working tree.
+- [ ] Exact-head CI for the repair head. Those changes form a new candidate,
+  so `adc974c9`'s green result does not transfer to it; a fresh
+  `workflow_dispatch` run is required once the repair commit is pushed.
+- [x] (2026-11-03) ExecPlan completeness/correctness assessment posted as issue
+  comment
+  [6598161483](https://github.com/leynos/whitaker/pull/372#issuecomment-6598161483)
+  under `Assessment-ID EP-372-harden-lint-whitaker-gate-20261103-a7f3`,
+  through the manual-comment route (`buzzybee-df12`, a pool account, not
+  `leynos`). The proof assessment is a justified `not applicable`: the
+  PR-exclusive diff against base `5a08c6ff` is 59 files and touches no proof,
+  Verus, or Kani file. (An `origin/main...HEAD` check appears to show Kani
+  files, but that three-dot range spans the whole 10-PR stack and does not
+  describe this PR.)
+- [x] (2026-11-03) Assessment reply received on `adc974c9` (issue comment
+  `6598194983`, Assessment-ID
+  `EP-372-harden-lint-whitaker-gate-20261103-a7f3`). It reports four findings.
+  All four were verified against live source before any edit; findings 1 and 2
+  are repaired in the working tree, 3 and 4 remain.
+- [x] (2026-11-03) Finding 1 repaired, with a wider scope than reported. The
+  assessment named one clause,
+  `test(example_harness_collects_call_site_evidence)`. A workspace grep showed
+  the same shadowing through **any** `test(<name>)` disjunct:
+  `example_compiles_under_test_harness` is declared in both
+  `no_expect_outside_tests` (`src/lib_ui_tests.rs:308`) and
+  `no_unwrap_or_else_panic` (`src/lib_ui_tests.rs:184`), so
+  `test(ui::example_compiles_under_test_harness)` reached the excluded package
+  too. Guarding each clause separately fixes the symptom and leaves the next
+  clause free to reintroduce it, so the exclusion now wraps the **whole
+  disjunction** in both profiles. In each, the guarded part is the six
+  `test(...)` clauses plus `binary(ui) & test(=ui)`, conjoined with the two
+  `not package(...)` guards and parenthesized as one operand of an outer
+  disjunction; that whole line is a single `filter = "..."` value in
+  `.config/nextest.toml` and is easier to read there than to quote here. The
+  lock test is joined **outside** the guard because
+  `acquire_places_the_lock_inside_the_effective_target_directory`
+  (`crates/rstest_helper_should_be_fixture/tests/ui/harness_lock_tests.rs:40`)
+  takes the target-scoped file lock without rebuilding anything: it needs
+  serialization but not a build-sized timeout. The clauses themselves cannot be
+  deleted, because `no_expect_outside_tests` declares
+  `ui::example_compiles_under_test_harness` and has no override of its own.
+- [x] (2026-11-03) The `ci` profile had a **separate, unreported** gap found
+  while repairing finding 1. Its filter had never contained the
+  `test(ui::example_compiles_under_test_harness)` clause at all, so that
+  nested-Cargo harness ran in CI at the 300 s base. The `ci` filter now carries
+  the same clause set as `default`. This surfaced as a red
+  `case_6_ci_shared_name`, which is the useful outcome: the test found a real
+  defect the assessment had not.
+- [x] (2026-11-03) Finding 2 repaired. `tests/nextest_ui_filter.rs` no longer
+  searches filter text. It evaluates the nextest filter grammar against concrete
+  `TestIdentity` values through a new
+  `tests/nextest_ui_filter/filter_model.rs`, and
+  `governing_override(overrides, setting, identity)` returns the *first*
+  override, in file order, that both configures the setting and selects the
+  identity — which is the rule nextest documents. Six parameterized cases pin
+  the effective `slow-timeout`, including the negative control
+  `SHARED_NAME_CONTROL` (package `no_expect_outside_tests`, which has no
+  override of its own and must still receive the broad clause's 20-minute
+  allowance) and both excluded packages at 75 minutes, under both profiles. The
+  evaluator panics on an unknown operator or leaf shape rather than answering
+  `false`, so a filter that grows a construct it does not model fails the guard
+  loudly instead of passing vacuously.
+- [x] (2026-11-03) The new test is non-vacuous, proved by a red step. Against
+  the **committed** config it failed 4 of 10 cases, including
+  `case_3_default_rstest_helper`, which received `1200s` where `4500s` was
+  required — the exact defect the assessment reported. After the repair the
+  same run is 10 of 10. The red log is
+  `/tmp/red-nuf-harden-lint-whitaker-gate.out`, the green log
+  `/tmp/green-nuf-harden-lint-whitaker-gate.out`.
+- [x] (2026-11-03) The repair obeys the 400-line file cap without weakening the
+  guard: `tests/nextest_ui_filter.rs` is 294 lines and the model is 172. The
+  first draft was 450 lines in one file and was split rather than trimmed.
+  `clippy --all-targets` exits 0. The fixture uses the repository's own
+  `#[whitaker_test_macros::allow_fixture_expansion_lints]`, already applied at
+  roughly ten sites, because `rustfmt.toml`'s `fn_single_line = true` collapses
+  the body to a brace form that Clippy's `unused_braces` denies.
+- [x] (2026-11-03) Finding 3 repaired: the root library's tests are reachable
+  from the gate. `TEST_EXCLUDES` names `--exclude whitaker` because the root
+  package's *test binaries* cannot link under `--all-features`; the *library*
+  links fine. `src/testing/ui/tests.rs` — which holds
+  `runner_env_guard_marks_the_toolchain_library_as_prepared` and its
+  explicit-zero case — therefore ran nowhere. A new `test-root-lib` target runs
+  `nextest run -p whitaker --lib --all-features`, `make test` invokes it, and
+  the target is in `.PHONY`. Gate evidence: 56 tests run, 56 passed, 0 skipped,
+  exit 0, under both the default and `ci` profiles
+  (`/tmp/trl-harden-lint-whitaker-gate.out`).
+- [x] (2026-11-03) The new gate is non-vacuous, proved by a seeded behavioural
+  fault rather than a compile error. Replacing `with_copy_library_flag`'s body
+  with an unconditional set compiled cleanly and produced 55/56 with
+  `runner_env_guard_marks_the_toolchain_library_as_prepared::case_2_explicit_value_is_kept`
+  FAILED and `MAKE_EXIT=2`. The guard was then restored and `git diff --stat`
+  came back empty before the green run above. The first attempt at this control
+  was **not** evidence: deleting the branch instead failed to compile on
+  `dead_code` and `unused_imports`, which proves nothing about detection.
+- [x] (2026-11-03) Finding 3's contract-test half repaired in
+  `tests/workflow_contracts/lint_makefile_test.py`, 13 tests, all passing
+  (`/tmp/contracts4-harden-lint-whitaker-gate.out`). It asserts the two-target
+  `lint` composition, warning denial in both tools, `--lib whitaker_suite` with
+  no `--all` fallback, the support-crate-only package set, the CI install step
+  and its position before `Lint`, the cached-install skip, the workflow-level
+  installer pin, the cache key, and the new `test-root-lib` wiring.
+- [x] (2026-11-03) Those contract tests are non-vacuous, and the check is
+  automated rather than argued. `/tmp/redcheck.py` mutates the Makefile and
+  workflow into eleven broken states and requires each corresponding test to
+  fail; it also runs one allow-probe that drops `--exclude whitaker` wholesale
+  and requires the root-lib test to stay **green**, so the tolerated end state
+  is not mistaken for a regression. Result: eleven `RED ok` lines, one
+  `GREEN ok`, "all probes red", exit 0
+  (`/tmp/redcheck2-harden-lint-whitaker-gate.out`).
+- [x] (2026-11-03) Finding 3's third strand — the CI boundary tests for the
+  Whitaker install — is the same contract file. The earlier
+  `tests/workflows/test_ci_workflow.py` covers the workflow's other steps and
+  was left alone; this is a new, narrow file beside it rather than a rewrite of
+  an existing suite.
+- [x] (2026-11-03) Finding 4: the execplan is reconciled against the published
+  implementation. Corrected here: the "nothing is committed or pushed" claim,
+  the "default-profile overrides never apply to `ci`" claim, the two-crate
+  `Test::src_base` diagnosis, the M4 lease constant, and the abbreviated
+  `selected_revision` (now the full `9fca3bc9fc2bc83c60bde26d18ed68f11564b228`,
+  with the snapshot manifest and three agreeing checks attached).
+- [x] (2026-11-03) `docs/developers-guide.md` corrected and extended. Line 320
+  said `make lint  # Run Clippy`; it now names the two-target gate, and two new
+  subsections document the prerequisite composition, the flag variables and why
+  `--all-targets` is absent, `WHITAKER_PACKAGES`, the `--lib whitaker_suite`
+  selection, the CI installer pin, and the `test-root-lib` target with the
+  `--exclude whitaker` rationale and its retirement path.
+- [x] (2026-11-03) The assessment's inherited-issue note was checked and
+  confirmed, and is left alone. `tests/workflows/test_ci_workflow.py` expects
+  `dtolnay/rust-toolchain@e97e2d8c…` while `.github/workflows/ci.yml:114` uses
+  `dtolnay/rust-toolchain@6c977a6c…`. Both values already differ at base
+  `5a08c6ff`, so this PR neither introduced nor is obliged to fix it, and the
+  contract suite that would catch it is a different directory from the one this
+  branch added. It is recorded here as a known inherited gap rather than
+  silently repaired, because repairing it would import an unrelated change into
+  a scope that is already over tolerance.
+- [x] (2026-11-03) Every gate re-run green on the repair working tree, each
+  logged under `/tmp/<action>-harden-lint-whitaker-gate.out`: `make check-fmt`;
+  `make fmt` (see the note on `docs/whitaker-dylint-suite-design.md` below);
+  `make typecheck`; `make test NEXTEST_PROFILE=ci` — 1673 nextest tests passed,
+  5 skipped, then 56 `test-root-lib` tests passed (the target is reachable and
+  `src/testing/ui/tests.rs` now runs under the gate), then the workspace
+  doctests all `ok`; `make lint` (both halves); `make test-workflow-contracts`
+  (13 passed); the `/tmp/redcheck.py` mutation harness (11 red, 1 green
+  allow-probe); and `make markdownlint` including `spelling` and
+  `spelling-phrase-check`. No gate was run in parallel with another, and
+  `RUSTC_WRAPPER` was left in place throughout.
+- [x] (2026-11-03) One unrelated reflow, excluded from the commit.
+  `make fmt` rewrites a Rust snippet in `docs/whitaker-dylint-suite-design.md`
+  (line 1034) that `mdtablefix` wants to join onto one line and wrap mid-path.
+  The same preview appears at base `5a08c6ff`, so it is pre-existing drift in a
+  file this PR touches only for the 6.0.1→6.3.2 version bump, and applying it
+  would add unrelated churn to an over-tolerance diff. It is reverted before
+  each commit; `make fmt` is expected to reintroduce it locally until the
+  snippet is fenced, which is a separate repair.
+- [ ] Formal CodeRabbit review queued as comenq `0711dcad`, ETA ~4h 29m.
+
+### Scope tolerance disposition
+
+The plan's own tolerance stops at "more than 12 non-ExecPlan files change, or
+more than 600 net lines". The PR exceeds both, so the number is recorded here
+rather than left implicit, split by what produced it.
+
+Measured against base `5a08c6ff`, excluding `docs/execplans/`, the assessed head
+`adc974c9` is **58 files, +1464/−846, net 618** — which reproduces the figure
+the assessment reported, so the two agree on the measurement rather than on the
+interpretation.
+
+| Segment                          | Commits                 | Files | Insertions | Deletions | Net |
+| -------------------------------- | ----------------------- | ----- | ---------- | --------- | --- |
+| Original PR work (2026-08-30)    | `43b488ee`, `b6be553d`  | 36    | 425        | 288       | 137 |
+| Repair increment (2026-11-01/03) | `d10469fd` … `adc974c9` | 25    | 1045       | 564       | 481 |
+| Union at the assessed head       |                         | 58    | 1464       | 846       | 618 |
+
+The segments are not disjoint, and only the net column is additive. The file
+counts sum above the union because three files appear in both rows. The
+insertion and deletion columns each sum six lines above it for the same reason:
+in `.github/workflows/ci.yml`, `AGENTS.md` and `Makefile`, a change made by the
+original work that the repair increment leaves in place is counted by both
+segment rows and once by the union, which overshoots by six inserted and six
+deleted lines — one and one, four and four, and one and one respectively. The
+net column does sum exactly, `137 + 481 = 618`, because a surviving change
+contributes the same net to both rows as to the union; that is the check that
+the split covers the whole change without double counting. Twenty-two files are
+touched only by the repair increment.
+
+The breach is real and is not argued away. It was accepted because the
+assessment's finding set is itself the cause: findings 1 and 2 rebuilt the
+nextest filter evaluator, finding 3 added a gate target and a contract suite,
+and finding 4 is documentation. None of those is optional under this skill's
+"action every finding" rule, and none can be shrunk without dropping a finding.
+The disposition is therefore *accepted with this record*, not *within
+tolerance*. The original PR work, at 36 files and net 137, is the part the
+tolerance was written for; the repair increment, at net 481, is the
+review-driven overrun.
+
+The figures above deliberately stop at `adc974c9`. The finding-3 and finding-4
+repairs in the working tree add two new files and edit five, and no smaller
+scope would discharge the findings, so the final head is larger again. Sizing
+that increment precisely in this document would require a figure that this
+document's own commit changes — a self-reference with no stable answer. The
+last row is therefore the honest, reproducible measurement, and the statement
+of *direction* is what the disposition rests on.
 
 ## Surprises & discoveries
 
@@ -473,7 +725,9 @@ The gate-2 failure is worth recording separately because the configuration
 looked right and the failure did not resemble a configuration problem. The
 override read:
 
-    filter = "package(no_unwrap_or_else_panic) & test(ui::ui)"
+```toml
+filter = "package(no_unwrap_or_else_panic) & test(ui::ui)"
+```
 
 but nextest reports the crate's tests as `ui`, `ui::hand_written_…`,
 `ui::example_compiles_under_test_harness`, and so on. No test has the name
@@ -517,27 +771,37 @@ list is empty — so the threshold had to be recovered another way. The local
 CodeScene CLI (`cs`, version 1.0.52) reproduced the finding exactly and gave
 the number the API withheld. Its delta command was run as:
 
-    cs delta origin/harden-lint-workspace-config --output-format json
+```sh
+cs delta origin/harden-lint-workspace-config --output-format json
+```
 
 That command reported "In this module, 53.3% of all arguments to its 16
 functions are strings. The threshold for string arguments is 39.0%". An
 independent hand census of the file reproduced the same figures: 16 functions,
-15 arguments, 8 of them string-typed, ratio 0.5333. CodeScene's measurement
-was therefore confirmed rather than merely accepted.
+15 arguments, 8 of them string-typed, ratio 0.5333. CodeScene's measurement was
+therefore confirmed rather than merely accepted.
 
-The root cause is that the file is pre-existing; it exists on `origin/main`
-and on this PR's base branch. This branch's delta grew it from 137 to about
-378 lines (+300/−59), which pushed the module's string-argument ratio from
-below the threshold to 53.3%, above the 39.0% warning threshold. CodeScene
-analyses only the delta, which is why pre-existing higher-ratio files
-elsewhere in the repository were not flagged.
+The root cause is that the file is pre-existing; it exists on `origin/main` and
+on this PR's base branch. This branch's delta grew it from 137 to about 378
+lines (+300/−59), which pushed the module's string-argument ratio from below
+the threshold to 53.3%, above the 39.0% warning threshold. CodeScene analyses
+only the delta, which is why pre-existing higher-ratio files elsewhere in the
+repository were not flagged.
 
-### Why `make test` fails for exactly two lint crates
+### Why `make test` failed for exactly two lint crates
 
-The two failing crates, `no_unwrap_or_else_panic` and
-`rstest_helper_should_be_fixture`, are the only two whose UI harnesses call
+Two crates failed in that run, `no_unwrap_or_else_panic` and
+`rstest_helper_should_be_fixture`, and an earlier revision of this entry
+explained them by saying their harnesses call
 `dylint_testing::ui::Test::src_base` directly instead of going through
-`whitaker::testing::ui::run_with_runner`. That distinction is the whole defect.
+`whitaker::testing::ui::run_with_runner`. That explanation is wrong, and the
+source says so plainly: every lint crate in this tree calls `run_with_runner`,
+at the base commit and at `HEAD`. `src_base` is also the wrong suspect for a
+different reason — `Test::src_base` runs through `run_tests`, which never
+copies a library at all; `copy_library` is reached from `dylint_libs`, which
+every `Test::run` calls.
+
+The real mechanism is narrower and does not depend on the `Test` constructor:
 
 `whitaker`'s helper builds the library itself (`src/testing/ui/toolchain.rs`):
 it reads the package's feature table, finds `dylint-driver`, and passes
@@ -549,6 +813,21 @@ lint crate declares `default = []` and puts the lint behind an optional
 `#[cfg(not(feature = "dylint-driver"))]` stub. `copy_library` then copies the
 stub over the toolchain-qualified filename, and `compiletest_rs` loads it and
 reports `could not find 'dylint_version'`.
+
+What decides *which* crates fail is build ordering, not call path. The wrapper
+runs first and writes a correct toolchain-qualified library; the bare build
+overwrites `target/debug/libX.so` only if Cargo actually rebuilds it. A crate
+whose plain artefact was already fresh from the gate's own `--all-features`
+compile keeps the working library, and a crate whose artefact was rebuilt from
+the stub loses it. That is why the same commit can pass and fail on different
+days, and why the two failures are a sample rather than a rule.
+
+The published repair removes the overwrite instead of depending on ordering:
+`with_runner_env` sets `DYLINT_LINK_ENABLE_COPY_LIBRARY=1` when the caller has
+not, and `dylint_internal::link::debug_path_with_toolchain` then returns the
+toolchain-qualified path without copying. `env::enabled` treats any value other
+than `0` as on, so an explicit `DYLINT_LINK_ENABLE_COPY_LIBRARY=0` still opts
+out, which `case_2_explicit_value_is_kept` pins.
 
 The measurements that pin this down, taken on this candidate:
 
@@ -571,12 +850,21 @@ solved this durably by vendoring `dylint_testing` (`Cargo.toml`:
 adding a reproducible, Clippy-keyed driver bootstrap. This branch carries
 neither, so it inherits the ordering sensitivity.
 
-The separate lock_timeout failures are a third, unrelated defect and are
-already recorded above: a host-global `/tmp/rstest-helper-example-harness.lock`
-plus `[[profile.default.overrides]]` that never apply to `profile.ci`. `main`
-has fixed both (6-minute acquire, `serial-dylint-ui` overrides under
-`profile.ci` with 75–120-minute timeouts). Neither file is touched by this
-branch.
+The separate lock_timeout failures are a third, unrelated defect, already
+recorded above: a host-global `/tmp/rstest-helper-example-harness.lock`. This
+entry originally added a second half — "`[[profile.default.overrides]]` that
+never apply to `profile.ci`" — and that half was **wrong**. Nextest inherits
+through the profile chain and applies the first override that matches a test
+*per setting*, so `default`'s overrides were always in force under
+`NEXTEST_PROFILE=ci`. What the `ci` profile genuinely lacked was its own copy
+of the budgets, which is a legibility problem rather than a runtime one.
+
+Both files are now touched by this branch: the lock resolves through Cargo's
+target directory into `serial-dylint-ui`, and `.config/nextest.toml` carries
+per-profile base timeouts plus `[[profile.ci.overrides]]`. `main` had fixed the
+same two defects independently (6-minute acquire, `serial-dylint-ui` under
+`profile.ci` with 75–120-minute timeouts); this branch reaches the same end
+state without importing `main`'s vendored `dylint_testing`.
 
 ## Decision log
 
@@ -650,8 +938,8 @@ A rebase onto `main` remains available, but it is no longer the cheaper option
 and is not required for the gates to pass.
 
 **Answer the CodeScene advisory with typed domain values, not suppression.**
-The String Heavy Function Arguments finding in `tests/nextest_ui_filter.rs`
-is repaired by introducing three domain newtypes: `ProfileName<'a>(&'a str)`,
+The String Heavy Function Arguments finding in `tests/nextest_ui_filter.rs` is
+repaired by introducing three domain newtypes: `ProfileName<'a>(&'a str)`,
 `PackageName<'a>(&'a str)` with a `Display` implementation, and
 `FilterExpression<'a>(&'a str)` with a `mentions(PackageName)` method that
 absorbs the former free function
@@ -665,9 +953,19 @@ genuine design weakness, and the advisory identified it correctly.
 
 ## Outcomes & retrospective
 
-Complete for M1–M3. M4 remains open: the repair is complete in the working tree
-and its focused tests pass, but the four repository gates have not yet all run
-against the repaired candidate and nothing is committed or pushed.
+Complete for M1–M3. M4 is open for one reason only: its green CI result belongs
+to `adc974c9`, and the repairs that answer the assessment's findings 3 and 4
+are not in that commit. Everything up to `adc974c9` is committed and pushed —
+nine commits from base `5a08c6ff`, of which seven are the 2026-11-01/03 repair
+increment — and the commit that carries this text, the `test-root-lib` target
+and the contract suite after it is the candidate still awaiting a hosted run.
+
+An earlier revision of this section said "nothing is committed or pushed". That
+was true when it was written and false by 2026-11-03: `adc974c9` is on
+`origin/harden-lint-whitaker-gate`, its `ls-remote` head matches
+`git rev-parse HEAD`, and CodeScene reports success on it. The distinction M4
+still owes is not publication but *hosted confirmation of the final candidate*,
+and that is a different, narrower gap.
 
 Gate 2 has now run once and failed, and the failure was informative in a way
 the earlier design did not anticipate. The nextest overrides carried a filter
@@ -703,11 +1001,28 @@ two blockers were diagnosed to source level and repaired rather than deferred:
   hung test was reported slow for ever and only the job timer ended it, which
   cancels the run and discards the log that would have named the test.
 
-The hosted CodeScene advisory is cleared locally, with the evidence recorded
-under Progress: the CLI reproduces the finding, the hand census confirms its
-figures, and the typed-newtype refactor drives `cs review` back to a score of
-10.0 with no findings, with `cs delta` producing empty output. Hosted
-confirmation on a new head is still pending, as is the full four-gate re-run.
+The hosted CodeScene advisory is cleared, in both directions. Locally, the CLI
+reproduces the finding, the hand census confirms its figures, and the
+typed-newtype refactor drives `cs review` back to a score of 10.0 with no
+findings, with `cs delta` producing empty output. Remotely, the hosted
+`CodeScene Code Health Review (main)` check concludes `success` with zero
+annotations on `adc974c9`, as recorded under Progress.
+
+The hosted CI re-run on that same head has since concluded green. Run
+[41598023070](https://github.com/leynos/whitaker/actions/runs/41598023070)
+reports `conclusion: success`: `linux-full` and `windows-compat` both complete
+and successful, with `Check formatting`, the spelling, Nixie and Markdown gates,
+`Install Whitaker`, `Lint` (both halves), `Workflow contract tests`,
+`Publish dry run`, `Test` and `Installer release dry run` all passing, and
+`coverage-check` skipped by its configured lane selection.
+
+What that does not certify is the tree described in this document. The run
+checked out `adc974c9`; the finding-3 and finding-4 repairs — the
+`test-root-lib` target, the rewritten nextest filters in both profiles, the new
+contract suite and the corrections to this plan — are uncommitted. They are a
+new candidate, and the green result belongs to the old one. M4 therefore closes
+when a fresh `workflow_dispatch` run on the pushed repair head is green, not
+before.
 
 ## Conformance basis
 

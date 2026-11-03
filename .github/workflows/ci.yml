@@ -505,6 +505,18 @@ jobs:
         with:
           globs: '**/*.md'
 
+      # The installer is fetched from its published release archive rather than
+      # built from source: `linux-full` runs on paid Ubicloud runners, and
+      # `ubicloud_tool_provenance_test` forbids `cargo install` anywhere in
+      # such a job. Provisioning binstall explicitly is what lets the download
+      # step below have a single, unconditional path instead of a
+      # compiler fallback that would never have been the intended route.
+      - name: Install cargo-binstall
+        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
+        with:
+          tool: cargo-binstall@1.16.6
+          fallback: none
+
       - name: Cache Whitaker installer
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
         with:
@@ -516,12 +528,7 @@ jobs:
       - name: Install Whitaker
         run: |
           if ! command -v whitaker-installer >/dev/null 2>&1; then
-            if cargo binstall --version >/dev/null 2>&1; then
-              cargo binstall --no-confirm --locked "whitaker-installer@${WHITAKER_INSTALLER_VERSION}"
-            else
-              echo "cargo-binstall unavailable; building whitaker-installer from crates.io"
-              cargo install --locked whitaker-installer --version "${WHITAKER_INSTALLER_VERSION}"
-            fi
+            cargo binstall --no-confirm --locked "whitaker-installer@${WHITAKER_INSTALLER_VERSION}"
           fi
           whitaker-installer
 
