@@ -8,10 +8,13 @@
 //! `cargo dylint`'s exit status. A relocated installation therefore needs no
 //! regenerated scripts.
 
-use crate::dirs::BaseDirs;
-use crate::error::{InstallerError, Result};
-use crate::resolution::SUITE_CRATE;
 use std::path::Path;
+
+use crate::{
+    dirs::BaseDirs,
+    error::{InstallerError, Result},
+    resolution::SUITE_CRATE,
+};
 
 /// Result of wrapper script generation.
 #[derive(Debug)]
@@ -48,8 +51,10 @@ pub enum WrapperScripts {
 /// # Examples
 ///
 /// ```no_run
-/// use whitaker_installer::dirs::{BaseDirs, SystemBaseDirs};
-/// use whitaker_installer::wrapper::generate_wrapper_scripts;
+/// use whitaker_installer::{
+///     dirs::{BaseDirs, SystemBaseDirs},
+///     wrapper::generate_wrapper_scripts,
+/// };
 ///
 /// let dirs = SystemBaseDirs::new().expect("failed to initialize directories");
 /// let result = generate_wrapper_scripts(&dirs)?;
@@ -81,8 +86,7 @@ pub fn generate_wrapper_scripts(dirs: &dyn BaseDirs) -> Result<WrapperResult> {
 /// };
 ///
 /// let dirs = SystemBaseDirs::new().expect("platform directories should exist");
-/// let result =
-///     generate_wrapper_scripts_with(&dirs, WrapperScripts::WhitakerLsOnly)?;
+/// let result = generate_wrapper_scripts_with(&dirs, WrapperScripts::WhitakerLsOnly)?;
 /// assert!(result.whitaker_ls_path.exists());
 /// # Ok::<(), whitaker_installer::error::InstallerError>(())
 /// ```
@@ -139,7 +143,8 @@ fi"#;
 #[cfg(unix)]
 fn unix_whitaker_script() -> String {
     format!(
-        "#!/usr/bin/env bash\nset -euo pipefail\n{UNIX_LOCATE_INSTALLER}\nexec \"${{installer}}\" run -- \"$@\"\n"
+        "#!/usr/bin/env bash\nset -euo pipefail\n{UNIX_LOCATE_INSTALLER}\nexec \"${{installer}}\" \
+         run -- \"$@\"\n"
     )
 }
 

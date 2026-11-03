@@ -13,12 +13,17 @@ use rustc_hir as hir;
 use rustc_lint::{LateContext, LateLintPass, LintContext};
 #[cfg(test)]
 use rustc_span::DUMMY_SP;
-use rustc_span::source_map::SourceMap;
-use rustc_span::symbol::Ident;
-use rustc_span::{BytePos, Span};
+use rustc_span::{BytePos, Span, source_map::SourceMap, symbol::Ident};
 use whitaker_common::i18n::{
-    Arguments, DiagnosticMessageSet, FluentValue, Localizer, MessageKey, MessageResolution,
-    get_localizer_for_lint, noop_reporter, safe_resolve_message_set,
+    Arguments,
+    DiagnosticMessageSet,
+    FluentValue,
+    Localizer,
+    MessageKey,
+    MessageResolution,
+    get_localizer_for_lint,
+    noop_reporter,
+    safe_resolve_message_set,
 };
 use whitaker_lint_core::{SharedConfig, module_body_span, module_header_span};
 
@@ -61,9 +66,7 @@ impl<'a> ParseInput<'a> {
     /// assert_eq!(input.as_str(), "example");
     /// ```
     #[must_use]
-    pub fn as_str(&self) -> &'a str {
-        **self
-    }
+    pub fn as_str(&self) -> &'a str { **self }
 }
 
 const LINT_NAME: &str = "module_must_have_inner_docs";

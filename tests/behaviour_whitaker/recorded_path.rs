@@ -41,17 +41,11 @@ struct TestBaseDirs {
 }
 
 impl BaseDirs for TestBaseDirs {
-    fn home(&self) -> Option<PathBuf> {
-        None
-    }
+    fn home(&self) -> Option<PathBuf> { None }
 
-    fn executables(&self) -> Option<PathBuf> {
-        None
-    }
+    fn executables(&self) -> Option<PathBuf> { None }
 
-    fn whitaker_data(&self) -> Option<PathBuf> {
-        Some(self.data.clone())
-    }
+    fn whitaker_data(&self) -> Option<PathBuf> { Some(self.data.clone()) }
 }
 
 struct RecordedPathFixture {

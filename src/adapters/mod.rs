@@ -17,7 +17,13 @@ use whitaker_installer::{
 };
 
 use crate::ports::{
-    CliError, InstallRequest, InstallService, LintInventory, LintRunner, ListRequest, Services,
+    CliError,
+    InstallRequest,
+    InstallService,
+    LintInventory,
+    LintRunner,
+    ListRequest,
+    Services,
     StagedInventory,
 };
 
@@ -38,9 +44,7 @@ impl SystemServices {
     /// let _ = ports;
     /// ```
     #[must_use]
-    pub const fn new() -> Self {
-        Self
-    }
+    pub const fn new() -> Self { Self }
 
     /// Borrows the implementation through the command ports.
     ///
@@ -119,9 +123,7 @@ fn signal_exit_code(status: ExitStatus) -> Option<i32> {
 }
 
 #[cfg(not(unix))]
-const fn signal_exit_code(_status: ExitStatus) -> Option<i32> {
-    None
-}
+const fn signal_exit_code(_status: ExitStatus) -> Option<i32> { None }
 
 /// Resolves the library path used when forwarding a command to cargo-dylint.
 fn active_library_path() -> Option<OsString> {

@@ -172,9 +172,8 @@ fn serial_dylint_ui_filter_captures_integration_and_nested_cargo_ui_tests(
             .any(|o| extract_filter(o).contains(filter_clause));
         assert!(
             captured,
-            "some serial-dylint-ui override must capture nested Cargo UI test \
-             `{filter_clause}` so its compiler resources are serialized on \
-             constrained runners; found filters: {:?}",
+            "some serial-dylint-ui override must capture nested Cargo UI test `{filter_clause}` \
+             so its compiler resources are serialized on constrained runners; found filters: {:?}",
             overrides
                 .iter()
                 .map(|o| extract_filter(o))

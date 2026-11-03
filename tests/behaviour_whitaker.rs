@@ -36,14 +36,10 @@ impl CliWorld {
 
 #[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
-fn world() -> CliWorld {
-    CliWorld::default()
-}
+fn world() -> CliWorld { CliWorld::default() }
 
 #[given("the whitaker binary is available")]
-fn given_binary_available(world: &CliWorld) {
-    let _ = world;
-}
+fn given_binary_available(world: &CliWorld) { let _ = world; }
 
 #[given("a Whitaker workspace checkout")]
 fn given_workspace_checkout(world: &CliWorld) -> Result<(), String> {
@@ -286,41 +282,25 @@ fn then_error_names_conflicts(world: &CliWorld) -> Result<(), String> {
 }
 
 #[scenario(path = "tests/features/whitaker_cli.feature", index = 0)]
-fn scenario_root_command_lists_subcommands(world: CliWorld) {
-    let _ = world;
-}
+fn scenario_root_command_lists_subcommands(world: CliWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/whitaker_cli.feature", index = 1)]
-fn scenario_help_exits_successfully(world: CliWorld) {
-    let _ = world;
-}
+fn scenario_help_exits_successfully(world: CliWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/whitaker_cli.feature", index = 2)]
-fn scenario_lists_staged_lints_as_json(world: CliWorld) {
-    let _ = world;
-}
+fn scenario_lists_staged_lints_as_json(world: CliWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/whitaker_cli.feature", index = 3)]
-fn scenario_lists_staged_lints_as_text(world: CliWorld) {
-    let _ = world;
-}
+fn scenario_lists_staged_lints_as_text(world: CliWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/whitaker_cli.feature", index = 4)]
-fn scenario_dry_run_has_no_stdout_or_wrapper(world: CliWorld) {
-    let _ = world;
-}
+fn scenario_dry_run_has_no_stdout_or_wrapper(world: CliWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/whitaker_cli.feature", index = 5)]
-fn scenario_conflicting_lint_flags_are_rejected(world: CliWorld) {
-    let _ = world;
-}
+fn scenario_conflicting_lint_flags_are_rejected(world: CliWorld) { let _ = world; }
 
 #[cfg(unix)]
 #[scenario(path = "tests/features/whitaker_cli.feature", index = 6)]
-fn scenario_legacy_lint_invocations_are_forwarded(world: CliWorld) {
-    let _ = world;
-}
+fn scenario_legacy_lint_invocations_are_forwarded(world: CliWorld) { let _ = world; }
 
-fn workspace_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-}
+fn workspace_root() -> PathBuf { PathBuf::from(env!("CARGO_MANIFEST_DIR")) }

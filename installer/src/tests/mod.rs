@@ -6,6 +6,7 @@ use std::{path::PathBuf, time::Duration};
 
 use rstest::{fixture, rstest};
 
+use super::*;
 use crate::{
     cli::{InstallArgs, LintSelectionFlags},
     crate_name::CrateName,
@@ -28,8 +29,6 @@ use crate::{
         *,
     },
 };
-
-use super::*;
 
 fn dependency_install_options<'a>(
     dirs: &'a TestBaseDirs,

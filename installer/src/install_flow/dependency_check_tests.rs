@@ -1,9 +1,11 @@
 //! Verify failed dependency queries stop before the installation decision.
 
+use std::cell::Cell;
+
+use rstest::rstest;
+
 use super::dependency_check::ensure_dylint_tools_with_query;
 use crate::error::InstallerError;
-use rstest::rstest;
-use std::cell::Cell;
 
 /// Verify failed availability queries stop before tool installation begins.
 #[rstest]

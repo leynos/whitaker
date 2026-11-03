@@ -9,9 +9,7 @@
 //! extend the recognized test attributes through `dylint.toml` when bespoke
 //! macros are in play.
 
-use std::collections::HashSet;
-use std::ffi::OsStr;
-use std::path::Path;
+use std::{collections::HashSet, ffi::OsStr, path::Path};
 
 use log::debug;
 use rustc_hir as hir;
@@ -20,11 +18,12 @@ use rustc_middle::ty::{self, Ty};
 use rustc_span::{RemapPathScopeComponents, sym};
 use serde::Deserialize;
 use whitaker_common::{AttributePath, Localizer, get_localizer_for_lint};
-use whitaker_lint_core::SharedConfig;
-use whitaker_lint_core::hir::has_test_like_hir_attributes;
+use whitaker_lint_core::{SharedConfig, hir::has_test_like_hir_attributes};
 
-use crate::context::{collect_context, is_cfg_test_attribute, summarize_context};
-use crate::diagnostics::{DiagnosticContext, emit_diagnostic};
+use crate::{
+    context::{collect_context, is_cfg_test_attribute, summarize_context},
+    diagnostics::{DiagnosticContext, emit_diagnostic},
+};
 
 /// Dylint lint declaration and registration glue.
 ///

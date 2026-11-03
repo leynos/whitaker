@@ -8,7 +8,8 @@ use std::{
 use ortho_config::{Localizer, is_display_request};
 
 use super::{
-    Cli, Command,
+    Cli,
+    Command,
     dispatch::{Class, TokenTag, classify},
     exit::Outcome,
     parser::is_common_cluster,

@@ -5,9 +5,11 @@
 //! `whitaker` binary.
 
 use clap::Parser;
-use whitaker_installer::cli::{Cli, Command};
-use whitaker_installer::orchestration::{exit_code_for_run_result, run, run_bootstrap_command};
-use whitaker_installer::output::write_stderr_line;
+use whitaker_installer::{
+    cli::{Cli, Command},
+    orchestration::{exit_code_for_run_result, run, run_bootstrap_command},
+    output::write_stderr_line,
+};
 
 mod tracing_config;
 

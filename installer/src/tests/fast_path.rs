@@ -1,5 +1,10 @@
 //! Tests for fast-path installer helper behaviour.
 
+use camino::{Utf8Path, Utf8PathBuf};
+use rstest::{fixture, rstest};
+use temp_env::with_var_unset;
+
+use super::*;
 use crate::{
     cli::ExecutionFlags,
     crate_name::CrateName,
@@ -8,11 +13,6 @@ use crate::{
     test_support::{TEST_STAGE_SUITE_ENV, env_test_guard},
     toolchain::Toolchain,
 };
-use camino::{Utf8Path, Utf8PathBuf};
-use rstest::{fixture, rstest};
-use temp_env::with_var_unset;
-
-use super::*;
 
 struct FastPathFixture {
     args: InstallArgs,

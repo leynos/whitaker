@@ -8,22 +8,33 @@
 //! snapshot comes from the release or from `--clippy-snapshot-bundle`, or
 //! installation stops.
 
-use crate::bootstrap::{
-    BOOTSTRAP_SCHEMA, BUILT_DRIVER_NOTICE, BootstrapLayout, BootstrapMetadata, StoredPath,
-    is_present_dir,
-};
-use crate::cli::InstallArgs;
-use crate::clippy_snapshot::{
-    BundleSource, ClippySnapshotManifest, embedded_manifest, generation_path, provision,
-};
-use crate::dirs::{BaseDirs, SystemBaseDirs};
-use crate::error::{InstallerError, Result};
-use crate::output::{ShellSnippet, write_stderr_line};
+use std::{ffi::OsString, io::Write};
+
+use camino::{Utf8Path, Utf8PathBuf};
+
 #[cfg(debug_assertions)]
 use crate::test_support::TEST_CLIPPY_SNAPSHOT_MANIFEST_ENV;
-use camino::{Utf8Path, Utf8PathBuf};
-use std::ffi::OsString;
-use std::io::Write;
+use crate::{
+    bootstrap::{
+        BOOTSTRAP_SCHEMA,
+        BUILT_DRIVER_NOTICE,
+        BootstrapLayout,
+        BootstrapMetadata,
+        StoredPath,
+        is_present_dir,
+    },
+    cli::InstallArgs,
+    clippy_snapshot::{
+        BundleSource,
+        ClippySnapshotManifest,
+        embedded_manifest,
+        generation_path,
+        provision,
+    },
+    dirs::{BaseDirs, SystemBaseDirs},
+    error::{InstallerError, Result},
+    output::{ShellSnippet, write_stderr_line},
+};
 
 /// The snapshot generation this installation provisioned.
 #[derive(Debug, Clone)]
@@ -35,9 +46,7 @@ pub(crate) struct InstalledSnapshot {
 
 impl InstalledSnapshot {
     /// The generation exported as `DYLINT_CLIPPY_REPO`.
-    pub(crate) fn generation(&self) -> &Utf8Path {
-        &self.generation
-    }
+    pub(crate) fn generation(&self) -> &Utf8Path { &self.generation }
 
     /// The driver slot exported as `DYLINT_DRIVER_PATH`.
     pub(crate) fn driver_dir(&self) -> Utf8PathBuf {

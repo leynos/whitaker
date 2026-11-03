@@ -3,6 +3,10 @@
 //! This module keeps prebuilt-download fallback and metrics recording logic
 //! separate from CLI orchestration in `main.rs`.
 
+use std::{collections::HashSet, fs, io, io::Write, time::Duration};
+
+use camino::{Utf8Path, Utf8PathBuf};
+
 use crate::{
     builder::{library_extension, library_prefix},
     cli::InstallArgs,
@@ -16,13 +20,6 @@ use crate::{
     prebuilt_path::prebuilt_library_dir,
     resolution::{EXPERIMENTAL_LINT_CRATES, LINT_CRATES, SUITE_CRATE},
 };
-use camino::Utf8Path;
-use camino::Utf8PathBuf;
-use std::collections::HashSet;
-use std::fs;
-use std::io;
-use std::io::Write;
-use std::time::Duration;
 
 pub(crate) mod bootstrap_step;
 mod dependency_check;

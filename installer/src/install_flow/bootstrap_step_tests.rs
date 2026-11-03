@@ -1,23 +1,19 @@
 //! The dry-run bootstrap plan's view of the snapshot generation.
 
+use std::path::PathBuf;
+
+use tempfile::TempDir;
+
 use super::*;
 use crate::bootstrap::BootstrapError;
-use std::path::PathBuf;
-use tempfile::TempDir;
 
 /// Platform directories rooted in a temporary directory.
 struct TempDirs(PathBuf);
 
 impl BaseDirs for TempDirs {
-    fn home(&self) -> Option<PathBuf> {
-        None
-    }
-    fn executables(&self) -> Option<PathBuf> {
-        None
-    }
-    fn whitaker_data(&self) -> Option<PathBuf> {
-        Some(self.0.join("whitaker"))
-    }
+    fn home(&self) -> Option<PathBuf> { None }
+    fn executables(&self) -> Option<PathBuf> { None }
+    fn whitaker_data(&self) -> Option<PathBuf> { Some(self.0.join("whitaker")) }
 }
 
 #[test]

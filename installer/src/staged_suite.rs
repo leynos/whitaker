@@ -4,8 +4,9 @@
 //! helper exists only so debug-built test binaries can stage a cheap synthetic
 //! artefact instead of recursively rebuilding the workspace inside nextest.
 
-use camino::{Utf8Path, Utf8PathBuf};
 use std::fs;
+
+use camino::{Utf8Path, Utf8PathBuf};
 
 use crate::{
     crate_name::CrateName,
@@ -61,11 +62,11 @@ mod tests {
     //! temporary environment-variable helpers to exercise the debug-only staged
     //! suite shortcuts without leaking process-wide state between cases.
 
-    use super::*;
     use rstest::{fixture, rstest};
     use temp_env::{with_var, with_var_unset};
     use tempfile::TempDir;
 
+    use super::*;
     use crate::test_support::{EnvTestGuard, env_test_guard};
 
     struct StagedSuiteSetup {
@@ -76,9 +77,7 @@ mod tests {
     }
 
     impl StagedSuiteSetup {
-        fn requested_suite_crates() -> Vec<CrateName> {
-            vec![CrateName::from(SUITE_CRATE)]
-        }
+        fn requested_suite_crates() -> Vec<CrateName> { vec![CrateName::from(SUITE_CRATE)] }
 
         fn stager(&self) -> Stager {
             Stager::new(self.target_dir.clone(), self.toolchain.channel())

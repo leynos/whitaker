@@ -1,11 +1,18 @@
 //! Query Dylint dependency availability before the install-flow decision.
 
-use crate::deps::{
-    CommandExecutor, DylintToolStatus, PathScanFailure, check_dylint_tools_with_diagnostics,
-};
-use crate::error::Result;
 use std::io::Write;
+
 use tracing::debug;
+
+use crate::{
+    deps::{
+        CommandExecutor,
+        DylintToolStatus,
+        PathScanFailure,
+        check_dylint_tools_with_diagnostics,
+    },
+    error::Result,
+};
 
 /// Query dependency availability and emit bounded PATH diagnostics.
 pub fn check_dylint_tools_for_command(executor: &dyn CommandExecutor) -> Result<DylintToolStatus> {
