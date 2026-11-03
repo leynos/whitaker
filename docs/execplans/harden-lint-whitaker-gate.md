@@ -452,10 +452,31 @@ each push rather than copying an earlier lease into the command.
   `windows-compat` does not run the spelling gate and was still in progress at
   that point; the run is superseded on its `linux-full` half by the next
   dispatch on the corrected head.
-- [ ] Exact-head CI for the corrected repair head. The spelling repair and the
-  plan additions form a new candidate, so neither `adc974c9`'s green result nor
-  `41602487492` transfers to it; a fresh `workflow_dispatch` is required once
-  the commit is pushed.
+- [x] (2026-11-03) Spelling repair committed as `126ffa86` ("Fix the spelling
+  gate and record the probe evidence") and published. All seven gates were run
+  again on the exact bytes committed, sequentially and each once: `check-fmt`,
+  `fmt`, `typecheck`, `test NEXTEST_PROFILE=ci` (1673 nextest passed / 5
+  skipped, then 56 `test-root-lib` passed, then all doctests `ok`), `lint`,
+  `test-workflow-contracts` (13 passed), `markdownlint` (78 files, 0 errors).
+  The `fmt` and `markdownlint` pair was re-run a second time after the final
+  plan edit so the Markdown formatting evidence covers the committed bytes
+  rather than an earlier revision; the file changed at 09:24:58, between the
+  09:23:49 `fmt` log and the 09:31:44 `markdownlint` log.
+- [x] (2026-11-03) Push transport corrected. The first push of `126ffa86` used
+  `origin`, which is an HTTPS URL, and the Lody remote helper rewrote it, so
+  the push printed `To https://github.com/leynos/whitaker.git`. The documented
+  clean environment was not sufficient: beyond the numbered `GIT_CONFIG_*`
+  `insteadof` rewrite, `GIT_EXEC_PATH` points at `~/.lody/gh-session-bin/<id>`
+  and supplies its own `git-remote-https`, and that variable is not in the
+  documented removal list. Stripping every `GIT_*` variable and pinning
+  `GIT_EXEC_PATH=/usr/libexec/git-core` produced a silent, genuine SSH push.
+  The remote content was already correct in both attempts; the branch head
+  `126ffa86` is now confirmed by SSH `ls-remote`, an SSH fetch with a leading
+  `+` refspec, `origin/harden-lint-whitaker-gate`, and `git rev-parse HEAD`,
+  which all agree.
+- [ ] Exact-head CI for `126ffa86`, dispatched as run `41604232779`. This is
+  the candidate that carries all four assessment repairs plus the spelling fix,
+  so neither `adc974c9`'s green result nor `41602487492` transfers to it.
 - [x] (2026-11-03) ExecPlan completeness/correctness assessment posted as issue
   comment
   [6598161483](https://github.com/leynos/whitaker/pull/372#issuecomment-6598161483)
@@ -816,6 +837,23 @@ step to name the defect it caught. The corrected run failed 4 of 10 cases with
 `left: 1200, right: 4500` and messages citing first-matching-override
 precedence — that is a detection, where `0 tests run` was the absence of one.
 
+### A spelling gate sees only what Git tracks
+
+`make spelling` runs `typos`, which walks tracked files. A file that is
+untracked in the working tree is invisible to it, so a local
+`make markdownlint` can be green on a tree that is red the moment the file is
+committed. That is exactly what happened here: a doc comment in
+`tests/nextest_ui_filter/filter_model.rs` used the British `-ised` ending for
+"parenthesized", passed `make markdownlint` while the file was untracked, and
+failed hosted CI on `Enforce en-GB-oxendict spelling` as soon as `57312cfe`
+tracked it. It is the same shape as the tracked-files-only class of surprise
+already recorded for this repository, and the discovery is that it applied to a
+*new* file added in the same change rather than to stale branch content.
+
+The practical rule is to run the spelling gate after staging, or at minimum to
+expect a first-commit surprise for any newly added file with prose in it. CI
+caught it, which is the gate working, but one dispatch was spent learning it.
+
 ### CodeScene measures the delta, not the file
 
 A hosted CodeScene check, `CodeScene Code Health Review (main)`, concluded
@@ -925,6 +963,20 @@ same two defects independently (6-minute acquire, `serial-dylint-ui` under
 state without importing `main`'s vendored `dylint_testing`.
 
 ## Decision log
+
+**Describe a spelling defect rather than quoting it.** Twice in this task the
+spelling gate rejected prose that *quoted* a misspelling — once in a commit
+message draft and once in this plan's "A spelling gate sees only what Git
+tracks" section, where writing `said "parenthesised"` reproduced the very error
+being recorded. The gate is correct to reject it: `typos` cannot tell a quoted
+defect from a made one, and the repository's rule is that exceptions go in
+`typos.local.toml`, not into the prose. The narrow fix is to name the defect
+structurally ("used the British `-ised` ending for *parenthesized*") so no
+forbidden token appears. Reserving `typos.local.toml` for repository
+*terminology* keeps that file meaningful; adding an allow-entry for a one-off
+quotation would erode it. This is worth doing consistently, because a plan that
+documents a class of mistake is exactly where that mistake is likeliest to be
+reintroduced.
 
 **Do not rebase onto `origin/main`.** Patch-identity comparison proves PRs 370
 and 371 are unlanded, so `main` contains none of this stack's parent work.
