@@ -1623,6 +1623,7 @@ make test-doc       # Run the workspace doctests, which `make test` does not
 make check-fmt      # Verify Rust and Markdown formatting
 make fmt            # Apply Rust and Markdown formatting
 make test-root-lib  # Run the whitaker root library's unit tests
+make test-nextest-filter  # Run the nextest override regression guard
 ```
 
 `make test-doc` is a separate lane, not a subset of `make test`:
@@ -2028,6 +2029,23 @@ ever fixed and `--exclude whitaker` can be dropped, `test-root-lib` may be
 retired with it; the contract test in
 `tests/workflow_contracts/lint_makefile_test.py` allows that and only forbids
 keeping the exclusion while losing the gate.
+
+`tests/nextest_ui_filter.rs` is an integration binary of the same excluded
+package, so `TEST_EXCLUDES` skips it and `test-root-lib`'s `--lib` does not
+reach it either. It guards `.config/nextest.toml`, where the `serial-dylint-ui`
+group serializes the Dylint UI harnesses and the slow-timeout overrides size
+their builds. A filter that stops matching, or an override shadowed by an
+earlier broad clause, does not fail any build — it silently stops serializing
+and sizing, and the symptom appears later as flaky Windows CI, far from the
+configuration that caused it. The `test-nextest-filter` target names the single
+integration binary, which `make test` invokes, because that is the only shape of
+`-p whitaker` that links under `--all-features` without pulling
+`rustc_private` into a test binary.
+
+The contract suite pins both of these reachability properties, and it checks
+their *direction* as well as their presence: `test-root-lib` must not select
+`--tests`, and `test-nextest-filter` must not select `--lib`. Either mistake
+would produce a green gate that runs the wrong binary.
 
 ## Mutation-testing workflow contract tests
 

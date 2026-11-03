@@ -17,13 +17,18 @@ The lint gate also needs a prerequisite the Makefile cannot install: the
 must install it as its own step, before `make lint`, at the version the
 workflow pins.
 
-These tests read the Makefile recipe text and parse the workflow YAML; they do
-not run either. Run via ``make test-workflow-contracts``.
+Most of these tests read the Makefile recipe text and parse the workflow YAML
+without running either. The exception is the install step: its branch structure
+is only observable by execution, so it is run against stubs that record every
+command and touch neither the network nor the host. Run via
+``make test-workflow-contracts``.
 """
 
 from __future__ import annotations
 
 import re
+import subprocess
+import tempfile
 from pathlib import Path
 
 import yaml
@@ -139,6 +144,14 @@ def test_lint_whitaker_names_the_aggregate_library_and_its_packages() -> None:
         "lint-whitaker must pass $(WHITAKER_PACKAGES) so the analysed crate set "
         "stays configurable and reviewable"
     )
+    # The flags after `--` decide *what* gets analysed. Dropping them narrows
+    # the gate to the default lib/bin targets of the support crates, which
+    # still exits 0, so a silently shrunken lint would read as a passing gate.
+    for required in ("--all-targets", "--all-features"):
+        assert required in recipe, (
+            f"lint-whitaker must pass {required!r}; without it the suite "
+            f"analyses fewer targets and still exits 0. Found {recipe!r}"
+        )
 
 
 def test_whitaker_packages_stay_inside_the_support_crates() -> None:
@@ -175,6 +188,22 @@ def test_whitaker_packages_stay_inside_the_support_crates() -> None:
     assert forbidden.isdisjoint(analysed), (
         "WHITAKER_PACKAGES must not name rustc_private or driver crates: "
         f"{sorted(forbidden & set(analysed))}"
+    )
+
+    # A ban list alone lets the set shrink to something that still passes:
+    # dropping a support crate narrows what the suite analyses without any
+    # error, so the gate would cover less while continuing to report success.
+    # Naming the intended set makes an accidental deletion a failure, and the
+    # reason to add one is then a deliberate edit to this list as well.
+    intended = {
+        "whitaker-common",
+        "whitaker-installer",
+        "whitaker_clones_core",
+        "whitaker_sarif",
+    }
+    assert intended <= set(analysed), (
+        "WHITAKER_PACKAGES has lost support crates, so the suite now analyses "
+        f"less than the gate claims. Missing: {sorted(intended - set(analysed))}"
     )
 
 
@@ -219,6 +248,44 @@ def test_the_root_library_tests_are_reachable_from_the_test_gate() -> None:
     )
 
 
+def test_the_nextest_filter_regression_guard_is_reachable_from_the_test_gate() -> None:
+    """The nextest override guard must run under `make test`.
+
+    `tests/nextest_ui_filter.rs` is an *integration* binary of the `whitaker`
+    root package, so it is covered by `TEST_EXCLUDES` exactly as the root
+    library is, and `test-root-lib`'s `--lib` does not reach it. Without a
+    target that names this test, nothing in the repository runs it.
+
+    That gap is worth its own check because the defect it guards is silent: a
+    shadowed or non-matching override does not fail the build, it just stops
+    serializing and sizing the dylint UI harnesses, and the symptom appears
+    later as flaky Windows CI far from the configuration that caused it.
+    """
+    if "--exclude whitaker" not in _variable("TEST_EXCLUDES"):
+        return
+
+    recipe = " ".join(_recipe_lines("test-nextest-filter"))
+    assert recipe, (
+        "TEST_EXCLUDES skips the whitaker root package, so a test-nextest-filter "
+        "target must run the nextest override guard it hides"
+    )
+    for required in ("-p whitaker", "--test nextest_ui_filter", "--all-features"):
+        assert required in recipe, (
+            f"test-nextest-filter must select {required!r} so it runs the "
+            f"excluded integration binary; found {recipe!r}"
+        )
+    assert "--lib" not in recipe, (
+        "test-nextest-filter must not select --lib; that shape runs the library "
+        "and would leave the integration binary unexercised"
+    )
+
+    test_recipe = " ".join(_recipe_lines("test"))
+    assert "test-nextest-filter" in test_recipe, (
+        "`make test` must invoke test-nextest-filter, or the nextest override "
+        "guard is unreachable from the repository's gate"
+    )
+
+
 def _load_ci() -> dict[str, object]:
     """Parse the CI workflow."""
     return yaml.safe_load(CI_WORKFLOW_PATH.read_text(encoding="utf-8"))
@@ -244,6 +311,80 @@ def _step_named(name: str) -> tuple[int, dict[str, object]]:
     raise AssertionError(f"linux-full must include a {name!r} step")
 
 
+# Every command the install script can issue, plus `command` itself, is
+# replaced by a stub that records its arguments and reports a fixed success or
+# failure. Anything else the script reaches for is a hard error rather than a
+# real execution, so the harness cannot run an unrelated program on the host.
+_INSTALL_STUB = """\
+#!/bin/sh
+printf '%s\\n' "$0 $*" >>"$STUB_LOG"
+# A successful install must leave the binary runnable, so the script's own
+# final invocation resolves. Only a download creates it.
+case "$0" in
+  */cargo|cargo)
+    printf '#!/bin/sh\\nprintf "%%s\\\\n" "$0 $*" >>"$STUB_LOG"\\n' \\
+      >"$STUB_BIN/whitaker-installer"
+    chmod 0755 "$STUB_BIN/whitaker-installer" ;;
+esac
+exit 0
+"""
+
+
+def _run_install_script(script: str, *, cached: bool, version: str) -> list[str]:
+    """Execute the CI install step against stubs and return what it ran.
+
+    `script` is the workflow's `run:` body, so this exercises the branch
+    structure the workflow actually ships rather than a copy of it. The
+    returned list is each invocation in order, as `program args`. Stub state is
+    per-call: a fresh directory holds the stubs and the log, so cases cannot
+    leak into one another.
+    """
+    with tempfile.TemporaryDirectory() as scratch:
+        directory = Path(scratch)
+        bin_dir = directory / "bin"
+        bin_dir.mkdir()
+        log = directory / "calls.log"
+        log.touch()
+
+        stubs = ["cargo"]
+        # `command -v` is a shell builtin, so the cache probe cannot be stubbed;
+        # whether the binary is "already installed" is expressed by whether it
+        # exists on PATH at all.
+        if cached:
+            stubs.append("whitaker-installer")
+        for name in stubs:
+            stub = bin_dir / name
+            stub.write_text(_INSTALL_STUB, encoding="utf-8")
+            stub.chmod(0o755)
+
+        environment = {
+            # Keep the script's own semantics (`#!/bin/sh`, `set -e`) but make
+            # every command it calls a stub, and let it see the pinned version.
+            "PATH": f"{bin_dir}:/usr/bin:/bin",
+            "HOME": scratch,
+            "STUB_LOG": str(log),
+            "STUB_BIN": str(bin_dir),
+            "WHITAKER_INSTALLER_VERSION": version,
+        }
+        result = subprocess.run(
+            ["/bin/sh", "-e", "-c", script],
+            env=environment,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 0, (
+            "the install step must succeed under the stubs; it failed with "
+            f"{result.returncode}:\n{result.stderr}"
+        )
+
+        return [
+            line.replace(str(bin_dir) + "/", "", 1).strip()
+            for line in log.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+
+
 def test_ci_installs_whitaker_before_the_lint_gate() -> None:
     """`make lint` needs the `whitaker` binary, so CI must install it first.
 
@@ -266,30 +407,40 @@ def test_ci_installs_whitaker_before_the_lint_gate() -> None:
 
     script = install.get("run")
     assert isinstance(script, str), "Install Whitaker must run a shell script"
-    assert "whitaker-installer" in script, (
-        "Install Whitaker must invoke whitaker-installer, which installs the "
-        "suite the lint gate runs"
+
+    # Reading the script is not enough. Text assertions cannot tell which
+    # branch runs, and a deleted standalone execution still satisfies a
+    # "mentions whitaker-installer" check. Running the script against stubs
+    # pins the behaviour instead: the cached path must skip the download, the
+    # download path must run at the pinned version, and the freshly installed
+    # binary must then actually be executed in both cases.
+    #
+    # There is deliberately no `cargo install` case. `linux-full` runs on paid
+    # Ubicloud runners, where `ubicloud_tool_provenance_test` forbids building
+    # a published binary from source; the binstall provisioning step is what
+    # makes that unconditional, so a fallback here would be unreachable code
+    # whose only effect would be to reintroduce the prohibited path.
+    cached = _run_install_script(script, cached=True, version="9.9.9")
+    assert not any("binstall" in call for call in cached), (
+        "the cached path must not download anything; found "
+        f"{[call for call in cached if 'binstall' in call]!r}"
     )
-    assert "command -v whitaker-installer" in script, (
-        "Install Whitaker must skip the download when the cached binary exists"
+    assert cached[-1] == "whitaker-installer", (
+        "the cached path must still execute the installed binary; found "
+        f"{cached!r}"
     )
-    # `cargo binstall --version` is a capability probe, not an install, so a
-    # line only counts when it both installs and names the package.
-    install_commands = [
-        line
-        for line in script.splitlines()
-        if re.search(r"cargo\s+(?:binstall|install)\b", line)
-        and "whitaker-installer" in line
-    ]
-    assert install_commands, (
-        "Install Whitaker must contain an installer install command; found none"
+
+    installed = _run_install_script(script, cached=False, version="9.9.9")
+    assert installed[0].startswith("cargo binstall"), (
+        f"the download must use binstall; found {installed!r}"
     )
-    for command in install_commands:
-        assert "${WHITAKER_INSTALLER_VERSION}" in command, (
-            "every installer install command must name the workflow-pinned "
-            f"version; an unpinned install lets CI and the Makefile drift "
-            f"apart. Found: {command.strip()!r}"
-        )
+    assert "9.9.9" in installed[0], (
+        f"the binstall command must use the pinned version; found {installed[0]!r}"
+    )
+    assert installed[-1] == "whitaker-installer", (
+        "the download path must execute the installed binary after install; "
+        f"found {installed!r}"
+    )
 
 
 def test_ci_pins_the_installer_version_and_keys_its_cache_on_it() -> None:

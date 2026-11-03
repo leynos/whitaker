@@ -312,6 +312,19 @@ test-root-lib: ## Run the whitaker root library tests nextest skips by exclusion
 	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v cargo-nextest >/dev/null || { echo "Install cargo-nextest (cargo install cargo-nextest)"; exit 1; }
 	RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) nextest run $(CARGO_LOCKED) -p whitaker --lib --all-features $(BUILD_JOBS) $(if $(NEXTEST_PROFILE),--profile $(NEXTEST_PROFILE))
 
+# `tests/nextest_ui_filter.rs` is an integration binary of the `whitaker` root
+# package, so `TEST_EXCLUDES` skips it exactly as it skips the root library,
+# and `test-root-lib`'s `--lib` does not reach it either. That leaves the
+# nextest override regression guard unrunnable by any gate. It matters because
+# the failure it guards is silent: a shadowed or non-matching override does not
+# break the build, it just stops serializing and sizing the dylint UI harnesses
+# until Windows CI goes flaky. Naming the single test target keeps the build
+# inside the shape that links, since only the library and this one integration
+# binary avoid the `rustc_private` duplicate-prelude error.
+test-nextest-filter: ## Run the nextest override regression guard nextest skips by exclusion
+	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v cargo-nextest >/dev/null || { echo "Install cargo-nextest (cargo install cargo-nextest)"; exit 1; }
+	RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) nextest run $(CARGO_LOCKED) -p whitaker --test nextest_ui_filter --all-features $(BUILD_JOBS) $(if $(NEXTEST_PROFILE),--profile $(NEXTEST_PROFILE))
+
 coverage: ## Generate LCOV coverage over the CI-tested crate subset
 	@# Reuse the `test` recipe verbatim (same TEST_CARGO_FLAGS excludes,
 	@# same prefer-dynamic RUSTFLAGS, same WHITAKER_SCRIPT safeguard) but
