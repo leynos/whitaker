@@ -179,6 +179,8 @@
   implementation work and larger follow-up tasks.
 - [Issue #523 OrthoConfig adoption plan](execplans/issue-523-adopt-ortho-config-v0-10-0-for-the-whitaker-cli.md)
   records the proposed scope, baseline, implementation sequence, and gates.
+- [Issue #514 debugging note](debugging/debugging-plan-20261024T200138Z.md)
+  records the cause, baseline evidence, and approval gate.
 
 ## Verification evidence
 

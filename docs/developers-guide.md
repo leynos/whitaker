@@ -1173,14 +1173,19 @@ for its `cdylib` lint crates. A doctest is compiled as its own crate, and
 library it is documenting, with `E0658`. With the plain `-D warnings` flags the
 same doctests pass.
 
-`DOCTEST_EXCLUDES` drops every crate that links `rustc_private`: the lint
-crates, the `rustc_*` proxy shims, `clippy_utils`, the `whitaker` root, and the
-suite. That is a structural limit rather than a policy choice. A doctest for
-those crates has no `#![feature(rustc_private)]` of its own and cannot compile
-at all, so the flags exclude what cannot run rather than what is not worth
-running. The remaining four packages, `whitaker-common`, `whitaker-installer`,
-`whitaker_sarif`, and `whitaker_clones_core`, hold the documented public API
-and contribute 335 doctests in about 18 seconds warm.
+`DOCTEST_EXCLUDES` drops the crates that link `rustc_private` without opting
+in: the lint crates, the `rustc_*` proxy shims, `clippy_utils`, the `whitaker`
+root, and the suite. For those crates a doctest has no
+`#![feature(rustc_private)]` of its own and cannot compile at all, so the flags
+exclude what cannot run rather than what is not worth running.
+`bumpy_road_function` is no longer excluded: its examples carry the hidden
+`#![cfg_attr(feature = "dylint-driver", feature(rustc_private))]` and
+`extern crate rustc_driver;` lines that let the doctest crate link the same
+`rustc_*` dependencies as the library. Its `normalize_settings` example also
+carries the `compile_fail,E0432` contract for the removed legacy spelling. The
+five doctested packages, `whitaker-common`, `whitaker-installer`,
+`whitaker_sarif`, `whitaker_clones_core`, and `bumpy_road_function`, hold the
+documented public API and contribute 375 doctests in about 18 seconds warm.
 
 `linux-full` executes no tests. It survives as a job because
 `main-required-checks` requires that context by name, and it carries the
@@ -4601,9 +4606,15 @@ timed out on three 20-minute attempts; the final attempt reached its pass
 fixture after 15 minutes of nested compilation. Retrying restarted that
 expensive build without producing a result. A later full run exceeded the
 45-minute allowance while Cargo waited on package-cache and compiler-admission
-queues. The other discovered compile contracts therefore share a 75-minute
-allowance and disable retries, leaving one build more time to reach its
-fixtures without repeating the same work.
+queues. The Bumpy Road contract no longer pays that cost. Its `pass` case made
+`trybuild` run `cargo build`, and the generated project merged the crate's
+whole Dylint dev-dependency graph, so a cold target recompiled 139 to 148
+seconds of dependencies for two tiny fixtures. Its fixtures were removed in
+favour of the existing `tests/analysis_behaviour.rs` public-path test and a
+`compile_fail,E0432` doctest on `normalize_settings`. The other discovered
+compile contracts therefore share a 75-minute allowance and disable retries,
+leaving one build more time to reach its fixtures without repeating the same
+work.
 
 The six parser-pin build-script integration cases run in the serial
 nested-Cargo group and each use a fresh temporary target directory. The
@@ -4828,9 +4839,8 @@ failure and `tests/nextest_ui_filter.rs` requires the key.
 It discovers the compile-contract tests rather than listing them. A test that
 drives `trybuild` invokes a nested cargo build, so it costs what a build costs
 and the base per-test allowance is the wrong order of magnitude for it. The
-current discovery finds eight tests across
+current discovery finds seven tests across
 `common/tests/public_api_contract.rs`,
-`crates/bumpy_road_function/tests/api_contract.rs`,
 `crates/whitaker_sarif/tests/api_contract.rs`, `installer/tests/ui.rs`,
 `crates/whitaker_test_macros/tests/ui.rs`, and
 `crates/rstest_helper_should_be_fixture/tests/ui.rs`. Three of those binaries
