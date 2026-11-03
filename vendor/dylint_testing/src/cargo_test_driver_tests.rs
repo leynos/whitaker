@@ -272,9 +272,9 @@ fn preserves_offline_trybuild_arguments() {
     assert_eq!(actual, ["build", "--offline"]);
 }
 
-/// Recognise and route the prepared manifest through a `..` spelling.
+/// Recognize and route the prepared manifest through a `..` spelling.
 #[test]
-fn recognises_a_manifest_spelled_through_a_parent_segment() {
+fn recognizes_a_manifest_spelled_through_a_parent_segment() {
     let workspace = Path::new(env!("CARGO_MANIFEST_DIR"));
     let manifest = workspace.join("src").join("..").join("Cargo.toml");
     let manifest = manifest
