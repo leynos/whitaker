@@ -535,8 +535,19 @@ each push rather than copying an earlier lease into the command.
   pattern. The negative control was re-run after the refactor and still yields
   6 passed / 4 failed against `adc974c9`'s configuration, so detection survives
   the change.
-- [ ] Exact-head CI for `06e33c04`. Run `41606198130` covers `615d3bd7` and
-  run `41606387238` covers `8af0fb2b`; both predate the CodeScene repair.
+- [x] (2026-11-03) CodeScene confirmed cleared **hosted**, not only locally.
+  `CodeScene Code Health Review (main)` concludes `pass` on the head after the
+  repair; it had concluded `fail` on `8af0fb2b` and earlier.
+- [ ] Exact-head CI for `b660e777`, the head carrying the CodeScene repair and
+  its plan record. Dispatched as run `41607603679`. Runs `41606198130`
+  (`615d3bd7`) and `41606387238` (`8af0fb2b`) both predate the repair.
+- [ ] CodeRabbit review of the head. `0711dcad` is queued; CodeRabbit reports
+  `Review paused` on the head's commit status, whose summary comment names the
+  cause as an automatic pause after an influx of commits — it last reviewed
+  `b6be553d` and has not reviewed `b660e777`. The pause notice offers
+  `@coderabbitai resume` and a "Resume reviews" checkbox; both are the bot's
+  own shortcut and the queue entry is the authorized route, so the queue is
+  allowed to deliver rather than adding a duplicate request.
 - [x] (2026-11-03) ExecPlan completeness/correctness assessment posted as issue
   comment
   [6598161483](https://github.com/leynos/whitaker/pull/372#issuecomment-6598161483)
