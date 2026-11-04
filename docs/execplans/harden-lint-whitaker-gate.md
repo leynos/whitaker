@@ -304,19 +304,22 @@ each push rather than copying an earlier lease into the command.
   `with_runner_env` around `ensure_toolchain_library` and the runner, and
   `dylint_testing::initialize` is lazy, so it fires inside that closure.
 - [x] (2026-11-03) M3b: the two pre-existing causes found during M3 are
-  repaired in the working tree. `dylint_testing`'s copy-library overwrite is
-  guarded by `DYLINT_LINK_ENABLE_COPY_LIBRARY=1`, the example-harness lock is
+  repaired and published in `f19408ff` (an ancestor of the current head).
+  `dylint_testing`'s copy-library overwrite is guarded by
+  `DYLINT_LINK_ENABLE_COPY_LIBRARY=1`, the example-harness lock is
   target-scoped instead of host-global, and `.config/nextest.toml` now bounds
   tests on both profiles. Gate re-run evidence is recorded under M4.
-- [ ] (in progress) M4: `make fmt` is green and the unrelated
-  `docs/whitaker-dylint-suite-design.md` reflow churn is reverted again after
-  the second `make fmt` pass re-damaged the same `<pre><code>` block. The
-  remaining Rust gates re-run after the gate-2 fix; push, re-observation and CI
-  dispatch follow the gate results. Readiness, not the commit, is the gate.
-  Status at 2026-11-03: the publication and re-observation halves are done (see
-  the Progress entries below through the assessment reply). What M4 still owes
-  is a completed, green exact-head CI result for the head that carries the
-  finding-3 and finding-4 repairs.
+- [x] (2026-11-04) M4: complete on `eabaa0f4`. The repository-wide gates are
+  green on the published head and on the Rust-bearing parent it builds on, and
+  a hosted run has concluded green against it — run `41800660806` on
+  `eabaa0f4` reports `success`, with `linux-full` and `windows-compat` both
+  successful and `coverage-check` skipped by its configured lane selection.
+  The `make fmt` reflow setback this row used to carry was resolved before
+  publication: the unrelated `docs/whitaker-dylint-suite-design.md` churn is
+  reverted (`md5sum` `7fef0aee4c210866329d53ca0f188439`) and `make check-fmt`
+  exits 0 on the tip. The exact-head requirement is now a standing one rather
+  than an outstanding row: every new head needs its own hosted green result,
+  and the rows below record one for each.
 - [x] (2026-11-03) The repair is committed as `f19408ff`
   ("Guard the Dylint copy step and scope the harness lock"). It sits on unpushed
   `55da1e23`, on top of remote `d10469fd`. Nine files, 740 insertions, 177
@@ -558,18 +561,19 @@ each push rather than copying an earlier lease into the command.
   `skipped` because the PR exceeds its 150,000 diff-character limit, an
   external limiter rather than a finding; `automerge` is `skipped` because the
   PR is a stack member.
-- [ ] CodeRabbit review of `9863d842`. `0711dcad` is still queued with three
-  other requests ahead of it; `comenq list` reports a declining ETA, from 2h44m
-  to 1h19m as the queue drained, so it is advancing rather than stalled. The
-  ETA is a prediction of remaining wait, not the request's age. CodeRabbit
-  reports `Review paused` on the head's check run — its title is
-  `Review paused`, its summary says `Result: Skipped - Review paused`, and
-  every step, including `Prepare review scope`, is skipped. The pause is an
-  automatic one after an influx of commits, not a rate limit, and the notices
-  offering `@coderabbitai resume` and a "Resume reviews" checkbox are the bot's
-  own shortcut. The queue entry is the authorized route, a pause is a wait
-  rather than an impasse, and a second entry for the same PR is forbidden, so
-  the queue is allowed to deliver.
+- [x] (2026-11-03) CodeRabbit review of `9863d842`: delivered. `0711dcad` was
+  queued behind three other requests and `comenq list` reported a declining
+  ETA, from 2h44m to 1h19m as the queue drained — a prediction of remaining
+  wait, not the request's age. CodeRabbit reported `Review paused` on the
+  head's check run: its title is `Review paused`, its summary says
+  `Result: Skipped - Review paused`, and every step, including
+  `Prepare review scope`, was skipped. That pause is automatic after an influx
+  of commits, not a rate limit, and the notices offering
+  `@coderabbitai resume` and a "Resume reviews" checkbox are the bot's own
+  shortcut. The queue entry was the authorized route, a pause is a wait rather
+  than an impasse, and a second entry for the same PR is forbidden, so the
+  queue was allowed to deliver — which it did, raising the eleven findings
+  recorded above.
 - [x] (2026-11-03) ExecPlan completeness/correctness assessment posted as issue
   comment
   [6598161483](https://github.com/leynos/whitaker/pull/372#issuecomment-6598161483)
@@ -751,9 +755,10 @@ each push rather than copying an earlier lease into the command.
   `harness_lock` acquisition ceiling, the `temp_env` lock ordering, the
   glob-versus-substring matchers, the `not` precedence, the stale
   developers-guide example, the M4 retrospective, and the Major finding on the
-  source-install toolchain. Repairs for all eleven are in the working tree that
-  carries this row, so they form a new candidate; the eleven hosted results on
-  `9bb6cb1c` do not transfer to it.
+  source-install toolchain. Repairs for all eleven were published in
+  `f199288e` and `b8fff90d`, so they formed a new candidate; the eleven hosted
+  results on `9bb6cb1c` do not transfer to it, and the runs recorded below are
+  what certify it instead.
 - [x] (2026-11-04) Gate and CI evidence now covers the final head `25aa211b`.
   Locally, `make check-fmt` is green on it (5 s), and the full three-gate run
   on its parent `b8fff90d` — `check-fmt`, `lint`, `test` — is green with `test`
@@ -1653,15 +1658,16 @@ and successful, with `Check formatting`, the spelling, Nixie and Markdown gates,
 `Publish dry run`, `Test` and `Installer release dry run` all passing, and
 `coverage-check` skipped by its configured lane selection.
 
-What that does not certify is the tree described in this document. The run
+What that run did not certify was the tree described in this document. It
 checked out `adc974c9`, before the finding-3 and finding-4 repairs — the
 `test-root-lib` target, the rewritten nextest filters in both profiles, the new
 contract suite, and the corrections to this plan — were written. Those were
-uncommitted at that point and were published in `126ffa86`, `5934827f`, and
-`615d3bd7`. They were a new candidate, and that green result belonged to the
-old one. The same rule applies to every head since: run `41618871744` certifies
-`9863d842`, and the repairs that answer CodeRabbit's eleven findings form
-another new candidate whose run has not yet been dispatched.
+published afterwards in `126ffa86`, `5934827f`, and `615d3bd7`. They were a new
+candidate, and that green result belonged to the old one. The same rule has
+applied to every head since, and each one has now been observed: run
+`41618871744` certifies `9863d842`, and the repairs that answered CodeRabbit's
+eleven findings were themselves published as `f199288e` and `b8fff90d` and
+certified by `41791718849`.
 
 ### Whole-profile allowance audit
 
