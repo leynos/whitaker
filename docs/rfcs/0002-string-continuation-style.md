@@ -13,9 +13,9 @@
 
 ## Revision history
 
-**2026-08-21.** Substantive revision, following validation of the original
-text against the pinned `nightly-2026-05-28` compiler sources and a six-lens
-design review. Two defects were corrected rather than annotated:
+**2026-08-21.** Substantive revision, following validation of the original text
+against the pinned `nightly-2026-05-28` compiler sources and a six-lens design
+review. Two defects were corrected rather than annotated:
 
 1. **Root syntax context does not prove a literal is unwrapped.** The original
    §Ordinary string expressions relied on `Span::ctxt().is_root()` to reject
@@ -133,8 +133,8 @@ compiler badge.
 - Enforce `concat!()` for interior source-line joins in ordinary cooked string
   expressions.
 - Enforce the same rule in source-authored format strings when no argument is
-  implicitly captured and the format string was supplied directly to a
-  compiler built-in formatting macro.
+  implicitly captured and the format string was supplied directly to a compiler
+  built-in formatting macro.
 - Retain escaped-newline continuations when direct-literal status, literal
   type, literal-token grammar, or layout trimming requires them.
 - Provide a whole-literal suggestion whenever the proof succeeds, and prove at
@@ -154,11 +154,11 @@ compiler badge.
 - Rewriting raw strings, which do not interpret continuation escapes.
 - Adding explicit format arguments to replace implicit captures.
 - Inspecting macro token trees. The original text qualified this with "whose
-  grammar Whitaker cannot prove" and then, in §Format strings, required
-  exactly such inspection to prove a literal's argument position. That
-  contradiction is resolved in favour of the non-goal: the compiler hands the
-  lint the format string's span directly, so there is no token tree to parse
-  and no argument index to count.
+  grammar Whitaker cannot prove" and then, in §Format strings, required exactly
+  such inspection to prove a literal's argument position. That contradiction is
+  resolved in favour of the non-goal: the compiler hands the lint the format
+  string's span directly, so there is no token tree to parse and no argument
+  index to count.
 - Identifying *which* macro produced a literal. The lint proves the literal's
   position instead; see §Wrapper depth.
 - Reversing already-valid `concat!()` expressions into continuation escapes.
@@ -216,16 +216,16 @@ not proven to preserve the relevant language or macro contract.
 
 ### Wrapper depth
 
-The number of enclosing abstract-syntax-tree nodes whose span came from a
-macro expansion. Zero means nothing stands between the literal and the
-compiler, so replacing the literal with a general expression cannot break an
-enclosing macro's matcher.
+The number of enclosing abstract-syntax-tree nodes whose span came from a macro
+expansion. Zero means nothing stands between the literal and the compiler, so
+replacing the literal with a general expression cannot break an enclosing
+macro's matcher.
 
 This replaces the original text's reliance on root syntax context, which does
 not carry that meaning. When `macro_rules!` substitutes a metavariable,
-`rustc_expand`'s `maybe_use_metavar_location` returns either the original
-token or one respanned with the call-site context; either way the substituted
-token keeps the call site's syntax context. So in
+`rustc_expand`'s `maybe_use_metavar_location` returns either the original token
+or one respanned with the call-site context; either way the substituted token
+keeps the call site's syntax context. So in
 
 ```rust
 macro_rules! shout { ($l:literal) => { let _x = $l; } }
@@ -364,10 +364,10 @@ The rule analyses expression literals and source-authored format arguments
 only. It does not visit or claim classification coverage for patterns,
 attributes, or meta-item literals.
 
-The pass additionally implements `check_item`, `check_item_post`,
-`check_stmt`, `check_expr_post`, and `check_mac_def`. The first four maintain
-wrapper depth; the last participates in the shadow check of §Macro position.
-None of them classifies a literal.
+The pass additionally implements `check_item`, `check_item_post`, `check_stmt`,
+`check_expr_post`, and `check_mac_def`. The first four maintain wrapper depth;
+the last participates in the shadow check of §Macro position. None of them
+classifies a literal.
 
 ### Check ordering
 
@@ -377,8 +377,8 @@ recovery and a re-lex at step 2, before anything had established the literal
 was even a candidate — a source-map binary search and a string allocation for
 every cooked literal in the crate, against a candidate rate that is very close
 to zero in practice. Worse, recovering a snippet from a foreign source file
-decodes an external crate's source out of crate metadata and retains it for
-the remainder of the compilation.
+decodes an external crate's source out of crate metadata and retains it for the
+remainder of the compilation.
 
 1. The token is `token::LitKind::Str`. Touches no source map.
 2. The uncooked symbol contains a backslash followed by a line feed. Symbol
@@ -453,10 +453,10 @@ all biased towards silence:
    macro-by-example matcher to break: `format_args!` parses an expression, and
    `write!`/`writeln!` forward through `$($arg:tt)*`.
 3. **The crate does not shadow any of those names.** A bare name check is sound
-   only if the name cannot be shadowed. If the crate under compilation defines
-   a `macro_rules!` or `macro` with a name in the set, or contains a `use`
-   whose terminal segment is one, or a `#[macro_use] extern crate`, the lint
-   disables itself for that crate entirely.
+   only if the name cannot be shadowed. If the crate under compilation defines a
+   `macro_rules!` or `macro` with a name in the set, or contains a `use` whose
+   terminal segment is one, or a `#[macro_use] extern crate`, the lint disables
+   itself for that crate entirely.
 
 Condition 3 is blunt. It will occasionally silence the lint across a whole
 crate that had no real conflict, and its residual hole — a crate reaching a
@@ -731,8 +731,8 @@ labels on each continuation.
 
 ## Crate layout
 
-Two crates, not one. The original text put everything in a single `cdylib`
-lint crate; splitting the pure logic out buys five things at once.
+Two crates, not one. The original text put everything in a single `cdylib` lint
+crate; splitting the pure logic out buys five things at once.
 
 ```plaintext
 crates/whitaker_string_literals/     # plain rlib, no rustc dependency
@@ -965,8 +965,8 @@ without a control passes against an unimplemented lint and proves nothing.
 - Assert that splitting and re-concatenating copied fragment source equals
   deleting the union of `escape_range` and `skipped_whitespace_range` for every
   selected join. This is also the subject of a deductive proof over sequences,
-  inducting on the *last* range rather than the first, so that no index-rebasing
-  lemma is needed.
+  inducting on the *last* range rather than the first, so that no
+  index-rebasing lemma is needed.
 - Generate arbitrary safe fragment text and one to several continuation joins
   with `proptest`. Generate non-empty indentation after each newline and assert
   the union semantics explicitly, so retaining only that indentation while
@@ -1030,10 +1030,10 @@ Feature: Context-sensitive string continuation style
 ### Macro position fixtures
 
 The original text listed eleven fixtures over `log` and `tracing` grammars.
-Those move to roadmap item 2.4.2 with the facade support. What replaces them
-is one fixture per way the position proof of §Macro position can fail —
-a shorter list, and one that does not decay when a third-party crate ships a
-new macro arm.
+Those move to roadmap item 2.4.2 with the facade support. What replaces them is
+one fixture per way the position proof of §Macro position can fail — a shorter
+list, and one that does not decay when a third-party crate ships a new macro
+arm.
 
 | Fixture                           | Expected result                                                                        |
 | --------------------------------- | -------------------------------------------------------------------------------------- |
@@ -1151,9 +1151,9 @@ not have. Three ways round that were considered:
   emitter that resolves identity, mirroring Clippy's format-argument storage.
   Clippy needs that structure because its format lints reason about *types*;
   this lint reasons about *bytes*. Adopting the structure without the
-  motivation buys one thing — a crate name — and costs a second literal-handling
-  path, shared mutable storage across two pass objects, two more compiler
-  dependencies, and a two-pass suite registration.
+  motivation buys one thing — a crate name — and costs a second
+  literal-handling path, shared mutable storage across two pass objects, two
+  more compiler dependencies, and a two-pass suite registration.
 - Restrict the allowlist to what `ExpnData` alone can distinguish, which cannot
   satisfy the identity clause as written.
 
@@ -1213,18 +1213,17 @@ Added in the 2026-08-21 revision, verified against the pinned
   snippet-versus-input comparison, which is `false` when a procedural macro has
   respanned the literal (rust-lang/rust#114865).
 - `FormatArgs::span` is assigned the fully-expanded format-string expression's
-  span, and `Span::from_inner` maps byte offsets within a token to source
-  spans.
+  span, and `Span::from_inner` maps byte offsets within a token to source spans.
 - The `println!` family appends its newline to the cooked symbol only, leaving
   `uncooked_symbol` — the raw source body — untouched.
 - `rustc_expand`'s `maybe_use_metavar_location` preserves the call-site syntax
   context for tokens substituted from a matcher, while `Marker::mark_span`
-  marks the transcribed structure around them. This is the basis of
-  §Wrapper depth.
+  marks the transcribed structure around them. This is the basis of §Wrapper
+  depth.
 - `rustc-literal-escaper` and `rustc_lexer` both implement the continuation
-  whitespace rule as a single skip over `{space, tab, line feed, carriage
-  return}`, excluding formfeed (rust-lang/rust#136600). This is the basis of
-  §The whitespace rule.
+  whitespace rule as a single skip over
+  `{space, tab, line feed, carriage return}`, excluding formfeed
+  (rust-lang/rust#136600). This is the basis of §The whitespace rule.
 - `SourceFile` construction normalizes newlines, so literal symbols and
   recovered snippets never contain carriage returns.
 - `LintStore::register_early_pass` takes a factory, and the only site that
@@ -1235,8 +1234,8 @@ Added in the 2026-08-21 revision, verified against the pinned
   header: it applies the suggestion, diffs against a `.fixed` file, recompiles
   the result, and fails on residual diagnostics. Note that `dylint_testing`
   constructs its configuration with blessing disabled and exposes no override,
-  so expectation files are updated by copying the actual-output path the
-  report prints, not by an environment variable.
+  so expectation files are updated by copying the actual-output path the report
+  prints, not by an environment variable.
 - `log` 0.4.33's facade macros accept a `logger:` control absent from the
   original allowlist, and separate key-value fields from the message with a
   semicolon.

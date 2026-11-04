@@ -119,7 +119,6 @@ fn run_ui_test_panics_with_context_from_runner_failure() {
     assert!(message.contains("known runner failure"));
 }
 
-
 // A configured wrapper caches or admits compilations, so the runner must not
 // strip it. Example staging tolerates wrappers instead.
 #[test]
@@ -198,8 +197,6 @@ fn overlapping_runner_guards_keep_the_flag_until_the_last_drops() {
     });
 }
 
-
-
 #[cfg(windows)]
 #[test]
 fn windows_env_guard_leaves_absent_rustc_wrapper_untouched() {
@@ -254,7 +251,6 @@ fn runner_env_guard_test_lock_releases_after_panic() {
         .join()
         .expect("second environment-lock test thread should complete");
 }
-
 
 /// Acquires the production environment protocol for assertions spanning a callback.
 fn runner_env_guard_test_lock() -> EnvTestGuard {

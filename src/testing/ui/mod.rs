@@ -14,10 +14,9 @@ mod example;
 
 mod toolchain;
 
-pub use self::example::{StagedExample, stage_example};
-
 use whitaker_common::test_support::env_test_guard;
 
+pub use self::example::{StagedExample, stage_example};
 use self::toolchain::{CrateName, ensure_toolchain_library};
 
 /// Errors produced when preparing or executing Dylint UI tests.
