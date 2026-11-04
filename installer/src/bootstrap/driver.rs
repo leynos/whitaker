@@ -60,9 +60,13 @@ impl DriverIdentity {
 
     /// Render the identity as the ready marker's single line.
     fn to_record(self) -> String {
-        let time = |t: Option<SystemTime>| {
-            t.and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-                .map_or_else(|| "-".to_owned(), |d| d.as_nanos().to_string())
+        let time = |moment: Option<SystemTime>| {
+            moment
+                .and_then(|instant| instant.duration_since(UNIX_EPOCH).ok())
+                .map_or_else(
+                    || "-".to_owned(),
+                    |duration| duration.as_nanos().to_string(),
+                )
         };
         #[cfg(unix)]
         let file = format!("{}:{}", self.file.0, self.file.1);
@@ -88,21 +92,21 @@ impl DriverIdentity {
             if value == "-" {
                 return Some(None);
             }
-            let nanos: u128 = value.parse().ok()?;
-            let nanos = u64::try_from(nanos).ok()?;
+            let parsed: u128 = value.parse().ok()?;
+            let nanos = u64::try_from(parsed).ok()?;
             Some(Some(UNIX_EPOCH + Duration::from_nanos(nanos)))
         };
         let len = next("len")?.parse().ok()?;
         let modified = time(&next("modified")?)?;
         let created = time(&next("created")?)?;
-        let file = next("file")?;
+        let file_field = next("file")?;
         #[cfg(unix)]
         let file = {
-            let (dev, ino) = file.split_once(':')?;
+            let (dev, ino) = file_field.split_once(':')?;
             (dev.parse().ok()?, ino.parse().ok()?)
         };
         #[cfg(not(unix))]
-        let _ = file;
+        let _ = file_field;
         Some(Self {
             len,
             modified,
@@ -227,7 +231,7 @@ impl DriverSlot {
     pub fn lock_shared(&self) -> Result<File, BootstrapError> {
         let file = self.open_lock()?;
         FileExt::lock_shared(&file)
-            .map_err(|error| BootstrapError::io(self.lock_path(), &error))?;
+            .map_err(|error| BootstrapError::io(&self.lock_path(), &error))?;
         Ok(file)
     }
 
@@ -239,7 +243,7 @@ impl DriverSlot {
     pub fn lock_exclusive(&self) -> Result<File, BootstrapError> {
         let file = self.open_lock()?;
         FileExt::lock_exclusive(&file)
-            .map_err(|error| BootstrapError::io(self.lock_path(), &error))?;
+            .map_err(|error| BootstrapError::io(&self.lock_path(), &error))?;
         Ok(file)
     }
 
@@ -262,7 +266,7 @@ impl DriverSlot {
         let mut file = tempfile::NamedTempFile::new_in(&self.dir)
             .map_err(|error| BootstrapError::io(&self.dir, &error))?;
         std::io::Write::write_all(&mut file, record.as_bytes())
-            .map_err(|error| BootstrapError::io(file.path().display(), &error))?;
+            .map_err(|error| BootstrapError::io(&file.path().display(), &error))?;
         file.persist(&marker)
             .map_err(|error| BootstrapError::io(&marker, &error.error))?;
         Ok(())

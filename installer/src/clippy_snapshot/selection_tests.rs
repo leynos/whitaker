@@ -67,13 +67,21 @@ fn reports_why_history_is_insufficient() {
 fn dylint_walk(channels: &[u8], toolchain: u8) -> Option<usize> {
     let mut emitted = Vec::new();
     for index in 1..channels.len() {
-        if channels[index] != channels[index - 1] {
+        let current = channels
+            .get(index)
+            .expect("the index is within the history");
+        let previous = channels
+            .get(index - 1)
+            .expect("the index is within the history");
+        if current != previous {
             emitted.push(index - 1);
         }
     }
-    emitted
-        .into_iter()
-        .find(|&index| channels[index] <= toolchain)
+    emitted.into_iter().find(|&index| {
+        channels
+            .get(index)
+            .is_some_and(|&channel| channel <= toolchain)
+    })
 }
 
 /// The kernel's view of the same history: commits whose channel differs from
@@ -82,17 +90,26 @@ fn dylint_walk(channels: &[u8], toolchain: u8) -> Option<usize> {
 fn kernel_walk(channels: &[u8], rewrites: &[bool], toolchain: u8) -> Option<usize> {
     let last = channels.len() - 1;
     let touched: Vec<usize> = (0..channels.len())
-        .filter(|&i| i == last || rewrites[i] || channels[i] != channels[i + 1])
+        .filter(|&i| {
+            i == last
+                || rewrites.get(i).is_some_and(|&rewrite| rewrite)
+                || channels.get(i) != channels.get(i + 1)
+        })
         .collect();
     let history: Vec<ToolchainChange> = touched
         .iter()
         .map(|&i| ToolchainChange {
             commit: i.to_string(),
-            channel: format!("nightly-{:03}", channels[i]),
+            channel: format!(
+                "nightly-{:03}",
+                channels
+                    .get(i)
+                    .expect("touched indices are within the history")
+            ),
         })
         .collect();
-    let toolchain = format!("nightly-{toolchain:03}");
-    select_revision(&history, &toolchain)
+    let target = format!("nightly-{toolchain:03}");
+    select_revision(&history, &target)
         .ok()
         .map(|change| change.commit.parse().expect("index"))
 }
@@ -120,15 +137,16 @@ proptest! {
 /// `clippy_repository` caches its clone per thread, so each call gets a fresh
 /// thread. The variable is scoped to the selection and restored afterwards.
 fn dylint_selection(repo: &Utf8Path, toolchain: &str) -> Option<String> {
-    let repo = repo.to_owned();
-    let toolchain = toolchain.to_owned();
-    whitaker_common::test_support::with_env_var("DYLINT_CLIPPY_REPO", repo.as_str(), || {
+    let repo_path = repo.to_owned();
+    let target = toolchain.to_owned();
+    whitaker_common::test_support::with_env_var("DYLINT_CLIPPY_REPO", repo_path.as_str(), || {
         std::thread::spawn(move || {
             let revs = dylint_internal::clippy_utils::Revs::new(true).expect("open the repository");
             let mut iter = revs.channel_iter().expect("walk the history");
+            let wanted = target.as_str();
             iter.find(|rev| {
                 rev.as_ref()
-                    .map_or(true, |rev| rev.channel.as_str() <= toolchain.as_str())
+                    .map_or(true, |candidate| candidate.channel.as_str() <= wanted)
             })
             .and_then(Result::ok)
             .map(|rev| rev.oid.to_string())
@@ -161,13 +179,18 @@ fn agrees_with_dylint_on_real_git_history(#[case] steps: &[Step], #[case] expect
         &repo.work,
         &["clone", "--quiet", "--bare", ".", bare.as_str()],
     );
-    let expected = expected.map(|index| repo.commits[index].clone());
+    let expected_commit = expected.map(|index| {
+        repo.commits
+            .get(index)
+            .expect("the expected index is within the history")
+            .clone()
+    });
 
     assert_eq!(
         whitaker_selection(&bare, repo.tip(), FIXTURE_TOOLCHAIN),
-        expected
+        expected_commit
     );
-    assert_eq!(dylint_selection(&bare, FIXTURE_TOOLCHAIN), expected);
+    assert_eq!(dylint_selection(&bare, FIXTURE_TOOLCHAIN), expected_commit);
 }
 
 /// The published snapshot selects the recorded revision under both
@@ -176,9 +199,9 @@ fn agrees_with_dylint_on_real_git_history(#[case] steps: &[Step], #[case] expect
 #[test]
 #[ignore = "needs an installed Clippy snapshot in WHITAKER_CLIPPY_SNAPSHOT_REPO"]
 fn the_published_snapshot_selects_the_recorded_revision() {
-    let repo = std::env::var("WHITAKER_CLIPPY_SNAPSHOT_REPO")
+    let repo_path = std::env::var("WHITAKER_CLIPPY_SNAPSHOT_REPO")
         .expect("WHITAKER_CLIPPY_SNAPSHOT_REPO names an installed snapshot");
-    let repo = Utf8Path::new(&repo);
+    let repo = Utf8Path::new(&repo_path);
     let manifest = crate::clippy_snapshot::embedded_manifest().expect("embedded manifest");
     let expected = Some(manifest.selected_revision.to_string());
 

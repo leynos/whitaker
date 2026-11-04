@@ -136,7 +136,7 @@ fn finite_non_negative(candidate: f64, fallback: f64) -> f64 {
 }
 
 /// Accept only non-zero odd windows, as the smoothing pass requires.
-fn is_valid_window(window: usize) -> bool { window != 0 && (window & 1) == 1 }
+const fn is_valid_window(window: usize) -> bool { window != 0 && (window & 1) == 1 }
 
 /// Clamp fixture thresholds and canonicalize provider attributes.
 fn normalize_rstest_helper(helper: &mut RstestHelper) {

@@ -26,10 +26,10 @@ fn cross_process_lock_contention_and_release() {
 
 /// Assert the child lock attempt matches the operation selected by the parent.
 fn exercise_child_lock_mode(mode: &str) {
-    let executable = match std::env::var_os(CHILD_EXECUTABLE_PATH_ENV) {
-        Some(executable) => std::path::PathBuf::from(executable),
-        None => std::env::current_exe().expect("resolve child test executable"),
-    };
+    let executable = std::env::var_os(CHILD_EXECUTABLE_PATH_ENV).map_or_else(
+        || std::env::current_exe().expect("resolve child test executable"),
+        std::path::PathBuf::from,
+    );
     let configured_target_directory = if mode == "profile-fallback-contended" {
         None
     } else {
@@ -79,11 +79,11 @@ fn exercise_parent_child_lock_contention_and_release() {
     .expect("parent should acquire the effective-target lock");
 
     let contended_child = run_child_lock_test(&target_directory, "contended");
-    assert_successful_lock_child(contended_child, "contended");
+    assert_successful_lock_child(&contended_child, "contended");
     drop(parent_lock);
 
     let acquiring_child = run_child_lock_test(&target_directory, "acquire");
-    assert_successful_lock_child(acquiring_child, "acquire");
+    assert_successful_lock_child(&acquiring_child, "acquire");
 }
 
 /// Match an absolute override to a marker-free process's profile fallback.
@@ -93,10 +93,10 @@ fn exercise_mixed_target_override_and_profile_fallback() {
     let executable = configured_target_directory.join("debug/deps/test-binary");
     std::fs::create_dir_all(executable.parent().expect("get executable directory"))
         .expect("create marker-free profile directory");
-    let configured_target_directory =
+    let canonical_target_directory =
         std::fs::canonicalize(configured_target_directory).expect("canonicalize target root");
     let target_directory =
-        effective_target_directory(&executable, Some(configured_target_directory.as_path()))
+        effective_target_directory(&executable, Some(canonical_target_directory.as_path()))
             .expect("resolve the configured process target directory");
     let parent_lock = ExampleHarnessLock::acquire_for_target_directory(
         &target_directory,
@@ -116,7 +116,7 @@ fn exercise_mixed_target_override_and_profile_fallback() {
     .output()
     .expect("run marker-free process without target override");
 
-    assert_successful_lock_child(output, "profile fallback");
+    assert_successful_lock_child(&output, "profile fallback");
     drop(parent_lock);
 }
 
@@ -133,7 +133,7 @@ fn run_child_lock_test(target_directory: &Path, mode: &str) -> std::process::Out
 }
 
 /// Verify a child ran the requested test case and exited successfully.
-fn assert_successful_lock_child(output: std::process::Output, mode: &str) {
+fn assert_successful_lock_child(output: &std::process::Output, mode: &str) {
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(

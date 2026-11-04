@@ -87,7 +87,10 @@ fn main() {
         }
         Ok(None) => {}
         Err(error) => {
-            eprintln!("whitaker-clippy-snapshot: {error}");
+            // The exit status already reports the failure, so a stderr write
+            // that also fails has nowhere left to go.
+            let mut stderr = std::io::stderr();
+            drop(writeln!(stderr, "whitaker-clippy-snapshot: {error}"));
             std::process::exit(1);
         }
     }
@@ -104,7 +107,7 @@ fn run(command: Command) -> Result<Option<String>, ClippySnapshotError> {
         } => {
             let scratch =
                 tempfile::tempdir().map_err(|error| ClippySnapshotError::io("tempdir", &error))?;
-            let work_dir = work_dir.unwrap_or_else(|| utf8_temp(&scratch));
+            let resolved_work_dir = work_dir.unwrap_or_else(|| utf8_temp(&scratch));
             // The token is offered only after an anonymous clone is refused.
             let token = std::env::var("GH_TOKEN")
                 .or_else(|_| std::env::var("GITHUB_TOKEN"))
@@ -112,7 +115,7 @@ fn run(command: Command) -> Result<Option<String>, ClippySnapshotError> {
             let built = build_bundle(&BuildRequest {
                 manifest,
                 source: source.as_deref().unwrap_or(&manifest.upstream),
-                work_dir: &work_dir,
+                work_dir: &resolved_work_dir,
                 output_dir: &output_dir,
                 token: token.as_deref(),
             })?;
@@ -141,7 +144,7 @@ fn snapshot_manifest() -> Result<&'static ClippySnapshotManifest, ClippySnapshot
         std::env::var_os(whitaker_installer::test_support::TEST_CLIPPY_SNAPSHOT_MANIFEST_ENV)
     {
         let contents = std::fs::read_to_string(&path)
-            .map_err(|error| ClippySnapshotError::io(path.to_string_lossy(), &error))?;
+            .map_err(|error| ClippySnapshotError::io(&path.to_string_lossy(), &error))?;
         let manifest = whitaker_installer::clippy_snapshot::parse_manifest(&contents)?;
         // One manifest per process, read once, like the embedded one.
         return Ok(Box::leak(Box::new(manifest)));
@@ -153,8 +156,8 @@ fn snapshot_manifest() -> Result<&'static ClippySnapshotManifest, ClippySnapshot
 fn absolute(path: &Utf8PathBuf) -> Result<Utf8PathBuf, ClippySnapshotError> {
     let resolved =
         std::path::absolute(path).map_err(|error| ClippySnapshotError::io(path, &error))?;
-    Utf8PathBuf::from_path_buf(resolved).map_err(|resolved| ClippySnapshotError::Io {
-        path: resolved.display().to_string(),
+    Utf8PathBuf::from_path_buf(resolved).map_err(|non_utf8| ClippySnapshotError::Io {
+        path: non_utf8.display().to_string(),
         reason: "the path is not valid UTF-8".to_owned(),
     })
 }

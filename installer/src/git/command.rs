@@ -66,29 +66,11 @@ pub(super) fn run_git_with_timeout(
 /// `InstallerError::Git` when it times out or its output cannot be read.
 pub(crate) fn run_git(invocation: &GitInvocation<'_>) -> Result<Output> {
     let GitInvocation {
-        args,
-        working_dir,
-        operation,
-        timeout,
-        envs,
-        env_remove,
+        operation, timeout, ..
     } = *invocation;
     let started = Instant::now();
     debug!(operation, outcome = "started", "running Git operation");
-    let mut cmd = Command::new("git");
-    for name in env_remove {
-        cmd.env_remove(name);
-    }
-    cmd.args(args)
-        .envs(envs.iter().copied())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-
-    if let Some(dir) = working_dir {
-        cmd.current_dir(dir.as_std_path());
-    }
-
-    let mut child = cmd.spawn()?;
+    let mut child = build_command(invocation).spawn()?;
     let readers = spawn_output_readers(&mut child);
 
     if let Some(status) = child.wait_timeout(timeout)? {
@@ -98,6 +80,29 @@ pub(crate) fn run_git(invocation: &GitInvocation<'_>) -> Result<Output> {
     reap_timed_out_child(&mut child, readers);
     log_git_timeout(operation, elapsed_millis(started));
     Err(timed_out_error(operation, timeout))
+}
+
+/// Build the child command for one bounded Git invocation.
+fn build_command(invocation: &GitInvocation<'_>) -> Command {
+    let GitInvocation {
+        args,
+        working_dir,
+        envs,
+        env_remove,
+        ..
+    } = *invocation;
+    let mut cmd = Command::new("git");
+    for name in env_remove {
+        cmd.env_remove(name);
+    }
+    cmd.args(args)
+        .envs(envs.iter().copied())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    if let Some(dir) = working_dir {
+        cmd.current_dir(dir.as_std_path());
+    }
+    cmd
 }
 
 /// Build the timeout error reported when a Git process is abandoned.

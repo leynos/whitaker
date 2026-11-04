@@ -28,6 +28,9 @@ use super::{
         LockMode,
         child_label,
         failure_label,
+        log_driver_changed,
+        log_run,
+        log_using_ready_driver,
         record_driver_build,
         record_lock_failure,
         record_lock_wait,
@@ -74,6 +77,18 @@ pub fn run(dirs: &dyn BaseDirs, args: &[OsString]) -> Result<RunOutcome, Bootstr
 /// As for [`run`].
 #[tracing::instrument(name = "bootstrap.run", skip_all)]
 pub fn run_with_cargo(
+    dirs: &dyn BaseDirs,
+    cargo: &OsStr,
+    args: &[OsString],
+) -> Result<RunOutcome, BootstrapError> {
+    run_resolved(dirs, cargo, args)
+}
+
+/// Resolve the installation and run against it.
+///
+/// The instrumented entry point above stays a single call: the span's expansion
+/// and this function's branching together exceed the complexity budget.
+fn run_resolved(
     dirs: &dyn BaseDirs,
     cargo: &OsStr,
     args: &[OsString],
@@ -146,7 +161,7 @@ fn choose_and_run(prepared: &PreparedRun, cargo: &OsStr, args: &[OsString]) -> R
             return Ok((DriverPath::Warm, outcome));
         }
     }
-    let _exclusive =
+    let exclusive =
         timed_lock(LockMode::Exclusive, || slot.lock_exclusive()).map_err(unresolved)?;
     if !slot.is_ready().map_err(unresolved)? {
         return reached(DriverPath::Cold, run_cold(prepared, cargo, args));
@@ -154,16 +169,14 @@ fn choose_and_run(prepared: &PreparedRun, cargo: &OsStr, args: &[OsString]) -> R
     // Another process built and verified the driver while this one waited.
     // Trade the exclusive lock for a shared one rather than make every run
     // that queued behind the build wait for the others in turn.
-    drop(_exclusive);
-    match warm_or_none(DriverPath::WarmAfterWait, prepared, cargo, args)? {
-        Some(outcome) => Ok((DriverPath::WarmAfterWait, outcome)),
-        // Replaced again in between: build under the exclusive lock.
-        None => {
-            let _exclusive = timed_lock(LockMode::Exclusive, || slot.lock_exclusive())
-                .map_err(|error| (DriverPath::Cold, error))?;
-            reached(DriverPath::Cold, run_cold(prepared, cargo, args))
-        }
+    drop(exclusive);
+    if let Some(outcome) = warm_or_none(DriverPath::WarmAfterWait, prepared, cargo, args)? {
+        return Ok((DriverPath::WarmAfterWait, outcome));
     }
+    // Replaced again in between: build under the exclusive lock.
+    let _exclusive = timed_lock(LockMode::Exclusive, || slot.lock_exclusive())
+        .map_err(|error| (DriverPath::Cold, error))?;
+    reached(DriverPath::Cold, run_cold(prepared, cargo, args))
 }
 
 /// [`run_warm`] tagged with `path`, keeping its "not ready after all" answer.
@@ -191,21 +204,7 @@ fn finish(
         .map_or_else(failure_label, |run| child_label(run.code));
     record_run(path, outcome, elapsed);
     let elapsed_ms = u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX);
-    if result.is_ok() {
-        tracing::debug!(
-            driver = path.label(),
-            outcome,
-            elapsed_ms,
-            "bootstrap run finished"
-        );
-    } else {
-        tracing::warn!(
-            driver = path.label(),
-            outcome,
-            elapsed_ms,
-            "bootstrap run failed"
-        );
-    }
+    log_run(path, outcome, result.is_ok(), elapsed_ms);
     result
 }
 
@@ -237,14 +236,11 @@ fn run_warm(
     // after this read changes the identity the child leaves, which the
     // comparison below catches.
     let before = slot.driver_identity()?;
-    if before.is_none() || slot.ready_identity()? != before {
-        tracing::debug!(
-            toolchain = slot.toolchain(),
-            "the driver changed since it was verified"
-        );
+    if !is_marked_ready(slot, before)? {
+        log_driver_changed(slot.toolchain());
         return Ok(None);
     }
-    tracing::debug!(toolchain = slot.toolchain(), "using the ready driver");
+    log_using_ready_driver(slot.toolchain());
     // Dylint re-probes a cached driver and rebuilds it if the probe fails, so
     // a warm run can still build; compare identities rather than assume.
     let started = Instant::now();
@@ -257,6 +253,14 @@ fn run_warm(
         code: exit_code(status),
         built_driver,
     }))
+}
+
+/// Return whether `before` is still the driver the ready marker records.
+fn is_marked_ready(
+    slot: &DriverSlot,
+    before: Option<DriverIdentity>,
+) -> Result<bool, BootstrapError> {
+    Ok(before.is_some() && slot.ready_identity()? == before)
 }
 
 /// Verify the snapshot a warm run's rebuild just read, before trusting it.
@@ -274,26 +278,53 @@ fn check_warm_rebuild(prepared: &PreparedRun, started: Instant) -> Result<(), Bo
         "Dylint rebuilt a ready driver; verifying the snapshot it read"
     );
     let verified = verify_snapshot(&prepared.snapshot);
-    let outcome = if verified.is_ok() {
-        // Record the verified replacement, so other runs may share it.
-        if let Err(error) = prepared.slot.mark_ready() {
-            tracing::warn!(
-                failure = failure_label(&error),
-                "could not record the rebuilt driver as ready"
-            );
-        }
-        BuildOutcome::Built
-    } else {
-        if let Err(error) = prepared.slot.clear_ready() {
-            tracing::warn!(
-                failure = failure_label(&error),
-                "could not mark the driver cold after a failed verification"
-            );
-        }
-        BuildOutcome::VerifyFailed
-    };
+    let outcome = record_verification(&prepared.slot, &verified);
     record_driver_build(outcome, started.elapsed());
     verified
+}
+
+/// Record a rebuilt driver's verification outcome in the slot.
+///
+/// A verified replacement is marked ready so other runs may share it; a failed
+/// verification clears the marker so the next cold run rebuilds from scratch.
+fn record_verification(slot: &DriverSlot, verified: &Result<(), BootstrapError>) -> BuildOutcome {
+    if verified.is_ok() {
+        mark_rebuilt_ready(slot)
+    } else {
+        clear_rebuilt_ready(slot)
+    }
+}
+
+/// Mark a verified rebuild ready, reporting but not returning a marker failure.
+fn mark_rebuilt_ready(slot: &DriverSlot) -> BuildOutcome {
+    if let Err(error) = slot.mark_ready() {
+        log_ready_mark_failure(&error);
+    }
+    BuildOutcome::Built
+}
+
+/// Clear the ready marker after a failed verification.
+fn clear_rebuilt_ready(slot: &DriverSlot) -> BuildOutcome {
+    if let Err(error) = slot.clear_ready() {
+        log_ready_clear_failure(&error);
+    }
+    BuildOutcome::VerifyFailed
+}
+
+/// Report a ready marker that could not be written.
+fn log_ready_mark_failure(error: &BootstrapError) {
+    tracing::warn!(
+        failure = failure_label(error),
+        "could not record the rebuilt driver as ready"
+    );
+}
+
+/// Report a ready marker that could not be cleared.
+fn log_ready_clear_failure(error: &BootstrapError) {
+    tracing::warn!(
+        failure = failure_label(error),
+        "could not mark the driver cold after a failed verification"
+    );
 }
 
 /// Return whether the child persisted a driver other than `before`.
@@ -352,20 +383,35 @@ fn run_cold(
 /// and its exit status matters more than the marker. An unmarked slot is
 /// simply cold again next time.
 fn record_readiness(slot: &DriverSlot) -> BuildOutcome {
-    match slot.has_driver().and_then(|has_driver| {
-        has_driver
-            .then(|| slot.mark_ready())
-            .transpose()
-            .map(|marked| marked.is_some())
-    }) {
-        Ok(true) => BuildOutcome::Built,
-        Ok(false) => {
-            tracing::warn!(
-                toolchain = slot.toolchain(),
-                "cargo dylint exited without building a driver"
-            );
-            BuildOutcome::NotBuilt
-        }
+    match slot.has_driver() {
+        Ok(true) => mark_ready_outcome(slot),
+        Ok(false) => report_missing_driver(slot),
+        Err(error) => report_unreadable_driver(&error),
+    }
+}
+
+/// Report a child that exited without leaving a driver behind.
+fn report_missing_driver(slot: &DriverSlot) -> BuildOutcome {
+    tracing::warn!(
+        toolchain = slot.toolchain(),
+        "cargo dylint exited without building a driver"
+    );
+    BuildOutcome::NotBuilt
+}
+
+/// Report a driver slot that could not be inspected after the child ran.
+fn report_unreadable_driver(error: &BootstrapError) -> BuildOutcome {
+    tracing::warn!(
+        failure = failure_label(error),
+        "could not record the driver as ready"
+    );
+    BuildOutcome::Unrecorded
+}
+
+/// Mark the slot ready after the child left a driver behind.
+fn mark_ready_outcome(slot: &DriverSlot) -> BuildOutcome {
+    match slot.mark_ready() {
+        Ok(()) => BuildOutcome::Built,
         Err(error) => {
             tracing::warn!(
                 failure = failure_label(&error),

@@ -22,7 +22,7 @@ use std::ffi::OsStr;
 /// ```
 #[must_use]
 pub fn source_fallback_override(value: Option<&OsStr>) -> Option<bool> {
-    value.and_then(|value| match value.to_str() {
+    value.and_then(|raw| match raw.to_str() {
         Some(text)
             if matches!(
                 text.trim().to_ascii_lowercase().as_str(),

@@ -72,38 +72,52 @@ fn slot(installation: &Installation) -> Utf8PathBuf {
 }
 
 /// Apply `perturbation`; return whether the slot is still ready afterwards.
+///
+/// # Errors
+///
+/// Returns an error if the data root cannot be moved or the driver slot
+/// cannot be rewritten.
 fn perturb(
     installation: &mut Installation,
     perturbation: Perturbation,
     was_ready: bool,
     round_index: usize,
-) -> bool {
+) -> Result<bool, Box<dyn std::error::Error>> {
     let slot_dir = slot(installation);
     match perturbation {
-        Perturbation::None => was_ready,
+        Perturbation::None => Ok(was_ready),
         Perturbation::Relocate => {
-            installation.relocate(&format!("moved-{round_index}"));
-            was_ready
+            installation.relocate(&format!("moved-{round_index}"))?;
+            Ok(was_ready)
         }
         Perturbation::DeleteMarker => {
             // A missing marker is the state being forced, so absence is fine.
-            let _ = std::fs::remove_file(slot_dir.join(format!(".{TOOLCHAIN}.ready")));
-            false
+            drop(std::fs::remove_file(
+                slot_dir.join(format!(".{TOOLCHAIN}.ready")),
+            ));
+            Ok(false)
         }
         Perturbation::ReplaceDriver => {
             let dir = slot_dir.join(TOOLCHAIN);
             if dir.join("dylint-driver").exists() {
                 let partial = dir.join("dylint-driver.partial");
-                std::fs::write(&partial, "#!/bin/sh\n").expect("write the replacement");
-                std::fs::rename(&partial, dir.join("dylint-driver")).expect("persist it");
+                std::fs::write(&partial, "#!/bin/sh\n")?;
+                std::fs::rename(&partial, dir.join("dylint-driver"))?;
             }
-            false
+            Ok(false)
         }
     }
 }
 
 /// Spawn every process of `round`, then wait for all of them.
-fn run_round(installation: &Installation, round: &Round) -> Vec<std::process::Output> {
+///
+/// # Errors
+///
+/// Returns an error if a process cannot be spawned or awaited.
+fn run_round(
+    installation: &Installation,
+    round: &Round,
+) -> Result<Vec<std::process::Output>, Box<dyn std::error::Error>> {
     let children: Vec<Child> = (0..round.processes)
         .map(|_| {
             let mut command = installation.run_command(&["--all"]);
@@ -114,23 +128,30 @@ fn run_round(installation: &Installation, round: &Round) -> Vec<std::process::Ou
             if round.fails_build {
                 command.env("STUB_FAIL_BUILD", "1");
             }
-            command.spawn().expect("spawn whitaker-installer")
+            command.spawn()
         })
-        .collect();
-    children
+        .collect::<Result<Vec<_>, _>>()?;
+    let outputs = children
         .into_iter()
-        .map(|child| child.wait_with_output().expect("wait for a run"))
-        .collect()
+        .map(std::process::Child::wait_with_output)
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(outputs)
+}
+
+/// Convert an ordinary error into a proptest failure, keeping its text.
+fn case_error(error: impl std::fmt::Display) -> TestCaseError {
+    TestCaseError::fail(error.to_string())
 }
 
 /// Drive `rounds` against one installation, checking the model each round.
 fn check_schedule(rounds: &[Round]) -> Result<(), TestCaseError> {
-    let mut installation = Installation::new();
+    let mut installation = Installation::new().map_err(case_error)?;
     let mut is_ready = false;
     for (index, round) in rounds.iter().enumerate() {
-        is_ready = perturb(&mut installation, round.perturbation, is_ready, index);
+        is_ready =
+            perturb(&mut installation, round.perturbation, is_ready, index).map_err(case_error)?;
         let before = installation.builds();
-        let outputs = run_round(&installation, round);
+        let outputs = run_round(&installation, round).map_err(case_error)?;
         let new_builds = installation.builds() - before;
         let is_success = is_ready || !round.fails_build;
         let stderr = || {
@@ -173,7 +194,7 @@ fn check_schedule(rounds: &[Round]) -> Result<(), TestCaseError> {
     if is_ready {
         // A ready slot is warm: a further run builds nothing.
         let before = installation.builds();
-        let output = installation.run(&["--all"]);
+        let output = installation.run(&["--all"]).map_err(case_error)?;
         prop_assert!(output.status.code().is_some());
         prop_assert_eq!(installation.builds(), before);
     }
@@ -196,7 +217,7 @@ fn check_recovery(
         .run_command(&["--all"])
         .env("STUB_EXIT", lint_status.to_string())
         .output()
-        .expect("retry after the failed build");
+        .map_err(case_error)?;
     prop_assert_eq!(
         retry.status.code(),
         Some(lint_status),
@@ -210,7 +231,7 @@ fn check_recovery(
         "round {}: the retry builds once",
         index
     );
-    let warm = installation.run(&["--all"]);
+    let warm = installation.run(&["--all"]).map_err(case_error)?;
     prop_assert!(warm.status.code().is_some(), "round {}: warm run", index);
     prop_assert_eq!(
         installation.builds() - before,
@@ -235,7 +256,7 @@ fn check_environment_and_snapshot(installation: &Installation) -> Result<(), Tes
     }
     // Cold builds verify the snapshot and must leave it at the pinned commit.
     let snapshot = installation.layout().snapshot(&installation.commit);
-    let head = git(&snapshot, &["rev-parse", "HEAD"]);
+    let head = git(&snapshot, &["rev-parse", "HEAD"]).map_err(case_error)?;
     prop_assert_eq!(head.trim(), installation.commit.as_str());
     Ok(())
 }

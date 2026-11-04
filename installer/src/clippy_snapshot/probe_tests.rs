@@ -104,6 +104,6 @@ fn verifying_a_repository_records_no_telemetry() {
         metrics::with_local_recorder(&recorder, || verify_repository(&absent, &manifest()));
 
     assert!(result.is_err(), "nothing is installed");
-    let recorded = snapshotter.snapshot().into_vec();
-    assert!(recorded.is_empty(), "a query recorded {recorded:#?}");
+    let entries = snapshotter.snapshot().into_vec();
+    assert!(entries.is_empty(), "a query recorded {entries:#?}");
 }

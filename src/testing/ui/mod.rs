@@ -12,7 +12,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 
 mod toolchain;
 
-use whitaker_common::test_support::env_test_guard;
+use whitaker_common::test_support::with_env_vars;
 
 use self::toolchain::{CrateName, ensure_toolchain_library};
 
@@ -162,17 +162,15 @@ pub fn run_with_runner(
     let crate_name_owned =
         CrateName::try_from(crate_name).map_err(|_| HarnessError::EmptyCrateName)?;
     let crate_name_str = crate_name_owned.as_str();
-    let _runner_env_guard = runner_env_guard();
-    ensure_toolchain_library(&crate_name_owned)?;
 
-    match runner(crate_name_str, directory.as_ref()) {
-        Ok(()) => Ok(()),
-        Err(message) => Err(HarnessError::RunnerFailure {
-            crate_name: crate_name_owned.into_inner(),
-            directory,
+    with_env_vars(absent_runner_env_settings(), || {
+        ensure_toolchain_library(&crate_name_owned)?;
+        runner(crate_name_str, directory.as_ref()).map_err(|message| HarnessError::RunnerFailure {
+            crate_name: crate_name_owned.as_str().to_owned(),
+            directory: directory.clone(),
             message,
-        }),
-    }
+        })
+    })
 }
 
 /// Runs a UI test and reports runner failures using the standard panic format.
@@ -205,70 +203,6 @@ pub fn run_ui_test(
     });
 }
 
-/// Serializes environment mutations required by `run_with_runner`.
-///
-/// Every platform needs one variable, and Windows needs a second:
-///
-/// - `DYLINT_LINK_ENABLE_COPY_LIBRARY`: set to `1` when absent. Since Dylint 6.3.0,
-///   `dylint_testing` copies `lib<crate>.so` over the toolchain-qualified library unless this flag
-///   says the copy already exists. The harness has just built that copy with the `dylint-driver`
-///   feature, while `dylint_testing` first rebuilds the plain library with default features, which
-///   for every Whitaker lint crate is an empty `cdylib`. Without the flag the UI test loads that
-///   stub and fails with ``could not find `dylint_version` ``.
-/// - `VCPKG_ROOT` (Windows only): set to `C:\vcpkg` when that directory exists and the variable is
-///   otherwise absent, so downstream `cargo` invocations resolve vcpkg.
-///
-/// Each mutation and restoration step acquires `env_test_guard()` only for the
-/// environment write itself. The guard deliberately does not hold that mutex
-/// across the UI runner callback, because runner closures can perform their
-/// own environment-guarded setup.
-///
-/// Runners in one test binary can overlap under plain `cargo test`, so the
-/// variables are shared: the first active runner sets whichever are absent and
-/// the last one to finish removes them. A per-runner record would let one
-/// runner remove the flag while another still relies on it.
-struct RunnerEnvGuard {
-    _shared: (),
-}
-
-/// Every active runner's view of the variables they set while absent.
-struct SharedRunnerEnv {
-    active: usize,
-    set_while_absent: Vec<&'static str>,
-}
-
-/// The process-wide runner environment record, written under `env_test_guard`.
-static SHARED_RUNNER_ENV: std::sync::Mutex<SharedRunnerEnv> =
-    std::sync::Mutex::new(SharedRunnerEnv {
-        active: 0,
-        set_while_absent: Vec::new(),
-    });
-
-/// Lock the shared record, recovering it if a panicking test poisoned it.
-fn shared_runner_env() -> std::sync::MutexGuard<'static, SharedRunnerEnv> {
-    SHARED_RUNNER_ENV
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
-}
-
-impl Drop for RunnerEnvGuard {
-    /// Restore temporary environment changes when the last runner finishes.
-    fn drop(&mut self) {
-        let _env_guard = env_test_guard();
-        let mut shared = shared_runner_env();
-        shared.active = shared.active.saturating_sub(1);
-        if shared.active > 0 {
-            return;
-        }
-        for key in std::mem::take(&mut shared.set_while_absent) {
-            // SAFETY: `env_test_guard` serializes the restoration write.
-            unsafe {
-                env::remove_var(key);
-            }
-        }
-    }
-}
-
 /// Tells `dylint_testing` that the toolchain-qualified library is prepared.
 const COPY_LIBRARY_FLAG: (&str, &str) = ("DYLINT_LINK_ENABLE_COPY_LIBRARY", "1");
 
@@ -289,25 +223,29 @@ fn runner_env_settings() -> Vec<(&'static str, &'static str)> {
     }
 }
 
-/// Prepare the environment required by the UI runner.
-fn runner_env_guard() -> RunnerEnvGuard {
-    let _env_guard = env_test_guard();
-    let mut shared = shared_runner_env();
-    if shared.active == 0 {
-        shared.set_while_absent = runner_env_settings()
-            .into_iter()
-            .filter(|(key, _)| env::var_os(key).is_none())
-            .map(|(key, value)| {
-                // SAFETY: `_env_guard` serializes concurrent environment mutations.
-                unsafe {
-                    env::set_var(key, value);
-                }
-                key
-            })
-            .collect();
-    }
-    shared.active += 1;
-    RunnerEnvGuard { _shared: () }
+/// Select the runner variables the process does not already set.
+///
+/// Every platform needs one variable, and Windows can need a second:
+///
+/// - `DYLINT_LINK_ENABLE_COPY_LIBRARY`: set to `1` when absent. Since Dylint 6.3.0,
+///   `dylint_testing` copies `lib<crate>.so` over the toolchain-qualified library unless this flag
+///   says the copy already exists. The harness has just built that copy with the `dylint-driver`
+///   feature, while `dylint_testing` first rebuilds the plain library with default features, which
+///   for every Whitaker lint crate is an empty `cdylib`. Without the flag the UI test loads that
+///   stub and fails with ``could not find `dylint_version` ``.
+/// - `VCPKG_ROOT` (Windows only): set to `C:\vcpkg` when that directory exists and the variable is
+///   otherwise absent, so downstream `cargo` invocations resolve vcpkg.
+///
+/// A value the caller or CI already supplied is left in place, so the scoped
+/// override cannot hide a deliberate setting. The scoped helper holds
+/// `temp_env`'s re-entrant lock for the callback, so runners in one test binary
+/// take turns rather than sharing a process-wide record; a runner that performs
+/// its own scoped environment setup still nests safely on the same thread.
+fn absent_runner_env_settings() -> Vec<(&'static str, &'static str)> {
+    runner_env_settings()
+        .into_iter()
+        .filter(|(key, _)| env::var_os(key).is_none())
+        .collect()
 }
 
 fn directory_is_rooted(path: &Utf8Path) -> bool {

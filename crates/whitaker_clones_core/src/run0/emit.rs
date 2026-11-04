@@ -377,7 +377,13 @@ mod tests {
         /// Check that the digest serializer matches `u64::to_be_bytes`.
         #[test]
         fn big_endian_bytes_match_to_be_bytes(value in any::<u64>()) {
-            prop_assert_eq!(u64_big_endian_bytes(value), value.to_be_bytes());
+            let mut expected = [0_u8; 8];
+            let mut remaining = value;
+            for slot in expected.iter_mut().rev() {
+                *slot = (remaining & 0xff) as u8;
+                remaining >>= 8;
+            }
+            prop_assert_eq!(u64_big_endian_bytes(value), expected);
         }
     }
 }

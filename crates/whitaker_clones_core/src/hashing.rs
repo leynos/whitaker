@@ -166,10 +166,9 @@ mod tests {
             current in any::<u64>(),
             value in any::<u16>(),
         ) {
-            prop_assert_eq!(
-                mix_u16(current, value),
-                mix_bytes(current, &value.to_le_bytes())
-            );
+            let low = (value & 0x00ff) as u8;
+            let high = (value >> 8) as u8;
+            prop_assert_eq!(mix_u16(current, value), mix_bytes(current, &[low, high]));
         }
 
         /// Check that the `u64` mixer matches mixing its little-endian bytes.
@@ -178,10 +177,13 @@ mod tests {
             current in any::<u64>(),
             value in any::<u64>(),
         ) {
-            prop_assert_eq!(
-                mix_u64(current, value),
-                mix_bytes(current, &value.to_le_bytes())
-            );
+            let mut expected = [0_u8; 8];
+            let mut remaining = value;
+            for slot in &mut expected {
+                *slot = (remaining & 0xff) as u8;
+                remaining >>= 8;
+            }
+            prop_assert_eq!(mix_u64(current, value), mix_bytes(current, &expected));
         }
     }
 }

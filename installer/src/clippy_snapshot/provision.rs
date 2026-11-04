@@ -54,26 +54,71 @@ pub fn provision_with(
     root: &Utf8Path,
     downloader: &dyn DependencyArchiveDownloader,
 ) -> Result<Utf8PathBuf, ClippySnapshotError> {
-    std::fs::create_dir_all(root).map_err(|error| ClippySnapshotError::io(root, &error))?;
-    let root = std::path::absolute(root).map_err(|error| ClippySnapshotError::io(root, &error))?;
-    let root = Utf8PathBuf::try_from(root).map_err(|error| ClippySnapshotError::Io {
-        path: error.as_path().display().to_string(),
-        reason: "the path is not valid UTF-8".to_owned(),
-    })?;
-    let generation = super::generation_path(&root, manifest);
+    provision_under(source, manifest, root, downloader)
+}
+
+/// Do the work of [`provision_with`] outside the instrumented span.
+///
+/// Keeping the span's function to a single call leaves room in the
+/// cognitive-complexity budget for the provisioning branches.
+fn provision_under(
+    source: &BundleSource,
+    manifest: &ClippySnapshotManifest,
+    root: &Utf8Path,
+    downloader: &dyn DependencyArchiveDownloader,
+) -> Result<Utf8PathBuf, ClippySnapshotError> {
+    let root_buf = ensure_root(root)?;
+    let generation = super::generation_path(&root_buf, manifest);
     // An uninspectable generation is an error, not a reason to download.
     let (origin, result) = if is_present(&generation)? {
-        tracing::debug!(commit = %manifest.commit, "reusing the installed Clippy snapshot");
-        (
-            ProvisionSource::Existing,
-            timed(Operation::Reuse, || reuse_generation(&generation, manifest)),
-        )
+        reuse_existing(&generation, manifest)
     } else {
-        tracing::info!(commit = %manifest.commit, "installing the pinned Clippy snapshot");
-        install_from(source, manifest, &root, downloader)
+        install_missing(source, manifest, &root_buf, downloader)
     };
     record_provision(origin, result.is_ok());
     result
+}
+
+/// Reuse a generation already installed under `root`.
+fn reuse_existing(
+    generation: &Utf8Path,
+    manifest: &ClippySnapshotManifest,
+) -> (ProvisionSource, Result<Utf8PathBuf, ClippySnapshotError>) {
+    tracing::debug!(commit = %manifest.commit, "reusing the installed Clippy snapshot");
+    (
+        ProvisionSource::Existing,
+        timed(Operation::Reuse, || reuse_generation(generation, manifest)),
+    )
+}
+
+/// Install the missing generation from `source`.
+fn install_missing(
+    source: &BundleSource,
+    manifest: &ClippySnapshotManifest,
+    root: &Utf8Path,
+    downloader: &dyn DependencyArchiveDownloader,
+) -> (ProvisionSource, Result<Utf8PathBuf, ClippySnapshotError>) {
+    tracing::info!(commit = %manifest.commit, "installing the pinned Clippy snapshot");
+    install_from(source, manifest, root, downloader)
+}
+
+/// Create `root` when absent and return its absolute UTF-8 form.
+///
+/// Git runs from other directories, so a caller's relative root must be fixed
+/// against the caller's directory before the generation path is derived.
+///
+/// # Errors
+///
+/// Returns [`ClippySnapshotError::Io`] when the directory cannot be created,
+/// resolved, or represented as UTF-8.
+fn ensure_root(root: &Utf8Path) -> Result<Utf8PathBuf, ClippySnapshotError> {
+    std::fs::create_dir_all(root).map_err(|error| ClippySnapshotError::io(root, &error))?;
+    let absolute_root =
+        std::path::absolute(root).map_err(|error| ClippySnapshotError::io(root, &error))?;
+    Utf8PathBuf::try_from(absolute_root).map_err(|error| ClippySnapshotError::Io {
+        path: error.as_path().display().to_string(),
+        reason: "the path is not valid UTF-8".to_owned(),
+    })
 }
 
 /// Install a missing generation from `source`, naming the source it used.

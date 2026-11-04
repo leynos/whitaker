@@ -15,21 +15,31 @@ struct SpanNames(Arc<Mutex<Vec<&'static str>>>);
 impl<S: tracing::Subscriber> Layer<S> for SpanNames {
     /// Remember each new span's name.
     fn on_new_span(&self, attrs: &Attributes<'_>, _id: &Id, _ctx: Context<'_, S>) {
-        self.0
+        // Recording must not panic inside the subscriber if another thread
+        // poisoned the lock; the names gathered so far remain valid.
+        let mut names = self
+            .0
             .lock()
-            .expect("span list lock")
-            .push(attrs.metadata().name());
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        names.push(attrs.metadata().name());
     }
 }
 
 /// Write `body` as an executable stub `cargo` beside the installation.
-fn stub(installed: &Installed, name: &str, body: &str) -> Utf8PathBuf {
+///
+/// # Errors
+///
+/// Returns an error if the stub cannot be written or made executable.
+fn stub(
+    installed: &Installed,
+    name: &str,
+    body: &str,
+) -> Result<Utf8PathBuf, Box<dyn std::error::Error>> {
     use std::os::unix::fs::PermissionsExt;
     let path = installed.library_dir.join("../../..").join(name);
-    std::fs::write(&path, body).expect("write stub cargo");
-    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))
-        .expect("chmod stub cargo");
-    path
+    std::fs::write(&path, body)?;
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))?;
+    Ok(path)
 }
 
 /// A run whose child fails, as when lints fire, is told apart from both a
@@ -38,7 +48,7 @@ fn stub(installed: &Installed, name: &str, body: &str) -> Utf8PathBuf {
 #[case::clean(0, "ok")]
 #[case::lints_fired(3, "child_nonzero")]
 fn a_run_classifies_its_child_exit(#[case] code: i32, #[case] outcome: &str) {
-    let installed = Installed::new();
+    let installed = Installed::new().expect("build the installation");
     let cargo = stub(
         &installed,
         "cargo-exits",
@@ -46,7 +56,8 @@ fn a_run_classifies_its_child_exit(#[case] code: i32, #[case] outcome: &str) {
             "#!/usr/bin/env bash\n[[ \"$1 $2\" == \"dylint --version\" ]] && {{ echo \
              'cargo-dylint 6.3.0'; exit 0; }}\nexit {code}\n"
         ),
-    );
+    )
+    .expect("write stub cargo");
     let prepared = prepare(&installed.layout, cargo.as_os_str()).expect("prepare");
     let recorder = DebuggingRecorder::new();
     let snapshotter = recorder.snapshotter();
@@ -69,8 +80,8 @@ fn a_run_classifies_its_child_exit(#[case] code: i32, #[case] outcome: &str) {
 /// `INFO` callsites as uninteresting mid-run.
 #[test]
 fn a_cold_run_opens_spans_for_each_boundary() {
-    let installed = Installed::new();
-    let cargo = installed.cargo(true);
+    let installed = Installed::new().expect("build the installation");
+    let cargo = installed.cargo(true).expect("write stub cargo");
     let names = SpanNames::default();
     let subscriber = tracing_subscriber::registry().with(names.clone());
 
@@ -82,13 +93,16 @@ fn a_cold_run_opens_spans_for_each_boundary() {
         execute(&prepared, cargo.as_os_str(), &[]).expect("execute");
     });
 
-    let names = names.0.lock().expect("span list lock").clone();
+    let recorded_names = names.0.lock().expect("span list lock").clone();
     for expected in [
         "bootstrap.cargo_dylint_version",
         "clippy_snapshot.verify",
         "clippy_snapshot.git",
         "bootstrap.child",
     ] {
-        assert!(names.contains(&expected), "missing {expected}: {names:?}");
+        assert!(
+            recorded_names.contains(&expected),
+            "missing {expected}: {recorded_names:?}"
+        );
     }
 }

@@ -13,9 +13,9 @@
 //!   variables.
 //! - [`ui`]: Discovers fixtures, prepares isolated workspaces, and runs dylint UI tests with
 //!   consistent panic handling.
-//! - [`with_locale`], [`with_env_var`], and [`with_env_var_removed`]: Scope temporary environment
-//!   mutations (such as `DYLINT_LOCALE` overrides) to a callback so tests cannot leak global state
-//!   between cases.
+//! - [`with_locale`], [`with_env_var`], [`with_env_vars`], and [`with_env_var_removed`]: Scope
+//!   temporary environment mutations (such as `DYLINT_LOCALE` overrides) to a callback so tests
+//!   cannot leak global state between cases.
 
 pub mod decomposition;
 pub mod fixtures;
@@ -86,6 +86,45 @@ pub fn env_test_guard() -> EnvTestGuard {
 /// ```
 pub fn with_env_var<R>(key: &str, value: impl AsRef<OsStr>, callback: impl FnOnce() -> R) -> R {
     temp_env::with_var(key, Some(value.as_ref()), callback)
+}
+
+/// Runs `callback` with each variable in `vars` temporarily set.
+///
+/// The prior value of every variable is restored afterwards, even on panic.
+/// Serialization is provided by `temp_env`'s re-entrant global lock, so nested
+/// scoped mutations from the same thread do not deadlock.
+///
+/// # Examples
+///
+/// ```
+/// use whitaker_common::test_support::with_env_vars;
+///
+/// with_env_vars(
+///     [("WHITAKER_FIRST_VAR", "1"), ("WHITAKER_SECOND_VAR", "2")],
+///     || {
+///         assert_eq!(
+///             std::env::var("WHITAKER_FIRST_VAR").expect("first test env var should be set"),
+///             "1",
+///         );
+///         assert_eq!(
+///             std::env::var("WHITAKER_SECOND_VAR").expect("second test env var should be set"),
+///             "2",
+///         );
+///     },
+/// );
+/// ```
+pub fn with_env_vars<R>(
+    vars: impl IntoIterator<Item = (&'static str, &'static str)>,
+    callback: impl FnOnce() -> R,
+) -> R {
+    let settings: Vec<(&'static str, Option<&'static str>)> = vars
+        .into_iter()
+        .map(|(key, value)| (key, Some(value)))
+        .collect();
+    if settings.is_empty() {
+        return callback();
+    }
+    temp_env::with_vars(settings, callback)
 }
 
 /// Runs `callback` with one environment variable temporarily removed.

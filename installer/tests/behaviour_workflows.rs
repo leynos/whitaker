@@ -205,12 +205,12 @@ fn when_installer_cli_run(world: &WorkflowWorld) -> Result<(), String> {
     cmd.args(args.iter());
     cmd.current_dir(workspace_root()?);
     // Kept alive until the command finishes; it owns the bundle and data root.
-    let isolation = world.use_test_staged_suite.get().then(|| {
+    let isolation_setup = world.use_test_staged_suite.get().then(|| {
         let snapshot = SnapshotFixture::new()?;
         let data_home = TempDir::new().map_err(|error| error.to_string())?;
         Ok::<_, String>((snapshot, data_home))
     });
-    let isolation = isolation.transpose()?;
+    let isolation = isolation_setup.transpose()?;
     if let Some((snapshot, data_home)) = &isolation {
         cmd.env(TEST_STAGE_SUITE_ENV, "1");
         // An installation records its bootstrap; keep it out of the real data root.

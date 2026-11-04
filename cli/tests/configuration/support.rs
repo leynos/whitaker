@@ -34,8 +34,53 @@ pub(super) fn non_unicode_value() -> std::ffi::OsString {
 }
 
 /// Read the effective locale from one injected source bundle.
-pub(super) fn locale(input: Sources) -> ortho_config::OrthoResult<String> {
+pub(super) fn locale(input: &Sources) -> ortho_config::OrthoResult<String> {
     Ok(load_with_sources(input)?.settings.diagnostics.locale)
+}
+
+/// Fail the scenario with `message` when `condition` is false.
+///
+/// These scenarios return `Result` so a fallible fixture can be propagated
+/// with `?`, and `clippy::panic_in_result_fn` forbids `assert!` inside such a
+/// function. Use this only where the scenario must stay fallible; general
+/// assertions belong in a `()`-returning helper, where a panic reads better.
+///
+/// # Errors
+///
+/// Returns an error carrying `message` when `condition` is false.
+pub(super) fn ensure(
+    condition: bool,
+    message: impl Into<String>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if condition {
+        return Ok(());
+    }
+    let failure: String = message.into();
+    Err(failure.into())
+}
+
+/// Fail the scenario unless `actual` equals `expected`, naming both values.
+///
+/// Both sides are borrowed so a caller can compare a field without moving it
+/// out of the loaded settings, and so a heterogeneous pair such as
+/// `Vec<String>` against `[&str; 2]` still satisfies [`PartialEq`].
+///
+/// # Errors
+///
+/// Returns an error quoting `context` and showing both values when they differ.
+pub(super) fn ensure_eq<T, U>(
+    actual: &T,
+    expected: &U,
+    context: &str,
+) -> Result<(), Box<dyn std::error::Error>>
+where
+    T: PartialEq<U> + std::fmt::Debug + ?Sized,
+    U: std::fmt::Debug + ?Sized,
+{
+    if actual == expected {
+        return Ok(());
+    }
+    Err(format!("{context}: expected {expected:?}, got {actual:?}").into())
 }
 
 /// Construct sources rooted in a private test directory.

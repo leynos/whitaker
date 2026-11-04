@@ -162,7 +162,7 @@ pub enum ClippySnapshotError {
 impl ClippySnapshotError {
     /// Build an [`Self::Invalid`] error for `path`.
     #[must_use]
-    pub fn invalid(path: impl ToString, check: impl Into<String>) -> Self {
+    pub fn invalid<P: ToString + ?Sized>(path: &P, check: impl Into<String>) -> Self {
         Self::Invalid {
             path: path.to_string(),
             check: check.into(),
@@ -171,7 +171,7 @@ impl ClippySnapshotError {
 
     /// Build an [`Self::Io`] error for `path`.
     #[must_use]
-    pub fn io(path: impl ToString, error: &std::io::Error) -> Self {
+    pub fn io<P: ToString + ?Sized>(path: &P, error: &std::io::Error) -> Self {
         Self::Io {
             path: path.to_string(),
             reason: error.to_string(),

@@ -200,24 +200,23 @@ fn windows_whitaker_script() -> String {
 fn windows_ls_script() -> String {
     format!(
         r#"{WINDOWS_LOCATE_INSTALLER}
-$suite = "{suite_crate}"
+$suite = "{SUITE_CRATE}"
 & $installer run -- list --color never | Where-Object {{
     $_ -match ("^\s*" + [regex]::Escape($suite) + "(\s|$)")
 }}
 exit $LASTEXITCODE
-"#,
-        suite_crate = SUITE_CRATE,
+"#
     )
 }
 
 /// Checks if a directory is in the PATH environment variable.
 fn is_directory_in_path(dir: &Path) -> bool {
     std::env::var_os("PATH")
-        .map(|path| std::env::split_paths(&path).any(|p| p == dir))
-        .unwrap_or(false)
+        .is_some_and(|path| std::env::split_paths(&path).any(|entry| entry == dir))
 }
 
 /// Returns instructions for adding a directory to PATH.
+#[must_use]
 pub fn path_instructions(bin_dir: &Path) -> String {
     #[cfg(unix)]
     {
