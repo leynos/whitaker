@@ -206,11 +206,23 @@ const COPY_LIBRARY_FLAG: (&str, &str) = ("DYLINT_LINK_ENABLE_COPY_LIBRARY", "1")
 /// panic. `temp_env`'s re-entrant global lock serializes them, so runner
 /// closures that perform their own scoped environment setup nest without
 /// deadlocking.
+///
+/// `RUSTC_WRAPPER` is removed first, outside the [`COPY_LIBRARY_FLAG`] check,
+/// so that read happens while the `temp_env` lock is held. Read before the
+/// lock, it could observe another scope's value: that scope sets the flag,
+/// this one reads it, the other restores it, and this callback then runs
+/// *without* the flag. `dylint_testing` would rebuild the library with default
+/// features, copy the resulting empty `cdylib` over the prepared one, and the
+/// test would fail with ``could not find `dylint_version` ``.
 fn with_runner_env<R>(callback: impl FnOnce() -> R) -> R {
-    with_vcpkg_root(|| with_copy_library_flag(|| with_env_var_removed("RUSTC_WRAPPER", callback)))
+    with_vcpkg_root(|| with_env_var_removed("RUSTC_WRAPPER", || with_copy_library_flag(callback)))
 }
 
 /// Sets [`COPY_LIBRARY_FLAG`] when the caller has not set it already.
+///
+/// Call this only from inside a scoped `temp_env` mutation, as
+/// [`with_runner_env`] does: the flag read must happen under the lock that
+/// serializes sibling scopes.
 fn with_copy_library_flag<R>(callback: impl FnOnce() -> R) -> R {
     if std::env::var_os(COPY_LIBRARY_FLAG.0).is_some() {
         callback()

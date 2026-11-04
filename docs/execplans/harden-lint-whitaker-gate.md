@@ -745,7 +745,176 @@ each push rather than copying an earlier lease into the command.
   would add unrelated churn to an over-tolerance diff. It is reverted before
   each commit; `make fmt` is expected to reintroduce it locally until the
   snippet is fenced, which is a separate repair.
-- [ ] Formal CodeRabbit review queued as comenq `0711dcad`, ETA ~4h 29m.
+- [x] (2026-11-03) Formal CodeRabbit review queued as comenq `0711dcad`
+  completed on `9bb6cb1c` and raised eleven findings, all of them substantive:
+  the two-profile gaps in `.config/nextest.toml` and the guards, the
+  `harness_lock` acquisition ceiling, the `temp_env` lock ordering, the
+  glob-versus-substring matchers, the `not` precedence, the stale
+  developers-guide example, the M4 retrospective, and the Major finding on the
+  source-install toolchain. Repairs for all eleven are in the working tree that
+  carries this row, so they form a new candidate; the eleven hosted results on
+  `9bb6cb1c` do not transfer to it.
+- [x] (2026-11-03) The `markdownlint` gate rejected two en-GB `-ise` spellings
+  the candidate itself introduced (`recognised` in
+  `installer/src/deps/install.rs`, `Recognising` in this plan). Both are Oxford
+  `-ize` under the pinned `typos` release; the pair was fixed rather than
+  suppressed. The rest of the sequence was then re-run from `markdownlint`
+  onward, and the `make lint` and `make test` evidence below belongs to the
+  corrected tree.
+- [x] (2026-11-03) `make lint` failed twice on candidate-introduced Clippy
+  denials, each surfaced only by the full workspace gate. First
+  `clippy::shadow_reuse` at `installer/src/deps/install.rs:303`, where a
+  `map_or_else` closure parameter reused the enclosing `version`; fixed by
+  renaming it `pinned_version`. Then, on the re-run, `clippy::manual_assert` at
+  `tests/nextest_ui_filter/filter_model.rs:120`, where the new `glob_names`
+  helper wrote `if <cond> { panic!(…) }`; fixed by hoisting the condition into
+  `is_unsupported` and using `assert!(!is_unsupported, …)`. Neither was
+  suppressed. Both are Clippy-only lints, so neither `cargo check` nor the test
+  suite could have reported them.
+- [x] (2026-11-03) Lesson recorded: the two focus runs used to pre-validate
+  those fixes were scoped by package, and a package scope is not a tree scope.
+  `cargo clippy -p whitaker-installer …` returned `EXIT=0` while
+  `clippy::manual_assert` was failing in the root `whitaker` package, so the
+  green focus run was evidence about a different crate and not about the
+  candidate. A focus run only predicts a workspace gate for the crate it
+  actually compiles. Scope each one to the package that owns the edited file,
+  and treat the full gate as the authority regardless.
+- [x] (2026-11-03) `make lint` is green on the corrected tree:
+  `GATE_EXIT=0`, 5762 s, zero `error:` lines. Rustdoc finished in 4m10s,
+  `lint-clippy` in 7m25s, and `lint-whitaker` — which had never started in
+  either earlier attempt — built the Dylint suite under `nightly-2026-05-28` in
+  81m17s and passed. The long wall time is compile admission, not the suite:
+  the log shows queues of 100-370 requests throughout, and
+  `build-limits-status` reported `healthy` whenever sampled.
+- [ ] (2026-11-04) `make test` ran 1670 tests and produced **zero assertion
+  failures**, but the gate is red (`GATE_EXIT=2`) because nextest's own
+  pre-existing `global-timeout = "300m"` (`.config/nextest.toml:22`) fired at
+  exactly `18000.046s` and cancelled the last test with `SIGTERM`:
+  `whitaker-installer::ui sha2_0_11_pre_migration_patterns_fail_to_compile`,
+  260 s in, waiting behind `[build-limits] … (23 ahead, 45s)`. Verified from
+  the log rather than assumed: `grep -cE '^\s+FAIL'` is **0**, and the summary
+  reads `1669 passed (1 flaky), 1 failed, 5 skipped`. The candidate did not
+  touch `global-timeout` (`git diff .config/nextest.toml` has no `+`/`-` line
+  for it), so this is host-capacity, not a code defect. The one `flaky` is
+  `bumpy_road_function::ui`, terminated at its 1200 s bound and passing on
+  retry in 149.5 s.
+- [x] (2026-11-04) Because `make test` chains its four phases under `set -eu`,
+  the `SIGTERM` aborted the recipe before three of them ran. They were then run
+  as three separate gates, which is the fix for a global timeout masking whole
+  phases, and all three are green: the workspace **doctests** executed this
+  time — 336 passed, 0 failed, `GATE_EXIT=0`, 1243 s — plus `test-root-lib`
+  56/56 in 2164 s and `test-nextest-filter` 12/12 in 96 s. The doctest phase
+  was the one the earlier timeout had silently skipped, so it is now verified
+  rather than assumed.
+- [x] (2026-11-04) `make test-workflow-contracts` is green: 14 passed, exit 0.
+- [x] (2026-11-04) The Makefile cleanup trap's
+      `ERROR: Tests modified ~/.local/bin/whitaker - restoring backup` is a
+      side effect of the forced
+      abort, not corruption. Checked directly: the script is 179 bytes, `md5sum`
+      `e854896539502e94cfe355209d513cca`, identical to its backups, and
+      `whitaker --version` still reports `cargo-dylint 6.3.0`.
+- [x] (2026-11-04) The test `make test` could not finish now has a verdict, and
+  it is green. `sha2_0_11_pre_migration_patterns_fail_to_compile` ran alone
+  under `TEST_CARGO_FLAGS` plus `-E 'test(=…)'`:
+  `1 test run: 1 passed, 1674 skipped`, `GATE_EXIT=0`, 374.7 s. It compiles its
+  fixtures in 375 s, which the 75-minute override absorbs and the 300 s base
+  would have killed — the same cancellation the global timeout exposed in the
+  full run. The earlier attempt at this had failed with
+  `unknown lint: no_expect_outside_tests` because the dispatch omitted
+  `TEST_EXCLUDES`; that was a defect in my command, not the candidate, and the
+  corrected command reproduces the real gate's package set exactly.
+- [x] (2026-11-04) Guard gap found and closed while preparing the review
+  replies. Finding 4454591447's fix added two `default`-profile allowances, but
+  nothing asserted they *governed* their tests — the very failure mode this PR
+  exists to prevent. Added `build_sized_allowances_govern_their_tests`, which
+  resolves the effective `slow-timeout` for both identities in both profiles.
+  Two name facts mattered and were read from nextest's own output rather than
+  guessed: `sha2_0_11_pre_migration_patterns_fail_to_compile` is reported bare
+  from `installer/tests/ui.rs`, while the packaging check is
+  `unix::fluent_bundles_are_included_in_the_package_tarball` because it sits in
+  `#[cfg(unix)] mod unix`. Neither carries the `ui::` prefix, so the broad
+  clause's `test(ui::ui)` contains-term does not shadow them; the guard now
+  fails if that ever changes.
+
+  The guard is non-vacuous, shown by a negative control rather than asserted.
+  Shortening only the `default` profile's sha2 period to `5m` and re-running
+  the four cases produced `4 tests run: 3 passed, 1 failed`, with exactly the
+  right case failing: `case_1_default_sha2`, reporting
+  `a 300s slow-timeout, not the expected 4500s`. The `ci` cases and the
+  packaging case stayed green, so the guard discriminates per profile and per
+  test rather than failing wholesale. Restoring the file returned
+  `4 tests run: 4 passed`, exit 0. (`-E 'test(=…)'` selects nothing here:
+  rstest appends a `::case_N_…` suffix, so the exact matcher never matches and
+  the run reports `0 tests run`. `test(…)` without `=` is the right selector
+  for a parameterized test.)
+- [x] (2026-11-04) `tests/nextest_ui_filter.rs` had grown to 476 lines, past
+  AGENTS.md's 400-line limit, so the shared config-loading and override
+  resolution were extracted to `tests/nextest_ui_filter/config.rs` (145 lines)
+  behind the same `#[path]` module pattern `filter_model.rs` already uses. The
+  parent is now 351 lines. Behaviour is unchanged and shown to be: 16/16 pass
+  after the split, and re-running the negative control still fails exactly
+  `case_1_default_sha2` with `a 300s slow-timeout, not the expected 4500s`,
+  leaving the other 15 green.
+- [x] (2026-11-04) `make fmt` and `make check-fmt` are green on the split
+  candidate: exit 0 in 12 s and 6 s, `Summary: 0 error(s)` from
+  `markdownlint-cli2` over 77 files. `cargo fmt` reformatted
+  `tests/nextest_ui_filter.rs`, `tests/nextest_ui_filter/config.rs` untouched.
+  As always in this repository, `make fmt` re-broke
+  `docs/whitaker-dylint-suite-design.md` — `mdtablefix` joined
+  `#[no_mangle]` onto the following line and split `store: &mut LintStore`
+  across two. Restored with `git checkout --`; md5 is back at
+  `7fef0aee4c210866329d53ca0f188439`. The tree is exactly the 9 modified + 1
+  untracked file afterwards.
+- [x] (2026-11-04) `make lint` is green on the split candidate: exit 0 in 153 s,
+  with no `error:` or `warning:` line in the log. All three stages ran —
+  `cargo doc` under `RUSTDOCFLAGS="--cfg docsrs -D warnings"`, Clippy over
+  `--lib --bins --tests --benches --all-features` with `-D warnings`, and the
+  Whitaker Dylint suite — and the Whitaker stage re-checked the packages this
+  candidate touches (`whitaker-common`, `whitaker_clones_core`,
+  `whitaker_sarif`, `whitaker-installer`). 153 s is a warm-cache figure, not a
+  cold-build one, so it should not be read as a speed-up over the 5762 s
+  measured on the first run.
+- [ ] (2026-11-04) `make test` rerun on the split candidate reproduced the same
+  pre-existing outcome, and reproduced it exactly: the nextest phase ran the
+  full 1,670, produced **zero assertion failures**, and was cancelled by the
+  repository's own `global-timeout = "300m"` at `Summary [18000.046s] 1670
+  tests run: 1669 passed (1 flaky), 1 failed, 5 skipped`. The whole 18,000 s
+  went to compile admission — 672 result lines parsed from the log, the
+  slowest single test being a `no_unwrap_or_else_panic` harness at 3,878.9 s,
+  then `rstest_helper_should_be_fixture::ui` at 3,627.4 s and 1,466.6 s, and
+  three `whitaker_clones_core::build_script_integration` runs at 1,200.6 s,
+  930.4 s and 781.8 s. Sample queues during the run were 100–370 requests
+  deep, and `build-limits-status` read `capacity 4, held 4, healthy` both
+  before and after. The SIGTERM'd test is the `trybuild` contract that has
+  already been given a verdict on its own (`1 passed, 1674 skipped`, 374.7 s),
+  and the `flaky` is again `bumpy_road_function::ui`. The candidate does not
+  touch `global-timeout`; the diff has no line for it.
+- [x] (2026-11-04) The three phases the `global-timeout` masked were then run as
+  three separate gates and all are green on this candidate: **doctests** 336
+  passed / 0 failed / 15 ignored across six suites (`GATE_EXIT=0`, 149 s),
+  **`test-root-lib`** 56/56 (`GATE_EXIT=0`, 127 s), and
+  **`test-nextest-filter`** 16/16 (`GATE_EXIT=0`, 19 s). The 16 is the split
+  guard file's full case count — 4 in
+  `build_sized_allowances_govern_their_tests` (both identities × both
+  profiles), 6 in `effective_slow_timeout_follows_override_precedence`, and 6
+  in the three older parameterized guards. Doctests were 149 s against the
+  earlier 1,243 s for the same reason `make lint` was 153 s: warm cache, not
+  fewer tests. `make test` is therefore fully covered end to end, with the one
+  caveat that its first phase is cancelled by a pre-existing repository-wide
+  timer under host load rather than by anything in this diff.
+- [x] (2026-11-04) `make typecheck` is green (`GATE_EXIT=0`, 2,201 s;
+  `Finished dev profile` in 36 m 40 s with `-D warnings`). 1,297 of its 1,317
+  log lines are `[build-limits]` queue lines, so nearly all of that wall time
+  is admission, not the check.
+- [x] (2026-11-04) `make nixie` is green: all diagrams validated, `GATE_EXIT=0`.
+- [x] (2026-11-04) `make markdownlint` is green, `Summary: 0 error(s)` over 78
+  files, after two self-inflicted repairs. It first failed on the `spelling`
+  prerequisite with `parameterised` at two places in this plan. The checker's
+  suggested `parameterized` is right here rather than an en-US intrusion:
+  en-GB-oxendict uses *-ize*, and the file already spelled it that way twice.
+  It then failed `MD060` on the profile-parity table added above, whose cells
+  were not padded to their column widths. Both fixed; spelling and
+  `markdownlint-cli2` now pass together.
 
 ### Scope tolerance disposition
 
@@ -863,6 +1032,15 @@ tool defect that this branch merely surfaced by running the formatter, not a
 defect in the pin change. The damaged hunk was restored to its original text;
 the other two touched docs reformat byte-identically. Nothing outside the
 intended pin lines now differs in that file.
+
+`make -n test` is not a dry run in this repository. GNU Make executes any
+recipe line containing `$(MAKE)` even under `-n`, and `test`'s recipe recurses
+into `test-root-lib` and `test-nextest-filter` that way. Asking Make to *print*
+the doctest command therefore started a real full `nextest run`, which had to
+be detected and killed. The doctest command was subsequently taken from the
+recipe text and the Makefile's `DOCTEST_EXCLUDES` expansion, not from a dry
+run. Anyone needing `make test`'s phases individually should read the recipe
+rather than ask Make to expand it.
 
 `dylint_testing` 6.3.2's `rustc_flags_from_line` is not the same design as
 `main`'s vendored copy. `main` splits with `shlex` and returns only the
@@ -1179,21 +1357,49 @@ argument pair to compile and silently answer `false`. A `.codescene` rule
 suppression or directive was rejected: the stringly-typed signature was a
 genuine design weakness, and the advisory identified it correctly.
 
+**Decorate Cargo's toolchain refusal rather than add a manifest field.** The
+Major finding asked the source fallback to use a compatible toolchain or to
+report how to install one. The second half of that choice is the one taken, and
+the reason is blast radius rather than preference. A `rust_version` field on
+`DependencyBinary` would have to be parsed, validated, rendered into the
+provenance Markdown by `render_dependency_section`, documented in the
+developers' guide schema table, emitted by
+`installer/scripts/dependency_binaries_manifest.py`, and supplied by every
+fixture — to buy a pre-check that covers exactly one crate today. Only
+`cargo-dylint` carries the floor: `cargo-dylint-6.3.0`'s shipped lock pins
+`cargo-util` 0.2.32 and `cargo-util-schemas` 0.14.3, both declaring
+`rust-version = "1.97"`, while `dylint-link-6.3.0` has no `cargo-util*` in its
+86-package lock and declares no `rust-version` of its own. Recognizing Cargo's
+own refusal and appending the resolving commands covers both crates and every
+future one, without a schema change.
+
+The advice deliberately does not offer `--toolchain`. `run_install` ensures
+dependencies in step 1 and only resolves the toolchain in step 3, so the flag
+never reaches the `cargo install` that fails; naming it would send the user
+round a loop that fails identically. The message names the explicit
+`cargo +stable install --locked --version <v> <package>` invocation and the
+`--skip-deps` escape hatch instead, and a test asserts the flag is absent.
+
 ## Outcomes & retrospective
 
-Complete for M1–M3. M4 is open for one reason only: its green CI result belongs
-to `adc974c9`, and the repairs that answer the assessment's findings 3 and 4
-are not in that commit. Everything up to `adc974c9` is committed and pushed —
-nine commits from base `5a08c6ff`, of which seven are the 2026-11-01/03 repair
-increment — and the commit that carries this text, the `test-root-lib` target
-and the contract suite after it is the candidate still awaiting a hosted run.
+Complete for M1–M3, and M4's own requirement — a green hosted run on a
+published head — is met. Seven `workflow_dispatch` runs have concluded
+`success`, most recently `41618871744` on `9863d842`; CodeRabbit's review of
+that head then raised eleven findings across the configuration, the guards and
+the documentation. Repairs for all eleven are in the commit that carries this
+text, so that commit is a new candidate and M4's evidence does not transfer to
+it. Its hosted run is what remains; that is a fresh observation, not an
+outstanding milestone.
 
 An earlier revision of this section said "nothing is committed or pushed". That
 was true when it was written and false by 2026-11-03: `adc974c9` is on
 `origin/harden-lint-whitaker-gate`, its `ls-remote` head matches
-`git rev-parse HEAD`, and CodeScene reports success on it. The distinction M4
-still owes is not publication but *hosted confirmation of the final candidate*,
-and that is a different, narrower gap.
+`git rev-parse HEAD`, and CodeScene reports success on it. A later revision
+said M4 awaited a hosted run at all; the Progress rows above had already
+recorded seven green ones, and that contradiction is what this passage now
+corrects. What M4 owes is not publication or a first green run but *hosted
+confirmation of each new candidate*, and the eleven repairs made the current
+commit one.
 
 Gate 2 has now run once and failed, and the failure was informative in a way
 the earlier design did not anticipate. The nextest overrides carried a filter
@@ -1247,12 +1453,31 @@ and successful, with `Check formatting`, the spelling, Nixie and Markdown gates,
 What that does not certify is the tree described in this document. The run
 checked out `adc974c9`, before the finding-3 and finding-4 repairs — the
 `test-root-lib` target, the rewritten nextest filters in both profiles, the new
-contract suite and the corrections to this plan — were written. Those were
-uncommitted at that point and are now published in `126ffa86`, `5934827f` and
-`615d3bd7`. They are a new candidate, and the green result belongs to the old
-one. M4 therefore closes when a `workflow_dispatch` run on the published head
-is green, not before; run `41606198130` is the attempt against `615d3bd7`, and
-its conclusion is reported rather than assumed.
+contract suite, and the corrections to this plan — were written. Those were
+uncommitted at that point and were published in `126ffa86`, `5934827f`, and
+`615d3bd7`. They were a new candidate, and that green result belonged to the
+old one. The same rule applies to every head since: run `41618871744` certifies
+`9863d842`, and the repairs that answer CodeRabbit's eleven findings form
+another new candidate whose run has not yet been dispatched.
+
+### Whole-profile allowance audit
+
+Finding 4454591447's class — a `ci` allowance with no `default` counterpart —
+was worth sweeping for rather than patching one instance. Parsing both profiles
+out of `.config/nextest.toml` and comparing the filters that carry a
+build-sized period (over 20 minutes) leaves exactly one asymmetry in each
+direction, and both are intended:
+
+| Filter carrying the long period                            | `ci`                           | `default`         | Why                                                                                                                         |
+| ---------------------------------------------------------- | ------------------------------ | ----------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `test(crate_builds_without_dylint_driver_feature)`         | 30 m, folded with the next     | absent as written | Sole test in `binary(no_default_features_build)`, which both profiles already bound at 20 m in `serial-nested-cargo-builds` |
+| `test(fluent_bundles_are_included_in_the_package_tarball)` | 30 m, folded with the previous | 30 m              | The new `default` entry; the `ci` line still names both tests                                                               |
+
+So the asymmetry collapses to one test, and the new `default` entry is the
+counterpart that was missing. Copying the `ci` line verbatim into `default`
+would put `crate_builds_…` in two overrides; the first
+(`binary(no_default_features_build)`) already wins, so the second would be dead
+text. Splitting the filters keeps each profile stating what it means.
 
 ## Conformance basis
 

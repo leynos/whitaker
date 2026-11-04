@@ -21,9 +21,19 @@ use log::debug;
 // recovery after a process has abandoned its directory.
 const EXAMPLE_HARNESS_LOCK_STALE_AFTER: Duration = Duration::from_mins(5);
 // Bound the default `acquire()` wait so a wedged live owner surfaces a timeout
-// instead of polling forever. It exceeds the stale-recovery window so genuinely
-// abandoned locks are reclaimed before this ceiling is reached.
-const EXAMPLE_HARNESS_LOCK_ACQUIRE_TIMEOUT: Duration = Duration::from_mins(6);
+// instead of polling forever.
+//
+// The bound is the expected hold time, not the stale window. An owner compiles
+// an example through nested Cargo while holding the lock, and a cold build plus
+// the package-cache and compiler-admission queues behind it is what
+// `.config/nextest.toml` budgets 20 minutes for; a six-minute bound reported a
+// healthy owner as a timeout. The extra five minutes are the stale window, so
+// an owner that nextest has just killed is reclaimed before the waiter gives
+// up, and the failure then reported is the owner's rather than the waiter's.
+//
+// It stays well below the 75-minute allowance the harnesses that hold it get,
+// because a bound longer than the waiter's own ceiling could never fire.
+const EXAMPLE_HARNESS_LOCK_ACQUIRE_TIMEOUT: Duration = Duration::from_mins(25);
 const EXAMPLE_HARNESS_LOCK_POLL_INTERVAL: Duration = Duration::from_millis(100);
 const EXAMPLE_HARNESS_LOCK_OWNER_FILENAME: &str = "owner";
 const EXAMPLE_HARNESS_LOCK_LIVENESS_EXTENSION: &str = "owner-lock";

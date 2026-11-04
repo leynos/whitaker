@@ -3,9 +3,11 @@
 use rstest::rstest;
 
 use super::*;
-use crate::test_utils::dependency_binary_helpers::{
-    dylint_link_install_list_check,
-    with_fake_binary_on_path,
+use crate::test_utils::{
+    dependency_binary_helpers::{dylint_link_install_list_check, with_fake_binary_on_path},
+    failure_output,
+    stdout_output,
+    success_output,
 };
 
 #[rstest]
@@ -93,4 +95,152 @@ fn should_refresh_companions_returns_expected(
     #[case] expected: bool,
 ) {
     assert_eq!(should_refresh_companions(outcome, status), expected);
+}
+
+/// Cargo's refusal to build a dependency whose `rust-version` exceeds the
+/// active toolchain, as `cargo install --locked` reports it.
+const MSRV_REFUSAL: &str = concat!(
+    "error: failed to select a version for the requirement `cargo-util = \"^0.2.32\"`\n",
+    "candidate versions found which didn't match: 0.2.31, 0.2.30, 0.2.29\n",
+    "package `cargo-util v0.2.32` cannot be built because it requires rustc",
+    " 1.97 or newer, while the currently active rustc version is 1.96.0\n",
+    "Either upgrade to rustc 1.97 or newer, or use\n",
+    "cargo update cargo-util@0.2.32 --precise ver\n",
+    "where `ver` is the latest version of `cargo-util` supporting rustc 1.96.0",
+);
+
+#[test]
+fn source_install_failure_message_keeps_cargos_diagnosis_for_version_refusals() {
+    let message = source_install_failure_message(
+        &failure_output(MSRV_REFUSAL),
+        &CARGO_DYLINT_TOOL,
+        Some("6.3.0"),
+    );
+
+    // Cargo names the crate and versions that failed; discarding that text
+    // would leave the user without the evidence the advice is based on.
+    assert!(
+        message.contains("cargo-util v0.2.32"),
+        "the original diagnostic should survive; got: {message}"
+    );
+    assert!(
+        message.contains("requires rustc 1.97"),
+        "the required rustc version should survive; got: {message}"
+    );
+}
+
+#[test]
+fn source_install_failure_message_gives_a_runnable_install_command() {
+    let message = source_install_failure_message(
+        &failure_output(MSRV_REFUSAL),
+        &CARGO_DYLINT_TOOL,
+        Some("6.3.0"),
+    );
+
+    // The advice has to be copy-pasteable and complete. It deliberately does
+    // not offer `--toolchain`: that flag is resolved after dependencies are
+    // installed, so naming it would send the user round a loop that fails the
+    // same way.
+    assert!(
+        message.contains("cargo +stable install --locked --version 6.3.0 cargo-dylint"),
+        "the advice should carry the full pinned install command; got: {message}"
+    );
+    assert!(
+        message.contains("--skip-deps"),
+        "the advice should name the escape hatch for a manually installed tool; got: {message}"
+    );
+    assert!(
+        !message.contains("--toolchain"),
+        "the installer's `--toolchain` flag does not reach the dependency step, so it must not be \
+         offered; got: {message}"
+    );
+}
+
+#[test]
+fn source_install_failure_message_passes_unrelated_failures_through() {
+    let message = source_install_failure_message(
+        &failure_output("cargo install failed"),
+        &CARGO_DYLINT_TOOL,
+        Some("6.3.0"),
+    );
+
+    assert_eq!(message, "cargo install failed");
+}
+
+#[rstest]
+#[case::requires_rustc("package `x v1.0.0` cannot be built because it requires rustc 1.97")]
+#[case::ignore_flag("help: pass `--ignore-rust-version` to select a version")]
+fn is_rust_version_refusal_matches_cargos_wording(#[case] message: &str) {
+    assert!(is_rust_version_refusal(message));
+}
+
+#[rstest]
+#[case::empty("")]
+#[case::network("error: failed to download from registry")]
+#[case::compile("error[E0308]: mismatched types")]
+fn is_rust_version_refusal_rejects_other_failures(#[case] message: &str) {
+    assert!(!is_rust_version_refusal(message));
+}
+
+/// The advice is only useful if it reaches the error the user sees, so this
+/// drives the real `cargo install` path rather than the formatter alone.
+#[test]
+fn run_cargo_install_reports_toolchain_advice_for_a_version_refusal() {
+    let executor = crate::test_utils::StubExecutor::new(vec![crate::test_utils::ExpectedCall {
+        cmd: "cargo",
+        args: vec!["install", "--locked", "--version", "6.3.0", "cargo-dylint"],
+        result: Ok(failure_output(MSRV_REFUSAL)),
+    }]);
+    let plan = CargoInstallPlan::new(&CARGO_DYLINT_TOOL).with_version("6.3.0");
+    let mut stderr = Vec::new();
+
+    let error = run_cargo_install(&executor, plan, &mut stderr, true)
+        .expect_err("a refused source build should fail");
+
+    match error {
+        InstallerError::DependencyInstall { tool, message } => {
+            assert_eq!(tool, "cargo-dylint");
+            assert!(
+                message.contains("cargo +stable install"),
+                "the surfaced error should carry the advice; got: {message}"
+            );
+        }
+        other => panic!("unexpected error: {other}"),
+    }
+    assert!(
+        stderr.is_empty(),
+        "a failed install should not report success output"
+    );
+    executor.assert_finished();
+}
+
+/// A successful build must not gain the advice text, and must still report the
+/// success message: the diagnostic wrapper only ever decorates a failure.
+#[test]
+fn run_cargo_install_succeeds_without_advice_when_cargo_succeeds() {
+    with_fake_binary_on_path("dylint-link", || {
+        let executor = crate::test_utils::StubExecutor::new(vec![
+            crate::test_utils::ExpectedCall {
+                cmd: "cargo",
+                args: vec!["install", "--locked", "--version", "6.3.0", "dylint-link"],
+                result: Ok(success_output()),
+            },
+            crate::test_utils::ExpectedCall {
+                cmd: "cargo",
+                args: vec!["install", "--list"],
+                result: Ok(stdout_output("dylint-link v6.3.0:\n")),
+            },
+        ]);
+        let plan = CargoInstallPlan::new(&DYLINT_LINK_TOOL).with_version("6.3.0");
+        let mut stderr = Vec::new();
+
+        run_cargo_install(&executor, plan, &mut stderr, false)
+            .expect("the source build should succeed");
+
+        let output = String::from_utf8(stderr).expect("stderr should be UTF-8");
+        assert!(output.contains("Installed dylint-link from source with cargo install."));
+        assert!(!output.contains("rustup toolchain install"));
+        executor.assert_finished();
+    })
+    .expect("prepare fake PATH");
 }

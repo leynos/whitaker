@@ -228,6 +228,22 @@ slow-timeout = { period = "20m", terminate-after = 1, grace-period = "5s" }
 test-group = "serial-nested-cargo-builds"
 
 [[profile.default.overrides]]
+# Match the ci profile's allowance for this nested Cargo build. Without it, a
+# default-profile run (`make test`, `make coverage`) holds the trybuild compile
+# contracts to the 300 s base and kills them mid-build.
+filter = "test(sha2_0_11_pre_migration_patterns_fail_to_compile)"
+slow-timeout = { period = "75m", terminate-after = 1, grace-period = "5s" }
+test-group = "serial-dylint-ui"
+retries = 0
+
+[[profile.default.overrides]]
+# Match the ci profile's allowance for this package-isolated build check, which
+# `cargo package` runs into its own fresh target directory.
+filter = "test(fluent_bundles_are_included_in_the_package_tarball)"
+slow-timeout = { period = "30m", terminate-after = 1, grace-period = "5s" }
+test-group = "serial-nested-cargo-builds"
+
+[[profile.default.overrides]]
 # Serialize ignored exclusion integration tests when they are explicitly run.
 # They build and stage the lint library before invoking `cargo dylint`, so they
 # share the same target-directory race risk as the UI harnesses above.
