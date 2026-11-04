@@ -292,7 +292,17 @@ fn try_binstall(
     Ok(true)
 }
 
-/// Install through Cargo and verify the resulting executable.
+/// Builds a dependency from source when the prebuilt route was unavailable.
+///
+/// `cargo binstall` is tried first, and by the time this runs it has either
+/// failed or been declined. The pinned version is requested with `--locked`
+/// so the dependency builds from the lock file its publisher shipped rather
+/// than from a freshly resolved graph; without the pin, a transitive crate
+/// declared `rust-version` can be pulled in that the host toolchain refuses.
+///
+/// A refusal is not silent: [`source_install_failure_message`] turns it into
+/// the commands that resolve it, because Cargo's own wording reads as a
+/// Whitaker defect.
 fn run_cargo_install(
     executor: &dyn CommandExecutor,
     cargo_install_plan: CargoInstallPlan<'_>,

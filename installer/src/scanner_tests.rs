@@ -30,6 +30,11 @@ macro_rules! skip_unless_linux {
     "no_expect_outside_tests",
     "stable-1.80.0"
 )]
+/// Reads the crate name and toolchain out of a well-formed library filename.
+///
+/// The `stable-1.80.0` case matters because toolchain directory names are not
+/// all nightly dates; a parser that split on the date shape would reject real
+/// installations.
 fn parse_library_filename_valid(
     #[case] filename: &str,
     #[case] expected_crate: &str,
@@ -52,6 +57,11 @@ fn parse_library_filename_valid(
 #[case::wrong_prefix("module_max_lines@nightly-2026-05-28.so")]
 #[case::wrong_extension("libmodule_max_lines@nightly-2026-05-28.dll")]
 #[case::random_file("readme.txt")]
+/// Rejects every filename that is not a `lib<crate>@<toolchain>` library.
+///
+/// A scanner that accepted a near miss would report a library the Dylint
+/// driver cannot load, and the failure would surface much later as a missing
+/// lint rather than as a scan error.
 fn parse_library_filename_invalid(#[case] filename: &str) {
     skip_unless_linux!();
 
@@ -60,6 +70,12 @@ fn parse_library_filename_invalid(#[case] filename: &str) {
 }
 
 #[test]
+/// The suite library reports exactly the standard lint crates.
+///
+/// Asserting the count *and* both directions of membership catches a stale
+/// constant list in either direction: a missing standard lint and a stray
+/// experimental one are different defects, and a set comparison alone reports
+/// neither as clearly.
 fn lints_for_suite_returns_standard_lints_only() {
     let lints = lints_for_library(&CrateName::from("whitaker_suite"));
     // Suite reports only standard lints; experimental lints depend on build flags
@@ -77,6 +93,8 @@ fn lints_for_suite_returns_standard_lints_only() {
 }
 
 #[test]
+/// Requesting the experimental set adds it to the standard set rather than
+/// replacing it, and adds nothing twice.
 fn lints_for_suite_includes_experimental_when_requested() {
     let lints = lints_for_library_with_experimental(&CrateName::from("whitaker_suite"), true);
 

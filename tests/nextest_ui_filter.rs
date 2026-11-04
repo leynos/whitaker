@@ -28,8 +28,12 @@
 
 #[path = "nextest_ui_filter/config.rs"]
 mod config;
+#[path = "nextest_ui_filter/errors.rs"]
+mod errors;
 #[path = "nextest_ui_filter/filter_model.rs"]
 mod filter_model;
+#[path = "nextest_ui_filter/property.rs"]
+mod property;
 
 use filter_model::{BinaryName, PackageName, ProfileName, TestIdentity, TestName};
 use rstest::rstest;
@@ -142,7 +146,9 @@ fn serial_dylint_ui_filter_captures_integration_ui_binaries(
         .unwrap_or_else(|| panic!("profile.{}: broad override should filter", profile.0));
 
     assert!(
-        filter.selects(INTEGRATION_UI),
+        filter
+            .selects(INTEGRATION_UI)
+            .unwrap_or_else(|error| panic!("profile.{}: {error}", profile.0)),
         "profile.{}: the {SERIAL_UI_GROUP} filter must select an integration binary named `ui` \
          whose top-level test is also named `ui`; found filter: {}",
         profile.0,
@@ -160,6 +166,13 @@ fn serial_dylint_ui_filter_captures_integration_ui_binaries(
     );
 }
 
+/// The serialized UI override must retry, for a Windows-specific reason.
+///
+/// `dylint_testing::initialize()` can transiently fail with "Access is denied
+/// (os error 5)" while persisting a `NamedTempFile`, so a single attempt turns
+/// a host-level race into a red build. The count is asserted rather than the
+/// override's text, because a retry that was written on some other override
+/// would satisfy a text search and still leave these tests with none.
 #[rstest]
 #[case::default(ProfileName("default"))]
 #[case::ci(ProfileName("ci"))]
@@ -167,9 +180,6 @@ fn serial_dylint_ui_filter_has_retry_configuration(
     nextest_config: Value,
     #[case] profile: ProfileName<'_>,
 ) {
-    // On Windows, dylint_testing::initialize() can transiently fail with
-    // "Access is denied (os error 5)" during NamedTempFile::persist().
-    // Retries are essential for reliable CI on Windows.
     let Some(count) = broad_override(&nextest_config, profile)
         .get("retries")
         .and_then(|retries| retries.get("count"))
@@ -227,7 +237,9 @@ fn nested_cargo_harnesses_are_governed_by_the_whole_package_override(
         ..HARNESS
     };
     assert!(
-        filter.selects(unlisted),
+        filter
+            .selects(unlisted)
+            .unwrap_or_else(|error| panic!("profile.{}.overrides[{index}]: {error}", profile.0)),
         "profile.{}.overrides[{index}] governs {} by name list rather than the whole package \
          binary, so a new harness would silently fall to the base bound; found filter: {}",
         profile.0,

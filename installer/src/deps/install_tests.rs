@@ -217,10 +217,8 @@ fn run_cargo_install_reports_toolchain_advice_for_a_version_refusal() {
         result: Ok(failure_output(MSRV_REFUSAL)),
     }]);
     let plan = CargoInstallPlan::new(&CARGO_DYLINT_TOOL).with_version("6.3.0");
-    let mut stderr = Vec::new();
 
-    let error = run_cargo_install(&executor, plan, &mut stderr, true)
-        .expect_err("a refused source build should fail");
+    let error = run_cargo_install(&executor, plan).expect_err("a refused source build should fail");
 
     match error {
         InstallerError::DependencyInstall { tool, message } => {
@@ -232,15 +230,12 @@ fn run_cargo_install_reports_toolchain_advice_for_a_version_refusal() {
         }
         other => panic!("unexpected error: {other}"),
     }
-    assert!(
-        stderr.is_empty(),
-        "a failed install should not report success output"
-    );
     executor.assert_finished();
 }
 
-/// A successful build must not gain the advice text, and must still report the
-/// success message: the diagnostic wrapper only ever decorates a failure.
+/// A successful build must not gain the advice text: the diagnostic wrapper
+/// only ever decorates a failure. The success wording itself is chosen by
+/// [`install_success_message`] from the returned outcome and the pin.
 #[test]
 fn run_cargo_install_succeeds_without_advice_when_cargo_succeeds() {
     with_fake_binary_on_path("dylint-link", || {
@@ -257,14 +252,19 @@ fn run_cargo_install_succeeds_without_advice_when_cargo_succeeds() {
             },
         ]);
         let plan = CargoInstallPlan::new(&DYLINT_LINK_TOOL).with_version("6.3.0");
-        let mut stderr = Vec::new();
 
-        run_cargo_install(&executor, plan, &mut stderr, false)
-            .expect("the source build should succeed");
+        let outcome = run_cargo_install(&executor, plan).expect("the source build should succeed");
 
-        let output = String::from_utf8(stderr).expect("stderr should be UTF-8");
-        assert!(output.contains("Installed dylint-link from source with cargo install."));
-        assert!(!output.contains("rustup toolchain install"));
+        assert_eq!(outcome, InstallOutcome::CargoInstall);
+        let message = install_success_message(&DYLINT_LINK_TOOL, outcome, true);
+        assert!(
+            message.contains("from source with cargo install"),
+            "got: {message}"
+        );
+        assert!(
+            !message.contains("rustup toolchain install"),
+            "got: {message}"
+        );
         executor.assert_finished();
     })
     .expect("prepare fake PATH");

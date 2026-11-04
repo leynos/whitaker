@@ -94,23 +94,47 @@ pub fn broad_override<'a>(config: &'a Value, profile: ProfileName<'_>) -> &'a Va
 
 /// Reads an override's `filter` string, if it has one. An override without a
 /// filter matches every test.
+///
+/// A `filter` key that is present but not a string is a configuration error,
+/// not an absent filter. Mapping it to `None` would make such an override
+/// match every test unconditionally, which is the opposite of what a filter
+/// that failed to parse should do.
+///
+/// # Panics
+///
+/// Panics when `filter` is present but is not a string. The guard is a test
+/// harness, so a malformed configuration should stop it at the offending
+/// override rather than be threaded through every caller.
 pub fn filter_of(override_table: &Value) -> Option<FilterExpression<'_>> {
-    override_table
-        .get("filter")
-        .and_then(Value::as_str)
-        .map(FilterExpression)
+    let filter = override_table.get("filter")?;
+    let Some(text) = filter.as_str() else {
+        panic!("an override's `filter` must be a string; found {filter:?}");
+    };
+
+    Some(FilterExpression(text))
 }
 
 /// Returns the index and override that nextest applies for `setting`, which is
 /// the first override, in file order, that matches `identity` and configures
 /// that setting.
+///
+/// # Panics
+///
+/// Panics when an override's filter cannot be parsed, rather than treating that
+/// override as matching every test. The guard exists to detect configuration
+/// drift, and a clause it cannot read is exactly such drift.
 pub fn governing_override<'a>(
     overrides: &'a [Value],
     setting: &str,
     identity: TestIdentity<'_>,
 ) -> Option<(usize, &'a Value)> {
     overrides.iter().enumerate().find(|(_, over)| {
-        over.get(setting).is_some() && filter_of(over).is_none_or(|filter| filter.selects(identity))
+        over.get(setting).is_some()
+            && filter_of(over).is_none_or(|filter| {
+                filter
+                    .selects(identity)
+                    .unwrap_or_else(|error| panic!("{error}"))
+            })
     })
 }
 

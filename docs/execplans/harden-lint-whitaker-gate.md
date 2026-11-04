@@ -311,15 +311,15 @@ each push rather than copying an earlier lease into the command.
   tests on both profiles. Gate re-run evidence is recorded under M4.
 - [x] (2026-11-04) M4: complete on `eabaa0f4`. The repository-wide gates are
   green on the published head and on the Rust-bearing parent it builds on, and
-  a hosted run has concluded green against it — run `41800660806` on
-  `eabaa0f4` reports `success`, with `linux-full` and `windows-compat` both
-  successful and `coverage-check` skipped by its configured lane selection.
-  The `make fmt` reflow setback this row used to carry was resolved before
-  publication: the unrelated `docs/whitaker-dylint-suite-design.md` churn is
-  reverted (`md5sum` `7fef0aee4c210866329d53ca0f188439`) and `make check-fmt`
-  exits 0 on the tip. The exact-head requirement is now a standing one rather
-  than an outstanding row: every new head needs its own hosted green result,
-  and the rows below record one for each.
+  a hosted run has concluded green against it — run `41800660806` on `eabaa0f4`
+  reports `success`, with `linux-full` and `windows-compat` both successful and
+  `coverage-check` skipped by its configured lane selection. The `make fmt`
+  reflow setback this row used to carry was resolved before publication: the
+  unrelated `docs/whitaker-dylint-suite-design.md` churn is reverted (`md5sum`
+  `7fef0aee4c210866329d53ca0f188439`) and `make check-fmt` exits 0 on the tip.
+  The exact-head requirement is now a standing one rather than an outstanding
+  row: every new head needs its own hosted green result, and the rows below
+  record one for each.
 - [x] (2026-11-03) The repair is committed as `f19408ff`
   ("Guard the Dylint copy step and scope the harness lock"). It sits on unpushed
   `55da1e23`, on top of remote `d10469fd`. Nine files, 740 insertions, 177
@@ -568,12 +568,11 @@ each push rather than copying an earlier lease into the command.
   head's check run: its title is `Review paused`, its summary says
   `Result: Skipped - Review paused`, and every step, including
   `Prepare review scope`, was skipped. That pause is automatic after an influx
-  of commits, not a rate limit, and the notices offering
-  `@coderabbitai resume` and a "Resume reviews" checkbox are the bot's own
-  shortcut. The queue entry was the authorized route, a pause is a wait rather
-  than an impasse, and a second entry for the same PR is forbidden, so the
-  queue was allowed to deliver — which it did, raising the eleven findings
-  recorded above.
+  of commits, not a rate limit, and the notices offering `@coderabbitai resume`
+  and a "Resume reviews" checkbox are the bot's own shortcut. The queue entry
+  was the authorized route, a pause is a wait rather than an impasse, and a
+  second entry for the same PR is forbidden, so the queue was allowed to
+  deliver — which it did, raising the eleven findings recorded above.
 - [x] (2026-11-03) ExecPlan completeness/correctness assessment posted as issue
   comment
   [6598161483](https://github.com/leynos/whitaker/pull/372#issuecomment-6598161483)
@@ -755,10 +754,10 @@ each push rather than copying an earlier lease into the command.
   `harness_lock` acquisition ceiling, the `temp_env` lock ordering, the
   glob-versus-substring matchers, the `not` precedence, the stale
   developers-guide example, the M4 retrospective, and the Major finding on the
-  source-install toolchain. Repairs for all eleven were published in
-  `f199288e` and `b8fff90d`, so they formed a new candidate; the eleven hosted
-  results on `9bb6cb1c` do not transfer to it, and the runs recorded below are
-  what certify it instead.
+  source-install toolchain. Repairs for all eleven were published in `f199288e`
+  and `b8fff90d`, so they formed a new candidate; the eleven hosted results on
+  `9bb6cb1c` do not transfer to it, and the runs recorded below are what
+  certify it instead.
 - [x] (2026-11-04) Gate and CI evidence now covers the final head `25aa211b`.
   Locally, `make check-fmt` is green on it (5 s), and the full three-gate run
   on its parent `b8fff90d` — `check-fmt`, `lint`, `test` — is green with `test`
@@ -893,9 +892,9 @@ each push rather than copying an earlier lease into the command.
   `markdownlint-cli2` over 77 files. `cargo fmt` reformatted
   `tests/nextest_ui_filter.rs`, `tests/nextest_ui_filter/config.rs` untouched.
   As always in this repository, `make fmt` re-broke
-  `docs/whitaker-dylint-suite-design.md` — `mdtablefix` joined
-  `#[no_mangle]` onto the following line and split `store: &mut LintStore`
-  across two. Restored with `git checkout --`; md5 is back at
+  `docs/whitaker-dylint-suite-design.md` — `mdtablefix` joined `#[no_mangle]`
+  onto the following line and split `store: &mut LintStore` across two.
+  Restored with `git checkout --`; md5 is back at
   `7fef0aee4c210866329d53ca0f188439`. The tree is exactly the 9 modified + 1
   untracked file afterwards.
 - [x] (2026-11-04) `make lint` is green on the split candidate: exit 0 in 153 s,
@@ -910,15 +909,16 @@ each push rather than copying an earlier lease into the command.
 - [ ] (2026-11-04) `make test` rerun on the split candidate reproduced the same
   pre-existing outcome, and reproduced it exactly: the nextest phase ran the
   full 1,670, produced **zero assertion failures**, and was cancelled by the
-  repository's own `global-timeout = "300m"` at `Summary [18000.046s] 1670
-  tests run: 1669 passed (1 flaky), 1 failed, 5 skipped`. The whole 18,000 s
-  went to compile admission — 672 result lines parsed from the log, the
-  slowest single test being a `no_unwrap_or_else_panic` harness at 3,878.9 s,
-  then `rstest_helper_should_be_fixture::ui` at 3,627.4 s and 1,466.6 s, and
-  three `whitaker_clones_core::build_script_integration` runs at 1,200.6 s,
-  930.4 s and 781.8 s. Sample queues during the run were 100–370 requests
-  deep, and `build-limits-status` read `capacity 4, held 4, healthy` both
-  before and after. The SIGTERM'd test is the `trybuild` contract that has
+  repository's own `global-timeout = "300m"` at
+  `Summary [18000.046s] 1670
+  tests run: 1669 passed (1 flaky), 1 failed, 5 skipped`.
+  The whole 18,000 s went to compile admission — 672 result lines parsed from
+  the log, the slowest single test being a `no_unwrap_or_else_panic` harness at
+  3,878.9 s, then `rstest_helper_should_be_fixture::ui` at 3,627.4 s and
+  1,466.6 s, and three `whitaker_clones_core::build_script_integration` runs at
+  1,200.6 s, 930.4 s and 781.8 s. Sample queues during the run were 100–370
+  requests deep, and `build-limits-status` read `capacity 4, held 4, healthy`
+  both before and after. The SIGTERM'd test is the `trybuild` contract that has
   already been given a verdict on its own (`1 passed, 1674 skipped`, 374.7 s),
   and the `flaky` is again `bumpy_road_function::ui`. The candidate does not
   touch `global-timeout`; the diff has no line for it.
@@ -954,8 +954,58 @@ each push rather than copying an earlier lease into the command.
   Assertion Blocks)" and a `10.00 -> 9.69` delta on
   `installer/src/deps/install_tests.rs`, now concludes `success` with
   `Quality Gate Passed`, six gates passed and zero annotations. The repair is
-  recorded under [CodeScene measures the assertion chain, not the
-  test](#codescene-measures-the-assertion-chain-not-the-test).
+  recorded under
+  [CodeScene measures the assertion chain, not the test](#codescene-measures-the-assertion-chain-not-the-test).
+- [x] (2026-11-04) All seven gates pass on the working tree that becomes this
+  commit, run sequentially and once each by `scrutineer`:
+  - `make fmt` — pass, 11 s. Single run; see the reflow note below for why it
+    is not repeated after the doc restore.
+  - `make check-fmt` — pass, 5 s, and again 5 s after the restore.
+  - `make lint` — pass, 145 s. Clean exit is the load-bearing evidence: the
+    recipe runs rustdoc, Clippy and the Whitaker Dylint suite, and the log
+    carries no `error:` line and no explicit Dylint verdict line.
+  - `make test` — pass, 1,531 s. nextest `1673 tests run: 1673 passed, 5
+    skipped`; doctests 336 passed across six suites (11 and 4 ignored); root
+    library 56/56; filter suite 41/41.
+  - `make test-workflow-contracts` — pass, 2 s, 19 passed, with
+    `BASH_ENV`/`GH_TOKEN`/`GITHUB_TOKEN` unset so the Lody shim cannot hijack
+    the `gh` stubs.
+  - `make markdownlint` — pass, 27 s, 78 files, `Summary: 0 error(s)`.
+  - `make nixie` — pass, 3 s, all diagrams validated.
+- [x] (2026-11-04) The first `make lint` of this increment failed with five
+  Clippy errors, all in the three new test modules this increment adds, and all
+  fixed in the modules rather than suppressed: `question_mark` in `filter_of`,
+  `missing_const_for_fn` on the error-suite identity helper, and three
+  `map_unwrap_or` sites collapsed into one `table_from` helper. The second run
+  is the green one above. This is the case the earlier rows predicted — a green
+  `make test` does not imply a green `make lint`, because lints denied in
+  `Cargo.toml` are invisible to `rustc`.
+- [x] (2026-11-04) The increment's `make fmt` again rewrote an unrelated file,
+  `docs/whitaker-dylint-suite-design.md`, reflowing a Rust fence into malformed
+  Markdown. Restored from `HEAD` (`md5sum` back to
+  `7fef0aee4c210866329d53ca0f188439`, the value this plan already cites), and
+  the gate re-run order was `fmt` → restore → `check-fmt` so the restore could
+  not be re-broken. `check-fmt` only runs `cargo fmt --check`, so it cannot
+  catch Markdown reflow; the restore is verified by checksum, not by a gate.
+- [x] (2026-11-04) Two evidence limitations are recorded rather than papered
+  over. First, `make lint`'s Dylint phase has no "N lints loaded" line in the
+  log, so the suite's coverage rests on the recipe naming
+  `--lib whitaker_suite` and on the process exiting 0. Second, `make spelling`
+  reads `git ls-files`, so the three files that are still untracked —
+  `errors.rs`, `property.rs` and `lint_whitaker_execution_test.py` — were
+  outside that gate's field of view when it ran. They are staged in this commit
+  and `make markdownlint` is re-run afterwards so the previously uncovered
+  files are covered before publication.
+- [x] (2026-11-04) The re-run justified itself: with `errors.rs` tracked,
+  `spelling` failed on `unparseable` at `errors.rs:228` and the tree was not
+  clean. The repository spells it `unparsable` in five other places
+  (`whitaker_clones_core::ast`, the clone-detector design, and
+  `installer/src/deps/path_tests.rs`), so the test was renamed to
+  `an_unparsable_filter_is_rejected_during_resolution` rather than the
+  dictionary relaxed — a local terminology exception for one test name would
+  have been the wrong fix. `make markdownlint` then passed 78 files, 0 errors;
+  `make check-fmt` passed; and `make test-nextest-filter` still reports
+  41/41, so the rename broke no reference.
 
 ### The `make test` wrapper trap is environmental, not candidate
 
@@ -999,11 +1049,11 @@ excuse the exit line, which is discussed next.
 
 The script's state after the 08:10 run confirms the trap was reporting a real
 divergence, not a phantom one. The trap restores the backup, so the file at
-that moment was back to 179 bytes,
-`e854896539502e94cfe355209d513cca` — but today's preserved backups show it had
-genuinely changed away from that form during the run. The script is now 461
-bytes and delegates to `whitaker-installer run`. That is the script emitted by
-a *different* branch, `3-5-1-root-whitaker-binary`
+that moment was back to 179 bytes, `e854896539502e94cfe355209d513cca` — but
+today's preserved backups show it had genuinely changed away from that form
+during the run. The script is now 461 bytes and delegates to
+`whitaker-installer run`. That is the script emitted by a *different* branch,
+`3-5-1-root-whitaker-binary`
 (`worktrees/0c485c79…/installer/src/wrapper.rs:137`); this branch's
 `generate_unix_scripts` emits only the 179-byte `exec cargo dylint` form
 (`installer/src/wrapper.rs:107-111`). A sibling `make test` on that branch
@@ -1014,8 +1064,8 @@ candidates' gates, and the 08:10 trap is the detector working as designed.
 Fourth, and decisively, the same commit passes the same gate end to end when
 the host is quiet. A fresh sequential run on the identical `b8fff90d` — the
 scrutineer's, after the earlier one, with `check-fmt` and `lint` green ahead of
-it — completed all four phases and exited **0**, with `grep -c 'ERROR: Tests
-modified'` reading **0**:
+it — completed all four phases and exited **0**, with
+`grep -c 'ERROR: Tests modified'` reading **0**:
 
 ```text
 check-fmt  EXIT_CODE=0 DURATION=5s
@@ -1027,20 +1077,19 @@ test       EXIT_CODE=0 DURATION=1288s
   test-nextest-filter 16 tests run: 16 passed
 ```
 
-Nothing about the candidate changed between the red and the green run; only
-the other sessions' activity on the host did. That is the definition of an
+Nothing about the candidate changed between the red and the green run; only the
+other sessions' activity on the host did. That is the definition of an
 environmental flake, and it is the last evidence line this section needs.
 
-The trap is recorded as an environment finding for the host operator. It is
-not repaired here: the correct fix belongs to the host, not to this diff, and
+The trap is recorded as an environment finding for the host operator. It is not
+repaired here: the correct fix belongs to the host, not to this diff, and
 weakening a safeguard against a host-global race would be the wrong one.
 
-The candidate conclusion rests on the four phase summaries, each green:
-nextest `1670 tests run: 1670 passed, 5 skipped` in 2,477 s, doctests 336
-passed, `test-root-lib` 56/56, and `test-nextest-filter` 16/16. The trap is
-recorded as an environment finding for the host operator; it is not repaired
-here, because weakening a safeguard against a host-global race would be the
-wrong fix.
+The candidate conclusion rests on the four phase summaries, each green: nextest
+`1670 tests run: 1670 passed, 5 skipped` in 2,477 s, doctests 336 passed,
+`test-root-lib` 56/56, and `test-nextest-filter` 16/16. The trap is recorded as
+an environment finding for the host operator; it is not repaired here, because
+weakening a safeguard against a host-global race would be the wrong fix.
 
 ### Scope tolerance disposition
 
@@ -1332,9 +1381,9 @@ The obvious repair — split one assertion out of each chain so no test holds
 more than one — clears the rule without changing what any test can detect. It
 also leaves each test exactly as hard to diagnose, because a failure still
 reports an anonymous assertion line. The chain is a proxy for *the failure
-message does not say which promise broke*, and the rule can be satisfied
-either by breaking the chain arbitrarily or by making each promise its own
-named case. Only the second addresses what the rule is measuring.
+message does not say which promise broke*, and the rule can be satisfied either
+by breaking the chain arbitrarily or by making each promise its own named case.
+Only the second addresses what the rule is measuring.
 
 The two `source_install_failure_message` tests therefore became one four-case
 `#[rstest]`:
@@ -1361,8 +1410,8 @@ The two `source_install_failure_message` tests therefore became one four-case
 Each row carries both the fragment and a sentence saying why that fragment
 matters, and the sentence is spliced into the assertion message via
 `assert!(message.contains(fragment), "{why}; got: {message}")`. A failure now
-reports which promise broke. The promises are unchanged: all four fragments
-are still asserted.
+reports which promise broke. The promises are unchanged: all four fragments are
+still asserted.
 
 The one promise about *absence* — that `--toolchain` is never offered, because
 the installer resolves that flag after the dependency step, so naming it would
@@ -1376,12 +1425,12 @@ tests alone returned the file to `10.00`, so the test that drives the real
 
 Verification was bound to the committed object, not the working tree:
 `git show b8fff90d:installer/src/deps/install_tests.rs` scored `10.00` under
-`cs check` with `cs review` returning `score 10.0` and an empty `review`
-array. The affected nextest selection is 13/13 green, including all four new
-cases and the retained absence test. The hosted check then confirmed it
-independently, concluding `success` with `Quality Gate Passed` on the pushed
-commit. The lesson is that a structural biomarker has a structural repair that
-also serves the reader, and finding it is cheaper than arguing with the rule.
+`cs check` with `cs review` returning `score 10.0` and an empty `review` array.
+The affected nextest selection is 13/13 green, including all four new cases and
+the retained absence test. The hosted check then confirmed it independently,
+concluding `success` with `Quality Gate Passed` on the pushed commit. The
+lesson is that a structural biomarker has a structural repair that also serves
+the reader, and finding it is cheaper than arguing with the rule.
 
 ### Why `make test` failed for exactly two lint crates
 
