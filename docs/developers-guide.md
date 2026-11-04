@@ -5053,6 +5053,36 @@ nothing themselves; the commands that call them do. The logs never carry the
 raw error, which reaches the user through the returned result, nor a path, URL,
 or token.
 
+#### Clippy snapshot policy and adapter boundaries
+
+`installer/src/clippy_snapshot` separates what a snapshot must satisfy from how
+the installer observes it. Extend it along the same split.
+
+- `policy.rs` owns every acceptance rule as a pure function over evidence
+  values and recorded output. It performs no I/O and records no metrics.
+  `selection.rs` keeps `select_revision` as the pure kernel; policy evaluates
+  its outcome.
+- `ports.rs` owns the driven ports: `RepositoryQueries`, `BundleOperations`,
+  `SnapshotStore`, and `MetadataStore`, plus the `RootLock` and `Staging`
+  guards. Release downloads reuse the existing `DependencyArchiveDownloader`.
+- `git.rs` implements `RepositoryQueries` and `BundleOperations`; `store.rs`
+  implements `SnapshotStore` and `MetadataStore`. An adapter returns the
+  closest honest observation and translates infrastructure failures into
+  `ClippySnapshotError`; it does not decide whether an observation is
+  acceptable.
+- `verify.rs`, `install.rs`, and `provision.rs` orchestrate through
+  `SnapshotSupport<'_>`, a struct of borrowed ports.
+  `SnapshotSupport::production()` composes the process-wide `SnapshotGit` and
+  `ProductionStore`; the public entry points use it and the `*_with` variants
+  take explicit support.
+
+Keep the test split when adding coverage: value cases go in `policy_tests.rs`,
+call ordering and "never called" assertions go in `orchestration_tests.rs`
+through the scripted ports in `fakes.rs`, and adapter honesty stays in
+`verify_tests.rs` and `tests.rs` against real Git and a real directory. A new
+acceptance rule needs a value test; a new observation needs a port method and
+an adapter method, not a call from orchestration.
+
 ## Standard vs Experimental Lints
 
 Whitaker categorizes lints into two tiers:
