@@ -810,9 +810,25 @@ each push rather than copying an earlier lease into the command.
 - [x] (2026-11-04) The Makefile cleanup trap's
       `ERROR: Tests modified ~/.local/bin/whitaker - restoring backup` is a
       side effect of the forced
-      abort, not corruption. Checked directly: the script is 179 bytes, `md5sum`
+      abort, not corruption. Checked directly at that time: the script was
+      179 bytes, `md5sum`
       `e854896539502e94cfe355209d513cca`, identical to its backups, and
-      `whitaker --version` still reports `cargo-dylint 6.3.0`.
+      `whitaker --version` still reported `cargo-dylint 6.3.0`.
+- [x] (2026-11-04, later) The trap fired again on later runs, and this time the
+      *content* had genuinely changed: the shared script is now 461 bytes and
+      delegates to `whitaker-installer run`, which is the wrapper emitted by
+      branch `3-5-1-root-whitaker-binary`
+      (`worktrees/0c485c79…/installer/src/wrapper.rs:137`), not by this branch
+      — this branch's `generate_unix_scripts` still emits the 179-byte
+      `exec cargo dylint` form
+      (`installer/src/wrapper.rs:107-111`). A sibling `make test` on that branch
+      started at 08:21:13 and left `/tmp/.whitaker-test-backup-jGAjjy` (461
+      bytes, `08:21:14`); the trap at 08:10:09 belongs to the earlier 179-byte
+      epoch, while today's 08:19:01 rewrite sits inside that sibling's run. So
+      the shared script really is rewritten by *other* candidates' gates, which
+      is the host-global race this section documents, and the 08:10 trap is the
+      detector working, not a fabrication. The current mtime is not evidence
+      about this candidate's run.
 - [x] (2026-11-04) The test `make test` could not finish now has a verdict, and
   it is green. `sha2_0_11_pre_migration_patterns_fail_to_compile` ran alone
   under `TEST_CARGO_FLAGS` plus `-E 'test(=…)'`:
@@ -915,6 +931,99 @@ each push rather than copying an earlier lease into the command.
   It then failed `MD060` on the profile-parity table added above, whose cells
   were not padded to their column widths. Both fixed; spelling and
   `markdownlint-cli2` now pass together.
+- [x] (2026-11-04) CodeScene advisory cleared on `b8fff90d`. The hosted
+  `CodeScene Code Health Review (main)` check, which had concluded `failure` on
+  `f199288e` with "Enforce advisory code health rules (1 file with Duplicated
+  Assertion Blocks)" and a `10.00 -> 9.69` delta on
+  `installer/src/deps/install_tests.rs`, now concludes `success` with
+  `Quality Gate Passed`, six gates passed and zero annotations. The repair is
+  recorded under [CodeScene measures the assertion chain, not the
+  test](#codescene-measures-the-assertion-chain-not-the-test).
+
+### The `make test` wrapper trap is environmental, not candidate
+
+Both `make test` runs on this candidate — the 07:21:47 run and its 05:07
+predecessor — finished with all four phases green and then failed in the
+Makefile's own cleanup trap:
+
+```text
+ERROR: Tests modified /home/leynos/.local/bin/whitaker - restoring backup
+make: *** [Makefile:102: test] Error 1
+```
+
+Four independent lines of evidence place the cause outside this diff.
+
+First, the trap is pre-existing. `git show origin/main:Makefile` contains the
+same `diff -q` comparison and the same message (lines 233-255), and the base
+branch's `Makefile` carries eleven `WHITAKER_SCRIPT` references against this
+branch's. The trap is inherited, not added here.
+
+Second, it is host-global and reproduces on an unrelated branch. The sibling
+gate for `harden-lint-workspace-config` records the identical line at
+`/tmp/test-whitaker-harden-lint-workspace-config.out:3164`, and a preserved
+prior run of this branch records it at
+`/tmp/test-whitaker-harden-lint-whitaker-gate-prior-20261104T0507.out:2800`.
+Two different candidates, one shared `$HOME/.local/bin/whitaker`.
+
+Third, no test in this tree can be the writer of *this branch's* script. Every
+in-tree invocation of the installer binary passes `--skip-wrapper`:
+`behaviour_cli/support.rs:195`, `behaviour_workflows.rs:195`,
+`toolchain_steps/mod.rs:125`, `toolchain_steps/scenario_setup.rs:175`, and the
+dry-run cases in `behaviour_cli.rs:101-102` never reach `finish_install`. The
+one path that would write the script, `finish_install` →
+`generate_and_report_wrapper` → `generate_wrapper_scripts`
+(`installer/src/main.rs:295-299`, `installer/src/wrapper.rs:68-72`), is
+therefore unreachable from the suite. The dependency-binary installer writes
+into `dirs.executables()`, but the integration tests inject a `StubDirs`
+pointing at a `tempfile::tempdir()`
+(`installer/tests/behaviour_dependency_binaries.rs:256-262`). What this proves
+is that the 461-byte script cannot have come from this candidate; it does not
+excuse the exit line, which is discussed next.
+
+The script's state after the 08:10 run confirms the trap was reporting a real
+divergence, not a phantom one. The trap restores the backup, so the file at
+that moment was back to 179 bytes,
+`e854896539502e94cfe355209d513cca` — but today's preserved backups show it had
+genuinely changed away from that form during the run. The script is now 461
+bytes and delegates to `whitaker-installer run`. That is the script emitted by
+a *different* branch, `3-5-1-root-whitaker-binary`
+(`worktrees/0c485c79…/installer/src/wrapper.rs:137`); this branch's
+`generate_unix_scripts` emits only the 179-byte `exec cargo dylint` form
+(`installer/src/wrapper.rs:107-111`). A sibling `make test` on that branch
+started at 08:21:13 and captured a 461-byte `/tmp/.whitaker-test-backup-jGAjjy`
+at `08:21:14`. So the shared `$HOME/.local/bin/whitaker` is written by other
+candidates' gates, and the 08:10 trap is the detector working as designed.
+
+Fourth, and decisively, the same commit passes the same gate end to end when
+the host is quiet. A fresh sequential run on the identical `b8fff90d` — the
+scrutineer's, after the earlier one, with `check-fmt` and `lint` green ahead of
+it — completed all four phases and exited **0**, with `grep -c 'ERROR: Tests
+modified'` reading **0**:
+
+```text
+check-fmt  EXIT_CODE=0 DURATION=5s
+lint       EXIT_CODE=0 DURATION=43s
+test       EXIT_CODE=0 DURATION=1288s
+  nextest             1673 tests run: 1673 passed, 5 skipped
+  doctests            184 + 79 + 32 + 41 passed, 0 failed
+  test-root-lib       56 tests run: 56 passed
+  test-nextest-filter 16 tests run: 16 passed
+```
+
+Nothing about the candidate changed between the red and the green run; only
+the other sessions' activity on the host did. That is the definition of an
+environmental flake, and it is the last evidence line this section needs.
+
+The trap is recorded as an environment finding for the host operator. It is
+not repaired here: the correct fix belongs to the host, not to this diff, and
+weakening a safeguard against a host-global race would be the wrong one.
+
+The candidate conclusion rests on the four phase summaries, each green:
+nextest `1670 tests run: 1670 passed, 5 skipped` in 2,477 s, doctests 336
+passed, `test-root-lib` 56/56, and `test-nextest-filter` 16/16. The trap is
+recorded as an environment finding for the host operator; it is not repaired
+here, because weakening a safeguard against a host-global race would be the
+wrong fix.
 
 ### Scope tolerance disposition
 
@@ -1179,6 +1288,83 @@ lines (+300/−59), which pushed the module's string-argument ratio from below
 the threshold to 53.3%, above the 39.0% warning threshold. CodeScene analyses
 only the delta, which is why pre-existing higher-ratio files elsewhere in the
 repository were not flagged.
+
+### CodeScene measures the assertion chain, not the test
+
+The second CodeScene failure on this PR was the same biomarker family as the
+first, but aimed at test structure rather than production code:
+`Duplicated Assertion Blocks` on `installer/src/deps/install_tests.rs`, taking
+the file from `10.00` to `9.69` and failing the advisory gate.
+
+The local CLI reproduced it exactly — `cs check` printed
+`Code health score: 9.68` and a warning at line 130, matching the hosted
+figures to within the rounding the two tools use — so the finding was accepted
+rather than contested.
+
+Its own rule text defines an assertion block as *a chain of multiple assert
+statements located directly after each other*. Three tests each opened with
+such a chain:
+
+- `source_install_failure_message_keeps_cargos_diagnosis_for_version_refusals`
+  — two assertions.
+- `source_install_failure_message_gives_a_runnable_install_command` — three.
+- `run_cargo_install_reports_toolchain_advice_for_a_version_refusal` — two,
+  inside a `match` arm.
+
+The obvious repair — split one assertion out of each chain so no test holds
+more than one — clears the rule without changing what any test can detect. It
+also leaves each test exactly as hard to diagnose, because a failure still
+reports an anonymous assertion line. The chain is a proxy for *the failure
+message does not say which promise broke*, and the rule can be satisfied
+either by breaking the chain arbitrarily or by making each promise its own
+named case. Only the second addresses what the rule is measuring.
+
+The two `source_install_failure_message` tests therefore became one four-case
+`#[rstest]`:
+
+```rust
+#[case::keeps_crate_and_versions(
+    "cargo-util v0.2.32",
+    "Cargo's original diagnostic should survive, because it names the crate that failed"
+)]
+#[case::keeps_required_rustc(
+    "requires rustc 1.97",
+    "the required rustc version should survive, because the advice rests on it"
+)]
+#[case::pinned_install_command(
+    "cargo +stable install --locked --version 6.3.0 cargo-dylint",
+    "the advice should carry the full pinned install command so it stays copy-pasteable"
+)]
+#[case::skip_deps_escape_hatch(
+    "--skip-deps",
+    "the advice should name the escape hatch for a manually installed tool"
+)]
+```
+
+Each row carries both the fragment and a sentence saying why that fragment
+matters, and the sentence is spliced into the assertion message via
+`assert!(message.contains(fragment), "{why}; got: {message}")`. A failure now
+reports which promise broke. The promises are unchanged: all four fragments
+are still asserted.
+
+The one promise about *absence* — that `--toolchain` is never offered, because
+the installer resolves that flag after the dependency step, so naming it would
+send the user round a loop that fails the same way — cannot be a table row. It
+remains a dedicated test with a doc comment explaining why it is separate.
+
+`run_cargo_install_reports_toolchain_advice_for_a_version_refusal` was left
+untouched, with its two assertions intact: the extraction of the other two
+tests alone returned the file to `10.00`, so the test that drives the real
+`cargo install` path through `StubExecutor` did not need restructuring.
+
+Verification was bound to the committed object, not the working tree:
+`git show b8fff90d:installer/src/deps/install_tests.rs` scored `10.00` under
+`cs check` with `cs review` returning `score 10.0` and an empty `review`
+array. The affected nextest selection is 13/13 green, including all four new
+cases and the retained absence test. The hosted check then confirmed it
+independently, concluding `success` with `Quality Gate Passed` on the pushed
+commit. The lesson is that a structural biomarker has a structural repair that
+also serves the reader, and finding it is cheaper than arguing with the rule.
 
 ### Why `make test` failed for exactly two lint crates
 
