@@ -169,7 +169,7 @@ fn serial_dylint_ui_filters_have_retry_configuration(serial_dylint_ui_overrides:
 
     assert!(
         retry_counts.iter().copied().any(|count| count >= 1),
-        "at least one serial-dylint-ui override must configure retries for \
-         Windows CI reliability; found counts: {retry_counts:?}"
+        "at least one serial-dylint-ui override must configure retries for Windows CI \
+         reliability; found counts: {retry_counts:?}"
     );
 }

@@ -4852,15 +4852,16 @@ seconds on the Windows lane, cancelling the run. A handwritten list would have
 had the same hole, and a discovery that stops recognizing the call would sweep
 a smaller set silently, so finding nothing is a failure rather than a pass.
 
-Five of the tests are members of the capacity-one `serial-trybuild-contracts`
+Six of the tests are members of the capacity-one `serial-trybuild-contracts`
 group: `dependency_check_result_contract_is_public`,
 `fixture_expansion_lint_attribute_contract`,
+`public_const_api_works_in_const_context`,
 `renamed_common_apis_are_public_and_legacy_names_stay_removed`,
 `renamed_sarif_api_is_public_and_legacy_names_stay_removed`, and
 `sha2_0_11_pre_migration_patterns_fail_to_compile`. Trybuild writes under
 `target/tests/trybuild`, separate from Dylint's `debug` and `debug/examples`
 artefacts, so this group can run alongside the capacity-one `serial-dylint-ui`
-group. The sixth, `trybuild_fixtures_compile_without_diagnostics`, stays in
+group. The seventh, `trybuild_fixtures_compile_without_diagnostics`, stays in
 `serial-dylint-ui`: it shares `ExampleHarnessLock` with the
 `rstest_helper_should_be_fixture` example-harness tests, and a separate group
 would let the two contend until the lock's six-minute ceiling expired under a
