@@ -307,9 +307,36 @@ Hard invariants. Violating one requires escalation, not a workaround.
       The locale directories are now run sequentially from one serialized test
       entry, with per-directory panic capture so a missing locale golden does
       not prevent later locales from producing output.
+- [x] (2026-11-04) Rebased onto `origin/main` and retargeted the pull request
+      from `harden-lint-config` to `main`. Sixteen child commits were replayed
+      across the exclusive boundary `afb1e4ac`; the twenty-one
+      `harden-lint-config` commits that already landed on `main` were not
+      replayed. Every conflict was resolved by keeping both branches' intent:
+      `main`'s `version = "0.2.11"` on the `rustc_*` path dependencies plus this
+      branch's new dependency pins; `main`'s deletion of the
+      `lint-whitaker`/`lint-clippy` split and `WHITAKER_PACKAGES`, plus this
+      branch's `verus-string-literals` and `kani-string-literals` targets;
+      `main`'s removal of `[lints] workspace = true` from the lint crates, plus
+      the `serial_test` promotion this branch had made by editing the same four
+      manifests. `Cargo.lock` was taken from `main` and rebuilt with
+      `cargo update --workspace`, as instructed. Two repair commits follow the
+      replay: `f94f0e1b` repairs the entity-level merge driver's corruption of
+      four files and restores the workspace-inherited versions of the two new
+      crates; `df20763e` applies repository formatting.
+- [x] (2026-11-05) All four requested gates pass on the rebased candidate,
+      run sequentially: `make check-fmt` (exit 0), `make lint` (exit 0,
+      4m36s), `make typecheck` (exit 0, 26m12s), and `make test` (exit 0;
+      nextest 2231 tests run, 2231 passed, 6 skipped, 13,413s, then the
+      `dylint_testing` lib suite 19/19). The seven Clippy findings introduced
+      by the merge were fixed at source — a redundant closure, a
+      `reversed_empty_ranges` literal, and import-order drift — not
+      suppressed. Logs are under `/tmp/{check-fmt,lint,typecheck,test}-2-4-1-*.out`.
 - [x] Step 2: scaffold both crates. Commit `ea36d5e9`.
 - [x] EP-M1: pure domain crate.
-- [ ] EP-M2: plain cooked string literals.
+- [x] EP-M2: plain cooked string literals. The adapter compiles and all 18
+      main UI fixtures pass, including the six `run-rustfix` fixtures, the
+      derive-generated implementation, and the nested expansion. The three
+      locale directories run from one serialized entry and pass.
 - [ ] EP-M3: source-authored format strings from compiler built-ins.
 - [ ] EP-M5: suite, installer, tooling, and documentation integration.
 - [ ] Roadmap item 2.4.1 marked done.
@@ -574,6 +601,40 @@ Note that this is the `rustc-src` component, not the `rust-src` component at
   day after the first draft of this entry proposed the unsound
   paired-hooks-only counter.
 
+- **SURP-019: the entity-level merge driver silently corrupts Rust files and
+  leaves no conflict marker.** Found while rebasing onto `origin/main` on
+  2026-11-04. The user-wide `weave` merge driver resolved several files without
+  reporting a conflict, then wrote output that a compiler rejects: it deleted a
+  `//!` module doc from `common/src/i18n/helpers.rs`, spliced a stray
+  `use`-list fragment and an orphan `};` into `common/src/i18n/tests.rs` and
+  `crates/bumpy_road_function/src/driver/diagnostic.rs`, and replaced the body
+  of `run_fixture_under_test_harness` in
+  `crates/no_expect_outside_tests/src/lib_ui_tests.rs` with a mangled fragment.
+  None of those files had a textual conflict; the driver applied entity-level
+  edits to them anyway. Detection is cheap and must not be skipped:
+  `cargo fmt --all -- --check` fails immediately with
+  `unexpected closing delimiter`, and `make check-fmt` is the first gate.
+  Mitigation adopted: restore each mangled file from the pre-merge commit
+  (`a6d28440`), delete the `// weave: run 'weave explain ...'` trailers the
+  driver appends, and only then run the gates. Several of the corrupted files
+  lay outside this branch's diff, so "it is not my change" is not a defence.
+  Date/Author: 2026-11-05, implementation agent.
+
+- **SURP-020: `main` removed the `lint-whitaker` gate this plan's Step 5 relied
+  on.** `AGENTS.md` and the `Makefile` on `main` no longer define `lint-clippy`,
+  `lint-whitaker`, or `WHITAKER_PACKAGES`; `make lint` is now
+  `cargo doc --workspace --no-deps` followed by `cargo clippy $(CARGO_FLAGS)`
+  with `--all-targets --all-features`. The Dylint UI fixtures under `examples/`
+  were the reason that split existed; `main` now handles their exclusion
+  differently. Impact on this plan: the `Tolerances` note that
+  "`make lint-whitaker` cannot reach cdylib lint crates" no longer describes
+  the repository, so the two new crates inherit policy through
+  `[lints] workspace = true` plus `--all-targets --all-features`, and that is
+  what `make lint` now proves. `main` also deleted `[lints] workspace = true`
+  from the individual lint manifests; the two new crates keep theirs because
+  they were added by this branch and nothing supersedes them. Date/Author:
+  2026-11-05, implementation agent.
+
 ## Decision log
 
 - **DEC-001: Implement as a post-expansion early lint, per RFC 0002.**
@@ -831,8 +892,28 @@ Note that this is the `rustc-src` component, not the `rust-src` component at
 
 ## Outcomes & retrospective
 
-Implementation not started. To be completed at each milestone boundary and at
-plan closure.
+The plan is not yet complete: `EP-M3` and `EP-M5` remain open, so this section
+records progress only.
+
+Landed and validated so far: the pre-approval planning work (RFC 0002 revision,
+roadmap restructure, six-lens design review), the two-crate scaffold, the whole
+pure domain crate `EP-M1`, and the plain-literal adapter `EP-M2` with its
+eighteen-fixture UI matrix, six of which apply the suggestion with
+`run-rustfix` and recompile. On 2026-11-04 the branch was rebased from the
+long-lived `harden-lint-config` target onto `main`, which is where this work
+will now land; that replay is recorded in §Progress and cost two repair
+commits, both documented in `SURP-019`.
+
+Lessons so far. The rebase is where the actual risk was, not the lint code: an
+entity-level merge driver rewrote files this branch never touched and produced
+Rust that does not parse, and only the formatting gate caught it. Any future
+rebase of this branch should treat `make check-fmt` as a corruption probe, not
+a style check. Second, `main`'s gate list moved underneath a long-lived plan:
+`lint-whitaker` is gone, and a plan that names a retired target is worse than
+one that names none, because it reads as verification that no longer runs.
+Third, the adapter's UI suite is by far the dominant cost of `make test` — the
+`string_continuation_style` UI entries alone take roughly eleven minutes across
+the four locale directories, against a 13,413-second nextest total.
 
 One outcome is already recorded. `docs/rfcs/0002-string-continuation-style.md`
 was substantively revised on 2026-08-21, before implementation, because two of
@@ -2424,6 +2505,12 @@ Both crates set `[lints] workspace = true` and additionally deny
 `arithmetic_side_effects`.
 
 ## Revision note
+
+On 2026-11-05, recorded the rebase onto `main` (previously
+`harden-lint-config`), the two repair commits it required, the retirement of
+`lint-whitaker` on `main`, and the four passing gates on the rebased candidate.
+`EP-M2` is now marked complete because its UI matrix passes end to end; `EP-M3`
+and `EP-M5` remain open, so the plan stays `APPROVED` rather than `COMPLETE`.
 
 On 2026-11-01, recorded the owner's instruction to resume after the source-size
 threshold was reached. The 900-line cap remains in force; EP-M3 is staged after
