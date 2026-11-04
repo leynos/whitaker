@@ -262,4 +262,3 @@ fn runner_env_guard_test_lock() -> EnvTestGuard {
     // so their whole bodies must run serially rather than only each mutation.
     env_test_guard()
 }
-// weave: run 'weave explain src/testing/ui/tests.rs' for per-hunk detail, 'weave check' to verify your resolution

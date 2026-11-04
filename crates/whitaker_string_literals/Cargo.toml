@@ -1,6 +1,6 @@
 [package]
 name = "whitaker_string_literals"
-version = "0.1.0"
+version.workspace = true
 edition = "2024"
 publish = false
 description = "Pure string-literal continuation analysis for Whitaker"

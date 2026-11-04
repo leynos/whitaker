@@ -1,6 +1,6 @@
 [package]
 name = "string_continuation_style"
-version = "0.2.7"
+version.workspace = true
 edition = "2024"
 publish = false
 description = "Dylint lint for Rust string-literal continuation style"

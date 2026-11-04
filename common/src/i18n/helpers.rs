@@ -323,6 +323,8 @@ pub struct LabelResolution<'a> {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for localization helper phrases such as branch pluralization.
+
     use super::branch_phrase;
     use crate::i18n::FALLBACK_LOCALE;
 

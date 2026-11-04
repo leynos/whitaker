@@ -119,17 +119,12 @@ fn run_fixture_under_test_harness(
     let harness_flag_refs: Vec<_> = harness_flags.iter().map(String::as_str).collect();
 
     run_test_runner(spec.fixture_name, || {
-        if let Some(config) = env.take_config() {
-            test.dylint_toml(config);
-        }
-        test.rustc_flags(harness_flag_refs.as_slice());
-        test.run();
-        if let Some(config) = env.take_config() {
-            test.dylint_toml(config);
-        }
-        test.rustc_flags(harness_flag_refs.as_slice());
-        test.run();
         let mut test = Test::src_base(spec.crate_name, env.workdir());
+        if let Some(config) = env.take_config() {
+            test.dylint_toml(config);
+        }
+        test.rustc_flags(harness_flag_refs.as_slice());
+        test.run();
     })
 }
 
@@ -381,4 +376,3 @@ fn tokio_expect_outside_tests_still_fails_in_non_test_code() {
 #[cfg(test)]
 #[path = "dependency_rlib_tests.rs"]
 mod dependency_rlib_tests;
-// weave: run 'weave explain crates/no_expect_outside_tests/src/lib_ui_tests.rs' for per-hunk detail, 'weave check' to verify your resolution
