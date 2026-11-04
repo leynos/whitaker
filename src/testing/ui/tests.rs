@@ -143,6 +143,11 @@ fn runner_env_guard_marks_the_toolchain_library_as_prepared(
     }
 }
 
+/// The runner guard must not invent a `RUSTC_WRAPPER` that was never set.
+///
+/// Assigning one would silently reroute the UI harness's compiler through a
+/// wrapper the caller did not choose, which on a host without that wrapper
+/// fails the build for a reason that points nowhere near this code.
 #[cfg(windows)]
 #[test]
 fn windows_env_guard_leaves_absent_rustc_wrapper_untouched() {

@@ -11,6 +11,15 @@
 - [ ] 0.1.3. Establish Makefile or justfile targets for fmt, lint, test, and UI
   test orchestration. Requires 0.1.1.
 
+> **Note (2026-11-04):** Items 0.1.1–0.1.3 and 4.1.1–4.1.3 are complete in the
+> working tree but are left unchecked here. Their state was already stale
+> before this branch, which touches neither them nor the CI steps they
+> describe; checking them off is a roadmap-wide bookkeeping pass, not part of
+> the lint-gate change. The evidence is `rust-toolchain.toml`, `README.md`,
+> `LICENSE`, the `Makefile` targets `lint`, `test`, `check-fmt`, `markdownlint`
+> and `nixie`, and the `linux-full` job's `Check formatting`, `Lint`, Nixie,
+> spelling and Markdown-lint steps, all of which predate the branch.
+
 ## 1. Common infrastructure
 
 ### 1.1. Common crate helpers
@@ -246,6 +255,17 @@
   in `no_std_fs_operations` using runtime-generated `TempDir` fixture projects
   and `cargo dylint` subprocess invocation. Closes
   [`#111`](https://github.com/leynos/whitaker/issues/111).
+
+> **Note (2026-11-04):** Items 4.1.1–4.1.3 are complete in the working tree but
+> are left unchecked here, alongside the same gap recorded under 0.1 above.
+> Their evidence predates this branch: `ci.yml` runs `make check-fmt`,
+> `make lint`, `make nixie`, `make spelling` and Markdown lint on `linux-full`,
+> which also runs the test suite, while `windows-compat` covers the second OS
+> in the matrix. Those workflows carry `RUSTFLAGS` and `RUSTDOCFLAGS` as
+> `-D warnings`, and `Cargo.toml`'s `[workspace.lints]` tables set the deny
+> rules. This branch adds only the Whitaker installer step and its
+> `WHITAKER_INSTALLER_VERSION` pin to the existing `make lint` call, so it
+> neither completes nor defers any of these three items.
 
 ### 4.2. Release metadata
 

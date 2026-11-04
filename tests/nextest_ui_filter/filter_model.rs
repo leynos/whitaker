@@ -9,9 +9,13 @@
 //! [`TestIdentity`] answers the question the override actually asks.
 //!
 //! Only the operators this repository writes are handled: `&`, `|`, `not`, and
-//! parentheses. An unknown operator or leaf shape panics rather than answering
-//! `false`, so a filter that grows a construct this module does not model fails
-//! the guard loudly instead of passing vacuously.
+//! parentheses. Anything else is a [`FilterError`], never a quiet `false`, so a
+//! filter that grows a construct this module does not model fails the guard
+//! loudly instead of passing vacuously. The error travels through
+//! [`FilterExpression::selects`] rather than being swallowed, because a query
+//! that answered "does not select" for a *malformed* clause would be
+//! indistinguishable from a correct negative and would retarget the guards at
+//! nothing.
 
 use std::fmt;
 
@@ -39,6 +43,51 @@ pub struct TestName<'a>(pub &'a str);
 /// A nextest filter expression such as `package(foo) & binary(foo)`.
 #[derive(Clone, Copy, Debug)]
 pub struct FilterExpression<'a>(pub &'a str);
+
+/// Why a filter expression could not be evaluated.
+///
+/// The variants mirror the three ways a clause can leave this module's grammar:
+/// an operator it does not model, a glob it cannot expand, and a term that is
+/// not shaped `operator(argument)`. Each carries the offending text so the
+/// guard's failure names the clause rather than a line number.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum FilterError {
+    /// A leaf used an operator this module does not model.
+    UnsupportedOperator {
+        /// The operator text, for example `default-filter`.
+        operator: String,
+    },
+    /// A `package` or `binary` leaf used a glob this module cannot expand.
+    UnsupportedGlob {
+        /// The argument that contained a matcher prefix or metacharacter.
+        argument: String,
+    },
+    /// A term was not shaped `operator(argument)`.
+    MalformedTerm {
+        /// The term as it appeared in the expression.
+        term: String,
+        /// What was wrong with it.
+        problem: &'static str,
+    },
+}
+
+impl fmt::Display for FilterError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::UnsupportedOperator { operator } => {
+                write!(f, "unsupported nextest filter operator {operator:?}")
+            }
+            Self::UnsupportedGlob { argument } => {
+                write!(f, "unsupported nextest glob filter argument {argument:?}")
+            }
+            Self::MalformedTerm { term, problem } => {
+                write!(f, "nextest filter term {term:?} {problem}")
+            }
+        }
+    }
+}
+
+impl std::error::Error for FilterError {}
 
 /// The operator of a leaf filter term, such as `package` or `test`.
 ///
@@ -75,12 +124,18 @@ impl TestIdentity<'_> {
     /// explicit `=` prefix. An operator this repository does not use panics
     /// rather than answering `false`, so a filter that grows a new operator
     /// fails loudly instead of silently matching nothing.
-    fn matches(self, operator: Operator<'_>, argument: FilterArgument<'_>) -> bool {
+    fn matches(
+        self,
+        operator: Operator<'_>,
+        argument: FilterArgument<'_>,
+    ) -> Result<bool, FilterError> {
         match operator.0 {
             "package" => glob_names(self.package.0, argument),
             "binary" => glob_names(self.binary.0, argument),
-            "test" => names(self.name.0, argument),
-            other => panic!("unsupported nextest filter operator {other:?}"),
+            "test" => Ok(names(self.name.0, argument)),
+            other => Err(FilterError::UnsupportedOperator {
+                operator: other.to_owned(),
+            }),
         }
     }
 }
@@ -94,8 +149,16 @@ impl FilterExpression<'_> {
     /// the broad override shadow the package overrides. `package` and `binary`
     /// instead match exactly, because nextest's default matcher for them is the
     /// glob matcher.
-    #[must_use]
-    pub fn selects(&self, identity: TestIdentity<'_>) -> bool { term_holds(self.0, identity) }
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`FilterError`] when the expression uses an operator or glob
+    /// this model does not implement, or is not shaped as a filter expression.
+    /// A guard that receives one has drifted from the grammar in
+    /// `.config/nextest.toml` and must be extended, not silently answered.
+    pub fn selects(&self, identity: TestIdentity<'_>) -> Result<bool, FilterError> {
+        term_holds(self.0, identity)
+    }
 }
 
 /// Returns whether `actual` is selected by a single `test` argument.
@@ -113,24 +176,34 @@ fn names(actual: &str, FilterArgument(argument): FilterArgument<'_>) -> bool {
 /// model deliberately does not implement glob expansion: a clause that starts
 /// with a matcher prefix (`~`, `/`, `#`) or contains a metacharacter is not
 /// something the guards currently assert, and answering `false` for it would
-/// silently pass a guard that no longer describes the configuration. Panicking
-/// keeps the module's fail-loudly contract, and the panic names the argument so
-/// the guard can be extended before that clause lands.
-fn glob_names(actual: &str, FilterArgument(argument): FilterArgument<'_>) -> bool {
+/// silently pass a guard that no longer describes the configuration. It is an
+/// error instead, and the message names the argument so the guard can be
+/// extended before that clause lands.
+fn glob_names(
+    actual: &str,
+    FilterArgument(argument): FilterArgument<'_>,
+) -> Result<bool, FilterError> {
     let is_unsupported =
         argument.starts_with(['~', '/', '#']) || argument.contains(['*', '?', '[', '{']);
-    assert!(
-        !is_unsupported,
-        "unsupported nextest glob filter argument {argument:?}"
-    );
+    if is_unsupported {
+        return Err(FilterError::UnsupportedGlob {
+            argument: argument.to_owned(),
+        });
+    }
 
-    argument
+    Ok(argument
         .strip_prefix('=')
-        .map_or_else(|| actual == argument, |exact| actual == exact)
+        .map_or_else(|| actual == argument, |exact| actual == exact))
 }
 
 /// Evaluates one term, which may be negated, compound, or parenthesized.
-fn term_holds(term: &str, identity: TestIdentity<'_>) -> bool {
+///
+/// The two compound branches short-circuit in the direction their operator
+/// allows: a disjunct stops at the first `true`, a conjunct at the first
+/// `false`. That is observable rather than incidental — the guards rely on a
+/// malformed clause on the unreached side not failing a term already decided —
+/// so it is preserved deliberately.
+fn term_holds(term: &str, identity: TestIdentity<'_>) -> Result<bool, FilterError> {
     let bare = strip_wrapping_parens(term.trim());
 
     // `|` binds loosest, so it is split first; then `&`, then `not`, then a
@@ -139,23 +212,23 @@ fn term_holds(term: &str, identity: TestIdentity<'_>) -> bool {
     // read `not a & b` as `not (a & b)`.
     let alternatives = split_top_level(bare, '|');
     if alternatives.len() > 1 {
-        return alternatives
-            .iter()
-            .any(|alternative| term_holds(alternative, identity));
+        return alternatives.iter().try_fold(false, |held, alternative| {
+            Ok(held || term_holds(alternative, identity)?)
+        });
     }
 
     let conjuncts = split_top_level(bare, '&');
     if conjuncts.len() > 1 {
-        return conjuncts
-            .iter()
-            .all(|conjunct| term_holds(conjunct, identity));
+        return conjuncts.iter().try_fold(true, |held, conjunct| {
+            Ok(held && term_holds(conjunct, identity)?)
+        });
     }
 
     if let Some(negated) = bare.strip_prefix("not ") {
-        return !term_holds(negated, identity);
+        return Ok(!term_holds(negated, identity)?);
     }
 
-    let (operator, argument) = split_leaf(bare);
+    let (operator, argument) = split_leaf(bare)?;
     identity.matches(operator, argument)
 }
 
@@ -204,17 +277,23 @@ fn strip_wrapping_parens(mut term: &str) -> &str {
 }
 
 /// Splits a leaf term such as `binary(ui)` into its operator and argument.
-fn split_leaf(term: &str) -> (Operator<'_>, FilterArgument<'_>) {
+fn split_leaf(term: &str) -> Result<(Operator<'_>, FilterArgument<'_>), FilterError> {
     let Some(open) = term.find('(') else {
-        panic!("nextest filter term {term:?} should be of the form `operator(argument)`");
+        return Err(FilterError::MalformedTerm {
+            term: term.to_owned(),
+            problem: "should be of the form `operator(argument)`",
+        });
     };
     let (operator, rest) = term.split_at(open);
     let Some(argument) = rest
         .strip_prefix('(')
         .and_then(|text| text.strip_suffix(')'))
     else {
-        panic!("nextest filter term {term:?} should end with a closing parenthesis");
+        return Err(FilterError::MalformedTerm {
+            term: term.to_owned(),
+            problem: "should end with a closing parenthesis",
+        });
     };
 
-    (Operator(operator.trim()), FilterArgument(argument))
+    Ok((Operator(operator.trim()), FilterArgument(argument)))
 }

@@ -231,6 +231,11 @@ fn with_copy_library_flag<R>(callback: impl FnOnce() -> R) -> R {
     }
 }
 
+/// Points `VCPKG_ROOT` at the conventional Windows location when it exists.
+///
+/// Linking on Windows needs the vcpkg tree, and the Dylint build does not
+/// locate it by itself. An already-set `VCPKG_ROOT` always wins: overriding a
+/// value the caller chose would break a host with vcpkg somewhere else.
 #[cfg(windows)]
 fn with_vcpkg_root<R>(callback: impl FnOnce() -> R) -> R {
     let candidate = Utf8Path::new(r"C:\vcpkg");

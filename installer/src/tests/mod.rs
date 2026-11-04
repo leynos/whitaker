@@ -151,6 +151,12 @@ fn ensure_dylint_tools_skips_install_when_installed(test_base_dirs: TestBaseDirs
     "Dylint tools installed successfully.\n\n"
 )]
 #[case::quiet_suppresses_output(true, "", "")]
+/// A missing `cargo-dylint` is installed at the pinned version, and the
+/// progress messages respect `quiet`.
+///
+/// The stub executor asserts the exact argv, which is what pins the pin: the
+/// install must carry `--locked --version 6.3.0` or the fallback would build
+/// whatever version happens to be current.
 fn ensure_dylint_tools_installs_missing_tools(
     test_base_dirs: TestBaseDirs,
     #[case] quiet: bool,
@@ -207,6 +213,11 @@ fn ensure_dylint_tools_installs_missing_tools(
 }
 
 #[rstest]
+/// A failed install surfaces as a `DependencyInstall` naming the tool and
+/// Cargo's own message, so the caller can report which step failed.
+///
+/// The stub stops after the failing call, so `assert_finished` also proves the
+/// flow does not carry on and try to verify a tool it never installed.
 fn ensure_dylint_tools_propagates_install_failures(test_base_dirs: TestBaseDirs) {
     with_fake_binary_on_path("dylint-link", || {
         let executor = StubExecutor::new(vec![
