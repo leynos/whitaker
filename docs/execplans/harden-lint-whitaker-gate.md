@@ -1043,6 +1043,36 @@ revision of this plan described `f2686a6d` as documentation-only. It touches
 fifteen files. The retrospective above now says so and states the gate set that
 follows from it.
 
+### Discharging the review round, and what is still owed
+
+The inline finding's thread was resolved by CodeRabbit itself in reply
+`4467530300`, which confirms `dependency_tool_list()` derives the advice from
+`DEPENDENCY_TOOLS` and that the message now requires both tools; it also states
+plainly that CodeRabbit did not run the reported checks. The five outside-diff
+rows were reconciled against the head in issue comment `6630731589`, which
+names the stale `change_assessment_commit` of `c8858e8d` and re-derives each row
+from the current tree instead of carrying the old table over. Row 3 (docstring
+coverage) is conceded there rather than repaired: the percentage is computed by
+the review service, so no local edit can move it.
+
+Two facts about review coverage had to be kept separate while doing this. The
+resolved thread and the reconciled table are dispositions, not a review: the
+summary banner still reads "Reviews paused", with `9bb6cb1c` as the last
+reviewed commit and `4453cae3` the latest unreviewed one. So the head's
+`CodeRabbit` commit status is absent — the combined status endpoint returns
+`total_count: 0` — and its check run is `completed/skipped`. Neither is
+evidence of a rate limit; the pause is CodeRabbit's own auto-pause after an
+influx of commits. One review was queued through `comenq` as `310b35af` and is
+pending.
+
+Hosted CI on the head is now observed rather than inferred: run `41830758135`
+on `4453cae3` finished `success` for `linux-full` and `windows-compat`, with
+`coverage-check` skipped by lane selection. That run was dispatched with
+`workflow_dispatch`, because no `pull_request` run fired for `f2686a6d`,
+`35513b63`, `4eedf3cd` or `4453cae3` even though `refs/pull/372/merge` exists.
+The same event type certified every earlier head, so the evidence is
+candidate-bound but the trigger gap remains unexplained.
+
 ### The `make test` wrapper trap is environmental, not candidate
 
 Two `make test` runs on this candidate failed in the Makefile's own cleanup
