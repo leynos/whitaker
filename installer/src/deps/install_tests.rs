@@ -123,46 +123,57 @@ const MSRV_REFUSAL: &str = concat!(
     "where `ver` is the latest version of `cargo-util` supporting rustc 1.96.0",
 );
 
-#[test]
-fn source_install_failure_message_keeps_cargos_diagnosis_for_version_refusals() {
+/// The advice appended to a version refusal has two jobs: keep Cargo's own
+/// diagnosis, and offer a command the user can act on.
+///
+/// Each case names one fragment the message must carry and why it matters.
+/// They share a single call because the fragment is the only thing that
+/// varies, and a failure then reports which promise broke rather than which
+/// assertion line did.
+#[rstest]
+#[case::keeps_crate_and_versions(
+    "cargo-util v0.2.32",
+    "Cargo's original diagnostic should survive, because it names the crate that failed"
+)]
+#[case::keeps_required_rustc(
+    "requires rustc 1.97",
+    "the required rustc version should survive, because the advice rests on it"
+)]
+#[case::pinned_install_command(
+    "cargo +stable install --locked --version 6.3.0 cargo-dylint",
+    "the advice should carry the full pinned install command so it stays copy-pasteable"
+)]
+#[case::skip_deps_escape_hatch(
+    "--skip-deps",
+    "the advice should name the escape hatch for a manually installed tool"
+)]
+fn source_install_failure_message_advises_on_a_version_refusal(
+    #[case] fragment: &str,
+    #[case] why: &str,
+) {
     let message = source_install_failure_message(
         &failure_output(MSRV_REFUSAL),
         &CARGO_DYLINT_TOOL,
         Some("6.3.0"),
     );
 
-    // Cargo names the crate and versions that failed; discarding that text
-    // would leave the user without the evidence the advice is based on.
-    assert!(
-        message.contains("cargo-util v0.2.32"),
-        "the original diagnostic should survive; got: {message}"
-    );
-    assert!(
-        message.contains("requires rustc 1.97"),
-        "the required rustc version should survive; got: {message}"
-    );
+    assert!(message.contains(fragment), "{why}; got: {message}");
 }
 
+/// The advice deliberately does not offer `--toolchain`: that flag is resolved
+/// after dependencies are installed, so naming it would send the user round a
+/// loop that fails the same way.
+///
+/// This is the one promise about *absence*, which the table above cannot
+/// express.
 #[test]
-fn source_install_failure_message_gives_a_runnable_install_command() {
+fn source_install_failure_message_omits_the_toolchain_flag() {
     let message = source_install_failure_message(
         &failure_output(MSRV_REFUSAL),
         &CARGO_DYLINT_TOOL,
         Some("6.3.0"),
     );
 
-    // The advice has to be copy-pasteable and complete. It deliberately does
-    // not offer `--toolchain`: that flag is resolved after dependencies are
-    // installed, so naming it would send the user round a loop that fails the
-    // same way.
-    assert!(
-        message.contains("cargo +stable install --locked --version 6.3.0 cargo-dylint"),
-        "the advice should carry the full pinned install command; got: {message}"
-    );
-    assert!(
-        message.contains("--skip-deps"),
-        "the advice should name the escape hatch for a manually installed tool; got: {message}"
-    );
     assert!(
         !message.contains("--toolchain"),
         "the installer's `--toolchain` flag does not reach the dependency step, so it must not be \
