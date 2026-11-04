@@ -1,12 +1,14 @@
 //! Property tests for source reconstruction and evaluated-value preservation.
 
 use proptest::prelude::*;
-use rustc_lexer::unescape::unescape_str;
 
 use crate::{
     continuation::{Continuation, ContinuationKind},
     facts::LiteralBody,
-    rewrite::ConcatRewrite,
+    rewrite::{
+        ConcatRewrite,
+        gate::{decoded_value, preserves_value},
+    },
 };
 
 fn source_piece() -> impl Strategy<Value = String> {
@@ -83,16 +85,6 @@ fn remove_ranges(body: &str, joins: &[Continuation]) -> Option<String> {
     Some(output)
 }
 
-fn unescaped_value(body: &str) -> Option<String> {
-    let mut value = String::new();
-    let mut has_error = false;
-    unescape_str(body, &mut |_range, result| match result {
-        Ok(character) => value.push(character),
-        Err(_) => has_error = true,
-    });
-    (!has_error).then_some(value)
-}
-
 fn assert_preserved(body: &str, expected_joins: usize) -> Result<(), TestCaseError> {
     let wrapped = LiteralBody::new(body);
     let joins = joins_only(wrapped);
@@ -109,18 +101,19 @@ fn assert_preserved(body: &str, expected_joins: usize) -> Result<(), TestCaseErr
         Some(joined_fragments.as_str())
     );
 
-    let Some(original_value) = unescaped_value(body) else {
+    let Some(original_value) = decoded_value(body) else {
         return Err(TestCaseError::fail("generated original body must unescape"));
     };
     let Some(fragment_values) = rewrite
         .fragments()
         .iter()
-        .map(|fragment| unescaped_value(fragment))
+        .map(|fragment| decoded_value(fragment))
         .collect::<Option<Vec<_>>>()
     else {
         return Err(TestCaseError::fail("generated fragments must unescape"));
     };
-    prop_assert_eq!(fragment_values.concat(), original_value);
+    prop_assert_eq!(fragment_values.concat(), original_value.clone());
+    prop_assert!(preserves_value(body, rewrite.fragments()));
     Ok(())
 }
 

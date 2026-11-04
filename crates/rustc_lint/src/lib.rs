@@ -11,6 +11,8 @@ extern crate rustc_driver;
 extern crate rustc_errors;
 extern crate rustc_lint as upstream;
 
+/// Applicability type required by compiler diagnostic suggestions.
+pub use rustc_errors::Applicability;
 /// Provides the compiler diagnostic decorator intended for lint implementations.
 pub use rustc_errors::DiagDecorator;
 pub use upstream::*;
@@ -18,5 +20,5 @@ pub use upstream::*;
 pub mod errors {
     //! Diagnostic-construction helpers from `rustc_errors` needed by lint
     //! emission call sites (e.g. `errors::DiagDecorator`).
-    pub use rustc_errors::{Diag, DiagDecorator};
+    pub use rustc_errors::{Applicability, Diag, DiagDecorator};
 }

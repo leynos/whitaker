@@ -1,6 +1,6 @@
 //! Unit tests for rewrite construction and applicability checks.
 
-use super::{ConcatRewrite, Newline, is_concat_macro_expression};
+use super::{ConcatRewrite, Newline, cooked_literal_body, is_concat_macro_expression};
 use crate::{
     continuation::{Continuation, ContinuationKind},
     facts::{BodyOffset, LiteralBody},
@@ -96,6 +96,22 @@ fn renders_a_multiline_replacement_at_the_original_indentation() {
     assert!(rendered.starts_with("concat!(\r\n        \""));
     assert!(rendered.contains(",\r\n        \""));
     assert!(rendered.ends_with(",\r\n    )"));
+}
+
+#[rstest::rstest]
+#[case::cooked("\"alpha\\\nbeta\"", Some("alpha\\\nbeta"))]
+#[case::empty_cooked("\"\"", Some(""))]
+#[case::raw("r\"alpha\"", None)]
+#[case::byte("b\"alpha\"", None)]
+#[case::suffixed("\"alpha\"_suffix", None)]
+#[case::two_tokens("\"a\" \"b\"", None)]
+#[case::unterminated("\"alpha", None)]
+#[case::not_a_literal("alpha", None)]
+fn recovers_the_body_of_one_cooked_literal(#[case] snippet: &str, #[case] expected: Option<&str>) {
+    assert_eq!(
+        cooked_literal_body(snippet).map(LiteralBody::as_str),
+        expected
+    );
 }
 
 #[rstest::rstest]
