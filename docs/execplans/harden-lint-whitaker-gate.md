@@ -754,6 +754,18 @@ each push rather than copying an earlier lease into the command.
   source-install toolchain. Repairs for all eleven are in the working tree that
   carries this row, so they form a new candidate; the eleven hosted results on
   `9bb6cb1c` do not transfer to it.
+- [x] (2026-11-04) Gate and CI evidence now covers the final head `25aa211b`.
+  Locally, `make check-fmt` is green on it (5 s), and the full three-gate run
+  on its parent `b8fff90d` — `check-fmt`, `lint`, `test` — is green with `test`
+  completing all four phases in 1288 s and the wrapper trap silent. Since
+  `25aa211b` is docs-only against that parent (one file,
+  `docs/execplans/harden-lint-whitaker-gate.md`, +188/−2), the Rust, Makefile
+  and nextest inputs the other two gates exercise are byte-identical. Hosted,
+  run `41794314932` concluded `success` on `25aa211b`: `linux-full` success,
+  `windows-compat` success, `coverage-check` skipped (dispatch event). CodeScene
+  `Code Health Review (main)` succeeded on the same head, and Gecko reports no
+  vulnerabilities. M4's hosted-confirmation requirement is therefore met for
+  this candidate.
 - [x] (2026-11-03) The `markdownlint` gate rejected two en-GB `-ise` spellings
   the candidate itself introduced (`recognised` in
   `installer/src/deps/install.rs`, `Recognising` in this plan). Both are Oxford
@@ -1574,8 +1586,10 @@ published head — is met. Seven `workflow_dispatch` runs have concluded
 that head then raised eleven findings across the configuration, the guards and
 the documentation. Repairs for all eleven are in the commit that carries this
 text, so that commit is a new candidate and M4's evidence does not transfer to
-it. Its hosted run is what remains; that is a fresh observation, not an
-outstanding milestone.
+it. That fresh observation has since been made: run `41794314932` concluded
+`success` on `25aa211b`, with `linux-full` and `windows-compat` both green.
+The only commit after it is the documentation row recording that result, which
+changes no gate input.
 
 An earlier revision of this section said "nothing is committed or pushed". That
 was true when it was written and false by 2026-11-03: `adc974c9` is on
