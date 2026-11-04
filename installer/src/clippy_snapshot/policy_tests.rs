@@ -222,7 +222,7 @@ fn rejects_a_bundle_whose_main_is_at_another_commit() {
 
 #[rstest]
 #[case::equal("abc", "abc", true)]
-#[case::different("abc", "abd", false)]
+#[case::different("abc", "xyz", false)]
 #[case::one_empty("", "abc", false)]
 fn digests_agree_exactly(#[case] expected: &str, #[case] actual: &str, #[case] matches: bool) {
     assert_eq!(digests_match(expected, actual), matches);
