@@ -4,15 +4,19 @@
 //! [`provision`]. An existing generation is verified and reused; otherwise the
 //! bundle comes from the Whitaker release or from an explicit local file.
 //! There is no third source: when neither works, provisioning fails.
+//!
+//! Provisioning composes the production ports once and hands them to the
+//! install and verification orchestration, so the downloader is the only
+//! collaborator a test needs to replace.
 
 use camino::{Utf8Path, Utf8PathBuf};
 
 use super::{
     download::download_bundle,
     error::ClippySnapshotError,
-    install::{BundleArtefact, install_bundle, reuse_generation},
+    install::{from_sidecar_with, install_with, reuse_with},
     manifest::ClippySnapshotManifest,
-    probe::is_present,
+    ports::SnapshotSupport,
     telemetry::{Operation, ProvisionSource, record_provision, timed},
 };
 use crate::dependency_binaries::{DependencyArchiveDownloader, RepositoryArchiveDownloader};
@@ -54,71 +58,37 @@ pub fn provision_with(
     root: &Utf8Path,
     downloader: &dyn DependencyArchiveDownloader,
 ) -> Result<Utf8PathBuf, ClippySnapshotError> {
-    provision_under(source, manifest, root, downloader)
+    let support = SnapshotSupport {
+        downloader,
+        ..SnapshotSupport::production()
+    };
+    provision_support(source, manifest, root, &support)
 }
 
-/// Do the work of [`provision_with`] outside the instrumented span.
-///
-/// Keeping the span's function to a single call leaves room in the
-/// cognitive-complexity budget for the provisioning branches.
-fn provision_under(
+/// Provision using injected ports.
+fn provision_support(
     source: &BundleSource,
     manifest: &ClippySnapshotManifest,
     root: &Utf8Path,
-    downloader: &dyn DependencyArchiveDownloader,
+    support: &SnapshotSupport<'_>,
 ) -> Result<Utf8PathBuf, ClippySnapshotError> {
-    let root_buf = ensure_root(root)?;
-    let generation = super::generation_path(&root_buf, manifest);
+    let root = support.store.create_root(root)?;
+    let generation = super::generation_path(&root, manifest);
     // An uninspectable generation is an error, not a reason to download.
-    let (origin, result) = if is_present(&generation)? {
-        reuse_existing(&generation, manifest)
+    let (origin, result) = if support.store.is_present(&generation)? {
+        tracing::debug!(commit = %manifest.commit, "reusing the installed Clippy snapshot");
+        (
+            ProvisionSource::Existing,
+            timed(Operation::Reuse, || {
+                reuse_with(&generation, manifest, support)
+            }),
+        )
     } else {
-        install_missing(source, manifest, &root_buf, downloader)
+        tracing::info!(commit = %manifest.commit, "installing the pinned Clippy snapshot");
+        install_from(source, manifest, &root, support)
     };
     record_provision(origin, result.is_ok());
     result
-}
-
-/// Reuse a generation already installed under `root`.
-fn reuse_existing(
-    generation: &Utf8Path,
-    manifest: &ClippySnapshotManifest,
-) -> (ProvisionSource, Result<Utf8PathBuf, ClippySnapshotError>) {
-    tracing::debug!(commit = %manifest.commit, "reusing the installed Clippy snapshot");
-    (
-        ProvisionSource::Existing,
-        timed(Operation::Reuse, || reuse_generation(generation, manifest)),
-    )
-}
-
-/// Install the missing generation from `source`.
-fn install_missing(
-    source: &BundleSource,
-    manifest: &ClippySnapshotManifest,
-    root: &Utf8Path,
-    downloader: &dyn DependencyArchiveDownloader,
-) -> (ProvisionSource, Result<Utf8PathBuf, ClippySnapshotError>) {
-    tracing::info!(commit = %manifest.commit, "installing the pinned Clippy snapshot");
-    install_from(source, manifest, root, downloader)
-}
-
-/// Create `root` when absent and return its absolute UTF-8 form.
-///
-/// Git runs from other directories, so a caller's relative root must be fixed
-/// against the caller's directory before the generation path is derived.
-///
-/// # Errors
-///
-/// Returns [`ClippySnapshotError::Io`] when the directory cannot be created,
-/// resolved, or represented as UTF-8.
-fn ensure_root(root: &Utf8Path) -> Result<Utf8PathBuf, ClippySnapshotError> {
-    std::fs::create_dir_all(root).map_err(|error| ClippySnapshotError::io(root, &error))?;
-    let absolute_root =
-        std::path::absolute(root).map_err(|error| ClippySnapshotError::io(root, &error))?;
-    Utf8PathBuf::try_from(absolute_root).map_err(|error| ClippySnapshotError::Io {
-        path: error.as_path().display().to_string(),
-        reason: "the path is not valid UTF-8".to_owned(),
-    })
 }
 
 /// Install a missing generation from `source`, naming the source it used.
@@ -126,19 +96,19 @@ fn install_from(
     source: &BundleSource,
     manifest: &ClippySnapshotManifest,
     root: &Utf8Path,
-    downloader: &dyn DependencyArchiveDownloader,
+    support: &SnapshotSupport<'_>,
 ) -> (ProvisionSource, Result<Utf8PathBuf, ClippySnapshotError>) {
     match source {
         BundleSource::Local(bundle) => (
             ProvisionSource::Local,
             timed(Operation::Install, || {
-                BundleArtefact::from_sidecar(bundle, manifest)
-                    .and_then(|artefact| install_bundle(&artefact, manifest, root))
+                from_sidecar_with(support.store, bundle, manifest)
+                    .and_then(|artefact| install_with(&artefact, manifest, root, support))
             }),
         ),
         BundleSource::Release => (
             ProvisionSource::Release,
-            install_release(manifest, root, downloader),
+            install_release(manifest, root, support),
         ),
     }
 }
@@ -147,23 +117,15 @@ fn install_from(
 fn install_release(
     manifest: &ClippySnapshotManifest,
     root: &Utf8Path,
-    downloader: &dyn DependencyArchiveDownloader,
+    support: &SnapshotSupport<'_>,
 ) -> Result<Utf8PathBuf, ClippySnapshotError> {
     // Download beside the generations so the clone stays on one filesystem.
-    let downloads = tempfile::Builder::new()
-        .prefix(".download-")
-        .tempdir_in(root)
-        .map_err(|error| ClippySnapshotError::io(root, &error))?;
-    let directory =
-        Utf8Path::from_path(downloads.path()).ok_or_else(|| ClippySnapshotError::Io {
-            path: downloads.path().display().to_string(),
-            reason: "the path is not valid UTF-8".to_owned(),
-        })?;
+    let downloads = support.store.staging(root, ".download-")?;
     let artefact = timed(Operation::Download, || {
-        download_bundle(downloader, manifest, directory)
+        download_bundle(support.downloader, manifest, downloads.path())
     })?;
     timed(Operation::Install, || {
-        install_bundle(&artefact, manifest, root)
+        install_with(&artefact, manifest, root, support)
     })
 }
 

@@ -4,20 +4,27 @@
 //! accepted and before a cold driver build reads it. [`check_installed`] is
 //! the cheap subset a warm `whitaker` run repeats every time: it proves the
 //! generation is still the pinned one without re-hashing the object database.
+//!
+//! Both entry points compose the production ports and delegate to
+//! `*_with` functions. The orchestration only observes through
+//! [`RepositoryQueries`] and [`SnapshotStore`]; every accept/reject decision
+//! is a pure function in [`super::policy`].
 
 use camino::Utf8Path;
 
 use super::{
     error::ClippySnapshotError,
-    generation::GenerationMetadata,
-    git::SnapshotGit,
-    manifest::{ClippySnapshotManifest, SNAPSHOT_BRANCH},
-    probe::{is_present, is_present_dir},
+    manifest::ClippySnapshotManifest,
+    policy::{
+        SelectionRejection,
+        accept_integrity,
+        accept_selection,
+        accept_self_contained,
+        accept_structure,
+    },
+    ports::{RepositoryQueries, SnapshotStore, SnapshotSupport},
     selection::{channel_at, select_revision, toolchain_changes},
 };
-
-/// The only ref a snapshot may carry.
-fn main_ref() -> String { format!("refs/heads/{SNAPSHOT_BRANCH}") }
 
 /// Prove that `path` holds exactly the history `manifest` pins.
 ///
@@ -35,13 +42,24 @@ pub fn verify_repository(
     path: &Utf8Path,
     manifest: &ClippySnapshotManifest,
 ) -> Result<(), ClippySnapshotError> {
-    // A query: telemetry belongs to the commands that call it (reuse,
-    // install, and the cold bootstrap path), not here.
-    let git = SnapshotGit::local();
-    check_structure(git, path, manifest.commit.as_str())?;
-    check_self_contained(git, path)?;
-    check_objects(git, path)?;
-    check_selection(git, path, manifest)
+    verify_with(path, manifest, &SnapshotSupport::production())
+}
+
+/// Prove that `path` holds the pinned history using injected ports.
+pub(crate) fn verify_with(
+    path: &Utf8Path,
+    manifest: &ClippySnapshotManifest,
+    support: &SnapshotSupport<'_>,
+) -> Result<(), ClippySnapshotError> {
+    check_structure(
+        path,
+        manifest.commit.as_str(),
+        support.store,
+        support.repository,
+    )?;
+    check_self_contained(path, support.store, support.repository)?;
+    check_objects(path, support.repository)?;
+    check_selection(path, manifest, support.repository)
 }
 
 /// Prove that an installed generation is still the one its metadata names.
@@ -51,7 +69,16 @@ pub fn verify_repository(
 /// Returns [`ClippySnapshotError::NotInstalled`] when `path` is absent and
 /// [`ClippySnapshotError::Invalid`] when the refs or metadata disagree.
 pub fn check_installed(path: &Utf8Path, commit: &str) -> Result<(), ClippySnapshotError> {
-    let metadata = GenerationMetadata::read(path)?;
+    check_installed_with(path, commit, &SnapshotSupport::production())
+}
+
+/// The warm path using injected ports.
+pub(crate) fn check_installed_with(
+    path: &Utf8Path,
+    commit: &str,
+    support: &SnapshotSupport<'_>,
+) -> Result<(), ClippySnapshotError> {
+    let metadata = support.metadata.read(path)?;
     if metadata.commit != commit {
         return Err(ClippySnapshotError::invalid(
             path,
@@ -61,170 +88,99 @@ pub fn check_installed(path: &Utf8Path, commit: &str) -> Result<(), ClippySnapsh
             ),
         ));
     }
-    check_structure(SnapshotGit::local(), path, commit)
+    check_structure(path, commit, support.store, support.repository)
 }
 
 /// Check the repository shape and refs.
-fn check_structure(
-    git: SnapshotGit<'_>,
+pub(crate) fn check_structure(
     path: &Utf8Path,
     commit: &str,
+    store: &dyn SnapshotStore,
+    repository: &dyn RepositoryQueries,
 ) -> Result<(), ClippySnapshotError> {
-    if !is_present_dir(path)? {
+    if !store.is_present_dir(path)? {
         return Err(ClippySnapshotError::NotInstalled {
             path: path.to_string(),
         });
     }
-    let bare = git.stdout(
-        "rev-parse",
-        Some(path),
-        &["rev-parse", "--is-bare-repository"],
-    )?;
-    if bare != "true" {
-        return Err(ClippySnapshotError::invalid(
-            path,
-            "it is not a bare repository",
-        ));
-    }
-    let symbolic = git.output("symbolic-ref", Some(path), &["symbolic-ref", "HEAD"])?;
-    let head = String::from_utf8_lossy(&symbolic.stdout).trim().to_owned();
-    if head != main_ref() {
-        return Err(ClippySnapshotError::invalid(
-            path,
-            format!("HEAD is `{head}`, not a symbolic ref to {}", main_ref()),
-        ));
-    }
-    check_refs(git, path, commit)
+    let evidence = repository.structure(path)?;
+    accept_structure(&evidence, commit).map_err(|check| ClippySnapshotError::invalid(path, check))
 }
 
-/// Require exactly one ref, `main`, at the pinned commit.
-fn check_refs(
-    git: SnapshotGit<'_>,
+/// Check shallow history, alternates and remotes.
+fn check_self_contained(
     path: &Utf8Path,
-    commit: &str,
+    store: &dyn SnapshotStore,
+    repository: &dyn RepositoryQueries,
 ) -> Result<(), ClippySnapshotError> {
-    let listing = git.stdout(
-        "for-each-ref",
-        Some(path),
-        &["for-each-ref", "--format=%(refname) %(objectname)"],
-    )?;
-    let refs: Vec<(&str, &str)> = listing
-        .lines()
-        .filter_map(|line| line.split_once(' '))
-        .collect();
-    let main = main_ref();
-    let extra: Vec<&str> = refs
-        .iter()
-        .map(|(name, _)| *name)
-        .filter(|name| *name != main)
-        .collect();
-    if !extra.is_empty() {
-        return Err(ClippySnapshotError::invalid(
-            path,
-            format!("it carries refs other than {main}: {}", extra.join(", ")),
-        ));
-    }
-    match refs.first() {
-        Some((_, object)) if *object == commit => Ok(()),
-        Some((_, object)) => Err(ClippySnapshotError::invalid(
-            path,
-            format!("{main} is {object}, expected the pinned commit {commit}"),
-        )),
-        None => Err(ClippySnapshotError::invalid(
-            path,
-            format!("it has no {main}"),
-        )),
-    }
-}
-
-/// Require complete local history with no outside object sources or remotes.
-fn check_self_contained(git: SnapshotGit<'_>, path: &Utf8Path) -> Result<(), ClippySnapshotError> {
-    let shallow = git.stdout(
-        "rev-parse",
-        Some(path),
-        &["rev-parse", "--is-shallow-repository"],
-    )?;
-    if shallow != "false" {
-        return Err(ClippySnapshotError::invalid(path, "its history is shallow"));
-    }
-    if is_present(&path.join("objects/info/alternates"))? {
-        return Err(ClippySnapshotError::invalid(
-            path,
-            "it borrows objects through objects/info/alternates",
-        ));
-    }
-    let remotes = git.stdout("remote", Some(path), &["remote"])?;
-    if !remotes.is_empty() {
-        return Err(ClippySnapshotError::invalid(
-            path,
-            format!(
-                "it has remotes ({}), so it could fetch",
-                remotes.replace('\n', ", ")
-            ),
-        ));
-    }
-    Ok(())
+    let evidence = repository.self_contained(path)?;
+    let has_alternates = store.is_present(&path.join("objects/info/alternates"))?;
+    accept_self_contained(&evidence, has_alternates)
+        .map_err(|check| ClippySnapshotError::invalid(path, check))
 }
 
 /// Re-hash every object and check connectivity.
-fn check_objects(git: SnapshotGit<'_>, path: &Utf8Path) -> Result<(), ClippySnapshotError> {
-    let output = git.output(
-        "fsck",
-        Some(path),
-        &[
-            "fsck",
-            "--full",
-            "--strict",
-            "--no-dangling",
-            "--no-progress",
-        ],
-    )?;
-    if output.status.success() {
-        return Ok(());
-    }
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    Err(ClippySnapshotError::invalid(
-        path,
-        format!("git fsck --full failed: {}", stderr.trim()),
-    ))
+fn check_objects(
+    path: &Utf8Path,
+    repository: &dyn RepositoryQueries,
+) -> Result<(), ClippySnapshotError> {
+    let evidence = repository.integrity(path)?;
+    accept_integrity(&evidence).map_err(|check| ClippySnapshotError::invalid(path, check))
 }
 
 /// Re-run Dylint's selection and require the recorded result.
 fn check_selection(
-    git: SnapshotGit<'_>,
     path: &Utf8Path,
     manifest: &ClippySnapshotManifest,
+    repository: &dyn RepositoryQueries,
 ) -> Result<(), ClippySnapshotError> {
-    let changes = toolchain_changes(git, path, manifest.commit.as_str())?;
-    let selected = select_revision(&changes, &manifest.toolchain).map_err(|gap| {
-        ClippySnapshotError::InsufficientHistory {
+    let changes = toolchain_changes(repository, path, manifest.commit.as_str())?;
+    // The channel is needed at the revision Dylint selects; a selection gap
+    // is decided by the policy below, so there is no channel to read.
+    let channel = match select_revision(&changes, &manifest.toolchain) {
+        Ok(selected) => channel_at(repository, path, &selected.commit)?,
+        Err(_) => None,
+    };
+    accept_selection(
+        &changes,
+        &manifest.toolchain,
+        manifest.selected_revision.as_str(),
+        channel.as_deref(),
+    )
+    .map_err(|rejection| selection_error(path, &manifest.toolchain, rejection))
+}
+
+/// Translate a pure selection rejection into the boundary error.
+fn selection_error(
+    path: &Utf8Path,
+    toolchain: &str,
+    rejection: SelectionRejection,
+) -> ClippySnapshotError {
+    match rejection {
+        SelectionRejection::Insufficient(gap) => ClippySnapshotError::InsufficientHistory {
             path: path.to_string(),
-            toolchain: manifest.toolchain.clone(),
+            toolchain: toolchain.to_owned(),
             reason: gap.to_string(),
-        }
-    })?;
-    let expected = manifest.selected_revision.as_str();
-    if selected.commit != expected {
-        return Err(ClippySnapshotError::invalid(
+        },
+        SelectionRejection::Revision { selected, expected } => ClippySnapshotError::invalid(
             path,
             format!(
-                "Dylint would select {} for {}, but the manifest records {expected}",
-                selected.commit, manifest.toolchain
+                "Dylint would select {selected} for {toolchain}, but the manifest records \
+                 {expected}"
             ),
-        ));
-    }
-    let channel = channel_at(git, path, expected)?;
-    if channel.as_deref() != Some(manifest.toolchain.as_str()) {
-        return Err(ClippySnapshotError::invalid(
+        ),
+        SelectionRejection::Channel {
+            selected,
+            channel,
+            toolchain: rejected,
+        } => ClippySnapshotError::invalid(
             path,
             format!(
-                "the selected revision {expected} names {}, not {}",
-                channel.as_deref().unwrap_or("no channel"),
-                manifest.toolchain
+                "the selected revision {selected} names {}, not {rejected}",
+                channel.as_deref().unwrap_or("no channel")
             ),
-        ));
+        ),
     }
-    Ok(())
 }
 
 #[cfg(test)]

@@ -9,13 +9,9 @@ use proptest::prelude::*;
 use rstest::rstest;
 
 use super::*;
-use crate::clippy_snapshot::test_fixtures::{
-    DEFAULT_HISTORY,
-    DEFAULT_SELECTED,
-    FIXTURE_TOOLCHAIN,
-    FixtureRepo,
-    Step,
-    git,
+use crate::clippy_snapshot::{
+    git::SnapshotGit,
+    test_fixtures::{DEFAULT_HISTORY, DEFAULT_SELECTED, FIXTURE_TOOLCHAIN, FixtureRepo, Step, git},
 };
 
 /// Build a newest-first change list from `(commit, channel)` pairs.
@@ -158,7 +154,7 @@ fn dylint_selection(repo: &Utf8Path, toolchain: &str) -> Option<String> {
 
 /// Read and select through the Git layer, as verification does.
 fn whitaker_selection(repo: &Utf8Path, head: &str, toolchain: &str) -> Option<String> {
-    let changes = toolchain_changes(SnapshotGit::local(), repo, head).expect("read history");
+    let changes = toolchain_changes(&SnapshotGit::local(), repo, head).expect("read history");
     select_revision(&changes, toolchain)
         .ok()
         .map(|change| change.commit.clone())
