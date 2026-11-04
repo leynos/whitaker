@@ -82,6 +82,10 @@ pub fn generation_path(root: &Utf8Path, manifest: &ClippySnapshotManifest) -> Ut
 }
 
 #[cfg(test)]
+mod fakes;
+#[cfg(test)]
+mod orchestration_tests;
+#[cfg(test)]
 mod test_fixtures;
 #[cfg(test)]
 mod tests;

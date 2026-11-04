@@ -1,4 +1,8 @@
 //! Each structural check rejects the repository shape it exists to catch.
+//!
+//! These cases go through the real Git adapter. The rules themselves are
+//! exercised on values in `policy_tests.rs`, and the ordering of the checks on
+//! scripted ports in `orchestration_tests.rs`.
 
 use camino::Utf8PathBuf;
 use rstest::rstest;
