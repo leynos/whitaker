@@ -14,6 +14,16 @@ use std::{
     process::Command,
 };
 
+
+//! Serve prepared workspace metadata and route Cargo's Nextest call directly.
+//!
+//! `cargo-llvm-cov` invokes Cargo with `--cargo-metadata` and a
+//! `--manifest-path` that Nextest rejects. The driver answers a `--no-deps`
+//! metadata query from the file `make fetch` prepared, and forwards every
+//! other call unchanged. Routing drops a `--manifest-path` that names the
+//! prepared workspace, because the prepared metadata already describes it.
+};
+
 /// The environment the driver reads, resolved by the caller.
 ///
 /// Resolving the variables up front keeps the routing logic testable without
@@ -109,10 +119,7 @@ fn is_workspace_metadata_query(
     workspace_root: &Path,
 ) -> io::Result<bool> {
     let command_index = cargo_command_index(arguments);
-    let is_metadata = arguments
-        .get(command_index)
-        .is_some_and(|argument| argument == OsStr::new("metadata"));
-    if !is_metadata {
+    if !is_no_deps_metadata_query(arguments, command_index) {
         return Ok(false);
     }
 
@@ -129,6 +136,21 @@ fn is_workspace_metadata_query(
     ))
 }
 
+/// Check whether the request is a `cargo metadata --no-deps` query.
+///
+/// The prepared cache holds `--no-deps` output, which carries no dependency
+/// packages and no resolve graph. Serving it to a full metadata query would
+/// hand that caller a silently incomplete document, so only `--no-deps`
+/// requests may read it; every other query reaches the real Cargo.
+fn is_no_deps_metadata_query(arguments: &[OsString], command_index: usize) -> bool {
+    arguments
+        .get(command_index)
+        .is_some_and(|argument| argument == OsStr::new("metadata"))
+        && arguments
+            .iter()
+            .any(|argument| argument == OsStr::new("--no-deps"))
+}
+
 /// Locate the Cargo subcommand after an optional rustup toolchain selector.
 fn cargo_command_index(arguments: &[OsString]) -> usize {
     usize::from(
@@ -136,6 +158,52 @@ fn cargo_command_index(arguments: &[OsString]) -> usize {
             .first()
             .is_some_and(|argument| argument.to_string_lossy().starts_with('+')),
     )
+}
+
+/// One `--manifest-path` selector in a Cargo argument list.
+#[derive(Debug)]
+struct ManifestSelector {
+    /// Index of the argument that carries the flag.
+    position: usize,
+    /// Number of arguments the selector occupies; two for the separate form.
+    length: usize,
+    /// Manifest the selector names, absent when the flag has no value.
+    value: Option<OsString>,
+}
+
+/// Parse every `--manifest-path` selector in a Cargo argument list.
+///
+/// Cargo accepts the separate form (`--manifest-path <value>`) and the joined
+/// form (`--manifest-path=<value>`). The value of a separate flag is consumed
+/// with the flag, so a token that merely resembles a selector is never parsed
+/// as one. Metadata selection and Nextest routing both read this parser, so
+/// their view of the grammar cannot drift.
+fn manifest_selectors(arguments: &[OsString]) -> Vec<ManifestSelector> {
+    let mut selectors = Vec::new();
+    let mut index = 0;
+    while let Some(argument) = arguments.get(index) {
+        if argument == OsStr::new("--manifest-path") {
+            let value = arguments.get(index + 1).cloned();
+            let length = 1 + usize::from(value.is_some());
+            selectors.push(ManifestSelector {
+                position: index,
+                length,
+                value,
+            });
+            index += length;
+            continue;
+        }
+        if let Some(manifest) = argument.to_string_lossy().strip_prefix("--manifest-path=") {
+            selectors.push(ManifestSelector {
+                position: index,
+                length: 1,
+                value: Some(OsString::from(manifest)),
+            });
+        }
+        index += 1;
+    }
+
+    selectors
 }
 
 /// Confirm every manifest selector points at the current workspace.
@@ -149,23 +217,14 @@ fn manifest_is_workspace_root(
     command_index: usize,
     workspace_root: &Path,
 ) -> bool {
-    let mut arguments = arguments[command_index + 1..].iter();
-    while let Some(argument) = arguments.next() {
-        if argument == OsStr::new("--manifest-path") {
-            let Some(manifest) = arguments.next() else {
-                return false;
-            };
-            if !manifest_path_is_workspace_root(manifest, workspace_root) {
-                return false;
-            }
-        } else if let Some(manifest) = argument.to_string_lossy().strip_prefix("--manifest-path=")
-            && !manifest_path_is_workspace_root(OsStr::new(manifest), workspace_root)
-        {
-            return false;
-        }
-    }
-
-    true
+    manifest_selectors(&arguments[command_index + 1..])
+        .iter()
+        .all(|selector| {
+            selector
+                .value
+                .as_deref()
+                .is_some_and(|manifest| manifest_path_is_workspace_root(manifest, workspace_root))
+        })
 }
 
 /// Check whether a manifest argument names the workspace's root manifest.
@@ -226,26 +285,19 @@ fn without_prepared_manifest(
     };
 
     let mut forwarded = Vec::with_capacity(arguments.len());
-    let mut arguments = arguments.iter();
-    while let Some(argument) = arguments.next() {
-        if argument == OsStr::new("--manifest-path") {
-            match arguments.next() {
-                Some(manifest) if manifest_path_is_workspace_root(manifest, workspace_root) => {}
-                Some(manifest) => {
-                    forwarded.push(argument.clone());
-                    forwarded.push(manifest.clone());
-                }
-                None => forwarded.push(argument.clone()),
-            }
-            continue;
+    let mut start = 0;
+    for selector in manifest_selectors(arguments) {
+        forwarded.extend(arguments[start..selector.position].iter().cloned());
+        start = selector.position + selector.length;
+        let names_prepared = selector
+            .value
+            .as_deref()
+            .is_some_and(|manifest| manifest_path_is_workspace_root(manifest, workspace_root));
+        if !names_prepared {
+            forwarded.extend(arguments[selector.position..start].iter().cloned());
         }
-        if let Some(manifest) = argument.to_string_lossy().strip_prefix("--manifest-path=")
-            && manifest_path_is_workspace_root(OsStr::new(manifest), workspace_root)
-        {
-            continue;
-        }
-        forwarded.push(argument.clone());
     }
+    forwarded.extend(arguments[start..].iter().cloned());
 
     forwarded
 }

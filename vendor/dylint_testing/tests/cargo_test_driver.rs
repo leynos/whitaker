@@ -37,7 +37,12 @@ fn serves_the_prepared_metadata_file() -> io::Result<()> {
     let mut stdout = Vec::new();
 
     let code = run(
-        &["metadata".into(), "--format-version".into(), "1".into()],
+        &[
+            "metadata".into(),
+            "--no-deps".into(),
+            "--format-version".into(),
+            "1".into(),
+        ],
         workspace.path(),
         &environment,
         &mut stdout,
@@ -74,7 +79,7 @@ fn refuses_to_serve_metadata_for_another_directory() -> io::Result<()> {
     let mut stdout = Vec::new();
 
     let error = run(
-        &["metadata".into()],
+        &["metadata".into(), "--no-deps".into()],
         elsewhere.path(),
         &environment,
         &mut stdout,
@@ -83,6 +88,33 @@ fn refuses_to_serve_metadata_for_another_directory() -> io::Result<()> {
 
     assert_eq!(error.kind(), io::ErrorKind::NotFound);
     assert!(stdout.is_empty(), "the cache must not be served elsewhere");
+    Ok(())
+}
+
+/// A full metadata query is forwarded even for the prepared workspace.
+#[test]
+fn forwards_a_full_metadata_query() -> io::Result<()> {
+    let workspace = tempfile::tempdir()?;
+    let cache = workspace.path().join("metadata.json");
+    fs::write(&cache, b"prepared")?;
+    let environment = DriverEnvironment {
+        metadata_root: Some(workspace.path().to_path_buf()),
+        metadata_cache: Some(cache),
+        cargo_executable: Some(missing_program("cargo").into_os_string()),
+        nextest_executable: None,
+    };
+    let mut stdout = Vec::new();
+
+    let error = run(
+        &["metadata".into(), "--format-version".into(), "1".into()],
+        workspace.path(),
+        &environment,
+        &mut stdout,
+    )
+    .expect_err("a full metadata query should be forwarded to Cargo");
+
+    assert_eq!(error.kind(), io::ErrorKind::NotFound);
+    assert!(stdout.is_empty(), "the cache must not answer a full query");
     Ok(())
 }
 
@@ -147,8 +179,13 @@ fn reports_a_missing_metadata_cache() {
     };
     let mut stdout = Vec::new();
 
-    let error = run(&["metadata".into()], workspace, &environment, &mut stdout)
-        .expect_err("a matched request without its cache should fail");
+    let error = run(
+        &["metadata".into(), "--no-deps".into()],
+        workspace,
+        &environment,
+        &mut stdout,
+    )
+    .expect_err("a matched request without its cache should fail");
 
     assert_eq!(error.kind(), io::ErrorKind::NotFound);
     assert!(stdout.is_empty(), "nothing should be written");

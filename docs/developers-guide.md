@@ -163,8 +163,10 @@ Cargo calls use `--frozen`; trybuild and similar tools inherit
 `CARGO_NET_OFFLINE=true`, which lets them create temporary lockfiles without
 network access. Nextest reads the prepared metadata file instead of starting a
 Cargo metadata process during test execution. For coverage, the small test
-driver serves the prepared `--no-deps` metadata to `cargo-llvm-cov` and routes
-its Nextest request to the standalone executable.
+driver answers a `--no-deps` metadata query from the prepared file and routes
+the Nextest request to the standalone executable. A query that asks for the
+full dependency graph still reaches the real Cargo, because the prepared file
+would answer it with an incomplete document.
 
 The driver's routing lives in `dylint_testing::cargo_test_driver`, so it is
 tested as a library rather than only through the example binary.
@@ -887,15 +889,16 @@ resolver cache), proves the denial with a `git ls-remote` canary, and runs
 target empties the keyed driver directory, builds the driver once online
 through the same `warm_driver` preparation `make fetch` uses, then runs the
 ignored `no_std_fs_operations` `integration_exclusion` tests serially twice
-with the test lane's offline environment. It fails unless the driver file is
-byte-identical across both offline runs, so the cold build is proven to be the
-only build. The cold build cannot lean on `make fetch`: the target deletes the
-keyed slot after preparation would have filled it, so the build is an explicit
-online phase of the smoke target itself. The target refuses to empty any
-`DYLINT_DRIVER_PATH` other than the exact keyed slot, so an exported shared
-driver root is never deleted. The tests run real `cargo dylint` against
-fixtures and assert named `no_std_fs_operations` diagnostics. A warm driver
-also stops later parallel UI tests from racing to build it.
+with the harness forcing Dylint's Cargo calls offline. The outer `cargo test`
+stays online. The target fails unless the driver file is byte-identical across
+both offline runs, so the cold build is proven to be the only build. The cold
+build cannot lean on `make fetch`, because the target deletes the keyed slot
+after preparation would have filled it, so the build is an explicit online
+phase of the smoke target itself. The target refuses to empty any
+`DYLINT_DRIVER_PATH` except the exact keyed slot, so an exported shared driver
+root is never deleted. The tests run real `cargo dylint` against fixtures and
+assert named `no_std_fs_operations` diagnostics. A warm driver also stops later
+parallel UI tests from racing to build it.
 
 The pinned Dylint host tools follow the same rule.
 `scripts/install-dylint-tools.sh` once ran `cargo install --locked` for
