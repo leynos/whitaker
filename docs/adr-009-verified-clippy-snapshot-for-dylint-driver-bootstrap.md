@@ -2,10 +2,11 @@
 
 ## Status
 
-Accepted (2026-10-29): Adopt Dylint 6.3.0, publish the Clippy history its
-driver build reads as a commit-named, checksummed Git bundle, build the driver
-on first use in an identity-keyed directory, and route every installed run
-through `whitaker-installer run`.
+Accepted (2026-10-29, amended 2026-11-04): Adopt Dylint 6.3.0, publish the
+Clippy history its driver build reads as a commit-named, checksummed Git
+bundle, build the driver on first use in an identity-keyed directory, and route
+every installed run through `whitaker-installer run`. The amendment records the
+policy and adapter boundaries described below.
 
 ## Date
 
@@ -121,6 +122,48 @@ An existing generation is verified and reused, or rejected; it is never
 modified. Installation and verification permit only the `file` transport, so
 they cannot reach a remote by accident. Only `whitaker-clippy-snapshot build`
 may clone public Clippy, and only the producer runs it.
+
+### Policy and adapter boundaries
+
+Amended 2026-11-04 (issue #529). The checks above are decisions about values,
+but they were made beside the Git and filesystem calls that observed those
+values, so every rule needed a real repository and a real directory to test.
+The module now separates the decision from the observation.
+
+- `policy.rs` owns the acceptance rules as pure functions over evidence and
+  recorded output. Nothing there reads a file, runs a command, or records
+  telemetry. `selection.rs` keeps `select_revision` as the pure kernel; policy
+  evaluates its result.
+- `ports.rs` owns the driven ports the orchestration needs:
+  `RepositoryQueries` (shape, self-containment, integrity, first-parent
+  toolchain history, and a file at a commit), `BundleOperations` (header
+  verification, head listing, and staging clone), `SnapshotStore` (root
+  creation, path resolution, presence probes, digest, lock, staging, and
+  publish), and `MetadataStore` (read and write). `RootLock` and `Staging` are
+  RAII guards. Release downloads reuse the existing
+  `DependencyArchiveDownloader` rather than adding a second downloader port.
+- `git.rs` implements `RepositoryQueries` and `BundleOperations`; `store.rs`
+  implements `SnapshotStore` and `MetadataStore`. An adapter returns the
+  closest honest observation and translates every infrastructure failure into
+  `ClippySnapshotError` at that boundary. It applies no acceptance rule.
+- `SnapshotSupport<'_>` is the composition root for one operation: borrowed
+  trait objects for each port. `SnapshotSupport::production()` wires the
+  process-wide `SnapshotGit` and `ProductionStore`. The public entry points
+  (`verify_repository`, `check_installed`, `install_bundle`, `provision`) use
+  it, while their `*_with` variants accept explicit support for tests.
+- Query paths record no metrics. Provision, download, and install keep their
+  existing telemetry at the command boundaries, and the Git adapter keeps its
+  per-command debug events. Policy contributes neither.
+- Tests follow the same split. `policy_tests.rs` exercises acceptance rules on
+  values, `orchestration_tests.rs` drives verification and installation through
+  the scripted ports in `fakes.rs` and asserts both call order and what was
+  never called, and `verify_tests.rs` and `tests.rs` keep real Git and a real
+  filesystem so the adapters themselves stay honest.
+
+A new acceptance rule belongs in `policy.rs` with a value test. A new
+observation belongs behind an existing port, or a new port only when none fits,
+implemented by an adapter that translates failures. Orchestration never calls
+Git or the filesystem directly.
 
 ### No fallback
 
