@@ -32,9 +32,12 @@ mod generation;
 mod git;
 mod install;
 mod manifest;
+mod policy;
+mod ports;
 mod probe;
 mod provision;
 mod selection;
+mod store;
 mod telemetry;
 mod verify;
 

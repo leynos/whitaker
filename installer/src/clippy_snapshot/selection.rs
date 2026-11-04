@@ -14,10 +14,14 @@
 
 use camino::Utf8Path;
 
-use super::{error::ClippySnapshotError, git::SnapshotGit};
+use super::{
+    error::ClippySnapshotError,
+    policy::{ChannelRead, first_channel},
+    ports::RepositoryQueries,
+};
 
 /// The toolchain files Dylint reads, in rustup's precedence order.
-const TOOLCHAIN_FILES: [&str; 2] = ["rust-toolchain", "rust-toolchain.toml"];
+pub(crate) const TOOLCHAIN_FILES: [&str; 2] = ["rust-toolchain", "rust-toolchain.toml"];
 
 /// A first-parent commit that touched the toolchain file, and its channel.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -131,22 +135,16 @@ pub fn select_revision<'a>(
 ///
 /// Returns [`ClippySnapshotError::Git`] when the history cannot be read.
 pub(crate) fn toolchain_changes(
-    git: SnapshotGit<'_>,
+    queries: &dyn RepositoryQueries,
     repo: &Utf8Path,
     head: &str,
 ) -> Result<Vec<ToolchainChange>, ClippySnapshotError> {
-    let mut args = vec!["rev-list", "--first-parent", head, "--"];
-    args.extend(TOOLCHAIN_FILES);
-    let commits = git.stdout("rev-list", Some(repo), &args)?;
     let mut changes = Vec::new();
-    for commit in commits.lines() {
-        let Some(channel) = channel_at(git, repo, commit)? else {
+    for commit in queries.toolchain_commits(repo, head)? {
+        let Some(channel) = channel_at(queries, repo, &commit)? else {
             break;
         };
-        changes.push(ToolchainChange {
-            commit: commit.to_owned(),
-            channel,
-        });
+        changes.push(ToolchainChange { commit, channel });
     }
     Ok(changes)
 }
@@ -154,25 +152,27 @@ pub(crate) fn toolchain_changes(
 /// Read the channel the toolchain file names at `commit`, as Dylint reads it.
 ///
 /// Rustup's precedence applies: `rust-toolchain` wins over
-/// `rust-toolchain.toml` when both exist. `None` means Dylint could not read
-/// a channel there.
+/// `rust-toolchain.toml` when both exist. A read failure falls through to the
+/// next file, but when every read fails the failure is returned rather than
+/// read as "no channel". `None` means no file names a channel there.
 ///
 /// # Errors
 ///
 /// Returns [`ClippySnapshotError::Git`] when Git cannot run.
 pub(crate) fn channel_at(
-    git: SnapshotGit<'_>,
+    queries: &dyn RepositoryQueries,
     repo: &Utf8Path,
     commit: &str,
 ) -> Result<Option<String>, ClippySnapshotError> {
-    for file in TOOLCHAIN_FILES {
-        let object = format!("{commit}:{file}");
-        let output = git.output("show", Some(repo), &["show", &object])?;
-        if output.status.success() {
-            return Ok(parse_channel(&String::from_utf8_lossy(&output.stdout)));
-        }
-    }
-    Ok(None)
+    let reads = TOOLCHAIN_FILES.iter().map(|file| {
+        queries
+            .file_at_commit(repo, commit, file)
+            .map(|contents| match contents {
+                Some(text) => ChannelRead::Present(parse_channel(&text)),
+                None => ChannelRead::Absent,
+            })
+    });
+    first_channel(reads)
 }
 
 /// Extract `toolchain.channel` from a toolchain file, as Dylint does.
