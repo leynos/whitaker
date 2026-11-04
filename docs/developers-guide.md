@@ -4212,33 +4212,46 @@ When adding nextest test-group filters (e.g., for serializing UI tests), add a
 regression test that verifies the filter expression captures all intended test
 binaries.
 
-**Pattern:** Create a test that discovers relevant test files, parses the
-nextest config, and asserts the filter contains the necessary clauses.
+**Pattern:** Create a test that parses the nextest config and evaluates the
+filter expression against concrete test identities. Do not search the filter
+text for a package or binary name: a substring search cannot tell "this clause
+matches the test" from "this clause matches a different test with the same name
+in another package", and it passes for a negated clause too. The evaluator
+lives in `tests/nextest_ui_filter/filter_model.rs`, beside the guards that use
+it. The config loading and override resolution — `load_nextest_config`,
+`effective_overrides`, `governing_override`, and friends — live alongside in
+`tests/nextest_ui_filter/config.rs`, so the guards resolve a setting the way
+nextest does: from the *first* matching override that configures it, walking
+the selected profile and then `default`.
 
 **Example** (`tests/nextest_ui_filter.rs`):
 
 ```rust
-use rstest::{fixture, rstest};
-
-#[fixture]
-fn serial_dylint_ui_override() -> Value {
-    let config = load_nextest_config();
-    find_serial_dylint_ui_override(&config).clone()
-}
-
 #[rstest]
+#[case::default(ProfileName("default"))]
+#[case::ci(ProfileName("ci"))]
 fn serial_dylint_ui_filter_captures_integration_ui_binaries(
-    serial_dylint_ui_override: Value,
+    nextest_config: Value,
+    #[case] profile: ProfileName<'_>,
 ) {
-    let filter = extract_filter(&serial_dylint_ui_override);
+    let filter = filter_of(broad_override(&nextest_config, profile))
+        .unwrap_or_else(|| panic!("profile.{}: broad override should filter", profile.0));
 
     assert!(
-        filter.0.contains("(binary(ui) & test(=ui))"),
-        "filter must capture integration test binaries: {}",
+        filter.selects(INTEGRATION_UI),
+        "profile.{}: the {SERIAL_UI_GROUP} filter must select an integration binary named `ui` \
+         whose top-level test is also named `ui`; found filter: {}",
+        profile.0,
         filter.0
     );
 }
 ```
+
+Two properties of that example are worth copying. Both profiles are covered,
+because `profile.ci` is what the Windows lane runs and each profile declares
+its own copy of the clause. And the filter is *evaluated*, not searched:
+`selects` answers whether a specific identity is captured, which is the
+question the configuration exists to answer.
 
 This pattern prevents CI flakes where a new UI test is excluded from
 serialization due to an incomplete filter expression.

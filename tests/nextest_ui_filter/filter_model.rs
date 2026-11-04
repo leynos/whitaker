@@ -67,15 +67,18 @@ impl TestIdentity<'_> {
     /// Returns whether the single filter term `operator(argument)` selects
     /// this identity.
     ///
-    /// `test` matches a substring of the reported name unless the argument is
-    /// written `=name`, in which case it must match exactly; `package` and
-    /// `binary` follow the same rule. An operator this repository does not use
-    /// panics rather than answering `false`, so a filter that grows a new
-    /// operator fails loudly instead of silently matching nothing.
+    /// nextest gives the operators different default matchers. `test` defaults
+    /// to the *contains* matcher, so its argument matches a substring of the
+    /// reported name. `package` and `binary` default to the *glob* matcher, and
+    /// a glob with no metacharacters is an exact match, so their arguments must
+    /// name the package or binary in full. Both operators still honour an
+    /// explicit `=` prefix. An operator this repository does not use panics
+    /// rather than answering `false`, so a filter that grows a new operator
+    /// fails loudly instead of silently matching nothing.
     fn matches(self, operator: Operator<'_>, argument: FilterArgument<'_>) -> bool {
         match operator.0 {
-            "package" => names(self.package.0, argument),
-            "binary" => names(self.binary.0, argument),
+            "package" => glob_names(self.package.0, argument),
+            "binary" => glob_names(self.binary.0, argument),
             "test" => names(self.name.0, argument),
             other => panic!("unsupported nextest filter operator {other:?}"),
         }
@@ -85,30 +88,55 @@ impl TestIdentity<'_> {
 impl FilterExpression<'_> {
     /// Returns whether this expression selects `identity`.
     ///
-    /// Matching is by substring, as nextest does it, so a name clause reaches a
-    /// same-named test in *every* package; the regression tests depend on that
-    /// behaviour, because it is what made the broad override shadow the
-    /// package overrides.
+    /// Each operator keeps its own default matcher. A bare `test(<name>)`
+    /// matches a substring, so it reaches a same-named test in *every* package;
+    /// the regression tests depend on that behaviour, because it is what made
+    /// the broad override shadow the package overrides. `package` and `binary`
+    /// instead match exactly, because nextest's default matcher for them is the
+    /// glob matcher.
     #[must_use]
     pub fn selects(&self, identity: TestIdentity<'_>) -> bool { term_holds(self.0, identity) }
 }
 
-/// Returns whether `actual` is selected by a single filter argument.
+/// Returns whether `actual` is selected by a single `test` argument.
 fn names(actual: &str, FilterArgument(argument): FilterArgument<'_>) -> bool {
     argument
         .strip_prefix('=')
         .map_or_else(|| actual.contains(argument), |exact| actual == exact)
 }
 
+/// Returns whether `actual` is selected by a single `package` or `binary`
+/// argument.
+///
+/// nextest's default matcher for these operators is the glob matcher, so a
+/// bare argument is an exact name unless it contains a glob metacharacter. This
+/// model deliberately does not implement glob expansion: a clause that starts
+/// with a matcher prefix (`~`, `/`, `#`) or contains a metacharacter is not
+/// something the guards currently assert, and answering `false` for it would
+/// silently pass a guard that no longer describes the configuration. Panicking
+/// keeps the module's fail-loudly contract, and the panic names the argument so
+/// the guard can be extended before that clause lands.
+fn glob_names(actual: &str, FilterArgument(argument): FilterArgument<'_>) -> bool {
+    let is_unsupported =
+        argument.starts_with(['~', '/', '#']) || argument.contains(['*', '?', '[', '{']);
+    assert!(
+        !is_unsupported,
+        "unsupported nextest glob filter argument {argument:?}"
+    );
+
+    argument
+        .strip_prefix('=')
+        .map_or_else(|| actual == argument, |exact| actual == exact)
+}
+
 /// Evaluates one term, which may be negated, compound, or parenthesized.
 fn term_holds(term: &str, identity: TestIdentity<'_>) -> bool {
     let bare = strip_wrapping_parens(term.trim());
 
-    if let Some(negated) = bare.strip_prefix("not ") {
-        return !term_holds(negated, identity);
-    }
-
-    // `|` binds loosest, so it is split first; then `&`, then a leaf term.
+    // `|` binds loosest, so it is split first; then `&`, then `not`, then a
+    // leaf term. `not` binds tighter than both operators, so it must be
+    // unwrapped only after they have been split; unwrapping it first would
+    // read `not a & b` as `not (a & b)`.
     let alternatives = split_top_level(bare, '|');
     if alternatives.len() > 1 {
         return alternatives
@@ -121,6 +149,10 @@ fn term_holds(term: &str, identity: TestIdentity<'_>) -> bool {
         return conjuncts
             .iter()
             .all(|conjunct| term_holds(conjunct, identity));
+    }
+
+    if let Some(negated) = bare.strip_prefix("not ") {
+        return !term_holds(negated, identity);
     }
 
     let (operator, argument) = split_leaf(bare);

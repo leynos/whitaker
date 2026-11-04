@@ -9,10 +9,11 @@
 //!
 //! Two properties are pinned here, because a broken one is invisible by
 //! inspection. The first is precedence: nextest resolves each setting from the
-//! *first* matching override that configures it, so an earlier broad clause
-//! silently deprives a later, more specific one of its effect. The second is
-//! that the harnesses which rebuild a lint library through nested Cargo keep a
-//! build-sized allowance, since they queue behind shared compiler admission.
+//! *first* matching override that configures it, walking the selected profile
+//! and then `default`, so an earlier broad clause silently deprives a later,
+//! more specific one of its effect. The second is that the harnesses which
+//! rebuild a lint library through nested Cargo keep a build-sized allowance,
+//! since they queue behind shared compiler admission.
 //!
 //! `no_unwrap_or_else_panic` re-exports its UI module as `mod ui`
 //! (`src/lib.rs`), so nextest reports its tests as `ui::<name>`; its filter
@@ -25,21 +26,25 @@
 //! with the same name in another package" — which is exactly how the shadowing
 //! went unnoticed.
 
+#[path = "nextest_ui_filter/config.rs"]
+mod config;
 #[path = "nextest_ui_filter/filter_model.rs"]
 mod filter_model;
 
-use std::{fs, path::Path};
-
-use filter_model::{
-    BinaryName,
-    FilterExpression,
-    PackageName,
-    ProfileName,
-    TestIdentity,
-    TestName,
-};
-use rstest::{fixture, rstest};
+use filter_model::{BinaryName, PackageName, ProfileName, TestIdentity, TestName};
+use rstest::rstest;
 use toml::Value;
+
+use self::config::{
+    INTEGRATION_UI_CLAUSE,
+    SERIAL_UI_GROUP,
+    broad_override,
+    effective_overrides,
+    filter_of,
+    governing_override,
+    nextest_config,
+    slow_timeout_period_secs,
+};
 
 /// The crate whose nested-Cargo harnesses timed out.
 const HARNESS_PACKAGE: PackageName<'static> = PackageName("no_unwrap_or_else_panic");
@@ -70,8 +75,36 @@ const SHARED_NAME_CONTROL: TestIdentity<'static> = TestIdentity {
     name: TestName("ui::example_compiles_under_test_harness"),
 };
 
-/// The test-group every dylint UI harness must be serialized into.
-const SERIAL_UI_GROUP: &str = "serial-dylint-ui";
+/// An integration-test binary named `ui` with a top-level `fn ui()`, as
+/// nextest reports it: the binary and the test share the name `ui`.
+const INTEGRATION_UI: TestIdentity<'static> = TestIdentity {
+    package: PackageName("bumpy_road_function"),
+    binary: BinaryName("ui"),
+    name: TestName("ui"),
+};
+
+/// The `trybuild` compile contract in `installer/tests/ui.rs`.
+///
+/// This is a top-level `fn` in the file, so nextest reports it without the
+/// `ui::` module prefix that [`HARNESS`]'s crate produces. That difference
+/// matters: the broad clause's `test(ui::ui)` term is a *contains* match and
+/// does not select this name, which is why its own override is reachable.
+const SHA2_CONTRACT: TestIdentity<'static> = TestIdentity {
+    package: PackageName("whitaker-installer"),
+    binary: BinaryName("ui"),
+    name: TestName("sha2_0_11_pre_migration_patterns_fail_to_compile"),
+};
+
+/// The package-isolated packaging check in `common/tests/i18n_packaging.rs`,
+/// which `#[cfg(unix)] mod unix` nests, so nextest reports the `unix::` prefix.
+///
+/// Like [`SHA2_CONTRACT`] this name has no `ui::` prefix, so the broad
+/// clause's `ui::` terms do not reach it.
+const PACKAGING_CHECK: TestIdentity<'static> = TestIdentity {
+    package: PackageName("whitaker-common"),
+    binary: BinaryName("i18n_packaging"),
+    name: TestName("unix::fluent_bundles_are_included_in_the_package_tarball"),
+};
 
 /// The minimum period that counts as a build-sized allowance, in seconds.
 ///
@@ -83,125 +116,76 @@ const BUILD_SLOW_TIMEOUT_SECS: u64 = 20 * 60;
 /// The allowance the package overrides give a nested-Cargo harness.
 const PACKAGE_OVERRIDE_SECS: u64 = 75 * 60;
 
-/// Parses `.config/nextest.toml` into a [`Value`].
-fn load_nextest_config() -> Value {
-    let config_path = Path::new(env!("CARGO_MANIFEST_DIR")).join(".config/nextest.toml");
-    let contents = fs::read_to_string(&config_path)
-        .unwrap_or_else(|err| panic!("failed to read {}: {err}", config_path.display()));
-    toml::from_str(&contents)
-        .unwrap_or_else(|err| panic!(".config/nextest.toml should parse as TOML: {err}"))
-}
+/// The per-test bound a profile applies when no override selects a test, read
+/// from each profile's `slow-timeout.period` in `.config/nextest.toml`.
+const BASE_SLOW_TIMEOUT_SECS: u64 = 300;
 
-/// Fixture providing the parsed `nextest` config.
-#[whitaker_test_macros::allow_fixture_expansion_lints]
-#[fixture]
-fn nextest_config() -> Value { load_nextest_config() }
+/// The allowance the `trybuild` compile contracts need for a cold fixture
+/// build through nested Cargo.
+const SHA2_ALLOWANCE_SECS: u64 = 75 * 60;
 
-/// Returns the ordered override tables for `profile`.
-fn profile_overrides<'a>(config: &'a Value, profile: ProfileName<'_>) -> &'a [Value] {
-    let Some(overrides) = config
-        .get("profile")
-        .and_then(|p| p.get(profile.0))
-        .and_then(|d| d.get("overrides"))
-        .and_then(Value::as_array)
-    else {
-        panic!("profile.{}: overrides should be an array", profile.0);
-    };
+/// The allowance the packaging check needs, because `cargo package` builds
+/// into its own fresh target directory.
+const PACKAGING_ALLOWANCE_SECS: u64 = 30 * 60;
 
-    overrides.as_slice()
-}
-
-/// Returns the broad `serial-dylint-ui` override, which is first in the
-/// default profile because every clause below it is more specific.
-fn broad_override(config: &Value) -> &Value {
-    profile_overrides(config, ProfileName("default"))
-        .first()
-        .unwrap_or_else(|| panic!("the default profile should declare a broad overrides entry"))
-}
-
-/// Reads an override's `filter` string, if it has one. An override without a
-/// filter matches every test.
-fn filter_of(override_table: &Value) -> Option<FilterExpression<'_>> {
-    override_table
-        .get("filter")
-        .and_then(Value::as_str)
-        .map(FilterExpression)
-}
-
-/// Returns the index and override that nextest applies for `setting`, which is
-/// the first override, in file order, that matches `identity` and configures
-/// that setting.
-fn governing_override<'a>(
-    overrides: &'a [Value],
-    setting: &str,
-    identity: TestIdentity<'_>,
-) -> Option<(usize, &'a Value)> {
-    overrides.iter().enumerate().find(|(_, over)| {
-        over.get(setting).is_some() && filter_of(over).is_none_or(|filter| filter.selects(identity))
-    })
-}
-
-/// Reads the `period` of an override's `slow-timeout`, in seconds.
-fn slow_timeout_period_secs(overrides: &Value) -> Option<u64> {
-    let period = overrides.get("slow-timeout")?.get("period")?.as_str()?;
-    Some(parse_duration_secs(period))
-}
-
-/// Parses the nextest integer-with-suffix duration form, e.g. `"75m"`.
-///
-/// The suffixes are exactly the three below, each mapping to seconds; an
-/// unknown one is a configuration bug.
-fn parse_duration_secs(period: &str) -> u64 {
-    const SUFFIXES: [(char, u64); 3] = [('s', 1), ('m', 60), ('h', 60 * 60)];
-
-    let Some((suffix, multiplier)) = SUFFIXES
-        .iter()
-        .find(|(suffix, _)| period.ends_with(*suffix))
-    else {
-        panic!("slow-timeout period should end in s, m, or h; found {period:?}");
-    };
-
-    let digits = period
-        .strip_suffix(*suffix)
-        .unwrap_or_else(|| panic!("period {period:?} should end in {suffix:?}"));
-
-    digits
-        .parse::<u64>()
-        .unwrap_or_else(|err| panic!("slow-timeout period {period:?} should be an integer: {err}"))
-        * multiplier
-}
-
+/// The broad clause, not the package overrides, is what captures a plain
+/// integration-test binary named `ui`: its reported test name is `ui`, which
+/// `test(ui::ui)` misses.
 #[rstest]
-fn serial_dylint_ui_filter_captures_integration_ui_binaries(nextest_config: Value) {
-    let filter = filter_of(broad_override(&nextest_config))
-        .unwrap_or_else(|| panic!("broad override should filter"));
+#[case::default(ProfileName("default"))]
+#[case::ci(ProfileName("ci"))]
+fn serial_dylint_ui_filter_captures_integration_ui_binaries(
+    nextest_config: Value,
+    #[case] profile: ProfileName<'_>,
+) {
+    let filter = filter_of(broad_override(&nextest_config, profile))
+        .unwrap_or_else(|| panic!("profile.{}: broad override should filter", profile.0));
 
-    // The integration-test pattern produces binary=ui, test=ui, so the filter
-    // must match it; `test(ui::ui)` misses because the reported name is `ui`.
     assert!(
-        filter.0.contains("(binary(ui) & test(=ui))"),
-        "the serial-dylint-ui filter must contain `(binary(ui) & test(=ui))` to capture \
-         integration test binaries named `ui` with a top-level `fn ui()`; found filter: {}",
+        filter.selects(INTEGRATION_UI),
+        "profile.{}: the {SERIAL_UI_GROUP} filter must select an integration binary named `ui` \
+         whose top-level test is also named `ui`; found filter: {}",
+        profile.0,
+        filter.0
+    );
+    // Selecting the identity is necessary but not sufficient. `test(ui)` would
+    // also select it, while dragging in every test whose name merely contains
+    // `ui` in every package. The clause must keep the exact-name match.
+    assert!(
+        filter.0.contains(INTEGRATION_UI_CLAUSE),
+        "profile.{}: the {SERIAL_UI_GROUP} filter must contain `{INTEGRATION_UI_CLAUSE}` so the \
+         integration-binary clause matches only the test named exactly `ui`; found filter: {}",
+        profile.0,
         filter.0
     );
 }
 
 #[rstest]
-fn serial_dylint_ui_filter_has_retry_configuration(nextest_config: Value) {
+#[case::default(ProfileName("default"))]
+#[case::ci(ProfileName("ci"))]
+fn serial_dylint_ui_filter_has_retry_configuration(
+    nextest_config: Value,
+    #[case] profile: ProfileName<'_>,
+) {
     // On Windows, dylint_testing::initialize() can transiently fail with
     // "Access is denied (os error 5)" during NamedTempFile::persist().
     // Retries are essential for reliable CI on Windows.
-    let Some(count) = broad_override(&nextest_config)
+    let Some(count) = broad_override(&nextest_config, profile)
         .get("retries")
         .and_then(|retries| retries.get("count"))
         .and_then(Value::as_integer)
     else {
-        panic!("serial-dylint-ui override must configure retries.count for Windows CI");
+        panic!(
+            "profile.{}: the {SERIAL_UI_GROUP} override must configure retries.count for Windows \
+             CI",
+            profile.0
+        );
     };
 
     assert!(
         count >= 1,
-        "retries.count must be at least 1 for Windows CI reliability; found {count}"
+        "profile.{}: retries.count must be at least 1 for Windows CI reliability; found {count}",
+        profile.0
     );
 }
 
@@ -216,9 +200,9 @@ fn nested_cargo_harnesses_are_governed_by_the_whole_package_override(
     nextest_config: Value,
     #[case] profile: ProfileName<'_>,
 ) {
-    let overrides = profile_overrides(&nextest_config, profile);
+    let overrides = effective_overrides(&nextest_config, profile);
 
-    let Some((index, governing)) = governing_override(overrides, "slow-timeout", HARNESS) else {
+    let Some((index, governing)) = governing_override(&overrides, "slow-timeout", HARNESS) else {
         panic!(
             "profile.{}: no override with a slow-timeout selects {} {}, so its nested-Cargo \
              harnesses fall to the base bound",
@@ -233,13 +217,71 @@ fn nested_cargo_harnesses_are_governed_by_the_whole_package_override(
         );
     };
 
+    // Evaluate the governing filter against a harness that does not exist yet.
+    // A text search for `binary(no_unwrap_or_else_panic)` also passes when the
+    // clause is negated, or when the package is reached only by a name list,
+    // and either way the next harness added to the package falls to the base
+    // bound. Only selecting an unlisted name proves the whole-binary clause.
+    let unlisted = TestIdentity {
+        name: TestName("ui::a_harness_added_later"),
+        ..HARNESS
+    };
     assert!(
-        filter.0.contains(&format!("binary({HARNESS_PACKAGE})")),
+        filter.selects(unlisted),
         "profile.{}.overrides[{index}] governs {} by name list rather than the whole package \
          binary, so a new harness would silently fall to the base bound; found filter: {}",
         profile.0,
         HARNESS.name.0,
         filter.0
+    );
+}
+
+/// Pins the two build-sized allowances that the `default` profile lacked.
+///
+/// The `ci` profile budgeted 75 minutes for the `trybuild` compile contracts
+/// and 30 for the packaging check, but `default` — which `make test` and
+/// `make coverage` run — had no entry for either, so both were held to the
+/// 300 s base and killed mid-build.
+///
+/// Checking that an override *exists* is not enough, and neither is matching
+/// on its text. These two tests are named without a `ui::` module prefix, so
+/// the broad clause's `test(ui::ui)` term does not select them today; but that
+/// is a property of the *names*, and an earlier override that did select them
+/// would silently win the setting. Assert the effective allowance, which is
+/// what nextest applies.
+#[rstest]
+#[case::default_sha2(ProfileName("default"), SHA2_CONTRACT, SHA2_ALLOWANCE_SECS)]
+#[case::ci_sha2(ProfileName("ci"), SHA2_CONTRACT, SHA2_ALLOWANCE_SECS)]
+#[case::default_packaging(ProfileName("default"), PACKAGING_CHECK, PACKAGING_ALLOWANCE_SECS)]
+#[case::ci_packaging(ProfileName("ci"), PACKAGING_CHECK, PACKAGING_ALLOWANCE_SECS)]
+fn build_sized_allowances_govern_their_tests(
+    nextest_config: Value,
+    #[case] profile: ProfileName<'_>,
+    #[case] identity: TestIdentity<'_>,
+    #[case] expected_secs: u64,
+) {
+    let overrides = effective_overrides(&nextest_config, profile);
+
+    let Some((index, governing)) = governing_override(&overrides, "slow-timeout", identity) else {
+        panic!(
+            "profile.{}: no override with a slow-timeout selects {}, so it falls to the {}s base \
+             bound instead of the {expected_secs}s allowance",
+            profile.0, identity.name.0, BASE_SLOW_TIMEOUT_SECS
+        );
+    };
+
+    let period = slow_timeout_period_secs(governing).unwrap_or_else(|| {
+        panic!(
+            "profile.{}.overrides[{index}] should set slow-timeout.period",
+            profile.0
+        )
+    });
+    assert_eq!(
+        period, expected_secs,
+        "profile.{}.overrides[{index}] gives {} a {period}s slow-timeout, not the expected \
+         {expected_secs}s. nextest resolves a setting from the *first* matching override that \
+         configures it, so a broad clause listed above it shadows the allowance.",
+        profile.0, identity.name.0
     );
 }
 
@@ -266,9 +308,9 @@ fn effective_slow_timeout_follows_override_precedence(
     #[case] identity: TestIdentity<'_>,
     #[case] expected_secs: u64,
 ) {
-    let overrides = profile_overrides(&nextest_config, profile);
+    let overrides = effective_overrides(&nextest_config, profile);
 
-    let Some((index, governing)) = governing_override(overrides, "slow-timeout", identity) else {
+    let Some((index, governing)) = governing_override(&overrides, "slow-timeout", identity) else {
         panic!(
             "profile.{}: no override with a slow-timeout selects {} {}, so it falls to the base \
              bound instead of the {expected_secs}s allowance",
@@ -290,7 +332,12 @@ fn effective_slow_timeout_follows_override_precedence(
         profile.0, identity.binary.0, identity.name.0
     );
 
-    let group = governing.get("test-group").and_then(Value::as_str);
+    // `test-group` is resolved independently of `slow-timeout`. Reading it from
+    // the override that happened to govern the timeout would pass while a
+    // different group was actually applied.
+    let group = governing_override(&overrides, "test-group", identity)
+        .and_then(|(_, over)| over.get("test-group"))
+        .and_then(Value::as_str);
     assert_eq!(
         group,
         Some(SERIAL_UI_GROUP),

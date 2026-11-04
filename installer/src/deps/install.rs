@@ -305,7 +305,11 @@ fn run_cargo_install(
 
     let output = executor.run("cargo", &args)?;
     if !output.status.success() {
-        let message = command_error_message(&output);
+        let message = source_install_failure_message(
+            &output,
+            cargo_install_plan.tool,
+            cargo_install_plan.version,
+        );
         return Err(InstallerError::DependencyInstall {
             tool: cargo_install_plan.tool.package,
             message,
@@ -345,6 +349,54 @@ fn install_success_message(
             format!("Installed {} with cargo install.", tool.package)
         }
     }
+}
+
+/// Explain a failed `cargo install` source build.
+///
+/// Cargo's own message names the crate and the `rustc` it wanted, but not what
+/// the user can do about it, so a version refusal is recognized here and given
+/// the commands that resolve it.
+///
+/// Without this, the fallback fails with a bare toolchain error that reads as a
+/// Whitaker defect. It is not: `cargo-dylint` 6.3.0's shipped `Cargo.lock` pins
+/// `cargo-util` 0.2.32, which declares `rust-version = "1.97"`, so a host whose
+/// *active* toolchain is Rust 1.96 or older cannot build it from source.
+///
+/// The advice cannot be `--toolchain`: that flag is resolved in step 3 of the
+/// install flow, after dependencies are ensured in step 1, so it does not reach
+/// this command. The message therefore names the explicit `cargo +<channel>`
+/// invocation and the manual-install escape hatch instead.
+fn source_install_failure_message(
+    output: &Output,
+    tool: &DependencyTool,
+    version: Option<&str>,
+) -> String {
+    let message = command_error_message(output);
+    if !is_rust_version_refusal(&message) {
+        return message;
+    }
+
+    let version_flag = version.map_or_else(String::new, |pinned_version| {
+        format!("--locked --version {pinned_version} ")
+    });
+    format!(
+        "{message}\n{} needs a newer Rust toolchain to build from source. Install one with \
+         `rustup toolchain install stable`, then run `cargo +stable install {version_flag}{}` and \
+         rerun the installer. Alternatively install a prebuilt copy of the tool yourself and \
+         rerun the installer with `--skip-deps`.",
+        tool.package, tool.package,
+    )
+}
+
+/// Returns whether `message` is Cargo refusing a dependency's `rust-version`.
+///
+/// Cargo words this per crate, for example "package `cargo-util v0.2.32`
+/// cannot be built because it requires rustc 1.97 or newer"; the stable
+/// fragments are the "requires rustc" clause and the `--ignore-rust-version`
+/// hint, which Cargo prints with it. Matching either keeps the check working if
+/// only one of the two wordings survives a Cargo rewrite.
+fn is_rust_version_refusal(message: &str) -> bool {
+    message.contains("requires rustc") || message.contains("--ignore-rust-version")
 }
 
 pub(super) fn command_error_message(output: &Output) -> String {
