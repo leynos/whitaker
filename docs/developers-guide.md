@@ -130,6 +130,33 @@ make test
 This executes unit, behaviour, and UI harness tests. The shared target enables
 `rstest` fixtures and `rstest-bdd` scenarios.
 
+### Assertions in fallible tests
+
+The `panic_in_result_fn` lint denies a direct `assert!` or `assert_eq!` in any
+function that returns `Result`. Tests whose fixtures can fail must therefore be
+fallible, because `rstest` supplies `#[from(...)]` fixtures as a `Result` that
+the test unwraps with `?`. Two idioms keep those tests lint-clean.
+
+Name the fixture binding apart from the value it supplies, so the unwrapped
+binding does not shadow the parameter and trip `shadow_reuse`:
+
+```rust
+fn loads_a_locale(
+    #[from(root)] root_res: std::io::Result<TempDir>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let root = root_res?;
+    // ...
+}
+```
+
+Move each assertion into a `()`-returning helper, or use the `ensure` and
+`ensure_eq` helpers in `cli/tests/configuration/support.rs`, which report a
+failure as an error naming both values. The helpers are crate-internal to the
+CLI configuration test suite; they are not a general assertion library and must
+not be exported, moved into the shared test-support crate, or used to bypass a
+lint elsewhere. Extend them there when a second call site needs the same
+comparison.
+
 ### Fixture expansion lint macro
 
 The workspace-owned `whitaker_test_macros` crate provides
@@ -4541,12 +4568,12 @@ of the rule lives in the `generate-coverage` README in
 this repository sets, what each value is sized against, and where the third
 tier went.
 
-| Tier                     | What it bounds                     | Where it is set                             | Current value                                                                                                                                                                                                                                                                                                                                                                           |
-| ------------------------ | ---------------------------------- | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`, both profiles       | 300 s default; 20 m for ordinary serialized UI and no-default-feature builds; 30 m for isolated package checks; 75 m for parser-pin, nested example-build, alias UI and whole UI harness fixtures; 120 m for the trybuild compile contracts and for `rstest_helper_should_be_fixture::ui::trybuild_fixtures_compile_without_diagnostics`; 30 m for toolchain-installing behaviour tests |
-| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, both profiles       | 300 m                                                                                                                                                                                                                                                                                                                                                                                   |
-| Cargo watchdog           | one `cargo` invocation, wall clock | not used here, see below                    | absent                                                                                                                                                                                                                                                                                                                                                                                  |
-| Job `timeout-minutes`    | the whole job                      | `ci.yml` and `coverage-main.yml`, job level | 335 m for every lane that runs the suite                                                                                                                                                                                                                                                                                                                                                |
+| Tier                     | What it bounds                     | Where it is set                             | Current value                                                                                                                                                                                                                                                                                                                                                                                   |
+| ------------------------ | ---------------------------------- | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`, both profiles       | 300 s default; 20 m for ordinary serialized UI and no-default-feature builds; 30 m for isolated package checks; 75 m for parser-pin, nested example-build and whole UI harness fixtures; 120 m for the alias UI fixture, the trybuild compile contracts and `rstest_helper_should_be_fixture::ui::trybuild_fixtures_compile_without_diagnostics`; 30 m for toolchain-installing behaviour tests |
+| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, both profiles       | 300 m                                                                                                                                                                                                                                                                                                                                                                                           |
+| Cargo watchdog           | one `cargo` invocation, wall clock | not used here, see below                    | absent                                                                                                                                                                                                                                                                                                                                                                                          |
+| Job `timeout-minutes`    | the whole job                      | `ci.yml` and `coverage-main.yml`, job level | 335 m for every lane that runs the suite                                                                                                                                                                                                                                                                                                                                                        |
 
 *Table: the timers that can end a run, innermost first.*
 
@@ -4623,8 +4650,11 @@ target-scoped lock used by fixture builds.
 The alias UI fixture in `no_unwrap_or_else_panic` exceeded its 20-minute
 allowance while rebuilding its lint library through nested Cargo and waiting
 for compiler admission. A retry began the same build again and was cut short by
-the whole-run timeout. It now has a 75-minute allowance and no retry, so one
-queued build can finish without repeating its setup.
+the whole-run timeout. It was raised to 75 minutes, and a later attempt expired
+at that bound for the same reason while the admission pool reported itself
+healthy with 100-200 compiler groups queued, so it now shares the 120-minute
+build-sized allowance the trybuild contracts use. It still takes no retry, so
+one queued build can finish without repeating its setup.
 
 The same crate's whole `ui::ui` harness reached the 150-minute global deadline
 with a retry rebuilding the lint library while Cargo waited for the shared

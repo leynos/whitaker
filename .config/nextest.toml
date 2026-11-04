@@ -74,11 +74,15 @@ test-group = "serial-dylint-ui"
 retries = { backoff = "exponential", count = 2, delay = "5s" }
 
 [[profile.ci.overrides]]
-# The alias UI fixture rebuilds its lint library through nested Cargo. Its
-# 20-minute attempt timed out while compiler admission was queued; let one
-# build finish rather than restarting it on retry.
+# The alias UI fixture rebuilds its lint library and example through nested
+# Cargo. A 20-minute attempt timed out while compiler admission was queued, and
+# so did a 75-minute one on a host whose pool reported a healthy 100-200 queued
+# compiler groups; give one build the same build-sized allowance as the
+# trybuild contracts rather than restarting it on retry. Keep the provider in
+# step with `NESTED_UI_FIXTURE_FILTER` in
+# `tests/workflow_contracts/nextest_profile_test.py`.
 filter = "package(no_unwrap_or_else_panic) & test(ui::aliased_test_crate_non_companion_does_not_exempt_parent_function)"
-slow-timeout = { period = "75m", terminate-after = 1, grace-period = "5s" }
+slow-timeout = { period = "120m", terminate-after = 1, grace-period = "5s" }
 test-group = "serial-dylint-ui"
 retries = 0
 
@@ -189,11 +193,15 @@ test-group = "serial-dylint-ui"
 retries = 0
 
 [[profile.default.overrides]]
-# This UI fixture rebuilds its lint library through nested Cargo. Its 20-minute
-# attempt timed out while compiler admission was queued; let one build finish
-# instead of restarting it on retry.
+# This UI fixture rebuilds its lint library and example through nested Cargo. A
+# 20-minute attempt timed out while compiler admission was queued, and so did a
+# 75-minute one on a host whose pool reported a healthy 100-200 queued compiler
+# groups; give one build the same build-sized allowance as the trybuild
+# contracts instead of restarting it on retry. Keep the period in step with
+# `NESTED_UI_FIXTURE_FILTER` in
+# `tests/workflow_contracts/nextest_profile_test.py`.
 filter = "package(no_unwrap_or_else_panic) & test(ui::aliased_test_crate_non_companion_does_not_exempt_parent_function)"
-slow-timeout = { period = "75m", terminate-after = 1, grace-period = "5s" }
+slow-timeout = { period = "120m", terminate-after = 1, grace-period = "5s" }
 test-group = "serial-dylint-ui"
 retries = 0
 
