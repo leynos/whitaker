@@ -13,7 +13,7 @@ caused by the Dylint toolchain the repository pins: `dylint_testing` 6.0.1 and
 `dylint_driver` 6.0.1 clone `rust-lang/rust-clippy` at the branch name
 `master`, and that branch no longer exists.
 
-The outcome we want is observable and narrow: `make lint` and `make test` both
+The desired outcome is observable and narrow: `make lint` and `make test` both
 pass locally on this branch, CI turns green for a new head commit, and the
 blocking `CHANGES_REQUESTED` review on the superseded commit is superseded by a
 review of the new head. A reader should be able to confirm the work is done by
@@ -853,7 +853,7 @@ each push rather than copying an earlier lease into the command.
   would have killed — the same cancellation the global timeout exposed in the
   full run. The earlier attempt at this had failed with
   `unknown lint: no_expect_outside_tests` because the dispatch omitted
-  `TEST_EXCLUDES`; that was a defect in my command, not the candidate, and the
+  `TEST_EXCLUDES`; that was a defect in the command, not the candidate, and the
   corrected command reproduces the real gate's package set exactly.
 - [x] (2026-11-04) Guard gap found and closed while preparing the review
   replies. Finding 4454591447's fix added two `default`-profile allowances, but
@@ -1009,14 +1009,25 @@ each push rather than copying an earlier lease into the command.
 
 ### The `make test` wrapper trap is environmental, not candidate
 
-Both `make test` runs on this candidate — the 07:21:47 run and its 05:07
-predecessor — finished with all four phases green and then failed in the
-Makefile's own cleanup trap:
+Two `make test` runs on this candidate failed in the Makefile's own cleanup
+trap, and they failed differently. The earlier one, started 2026-11-03T23:54:45
+and preserved as
+`/tmp/test-whitaker-harden-lint-whitaker-gate-prior-20261104T0507.out`, never
+reached four green phases: its nextest run was cancelled by the profile's own
+`global-timeout` at `Summary [18000.046s] 1670 tests run: 1669 passed (1
+flaky), 1 failed, 5 skipped`, and the recipe died there under `set -eu` with
+`GATE_EXIT=2`. The later one, at 08:10:09, ran all four phases green —
+`Summary [2477.110s] 1670 tests run: 1670 passed, 5 skipped`, doctests 184 +
+79 + 32 + 41, `test-root-lib` 56/56 and `test-nextest-filter` 16/16 — and then
+hit the trap:
 
 ```text
 ERROR: Tests modified /home/leynos/.local/bin/whitaker - restoring backup
 make: *** [Makefile:102: test] Error 1
 ```
+
+The `1670` count is the marker that these are the two affected runs; both ran
+the same tree, and that tree's resolved count is `1673`.
 
 Four independent lines of evidence place the cause outside this diff.
 
@@ -1061,11 +1072,14 @@ started at 08:21:13 and captured a 461-byte `/tmp/.whitaker-test-backup-jGAjjy`
 at `08:21:14`. So the shared `$HOME/.local/bin/whitaker` is written by other
 candidates' gates, and the 08:10 trap is the detector working as designed.
 
-Fourth, and decisively, the same commit passes the same gate end to end when
-the host is quiet. A fresh sequential run on the identical `b8fff90d` — the
-scrutineer's, after the earlier one, with `check-fmt` and `lint` green ahead of
-it — completed all four phases and exited **0**, with
-`grep -c 'ERROR: Tests modified'` reading **0**:
+Fourth, and decisively, the same tree passes the same gate end to end when the
+host is quiet. A fresh sequential run on `b8fff90d` — the scrutineer's, after
+the earlier one, with `check-fmt` and `lint` green ahead of it — completed all
+four phases and exited **0**. The `test` phase is preserved as
+`/tmp/test-whitaker-harden-lint-whitaker-gate-2.out`, where
+`grep -c 'ERROR: Tests modified'` reads **0** and the last line is
+`EXIT_CODE=0 DURATION=1288s`; the `check-fmt` and `lint` timings below are the
+scrutineer's summary of the same sequence, not a separate preserved log:
 
 ```text
 check-fmt  EXIT_CODE=0 DURATION=5s
@@ -1081,15 +1095,23 @@ Nothing about the candidate changed between the red and the green run; only the
 other sessions' activity on the host did. That is the definition of an
 environmental flake, and it is the last evidence line this section needs.
 
+The candidate conclusion rests on the 08:42:42 run quoted above, the only one
+that exited 0. The 08:10:09 run passed the same four phases but under different
+counts, `1670` and `16/16`, because it ran an earlier tree; those numbers are
+not retconned onto the `b8fff90d` tree, which reports `1673` and `41/41`.
+The deltas are accounted for rather than rounded off. Diffing the two logs'
+PASS lines leaves exactly two removals —
+`source_install_failure_message_gives_a_runnable_install_command` and
+`..._keeps_cargos_diagnosis_for_version_refusals` — against five additions: the
+four cases and the single absence test that `b8fff90d` produced when it
+table-drove that pair. That is the whole `1670` → `1673` difference;
+`build_sized_allowances_govern_their_tests` was already present in the 08:10
+run, so the guard test is not the delta. The filter suite's `16/16` → `41/41`
+is the later `nextest_ui_filter` module cases and property tests.
+
 The trap is recorded as an environment finding for the host operator. It is not
 repaired here: the correct fix belongs to the host, not to this diff, and
 weakening a safeguard against a host-global race would be the wrong one.
-
-The candidate conclusion rests on the four phase summaries, each green: nextest
-`1670 tests run: 1670 passed, 5 skipped` in 2,477 s, doctests 336 passed,
-`test-root-lib` 56/56, and `test-nextest-filter` 16/16. The trap is recorded as
-an environment finding for the host operator; it is not repaired here, because
-weakening a safeguard against a host-global race would be the wrong fix.
 
 ### Scope tolerance disposition
 
@@ -1546,7 +1568,7 @@ driver built from the other. Moving the binary pins in lockstep with the
 libraries would work, but it would also invalidate the release assets this
 repository has already published, for no behavioural gain.
 
-The driver is the exception and is not pinned by us at all. `dylint`'s
+The driver is the exception and carries no repository pin at all. `dylint`'s
 `initialize()` derives its `dylint_driver` requirement from its own
 `CARGO_PKG_VERSION`, so 6.3.2 asks for `=6.3.2`. The warm 6.3.0 driver on this
 host is therefore judged outdated and rebuilt on the first run. That is
@@ -1632,21 +1654,41 @@ round a loop that fails identically. The message names the explicit
 `cargo +stable install --locked --version <v> <package>` invocation and the
 `--skip-deps` escape hatch instead, and a test asserts the flag is absent.
 
+`--skip-deps` is one flag in `installer/src/main.rs:115` guarding the whole of
+`ensure_dylint_tools`, so it stops checking both `cargo-dylint` and
+`dylint-link`. The advice therefore names both tools, built from
+`DEPENDENCY_TOOLS` rather than written out, so a future third tool cannot be
+left out of the guidance. A table case asserts the pair appears, alongside the
+existing case for the flag itself.
+
 ## Outcomes & retrospective
 
 Complete for M1–M3, and M4's own requirement — a green hosted run on a
-published head — is met. Seven `workflow_dispatch` runs have concluded
-`success`, most recently `41618871744` on `9863d842`; CodeRabbit's review of
+published head — is met. Seven `workflow_dispatch` runs had concluded
+`success` by `41618871744` on `9863d842`; later heads are certified by the runs
+named in the next paragraph, so `41618871744` is the seventh of that first
+group rather than the most recent success overall. CodeRabbit's review of
 that head then raised eleven findings across the configuration, the guards and
 the documentation. Repairs for all eleven are in the commit that carries this
 text, so that commit is a new candidate and M4's evidence does not transfer to
 it. That fresh observation has since been made on every head that carried a
-Rust change: run `41791718849` on `b8fff90d`, run `41794314932` on `25aa211b`
-and run `41796910336` on `359d071f` each concluded `success`, with `linux-full`
-and `windows-compat` green and `coverage-check` skipped for the dispatch event.
-Commits after `b8fff90d` touch only this plan, which is a gate input for
-`markdownlint` alone, so the local `check-fmt` and `markdownlint` evidence on
-the tip covers what those commits can affect.
+Rust change — `41787325744` on `f199288e`, `41791718849` on `b8fff90d`,
+`41794314932` on `25aa211b`, `41796910336` on `359d071f`, `41800660806` on
+`eabaa0f4` and `41807662541` on `c8858e8d` — and each concluded `success`,
+with `linux-full` and `windows-compat` green and `coverage-check` skipped for
+the dispatch event. That is six further runs beyond the seven above, so the
+`workflow_dispatch` total stands at thirteen. Commits after `b8fff90d` touch
+only this plan, which is a gate input for `markdownlint` alone, so the local
+`check-fmt` and `markdownlint` evidence on the tip covers what those commits
+can affect. `c8858e8d` is the one exception: it revises this plan and nothing
+else, which is why its hosted observation exists, and it is also the head the
+CodeRabbit review quoted in the pre-merge reconciliation was written against.
+`f2686a6d`, its successor, is not documentation-only — it carries the filter
+evaluator, the error and property suites, the installer advice and the new
+execution-contract test — so it owes the full local gate set rather than the
+Markdown pair, and it has not been hosted-observed. The rule that governed
+every earlier head applies to it unchanged: a green result belongs only to the
+head it tested.
 
 An earlier revision of this section said "nothing is committed or pushed". That
 was true when it was written and false by 2026-11-03: `adc974c9` is on

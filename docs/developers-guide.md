@@ -161,9 +161,10 @@ are never silently skipped in the pipeline.
 
 #### Test timeouts: four tiers, outermost last
 
-Both profiles set the same four bounds, in increasing scope. A test is only
-allowed to exceed a bound if a more specific override raises it, so the tiers
-must be read as a floor scheme rather than as independent budgets.
+Both profiles declare the same three nextest scopes, in increasing scope; a
+fourth bound sits outside nextest. A test is only allowed to exceed a bound if
+a more specific override raises it, so the tiers must be read as a floor
+scheme rather than as independent budgets.
 
 1. `slow-timeout.period = "300s"` on `[profile.default]` and `[profile.ci]`.
    This bounds an ordinary test. Without it a hung test is reported as slow for
@@ -173,8 +174,9 @@ must be read as a floor scheme rather than as independent budgets.
    20–120 minutes depending on how much they rebuild, because they queue behind
    the shared compiler admission and package-cache locks.
 3. `global-timeout = "300m"` on both profiles. This is the whole-run ceiling.
-4. The workflow job timeout, which sits outside nextest and is not ours to
-   tune from this file.
+4. The workflow job timeout. This one is not a profile setting and cannot be
+   configured from this file; it is the outermost bound and the one that
+   reports a wedged run if every nextest scope above it is already large.
 
 `terminate-after = 1` with `grace-period = "5s"` means a test that trips the
 period is killed once, then reported, rather than being retried indefinitely.
@@ -1898,9 +1900,13 @@ A directory becomes eligible for stale recovery after it has aged past five
 minutes, and stale cleanup removes that age-eligible lock directory only after
 successfully acquiring the lifetime owner-liveness lock. If stale cleanup sees
 `NotFound`, it treats the directory as already removed rather than as a failed
-recovery attempt. The live lock path waits up to six minutes in production —
-longer than the stale window, so an abandoned lock is reclaimed before the
-ceiling is reached — and the tests keep shorter bounded timeouts of their own.
+recovery attempt. The live lock path waits up to 25 minutes in production —
+longer than the five-minute stale window, so an abandoned lock is reclaimed
+before the ceiling is reached — and the tests supply their own limits rather
+than inheriting this one. The 25 minutes are the expected hold time, not a
+second stale window: an owner compiles an example through nested Cargo while
+holding the lock, and `.config/nextest.toml` budgets 20 minutes for exactly
+that build, so a six-minute bound reported a healthy owner as a timeout.
 A sidecar advisory lock serializes ownership transitions, and the directory's
 owner token prevents an original holder from deleting a successor after stale
 recovery.
@@ -1998,9 +2004,9 @@ fn serial_dylint_ui_filter_captures_integration_ui_binaries(
 }
 ```
 
-Two properties of that example are worth copying. Both profiles are covered,
-because `profile.ci` is what the Windows lane runs and each profile declares
-its own copy of the clause. And the filter is *evaluated*, not searched:
+Two properties of that example are worth copying. Both profiles are covered
+because `profile.ci` is what the Windows lane runs, and both profiles declare
+the clause. And the filter is *evaluated*, not searched:
 `selects` answers whether a specific identity is captured, which is the
 question the configuration exists to answer.
 
