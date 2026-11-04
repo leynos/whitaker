@@ -160,9 +160,9 @@ published-GPUI workspace invocation.
 - [ ] 2.4.2. Extend `string_continuation_style` to the `log` and `tracing`
   facade macros, proving macro identity, format-string position, and complete
   argument grammar before suggesting a rewrite, with acceptance fixtures for
-  every supported variant and for same-named local and external lookalikes.
-  See [RFC 0002](rfcs/0002-string-continuation-style.md) §Detection
-  architecture. Requires 2.4.1.
+  every supported variant and for same-named local and external lookalikes. See
+  [RFC 0002](rfcs/0002-string-continuation-style.md)
+  §Detection architecture. Requires 2.4.1.
 - [ ] 2.4.3. Promote the `string_continuation_style` suggestion from manual to
   machine applicability once field evidence shows the rewrite is safe to apply
   unattended, including an apply-and-recompile harness across the estate and a

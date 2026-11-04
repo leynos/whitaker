@@ -125,11 +125,10 @@ pinned nightly. The release uses OrthoConfig's default features.
 reporting, and Fluent output normalization. Lint crates own their message keys,
 arguments, and fallback wording; use `LabelResolution` to pair the message
 context with an attribute for `safe_resolve_label`, and use
-`safe_resolve_message_set` for a primary/note/help set. These
-helpers remove Fluent's U+2068 and U+2069 isolation marks while preserving
-U+FFFD, which signals an unresolved placeable. Add lint-specific fallback text
-at the call site, and extend the common helpers only for policy reused across
-lint crates.
+`safe_resolve_message_set` for a primary/note/help set. These helpers remove
+Fluent's U+2068 and U+2069 isolation marks while preserving U+FFFD, which
+signals an unresolved placeable. Add lint-specific fallback text at the call
+site, and extend the common helpers only for policy reused across lint crates.
 
 ## Running Tests
 
@@ -3703,23 +3702,23 @@ the variable is otherwise absent. Restoration uses the same shared environment
 mutex, but the runner callback itself executes without holding that mutex to
 avoid nested-lock deadlocks.
 
-Example targets are staged with
-[`stage_example`](#example-target-staging), which tolerates a wrapper, rather
-than with `dylint_testing::ui::Test::example`, which does not.
+Example targets are staged with [`stage_example`](#example-target-staging),
+which tolerates a wrapper, rather than with
+`dylint_testing::ui::Test::example`, which does not.
 
 #### Example-target staging
 
 Do not call `dylint_testing::ui::Test::example`. It recovers an example's
 `--extern`, `-L`, and `--edition` flags by rebuilding the example with
 `cargo build --verbose` and keeping the `Running` line whose *first* word is
-`rustc`. Any configured `rustc` wrapper takes that position instead —
-`sccache` in CI, or a compile-admission wrapper on a shared development host —
-and every example test then fails with "Found no `rustc` invocations".
+`rustc`. Any configured `rustc` wrapper takes that position instead — `sccache`
+in CI, or a compile-admission wrapper on a shared development host — and every
+example test then fails with "Found no `rustc` invocations".
 
 Clearing `RUSTC_WRAPPER` does not fix this. A wrapper set through
-`build.rustc-wrapper` in Cargo configuration survives environment clearing,
-and removing a wrapper would bypass the caching or admission control it
-exists to provide.
+`build.rustc-wrapper` in Cargo configuration survives environment clearing, and
+removing a wrapper would bypass the caching or admission control it exists to
+provide.
 
 Use `whitaker::testing::ui::stage_example(crate_name, example)` instead. It
 performs the same rebuild, skips any wrapper chain or environment assignments
@@ -3734,9 +3733,9 @@ test.rustc_flags(staged.linking_flags()).rustc_flags(["--test"]);
 test.run();
 ```
 
-`stage_example` is the single owner of example-flag recovery. Lint crates'
-UI harnesses may call it; they must not parse Cargo output themselves. Keep
-the returned `StagedExample` alive until the test has run, because dropping it
+`stage_example` is the single owner of example-flag recovery. Lint crates' UI
+harnesses may call it; they must not parse Cargo output themselves. Keep the
+returned `StagedExample` alive until the test has run, because dropping it
 deletes the staging directory.
 
 Any UI test that holds `env_test_guard()` while invoking Dylint must use

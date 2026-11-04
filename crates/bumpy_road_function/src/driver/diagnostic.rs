@@ -10,13 +10,13 @@ use rustc_lint::{LateContext, LintContext};
 use rustc_span::{BytePos, Span};
 use whitaker_common::{
     Arguments,
+    LabelResolution,
     Localizer,
     MessageResolution,
-    noop_reporter,
-    safe_resolve_message_set,
-    LabelResolution,
     i18n::{AttrKey, DiagnosticMessageSet},
+    noop_reporter,
     safe_resolve_label,
+    safe_resolve_message_set,
 };
 
 use super::{
@@ -26,14 +26,6 @@ use super::{
     numeric::{diagnostic_integer_argument, line_range_byte_offsets},
 };
 use crate::analysis::{BumpInterval, Settings, top_two_bumps};
-
-
-//! Diagnostic emission for the bumpy road lint.
-//!
-//! The lint warns when it detects two or more separated bump intervals in the
-//! smoothed signal and highlights the two most severe bumps.
-};
-};
 
 /// Payload describing a lint diagnostic to emit.
 pub(super) struct DiagnosticInput<'a> {

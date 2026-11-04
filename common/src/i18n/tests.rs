@@ -6,23 +6,19 @@ use rstest::rstest;
 
 use super::{
     Arguments,
-    FALLBACK_LOCALE,
-    FluentValue,
-    Localizer,
-    available_locales,
-    supports_locale,
     AttrKey,
     DiagnosticMessageSet,
+    FALLBACK_LOCALE,
+    FluentValue,
     LabelResolution,
+    Localizer,
     MessageKey,
     MessageResolution,
+    available_locales,
     normalize_fluent_output,
     safe_resolve_label,
+    supports_locale,
     testing::RecordingEmitter,
-};
-
-
-//! Test locale selection, support, enumeration, and message interpolation.
 };
 
 #[rstest]
