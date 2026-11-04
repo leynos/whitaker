@@ -1640,6 +1640,16 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
   interface used here while removing ten net lock entries. Date/Author:
   2026-10-25, following review.
 
+- **D-24: Accept the remaining file-count overrun for this plan.** On
+  2026-11-04 the owner directed that PR #356 be carried through review
+  reconciliation to merge. That direction accepts the file-count excess that
+  D-11 left open; the rebased diff is 136 files, 56 beyond D-11's accepted 80.
+  The same rebase brought the net added lines to +6,245, inside D-12's
+  7,000-line ceiling, so no further line-ceiling decision is required. This
+  accepts scope only. It does not authorize crates.io reservation or
+  publication, and it does not mark the plan `COMPLETE`. Date/Author:
+  2026-11-04, implementation supervisor, following the owner's instruction.
+
 ## Outcomes & retrospective
 
 - **EP-M0, 2026-08-24.** Complete. Extracted the compiler-private driver into
@@ -1854,6 +1864,49 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
   literal prefix, and the line break had hidden it.
 
   `make test-workflow-contracts` passes 793 tests.
+
+- **Rebase onto current `main`, 2026-11-04.** `origin/main` was `5bf23eab`
+  when the rebase started. The exclusive boundary was `bb6dab1a`, the old head
+  `a7d09b2c`, and the series 44 linear commits; the replay used
+  `--merge --no-fork-point --no-update-refs --no-autostash
+  --reapply-cherry-picks --keep-empty --empty=stop`
+  with `zdiff3` and, per the unattended policy,
+  `core.attributesFile=/dev/null` so the globally selected Weave driver could
+  not participate. Two commits conflicted.
+
+  The `Makefile` conflict was main's #539 doctest change against this branch's
+  `whitaker_lint_core` extraction. Both were kept: `CORE_TEST_CARGO_FLAGS` and
+  the `whitaker_lint_core` exclusions remain, and main's explanation of why
+  `bumpy_road_function` is doctested, together with its
+  `DOCTEST_EXCLUDES ?= --exclude clippy_utils` prefix, is restored. Dropping
+  either side would have removed coverage: the branch's core tests cannot run
+  in the all-feature pass, and main had just made the bumpy-road examples
+  compile-fail contracts.
+
+  `Cargo.lock` was taken from `origin/main` wholesale, as required for
+  packaging lock files, then rebuilt with
+  `cargo metadata --format-version 1 --offline`. The rebuild adds the
+  `whitaker_lint_core` package and `googletest`/`pretty_assertions`, and moves
+  the lint crates from the old `whitaker` dependency to the extracted core.
+
+  The audit explains the whole replay. `range-diff` marks 41 of the 44 commits
+  `=`; commits 11 and 12 changed only to adopt main's doctest exclusions, and
+  commit 40 is the lock-file rebuild. `git diff --check` is clean. New head
+  `807a4486` changes 136 files for +7,126/-881, a net **+6,245** lines, inside
+  D-12's 7,000-line ceiling. The file count remains 56 above D-11's accepted
+  80; D-24 records the owner's acceptance of that remainder.
+
+  `origin/main` advanced by one further commit while the gates ran: `15e65ba8`
+  updates only `tests/workflows/requirements.txt`, and a `git merge-tree` of
+  that target with this head is clean, so no second replay was required.
+
+  `ortho_config` resolves to 0.10.0 in the workspace manifest, the root
+  package, and `Cargo.lock`, and the root CLI calls only the 0.10.0
+  `LocalizedParse`, `Localizer`, and `is_display_request` interfaces.
+
+  Gate evidence on `807a4486`: `make check-fmt` passes (10 s); `make typecheck`
+  passes after queueing 77 m 34 s in compiler admission; `make lint` passes in
+  807 s. The `make test` result is recorded below when the run completes.
 
 To be completed at each milestone boundary and at completion. Before setting
 this plan to `COMPLETE`, reconcile every entry in `Surprises & discoveries`
