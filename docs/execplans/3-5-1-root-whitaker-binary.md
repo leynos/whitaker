@@ -1904,9 +1904,49 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
   package, and `Cargo.lock`, and the root CLI calls only the 0.10.0
   `LocalizedParse`, `Localizer`, and `is_display_request` interfaces.
 
-  Gate evidence on `807a4486`: `make check-fmt` passes (10 s); `make typecheck`
-  passes after queueing 77 m 34 s in compiler admission; `make lint` passes in
-  807 s. The `make test` result is recorded below when the run completes.
+  `b99f01d6` then rebuilt the lock file and recorded this replay. The final
+  candidate changes 138 files for +7,255/-900, a net **+6,355** lines, still
+  inside D-12's ceiling.
+
+  Gate evidence on `b99f01d6`, each gate run once and sequentially, with Cargo
+  and compiler admission allowed to queue:
+
+  - `make check-fmt` — pass in 14 s.
+  - `make typecheck` — pass in 734 s after queueing in compiler admission.
+  - `make lint` — pass (cached; 3 s).
+  - `make test` — pass in 10,675 s: main nextest profile 2,185 passed / 6
+    skipped, the secondary suite 84 passed, and the `dylint_testing` library 19
+    passed.
+  - `make test-workflow-contracts` — pass, 793 tests.
+  - `make markdownlint` — pass, 0 errors over 114 files (36 s), spelling
+    included.
+  - `make nixie` — pass.
+  - `scripts/run-kani.sh whitaker-cli` — `verify_classify_is_total_and_disjoint`
+    verified 360 checks; the three reachability harnesses each produced their
+    expected counterexample.
+  - `scripts/run-verus.sh cli` — `verification results:: 4 verified, 0 errors`.
+
+  The four negative controls were re-run on `b99f01d6` after the rebase,
+  because the replay and the `ortho_config` 0.10.0 port changed the code each
+  one guards. Each mutation was applied alone, the targeted check run, and the
+  file restored to its exact `HEAD` blob (verified by `git hash-object`
+  equalling `git rev-parse HEAD:<path>`):
+
+  - `EP-INV-DISPATCH`: classifying `Ls` as `Forward` made
+    `verify_classify_is_total_and_disjoint` fail with
+    `assertion failed: result == Class::Subcommand(Subcommand::Ls)`; the script
+    exited 1.
+  - `EP-LEM-DISPATCH`: widening `is_display` to include the subcommand class
+    made the Verus proof report `3 verified, 1 errors`, with the failed
+    postcondition `!(is_subcommand(tokens) && is_display(tokens))`.
+  - `EP-INV-PARITY`: forcing `skip.no_update = false` in the mapping made the
+    4,096-case property test fail at case 12, `["--no-update"]`, with
+    `no_update: false` against the expected `no_update: true`. The generated
+    proptest regression file was deleted, since it recorded a deliberately
+    broken candidate.
+  - `EP-INV-EXIT`: mapping a display request to `Outcome::UsageError` made
+    `root_help_exits_successfully` fail with actual status 2 against expected
+    status 0.
 
 To be completed at each milestone boundary and at completion. Before setting
 this plan to `COMPLETE`, reconcile every entry in `Surprises & discoveries`
