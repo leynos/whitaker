@@ -7,10 +7,38 @@ use crate::{
     facts::{BodyOffset, LiteralBody},
 };
 
+pub mod gate;
 #[cfg(test)]
 mod props;
 #[cfg(test)]
 mod tests;
+
+/// Recovers the body of a snippet that is exactly one cooked string literal.
+///
+/// The adapter uses this to turn a source span back into the bytes the scanner
+/// and the rewriter operate on. Returning `None` for anything that is not one
+/// complete, suffix-free cooked literal is what keeps a stale or partial span
+/// from being classified as if it were the literal the caller expected.
+///
+/// # Examples
+///
+/// ```
+/// use whitaker_string_literals::rewrite::cooked_literal_body;
+///
+/// assert_eq!(
+///     cooked_literal_body("\"a\\\nb\"").map(|body| body.as_str()),
+///     Some("a\\\nb")
+/// );
+/// assert!(cooked_literal_body("r\"a\"").is_none());
+/// ```
+#[must_use]
+pub fn cooked_literal_body(snippet: &str) -> Option<LiteralBody<'_>> {
+    if !is_single_cooked_string_token(snippet) {
+        return None;
+    }
+    let body = snippet.get(1..snippet.len().checked_sub(1)?)?;
+    Some(LiteralBody::new(body))
+}
 
 /// A source-preserving `concat!` rewrite that passed the domain checks.
 ///

@@ -1,0 +1,10 @@
+// run-rustfix
+#![warn(string_continuation_style)]
+
+#[path = "support.rs.inc"]
+mod support;
+
+const VALUE: &str = concat!("one ", "two ", "three");
+const _: () = assert!(support::same_bytes(VALUE.as_bytes(), b"one two three"));
+
+fn main() {}

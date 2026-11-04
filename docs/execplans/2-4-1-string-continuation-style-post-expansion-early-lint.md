@@ -43,10 +43,10 @@ asymmetric: it fires only when the replacement is proven safe.
 
 Observable success:
 
-1. `cargo nextest run -p string_continuation_style` passes, including a UI
-   matrix that pins both the firing and the non-firing cases, and in which
-   every machine-applicable suggestion is actually applied by `rustfix`,
-   recompiled, and asserted to preserve the evaluated string.
+1. `cargo nextest run -p string_continuation_style --all-features` passes,
+   including a UI matrix that pins both the firing and the non-firing cases,
+   and in which every machine-applicable suggestion is actually applied by
+   `rustfix`, recompiled, and asserted to preserve the evaluated string.
 2. The suite library reports the new lint:
    `cargo dylint list` includes `string_continuation_style`.
 3. `docs/users-guide.md` documents the rule, its exemptions, its
@@ -134,6 +134,16 @@ Hard invariants. Violating one requires escalation, not a workaround.
   fires on, stop and present options with trade-offs.
 
 ## Risks
+
+- **Risk: validation and delegation services are currently unreachable.**
+  Severity: high. Likelihood: uncertain. `build-limits-status` returned
+  `Operation not permitted` for the supervisor socket; the escalated query was
+  interrupted before producing a result. CodeGraph and context-pack MCP calls
+  returned `user cancelled MCP tool call`, so the required source navigation
+  and source-anchored scrutineer hand-off are not available yet. Mitigation:
+  continue source work using the checked-in plan, pinned compiler sources, and
+  Leta where it starts; do not compile, commit, delegate, or claim gates until
+  the required services respond.
 
 - **Risk: a literal captured by a `$l:literal` macro matcher looks
   root-context and is not.** Severity: high. Likelihood: high. This is the
@@ -255,6 +265,48 @@ Hard invariants. Violating one requires escalation, not a workaround.
       after the scope audit. Proceed with the milestones already specified in
       this plan despite the recorded branch-wide file and line counts. Retain
       the adapter size limit and all other tolerances and constraints.
+- [x] (2026-11-01) Resumed from the exact tracked branch head. The existing
+      worktree contains uncommitted pure rewrite-gate and configuration work;
+      no EP-M2 adapter or UI matrix is present yet. The required build
+      supervisor status query and codegraph/context-pack calls are unavailable,
+      so Rust validation and agent hand-off remain pending while source work
+      continues.
+- [x] (2026-11-01) The first resumed implementation pass added a partial
+      adapter and EP-M2 UI fixtures, plus a draft EP-M3 position gate. The
+      adapter `src/` tree reached 1,400 lines, exceeding the 900-line
+      stop-and-escalate tolerance. Implementation stopped and the owner then
+      directed continuation; see `DEC-017` for the bounded response.
+- [ ] (2026-11-01) Resume within the existing 900-line cap. Stage EP-M3 after
+      EP-M2, and keep private unit tests under `tests/support` with `#[path]`
+      declarations, following existing repository practice. The EP-M2 source
+      tree is at the 900-line cap. The adapter sends recovered cooked bodies
+      through the pure classifier and checks evaluated values before emitting;
+      literal-pattern expressions are excluded from its positive candidate
+      set. The wrapper-depth matrix includes expanded let, item, statement,
+      derive, and nested-expansion fixtures. The UI harness supplies machine
+      applicability only to prove `run-rustfix`; the shipped default remains
+      manual. `make fmt` and `make check-fmt` pass. The first full package run
+      compiled the adapter and exercised the unit tests; remaining UI setup
+      evidence is recorded below. No commit has been made.
+- [ ] (2026-11-03) The first compiler-backed EP-M2 UI run reached all 18
+      fixtures after the harness switched to Whitaker's toolchain-qualified
+      runner. That run identified edition and proc-macro auxiliary metadata
+      mistakes, an identity-only nested-expansion fixture, and six missing
+      diagnostic goldens. The auxiliary now uses the standard proc-macro UI
+      directives; the C-string fixture's edition header now uses the parser's
+      unspaced `// edition:2024` form. The nested fixture now
+      creates blocks and statements in both macro expansions. The six
+      diagnostics were reviewed against their `.fixed` replacements and added
+      explicitly. In the subsequent package run, the adapter compiled, 35
+      non-UI tests passed, and 17/18 main UI fixtures passed. The six
+      run-rustfix fixtures, derive output, and nested expansion all passed;
+      only the edition header failed because `// edition: 2024` emitted
+      `--edition= 2024`. Nextest exhausted its configured retries and stopped
+      before the three locale runs. The package log is
+      `/tmp/test-whitaker-2-4-1-string-continuation-style-post-expansion-early-lint-package.out`.
+      The locale directories are now run sequentially from one serialized test
+      entry, with per-directory panic capture so a missing locale golden does
+      not prevent later locales from producing output.
 - [x] Step 2: scaffold both crates. Commit `ea36d5e9`.
 - [x] EP-M1: pure domain crate.
 - [ ] EP-M2: plain cooked string literals.
@@ -754,6 +806,28 @@ Note that this is the `rustc-src` component, not the `rust-src` component at
   explicitly because the first draft quoted the idiom without naming the hook,
   and a literal reader could reasonably have put it in `check_expr`.
   Date/Author: 2026-08-21, planning agent.
+
+- **DEC-017: Resume implementation without increasing the adapter cap.** After
+  the 900-line tolerance was reached, the owner directed implementation to
+  continue. Keep the cap and the accepted milestone scope: finish and validate
+  EP-M2 before restoring EP-M3, and place private unit/UI test modules under
+  `crates/string_continuation_style/tests/support`, included from their owning
+  modules with `#[path]`. This matches existing repository practice and keeps
+  those tests in the same `cfg(test)` targets; it does not omit test coverage.
+  If the production adapter later exceeds 900 lines, stop and present concrete
+  design options instead of raising the limit. Date/Author: 2026-11-01,
+  implementation agent following the owner's continuation instruction.
+
+- **DEC-018: Keep span/walk callback generation local to `WrapperDepth`.** A
+  repository search found no existing helper for the repeated visitor shape
+  that wraps one AST node's span and invokes its matching `visit::walk_*`
+  function. The small `visit_with_span!` macro is therefore local to
+  `driver/depth.rs`; it is permitted only for callbacks with that exact
+  invariant. Callbacks with extra state, alternate spans, or special traversal
+  rules remain explicit methods. The macro is not a repository-wide extension
+  point. Rationale: reduce mechanical duplication without hiding the audited
+  list of span-bearing wrapper kinds. Date/Author: 2026-11-03, implementation
+  agent.
 
 ## Outcomes & retrospective
 
@@ -1492,7 +1566,8 @@ in the same commit as the code it constrains.
   note, a help, one secondary label per join, and a whole-literal `concat!()`
   suggestion whose applicability follows `DEC-013`. Byte strings, C strings,
   raw strings, layout trims, macro-captured literals, and generated source
-  files produce silence. Diagnostics are localized in `en-GB`, `cy`, and `gd`.
+  files produce silence. Diagnostics, including the suggestion descriptor, are
+  localized in `en-GB`, `cy`, and `gd`.
 - **Requirements discharged.** RFC-0002 §Ordinary string expressions,
   §Diagnostic, and the plain-literal rows of §Decision matrix. `LEM-SPAN-1`,
   `LEM-DEPTH-1`, `LEM-EMIT-1`, `LEM-FIX-1`, `LEM-REWRITE-2` layer (b).
@@ -1505,10 +1580,13 @@ in the same commit as the code it constrains.
   `fail_trim_and_join`, `fail_adjacent_joins`, `pass_leading_layout_trim`,
   `pass_trailing_layout_trim`, `pass_byte_and_c_strings`, `pass_raw_strings`,
   `pass_real_newline`, `pass_literal_in_pattern`, `pass_literal_macro_capture`,
-  `pass_expanded_item`, `pass_generated_source_file` all pass, each `fail_*`
-  with a `.fixed` file under `// run-rustfix`; `ui-cy`, `ui-gd`, and
+  `pass_expanded_item`, `pass_expanded_statement`, `pass_derive_generated_impl`,
+  `pass_nested_expansion`, and `pass_generated_source_file` all pass, each
+  `fail_*` with a `.fixed` file under `// run-rustfix`; `ui-cy`, `ui-gd`, and
   `ui-fallback` locale smokes pass; every silence fixture's paired control has
-  been run and observed to fail. `EV-M2-cost`:
+  been run and observed to fail. The UI runner explicitly configures
+  `applicability = "machine"` for the rustfix proof; separate unit coverage
+  keeps the shipped default at `MaybeIncorrect`. `EV-M2-cost`:
   `time cargo dylint --lib string_continuation_style` over one medium crate,
   before and after.
 - **Conformance check.** Applying `fail_plain_join`'s suggestion produces
@@ -1727,7 +1805,7 @@ exactly where that discipline fails under time pressure — which is why `EP-M3`
 `insta` snapshot exists as a second, independently blessable artefact.
 
 ```bash
-cargo nextest run -p string_continuation_style ui 2>&1 \
+cargo nextest run -p string_continuation_style --all-features ui 2>&1 \
   | tee "/tmp/ui-whitaker-$(git branch --show-current).out"
 ```
 
@@ -1771,11 +1849,9 @@ Edit, in this order:
     fixture then enforces the bug. This retroactively protects
     `bumpy_road_function` too.
 11. `common/locales/{en-GB,cy,gd}/string_continuation_style.ftl` — the message,
-    `.note`, `.help`, and `.label`. Decide the `.label` argument shape now:
-    adding a `{ $ordinal }` placeable later is a breaking change to three
-    Fluent files, the placeable-parity test, and every golden at once. Put a
-    one-line comment at the head of each file naming the dependent fixture
-    directories.
+    `.note`, `.help`, `.label`, and `.suggestion`. The `.label` takes no
+    arguments. Put a one-line comment at the head of each file naming the
+    dependent fixture directories.
 12. `README.md` — the lint table row and the "ships nine standard lints" count.
 13. `docs/users-guide.md` — a `### string_continuation_style` subsection
     covering what fires, what does not, the `DEC-013` configuration table, and
@@ -2346,3 +2422,18 @@ Dev-dependencies: `rstest`, `rstest-bdd`, `rstest-bdd-macros`, `proptest`,
 
 Both crates set `[lints] workspace = true` and additionally deny
 `arithmetic_side_effects`.
+
+## Revision note
+
+On 2026-11-01, recorded the owner's instruction to resume after the source-size
+threshold was reached. The 900-line cap remains in force; EP-M3 is staged after
+EP-M2 and test modules are kept under `tests/support` through path modules. The
+M2 wrapper-depth matrix covers expanded lets, items, statements,
+derive-generated implementations, and nested expansion. Diagnostic wording,
+including the suggestion descriptor, is translated in all three locales. The
+adapter uses the pure domain classifier and value-preservation gate. The UI
+harness now enables machine applicability only for rustfix verification; the
+production default remains manual. Pattern literals are omitted from the
+positive candidate set. Formatting passes. Compiler-backed validation and
+generated diagnostic goldens remain pending because build admission cannot be
+queried.

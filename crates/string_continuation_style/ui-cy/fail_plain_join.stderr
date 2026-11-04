@@ -1,0 +1,27 @@
+warning: Cysylltwch linellau ffisegol y llinyn wedi'i goginio hwn â `concat!()`.
+  --> $DIR/fail_plain_join.rs:3:21
+   |
+LL |    const VALUE: &str = "alpha /
+   |   _____________________^      -
+   |  |____________________________|
+LL | ||     beta";
+   | ||_-_______^ help: disodli ag ymadrodd `concat!()`: `concat!("alpha ", "beta")`
+   | |__|
+   |    uniad llinell ffynhonnell
+   |
+note: Mae'r llinell newydd ddianc yn dileu'r toriad llinell a'r mewnoliad dilynol, gan guddio'r ffin rhwng y darnau mewn un llythrennol.
+  --> $DIR/fail_plain_join.rs:3:21
+   |
+LL |   const VALUE: &str = "alpha /
+   |  _____________________^
+LL | |     beta";
+   | |_________^
+   = help: Rhannwch y llinyn wedi'i goginio yn ddadleuon `concat!()` wrth bob uniad llinell ffynhonnell.
+note: the lint level is defined here
+  --> $DIR/fail_plain_join.rs:1:9
+   |
+LL | #![warn(string_continuation_style)]
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: 1 warning emitted
+

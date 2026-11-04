@@ -13,6 +13,7 @@ crate-type = ["cdylib", "rlib"]
 default = []
 dylint-driver = [
     "dep:dylint_linting",
+    "dep:camino",
     "dep:fluent-templates",
     "dep:log",
     "dep:rustc_ast",
@@ -27,6 +28,7 @@ dylint-driver = [
 constituent = ["dylint-driver", "dylint_linting/constituent"]
 
 [dependencies]
+camino = { workspace = true, optional = true }
 dylint_linting = { workspace = true, optional = true }
 fluent-templates = { workspace = true, optional = true }
 log = { workspace = true, optional = true }
@@ -40,7 +42,7 @@ whitaker = { workspace = true, features = ["dylint-driver"], optional = true }
 whitaker_string_literals = { path = "../whitaker_string_literals", optional = true }
 
 [dev-dependencies]
-camino = { workspace = true }
+cap-std = { workspace = true }
 dylint_testing = { workspace = true }
 googletest = { workspace = true }
 pretty_assertions = { workspace = true }
