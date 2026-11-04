@@ -32,18 +32,34 @@ fn rejects_invalid_values_and_unknown_keys(
     Ok(())
 }
 
+/// Assert that loading under `env` rejects the configuration in `root`.
+///
+/// # Errors
+///
+/// Propagates the fixture's temporary-directory error, and reports `message`
+/// when the injected environment is accepted instead of rejected.
+fn assert_rejected_by_environment(
+    root_res: std::io::Result<TempDir>,
+    env: MapEnv,
+    message: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let root = root_res?;
+    ensure(
+        load_with_sources(&sources(&root, Arc::new(env), json!({}))).is_err(),
+        message,
+    )
+}
+
 /// Reject invalid presentation settings before returning application values.
 #[rstest::rstest]
 fn rejects_unknown_output_policy(
     #[from(root)] root_res: std::io::Result<TempDir>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let root = root_res?;
-    let env = Arc::new(MapEnv::new().with_var("WHITAKER_OUTPUT_COLOUR", "sometimes"));
-    ensure(
-        load_with_sources(&sources(&root, env, json!({}))).is_err(),
+    assert_rejected_by_environment(
+        root_res,
+        MapEnv::new().with_var("WHITAKER_OUTPUT_COLOUR", "sometimes"),
         "an unknown colour policy should be rejected",
-    )?;
-    Ok(())
+    )
 }
 
 /// Reject misspelled command namespaces instead of silently discarding them.
@@ -190,11 +206,9 @@ fn rejects_non_unicode_canonical_values(
     #[from(root)] root_res: std::io::Result<TempDir>,
     #[case] variable: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let root = root_res?;
-    let env = Arc::new(MapEnv::new().with_var(variable, non_unicode_value()));
-    ensure(
-        load_with_sources(&sources(&root, env, json!({}))).is_err(),
+    assert_rejected_by_environment(
+        root_res,
+        MapEnv::new().with_var(variable, non_unicode_value()),
         "a non-Unicode value should be rejected",
-    )?;
-    Ok(())
+    )
 }

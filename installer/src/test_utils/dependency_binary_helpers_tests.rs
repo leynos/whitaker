@@ -82,19 +82,24 @@ fn repository_verification_call_skips_executor_for_dylint_link(#[case] verificat
     );
 }
 
+/// Return the repository-install configuration shared by the cases below.
+///
+/// Both cases install from a repository whose asset is present and whose
+/// version probe succeeds, so they differ only in the binary being installed.
+fn repository_context_config() -> ExpectedCallConfig<'static> {
+    ExpectedCallConfig {
+        is_binstall_available: false,
+        has_repository_context: true,
+        is_repository_asset_missing: false,
+        repository_verification: RepositoryVerification::Succeeds,
+        cargo_binstall_failure: None,
+        cargo_install_failure: None,
+    }
+}
+
 #[test]
 fn expected_calls_include_repository_probe_for_cargo_dylint() -> Result<(), String> {
-    let calls = expected_calls(
-        "cargo-dylint",
-        &ExpectedCallConfig {
-            is_binstall_available: false,
-            has_repository_context: true,
-            is_repository_asset_missing: false,
-            repository_verification: RepositoryVerification::Succeeds,
-            cargo_binstall_failure: None,
-            cargo_install_failure: None,
-        },
-    )?;
+    let calls = expected_calls("cargo-dylint", &repository_context_config())?;
 
     assert_repository_probe_recorded(&calls);
     Ok(())
@@ -102,17 +107,7 @@ fn expected_calls_include_repository_probe_for_cargo_dylint() -> Result<(), Stri
 
 #[test]
 fn expected_calls_omit_executor_verification_for_dylint_link() -> Result<(), String> {
-    let calls = expected_calls(
-        "dylint-link",
-        &ExpectedCallConfig {
-            is_binstall_available: false,
-            has_repository_context: true,
-            is_repository_asset_missing: false,
-            repository_verification: RepositoryVerification::Succeeds,
-            cargo_binstall_failure: None,
-            cargo_install_failure: None,
-        },
-    )?;
+    let calls = expected_calls("dylint-link", &repository_context_config())?;
 
     assert_binstall_probe_recorded(&calls);
     Ok(())
