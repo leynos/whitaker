@@ -103,8 +103,8 @@ mod tests {
     #[rstest]
     #[case::two_fragments("red\\\n blue", &["red", "blue"], true)]
     #[case::empty_fragment("ab", &["a", "", "b"], true)]
-    #[case::dropped_character("alpha", &["alph"], false)]
-    #[case::duplicated_character("alpha", &["aalpha"], false)]
+    #[case::dropped_character("bravo", &["brav"], false)]
+    #[case::duplicated_character("bravo", &["bbravo"], false)]
     #[case::split_escape("\\u{41}", &["\\u{4", "1}"], false)]
     fn preserves_value_compares_evaluated_bytes(
         #[case] original: &str,
