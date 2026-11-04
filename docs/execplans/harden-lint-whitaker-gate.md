@@ -1586,10 +1586,13 @@ published head — is met. Seven `workflow_dispatch` runs have concluded
 that head then raised eleven findings across the configuration, the guards and
 the documentation. Repairs for all eleven are in the commit that carries this
 text, so that commit is a new candidate and M4's evidence does not transfer to
-it. That fresh observation has since been made: run `41794314932` concluded
-`success` on `25aa211b`, with `linux-full` and `windows-compat` both green.
-The only commit after it is the documentation row recording that result, which
-changes no gate input.
+it. That fresh observation has since been made on every head that carried a
+Rust change: run `41791718849` on `b8fff90d`, run `41794314932` on `25aa211b`
+and run `41796910336` on `359d071f` each concluded `success`, with `linux-full`
+and `windows-compat` green and `coverage-check` skipped for the dispatch event.
+Commits after `b8fff90d` touch only this plan, which is a gate input for
+`markdownlint` alone, so the local `check-fmt` and `markdownlint` evidence on
+the tip covers what those commits can affect.
 
 An earlier revision of this section said "nothing is committed or pushed". That
 was true when it was written and false by 2026-11-03: `adc974c9` is on
