@@ -4150,7 +4150,12 @@ advisory lock serializes ownership changes, and an owner-liveness lock prevents
 reclaiming a live owner. Missing lock paths count as released during cleanup;
 owner tokens prevent an old holder from deleting a successor. A lock directory
 becomes eligible for stale recovery once it is older than five minutes, and
-acquisition waits up to six minutes before returning a timeout. The
+acquisition waits up to 25 minutes before returning a timeout — longer than the
+stale window, so an abandoned lock is reclaimed rather than timing out a
+waiter. The 25 minutes are the expected hold time, not a second stale window:
+an owner compiles an example through nested Cargo while holding the lock, so a
+six-minute bound reported a healthy owner as a timeout. The tests supply their
+own limits rather than inheriting this one. The
 [timeout policy](#test-timeouts-four-tiers-outermost-last) explains the other
 bounds.
 
@@ -4247,9 +4252,9 @@ fn serial_dylint_ui_filter_captures_integration_ui_binaries(
 }
 ```
 
-Two properties of that example are worth copying. Both profiles are covered,
-because `profile.ci` is what the Windows lane runs and each profile declares
-its own copy of the clause. And the filter is *evaluated*, not searched:
+Two properties of that example are worth copying. Both profiles are covered
+because `profile.ci` is what the Windows lane runs, and both profiles declare
+the clause. And the filter is *evaluated*, not searched:
 `selects` answers whether a specific identity is captured, which is the
 question the configuration exists to answer.
 
@@ -5015,7 +5020,10 @@ tier went.
 
 *Table: the timers that can end a run, innermost first.*
 
-Each tier must sit above the one before it.
+Each tier must sit above the one before it. Within the innermost tier the
+per-harness overrides are a floor scheme, not independent budgets: a test may
+exceed the base allowance only because a more specific override raises it, so a
+new allowance has to clear the tier below it as well as the one above.
 
 ### What was missing
 

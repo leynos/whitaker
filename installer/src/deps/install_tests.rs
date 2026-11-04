@@ -147,6 +147,11 @@ const MSRV_REFUSAL: &str = concat!(
     "--skip-deps",
     "the advice should name the escape hatch for a manually installed tool"
 )]
+#[case::both_tools_before_skip_deps(
+    "`cargo-dylint` and `dylint-link`",
+    "`--skip-deps` stops checking both tools, so the advice must name both, not only the failing \
+     one"
+)]
 fn source_install_failure_message_advises_on_a_version_refusal(
     #[case] fragment: &str,
     #[case] why: &str,

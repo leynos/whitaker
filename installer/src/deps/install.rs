@@ -392,10 +392,24 @@ fn source_install_failure_message(
     format!(
         "{message}\n{} needs a newer Rust toolchain to build from source. Install one with \
          `rustup toolchain install stable`, then run `cargo +stable install {version_flag}{}` and \
-         rerun the installer. Alternatively install a prebuilt copy of the tool yourself and \
-         rerun the installer with `--skip-deps`.",
-        tool.package, tool.package,
+         rerun the installer. Alternatively install prebuilt copies of {} yourself and rerun the \
+         installer with `--skip-deps`, which skips the availability check for every tool.",
+        tool.package,
+        tool.package,
+        dependency_tool_list(),
     )
+}
+
+/// Render every tool `--skip-deps` stops checking as one prose list.
+///
+/// Generated from [`DEPENDENCY_TOOLS`] so that adding a third tool cannot
+/// leave the advice naming only the one whose build failed.
+fn dependency_tool_list() -> String {
+    DEPENDENCY_TOOLS
+        .iter()
+        .map(|tool| format!("`{}`", tool.package))
+        .collect::<Vec<_>>()
+        .join(" and ")
 }
 
 /// Returns whether `message` is Cargo refusing a dependency's `rust-version`.
