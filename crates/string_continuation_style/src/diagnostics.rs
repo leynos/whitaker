@@ -43,7 +43,7 @@ pub(crate) fn emit_rewrite(
         args: &arguments,
     };
     let messages =
-        safe_resolve_message_set(localizer, resolution, noop_reporter, || fallback_messages());
+        safe_resolve_message_set(localizer, resolution, noop_reporter, fallback_messages);
     let labels = rewrite
         .join_spans
         .into_iter()

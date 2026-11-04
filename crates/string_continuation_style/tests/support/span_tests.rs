@@ -28,8 +28,11 @@ fn exact_token_range_maps_to_the_exact_body_span() {
 #[test]
 fn malformed_ranges_and_token_lengths_fail_closed() {
     let token_span = DUMMY_SP.with_hi(rustc_span::BytePos(6));
+    // Built from variables: a reversed range is the input under test, and
+    // writing it as a literal would trip `reversed_empty_ranges`.
+    let (start, end) = (3, 2);
 
-    assert_eq!(body_range_span(token_span, 4, 3..2), None);
+    assert_eq!(body_range_span(token_span, 4, start..end), None);
     assert_eq!(body_range_span(token_span, 4, 0..5), None);
     assert_eq!(body_range_span(token_span, 3, 0..1), None);
 }
