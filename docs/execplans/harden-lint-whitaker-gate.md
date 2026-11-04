@@ -1007,6 +1007,42 @@ each push rather than copying an earlier lease into the command.
   `make check-fmt` passed; and `make test-nextest-filter` still reports
   41/41, so the rename broke no reference.
 
+### The review round on `5767537108`
+
+CodeRabbit's CHANGES_REQUESTED review of `c8858e8d` carried one inline finding
+and five outside-diff ones plus a grammar remark it labelled "unverified". All
+six were checked against the tree rather than assumed. Four were real and are
+repaired in `35513b63` and `4eedf3cd`:
+
+- The timeout prose said the profiles declare "the same four bounds" when only
+  three are nextest scopes; the fourth is the workflow job timeout, which no
+  profile can set. Restated as a floor scheme with the job timeout named as the
+  outermost bound.
+- Three first-person pronouns had reached PR-added prose — `developers-guide.md`
+  around the profile explanation, and this plan at "my command" and "pinned by
+  us at all". The style guide forbids them outside `README.md`.
+- The 25-minute example-harness lock ceiling was described as if it were a
+  second stale window. It is the expected hold time, and the rationale is that
+  an owner compiles through nested Cargo while holding the lock and
+  `.config/nextest.toml` budgets 20 minutes for that build.
+- The version-refusal advice named only the failing tool although
+  `--skip-deps` stops checking both. `dependency_tool_list()` now renders the
+  pair from `DEPENDENCY_TOOLS`, and `docs/users-guide.md` gained the failure
+  mode and its remedies.
+
+The sixth — a compile-fail test for `#[must_use]` on
+`DiagnosticMessageSet::help` — is rebutted rather than actioned. `git show
+5a08c6ff:common/src/i18n/diagnostics.rs` shows the attribute already present on
+the base, and the file carries seven `#[must_use]` on both sides; this branch
+moved them after their doc comments because `function_attrs_follow_docs`
+requires it, and rustfmt shows those moves as edits. A compile-fail harness for
+attributes the branch does not add would be new scope, not owed coverage.
+
+The same review round exposed a claim of my own that was false: a previous
+revision of this plan described `f2686a6d` as documentation-only. It touches
+fifteen files. The retrospective above now says so and states the gate set that
+follows from it.
+
 ### The `make test` wrapper trap is environmental, not candidate
 
 Two `make test` runs on this candidate failed in the Makefile's own cleanup
