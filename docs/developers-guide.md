@@ -4088,7 +4088,9 @@ decision is in
   port.
 - Adapters return the closest honest observation and translate infrastructure
   failures into `ClippySnapshotError`; they do not decide whether an
-  observation is acceptable.
+  observation is acceptable. The exceptions are the checks only an adapter can
+  make: a failed `git bundle verify`, a failed staging clone, and metadata that
+  cannot be decoded or names an unknown schema are reported as `Invalid`.
 - Orchestration runs through `SnapshotSupport<'_>`, a struct of borrowed
   ports. `SnapshotSupport::production()` composes the process-wide adapters;
   the public entry points use it and the `*_with` variants take explicit
