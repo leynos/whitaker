@@ -8,12 +8,33 @@ use super::{
         error::ClippySnapshotError,
         fakes::FakeStore,
         generation::GenerationMetadata,
-        install::install_with,
+        install::{from_sidecar_with, install_with},
         policy::StructureEvidence,
         verify::check_installed_with,
     },
     support::{OTHER, Ports, TIP, artefact, digest, manifest},
 };
+
+#[test]
+fn the_sidecar_is_read_through_the_store() {
+    let mut ports = Ports::accepting();
+    let recorded = digest('b');
+    ports.store.text = Ok(format!("{recorded}  snapshot.bundle\n"));
+
+    let artefact = from_sidecar_with(&ports.store, Utf8Path::new("snapshot.bundle"), &manifest())
+        .expect("the scripted sidecar names a digest");
+
+    assert_eq!(artefact.sha256, recorded);
+    assert_eq!(
+        ports.store.calls(),
+        vec![
+            "is_present_file snapshot.bundle".to_owned(),
+            "absolute snapshot.bundle".to_owned(),
+            "read_to_string snapshot.bundle.sha256".to_owned(),
+        ],
+        "the sidecar must be read through the port, not directly from disk"
+    );
+}
 
 #[test]
 fn a_digest_mismatch_is_rejected_before_any_other_call() {

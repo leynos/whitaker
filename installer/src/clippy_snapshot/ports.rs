@@ -146,6 +146,13 @@ pub(crate) trait SnapshotStore {
     /// Returns [`ClippySnapshotError::Io`] when the file cannot be read.
     fn digest(&self, path: &Utf8Path) -> Result<Sha256Digest, ClippySnapshotError>;
 
+    /// Read `path` as UTF-8 text.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ClippySnapshotError::Io`] when the file cannot be read.
+    fn read_to_string(&self, path: &Utf8Path) -> Result<String, ClippySnapshotError>;
+
     /// Hold an exclusive lock on `root` until the guard drops.
     ///
     /// # Errors
