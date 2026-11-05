@@ -8,4 +8,6 @@
 pub mod classification;
 pub mod continuation;
 pub mod facts;
+#[cfg(test)]
+mod props;
 pub mod rewrite;

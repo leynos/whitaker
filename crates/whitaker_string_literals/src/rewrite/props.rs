@@ -5,65 +5,19 @@ use proptest::prelude::*;
 use crate::{
     continuation::{Continuation, joins_only},
     facts::LiteralBody,
+    props::body_with_continuations,
     rewrite::{
         ConcatRewrite,
         gate::{decoded_value, preserves_value},
     },
 };
 
-fn source_piece() -> impl Strategy<Value = String> {
-    prop::collection::vec(
-        prop_oneof![
-            Just("alpha"),
-            Just("λ"),
-            Just("🦄"),
-            Just("\\\""),
-            Just("\\\\"),
-            Just("\\u{1F984}"),
-            Just("{{"),
-            Just("}}"),
-        ],
-        1..4,
-    )
-    .prop_map(|pieces| pieces.concat())
-}
-
-fn append_continuation(body: &mut String, whitespace: (u8, u8, u8)) {
-    let (spaces, blank_lines, tabs) = whitespace;
-    body.push('\\');
-    body.push('\n');
-    for _ in 0..spaces {
-        body.push(' ');
-    }
-    for _ in 0..blank_lines {
-        body.push('\n');
-    }
-    for _ in 0..tabs {
-        body.push('\t');
-    }
-}
-
-fn body_with_joins() -> impl Strategy<Value = (String, usize)> {
-    prop::collection::vec(source_piece(), 2..=6).prop_flat_map(|source_fragments| {
-        let join_count = source_fragments.len().saturating_sub(1);
-        (
-            Just(source_fragments),
-            prop::collection::vec((1_u8..4, 0_u8..3, 0_u8..3), join_count),
-        )
-            .prop_map(|(body_fragments, whitespace)| {
-                let mut body = String::new();
-                for (index, fragment) in body_fragments.iter().enumerate() {
-                    body.push_str(fragment);
-                    whitespace
-                        .get(index)
-                        .copied()
-                        .into_iter()
-                        .for_each(|settings| append_continuation(&mut body, settings));
-                }
-                (body, body_fragments.len().saturating_sub(1))
-            })
-    })
-}
+/// The fragment alphabet this suite generates.
+///
+/// Wider than the range suite's by the emoji and its `\u{...}` spelling,
+/// because these bodies are decoded and compared, so the escapes that only
+/// differ after decoding need to appear.
+const ALPHABET: &[&str] = &["alpha", "λ", "🦄", "\\\"", "\\\\", "\\u{1F984}", "{{", "}}"];
 
 fn remove_ranges(body: &str, joins: &[Continuation]) -> Option<String> {
     let mut output = String::new();
@@ -113,7 +67,7 @@ fn assert_preserved(body: &str, expected_joins: usize) -> Result<(), TestCaseErr
 proptest! {
     #[test]
     fn rewrites_preserve_source_spelling_and_evaluated_value(
-        (body, expected_joins) in body_with_joins()
+        (body, expected_joins) in body_with_continuations(ALPHABET)
     ) {
         assert_preserved(&body, expected_joins)?;
     }
@@ -157,7 +111,7 @@ fn deterministic_body(join_count: usize, has_non_bmp: bool) -> String {
     let mut body = String::new();
     for fragment in 0..=join_count {
         if fragment > 0 {
-            append_continuation(&mut body, (1, 0, 0));
+            crate::props::append_continuation(&mut body, (1, 0, 0));
         }
         if has_non_bmp && fragment == 0 {
             body.push('🦄');

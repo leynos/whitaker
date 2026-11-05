@@ -3,60 +3,17 @@
 use proptest::prelude::*;
 
 use super::Continuation;
-use crate::facts::{BodyOffset, LiteralBody};
+use crate::{
+    facts::{BodyOffset, LiteralBody},
+    props::body_with_continuations,
+};
 
-fn source_piece() -> impl Strategy<Value = String> {
-    prop::collection::vec(
-        prop_oneof![
-            Just("alpha"),
-            Just("λ"),
-            Just("\\\""),
-            Just("\\\\"),
-            Just("{{"),
-            Just("}}"),
-        ],
-        1..4,
-    )
-    .prop_map(|pieces| pieces.concat())
-}
-
-fn append_continuation(body: &mut String, whitespace: (u8, u8, u8)) {
-    let (spaces, blank_lines, tabs) = whitespace;
-    body.push('\\');
-    body.push('\n');
-    for _ in 0..spaces {
-        body.push(' ');
-    }
-    for _ in 0..blank_lines {
-        body.push('\n');
-    }
-    for _ in 0..tabs {
-        body.push('\t');
-    }
-}
-
-fn body_with_continuations() -> impl Strategy<Value = (String, usize)> {
-    prop::collection::vec(source_piece(), 2..=6).prop_flat_map(|source_fragments| {
-        let join_count = source_fragments.len().saturating_sub(1);
-        (
-            Just(source_fragments),
-            prop::collection::vec((1_u8..4, 0_u8..3, 0_u8..3), join_count),
-        )
-            .prop_map(|(body_fragments, whitespace)| {
-                let mut body = String::new();
-                for (index, fragment) in body_fragments.iter().enumerate() {
-                    body.push_str(fragment);
-                    whitespace
-                        .get(index)
-                        .copied()
-                        .into_iter()
-                        .for_each(|settings| append_continuation(&mut body, settings));
-                }
-                let expected_continuations = body_fragments.len().saturating_sub(1);
-                (body, expected_continuations)
-            })
-    })
-}
+/// The fragment alphabet this suite generates.
+///
+/// Deliberately narrower than the rewrite suite's: range checking needs
+/// multi-byte characters and escaped backslashes, but not the unicodescape or
+/// emoji that only matter once the value is decoded.
+const ALPHABET: &[&str] = &["alpha", "λ", "\\\"", "\\\\", "{{", "}}"];
 
 fn assert_scan_well_formed(
     body: &str,
@@ -95,7 +52,7 @@ fn assert_scan_well_formed(
 proptest! {
     #[test]
     fn constructed_bodies_have_ordered_non_overlapping_ranges(
-        (body, expected_count) in body_with_continuations()
+        (body, expected_count) in body_with_continuations(ALPHABET)
     ) {
         let continuations = LiteralBody::new(&body).scan();
         prop_assert!(!continuations.is_empty());
@@ -105,7 +62,7 @@ proptest! {
 
     #[test]
     fn every_generated_continuation_consumes_indented_whitespace(
-        (body, expected_count) in body_with_continuations()
+        (body, expected_count) in body_with_continuations(ALPHABET)
     ) {
         let continuations = LiteralBody::new(&body).scan();
         prop_assert!(!continuations.is_empty());
