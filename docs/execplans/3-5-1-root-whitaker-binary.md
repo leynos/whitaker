@@ -2014,6 +2014,19 @@ workspace. A successful full install is already covered by the installer's own
 full build from the root crate would duplicate that coverage at a large cost
 and would not exercise a different code path.
 
+**Gate evidence for the repair commit.** Commit `625a0600` carries the two P1
+repairs, the bootstrap fixture correction, and the remaining mechanical
+findings. `make fmt`, `make check-fmt`, `make lint` and `make typecheck` all
+exit zero on that tree. `make test` was split into
+`nextest run --partition count:1/2` and `count:2/2` because a single invocation
+of the full suite exceeds the harness's two-hour background cap; the pass runs
+after the partition filter, so each half is a different set of tests rather
+than a repeat. Together they run 2199 workspace tests, all passing, plus 84
+`whitaker_lint_core --no-default-features` tests and 19 `dylint_testing` tests
+that the two invocations each execute in full. The earlier uninterrupted run
+reached 2185 of 2199 with no failures before the cap stopped it, which is
+consistent with the split result.
+
 To be completed at each milestone boundary and at completion. Before setting
 this plan to `COMPLETE`, reconcile every entry in `Surprises & discoveries`
 against `docs/whitaker-cli-design.md`. In particular, `CLI-REQ-FWD` has no
