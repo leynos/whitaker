@@ -353,7 +353,9 @@ fn metadata_is_written_before_the_generation_is_published() {
         .expect("a consistent bundle installs");
 
     assert_eq!(generation, root.join(TIP));
-    let staged = "/root/.incoming-fake/snapshot.git".to_owned();
+    // Derive the staged path rather than spelling it, so the assertion holds
+    // on platforms whose separator is not `/`.
+    let staged = root.join(".incoming-fake").join("snapshot.git");
     assert_eq!(
         ports.metadata.calls(),
         vec![format!("write {staged}")],
