@@ -377,12 +377,14 @@ mod tests {
         /// Check that the digest serializer matches `u64::to_be_bytes`.
         #[test]
         fn big_endian_bytes_match_to_be_bytes(value in any::<u64>()) {
-            let mut expected = [0_u8; 8];
-            let mut remaining = value;
-            for slot in expected.iter_mut().rev() {
-                *slot = (remaining & 0xff) as u8;
-                remaining >>= 8;
-            }
+            // `to_be_bytes` is the independent oracle. Rebuilding the bytes with
+            // the production reverse-iteration loop would let a mistake shared
+            // by both copies pass, and `token_hash` depends on this order.
+            #[expect(
+                clippy::big_endian_bytes,
+                reason = "pinning the digest's big-endian contract needs the standard converter"
+            )]
+            let expected = value.to_be_bytes();
             prop_assert_eq!(u64_big_endian_bytes(value), expected);
         }
     }
