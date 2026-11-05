@@ -12,7 +12,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 
 mod toolchain;
 
-use whitaker_common::test_support::with_env_vars;
+use whitaker_common::test_support::with_env_vars_selected;
 
 use self::toolchain::{CrateName, ensure_toolchain_library};
 
@@ -163,7 +163,7 @@ pub fn run_with_runner(
         CrateName::try_from(crate_name).map_err(|_| HarnessError::EmptyCrateName)?;
     let crate_name_str = crate_name_owned.as_str();
 
-    with_env_vars(absent_runner_env_settings(), || {
+    with_env_vars_selected(absent_runner_env_settings, || {
         ensure_toolchain_library(&crate_name_owned)?;
         runner(crate_name_str, directory.as_ref()).map_err(|message| HarnessError::RunnerFailure {
             crate_name: crate_name_owned.as_str().to_owned(),
@@ -237,10 +237,14 @@ fn runner_env_settings() -> Vec<(&'static str, &'static str)> {
 ///   otherwise absent, so downstream `cargo` invocations resolve vcpkg.
 ///
 /// A value the caller or CI already supplied is left in place, so the scoped
-/// override cannot hide a deliberate setting. The scoped helper holds
-/// `temp_env`'s re-entrant lock for the callback, so runners in one test binary
-/// take turns rather than sharing a process-wide record; a runner that performs
-/// its own scoped environment setup still nests safely on the same thread.
+/// override cannot hide a deliberate setting. The selection runs through
+/// [`with_env_vars_selected`], which holds `temp_env`'s re-entrant lock from
+/// before this query until the callback returns. Runners in one test binary
+/// therefore take turns instead of sharing a process-wide record: a runner
+/// that overlapped another would otherwise see that runner's temporary flag,
+/// select nothing, and then run after the flag was removed. A runner that
+/// performs its own scoped environment setup still nests safely on the same
+/// thread.
 fn absent_runner_env_settings() -> Vec<(&'static str, &'static str)> {
     runner_env_settings()
         .into_iter()

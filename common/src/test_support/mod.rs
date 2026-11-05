@@ -13,9 +13,10 @@
 //!   variables.
 //! - [`ui`]: Discovers fixtures, prepares isolated workspaces, and runs dylint UI tests with
 //!   consistent panic handling.
-//! - [`with_locale`], [`with_env_var`], [`with_env_vars`], and [`with_env_var_removed`]: Scope
-//!   temporary environment mutations (such as `DYLINT_LOCALE` overrides) to a callback so tests
-//!   cannot leak global state between cases.
+//! - [`with_locale`], [`with_env_var`], [`with_env_vars`], [`with_env_vars_selected`], and
+//!   [`with_env_var_removed`]: Scope temporary environment mutations (such as `DYLINT_LOCALE`
+//!   overrides) to a callback so tests cannot leak global state between cases.
+//!   [`with_env_vars_selected`] also chooses the variables under the same lock that applies them.
 
 pub mod decomposition;
 pub mod fixtures;
@@ -125,6 +126,43 @@ pub fn with_env_vars<R>(
         return callback();
     }
     temp_env::with_vars(settings, callback)
+}
+
+/// Runs `callback` with the variables chosen by `select`.
+///
+/// `select` runs while the process-wide environment lock is held, so another
+/// thread's scoped mutation cannot change the answer between the decision and
+/// the mutation. [`with_env_vars`] cannot offer that guarantee: its caller
+/// chooses the variables before the lock is taken, and it skips the lock
+/// entirely when the choice is empty.
+///
+/// Use this when the set of variables to scope depends on the current
+/// environment. Otherwise prefer [`with_env_vars`].
+///
+/// # Examples
+///
+/// ```
+/// use whitaker_common::test_support::with_env_vars_selected;
+///
+/// with_env_vars_selected(
+///     || vec![("WHITAKER_SELECTED_VAR", "1")],
+///     || {
+///         assert_eq!(
+///             std::env::var("WHITAKER_SELECTED_VAR").expect("selected var should be set"),
+///             "1",
+///         );
+///     },
+/// );
+/// ```
+pub fn with_env_vars_selected<R>(
+    select: impl FnOnce() -> Vec<(&'static str, &'static str)>,
+    callback: impl FnOnce() -> R,
+) -> R {
+    // An empty scoped mutation still takes `temp_env`'s re-entrant lock, which
+    // is what serializes the selection against scoped helpers on other threads.
+    temp_env::with_vars(Vec::<(&'static str, Option<&'static str>)>::new(), || {
+        with_env_vars(select(), callback)
+    })
 }
 
 /// Runs `callback` with one environment variable temporarily removed.

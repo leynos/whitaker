@@ -10,7 +10,13 @@ use std::{
 
 use proptest::prelude::*;
 
-use super::{env_test_guard, with_env_var, with_env_var_removed, with_locale};
+use super::{
+    env_test_guard,
+    with_env_var,
+    with_env_var_removed,
+    with_env_vars_selected,
+    with_locale,
+};
 
 const ABSENT_SET_KEY: &str = "WHITAKER_TEST_SUPPORT_ABSENT_SET";
 const REMOVED_KEY: &str = "WHITAKER_TEST_SUPPORT_REMOVED";
@@ -18,6 +24,7 @@ const SET_PANIC_KEY: &str = "WHITAKER_TEST_SUPPORT_SET_PANIC";
 const REMOVE_PANIC_KEY: &str = "WHITAKER_TEST_SUPPORT_REMOVE_PANIC";
 const SCOPED_KEY: &str = "WHITAKER_TEST_SUPPORT_SCOPED";
 const OVERLAPPING_KEY: &str = "WHITAKER_TEST_SUPPORT_OVERLAPPING";
+const SELECTED_KEY: &str = "WHITAKER_TEST_SUPPORT_SELECTED";
 const PROPERTY_KEY: &str = "WHITAKER_TEST_SUPPORT_PROPERTY";
 
 #[derive(Clone, Copy)]
@@ -80,12 +87,12 @@ impl ScopedMutationThread {
 }
 
 /// Starts a thread that holds a scoped value until the test releases it.
-fn spawn_scoped_mutation(value: &'static str) -> ScopedMutationThread {
+fn spawn_scoped_mutation(key: &'static str, value: &'static str) -> ScopedMutationThread {
     let (entered_sender, entered_receiver) = mpsc::channel();
     let (release_sender, release_receiver) = mpsc::channel();
     let (restored_sender, restored_receiver) = mpsc::channel();
     let thread = thread::spawn(move || {
-        with_env_var(OVERLAPPING_KEY, value, || {
+        with_env_var(key, value, || {
             entered_sender
                 .send(())
                 .expect("scoped callback entry must be reported");
@@ -170,7 +177,7 @@ fn with_env_var_removed_restores_a_value_after_a_panic() {
 #[test]
 fn scoped_mutations_wait_for_callback_restoration() {
     let original_value = std::env::var_os(OVERLAPPING_KEY);
-    let first = spawn_scoped_mutation("first");
+    let first = spawn_scoped_mutation(OVERLAPPING_KEY, "first");
     let release_first = ReleaseOnDrop(Some(first.release_sender.clone()));
     first.wait_for_entry("first callback should enter before the second starts");
 
@@ -232,6 +239,65 @@ fn scoped_mutations_wait_for_callback_restoration() {
     first.join();
     second.join();
     assert_eq!(std::env::var_os(OVERLAPPING_KEY), original_value);
+}
+
+/// Check that the selection waits for the current scoped mutation to restore.
+///
+/// Regression: the UI harness chose which variables to scope before taking
+/// the environment lock, and skipped the lock entirely when it chose none. A
+/// runner that overlapped another therefore saw the first runner's temporary
+/// flag, selected nothing, and then ran after the flag had been removed, so
+/// `dylint_testing` copied its default-feature stub over the prepared library.
+#[test]
+fn env_selection_waits_for_callback_restoration() {
+    let original_value = std::env::var_os(SELECTED_KEY);
+    let first = spawn_scoped_mutation(SELECTED_KEY, "first");
+    let release_first = ReleaseOnDrop(Some(first.release_sender.clone()));
+    first.wait_for_entry("first callback should enter before the selection starts");
+
+    let (attempted_sender, attempted_receiver) = mpsc::channel();
+    let (selected_sender, selected_receiver) = mpsc::channel();
+    let selector = thread::spawn(move || {
+        attempted_sender
+            .send(())
+            .expect("selection attempt must be reported");
+        with_env_vars_selected(
+            || {
+                selected_sender
+                    .send(())
+                    .expect("selection evaluation must be reported");
+                // Mirrors the harness's "only supply what is absent" rule.
+                if std::env::var_os(SELECTED_KEY).is_none() {
+                    vec![(SELECTED_KEY, "selected")]
+                } else {
+                    Vec::new()
+                }
+            },
+            || std::env::var_os(SELECTED_KEY),
+        )
+    });
+    attempted_receiver
+        .recv()
+        .expect("selection attempt should start");
+
+    assert!(
+        selected_receiver
+            .recv_timeout(Duration::from_millis(100))
+            .is_err(),
+        "the selection must wait for the first scoped mutation to restore"
+    );
+
+    release_first.release();
+    first.wait_for_restoration("the first value should restore before the selection runs");
+    selected_receiver
+        .recv_timeout(Duration::from_secs(1))
+        .expect("the selection should run after restoration");
+
+    let seen_by_callback = selector.join().expect("selection thread should complete");
+    first.join();
+
+    assert_eq!(seen_by_callback.as_deref(), Some(OsStr::new("selected")));
+    assert_eq!(std::env::var_os(SELECTED_KEY), original_value);
 }
 
 /// Check that nested scoped overrides restore the outer value.
