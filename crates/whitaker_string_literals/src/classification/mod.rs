@@ -1,7 +1,7 @@
 //! Classifies continuations by source context and the content around each escape.
 
 use crate::{
-    continuation::{Continuation, ContinuationKind},
+    continuation::joins_only,
     facts::{CaptureStatus, LiteralContext, LiteralFacts},
     rewrite::ConcatRewrite,
 };
@@ -122,10 +122,7 @@ pub fn classify<'a>(facts: &LiteralFacts<'a>) -> ContinuationDisposition<'a> {
         } => {}
     }
 
-    let joins: Vec<Continuation> = continuations
-        .into_iter()
-        .filter(|continuation| continuation.kind == ContinuationKind::Join)
-        .collect();
+    let joins = joins_only(continuations);
     if joins.is_empty() {
         return ContinuationDisposition::RequireContinuation(
             RequiredReason::LeadingOrTrailingLayoutTrim,

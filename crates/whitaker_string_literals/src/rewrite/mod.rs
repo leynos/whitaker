@@ -3,7 +3,7 @@
 use rustc_lexer::{LiteralKind, Token, TokenKind, tokenize};
 
 use crate::{
-    continuation::{Continuation, ContinuationKind},
+    continuation::{Continuation, ContinuationKind, joins_only},
     facts::{BodyOffset, LiteralBody},
 };
 
@@ -87,11 +87,7 @@ impl<'a> ConcatRewrite<'a> {
             return None;
         }
 
-        let scanned_joins: Vec<_> = body
-            .scan()
-            .into_iter()
-            .filter(|continuation| continuation.kind == ContinuationKind::Join)
-            .collect();
+        let scanned_joins = joins_only(body.scan());
         if joins.is_empty() || joins != scanned_joins.as_slice() {
             return None;
         }

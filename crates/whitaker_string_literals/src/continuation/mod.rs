@@ -64,6 +64,32 @@ impl LiteralBody<'_> {
     }
 }
 
+/// Retains only the continuations that join source fragments.
+///
+/// A continuation that trims layout is not a join, and rewriting it would
+/// change the literal's value. Every caller that needs joins — the classifier
+/// that decides whether to offer a rewrite, the rewrite gate that re-derives
+/// the caller's joins from the source, and the property and unit tests that
+/// build an expectation — must apply the same rule. Sharing it here keeps the
+/// gate from rejecting joins the classifier has just supplied.
+///
+/// This is the only definition of the rule. The Kani harness compares the
+/// kinds arithmetically instead, so that its loop-free model does not depend
+/// on `Iterator` machinery.
+///
+/// For a body spelled `"\\\n  alpha\\\nbeta"` the scan yields two
+/// continuations, of which the first begins its line and is layout trim; only
+/// the second survives here.
+#[must_use]
+pub(crate) fn joins_only(
+    continuations: impl IntoIterator<Item = Continuation>,
+) -> Vec<Continuation> {
+    continuations
+        .into_iter()
+        .filter(|continuation| continuation.kind == ContinuationKind::Join)
+        .collect()
+}
+
 /// Scans `body`, emitting each continuation to `emit`.
 ///
 /// The single pass keeps the three helpers below free of cursor discipline;
