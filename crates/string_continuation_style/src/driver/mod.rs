@@ -14,6 +14,7 @@ use crate::{
 
 mod depth;
 mod facts;
+mod literal;
 mod span;
 #[cfg(test)]
 #[path = "../../tests/support/driver_tests.rs"]

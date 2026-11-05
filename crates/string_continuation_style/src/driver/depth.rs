@@ -8,13 +8,13 @@
 use std::collections::HashSet;
 
 use rustc_ast::{
-    ast::{self, ExprKind, ItemKind},
-    token,
+    ast::{self, ItemKind},
     visit::{self, Visitor},
 };
 use rustc_span::Span;
 use whitaker_common::SimplePath;
 
+use super::literal::plain_join_literal;
 use crate::exclusion::PathExclusions;
 
 /// Positive safe-span set consumed by the plain-literal check.
@@ -78,15 +78,10 @@ impl<'a> WrapperDepth<'a> {
     }
 
     fn records_plain_candidate(&mut self, expression: &ast::Expr) {
-        let ExprKind::Lit(literal) = &expression.kind else {
+        if plain_join_literal(expression).is_none() {
             return;
-        };
-        if literal.kind != token::LitKind::Str
-            || literal.suffix.is_some()
-            || !literal.symbol.as_str().contains("\\\n")
-            || self.expansion_depth != Some(0)
-            || self.is_path_excluded()
-        {
+        }
+        if self.expansion_depth != Some(0) || self.is_path_excluded() {
             return;
         }
         self.safe_literal_spans.insert(expression.span);
@@ -157,6 +152,11 @@ impl<'ast> Visitor<'ast> for WrapperDepth<'_> {
         });
     }
 
+    // The five-parameter shape is the `rustc_ast::visit::Visitor` trait's own
+    // signature; it cannot be grouped into a struct without ceasing to be that
+    // trait method, which would drop the walk. `_attrs` and `_id` are unused
+    // because only the function's signature span and its body matter here.
+    // @codescene(disable:"Excess Number of Function Arguments") trait signature (2026-11-05)
     fn visit_fn(
         &mut self,
         kind: visit::FnKind<'ast>,

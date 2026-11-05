@@ -102,16 +102,7 @@ impl<'a> ConcatRewrite<'a> {
         let mut previous_end = 0;
 
         for join in joins {
-            if join.kind != ContinuationKind::Join {
-                return None;
-            }
-            if !scanned_joins.contains(join) {
-                return None;
-            }
-            if join.escape_range.start.get() < previous_end {
-                return None;
-            }
-            if !is_valid_join_range(source, join) {
+            if !is_selected_join(source, join, &scanned_joins, previous_end) {
                 return None;
             }
 
@@ -278,6 +269,27 @@ fn is_single_cooked_string_token(source: &str) -> bool {
     };
 
     token.len == source.len() && suffix_start == token.len && tokens.next().is_none()
+}
+
+/// Returns whether `join` may be split out of `source` at this position.
+///
+/// Four conditions must hold together, and each is a separate defence against
+/// a caller passing continuations that the scanner would not itself produce:
+/// the join must be classified as an interior join, it must be one the body's
+/// own scan reported, it must not start before the previous split ended, and
+/// its byte ranges must spell exactly one unpaired backslash and LF followed
+/// by consumed whitespace. Folding them into one predicate keeps the builder's
+/// loop reading as "validate, then split" rather than as four early returns.
+fn is_selected_join(
+    source: &str,
+    join: &Continuation,
+    scanned_joins: &[Continuation],
+    previous_end: usize,
+) -> bool {
+    join.kind == ContinuationKind::Join
+        && scanned_joins.contains(join)
+        && join.escape_range.start.get() >= previous_end
+        && is_valid_join_range(source, join)
 }
 
 fn is_valid_join_range(source: &str, join: &Continuation) -> bool {
