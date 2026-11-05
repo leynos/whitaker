@@ -3336,6 +3336,23 @@ clause of a longer predicate, and the Kani harness in `continuation/kani.rs`
 counts kinds arithmetically so its loop-free model never depends on `Iterator`
 machinery.
 
+### One generator for the continuation property bodies
+
+`whitaker_string_literals::props` (test-only) owns the assembly of the bodies
+both property suites generate: `source_piece`, `append_continuation`, and
+`body_with_continuations`. The continuation suite checks byte ranges on those
+bodies and the rewrite suite decodes them and compares values, so they must
+generate the same *shapes* while differing in alphabet. Each suite supplies its
+own `ALPHABET` constant; the continuation suite omits the unicodescape and
+emoji that only matter once a value is decoded.
+
+Only the assembly is shared, because that is the part that can silently
+diverge. A change to how continuations, blank lines, and tabs interleave would
+otherwise land in one suite and leave the other green while generating
+different bodies. The alphabets are deliberately duplicated rather than
+parameterized: they encode which constructs each suite has to reach, and a
+single merged alphabet would make both suites pay for the other's inputs.
+
 ### Localization and the label spans
 
 The pass emits through the shared `whitaker_common::i18n` helpers so the
