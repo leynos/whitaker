@@ -838,26 +838,43 @@ def _read_text(path: pathlib.Path, kind: str, errors: str = "strict") -> str:
 
 
 def _read_json(path: pathlib.Path) -> typ.Any:
-    """Read a JSON document, naming the file when it cannot be read.
-
-    A Nextest list report is one JSON document on one line. The report is
-    captured through ``make test``, whose later steps write after it, so the
-    reader also accepts a document embedded among other output.
-    """
-    text = _read_text(path, "JSON report")
+    """Read a JSON document, naming the file when it cannot be read."""
+    text = _read_text(path, "JSON document")
     try:
         return json.loads(text)
     except json.JSONDecodeError as error:
-        message = f"cannot read {path}: {error}"
-    for line in text.splitlines():
-        stripped = line.strip()
-        if not stripped.startswith("{"):
-            continue
+        raise BenchmarkError(f"cannot read {path}: {error}") from error
+
+
+#: Either key identifies a Nextest list report across the supported versions.
+_LISTING_KEYS: typ.Final = ("rust-suites", "suites")
+
+
+def _read_listing(path: pathlib.Path) -> dict[str, typ.Any]:
+    """Read a Nextest list report captured inside a ``make test`` log."""
+    text = _read_text(path, "JSON report")
+    listing = _decode_listing(text)
+    if listing is None:
+        raise BenchmarkError(f"cannot read {path}: no Nextest list report found")
+    return listing
+
+
+def _decode_listing(text: str) -> dict[str, typ.Any] | None:
+    """Return the first Nextest list report in ``text``, if any."""
+    decoder = json.JSONDecoder()
+    # Decode from every ``{`` in the text rather than from each line. Nextest
+    # writes its report without a trailing newline, so whatever the build
+    # prints next is appended to the report's last line; and a pretty-printed
+    # report spans many lines. Decoding from an offset handles both, because
+    # ``raw_decode`` stops at the document's end and ignores what follows.
+    for candidate in re.finditer(r"\{", text):
         try:
-            return json.loads(stripped)
+            value, _ = decoder.raw_decode(text, candidate.start())
         except json.JSONDecodeError:
             continue
-    raise BenchmarkError(message)
+        if isinstance(value, dict) and any(key in value for key in _LISTING_KEYS):
+            return value
+    return None
 
 
 def _parse_group_argument(value: str) -> tuple[str, pathlib.Path]:
@@ -897,8 +914,8 @@ def _union_filter(args: argparse.Namespace) -> int:
 
 def _membership(args: argparse.Namespace) -> int:
     """Write the group membership used to classify JUnit reports."""
-    groups = {name: _read_json(path) for name, path in args.group}
-    control = None if args.control is None else _read_json(args.control)
+    groups = {name: _read_listing(path) for name, path in args.group}
+    control = None if args.control is None else _read_listing(args.control)
     report = membership_report(
         groups,
         None if control is None else _qualified_names(control),
