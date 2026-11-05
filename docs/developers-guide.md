@@ -2105,8 +2105,13 @@ require.
 
 `make verus` currently runs both decomposition-advice proofs and the
 clone-detector sidecars for `LshConfig::new`, `CandidatePair::new`, and AST
-feature-count accumulation. `make kani` runs the decomposition adjacency
-harnesses and the clone-detector harness group in one pass.
+feature-count accumulation. `make kani` runs the provable decomposition harness
+and the clone-detector and string-literal harness groups in one pass. Three
+label-propagation harnesses are excluded from that default because they cannot
+reach a verdict: CBMC spends the entire budget in the propagation loop's `Vec`
+and iterator model without discharging the assertions. They remain runnable by
+name, and the design document and roadmap item 6.4.6 record the open modelling
+work.
 
 ### Spelling gate
 

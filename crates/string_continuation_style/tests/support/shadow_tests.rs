@@ -74,12 +74,27 @@ fn krate(items: Vec<ast::Item>) -> ast::Crate {
     }
 }
 
-fn ident(name: &str) -> Ident { Ident::with_dummy_span(Symbol::intern(name)) }
+/// A macro or module name a fixture mentions.
+///
+/// The builders take this rather than `&str` so a raw string is accepted at
+/// exactly one place — the interning boundary — and every name reaching the
+/// syntax tree is one the test meant to write as an identifier.
+#[derive(Clone, Copy)]
+struct Name(&'static str);
 
-fn path(segments: &str) -> Path {
+impl Name {
+    fn ident(self) -> Ident { Ident::with_dummy_span(Symbol::intern(self.0)) }
+}
+
+impl From<&'static str> for Name {
+    fn from(name: &'static str) -> Self { Self(name) }
+}
+
+fn path(segments: Name) -> Path {
     let segments = segments
+        .0
         .split("::")
-        .map(|segment| PathSegment::from_ident(ident(segment)))
+        .map(|segment| PathSegment::from_ident(Name::from(segment).ident()))
         .collect::<Vec<_>>();
     Path {
         span: DUMMY_SP,
@@ -88,9 +103,9 @@ fn path(segments: &str) -> Path {
     }
 }
 
-fn macro_def(name: &str) -> ItemKind {
+fn macro_def(name: Name) -> ItemKind {
     ItemKind::MacroDef(
-        ident(name),
+        name.ident(),
         MacroDef {
             body: Box::new(DelimArgs {
                 dspan: DelimSpan::from_single(DUMMY_SP),
@@ -103,21 +118,21 @@ fn macro_def(name: &str) -> ItemKind {
     )
 }
 
-fn use_tree(prefix: &str, kind: UseTreeKind) -> ItemKind {
+fn use_tree(prefix: Name, kind: UseTreeKind) -> ItemKind {
     ItemKind::Use(UseTree {
         prefix: path(prefix),
         kind,
     })
 }
 
-fn tree(prefix: &str, kind: UseTreeKind) -> UseTree {
+fn tree(prefix: Name, kind: UseTreeKind) -> UseTree {
     UseTree {
         prefix: path(prefix),
         kind,
     }
 }
 
-fn simple(rename: Option<&str>) -> UseTreeKind { UseTreeKind::Simple(rename.map(ident)) }
+fn simple(rename: Option<Name>) -> UseTreeKind { UseTreeKind::Simple(rename.map(Name::ident)) }
 
 fn nested(trees: Vec<UseTree>) -> UseTreeKind {
     let items = trees
@@ -130,8 +145,8 @@ fn nested(trees: Vec<UseTree>) -> UseTreeKind {
     }
 }
 
-fn extern_crate(name: &str, has_macro_use: bool) -> ast::Item {
-    let mut crate_item = item(ItemKind::ExternCrate(None, ident(name)));
+fn extern_crate(name: Name, has_macro_use: bool) -> ast::Item {
+    let mut crate_item = item(ItemKind::ExternCrate(None, name.ident()));
     if has_macro_use {
         let generator = AttrIdGenerator::new();
         crate_item.attrs.push(attr::mk_attr_word(
@@ -145,11 +160,11 @@ fn extern_crate(name: &str, has_macro_use: bool) -> ast::Item {
     crate_item
 }
 
-fn inline_module(name: &str, inner: ast::Item) -> ast::Item {
+fn inline_module(name: Name, inner: ast::Item) -> ast::Item {
     let items = vec![Box::new(inner)].into();
     item(ItemKind::Mod(
         Safety::Default,
-        ident(name),
+        name.ident(),
         ModKind::Loaded(items, Inline::Yes, ModSpans::default()),
     ))
 }
@@ -159,33 +174,35 @@ fn an_ordinary_crate_is_not_shadowed() {
     let is_shadowed = detects_shadowing(|| {
         let leaf = item(ItemKind::Mod(
             Safety::Default,
-            ident("leaf"),
+            Name::from("leaf").ident(),
             ModKind::Unloaded,
         ));
-        vec![inline_module("inner", leaf)]
+        vec![inline_module("inner".into(), leaf)]
     });
     assert!(!is_shadowed);
 }
 
 #[test]
 fn a_macro_rules_definition_of_a_builtin_name_shadows() {
-    assert!(detects_shadowing(|| vec![item(macro_def("println"))]));
+    assert!(detects_shadowing(|| vec![item(macro_def(
+        "println".into()
+    ))]));
 }
 
 #[test]
 fn a_definition_reaching_concat_shadows() {
-    assert!(detects_shadowing(|| vec![item(macro_def("concat"))]));
+    assert!(detects_shadowing(|| vec![item(macro_def("concat".into()))]));
 }
 
 #[test]
 fn a_definition_of_an_unlisted_name_does_not_shadow() {
-    assert!(!detects_shadowing(|| vec![item(macro_def("shout"))]));
+    assert!(!detects_shadowing(|| vec![item(macro_def("shout".into()))]));
 }
 
 #[test]
 fn a_use_binding_a_builtin_name_shadows() {
     assert!(detects_shadowing(|| vec![item(use_tree(
-        "helpers::println",
+        "helpers::println".into(),
         simple(None)
     ))]));
 }
@@ -193,8 +210,8 @@ fn a_use_binding_a_builtin_name_shadows() {
 #[test]
 fn a_rename_onto_a_builtin_name_shadows() {
     assert!(detects_shadowing(|| vec![item(use_tree(
-        "helpers::shout",
-        simple(Some("format_args"))
+        "helpers::shout".into(),
+        simple(Some("format_args".into()))
     ))]));
 }
 
@@ -203,8 +220,8 @@ fn a_rename_away_from_a_builtin_name_does_not_shadow() {
     // `use helpers::println as shout` binds `shout`; the segment it was
     // imported under can no longer reach `println!`.
     assert!(!detects_shadowing(|| vec![item(use_tree(
-        "helpers::println",
-        simple(Some("shout"))
+        "helpers::println".into(),
+        simple(Some("shout".into()))
     ))]));
 }
 
@@ -212,34 +229,48 @@ fn a_rename_away_from_a_builtin_name_does_not_shadow() {
 fn a_nested_use_tree_is_searched() {
     let is_shadowed = detects_shadowing(|| {
         let branches = nested(vec![
-            tree("helpers::print", simple(None)),
-            tree("helpers::shout", simple(None)),
+            tree("helpers::print".into(), simple(None)),
+            tree("helpers::shout".into(), simple(None)),
         ]);
-        vec![item(use_tree("helpers", branches))]
+        vec![item(use_tree("helpers".into(), branches))]
     });
     assert!(is_shadowed);
 }
 
 #[test]
 fn a_glob_import_is_accepted_as_a_residual_hole() {
-    let is_shadowed =
-        detects_shadowing(|| vec![item(use_tree("helpers", UseTreeKind::Glob(DUMMY_SP)))]);
+    let is_shadowed = detects_shadowing(|| {
+        vec![item(use_tree(
+            "helpers".into(),
+            UseTreeKind::Glob(DUMMY_SP),
+        ))]
+    });
     assert!(!is_shadowed);
 }
 
 #[test]
 fn an_extern_crate_with_macro_use_shadows() {
-    assert!(detects_shadowing(|| vec![extern_crate("helpers", true)]));
+    assert!(detects_shadowing(|| vec![extern_crate(
+        "helpers".into(),
+        true
+    )]));
 }
 
 #[test]
 fn an_extern_crate_without_macro_use_does_not_shadow() {
-    assert!(!detects_shadowing(|| vec![extern_crate("helpers", false)]));
+    assert!(!detects_shadowing(|| vec![extern_crate(
+        "helpers".into(),
+        false
+    )]));
 }
 
 #[test]
 fn a_definition_nested_in_a_module_is_seen() {
-    let is_shadowed =
-        detects_shadowing(|| vec![inline_module("inner", item(macro_def("assert_eq")))]);
+    let is_shadowed = detects_shadowing(|| {
+        vec![inline_module(
+            "inner".into(),
+            item(macro_def("assert_eq".into())),
+        )]
+    });
     assert!(is_shadowed);
 }

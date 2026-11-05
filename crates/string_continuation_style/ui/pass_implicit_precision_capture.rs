@@ -8,9 +8,9 @@
 //! placeholder kind rather than every argument would be caught here.
 
 fn main() {
-    let value = "truncate me";
+    let value = "galloping";
     let precision = 4;
     let rendered = format!("alpha \
         beta {value:.precision$}");
-    assert_eq!(rendered, "alpha beta trun");
+    assert_eq!(rendered, "alpha beta gall");
 }

@@ -3,7 +3,7 @@
 //! `join_format_string` and `has_captured_argument` both read only the parsed
 //! `FormatArgs`, so the fixtures build one directly instead of driving a
 //! compilation. The `outermost_macro_name` predicate is deliberately not
-//! covered here: it needs real expansion frames, and a synthesised span would
+//! covered here: it needs real expansion frames, and a synthesized span would
 //! prove only that the fixture's context was root, not that the walk works.
 //! The UI fixtures cover it end to end.
 
