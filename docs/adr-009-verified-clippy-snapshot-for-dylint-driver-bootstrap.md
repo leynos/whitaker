@@ -155,10 +155,10 @@ The module now separates the decision from the observation.
   existing telemetry at the command boundaries, and the Git adapter keeps its
   per-command debug events. Policy contributes neither.
 - Tests follow the same split. `policy_tests.rs` exercises acceptance rules on
-  values, `orchestration_tests.rs` drives verification and installation through
-  the scripted ports in `fakes.rs` and asserts both call order and what was
-  never called, and `verify_tests.rs` and `tests.rs` keep real Git and a real
-  filesystem so the adapters themselves stay honest.
+  values, the `orchestration_tests/` modules drive verification and
+  installation through the scripted ports in `fakes.rs` and assert both call
+  order and what was never called, and `verify_tests.rs` and `tests.rs` keep
+  real Git and a real filesystem so the adapters themselves stay honest.
 
 A new acceptance rule belongs in `policy.rs` with a value test. A new
 observation belongs behind an existing port, or a new port only when none fits,
