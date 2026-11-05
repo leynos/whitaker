@@ -27,7 +27,11 @@ make test-workflow-contracts
 
 from __future__ import annotations
 
+import json
+import os
+import pathlib
 import re
+import subprocess  # noqa: S404  # Cargo is the authority on workspace membership.
 import tomllib
 import typing as typ
 
@@ -65,6 +69,11 @@ REQUIRED_RUSTDOC_LINTS = {
     "missing_crate_level_docs": "deny",
 }
 
+#: Clippy groups the vendored manifest must keep enabled. `cargo vendor`
+#: cannot carry the workspace's individual denials, so these groups are what
+#: makes `-D warnings` still fail the crate.
+VENDORED_CLIPPY_GROUPS = ("nursery", "pedantic")
+
 
 def _manifest(path: Path) -> dict[str, typ.Any]:
     """Return one decoded Cargo manifest."""
@@ -89,14 +98,35 @@ def _workspace_lints(group: str) -> dict[str, typ.Any]:
     return table
 
 
+def _resolved_member_manifests() -> list[Path]:
+    """Return the manifest of every member Cargo resolves, not just the globs.
+
+    Cargo also makes an in-workspace path dependency a member when no
+    `members` pattern names it, so expanding the patterns alone would miss a
+    crate the workspace still builds and lints.
+    """
+    cargo = os.environ.get("CARGO", "cargo")
+    result = subprocess.run(  # noqa: S603  # Fixed argument list, no shell.
+        [cargo, "metadata", "--no-deps", "--format-version", "1"],
+        cwd=REPOSITORY_ROOT,
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+    assert result.returncode == 0, (
+        f"cargo metadata must describe the workspace; got {result.stderr!r}"
+    )
+    metadata = json.loads(result.stdout)
+    return [
+        pathlib.Path(package["manifest_path"]) for package in metadata["packages"]
+    ]
+
+
 def _member_manifests() -> dict[Path, dict[str, typ.Any]]:
-    """Return every workspace member's decoded manifest, keyed by path."""
-    root = _manifest(CARGO_MANIFEST)
-    manifests = {CARGO_MANIFEST: root}
-    for member in root["workspace"]["members"]:
-        matches = sorted(REPOSITORY_ROOT.glob(f"{member}/Cargo.toml"))
-        assert matches, f"workspace member {member!r} matches no manifest"
-        for path in matches:
+    """Return every resolved workspace member's decoded manifest, keyed by path."""
+    manifests = {CARGO_MANIFEST: _manifest(CARGO_MANIFEST)}
+    for path in _resolved_member_manifests():
+        if path != CARGO_MANIFEST:
             manifests[path] = _manifest(path)
     return manifests
 
@@ -187,8 +217,7 @@ def test_every_member_inherits_the_workspace_policy() -> None:
     offenders = sorted(
         _relative(path)
         for path, manifest in _member_manifests().items()
-        if path != CARGO_MANIFEST
-        and path.relative_to(REPOSITORY_ROOT).parts[0] != "vendor"
+        if path.relative_to(REPOSITORY_ROOT).parts[0] != "vendor"
         and manifest.get("lints") != {"workspace": True}
     )
     assert not offenders, (
@@ -208,11 +237,25 @@ def test_the_vendored_crate_is_linted_under_its_own_policy() -> None:
         f"{VENDORED_MEMBER} must stay a workspace member to remain linted"
     )
     lints = _manifest(REPOSITORY_ROOT / VENDORED_MEMBER / "Cargo.toml").get("lints")
-    assert isinstance(lints, dict) and lints, (
+    assert isinstance(lints, dict), (
         "the vendored crate must carry its own [lints.*] tables"
     )
+    assert lints, "the vendored crate's [lints.*] tables must not be empty"
     assert "workspace" not in lints, (
         "a normalized vendored manifest cannot inherit the workspace table"
+    )
+    clippy = lints.get("clippy")
+    assert isinstance(clippy, dict), "the vendored crate must carry [lints.clippy]"
+    for group in VENDORED_CLIPPY_GROUPS:
+        assert _level(clippy.get(group)) == "warn", (
+            f"the vendored crate must keep the {group} group at warn so "
+            f"-D warnings still fails it; got {clippy.get(group)!r}"
+        )
+    rust = lints.get("rust")
+    assert isinstance(rust, dict), "the vendored crate must carry [lints.rust]"
+    assert _level(rust.get("unexpected_cfgs")) == "deny", (
+        "the vendored crate must keep its unexpected_cfgs denial; "
+        f"got {rust.get('unexpected_cfgs')!r}"
     )
 
 
