@@ -63,7 +63,10 @@ pub(crate) trait RepositoryQueries {
     ///
     /// # Errors
     ///
-    /// Returns [`ClippySnapshotError::Git`] when Git cannot run.
+    /// Returns [`ClippySnapshotError::Git`] when Git cannot run or when the
+    /// path is listed at `commit` but cannot be read. A failed read is never
+    /// reported as absence: the caller's precedence walk must stop rather
+    /// than let a lower-priority file win.
     fn file_at_commit(
         &self,
         path: &Utf8Path,

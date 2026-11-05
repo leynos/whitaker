@@ -245,14 +245,23 @@ impl RepositoryQueries for SnapshotGit<'_> {
         commit: &str,
         file: &str,
     ) -> Result<Option<String>, ClippySnapshotError> {
+        // The tree decides whether the path exists, so a read that fails
+        // afterwards stays an error. Treating it as absence would let a
+        // lower-priority toolchain file win, which rustup never would.
+        let listing = self.stdout(
+            "ls-tree",
+            Some(path),
+            &["ls-tree", "--name-only", commit, "--", file],
+        )?;
+        if listing.is_empty() {
+            return Ok(None);
+        }
         let object = format!("{commit}:{file}");
         let output = self.output("show", Some(path), &["show", &object])?;
         if output.status.success() {
             Ok(Some(String::from_utf8_lossy(&output.stdout).into_owned()))
         } else {
-            // A missing path and an unreadable object both mean "no channel
-            // here"; only a failure to run Git is an infrastructure error.
-            Ok(None)
+            Err(git_failure("show", &output))
         }
     }
 }
@@ -290,8 +299,10 @@ impl BundleOperations for SnapshotGit<'_> {
         destination: &Utf8Path,
     ) -> Result<(), ClippySnapshotError> {
         // `git bundle verify` reads only the header, so a truncated or
-        // damaged pack first shows up here.
-        self.stdout(
+        // damaged pack first shows up here. Only a clone that ran and failed
+        // says the bundle is invalid; a Git that could not start or timed out
+        // is an infrastructure failure and keeps its own error.
+        let clone = self.output(
             "clone",
             None,
             &[
@@ -301,10 +312,14 @@ impl BundleOperations for SnapshotGit<'_> {
                 bundle.as_str(),
                 destination.as_str(),
             ],
-        )
-        .map_err(|error| {
-            ClippySnapshotError::invalid(bundle, format!("the bundle could not be cloned: {error}"))
-        })?;
+        )?;
+        if !clone.status.success() {
+            let stderr = String::from_utf8_lossy(&clone.stderr);
+            return Err(ClippySnapshotError::invalid(
+                bundle,
+                format!("the bundle could not be cloned: {}", stderr.trim()),
+            ));
+        }
         self.stdout(
             "remote remove",
             Some(destination),
