@@ -38,6 +38,7 @@ use crate::{
     "  no_expect_outside_tests       Forbid .expect() outside test contexts\n",
     "  no_std_fs_operations          Enforce capability-based filesystem access\n",
     "  no_unwrap_or_else_panic       Deny panicking unwrap_or_else fallbacks\n",
+    "  string_continuation_style     Prefer concat!() over source-line joins\n",
     "  test_must_not_have_example    Forbid examples in test documentation\n\n",
     "EXPERIMENTAL LINTS (requires --experimental):\n",
     "  (none currently)\n\n",

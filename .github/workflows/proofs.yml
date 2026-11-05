@@ -1,0 +1,68 @@
+name: Proofs
+
+# DEC-011: neither proof suite ran in CI, and a proof outside a gate is a
+# comment. The danger it names is a toolchain bump: the adapter is patched to
+# compile, the `.stderr` fixtures are re-blessed as "diagnostic drift", and
+# nothing notices that the proof now describes code which no longer exists.
+#
+# This is its own workflow rather than a fourth job in `ci.yml`. Three
+# contracts pin `ci.yml`'s job set — `ci_telemetry_test` holds every job there
+# to the shared start/report telemetry pair, which a hosted proof lane has no
+# endpoint for, and `lane_deduplication_contract_test` reads every job in the
+# tree for a second execution of the Rust suite. A job that runs on a
+# path-filtered trigger also cannot be expressed in `ci.yml`, whose triggers
+# are unconditional.
+on:
+  schedule:
+    # Nightly, ahead of the 04:50 mutation lane so the two do not overlap.
+    - cron: "17 3 * * *" # Daily, 03:17 UTC
+  workflow_dispatch:
+  # The three inputs that can invalidate a proof without touching the code
+  # around it: the proof itself, the pure domain crate the string-literal
+  # proof describes, and the scripts that pin and invoke the verifiers.
+  pull_request:
+    paths:
+      - "verus/**"
+      - "crates/whitaker_string_literals/**"
+      - "scripts/install-kani.sh"
+      - "scripts/install-verus.sh"
+      - "scripts/run-kani.sh"
+      - "scripts/run-kani-limited.sh"
+      - "scripts/run-verus.sh"
+      - ".github/workflows/proofs.yml"
+
+# A second push to a pull request supersedes the run already in flight. The
+# guard is on the event rather than a literal `true`, because a nightly run and
+# a manual dispatch share the group with themselves and must run to
+# completion.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  proofs:
+    name: Kani and Verus
+    # GitHub-hosted rather than Ubicloud: this lane needs no compiler cache
+    # (it shares none of the suite's shapes), and the limited runner needs the
+    # image's user systemd session, cgroup v2 memory controller, `gcc`, and
+    # GNU `timeout`.
+    runs-on: ubuntu-24.04
+    # Seventeen Kani invocations, each capped at ten minutes by
+    # `run-kani-limited.sh`, plus six Verus proofs and two cached toolchain
+    # installs. The ceiling is a runaway guard, not a budget: a run that
+    # reaches it has harnesses that timed out, not a slow one.
+    timeout-minutes: 240
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7
+        with:
+          # The proofs read no history, and the default shallow checkout is
+          # the cheaper half of a lane that spends its time in the verifiers.
+          persist-credentials: false
+      - name: Run the Kani harnesses
+        run: make kani
+      - name: Run the Verus proofs
+        run: make verus

@@ -258,8 +258,8 @@ runner in `src/lib_ui_tests.rs`.
 The harness splits cases into two shapes:
 
 - Example-based runs use `ExampleHarnessRun` plus
-  `whitaker::testing::ui::stage_example` and `Test::src_base` when a single
-  example target is enough and no extra fixture assets are needed.
+  `dylint_testing::ui::Test::example` when a single example target is enough
+  and no extra fixture assets are needed.
 - Fixture-based runs use `FixtureHarnessRun`, `prepare_fixture`, and
   `Test::src_base` when the case needs copied support files, a per-fixture
   `dylint.toml`, or additional `--extern` wiring.
@@ -2416,6 +2416,11 @@ toolchain bump must update the channel written here as part of the runbook
    through unchanged so callers can opt into `--locked` explicitly when they
    need Cargo to enforce the lockfile for a build, lint, package, or test
    command.
+10. Re-run the `string_continuation_style` source probe, described in
+    [Early-pass maintenance](#early-pass-maintenance), and re-record the
+    transcript. The items it pins are listed there; the failure that matters
+    most is a semantic change in `FormatArgs::is_source_literal`, which
+    converts firing cases into silence without failing any test.
 
 ### `ra_ap_syntax` re-pinning runbook
 
@@ -3297,6 +3302,86 @@ Unit coverage for both rules lives in
 (`parsed_attribute_span_recovers_whitelisted_kinds` and
 `attribute_within_item_span_boundaries`).
 
+## Writing an early pass
+
+`string_continuation_style` is the suite's only `EarlyLintPass`. It runs on
+rustc's expanded AST, which is the only phase that can see both a literal's
+source spelling and its parsed `FormatArgs`. A late (HIR) pass cannot see
+`ExprKind::FormatArgs` at all, because format arguments are lowered away, and a
+pre-expansion pass cannot see which format arguments are implicit captures. If
+a future lint needs either, it needs an early pass, and these constraints come
+with it.
+
+### `EarlyContext` has no `TyCtxt`
+
+An early pass receives `&EarlyContext<'_>`, which offers the lint store, the
+session, span snippet recovery, and the AST. It has no type information, no
+resolved paths, no name resolution, and no HIR. Design the check around the
+syntax it can see, or accept that it belongs in a late pass instead. The
+adapter in `crates/string_continuation_style/src/driver/` converts AST nodes
+into a plain `LiteralFacts` value and hands everything else to
+`whitaker_string_literals`, which is rustc-free; that split is what makes the
+policy verifiable without a compiler.
+
+### `is_source_literal` is the only trustworthy provenance test for format strings
+
+`FormatArgs::is_source_literal` is true only when the format string was written
+in source. A format string produced by `concat!()`, `include_str!()` or another
+eager macro is false, and there is no source literal to rewrite. This is the
+check that keeps the lint from suggesting a rewrite of `concat!("a", "b")` into
+`concat!("a", "b")`.
+
+### Wrapper depth, and why `is_root()` is not enough
+
+`Span::ctxt().is_root()` looks like a provenance test and is not one. A literal
+captured by a `$l:literal` matcher reaches a post-expansion pass with a root
+syntax context, so a lint that trusted `is_root()` would offer a rewrite that
+does not compile. `crates/string_continuation_style/src/driver/depth.rs`
+therefore counts *wrapper depth*: the number of enclosing AST containers whose
+span is `from_expansion()`. Depth zero means nothing that could have matched
+the literal stands between it and the compiler.
+
+The count is not maintained by balanced `check_*` hooks. `nightly-2026-05-28`
+has no `check_stmt_post`, `check_local`, `check_block`, `check_arm` or
+`check_ty` pairing, so the paired hooks alone miss containers. A
+`rustc_ast::visit::Visitor` runs from `check_crate`, pushes and pops explicitly
+for every container kind, and records the spans of literals that pass into an
+`FxHashSet`; the emitting hooks consult membership. Adding a container kind
+means adding its visit method to the visitor, not a hook pair.
+
+The counterpart in the pure domain is the rewrite builder, which re-lexes its
+own output: a generated `concat!()` must parse back as one expression with the
+original fragments before any suggestion is offered.
+
+### Localization and the label spans
+
+The pass emits through the shared `whitaker_common::i18n` helpers so the
+message, `.note`, `.help`, `.label` and `.suggestion` all resolve per locale.
+Each `join_spans` entry becomes a labelled secondary span. Locale resources
+live in `common/locales/{en-GB,cy,gd}/string_continuation_style.ftl`, and the
+`common/tests/i18n_quality` gate requires every en-GB attribute to be present
+and non-empty in each secondary locale. Missing a `.label` would otherwise
+render English into a blessed `ui-cy` golden, which then enforces the bug.
+
+### Early-pass maintenance
+
+The crate depends on `rustc_ast` items that are not covered by the ordinary
+test suite. Re-run the probe recorded as `EV-M0-transcript` in the 2.4.1
+ExecPlan on every toolchain bump, and re-record the transcript. The
+load-bearing items are:
+
+- `FormatArgs::span`, which anchors the diagnostic;
+- `FormatArgs::is_source_literal`, which decides whether a source literal
+  exists at all;
+- `FormatArgs::uncooked_fmt_str`, which supplies the literal to scan;
+- `FormatArgumentKind::Captured`, which forces the "require continuation"
+  decision for implicit captures.
+
+A semantic change in `is_source_literal` is the dangerous one: it turns firing
+cases into silence without failing any test, because silence is the lint's
+normal output for most code. Only the probe distinguishes "the lint is
+correctly quiet" from "the lint stopped seeing anything".
+
 ## Shared fingerprint helpers
 
 `common::rstest` exposes two families of pure data model for deterministic
@@ -3702,41 +3787,42 @@ the variable is otherwise absent. Restoration uses the same shared environment
 mutex, but the runner callback itself executes without holding that mutex to
 avoid nested-lock deadlocks.
 
-Example targets are staged with [`stage_example`](#example-target-staging),
-which tolerates a wrapper, rather than with
-`dylint_testing::ui::Test::example`, which does not.
+Example targets are run with `dylint_testing::ui::Test::example`. The workspace
+patches `dylint_testing`, and the patched decoder tolerates a wrapper chain (see
+[Example-target staging](#example-target-staging)).
 
 #### Example-target staging
 
-Do not call `dylint_testing::ui::Test::example`. It recovers an example's
-`--extern`, `-L`, and `--edition` flags by rebuilding the example with
-`cargo build --verbose` and keeping the `Running` line whose *first* word is
-`rustc`. Any configured `rustc` wrapper takes that position instead — `sccache`
-in CI, or a compile-admission wrapper on a shared development host — and every
-example test then fails with "Found no `rustc` invocations".
-
-Clearing `RUSTC_WRAPPER` does not fix this. A wrapper set through
-`build.rustc-wrapper` in Cargo configuration survives environment clearing, and
-removing a wrapper would bypass the caching or admission control it exists to
-provide.
-
-Use `whitaker::testing::ui::stage_example(crate_name, example)` instead. It
-performs the same rebuild, skips any wrapper chain or environment assignments
-before the compiler, and copies the example source with its `.stderr`,
-`.stdout`, and `.fixed` expectation files into a temporary directory. Pass the
-result to `Test::src_base`, which is what `Test::example` does internally:
+Use `dylint_testing::ui::Test::example(crate_name, example)` for example-based
+UI tests. It rebuilds the example with `cargo rustc` under a process-unique
+`-C metadata` value, recovers the `--extern`, `-L`, and `--edition` flags from
+the resulting compiler invocation, and stages the source with its `.stderr`,
+`.stdout`, and `.fixed` expectation files:
 
 ```rust
-let staged = stage_example(crate_name, "pass_in_test_harness")?;
-let mut test = Test::src_base(crate_name, staged.directory());
-test.rustc_flags(staged.linking_flags()).rustc_flags(["--test"]);
+let mut test = Test::example(crate_name, "pass_in_test_harness");
+test.rustc_flags(["--test"]);
 test.run();
 ```
 
-`stage_example` is the single owner of example-flag recovery. Lint crates' UI
-harnesses may call it; they must not parse Cargo output themselves. Keep the
-returned `StagedExample` alive until the test has run, because dropping it
-deletes the staging directory.
+`dylint_testing` is vendored and patched, so do not assume upstream's decoder.
+Two properties matter here.
+
+First, the rebuild uses compiler metadata rather than deleting
+`target/debug/examples` first. Deletion forced a recompile under Cargo's legacy
+layout, but Cargo can now restore a removed example from its cached build
+artefact without invoking `rustc`, leaving the decoder with nothing to parse. A
+stale-deletion approach therefore fails intermittently rather than loudly.
+
+Second, `rustc_invocation` parses Cargo's quoted command line with `shlex` and
+takes the arguments after the *last* `rustc` before `--crate-name`, so a
+configured wrapper — `sccache` in CI, or a compile-admission wrapper on a
+shared development host — is skipped rather than mistaken for the compiler.
+Never clear `RUSTC_WRAPPER` to work around a parsing failure: a wrapper set
+through `build.rustc-wrapper` in Cargo configuration survives environment
+clearing, and removing it would bypass the caching or admission control it
+exists to provide. Never parse Cargo output in a lint crate's harness either;
+`Test::example` is the single owner of example-flag recovery.
 
 Any UI test that holds `env_test_guard()` while invoking Dylint must use
 `run_test_runner_with_env_guard()`. It catches a runner panic before releasing
@@ -4777,6 +4863,25 @@ its 20 m per-test allowance during the recovery run: Cargo built the library,
 then timed out while building the example. Its retry passed after 764 seconds.
 The 75 m override covers both nested builds and retains the existing retry for
 transient UI failures.
+
+The `string_continuation_style` UI entries take the ordinary 20 m allowance and
+do not get a narrower one of their own. Four entries run, one per locale, and
+together they were measured at 31.3 s warm in isolation and 157.7 s inside the
+full suite. They are `tests::ui::{ui, ui_cy, ui_gd, ui_fallback}` in the
+crate's **lib** target, not a `tests/ui.rs` integration target: `src/lib.rs`
+declares the suite with `#[path = "../tests/support/tests.rs"]`, which in turn
+declares `#[path = "ui.rs"] mod ui;`. So the `test(tests::ui::)` clause of the
+broad Dylint override matches all four, and the `(binary(ui) & test(=ui))`
+clause does not apply, because the crate has no integration target named `ui`.
+
+A narrower override would have to be declared **before** the broad entry and
+cannot be: nextest applies the first override that matches each setting, so a
+later entry is inert for `slow-timeout`, and an earlier one displaces the broad
+entry as the first `serial-dylint-ui`-grouped override. Two contracts read that
+first entry by position — `tests/nextest_ui_filter.rs` requires it to carry a
+retry, and `nextest_profile_test.py` requires exactly one override per exact
+filter string per profile — so the broad entry is also the only place a 20 m
+allowance for these fixtures can live.
 
 The 15 m allowance for work outside nextest's window is measured, from the
 worst of several runs rather than one:

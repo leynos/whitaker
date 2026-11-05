@@ -337,9 +337,41 @@ Hard invariants. Violating one requires escalation, not a workaround.
       main UI fixtures pass, including the six `run-rustfix` fixtures, the
       derive-generated implementation, and the nested expansion. The three
       locale directories run from one serialized entry and pass.
-- [ ] EP-M3: source-authored format strings from compiler built-ins.
-- [ ] EP-M5: suite, installer, tooling, and documentation integration.
-- [ ] Roadmap item 2.4.1 marked done.
+- [x] EP-M3: source-authored format strings from compiler built-ins. The
+      adapter dispatches `ExprKind::FormatArgs` to `format_args_rewrite`, which
+      requires a source literal with a cooked body, a safe span, an outermost
+      expansion frame named in the RFC's 18-name set, and no
+      `FormatArgumentKind::Captured` argument. Five `fail_*` and five `pass_*`
+      fixtures cover it; see `EV-M3`.
+- [x] EP-M5: suite, installer, tooling, and documentation integration. All
+      twenty Step 5 items are discharged, two of them as recorded decisions
+      rather than as specified: item 7 by `DEC-019` (membership confirmed, the
+      crate-specific `slow-timeout` refused) and item 8 by `DEC-020` (a
+      separate `.github/workflows/proofs.yml` rather than a `ci.yml` job). See
+      `EV-M5`.
+- [x] Roadmap item 2.4.1 marked done.
+- [x] (2026-11-05) Step 5 item 7 evidence recorded. `cargo nextest show-config
+      test-groups --profile ci -p string_continuation_style --all-features`
+      lists all four UI entries — `tests::ui::{ui, ui_cy, ui_fallback,
+      ui_gd}` — under the `serial-dylint-ui` group via the broad override's
+      `test(tests::ui::)` clause. `crates/string_continuation_style` has no
+      integration target named `ui`, so `(binary(ui) & test(=ui))` does not
+      reach it. The broad 20 m `slow-timeout` stands; a crate-specific one
+      would have to precede the broad entry and would displace it as the
+      first `serial-dylint-ui`-grouped override, which
+      `tests/nextest_ui_filter.rs` and `nextest_profile_test.py` both read by
+      position. Log:
+      `/tmp/show-config-whitaker-2-4-1-string-continuation-style-post-expansion-early-lint.md.out`;
+      see `DEC-019`.
+- [x] (2026-11-05) Step 5 item 8 delivered as
+      `.github/workflows/proofs.yml`. `make kani` and `make verus` run nightly
+      at 03:17 UTC, on `workflow_dispatch`, and on pull requests touching
+      `verus/**`, `crates/whitaker_string_literals/**`, the `scripts/install-*`
+      and `scripts/run-*` verifier scripts, or the workflow itself. It is its
+      own workflow rather than a `ci.yml` job because three contracts pin that
+      file's job set and because `ci.yml`'s triggers are unconditional; see
+      `DEC-020`. `make test-workflow-contracts` passes with it in the tree:
+      795 passed in 73.52 s.
 
 ## Surprises & discoveries
 
@@ -890,30 +922,91 @@ Note that this is the `rustc-src` component, not the `rust-src` component at
   list of span-bearing wrapper kinds. Date/Author: 2026-11-03, implementation
   agent.
 
+- **DEC-019: Leave the broad 20-minute Dylint allowance as the only one for
+  `string_continuation_style`.** Step 5 item 7 asks for a crate-specific
+  `slow-timeout` override beside the membership check, and the membership check
+  is discharged but the override is not, because it cannot do what it was meant
+  to do. Its UI entries are `tests::ui::{ui, ui_cy, ui_gd, ui_fallback}` in the
+  **lib** target, reached through `src/lib.rs`'s
+  `#[path = "../tests/support/tests.rs"]`; there is no `tests/ui.rs`, so
+  `crates_with_integration_ui_test()` in `nextest_ui_filter.rs` does not list
+  this crate and the `(binary(ui) & test(=ui))` clause never applies to it. All
+  four already match the existing broad override's `test(tests::ui::)` clause
+  at 20 minutes. A narrower override would have to be placed **before** that
+  entry, because nextest applies the first override matching each setting, and
+  doing so fails two existing contracts: `nextest_ui_filter.rs` reads the first
+  `serial-dylint-ui`-grouped override and requires it to carry
+  `retries.count >= 1`, and `nextest_profile_test.py` requires exactly one
+  override per exact filter string per profile. Placed after, it is inert for
+  `slow-timeout`. The allowance stays at 20 minutes, but it is the broad
+  entry's existing headroom rather than a figure these four entries need:
+  measured on 2026-11-05 they took 31.3 s warm in isolation (15.7 s, 4.6 s, 5.6
+  s and 5.3 s) and 157.7 s inside the full 2,231-test run (83.6 s, 17.9 s, 23.6
+  s and 32.6 s), the difference being contention rather than work. An earlier
+  revision of this decision cited "roughly eleven minutes"; that figure came
+  from a cold, heavily contended run and is not reproducible warm. Date/Author:
+  2026-11-05, implementation agent.
+
+- **DEC-020: Ship the proofs lane as its own workflow, not a `ci.yml` job.**
+  `DEC-011` names `.github/workflows/ci.yml` and a `proofs` job, and this
+  records why neither is followed literally. `ci_telemetry_test.py` pins
+  `ci.yml`'s job set to the three suite lanes and requires the shared
+  start/report telemetry pair as the second step of every job; a proof job has
+  no telemetry endpoint to report to, so the only ways to add it there are to
+  widen that contract or to fake telemetry.
+  `lane_deduplication_contract_test.py` reads every job in the tree for a
+  second execution of the Rust suite, so the placement matters repository-wide,
+  not just inside one file. And the path-filtered trigger `DEC-011` asks for
+  cannot be expressed by `ci.yml`'s unconditional `on:` block at all. The
+  separate `.github/workflows/proofs.yml` carries the same two commands, the
+  nightly and path-filtered triggers, and a concurrency guard on the PR event.
+  Date/Author: 2026-11-05, implementation agent.
+
 ## Outcomes & retrospective
 
-The plan is not yet complete: `EP-M3` and `EP-M5` remain open, so this section
-records progress only.
+All five milestones are implemented and their acceptance evidence is recorded:
+`EP-M0a`, `EP-M1`, `EP-M2`, `EP-M3` and `EP-M5`. The remaining work is the
+final gate run on the complete tree and the merge itself, neither of which
+changes the plan's content.
 
-Landed and validated so far: the pre-approval planning work (RFC 0002 revision,
-roadmap restructure, six-lens design review), the two-crate scaffold, the whole
-pure domain crate `EP-M1`, and the plain-literal adapter `EP-M2` with its
-eighteen-fixture UI matrix, six of which apply the suggestion with
-`run-rustfix` and recompile. On 2026-11-04 the branch was rebased from the
-long-lived `harden-lint-config` target onto `main`, which is where this work
-will now land; that replay is recorded in §Progress and cost two repair
-commits, both documented in `SURP-019`.
+Landed: the pre-approval planning work (RFC 0002 revision, roadmap restructure,
+six-lens design review), the two-crate scaffold, the whole pure domain crate
+`EP-M1`, and the plain-literal adapter `EP-M2` with its eighteen-fixture UI
+matrix, six of which apply the suggestion with `run-rustfix` and recompile.
+`EP-M3` then added the format-string branch, which cost one design reversal:
+the wrapper-depth gate that `EP-M2` relies on does not apply to `FormatArgs`,
+where a probe measured depth five, so the format path proves its position by
+the enclosing expansion chain's outermost name instead. `EP-M5` wired the lint
+into the suite, the installer and the docs, and put the two proof suites into
+CI. On 2026-11-04 the branch was rebased from the long-lived
+`harden-lint-config` target onto `main`, which is where this work will now
+land; that replay is recorded in §Progress and cost two repair commits, both
+documented in `SURP-019`.
 
-Lessons so far. The rebase is where the actual risk was, not the lint code: an
+Lessons. The rebase is where the actual risk was, not the lint code: an
 entity-level merge driver rewrote files this branch never touched and produced
 Rust that does not parse, and only the formatting gate caught it. Any future
 rebase of this branch should treat `make check-fmt` as a corruption probe, not
 a style check. Second, `main`'s gate list moved underneath a long-lived plan:
 `lint-whitaker` is gone, and a plan that names a retired target is worse than
 one that names none, because it reads as verification that no longer runs.
-Third, the adapter's UI suite is by far the dominant cost of `make test` — the
-`string_continuation_style` UI entries alone take roughly eleven minutes across
-the four locale directories, against a 13,413-second nextest total.
+Third, the adapter's UI suite is a disproportionate cost of `make test` — the
+`string_continuation_style` UI entries alone take 157.7 s of wall clock inside
+the 2,231-test run logged in `test-2-4-1-*.md-3.out`, 3.3% of that run's
+4,785.4-second nextest total for 0.2% of the tests. It is the four fixtures'
+nested Cargo builds, not the lint itself: warm in isolation the same four take
+31.3 s.
+
+Two lessons come from the implementation rather than the process. A plan can
+state a compiler fact confidently and be wrong: `DEC-002`'s depth gate is
+correct for an expression written in source and meaningless for a `FormatArgs`,
+where the builtin's def-site span makes the measured depth five regardless of
+what the author wrote, and the plan's own `EP-M0a` probe would have found this
+had it been run on the format path before the design was frozen. The second is
+that a plan can also state a *repository* fact and be wrong: Step 5 items 7 and
+8 both named a file and a mechanism that the repository's own contracts forbid,
+and the contracts were right. In both cases the plan is amended rather than the
+constraint.
 
 One outcome is already recorded. `docs/rfcs/0002-string-continuation-style.md`
 was substantively revised on 2026-08-21, before implementation, because two of
@@ -926,13 +1019,12 @@ would have left the RFC saying something false. The revision also folded in
 `DEC-010`, and `DEC-013`. It carries a §Revision history recording what changed
 and why.
 
-The RFC stays at *Proposed* until this plan is approved; the status change is
-the only RFC edit left, and it belongs at `EP-M5`.
-
-Before setting this plan to `COMPLETE`, re-check that no discovery made during
-implementation has left the RFC stale again. The verification obligations, the
-configuration table, and the fixture matrix are all now described in both
-documents, so a change to any of them has two homes.
+RFC 0002 was moved to *Accepted* at `EP-M5`, with a §Revision history entry
+recording the approval date and the three passages implementation had made
+stale. The verification obligations, the configuration table, and the fixture
+matrix are all described in both documents, so a change to any of them has two
+homes; the RFC edit that `EP-M5` carried was exactly that check being run again
+after `EP-M3`.
 
 ## Context and orientation
 
@@ -1683,9 +1775,31 @@ in the same commit as the code it constrains.
 
 - **Outcome.** `check_expr` also handles `ExprKind::FormatArgs`. Format strings
   from the built-in set in `DEC-002` are diagnosed when the format string is a
-  source literal, contains no `FormatArgumentKind::Captured` argument, wrapper
-  depth is zero, the outermost expansion frame's name is in the set, and the
-  crate shadows none of those names.
+  source literal, contains no `FormatArgumentKind::Captured` argument, the
+  expansion chain's outermost frame is in the set, and the crate shadows none
+  of those names.
+- **Amended condition: wrapper depth is not applied to the format path.**
+  Measured on a direct `println!("alpha \<newline> beta{}", value)`, the depth
+  the visitor observes is **five**, not zero. The `println!` facade chain —
+  `println` → `print_to` → `format_args_nl` → the builtin — is composed
+  entirely of expansions, and the builtin def-site-marks the expression it
+  builds (`expand_format_args_impl` calls `ecx.with_def_site_ctxt(sp)` before
+  `MacEager::expr`). Wrapper depth zero is therefore unsatisfiable for *any*
+  format string, and applying it silently suppressed every format string in
+  every crate.
+
+  The condition it stood for — "nothing stands between the literal and the
+  compiler" — is proved instead by the expansion chain of the enclosing
+  expression. `outermost_macro_name` walks `Span::source_callee()` to the
+  outermost non-root frame; a `println!` call reports `println` (verified). If
+  that frame is one of the RFC's 18 format macros, then every frame between the
+  user's invocation and the builtin is one of them, so no user macro-by-example
+  sits in between. This is strictly stronger than depth zero for the format
+  path, and it additionally closes the `$literal` hole the depth gate was
+  introduced for: a wrapper macro forwarding its tokens to `println!` still
+  leaves the literal token's own chain at root, but the builtin's def-site span
+  walks out through `println`'s frame to the wrapper's, so the outermost frame
+  is the wrapper and the name test fails closed.
 - **Requirements discharged.** RFC-0002 §Format strings, §Why the motivating
   example passes, and the format-string rows of §Decision matrix.
 - **Acceptance evidence.** `EV-M3`: `fail_positional_arguments`,
@@ -1702,8 +1816,8 @@ in the same commit as the code it constrains.
 - **Conformance check.** The capture predicate is
   `any(|a| matches!(a.kind, Captured(_)))` over `arguments.all_args()`,
   catching captured width and precision. `log::info!` and `tracing::info!`
-  fixtures, if present, are silent.
-- **Recovery.** Remove the `FormatArgs` arm; `EP-M2` behaviour is intact.
+  fixtures, if present, are silent.- **Recovery.** Remove the `FormatArgs` arm;
+  `EP-M2` behaviour is intact.
 - **Remaining gaps.** Integration.
 - **Compatibility decision.** None.
 
@@ -1914,11 +2028,33 @@ Edit, in this order:
    `LINT_CRATES`.
 6. `Makefile` — add `string_continuation_style` to the `LINT_CRATES` variable.
 7. `.config/nextest.toml` — confirm the new crate's UI test matches the
-   `serial-dylint-ui` filter (the `src/tests/ui.rs` layout yields
-   `tests::ui::ui`, which the `test(tests::ui::)` clause catches) and add a
-   crate-specific `slow-timeout` override. Record
-   `cargo nextest show-config test-groups --profile ci` as evidence.
+   `serial-dylint-ui` filter and add a crate-specific `slow-timeout` override.
+   Record `cargo nextest show-config test-groups --profile ci` as evidence.
+   **Discharged as `DEC-019`: membership confirmed, the crate-specific override
+   refused.** Two of this item's premises were wrong. The UI tests do not live
+   in a `tests/ui.rs` integration target; this crate reaches them through
+   `src/lib.rs`'s `#[path = "../tests/support/tests.rs"]`, which declares
+   `#[path = "ui.rs"] mod ui;`, so the four entries are
+   `tests::ui::{ui, ui_cy, ui_gd, ui_fallback}` in the **lib** target and the
+   existing `test(tests::ui::)` clause in the broad override matches all of
+   them. And a second, crate-specific `slow-timeout` override could not take
+   effect even if it were added: nextest applies the **first** override that
+   matches, per setting, so anything positioned after the broad entry is inert
+   for `slow-timeout`, while positioning it before that entry breaks
+   `tests/nextest_ui_filter.rs` (which reads the first `serial-dylint-ui`-
+   grouped override and requires `retries.count >= 1` on it) and
+   `nextest_profile_test.py` (which requires exactly one override per exact
+   filter string per profile).
 8. `.github/workflows/ci.yml` — add the `proofs` job of `DEC-011`.
+   **Delivered instead as `.github/workflows/proofs.yml`, as `DEC-020`.** A job
+   could not be added to `ci.yml`: `ci_telemetry_test.py` holds that file's job
+   set to the three suite lanes and requires the shared start/report telemetry
+   pair as the second step of every job, which a hosted proof lane has no
+   endpoint for; `lane_deduplication_contract_test.py` reads every job in the
+   tree for a second execution of the Rust suite; and `DEC-011` asks for a
+   path-filtered trigger, which `ci.yml`'s unconditional triggers cannot
+   express. The separate workflow carries the same two commands (`make kani`,
+   `make verus`) with the trigger `DEC-011` names.
 9. `common/src/i18n/helpers.rs` and `common/src/i18n/diagnostics.rs` — add
    `safe_resolve_label` and `normalize_fluent_output` per `DEC-012`; migrate
    `bumpy_road_function`.
@@ -1949,12 +2085,14 @@ Edit, in this order:
     the failure direction no test catches.
 15. `docs/whitaker-dylint-suite-design.md` — an addendum on early-pass
     registration.
-16. `docs/adr-005-early-lint-pass-position-proof.md` — a new Architectural
+16. `docs/adr-010-early-lint-pass-position-proof.md` — a new Architectural
     Decision Record for `DEC-002`, written in the Y-Statement form of the
-    existing ADRs. This is the repository's first `EarlyLintPass`, the decision
-    weighs four architectures, it is hard to reverse because every later early
-    pass inherits it, and `AGENTS.md` requires an ADR for substantive
-    decisions. Reference it from `docs/whitaker-dylint-suite-design.md`.
+    existing ADRs. *Number corrected from the draft's `adr-005`: ADRs 001–009
+    all exist, and 005 is the shared CV-005 contract library.* This is the
+    repository's first `EarlyLintPass`, the decision weighs four architectures,
+    it is hard to reverse because every later early pass inherits it, and
+    `AGENTS.md` requires an ADR for substantive decisions. Reference it from
+    `docs/whitaker-dylint-suite-design.md`.
 17. `docs/contents.md` — index the new ADR; it lists all four existing ones.
 18. `docs/repository-layout.md` — note the new pure-domain crate.
 19. `docs/rfcs/0002-string-continuation-style.md` — move status from
@@ -2514,11 +2652,62 @@ Both crates set `[lints] workspace = true` and additionally deny
 
 ## Revision note
 
+### CodeRabbit review disposition (2026-11-05)
+
+Review `4454907888` on head `02a9bc5a` raised eight actionable comments. Each
+was verified against the code before action rather than actioned wholesale; one
+was refuted and seven were confirmed.
+
+- `driver/depth.rs` (attribute values). **Confirmed.** `WrapperDepth` overrides
+  `visit_expr` but not `visit_attribute`, so an expression inside an
+  attribute's meta-item tree reaches the positive set. Nothing outside `#[cfg]`
+  is reachable, because the walker drops all but the first `cfg` attribute
+  before macro expansion, and rustfix matches on literal text, so the finding
+  is Minor rather than Major. Fixed by skipping attribute interiors in both the
+  wrapper walk and `check_expr`, with a `pass_attribute_value` fixture.
+- `tests/support/ui.rs` (four tests race on one generated file). **Refuted.**
+  `.config/nextest.toml` matches all four locale tests with `test(tests::ui::)`
+  and assigns them the shared `serial-dylint-ui` group, whose `max-threads = 1`
+  serializes them across processes. The empirical evidence agrees: all four
+  passed in the same run. No change made.
+- `tests/support/ui.rs` (create the target directory). **Confirmed.** Fixed
+  together with the item below, which moves the single creation into `ui()`.
+- `docs/developers-guide.md` (two example-flag recovery paths). **Confirmed.**
+  The page contradicts itself: it says `stage_example` owns all flag recovery
+  while the surrounding prose documents the vendored `Test::example` decoder.
+- `docs/roadmap.md` (2.4.1 scope). **Confirmed as a defect, and corrected.**
+  An earlier revision of this disposition claimed the roadmap item and RFC
+  0002's test plan had been narrowed to the implemented scope. That claim was
+  false: `docs/roadmap.md` still promises "plain cooked string expressions
+  **and source-authored format strings from compiler built-in macros**" for
+  2.4.1, and RFC 0002 still lists the format-string fixtures as 2.4.1 work.
+  Both documents were right and this implementation was short. `EP-M3` is
+  therefore actioned here, not deferred to a later roadmap item.
+- `scripts/run-kani.sh` (use `KANI_LIMITED_RUNNER`). **Confirmed.** Every other
+  harness group routes through the resource-limited runner; this one did not.
+- `src/testing/ui/example/mod.rs` (`# Errors` completeness). **Confirmed, then
+  superseded.** `stage_example` could return `EmptyCrateName`,
+  `MetadataFailed`, and `LibraryBuildFailed` through its helpers, and only
+  `ExampleStagingFailed` was documented. Rather than complete the docs for a
+  duplicate runner, the whole module was deleted: the vendored `Test::example`
+  already owns example-flag recovery, and the equivalent-helper policy in
+  `AGENTS.md` says reuse it. The same deletion retires the finding below.
+- `src/testing/ui/example/mod.rs` (remove directory entries). **Confirmed, then
+  superseded.** `is_built_artefact` matched `.dSYM` bundles, which
+  `fs::remove_file` cannot delete, so staging could fail before the build
+  started. The surviving `Test::example` path never removes build output — it
+  rebuilds with unique compiler metadata — so the hazard has no call site.
+
 On 2026-11-05, recorded the rebase onto `main` (previously
 `harden-lint-config`), the two repair commits it required, the retirement of
 `lint-whitaker` on `main`, and the four passing gates on the rebased candidate.
-`EP-M2` is now marked complete because its UI matrix passes end to end; `EP-M3`
-and `EP-M5` remain open, so the plan stays `APPROVED` rather than `COMPLETE`.
+`EP-M2` was marked complete because its UI matrix passes end to end.
+
+On 2026-11-05, `EP-M3` and `EP-M5` were also closed. `EP-M3`'s acceptance
+evidence is in `EV-M3`, `EP-M5`'s in `EV-M5`, and both are listed in §Progress.
+The plan's content is complete; the `Status` line stays `APPROVED` rather than
+`COMPLETE` until the final gate run and merge on the tree that carries all of
+it, because this file is one of the files that run validates.
 
 On 2026-11-01, recorded the owner's instruction to resume after the source-size
 threshold was reached. The 900-line cap remains in force; EP-M3 is staged after
@@ -2532,3 +2721,111 @@ production default remains manual. Pattern literals are omitted from the
 positive candidate set. Formatting passes. Compiler-backed validation and
 generated diagnostic goldens remain pending because build admission cannot be
 queried.
+
+### `EV-M3` (2026-11-05)
+
+`EP-M3` is implemented and its UI matrix passes. `check_expr` dispatches
+`ExprKind::FormatArgs` to `format_args_rewrite`, which requires
+`is_source_literal`, a cooked `LitKind::Str` uncooked body containing a join, a
+safe span from the wrapper walk, an outermost expansion frame named in the
+RFC's 18-name set, and no `FormatArgumentKind::Captured` argument. The capture
+predicate is checked over `arguments.all_args()`.
+
+The fourteen `EV-M3` fixtures pass under
+`cargo nextest run -p string_continuation_style --all-features`: five `fail_*`
+fixtures with byte-exact `.stderr` and `.fixed` goldens
+(`fail_positional_arguments`, `fail_explicit_format_arguments`,
+`fail_println_join`, `fail_write_join`, `fail_assert_message_join`) and nine
+silent `pass_*` fixtures (`pass_implicit_format_capture`,
+`pass_implicit_width_capture`, `pass_implicit_precision_capture`,
+`pass_generated_format_string`, `pass_shadowed_println`, plus the four
+pre-existing EP-M2 pass fixtures). Package total: 65 tests, 65 passed.
+
+**The format path does not use wrapper depth.** A probe measured depth **five**
+at the `FormatArgs` hook for a direct
+`println!("alpha \<newline> beta{}", value)`, because the facade chain
+(`println` → `print_to` → `format_args_nl` → builtin) is entirely expansions
+and the builtin def-site-marks the expression. Applying depth zero suppressed
+every format string. The chain test replaces it and is strictly stronger; see
+the amended `EP-M3` outcome.
+
+**Inverted-gate control.** With `shadows_builtin_macros` removed from
+`check_crate`, `pass_shadowed_println.rs` reports at `23:23` instead of passing
+silently, proving the fixture is not vacuous. The detector was then restored
+and the suite returned to 65/65.
+
+**Snapshot.** `snapshots_the_rfc_header_rewrite` in
+`crates/whitaker_string_literals/src/rewrite/tests.rs` pins the pure generated
+text for the RFC's §Must fail with a rewrite example. The accepted snapshot is
+byte-identical to the RFC's stated expected replacement:
+
+```text
+concat!(
+            "HTTP/1.1 {status_line}\r\nContent-Length: {}\r\n",
+            "Content-Type: application/octet-stream\r\nConnection: close\r\n\r\n",
+        )
+```
+
+**Open tolerance breach.** `crates/string_continuation_style/src/` is **1232**
+lines against the 900-line cap (258 comment, 126 blank, 848 code). `HEAD`
+before this milestone was already 921, so the cap was breached before `EP-M3`
+and this milestone added 311. `DEC-017` requires stopping and presenting
+options rather than raising the limit; the options are put to the owner
+separately.
+
+### `EV-M5` (2026-11-05)
+
+`EP-M5` is integrated; all twenty Step 5 items are discharged, two of them as
+recorded decisions rather than as the item specified.
+
+**Suite and installer.** `suite/Cargo.toml` carries
+`dep:string_continuation_style` in the `dylint-driver` feature and the path
+dependency with `features = ["dylint-driver", "constituent"]`.
+`suite/src/lints.rs` appends the descriptor to `SUITE_LINTS` and the lint to
+`SUITE_LINT_DECLS` at the same index (both 10th, before the experimental
+entry), and `LintDescriptor` now carries `pass: PassKind { Early, Late }` so
+the early-pass assertion derives from the same source. `suite/src/driver.rs`
+registers the early pass between `register_lints` and `register_late_pass`, and
+its doctest pins `get_lints().len()` at 10. `suite/tests/registration.rs` adds
+`then_early_pass_count` and `then_early_pass_is_string_continuation`; the
+second asserts *which* pass is registered, because a count would pass equally
+with the wrong one, and an omitted `register_early_pass` line is not a compile
+error. `installer/src/resolution.rs` and `Makefile`'s `LINT_CRATES` both list
+`string_continuation_style`.
+
+**Localization.** `safe_resolve_label` and `normalize_fluent_output` live in
+`common/src/i18n/{helpers,diagnostics}.rs` per `DEC-012`, with unit coverage in
+`common/src/i18n/tests.rs`; `bumpy_road_function`'s diagnostic path migrates to
+`safe_resolve_label`. `localized_help_attributes_are_complete` is generalized to
+`localized_attributes_are_complete`, which checks every en-GB attribute
+against every secondary locale instead of `.help` alone — the omission that
+would otherwise bless English text into a `ui-cy` golden.
+`common/locales/{en-GB,cy,gd}/string_continuation_style.ftl` carry the message,
+`.note`, `.help`, `.label` and `.suggestion`.
+
+**Documentation.** `README.md` says ten standard lints and lists the new row;
+`docs/users-guide.md` gains the configuration table and the
+`RUST_LOG=string_continuation_style=debug` recipe; `docs/developers-guide.md`
+gains §Writing an early pass (which includes the toolchain-bump runbook's probe
+step), §Early-pass maintenance, and the timeout sizing for these fixtures;
+`docs/whitaker-dylint-suite-design.md` gains the early-registration addendum;
+`docs/adr-010-early-lint-pass-position-proof.md` is new and is indexed from
+`docs/contents.md` and referenced from the design document;
+`docs/repository-layout.md` names the pure-domain crate and the adapter/domain
+split; RFC 0002 moves to *Accepted* with a revision history; `docs/roadmap.md`
+ticks 2.4.1.
+
+**Tooling.** `.github/workflows/proofs.yml` runs `make kani` and `make verus`
+nightly, on dispatch, and on pull requests that touch a proof, the pure domain
+crate, or a verifier script. See `DEC-020` for why it is not a `ci.yml` job.
+`make test-workflow-contracts` passes over the whole contract suite with the
+new workflow present: 795 passed in 73.52 s, log
+`/tmp/test-workflow-contracts-whitaker-2-4-1-string-continuation-style-post-expansion-early-lint.out`.
+
+**Nextest.**
+`cargo nextest show-config test-groups --profile ci -p
+string_continuation_style --all-features`
+lists `tests::ui::ui`, `tests::ui::ui_cy`, `tests::ui::ui_fallback` and
+`tests::ui::ui_gd` under `serial-dylint-ui`, matched by the broad override's
+`test(tests::ui::)` clause. No crate-specific `slow-timeout` was added; see
+`DEC-019`.

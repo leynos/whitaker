@@ -13,11 +13,20 @@ use rustc_lint::{EarlyContext, LintContext};
 use rustc_span::{NormalizedPos, Pos, Span};
 use whitaker_string_literals::{
     classification::{ContinuationDisposition, classify},
-    facts::{LiteralContext, LiteralFacts},
+    facts::{CaptureStatus, LiteralContext, LiteralFacts},
     rewrite::{Newline, cooked_literal_body, gate::preserves_value},
 };
 
-use super::{literal::plain_join_literal, span::body_range_span};
+use super::{
+    literal::{
+        has_captured_argument,
+        join_format_string,
+        outermost_macro_name,
+        plain_join_literal,
+    },
+    shadow::is_format_macro_name,
+    span::body_range_span,
+};
 use crate::config::LINT_NAME;
 
 /// A validated replacement and the continuation spans it will label.
@@ -42,13 +51,65 @@ pub(crate) fn plain_literal_rewrite(
         return None;
     }
 
-    source_literal_rewrite(cx, expression.span, literal.symbol.as_str())
+    source_literal_rewrite(
+        cx,
+        expression.span,
+        literal.symbol.as_str(),
+        |is_editable| {
+            if is_editable {
+                LiteralContext::Expression
+            } else {
+                LiteralContext::GeneratedSourceFile
+            }
+        },
+    )
+}
+
+/// Extracts a rewrite when `expression` is a safe, editable format string
+/// reached through one of the RFC's format macros.
+///
+/// Two different spans matter here, and they are not interchangeable. The
+/// rewrite replaces `arguments.span`, which the builtin sets to the literal
+/// token; the enclosing expression's span is def-site-marked by the builtin.
+/// The macro-identity test needs that second span: a `println!`-family literal
+/// travels through `$($arg:tt)*` unchanged, so the token keeps root context
+/// and its own `source_callee()` is empty, while the def-site-marked
+/// expression's chain reaches the macro the user typed.
+pub(crate) fn format_args_rewrite(
+    cx: &EarlyContext<'_>,
+    expression: &ast::Expr,
+    arguments: &ast::FormatArgs,
+    safe_format_spans: &HashSet<Span>,
+) -> Option<LiteralRewrite> {
+    let uncooked_body = join_format_string(arguments)?;
+
+    if !safe_format_spans.contains(&arguments.span) {
+        return None;
+    }
+    let macro_name = outermost_macro_name(expression.span)?;
+    if !is_format_macro_name(macro_name.as_str()) {
+        return None;
+    }
+    let capture = if has_captured_argument(arguments) {
+        CaptureStatus::Present
+    } else {
+        CaptureStatus::NoneObserved
+    };
+
+    source_literal_rewrite(cx, arguments.span, uncooked_body, |is_editable| {
+        if is_editable {
+            LiteralContext::SourceFormatString { capture }
+        } else {
+            LiteralContext::GeneratedSourceFile
+        }
+    })
 }
 
 fn source_literal_rewrite(
     cx: &EarlyContext<'_>,
     literal_span: Span,
     uncooked_body: &str,
+    context_of: impl FnOnce(bool) -> LiteralContext,
 ) -> Option<LiteralRewrite> {
     let source_map = cx.sess().source_map();
     let source_path = source_map
@@ -64,11 +125,7 @@ fn source_literal_rewrite(
         return None;
     }
 
-    let context = if is_editable_source(source_path) {
-        LiteralContext::Expression
-    } else {
-        LiteralContext::GeneratedSourceFile
-    };
+    let context = context_of(is_editable_source(source_path));
     let facts = LiteralFacts::Cooked { body, context };
     let rewrite = match classify(&facts) {
         ContinuationDisposition::PreferConcat(rewrite) => {

@@ -99,7 +99,7 @@ run_clone_detector_harnesses() {
 
 run_string_literal_harnesses() {
     for harness in verify_scanner_matches_bounded_parity_reference; do
-        "${CARGO_KANI_BIN}" kani \
+        "${KANI_LIMITED_RUNNER}" "${harness}" "${CARGO_KANI_BIN}" kani \
             --manifest-path "${STRING_LITERAL_MANIFEST}" \
             --default-unwind 9 \
             --harness "${harness}" \

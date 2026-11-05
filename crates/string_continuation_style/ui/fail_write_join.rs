@@ -1,0 +1,11 @@
+// run-rustfix
+#![warn(string_continuation_style)]
+
+use std::io::Write as _;
+
+fn main() {
+    let mut sink = Vec::new();
+    write!(&mut sink, "alpha \
+        beta{}", 7)
+        .expect("writing to a Vec cannot fail");
+}

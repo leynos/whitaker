@@ -216,19 +216,6 @@ fn windows_env_guard_leaves_absent_rustc_wrapper_untouched() {
 }
 
 #[test]
-fn example_staging_failures_name_the_example() {
-    let error = HarnessError::ExampleStagingFailed {
-        example: String::from("pass_demo"),
-        message: String::from("found no `rustc` invocation for `pass_demo`"),
-    };
-
-    assert_eq!(
-        error.to_string(),
-        "failed to stage example pass_demo: found no `rustc` invocation for `pass_demo`",
-    );
-}
-
-#[test]
 fn runner_env_guard_test_lock_releases_after_panic() {
     let result = std::panic::catch_unwind(|| {
         let _serial_guard = runner_env_guard_test_lock();

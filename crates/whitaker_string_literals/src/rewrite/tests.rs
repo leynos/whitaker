@@ -123,3 +123,21 @@ fn recovers_the_body_of_one_cooked_literal(#[case] snippet: &str, #[case] expect
 fn validates_the_generated_macro_expression(#[case] source: &str, #[case] expected: bool) {
     assert_eq!(is_concat_macro_expression(source), expected);
 }
+
+/// The RFC's §Must fail with a rewrite example, pinned as an independent
+/// artefact.
+///
+/// The UI fixture's `.fixed` golden proves the adapter end to end; this
+/// snapshot proves the *pure* generated `concat!()` text. Drift in the
+/// multi-line layout then requires two files to be blessed in agreement, which
+/// a single end-to-end golden cannot enforce.
+#[test]
+fn snapshots_the_rfc_header_rewrite() {
+    let body_source = "HTTP/1.1 {status_line}\\r\\nContent-Length: {}\\r\\n\\\n         \
+                       Content-Type: application/octet-stream\\r\\nConnection: close\\r\\n\\r\\n";
+    let body = LiteralBody::new(body_source);
+    let joins = interior_joins(body);
+    let rewrite = ConcatRewrite::build(body, &joins).expect("the header join is safe");
+
+    insta::assert_snapshot!(rewrite.render(8, Newline::Lf));
+}

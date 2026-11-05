@@ -150,7 +150,7 @@ published-GPUI workspace invocation.
 
 ### 2.4. String continuation style
 
-- [ ] 2.4.1. Implement `string_continuation_style` as a post-expansion early
+- [x] 2.4.1. Implement `string_continuation_style` as a post-expansion early
   lint covering plain cooked string expressions and source-authored format
   strings from compiler built-in macros, including source-preserving
   `concat!()` suggestions, format-capture and literal-context exemptions,

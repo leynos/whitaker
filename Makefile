@@ -163,7 +163,7 @@ SKILLS_REF := env -u GIT_CONFIG_COUNT -u GIT_EXEC_PATH PATH="$(SKILLS_REF_PATH)"
 # `line-length` rule is disabled rather than wrapping the frontmatter.
 SKILL_YAMLLINT_CONFIG := {extends: default, rules: {line-length: disable}}
 WORKFLOW_TEST_VENV ?= .venv
-LINT_CRATES ?= bumpy_road_function conditional_max_n_branches function_attrs_follow_docs module_max_lines module_must_have_inner_docs no_expect_outside_tests test_must_not_have_example no_std_fs_operations no_unwrap_or_else_panic whitaker_suite
+LINT_CRATES ?= bumpy_road_function conditional_max_n_branches function_attrs_follow_docs module_max_lines module_must_have_inner_docs no_expect_outside_tests string_continuation_style test_must_not_have_example no_std_fs_operations no_unwrap_or_else_panic whitaker_suite
 CARGO_DYLINT_VERSION ?= 6.3.0
 DYLINT_LINK_VERSION ?= 6.3.0
 # The pinned host tools are downloaded once into a durable directory rather

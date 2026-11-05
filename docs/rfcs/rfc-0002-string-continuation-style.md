@@ -3,15 +3,40 @@
 ## Preamble
 
 - **RFC number:** 0002
-- **Status:** Proposed
+- **Status:** Accepted (2026-10-18)
 - **Repository:** `leynos/whitaker`
 - **Created:** 2026-07-26
-- **Revised:** 2026-08-21
+- **Revised:** 2026-11-05
 - **Proposed lint:** `string_continuation_style`
 - **Default level:** `Warn`
-- **Suite status:** Proposed for the standard suite after implementation
+- **Suite status:** Accepted for the standard suite; registration landed with
+  the crate
 
 ## Revision history
+
+**2026-11-05.** Status moved from *Proposed* to *Accepted*, approved with
+[ExecPlan 2.4.1](../execplans/2-4-1-string-continuation-style-post-expansion-early-lint.md)
+on 2026-10-18 and now backed by a shipped implementation. Three passages were
+brought into line with what implementation measured, because leaving them as
+written would describe code that does not exist:
+
+1. **Wrapper depth does not apply on the format-string path.** §Format strings
+   had required depth zero for `FormatArgs` as well. Measured on a direct
+   `println!("alpha \<newline> beta{}", value)`, the depth the visitor observes
+   is five, not zero: the facade chain is entirely expansions and the builtin
+   def-site-marks the expression. §Format strings, §Macro position, and the
+   §Decision matrix now state the outermost-frame test for that path and keep
+   the depth test for plain literals.
+2. **Wrapper depth is not maintained by paired lint hooks.** §AST entry points
+   described `check_item`, `check_item_post`, `check_stmt`, `check_expr_post`,
+   and `check_mac_def`. The pinned `nightly-2026-05-28` has no
+   `check_stmt_post` / `check_local` / `check_block` / `check_arm` / `check_ty`
+   pairing, so the pass implements only `check_crate` and `check_expr`, with a
+   single visitor walk recording the positive span sets.
+3. **`RequiredReason` carries four variants, not five.** `UnknownMacroContract`
+   is not constructed by the adapter — every situation it would have named is
+   gated before classification — so §Rule semantics now lists the four that
+   exist.
 
 **2026-08-21.** Substantive revision, following validation of the original text
 against the pinned `nightly-2026-05-28` compiler sources and a six-lens design
@@ -259,7 +284,6 @@ pub(crate) enum RequiredReason {
     ImplicitFormatCapture,
     NonStringLiteralType,
     LeadingOrTrailingLayoutTrim,
-    UnknownMacroContract,
     GeneratedSourceFile,
 }
 ```
@@ -267,23 +291,30 @@ pub(crate) enum RequiredReason {
 Only `PreferConcat` emits a lint. The `RequireContinuation` variants exist to
 make the negative policy explicit and directly testable.
 
-Two variants from the original text are gone. `GeneratedFormatString` and
+Three variants from the original text are gone. `GeneratedFormatString` and
 `UnrecoverableSourceSpan` named situations the decision matrix routes to
 `Ignore`, so as `RequireContinuation` reasons they were unreachable — and two
 encodings of one outcome cannot be told apart end to end, because both produce
-silence. `GeneratedSourceFile` is new; see §Configuration.
+silence. `UnknownMacroContract` went the same way for a different reason: the
+adapter never constructs it, because every situation it would have named is
+gated before classification runs. A literal in an unknown macro position never
+reaches the classifier at all — the wrapper-depth walk declines to record its
+span — so the variant would have been a claim the driver cannot make and a test
+the pure layer can only satisfy against synthetic facts. `GeneratedSourceFile`
+is new; see §Configuration.
 
 ### Decision matrix
 
 | Source situation                                                                     | Decision                                  | Rationale                                                                      |
 | ------------------------------------------------------------------------------------ | ----------------------------------------- | ------------------------------------------------------------------------------ |
 | Cooked `str` expression at wrapper depth zero with an interior join                  | Diagnose and suggest `concat!()`          | A general expression is valid and type and value are preserved                 |
-| Source-authored format string with positional or explicitly named arguments only     | Diagnose and suggest `concat!()`          | No implicit capture is lost                                                    |
+| Format string reached through a known format macro, with no `Captured` argument      | Diagnose and suggest `concat!()`          | No enclosing matcher can break and no implicit capture is lost                 |
 | Source-authored format string containing any `FormatArgumentKind::Captured` argument | Require continuation                      | `concat!()` would turn the format string into macro output and disable capture |
+| Format string whose outermost expansion frame is not a known format macro            | Require continuation                      | The macro may have matched `$literal` (see §Macro position)                    |
 | Cooked byte string or C string                                                       | Require continuation                      | `concat!()` changes the type or has no stable equivalent                       |
 | Raw string, raw byte string, or raw C string                                         | Ignore                                    | Continuation escapes are not interpreted                                       |
 | Leading or trailing layout trim                                                      | Require continuation                      | It expresses source layout rather than a fragment boundary                     |
-| Literal at wrapper depth greater than zero                                           | Require continuation                      | An enclosing macro may have matched `$literal` (see §Wrapper depth)            |
+| Plain literal at wrapper depth greater than zero                                     | Require continuation                      | An enclosing macro may have matched `$literal` (see §Wrapper depth)            |
 | Format string generated by `concat!`, `include_str!`, or another eager macro         | Ignore                                    | `is_source_literal` is false; there is no direct source literal to rewrite     |
 | Literal in a file outside the workspace root or under the target directory           | Require continuation                      | The user cannot annotate a file they do not write (see §Configuration)         |
 | Literal whose editable source span cannot be recovered exactly                       | Ignore                                    | No trustworthy suggestion range exists                                         |
@@ -364,10 +395,26 @@ The rule analyses expression literals and source-authored format arguments
 only. It does not visit or claim classification coverage for patterns,
 attributes, or meta-item literals.
 
-The pass additionally implements `check_item`, `check_item_post`, `check_stmt`,
-`check_expr_post`, and `check_mac_def`. The first four maintain wrapper depth;
-the last participates in the shadow check of §Macro position. None of them
-classifies a literal.
+The pass implements exactly two hooks: `check_crate` and `check_expr`. Wrapper
+depth is not maintained by paired entry/exit hooks, because the pinned
+`nightly-2026-05-28` `EarlyLintPass` has no `check_stmt_post`, `check_local`,
+`check_block`, `check_arm`, or `check_ty` counterpart to balance the entry
+hooks it does have — and even a balanced set would not cover the `$literal`
+capture case, since the captured token enters as an expression inside a
+transcribed statement. Instead, `check_crate` runs a
+`rustc_ast::visit::Visitor` over the expanded crate once, pushing and popping
+for every AST container kind. `check_crate` also performs the shadow scan of
+§Macro position. Neither hook's work is a classification; `check_expr` is the
+only site that classifies.
+
+The walk records a positive set rather than recomputing depth per expression,
+and it records two of them, because the two expression shapes are admitted by
+different predicates. A plain literal enters the plain set when its depth is
+zero. A format string enters the format set when its outermost expansion frame
+is a known format macro, the depth test being inapplicable on that path for the
+reason §Format strings gives. `check_expr` looks up whichever set matches the
+expression kind it is handed, so an unrecorded span is silence rather than a
+finding.
 
 ### Check ordering
 
@@ -383,7 +430,8 @@ remainder of the compilation.
 1. The token is `token::LitKind::Str`. Touches no source map.
 2. The uncooked symbol contains a backslash followed by a line feed. Symbol
    resolution is an interned lookup and the scan allocates nothing.
-3. Wrapper depth is zero and the span is not from an expansion.
+3. The span is in the recorded positive set for its expression kind — depth
+   zero for a plain literal, a known outermost frame for a format string.
 4. Only now recover the snippet and re-lex it.
 
 ### What the compiler already proves
@@ -418,12 +466,20 @@ For `ExprKind::FormatArgs`:
 
 1. Require `is_source_literal`.
 2. Require a cooked `token::LitKind::Str` uncooked format string.
-3. Require wrapper depth zero.
-4. Require the macro position to be provable (§Macro position).
-5. Scan `uncooked_fmt_str` for join continuations.
-6. If any argument is `Captured`, return
+3. Require the macro position to be provable (§Macro position). Wrapper depth
+   is **not** applied on this path; implementation showed it cannot be, and
+   why. A format literal is never at depth zero: the facade chain (`println` →
+   `print_to` → `format_args_nl` → the builtin) is entirely expansions, and the
+   builtin def-site-marks the expression it constructs. Measured on a direct
+   `println!("alpha \<newline> beta{}", value)`, the depth the visitor observes
+   is five. Depth zero stood for "no enclosing matcher can be broken"; the
+   outermost-frame requirement in step 3 proves that property directly, and
+   proves more, because a `shout!` that forwards its tokens to `println!` walks
+   back out through `println`'s frame to `shout`'s and is refused.
+4. Scan `uncooked_fmt_str` for join continuations.
+5. If any argument is `Captured`, return
    `RequireContinuation(ImplicitFormatCapture)`.
-7. Otherwise build the `concat!()` rewrite and emit it, subject to
+6. Otherwise build the `concat!()` rewrite and emit it, subject to
    §Applicability.
 
 ### Macro position
@@ -436,31 +492,35 @@ name without one.
 
 It is also more than the rule needs. The lint does not need to know which macro
 produced a literal. It needs to know whether anything stands between that
-literal and the compiler — and that is answerable locally. Three conditions,
-all biased towards silence:
+literal and the compiler — and that is answerable locally.
 
-1. **Wrapper depth is zero.** Nothing enclosing the literal came from an
-   expansion, so no enclosing matcher can be broken. This is the condition that
-   closes the `$literal` hole described in §Wrapper depth, and it subsumes the
-   original decision-matrix row for unknown literal contracts.
-2. **The outermost non-root expansion frame is a known formatting macro.** Walk
-   the literal span's expansion chain to its outermost frame — the invocation
-   the user actually typed — and require it to be a bang macro whose name is in
-   this fixed set: `format_args`, `format`, `print`, `println`, `eprint`,
-   `eprintln`, `write`, `writeln`, `panic`, `todo`, `unimplemented`,
-   `unreachable`, `assert`, `debug_assert`, `assert_eq`, `assert_ne`,
-   `debug_assert_eq`, `debug_assert_ne`. These are language built-ins with no
-   macro-by-example matcher to break: `format_args!` parses an expression, and
-   `write!`/`writeln!` forward through `$($arg:tt)*`.
+The position test has **two branches**, because the two expression shapes reach
+it from opposite directions, plus a crate-wide switch that governs both.
+
+1. **Plain literal: wrapper depth is zero.** Nothing enclosing the literal came
+   from an expansion, so no enclosing matcher can be broken. This is the
+   condition that closes the `$literal` hole described in §Wrapper depth, and
+   it subsumes the original decision-matrix row for unknown literal contracts.
+2. **Format string: the outermost non-root expansion frame is a known
+   formatting macro.** Walk the literal span's expansion chain to its outermost
+   frame — the invocation the user actually typed — and require it to be a bang
+   macro whose name is in this fixed set: `format_args`, `format`, `print`,
+   `println`, `eprint`, `eprintln`, `write`, `writeln`, `panic`, `todo`,
+   `unimplemented`, `unreachable`, `assert`, `debug_assert`, `assert_eq`,
+   `assert_ne`, `debug_assert_eq`, `debug_assert_ne`. These are language
+   built-ins with no macro-by-example matcher to break: `format_args!` parses
+   an expression, and `write!`/`writeln!` forward through `$($arg:tt)*`. This
+   branch replaces, rather than supplements, the depth test on this path; see
+   §Format strings.
 3. **The crate does not shadow any of those names.** A bare name check is sound
    only if the name cannot be shadowed. If the crate under compilation defines a
    `macro_rules!` or `macro` with a name in the set, or contains a `use` whose
    terminal segment is one, or a `#[macro_use] extern crate`, the lint disables
-   itself for that crate entirely.
+   itself for that crate entirely. This applies to both branches.
 
 Condition 3 is blunt. It will occasionally silence the lint across a whole
 crate that had no real conflict, and its residual hole — a crate reaching a
-same-named macro by a path none of the three checks observes — fails silently
+same-named macro by a path that none of the checks observes — fails silently
 rather than loudly. Both are the correct direction under a near-zero
 false-positive budget, but they mean the lint's real-world hit rate cannot be
 measured from inside the lint.
@@ -1035,18 +1095,35 @@ one fixture per way the position proof of §Macro position can fail — a shorte
 list, and one that does not decay when a third-party crate ships a new macro
 arm.
 
-| Fixture                           | Expected result                                                                        |
-| --------------------------------- | -------------------------------------------------------------------------------------- |
-| `pass_literal_macro_capture.rs`   | A `$l:literal` matcher substituting a joined literal receives no diagnostic            |
-| `pass_expanded_item.rs`           | A joined literal inside an expanded item receives no diagnostic                        |
-| `pass_expanded_stmt.rs`           | A joined literal inside an expanded statement receives no diagnostic                   |
-| `pass_derive_generated.rs`        | A joined literal in derive output receives no diagnostic                               |
-| `pass_nested_expansion.rs`        | A joined literal two expansions deep receives no diagnostic                            |
-| `pass_local_macro_lookalikes.rs`  | A crate defining its own `println!` disables the lint for that crate                   |
-| `pass_facade_macros.rs`           | `log::info!` and `tracing::info!` joins receive no diagnostic until roadmap item 2.4.2 |
-| `pass_generated_format_string.rs` | `concat!()` and `include_str!()` format strings receive no diagnostic                  |
+| Fixture                           | Expected result                                                             |
+| --------------------------------- | --------------------------------------------------------------------------- |
+| `pass_literal_macro_capture.rs`   | A `$l:literal` matcher substituting a joined literal receives no diagnostic |
+| `pass_expanded_item.rs`           | A joined literal inside an expanded item receives no diagnostic             |
+| `pass_expanded_statement.rs`      | A joined literal inside an expanded statement receives no diagnostic        |
+| `pass_derive_generated_impl.rs`   | A joined literal in derive output receives no diagnostic                    |
+| `pass_nested_expansion.rs`        | A joined literal two expansions deep receives no diagnostic                 |
+| `pass_generated_source_file.rs`   | A joined literal in `include!()`-ed generated source receives no diagnostic |
+| `pass_generated_format_string.rs` | `concat!()` and `include_str!()` format strings receive no diagnostic       |
+| `pass_shadowed_println.rs`        | A crate defining its own `println!` disables the lint for that crate        |
+| `pass_local_macro_lookalikes.rs`  | Same-named local and external lookalikes of the facades stay silent         |
+| `pass_facade_macros.rs`           | `log::info!` and `tracing::info!` joins receive no diagnostic               |
 
-Each has a paired control that inverts its gate, per §UI passes.
+Each has a paired control that inverts its gate, per §UI passes. The control is
+an acceptance requirement in its own right, not an optional extra: a silence
+fixture without one also passes against an unimplemented lint, so it proves
+nothing.
+
+The last two rows belong to roadmap item 2.4.2 and are deferred with §Deferred:
+facade macros. They stay in this table because it is an acceptance test plan
+for the whole rule, not an inventory of delivered files.
+
+Everything above them is 2.4.1. Generated format-string coverage in particular
+is *not* deferred: `concat!()` and `include_str!()` reach the format-string
+position in 2.4.1, so `pass_generated_format_string.rs` stays. Condition 3's
+crate-wide shadow kill switch is 2.4.1 too, and `pass_shadowed_println.rs` is
+its fixture. `pass_generated_source_file.rs` is a separate case —
+`include!()`-ed source rather than a generated format string — and is also
+2.4.1, per §UI passes.
 
 ### Must pass unchanged
 

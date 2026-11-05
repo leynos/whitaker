@@ -9,7 +9,14 @@ use whitaker_common::test_support::with_locale;
 
 #[test]
 #[serial]
-fn ui() { run_with_locale("ui", None); }
+fn ui() {
+    // Only the `ui/` fixture reads the generated file, so only this test needs
+    // it. The other three locale runs would otherwise create and delete the
+    // same path for no reason.
+    let _generated_source = GeneratedSource::create()
+        .expect("generated-source UI input should be prepared in the target directory");
+    run_with_locale("ui", None);
+}
 
 #[test]
 #[serial]
@@ -24,8 +31,6 @@ fn ui_gd() { run_with_locale("ui-gd", Some("gd")); }
 fn ui_fallback() { run_with_locale("ui-fallback", Some("zz")); }
 
 fn run_with_locale(directory: &str, locale: Option<&str>) {
-    let _generated_source = GeneratedSource::create()
-        .expect("generated-source UI input should be prepared in the target directory");
     with_locale(locale, || run_ui_directory(directory));
 }
 
@@ -53,8 +58,20 @@ struct GeneratedSource {
 impl GeneratedSource {
     fn create() -> io::Result<Self> {
         let target_root = Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target");
+        // `CARGO_TARGET_DIR` can point elsewhere and the directory may not have
+        // been created yet, so create the fixed fixture location rather than
+        // assuming the default `target/` already exists.
+        Dir::create_ambient_dir_all(&target_root, ambient_authority())?;
         let target_directory = Dir::open_ambient_dir(&target_root, ambient_authority())?;
         let path = Utf8PathBuf::from("string_continuation_style-generated-ui.rs");
+        // An interrupted earlier run leaves the file behind, and `create_new`
+        // would then fail for the rest of the session. Remove it first, but
+        // ignore "not found" so a clean target directory still succeeds.
+        match target_directory.remove_file(&path) {
+            Ok(()) => {}
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error),
+        }
         let mut options = OpenOptions::new();
         options.write(true).create_new(true);
         let mut file = target_directory.open_with(&path, &options)?;

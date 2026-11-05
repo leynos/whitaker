@@ -64,6 +64,11 @@ impl LiteralBody<'_> {
     }
 }
 
+/// Scans `body`, emitting each continuation to `emit`.
+///
+/// The single pass keeps the three helpers below free of cursor discipline;
+/// they report the next cursor and the new line-content state, and this loop
+/// owns the walk.
 fn scan_into(body: &str, mut emit: impl FnMut(Continuation)) {
     let bytes = body.as_bytes();
     let mut cursor = 0;
@@ -80,6 +85,12 @@ fn scan_into(body: &str, mut emit: impl FnMut(Continuation)) {
     }
 }
 
+/// Consumes a run of backslashes starting at `run_start`, emitting the
+/// continuation that run denotes when it is unpaired and followed by LF.
+///
+/// Returns the cursor to resume from and the line-content state to resume
+/// with. An escaped backslash pair leaves the line with content, because its
+/// spelling occupies the line even though it decodes to one byte.
 fn scan_backslash_run(
     bytes: &[u8],
     run_start: usize,
@@ -100,6 +111,11 @@ fn scan_backslash_run(
     }
 }
 
+/// Returns whether the current line still has content after `byte`.
+///
+/// Only LF clears the flag. Horizontal space and tab preserve it, so a line of
+/// indentation before a continuation still reads as contentless and the
+/// continuation classifies as layout trim rather than a join.
 const fn line_content_after_byte(byte: u8, line_has_content: bool) -> bool {
     match byte {
         b'\n' => false,
@@ -108,6 +124,12 @@ const fn line_content_after_byte(byte: u8, line_has_content: bool) -> bool {
     }
 }
 
+/// Builds the continuation for an odd backslash run that is followed by LF.
+///
+/// Returns `None` when the run is paired or not followed by a line feed, which
+/// means the backslash escapes something other than a newline. A run longer
+/// than one leaves a real escaped backslash on the line, so `has_content_before`
+/// also counts the run length.
 fn continuation_after_backslash_run(
     bytes: &[u8],
     run_start: usize,
@@ -147,4 +169,10 @@ fn continuation_after_backslash_run(
     ))
 }
 
+/// Returns whether Rust skips `byte` after a continuation's line feed.
+///
+/// The set is exactly space, tab, LF, and CR, in any order. Formfeed is
+/// deliberately absent: rust-lang/rust#136600 is the compiler behaviour this
+/// mirrors, and a scanner that skipped it would disagree with the language on
+/// the bytes it consumes.
 const fn is_consumed_whitespace(byte: u8) -> bool { matches!(byte, b' ' | b'\t' | b'\n' | b'\r') }
