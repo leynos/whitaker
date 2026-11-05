@@ -68,14 +68,22 @@ fn a_bare_word_is_a_malformed_term() {
     );
 }
 
-/// An unterminated clause means the filter text is truncated or corrupted.
-#[rstest]
-#[case::missing_close("package(foo")]
-#[case::missing_close_after_operator("test(")]
-fn an_unterminated_clause_is_a_malformed_term(#[case] expression: &str) {
-    let error = FilterExpression(expression)
-        .selects(sample_identity())
-        .expect_err("an unterminated clause is not a nextest filter clause");
+/// Asserts that `expression` is rejected, quoting itself and `reason`.
+///
+/// Every malformed-term case owes the same two guarantees, and they are worth
+/// stating once: the error must name the clause the reader could not parse, and
+/// it must carry the specific reason rather than a generic refusal. The cases
+/// below differ only in which reason they expect, so the shared half lives here
+/// and each case passes its own `reason`.
+///
+/// # Panics
+///
+/// Panics when the expression is accepted, when the error is a different
+/// variant, or when either field disagrees with the case.
+fn assert_malformed(expression: &str, reason: &str) {
+    let Err(error) = FilterExpression(expression).selects(sample_identity()) else {
+        panic!("{expression:?} is outside the modelled grammar, so it should be rejected");
+    };
 
     let FilterError::MalformedTerm { term, problem } = &error else {
         panic!("expected a malformed-term error for {expression:?}; got {error}");
@@ -85,9 +93,17 @@ fn an_unterminated_clause_is_a_malformed_term(#[case] expression: &str) {
         "the error should quote the clause it could not read"
     );
     assert_eq!(
-        *problem, "should end with a closing parenthesis",
-        "an unterminated clause should report the missing parenthesis"
+        *problem, reason,
+        "the error should report the reason this clause is unreadable"
     );
+}
+
+/// An unterminated clause means the filter text is truncated or corrupted.
+#[rstest]
+#[case::missing_close("package(foo")]
+#[case::missing_close_after_operator("test(")]
+fn an_unterminated_clause_is_a_malformed_term(#[case] expression: &str) {
+    assert_malformed(expression, "should end with a closing parenthesis");
 }
 
 /// A closing parenthesis with no opener is equally malformed.
@@ -117,20 +133,9 @@ fn a_stray_closing_parenthesis_is_a_malformed_term() {
 #[case::nested_parens("package((alpha))")]
 #[case::escaped_close("package(a\\)b)")]
 fn a_parenthesis_inside_a_leaf_argument_is_a_malformed_term(#[case] expression: &str) {
-    let error = FilterExpression(expression)
-        .selects(sample_identity())
-        .expect_err("a parenthesis inside an argument is not part of the modelled grammar");
-
-    let FilterError::MalformedTerm { term, problem } = &error else {
-        panic!("expected a malformed-term error for {expression:?}; got {error}");
-    };
-    assert_eq!(
-        term, expression,
-        "the error should quote the clause it could not read"
-    );
-    assert_eq!(
-        *problem, "should not contain a parenthesis inside its argument",
-        "a leaf argument should report the nested parenthesis, not select nothing"
+    assert_malformed(
+        expression,
+        "should not contain a parenthesis inside its argument",
     );
 }
 
