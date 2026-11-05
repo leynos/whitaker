@@ -962,6 +962,27 @@ Note that this is the `rustc-src` component, not the `rust-src` component at
   nightly and path-filtered triggers, and a concurrency guard on the PR event.
   Date/Author: 2026-11-05, implementation agent.
 
+- **DEC-021: Run only the provable decomposition harness in `make kani`.**
+  The first `Proofs` run failed because `run_decomposition_harnesses` invoked
+  `cargo kani` with no `--harness` filter, which ran all four
+  `propagate_labels` harnesses in one ten-minute scope. That is not a packing
+  problem. Measured against a warm cache on 2026-11-05, three of the four time
+  out on their own: `returns_vector_per_input`, `preserves_label_indices`, and
+  `bounded_return_for_any_max_iterations` each reached a 300 s cap at 3.7-4.0
+  GiB, and the first consumed 578 s of a 600 s cap while still climbing. Only
+  `verify_propagate_labels_zero_iterations_keeps_initial_labels` proves, in 43
+  s at 1.5 GiB, because it returns before entering the propagation loop.
+  Splitting the group per harness therefore cannot produce verdicts, and
+  raising either limit cannot either: the memory growth is unbounded rather
+  than slow, so a larger cap trades a timeout for an OOM kill. The lane is
+  scoped to the harness that reaches a verdict, and the three intractable ones
+  stay runnable by name so the blocker remains reproducible. Reporting a
+  timeout as a pass was rejected: it would let the lane assert coverage it does
+  not have, which is the drift `DEC-011` exists to prevent. The blocker itself
+  is pre-existing and documented — roadmap item 6.4.6 left it open and
+  `docs/brain-trust-lints-design.md` records CBMC state explosion in runtime
+  containers. Date/Author: 2026-11-05, implementation agent.
+
 ## Outcomes & retrospective
 
 All five milestones are implemented and their acceptance evidence is recorded:

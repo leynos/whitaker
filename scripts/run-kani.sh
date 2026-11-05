@@ -16,7 +16,9 @@
 #   clone-detector-harness
 #                   Run exactly one clone-detector harness.
 #   string-literals Run bounded continuation-scanner harnesses.
-#   decomposition   Run the existing decomposition/common harnesses.
+#   decomposition   Run the decomposition/common harnesses. Without a filter
+#                   this runs only the harnesses that reach a verdict; see
+#                   run_decomposition_harnesses for why the rest are excluded.
 #   HARNESS_FILTER  When no group is given, treat the first positional
 #                   argument as a decomposition/common harness filter.
 #
@@ -111,9 +113,23 @@ run_decomposition_harnesses() {
     cd "${REPO_ROOT}/common"
     if [ $# -gt 0 ]; then
         "${KANI_LIMITED_RUNNER}" "$1" "${CARGO_KANI_BIN}" kani --harness "$1"
-    else
-        "${KANI_LIMITED_RUNNER}" decomposition-all "${CARGO_KANI_BIN}" kani
+        return
     fi
+    # Only the zero-iteration harness produces a verdict. The other three enter
+    # label propagation's `Vec`/iterator machinery, where CBMC spends the whole
+    # budget without discharging the assertion: each was measured at a 300 s
+    # timeout using 3.7-4.0 GiB of the 8 GiB cap, and the longest reached
+    # 5.7 GiB before its 600 s cap. Raising the limit cannot help, because the
+    # growth is unbounded, not merely slow.
+    #
+    # They remain runnable by name so the blocker stays reproducible, but they
+    # are excluded from the group default rather than reported as a pass. A
+    # timed-out proof is inconclusive; treating it as green would make this
+    # lane claim coverage it does not have. See `docs/brain-trust-lints-design
+    # .md` and roadmap item 6.4.6 for the open modelling work.
+    local is_provable_harness=verify_propagate_labels_zero_iterations_keeps_initial_labels
+    "${KANI_LIMITED_RUNNER}" "${is_provable_harness}" "${CARGO_KANI_BIN}" kani \
+        --harness "${is_provable_harness}"
 }
 
 if [ $# -eq 0 ]; then

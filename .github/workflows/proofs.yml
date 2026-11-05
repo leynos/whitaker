@@ -51,9 +51,11 @@ jobs:
     # GNU `timeout`.
     runs-on: ubuntu-24.04
     # Seventeen Kani invocations, each capped at ten minutes by
-    # `run-kani-limited.sh`, plus six Verus proofs and two cached toolchain
-    # installs. The ceiling is a runaway guard, not a budget: a run that
-    # reaches it has harnesses that timed out, not a slow one.
+    # `run-kani-limited.sh`, plus the Verus proofs and two cached toolchain
+    # installs. Measured end to end at roughly eleven minutes on a warm cache
+    # (clone-detector 314 s, string-literals 287 s, Verus 7 s). The ceiling is a
+    # runaway guard, not a budget: a run that reaches it has harnesses that
+    # timed out, not a slow one.
     timeout-minutes: 240
     steps:
       - name: Check out the repository
