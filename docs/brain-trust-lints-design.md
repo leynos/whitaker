@@ -526,9 +526,14 @@ further decomposition analysis was omitted.
   `scripts/install-kani.sh` pins Kani 0.67.0 and downloads the pre-built
   tarball into `${XDG_CACHE_HOME:-$HOME/.cache}/whitaker/kani`.
   `scripts/run-kani.sh` invokes the pinned `cargo-kani` binary against the
-  `common` crate, running all harnesses by default; passing a harness name as
-  an argument filters to that specific harness. `make kani` exposes the
-  workflow as a top-level quality gate.
+  `common` crate; passing a harness name as an argument filters to that
+  specific harness. The default decomposition run attempts only
+  `verify_propagate_labels_zero_iterations_keeps_initial_labels`, because the
+  other three propagation harnesses exhaust CBMC's budget without discharging
+  their assertions (see 6.4.6). The run prints an `INCONCLUSIVE` line for each
+  omitted harness and a "proved 1 of 4" summary, so a green `make kani` does
+  not read as full propagation coverage. `make kani` exposes the workflow as a
+  top-level quality gate.
 - **Generated graph tests cover adjacency invariants**: the Proptest calls the
   production `build_adjacency` function and checks row count, sorted rows,
   exact directed edge tuples, symmetry, bounds, edge preservation, and the
