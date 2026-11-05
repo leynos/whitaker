@@ -6,6 +6,8 @@
 //! a subprocess. The effectful call sites live in [`super::verify`],
 //! [`super::install`], and [`super::selection`].
 
+use std::fmt;
+
 use super::{
     error::ClippySnapshotError,
     manifest::SNAPSHOT_BRANCH,
@@ -14,6 +16,26 @@ use super::{
 
 /// The only ref a snapshot may carry.
 pub(crate) fn main_ref() -> String { format!("refs/heads/{SNAPSHOT_BRANCH}") }
+
+/// The commit a snapshot is pinned to, as policy compares it.
+///
+/// Rulings compare observed object names against one expected commit. Naming
+/// that expectation keeps the pinned value distinct from the arbitrary object
+/// names a listing may carry.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct PinnedCommit<'a>(&'a str);
+
+impl<'a> PinnedCommit<'a> {
+    /// Borrow `commit` as the expected object name.
+    pub(crate) fn new(commit: &'a str) -> Self { Self(commit) }
+
+    /// Return the object name as a string slice.
+    pub(crate) fn as_str(&self) -> &'a str { self.0 }
+}
+
+impl fmt::Display for PinnedCommit<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { f.write_str(self.0) }
+}
 
 /// What the repository-shape queries reported.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -27,7 +49,10 @@ pub(crate) struct StructureEvidence {
 }
 
 /// Accept a repository's shape and refs, or say what is wrong.
-pub(crate) fn accept_structure(evidence: &StructureEvidence, commit: &str) -> Result<(), String> {
+pub(crate) fn accept_structure(
+    evidence: &StructureEvidence,
+    commit: PinnedCommit<'_>,
+) -> Result<(), String> {
     if evidence.is_bare != "true" {
         return Err("it is not a bare repository".to_owned());
     }
@@ -42,7 +67,7 @@ pub(crate) fn accept_structure(evidence: &StructureEvidence, commit: &str) -> Re
 }
 
 /// Require exactly one ref, `main`, at the pinned commit.
-fn accept_refs(listing: &str, commit: &str) -> Result<(), String> {
+fn accept_refs(listing: &str, commit: PinnedCommit<'_>) -> Result<(), String> {
     let refs: Vec<(&str, &str)> = listing
         .lines()
         .filter_map(|line| line.split_once(' '))
@@ -60,7 +85,7 @@ fn accept_refs(listing: &str, commit: &str) -> Result<(), String> {
         ));
     }
     match refs.first() {
-        Some((_, object)) if *object == commit => Ok(()),
+        Some((_, object)) if *object == commit.as_str() => Ok(()),
         Some((_, object)) => Err(format!(
             "{main} is {object}, expected the pinned commit {commit}"
         )),
@@ -124,7 +149,7 @@ pub(crate) fn accept_integrity(evidence: &IntegrityEvidence) -> Result<(), Strin
 ///
 /// Unexpected lines are reported before a missing `main` line, and duplicate
 /// lines are not rejected: the bundle's own header is the only source here.
-pub(crate) fn accept_bundle_heads(heads: &str, commit: &str) -> Result<(), String> {
+pub(crate) fn accept_bundle_heads(heads: &str, commit: PinnedCommit<'_>) -> Result<(), String> {
     let main = main_ref();
     let unexpected: Vec<&str> = heads
         .lines()
@@ -170,25 +195,38 @@ pub(crate) enum SelectionRejection {
     },
 }
 
+/// What the manifest expects Dylint's selection to produce.
+///
+/// The three facts travel together: a selection is judged against the pinned
+/// nightly, the recorded revision, and the channel that revision names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct SelectionExpectation<'a> {
+    /// The pinned nightly toolchain.
+    pub(crate) toolchain: &'a str,
+    /// The revision the manifest records.
+    pub(crate) revision: &'a str,
+    /// The channel the selected revision names, if one was read.
+    pub(crate) channel: Option<&'a str>,
+}
+
 /// Accept Dylint's selection and the channel the selected revision names.
 pub(crate) fn accept_selection(
     changes: &[ToolchainChange],
-    toolchain: &str,
-    expected_revision: &str,
-    channel: Option<&str>,
+    expected: &SelectionExpectation<'_>,
 ) -> Result<(), SelectionRejection> {
-    let selected = select_revision(changes, toolchain).map_err(SelectionRejection::Insufficient)?;
-    if selected.commit != expected_revision {
+    let selected =
+        select_revision(changes, expected.toolchain).map_err(SelectionRejection::Insufficient)?;
+    if selected.commit != expected.revision {
         return Err(SelectionRejection::Revision {
             selected: selected.commit.clone(),
-            expected: expected_revision.to_owned(),
+            expected: expected.revision.to_owned(),
         });
     }
-    if channel != Some(toolchain) {
+    if expected.channel != Some(expected.toolchain) {
         return Err(SelectionRejection::Channel {
-            selected: expected_revision.to_owned(),
-            channel: channel.map(ToOwned::to_owned),
-            toolchain: toolchain.to_owned(),
+            selected: expected.revision.to_owned(),
+            channel: expected.channel.map(ToOwned::to_owned),
+            toolchain: expected.toolchain.to_owned(),
         });
     }
     Ok(())

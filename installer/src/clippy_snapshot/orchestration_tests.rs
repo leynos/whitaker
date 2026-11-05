@@ -208,9 +208,17 @@ fn verification_observes_each_check_in_the_documented_order() {
             .position(|call| call.starts_with(prefix))
             .unwrap_or_else(|| panic!("missing {prefix}: {calls:?}"))
     };
-    assert!(position("structure ") < position("self_contained "));
-    assert!(position("self_contained ") < position("integrity "));
-    assert!(position("integrity ") < position("toolchain_commits "));
+    let documented = [
+        "structure ",
+        "self_contained ",
+        "integrity ",
+        "toolchain_commits ",
+    ];
+    let observed: Vec<usize> = documented.iter().map(|prefix| position(prefix)).collect();
+    assert!(
+        observed.windows(2).all(|pair| pair[0] < pair[1]),
+        "checks must run in the documented order {documented:?}: {observed:?}"
+    );
     assert!(
         ports
             .store
@@ -287,8 +295,12 @@ fn a_digest_mismatch_is_rejected_before_any_other_call() {
         ports.store.calls(),
         vec!["digest snapshot.bundle".to_owned()]
     );
-    assert!(ports.bundles.calls().is_empty());
-    assert!(ports.repo.calls().is_empty());
+    assert!(
+        ports.bundles.calls().is_empty() && ports.repo.calls().is_empty(),
+        "no other observation may run: bundles {:?}, repository {:?}",
+        ports.bundles.calls(),
+        ports.repo.calls()
+    );
 }
 
 #[test]
@@ -305,11 +317,11 @@ fn unexpected_bundle_heads_are_rejected_before_the_root_is_locked() {
         "{error}"
     );
     assert!(
-        !ports.store.has_call_starting_with("lock "),
-        "the root must not be locked: {:?}",
+        !ports.store.has_call_starting_with("lock ")
+            && !ports.store.has_call_starting_with("create_root "),
+        "the root must not be locked or created: {:?}",
         ports.store.calls()
     );
-    assert!(!ports.store.has_call_starting_with("create_root "));
     assert_eq!(
         ports.bundles.calls(),
         vec![
@@ -380,11 +392,12 @@ fn an_existing_generation_is_reused_without_staging_or_publishing() {
         .expect("the existing generation verifies");
 
     assert_eq!(installed, generation);
-    assert!(!ports.store.has_call_starting_with("staging "));
-    assert!(!ports.store.has_call_starting_with("publish "));
     assert!(
-        !ports.metadata.has_call_starting_with("write "),
-        "reuse must not rewrite metadata: {:?}",
+        !ports.store.has_call_starting_with("staging ")
+            && !ports.store.has_call_starting_with("publish ")
+            && !ports.metadata.has_call_starting_with("write "),
+        "reuse must not stage, publish, or rewrite metadata: store {:?}, metadata {:?}",
+        ports.store.calls(),
         ports.metadata.calls()
     );
 }
@@ -408,15 +421,15 @@ fn an_existing_generation_with_wrong_metadata_is_rejected_not_repaired() {
             if check.contains("records commit")),
         "{error}"
     );
-    assert!(!ports.store.has_call_starting_with("publish "));
     assert!(
-        !ports.metadata.has_call_starting_with("write "),
-        "a rejected generation is never rewritten: {:?}",
-        ports.metadata.calls()
-    );
-    assert!(
-        ports.repo.calls().is_empty(),
-        "the repository is not consulted once metadata disagrees"
+        !ports.store.has_call_starting_with("publish ")
+            && !ports.metadata.has_call_starting_with("write ")
+            && ports.repo.calls().is_empty(),
+        "a rejected generation is not published, rewritten, or re-observed: store {:?}, metadata \
+         {:?}, repository {:?}",
+        ports.store.calls(),
+        ports.metadata.calls(),
+        ports.repo.calls()
     );
 }
 
