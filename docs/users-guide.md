@@ -1106,7 +1106,10 @@ crate.
   literal is not the argument of a macro with a matcher that could depend on
   its shape
 - A join inside a format string whose arguments are all positional or
-  explicitly named, so no implicit capture is lost
+  explicitly named, so no implicit capture is lost, and which was passed
+  through one of the compiler's built-in formatting macros. A format string
+  reached through a lookalike or a facade macro of the same name is not
+  diagnosed, even when every argument is positional or explicitly named
 - Several joins in one literal produce one diagnostic and one whole-literal
   rewrite, rather than a cascade
 
