@@ -5077,7 +5077,7 @@ the installer observes it. Extend it along the same split.
   take explicit support.
 
 Keep the test split when adding coverage: value cases go in `policy_tests.rs`,
-call ordering and "never called" assertions go in `orchestration_tests.rs`
+call ordering and "never called" assertions go in `orchestration_tests/`
 through the scripted ports in `fakes.rs`, and adapter honesty stays in
 `verify_tests.rs` and `tests.rs` against real Git and a real directory. A new
 acceptance rule needs a value test; a new observation needs a port method and

@@ -2,7 +2,7 @@
 //!
 //! These cases go through the real Git adapter. The rules themselves are
 //! exercised on values in `policy_tests.rs`, and the ordering of the checks on
-//! scripted ports in `orchestration_tests.rs`.
+//! scripted ports in `orchestration_tests/`.
 
 use camino::Utf8PathBuf;
 use rstest::rstest;

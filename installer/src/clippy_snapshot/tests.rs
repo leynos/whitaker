@@ -3,7 +3,7 @@
 //! These tests keep real Git and a real filesystem, so the adapters stay
 //! honest. The accept/reject rules themselves are exercised on values in
 //! `policy_tests.rs`, and the orchestration on scripted ports in
-//! `orchestration_tests.rs`.
+//! `orchestration_tests/`.
 
 use rstest::{fixture, rstest};
 
