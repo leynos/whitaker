@@ -1000,18 +1000,18 @@ each push rather than copying an earlier lease into the command.
   all six that completed, and `make test` is green on its re-run. `check-fmt`
   passed (5 s, no output); `lint` passed (172 s, zero `error:` lines and zero
   `warning:` lines — the two `warning` matches in the log are the `-D warnings`
-  flags in the echoed command lines); `test-workflow-contracts` passed (1 s,
-  19 passed); `markdownlint` passed (21 s, typos 5 passed at 95.45 % coverage,
+  flags in the echoed command lines); `test-workflow-contracts` passed (1 s, 19
+  passed); `markdownlint` passed (21 s, typos 5 passed at 95.45 % coverage,
   `markdownlint-cli2` 78 files, `Summary: 0 error(s)`); `nixie` passed (2 s,
   all diagrams validated).
 - [x] (2026-11-04) The first attempt at `make test` in that run was cut off by
   the scrutineer's own execution harness, not by the candidate: the tool's
   30-minute background cap stopped the gate at nextest test 1666/1674 with zero
   `FAIL` lines and no `Summary`, so the doctest, root-lib and filter phases
-  never started. That is an evidence gap, not a failure, and the log records
-  it as `[killed]`. The orphaned `/tmp/.whitaker-test-backup-tLPWU0` the trap
-  did not clean up was checked against `/home/leynos/.local/bin/whitaker` and
-  is byte-identical (`md5sum 0524175d1d5c91d9a9343846c1504598` both), so no
+  never started. That is an evidence gap, not a failure, and the log records it
+  as `[killed]`. The orphaned `/tmp/.whitaker-test-backup-tLPWU0` the trap did
+  not clean up was checked against `/home/leynos/.local/bin/whitaker` and is
+  byte-identical (`md5sum 0524175d1d5c91d9a9343846c1504598` both), so no
   installed file was damaged.
 - [x] (2026-11-04) `make test` re-run with a 2-hour budget is green in every
   phase, on the same tree: nextest `1674 tests run: 1674 passed, 5 skipped` in
@@ -1944,6 +1944,50 @@ counterpart that was missing. Copying the `ci` line verbatim into `default`
 would put `crate_builds_…` in two overrides; the first
 (`binary(no_default_features_build)`) already wins, so the second would be dead
 text. Splitting the filters keeps each profile stating what it means.
+
+### The branch duplicates its parent, and that blocks review
+
+The base branch advanced past this branch's history and the two are not
+reconcilable as ordinary siblings. Measured on `eb0258b6` against `932d9073`
+(`harden-lint-workspace-config`):
+
+- The two branches share **zero** commits. `git rev-list` on
+  `ab2bc519..932d9073` and on `ab2bc519..eb0258b6` intersect on nothing, so 117
+  parent commits and 45 child commits were written independently.
+- A three-way merge over the true merge-base reports **193 conflicted paths**
+  (177 modify/modify, 13 both-added, 3 deleted-by-parent).
+- **424 of this branch's 449 changed files** are changed by the first ten
+  of its commits, and those ten commits are the workspace-lint hardening that
+  `#371` carries. Only `5a08c6ff..eb0258b6`, **72 files**, is work this branch
+  does not share with its parent.
+- Re-running the same three-way merge with `5a08c6ff` as the base reports
+  **30 conflicted paths** instead of 193. The difference is the duplicated
+  hardening, not a genuine disagreement about the suite.
+
+That duplication has an external consequence, because the largest automated
+reviewers gate on diff size. Sourcery states it outright: "It changes 449
+files. Sourcery can review pull requests with up to 300 changed files." Its
+check run is `skipped` for exactly that reason. CodeRabbit's check run for the
+same head is `Incremental review skipped` and its commit status is
+`SKIPPED`/`COMPLETED`, so the branch currently draws **no automated review at
+all**. Equilibrium condition 4 cannot be satisfied on this head by any action
+available to the reviewer queue: raising the file count is a structural
+property of the diff, not a service pause or a rate limit.
+
+The way out is the stack's own rule rather than a new decision. Section 3 of
+the babysitting contract says to land the lowest unmerged layer first and
+restack the child afterwards. `#371` is that layer: `MERGEABLE`/`CLEAN` at
+`932d9073` with `linux-full`, `windows-compat`, `coverage-check`, `CodeRabbit`
+and `CodeScene` all `success` on 169 files, and only three CodeRabbit prose
+findings open. Once it lands, this branch restacks onto `main` with the
+duplicated ten commits dropped from the replay, which is the 30-conflict
+operation above and leaves a diff of roughly 72 files — comfortably inside both
+reviewers' caps.
+
+Recorded here because the earlier entry, "Do not rebase onto `origin/main`",
+was correct when it was written and is now incomplete. It reasoned about `main`
+alone; it did not consider that the *parent* had become a near-duplicate of
+this branch's own history.
 
 ## Conformance basis
 
