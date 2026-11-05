@@ -36,6 +36,34 @@ fn the_sidecar_is_read_through_the_store() {
     );
 }
 
+/// A sidecar read failure carries the reason once, not a nested error.
+///
+/// `Io`'s display already names the path, its remedy, and the no-fallback
+/// rule; embedding it in `Sidecar` would repeat that advice and contradict it.
+#[test]
+fn a_sidecar_read_failure_carries_only_the_reason() {
+    let mut ports = Ports::accepting();
+    ports.store.text = Err(ClippySnapshotError::Io {
+        path: "snapshot.bundle.sha256".to_owned(),
+        reason: "permission denied".to_owned(),
+    });
+
+    let error = from_sidecar_with(&ports.store, Utf8Path::new("snapshot.bundle"), &manifest())
+        .expect_err("an unreadable sidecar is an error");
+
+    let message = error.to_string();
+    assert!(
+        matches!(&error, ClippySnapshotError::Sidecar { .. }),
+        "{message}"
+    );
+    assert!(message.contains("permission denied"), "{message}");
+    assert_eq!(
+        message.matches("Whitaker never falls back").count(),
+        1,
+        "the no-fallback rule must appear once: {message}"
+    );
+}
+
 #[test]
 fn a_digest_mismatch_is_rejected_before_any_other_call() {
     let root = Utf8Path::new("/root");

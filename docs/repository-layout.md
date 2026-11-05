@@ -103,6 +103,13 @@ minimum supported Rust version; the root `Makefile` target
 staged-common packaged-crate install and `--version` smoke check under that
 toolchain.
 
+Within `src/clippy_snapshot/`, `policy.rs` holds the acceptance rules as pure
+functions over evidence, `selection.rs` the pure revision kernel, `ports.rs`
+the driven ports, `git.rs` and `store.rs` their adapters, and `verify.rs`,
+`install.rs`, and `provision.rs` the orchestration. Tests follow the same split:
+`policy_tests.rs` for values, `orchestration_tests/` with the scripted ports in
+`fakes.rs`, and `verify_tests.rs` and `tests.rs` for the real adapters.
+
 ### `src/` and `suite/`
 
 The repository root `src/` directory contains the `whitaker` executable and the
