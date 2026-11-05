@@ -219,10 +219,13 @@ fn verification_observes_each_check_in_the_documented_order() {
         observed.windows(2).all(|pair| pair[0] < pair[1]),
         "checks must run in the documented order {documented:?}: {observed:?}"
     );
+    // Derive the probed path rather than spelling it, so the assertion holds
+    // on platforms whose separator is not `/`.
+    let alternates = path.join("objects/info/alternates");
     assert!(
         ports
             .store
-            .has_call_starting_with("is_present /snapshot.git/objects/info/alternates"),
+            .has_call_starting_with(&format!("is_present {alternates}")),
         "{:?}",
         ports.store.calls()
     );
