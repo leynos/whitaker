@@ -31,7 +31,7 @@ fn every_absent_file_means_no_channel() {
 }
 
 #[test]
-fn every_failed_read_surfaces_the_last_failure() {
+fn every_failed_read_surfaces_the_first_failure() {
     let reads = [
         Err(ClippySnapshotError::NotInstalled {
             path: "first".to_owned(),
@@ -43,7 +43,7 @@ fn every_failed_read_surfaces_the_last_failure() {
     assert_eq!(
         first_channel(reads),
         Err(ClippySnapshotError::NotInstalled {
-            path: "second".to_owned(),
+            path: "first".to_owned(),
         })
     );
 }
@@ -67,16 +67,21 @@ fn an_absent_file_does_not_hide_an_earlier_failure() {
 }
 
 #[test]
-fn a_present_file_clears_an_earlier_failure() {
-    // The earlier file being unreadable does not matter once a later file
-    // decides the channel, exactly as rustup's precedence requires.
+fn a_failed_read_stops_the_walk_before_a_later_present_file() {
+    // The failed file may exist and outrank the later one, so its channel
+    // cannot be inferred from a file rustup might never reach.
     let reads = [
         Err(ClippySnapshotError::NotInstalled {
             path: "first".to_owned(),
         }),
         Ok(ChannelRead::Present(Some("n-04".to_owned()))),
     ];
-    assert_eq!(first_channel(reads), Ok(Some("n-04".to_owned())));
+    assert_eq!(
+        first_channel(reads),
+        Err(ClippySnapshotError::NotInstalled {
+            path: "first".to_owned(),
+        })
+    );
 }
 
 #[test]

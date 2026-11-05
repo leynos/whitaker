@@ -244,24 +244,19 @@ pub(crate) enum ChannelRead {
 /// Choose the first present toolchain file's channel.
 ///
 /// Rustup's precedence applies: the first file that exists wins, even when it
-/// names no channel. An absent file falls through to the next one; when every
-/// read fails, the last failure is returned so an infrastructure fault never
-/// reads as "no channel".
+/// names no channel. An absent file falls through to the next one. A read that
+/// fails stops the walk, because the file's existence is unknown: letting a
+/// later file win could pick a channel rustup would never have chosen.
 pub(crate) fn first_channel(
     results: impl IntoIterator<Item = Result<ChannelRead, ClippySnapshotError>>,
 ) -> Result<Option<String>, ClippySnapshotError> {
-    let mut last_error = None;
     for result in results {
-        match result {
-            Ok(ChannelRead::Present(channel)) => return Ok(channel),
-            Ok(ChannelRead::Absent) => continue,
-            Err(error) => last_error = Some(error),
+        match result? {
+            ChannelRead::Present(channel) => return Ok(channel),
+            ChannelRead::Absent => {}
         }
     }
-    match last_error {
-        Some(error) => Err(error),
-        None => Ok(None),
-    }
+    Ok(None)
 }
 
 #[cfg(test)]

@@ -152,9 +152,9 @@ pub(crate) fn toolchain_changes(
 /// Read the channel the toolchain file names at `commit`, as Dylint reads it.
 ///
 /// Rustup's precedence applies: `rust-toolchain` wins over
-/// `rust-toolchain.toml` when both exist. A read failure falls through to the
-/// next file, but when every read fails the failure is returned rather than
-/// read as "no channel". `None` means no file names a channel there.
+/// `rust-toolchain.toml` when both exist. A read failure stops the walk and is
+/// returned rather than read as "no channel", because the failed file's
+/// existence is unknown. `None` means no file names a channel there.
 ///
 /// # Errors
 ///
