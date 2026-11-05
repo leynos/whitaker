@@ -69,8 +69,11 @@ pub(crate) fn from_sidecar_with(
         path: sidecar.to_string(),
         reason,
     };
-    let contents =
-        std::fs::read_to_string(&sidecar).map_err(|error| sidecar_error(error.to_string()))?;
+    // Read through the store port: the orchestration must not reach for the
+    // filesystem itself, and a partly scripted store would hide the read.
+    let contents = store
+        .read_to_string(&sidecar)
+        .map_err(|error| sidecar_error(error.to_string()))?;
     let token = contents
         .split_whitespace()
         .next()

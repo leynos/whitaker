@@ -53,6 +53,10 @@ impl SnapshotStore for ProductionStore {
         })
     }
 
+    fn read_to_string(&self, path: &Utf8Path) -> Result<String, ClippySnapshotError> {
+        std::fs::read_to_string(path).map_err(|error| ClippySnapshotError::io(path, &error))
+    }
+
     fn lock(&self, root: &Utf8Path) -> Result<Box<dyn RootLock>, ClippySnapshotError> {
         let path = root.join(ROOT_LOCK_FILE);
         let file = std::fs::OpenOptions::new()

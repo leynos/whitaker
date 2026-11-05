@@ -201,6 +201,8 @@ pub(super) struct FakeStore {
     pub(super) present_dir: bool,
     /// The answer to [`SnapshotStore::digest`].
     pub(super) digest: Result<Sha256Digest, ClippySnapshotError>,
+    /// The answer to [`SnapshotStore::read_to_string`].
+    pub(super) text: Result<String, ClippySnapshotError>,
     /// The answer to [`SnapshotStore::publish`].
     pub(super) publish: Result<(), ClippySnapshotError>,
 }
@@ -213,6 +215,7 @@ impl FakeStore {
             present: Mutex::new(HashSet::new()),
             present_dir: true,
             digest: Ok(digest),
+            text: Ok(String::new()),
             publish: Ok(()),
         }
     }
@@ -268,6 +271,11 @@ impl SnapshotStore for FakeStore {
     fn digest(&self, path: &Utf8Path) -> Result<Sha256Digest, ClippySnapshotError> {
         record(&self.calls, format!("digest {path}"));
         self.digest.clone()
+    }
+
+    fn read_to_string(&self, path: &Utf8Path) -> Result<String, ClippySnapshotError> {
+        record(&self.calls, format!("read_to_string {path}"));
+        self.text.clone()
     }
 
     fn lock(&self, root: &Utf8Path) -> Result<Box<dyn RootLock>, ClippySnapshotError> {
