@@ -34,7 +34,15 @@ use rustc_ast::{
     token::Delimiter,
     tokenstream::{DelimSpan, TokenStream},
 };
-use rustc_span::{DUMMY_SP, Ident, Symbol, create_default_session_globals_then, sym};
+use rustc_span::{
+    BytePos,
+    DUMMY_SP,
+    Ident,
+    Span,
+    Symbol,
+    create_default_session_globals_then,
+    sym,
+};
 
 use super::shadows_builtin_macros;
 
@@ -102,6 +110,23 @@ fn path(segments: Name) -> Path {
         tokens: None,
     }
 }
+
+/// Builds a use tree whose glob carries a real source location.
+///
+/// The detector ignores a glob with no location, because that is how the
+/// compiler injects every crate's `std` prelude. A fixture standing for a
+/// source-written `use module::*` therefore needs a span with a real `lo`.
+fn source_glob(module: Name) -> UseTree {
+    let mut glob_path = path(module);
+    glob_path.span = source_span();
+    UseTree {
+        prefix: glob_path,
+        kind: UseTreeKind::Glob(source_span()),
+    }
+}
+
+/// Returns a span with a real location, distinct from `DUMMY_SP`.
+fn source_span() -> Span { Span::with_root_ctxt(BytePos(1), BytePos(2)) }
 
 fn macro_def(name: Name) -> ItemKind {
     ItemKind::MacroDef(
@@ -238,10 +263,31 @@ fn a_nested_use_tree_is_searched() {
 }
 
 #[test]
-fn a_glob_import_is_accepted_as_a_residual_hole() {
+fn a_source_glob_shadows_because_it_can_make_concat_ambiguous() {
+    let is_shadowed =
+        detects_shadowing(|| vec![item(ItemKind::Use(source_glob("helpers".into())))]);
+    assert!(is_shadowed);
+}
+
+#[test]
+fn a_source_glob_nested_inside_a_use_tree_shadows() {
     let is_shadowed = detects_shadowing(|| {
         vec![item(use_tree(
             "helpers".into(),
+            nested(vec![source_glob("inner".into())]),
+        ))]
+    });
+    assert!(is_shadowed);
+}
+
+#[test]
+fn the_injected_prelude_glob_does_not_shadow() {
+    // The compiler prepends `use std::prelude::rust_20xx::*;` to every crate
+    // with a no-location span. Counting it would silence the lint everywhere,
+    // which is why the detector tests the span rather than the glob kind.
+    let is_shadowed = detects_shadowing(|| {
+        vec![item(use_tree(
+            "std::prelude::rust_2024".into(),
             UseTreeKind::Glob(DUMMY_SP),
         ))]
     });

@@ -1129,10 +1129,27 @@ crate.
 
 **Crate-wide opt-out:** if a crate defines its own `println!`, `format!` or
 other name in the lint's known-macro set — by `macro_rules!`, `macro`, a `use`
-whose terminal segment matches, or `#[macro_use] extern crate` — the lint
-switches itself off for that crate. A bare name check is only sound when the
-name cannot be shadowed. The alternative is diagnosing literals passed to a
+that binds such a name, a glob import, or `#[macro_use] extern crate` — the
+lint switches itself off for that crate. A bare name check is only sound when
+the name cannot be shadowed. The alternative is diagnosing literals passed to a
 user macro whose matcher the rewrite could break.
+
+A `use` counts by the name it *binds*, not by the path it names:
+`use helpers::println as shout` binds `shout` and leaves `println!` untouched.
+
+Glob imports count because they are checked without name resolution: the lint
+cannot tell whether `use some_crate::*` brings in a `concat`. If it does, the
+suggested `concat!(...)` is ambiguous between the imported macro and the
+built-in one, and rustc rejects the rewrite with `E0659` rather than applying
+it. Treating a glob import as disqualifying is the conservative reading — it
+can silence the lint for a crate that merely re-exports a prelude, and since
+that silence is visible here, it is preferable to emitting a suggestion that
+breaks the build.
+
+Only a glob written in the crate counts. The compiler prepends
+`use std::prelude::rust_20xx::*;` to every crate, and counting that one would
+switch the lint off everywhere; it is recognized by its missing source
+location, not by its path.
 
 Diagnostics are localized like the rest of the suite. To trace why a literal
 was or was not diagnosed, run with:
