@@ -9,7 +9,6 @@ use std::{
 use camino::Utf8Path;
 use dylint_testing::ui::Test;
 use rstest::rstest;
-use whitaker::testing::ui::stage_example;
 use whitaker_common::test_support::{prepare_fixture, run_test_runner};
 
 /// Describes a single example-based regression to run under the test harness.
@@ -18,7 +17,7 @@ use whitaker_common::test_support::{prepare_fixture, run_test_runner};
 /// used in panic messages, and `rustc_flags` supplies the extra harness flags
 /// passed to `dylint_testing`.
 struct ExampleHarnessRun<'a> {
-    /// Example target name passed to `stage_example`.
+    /// Example target name passed to `Test::example`.
     name: &'a str,
     /// Human-readable label used when a regression runner fails.
     label: &'a str,
@@ -85,11 +84,9 @@ fn run_example_under_test_harness(spec: &ExampleHarnessRun<'_>) {
     let crate_name = env!("CARGO_PKG_NAME");
     let directory = "examples";
     whitaker::testing::ui::run_with_runner(crate_name, directory, |_, _| {
-        let staged = stage_example(crate_name, spec.name).map_err(|error| error.to_string())?;
         run_test_runner(spec.name, || {
-            let mut test = Test::src_base(crate_name, staged.directory());
-            test.rustc_flags(staged.linking_flags())
-                .rustc_flags(spec.rustc_flags);
+            let mut test = Test::example(crate_name, spec.name);
+            test.rustc_flags(spec.rustc_flags);
             test.run();
         })
     })

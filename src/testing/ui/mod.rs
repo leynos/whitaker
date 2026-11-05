@@ -10,13 +10,10 @@ use std::{env, fmt};
 
 use camino::{Utf8Path, Utf8PathBuf};
 
-mod example;
-
 mod toolchain;
 
 use whitaker_common::test_support::env_test_guard;
 
-pub use self::example::{StagedExample, stage_example};
 use self::toolchain::{CrateName, ensure_toolchain_library};
 
 /// Errors produced when preparing or executing Dylint UI tests.
@@ -66,13 +63,6 @@ pub enum HarnessError {
         /// Error emitted while loading metadata.
         message: String,
     },
-    /// Building or staging an example target for a UI run failed.
-    ExampleStagingFailed {
-        /// Example target being staged.
-        example: String,
-        /// Error produced while building, parsing, or copying the example.
-        message: String,
-    },
 }
 
 impl fmt::Display for HarnessError {
@@ -117,9 +107,6 @@ impl fmt::Display for HarnessError {
             }
             Self::MetadataFailed { message } => {
                 write!(formatter, "failed to retrieve Cargo metadata: {message}")
-            }
-            Self::ExampleStagingFailed { example, message } => {
-                write!(formatter, "failed to stage example {example}: {message}")
             }
         }
     }

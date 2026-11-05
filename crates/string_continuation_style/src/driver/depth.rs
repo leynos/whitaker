@@ -14,14 +14,20 @@ use rustc_ast::{
 use rustc_span::Span;
 use whitaker_common::SimplePath;
 
-use super::literal::plain_join_literal;
+use super::{
+    literal::{join_format_string, outermost_macro_name, plain_join_literal},
+    shadow::is_format_macro_name,
+};
 use crate::exclusion::PathExclusions;
 
-/// Positive safe-span set consumed by the plain-literal check.
+/// Positive safe-span set consumed by the expression checks.
 #[derive(Default)]
 pub(crate) struct SafeSpans {
     /// Plain string-expression spans with no expansion-derived ancestor.
     pub(crate) plain_literals: HashSet<Span>,
+    /// Source-authored format-string token spans reached through a format
+    /// macro, with no expansion-derived ancestor of their own.
+    pub(crate) format_strings: HashSet<Span>,
 }
 
 /// Finds source literal expressions that are not wrapped by macro expansion.
@@ -34,6 +40,7 @@ pub(crate) fn safe_literal_spans(
     visitor.visit_crate(krate);
     SafeSpans {
         plain_literals: visitor.safe_literal_spans,
+        format_strings: visitor.safe_format_spans,
     }
 }
 
@@ -42,6 +49,7 @@ struct WrapperDepth<'a> {
     module_path: Vec<String>,
     path_exclusions: &'a PathExclusions,
     safe_literal_spans: HashSet<Span>,
+    safe_format_spans: HashSet<Span>,
 }
 
 // Keep the repeated span/walk shape local to this visitor; the invocation list
@@ -61,6 +69,7 @@ impl<'a> WrapperDepth<'a> {
             module_path: vec![crate_name.to_owned()],
             path_exclusions,
             safe_literal_spans: HashSet::new(),
+            safe_format_spans: HashSet::new(),
         }
     }
 
@@ -81,10 +90,49 @@ impl<'a> WrapperDepth<'a> {
         if plain_join_literal(expression).is_none() {
             return;
         }
-        if self.expansion_depth != Some(0) || self.is_path_excluded() {
+        if !self.is_at_source_depth() {
             return;
         }
         self.safe_literal_spans.insert(expression.span);
+    }
+
+    /// Records a format-string candidate.
+    ///
+    /// The wrapper-depth test is deliberately *not* applied here, and the
+    /// reason is structural rather than a relaxation. A format literal is never
+    /// at depth zero: the facade chain (`println` → `print_to` →
+    /// `format_args_nl` → the builtin) is made entirely of expansions, and the
+    /// builtin def-site-marks the expression it builds. Measured on a direct
+    /// `println!("alpha \<newline> beta{}", value)`, the depth at this hook is
+    /// five.
+    ///
+    /// Depth zero stood for "no enclosing matcher can be broken". That property
+    /// is proved here instead by the expansion chain of the enclosing
+    /// expression: if the outermost frame is a known format macro, then every
+    /// frame between the user's invocation and the builtin is one of them, so
+    /// no user macro sits in between. That is a stronger statement than depth
+    /// zero, and it also closes the `$literal` hole: a `shout!(…)` that
+    /// forwards its tokens to `println!` leaves the literal token's own chain
+    /// at root, but the builtin's def-site span walks back out through
+    /// `println`'s frame to `shout`'s.
+    fn records_format_candidate(&mut self, expression: &ast::Expr, arguments: &ast::FormatArgs) {
+        if join_format_string(arguments).is_none() {
+            return;
+        }
+        if self.is_path_excluded() {
+            return;
+        }
+        let Some(macro_name) = outermost_macro_name(expression.span) else {
+            return;
+        };
+        if !is_format_macro_name(macro_name.as_str()) {
+            return;
+        }
+        self.safe_format_spans.insert(arguments.span);
+    }
+
+    fn is_at_source_depth(&self) -> bool {
+        self.expansion_depth == Some(0) && !self.is_path_excluded()
     }
 
     fn is_path_excluded(&self) -> bool {
@@ -115,7 +163,14 @@ impl<'ast> Visitor<'ast> for WrapperDepth<'_> {
     visit_with_span!(visit_foreign_item, item: ForeignItem, item.span, walk_item);
 
     fn visit_expr(&mut self, expression: &'ast ast::Expr) {
+        // Both candidates are recorded before the enclosing expression's own
+        // span joins the depth count. A format expression's span is
+        // def-site-marked by the builtin, so counting it first would suppress
+        // every format string in the crate.
         self.records_plain_candidate(expression);
+        if let ast::ExprKind::FormatArgs(arguments) = &expression.kind {
+            self.records_format_candidate(expression, arguments);
+        }
         self.with_span(expression.span, |visitor| {
             visit::walk_expr(visitor, expression);
         });
@@ -178,6 +233,13 @@ impl<'ast> Visitor<'ast> for WrapperDepth<'_> {
     visit_with_span!(visit_assoc_item_constraint, constraint: AssocItemConstraint, constraint.span, walk_assoc_item_constraint);
     visit_with_span!(visit_poly_trait_ref, trait_ref: PolyTraitRef, trait_ref.span, walk_poly_trait_ref);
     visit_with_span!(visit_format_args, format_args: FormatArgs, format_args.span, walk_format_args);
+
+    // Attribute values are not replaceable expressions. `#[doc = "..."]` and
+    // friends carry their value as a meta-item literal, so walking them would
+    // record a span the lint hook must then decline to rewrite. `#[cfg]` is
+    // the only attribute that reaches macro expansion, where it is consumed
+    // rather than retained, so skipping the interior costs no real coverage.
+    fn visit_attribute(&mut self, _attr: &'ast ast::Attribute) {}
 
     fn visit_ty_pat(&mut self, _pattern: &'ast ast::TyPat) {}
 }

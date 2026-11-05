@@ -15,6 +15,7 @@ use crate::{
 mod depth;
 mod facts;
 mod literal;
+mod shadow;
 mod span;
 #[cfg(test)]
 #[path = "../../tests/support/driver_tests.rs"]
@@ -24,11 +25,17 @@ pub(super) use facts::LiteralRewrite;
 
 use self::{
     depth::{SafeSpans, safe_literal_spans},
-    facts::plain_literal_rewrite,
+    facts::{format_args_rewrite, plain_literal_rewrite},
+    shadow::shadows_builtin_macros,
 };
 
-/// Dylint declaration and generated ABI registration glue.
 mod declaration {
+    //! Dylint declaration and generated ABI registration glue.
+    //!
+    //! Keeping the `impl_early_lint!` expansion in its own module confines the
+    //! items it generates — which have no source location that could carry
+    //! documentation — so the enclosing `missing_docs` expectation covers only
+    //! them and not the pass beside it.
     #![expect(
         missing_docs,
         reason = "impl_early_lint! emits generated items without a documentable source location"
@@ -71,7 +78,11 @@ impl EarlyLintPass for StringContinuationStyle {
         self.configuration = load_configuration();
         self.localizer = load_localizer();
         let crate_name = crate_name(cx);
-        self.is_disabled_crate = self.configuration.is_excluded_crate(&crate_name);
+        // A crate that can substitute its own macro for one of the built-in
+        // names makes every bare-name report unsound, so it is disabled
+        // wholesale before the walk begins and no span is ever recorded.
+        self.is_disabled_crate =
+            self.configuration.is_excluded_crate(&crate_name) || shadows_builtin_macros(krate);
         self.safe_spans = if self.is_disabled_crate {
             SafeSpans::default()
         } else {
@@ -84,10 +95,15 @@ impl EarlyLintPass for StringContinuationStyle {
         if self.is_disabled_crate {
             return;
         }
-        let ast::ExprKind::Lit(_) = &expression.kind else {
-            return;
+        let rewrite = match &expression.kind {
+            ast::ExprKind::Lit(_) => {
+                plain_literal_rewrite(cx, expression, &self.safe_spans.plain_literals)
+            }
+            ast::ExprKind::FormatArgs(arguments) => {
+                format_args_rewrite(cx, expression, arguments, &self.safe_spans.format_strings)
+            }
+            _ => None,
         };
-        let rewrite = plain_literal_rewrite(cx, expression, &self.safe_spans.plain_literals);
         let Some(rewrite) = rewrite else {
             return;
         };
