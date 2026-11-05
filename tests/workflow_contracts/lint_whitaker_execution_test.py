@@ -107,6 +107,21 @@ def _observed_rustflags(lines: list[str]) -> str:
     return flags[0].removeprefix("rustflags ")
 
 
+def _contains_run(tokens: list[str], run: list[str]) -> bool:
+    """Return whether `run` appears in `tokens` as one contiguous, ordered run.
+
+    Checking each token independently is not the same question. `-p alpha
+    --features beta` contains `-p`, `alpha`, and `beta`, yet it has lost the
+    second package and forwarded `beta` as a feature, so the suite analyses a
+    narrower set than `WHITAKER_PACKAGES` names.
+    """
+    width = len(run)
+    return any(
+        tokens[index : index + width] == run
+        for index in range(len(tokens) - width + 1)
+    )
+
+
 def test_lint_whitaker_passes_the_named_library_and_package_list() -> None:
     """The executed gate must name `whitaker_suite` and the configured packages.
 
@@ -142,12 +157,16 @@ def test_lint_whitaker_passes_the_named_library_and_package_list() -> None:
     separator = argv.index("--")
     after = argv[separator + 1 :]
 
-    for expected in ("-p", "alpha", "-p", "beta"):
-        assert expected in after, (
-            "lint-whitaker must forward WHITAKER_PACKAGES verbatim after `--`, "
-            f"so the analysed set stays configurable; missing {expected!r} in "
-            f"{after!r}"
-        )
+    # The pairs must appear as one contiguous, ordered run. Checking each
+    # token on its own would pass for `-p alpha --features beta`, where the
+    # second `-p` has been dropped and `beta` is no longer a package, so the
+    # suite would analyse less than the variable names.
+    expected = ["-p", "alpha", "-p", "beta"]
+    assert _contains_run(after, expected), (
+        "lint-whitaker must forward WHITAKER_PACKAGES verbatim after `--`, "
+        f"so the analysed set stays configurable; missing {expected!r} in "
+        f"{after!r}"
+    )
 
 
 def test_lint_whitaker_analyses_every_target_with_every_feature() -> None:
@@ -208,7 +227,7 @@ def test_lint_whitaker_honours_a_reconfigured_package_list() -> None:
     )
 
     after = argv[argv.index("--") + 1 :] if "--" in argv else []
-    assert "gamma" in after, (
+    assert _contains_run(after, ["-p", "gamma"]), (
         f"a reconfigured package list must reach the suite; got {after!r}"
     )
     for stale in ("alpha", "beta"):

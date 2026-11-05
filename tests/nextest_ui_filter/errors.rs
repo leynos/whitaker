@@ -103,6 +103,37 @@ fn a_stray_closing_parenthesis_is_a_malformed_term() {
     );
 }
 
+/// A parenthesis inside a leaf argument means the text is not one clause.
+///
+/// `split_top_level` only splits where the nesting depth is zero, so
+/// `package(a) and package(b)` reaches [`split_leaf`](super::filter_model) as
+/// one term. Reading everything between the first `(` and the last `)` as the
+/// argument would then look up the package `a) and package(b`, miss, and answer
+/// a quiet `false` for a clause the model cannot actually evaluate. The case
+/// below is what nextest's own `and` spelling produces, and it is the reason
+/// the argument is rejected rather than trimmed.
+#[rstest]
+#[case::nextest_and("package(a) and package(b)")]
+#[case::nested_parens("package((alpha))")]
+#[case::escaped_close("package(a\\)b)")]
+fn a_parenthesis_inside_a_leaf_argument_is_a_malformed_term(#[case] expression: &str) {
+    let error = FilterExpression(expression)
+        .selects(sample_identity())
+        .expect_err("a parenthesis inside an argument is not part of the modelled grammar");
+
+    let FilterError::MalformedTerm { term, problem } = &error else {
+        panic!("expected a malformed-term error for {expression:?}; got {error}");
+    };
+    assert_eq!(
+        term, expression,
+        "the error should quote the clause it could not read"
+    );
+    assert_eq!(
+        *problem, "should not contain a parenthesis inside its argument",
+        "a leaf argument should report the nested parenthesis, not select nothing"
+    );
+}
+
 /// nextest has more operators than this model implements. Reaching one must
 /// stop the guard, because a clause it cannot read is exactly the drift the
 /// guard exists to detect.

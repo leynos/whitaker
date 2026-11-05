@@ -26,6 +26,8 @@
 //! with the same name in another package" — which is exactly how the shadowing
 //! went unnoticed.
 
+#[path = "nextest_ui_filter/build_allowances.rs"]
+mod build_allowances;
 #[path = "nextest_ui_filter/config.rs"]
 mod config;
 #[path = "nextest_ui_filter/errors.rs"]
@@ -87,50 +89,17 @@ const INTEGRATION_UI: TestIdentity<'static> = TestIdentity {
     name: TestName("ui"),
 };
 
-/// The `trybuild` compile contract in `installer/tests/ui.rs`.
+/// The bound the broad clause actually gives a test it captures, in seconds.
 ///
-/// This is a top-level `fn` in the file, so nextest reports it without the
-/// `ui::` module prefix that [`HARNESS`]'s crate produces. That difference
-/// matters: the broad clause's `test(ui::ui)` term is a *contains* match and
-/// does not select this name, which is why its own override is reachable.
-const SHA2_CONTRACT: TestIdentity<'static> = TestIdentity {
-    package: PackageName("whitaker-installer"),
-    binary: BinaryName("ui"),
-    name: TestName("sha2_0_11_pre_migration_patterns_fail_to_compile"),
-};
-
-/// The package-isolated packaging check in `common/tests/i18n_packaging.rs`,
-/// which `#[cfg(unix)] mod unix` nests, so nextest reports the `unix::` prefix.
-///
-/// Like [`SHA2_CONTRACT`] this name has no `ui::` prefix, so the broad
-/// clause's `ui::` terms do not reach it.
-const PACKAGING_CHECK: TestIdentity<'static> = TestIdentity {
-    package: PackageName("whitaker-common"),
-    binary: BinaryName("i18n_packaging"),
-    name: TestName("unix::fluent_bundles_are_included_in_the_package_tarball"),
-};
-
-/// The minimum period that counts as a build-sized allowance, in seconds.
-///
-/// Nested Cargo builds queue behind shared compiler admission and package
-/// caches; twenty minutes is the smallest budget the repository has needed.
-/// Anything shorter is a hang detector, not an allowance.
-const BUILD_SLOW_TIMEOUT_SECS: u64 = 20 * 60;
+/// It was 20 minutes until this guard was extended. The clause also captures
+/// the direct-`acquire` lock test, whose wait bound is 25 minutes, so a 20
+/// minute ceiling would have killed that test mid-wait and reported a waiter's
+/// timeout for a healthy owner. The clause's period is now 30 minutes, which is
+/// above the wait bound and below the harnesses' own 75-minute allowance.
+const BROAD_CLAUSE_SECS: u64 = 30 * 60;
 
 /// The allowance the package overrides give a nested-Cargo harness.
 const PACKAGE_OVERRIDE_SECS: u64 = 75 * 60;
-
-/// The per-test bound a profile applies when no override selects a test, read
-/// from each profile's `slow-timeout.period` in `.config/nextest.toml`.
-const BASE_SLOW_TIMEOUT_SECS: u64 = 300;
-
-/// The allowance the `trybuild` compile contracts need for a cold fixture
-/// build through nested Cargo.
-const SHA2_ALLOWANCE_SECS: u64 = 75 * 60;
-
-/// The allowance the packaging check needs, because `cargo package` builds
-/// into its own fresh target directory.
-const PACKAGING_ALLOWANCE_SECS: u64 = 30 * 60;
 
 /// The broad clause, not the package overrides, is what captures a plain
 /// integration-test binary named `ui`: its reported test name is `ui`, which
@@ -248,55 +217,6 @@ fn nested_cargo_harnesses_are_governed_by_the_whole_package_override(
     );
 }
 
-/// Pins the two build-sized allowances that the `default` profile lacked.
-///
-/// The `ci` profile budgeted 75 minutes for the `trybuild` compile contracts
-/// and 30 for the packaging check, but `default` — which `make test` and
-/// `make coverage` run — had no entry for either, so both were held to the
-/// 300 s base and killed mid-build.
-///
-/// Checking that an override *exists* is not enough, and neither is matching
-/// on its text. These two tests are named without a `ui::` module prefix, so
-/// the broad clause's `test(ui::ui)` term does not select them today; but that
-/// is a property of the *names*, and an earlier override that did select them
-/// would silently win the setting. Assert the effective allowance, which is
-/// what nextest applies.
-#[rstest]
-#[case::default_sha2(ProfileName("default"), SHA2_CONTRACT, SHA2_ALLOWANCE_SECS)]
-#[case::ci_sha2(ProfileName("ci"), SHA2_CONTRACT, SHA2_ALLOWANCE_SECS)]
-#[case::default_packaging(ProfileName("default"), PACKAGING_CHECK, PACKAGING_ALLOWANCE_SECS)]
-#[case::ci_packaging(ProfileName("ci"), PACKAGING_CHECK, PACKAGING_ALLOWANCE_SECS)]
-fn build_sized_allowances_govern_their_tests(
-    nextest_config: Value,
-    #[case] profile: ProfileName<'_>,
-    #[case] identity: TestIdentity<'_>,
-    #[case] expected_secs: u64,
-) {
-    let overrides = effective_overrides(&nextest_config, profile);
-
-    let Some((index, governing)) = governing_override(&overrides, "slow-timeout", identity) else {
-        panic!(
-            "profile.{}: no override with a slow-timeout selects {}, so it falls to the {}s base \
-             bound instead of the {expected_secs}s allowance",
-            profile.0, identity.name.0, BASE_SLOW_TIMEOUT_SECS
-        );
-    };
-
-    let period = slow_timeout_period_secs(governing).unwrap_or_else(|| {
-        panic!(
-            "profile.{}.overrides[{index}] should set slow-timeout.period",
-            profile.0
-        )
-    });
-    assert_eq!(
-        period, expected_secs,
-        "profile.{}.overrides[{index}] gives {} a {period}s slow-timeout, not the expected \
-         {expected_secs}s. nextest resolves a setting from the *first* matching override that \
-         configures it, so a broad clause listed above it shadows the allowance.",
-        profile.0, identity.name.0
-    );
-}
-
 /// Pins the *effective* allowance for each nested-Cargo harness, which is what
 /// nextest actually applies. Checking that some override mentions a package is
 /// not enough: an earlier broad clause that also matches the test wins the
@@ -312,8 +232,8 @@ fn build_sized_allowances_govern_their_tests(
 #[case::ci_package_override(ProfileName("ci"), HARNESS, PACKAGE_OVERRIDE_SECS)]
 #[case::default_rstest_helper(ProfileName("default"), RSTEST_HELPER_HARNESS, PACKAGE_OVERRIDE_SECS)]
 #[case::ci_rstest_helper(ProfileName("ci"), RSTEST_HELPER_HARNESS, PACKAGE_OVERRIDE_SECS)]
-#[case::default_shared_name(ProfileName("default"), SHARED_NAME_CONTROL, BUILD_SLOW_TIMEOUT_SECS)]
-#[case::ci_shared_name(ProfileName("ci"), SHARED_NAME_CONTROL, BUILD_SLOW_TIMEOUT_SECS)]
+#[case::default_shared_name(ProfileName("default"), SHARED_NAME_CONTROL, BROAD_CLAUSE_SECS)]
+#[case::ci_shared_name(ProfileName("ci"), SHARED_NAME_CONTROL, BROAD_CLAUSE_SECS)]
 fn effective_slow_timeout_follows_override_precedence(
     nextest_config: Value,
     #[case] profile: ProfileName<'_>,
