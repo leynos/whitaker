@@ -17,18 +17,24 @@ on:
     # Nightly, ahead of the 04:50 mutation lane so the two do not overlap.
     - cron: "17 3 * * *" # Daily, 03:17 UTC
   workflow_dispatch:
-  # The three inputs that can invalidate a proof without touching the code
-  # around it: the proof itself, the pure domain crate the string-literal
-  # proof describes, and the scripts that pin and invoke the verifiers.
+  # Every domain the two runners actually verify, plus the scripts that pin
+  # and invoke the verifiers. `make kani` runs the decomposition harnesses in
+  # `common/` and the clone-detector harnesses in `crates/whitaker_clones_core/`
+  # as well as the string-literal ones, and `make verus` reads `verus/**`.
+  # Omitting any of these would leave a proof describing code that the pull
+  # request had already changed.
   pull_request:
     paths:
       - "verus/**"
+      - "common/**"
+      - "crates/whitaker_clones_core/**"
       - "crates/whitaker_string_literals/**"
       - "scripts/install-kani.sh"
       - "scripts/install-verus.sh"
       - "scripts/run-kani.sh"
       - "scripts/run-kani-limited.sh"
       - "scripts/run-verus.sh"
+      - "Makefile"
       - ".github/workflows/proofs.yml"
 
 # A second push to a pull request supersedes the run already in flight. The

@@ -88,11 +88,16 @@ has, and it does so with information the pass already holds.
 
 ## Decision outcome / proposed direction
 
-The lint runs as a post-expansion `EarlyLintPass` and admits a literal only
-when all three hold.
+The lint runs as a post-expansion `EarlyLintPass` and admits a literal by one
+of two position branches, both gated on a crate-wide shadow check. The branches
+are alternatives, not simultaneous conditions: a plain literal is at wrapper
+depth zero and never has a macro frame, while a format string always has a
+facade chain and is never at depth zero. Requiring all three would suppress
+every candidate on both paths. The implementation records the two kinds in
+separate safe-span sets for exactly this reason.
 
-1. **Wrapper depth is zero.** The literal sits in no AST container whose span
-   came from an expansion. The depth set is computed by a
+1. **Plain literals: wrapper depth is zero.** The literal sits in no AST
+   container whose span came from an expansion. The depth set is computed by a
    `rustc_ast::visit::Visitor` run from `check_crate`, with an explicit
    push/pop for every container kind, recording safe literal spans into a
    `FxHashSet` that the emitting hooks consult. `nightly-2026-05-28` has no
@@ -101,21 +106,31 @@ when all three hold.
    case, which is why the set is built by a visitor rather than maintained by
    balanced hooks.
 
-2. **The outermost non-root expansion frame is a known formatting macro.** For
-   `ExprKind::FormatArgs`, walk the literal span's expansion chain to its
-   outermost frame — the invocation the user actually typed — and require
-   `ExpnKind::Macro(MacroKind::Bang, sym)` with `sym` in a fixed set:
-   `format_args`, `format`, `print`, `println`, `eprint`, `eprintln`, `write`,
-   `writeln`, `panic`, `todo`, `unimplemented`, `unreachable`, `assert`,
-   `debug_assert`, `assert_eq`, `assert_ne`, `debug_assert_eq`,
+2. **Format strings: the outermost non-root expansion frame is a known
+   formatting macro.** For `ExprKind::FormatArgs`, walk the literal span's
+   expansion chain to its outermost frame — the invocation the user actually
+   typed — and require `ExpnKind::Macro(MacroKind::Bang, sym)` with `sym` in a
+   fixed set: `format_args`, `format`, `print`, `println`, `eprint`, `eprintln`,
+   `write`, `writeln`, `panic`, `todo`, `unimplemented`, `unreachable`,
+   `assert`, `debug_assert`, `assert_eq`, `assert_ne`, `debug_assert_eq`,
    `debug_assert_ne`. These are language built-ins with no macro-by-example
    matcher to break.
 
-3. **The crate does not shadow any of those names.** A bare name check is sound
-   only if the name cannot be shadowed. If the crate under compilation defines a
-   `macro_rules!` or `macro` with a name in the set, or contains a `use` whose
-   terminal segment is one, or a `#[macro_use] extern crate`, the lint disables
-   itself for that crate.
+3. **The crate does not shadow any of those names, or `concat`.** A bare name
+   check is sound only if the name cannot be shadowed. If the crate under
+   compilation defines a `macro_rules!` with a name in the set or one equal to
+   `concat`, or contains a `use` whose bound name is one, or a
+   `#[macro_use] extern crate`, the lint disables itself for that crate.
+   `concat` is included even though it is not a format macro, because the
+   suggested replacement itself spells a bare `concat!()`. The bound name, not
+   the terminal path segment, is what counts: `use module::println as shout`
+   binds `shout` and cannot shadow `println!`.
+
+   The `macro` item kind — declarative macros 2.0, spelled `macro name { … }`
+   rather than `macro_rules! name` — is not yet part of the shadow scanner,
+   which observes only `ItemKind::MacroDef`. A crate that shadows a format
+   macro this way, without also defining a `macro_rules!` of the same name,
+   would keep the lint enabled.
 
 **Shared entry point.** Because the usual `LateLintPass` route cannot carry an
 early lint, the suite registers this pass separately with

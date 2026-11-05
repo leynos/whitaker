@@ -85,8 +85,10 @@ A lint of any complexity splits into a compiler adapter and a pure-domain crate.
 module holds the `EarlyLintPass`, source recovery, and diagnostic emission,
 while every decision about whether a continuation may become `concat!()` lives
 in `whitaker_string_literals/`. The dependency runs one way — the adapter
-depends on the domain crate — and `whitaker_string_literals/` has no `rustc_*`
-dependency at all.
+depends on the domain crate — and `whitaker_string_literals/` has no
+compiler-private `rustc_private` dependency. Its one `rustc_*` dependency is
+`rustc_lexer`, a standalone crate published on crates.io that carries no
+compiler internals.
 
 ### `installer/`
 

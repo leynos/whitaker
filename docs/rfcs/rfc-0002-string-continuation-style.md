@@ -32,7 +32,9 @@ written would describe code that does not exist:
    and `check_mac_def`. The pinned `nightly-2026-05-28` has no
    `check_stmt_post` / `check_local` / `check_block` / `check_arm` / `check_ty`
    pairing, so the pass implements only `check_crate` and `check_expr`, with a
-   single visitor walk recording the positive span sets.
+   single visitor walk recording the positive span sets. That walk also
+   performs the shadow scan of §Macro position, so `check_mac_def` is neither
+   needed nor present.
 3. **`RequiredReason` carries four variants, not five.** `UnknownMacroContract`
    is not constructed by the adapter — every situation it would have named is
    gated before classification — so §Rule semantics now lists the four that
@@ -250,7 +252,9 @@ This replaces the original text's reliance on root syntax context, which does
 not carry that meaning. When `macro_rules!` substitutes a metavariable,
 `rustc_expand`'s `maybe_use_metavar_location` returns either the original token
 or one respanned with the call-site context; either way the substituted token
-keeps the call site's syntax context. So in
+keeps the call site's syntax context. So in the following example, the literal
+has no expansion-derived ancestor at all, yet it is still captured by
+`$l:literal`.
 
 ```rust
 macro_rules! shout { ($l:literal) => { let _x = $l; } }
@@ -512,11 +516,16 @@ it from opposite directions, plus a crate-wide switch that governs both.
    an expression, and `write!`/`writeln!` forward through `$($arg:tt)*`. This
    branch replaces, rather than supplements, the depth test on this path; see
    §Format strings.
-3. **The crate does not shadow any of those names.** A bare name check is sound
-   only if the name cannot be shadowed. If the crate under compilation defines a
-   `macro_rules!` or `macro` with a name in the set, or contains a `use` whose
-   terminal segment is one, or a `#[macro_use] extern crate`, the lint disables
-   itself for that crate entirely. This applies to both branches.
+3. **The crate does not shadow any of those names, or `concat`.** A bare name
+   check is sound only if the name cannot be shadowed. If the crate under
+   compilation defines a `macro_rules!` with a name in the set or one equal to
+   `concat`, or contains a `use` that binds such a name, or a
+   `#[macro_use] extern crate`, the lint disables itself for that crate
+   entirely. This applies to both branches. `concat` is included because the
+   suggested replacement spells it bare. What counts is the name a `use` binds,
+   not its terminal segment, so `use module::println as shout` binds `shout`
+   and leaves the lint enabled. The scanner observes `ItemKind::MacroDef` only,
+   so a `macro` item that shadows one of these names is not yet detected.
 
 Condition 3 is blunt. It will occasionally silence the lint across a whole
 crate that had no real conflict, and its residual hole — a crate reaching a
