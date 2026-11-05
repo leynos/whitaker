@@ -1,0 +1,32 @@
+warning: Join the physical lines in this cooked string with `concat!()`.
+  --> $DIR/fail_adjacent_joins.rs:7:21
+   |
+LL |     const VALUE: &str = "left /
+   |  _______________________^     -
+   | | ____________________________|
+LL | ||      middle /
+   | || _-__________-
+   | |||_|
+   | | | source-line join
+LL | | |     right";
+   | |_|_-________^ help: replace with a `concat!()` expression: `concat!("left ", "middle ", "right")`
+   |   |_|
+   |     source-line join
+   |
+note: The escaped newline removes the physical line break and following indentation, hiding the fragment boundary inside one literal.
+  --> $DIR/fail_adjacent_joins.rs:7:21
+   |
+LL |   const VALUE: &str = "left /
+   |  _____________________^
+LL | |     middle /
+LL | |     right";
+   | |__________^
+   = help: Split the cooked string into `concat!()` arguments at each source-line join.
+note: the lint level is defined here
+  --> $DIR/fail_adjacent_joins.rs:2:9
+   |
+LL | #![warn(string_continuation_style)]
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: 1 warning emitted
+

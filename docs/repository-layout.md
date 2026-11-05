@@ -64,9 +64,13 @@ small set of support crates:
   `conditional_max_n_branches/`, `function_attrs_follow_docs/`,
   `module_max_lines/`, `module_must_have_inner_docs/`,
   `no_expect_outside_tests/`, `no_std_fs_operations/`,
-  `no_unwrap_or_else_panic/`, `rstest_helper_should_be_fixture/`, and
-  `test_must_not_have_example/`.
+  `no_unwrap_or_else_panic/`, `rstest_helper_should_be_fixture/`,
+  `string_continuation_style/`, and `test_must_not_have_example/`.
 - Support crates such as `whitaker_clones_core/` and `whitaker_sarif/`.
+- Pure-domain crates such as `whitaker_string_literals/`, which hold the
+  classification, fact, and rewrite logic for a lint with no dependency on the
+  compiler, so it can be unit tested, property tested, and formally verified
+  without a Dylint driver.
 - Vendored compatibility crates such as `rustc_ast/`, `rustc_hir/`, and other
   `rustc_*` crates used to align with the Rust compiler interfaces Whitaker
   targets.
@@ -75,6 +79,16 @@ Most lint crates follow a repeatable shape with `src/` for implementation,
 `tests/` for crate-specific tests, and `ui/` fixtures for compiler-diagnostic
 testing. Some crates also include locale-specific UI directories or `examples/`
 where the lint needs extra coverage material.
+
+A lint of any complexity splits into a compiler adapter and a pure-domain crate.
+`string_continuation_style/` is the first to take that shape: its `driver/`
+module holds the `EarlyLintPass`, source recovery, and diagnostic emission,
+while every decision about whether a continuation may become `concat!()` lives
+in `whitaker_string_literals/`. The dependency runs one way — the adapter
+depends on the domain crate — and `whitaker_string_literals/` has no
+compiler-private `rustc_private` dependency. Its one `rustc_*` dependency is
+`rustc_lexer`, a standalone crate published on crates.io that carries no
+compiler internals.
 
 ### `installer/`
 

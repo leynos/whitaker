@@ -1,0 +1,9 @@
+---
+source: crates/whitaker_string_literals/src/rewrite/tests.rs
+assertion_line: 141
+expression: "rewrite.render(8, Newline::Lf)"
+---
+concat!(
+            "HTTP/1.1 {status_line}\r\nContent-Length: {}\r\n",
+            "Content-Type: application/octet-stream\r\nConnection: close\r\n\r\n",
+        )

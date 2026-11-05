@@ -119,6 +119,8 @@ fn run_ui_test_panics_with_context_from_runner_failure() {
     assert!(message.contains("known runner failure"));
 }
 
+// A configured wrapper caches or admits compilations, so the runner must not
+// strip it. Example staging tolerates wrappers instead.
 #[test]
 fn runner_env_guard_preserves_rustc_wrapper() {
     let _serial_guard = runner_env_guard_test_lock();

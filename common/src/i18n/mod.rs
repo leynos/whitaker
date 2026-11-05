@@ -78,13 +78,16 @@ pub use diagnostics::{
     BundleLookup,
     DiagnosticMessageSet,
     MessageKey,
+    normalize_fluent_output,
     resolve_message_set,
 };
 pub use helpers::{
+    LabelResolution,
     MessageResolution,
     branch_phrase,
     get_localizer_for_lint,
     noop_reporter,
+    safe_resolve_label,
     safe_resolve_message_set,
 };
 pub use loader::{Arguments, I18nError, Localizer};

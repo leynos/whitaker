@@ -1,0 +1,32 @@
+warning: Join the physical lines in this cooked string with `concat!()`.
+  --> $DIR/fail_multiple_joins.rs:7:21
+   |
+LL |     const VALUE: &str = "one /
+   |  _______________________^    -
+   | | ___________________________|
+LL | ||      two /
+   | || _-_______-
+   | |||_|
+   | | | source-line join
+LL | | |     three";
+   | |_|_-________^ help: replace with a `concat!()` expression: `concat!("one ", "two ", "three")`
+   |   |_|
+   |     source-line join
+   |
+note: The escaped newline removes the physical line break and following indentation, hiding the fragment boundary inside one literal.
+  --> $DIR/fail_multiple_joins.rs:7:21
+   |
+LL |   const VALUE: &str = "one /
+   |  _____________________^
+LL | |     two /
+LL | |     three";
+   | |__________^
+   = help: Split the cooked string into `concat!()` arguments at each source-line join.
+note: the lint level is defined here
+  --> $DIR/fail_multiple_joins.rs:2:9
+   |
+LL | #![warn(string_continuation_style)]
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: 1 warning emitted
+
