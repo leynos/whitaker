@@ -3358,6 +3358,32 @@ The counterpart in the pure domain is the rewrite builder, which re-lexes its
 own output: a generated `concat!()` must parse back as one expression with the
 original fragments before any suggestion is offered.
 
+### One definition of "join", shared by the classifier and the gate
+
+`whitaker_string_literals::continuation::joins_only` is the only place that
+decides which scanned continuations are joins. Four call sites depend on that
+rule agreeing with itself:
+
+- `classification::classify`, which decides whether to offer a rewrite at all;
+- `ConcatRewrite::build`, which re-derives the caller's joins from the source
+  and rejects the rewrite when they differ;
+- the `rewrite/props.rs` property test, which builds an expectation;
+- `rewrite/tests.rs`, which builds unit-test expectations.
+
+The gate re-deriving the joins is the reason the rule is shared rather than
+repeated. If `build` and `classify` disagreed about what a join is, `build`
+would reject the very joins `classify` had just supplied, and every affected
+literal would silently fall back to `Ignore`. Tests call the same helper so
+that an expectation cannot encode a stale copy of the rule.
+
+The helper is `pub(crate)` and deliberately not part of the public API: it
+encodes an internal agreement, not a service this crate offers. Two kinds of
+call site are *not* covered and must not be folded in.
+`rewrite::is_selected_join` tests a single continuation for join-ness as one
+clause of a longer predicate, and the Kani harness in `continuation/kani.rs`
+counts kinds arithmetically so its loop-free model never depends on `Iterator`
+machinery.
+
 ### Localization and the label spans
 
 The pass emits through the shared `whitaker_common::i18n` helpers so the

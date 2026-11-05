@@ -2,21 +2,14 @@
 
 use super::{ConcatRewrite, Newline, cooked_literal_body, is_concat_macro_expression};
 use crate::{
-    continuation::{Continuation, ContinuationKind},
+    continuation::{Continuation, ContinuationKind, joins_only},
     facts::{BodyOffset, LiteralBody},
 };
-
-fn interior_joins(body: LiteralBody<'_>) -> Vec<Continuation> {
-    body.scan()
-        .into_iter()
-        .filter(|continuation| continuation.kind == ContinuationKind::Join)
-        .collect()
-}
 
 #[test]
 fn splits_at_every_join_and_copies_original_escape_spelling() {
     let body = LiteralBody::new("a\\\"b\\\\c\\\n d\\\n e");
-    let joins = interior_joins(body);
+    let joins = joins_only(body.scan());
     let rewrite = ConcatRewrite::build(body, &joins).expect("the body contains safe joins");
 
     assert_eq!(rewrite.fragments(), &["a\\\"b\\\\c", "d", "e"]);
@@ -44,7 +37,7 @@ fn rejects_layout_trims() {
 #[test]
 fn rejects_unlexable_original_string_tokens() {
     let body = LiteralBody::new("alpha\" \\\nbeta");
-    let joins = interior_joins(body);
+    let joins = joins_only(body.scan());
 
     assert_eq!(joins.len(), 1);
     assert!(ConcatRewrite::build(body, &joins).is_none());
@@ -65,7 +58,7 @@ fn rejects_ranges_that_do_not_match_the_scanner_output() {
 #[test]
 fn rejects_a_partial_set_of_detected_joins() {
     let body = LiteralBody::new("first\\\nsecond\\\nthird");
-    let joins = interior_joins(body);
+    let joins = joins_only(body.scan());
 
     assert_eq!(joins.len(), 2);
     let first_join = joins.first().expect("the body contains two joins");
@@ -76,7 +69,7 @@ fn rejects_a_partial_set_of_detected_joins() {
 #[test]
 fn renders_a_single_line_replacement_when_it_fits() {
     let body = LiteralBody::new("alpha\\\nbeta");
-    let joins = interior_joins(body);
+    let joins = joins_only(body.scan());
     let rewrite = ConcatRewrite::build(body, &joins).expect("safe join");
 
     assert_eq!(
@@ -89,7 +82,7 @@ fn renders_a_single_line_replacement_when_it_fits() {
 fn renders_a_multiline_replacement_at_the_original_indentation() {
     let body_source = format!("{}\\\n{}", "a".repeat(55), "b".repeat(55));
     let body = LiteralBody::new(&body_source);
-    let joins = interior_joins(body);
+    let joins = joins_only(body.scan());
     let rewrite = ConcatRewrite::build(body, &joins).expect("safe join");
     let rendered = rewrite.render(4, Newline::CrLf);
 
@@ -136,7 +129,7 @@ fn snapshots_the_rfc_header_rewrite() {
     let body_source = "HTTP/1.1 {status_line}\\r\\nContent-Length: {}\\r\\n\\\n         \
                        Content-Type: application/octet-stream\\r\\nConnection: close\\r\\n\\r\\n";
     let body = LiteralBody::new(body_source);
-    let joins = interior_joins(body);
+    let joins = joins_only(body.scan());
     let rewrite = ConcatRewrite::build(body, &joins).expect("the header join is safe");
 
     insta::assert_snapshot!(rewrite.render(8, Newline::Lf));

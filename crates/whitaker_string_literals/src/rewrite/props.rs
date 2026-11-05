@@ -3,7 +3,7 @@
 use proptest::prelude::*;
 
 use crate::{
-    continuation::{Continuation, ContinuationKind},
+    continuation::{Continuation, joins_only},
     facts::LiteralBody,
     rewrite::{
         ConcatRewrite,
@@ -65,13 +65,6 @@ fn body_with_joins() -> impl Strategy<Value = (String, usize)> {
     })
 }
 
-fn joins_only(body: LiteralBody<'_>) -> Vec<Continuation> {
-    body.scan()
-        .into_iter()
-        .filter(|continuation| continuation.kind == ContinuationKind::Join)
-        .collect()
-}
-
 fn remove_ranges(body: &str, joins: &[Continuation]) -> Option<String> {
     let mut output = String::new();
     let mut previous_end = 0;
@@ -87,7 +80,7 @@ fn remove_ranges(body: &str, joins: &[Continuation]) -> Option<String> {
 
 fn assert_preserved(body: &str, expected_joins: usize) -> Result<(), TestCaseError> {
     let wrapped = LiteralBody::new(body);
-    let joins = joins_only(wrapped);
+    let joins = joins_only(wrapped.scan());
     prop_assert_eq!(joins.len(), expected_joins);
 
     let Some(rewrite) = ConcatRewrite::build(wrapped, &joins) else {
