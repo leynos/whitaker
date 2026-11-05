@@ -6,8 +6,9 @@
 //! sound to report when the crate cannot substitute its own macro for it, and
 //! a post-expansion early pass has no name resolution to consult. Detection is
 //! therefore syntactic, crate-wide, and deliberately blunt: any matching
-//! `macro_rules!`/`macro` definition, any `use` that binds a matching name, or
-//! any `#[macro_use] extern crate` silences the lint for the whole crate.
+//! `macro_rules!`/`macro` definition, any `use` that binds a matching name, any
+//! glob import, or any `#[macro_use] extern crate` silences the lint for the
+//! whole crate.
 //!
 //! Detection does not model textual or module scope. A definition that could
 //! not shadow a given call site still silences the crate. The bias is
@@ -83,6 +84,17 @@ impl ShadowDetector {
             .any(|attribute| attribute.has_name(sym::macro_use));
     }
 
+    /// Records a glob import as shadowing, unless the compiler injected it.
+    ///
+    /// Every crate is handed `use std::prelude::rust_20xx::*;` before the
+    /// user's items, and that injection is built on `DUMMY_SP`. Counting it
+    /// would silence the lint in every crate, which is not a conservative
+    /// reading of the ambiguity risk — it is the detector switching itself off
+    /// everywhere. A glob that appears in source, whether written directly or
+    /// produced by a macro, has a real location, and only such a glob can carry
+    /// a `concat` binding the suggested call would collide with.
+    fn record_glob(&mut self, tree: &ast::UseTree) { self.is_shadowed |= !tree.span().is_dummy(); }
+
     fn record_use_tree(&mut self, tree: &ast::UseTree) {
         match &tree.kind {
             // A rename makes the source segment irrelevant: `use p::println as
@@ -97,10 +109,17 @@ impl ShadowDetector {
                     self.record_use_tree(nested);
                 }
             }
-            // `use module::*` has no segment to inspect. Treating every glob
-            // as shadowing would silence the lint for nearly every crate that
-            // re-exports a prelude, so the glob hole is accepted deliberately.
-            UseTreeKind::Glob(_) => {}
+            // `use module::*` has no segment to inspect, and it can bind
+            // `concat`. A glob-imported `concat` does not shadow it outright,
+            // as a definition would; it makes the name *ambiguous*, so the
+            // suggested bare `concat!(...)` fails with E0659 at the call site
+            // the lint just rewrote. That is the false positive this detector
+            // exists to prevent, caused by a construct the detector cannot
+            // resolve without name resolution. Treating a source-written glob
+            // as shadowing is therefore the sound reading of the bias stated
+            // in the module comment: silence is a cost the user can see and
+            // attribute, while a broken rewrite is not.
+            UseTreeKind::Glob(_) => self.record_glob(tree),
         }
     }
 }

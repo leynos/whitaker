@@ -149,11 +149,15 @@ See the early-pass registration addendum in the
   construction rather than by policy. Supporting them is a separate, later
   decision that must prove macro identity, format-string position, and the
   argument grammar, and it stays out of this release.
-- The residual hole is a crate reaching a same-named macro by a path that none
-  of the three checks observes. The failure mode is silence, so it is
-  undetectable from inside the lint. This is accepted because the alternative —
-  diagnosing a literal passed to a user macro whose matcher the rewrite could
-  break — fails loudly in the wrong direction.
+- The residual hole is a crate reaching a same-named macro by a path that
+  neither the definition check nor the `use`-tree check observes, such as a
+  path imported through a re-export chain the syntactic check does not follow.
+  The failure mode is silence, so it is undetectable from inside the lint. This
+  is accepted because the alternative — diagnosing a literal passed to a user
+  macro whose matcher the rewrite could break — fails loudly in the wrong
+  direction. Glob imports were originally accepted as a second hole; they are
+  now disqualifying, because a glob-imported `concat` makes the suggested bare
+  call ambiguous and fails the rewrite with E0659.
 - The crate-wide shadow switch is blunt: it will silence the lint across a
   crate with no real conflict. Accepted for the same reason.
 - Wrapper-depth accounting is a new correctness surface that the pure-domain
