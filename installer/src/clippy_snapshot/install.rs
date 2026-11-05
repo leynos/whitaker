@@ -71,9 +71,14 @@ pub(crate) fn from_sidecar_with(
     };
     // Read through the store port: the orchestration must not reach for the
     // filesystem itself, and a partly scripted store would hide the read.
+    // Only the reason travels: `Io`'s display already names the path, its
+    // remedy, and the no-fallback rule, and `Sidecar` repeats that advice.
     let contents = store
         .read_to_string(&sidecar)
-        .map_err(|error| sidecar_error(error.to_string()))?;
+        .map_err(|error| match error {
+            ClippySnapshotError::Io { reason, .. } => sidecar_error(reason),
+            other => sidecar_error(other.to_string()),
+        })?;
     let token = contents
         .split_whitespace()
         .next()

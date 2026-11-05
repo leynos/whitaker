@@ -4075,25 +4075,24 @@ or token.
 #### Clippy snapshot policy and adapter boundaries
 
 `installer/src/clippy_snapshot` separates what a snapshot must satisfy from how
-the installer observes it. Extend it along the same split.
+the installer observes it. Extend it along the same split; the file-to-role
+mapping is in the [repository layout](repository-layout.md) and the boundary
+decision is in
+[ADR 009](adr-009-verified-clippy-snapshot-for-dylint-driver-bootstrap.md).
 
-- `policy.rs` owns every acceptance rule as a pure function over evidence
-  values and recorded output. It performs no I/O and records no metrics.
-  `selection.rs` keeps `select_revision` as the pure kernel; policy evaluates
-  its outcome.
-- `ports.rs` owns the driven ports: `RepositoryQueries`, `BundleOperations`,
-  `SnapshotStore`, and `MetadataStore`, plus the `RootLock` and `Staging`
-  guards. Release downloads reuse the existing `DependencyArchiveDownloader`.
-- `git.rs` implements `RepositoryQueries` and `BundleOperations`; `store.rs`
-  implements `SnapshotStore` and `MetadataStore`. An adapter returns the
-  closest honest observation and translates infrastructure failures into
-  `ClippySnapshotError`; it does not decide whether an observation is
-  acceptable.
-- `verify.rs`, `install.rs`, and `provision.rs` orchestrate through
-  `SnapshotSupport<'_>`, a struct of borrowed ports.
-  `SnapshotSupport::production()` composes the process-wide `SnapshotGit` and
-  `ProductionStore`; the public entry points use it and the `*_with` variants
-  take explicit support.
+- Acceptance rules are pure: they take evidence values and recorded output,
+  perform no I/O, and record no metrics. `select_revision` stays the pure
+  kernel, and policy evaluates its outcome.
+- Ports describe what orchestration needs. Release downloads reuse the
+  existing `DependencyArchiveDownloader` rather than adding a second downloader
+  port.
+- Adapters return the closest honest observation and translate infrastructure
+  failures into `ClippySnapshotError`; they do not decide whether an
+  observation is acceptable.
+- Orchestration runs through `SnapshotSupport<'_>`, a struct of borrowed
+  ports. `SnapshotSupport::production()` composes the process-wide adapters;
+  the public entry points use it and the `*_with` variants take explicit
+  support.
 
 Keep the test split when adding coverage: value cases go in `policy_tests.rs`,
 call ordering and "never called" assertions go in `orchestration_tests/`
