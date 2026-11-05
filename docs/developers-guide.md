@@ -163,8 +163,8 @@ are never silently skipped in the pipeline.
 
 Both profiles declare the same three nextest scopes, in increasing scope; a
 fourth bound sits outside nextest. A test is only allowed to exceed a bound if
-a more specific override raises it, so the tiers must be read as a floor
-scheme rather than as independent budgets.
+a more specific override raises it, so the tiers must be read as a floor scheme
+rather than as independent budgets.
 
 1. `slow-timeout.period = "300s"` on `[profile.default]` and `[profile.ci]`.
    This bounds an ordinary test. Without it a hung test is reported as slow for
@@ -1905,11 +1905,14 @@ longer than the five-minute stale window, so an abandoned lock is reclaimed
 before the ceiling is reached — and the tests supply their own limits rather
 than inheriting this one. The 25 minutes are the expected hold time, not a
 second stale window: an owner compiles an example through nested Cargo while
-holding the lock, and `.config/nextest.toml` budgets 20 minutes for exactly
-that build, so a six-minute bound reported a healthy owner as a timeout.
-A sidecar advisory lock serializes ownership transitions, and the directory's
-owner token prevents an original holder from deleting a successor after stale
-recovery.
+holding the lock, and what a healthy owner can spend on that build is set by
+the nextest override covering it — 75 minutes for the two harnesses that take
+the lock, 120 for the `trybuild` fixture, and 30 for the test that calls
+`acquire()` directly — so a six-minute bound reported a healthy owner as a
+timeout. The wait bound has to stay under each of those ceilings, or it could
+never fire. A sidecar advisory lock serializes ownership transitions, and the
+directory's owner token prevents an original holder from deleting a successor
+after stale recovery.
 
 ### Configuration constant patterns
 
@@ -1979,7 +1982,12 @@ it. The config loading and override resolution — `load_nextest_config`,
 `effective_overrides`, `governing_override`, and friends — live alongside in
 `tests/nextest_ui_filter/config.rs`, so the guards resolve a setting the way
 nextest does: from the *first* matching override that configures it, walking
-the selected profile and then `default`.
+the selected profile and then `default`. Guards that pin a *build-sized*
+allowance or its serializing group, as opposed to the filter's reach, live in
+`tests/nextest_ui_filter/build_allowances.rs`; keep a guard there rather than
+in the root file once it needs more than four inputs, since `rstest` expands
+every `#[case]` column into a function argument and Clippy's argument threshold
+is four.
 
 **Example** (`tests/nextest_ui_filter.rs`):
 
@@ -1995,7 +2003,9 @@ fn serial_dylint_ui_filter_captures_integration_ui_binaries(
         .unwrap_or_else(|| panic!("profile.{}: broad override should filter", profile.0));
 
     assert!(
-        filter.selects(INTEGRATION_UI),
+        filter
+            .selects(INTEGRATION_UI)
+            .unwrap_or_else(|error| panic!("profile.{}: {error}", profile.0)),
         "profile.{}: the {SERIAL_UI_GROUP} filter must select an integration binary named `ui` \
          whose top-level test is also named `ui`; found filter: {}",
         profile.0,
@@ -2004,11 +2014,14 @@ fn serial_dylint_ui_filter_captures_integration_ui_binaries(
 }
 ```
 
-Two properties of that example are worth copying. Both profiles are covered
+Three properties of that example are worth copying. Both profiles are covered
 because `profile.ci` is what the Windows lane runs, and both profiles declare
-the clause. And the filter is *evaluated*, not searched:
-`selects` answers whether a specific identity is captured, which is the
-question the configuration exists to answer.
+the clause. The filter is *evaluated*, not searched: `selects` answers whether
+a specific identity is captured, which is the question the configuration exists
+to answer. And it returns a `Result`, so the `unwrap_or_else` is not
+decoration: a clause the model cannot parse is reported with that clause in the
+message, rather than being flattened into a bare `false` that reads exactly
+like a correct negative.
 
 This pattern prevents CI flakes where a new UI test is excluded from
 serialization due to an incomplete filter expression.

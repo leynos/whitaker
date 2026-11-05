@@ -662,8 +662,10 @@ each push rather than copying an earlier lease into the command.
   nothing and nextest exited 4 with `0 tests run`. See "A discrimination probe
   can report a false clean" under Surprises & discoveries.
 - [x] (2026-11-03) The repair obeys the 400-line file cap without weakening the
-  guard: `tests/nextest_ui_filter.rs` is 294 lines and the model is 172. The
-  first draft was 450 lines in one file and was split rather than trimmed.
+  guard: the first draft was 450 lines in one file and was split rather than
+  trimmed. After the 2026-11-04 second split the root file is 282 lines, its
+  feature modules are 169–383 lines each, and the build-allowance guards moved
+  to `tests/nextest_ui_filter/build_allowances.rs` at 184.
   `clippy --all-targets` exits 0. The fixture uses the repository's own
   `#[whitaker_test_macros::allow_fixture_expansion_lints]`, already applied at
   roughly ten sites, because `rustfmt.toml`'s `fn_single_line = true` collapses
@@ -910,8 +912,7 @@ each push rather than copying an earlier lease into the command.
   pre-existing outcome, and reproduced it exactly: the nextest phase ran the
   full 1,670, produced **zero assertion failures**, and was cancelled by the
   repository's own `global-timeout = "300m"` at
-  `Summary [18000.046s] 1670
-  tests run: 1669 passed (1 flaky), 1 failed, 5 skipped`.
+  `Summary [18000.046s] 1670 tests run: 1669 passed (1 flaky), 1 failed, 5 skipped`.
   The whole 18,000 s went to compile admission — 672 result lines parsed from
   the log, the slowest single test being a `no_unwrap_or_else_panic` harness at
   3,878.9 s, then `rstest_helper_should_be_fixture::ui` at 3,627.4 s and
@@ -920,8 +921,8 @@ each push rather than copying an earlier lease into the command.
   requests deep, and `build-limits-status` read `capacity 4, held 4, healthy`
   both before and after. The SIGTERM'd test is the `trybuild` contract that has
   already been given a verdict on its own (`1 passed, 1674 skipped`, 374.7 s),
-  and the `flaky` is again `bumpy_road_function::ui`. The candidate does not
-  touch `global-timeout`; the diff has no line for it.
+  and the `flaky` test is again `bumpy_road_function::ui`. The candidate does
+  not touch `global-timeout`; the diff has no line for it.
 - [x] (2026-11-04) The three phases the `global-timeout` masked were then run as
   three separate gates and all are green on this candidate: **doctests** 336
   passed / 0 failed / 15 ignored across six suites (`GATE_EXIT=0`, 149 s),
@@ -935,6 +936,29 @@ each push rather than copying an earlier lease into the command.
   fewer tests. `make test` is therefore fully covered end to end, with the one
   caveat that its first phase is cancelled by a pre-existing repository-wide
   timer under host load rather than by anything in this diff.
+- [x] (2026-11-04) The 16 above was traced to its PASS lines and is the guard
+  *files* before the second split, not a short run: it lists exactly
+  `build_sized_allowances_govern_their_tests` ×4,
+  `effective_slow_timeout_follows_override_precedence` ×6 and the three older
+  parameterized guards ×6. The later `41/41` and the current `44/44` are the
+  same file with the `errors`, `filter_model` and `property` modules added. The
+  split itself moved guards between files without changing the count, so the
+  suite went 44 → 44 across it; the new module's four cases are the four that
+  were already there.
+- [x] (2026-11-04) The second split (this one) was forced by the gate, not
+  chosen: `make lint` reported `too-many-arguments (6/4)` on
+  `build_sized_allowances_govern_their_tests` and `shadow_reuse` on its
+  `expected_retries` binding, both introduced by the increment that added the
+  group and retries columns, and the root file had also passed 400 lines at
+  430. The fix was one extraction rather than two suppressions: the five
+  `#[case]` columns became a single `Allowance` struct (which is what
+  `too_many_arguments` asks for — group related parameters in a named struct),
+  and the shadowed binding was renamed `pinned`. After the split the root file
+  is 282 lines and the new module 184;
+  `cargo clippy -p whitaker --test
+  nextest_ui_filter --all-features -- -D warnings`
+  exits 0 (`CLIPPY_EXIT=0`, 127 s, warm), and `make test-nextest-filter`
+  reports 44/44, 0 skipped, `GATE_EXIT=0`.
 - [x] (2026-11-04) `make typecheck` is green (`GATE_EXIT=0`, 2,201 s;
   `Finished dev profile` in 36 m 40 s with `-D warnings`). 1,297 of its 1,317
   log lines are `[build-limits]` queue lines, so nearly all of that wall time
@@ -972,6 +996,34 @@ each push rather than copying an earlier lease into the command.
     the `gh` stubs.
   - `make markdownlint` — pass, 27 s, 78 files, `Summary: 0 error(s)`.
   - `make nixie` — pass, 3 s, all diagrams validated.
+- [x] (2026-11-04) The second six-gate run on the split candidate is green on
+  all six that completed, and `make test` is green on its re-run. `check-fmt`
+  passed (5 s, no output); `lint` passed (172 s, zero `error:` lines and zero
+  `warning:` lines — the two `warning` matches in the log are the `-D warnings`
+  flags in the echoed command lines); `test-workflow-contracts` passed (1 s,
+  19 passed); `markdownlint` passed (21 s, typos 5 passed at 95.45 % coverage,
+  `markdownlint-cli2` 78 files, `Summary: 0 error(s)`); `nixie` passed (2 s,
+  all diagrams validated).
+- [x] (2026-11-04) The first attempt at `make test` in that run was cut off by
+  the scrutineer's own execution harness, not by the candidate: the tool's
+  30-minute background cap stopped the gate at nextest test 1666/1674 with zero
+  `FAIL` lines and no `Summary`, so the doctest, root-lib and filter phases
+  never started. That is an evidence gap, not a failure, and the log records
+  it as `[killed]`. The orphaned `/tmp/.whitaker-test-backup-tLPWU0` the trap
+  did not clean up was checked against `/home/leynos/.local/bin/whitaker` and
+  is byte-identical (`md5sum 0524175d1d5c91d9a9343846c1504598` both), so no
+  installed file was damaged.
+- [x] (2026-11-04) `make test` re-run with a 2-hour budget is green in every
+  phase, on the same tree: nextest `1674 tests run: 1674 passed, 5 skipped` in
+  2,969.7 s; doctests `336 passed; 0 failed; 15 ignored` across the same six
+  suites (184 + 79 + 32 + 41 + 0 + 0, with 11 and 4 ignored); root library
+  56/56 in 0.18 s; filter suite 44/44 in 0.21 s, 0 skipped. Zero `FAIL` lines,
+  zero `ERROR` lines and no `make: ***` line in the whole 346 KB log.
+- [x] (2026-11-05) The rows above cover the code-bearing files of this change
+  set. The only edits after that run are this plan and nothing else, so the
+  `fmt`, `lint`, `test` and `test-workflow-contracts` results still apply
+  unchanged and only the two Markdown gates are re-run on the final plan
+  content.
 - [x] (2026-11-04) The first `make lint` of this increment failed with five
   Clippy errors, all in the three new test modules this increment adds, and all
   fixed in the modules rather than suppressed: `question_mark` in `filter_of`,
@@ -1004,8 +1056,8 @@ each push rather than copying an earlier lease into the command.
   `an_unparsable_filter_is_rejected_during_resolution` rather than the
   dictionary relaxed — a local terminology exception for one test name would
   have been the wrong fix. `make markdownlint` then passed 78 files, 0 errors;
-  `make check-fmt` passed; and `make test-nextest-filter` still reports
-  41/41, so the rename broke no reference.
+  `make check-fmt` passed; and `make test-nextest-filter` still reports 41/41,
+  so the rename broke no reference.
 
 ### The review round on `5767537108`
 
@@ -1019,8 +1071,8 @@ repaired in `35513b63` and `4eedf3cd`:
   profile can set. Restated as a floor scheme with the job timeout named as the
   outermost bound.
 - Three first-person pronouns had reached PR-added prose — `developers-guide.md`
-  around the profile explanation, and this plan at "my command" and "pinned by
-  us at all". The style guide forbids them outside `README.md`.
+  around the profile explanation, and two phrases in this plan. The style guide
+  forbids them outside `README.md`.
 - The 25-minute example-harness lock ceiling was described as if it were a
   second stale window. It is the expected hold time, and the rationale is that
   an owner compiles through nested Cargo while holding the lock and
@@ -1031,15 +1083,16 @@ repaired in `35513b63` and `4eedf3cd`:
   mode and its remedies.
 
 The sixth — a compile-fail test for `#[must_use]` on
-`DiagnosticMessageSet::help` — is rebutted rather than actioned. `git show
-5a08c6ff:common/src/i18n/diagnostics.rs` shows the attribute already present on
-the base, and the file carries seven `#[must_use]` on both sides; this branch
-moved them after their doc comments because `function_attrs_follow_docs`
-requires it, and rustfmt shows those moves as edits. A compile-fail harness for
-attributes the branch does not add would be new scope, not owed coverage.
+`DiagnosticMessageSet::help` — is rebutted rather than actioned.
+`git show 5a08c6ff:common/src/i18n/diagnostics.rs` shows the attribute already
+present on the base, and the file carries seven `#[must_use]` on both sides;
+this branch moved them after their doc comments because
+`function_attrs_follow_docs` requires it, and rustfmt shows those moves as
+edits. A compile-fail harness for attributes the branch does not add would be
+new scope, not owed coverage.
 
-The same review round exposed a claim of my own that was false: a previous
-revision of this plan described `f2686a6d` as documentation-only. It touches
+The same review round exposed a claim made earlier in this plan that was false:
+a previous revision described `f2686a6d` as documentation-only. It touches
 fifteen files. The retrospective above now says so and states the gate set that
 follows from it.
 
@@ -1050,28 +1103,66 @@ The inline finding's thread was resolved by CodeRabbit itself in reply
 `DEPENDENCY_TOOLS` and that the message now requires both tools; it also states
 plainly that CodeRabbit did not run the reported checks. The five outside-diff
 rows were reconciled against the head in issue comment `6630731589`, which
-names the stale `change_assessment_commit` of `c8858e8d` and re-derives each row
-from the current tree instead of carrying the old table over. Row 3 (docstring
-coverage) is conceded there rather than repaired: the percentage is computed by
-the review service, so no local edit can move it.
+names the stale `change_assessment_commit` of `c8858e8d` and re-derives each
+row from the current tree instead of carrying the old table over. Row 3
+(docstring coverage) is conceded there rather than repaired: the percentage is
+computed by the review service, so no local edit can move it.
 
 Two facts about review coverage had to be kept separate while doing this. The
 resolved thread and the reconciled table are dispositions, not a review: the
-summary banner still reads "Reviews paused", with `9bb6cb1c` as the last
-reviewed commit and `4453cae3` the latest unreviewed one. So the head's
-`CodeRabbit` commit status is absent — the combined status endpoint returns
-`total_count: 0` — and its check run is `completed/skipped`. Neither is
-evidence of a rate limit; the pause is CodeRabbit's own auto-pause after an
-influx of commits. One review was queued through `comenq` as `310b35af` and is
-pending.
+summary banner read "Reviews paused", with `9bb6cb1c` as the last reviewed
+commit. So the head's `CodeRabbit` commit status was absent — the combined
+status endpoint returned `total_count: 0` — and its check run was
+`completed/skipped`. Neither is evidence of a rate limit; the pause is
+CodeRabbit's own auto-pause after an influx of commits. The review queued
+through `comenq` as `310b35af` was posted as issue comment `6631908299` and its
+reply `6631910079` records the review as finished, which is what cleared the
+queue. CodeRabbit then returned review `5769448287` on `a01f9521`, this time
+`CHANGES_REQUESTED` with twelve findings. That is a fresh review round rather
+than a re-review of old commits, so the earlier dispositions do not carry
+across and each finding is dispositioned separately below.
 
-Hosted CI on the head is now observed rather than inferred: run `41830758135`
-on `4453cae3` finished `success` for `linux-full` and `windows-compat`, with
-`coverage-check` skipped by lane selection. That run was dispatched with
+Hosted CI on every head to `a01f9521` is observed rather than inferred. Run
+`41830758135` on `4453cae3`, `41830636327` on `4eedf3cd` and `41834256431` on
+`a01f9521` each finished `success` for `linux-full` and `windows-compat`, with
+`coverage-check` skipped by lane selection. Those runs were dispatched with
 `workflow_dispatch`, because no `pull_request` run fired for `f2686a6d`,
-`35513b63`, `4eedf3cd` or `4453cae3` even though `refs/pull/372/merge` exists.
-The same event type certified every earlier head, so the evidence is
-candidate-bound but the trigger gap remains unexplained.
+`35513b63`, `4eedf3cd`, `4453cae3` or `a01f9521` even though
+`refs/pull/372/merge` exists. The same event type certified every earlier head,
+so the evidence is candidate-bound but the trigger gap remains unexplained.
+
+Review `5769448287` raised twelve findings against `a01f9521`: one Major
+outside the diff, seven inline Minor/Trivial rows and four further outside-diff
+rows. Eleven are valid and are repaired in the commit that carries this text;
+the twelfth is rebutted. The rebuttal is the Major's `typos` claim, which quotes
+`recognised` and `Recognising` from this plan as spellings `typos` would
+reject. `make spelling` exits 0 on this tree, and a direct `typos` probe over
+the same two words outside backticks exits 2. The reason is that `typos.toml`
+sets `[default] extend-ignore-re`, whose entries include a pattern matching any
+backticked span, so a word inside backticks is invisible to the linter, and
+both words appear in this plan only inside backticks. The finding's dependency
+half is correct — the `markdownlint` target does depend on `spelling` — but the
+gate it names cannot see the text it quotes.
+
+The repairs are the following. In `.config/nextest.toml`, the direct-`acquire`
+lock test was governed by the broad override's 20-minute bound while its own
+wait bound is 25 minutes, so both profiles now give that block 30. The constant
+in `crates/rstest_helper_should_be_fixture/tests/ui/harness_lock.rs` keeps its
+25-minute value and corrects the rationale that had described the harnesses'
+allowance instead of this test's. `docs/developers-guide.md`'s `selects`
+example did not compile — the method returns `Result` — and now uses the
+`unwrap_or_else` pattern the guard uses.
+`tests/nextest_ui_filter/filter_model.rs` gained the parenthesis guard its
+error tests already assumed, with three regression cases in
+`tests/nextest_ui_filter/errors.rs`. `tests/nextest_ui_filter.rs` now resolves
+`test-group` and `retries` independently of `slow-timeout`.
+`tests/workflow_contracts/lint_whitaker_execution_test.py` asserts the package
+list as one contiguous run rather than as loose tokens. `docs/users-guide.md`
+and its source string in `installer/src/deps/install.rs` say `manually` instead
+of `yourself`. The remaining four are prose repairs in this plan and in
+`docs/roadmap.md`: a missing noun, a quoted first-person phrase, a
+subject–predicate mismatch, and a documentation-only boundary that wrongly
+covered five commits.
 
 ### The `make test` wrapper trap is environmental, not candidate
 
@@ -1080,12 +1171,14 @@ trap, and they failed differently. The earlier one, started 2026-11-03T23:54:45
 and preserved as
 `/tmp/test-whitaker-harden-lint-whitaker-gate-prior-20261104T0507.out`, never
 reached four green phases: its nextest run was cancelled by the profile's own
-`global-timeout` at `Summary [18000.046s] 1670 tests run: 1669 passed (1
-flaky), 1 failed, 5 skipped`, and the recipe died there under `set -eu` with
-`GATE_EXIT=2`. The later one, at 08:10:09, ran all four phases green —
-`Summary [2477.110s] 1670 tests run: 1670 passed, 5 skipped`, doctests 184 +
-79 + 32 + 41, `test-root-lib` 56/56 and `test-nextest-filter` 16/16 — and then
-hit the trap:
+`global-timeout` at
+`Summary [18000.046s] 1670 tests run: 1669 passed (1 flaky),
+1 failed, 5 skipped`,
+and the recipe died there under `set -eu` with `GATE_EXIT=2`. The later one,
+at 08:10:09, ran all four phases green —
+`Summary [2477.110s] 1670 tests run: 1670 passed, 5 skipped`, doctests
+`184 + 79 + 32 + 41`, `test-root-lib` 56/56 and `test-nextest-filter` 16/16 —
+and then hit the trap:
 
 ```text
 ERROR: Tests modified /home/leynos/.local/bin/whitaker - restoring backup
@@ -1144,8 +1237,9 @@ the earlier one, with `check-fmt` and `lint` green ahead of it — completed all
 four phases and exited **0**. The `test` phase is preserved as
 `/tmp/test-whitaker-harden-lint-whitaker-gate-2.out`, where
 `grep -c 'ERROR: Tests modified'` reads **0** and the last line is
-`EXIT_CODE=0 DURATION=1288s`; the `check-fmt` and `lint` timings below are the
-scrutineer's summary of the same sequence, not a separate preserved log:
+`EXIT_CODE=0 DURATION=1288s`; the `check-fmt` and `lint` timings below come
+from the scrutineer's summary of the same sequence, not from a separate
+preserved log:
 
 ```text
 check-fmt  EXIT_CODE=0 DURATION=5s
@@ -1164,9 +1258,9 @@ environmental flake, and it is the last evidence line this section needs.
 The candidate conclusion rests on the 08:42:42 run quoted above, the only one
 that exited 0. The 08:10:09 run passed the same four phases but under different
 counts, `1670` and `16/16`, because it ran an earlier tree; those numbers are
-not retconned onto the `b8fff90d` tree, which reports `1673` and `41/41`.
-The deltas are accounted for rather than rounded off. Diffing the two logs'
-PASS lines leaves exactly two removals —
+not retconned onto the `b8fff90d` tree, which reports `1673` and `41/41`. The
+deltas are accounted for rather than rounded off. Diffing the two logs' PASS
+lines leaves exactly two removals —
 `source_install_failure_message_gives_a_runnable_install_command` and
 `..._keeps_cargos_diagnosis_for_version_refusals` — against five additions: the
 four cases and the single absence test that `b8fff90d` produced when it
@@ -1730,31 +1824,37 @@ existing case for the flag itself.
 ## Outcomes & retrospective
 
 Complete for M1–M3, and M4's own requirement — a green hosted run on a
-published head — is met. Seven `workflow_dispatch` runs had concluded
-`success` by `41618871744` on `9863d842`; later heads are certified by the runs
-named in the next paragraph, so `41618871744` is the seventh of that first
-group rather than the most recent success overall. CodeRabbit's review of
-that head then raised eleven findings across the configuration, the guards and
-the documentation. Repairs for all eleven are in the commit that carries this
-text, so that commit is a new candidate and M4's evidence does not transfer to
-it. That fresh observation has since been made on every head that carried a
-Rust change — `41787325744` on `f199288e`, `41791718849` on `b8fff90d`,
+published head — is met. Seven `workflow_dispatch` runs had concluded `success`
+by `41618871744` on `9863d842`; later heads are certified by the runs named in
+the next paragraph, so `41618871744` is the seventh of that first group rather
+than the most recent success overall. CodeRabbit's review of that head then
+raised eleven findings across the configuration, the guards and the
+documentation. Repairs for all eleven are in the commit that carries this text,
+so that commit is a new candidate and M4's evidence does not transfer to it.
+That fresh observation has since been made on every head that carried a Rust
+change — `41787325744` on `f199288e`, `41791718849` on `b8fff90d`,
 `41794314932` on `25aa211b`, `41796910336` on `359d071f`, `41800660806` on
-`eabaa0f4` and `41807662541` on `c8858e8d` — and each concluded `success`,
-with `linux-full` and `windows-compat` green and `coverage-check` skipped for
-the dispatch event. That is six further runs beyond the seven above, so the
-`workflow_dispatch` total stands at thirteen. Commits after `b8fff90d` touch
-only this plan, which is a gate input for `markdownlint` alone, so the local
-`check-fmt` and `markdownlint` evidence on the tip covers what those commits
-can affect. `c8858e8d` is the one exception: it revises this plan and nothing
-else, which is why its hosted observation exists, and it is also the head the
-CodeRabbit review quoted in the pre-merge reconciliation was written against.
-`f2686a6d`, its successor, is not documentation-only — it carries the filter
-evaluator, the error and property suites, the installer advice and the new
-execution-contract test — so it owes the full local gate set rather than the
-Markdown pair, and it has not been hosted-observed. The rule that governed
-every earlier head applies to it unchanged: a green result belongs only to the
-head it tested.
+`eabaa0f4` and `41807662541` on `c8858e8d` — and each concluded `success`, with
+`linux-full` and `windows-compat` green and `coverage-check` skipped for the
+dispatch event. That is six further runs beyond the seven above, so the
+`workflow_dispatch` total stands at thirteen.
+
+The commits after `b8fff90d` are not uniform, and an earlier revision of this
+section wrongly treated them as one documentation-only block. `25aa211b`,
+`359d071f`, `eabaa0f4` and `c8858e8d` revise only this plan, which is a gate
+input for `markdownlint` alone. `f2686a6d` is not documentation-only: it
+carries the filter evaluator, the error and property suites, the installer
+advice and the execution-contract test, across fifteen files and 1,195
+insertions. `35513b63` is not documentation-only either; it changes
+`installer/src/deps/install.rs`, its tests and the developers' guide.
+`4eedf3cd` adds a users' guide section, and `4453cae3` and `a01f9521` revise
+this plan alone. Hosted observation exists for `4eedf3cd` (`41830636327`),
+`4453cae3` (`41830758135`) and `a01f9521` (`41834256431`), each `success` with
+`linux-full` and `windows-compat` green. The two heads with no CI run at all are
+`f2686a6d` and `35513b63`; both carry Rust changes, so both owe the full local
+gate set, and neither has a hosted result. The commit that carries this text is
+a further new candidate. The rule that governed every earlier head applies to
+all of them unchanged: a green result belongs only to the head it tested.
 
 An earlier revision of this section said "nothing is committed or pushed". That
 was true when it was written and false by 2026-11-03: `adc974c9` is on

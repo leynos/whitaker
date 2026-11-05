@@ -317,7 +317,7 @@ fn source_install_failure_message(
     format!(
         "{message}\n{} needs a newer Rust toolchain to build from source. Install one with \
          `rustup toolchain install stable`, then run `cargo +stable install {version_flag}{}` and \
-         rerun the installer. Alternatively install prebuilt copies of {} yourself and rerun the \
+         rerun the installer. Alternatively install prebuilt copies of {} manually and rerun the \
          installer with `--skip-deps`, which skips the availability check for every tool.",
         tool.package,
         tool.package,

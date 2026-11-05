@@ -277,6 +277,14 @@ fn strip_wrapping_parens(mut term: &str) -> &str {
 }
 
 /// Splits a leaf term such as `binary(ui)` into its operator and argument.
+///
+/// A parenthesis left inside the argument means this is not a single leaf.
+/// Splitting on `&` and `|` happens only at depth zero, so nextest's `and`
+/// spelling of `package(a) and package(b)`, and any other construct the model
+/// does not decode, arrives here whole; taking the text between the first `(`
+/// and the last `)` would turn it into an argument that matches nothing and
+/// answer `false` for a clause that was never evaluated. Rejecting it keeps the
+/// guard's promise that an unmodelled construct fails loudly.
 fn split_leaf(term: &str) -> Result<(Operator<'_>, FilterArgument<'_>), FilterError> {
     let Some(open) = term.find('(') else {
         return Err(FilterError::MalformedTerm {
@@ -294,6 +302,12 @@ fn split_leaf(term: &str) -> Result<(Operator<'_>, FilterArgument<'_>), FilterEr
             problem: "should end with a closing parenthesis",
         });
     };
+    if argument.contains(['(', ')']) {
+        return Err(FilterError::MalformedTerm {
+            term: term.to_owned(),
+            problem: "should not contain a parenthesis inside its argument",
+        });
+    }
 
     Ok((Operator(operator.trim()), FilterArgument(argument)))
 }

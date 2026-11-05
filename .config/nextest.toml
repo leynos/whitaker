@@ -71,9 +71,14 @@ test-group = "serial-toolchain-installs"
 # The lock test is joined outside the guard because, unlike the harnesses, it
 # belongs to the excluded package and still needs serializing: it takes the
 # target-scoped file lock rather than rebuilding anything, so it needs the group
-# but not a longer timeout.
+# but not the harnesses' 75-minute build allowance. It does need a bound above
+# `EXAMPLE_HARNESS_LOCK_ACQUIRE_TIMEOUT`, though: its `acquire()` waits up to 25
+# minutes, and the base 300 s would kill it mid-wait. A shorter wait bound is
+# worse still, because the test excludes itself from its own lock, so a contended
+# run blocks only for as long as a real holder takes and reports that holder's
+# timeout rather than a waiter's.
 filter = "((test(driver::ui::) | test(tests::ui::) | test(ui::ui) | test(example_harness_collects_call_site_evidence) | test(ui::example_compiles_under_test_harness) | test(ui::rstest_unwrap_outside_tests_still_fails_in_non_harness_code) | test(ui::rstest_empty_companion_does_not_exempt_parent_function) | (binary(ui) & test(=ui))) & not package(no_unwrap_or_else_panic) & not package(rstest_helper_should_be_fixture)) | test(acquire_places_the_lock_inside_the_effective_target_directory)"
-slow-timeout = { period = "20m", terminate-after = 1, grace-period = "5s" }
+slow-timeout = { period = "30m", terminate-after = 1, grace-period = "5s" }
 test-group = "serial-dylint-ui"
 retries = { backoff = "exponential", count = 2, delay = "5s" }
 
@@ -181,11 +186,16 @@ serial-nested-cargo-builds = { max-threads = 1 }
 # The lock test is joined outside the guard because, unlike the harnesses, it
 # belongs to the excluded package and still needs serializing: it takes the
 # target-scoped file lock rather than rebuilding anything, so it needs the group
-# but not a longer timeout.
+# but not the harnesses' 75-minute build allowance. It does need a bound above
+# `EXAMPLE_HARNESS_LOCK_ACQUIRE_TIMEOUT`, though: its `acquire()` waits up to 25
+# minutes, and the base 300 s would kill it mid-wait. A shorter wait bound is
+# worse still, because the test excludes itself from its own lock, so a contended
+# run blocks only for as long as a real holder takes and reports that holder's
+# timeout rather than a waiter's.
 filter = "((test(driver::ui::) | test(tests::ui::) | test(ui::ui) | test(example_harness_collects_call_site_evidence) | test(ui::example_compiles_under_test_harness) | test(ui::rstest_unwrap_outside_tests_still_fails_in_non_harness_code) | test(ui::rstest_empty_companion_does_not_exempt_parent_function) | (binary(ui) & test(=ui))) & not package(no_unwrap_or_else_panic) & not package(rstest_helper_should_be_fixture)) | test(acquire_places_the_lock_inside_the_effective_target_directory)"
 test-group = "serial-dylint-ui"
 retries = { backoff = "exponential", count = 2, delay = "5s" }
-slow-timeout = { period = "20m", terminate-after = 1, grace-period = "5s" }
+slow-timeout = { period = "30m", terminate-after = 1, grace-period = "5s" }
 
 [[profile.default.overrides]]
 # Every `ui` test in this package rebuilds the lint library through nested

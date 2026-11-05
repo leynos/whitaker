@@ -26,13 +26,17 @@ const EXAMPLE_HARNESS_LOCK_STALE_AFTER: Duration = Duration::from_mins(5);
 // The bound is the expected hold time, not the stale window. An owner compiles
 // an example through nested Cargo while holding the lock, and a cold build plus
 // the package-cache and compiler-admission queues behind it is what
-// `.config/nextest.toml` budgets 20 minutes for; a six-minute bound reported a
-// healthy owner as a timeout. The extra five minutes are the stale window, so
-// an owner that nextest has just killed is reclaimed before the waiter gives
-// up, and the failure then reported is the owner's rather than the waiter's.
+// `.config/nextest.toml` raises the harness allowances to 75 and 120 minutes
+// for; a six-minute bound reported a healthy owner as a timeout. The extra
+// five minutes are the stale window, so an owner that nextest has just killed
+// is reclaimed before the waiter gives up, and the failure then reported is
+// the owner's rather than the waiter's.
 //
-// It stays well below the 75-minute allowance the harnesses that hold it get,
-// because a bound longer than the waiter's own ceiling could never fire.
+// It must stay below the ceiling of every nextest bound the lock is taken
+// under, because a wait bound above its caller's own ceiling could never fire.
+// The harnesses that hold the lock get 75 or 120 minutes, and the test that
+// calls `acquire()` directly gets 30: `.config/nextest.toml` raises its
+// allowance for exactly this wait rather than letting the 300 s base kill it.
 const EXAMPLE_HARNESS_LOCK_ACQUIRE_TIMEOUT: Duration = Duration::from_mins(25);
 const EXAMPLE_HARNESS_LOCK_POLL_INTERVAL: Duration = Duration::from_millis(100);
 const EXAMPLE_HARNESS_LOCK_OWNER_FILENAME: &str = "owner";

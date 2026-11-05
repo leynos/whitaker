@@ -57,15 +57,15 @@ After installation, run `whitaker --all` in any Rust project to lint it. Use
 `whitaker-ls` to list the installed Whitaker suite libraries.
 
 The source-build fallback can fail when the *active* Rust toolchain is older
-than the installer's pinned dependencies require. `cargo-dylint` 6.3.0's
-shipped `Cargo.lock` pins `cargo-util` 0.2.32, which declares
-`rust-version = "1.97"`, so a host on Rust 1.96 or older cannot build it from
-source. The installer recognizes that refusal and adds the commands that
-resolve it: install a newer toolchain with `rustup toolchain install stable`,
-then rerun with `cargo +stable install --locked --version 6.3.0 <tool>`.
-Alternatively, install prebuilt copies of both `cargo-dylint` and `dylint-link`
-yourself and rerun with `--skip-deps`, which skips the availability check for
-every tool rather than only the one whose build failed.
+than the installer's pinned dependencies require. `cargo-dylint` 6.3.0's shipped
+`Cargo.lock` pins `cargo-util` 0.2.32, which declares `rust-version = "1.97"`,
+so a host on Rust 1.96 or older cannot build it from source. The installer
+recognizes that refusal and adds the commands that resolve it: install a newer
+toolchain with `rustup toolchain install stable`, then rerun with
+`cargo +stable install --locked --version 6.3.0 <tool>`. Alternatively, install
+prebuilt copies of both `cargo-dylint` and `dylint-link` manually and rerun with
+`--skip-deps`, which skips the availability check for every tool rather than
+only the one whose build failed.
 
 On Windows, the installer's `PATH` check honours `PATHEXT` and falls back to
 the usual executable suffixes when `PATHEXT` is unset, so a normal
