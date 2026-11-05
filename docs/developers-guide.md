@@ -4870,6 +4870,19 @@ example-harness tests and `integration_exclusion`. The independence inventory
 for issue #513 records the target, environment and lock checks behind this
 split.
 
+`tests/workflow_contracts/nextest_group_test.py` holds that boundary in both
+profiles: the six contracts must match no `serial-dylint-ui` override, and the
+seventh must keep its own override in that group. Answering the first question
+with a real `cargo nextest list` would compile the workspace, so
+`tests/workflow_contracts/nextest_filter.py` evaluates a filter expression
+against a test name instead. It belongs to the workflow contracts and has no
+other callers: code that can afford a listing should take one, because Nextest
+remains the authority on what a filter selects. The reader treats a predicate
+it cannot evaluate from a name, such as `default()`, as unknown rather than as
+a miss, and raises `ValueError` on syntax outside its grammar, so a guard built
+on it errs towards reporting a capture. `nextest_filter_property_test.py`
+checks it against an independent oracle over generated expression trees.
+
 It drives the lane discovery with workflow documents rather than only with the
 files. `_declared_jobs` takes parsed documents and reads the repository's own
 only when given none, so `lane_discovery_test.py` can put a job with no
