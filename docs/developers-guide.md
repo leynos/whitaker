@@ -1648,6 +1648,76 @@ The recipe assigns `RUSTFLAGS` itself but not `RUSTDOCFLAGS`, so the rustdoc
 invocation inherits whatever the caller exported; the coverage workflow exports
 both for that reason.
 
+#### The `lint` gate is two gates
+
+`make lint` is a composition, not a single command: it declares `lint-clippy`
+and `lint-whitaker` as prerequisites, and either half can be dropped without
+any recipe line changing.
+
+`lint-clippy` builds rustdoc for the workspace and then runs Clippy over
+`CLIPPY_FLAGS`, which is
+`--workspace --lib --bins --tests --benches --all-features`. `--all-targets` is
+deliberately absent: the Dylint UI fixtures under `examples/` exist to contain
+the anti-patterns the suite detects, so the workspace lint policy cannot
+meaningfully apply to them. Warning denial comes from the variables, not from
+the flags inline: `RUSTDOC_FLAGS` (`--cfg docsrs -D warnings`) is passed to
+`cargo doc` and `RUST_FLAGS` (`-D warnings`) to `cargo clippy`. Drop either and
+the gate turns green rather than red.
+
+`lint-whitaker` runs the installed `whitaker` binary over the support crates
+listed in `WHITAKER_PACKAGES` (`whitaker-common`, `whitaker-installer`,
+`whitaker_clones_core`, `whitaker_sarif`). The rustc_* proxy shims, the lint
+crates, the aggregate suite, and the `whitaker` root crate all need
+`rustc_private` plumbing that `cargo dylint`'s plain check build cannot
+provide, so they are not in that list. The suite is selected with
+`--lib whitaker_suite` rather than `--all` because `cargo-dylint` warns and
+exits 0 when it discovers no libraries; naming the aggregate turns a missing or
+partially installed suite into an error instead of a silent pass.
+
+The `whitaker` binary is a prerequisite the Makefile cannot install. The
+`linux-full` CI job provides it in its own `Install Whitaker` step, after
+restoring the installer cache and before the `Lint` step, and pins it at the
+workflow-level `WHITAKER_INSTALLER_VERSION`. The pin matters: the installer
+carries the embedded `dependency-binaries.toml` that pins `cargo-dylint` and
+`dylint-link`, and the Clippy snapshot must match the resolved Dylint libraries.
+
+#### `test-root-lib` and the root package exclusion
+
+`TEST_EXCLUDES` passes `--exclude whitaker` to the main `make test` run. That
+exclusion exists for the root package's test *binaries*: with `--all-features`
+the `dylint-driver` feature pulls `rustc_private`, and rustc fails the whole
+build with "cannot satisfy dependencies so `std` only shows up once" across 19
+prelude crates. The root *library* builds fine, so its unit tests run in the
+separate `test-root-lib` target, which `make test` invokes.
+
+Those tests are not incidental. `src/testing/ui/tests.rs` carries the
+regression tests for the Dylint copy-library guard, which sets
+`DYLINT_LINK_ENABLE_COPY_LIBRARY` when the caller has not, so `dylint_testing`
+keeps the library the harness built with `dylint-driver` instead of copying its
+own default-feature rebuild over it. Without the guard the UI harnesses fail
+with ``could not find `dylint_version` ``. If the underlying link problem is
+ever fixed and `--exclude whitaker` can be dropped, `test-root-lib` may be
+retired with it; the contract test in
+`tests/workflow_contracts/lint_makefile_test.py` allows that and only forbids
+keeping the exclusion while losing the gate.
+
+`tests/nextest_ui_filter.rs` is an integration binary of the same excluded
+package, so `TEST_EXCLUDES` skips it and `test-root-lib`'s `--lib` does not
+reach it either. It guards `.config/nextest.toml`, where the `serial-dylint-ui`
+group serializes the Dylint UI harnesses and the slow-timeout overrides size
+their builds. A filter that stops matching, or an override shadowed by an
+earlier broad clause, does not fail any build — it silently stops serializing
+and sizing, and the symptom appears later as flaky Windows CI, far from the
+configuration that caused it. The `test-nextest-filter` target names the single
+integration binary, which `make test` invokes, because that is the only shape of
+`-p whitaker` that links under `--all-features` without pulling
+`rustc_private` into a test binary.
+
+The contract suite pins both of these reachability properties, and it checks
+their *direction* as well as their presence: `test-root-lib` must not select
+`--tests`, and `test-nextest-filter` must not select `--lib`. Either mistake
+would produce a green gate that runs the wrong binary.
+
 ## Module layout and test placement
 
 ### The 400-line module budget
@@ -1976,76 +2046,6 @@ skill fails `skill-manifest-validate`. Finally, it asserts that
 `skill-manifest-check` still depends on `skill-metadata-check`, and that `lint`
 still depends on `skill-manifest-check`, so dropping either prerequisite fails
 the contract rather than silently disabling validation.
-
-#### The `lint` gate is two gates
-
-`make lint` is a composition, not a single command: it declares `lint-clippy`
-and `lint-whitaker` as prerequisites, and either half can be dropped without
-any recipe line changing.
-
-`lint-clippy` builds rustdoc for the workspace and then runs Clippy over
-`CLIPPY_FLAGS`, which is
-`--workspace --lib --bins --tests --benches --all-features`. `--all-targets` is
-deliberately absent: the Dylint UI fixtures under `examples/` exist to contain
-the anti-patterns the suite detects, so the workspace lint policy cannot
-meaningfully apply to them. Warning denial comes from the variables, not from
-the flags inline: `RUSTDOC_FLAGS` (`--cfg docsrs -D warnings`) is passed to
-`cargo doc` and `RUST_FLAGS` (`-D warnings`) to `cargo clippy`. Drop either and
-the gate turns green rather than red.
-
-`lint-whitaker` runs the installed `whitaker` binary over the support crates
-listed in `WHITAKER_PACKAGES` (`whitaker-common`, `whitaker-installer`,
-`whitaker_clones_core`, `whitaker_sarif`). The rustc_* proxy shims, the lint
-crates, the aggregate suite, and the `whitaker` root crate all need
-`rustc_private` plumbing that `cargo dylint`'s plain check build cannot
-provide, so they are not in that list. The suite is selected with
-`--lib whitaker_suite` rather than `--all` because `cargo-dylint` warns and
-exits 0 when it discovers no libraries; naming the aggregate turns a missing or
-partially installed suite into an error instead of a silent pass.
-
-The `whitaker` binary is a prerequisite the Makefile cannot install. The
-`linux-full` CI job provides it in its own `Install Whitaker` step, after
-restoring the installer cache and before the `Lint` step, and pins it at the
-workflow-level `WHITAKER_INSTALLER_VERSION`. The pin matters: the installer
-carries the embedded `dependency-binaries.toml` that pins `cargo-dylint` and
-`dylint-link`, and the Clippy snapshot must match the resolved Dylint libraries.
-
-#### `test-root-lib` and the root package exclusion
-
-`TEST_EXCLUDES` passes `--exclude whitaker` to the main `make test` run. That
-exclusion exists for the root package's test *binaries*: with `--all-features`
-the `dylint-driver` feature pulls `rustc_private`, and rustc fails the whole
-build with "cannot satisfy dependencies so `std` only shows up once" across 19
-prelude crates. The root *library* builds fine, so its unit tests run in the
-separate `test-root-lib` target, which `make test` invokes.
-
-Those tests are not incidental. `src/testing/ui/tests.rs` carries the
-regression tests for the Dylint copy-library guard, which sets
-`DYLINT_LINK_ENABLE_COPY_LIBRARY` when the caller has not, so `dylint_testing`
-keeps the library the harness built with `dylint-driver` instead of copying its
-own default-feature rebuild over it. Without the guard the UI harnesses fail
-with ``could not find `dylint_version` ``. If the underlying link problem is
-ever fixed and `--exclude whitaker` can be dropped, `test-root-lib` may be
-retired with it; the contract test in
-`tests/workflow_contracts/lint_makefile_test.py` allows that and only forbids
-keeping the exclusion while losing the gate.
-
-`tests/nextest_ui_filter.rs` is an integration binary of the same excluded
-package, so `TEST_EXCLUDES` skips it and `test-root-lib`'s `--lib` does not
-reach it either. It guards `.config/nextest.toml`, where the `serial-dylint-ui`
-group serializes the Dylint UI harnesses and the slow-timeout overrides size
-their builds. A filter that stops matching, or an override shadowed by an
-earlier broad clause, does not fail any build — it silently stops serializing
-and sizing, and the symptom appears later as flaky Windows CI, far from the
-configuration that caused it. The `test-nextest-filter` target names the single
-integration binary, which `make test` invokes, because that is the only shape of
-`-p whitaker` that links under `--all-features` without pulling
-`rustc_private` into a test binary.
-
-The contract suite pins both of these reachability properties, and it checks
-their *direction* as well as their presence: `test-root-lib` must not select
-`--tests`, and `test-nextest-filter` must not select `--lib`. Either mistake
-would produce a green gate that runs the wrong binary.
 
 ## Mutation-testing workflow contract tests
 
