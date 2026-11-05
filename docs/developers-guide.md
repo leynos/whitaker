@@ -1730,6 +1730,24 @@ The threshold, when self-linting arrives, is set as TOML under
 The layout convention itself is recorded in
 [ADR 0006](./adrs/adr-0006-directory-based-module-layout.md).
 
+## Lint policy checks
+
+The workspace lint policy is declared in three places, and the compiler checks
+none of them against the others: the `[workspace.lints.*]` tables in the root
+`Cargo.toml`, the `[lints] workspace = true` opt-in in every member manifest,
+and the `lint` recipe that applies them through `cargo doc` and `cargo clippy`
+over `CARGO_FLAGS` with `-D warnings`. Each can drift without a diagnostic. A
+member that drops the opt-in compiles under Cargo's default lint set, and a
+narrowed recipe keeps exiting zero while checking fewer targets.
+
+[`tests/workflow_contracts/lint_gate_contract_test.py`](../tests/workflow_contracts/lint_gate_contract_test.py)
+pins all three, so any drift fails `make test-workflow-contracts` rather than
+quietly reducing coverage. `vendor/dylint_testing` is the recorded exception:
+`cargo vendor` writes a Cargo-normalized manifest that cannot inherit the
+workspace table, so that crate carries its own inline `[lints.*]` tables. It
+stays a workspace member precisely so it is still built and linted, which the
+contract also pins.
+
 ## Python script interpreter convention
 
 Every Python script that a workflow or the `Makefile` runs by path carries the
