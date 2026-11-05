@@ -244,19 +244,16 @@ fn rejects_a_bundle_whose_main_is_at_another_commit() {
     );
 }
 
-#[test]
-fn equal_digests_agree() {
-    assert!(digests_match("abc", "abc"));
-}
-
-#[test]
-fn different_digests_disagree() {
-    assert!(!digests_match("abc", "xyz"));
-}
-
-#[test]
-fn an_empty_digest_never_matches() {
-    assert!(!digests_match("", "abc"));
+#[rstest]
+#[case::equal("abc", "abc", true)]
+#[case::different("abc", "xyz", false)]
+#[case::empty_expected("", "abc", false)]
+fn digests_match_only_when_equal(
+    #[case] expected: &str,
+    #[case] actual: &str,
+    #[case] agree: bool,
+) {
+    assert_eq!(digests_match(expected, actual), agree);
 }
 
 /// A newest-first history of `(commit, channel)` pairs.

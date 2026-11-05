@@ -8,12 +8,11 @@ use camino::Utf8PathBuf;
 use rstest::rstest;
 
 use super::*;
-use crate::clippy_snapshot::test_fixtures::{
-    DEFAULT_HISTORY,
-    DEFAULT_SELECTED,
-    FixtureRepo,
-    git,
-    utf8,
+use crate::clippy_snapshot::{
+    error::ClippySnapshotError,
+    git::SnapshotGit,
+    ports::RepositoryQueries,
+    test_fixtures::{DEFAULT_HISTORY, DEFAULT_SELECTED, FixtureRepo, git, utf8},
 };
 
 /// A bare clone of the default fixture, damaged by `damage`.
@@ -122,6 +121,34 @@ fn rejects_damaged_snapshots(#[case] damage: Damage, #[case] expected: &str) {
     assert!(
         error.to_string().contains(expected),
         "`{error}` should mention `{expected}`"
+    );
+}
+
+/// A HEAD Git cannot resolve is an infrastructure failure, not evidence.
+///
+/// `symbolic-ref --quiet` exits 1 only for a detached HEAD; a malformed or
+/// unreadable HEAD exits 128. Reading that as "detached" would make the policy
+/// blame the snapshot for a fault reinstalling it cannot fix.
+#[test]
+fn an_unresolvable_head_is_a_git_error() {
+    let (_repo, bare, _manifest) = damaged(Damage::None);
+    // An invalid ref name leaves `rev-parse` working while `symbolic-ref`
+    // fails, which separates an unreadable HEAD from a detached one.
+    std::fs::write(bare.join("HEAD"), "ref: refs/heads/a b\n").expect("write HEAD");
+
+    let error = SnapshotGit::local()
+        .structure(&bare)
+        .expect_err("an unresolvable HEAD is an error");
+
+    assert!(
+        matches!(
+            error,
+            ClippySnapshotError::Git {
+                operation: "symbolic-ref",
+                ..
+            }
+        ),
+        "expected a failed `symbolic-ref`, got {error:?}"
     );
 }
 

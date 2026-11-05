@@ -138,9 +138,9 @@ The module now separates the decision from the observation.
   `RepositoryQueries` (shape, self-containment, integrity, first-parent
   toolchain history, and a file at a commit), `BundleOperations` (header
   verification, head listing, and staging clone), `SnapshotStore` (root
-  creation, path resolution, presence probes, digest, lock, staging, and
-  publish), and `MetadataStore` (read and write). `RootLock` and `Staging` are
-  RAII guards. Release downloads reuse the existing
+  creation, path resolution, presence probes, digest, text read, lock, staging,
+  and publish), and `MetadataStore` (read and write). `RootLock` and `Staging`
+  are RAII guards. Release downloads reuse the existing
   `DependencyArchiveDownloader` rather than adding a second downloader port.
 - `git.rs` implements `RepositoryQueries` and `BundleOperations`; `store.rs`
   implements `SnapshotStore` and `MetadataStore`. An adapter returns the
