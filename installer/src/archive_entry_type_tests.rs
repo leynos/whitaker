@@ -19,12 +19,15 @@ use std::{
 use rstest::{fixture, rstest};
 use tar::EntryType;
 
+// Only the Linux sparse-proof test reports a skip, so the helper would be an
+// unused import on every other target (and `-D warnings` fails the build).
+#[cfg(target_os = "linux")]
+use crate::output::write_stderr_line;
 use crate::{
     artefact::packaging::create_archive,
     dependency_binaries::find_dependency_binary,
     dependency_packaging::{DependencyPackageParams, package_dependency_binary},
     installer_packaging::{InstallerPackageParams, TargetTriple, Version, package_installer},
-    output::write_stderr_line,
 };
 
 /// The hole's length: large enough that every Linux filesystem allocates no
