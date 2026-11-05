@@ -53,6 +53,17 @@ struct ExpectedMessage(&'static str);
     structure(true, "refs/heads/master", ""),
     ExpectedMessage("HEAD is `refs/heads/master`, not a symbolic ref to refs/heads/main")
 )]
+#[case::main_at_another_object(
+    structure(true, &main_ref(), "refs/heads/main deadbeef"),
+    ExpectedMessage(
+        "refs/heads/main is deadbeef, expected the pinned commit \
+         0123456789abcdef0123456789abcdef01234567"
+    )
+)]
+#[case::no_main(
+    structure(true, &main_ref(), ""),
+    ExpectedMessage("it has no refs/heads/main")
+)]
 fn rejects_the_wrong_repository_shape(
     #[case] evidence: StructureEvidence,
     #[case] reason: ExpectedMessage,
@@ -75,26 +86,6 @@ fn reports_extra_refs_before_comparing_the_pinned_object() {
     assert_eq!(
         accept_structure(&evidence, PinnedCommit::new(COMMIT)),
         Err("it carries refs other than refs/heads/main: refs/tags/v1".to_owned())
-    );
-}
-
-#[test]
-fn rejects_main_at_another_object() {
-    let evidence = structure(true, &main_ref(), "refs/heads/main deadbeef");
-    assert_eq!(
-        accept_structure(&evidence, PinnedCommit::new(COMMIT)),
-        Err(format!(
-            "refs/heads/main is deadbeef, expected the pinned commit {COMMIT}"
-        ))
-    );
-}
-
-#[test]
-fn rejects_a_listing_without_main() {
-    let evidence = structure(true, &main_ref(), "");
-    assert_eq!(
-        accept_structure(&evidence, PinnedCommit::new(COMMIT)),
-        Err("it has no refs/heads/main".to_owned())
     );
 }
 
@@ -222,25 +213,28 @@ fn rejects_unexpected_bundle_lines_before_a_missing_main() {
     );
 }
 
-#[test]
-fn rejects_a_bundle_without_main() {
-    let listing = heads(&[&format!("{COMMIT} HEAD")]);
+#[rstest]
+#[case::no_main(
+    heads(&[&format!("{COMMIT} HEAD")]),
+    ExpectedMessage(
+        "the bundle does not carry refs/heads/main at the pinned commit \
+         0123456789abcdef0123456789abcdef01234567"
+    )
+)]
+#[case::main_at_another_commit(
+    heads(&["deadbeef refs/heads/main"]),
+    ExpectedMessage(
+        "the bundle must carry only refs/heads/main and HEAD at \
+         0123456789abcdef0123456789abcdef01234567, but lists: deadbeef refs/heads/main"
+    )
+)]
+fn rejects_a_bundle_that_does_not_carry_the_pinned_main(
+    #[case] listing: String,
+    #[case] reason: ExpectedMessage,
+) {
     assert_eq!(
         accept_bundle_heads(&listing, PinnedCommit::new(COMMIT)),
-        Err(format!(
-            "the bundle does not carry refs/heads/main at the pinned commit {COMMIT}"
-        ))
-    );
-}
-
-#[test]
-fn rejects_a_bundle_whose_main_is_at_another_commit() {
-    let listing = heads(&["deadbeef refs/heads/main"]);
-    assert_eq!(
-        accept_bundle_heads(&listing, PinnedCommit::new(COMMIT)),
-        Err("the bundle must carry only refs/heads/main and HEAD at \
-             0123456789abcdef0123456789abcdef01234567, but lists: deadbeef refs/heads/main"
-            .to_owned())
+        Err(reason.0.to_owned())
     );
 }
 

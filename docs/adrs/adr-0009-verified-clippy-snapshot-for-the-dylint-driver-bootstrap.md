@@ -10,7 +10,7 @@ policy and adapter boundaries described below.
 
 ## Date
 
-2026-10-29.
+2026-11-04.
 
 ## Context and problem statement
 
@@ -145,7 +145,10 @@ The module now separates the decision from the observation.
 - `git.rs` implements `RepositoryQueries` and `BundleOperations`; `store.rs`
   implements `SnapshotStore` and `MetadataStore`. An adapter returns the
   closest honest observation and translates every infrastructure failure into
-  `ClippySnapshotError` at that boundary. It applies no acceptance rule.
+  `ClippySnapshotError` at that boundary. It applies no snapshot acceptance
+  rule, except that a failed `git bundle verify`, a failed staging clone, and
+  metadata that cannot be decoded or names an unknown schema are reported as
+  `Invalid`.
 - `SnapshotSupport<'_>` is the composition root for one operation: borrowed
   trait objects for each port. `SnapshotSupport::production()` wires the
   process-wide `SnapshotGit` and `ProductionStore`. The public entry points
