@@ -6,5 +6,5 @@ pub mod exit;
 mod parser;
 mod runner;
 
-pub use parser::{Cli, Command};
+pub use parser::{Cli, Command, diagnostic_settings};
 pub use runner::{CommandStreams, run_from};

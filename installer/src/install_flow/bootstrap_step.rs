@@ -8,7 +8,10 @@
 //! snapshot comes from the release or from `--clippy-snapshot-bundle`, or
 //! installation stops.
 
-use std::{ffi::OsString, io::Write};
+use std::{
+    ffi::{OsStr, OsString},
+    io::Write,
+};
 
 use camino::{Utf8Path, Utf8PathBuf};
 
@@ -20,6 +23,7 @@ use crate::{
         BUILT_DRIVER_NOTICE,
         BootstrapLayout,
         BootstrapMetadata,
+        RunOptions,
         StoredPath,
         is_present_dir,
     },
@@ -163,12 +167,20 @@ pub(crate) fn report_bootstrap_plan(dirs: &dyn BaseDirs, stderr: &mut dyn Write)
 }
 
 /// Run `cargo dylint` through the installed bootstrap; return the exit code.
-pub(crate) fn run_bootstrap(args: &[OsString], stderr: &mut dyn Write) -> i32 {
+///
+/// `library_path` replaces the installation's recorded `DYLINT_LIBRARY_PATH`
+/// when the caller has its own list of staged directories, as the root CLI
+/// does after recording one path per toolchain.
+pub(crate) fn run_bootstrap(
+    args: &[OsString],
+    library_path: Option<&OsStr>,
+    stderr: &mut dyn Write,
+) -> i32 {
     let Some(dirs) = SystemBaseDirs::new() else {
         write_stderr_line(stderr, "whitaker: could not determine platform directories");
         return 1;
     };
-    match crate::bootstrap::run(&dirs, args) {
+    match crate::bootstrap::run_with_options(&dirs, RunOptions { library_path }, args) {
         Ok(outcome) => {
             // After the child's output, so it is the last thing a slow first
             // run shows and verification can count it.

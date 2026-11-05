@@ -15,11 +15,16 @@ use whitaker_installer::builder::{library_extension, library_prefix};
 #[path = "behaviour_whitaker/recorded_path.rs"]
 mod recorded_path;
 
+#[cfg(unix)]
+#[path = "behaviour_whitaker/support.rs"]
+mod support;
+
 #[derive(Default)]
 struct CliWorld {
     output: RefCell<Option<Output>>,
     staging: RefCell<Option<TempDir>>,
-    fake_cargo: RefCell<Option<TempDir>>,
+    #[cfg(unix)]
+    bootstrap: RefCell<Option<support::BootstrapFixture>>,
 }
 
 impl CliWorld {
@@ -31,6 +36,12 @@ impl CliWorld {
     fn staging_directory(&self) -> Result<Ref<'_, TempDir>, String> {
         Ref::filter_map(self.staging.borrow(), Option::as_ref)
             .map_err(|_| "install target should be recorded".to_owned())
+    }
+
+    #[cfg(unix)]
+    fn bootstrap(&self) -> Result<Ref<'_, support::BootstrapFixture>, String> {
+        Ref::filter_map(self.bootstrap.borrow(), Option::as_ref)
+            .map_err(|_| "a bootstrap fixture should be installed".to_owned())
     }
 }
 
@@ -52,26 +63,11 @@ fn given_workspace_checkout(world: &CliWorld) -> Result<(), String> {
 #[cfg(unix)]
 #[given("a fake cargo dylint command returning exit code 23")]
 fn given_fake_cargo(world: &CliWorld) -> Result<(), String> {
-    use cap_std::{
-        ambient_authority,
-        fs_utf8::{Dir, Permissions, PermissionsExt},
-    };
-
-    let directory = TempDir::new()
-        .map_err(|error| format!("fake cargo directory should be created: {error}"))?;
-    let directory_handle = Dir::open_ambient_dir(
-        camino::Utf8Path::from_path(directory.path())
-            .ok_or_else(|| "fake cargo directory path should be UTF-8".to_owned())?,
-        ambient_authority(),
-    )
-    .map_err(|error| format!("fake cargo directory should be opened: {error}"))?;
-    directory_handle
-        .write("cargo", "#!/bin/sh\nprintf '%s\\n' \"$@\"\nexit 23\n")
-        .map_err(|error| format!("fake cargo command should be written: {error}"))?;
-    directory_handle
-        .set_permissions("cargo", Permissions::from_mode(0o755))
-        .map_err(|error| format!("fake cargo should be executable: {error}"))?;
-    world.fake_cargo.replace(Some(directory));
+    // A fixture defect is a step failure, so report it as `Err` rather than
+    // asserting inside a `given` step.
+    world
+        .bootstrap
+        .replace(Some(support::BootstrapFixture::new()?));
     Ok(())
 }
 
@@ -105,11 +101,14 @@ fn given_staged_suite(world: &CliWorld) -> Result<(), String> {
 #[when("I run whitaker with \"{arguments}\"")]
 fn when_run_whitaker(world: &CliWorld, arguments: &str) -> Result<(), String> {
     let parsed_arguments: Vec<&str> = arguments.split_ascii_whitespace().collect();
+    #[cfg(unix)]
+    let mut command = match world.bootstrap.borrow().as_ref() {
+        Some(fixture) => fixture.command()?,
+        None => Command::new(env!("CARGO_BIN_EXE_whitaker")),
+    };
+    #[cfg(not(unix))]
     let mut command = Command::new(env!("CARGO_BIN_EXE_whitaker"));
     command.args(parsed_arguments);
-    if let Some(fake_cargo) = world.fake_cargo.borrow().as_ref() {
-        command.env("PATH", fake_cargo.path());
-    }
     if let Some(staging) = world.staging.borrow().as_ref() {
         let target_dir = staging
             .path()
@@ -236,12 +235,51 @@ fn then_invocation_reaches_cargo_dylint(world: &CliWorld) -> Result<(), String> 
     if output.status.code() != Some(23) {
         return Err("forwarded status should be preserved".to_owned());
     }
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    if stdout.starts_with("dylint\n--all\n--\n-p\nwhitaker-common\n--all-targets\n") {
+    let forwarded = world.bootstrap()?.forwarded_arguments();
+    let expected = [
+        "dylint",
+        "--all",
+        "--",
+        "-p",
+        "whitaker-common",
+        "--all-targets",
+    ];
+    if forwarded != expected {
+        return Err(format!(
+            "cargo dylint should receive the original argument vector: {forwarded:?}"
+        ));
+    }
+    // A bare `cargo dylint` sets neither variable. Seeing both here proves the
+    // child ran through the bootstrap, which is the property the P1 finding
+    // was about.
+    let bootstrap = world.bootstrap()?;
+    let clippy_repo = bootstrap.clippy_repo().unwrap_or_default();
+    if !std::path::Path::new(&clippy_repo).is_dir() {
+        return Err(format!(
+            "the verified Clippy snapshot should be exported, got {clippy_repo:?}"
+        ));
+    }
+    let driver_path = bootstrap.driver_path().unwrap_or_default();
+    if !std::path::Path::new(&driver_path).is_dir() {
+        return Err(format!(
+            "the managed driver slot should be exported, got {driver_path:?}"
+        ));
+    }
+    Ok(())
+}
+
+/// A verbose run proves the root binary installs a diagnostic subscriber:
+/// the bootstrap's cold-build notice is an `info` event, visible only then.
+#[cfg(unix)]
+#[then("stderr reports the cold driver build")]
+fn then_stderr_reports_cold_driver_build(world: &CliWorld) -> Result<(), String> {
+    let output = world.recorded_output()?;
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if stderr.contains("building the Dylint driver on first use") {
         Ok(())
     } else {
         Err(format!(
-            "cargo dylint should receive the original argument vector: {stdout:?}"
+            "a verbose run should report the cold build on stderr: {stderr:?}"
         ))
     }
 }
@@ -302,5 +340,9 @@ fn scenario_conflicting_lint_flags_are_rejected(world: CliWorld) { let _ = world
 #[cfg(unix)]
 #[scenario(path = "tests/features/whitaker_cli.feature", index = 6)]
 fn scenario_legacy_lint_invocations_are_forwarded(world: CliWorld) { let _ = world; }
+
+#[cfg(unix)]
+#[scenario(path = "tests/features/whitaker_cli.feature", index = 7)]
+fn scenario_verbose_forwarded_run_reports_diagnostics(world: CliWorld) { let _ = world; }
 
 fn workspace_root() -> PathBuf { PathBuf::from(env!("CARGO_MANIFEST_DIR")) }

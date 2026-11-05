@@ -15,13 +15,13 @@ fn cargo_config_keeps_dynamic_linking_out_of_workspace_configuration() {
         .unwrap_or_else(|err| panic!("failed to read {config_path:?}: {err}"));
     let value: Value = toml::from_str(&contents).expect("cargo config should parse as TOML table");
 
-    let rustflags = value
-        .get("build")
-        .and_then(|table| table.get("rustflags"))
-        .and_then(Value::as_array);
+    // Cargo accepts both an array and a whitespace-separated string here, so
+    // the guard must reject the key itself rather than one of its shapes.
+    let rustflags = value.get("build").and_then(|table| table.get("rustflags"));
 
     assert!(
         rustflags.is_none(),
-        "dynamic linker flags belong to the Dylint-aware Make recipes, not workspace configuration"
+        "dynamic linker flags belong to the Dylint-aware Make recipes, not workspace \
+         configuration: {rustflags:?}"
     );
 }

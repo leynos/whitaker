@@ -33,7 +33,7 @@ pub use driver::{DriverIdentity, DriverSlot};
 pub use error::BootstrapError;
 pub use metadata::{BOOTSTRAP_SCHEMA, BootstrapMetadata, StoredPath};
 pub use probe::is_present_dir;
-pub use run::{RunOutcome, run, run_with_cargo};
+pub use run::{RunOptions, RunOutcome, run, run_with_cargo, run_with_options};
 
 /// What `whitaker-installer run` prints once a run has built the driver.
 ///
@@ -120,6 +120,35 @@ impl BootstrapLayout {
     /// The installation record.
     #[must_use]
     pub fn metadata_path(&self) -> Utf8PathBuf { self.root.join("bootstrap.json") }
+}
+
+/// Report whether an installation has recorded a bootstrap.
+///
+/// Callers use this to choose between [`run`] and their own legacy path, so
+/// it answers only "is there a record to run from". A record that exists but
+/// is unreadable still counts: [`run`] reports the specific defect, whereas a
+/// silent fallback would hide a broken installation.
+///
+/// # Examples
+///
+/// ```
+/// use std::path::PathBuf;
+///
+/// use whitaker_installer::{bootstrap::is_installed, dirs::BaseDirs};
+///
+/// struct NoData;
+///
+/// impl BaseDirs for NoData {
+///     fn home(&self) -> Option<PathBuf> { None }
+///     fn executables(&self) -> Option<PathBuf> { None }
+///     fn whitaker_data(&self) -> Option<PathBuf> { None }
+/// }
+///
+/// assert!(!is_installed(&NoData));
+/// ```
+#[must_use]
+pub fn is_installed(dirs: &dyn BaseDirs) -> bool {
+    BootstrapLayout::from_dirs(dirs).is_ok_and(|layout| layout.metadata_path().is_file())
 }
 
 #[cfg(test)]

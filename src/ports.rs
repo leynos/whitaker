@@ -5,6 +5,7 @@ use std::{ffi::OsString, io, io::Write};
 use thiserror::Error;
 use whitaker_installer::{
     cli::{InstallArgs, ListArgs},
+    installation_record::InstallationRecordError,
     scanner::InstalledLints,
 };
 
@@ -36,6 +37,17 @@ pub enum CliError {
         /// The operating-system write error.
         #[source]
         source: io::Error,
+    },
+    /// The installation record exists but could not be read.
+    ///
+    /// A missing record is not an error: it means nothing has been installed
+    /// yet. A record that exists but cannot be locked, read, or parsed is a
+    /// real failure, and forwarding with an empty library path would hide it.
+    #[error("could not read the installation record: {source}")]
+    InstallationRecord {
+        /// The record-layer failure.
+        #[source]
+        source: InstallationRecordError,
     },
 }
 
@@ -131,25 +143,27 @@ pub trait LintInventory {
 
 /// Runs Dylint on behalf of a forwarded invocation.
 pub trait LintRunner {
-    /// Forwards arguments to `cargo dylint` and returns its exit code.
+    /// Forwards arguments through the installed bootstrap and returns its exit
+    /// code, writing the bootstrap's own diagnostics to `stderr`.
     ///
     /// # Examples
     ///
     /// ```no_run
-    /// use std::ffi::OsString;
+    /// use std::{ffi::OsString, io};
     ///
     /// use whitaker::{adapters::SystemServices, ports::LintRunner};
     ///
     /// let services = SystemServices::new();
-    /// let status = services.forward(&[OsString::from("--all")])?;
+    /// let mut stderr = io::sink();
+    /// let status = services.forward(&[OsString::from("--all")], &mut stderr)?;
     /// println!("cargo dylint exited with {status}");
     /// # Ok::<(), whitaker::ports::CliError>(())
     /// ```
     ///
     /// # Errors
     ///
-    /// Returns an error when the subprocess cannot be started.
-    fn forward(&self, args: &[OsString]) -> Result<i32, CliError>;
+    /// Returns an error when the invocation cannot be dispatched.
+    fn forward(&self, args: &[OsString], stderr: &mut dyn Write) -> Result<i32, CliError>;
 }
 
 /// Groups the independently replaceable command adapters.

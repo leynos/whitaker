@@ -143,8 +143,14 @@ fn write_inventory(
 }
 
 /// Writes an operational CLI error and returns its failure outcome.
+///
+/// A failed write cannot change the outcome, because the command has already
+/// failed. It is still reported through `tracing` so a broken diagnostic
+/// stream is visible rather than silently discarded.
 fn print_cli_error(error: &CliError, stderr: &mut dyn Write) -> Outcome {
-    writeln!(stderr, "{error}").unwrap_or(());
+    if let Err(source) = writeln!(stderr, "{error}") {
+        tracing::error!(%source, "failed to write the CLI error to stderr");
+    }
     Outcome::OperationalFailure
 }
 
@@ -168,7 +174,7 @@ fn print_clap_error(
 /// Forwards legacy lint arguments to cargo-dylint and preserves its status.
 fn forward_arguments(raw: &[OsString], services: &Services<'_>, stderr: &mut dyn Write) -> Outcome {
     let arguments: Vec<OsString> = raw.iter().skip(1).cloned().collect();
-    match services.lint_runner.forward(&arguments) {
+    match services.lint_runner.forward(&arguments, stderr) {
         Ok(code) => Outcome::Forwarded(code),
         Err(error) => print_cli_error(&error, stderr),
     }

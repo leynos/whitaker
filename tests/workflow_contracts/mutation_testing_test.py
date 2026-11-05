@@ -39,7 +39,8 @@ EXPECTED_WITH = {
     "paths": "src/,common/,crates/,installer/,suite/",
     "exclude-globs": (
         "crates/rustc_*/**,crates/clippy_utils/**,crates/*/ui/**,"
-        "crates/*/examples/**,src/testing/**,common/src/test_support/**"
+        "crates/*/examples/**,crates/whitaker_lint_core/src/testing/**,"
+        "common/src/test_support/**"
     ),
     "extra-args": "--all-features",
 }

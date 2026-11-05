@@ -501,8 +501,9 @@ or every existing user. That is worth verifying properly.
 - **Domain.** argv modelled as a bounded sequence of _token tags_, not
   strings: an enum over
   `{Install, Ls, Help, Version, DoubleDash, GlobalFlag, DylintFlag, Other}`,
-  length bounded at 6 — under 10^5 states. `#[kani::unwind(7)]`, one greater
-  than the maximum iteration count.
+  length bounded at 6 — 299,593 distinct token sequences across lengths 0–6
+  (`sum(8^k for k in 0..=6)`). `#[kani::unwind(7)]`, one greater than the
+  maximum iteration count.
 - **Siting.** `classify` and its token enum live in `src/cli/dispatch.rs` in
   the root package and take the token enum rather than `clap::Cli`, so the
   harness compiles a small pure module. This is deliberate: siting Kani where
@@ -530,7 +531,8 @@ or every existing user. That is worth verifying properly.
 ### `EP-LEM-DISPATCH` — classification is total for unbounded argv
 
 - **Obligation.** For every finite token sequence of _any_ length, exactly one
-  classification applies. Kani bounds length at 6; this closes the tail.
+  classification applies. Kani bounds length at 6; this proof covers the
+  unbounded tail that the bounded check cannot reach.
 - **Method.** Formal proof (Verus) over `Seq<TokenTag>`.
 - **Rationale.** The guarantee must hold for all admissible inputs — a user's
   `cargo dylint` invocation has no length bound. Bounded checking cannot
@@ -1947,6 +1949,70 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
   - `EP-INV-EXIT`: mapping a display request to `Outcome::UsageError` made
     `root_help_exits_successfully` fail with actual status 2 against expected
     status 0.
+
+**Forwarding and diagnostics repair.** Two P1 findings on the published head
+were confirmed against the source and repaired:
+
+- Forwarded invocations started `cargo dylint` directly, which bypassed the
+  installed bootstrap: no verified Clippy snapshot, no managed driver slot, and
+  no cold-build serialization, so `whitaker --all` regressed to the first-run
+  failure the bootstrap exists to prevent. `bootstrap::run` now takes
+  `RunOptions`, the root CLI passes the multi-toolchain library path it
+  resolved, and the same run path performs verification, locking, and the
+  built-driver notice.
+- Nothing in the root executable installed a `tracing` subscriber, so the
+  installer library's events were discarded. `src/diagnostics.rs` installs the
+  root-owned subscriber before routing, with the installer binary's policy:
+  `-q` admits only errors, any `-v` admits debug, and the default admits
+  warnings.
+
+Routing every forward through the bootstrap unconditionally would have broken
+the branch's own `CLI-REQ-FWD` compatibility contract for a source checkout or
+a manually configured `DYLINT_LIBRARY_PATH`, where no bootstrap exists to run.
+Forwarding therefore selects: `bootstrap::is_installed` answers whether a
+record exists, the recorded bootstrap runs when it does, and a machine with no
+record keeps the legacy direct `cargo dylint`. A record that exists but is
+unreadable still counts as installed, so the bootstrap reports the defect
+rather than a silent fallback hiding a broken installation. The exit contract
+tests pin this by pointing `XDG_DATA_HOME` at an empty directory, which selects
+the legacy path deterministically instead of inheriting whatever the
+developer's real data root holds.
+
+The behaviour fixtures now install a real (fixture) bootstrap and a stub
+`cargo` that records its argument vector and `DYLINT_LIBRARY_PATH`, so both
+properties are asserted end to end rather than through a PATH override alone.
+The verbose scenario asserts the bootstrap's cold-build `info` event on stderr,
+which passes only when the root binary installs a subscriber.
+
+One bootstrap fixture also had to learn where a stub program may live. The
+explicit-override test removes the recorded library directory to prove that the
+override skips the recorded-directory check, and the stub `cargo` had been
+written through `library_dir/../../..`. Path resolution requires every
+intermediate component to exist, so removing `lib` made the spawn fail with
+`ENOENT` even though the lexical destination was untouched. The stub now sits
+directly at the layout's data root, which the test never removes, so the test
+measures the override rule rather than a deleted-parent side effect.
+
+**Release ordering.** CodeRabbit observed that the root package's registry
+dependency on `whitaker-installer 0.2.11` does not contain the `orchestration`
+and `installation_record` modules this branch imports, so a
+`cargo package --no-verify` check cannot prove that a release would compile,
+and the installer therefore has to be published before the root crate. The
+observation is correct and already governs the release: `docs/publishing.md`
+requires a coordinated bump of `common`, `installer`, and the root manifest,
+followed by publication of `whitaker-common`, `whitaker-installer`, then
+`whitaker`. `EP-M3b` (crates.io name reservation) remains unauthorized, so no
+version is bumped and nothing is published here. `--no-verify` stays until that
+release step, when the coordinated bump and installer-first order make the
+verification build resolvable.
+
+**Root-install coverage.** The root CLI's install route is exercised through
+the public binary by the dry-run behaviour scenario, which proves argument
+routing and the `whitaker-ls`-only wrapper policy without building the
+workspace. A successful full install is already covered by the installer's own
+`behaviour_cli` suite, which drives the same `run_install` flow; repeating a
+full build from the root crate would duplicate that coverage at a large cost
+and would not exercise a different code path.
 
 To be completed at each milestone boundary and at completion. Before setting
 this plan to `COMPLETE`, reconcile every entry in `Surprises & discoveries`

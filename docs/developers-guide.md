@@ -4696,14 +4696,13 @@ filter still listed them and also configured `slow-timeout`. The `ci` profile
 was unaffected only because its ordinary override never named those tests, so
 their specific overrides were reached first.
 
-The `serial-dylint-ui` filter must keep naming the nested Cargo harnesses: its
-contract test looks them up in that table, and naming them there is what
-serializes them. The long allowances therefore sit *above* that filter and
-configure only `slow-timeout` and `retries`. Serialization still comes from the
-first override that configures `test-group`, and because precedence is
-per-setting the earlier tables do not shadow it. Adding an allowance below the
-filter, or removing the named test from it, reintroduces the bug in one
-direction or the other.
+Keep a test in the ordinary `serial-dylint-ui` filter only when that filter's
+20-minute `slow-timeout` is appropriate. Tests with longer allowances remain
+excluded from that filter. Their later overrides must configure both
+`slow-timeout` and `test-group`, because nextest resolves each setting
+independently. Adding those tests to the ordinary filter would make its
+20-minute timeout shadow their longer allowances, while omitting `test-group`
+from a later override would leave them unserialized.
 
 Every other discovered trybuild compile contract rebuilds fixture crates
 through nested Cargo. In a cold workspace, the Bumpy Road public API contract

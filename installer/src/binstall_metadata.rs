@@ -207,6 +207,7 @@ pub fn load_cargo_toml() -> Result<toml::Table, String> {
 ///
 /// Returns a description of the failure if the manifest cannot be read or
 /// does not parse as TOML.
+#[cfg(any(test, feature = "test-support"))]
 pub fn load_cargo_toml_from(manifest_path: &std::path::Path) -> Result<toml::Table, String> {
     let content = std::fs::read_to_string(manifest_path)
         .map_err(|err| format!("failed to read {}: {err}", manifest_path.display()))?;

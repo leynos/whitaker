@@ -116,9 +116,31 @@ caller; a failure to start the subprocess is an operational error with exit
 code 1. Root help and version are handled by Whitaker only when they precede a
 Dylint option, so `whitaker --all --version` reaches Dylint.
 
+The forwarded invocation runs through the installed bootstrap rather than
+starting `cargo dylint` directly. The bootstrap exports the verified Clippy
+snapshot and the managed driver slot, and serializes a cold driver build, so a
+first run behaves the same whether it is started by `whitaker` or by
+`whitaker-installer run`. The root CLI passes the library path it resolved from
+its per-toolchain installation record, so Dylint can still select the toolchain
+a project declares, and a non-empty `DYLINT_LIBRARY_PATH` stays authoritative.
+
+When no bootstrap has been recorded, forwarding starts `cargo dylint` directly
+with the same resolved library path. A source checkout or a manually configured
+`DYLINT_LIBRARY_PATH` therefore keeps the legacy behaviour, and there is no
+installed bootstrap for that path to bypass. A record that exists but cannot be
+read is not treated as absent: the bootstrap reports the defect instead of
+falling back silently.
+
 The subprocess port carries the native `i32` exit code through the root exit
 policy. This preserves the full 32-bit status reported on Windows; Unix signal
 termination continues to map to the conventional `128 + signal` shell status.
+
+The root executable installs the process-wide `tracing` subscriber before
+routing, because the installer library must not install one for its host. The
+policy matches the installer binary: `-q` admits only errors, any `-v` admits
+debug, and the default admits warnings. Configuring it before routing means a
+forwarded invocation honours those flags even though it never reaches the clap
+parser.
 
 This is `CLI-REQ-FWD`, a compatibility requirement derived from the existing
 user workflow rather than an upstream CLI specification. Removing forwarding is
@@ -343,7 +365,9 @@ Configuration discovery and merging should be implemented with
 [`ortho_config`](https://github.com/leynos/ortho-config) via the `ortho_config`
 crate.[^4] That gives Whitaker a consistent model for merging CLI flags,
 environment variables, and TOML configuration, including subcommand helpers and
-comma-separated environment values.
+comma-separated environment values. The
+[OrthoConfig user's guide](ortho-config-users-guide.md) shows how those pieces
+fit a layered command surface.
 
 The application configuration boundary is specified by
 [ADR 0008](adrs/adr-0008-ortho-config-cli-boundary.md). Roadmap item 3.6.3

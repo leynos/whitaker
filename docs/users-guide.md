@@ -234,10 +234,22 @@ to `cargo dylint`. From a checkout, install it with `cargo install --path .`.
 Crates.io packages and binstall archives are pending. When both `whitaker`
 binaries are on `PATH`, the first wins; `install` creates only `whitaker-ls`.
 
+Forwarding runs through the installed bootstrap, so `whitaker --all` uses the
+same verified Clippy snapshot, driver directory, and serialized first build as
+`whitaker-installer run -- --all`. A first run therefore works without Dylint's
+upstream Clippy clone, and a diagnostic from the bootstrap reaches the
+terminal. When no bootstrap has been recorded — a fresh checkout, or a manually
+configured `DYLINT_LIBRARY_PATH` — forwarding starts `cargo dylint` directly,
+which is the behaviour the legacy wrapper had before installation.
+
 The root `whitaker` CLI also remembers each successful install's staging path
 by Rust toolchain. This lets `whitaker --all` find libraries installed with a
 custom `--target-dir`, including when run from another project. An explicitly
 set `DYLINT_LIBRARY_PATH` continues to override the recorded paths.
+
+`-q` and `-v` control diagnostics for every command, including forwarded
+invocations. `-q` shows only errors, `-v` adds informational and debug messages
+such as the cold driver build, and the default shows warnings.
 
 ### Adding Whitaker to a project
 

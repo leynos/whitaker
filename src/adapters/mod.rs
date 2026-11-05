@@ -1,17 +1,19 @@
 //! Production adapters for installer, inventory, and Dylint subprocess ports.
 
 use std::{
-    ffi::OsString,
+    ffi::{OsStr, OsString},
+    io::Write,
     process::{Command, ExitStatus},
 };
 
 use camino::Utf8PathBuf;
 use whitaker_installer::{
+    bootstrap::is_installed,
     dependency_binaries::host_target,
     dirs::SystemBaseDirs,
     installation_record::installed_paths,
     list::{collect_installed, detect_active_toolchain},
-    orchestration::run_install_for_whitaker,
+    orchestration::{run_bootstrap_command_with_library_path, run_install_for_whitaker},
     prebuilt_path::prebuilt_library_dir,
     stager::default_target_dir,
 };
@@ -96,19 +98,54 @@ impl LintInventory for SystemServices {
 }
 
 impl LintRunner for SystemServices {
-    fn forward(&self, args: &[OsString]) -> Result<i32, CliError> {
-        let mut command = Command::new("cargo");
-        command.arg("dylint").args(args);
-        if let Some(library_path) = active_library_path() {
-            command.env("DYLINT_LIBRARY_PATH", library_path);
+    /// Run the forwarded invocation through the installed bootstrap.
+    ///
+    /// Running it here rather than as a bare `cargo dylint` is what makes a
+    /// cold run work: the bootstrap exports the verified Clippy snapshot and
+    /// the managed driver slot, and serializes the first driver build. The
+    /// library path is the one this crate resolved, so Dylint can still pick
+    /// the toolchain a project declares, and an explicit
+    /// `DYLINT_LIBRARY_PATH` stays authoritative.
+    ///
+    /// A machine with no recorded bootstrap falls back to starting
+    /// `cargo dylint` directly. That keeps the legacy forwarding contract for
+    /// a source checkout or a manually configured `DYLINT_LIBRARY_PATH`, and
+    /// there is no installed bootstrap for that path to bypass.
+    fn forward(&self, args: &[OsString], stderr: &mut dyn Write) -> Result<i32, CliError> {
+        let library_path = active_library_path()?;
+        if has_installed_bootstrap() {
+            return Ok(run_bootstrap_command_with_library_path(
+                args,
+                library_path.as_deref(),
+                stderr,
+            ));
         }
-        let status = command
-            .status()
-            .map_err(|source| CliError::Forward { source })?;
-        Ok(child_exit_code(status))
+        forward_without_bootstrap(args, library_path.as_deref())
     }
 }
 
+/// Report whether an installation recorded a bootstrap to run from.
+fn has_installed_bootstrap() -> bool {
+    SystemBaseDirs::new().is_some_and(|dirs| is_installed(&dirs))
+}
+
+/// Run `cargo dylint` directly, for a machine with no installed bootstrap.
+fn forward_without_bootstrap(
+    args: &[OsString],
+    library_path: Option<&OsStr>,
+) -> Result<i32, CliError> {
+    let mut command = Command::new("cargo");
+    command.arg("dylint").args(args);
+    if let Some(path) = library_path {
+        command.env("DYLINT_LIBRARY_PATH", path);
+    }
+    let status = command
+        .status()
+        .map_err(|source| CliError::Forward { source })?;
+    Ok(child_exit_code(status))
+}
+
+/// Map a child's status to the code this process should exit with.
 fn child_exit_code(status: ExitStatus) -> i32 {
     status
         .code()
@@ -126,20 +163,42 @@ fn signal_exit_code(status: ExitStatus) -> Option<i32> {
 const fn signal_exit_code(_status: ExitStatus) -> Option<i32> { None }
 
 /// Resolves the library path used when forwarding a command to cargo-dylint.
-fn active_library_path() -> Option<OsString> {
+///
+/// # Errors
+///
+/// Returns [`CliError::InstallationRecord`] when an installation record exists
+/// but cannot be locked, read, or parsed. A missing record is not an error: it
+/// simply means no toolchain has been installed yet.
+fn active_library_path() -> Result<Option<OsString>, CliError> {
     let explicit_path = std::env::var_os("DYLINT_LIBRARY_PATH");
     if explicit_path.as_ref().is_some_and(|path| !path.is_empty()) {
-        return explicit_path;
+        return Ok(explicit_path);
     }
-    let recorded_paths = SystemBaseDirs::new()
-        .and_then(|dirs| installed_paths(&dirs).ok())
-        .unwrap_or_default();
+    let recorded_paths = recorded_library_paths()?;
     let active_toolchain = detect_active_toolchain();
     let build_path = active_toolchain.as_ref().and_then(|toolchain| {
         default_target_dir().map(|target_dir| target_dir.join(toolchain).join("release"))
     });
     let prebuilt_path = active_toolchain.as_deref().and_then(prebuilt_library_path);
-    active_library_path_for(explicit_path, recorded_paths, build_path, prebuilt_path)
+    Ok(active_library_path_for(
+        explicit_path,
+        recorded_paths,
+        build_path,
+        prebuilt_path,
+    ))
+}
+
+/// Reads the per-toolchain staging directories recorded by earlier installs.
+///
+/// An unavailable platform data directory yields no recorded paths, matching
+/// the "nothing installed" case. A record that exists but fails to load is
+/// propagated so the caller can report it instead of silently forwarding with
+/// an empty library path.
+fn recorded_library_paths() -> Result<Vec<Utf8PathBuf>, CliError> {
+    SystemBaseDirs::new().map_or_else(
+        || Ok(Vec::new()),
+        |dirs| installed_paths(&dirs).map_err(|source| CliError::InstallationRecord { source }),
+    )
 }
 
 /// Includes recorded and default directories so Dylint can select by toolchain.
@@ -190,11 +249,16 @@ mod tests {
     use camino::{Utf8Path, Utf8PathBuf};
     use cap_std::{ambient_authority, fs_utf8::Dir};
     use tempfile::TempDir;
-    use whitaker_common::test_support::with_env_var;
+    use whitaker_common::test_support::{with_env_var, with_env_var_removed};
+    use whitaker_installer::installation_record::InstallationRecordError;
 
-    #[cfg(any(unix, windows))]
-    use super::child_exit_code;
-    use super::{active_library_path, active_library_path_for};
+    use super::{
+        active_library_path,
+        active_library_path_for,
+        has_installed_bootstrap,
+        recorded_library_paths,
+    };
+    use crate::ports::CliError;
 
     fn utf8_path(path: &std::path::Path) -> Utf8PathBuf {
         Utf8PathBuf::from_path_buf(path.to_path_buf())
@@ -235,7 +299,115 @@ mod tests {
         let expected = OsString::from("/custom/dylint/lib");
 
         with_env_var("DYLINT_LIBRARY_PATH", &expected, || {
-            assert_eq!(active_library_path(), Some(expected.clone()));
+            let actual = active_library_path().expect("an explicit path never reads the record");
+            assert_eq!(actual, Some(expected.clone()));
+        });
+    }
+
+    /// Point the platform data directory at `data_home`.
+    fn with_data_home<R>(data_home: &Utf8Path, callback: impl FnOnce() -> R) -> R {
+        with_env_var_removed("DYLINT_LIBRARY_PATH", || {
+            with_env_var("XDG_DATA_HOME", data_home, callback)
+        })
+    }
+
+    /// Write `contents` as the installation record under `data_home`.
+    fn write_record(data_home: &Utf8Path, contents: &[u8]) -> Utf8PathBuf {
+        let record_dir = data_home.join("whitaker");
+        std::fs::create_dir_all(&record_dir)
+            .expect("record directory should be created inside the temporary directory");
+        let record_path = record_dir.join("installed_lint_paths.json");
+        std::fs::write(&record_path, contents).expect("record should be written");
+        record_path
+    }
+
+    #[test]
+    fn malformed_installation_record_is_reported() {
+        let temporary = TempDir::new().expect("temporary directories should be created");
+        let data_home = utf8_path(temporary.path());
+        write_record(&data_home, b"not JSON");
+
+        with_data_home(&data_home, || {
+            let error = active_library_path().expect_err("a malformed record must not be ignored");
+            assert!(
+                matches!(
+                    error,
+                    CliError::InstallationRecord {
+                        source: InstallationRecordError::Parse { .. }
+                    }
+                ),
+                "unexpected error: {error}"
+            );
+        });
+    }
+
+    #[test]
+    fn unreadable_installation_record_is_reported() {
+        let temporary = TempDir::new().expect("temporary directories should be created");
+        let data_home = utf8_path(temporary.path());
+        // A directory in place of the record opens but cannot be read, which
+        // fails the same way an unreadable file does without depending on the
+        // test runner's privileges.
+        std::fs::create_dir_all(data_home.join("whitaker/installed_lint_paths.json"))
+            .expect("a directory should stand in for the unreadable record");
+
+        with_data_home(&data_home, || {
+            let error =
+                active_library_path().expect_err("an unreadable record must not be ignored");
+            assert!(
+                matches!(
+                    error,
+                    CliError::InstallationRecord {
+                        source: InstallationRecordError::Io { .. }
+                    }
+                ),
+                "unexpected error: {error}"
+            );
+        });
+    }
+
+    #[test]
+    fn absent_installation_record_yields_no_recorded_paths() {
+        let temporary = TempDir::new().expect("temporary directories should be created");
+        let data_home = utf8_path(temporary.path());
+
+        with_data_home(&data_home, || {
+            let recorded = recorded_library_paths().expect("a missing record is not a failure");
+            assert!(recorded.is_empty());
+        });
+    }
+
+    #[test]
+    fn absent_bootstrap_metadata_reports_no_installation() {
+        let temporary = TempDir::new().expect("temporary directories should be created");
+        let data_home = utf8_path(temporary.path());
+
+        with_data_home(&data_home, || {
+            assert!(
+                !has_installed_bootstrap(),
+                "no bootstrap.json means there is nothing to run from"
+            );
+        });
+    }
+
+    #[test]
+    fn recorded_bootstrap_metadata_reports_an_installation() {
+        let temporary = TempDir::new().expect("temporary directories should be created");
+        let data_home = utf8_path(temporary.path());
+        // The metadata's contents are irrelevant here: the selection asks only
+        // whether a record exists, and a broken record must still be reported
+        // by the bootstrap rather than silently bypassed.
+        let bootstrap_dir = data_home.join("whitaker-bootstrap");
+        std::fs::create_dir_all(&bootstrap_dir)
+            .expect("bootstrap directory should be created inside the temporary directory");
+        std::fs::write(bootstrap_dir.join("bootstrap.json"), b"{}")
+            .expect("bootstrap metadata should be written");
+
+        with_data_home(&data_home, || {
+            assert!(
+                has_installed_bootstrap(),
+                "a recorded bootstrap must be used"
+            );
         });
     }
 
@@ -289,26 +461,6 @@ mod tests {
         let actual = active_library_path_for(None, vec![stable, nightly], Some(active_build), None);
 
         assert_eq!(actual, Some(expected));
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn child_signal_termination_uses_the_conventional_shell_status() {
-        use std::os::unix::process::ExitStatusExt as _;
-
-        let interrupted = std::process::ExitStatus::from_raw(2);
-
-        assert_eq!(child_exit_code(interrupted), 130);
-    }
-
-    #[cfg(windows)]
-    #[test]
-    fn child_exit_code_preserves_statuses_above_the_unix_byte_range() {
-        use std::os::windows::process::ExitStatusExt as _;
-
-        let child_status = std::process::ExitStatus::from_raw(256);
-
-        assert_eq!(child_exit_code(child_status), 256);
     }
 
     #[cfg(unix)]

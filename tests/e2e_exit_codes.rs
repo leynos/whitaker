@@ -2,12 +2,23 @@
 
 use std::process::{Command, Output};
 
+#[cfg(unix)]
+use tempfile::TempDir;
+
 /// Run the root binary with the supplied arguments and capture its output.
 fn run_whitaker(arguments: &[&str]) -> std::io::Result<Output> {
     Command::new(env!("CARGO_BIN_EXE_whitaker"))
         .args(arguments)
         .output()
 }
+
+/// Create an empty platform data directory for a forwarding test.
+///
+/// Forwarding uses the installed bootstrap when one is recorded, so a test
+/// that stubs `cargo` must not inherit the developer's real installation.
+/// An empty data directory selects the legacy direct path deterministically.
+#[cfg(unix)]
+fn isolated_data_home() -> std::io::Result<TempDir> { TempDir::new() }
 
 #[test]
 fn root_help_exits_successfully() {
@@ -144,9 +155,11 @@ fn legacy_dylint_invocations_forward_arguments_and_exit_status() {
         .set_permissions("cargo", Permissions::from_mode(0o755))
         .expect("fake cargo should be executable");
 
+    let data_home = isolated_data_home().expect("temporary data directory should be created");
     let output = Command::new(env!("CARGO_BIN_EXE_whitaker"))
         .args(["--all", "--", "-p", "whitaker-common", "--all-targets"])
         .env("PATH", bin_dir.path())
+        .env("XDG_DATA_HOME", data_home.path())
         .output()
         .expect("whitaker forwarding process should start");
     assert_eq!(
@@ -167,6 +180,7 @@ fn legacy_dylint_invocations_forward_arguments_and_exit_status() {
     let version_output = Command::new(env!("CARGO_BIN_EXE_whitaker"))
         .args(["--all", "--version"])
         .env("PATH", bin_dir.path())
+        .env("XDG_DATA_HOME", data_home.path())
         .output()
         .expect("whitaker forwarding process should start");
     assert_eq!(
@@ -186,6 +200,7 @@ fn legacy_dylint_invocations_forward_arguments_and_exit_status() {
     let interrupted = Command::new(env!("CARGO_BIN_EXE_whitaker"))
         .args(["--all"])
         .env("PATH", bin_dir.path())
+        .env("XDG_DATA_HOME", data_home.path())
         .output()
         .expect("whitaker forwarding process should start");
     assert_eq!(
@@ -219,8 +234,10 @@ fn a_bare_invocation_forwards_to_dylint_without_arguments() {
         .set_permissions("cargo", Permissions::from_mode(0o755))
         .expect("fake cargo should be executable");
 
+    let data_home = isolated_data_home().expect("temporary data directory should be created");
     let bare_output = Command::new(env!("CARGO_BIN_EXE_whitaker"))
         .env("PATH", bin_dir.path())
+        .env("XDG_DATA_HOME", data_home.path())
         .output()
         .expect("whitaker forwarding process should start");
     assert_eq!(

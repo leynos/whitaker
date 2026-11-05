@@ -6,6 +6,8 @@ use clap::{CommandFactory, Parser, Subcommand as ClapSubcommand};
 use ortho_config::{LocalizedParse as _, Localizer};
 use whitaker_installer::cli::{InstallArgs, ListArgs};
 
+use crate::diagnostics::DiagnosticSettings;
+
 /// Parsed root command and the common options consumed before dispatch.
 #[derive(Debug)]
 pub struct Cli {
@@ -131,6 +133,26 @@ impl Cli {
         arguments.verbosity = self.verbosity;
         arguments
     }
+}
+
+/// Resolve the diagnostic policy from the global flags in `arguments`.
+///
+/// Diagnostics are configured before routing, because the forwarded Dylint
+/// route never reaches the clap parser and still honours `-q` and `-v`.
+///
+/// # Examples
+///
+/// ```
+/// use whitaker::cli::diagnostic_settings;
+///
+/// let settings = diagnostic_settings(&["whitaker".into(), "-vv".into(), "--all".into()]);
+/// assert_eq!(settings.verbosity, 2);
+/// assert!(!settings.quiet);
+/// ```
+#[must_use]
+pub fn diagnostic_settings(arguments: &[OsString]) -> DiagnosticSettings {
+    let (_, quiet, verbosity) = extract_global_options(arguments.to_vec());
+    DiagnosticSettings { quiet, verbosity }
 }
 
 #[derive(Debug, Clone, Copy)]

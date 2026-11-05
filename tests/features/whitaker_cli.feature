@@ -47,3 +47,9 @@ Feature: The root whitaker command-line interface
     When I run whitaker with "--all -- -p whitaker-common --all-targets"
     Then the invocation reaches cargo dylint
     And the exit code is 23
+
+  Scenario: A verbose forwarded run reports bootstrap diagnostics
+    Given the whitaker binary is available
+    And a fake cargo dylint command returning exit code 23
+    When I run whitaker with "-v --all -- -p whitaker-common --all-targets"
+    Then stderr reports the cold driver build

@@ -1,18 +1,24 @@
 //! Process entry point for the root `whitaker` command.
 
-use std::process;
+use std::{io::Write as _, process};
 
 use ortho_config::NoOpLocalizer;
-use whitaker::{adapters::SystemServices, cli};
+use whitaker::{adapters::SystemServices, cli, diagnostics};
 
 fn main() {
+    let arguments: Vec<std::ffi::OsString> = std::env::args_os().collect();
     let services = SystemServices::new();
     let ports = services.ports();
     let mut stdout = std::io::stdout();
     let mut stderr = std::io::stderr();
+    // Configure diagnostics before routing, so the forwarded Dylint route —
+    // which never reaches the clap parser — honours the same `-q`/`-v` policy.
+    if let Err(error) = diagnostics::configure(cli::diagnostic_settings(&arguments)) {
+        writeln!(stderr, "whitaker: {error}").unwrap_or(());
+    }
     let localizer = NoOpLocalizer::new();
     let outcome = cli::run_from(
-        std::env::args_os(),
+        arguments,
         &ports,
         &localizer,
         &mut cli::CommandStreams::new(&mut stdout, &mut stderr),

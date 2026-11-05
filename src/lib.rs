@@ -5,4 +5,5 @@
 
 pub mod adapters;
 pub mod cli;
+pub mod diagnostics;
 pub mod ports;

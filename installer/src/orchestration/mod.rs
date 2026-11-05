@@ -9,10 +9,16 @@ use std::{io::Write, time::Instant};
 use camino::{Utf8Path, Utf8PathBuf};
 
 mod dry_run;
+mod entry;
 mod exit;
 mod finish;
 
 use dry_run::run_dry;
+pub use entry::{
+    run_bootstrap_command,
+    run_bootstrap_command_with_library_path,
+    run_install_for_whitaker,
+};
 pub use exit::exit_code_for_run_result;
 use finish::{FinishInstallContext, finish_install_and_record_metrics};
 
@@ -24,7 +30,7 @@ use crate::{
     error::{InstallerError, Result},
     install_flow::{
         PrebuiltInstallationContext,
-        bootstrap_step::{InstalledSnapshot, install_clippy_snapshot, run_bootstrap},
+        bootstrap_step::{InstalledSnapshot, install_clippy_snapshot},
         ensure_dylint_tools_with_executor,
         try_prebuilt_installation,
     },
@@ -68,45 +74,6 @@ pub fn run(cli: &Cli, stdout: &mut dyn Write, stderr: &mut dyn Write) -> Result<
             run_install(cli.install_args(), stdout, stderr, WrapperScripts::Both)
         }
     }
-}
-
-/// Runs the installed bootstrap for a forwarded `cargo dylint` invocation.
-///
-/// Returns the child's exit status so a composition root can exit with it
-/// unchanged; `whitaker-installer run` forwards lint statuses this way.
-pub fn run_bootstrap_command(arguments: &[std::ffi::OsString], stderr: &mut dyn Write) -> i32 {
-    run_bootstrap(arguments, stderr)
-}
-
-/// Runs a root-CLI install without replacing its `whitaker` executable.
-///
-/// The legacy installer continues to use [`run`] and creates both scripts.
-/// The root binary creates only `whitaker-ls`, preserving the executable name
-/// that the user invoked.
-///
-/// # Examples
-///
-/// ```no_run
-/// use std::io;
-///
-/// use whitaker_installer::{cli::InstallArgs, orchestration::run_install_for_whitaker};
-///
-/// let arguments = InstallArgs::default();
-/// let mut output = io::stdout();
-/// let mut diagnostics = io::stderr();
-/// run_install_for_whitaker(&arguments, &mut output, &mut diagnostics)?;
-/// # Ok::<(), whitaker_installer::error::InstallerError>(())
-/// ```
-///
-/// # Errors
-///
-/// Returns an error when the selected installation operation cannot complete.
-pub fn run_install_for_whitaker(
-    args: &InstallArgs,
-    stdout: &mut dyn Write,
-    stderr: &mut dyn Write,
-) -> Result<()> {
-    run_install(args, stdout, stderr, WrapperScripts::WhitakerLsOnly)
 }
 
 /// Returns the set of additional rustup components requested by the CLI flags.
@@ -155,7 +122,7 @@ fn try_fast_path_installation(
 /// # Errors
 ///
 /// Returns an error if any step fails.
-fn run_install(
+pub(super) fn run_install(
     args: &InstallArgs,
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,

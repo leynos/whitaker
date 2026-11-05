@@ -104,6 +104,8 @@ camino.workspace = true
 clap = { workspace = true, features = ["derive"] }
 ortho_config.workspace = true
 thiserror.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
 whitaker-installer.workspace = true
 
 [dev-dependencies]

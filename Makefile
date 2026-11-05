@@ -311,7 +311,12 @@ trybuild-contracts: ## Run the trybuild compile-contract tests, which `make cove
 	@# `make coverage` leaves six of these out (see TRYBUILD_CONTRACT_FILTER), so
 	@# a developer runs them here, plain and uninstrumented, under the `ci`
 	@# profile that gives them their serial group and build-sized allowance.
-	@$(MAKE) test NEXTEST_PROFILE=ci TEST_RUNNER="nextest run -E '$(TRYBUILD_CONTRACT_FILTER)'"
+	@# Filter both passes: the separate `whitaker_lint_core` pass would
+	@# otherwise run that crate's whole suite, so an unrelated core failure
+	@# could fail this focused target.
+	@$(MAKE) test NEXTEST_PROFILE=ci \
+		TEST_RUNNER="nextest run -E '$(TRYBUILD_CONTRACT_FILTER)'" \
+		CORE_TEST_RUNNER="nextest run -E '$(TRYBUILD_CONTRACT_FILTER)'"
 
 test-doc: ## Run the workspace doctests, which no other lane executes
 	@# `cargo llvm-cov nextest` runs no doctests and `--all-targets` excludes

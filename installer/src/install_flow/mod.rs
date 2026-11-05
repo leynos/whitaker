@@ -24,7 +24,7 @@ use crate::{
 pub(crate) mod bootstrap_step;
 mod dependency_check;
 /// PATH-scan query used by the legacy binary's tracing probe.
-#[cfg(unix)]
+#[cfg(all(unix, any(test, feature = "test-support")))]
 pub use dependency_check::check_dylint_tools_for_command;
 
 pub(crate) fn ensure_dylint_tools_core(

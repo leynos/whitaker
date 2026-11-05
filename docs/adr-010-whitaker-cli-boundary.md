@@ -105,6 +105,16 @@ arguments after it. The child exit status is preserved. This requirement is
 than an upstream specification. It is deferred for removal until roadmap item
 3.9.3, after `whitaker check` supersedes it.
 
+Forwarding runs through the installed bootstrap rather than starting
+`cargo dylint` directly. A direct child would inherit none of the bootstrap's
+environment: it would look for Clippy in Dylint's upstream location instead of
+the verified snapshot, ignore the managed driver slot, and race a concurrent
+first run on the same driver build. The bootstrap supplies the snapshot, the
+driver slot, and the cold-build lock, and the root CLI passes its resolved
+library path through `RunOptions` so the multi-toolchain list below still
+applies. The bootstrap's own diagnostics reach the root binary's stderr, and
+its exit status is the child's.
+
 The root package depends on the installer library and root-only CLI
 dependencies. The compiler-private driver remains in the non-publishable
 `whitaker_lint_core` crate, so `ortho_config` and CLI dependencies do not
@@ -120,6 +130,13 @@ Dylint to choose the matching toolchain. A non-empty user-provided
 `DYLINT_LIBRARY_PATH` remains authoritative. The installer owns this record's
 format and updates it at the common completion point for source builds,
 prebuilt downloads, and staged-suite installs.
+
+The root binary installs the process-wide `tracing` subscriber, because the
+installer library must not do so on its host's behalf. The policy mirrors the
+installer binary: `-q` admits only errors, any `-v` admits debug, and the
+default admits warnings. Diagnostics are configured before routing, so a
+forwarded invocation honours the same flags even though it never reaches the
+clap parser.
 
 The root package carries cargo-binstall metadata. Publishing the crate reserves
 the name `whitaker`, but GitHub release archives for that executable are not

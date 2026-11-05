@@ -2,6 +2,7 @@
 name = "no_std_fs_operations"
 version = "0.2.11"
 edition = "2024"
+publish = false
 
 [lib]
 crate-type = ["cdylib", "rlib"]
