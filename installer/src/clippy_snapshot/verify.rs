@@ -16,6 +16,8 @@ use super::{
     error::ClippySnapshotError,
     manifest::ClippySnapshotManifest,
     policy::{
+        PinnedCommit,
+        SelectionExpectation,
         SelectionRejection,
         accept_integrity,
         accept_selection,
@@ -104,7 +106,8 @@ pub(crate) fn check_structure(
         });
     }
     let evidence = repository.structure(path)?;
-    accept_structure(&evidence, commit).map_err(|check| ClippySnapshotError::invalid(path, check))
+    accept_structure(&evidence, PinnedCommit::new(commit))
+        .map_err(|check| ClippySnapshotError::invalid(path, check))
 }
 
 /// Check shallow history, alternates and remotes.
@@ -143,9 +146,11 @@ fn check_selection(
     };
     accept_selection(
         &changes,
-        &manifest.toolchain,
-        manifest.selected_revision.as_str(),
-        channel.as_deref(),
+        &SelectionExpectation {
+            toolchain: &manifest.toolchain,
+            revision: manifest.selected_revision.as_str(),
+            channel: channel.as_deref(),
+        },
     )
     .map_err(|rejection| selection_error(path, &manifest.toolchain, rejection))
 }

@@ -17,7 +17,7 @@ use super::{
     error::ClippySnapshotError,
     generation::GenerationMetadata,
     manifest::ClippySnapshotManifest,
-    policy::{accept_bundle_heads, digests_match},
+    policy::{PinnedCommit, accept_bundle_heads, digests_match},
     ports::{BundleOperations, SnapshotStore, SnapshotSupport},
     store::ProductionStore,
     verify::verify_with,
@@ -174,6 +174,6 @@ fn verify_bundle_heads(
 ) -> Result<(), ClippySnapshotError> {
     bundles.verify_header(bundle)?;
     let heads = bundles.list_heads(bundle)?;
-    accept_bundle_heads(&heads, manifest.commit.as_str())
+    accept_bundle_heads(&heads, PinnedCommit::new(manifest.commit.as_str()))
         .map_err(|check| ClippySnapshotError::invalid(bundle, check))
 }
