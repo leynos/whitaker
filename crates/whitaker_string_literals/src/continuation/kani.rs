@@ -37,14 +37,25 @@ fn expected_continuation_count(body: &str) -> usize {
     count
 }
 
-fn exactly_one_continuation_kind(continuation: &Continuation) -> bool {
-    let is_join = continuation.kind == ContinuationKind::Join;
-    let is_leading = continuation.kind == ContinuationKind::LeadingLayoutTrim;
-    let is_trailing = continuation.kind == ContinuationKind::TrailingLayoutTrim;
+/// Counts how many variants `continuation.kind` matches.
+///
+/// This is `exactly_one_of`, not `at_least_one_of`: the harness asserts the
+/// count equals one, so a kind that matched two variants would fail the same
+/// assertion as one that matched none.
+///
+/// The sum is written out rather than iterating over a variant array because
+/// Kani must unwind every loop it meets. An array iterator here costs proof
+/// budget in the same harness that already carries the scanner's own loops,
+/// so the three comparisons are spelled arithmetically and stay loop-free.
+fn matching_kind_count(continuation: &Continuation) -> u8 {
+    let kind = continuation.kind;
+    u8::from(kind == ContinuationKind::Join)
+        + u8::from(kind == ContinuationKind::LeadingLayoutTrim)
+        + u8::from(kind == ContinuationKind::TrailingLayoutTrim)
+}
 
-    (is_join && !is_leading && !is_trailing)
-        || (!is_join && is_leading && !is_trailing)
-        || (!is_join && !is_leading && is_trailing)
+fn exactly_one_continuation_kind(continuation: &Continuation) -> bool {
+    matching_kind_count(continuation) == 1
 }
 
 #[kani::proof]
@@ -89,31 +100,40 @@ fn verify_scanner_matches_bounded_parity_reference() {
     );
 
     for continuation in recorded.iter().flatten() {
-        let escape_start = continuation.escape_range.start.get();
-        let escape_end = continuation.escape_range.end.get();
-        let skipped_start = continuation.skipped_whitespace_range.start.get();
+        assert_recorded_continuation(body, continuation);
+    }
+}
+
+/// Asserts every field of one recorded continuation against `body`.
+///
+/// Split out of the harness so the proof reads as "scan, then check each
+/// record" and each assertion keeps a single, quotable subject.
+fn assert_recorded_continuation(body: &str, continuation: &Continuation) {
+    let escape_start = continuation.escape_range.start.get();
+    let escape_end = continuation.escape_range.end.get();
+    let skipped_start = continuation.skipped_whitespace_range.start.get();
+    kani::assert(
+        body.as_bytes().get(escape_start..escape_end) == Some(&b"\\\n"[..]),
+        "every recorded escape must be one unpaired backslash and LF",
+    );
+    kani::assert(
+        escape_end == skipped_start,
+        "the skipped range must start immediately after the escape",
+    );
+    kani::assert(
+        exactly_one_continuation_kind(continuation),
+        "each scanned continuation must have exactly one classification",
+    );
+
+    let skipped_end = continuation.skipped_whitespace_range.end.get();
+    let Some(skipped) = body.as_bytes().get(skipped_start..skipped_end) else {
+        kani::assert(false, "the skipped range must be within the bounded body");
+        return;
+    };
+    for byte in skipped {
         kani::assert(
-            body.as_bytes().get(escape_start..escape_end) == Some(&b"\\\n"[..]),
-            "every recorded escape must be one unpaired backslash and LF",
+            is_consumed_whitespace(*byte),
+            "the skipped range must contain only consumed whitespace",
         );
-        kani::assert(
-            escape_end == skipped_start,
-            "the skipped range must start immediately after the escape",
-        );
-        kani::assert(
-            exactly_one_continuation_kind(continuation),
-            "each scanned continuation must have exactly one classification",
-        );
-        let skipped_end = continuation.skipped_whitespace_range.end.get();
-        let Some(skipped) = body.as_bytes().get(skipped_start..skipped_end) else {
-            kani::assert(false, "the skipped range must be within the bounded body");
-            continue;
-        };
-        for byte in skipped {
-            kani::assert(
-                is_consumed_whitespace(*byte),
-                "the skipped range must contain only consumed whitespace",
-            );
-        }
     }
 }

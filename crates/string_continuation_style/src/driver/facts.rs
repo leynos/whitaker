@@ -8,10 +8,7 @@ use std::{collections::HashSet, env};
 
 use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
 use log::debug;
-use rustc_ast::{
-    ast::{self, ExprKind},
-    token,
-};
+use rustc_ast::ast;
 use rustc_lint::{EarlyContext, LintContext};
 use rustc_span::{NormalizedPos, Pos, Span};
 use whitaker_string_literals::{
@@ -20,7 +17,7 @@ use whitaker_string_literals::{
     rewrite::{Newline, cooked_literal_body, gate::preserves_value},
 };
 
-use super::span::body_range_span;
+use super::{literal::plain_join_literal, span::body_range_span};
 use crate::config::LINT_NAME;
 
 /// A validated replacement and the continuation spans it will label.
@@ -39,15 +36,7 @@ pub(crate) fn plain_literal_rewrite(
     expression: &ast::Expr,
     safe_literal_spans: &HashSet<Span>,
 ) -> Option<LiteralRewrite> {
-    let ExprKind::Lit(literal) = &expression.kind else {
-        return None;
-    };
-    if literal.kind != token::LitKind::Str
-        || literal.suffix.is_some()
-        || !literal.symbol.as_str().contains("\\\n")
-    {
-        return None;
-    }
+    let literal = plain_join_literal(expression)?;
 
     if expression.span.from_expansion() || !safe_literal_spans.contains(&expression.span) {
         return None;

@@ -1818,7 +1818,7 @@ crates/string_continuation_style/
 ├── src/
 │   ├── lib.rs
 │   ├── diagnostics.rs
-│   ├── driver/{mod.rs,depth.rs,facts.rs,span.rs,tests.rs}
+│   ├── driver/{mod.rs,depth.rs,facts.rs,literal.rs,span.rs,tests.rs}
 │   ├── lib_ui_tests.rs
 │   └── tests/{mod.rs,ui.rs}
 ├── ui/    ui-cy/    ui-gd/    ui-fallback/
@@ -2463,6 +2463,14 @@ width, and fall back to the indented multi-line form otherwise.
   crate-scoped shadow kill switch.
 - `src/driver/facts.rs` — construction of `LiteralFacts` from `ExprKind::Lit`
   and `ExprKind::FormatArgs`, under `DEC-015`'s cheap-first ordering.
+- `src/driver/literal.rs` — the single shared predicate for a plain cooked
+  literal containing a source-line join, `plain_join_literal`, consulted by both
+  `depth.rs` and `facts.rs` so the span one records and the span the other
+  looks up cannot drift apart. It returns the `token::Lit` it matched, so the
+  rewrite path binds the symbol without re-testing `ExprKind` where the
+  unreachable arm would invite the two copies to diverge again. The
+  expansion-depth and module-path exclusion tests deliberately stay with the
+  callers, because they describe the walk position rather than the expression.
 - `src/driver/span.rs` — the sole owner of the offset conversion:
 
   ```rust
