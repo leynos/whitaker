@@ -179,9 +179,19 @@ impl RepositoryQueries for SnapshotGit<'_> {
             Some(path),
             &["rev-parse", "--is-bare-repository"],
         )?;
-        // A detached HEAD is evidence, not a failure: the policy reports it.
-        let head = self.output("symbolic-ref", Some(path), &["symbolic-ref", "HEAD"])?;
-        let head = String::from_utf8_lossy(&head.stdout).trim().to_owned();
+        // A detached HEAD (exit 1 under `--quiet`) is evidence, not a failure:
+        // the policy reports it. Any other failure, such as a malformed or
+        // unreadable HEAD, is an infrastructure fault and stays an error, so
+        // the policy cannot blame the snapshot for it.
+        let head = self.output(
+            "symbolic-ref",
+            Some(path),
+            &["symbolic-ref", "--quiet", "HEAD"],
+        )?;
+        let head = match head.status.code() {
+            Some(0 | 1) => String::from_utf8_lossy(&head.stdout).trim().to_owned(),
+            _ => return Err(git_failure("symbolic-ref", &head)),
+        };
         let refs = self.stdout(
             "for-each-ref",
             Some(path),
