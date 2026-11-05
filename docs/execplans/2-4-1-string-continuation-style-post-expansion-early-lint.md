@@ -2850,3 +2850,50 @@ lists `tests::ui::ui`, `tests::ui::ui_cy`, `tests::ui::ui_fallback` and
 `tests::ui::ui_gd` under `serial-dylint-ui`, matched by the broad override's
 `test(tests::ui::)` clause. No crate-specific `slow-timeout` was added; see
 `DEC-019`.
+
+### `EV-SHADOW-GLOB` (2026-11-05)
+
+The glob hole accepted by `DEC-002` is closed. A review finding observed that
+`use some_crate::*;` can bind a `concat`, and a glob-imported `concat` does not
+merely shadow the built-in — it makes the bare name *ambiguous*, so the
+suggested `concat!(...)` fails with E0659 at the call site the lint rewrote.
+That is the false positive `DEC-002`'s bias exists to prevent, so a
+source-written glob now silences the lint.
+
+**Reproduction.** A two-crate workspace reproduced the diagnostic exactly:
+`shady` exports `macro_rules! concat` behind `#[macro_export]`, `app` writes
+`use shady::*;` and calls `concat!("alpha ", "beta")`, and rustc reports
+`error[E0659]: concat is ambiguous`. The single-crate shape does *not*
+reproduce it, because `#[macro_export]` hoists the name to the crate root and
+`use other::*` then has nothing local to collide with.
+
+**The trap.** The first implementation treated every `UseTreeKind::Glob` as
+shadowing, and all twelve `fail_*` UI fixtures went silent. Instrumenting the
+arm showed why: the compiler injects the standard prelude as a real glob use
+tree into every crate before the user's items.
+
+```text
+GLOBDBG prefix=Path { span: no-location (#1), segments: [{{root}}, std, prelude, rust_2015] } span=no-location (#1)
+GLOBDBG prefix=Path { span: no-location (#1), segments: [std, prelude, rust_2024] } span=no-location (#1)
+```
+
+`rustc_builtin_macros::standard_library_imports::inject` builds both the extern
+crate and the `use …::prelude::rust_20xx::*` item on `DUMMY_SP`, so a real
+predicate distinguishes the two without any name matching. The rule is therefore
+`!tree.span().is_dummy()`: a source-written glob, including one a macro
+produced, carries a real location.
+
+**Tests.** Three unit cases in `tests/support/shadow_tests.rs` cover the two
+span shapes (`a_source_glob_shadows_because_it_can_make_concat_ambiguous`,
+`a_source_glob_nested_inside_a_use_tree_shadows`,
+`the_injected_prelude_glob_does_not_shadow`), and `ui/pass_glob_import.rs` is
+the end-to-end case: a crate with `use helpers::*;` and a join that would
+otherwise report. Control: with the `use helpers::*;` line removed, the same
+fixture reports at 25:23, so the silence is caused by the glob and not by the
+fixture being inert. The full UI matrix is 31/31, and
+`cargo test -p string_continuation_style --all-features --lib` is 67/67.
+
+**Docs.** `docs/users-guide.md`,
+`docs/adr-010-early-lint-pass-position-proof.md` and the `shadow.rs` module
+comment all restate the rule: a source glob counts, the injected prelude does
+not, and the reason is E0659 rather than shadowing proper.

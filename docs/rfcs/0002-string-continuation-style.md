@@ -252,9 +252,10 @@ This replaces the original text's reliance on root syntax context, which does
 not carry that meaning. When `macro_rules!` substitutes a metavariable,
 `rustc_expand`'s `maybe_use_metavar_location` returns either the original token
 or one respanned with the call-site context; either way the substituted token
-keeps the call site's syntax context. So in the following example, the literal
-has no expansion-derived ancestor at all, yet it is still captured by
-`$l:literal`.
+keeps the call site's syntax context. So in the following example the literal
+retains that call-site context, although the `let` statement around it is
+transcribed from the macro body and therefore expansion-derived. It is still
+captured by `$l:literal`.
 
 ```rust
 macro_rules! shout { ($l:literal) => { let _x = $l; } }

@@ -130,6 +130,31 @@ run_decomposition_harnesses() {
     local is_provable_harness=verify_propagate_labels_zero_iterations_keeps_initial_labels
     "${KANI_LIMITED_RUNNER}" "${is_provable_harness}" "${CARGO_KANI_BIN}" kani \
         --harness "${is_provable_harness}"
+
+    report_inconclusive_harnesses
+}
+
+# Names the propagation harnesses the default run does not attempt.
+#
+# The default run exits 0 after the one harness that reaches a verdict, so a
+# green `make kani` would otherwise read as "every propagation property is
+# proved". It is not: three harnesses are excluded, and `make kani` succeeds
+# without them by design. Printing them keeps that gap in the output the
+# operator actually sees, next to the verdict it qualifies.
+report_inconclusive_harnesses() {
+    local omitted_harness
+    for omitted_harness in \
+        verify_propagate_labels_returns_vector_per_input \
+        verify_propagate_labels_preserves_label_indices \
+        verify_propagate_labels_bounded_return_for_any_max_iterations
+    do
+        printf 'INCONCLUSIVE: %s was not attempted by this run.\n' "${omitted_harness}"
+        printf '  State explosion in label propagation'"'"'s Vec/iterator model; see\n'
+        printf '  docs/brain-trust-lints-design.md (6.4.6). This property is\n'
+        printf '  unproved, not proved.\n'
+    done
+    printf 'The default decomposition run proved 1 of 4 harnesses.\n'
+    printf 'Run any omitted name as an argument to attempt it directly.\n'
 }
 
 if [ $# -eq 0 ]; then
