@@ -6,7 +6,10 @@ Whitaker itself. For using Whitaker lints in a project, see the
 
 ## Prerequisites
 
-- Rust nightly toolchain (version specified in `rust-toolchain.toml`)
+- Rust nightly toolchain (version and components specified in
+  `rust-toolchain.toml`; `rustup` installs them on first use in the workspace).
+  The component list includes `rust-analyzer` for editor support, alongside
+  `rustfmt`, `clippy`, `rustc-dev`, `llvm-tools-preview` and `rust-src`.
 - `jq` for extracting package metadata in release dry runs
 - Python 3 for workflow tests and release checksum generation
 - `cargo-dylint` and `dylint-link` installed:
@@ -1747,6 +1750,19 @@ quietly reducing coverage. `vendor/dylint_testing` is the recorded exception:
 workspace table, so that crate carries its own inline `[lints.*]` tables. It
 stays a workspace member precisely so it is still built and linted, which the
 contract also pins.
+
+`make lint` runs two lanes over `CARGO_FLAGS`, which defaults to
+`--workspace --all-targets --all-features`:
+
+```sh
+RUSTDOCFLAGS="$(RUSTDOC_FLAGS)" cargo doc --locked --workspace --no-deps
+cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+```
+
+`RUSTDOC_FLAGS` defaults to `--cfg docsrs -D warnings`, so a rustdoc warning
+fails the gate as well as a Clippy one. The flags are Make variables: override
+`CARGO_FLAGS` to check a narrower set while iterating, but leave the `?=`
+defaults alone when validating a commit.
 
 ## Python script interpreter convention
 

@@ -259,6 +259,9 @@ Crates that depend on `whitaker_installer` see these changes:
   exhaustive matches.
 - The CLI gains `Command::Run(RunArgs)`. Update exhaustive matches on
   `Command`.
+- `output::DryRunInfo` replaces its `skip_deps`, `skip_wrapper` and `no_update`
+  fields with one `skip: SkipFlags` field, matching the `InstallArgs` grouping
+  below. The rendered dry-run text is unchanged; only the struct's shape moves.
 - `wrapper::generate_wrapper_scripts` takes one argument, `dirs`, instead of
   two. The `library_path` argument is removed because the wrappers no longer
   embed it:
