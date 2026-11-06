@@ -64,6 +64,7 @@ def _matrix_entries(workflow_path, job_name):
 
 
 def _assert_native_runners(workflow_path, job_name):
+    """Assert that every leg builds natively and covers the published target set."""
     entries = _matrix_entries(workflow_path, job_name)
     targets = {entry["target"] for entry in entries}
     assert targets == DEPENDENCY_TARGETS, (
@@ -92,6 +93,7 @@ def test_all_build_legs_run_on_native_runners() -> None:
 
 
 def _dependency_install_script(workflow_path):
+    """Return the shell script of the dependency build step in the workflow."""
     job = _job_from(workflow_path, "build-dependency-binaries")
     step = _find_step_by_name(job["steps"], "Build and package dependency binaries")
     assert step is not None, (

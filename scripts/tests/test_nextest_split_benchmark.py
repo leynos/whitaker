@@ -99,6 +99,7 @@ class TestConfiguration:
     def test_control_folds_only_the_trybuild_group(
         self, benchmark: types.ModuleType
     ) -> None:
+        """Check that the control configuration folds only the trybuild group."""
         control = benchmark.serial_control_text(CONFIG)
         folded = control.count(f'test-group = "{benchmark.SERIAL_DYLINT_UI}"')
         assert folded == 2, (
@@ -120,6 +121,7 @@ class TestConfiguration:
     def test_control_refuses_a_configuration_without_the_group(
         self, benchmark: types.ModuleType
     ) -> None:
+        """Check that a configuration without the group is refused."""
         without_group = CONFIG.replace(
             "serial-trybuild-contracts", "serial-dylint-ui"
         )
@@ -135,6 +137,7 @@ class TestConfiguration:
         # The rewrite matches only the basic-string spelling, so this file lets
         # one substitution succeed and leaves the second override in the
         # trybuild group.
+        """Check that a literal-string assignment the rewrite misses is refused."""
         wrapped = CONFIG + (
             "\n[[profile.default.overrides]]\n"
             'filter = "test(contract_c)"\n'
@@ -146,6 +149,7 @@ class TestConfiguration:
     def test_junit_section_is_appended_once(
         self, benchmark: types.ModuleType, tmp_path: pathlib.Path
     ) -> None:
+        """Check that the JUnit section is appended once, however often it is added."""
         first, second = tmp_path / "a.xml", tmp_path / "b.xml"
         once = benchmark.with_junit(CONFIG, "default", first)
         twice = benchmark.with_junit(once, "default", second)
@@ -159,6 +163,7 @@ class TestConfiguration:
         )
 
     def test_union_filter_joins_both_groups(self, benchmark: types.ModuleType) -> None:
+        """Check that the union filter joins the expressions of both groups."""
         expression = benchmark.union_filter(CONFIG, "default")
         expected = (
             "(test(ui::ui) | (binary(ui) & test(=ui))) | "
@@ -169,6 +174,7 @@ class TestConfiguration:
         )
 
     def test_invalid_configuration_is_reported(self, benchmark: types.ModuleType) -> None:
+        """Check that an invalid TOML configuration is reported as a benchmark error."""
         with pytest.raises(benchmark.BenchmarkError, match="not valid TOML"):
             benchmark.profile_overrides("[profile.default", "default")
 
@@ -177,6 +183,7 @@ class TestMembership:
     """Membership is what classifies a JUnit report, so it must be exact."""
 
     def test_report_rejects_shared_members(self, benchmark: types.ModuleType) -> None:
+        """Check that groups sharing a member are rejected."""
         listing = _single_test_listing()
         with pytest.raises(benchmark.BenchmarkError, match="share members"):
             benchmark.membership_report({"a": listing, "b": listing})
@@ -184,6 +191,7 @@ class TestMembership:
     def test_report_rejects_a_control_selecting_other_tests(
         self, benchmark: types.ModuleType
     ) -> None:
+        """Check that a control selecting a different test set is rejected."""
         listing = _single_test_listing()
         with pytest.raises(benchmark.BenchmarkError, match="different test set"):
             benchmark.membership_report({"a": listing}, {"crate::ui::other"})
@@ -191,6 +199,7 @@ class TestMembership:
     def test_report_pins_an_expected_group_size(
         self, benchmark: types.ModuleType
     ) -> None:
+        """Check that a group of an unexpected size is rejected."""
         listing = _single_test_listing()
         with pytest.raises(benchmark.BenchmarkError, match="expected 7"):
             benchmark.membership_report({"a": listing}, None, {"a": 7})
@@ -204,6 +213,7 @@ class TestMembership:
     ) -> None:
         # Observed from nextest 0.9.133: an ignored test is reported as a
         # mismatch whose reason is "ignored", so it is not part of the run.
+        """Check that ignored tests are recorded but not selected."""
         listing = {
             "rust-suites": {
                 "crate::integration_exclusion": {
@@ -233,6 +243,7 @@ class TestMembership:
     ) -> None:
         # Nextest lists every test in a binary it had to run, so the report
         # holds mismatches as well as matches; only matches belong to a group.
+        """Check that tests the filter rejected are not group members."""
         listing = {
             "rust-suites": {
                 "crate::ui": {
@@ -258,6 +269,7 @@ class TestMeasurement:
     def test_statuses_and_retries_are_recorded(
         self, benchmark: types.ModuleType
     ) -> None:
+        """Check that statuses and retries are recorded from the JUnit report."""
         xml = _report(
             _testcase(
                 name="ui", start="2026-10-31T10:00:00.000Z", seconds=10
@@ -281,6 +293,7 @@ class TestMeasurement:
     def test_retried_attempts_keep_only_the_last(
         self, benchmark: types.ModuleType
     ) -> None:
+        """Check that a retried test keeps only its last attempt."""
         first = _testcase(
             name="ui",
             start="2026-10-31T10:00:00.000Z",
@@ -302,6 +315,7 @@ class TestMeasurement:
         assert test.seconds == 2, f"the last attempt's duration must be kept; got {test!r}"
 
     def test_missing_timestamp_fails_loudly(self, benchmark: types.ModuleType) -> None:
+        """Check that a test case without a timestamp fails with a clear error."""
         xml = (
             '<testsuites><testsuite><testcase name="ui" classname="c::ui" '
             'time="1"/></testsuite></testsuites>'
@@ -310,12 +324,14 @@ class TestMeasurement:
             benchmark.measure_junit(xml, _membership(benchmark))
 
     def test_invalid_junit_is_reported(self, benchmark: types.ModuleType) -> None:
+        """Check that invalid JUnit XML is reported as a benchmark error."""
         with pytest.raises(benchmark.BenchmarkError, match="not valid XML"):
             benchmark.measure_junit("<testsuite>", _membership(benchmark))
 
     def test_rerun_attempts_are_collected(self, benchmark: types.ModuleType) -> None:
         # A failing test that was retried keeps the *first* attempt as its
         # testcase timestamp and records later attempts as rerun children.
+        """Check that rerun attempts are collected from the JUnit report."""
         xml = (
             '<?xml version="1.0"?><testsuites><testsuite name="cargo-nextest">'
             '<testcase name="ui" classname="crate::ui" '
@@ -338,6 +354,7 @@ class TestOverlap:
     """Cross-group overlap is the claim the split is measured against."""
 
     def test_cross_group_overlap_is_counted(self, benchmark: types.ModuleType) -> None:
+        """Check that overlap between the two groups is counted."""
         xml = _report(
             _testcase(
                 name="ui", start="2026-10-31T10:00:00.000Z", seconds=60
@@ -363,6 +380,7 @@ class TestOverlap:
         )
 
     def test_within_group_overlap_is_reported(self, benchmark: types.ModuleType) -> None:
+        """Check that overlap within one group is reported."""
         membership = {
             "groups": {benchmark.SERIAL_DYLINT_UI: ["c::ui::one", "c::ui::two"]},
             "ignored": [],
@@ -386,6 +404,7 @@ class TestOverlap:
     def test_touching_intervals_do_not_overlap(
         self, benchmark: types.ModuleType
     ) -> None:
+        """Check that intervals that only touch do not count as overlapping."""
         xml = _report(
             _testcase(
                 name="ui", start="2026-10-31T10:00:00.000Z", seconds=60
@@ -410,6 +429,7 @@ class TestOverlap:
     def test_retry_attempt_intervals_are_used(
         self, benchmark: types.ModuleType
     ) -> None:
+        """Check that the intervals of retry attempts are used for overlap."""
         membership = {
             "groups": {benchmark.SERIAL_DYLINT_UI: ["c::ui::one", "c::ui::two"]},
             "ignored": [],
@@ -438,6 +458,7 @@ class TestOverlap:
     ) -> None:
         # A whole-suite run has thousands of tests outside both groups; they
         # are not subject to capacity one and must not be compared.
+        """Check that tests outside both groups are excluded from overlap."""
         xml = _report(
             _testcase(
                 name="ui", start="2026-10-31T10:00:00.000Z", seconds=60
@@ -471,6 +492,7 @@ class TestOverlap:
     def test_skipped_tests_are_excluded_from_overlap(
         self, benchmark: types.ModuleType
     ) -> None:
+        """Check that skipped tests are excluded from overlap."""
         xml = _report(
             _testcase(
                 name="ui",
@@ -499,6 +521,7 @@ class TestSummary:
     def test_summary_records_duration_and_slowest_tests(
         self, benchmark: types.ModuleType
     ) -> None:
+        """Check that the summary records the duration and the slowest tests."""
         xml = _report(
             _testcase(
                 name="ui", start="2026-10-31T10:00:00.000Z", seconds=60
@@ -540,6 +563,7 @@ class TestSummary:
     def test_coloured_summary_is_readable(self, benchmark: types.ModuleType) -> None:
         # CI forces coloured output; the reset escape sits between the
         # heading and the duration.
+        """Check that the summary line is read through colour escapes."""
         log = "\x1b[32;1m     Summary\x1b[0m [   0.406s] \x1b[1m1\x1b[0m test run"
         summary = benchmark.summarize(
             _report(), {"groups": {}, "ignored": [], "selection": []}, log
@@ -551,6 +575,7 @@ class TestSummary:
     def test_selected_but_absent_tests_are_reported(
         self, benchmark: types.ModuleType
     ) -> None:
+        """Check that selected tests missing from the report are reported."""
         xml = _report(
             _testcase(
                 name="ui", start="2026-10-31T10:00:00.000Z", seconds=1
@@ -571,6 +596,7 @@ class TestCommandLine:
         tmp_path: pathlib.Path,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
+        """Check that an invalid configuration exits with status 2."""
         config = tmp_path / "nextest.toml"
         config.write_text("[profile.default")
         status = benchmark.main(

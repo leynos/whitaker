@@ -1767,6 +1767,19 @@ make test-markdown-format
 The target uses isolated `uv` dependencies and does not rewrite Markdown
 sources or other tracked files.
 
+## Python docstring coverage
+
+`make lint` depends on `make interrogate`, which requires a docstring on every
+module, class and function in the Python files under `installer/scripts`,
+`scripts` and `tests`. The target runs interrogate 1.7.0 through `uv tool run`
+with `-vv --fail-under 100`, so it needs `uv` on the path, and it also fails on
+any `MISSED` row because the rounded percentage can hide a single gap. Add a
+new Python directory to `INTERROGATE_TARGETS` in the Makefile.
+`tests/workflow_contracts/interrogate_gate_test.py` holds the wiring: it checks
+that `lint` reaches the target, the pin and the flags, that every directory
+holding Python is a target, and that a failing or `MISSED` report fails the
+target.
+
 ## Skill manifest checks
 
 Every directory under [`skills/`](../skills/) carries a `SKILL.md` whose YAML

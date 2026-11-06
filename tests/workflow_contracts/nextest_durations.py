@@ -132,6 +132,7 @@ class _Total:
     """
 
     def __init__(self) -> None:
+        """Start the seconds and nanoseconds totals at zero."""
         self.seconds = 0
         self.nanoseconds = 0
 

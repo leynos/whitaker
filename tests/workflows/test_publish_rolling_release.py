@@ -78,6 +78,7 @@ def publish(tmp_path: Path, repo_root: Path) -> typ.Callable[..., PublishRun]:
         published: list[str],
         release_exists: bool = True,
     ) -> PublishRun:
+        """Run the publish script against a stubbed gh and return what it did."""
         workspace = tmp_path / "workspace"
         dist = workspace / "dist"
         dist.mkdir(parents=True, exist_ok=True)
