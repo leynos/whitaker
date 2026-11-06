@@ -3921,6 +3921,46 @@ the parameterized test register twice. The Kani harnesses in
 reachability. The Verus sidecar is `verus/whitaker_cli_dispatch.rs`; its
 unbounded routing claim and verifier outcome are recorded in the ExecPlan.
 
+#### Installation record
+
+`installer/src/installation_record.rs` persists one staging directory per Rust
+toolchain in `installed_lint_paths.json` beneath `BaseDirs::whitaker_data`.
+`record_installation(dirs, toolchain, staging_path)` canonicalizes the staging
+path, takes an exclusive lock on the record, and stores the absolute path under
+the toolchain name. A later install for the same toolchain replaces its entry
+and leaves other toolchains intact. `installed_paths(dirs)` takes a shared lock
+and returns only absolute paths that still exist, so stale entries and relative
+paths are ignored. A missing record yields an empty list. A malformed record
+makes `installed_paths` return `InstallationRecordError::Parse`, while a
+successful `record_installation` discards the unreadable contents and starts a
+fresh map. Both functions resolve the record from the platform data directory
+alone, so callers pass a single `BaseDirs` view.
+
+#### Bootstrap boundary
+
+`installer/src/bootstrap/` exposes `is_installed`, `RunOptions`, `run`,
+`run_with_options`, and `RunOutcome`. `is_installed` reports only whether a
+bootstrap record exists; an unreadable record still counts, so `run` can report
+the specific defect instead of silently falling back.
+`RunOptions::library_path` replaces the recorded `DYLINT_LIBRARY_PATH` for
+callers that resolved their own per-toolchain list. `run` is the options-free
+entry point and delegates to `run_with_options` with `RunOptions::default()`.
+
+#### Library-path precedence
+
+`src/adapters/mod.rs::active_library_path` builds the value forwarded as
+`DYLINT_LIBRARY_PATH` from these candidates, in order:
+
+- an explicit, non-empty `DYLINT_LIBRARY_PATH`, which wins outright and skips
+  the rest;
+- the per-toolchain staging directories recorded by the installer;
+- the active toolchain's build directory;
+- the prebuilt library directory for the host target and toolchain.
+
+Recorded paths come first, and the build and prebuilt candidates are appended
+only when they are not already present, so a duplicate candidate is collapsed
+once. The joined value retains only absolute directories that exist.
+
 ### Installer internal architecture
 
 `installer/src/orchestration/mod.rs` coordinates the installation workflow

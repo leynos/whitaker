@@ -13,6 +13,29 @@ They do not change the SARIF 2.1.0 serialized representation. Serde renames
 keep the JSON keys `artifacts` and `artifactLocation`, so no serialized-data
 migration is needed.
 
+## Root `whitaker` package
+
+The root package is now the CLI-only `whitaker` binary. It declares no library
+target, so the shared support APIs that 0.2.x consumers imported from the
+`whitaker` crate are no longer available there.
+
+Those APIs and the `dylint-driver` feature moved to `whitaker_lint_core`, which
+exposes the `config`, `lints`, and `testing` modules plus a `hir` module behind
+that feature. Import the same items from the new crate path:
+
+```rust
+use whitaker_lint_core::SharedConfig;
+```
+
+Depend on `whitaker_lint_core` when shared configuration, lint templates, or
+test helpers are what the consumer actually needs; it is not published to
+crates.io, so reach it through a path or Git dependency. Consumers that use one
+lint should depend on that lint crate directly.
+
+`whitaker-installer` is unchanged in this respect. It continues to own
+installation and lint staging, and the root `whitaker` command drives
+installation through it.
+
 ## `whitaker_common` APIs
 
 Update the locale helper import and calls:

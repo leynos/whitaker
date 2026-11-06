@@ -234,7 +234,10 @@ including `whitaker ls --json`; other arguments, such as `--all`, are forwarded
 to `cargo dylint`. From a checkout, install it with `cargo install --path .`.
 Crates.io packages and binstall archives are pending. When both `whitaker`
 binaries are on `PATH`, the first wins; `install` writes no compatibility
-scripts, so use `whitaker ls` rather than `whitaker-ls`.
+scripts, so use `whitaker ls` rather than `whitaker-ls`. Consumers upgrading
+from 0.2.x should read
+[the migration note](v0-3-0-migration-guide.md#root-whitaker-package) for the
+move of the shared library APIs to `whitaker_lint_core`.
 
 Forwarding runs through the installed bootstrap, so `whitaker --all` uses the
 same verified Clippy snapshot, driver directory, and serialized first build as

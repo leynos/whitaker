@@ -298,6 +298,11 @@ from the repository root, which `git rev-parse --show-toplevel` identifies.
 
 ### The root package today
 
+This subsection records the planning baseline before implementation, not the
+current state; see [Progress](#progress) and
+[Outcomes & retrospective](#outcomes--retrospective) for the current package
+version and layout.
+
 The repository root is itself a Cargo package:
 
 ```toml
