@@ -145,7 +145,7 @@ fn is_workspace_metadata_query(
 /// has no selector to classify, so this check is what keeps it away from the
 /// cache.
 fn prepared_manifest_is_readable(workspace_root: &Path) -> bool {
-    fs::File::open(workspace_root.join("Cargo.toml")).is_ok()
+    is_readable_file(&workspace_root.join("Cargo.toml"))
 }
 
 /// Check whether the request is a `cargo metadata --no-deps` query.
@@ -249,6 +249,18 @@ fn manifest_is_workspace_root(
 /// answering from stale metadata. Both failure modes point the same way that
 /// Nextest routing needs, where keeping the selector is also the safe choice.
 fn manifest_path_is_workspace_root(manifest: &OsStr, workspace_root: &Path) -> bool {
+    manifest_names_prepared_root(manifest, workspace_root, is_readable_file)
+}
+
+/// Decide whether a manifest selector names the prepared root manifest.
+///
+/// Readability is injected so the unreadable-manifest rule can be tested
+/// without permission bits, which a privileged test runner does not enforce.
+fn manifest_names_prepared_root(
+    manifest: &OsStr,
+    workspace_root: &Path,
+    is_readable: impl Fn(&Path) -> bool,
+) -> bool {
     let Ok(manifest_path) = fs::canonicalize(resolve_manifest(manifest, workspace_root)) else {
         return false;
     };
@@ -258,7 +270,11 @@ fn manifest_path_is_workspace_root(manifest: &OsStr, workspace_root: &Path) -> b
 
     manifest_path.file_name() == Some(OsStr::new("Cargo.toml"))
         && manifest_path.parent() == Some(workspace_root.as_path())
+        && is_readable(&manifest_path)
 }
+
+/// Report whether a file can be opened for reading.
+fn is_readable_file(path: &Path) -> bool { fs::File::open(path).is_ok() }
 
 /// Resolve a manifest selector against the prepared workspace root.
 fn resolve_manifest(manifest: &OsStr, workspace_root: &Path) -> PathBuf {

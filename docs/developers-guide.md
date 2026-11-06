@@ -176,13 +176,14 @@ propagated from Cargo, and the failures for a missing cache or a missing
 `CARGO_REAL`. The module's unit tests cover command construction, including
 joined, separate, repeated, and malformed `--manifest-path` arguments. A
 selector counts as the prepared one only when it resolves to the prepared
-workspace's root `Cargo.toml`. A manifest that no longer exists is left
-foreign, so the real Cargo reports the missing file instead of the driver
-answering from metadata that describes it. The prepared workspace's own root
-manifest must also be readable before its metadata is served, so a request with
-no selector cannot be answered for a workspace whose manifest is gone or
-inaccessible. `make test` runs the library tests, the integration test, and the
-example together.
+workspace's root `Cargo.toml` and that file can be opened. A manifest that is
+missing or unreadable is left foreign, so the real Cargo reports the problem
+instead of the driver answering from metadata that describes it, and Nextest
+routing keeps the selector it would otherwise drop. The prepared workspace's
+own root manifest must also be readable before its metadata is served, so a
+request with no selector cannot be answered for a workspace whose manifest is
+gone or inaccessible. `make test` runs the library tests, the integration test,
+and the example together.
 
 If a nested command needs an unfetched crate, Cargo fails with an error like:
 

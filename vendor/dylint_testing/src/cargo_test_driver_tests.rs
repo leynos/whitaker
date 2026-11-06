@@ -3,55 +3,16 @@
 //! The property test repeats the enumerated argument shapes over generated
 //! arguments, so an unlisted ordering cannot slip through.
 
-use super::{is_workspace_metadata_query, routed_command};
 use std::{
     ffi::{OsStr, OsString},
-    path::Path,
     fs,
+    path::Path,
 };
 
 use rstest::rstest;
-
-//! Check metadata selection and command routing without spawning tools.
-//!
-//! The property test repeats the enumerated argument shapes over generated
-//! arguments, so an unlisted ordering cannot slip through.
-};
-
 use tempfile::tempdir;
 
-//! Check metadata selection and command routing without spawning tools.
-//!
-//! The property test repeats the enumerated argument shapes over generated
-//! arguments, so an unlisted ordering cannot slip through.
-};
-//! Check metadata selection and command routing without spawning tools.
-//!
-//! The property test repeats the enumerated argument shapes over generated
-//! arguments, so an unlisted ordering cannot slip through.
-};
-
-
-//! Check metadata selection and command routing without spawning tools.
-//!
-//! The property test repeats the enumerated argument shapes over generated
-//! arguments, so an unlisted ordering cannot slip through.
-};
-//! Check metadata selection and command routing without spawning tools.
-//!
-//! The property test repeats the enumerated argument shapes over generated
-//! arguments, so an unlisted ordering cannot slip through.
-};
-//! Check metadata selection and command routing without spawning tools.
-//!
-//! The property test repeats the enumerated argument shapes over generated
-//! arguments, so an unlisted ordering cannot slip through.
-};
-//! Check metadata selection and command routing without spawning tools.
-//!
-//! The property test repeats the enumerated argument shapes over generated
-//! arguments, so an unlisted ordering cannot slip through.
-};
+use super::{is_workspace_metadata_query, manifest_names_prepared_root, routed_command};
 
 /// Prepared workspace the routing tests compare against.
 ///
@@ -362,6 +323,62 @@ fn keeps_a_missing_manifest_when_routing_nextest() {
     );
 }
 
+/// Treat an unreadable prepared manifest as foreign.
+///
+/// Readability is injected so this branch is covered on every runner, including
+/// a privileged one that ignores permission bits. The production wiring is
+/// checked separately by [`keeps_an_unreadable_manifest_when_routing_nextest`].
+#[test]
+fn refuses_an_unreadable_prepared_manifest() {
+    let names_prepared = manifest_names_prepared_root(
+        OsStr::new(PREPARED_MANIFEST),
+        Path::new(PREPARED_ROOT),
+        |_| false,
+    );
+
+    assert!(!names_prepared);
+}
+
+/// Keep an unreadable prepared manifest's selector when routing Nextest.
+///
+/// A privileged runner ignores the mode bits, so the test skips itself when the
+/// manifest is still readable after the permission change rather than asserting
+/// an outcome the environment cannot produce. Permissions are restored before
+/// the temporary directory is removed.
+#[cfg(unix)]
+#[test]
+fn keeps_an_unreadable_manifest_when_routing_nextest() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let workspace = tempdir().expect("a temporary workspace should be created");
+    let manifest = workspace.path().join("Cargo.toml");
+    fs::write(&manifest, b"[workspace]\n").expect("a root manifest should be written");
+    fs::set_permissions(&manifest, fs::Permissions::from_mode(0o000))
+        .expect("the manifest permissions should be changed");
+    let is_enforced = fs::File::open(&manifest).is_err();
+    let arguments = ["nextest", "run", "--manifest-path", "Cargo.toml"].map(OsString::from);
+    // Route while the manifest is still unreadable, then restore the mode.
+    let routed = is_enforced.then(|| {
+        routed_command(
+            OsStr::new("cargo"),
+            OsStr::new("cargo-nextest"),
+            &arguments,
+            Some(workspace.path()),
+        )
+    });
+    fs::set_permissions(&manifest, fs::Permissions::from_mode(0o644))
+        .expect("the manifest permissions should be restored");
+
+    let Some(routed) = routed else {
+        return;
+    };
+    assert_eq!(
+        routed.get_args().collect::<Vec<_>>(),
+        ["nextest", "run", "--manifest-path", "Cargo.toml"],
+        "an unreadable manifest must stay on the routed call"
+    );
+}
+
 /// Pass ordinary Cargo calls through without forcing a lockfile policy.
 #[test]
 fn preserves_offline_trybuild_arguments() {
@@ -411,3 +428,4 @@ fn recognizes_a_manifest_spelled_through_a_parent_segment() {
 
 #[path = "cargo_test_driver_proptests.rs"]
 mod proptests;
+// weave: run 'weave explain vendor/dylint_testing/src/cargo_test_driver_tests.rs' for per-hunk detail, 'weave check' to verify your resolution
