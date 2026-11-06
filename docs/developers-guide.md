@@ -4930,11 +4930,12 @@ passes each contract's package, binary and kind from `COMPILE_CONTRACTS`, and a
 contract test checks that table against the source tree, because a name alone
 cannot rule out an override such as `binary(integration_exclusion)`. The reader
 treats a predicate it has no data for, such as `default()`, as unknown rather
-than as a miss. It does the same for matchers Python cannot be relied on to
-evaluate as Nextest does: every regular expression, because `re` and Rust's
-`regex` crate disagree on patterns both accept, and any glob using more than
-`*` and `?`. It raises `ValueError` on syntax outside its grammar, including the
-`+` and `-` operators, so a guard built on it errs towards reporting a capture.
+than as a miss. It does the same for matchers that need Nextest's own engines:
+every regular expression and every glob with a metacharacter, because `re` and
+`fnmatch` disagree with Rust's `regex` and `globset` crates on patterns both
+accept. Its only definite answers come from comparing exact strings. It raises
+`ValueError` on syntax outside its grammar, including the `+` and `-`
+operators, so a guard built on it errs towards reporting a capture.
 `nextest_filter_property_test.py` checks it against an independent oracle over
 generated expression trees.
 

@@ -57,7 +57,7 @@ def test_filter_matching_evaluates_nextest_boolean_forms(
         r"test(=call(site\))",
         r"test(call(site)",
         r"test(~site\))",
-        r"test(#*(site\))",
+        r"test(#call(site\))",
     ],
 )
 def test_matcher_text_resolves_nextest_escapes(selector: str) -> None:
@@ -69,15 +69,14 @@ def test_matcher_text_resolves_nextest_escapes(selector: str) -> None:
     ("selector", "matches"),
     [
         ("package(whitaker-installer)", True),
-        ("package(whitaker-*)", True),
         ("package(installer)", False),
         ("package(~installer)", True),
         ("package(=whitaker-*)", False),
-        ("binary(u*)", True),
+        ("binary(ui)", True),
         ("binary(other)", False),
         ("kind(test)", True),
         ("kind(te*)", False),
-        ("kind(#te*)", True),
+        ("kind(#test)", True),
     ],
 )
 def test_metadata_predicates_use_their_documented_default_matchers(
@@ -115,6 +114,14 @@ def test_predicates_without_data_are_unknown_rather_than_false(selector: str) ->
         "binary([^x]i)",
         r"test(#{a\,b})",
         "binary([!x]i)",
+        "package(whitaker-*)",
+        "package(#whitaker-*)",
+        "package(**/whitaker-installer)",
+        "package(#**/whitaker-installer)",
+        "not package(**/whitaker-installer)",
+        "binary(u?)",
+        "kind(#te*)",
+        "test(#*absent*)",
         "binary([u]i)",
         "package(/^whitaker/)",
         "test(/absent/)",

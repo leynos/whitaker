@@ -13,9 +13,10 @@ The reader is deliberately conservative. ``package()``, ``binary()`` and
 it has no data for, such as ``default()`` and ``deps()``, are unknown rather than
 false, so a guard built on ``filter_may_select_test`` errs towards reporting a
 capture. A test name alone therefore cannot rule out a bare ``package(...)``.
-The same goes for matchers Python cannot be relied on to evaluate as Nextest
-does: every regular expression, and any glob using more than ``*`` and ``?``, is
-unknown too.
+The same goes for matchers that need Nextest's own engines: every regular
+expression and every glob with a metacharacter is unknown too. The reader's only
+definite answers come from comparing exact strings, so it has no second regex or
+glob engine to disagree with Nextest.
 Syntax outside the supported grammar, including the ``+`` and ``-`` operators,
 raises ``ValueError`` rather than guessing.
 
@@ -26,7 +27,6 @@ Matchers and escapes follow the Nextest filterset reference.[1]_
 
 from __future__ import annotations
 
-import fnmatch
 import re
 import typing as typ
 
@@ -61,7 +61,7 @@ _METADATA_DEFAULT_MATCHERS: typ.Final[dict[str, str]] = {
     "kind": "=",
 }
 
-_GLOB_SYNTAX_NOT_SHARED: typ.Final[re.Pattern[str]] = re.compile(r"[{}\[\]]")
+_GLOB_METACHARACTERS: typ.Final[re.Pattern[str]] = re.compile(r"[*?{}\[\]\\]")
 
 _ESCAPES: typ.Final[dict[str, str]] = {
     "n": "\n",
@@ -87,17 +87,14 @@ def _unescape(text: str) -> str:
     return re.sub(r"\\(.)", _resolve_escape, text)
 
 
-def _glob_matches(glob: str, value: str) -> bool | None:
-    """Match a Nextest glob of ``*`` and ``?``, and report any other as unknown.
+def _literal_glob_matches(glob: str, value: str) -> bool | None:
+    """Compare a metacharacter-free glob exactly, and report any other as unknown.
 
-    Nextest uses ``globset``, which reads ``{a,b}`` as alternation and ``[^a]`` as
-    negation, while ``fnmatch`` reads both literally and would report a miss. Only
-    the two wildcards are known to agree, so the check allows those rather than
-    listing the differences.
+    Nextest uses ``globset``, and no Python matcher is known to agree with it:
+    ``{a,b}``, ``[^a]`` and ``**/a`` each read differently under ``fnmatch``. A glob
+    with no metacharacters can only match itself, which needs no glob engine.
     """
-    if _GLOB_SYNTAX_NOT_SHARED.search(glob) is not None:
-        return None
-    return fnmatch.fnmatchcase(value, glob)
+    return None if _GLOB_METACHARACTERS.search(glob) is not None else value == glob
 
 
 def _selector_matches(selector: str, value: str, default_matcher: str) -> bool | None:
@@ -119,7 +116,7 @@ def _selector_matches(selector: str, value: str, default_matcher: str) -> bool |
         case "~":
             return text in value
         case _:
-            return _glob_matches(text, value)
+            return _literal_glob_matches(text, value)
 
 
 def _evaluate_predicate(name: str, argument: str, test: FilterSubject) -> bool | None:
@@ -268,7 +265,9 @@ class FilterReader:
     >>> FilterReader("package(whitaker-*)", FilterSubject("ui::ui")).value() is None
     True
     >>> known = FilterSubject("ui::ui", package="whitaker-installer")
-    >>> FilterReader("package(whitaker-*)", known).value()
+    >>> FilterReader("package(whitaker-installer)", known).value()
+    True
+    >>> FilterReader("package(whitaker-*)", known).value() is None
     True
     """
 

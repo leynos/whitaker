@@ -125,6 +125,9 @@ def test_separately_grouped_trybuild_contracts_do_not_match_dylint_ui_overrides(
         "not test(/(?i)publ\u0131c/) & test(dependency_check_result_contract_is_public)",
         "test(/dependency_check/)",
         "package([w]hitaker-installer)",
+        "package(**/whitaker-installer) & test(dependency_check_result_contract_is_public)",
+        "package(#**/whitaker-installer)",
+        "not package(**/other)",
     ],
 )
 def test_guard_reports_a_filter_that_selects_by_test_metadata(
