@@ -13,8 +13,9 @@ The reader is deliberately conservative. ``package()``, ``binary()`` and
 it has no data for, such as ``default()`` and ``deps()``, are unknown rather than
 false, so a guard built on ``filter_may_select_test`` errs towards reporting a
 capture. A test name alone therefore cannot rule out a bare ``package(...)``.
-The same goes for matchers Python cannot evaluate as Nextest does: globs using
-``{a,b}`` or ``[^a]``, and regular expressions ``re`` refuses, are unknown too.
+The same goes for matchers Python cannot be relied on to evaluate as Nextest
+does: every regular expression, and any glob using more than ``*`` and ``?``, is
+unknown too.
 Syntax outside the supported grammar, including the ``+`` and ``-`` operators,
 raises ``ValueError`` rather than guessing.
 
@@ -60,7 +61,7 @@ _METADATA_DEFAULT_MATCHERS: typ.Final[dict[str, str]] = {
     "kind": "=",
 }
 
-_GLOB_SYNTAX_FNMATCH_LACKS: typ.Final[re.Pattern[str]] = re.compile(r"[{}]|\[\^")
+_GLOB_SYNTAX_NOT_SHARED: typ.Final[re.Pattern[str]] = re.compile(r"[{}\[\]]")
 
 _ESCAPES: typ.Final[dict[str, str]] = {
     "n": "\n",
@@ -86,34 +87,29 @@ def _unescape(text: str) -> str:
     return re.sub(r"\\(.)", _resolve_escape, text)
 
 
-def _regex_matches(pattern: str, value: str) -> bool | None:
-    """Search with a Nextest regex, or report it unknown if ``re`` cannot read it.
-
-    Nextest uses Rust's ``regex`` crate, which accepts syntax such as ``\\p{L}``
-    that ``re`` refuses, so a refusal says nothing about whether the test matches.
-    """
-    try:
-        return re.search(pattern, value) is not None
-    except re.error:
-        return None
-
-
 def _glob_matches(glob: str, value: str) -> bool | None:
-    """Match a Nextest glob, or report it unknown if ``fnmatch`` differs from it.
+    """Match a Nextest glob of ``*`` and ``?``, and report any other as unknown.
 
     Nextest uses ``globset``, which reads ``{a,b}`` as alternation and ``[^a]`` as
-    negation, while ``fnmatch`` reads both literally and would report a miss.
+    negation, while ``fnmatch`` reads both literally and would report a miss. Only
+    the two wildcards are known to agree, so the check allows those rather than
+    listing the differences.
     """
-    if _GLOB_SYNTAX_FNMATCH_LACKS.search(glob) is not None:
+    if _GLOB_SYNTAX_NOT_SHARED.search(glob) is not None:
         return None
     return fnmatch.fnmatchcase(value, glob)
 
 
 def _selector_matches(selector: str, value: str, default_matcher: str) -> bool | None:
-    """Match a Nextest name matcher, or report it unknown if unsupported."""
-    regex = re.fullmatch(r"/(.+)/", selector, re.DOTALL)
-    if regex is not None:
-        return _regex_matches(regex[1], value)
+    """Match a Nextest name matcher, or report it unknown if it cannot be read.
+
+    Regular expressions are always unknown. Nextest uses Rust's ``regex`` crate,
+    and ``re`` differs from it on patterns both accept: ``(?i)publ\u0131c`` matches
+    ``public`` only under ``re``. No repository filter uses one, so nothing is lost
+    by not guessing.
+    """
+    if re.fullmatch(r"/.+/", selector, re.DOTALL) is not None:
+        return None
     has_prefix = selector[:1] in {"=", "~", "#"}
     matcher = selector[0] if has_prefix else default_matcher
     text = _unescape(selector[1:] if has_prefix else selector)

@@ -65,8 +65,8 @@ _FIXED_ATOMS: typ.Final[tuple[_Node, ...]] = (
     _atom("test(=call)", expected=False),
     _atom("test(~absent)", expected=False),
     _atom("test(absent)", expected=False),
-    _atom(r"test(/^ui::call\(site\)/)", expected=True),
-    _atom("test(/^absent/)", expected=False),
+    _atom(r"test(/^ui::call\(site\)/)", expected=None),
+    _atom("test(/^absent/)", expected=None),
     _atom(r"test(#ui::*(site\)*)", expected=True),
     _atom("test(#absent*)", expected=False),
     _atom("all()", expected=True),
@@ -86,6 +86,8 @@ _FIXED_ATOMS: typ.Final[tuple[_Node, ...]] = (
     _atom("kind(#[^x]est)", expected=None),
     _atom(r"test(#{ui\,other}*)", expected=None),
     _atom(r"test(/\p{L}+/)", expected=None),
+    _atom("package(/^whitaker/)", expected=None),
+    _atom("binary([u]i)", expected=None),
 )
 
 

@@ -30,7 +30,7 @@ from nextest_filter import FilterReader, FilterSubject, filter_may_select_test
         ("test(trybuild)", True),
         ("test(trybuild) & not package(no_unwrap_or_else_panic)", True),
         ("test(=trybuild_fixtures_compile_without_diagnostics)", True),
-        ("test(/trybuild/)", True),
+        ("test(/absent/)", True),
         ("test(#*trybuild*)", True),
         ("test(=ui)", False),
         ("test(ui::ui) & not package(no_unwrap_or_else_panic)", False),
@@ -58,11 +58,10 @@ def test_filter_matching_evaluates_nextest_boolean_forms(
         r"test(call(site)",
         r"test(~site\))",
         r"test(#*(site\))",
-        r"test(/call\(site\)/)",
     ],
 )
 def test_matcher_text_resolves_nextest_escapes(selector: str) -> None:
-    """End a matcher at an unescaped parenthesis, and a regex at its slash."""
+    """End a matcher at the first unescaped parenthesis."""
     assert FilterReader(selector, FilterSubject("call(site)")).value() is True
 
 
@@ -74,7 +73,6 @@ def test_matcher_text_resolves_nextest_escapes(selector: str) -> None:
         ("package(installer)", False),
         ("package(~installer)", True),
         ("package(=whitaker-*)", False),
-        ("package(/^whitaker/)", True),
         ("binary(u*)", True),
         ("binary(other)", False),
         ("kind(test)", True),
@@ -116,13 +114,20 @@ def test_predicates_without_data_are_unknown_rather_than_false(selector: str) ->
         r"not package({other\,nope})",
         "binary([^x]i)",
         r"test(#{a\,b})",
+        "binary([!x]i)",
+        "binary([u]i)",
+        "package(/^whitaker/)",
+        "test(/absent/)",
+        "test(/a(b)c/)",
+        r"test(/a\)b/)",
         r"test(/\p{L}+/)",
+        "not test(/(?i)publ\u0131c/)",
     ],
 )
 def test_matchers_python_cannot_evaluate_are_unknown_rather_than_false(
     selector: str,
 ) -> None:
-    """Report Nextest syntax that ``fnmatch`` or ``re`` would misread as unknown."""
+    """Report matchers ``fnmatch`` or ``re`` cannot be relied on for as unknown."""
     test = FilterSubject("a", package="whitaker-installer", binary="ui", kind="test")
     assert FilterReader(selector, test).value() is None
 
