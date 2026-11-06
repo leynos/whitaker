@@ -164,6 +164,7 @@ jobs:
           # letting sccache compile against local disk unnoticed.
           expect-cache: ubicloud
           cache-provider: external
+          install-mold: 'true'
 
       - name: Provision the Clippy snapshot
         # The only producer step that may read public Clippy, and only on a

@@ -303,7 +303,7 @@ test-doc: ## Run the workspace doctests, which no other lane executes
 	@# pair the test lane uses: a doctest is compiled as a separate crate, and
 	@# `force-unstable-if-unmarked` then makes every one of them fail to load
 	@# its own library at `E0658`.
-	RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) test --doc $(CARGO_LOCKED) $(DOCTEST_CARGO_FLAGS) $(BUILD_JOBS)
+	RUSTFLAGS="$(RUST_FLAGS) $(DEV_STANDARD_FLAGS)" $(CARGO) test --doc $(CARGO_LOCKED) $(DOCTEST_CARGO_FLAGS) $(BUILD_JOBS)
 
 workflow-test: workflow-test-deps ## Run opt-in GitHub workflow smoke tests with act + pytest
 	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v act >/dev/null || { echo "Install act to run workflow tests"; exit 1; }
