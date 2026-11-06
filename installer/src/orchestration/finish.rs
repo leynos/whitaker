@@ -41,12 +41,37 @@ pub(super) struct FinishInstallContext<'a> {
     pub(super) install_started: Instant,
 }
 
+/// The staging record a successful install writes before anything else.
+///
+/// Split out from [`FinishInstallContext`] because the record is written
+/// before the snapshot is reported on, and because the record-failure policy
+/// can then be exercised without building an [`InstalledSnapshot`], whose
+/// fields are private to the bootstrap step.
+pub(super) struct StagingRecord<'a> {
+    pub(super) dirs: &'a dyn BaseDirs,
+    pub(super) toolchain: &'a str,
+    pub(super) staging_path: &'a Utf8Path,
+    pub(super) wrapper_scripts: WrapperScripts,
+}
+
+impl<'a> StagingRecord<'a> {
+    /// Borrow the record inputs from a completed install.
+    const fn from_context(context: &FinishInstallContext<'a>) -> Self {
+        Self {
+            dirs: context.dirs,
+            toolchain: context.toolchain,
+            staging_path: context.staging_path,
+            wrapper_scripts: context.wrapper_scripts,
+        }
+    }
+}
+
 /// Finalize installation and record aggregate installer metrics.
 pub(super) fn finish_install_and_record_metrics(
     context: &FinishInstallContext<'_>,
     stderr: &mut dyn Write,
 ) -> Result<()> {
-    record_installed_path(context, stderr)?;
+    record_installed_path(&StagingRecord::from_context(context), stderr)?;
     finish_install(context, stderr)?;
     let metrics_context = MetricsWriteContext {
         quiet: context.args.quiet,
@@ -64,14 +89,14 @@ pub(super) fn finish_install_and_record_metrics(
 /// a silent failure would leave it pointing at a stale or missing library
 /// directory. The legacy installer can still be invoked from within the
 /// repository, where the default target is discoverable, so it warns instead.
-fn record_installed_path(context: &FinishInstallContext<'_>, stderr: &mut dyn Write) -> Result<()> {
+fn record_installed_path(record: &StagingRecord<'_>, stderr: &mut dyn Write) -> Result<()> {
     if let Err(record_error) =
-        record_installation(context.dirs, context.toolchain, context.staging_path)
+        record_installation(record.dirs, record.toolchain, record.staging_path)
     {
         let error = InstallerError::InstallationRecord {
             message: record_error.to_string(),
         };
-        if context.wrapper_scripts.is_root_cli() {
+        if record.wrapper_scripts.is_root_cli() {
             return Err(error);
         }
         write_stderr_line(stderr, format!("Warning: {error}"));
@@ -152,4 +177,89 @@ fn wrapper_bin_dir(result: &WrapperResult) -> Result<&std::path::Path> {
         .ok_or_else(|| InstallerError::StagingFailed {
             reason: "wrapper script path has no parent directory".to_owned(),
         })
+}
+
+#[cfg(test)]
+mod tests {
+    //! Tests for the staging-record failure policy.
+
+    use std::path::PathBuf;
+
+    use camino::Utf8PathBuf;
+    use tempfile::TempDir;
+
+    use super::{StagingRecord, record_installed_path};
+    use crate::{dirs::BaseDirs, error::InstallerError, wrapper::WrapperScripts};
+
+    /// A directory provider with no Whitaker data directory.
+    ///
+    /// Recording needs a data directory, so this is the smallest way to make
+    /// `record_installation` fail without touching the host's filesystem.
+    struct NoDataDirectory;
+
+    impl BaseDirs for NoDataDirectory {
+        fn home(&self) -> Option<PathBuf> { None }
+
+        fn executables(&self) -> Option<PathBuf> { None }
+
+        fn whitaker_data(&self) -> Option<PathBuf> { None }
+    }
+
+    /// A staging directory that exists, so only the record path can fail.
+    fn staging_directory() -> (TempDir, Utf8PathBuf) {
+        let directory = TempDir::new().expect("a temporary staging directory should be created");
+        let path = Utf8PathBuf::try_from(directory.path().to_path_buf())
+            .expect("a temporary path should be UTF-8");
+        (directory, path)
+    }
+
+    #[test]
+    fn a_root_install_treats_a_record_failure_as_fatal() {
+        let (_staging, staging_path) = staging_directory();
+        let record = StagingRecord {
+            dirs: &NoDataDirectory,
+            toolchain: "nightly-2026-05-28",
+            staging_path: &staging_path,
+            wrapper_scripts: WrapperScripts::None,
+        };
+        let mut stderr = Vec::new();
+
+        let error = record_installed_path(&record, &mut stderr)
+            .expect_err("the root CLI cannot forward without a recorded path");
+
+        assert!(
+            matches!(error, InstallerError::InstallationRecord { .. }),
+            "expected an installation-record error, got {error:?}"
+        );
+        assert!(
+            stderr.is_empty(),
+            "a fatal record failure should not also warn: {}",
+            String::from_utf8_lossy(&stderr)
+        );
+    }
+
+    #[test]
+    fn a_legacy_install_warns_about_a_record_failure_and_continues() {
+        let (_staging, staging_path) = staging_directory();
+        let record = StagingRecord {
+            dirs: &NoDataDirectory,
+            toolchain: "nightly-2026-05-28",
+            staging_path: &staging_path,
+            wrapper_scripts: WrapperScripts::Both,
+        };
+        let mut stderr = Vec::new();
+
+        record_installed_path(&record, &mut stderr)
+            .expect("the legacy installer can still run from inside the repository");
+
+        let warning = String::from_utf8(stderr).expect("the warning should be UTF-8");
+        assert!(
+            warning.starts_with("Warning: "),
+            "the legacy installer should warn, got {warning:?}"
+        );
+        assert!(
+            warning.contains("failed to record installed lint path"),
+            "the warning should name the failure, got {warning:?}"
+        );
+    }
 }
