@@ -1,7 +1,7 @@
-//! Check argument routing over generated inputs.
+//! Check argument routing and cache selection over generated inputs.
 //!
 //! The enumerated tests pin down each flag form; these properties repeat the
-//! same invariant over arbitrary orderings of that grammar.
+//! same invariants over arbitrary orderings of that grammar.
 
 use std::{
     ffi::{OsStr, OsString},
@@ -11,7 +11,13 @@ use std::{
 
 use proptest::prelude::*;
 
-use super::{super::without_prepared_manifest, PREPARED_JOINED, PREPARED_MANIFEST, PREPARED_ROOT};
+use super::{
+    super::without_prepared_manifest,
+    PREPARED_JOINED,
+    PREPARED_MANIFEST,
+    PREPARED_ROOT,
+    is_workspace_metadata_query,
+};
 
 /// Report whether a manifest value names the prepared workspace manifest.
 ///
@@ -137,6 +143,95 @@ proptest! {
         arguments in proptest::collection::vec(arbitrary_argument(), 0..12),
     ) {
         prop_assert_eq!(without_prepared_manifest(&arguments, None), arguments);
+    }
+}
+
+/// Produce one argument from the metadata-query grammar.
+///
+/// The tokens cover the subcommand, the `--no-deps` marker, both selector
+/// forms, a foreign and a missing manifest, and a rustup toolchain selector.
+fn arbitrary_metadata_argument() -> impl Strategy<Value = OsString> {
+    prop_oneof![
+        Just(OsString::from("metadata")),
+        Just(OsString::from("nextest")),
+        Just(OsString::from("build")),
+        Just(OsString::from("--no-deps")),
+        Just(OsString::from("--format-version")),
+        Just(OsString::from("1")),
+        Just(OsString::from("--manifest-path")),
+        Just(OsString::from(PREPARED_MANIFEST)),
+        Just(OsString::from(PREPARED_JOINED)),
+        Just(OsString::from("--manifest-path=/other/Cargo.toml")),
+        Just(OsString::from("/other/Cargo.toml")),
+        Just(OsString::from("Cargo.toml")),
+        Just(OsString::from("missing/Cargo.toml")),
+        Just(OsString::from("+nightly")),
+        "[a-z]{0,8}".prop_map(OsString::from),
+    ]
+}
+
+/// Report whether every selector after the subcommand names the prepared root.
+///
+/// This is the contract the cache depends on, written against the flag grammar
+/// rather than the driver's parser, so the property can disagree with the
+/// implementation. A dangling flag names nothing and is therefore foreign.
+fn every_selector_names_prepared(
+    arguments: &[OsString],
+    command_index: usize,
+    workspace: &Path,
+) -> bool {
+    let mut index = command_index + 1;
+    while let Some(argument) = arguments.get(index) {
+        if argument == OsStr::new("--manifest-path") {
+            let Some(value) = arguments.get(index + 1) else {
+                return false;
+            };
+            if !names_prepared_manifest(value, workspace) {
+                return false;
+            }
+            index += 2;
+            continue;
+        }
+        if let Some(value) = argument.to_string_lossy().strip_prefix("--manifest-path=")
+            && !names_prepared_manifest(OsStr::new(value), workspace)
+        {
+            return false;
+        }
+        index += 1;
+    }
+
+    true
+}
+
+/// Decide cache eligibility independently of the driver's classifier.
+fn expected_cache_hit(arguments: &[OsString], workspace: &Path) -> bool {
+    let command_index = usize::from(
+        arguments
+            .first()
+            .is_some_and(|argument| argument.to_string_lossy().starts_with('+')),
+    );
+    let is_no_deps_metadata = arguments.get(command_index) == Some(&OsString::from("metadata"))
+        && arguments
+            .iter()
+            .any(|argument| argument == OsStr::new("--no-deps"));
+
+    is_no_deps_metadata
+        && workspace.join("Cargo.toml").is_file()
+        && every_selector_names_prepared(arguments, command_index, workspace)
+}
+
+proptest! {
+    /// Serve the prepared cache exactly when the oracle says the query matches.
+    #[test]
+    fn cache_selection_matches_the_selector_contract(
+        arguments in proptest::collection::vec(arbitrary_metadata_argument(), 0..12),
+    ) {
+        let workspace = Path::new(PREPARED_ROOT);
+
+        let served = is_workspace_metadata_query(&arguments, workspace, workspace)
+            .expect("the prepared workspace should resolve");
+
+        prop_assert_eq!(served, expected_cache_hit(&arguments, workspace));
     }
 }
 // weave: run 'weave explain vendor/dylint_testing/src/cargo_test_driver_proptests.rs' for per-hunk detail, 'weave check' to verify your resolution
