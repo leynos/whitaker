@@ -91,6 +91,45 @@ fn refuses_to_serve_metadata_for_another_directory() -> io::Result<()> {
     Ok(())
 }
 
+/// A manifest request for a file that is gone is forwarded, not cached.
+///
+/// The workspace directory still resolves, so a lexical comparison would call
+/// the request a match and hand back metadata for a manifest that no longer
+/// exists. The caller needs Cargo's own "manifest not found" error instead.
+#[test]
+fn forwards_a_manifest_request_whose_file_is_missing() -> io::Result<()> {
+    let workspace = tempfile::tempdir()?;
+    let cache = workspace.path().join("metadata.json");
+    fs::write(&cache, b"prepared")?;
+    let environment = DriverEnvironment {
+        metadata_root: Some(workspace.path().to_path_buf()),
+        metadata_cache: Some(cache),
+        cargo_executable: Some(missing_program("cargo").into_os_string()),
+        nextest_executable: None,
+    };
+    let mut stdout = Vec::new();
+
+    let error = run(
+        &[
+            "metadata".into(),
+            "--no-deps".into(),
+            "--manifest-path".into(),
+            "Cargo.toml".into(),
+        ],
+        workspace.path(),
+        &environment,
+        &mut stdout,
+    )
+    .expect_err("a missing manifest should be forwarded to Cargo");
+
+    assert_eq!(error.kind(), io::ErrorKind::NotFound);
+    assert!(
+        stdout.is_empty(),
+        "the cache must not answer for a lost file"
+    );
+    Ok(())
+}
+
 /// A full metadata query is forwarded even for the prepared workspace.
 #[test]
 fn forwards_a_full_metadata_query() -> io::Result<()> {

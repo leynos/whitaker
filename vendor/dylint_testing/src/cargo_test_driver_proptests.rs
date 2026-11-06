@@ -3,19 +3,22 @@
 //! The enumerated tests pin down each flag form; these properties repeat the
 //! same invariant over arbitrary orderings of that grammar.
 
-use super::super::without_prepared_manifest;
-use proptest::prelude::*;
 use std::{
     ffi::{OsStr, OsString},
+    fs,
     path::Path,
 };
+
+use proptest::prelude::*;
+
+use super::{super::without_prepared_manifest, PREPARED_JOINED, PREPARED_MANIFEST, PREPARED_ROOT};
 
 /// Report whether a manifest value names the prepared workspace manifest.
 ///
 /// Cargo resolves a relative `--manifest-path` against the workspace, so
-/// `Cargo.toml` names the same file as `<workspace>/Cargo.toml`. The
-/// comparison stays lexical: the generated workspaces do not exist, so no
-/// filesystem resolution is available to fold a `..` segment.
+/// `Cargo.toml` names the same file as `<workspace>/Cargo.toml`. Both sides
+/// are resolved here, independently of the router's classifier, so a match
+/// means the same file rather than the same spelling.
 fn names_prepared_manifest(value: &OsStr, workspace: &Path) -> bool {
     let manifest = Path::new(value);
     let manifest = if manifest.is_absolute() {
@@ -24,7 +27,10 @@ fn names_prepared_manifest(value: &OsStr, workspace: &Path) -> bool {
         workspace.join(manifest)
     };
 
-    manifest == workspace.join("Cargo.toml")
+    match (fs::canonicalize(manifest), fs::canonicalize(workspace)) {
+        (Ok(manifest), Ok(workspace)) => manifest == workspace.join("Cargo.toml"),
+        _ => false,
+    }
 }
 
 /// Build the arguments routing must forward for the prepared workspace.
@@ -95,8 +101,8 @@ fn contains_prepared_selector(arguments: &[OsString], workspace: &Path) -> bool 
 fn arbitrary_argument() -> impl Strategy<Value = OsString> {
     prop_oneof![
         Just(OsString::from("--manifest-path")),
-        Just(OsString::from("--manifest-path=/workspace/Cargo.toml")),
-        Just(OsString::from("/workspace/Cargo.toml")),
+        Just(OsString::from(PREPARED_JOINED)),
+        Just(OsString::from(PREPARED_MANIFEST)),
         Just(OsString::from("--manifest-path=/other/Cargo.toml")),
         Just(OsString::from("/other/Cargo.toml")),
         Just(OsString::from("Cargo.toml")),
@@ -110,7 +116,7 @@ proptest! {
     fn routing_removes_only_the_prepared_manifest(
         arguments in proptest::collection::vec(arbitrary_argument(), 0..12),
     ) {
-        let workspace = Path::new("/workspace");
+        let workspace = Path::new(PREPARED_ROOT);
 
         let forwarded = without_prepared_manifest(&arguments, Some(workspace));
 
@@ -133,3 +139,4 @@ proptest! {
         prop_assert_eq!(without_prepared_manifest(&arguments, None), arguments);
     }
 }
+// weave: run 'weave explain vendor/dylint_testing/src/cargo_test_driver_proptests.rs' for per-hunk detail, 'weave check' to verify your resolution

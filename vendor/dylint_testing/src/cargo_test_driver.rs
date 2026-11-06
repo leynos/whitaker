@@ -229,23 +229,33 @@ fn manifest_is_workspace_root(
 
 /// Check whether a manifest argument names the workspace's root manifest.
 ///
-/// Both sides are canonicalized when they exist, so a checkout reached through
-/// a symlink, or a manifest spelled with `..`, still matches. Canonicalization
-/// fails for the synthetic paths the unit tests use, and the lexical
-/// comparison is then the only evidence available.
+/// Both sides are canonicalized, so a checkout reached through a symlink, or a
+/// manifest spelled with `..`, still matches. A manifest that cannot be
+/// resolved — missing, or unreadable — is classified as foreign rather than
+/// compared lexically: the prepared cache describes a file that does not
+/// exist, so the real Cargo must report the problem instead of the driver
+/// answering from stale metadata. Both failure modes point the same way that
+/// Nextest routing needs, where keeping the selector is also the safe choice.
 fn manifest_path_is_workspace_root(manifest: &OsStr, workspace_root: &Path) -> bool {
-    let manifest_path = Path::new(manifest);
-    let manifest_path = if manifest_path.is_absolute() {
-        manifest_path.to_path_buf()
-    } else {
-        workspace_root.join(manifest_path)
+    let Ok(manifest_path) = fs::canonicalize(resolve_manifest(manifest, workspace_root)) else {
+        return false;
     };
-    let manifest_path = fs::canonicalize(&manifest_path).unwrap_or(manifest_path);
-    let workspace_root =
-        fs::canonicalize(workspace_root).unwrap_or_else(|_| workspace_root.to_path_buf());
+    let Ok(workspace_root) = fs::canonicalize(workspace_root) else {
+        return false;
+    };
 
     manifest_path.file_name() == Some(OsStr::new("Cargo.toml"))
         && manifest_path.parent() == Some(workspace_root.as_path())
+}
+
+/// Resolve a manifest selector against the prepared workspace root.
+fn resolve_manifest(manifest: &OsStr, workspace_root: &Path) -> PathBuf {
+    let manifest_path = Path::new(manifest);
+    if manifest_path.is_absolute() {
+        manifest_path.to_path_buf()
+    } else {
+        workspace_root.join(manifest_path)
+    }
 }
 
 /// Route Cargo's Nextest subcommand to the standalone Nextest executable.

@@ -17,6 +17,36 @@ use rstest::rstest;
 //! arguments, so an unlisted ordering cannot slip through.
 };
 
+use tempfile::tempdir;
+
+//! Check metadata selection and command routing without spawning tools.
+//!
+//! The property test repeats the enumerated argument shapes over generated
+//! arguments, so an unlisted ordering cannot slip through.
+};
+//! Check metadata selection and command routing without spawning tools.
+//!
+//! The property test repeats the enumerated argument shapes over generated
+//! arguments, so an unlisted ordering cannot slip through.
+};
+
+/// Prepared workspace the routing tests compare against.
+///
+/// The path is real and holds a `Cargo.toml`, because the classifier resolves
+/// the manifest before comparing it. Synthetic roots would exercise the
+/// "missing manifest" path instead of a match.
+const PREPARED_ROOT: &str = env!("CARGO_MANIFEST_DIR");
+
+/// Root manifest of [`PREPARED_ROOT`].
+const PREPARED_MANIFEST: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml");
+
+/// Joined `--manifest-path` form naming [`PREPARED_MANIFEST`].
+const PREPARED_JOINED: &str = concat!(
+    "--manifest-path=",
+    env!("CARGO_MANIFEST_DIR"),
+    "/Cargo.toml"
+);
+
 /// Require workspace metadata requests to match the prepared root.
 #[test]
 fn uses_cached_metadata_only_for_workspace_queries() {
@@ -96,14 +126,14 @@ fn routes_nextest_without_adding_frozen_mode() {
     assert_eq!(actual, ["nextest", "run", "--locked", "--workspace"]);
 }
 
-/// Route `nextest run` arguments against the prepared `/workspace` root.
+/// Route `nextest run` arguments against the prepared workspace root.
 fn routed_arguments(arguments: &[&str]) -> Vec<String> {
     let arguments = arguments.iter().map(OsString::from).collect::<Vec<_>>();
     routed_command(
         OsStr::new("cargo"),
         OsStr::new("cargo-nextest"),
         &arguments,
-        Some(Path::new("/workspace")),
+        Some(Path::new(PREPARED_ROOT)),
     )
     .get_args()
     .map(|argument| argument.to_string_lossy().into_owned())
@@ -117,7 +147,7 @@ fn routed_arguments(arguments: &[&str]) -> Vec<String> {
         "nextest",
         "run",
         "--manifest-path",
-        "/workspace/Cargo.toml",
+        PREPARED_MANIFEST,
         "--target-dir",
         "/workspace/target/llvm-cov-target",
         "--cargo-metadata",
@@ -133,7 +163,7 @@ fn routed_arguments(arguments: &[&str]) -> Vec<String> {
     ][..],
 )]
 #[case::joined_form(
-    &["nextest", "run", "--manifest-path=/workspace/Cargo.toml"][..],
+    &["nextest", "run", PREPARED_JOINED][..],
     &["nextest", "run"][..],
 )]
 #[case::other_workspace(
@@ -145,8 +175,8 @@ fn routed_arguments(arguments: &[&str]) -> Vec<String> {
         "nextest",
         "run",
         "--manifest-path",
-        "/workspace/Cargo.toml",
-        "--manifest-path=/workspace/Cargo.toml",
+        PREPARED_MANIFEST,
+        PREPARED_JOINED,
     ][..],
     &["nextest", "run"][..],
 )]
@@ -155,7 +185,7 @@ fn routed_arguments(arguments: &[&str]) -> Vec<String> {
         "nextest",
         "run",
         "--manifest-path",
-        "/workspace/Cargo.toml",
+        PREPARED_MANIFEST,
         "--manifest-path",
         "/other/Cargo.toml",
     ][..],
@@ -226,6 +256,47 @@ fn refuses_cached_metadata_for_a_dangling_manifest_flag() {
     .expect("workspace paths should resolve");
 
     assert!(!is_workspace_query);
+}
+
+/// Refuse the cache when the prepared workspace has no root manifest.
+///
+/// The workspace directory resolves, but its `Cargo.toml` does not. A lexical
+/// comparison would call that a match and answer from metadata describing a
+/// file that is gone; the classifier must leave it to the real Cargo.
+#[test]
+fn refuses_cached_metadata_when_the_root_manifest_is_missing() {
+    let workspace = tempdir().expect("a temporary workspace should be created");
+    let arguments = ["metadata", "--no-deps", "--manifest-path", "Cargo.toml"].map(OsString::from);
+
+    let is_workspace_query =
+        is_workspace_metadata_query(&arguments, workspace.path(), workspace.path())
+            .expect("an existing workspace directory should resolve");
+
+    assert!(!is_workspace_query);
+}
+
+/// Keep an unresolved manifest selector when routing Nextest.
+///
+/// The selector and the prepared metadata cannot travel together, but dropping
+/// it would silently point Nextest at the prepared workspace when the caller
+/// named a manifest that is not there.
+#[test]
+fn keeps_a_missing_manifest_when_routing_nextest() {
+    let workspace = tempdir().expect("a temporary workspace should be created");
+    let arguments = ["nextest", "run", "--manifest-path", "Cargo.toml"].map(OsString::from);
+
+    let routed = routed_command(
+        OsStr::new("cargo"),
+        OsStr::new("cargo-nextest"),
+        &arguments,
+        Some(workspace.path()),
+    );
+
+    assert_eq!(
+        routed.get_args().collect::<Vec<_>>(),
+        ["nextest", "run", "--manifest-path", "Cargo.toml"],
+        "an unresolved manifest must stay on the routed call"
+    );
 }
 
 /// Pass ordinary Cargo calls through without forcing a lockfile policy.

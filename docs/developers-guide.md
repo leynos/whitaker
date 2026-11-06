@@ -174,9 +174,12 @@ tested as a library rather than only through the example binary.
 real child processes: it checks the served metadata bytes, the exit status
 propagated from Cargo, and the failures for a missing cache or a missing
 `CARGO_REAL`. The module's unit tests cover command construction, including
-joined, separate, repeated, and malformed `--manifest-path` arguments.
-`make test` runs the library tests, the integration test, and the example
-together.
+joined, separate, repeated, and malformed `--manifest-path` arguments. A
+selector counts as the prepared one only when it resolves to the prepared
+workspace's root `Cargo.toml`. A manifest that no longer exists is left
+foreign, so the real Cargo reports the missing file instead of the driver
+answering from metadata that describes it. `make test` runs the library tests,
+the integration test, and the example together.
 
 If a nested command needs an unfetched crate, Cargo fails with an error like:
 
