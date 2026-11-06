@@ -120,6 +120,9 @@ rstest-bdd-macros = { workspace = true }
 dylint_testing = { workspace = true }
 whitaker_test_macros = { workspace = true }
 
+[lints.rust]
+missing_docs = "deny"
+
 [lints.clippy]
 pedantic = { level = "warn", priority = -1 }
 
