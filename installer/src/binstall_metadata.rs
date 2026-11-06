@@ -129,11 +129,19 @@ pub fn expand_bin_dir_for(release: BinstallRelease<'_>) -> String {
     render_release(release, &BinstallTemplate::BinDirectory)
 }
 
+/// The cargo-binstall template a release field is rendered from.
 enum BinstallTemplate {
+    /// The `pkg-url` template, whose archive format depends on the target.
     PackageUrl,
+    /// The `bin-dir` template, whose binary name depends on the target.
     BinDirectory,
 }
 
+/// Render one cargo-binstall template for `release`.
+///
+/// The archive format and binary name are the only target-sensitive fields:
+/// the Windows override target downloads a `.zip` containing `whitaker.exe`,
+/// while every other target downloads a `.tar.gz` containing `whitaker`.
 fn render_release(release: BinstallRelease<'_>, template: &BinstallTemplate) -> String {
     let (template_text, platform_key, platform_value) = match template {
         BinstallTemplate::PackageUrl => (
@@ -155,6 +163,10 @@ fn render_release(release: BinstallRelease<'_>, template: &BinstallTemplate) -> 
         .replace(platform_key, &platform_value)
 }
 
+/// Return the released binary's file name for `release`.
+///
+/// The binary takes the package name, gaining an `.exe` suffix only when the
+/// target is the Windows override.
 fn binary_name(release: BinstallRelease<'_>) -> String {
     let extension = if release.target == WINDOWS_OVERRIDE_TARGET {
         ".exe"

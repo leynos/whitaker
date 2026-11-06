@@ -114,8 +114,6 @@ impl fmt::Display for HarnessError {
 
 impl std::error::Error for HarnessError {}
 
-/// Run UI tests for an explicit crate name.
-///
 /// Run UI tests using a custom runner.
 ///
 /// The caller supplies the runner so tests can replace the default implementation

@@ -176,6 +176,16 @@ fn unix_whitaker_ls_script() -> String {
     )
 }
 
+/// Write the Unix wrapper scripts selected by `scripts`.
+///
+/// The conventional `whitaker` and `whitaker-ls` paths are returned whether or
+/// not anything was written, so the caller can report where the wrappers live
+/// even when [`WrapperScripts::None`] suppresses generation.
+///
+/// # Errors
+///
+/// Returns [`InstallerError::WrapperGeneration`] when a script cannot be
+/// written or made executable.
 #[cfg(unix)]
 fn generate_unix_scripts(
     bin_dir: &Path,
@@ -228,6 +238,16 @@ if (-not (Test-Path -LiteralPath $installer -PathType Leaf)) {
     $installer = $command.Source
 }"#;
 
+/// Write the PowerShell wrapper scripts selected by `scripts`.
+///
+/// The conventional `whitaker.ps1` and `whitaker-ls.ps1` paths are returned
+/// whether or not anything was written, so the caller can report where the
+/// wrappers live even when [`WrapperScripts::None`] suppresses generation.
+///
+/// # Errors
+///
+/// Returns [`InstallerError::WrapperGeneration`] when a script cannot be
+/// written.
 #[cfg(windows)]
 fn generate_windows_scripts(
     bin_dir: &Path,
