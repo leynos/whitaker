@@ -208,6 +208,7 @@ def _run_script(
 
 
 def _downloads(harness: Harness) -> str:
+    """Return the stub curl log of download attempts, or an empty string."""
     log = harness.stub_dir / "curl.log"
     return log.read_text() if log.exists() else ""
 

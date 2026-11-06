@@ -101,6 +101,7 @@ def stub_readelf(
     """Replace readelf with deterministic output keyed by the inspected path."""
 
     def run(command: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        """Return the prepared readelf output for the last path on the command."""
         path = Path(command[-1])
         return subprocess.CompletedProcess(command, 0, outputs[path], "")
 
@@ -223,6 +224,7 @@ def test_main_rejects_readelf_failure(
     """Fail closed when readelf rejects an input as non-ELF."""
 
     def run(command: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        """Report a failing readelf run with a not-an-ELF message."""
         return subprocess.CompletedProcess(command, 1, "", "not an ELF file")
 
     monkeypatch.setattr(checker.subprocess, "run", run)
