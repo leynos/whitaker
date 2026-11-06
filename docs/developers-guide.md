@@ -332,26 +332,29 @@ toolchains ignore it.
 
 ### Build standard
 
-`.cargo/config.toml` makes the parallel frontend (`-Zthreads=8`) the default
-for every build and adds the `mold` linker on Linux, so a bare `cargo build`
-takes both. Cargo applies a single `rustflags` source rather than merging them,
-and an assigned `RUSTFLAGS` replaces every source, so each source repeats the
-frontend flag and the `test` and `typecheck` recipes restate both flags next to
-the Dylint-specific `-C prefer-dynamic -Z force-unstable-if-unmarked`
-(`DEV_STANDARD_FLAGS`). `-C prefer-dynamic` stays out of the configuration
-because it would break `cargo install` for `whitaker-installer`. The release
-workflows build on the pinned nightly from `rust-toolchain.toml`, as an
-application does. The CI lanes that run the `test` and `typecheck` recipes
-install `mold` through `setup-rust`'s `install-mold` input; the release jobs
-export `RUSTFLAGS` through `setup-rust`, which replaces the configuration's
-sources, so they never read the linker flag. The Dylint lint-library toolchain
-(`nightly-2026-05-28` today) is the pinned channel itself, so the application
-pin and the lint-library toolchain are one. A local Linux build needs `mold` on
-the `PATH` (for example `sudo apt-get install mold`, or your distribution's
-package); without it the linker flag stops a linked `cargo build`. The flag
-also needs a GCC driver of 12.1 or newer; with an older GCC, upgrade it or
-select clang as the linker driver with
-`CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER=clang`.
+The estate build standard makes the parallel frontend (`-Zthreads=8`) and the
+`mold` linker the defaults, but `.cargo/config.toml` here carries neither:
+`whitaker-installer` builds lint libraries from a checkout of this repository,
+so an auto-discovered linker flag would break source builds for users without
+`mold`. The flags live in the opt-in fragment `tools/dev-fast/config.toml`,
+selected with `cargo --config tools/dev-fast/config.toml`, and the `test`,
+`test-doc` and `typecheck` recipes restate them (`DEV_STANDARD_FLAGS`) next to
+the Dylint-specific `-C prefer-dynamic -Z force-unstable-if-unmarked`, because
+they assign `RUSTFLAGS` and an assigned `RUSTFLAGS` replaces every
+configuration source. `.concordat` records the exception for BD-001, BD-002,
+BD-004 and BD-008, and
+[ADR 010](adr-010-keep-the-fast-linker-out-of-the-auto-discovered-cargo-config.md)
+gives the reasoning.
+
+The release workflows build on the pinned nightly from `rust-toolchain.toml`,
+as an application does. The CI lanes that run the Makefile recipes install
+`mold` through `setup-rust`'s `install-mold` input. A local Linux build through
+the Makefile needs `mold` on the `PATH` (for example
+`sudo apt-get install mold`, or your distribution's package) and a GCC driver
+of 12.1 or newer; with an older GCC, upgrade it or select clang as the linker
+driver with `CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER=clang`. The Dylint
+lint-library toolchain (`nightly-2026-05-28` today) is the pinned channel
+itself, so the application pin and the lint-library toolchain are one.
 
 #### Cranelift backend support
 
