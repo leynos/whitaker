@@ -231,8 +231,10 @@ Hard invariants. Violation requires escalation, not a workaround.
    `StubExecutor` and `InstallerError::StubMismatch` behind the `test-support`
    feature, which roadmap 3.2.2 declares supported. Additions are fine;
    removals and signature narrowings are not.
-4. **The root package stays named `whitaker` at version `0.2.7`**, and the new
-   binary is named `whitaker`.
+4. **The root package stays named `whitaker`**, and the new binary is named
+   `whitaker`. The workspace version has moved with each release since this
+   plan was written and is now `0.2.11`; the constraint fixes the package and
+   binary name, not the version number.
 5. **The Dylint lint crates must keep building and their UI tests passing**
    throughout `EP-M0`. They are the oracle for that milestone.
 6. **No new lint suppressions.** `Cargo.toml [workspace.lints]` sets
@@ -1718,6 +1720,20 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
   publication, and it does not mark the plan `COMPLETE`. Date/Author:
   2026-11-04, implementation supervisor, following the owner's instruction.
 
+- **D-25: Carry the reconciled scope past the D-12 line ceiling.** Measured on
+  `0886261b` against `origin/main` (`84eed837`), the branch changes 159 files
+  for +10,491/−1,113, a net +9,378 lines. That is 2,378 lines above D-12's
+  7,000-line ceiling and 79 files above D-11's accepted 80, because the review
+  repairs added the typed library-path and telemetry adapters, the root install
+  end-to-end test, the Verus routing proof, the trybuild fixture, and the
+  release-workflow contract test since D-24 was recorded. The owner's
+  2026-11-04 direction — carry PR #356 through review reconciliation to merge —
+  governs here; the added lines are the evidence the review findings demanded,
+  not unrelated growth. This accepts scope only. It does not authorize
+  crates.io reservation or publication, and it does not mark the plan
+  `COMPLETE`. Date/Author: 2026-11-06, implementation supervisor, recording the
+  measurement after the replay onto current `main`.
+
 ## Outcomes & retrospective
 
 - **EP-M0, 2026-08-24.** Complete. Extracted the compiler-private driver into
@@ -2072,13 +2088,17 @@ version is bumped and nothing is published here. `--no-verify` stays until that
 release step, when the coordinated bump and installer-first order make the
 verification build resolvable.
 
-**Root-install coverage.** The root CLI's install route is exercised through
-the public binary by the dry-run behaviour scenario, which proves argument
-routing and the root CLI's no-wrapper policy without building the workspace. A
-successful full install is already covered by the installer's own
-`behaviour_cli` suite, which drives the same `run_install` flow; repeating a
-full build from the root crate would duplicate that coverage at a large cost
-and would not exercise a different code path.
+**Root-install coverage.** The root CLI's install route is now exercised end to
+end by `tests/root_install_e2e.rs`, which drives the public binary against
+isolated directories and asserts a real successful install: the staged suite,
+the persisted installation record, preservation of an existing `whitaker`
+executable, the absence of both generated wrapper scripts, and the root
+diagnostics. `installer/src/orchestration/finish.rs` additionally carries unit
+coverage for the record-failure policy in both directions — fatal for the root
+CLI, warn-and-continue for the legacy installer. The dry-run behaviour scenario
+still proves argument routing and the no-wrapper policy without building the
+workspace, so the route is covered at three levels rather than delegated
+entirely to the installer's own `behaviour_cli` suite.
 
 **Gate evidence for the repair commit.** Commit `625a0600` carries the two P1
 repairs, the bootstrap fixture correction, and the remaining mechanical
@@ -2092,6 +2112,40 @@ than a repeat. Together they run 2199 workspace tests, all passing, plus 84
 that the two invocations each execute in full. The earlier uninterrupted run
 reached 2185 of 2199 with no failures before the cap stopped it, which is
 consistent with the split result.
+
+**Replay onto current `main`, 2026-11-06.** The branch was replayed onto
+`origin/main` (`84eed837`) with `zdiff3`; 57 commits were replayed and the
+resulting head was `6190082e`. Two target commits changed the rules the branch
+had to satisfy, and both are now met:
+
+- `c1e87255` denies `missing_docs` in every workspace crate and adds the shared
+  `[workspace.lints.rust]` and `[workspace.lints.rustdoc]` sets. The root
+  package mirrors those tables rather than inheriting them, because Cargo
+  forbids `workspace = true` beside its own lint tables and the root crate's
+  Clippy set cannot be exported workspace-wide (D-24 measures the 134 denials
+  that alternative produces). Mirroring is what keeps the root crate inside the
+  new denials without loosening the other four packages.
+- `a46cf1e5` adds `DEV_STANDARD_FLAGS` (ADR 010) and requires it in every
+  recipe that assigns `RUSTFLAGS`, because an assigned `RUSTFLAGS` replaces all
+  other configuration sources. The `test:` and `test-doc:` recipes now carry it
+  alongside the branch's core-test and doctest lines.
+
+The replay also produced two tree defects that were repaired before gating. The
+root manifest ended up with two `[lints.rust]` tables, which is invalid TOML;
+`0886261b` keeps the single table that `main` introduced. `Cargo.lock` was
+taken from `main` and regenerated, as the lock-file policy requires; the
+rebuild added no further change, so the replayed lock already encoded both
+`main`'s newest versions and the branch's dependency removals.
+
+Gate evidence on `0886261b`, each gate run once and sequentially, with Cargo
+and compiler admission allowed to queue: `make check-fmt`, `make lint`,
+`make typecheck`, `make test` (2,218 passed / 6 skipped in the main profile, 84
+in the secondary suite, 19 `dylint_testing`), `make test-workflow-contracts`
+(795 passed), `make nixie`, and `scripts/run-verus.sh cli`
+(`8 verified, 0 errors`) all passed. `make markdownlint` failed only at its
+`spelling` prerequisite, which rejected three `-ise`/`-ifact` forms in the new
+test comments; `c15be632` corrects them, and the markdownlint step proper then
+ran clean over 115 files.
 
 To be completed at each milestone boundary and at completion. Before setting
 this plan to `COMPLETE`, reconcile every entry in `Surprises & discoveries`
