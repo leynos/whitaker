@@ -81,6 +81,11 @@ _FIXED_ATOMS: typ.Final[tuple[_Node, ...]] = (
     _atom("default()", expected=None),
     _atom("deps(whitaker)", expected=None),
     _atom("binary_id(whitaker::ui)", expected=None),
+    _atom(r"package({whitaker-installer\,other})", expected=None),
+    _atom(r"binary(#{ui\,other})", expected=None),
+    _atom("kind(#[^x]est)", expected=None),
+    _atom(r"test(#{ui\,other}*)", expected=None),
+    _atom(r"test(/\p{L}+/)", expected=None),
 )
 
 

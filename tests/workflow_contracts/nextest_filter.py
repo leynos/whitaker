@@ -13,6 +13,8 @@ The reader is deliberately conservative. ``package()``, ``binary()`` and
 it has no data for, such as ``default()`` and ``deps()``, are unknown rather than
 false, so a guard built on ``filter_may_select_test`` errs towards reporting a
 capture. A test name alone therefore cannot rule out a bare ``package(...)``.
+The same goes for matchers Python cannot evaluate as Nextest does: globs using
+``{a,b}`` or ``[^a]``, and regular expressions ``re`` refuses, are unknown too.
 Syntax outside the supported grammar, including the ``+`` and ``-`` operators,
 raises ``ValueError`` rather than guessing.
 
@@ -58,6 +60,8 @@ _METADATA_DEFAULT_MATCHERS: typ.Final[dict[str, str]] = {
     "kind": "=",
 }
 
+_GLOB_SYNTAX_FNMATCH_LACKS: typ.Final[re.Pattern[str]] = re.compile(r"[{}]|\[\^")
+
 _ESCAPES: typ.Final[dict[str, str]] = {
     "n": "\n",
     "r": "\r",
@@ -82,11 +86,34 @@ def _unescape(text: str) -> str:
     return re.sub(r"\\(.)", _resolve_escape, text)
 
 
-def _selector_matches(selector: str, value: str, default_matcher: str) -> bool:
-    """Match a Nextest name matcher against a value."""
+def _regex_matches(pattern: str, value: str) -> bool | None:
+    """Search with a Nextest regex, or report it unknown if ``re`` cannot read it.
+
+    Nextest uses Rust's ``regex`` crate, which accepts syntax such as ``\\p{L}``
+    that ``re`` refuses, so a refusal says nothing about whether the test matches.
+    """
+    try:
+        return re.search(pattern, value) is not None
+    except re.error:
+        return None
+
+
+def _glob_matches(glob: str, value: str) -> bool | None:
+    """Match a Nextest glob, or report it unknown if ``fnmatch`` differs from it.
+
+    Nextest uses ``globset``, which reads ``{a,b}`` as alternation and ``[^a]`` as
+    negation, while ``fnmatch`` reads both literally and would report a miss.
+    """
+    if _GLOB_SYNTAX_FNMATCH_LACKS.search(glob) is not None:
+        return None
+    return fnmatch.fnmatchcase(value, glob)
+
+
+def _selector_matches(selector: str, value: str, default_matcher: str) -> bool | None:
+    """Match a Nextest name matcher, or report it unknown if unsupported."""
     regex = re.fullmatch(r"/(.+)/", selector, re.DOTALL)
     if regex is not None:
-        return re.search(regex[1], value) is not None
+        return _regex_matches(regex[1], value)
     has_prefix = selector[:1] in {"=", "~", "#"}
     matcher = selector[0] if has_prefix else default_matcher
     text = _unescape(selector[1:] if has_prefix else selector)
@@ -96,7 +123,7 @@ def _selector_matches(selector: str, value: str, default_matcher: str) -> bool:
         case "~":
             return text in value
         case _:
-            return fnmatch.fnmatchcase(value, text)
+            return _glob_matches(text, value)
 
 
 def _evaluate_predicate(name: str, argument: str, test: FilterSubject) -> bool | None:

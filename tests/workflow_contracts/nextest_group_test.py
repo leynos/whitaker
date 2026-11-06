@@ -116,6 +116,12 @@ def test_separately_grouped_trybuild_contracts_do_not_match_dylint_ui_overrides(
         "kind(test) & test(sha2_0_11)",
         "not package(no_unwrap_or_else_panic)",
         "default()",
+        (
+            r"package({whitaker-installer\,other}) & "
+            "test(dependency_check_result_contract_is_public)"
+        ),
+        r"package(#{whitaker-installer\,other})",
+        r"not package({other\,nope})",
     ],
 )
 def test_guard_reports_a_filter_that_selects_by_test_metadata(

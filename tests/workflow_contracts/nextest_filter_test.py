@@ -109,6 +109,25 @@ def test_predicates_without_data_are_unknown_rather_than_false(selector: str) ->
 
 
 @pytest.mark.parametrize(
+    "selector",
+    [
+        r"package({whitaker-installer\,other})",
+        r"package(#{whitaker-installer\,other})",
+        r"not package({other\,nope})",
+        "binary([^x]i)",
+        r"test(#{a\,b})",
+        r"test(/\p{L}+/)",
+    ],
+)
+def test_matchers_python_cannot_evaluate_are_unknown_rather_than_false(
+    selector: str,
+) -> None:
+    """Report Nextest syntax that ``fnmatch`` or ``re`` would misread as unknown."""
+    test = FilterSubject("a", package="whitaker-installer", binary="ui", kind="test")
+    assert FilterReader(selector, test).value() is None
+
+
+@pytest.mark.parametrize(
     "expression",
     [
         pytest.param("", id="empty-filter-has-no-predicate"),
