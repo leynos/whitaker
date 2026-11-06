@@ -9,13 +9,10 @@ use proptest::prelude::*;
 use rstest::rstest;
 
 use super::*;
-use crate::clippy_snapshot::test_fixtures::{
-    DEFAULT_HISTORY,
-    DEFAULT_SELECTED,
-    FIXTURE_TOOLCHAIN,
-    FixtureRepo,
-    Step,
-    git,
+use crate::clippy_snapshot::{
+    error::ClippySnapshotError,
+    git::SnapshotGit,
+    test_fixtures::{DEFAULT_HISTORY, DEFAULT_SELECTED, FIXTURE_TOOLCHAIN, FixtureRepo, Step, git},
 };
 
 /// Build a newest-first change list from `(commit, channel)` pairs.
@@ -138,9 +135,55 @@ fn dylint_selection(repo: &Utf8Path, toolchain: &str) -> Option<String> {
     })
 }
 
+/// A listed toolchain file that Git cannot read stops the walk.
+///
+/// `rust-toolchain` outranks `rust-toolchain.toml`, so reading an unreadable
+/// higher-priority file as absent would select a channel rustup never would.
+#[test]
+fn an_unreadable_toolchain_file_is_an_error_not_an_absence() {
+    let repo = FixtureRepo::new(&[Step::Channel(FIXTURE_TOOLCHAIN)]);
+    std::fs::write(
+        repo.work.join("rust-toolchain"),
+        "[toolchain]\nchannel = \"nightly-2026-05-13\"\n",
+    )
+    .expect("write the plain toolchain file");
+    git(&repo.work, &["add", "--all"]);
+    git(
+        &repo.work,
+        &["commit", "--quiet", "--message", "add plain toolchain"],
+    );
+    let head = git(&repo.work, &["rev-parse", "HEAD"]);
+
+    // Remove the blob the tree still lists, so `ls-tree` sees the path while
+    // `show` cannot read it.
+    let blob = git(
+        &repo.work,
+        &["rev-parse", &format!("{head}:rust-toolchain")],
+    );
+    let object = repo
+        .work
+        .join(".git/objects")
+        .join(&blob[..2])
+        .join(&blob[2..]);
+    std::fs::remove_file(&object).expect("remove the toolchain blob");
+
+    let error = channel_at(&SnapshotGit::local(), &repo.work, &head)
+        .expect_err("an unreadable toolchain file is an error");
+    assert!(
+        matches!(
+            error,
+            ClippySnapshotError::Git {
+                operation: "show",
+                ..
+            }
+        ),
+        "expected a failed `git show`, got {error:?}"
+    );
+}
+
 /// Read and select through the Git layer, as verification does.
 fn whitaker_selection(repo: &Utf8Path, head: &str, toolchain: &str) -> Option<String> {
-    let changes = toolchain_changes(SnapshotGit::local(), repo, head).expect("read history");
+    let changes = toolchain_changes(&SnapshotGit::local(), repo, head).expect("read history");
     select_revision(&changes, toolchain)
         .ok()
         .map(|change| change.commit.clone())

@@ -4072,6 +4072,37 @@ nothing themselves; the commands that call them do. The logs never carry the
 raw error, which reaches the user through the returned result, nor a path, URL,
 or token.
 
+#### Clippy snapshot policy and adapter boundaries
+
+`installer/src/clippy_snapshot` separates what a snapshot must satisfy from how
+the installer observes it. Extend it along the same split; the file-to-role
+mapping is in the [repository layout](repository-layout.md) and the boundary
+decision is in
+[ADR 009](adr-009-verified-clippy-snapshot-for-dylint-driver-bootstrap.md).
+
+- Acceptance rules are pure: they take evidence values and recorded output,
+  perform no I/O, and record no metrics. `select_revision` stays the pure
+  kernel, and policy evaluates its outcome.
+- Ports describe what orchestration needs. Release downloads reuse the
+  existing `DependencyArchiveDownloader` rather than adding a second downloader
+  port.
+- Adapters return the closest honest observation and translate infrastructure
+  failures into `ClippySnapshotError`; they do not decide whether an
+  observation is acceptable. The exceptions are the checks only an adapter can
+  make: a failed `git bundle verify`, a failed staging clone, and metadata that
+  cannot be decoded or names an unknown schema are reported as `Invalid`.
+- Orchestration runs through `SnapshotSupport<'_>`, a struct of borrowed
+  ports. `SnapshotSupport::production()` composes the process-wide adapters;
+  the public entry points use it and the `*_with` variants take explicit
+  support.
+
+Keep the test split when adding coverage: value cases go in `policy_tests.rs`,
+call ordering and "never called" assertions go in `orchestration_tests/`
+through the scripted ports in `fakes.rs`, and adapter honesty stays in
+`verify_tests.rs` and `tests.rs` against real Git and a real directory. A new
+acceptance rule needs a value test; a new observation needs a port method and
+an adapter method, not a call from orchestration.
+
 ## Standard vs Experimental Lints
 
 Whitaker categorizes lints into two tiers:

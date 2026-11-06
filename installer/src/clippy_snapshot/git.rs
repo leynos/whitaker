@@ -8,9 +8,14 @@
 
 use std::{process::Output, time::Duration};
 
-use camino::Utf8Path;
+use camino::{Utf8Path, Utf8PathBuf};
 
-use super::error::ClippySnapshotError;
+use super::{
+    error::ClippySnapshotError,
+    policy::{IntegrityEvidence, SelfContainedEvidence, StructureEvidence},
+    ports::{BundleOperations, RepositoryQueries},
+    selection::TOOLCHAIN_FILES,
+};
 use crate::git::{GitInvocation, run_git};
 
 /// Local operations are bounded so a wedged filesystem cannot hang an install.
@@ -164,6 +169,196 @@ impl<'env> SnapshotGit<'env> {
             Reach::Local => LOCAL_TIMEOUT,
             Reach::Network => NETWORK_TIMEOUT,
         }
+    }
+}
+
+impl RepositoryQueries for SnapshotGit<'_> {
+    fn structure(&self, path: &Utf8Path) -> Result<StructureEvidence, ClippySnapshotError> {
+        let is_bare = self.stdout(
+            "rev-parse",
+            Some(path),
+            &["rev-parse", "--is-bare-repository"],
+        )?;
+        // A detached HEAD (exit 1 under `--quiet`) is evidence, not a failure:
+        // the policy reports it. Any other failure, such as a malformed or
+        // unreadable HEAD, is an infrastructure fault and stays an error, so
+        // the policy cannot blame the snapshot for it.
+        let head = self.output(
+            "symbolic-ref",
+            Some(path),
+            &["symbolic-ref", "--quiet", "HEAD"],
+        )?;
+        let head = match head.status.code() {
+            Some(0 | 1) => String::from_utf8_lossy(&head.stdout).trim().to_owned(),
+            _ => return Err(git_failure("symbolic-ref", &head)),
+        };
+        let refs = self.stdout(
+            "for-each-ref",
+            Some(path),
+            &["for-each-ref", "--format=%(refname) %(objectname)"],
+        )?;
+        Ok(StructureEvidence {
+            is_bare,
+            head,
+            refs,
+        })
+    }
+
+    fn self_contained(
+        &self,
+        path: &Utf8Path,
+    ) -> Result<SelfContainedEvidence, ClippySnapshotError> {
+        let is_shallow = self.stdout(
+            "rev-parse",
+            Some(path),
+            &["rev-parse", "--is-shallow-repository"],
+        )?;
+        let remotes = self.stdout("remote", Some(path), &["remote"])?;
+        Ok(SelfContainedEvidence {
+            is_shallow,
+            remotes,
+        })
+    }
+
+    fn integrity(&self, path: &Utf8Path) -> Result<IntegrityEvidence, ClippySnapshotError> {
+        let output = self.output(
+            "fsck",
+            Some(path),
+            &[
+                "fsck",
+                "--full",
+                "--strict",
+                "--no-dangling",
+                "--no-progress",
+            ],
+        )?;
+        Ok(IntegrityEvidence {
+            succeeded: output.status.success(),
+            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+        })
+    }
+
+    fn toolchain_commits(
+        &self,
+        path: &Utf8Path,
+        head: &str,
+    ) -> Result<Vec<String>, ClippySnapshotError> {
+        let mut args = vec!["rev-list", "--first-parent", head, "--"];
+        args.extend(TOOLCHAIN_FILES);
+        let listing = self.stdout("rev-list", Some(path), &args)?;
+        Ok(listing.lines().map(ToOwned::to_owned).collect())
+    }
+
+    fn file_at_commit(
+        &self,
+        path: &Utf8Path,
+        commit: &str,
+        file: &str,
+    ) -> Result<Option<String>, ClippySnapshotError> {
+        // The tree decides whether the path exists, so a read that fails
+        // afterwards stays an error. Treating it as absence would let a
+        // lower-priority toolchain file win, which rustup never would.
+        let listing = self.stdout(
+            "ls-tree",
+            Some(path),
+            &["ls-tree", "--name-only", commit, "--", file],
+        )?;
+        if listing.is_empty() {
+            return Ok(None);
+        }
+        let object = format!("{commit}:{file}");
+        let output = self.output("show", Some(path), &["show", &object])?;
+        if output.status.success() {
+            Ok(Some(String::from_utf8_lossy(&output.stdout).into_owned()))
+        } else {
+            Err(git_failure("show", &output))
+        }
+    }
+}
+
+impl BundleOperations for SnapshotGit<'_> {
+    fn verify_header(&self, bundle: &Utf8Path) -> Result<(), ClippySnapshotError> {
+        let (_scratch, scratch) = self.scratch_repository(bundle)?;
+        let verify = self.output(
+            "bundle verify",
+            Some(&scratch),
+            &["bundle", "verify", bundle.as_str()],
+        )?;
+        if verify.status.success() {
+            return Ok(());
+        }
+        let stderr = String::from_utf8_lossy(&verify.stderr);
+        Err(ClippySnapshotError::invalid(
+            bundle,
+            format!("git bundle verify failed: {}", stderr.trim()),
+        ))
+    }
+
+    fn list_heads(&self, bundle: &Utf8Path) -> Result<String, ClippySnapshotError> {
+        let (_scratch, scratch) = self.scratch_repository(bundle)?;
+        self.stdout(
+            "bundle list-heads",
+            Some(&scratch),
+            &["bundle", "list-heads", bundle.as_str()],
+        )
+    }
+
+    fn stage_clone(
+        &self,
+        bundle: &Utf8Path,
+        destination: &Utf8Path,
+    ) -> Result<(), ClippySnapshotError> {
+        // `git bundle verify` reads only the header, so a truncated or
+        // damaged pack first shows up here. Only a clone that ran and failed
+        // says the bundle is invalid; a Git that could not start or timed out
+        // is an infrastructure failure and keeps its own error.
+        let clone = self.output(
+            "clone",
+            None,
+            &[
+                "clone",
+                "--quiet",
+                "--bare",
+                bundle.as_str(),
+                destination.as_str(),
+            ],
+        )?;
+        if !clone.status.success() {
+            let stderr = String::from_utf8_lossy(&clone.stderr);
+            return Err(ClippySnapshotError::invalid(
+                bundle,
+                format!("the bundle could not be cloned: {}", stderr.trim()),
+            ));
+        }
+        self.stdout(
+            "remote remove",
+            Some(destination),
+            &["remote", "remove", "origin"],
+        )?;
+        Ok(())
+    }
+}
+
+impl SnapshotGit<'_> {
+    /// Create an empty bare repository for bundle header commands.
+    ///
+    /// `git bundle verify` insists on a repository even for a bundle without
+    /// prerequisites. The returned `TempDir` must outlive the commands run in
+    /// the returned path.
+    fn scratch_repository(
+        self,
+        bundle: &Utf8Path,
+    ) -> Result<(tempfile::TempDir, Utf8PathBuf), ClippySnapshotError> {
+        let scratch =
+            tempfile::tempdir().map_err(|error| ClippySnapshotError::io(bundle, &error))?;
+        let path = Utf8Path::from_path(scratch.path())
+            .ok_or_else(|| ClippySnapshotError::Io {
+                path: scratch.path().display().to_string(),
+                reason: "the path is not valid UTF-8".to_owned(),
+            })?
+            .to_owned();
+        self.stdout("init", None, &["init", "--quiet", "--bare", path.as_str()])?;
+        Ok((scratch, path))
     }
 }
 

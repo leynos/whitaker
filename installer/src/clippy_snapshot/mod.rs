@@ -32,9 +32,12 @@ mod generation;
 mod git;
 mod install;
 mod manifest;
+mod policy;
+mod ports;
 mod probe;
 mod provision;
 mod selection;
+mod store;
 mod telemetry;
 mod verify;
 
@@ -78,6 +81,10 @@ pub fn generation_path(root: &Utf8Path, manifest: &ClippySnapshotManifest) -> Ut
     root.join(manifest.commit.as_str())
 }
 
+#[cfg(test)]
+mod fakes;
+#[cfg(test)]
+mod orchestration_tests;
 #[cfg(test)]
 mod test_fixtures;
 #[cfg(test)]
