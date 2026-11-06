@@ -62,8 +62,10 @@ pub fn run_from_process() -> io::Result<i32> {
 ///
 /// # Errors
 ///
-/// Return an I/O error if the metadata cache cannot be read or a child process
-/// cannot be started.
+/// Return an I/O error naming the operation that failed when the metadata
+/// cache cannot be read or a child process cannot be started. The named
+/// operation is the only diagnostic for a failure that happens before a child
+/// exists to inherit stderr from.
 pub fn run(
     arguments: &[OsString],
     current_directory: &Path,
@@ -75,7 +77,9 @@ pub fn run(
         environment.metadata_cache.as_deref(),
     ) && is_workspace_metadata_query(arguments, current_directory, root)?
     {
-        stdout.write_all(&fs::read(cache)?)?;
+        let metadata = fs::read(cache)
+            .map_err(|error| operation_error(&error, "reading the prepared metadata cache"))?;
+        stdout.write_all(&metadata)?;
         return Ok(0);
     }
 
@@ -89,13 +93,15 @@ pub fn run(
         .nextest_executable
         .as_deref()
         .unwrap_or_else(|| OsStr::new("cargo-nextest"));
+    let prepared_root = prepared_workspace(current_directory, environment.metadata_root.as_deref());
     let status = routed_command(
         cargo_executable,
         nextest_executable,
         arguments,
-        environment.metadata_root.as_deref(),
+        prepared_root,
     )
-    .status()?;
+    .status()
+    .map_err(|error| operation_error(&error, "starting the routed child"))?;
     Ok(status.code().unwrap_or(1))
 }
 
@@ -136,7 +142,10 @@ fn is_workspace_metadata_query(
 /// has no selector to classify, so this check is what keeps it away from the
 /// cache.
 fn prepared_manifest_is_readable(workspace_root: &Path) -> bool {
-    is_readable_file(&workspace_root.join("Cargo.toml"))
+    // The answer here is deliberately a yes or no: an unreadable manifest sends
+    // the request to the real Cargo, which reports the failure itself, so there
+    // is no caller left to receive the error.
+    is_readable_file(&workspace_root.join("Cargo.toml")).is_ok()
 }
 
 /// Check whether the request is a `cargo metadata --no-deps` query.
@@ -179,12 +188,17 @@ struct ManifestSelector {
 /// Cargo accepts the separate form (`--manifest-path <value>`) and the joined
 /// form (`--manifest-path=<value>`). The value of a separate flag is consumed
 /// with the flag, so a token that merely resembles a selector is never parsed
-/// as one. Metadata selection and Nextest routing both read this parser, so
-/// their view of the grammar cannot drift.
+/// as one. Scanning stops at a bare `--`, because everything after it belongs
+/// to the program Cargo runs rather than to Cargo. Metadata selection and
+/// Nextest routing both read this parser, so their view of the grammar cannot
+/// drift.
 fn manifest_selectors(arguments: &[OsString]) -> Vec<ManifestSelector> {
     let mut selectors = Vec::new();
     let mut index = 0;
     while let Some(argument) = arguments.get(index) {
+        if argument == OsStr::new("--") {
+            break;
+        }
         if argument == OsStr::new("--manifest-path") {
             let value = arguments.get(index + 1).cloned();
             let length = 1 + usize::from(value.is_some());
@@ -265,7 +279,8 @@ fn manifest_path_is_workspace_root(manifest: &OsStr, workspace_root: &Path) -> b
 /// without permission bits, which a privileged test runner does not enforce.
 /// Canonicalization proves only that a path resolves, so a manifest that
 /// resolves but cannot be opened is reported as an error rather than as
-/// prepared.
+/// prepared. The injected operation returns its own result, so the error keeps
+/// its category instead of every failure becoming a permission problem.
 ///
 /// # Errors
 ///
@@ -273,7 +288,7 @@ fn manifest_path_is_workspace_root(manifest: &OsStr, workspace_root: &Path) -> b
 fn classify_manifest(
     manifest: &OsStr,
     workspace_root: &Path,
-    is_readable: impl Fn(&Path) -> bool,
+    is_readable: impl Fn(&Path) -> io::Result<()>,
 ) -> io::Result<ManifestMatch> {
     let manifest_path = fs::canonicalize(resolve_manifest(manifest, workspace_root))?;
     let workspace_root = fs::canonicalize(workspace_root)?;
@@ -284,18 +299,22 @@ fn classify_manifest(
         return Ok(ManifestMatch::Foreign);
     }
 
-    if is_readable(&manifest_path) {
-        Ok(ManifestMatch::Prepared)
-    } else {
-        Err(io::Error::new(
-            io::ErrorKind::PermissionDenied,
-            "the prepared root manifest cannot be read",
-        ))
-    }
+    is_readable(&manifest_path)?;
+    Ok(ManifestMatch::Prepared)
 }
 
-/// Report whether a file can be opened for reading.
-fn is_readable_file(path: &Path) -> bool { fs::File::open(path).is_ok() }
+/// Open a file to prove it can be read, reporting why it cannot.
+fn is_readable_file(path: &Path) -> io::Result<()> { fs::File::open(path).map(drop) }
+
+/// Name the operation that failed while preserving the error's category.
+///
+/// The driver's example prints this error to stderr. A failure before a child
+/// exists has no inherited diagnostics to explain it, so the message names the
+/// step; the kind survives so a missing file stays distinguishable from a
+/// permission problem.
+fn operation_error(error: &io::Error, operation: &str) -> io::Error {
+    io::Error::new(error.kind(), format!("{operation}: {error}"))
+}
 
 /// Resolve a manifest selector against the prepared workspace root.
 fn resolve_manifest(manifest: &OsStr, workspace_root: &Path) -> PathBuf {
@@ -305,6 +324,25 @@ fn resolve_manifest(manifest: &OsStr, workspace_root: &Path) -> PathBuf {
     } else {
         workspace_root.join(manifest_path)
     }
+}
+
+/// Return the prepared workspace root when the caller is standing in it.
+///
+/// A `--manifest-path` naming the prepared workspace may only be dropped when
+/// the routed call would otherwise resolve that same workspace. Both sides are
+/// canonicalized, so a checkout reached through a symlink, or a current
+/// directory spelled with `..`, still matches. A path that cannot be resolved
+/// answers `None`, which keeps the selector: a kept selector makes Nextest
+/// describe the workspace the caller named, while a dropped one would silently
+/// move the run to whatever manifest the current directory holds.
+fn prepared_workspace<'a>(
+    current_directory: &Path,
+    workspace_root: Option<&'a Path>,
+) -> Option<&'a Path> {
+    let workspace_root = workspace_root?;
+    let current_directory = fs::canonicalize(current_directory).ok()?;
+    let canonical_root = fs::canonicalize(workspace_root).ok()?;
+    (current_directory == canonical_root).then_some(workspace_root)
 }
 
 /// Route Cargo's Nextest subcommand to the standalone Nextest executable.
@@ -334,7 +372,9 @@ fn routed_command(
 /// Nextest refuses `--manifest-path` together with `--cargo-metadata`, and
 /// `cargo llvm-cov` adds the flag when it invokes Cargo, so the routed call
 /// must not forward that pair. A manifest naming any other workspace is kept,
-/// because the prepared metadata would describe the wrong workspace.
+/// because the prepared metadata would describe the wrong workspace. The
+/// caller passes a root only when the current directory is that workspace, so
+/// a run started elsewhere keeps its selector.
 fn without_prepared_manifest(
     arguments: &[OsString],
     workspace_root: Option<&Path>,

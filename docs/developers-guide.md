@@ -136,7 +136,10 @@ driver via `dylint_testing`'s `warm_driver` example. It also saves full
 workspace metadata for Nextest and `--no-deps` metadata for `cargo-llvm-cov`.
 `make coverage` inherits the same preparation through its `make test` call. The
 test recipe repeats preparation on a warm cache so direct local invocations and
-CI follow the same path.
+CI follow the same path. The decision, its manifest-error policy, and the
+package-cache limitation are recorded in
+[ADR 0011](adrs/adr-0011-offline-test-execution-with-prepared-metadata.md);
+issue #543 tracks the contention that no Cargo flag can remove.
 
 `dylint_testing::prepare_driver` is the library entry point behind the
 `warm_driver` example. It returns the path to the driver for the pinned
@@ -152,7 +155,11 @@ Pass the Cargo executable and active Rustup toolchain explicitly so nested
 tests use the same toolchain. A direct invocation can use:
 
 ```sh
-eval "$(make dylint-env | sed 's/^/export /')"
+# `make dylint-env` prints one `NAME=value` line per variable. Reading each
+# line rather than evaluating it keeps a path containing spaces or shell
+# metacharacters literal, because nothing is re-parsed by a shell.
+while IFS='=' read -r name value; do export "$name=$value"; done \
+    < <(make dylint-env)
 make fetch
 CARGO="$(command -v cargo)" \
 RUSTUP_TOOLCHAIN="$(rustup show active-toolchain | cut -d' ' -f1)" \
@@ -178,10 +185,12 @@ would answer it with an incomplete document.
 
 The driver's routing lives in `dylint_testing::cargo_test_driver`, so it is
 tested as a library rather than only through the example binary.
-`vendor/dylint_testing/tests/cargo_test_driver.rs` runs the entry point against
-real child processes: it checks the served metadata bytes, the exit status
-propagated from Cargo, and the failures for a missing cache or a missing
-`CARGO_REAL`. The module's unit tests cover command construction, including
+`vendor/dylint_testing/tests/cargo_test_driver.rs` calls the entry point
+directly: it checks the served metadata bytes, the exit status propagated from
+Cargo, and the failures for a missing cache or a missing `CARGO_REAL`. Its
+`executable` sibling starts the built example, which is the only way to observe
+environment resolution, the process exit status, and the stderr a caller
+actually sees. The module's unit tests cover command construction, including
 joined, separate, repeated, and malformed `--manifest-path` arguments. A
 selector counts as the prepared one only when it resolves to the prepared
 workspace's root `Cargo.toml` and that file can be opened. A manifest that is
@@ -190,8 +199,19 @@ instead of the driver answering from metadata that describes it, and Nextest
 routing keeps the selector it would otherwise drop. The prepared workspace's
 own root manifest must also be readable before its metadata is served, so a
 request with no selector cannot be answered for a workspace whose manifest is
-gone or inaccessible. `make test` runs the library tests, the integration test,
-and the example together.
+gone or inaccessible. `make test` runs the library tests, the integration
+tests, and the example together.
+
+The driver's observable surface is deliberately small: prepared metadata bytes
+on stdout, its own operation-named error on stderr when a failure happens
+before a child exists, and the child's inherited diagnostics and exit status
+otherwise. It adds no `tracing` or `metrics` instrumentation. The crate is a
+patched vendored copy of `dylint_testing` 6.3.0, so new instrumentation
+dependencies would widen a vendored dependency surface that exists only to
+carry a few local patches, and a library cannot install the subscriber those
+events would need. The process boundary is asserted by the integration tests
+instead, which is stronger evidence for a short-lived shim than sampled
+telemetry.
 
 If a nested command needs an unfetched crate, Cargo fails with an error like:
 

@@ -234,5 +234,3 @@ proptest! {
         prop_assert_eq!(served, expected_cache_hit(&arguments, workspace));
     }
 }
-// weave: run 'weave explain vendor/dylint_testing/src/cargo_test_driver_proptests.rs' for per-hunk
-// detail, 'weave check' to verify your resolution

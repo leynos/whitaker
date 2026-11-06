@@ -1,8 +1,9 @@
-//! Exercise the driver at the boundary a caller actually observes.
+//! Exercise the driver's entry point and the executable built around it.
 //!
-//! The unit tests check how commands are constructed. These tests run the
-//! entry point the example calls: they supply the prepared metadata, route to
-//! real child processes, and check the status and bytes the driver reports.
+//! The tests in this file call `run` directly: they supply the prepared
+//! metadata, route to real child processes, and check the status and bytes the
+//! driver reports. The `executable` sibling starts the built example, which is
+//! the only way to observe environment resolution and the process exit status.
 
 use std::{
     env,
@@ -267,6 +268,10 @@ fn reports_a_missing_metadata_cache() {
     .expect_err("a matched request without its cache should fail");
 
     assert_eq!(error.kind(), io::ErrorKind::NotFound);
+    assert!(
+        error.to_string().contains("prepared metadata cache"),
+        "the error should name the failed operation: {error}"
+    );
     assert!(stdout.is_empty(), "nothing should be written");
 }
 
@@ -289,3 +294,6 @@ fn routes_nextest_to_the_standalone_executable() {
 
     assert_eq!(error.kind(), io::ErrorKind::NotFound);
 }
+
+#[path = "driver_support/executable.rs"]
+mod executable;

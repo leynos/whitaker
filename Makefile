@@ -311,6 +311,11 @@ coverage: ## Generate LCOV coverage over the CI-tested crate subset
 	@# LLVM coverage maps carry source locations without DWARF debug info.
 	@# Omit optional symbols from this throwaway target to limit runner disk use.
 	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v "$(CARGO_LLVM_COV)" >/dev/null || { echo "Install cargo-llvm-cov (cargo install cargo-llvm-cov)"; exit 1; }
+	@# `fetch` builds the `cargo_test_driver` wrapper for the host, so an
+	@# inherited cross-compilation target would leave it under a triple
+	@# subdirectory this recipe cannot execute. Reject that configuration
+	@# instead of running the tests through a wrapper that is not there.
+	@if [ -n "$${CARGO_BUILD_TARGET:-}" ]; then echo "make coverage runs the host-built cargo_test_driver wrapper; unset CARGO_BUILD_TARGET"; exit 1; fi
 	@CARGO_LLVM_COV_TARGET_DIR="$(COVERAGE_TARGET_DIR)" \
 		CARGO_TARGET_DIR="$(COVERAGE_TARGET_DIR)" \
 		LLVM_PROFILE_FILE_NAME="$(COVERAGE_PROFILE_FILE_NAME)" \

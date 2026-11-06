@@ -155,8 +155,22 @@ adds, because Nextest rejects that flag alongside `--cargo-metadata`.
 Both examples are thin shims over library modules, so the behaviour is testable
 without spawning the binaries. `src/warm_driver.rs` reports a preparation
 failure with the step that failed. `src/cargo_test_driver.rs` holds the routing
-and metadata logic, and `tests/cargo_test_driver.rs` exercises it at the
-process boundary: served metadata bytes, exit-status propagation, and the
-missing-cache and missing-`CARGO_REAL` failures. The routing treats every
-`--manifest-path` occurrence as significant, so a repeated flag naming another
-workspace keeps the query away from the prepared metadata.
+and metadata logic, and `tests/cargo_test_driver.rs` exercises it against real
+child processes: served metadata bytes, exit-status propagation, and the
+missing-cache and missing-`CARGO_REAL` failures.
+`tests/driver_support/executable.rs` adds the executable boundary: environment
+resolution, exit status, and nonzero failures observed only through the built
+example. The routing treats every `--manifest-path` occurrence as significant
+up to a bare `--`, so a repeated flag naming another workspace keeps the query
+away from the prepared metadata while arguments after the separator belong to
+the test program. A selector is dropped only when the current directory is the
+prepared workspace; started elsewhere, the routed call keeps the workspace the
+caller named.
+
+The examples carry no `tracing` or `metrics` instrumentation. Their observable
+surface is stdout for prepared metadata, their own operation-named error on
+stderr before a child exists, and the child's inherited diagnostics afterwards.
+Adding instrumentation dependencies to this patched vendored crate would widen
+the surface the local patch has to maintain, and a library cannot install the
+subscriber the events would need; the integration tests assert the boundary
+instead.

@@ -5,7 +5,6 @@
 
 use std::{
     ffi::{OsStr, OsString},
-    fs,
     path::Path,
 };
 
@@ -13,7 +12,7 @@ use rstest::rstest;
 use tempfile::tempdir;
 
 use super::{PREPARED_JOINED, PREPARED_MANIFEST, PREPARED_ROOT};
-use crate::cargo_test_driver::{is_workspace_metadata_query, routed_command};
+use crate::cargo_test_driver::{is_workspace_metadata_query, prepared_workspace, routed_command};
 
 /// Route `nextest run` arguments against the prepared workspace root.
 fn routed_arguments(arguments: &[&str]) -> Vec<String> {
@@ -131,6 +130,14 @@ fn routes_nextest_without_adding_frozen_mode() {
     &["nextest", "run", "--manifest-path"][..],
     &["nextest", "run", "--manifest-path"][..],
 )]
+#[case::separator_then_flag(
+    &["nextest", "run", "--", "--manifest-path", PREPARED_MANIFEST][..],
+    &["nextest", "run", "--", "--manifest-path", PREPARED_MANIFEST][..],
+)]
+#[case::separator_then_joined(
+    &["nextest", "run", "--", PREPARED_JOINED][..],
+    &["nextest", "run", "--", PREPARED_JOINED][..],
+)]
 fn routes_nextest_around_the_prepared_manifest(
     #[case] arguments: &[&str],
     #[case] expected: &[&str],
@@ -171,7 +178,7 @@ fn keeps_a_missing_manifest_when_routing_nextest() {
 #[cfg(unix)]
 #[test]
 fn keeps_an_unreadable_manifest_when_routing_nextest() {
-    use std::os::unix::fs::PermissionsExt;
+    use std::{fs, os::unix::fs::PermissionsExt};
 
     let workspace = tempdir().expect("a temporary workspace should be created");
     let manifest = workspace.path().join("Cargo.toml");
@@ -199,6 +206,33 @@ fn keeps_an_unreadable_manifest_when_routing_nextest() {
         routed.get_args().collect::<Vec<_>>(),
         ["nextest", "run", "--manifest-path", "Cargo.toml"],
         "an unreadable manifest must stay on the routed call"
+    );
+}
+
+/// Keep the prepared selector when the routed call starts elsewhere.
+///
+/// `prepared_workspace` answers `None` because the current directory is not the
+/// prepared root, and both selector spellings must then survive: dropping them
+/// would move the run to whatever manifest that directory holds.
+#[rstest]
+#[case::absolute(PREPARED_MANIFEST)]
+#[case::relative("Cargo.toml")]
+fn keeps_the_prepared_manifest_when_routed_from_another_directory(#[case] manifest: &str) {
+    let elsewhere = tempdir().expect("a temporary directory should be created");
+    let prepared_root = prepared_workspace(elsewhere.path(), Some(Path::new(PREPARED_ROOT)));
+    let arguments = ["nextest", "run", "--manifest-path", manifest].map(OsString::from);
+
+    let routed = routed_command(
+        OsStr::new("cargo"),
+        OsStr::new("cargo-nextest"),
+        &arguments,
+        prepared_root,
+    );
+
+    assert_eq!(
+        routed.get_args().collect::<Vec<_>>(),
+        ["nextest", "run", "--manifest-path", manifest],
+        "a selector must survive when the caller stands outside the prepared workspace"
     );
 }
 

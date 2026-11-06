@@ -6,12 +6,13 @@
 use std::{
     ffi::{OsStr, OsString},
     fs,
+    io,
     path::Path,
 };
 
 use tempfile::tempdir;
 
-use super::{ManifestMatch, classify_manifest, is_workspace_metadata_query};
+use super::{ManifestMatch, classify_manifest, is_workspace_metadata_query, prepared_workspace};
 
 /// Prepared workspace the classifier tests compare against.
 ///
@@ -30,8 +31,8 @@ const PREPARED_JOINED: &str = concat!(
     "/Cargo.toml"
 );
 
-/// Report every manifest as readable.
-fn readable(_: &Path) -> bool { true }
+/// Report whether the manifest can actually be opened.
+fn readable(path: &Path) -> io::Result<()> { fs::File::open(path).map(drop) }
 
 /// Require workspace metadata requests to match the prepared root.
 #[test]
@@ -230,15 +231,94 @@ fn classifies_an_unreadable_manifest_as_unresolvable() {
     let error = classify_manifest(
         OsStr::new(PREPARED_MANIFEST),
         Path::new(PREPARED_ROOT),
-        |_| false,
+        |_| Err(io::Error::from(io::ErrorKind::PermissionDenied)),
     )
     .expect_err("an unreadable manifest should not be prepared");
 
+    assert_eq!(error.kind(), io::ErrorKind::PermissionDenied, "{error}");
+}
+
+/// Keep the open error's own category instead of reporting every failure as a
+/// permission problem.
+///
+/// A file removed between canonicalization and opening is the realistic case:
+/// the path resolved, so the failure is `NotFound`, and a caller inspecting the
+/// error must not be told the manifest was unreadable.
+#[test]
+fn preserves_the_open_error_category() {
+    let error = classify_manifest(
+        OsStr::new(PREPARED_MANIFEST),
+        Path::new(PREPARED_ROOT),
+        |_| Err(io::Error::from(io::ErrorKind::NotFound)),
+    )
+    .expect_err("a manifest that cannot be opened should not be prepared");
+
+    assert_eq!(error.kind(), io::ErrorKind::NotFound, "{error}");
+}
+
+/// Treat the prepared root as prepared when the caller stands in it.
+#[test]
+fn matches_the_prepared_workspace_from_its_own_directory() {
+    let root = Path::new(PREPARED_ROOT);
+
+    assert_eq!(prepared_workspace(root, Some(root)), Some(root));
+}
+
+/// Resolve the current directory before comparing it with the prepared root.
+///
+/// The prepared root may be reported as absolute by the Makefile while the
+/// process reports a path spelled through `..`, and both name one directory.
+#[test]
+fn matches_the_prepared_workspace_spelled_through_a_parent_segment() {
+    let root = Path::new(PREPARED_ROOT);
+    let inside = root.join("src").join("..");
+
+    assert_eq!(prepared_workspace(&inside, Some(root)), Some(root));
+}
+
+/// Keep the selector when the caller stands in another directory.
+#[test]
+fn refuses_the_prepared_workspace_from_another_directory() {
+    let elsewhere = tempdir().expect("a temporary directory should be created");
+
     assert_eq!(
-        error.kind(),
-        std::io::ErrorKind::PermissionDenied,
-        "{error}"
+        prepared_workspace(elsewhere.path(), Some(Path::new(PREPARED_ROOT))),
+        None
     );
+}
+
+/// Keep the selector when the prepared root itself cannot be resolved.
+#[test]
+fn refuses_a_prepared_workspace_that_cannot_be_resolved() {
+    let workspace = tempdir().expect("a temporary directory should be created");
+    let missing = workspace.path().join("missing");
+
+    assert_eq!(prepared_workspace(workspace.path(), Some(&missing)), None);
+}
+
+/// Ignore a manifest selector that follows a bare `--`.
+///
+/// Everything after the separator belongs to the program Cargo runs, so a
+/// token there is not a Cargo flag and cannot make the query foreign.
+#[test]
+fn ignores_a_manifest_selector_after_the_separator() {
+    let arguments = [
+        "metadata",
+        "--no-deps",
+        "--",
+        "--manifest-path",
+        "/other/Cargo.toml",
+    ]
+    .map(OsString::from);
+
+    let is_workspace_query = is_workspace_metadata_query(
+        &arguments,
+        Path::new(env!("CARGO_MANIFEST_DIR")),
+        Path::new(env!("CARGO_MANIFEST_DIR")),
+    )
+    .expect("workspace paths should resolve");
+
+    assert!(is_workspace_query);
 }
 
 #[path = "cargo_test_driver_routing_tests.rs"]
@@ -246,5 +326,3 @@ mod routing;
 
 #[path = "cargo_test_driver_proptests.rs"]
 mod proptests;
-// weave: run 'weave explain vendor/dylint_testing/src/cargo_test_driver_tests.rs' for per-hunk
-// detail, 'weave check' to verify your resolution
