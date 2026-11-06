@@ -49,6 +49,29 @@ pub enum CliError {
         #[source]
         source: InstallationRecordError,
     },
+    /// The prebuilt library directory for the active toolchain could not be
+    /// resolved.
+    ///
+    /// Falling back to "no candidate" would hide a broken data directory and
+    /// let Dylint run without the libraries the user installed.
+    #[error("could not resolve the prebuilt library directory: {message}")]
+    PrebuiltLibraryPath {
+        /// Human-readable installer error details.
+        message: String,
+    },
+    /// The resolved candidate directories could not be joined into one
+    /// platform path list.
+    ///
+    /// Every candidate is checked for representability before it is joined, so
+    /// this is a defensive variant rather than an expected outcome. It exists
+    /// so a representation failure has a typed report instead of silently
+    /// becoming "nothing installed".
+    #[error("could not build the Dylint library path: {source}")]
+    LibraryPath {
+        /// The platform path-list joining error.
+        #[source]
+        source: std::env::JoinPathsError,
+    },
 }
 
 /// Input needed to install Whitaker dependencies and lint libraries.

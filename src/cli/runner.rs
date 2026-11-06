@@ -208,8 +208,35 @@ fn token_tag(argument: &OsStr) -> TokenTag {
 mod tests {
     //! Tests for routing parser diagnostics through the supplied streams.
 
-    use super::{CommandStreams, Outcome, run_from};
-    use crate::adapters::SystemServices;
+    use std::io::{self, Write};
+
+    use super::{CommandStreams, Outcome, print_cli_error, run_from};
+    use crate::{adapters::SystemServices, ports::CliError};
+
+    /// A stream that refuses every write, standing in for a closed stderr.
+    struct FailingWriter;
+
+    impl Write for FailingWriter {
+        fn write(&mut self, _buffer: &[u8]) -> io::Result<usize> {
+            Err(io::Error::other("stderr is closed"))
+        }
+
+        fn flush(&mut self) -> io::Result<()> { Ok(()) }
+    }
+
+    #[test]
+    fn a_failing_diagnostic_stream_still_reports_operational_failure() {
+        let error = CliError::Inventory {
+            message: "the inventory is unavailable".to_owned(),
+        };
+        let mut stderr = FailingWriter;
+
+        assert_eq!(
+            print_cli_error(&error, &mut stderr),
+            Outcome::OperationalFailure,
+            "the command has already failed, so a lost diagnostic cannot change the outcome"
+        );
+    }
 
     #[test]
     fn clap_diagnostics_use_the_configured_streams() {

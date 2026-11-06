@@ -3757,6 +3757,8 @@ dependencies = [
  "clap",
  "googletest",
  "insta",
+ "metrics",
+ "metrics-util",
  "ortho_config",
  "pretty_assertions",
  "proptest",

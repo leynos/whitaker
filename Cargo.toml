@@ -102,6 +102,7 @@ path = "src/main.rs"
 [dependencies]
 camino.workspace = true
 clap = { workspace = true, features = ["derive"] }
+metrics.workspace = true
 ortho_config.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
@@ -112,6 +113,7 @@ whitaker-installer.workspace = true
 cap-std.workspace = true
 googletest.workspace = true
 insta.workspace = true
+metrics-util.workspace = true
 pretty_assertions.workspace = true
 proptest.workspace = true
 rstest.workspace = true

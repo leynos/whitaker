@@ -4,20 +4,20 @@ use std::{
     ffi::{OsStr, OsString},
     io::Write,
     process::{Command, ExitStatus},
+    time::{Duration, Instant},
 };
 
-use camino::Utf8PathBuf;
 use whitaker_installer::{
     bootstrap::is_installed,
-    dependency_binaries::host_target,
     dirs::{BaseDirs, SystemBaseDirs},
-    installation_record::installed_paths,
     list::{collect_installed, detect_active_toolchain},
     orchestration::{run_bootstrap_command_with_library_path, run_install_for_whitaker},
-    prebuilt_path::prebuilt_library_dir,
-    stager::default_target_dir,
 };
 
+use self::{
+    library_path::active_library_path,
+    telemetry::{ForwardOutcome, ForwardSource},
+};
 use crate::ports::{
     CliError,
     InstallRequest,
@@ -28,6 +28,9 @@ use crate::ports::{
     Services,
     StagedInventory,
 };
+
+pub mod library_path;
+pub mod telemetry;
 
 /// The system-backed adapters used by the `whitaker` executable.
 #[derive(Debug, Default)]
@@ -116,20 +119,131 @@ impl LintRunner for SystemServices {
         // invocation sees the same view of the installation.
         let system_dirs = SystemBaseDirs::new();
         let dirs = system_dirs.as_ref().map(|system| system as &dyn BaseDirs);
-        let library_path = active_library_path(dirs)?;
-        if has_installed_bootstrap(dirs) {
-            return Ok(run_bootstrap_command_with_library_path(
-                args,
-                library_path.as_deref(),
-                stderr,
-            ));
-        }
-        forward_without_bootstrap(args, library_path.as_deref())
+        let source = forward_source(dirs);
+        let started = Instant::now();
+        let library_path = match active_library_path(dirs) {
+            Ok(path) => path,
+            Err(error) => return Err(report_resolution_failure(source, started, error)),
+        };
+        telemetry::record_library_path(library_path.kind(), library_path.candidate_count());
+        let forwarding = Forwarding {
+            args,
+            stderr,
+            source,
+            library_path: library_path.as_deref(),
+            started,
+        };
+        telemetry::forward_span(source, library_path.kind())
+            .in_scope(|| dispatch_forward(forwarding))
     }
 }
 
 /// Report whether an installation recorded a bootstrap to run from.
 fn has_installed_bootstrap(dirs: Option<&dyn BaseDirs>) -> bool { dirs.is_some_and(is_installed) }
+
+/// Choose the forwarding route this machine supports.
+///
+/// The route is a property of the installation, not of the arguments, so it is
+/// decided before the library path is resolved and can label a resolution
+/// failure as well as a completed run.
+fn forward_source(dirs: Option<&dyn BaseDirs>) -> ForwardSource {
+    if has_installed_bootstrap(dirs) {
+        ForwardSource::Bootstrap
+    } else {
+        ForwardSource::Direct
+    }
+}
+
+/// One forwarded invocation, as the adapter sees it.
+///
+/// The fields travel together through dispatch and reporting, so they are
+/// grouped rather than threaded through every helper as separate parameters.
+struct Forwarding<'a> {
+    /// The arguments to hand to Dylint.
+    args: &'a [OsString],
+    /// Where the child's own diagnostics are written.
+    stderr: &'a mut dyn Write,
+    /// The route this machine supports.
+    source: ForwardSource,
+    /// The resolved library path, if any.
+    library_path: Option<&'a OsStr>,
+    /// When the command started, so resolution and dispatch share one clock.
+    started: Instant,
+}
+
+/// Run the forwarded invocation and record how it ended.
+///
+/// The elapsed time covers resolution and dispatch together, because a user
+/// waiting on `whitaker` experiences both as one command.
+fn dispatch_forward(forwarding: Forwarding<'_>) -> Result<i32, CliError> {
+    let Forwarding {
+        args,
+        stderr,
+        source,
+        library_path,
+        started,
+    } = forwarding;
+    let result = match source {
+        ForwardSource::Bootstrap => Ok(run_bootstrap_command_with_library_path(
+            args,
+            library_path,
+            stderr,
+        )),
+        ForwardSource::Direct => forward_without_bootstrap(args, library_path),
+    };
+    let elapsed = started.elapsed();
+    result.map_or_else(
+        |error| Err(record_dispatch_failure(source, error, elapsed)),
+        |code| Ok(record_completion(source, code, elapsed)),
+    )
+}
+
+/// Record a finished child and return the code this process should exit with.
+fn record_completion(source: ForwardSource, code: i32, elapsed: Duration) -> i32 {
+    let outcome = ForwardOutcome::classify_exit(code);
+    telemetry::record_forward(source, outcome, elapsed);
+    tracing::debug!(
+        operation = "forward",
+        source = source.label(),
+        outcome = outcome.label(),
+        exit_code = code,
+        elapsed_seconds = elapsed.as_secs_f64(),
+        "forwarded invocation finished"
+    );
+    code
+}
+
+/// Record a child that could not be started and hand the error back.
+fn record_dispatch_failure(source: ForwardSource, error: CliError, elapsed: Duration) -> CliError {
+    telemetry::record_forward(source, ForwardOutcome::DispatchFailed, elapsed);
+    tracing::error!(
+        operation = "forward",
+        source = source.label(),
+        outcome = ForwardOutcome::DispatchFailed.label(),
+        error_category = telemetry::error_category(&error),
+        elapsed_seconds = elapsed.as_secs_f64(),
+        "forwarded invocation could not be dispatched"
+    );
+    error
+}
+
+/// Record a library-path failure and hand the error back to the caller.
+///
+/// Returning the error keeps the reporting at the boundary that owns the
+/// outcome, so the command layer still decides the process exit code.
+fn report_resolution_failure(source: ForwardSource, started: Instant, error: CliError) -> CliError {
+    let elapsed = started.elapsed();
+    telemetry::record_forward(source, ForwardOutcome::LibraryPathFailed, elapsed);
+    tracing::error!(
+        operation = "forward",
+        source = source.label(),
+        outcome = ForwardOutcome::LibraryPathFailed.label(),
+        error_category = telemetry::error_category(&error),
+        elapsed_seconds = elapsed.as_secs_f64(),
+        "the Dylint library path could not be resolved"
+    );
+    error
+}
 
 /// Run `cargo dylint` directly, for a machine with no installed bootstrap.
 fn forward_without_bootstrap(
@@ -163,92 +277,6 @@ fn signal_exit_code(status: ExitStatus) -> Option<i32> {
 
 #[cfg(not(unix))]
 const fn signal_exit_code(_status: ExitStatus) -> Option<i32> { None }
-
-/// Resolves the library path used when forwarding a command to cargo-dylint.
-///
-/// # Errors
-///
-/// Returns [`CliError::InstallationRecord`] when an installation record exists
-/// but cannot be locked, read, or parsed. A missing record is not an error: it
-/// simply means no toolchain has been installed yet.
-fn active_library_path(dirs: Option<&dyn BaseDirs>) -> Result<Option<OsString>, CliError> {
-    let explicit_path = std::env::var_os("DYLINT_LIBRARY_PATH");
-    if explicit_path.as_ref().is_some_and(|path| !path.is_empty()) {
-        return Ok(explicit_path);
-    }
-    let recorded_paths = recorded_library_paths(dirs)?;
-    let active_toolchain = detect_active_toolchain();
-    let build_path = active_toolchain.as_ref().and_then(|toolchain| {
-        default_target_dir().map(|target_dir| target_dir.join(toolchain).join("release"))
-    });
-    let prebuilt_path = active_toolchain
-        .as_deref()
-        .and_then(|toolchain| prebuilt_library_path(dirs, toolchain));
-    Ok(active_library_path_for(
-        explicit_path,
-        recorded_paths,
-        build_path,
-        prebuilt_path,
-    ))
-}
-
-/// Reads the per-toolchain staging directories recorded by earlier installs.
-///
-/// An unavailable platform data directory yields no recorded paths, matching
-/// the "nothing installed" case. A record that exists but fails to load is
-/// propagated so the caller can report it instead of silently forwarding with
-/// an empty library path.
-///
-/// The directory provider is a parameter so callers pass one resolved view,
-/// and so the record's error paths can be exercised with a directory a test
-/// owns. An environment-driven redirect is not portable: Windows resolves the
-/// data directory from the known-folder API and ignores `XDG_DATA_HOME`.
-fn recorded_library_paths(dirs: Option<&dyn BaseDirs>) -> Result<Vec<Utf8PathBuf>, CliError> {
-    dirs.map_or_else(
-        || Ok(Vec::new()),
-        |provider| {
-            installed_paths(provider).map_err(|source| CliError::InstallationRecord { source })
-        },
-    )
-}
-
-/// Includes recorded and default directories so Dylint can select by toolchain.
-fn active_library_path_for(
-    explicit_path: Option<OsString>,
-    recorded_paths: Vec<Utf8PathBuf>,
-    build_path: Option<Utf8PathBuf>,
-    prebuilt_path: Option<Utf8PathBuf>,
-) -> Option<OsString> {
-    if let Some(path) = explicit_path.filter(|path| !path.is_empty()) {
-        return Some(path);
-    }
-    let mut candidates = recorded_paths;
-    for candidate in [build_path, prebuilt_path].into_iter().flatten() {
-        if !candidates.contains(&candidate) {
-            candidates.push(candidate);
-        }
-    }
-    existing_recorded_directories(candidates)
-}
-
-/// Joins every existing recorded path so Dylint can select by toolchain.
-fn existing_recorded_directories(paths: Vec<Utf8PathBuf>) -> Option<OsString> {
-    let existing: Vec<_> = paths
-        .into_iter()
-        .filter(|path| path.is_absolute() && path.is_dir())
-        .map(Utf8PathBuf::into_std_path_buf)
-        .filter(|path| std::env::join_paths([path]).is_ok())
-        .collect();
-    (!existing.is_empty())
-        .then(|| std::env::join_paths(existing).ok())
-        .flatten()
-}
-
-/// Resolves the prebuilt library directory for the active host and toolchain.
-fn prebuilt_library_path(dirs: Option<&dyn BaseDirs>, toolchain: &str) -> Option<Utf8PathBuf> {
-    let target = host_target()?;
-    prebuilt_library_dir(dirs?, toolchain, target.as_str()).ok()
-}
 
 #[cfg(test)]
 mod tests;
