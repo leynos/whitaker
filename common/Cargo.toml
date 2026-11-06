@@ -41,6 +41,7 @@ logtest = "2.0.0"
 
 
 [lints.rust]
+missing_docs = "deny"
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }
 
 [lints.clippy]
