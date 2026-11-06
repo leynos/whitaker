@@ -67,6 +67,7 @@ _FIXED_ATOMS: typ.Final[tuple[_Node, ...]] = (
     _atom("test(absent)", expected=False),
     _atom(r"test(/^ui::call\(site\)/)", expected=None),
     _atom("test(/^absent/)", expected=None),
+    _atom("test(//)", expected=None),
     _atom(r"test(#ui::*(site\)*)", expected=None),
     _atom("test(#absent*)", expected=None),
     _atom(r"test(#ui::call(site\)_contract)", expected=True),

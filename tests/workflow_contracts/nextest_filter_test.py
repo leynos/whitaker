@@ -124,6 +124,9 @@ def test_predicates_without_data_are_unknown_rather_than_false(selector: str) ->
         "test(#*absent*)",
         "binary([u]i)",
         "package(/^whitaker/)",
+        "test(//)",
+        "not test(//)",
+        "package(//)",
         "test(/absent/)",
         "test(/a(b)c/)",
         r"test(/a\)b/)",
@@ -156,6 +159,7 @@ def test_matchers_python_cannot_evaluate_are_unknown_rather_than_false(
         pytest.param("test(a) + test(b)", id="plus-is-outside-the-grammar"),
         pytest.param(r"test(a\()", id="opening-parenthesis-is-not-an-escape"),
         pytest.param("test(/a)", id="regex-must-close"),
+        pytest.param("test(/)", id="lone-slash-is-an-unterminated-regex"),
     ],
 )
 def test_malformed_filters_raise_rather_than_read_as_no_match(expression: str) -> None:

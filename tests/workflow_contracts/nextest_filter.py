@@ -105,7 +105,7 @@ def _selector_matches(selector: str, value: str, default_matcher: str) -> bool |
     ``public`` only under ``re``. No repository filter uses one, so nothing is lost
     by not guessing.
     """
-    if re.fullmatch(r"/.+/", selector, re.DOTALL) is not None:
+    if re.fullmatch(r"/.*/", selector, re.DOTALL) is not None:
         return None
     has_prefix = selector[:1] in {"=", "~", "#"}
     matcher = selector[0] if has_prefix else default_matcher
