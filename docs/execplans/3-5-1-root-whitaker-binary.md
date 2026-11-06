@@ -156,6 +156,61 @@ is +7,400 net lines, 400 above D-12's ceiling, and exceeds D-11's accepted 80
 files. Resolve this scope with the owner before merge. Crates.io reservation
 remains unauthorized; the plan stays `IN PROGRESS`.
 
+**Rebase and review repair, 2026-11-05.** The branch was replayed onto
+`origin/main` (`15e65ba8`) with `zdiff3`, keeping both sides where each
+contributed something and taking the target's lock file before rebuilding it.
+Review of the replayed tree produced the repairs below.
+
+- The root package's `[lints] workspace = true` was reverted. Moving the
+  strict Clippy restriction set into `[workspace.lints.clippy]` was measured
+  and fails: the four packages that inherit workspace lints produce 134 denials
+  (`shadow_reuse`, `cognitive_complexity`, `needless_pass_by_value`,
+  `indexing_slicing`, `const fn`, float comparisons). The root crate instead
+  keeps its own `[lints.clippy]` and mirrors the workspace `rust` and `rustdoc`
+  tables, because Cargo forbids `workspace = true` beside package lint tables.
+  This closes the root crate's real gap — it had been skipping `missing_docs`,
+  `unknown_lints`, `renamed_and_removed_lints`, and every rustdoc denial.
+- The root install now passes `WrapperScripts::None`. The generated
+  `whitaker-ls` calls `whitaker-installer run`, so writing it from a root
+  install would leave a script that fails unless the installer is separately
+  installed; `whitaker ls` provides the listing. `whitaker-installer` still
+  passes `Both`, and the intermediate `WhitakerLsOnly` variant was removed now
+  that nothing constructs it.
+- `src/adapters/mod.rs` was split into `src/adapters/tests.rs` to stay under
+  the 400-line limit after the rebase.
+- Adapter directory lookups now take a `BaseDirs` provider instead of
+  constructing `SystemBaseDirs` internally. `LintRunner::forward` resolves it
+  once and threads one `Option<&dyn BaseDirs>` through every lookup, so the
+  record tests supply a `TempBaseDirs` fixture rather than redirecting
+  `XDG_DATA_HOME`. Windows resolves the data directory from the known-folder
+  API and ignores that variable, which is why the previous head failed three
+  adapter tests on `windows-compat`.
+- `tests/e2e_exit_codes.rs` was split into three processes, the `fake_cargo_dir`
+  fixture now drops its directory handle instead of claiming to keep it, and
+  the recorded-path behaviour fixture canonicalizes its staging directory so
+  the macOS `/var` → `/private/var` resolution no longer fails an unrelated
+  assertion.
+- The nextest workflow contract test now asserts the two-pass split: both
+  `trybuild-contracts` passes carry the contract filter and the `ci` profile,
+  and only the feature-free `whitaker_lint_core` pass tolerates an empty match.
+
+Documentation was reconciled with those decisions in ADR-010, the CLI design
+document, `docs/publishing.md`, and `docs/users-guide.md`.
+
+Gate evidence for this repair commit, run sequentially against the worktree
+that becomes the commit:
+
+| Gate                           | Result                       | Log                                                                    |
+| ------------------------------ | ---------------------------- | ---------------------------------------------------------------------- |
+| `make check-fmt`               | pass                         | `/tmp/check-fmt-whitaker-3-5-1-root-whitaker-binary.out`               |
+| `make lint`                    | pass                         | `/tmp/lint-whitaker-3-5-1-root-whitaker-binary.out`                    |
+| `make typecheck`               | pass                         | `/tmp/typecheck-whitaker-3-5-1-root-whitaker-binary.out`               |
+| `make test`                    | pass, 2203 passed, 6 skipped | `/tmp/test-whitaker-3-5-1-root-whitaker-binary.out`                    |
+| `NEXTEST_PROFILE=ci make test` | pass, 2221 passed, 6 skipped | `/tmp/test-ci3-whitaker-3-5-1-root-whitaker-binary.out`                |
+| `make markdownlint`            | pass, 114 files              | `/tmp/markdownlint-whitaker-3-5-1-root-whitaker-binary.out`            |
+| `make nixie`                   | pass                         | `/tmp/nixie-whitaker-3-5-1-root-whitaker-binary.out`                   |
+| `make test-workflow-contracts` | pass, 793 passed             | `/tmp/test-workflow-contracts-whitaker-3-5-1-root-whitaker-binary.out` |
+
 ## Constraints
 
 Hard invariants. Violation requires escalation, not a workaround.
@@ -716,9 +771,15 @@ Every one must **fail**, for the expected reason. Record each red transcript.
 
 2. **Wrapper generation becomes a parameter.** Give
    `generate_and_report_wrapper` an argument naming which scripts to write.
-   `whitaker-installer` passes `{whitaker, whitaker-ls}`, preserving Constraint
-   1 exactly. `whitaker install` passes `{whitaker-ls}` — it must not overwrite
-   the binary the user just invoked.
+   `whitaker-installer` passes `WrapperScripts::Both`, preserving Constraint 1
+   exactly. `whitaker install` passes `WrapperScripts::None`: it must not
+   overwrite the binary the user just invoked, and it cannot write the lister
+   either, because the generated `whitaker-ls` shells out to
+   `whitaker-installer run`, which a root install has no reason to assume is on
+   `PATH`. The root CLI's own `whitaker ls` covers the listing instead. (The
+   plan originally proposed `{whitaker-ls}` here; review showed the lister's
+   dependency on a separately installed installer, so the policy became "write
+   nothing".)
 
 3. **Build the CLI in the root package.** `src/cli/` holds the clap types;
    `src/cli/dispatch.rs` the classifier; `src/cli/exit.rs` the exit policy;
@@ -1784,10 +1845,10 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
   `Default` values and `install_args` accessor. The source-policy tests keep
   the target's `super::super::` paths and import only the type they construct.
   `wrapper.rs` keeps the target's path-free wrapper plus the branch's
-  `WrapperScripts` selection, so the installer writes `whitaker-ls` alone when
-  the root binary owns that name. `dry_run.rs` restores the target's
-  bootstrap-plan reporting call, without which `report_bootstrap_plan` is dead
-  code and the dry-run snapshot loses its Clippy-snapshot lines.
+  `WrapperScripts` selection; the legacy installer writes both scripts, and the
+  root CLI writes none. `dry_run.rs` restores the target's bootstrap-plan
+  reporting call, without which `report_bootstrap_plan` is dead code and the
+  dry-run snapshot loses its Clippy-snapshot lines.
 
   The rest follows the target's renames and signatures: `BaseDirs` accessors are
   `home`, `executables` and `whitaker_data`; `load_cargo_toml` and
@@ -2008,8 +2069,8 @@ verification build resolvable.
 
 **Root-install coverage.** The root CLI's install route is exercised through
 the public binary by the dry-run behaviour scenario, which proves argument
-routing and the `whitaker-ls`-only wrapper policy without building the
-workspace. A successful full install is already covered by the installer's own
+routing and the root CLI's no-wrapper policy without building the workspace. A
+successful full install is already covered by the installer's own
 `behaviour_cli` suite, which drives the same `run_install` flow; repeating a
 full build from the root crate would duplicate that coverage at a large cost
 and would not exercise a different code path.

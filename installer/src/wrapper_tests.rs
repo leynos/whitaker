@@ -349,7 +349,7 @@ fn windows_wrapper_branches_share_one_forwarding_line() {
 
 /// The root install must not overwrite the `whitaker` executable it runs from.
 #[test]
-fn lister_only_generation_preserves_an_existing_whitaker_binary() {
+fn root_policy_generation_preserves_an_existing_whitaker_binary() {
     let temp = TempDir::new().expect("temporary bin parent should be created");
     let bin_dir = temp.path().join("bin");
     let whitaker_path = bin_dir.join(if cfg!(windows) {
@@ -366,8 +366,8 @@ fn lister_only_generation_preserves_an_existing_whitaker_binary() {
     dirs.expect_executables()
         .return_once(move || Some(expected_bin_dir));
 
-    let result = generate_wrapper_scripts_with(&dirs, WrapperScripts::WhitakerLsOnly)
-        .expect("lister wrapper should be generated");
+    let result = generate_wrapper_scripts_with(&dirs, WrapperScripts::None)
+        .expect("the root policy needs no script to succeed");
 
     assert_eq!(
         std::fs::read(&whitaker_path).expect("existing executable should remain readable"),
@@ -375,7 +375,28 @@ fn lister_only_generation_preserves_an_existing_whitaker_binary() {
         "root install must not overwrite its own executable",
     );
     assert!(
-        result.whitaker_ls_path.exists(),
-        "lister wrapper should be created"
+        !result.whitaker_ls_path.exists(),
+        "the lister script would need a separately installed whitaker-installer",
+    );
+}
+
+/// The root policy writes nothing into an empty bin directory either.
+#[test]
+fn root_policy_generation_writes_no_scripts() {
+    let temp = TempDir::new().expect("temporary bin parent should be created");
+    let bin_dir = temp.path().join("bin");
+    std::fs::create_dir_all(&bin_dir).expect("bin directory should be created");
+
+    let mut dirs = crate::dirs::MockBaseDirs::new();
+    let expected_bin_dir = bin_dir.clone();
+    dirs.expect_executables()
+        .return_once(move || Some(expected_bin_dir));
+
+    let result = generate_wrapper_scripts_with(&dirs, WrapperScripts::None)
+        .expect("the root policy needs no script to succeed");
+
+    assert!(
+        !result.whitaker_path.exists() && !result.whitaker_ls_path.exists(),
+        "the root policy must leave the bin directory empty",
     );
 }

@@ -68,8 +68,11 @@ second public product name.
 Move compiler-private code into an internal crate, expose installer
 orchestration from the installer library, and add the root binary behind
 application ports. Keep the legacy installer unchanged; its root-CLI entry
-point selects a policy that creates only `whitaker-ls`. Route existing Dylint
-arguments to `cargo dylint` until `whitaker check` replaces that workflow.
+point selects a policy that writes no compatibility scripts. (An earlier draft
+of this option wrote `whitaker-ls` alone; it was dropped because that generated
+script needs a separately installed `whitaker-installer`.) Route existing
+Dylint arguments to `cargo dylint` until `whitaker check` replaces that
+workflow.
 
 | Topic                                  | Option A       | Option B | Option C                |
 | -------------------------------------- | -------------- | -------- | ----------------------- |
@@ -92,10 +95,13 @@ performed.
 
 The installer orchestration boundary is `whitaker_installer::orchestration`.
 The root CLI calls `run_install_for_whitaker`, which uses the same installation
-flow but does not write a `whitaker` wrapper. Inventory discovery is shared
-through `whitaker_installer::list::collect_installed`; the root CLI and legacy
-installer retain their own output and toolchain-display decisions. The
-installer's existing public helpers remain source-compatible.
+flow but writes no wrapper scripts at all. The generated `whitaker-ls` script
+was rejected as well as the generated `whitaker` script: the lister shells out
+to `whitaker-installer run`, which a root install has no reason to assume is on
+`PATH`. The root CLI's own `whitaker ls` covers the listing instead. Inventory
+discovery is shared through `whitaker_installer::list::collect_installed`; the
+root CLI and legacy installer retain their own output and toolchain-display
+decisions. The installer's existing public helpers remain source-compatible.
 
 For any invocation whose first non-global token is not `install`, `ls`, root
 help, or root version, the root binary forwards all arguments after its own
@@ -105,15 +111,17 @@ arguments after it. The child exit status is preserved. This requirement is
 than an upstream specification. It is deferred for removal until roadmap item
 3.9.3, after `whitaker check` supersedes it.
 
-Forwarding runs through the installed bootstrap rather than starting
-`cargo dylint` directly. A direct child would inherit none of the bootstrap's
-environment: it would look for Clippy in Dylint's upstream location instead of
-the verified snapshot, ignore the managed driver slot, and race a concurrent
-first run on the same driver build. The bootstrap supplies the snapshot, the
-driver slot, and the cold-build lock, and the root CLI passes its resolved
-library path through `RunOptions` so the multi-toolchain list below still
-applies. The bootstrap's own diagnostics reach the root binary's stderr, and
-its exit status is the child's.
+When an installed bootstrap exists, forwarding runs through it rather than
+starting `cargo dylint` directly. A direct child would inherit none of the
+bootstrap's environment: it would look for Clippy in Dylint's upstream location
+instead of the verified snapshot, ignore the managed driver slot, and race a
+concurrent first run on the same driver build. The bootstrap supplies the
+snapshot, the driver slot, and the cold-build lock, and the root CLI passes its
+resolved library path through `RunOptions` so the multi-toolchain list below
+still applies. The bootstrap's own diagnostics reach the root binary's stderr,
+and its exit status is the child's. When no installed bootstrap exists,
+forwarding starts `cargo dylint` directly, which keeps a source checkout or a
+manually configured `DYLINT_LIBRARY_PATH` working.
 
 The root package depends on the installer library and root-only CLI
 dependencies. The compiler-private driver remains in the non-publishable

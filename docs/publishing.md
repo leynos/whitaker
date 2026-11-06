@@ -34,14 +34,21 @@ Run the project publish gate to ensure production-like builds and packaging
 succeed:
 
 ```sh
-make publish-check PUBLISH_PACKAGES="whitaker-common whitaker-installer whitaker"
+make publish-check PUBLISH_PACKAGES="whitaker-common whitaker-installer"
 ```
 
 This target builds the workspace, builds each lint library, and packages the
 crates named in `PUBLISH_PACKAGES` for inspection, which here means
-`whitaker-common`, `whitaker-installer`, and `whitaker`. The target runs under
-`set -eu`, so any failed step aborts the gate immediately rather than
-continuing with a partially built or stale toolchain.
+`whitaker-common` and `whitaker-installer`. The target runs under `set -eu`, so
+any failed step aborts the gate immediately rather than continuing with a
+partially built or stale toolchain.
+
+The root `whitaker` package is deliberately absent. `publish-check` runs
+`cargo package` without `--no-verify`, so Cargo builds each package against its
+registry dependencies; `whitaker` depends on the `whitaker-installer` version
+being released, and that version is not in the registry until this release
+publishes it. Once `whitaker-installer` is available, validate the root package
+with `make publish-check PUBLISH_PACKAGES=whitaker` as a post-publication step.
 
 It runs no tests. The coverage job is the single execution of the suite per
 pull request, so re-running it here would bill twice for one result; see "One
@@ -125,12 +132,16 @@ Perform a dry run to see the exact artefacts that would be uploaded:
 ```sh
 cargo publish -p whitaker-common --dry-run
 cargo publish -p whitaker-installer --dry-run
-cargo publish -p whitaker --dry-run
 ```
 
 Review the package contents in the output. If files need to be excluded or
 included, adjust `common/Cargo.toml` for `whitaker-common`, or the appropriate
 package manifest for the other crates, then repeat the relevant dry run.
+
+Dry-run `whitaker` separately, with `cargo publish -p whitaker --dry-run`, after
+`whitaker-installer` has been published. Before that point Cargo resolves the
+installer from the registry, where the APIs the root CLI uses do not yet exist,
+so the dry run cannot succeed.
 
 Publishing the root `whitaker` package reserves that crates.io name. Perform
 that first publication only after the release gates and package contents have

@@ -20,6 +20,53 @@ fn run_whitaker(arguments: &[&str]) -> std::io::Result<Output> {
 #[cfg(unix)]
 fn isolated_data_home() -> std::io::Result<TempDir> { TempDir::new() }
 
+/// Create a directory whose `cargo` is an executable shell script.
+///
+/// # Errors
+///
+/// Returns an error when the temporary directory cannot be created, opened,
+/// or written to, or when its path is not valid UTF-8.
+#[cfg(unix)]
+fn fake_cargo_dir(script: &str) -> std::io::Result<TempDir> {
+    use cap_std::{
+        ambient_authority,
+        fs_utf8::{Dir, Permissions, PermissionsExt},
+    };
+
+    let directory = TempDir::new()?;
+    let path = camino::Utf8Path::from_path(directory.path()).ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "temporary path should be UTF-8",
+        )
+    })?;
+    let handle = Dir::open_ambient_dir(path, ambient_authority())?;
+    handle.write("cargo", script)?;
+    handle.set_permissions("cargo", Permissions::from_mode(0o755))?;
+    Ok(directory)
+}
+
+/// Run the root binary against the fake `cargo` and an isolated data root.
+///
+/// `PATH` is replaced rather than extended so an ambient `cargo` can never
+/// answer before the stub does.
+///
+/// # Errors
+///
+/// Returns an error when the forwarding process cannot be started.
+#[cfg(unix)]
+fn run_with_fake_cargo(
+    bin_dir: &TempDir,
+    data_home: &TempDir,
+    arguments: &[&str],
+) -> std::io::Result<Output> {
+    Command::new(env!("CARGO_BIN_EXE_whitaker"))
+        .args(arguments)
+        .env("PATH", bin_dir.path())
+        .env("XDG_DATA_HOME", data_home.path())
+        .output()
+}
+
 #[test]
 fn root_help_exits_successfully() {
     let output = run_whitaker(&["--help"]).expect("whitaker help process should start");
@@ -136,32 +183,16 @@ fn fake_cargo_dylint() {
 #[cfg(unix)]
 #[test]
 fn legacy_dylint_invocations_forward_arguments_and_exit_status() {
-    use cap_std::{
-        ambient_authority,
-        fs_utf8::{Dir, Permissions, PermissionsExt},
-    };
-    use tempfile::TempDir;
-
-    let bin_dir = TempDir::new().expect("fake cargo directory should be created");
-    let bin_dir_handle = Dir::open_ambient_dir(
-        camino::Utf8Path::from_path(bin_dir.path()).expect("temporary path should be UTF-8"),
-        ambient_authority(),
-    )
-    .expect("fake cargo directory should be opened");
-    bin_dir_handle
-        .write("cargo", "#!/bin/sh\nprintf '%s\\n' \"$@\"\nexit 23\n")
-        .expect("fake cargo command should be written");
-    bin_dir_handle
-        .set_permissions("cargo", Permissions::from_mode(0o755))
-        .expect("fake cargo should be executable");
-
+    let bin_dir = fake_cargo_dir("#!/bin/sh\nprintf '%s\\n' \"$@\"\nexit 23\n")
+        .expect("fake cargo directory should be created");
     let data_home = isolated_data_home().expect("temporary data directory should be created");
-    let output = Command::new(env!("CARGO_BIN_EXE_whitaker"))
-        .args(["--all", "--", "-p", "whitaker-common", "--all-targets"])
-        .env("PATH", bin_dir.path())
-        .env("XDG_DATA_HOME", data_home.path())
-        .output()
-        .expect("whitaker forwarding process should start");
+
+    let output = run_with_fake_cargo(
+        &bin_dir,
+        &data_home,
+        &["--all", "--", "-p", "whitaker-common", "--all-targets"],
+    )
+    .expect("whitaker forwarding process should start");
     assert_eq!(
         output.status.code(),
         Some(23),
@@ -176,12 +207,16 @@ fn legacy_dylint_invocations_forward_arguments_and_exit_status() {
         stdout.contains("whitaker-common"),
         "cargo arguments should reach the fake process"
     );
+}
 
-    let version_output = Command::new(env!("CARGO_BIN_EXE_whitaker"))
-        .args(["--all", "--version"])
-        .env("PATH", bin_dir.path())
-        .env("XDG_DATA_HOME", data_home.path())
-        .output()
+#[cfg(unix)]
+#[test]
+fn dylint_version_option_is_forwarded_after_all() {
+    let bin_dir = fake_cargo_dir("#!/bin/sh\nprintf '%s\\n' \"$@\"\nexit 23\n")
+        .expect("fake cargo directory should be created");
+    let data_home = isolated_data_home().expect("temporary data directory should be created");
+
+    let version_output = run_with_fake_cargo(&bin_dir, &data_home, &["--all", "--version"])
         .expect("whitaker forwarding process should start");
     assert_eq!(
         version_output.status.code(),
@@ -193,15 +228,16 @@ fn legacy_dylint_invocations_forward_arguments_and_exit_status() {
         version_stdout.starts_with("dylint\n--all\n--version\n"),
         "cargo dylint should receive the later version option: {version_stdout:?}",
     );
+}
 
-    bin_dir_handle
-        .write("cargo", "#!/bin/sh\nkill -INT $$\n")
-        .expect("interrupting cargo command should be written");
-    let interrupted = Command::new(env!("CARGO_BIN_EXE_whitaker"))
-        .args(["--all"])
-        .env("PATH", bin_dir.path())
-        .env("XDG_DATA_HOME", data_home.path())
-        .output()
+#[cfg(unix)]
+#[test]
+fn a_signal_terminated_child_status_is_preserved() {
+    let bin_dir = fake_cargo_dir("#!/bin/sh\nkill -INT $$\n")
+        .expect("fake cargo directory should be created");
+    let data_home = isolated_data_home().expect("temporary data directory should be created");
+
+    let interrupted = run_with_fake_cargo(&bin_dir, &data_home, &["--all"])
         .expect("whitaker forwarding process should start");
     assert_eq!(
         interrupted.status.code(),
@@ -215,30 +251,11 @@ fn legacy_dylint_invocations_forward_arguments_and_exit_status() {
 #[cfg(unix)]
 #[test]
 fn a_bare_invocation_forwards_to_dylint_without_arguments() {
-    use cap_std::{
-        ambient_authority,
-        fs_utf8::{Dir, Permissions, PermissionsExt},
-    };
-    use tempfile::TempDir;
-
-    let bin_dir = TempDir::new().expect("fake cargo directory should be created");
-    let bin_dir_handle = Dir::open_ambient_dir(
-        camino::Utf8Path::from_path(bin_dir.path()).expect("temporary path should be UTF-8"),
-        ambient_authority(),
-    )
-    .expect("fake cargo directory should be opened");
-    bin_dir_handle
-        .write("cargo", "#!/bin/sh\nprintf '%s\\n' \"$@\"\nexit 23\n")
-        .expect("fake cargo command should be written");
-    bin_dir_handle
-        .set_permissions("cargo", Permissions::from_mode(0o755))
-        .expect("fake cargo should be executable");
-
+    let bin_dir = fake_cargo_dir("#!/bin/sh\nprintf '%s\\n' \"$@\"\nexit 23\n")
+        .expect("fake cargo directory should be created");
     let data_home = isolated_data_home().expect("temporary data directory should be created");
-    let bare_output = Command::new(env!("CARGO_BIN_EXE_whitaker"))
-        .env("PATH", bin_dir.path())
-        .env("XDG_DATA_HOME", data_home.path())
-        .output()
+
+    let bare_output = run_with_fake_cargo(&bin_dir, &data_home, &[])
         .expect("whitaker forwarding process should start");
     assert_eq!(
         bare_output.status.code(),

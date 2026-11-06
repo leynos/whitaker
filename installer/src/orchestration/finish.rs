@@ -24,7 +24,7 @@ use crate::{
     install_metrics::InstallMode,
     installation_record::record_installation,
     output::write_stderr_line,
-    wrapper::{WrapperScripts, generate_wrapper_scripts_with, path_instructions},
+    wrapper::{WrapperResult, WrapperScripts, generate_wrapper_scripts_with, path_instructions},
 };
 
 /// Aggregates final-step inputs required after a successful install run.
@@ -71,7 +71,7 @@ fn record_installed_path(context: &FinishInstallContext<'_>, stderr: &mut dyn Wr
         let error = InstallerError::InstallationRecord {
             message: record_error.to_string(),
         };
-        if context.wrapper_scripts == WrapperScripts::WhitakerLsOnly {
+        if context.wrapper_scripts.is_root_cli() {
             return Err(error);
         }
         write_stderr_line(stderr, format!("Warning: {error}"));
@@ -101,6 +101,10 @@ fn generate_and_report_wrapper(
 ) -> Result<()> {
     let result = generate_wrapper_scripts_with(dirs, scripts)?;
     write_stderr_line(stderr, "");
+    if scripts.is_root_cli() {
+        report_installed_binary(&result, stderr)?;
+        return Ok(());
+    }
     write_stderr_line(stderr, "Wrapper scripts created:");
     if scripts == WrapperScripts::Both {
         write_stderr_line(stderr, format!("  - {}", result.whitaker_path.display()));
@@ -113,13 +117,7 @@ fn generate_and_report_wrapper(
         write_stderr_line(stderr, "  whitaker --all");
         write_stderr_line(stderr, "  whitaker-ls");
     } else {
-        let bin_dir =
-            result
-                .whitaker_path
-                .parent()
-                .ok_or_else(|| InstallerError::StagingFailed {
-                    reason: "wrapper script path has no parent directory".to_owned(),
-                })?;
+        let bin_dir = wrapper_bin_dir(&result)?;
         write_stderr_line(stderr, path_instructions(bin_dir));
         write_stderr_line(stderr, "");
         write_stderr_line(stderr, "Then run:");
@@ -127,4 +125,31 @@ fn generate_and_report_wrapper(
         write_stderr_line(stderr, "  whitaker-ls");
     }
     Ok(())
+}
+
+/// Reports how to use the installed root binary, which needs no script.
+///
+/// The root CLI supplies `ls` itself, so the legacy `whitaker-ls` hint would
+/// name a script that the root install deliberately does not create.
+fn report_installed_binary(result: &WrapperResult, stderr: &mut dyn Write) -> Result<()> {
+    if result.in_path {
+        write_stderr_line(stderr, "You can now run:");
+    } else {
+        write_stderr_line(stderr, path_instructions(wrapper_bin_dir(result)?));
+        write_stderr_line(stderr, "");
+        write_stderr_line(stderr, "Then run:");
+    }
+    write_stderr_line(stderr, "  whitaker ls");
+    write_stderr_line(stderr, "  whitaker --all");
+    Ok(())
+}
+
+/// Resolves the directory that holds the conventional wrapper paths.
+fn wrapper_bin_dir(result: &WrapperResult) -> Result<&std::path::Path> {
+    result
+        .whitaker_path
+        .parent()
+        .ok_or_else(|| InstallerError::StagingFailed {
+            reason: "wrapper script path has no parent directory".to_owned(),
+        })
 }

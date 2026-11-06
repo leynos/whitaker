@@ -154,14 +154,26 @@ def test_make_test_runs_every_test_without_a_filter(tmp_path: Path) -> None:
 
 
 def test_contracts_target_runs_all_seven_under_the_ci_profile(tmp_path: Path) -> None:
-    """``make trybuild-contracts`` filters to the seven contract tests, uninstrumented."""
+    """``make trybuild-contracts`` filters both passes to the seven contract tests.
+
+    The target runs the workspace pass and then the feature-free
+    ``whitaker_lint_core`` pass. Both must carry the contract filter, otherwise
+    the core pass would run that crate's whole suite; only the core pass needs
+    ``--no-tests=pass``, because no contract test lives there today.
+    """
     expected = _makefile_variable("TRYBUILD_CONTRACT_FILTER")
     lines = [a for a in _cargo_arguments(tmp_path, "trybuild-contracts") if "nextest" in a]
     filtered = [a for a in lines if " -E " in a]
-    assert len(filtered) == 1, f"expected one filtered contract run; got: {filtered}"
-    line = filtered[0]
-    assert f" -E {expected}" in line, f"expected the seven contract tests; got: {line}"
-    assert "--profile ci" in line, f"expected the ci profile; got: {line}"
+    assert len(filtered) == 2, (
+        f"expected the workspace and core passes to share the filter; got: {filtered}"
+    )
+    for line in filtered:
+        assert f" -E {expected}" in line, f"expected the seven contract tests; got: {line}"
+        assert "--profile ci" in line, f"expected the ci profile; got: {line}"
+    tolerated_emptiness = [a for a in filtered if "--no-tests=pass" in a]
+    assert len(tolerated_emptiness) == 1, (
+        f"only the core pass may accept an empty filter match; got: {filtered}"
+    )
     assert all("llvm-cov" not in a for a in lines), (
         f"expected no instrumentation; got: {lines}"
     )

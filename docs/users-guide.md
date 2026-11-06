@@ -157,8 +157,9 @@ whitaker-bootstrap/
     <toolchain>/dylint-driver            built on the first run
 ```
 
-`whitaker` and `whitaker-ls` contain no paths. They find `whitaker-installer`
-beside themselves, or else on `PATH`, and call `whitaker-installer run`, which:
+The installer's generated `whitaker` and `whitaker-ls` wrapper scripts contain
+no paths. They find `whitaker-installer` beside themselves, or else on `PATH`,
+and call `whitaker-installer run`, which:
 
 - checks that the installation is complete, that the snapshot is still the
   pinned one (with `main` as its only branch), and that
@@ -232,7 +233,8 @@ The root `whitaker` command provides `install` and transitional `ls` commands,
 including `whitaker ls --json`; other arguments, such as `--all`, are forwarded
 to `cargo dylint`. From a checkout, install it with `cargo install --path .`.
 Crates.io packages and binstall archives are pending. When both `whitaker`
-binaries are on `PATH`, the first wins; `install` creates only `whitaker-ls`.
+binaries are on `PATH`, the first wins; `install` writes no compatibility
+scripts, so use `whitaker ls` rather than `whitaker-ls`.
 
 Forwarding runs through the installed bootstrap, so `whitaker --all` uses the
 same verified Clippy snapshot, driver directory, and serialized first build as
@@ -247,9 +249,10 @@ by Rust toolchain. This lets `whitaker --all` find libraries installed with a
 custom `--target-dir`, including when run from another project. An explicitly
 set `DYLINT_LIBRARY_PATH` continues to override the recorded paths.
 
-`-q` and `-v` control diagnostics for every command, including forwarded
-invocations. `-q` shows only errors, `-v` adds informational and debug messages
-such as the cold driver build, and the default shows warnings.
+`-q` and `-v` control tracing diagnostics for every command, including
+forwarded invocations. `-q` shows only error-level tracing events, while direct
+bootstrap notices such as the cold driver build are still written to standard
+error.
 
 ### Adding Whitaker to a project
 

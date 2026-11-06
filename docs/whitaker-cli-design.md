@@ -100,9 +100,13 @@ of the other commands is explicit:
 The root package owns the real `whitaker` executable. The existing
 `whitaker-installer` binary remains functional and keeps its current wrapper
 generation behaviour during this migration. A root `whitaker install` call uses
-the same installation flow but creates only `whitaker-ls`; it never creates a
-wrapper named `whitaker` over the executable. The generated `whitaker-ls`
-script remains available during the transition.
+the same installation flow but writes no compatibility scripts at all. It must
+not create a wrapper named `whitaker` over the executable, and it cannot create
+the lister either: the generated `whitaker-ls` script shells out to
+`whitaker-installer run`, which a root install has no reason to assume is
+present. The root CLI's own `whitaker ls` subcommand provides the same listing,
+so the installer's generated lister remains available only through the legacy
+`whitaker-installer` binary.
 
 ### Legacy Dylint forwarding
 
@@ -633,7 +637,8 @@ environment unset so Dylint can report its usual missing-library error.
 
 `--build-only` should be renamed to `--build-from-source`. The old flag may
 survive as a hidden compatibility alias for one or two releases.
-`--skip-wrapper` should be removed because wrapper generation disappears.
+`--skip-wrapper` should be removed because the root CLI generates no wrapper
+scripts; only the legacy `whitaker-installer` binary still writes them.
 
 ## Bundle manifests and `whitaker ls`
 

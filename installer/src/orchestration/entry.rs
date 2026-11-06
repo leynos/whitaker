@@ -44,8 +44,9 @@ pub fn run_bootstrap_command_with_library_path(
 /// Runs a root-CLI install without replacing its `whitaker` executable.
 ///
 /// The legacy installer continues to use [`super::run`] and creates both
-/// scripts. The root binary creates only `whitaker-ls`, preserving the
-/// executable name that the user invoked.
+/// scripts. The root binary creates none: it is itself the `whitaker`
+/// executable, and its own `ls` subcommand replaces `whitaker-ls`, whose
+/// generated script would need a separately installed `whitaker-installer`.
 ///
 /// # Examples
 ///
@@ -69,5 +70,5 @@ pub fn run_install_for_whitaker(
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> Result<()> {
-    run_install(args, stdout, stderr, WrapperScripts::WhitakerLsOnly)
+    run_install(args, stdout, stderr, WrapperScripts::None)
 }

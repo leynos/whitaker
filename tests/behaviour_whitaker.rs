@@ -11,7 +11,7 @@ use rstest_bdd_macros::{given, scenario, then, when};
 use tempfile::TempDir;
 use whitaker_installer::builder::{library_extension, library_prefix};
 
-#[cfg(all(unix, not(target_os = "macos")))]
+#[cfg(unix)]
 #[path = "behaviour_whitaker/recorded_path.rs"]
 mod recorded_path;
 

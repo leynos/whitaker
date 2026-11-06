@@ -172,9 +172,9 @@ serial-nested-cargo-builds = { max-threads = 1 }
 # The alias fixture rebuilds its lint library through nested Cargo and joins
 # this group for the same reason as its sibling below.
 #
-# The binary clause also groups the nested Cargo UI harnesses that share this
-# binary, so a crate that names its integration binary `ui` cannot opt its
-# fixtures out of serialization by choosing a different top-level test name.
+# The binary clause matches only the top-level `ui` test of a binary named
+# `ui`. Other tests in that binary need their own filter clause to join this
+# serial group.
 #
 # `example_compiles_without_diagnostics`,
 # `trybuild_fixtures_compile_without_diagnostics`, and the alias fixture are

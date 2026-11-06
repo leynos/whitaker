@@ -64,12 +64,18 @@ fn record_two_toolchains(fixture: &BootstrapFixture) -> Result<(PathBuf, PathBuf
 
 /// Create an existing staging directory, as a completed install would leave it.
 ///
+/// The install record stores canonical paths, so the fixture returns the
+/// canonical form too. On macOS the temporary directory resolves from `/var`
+/// to `/private/var`, and comparing the unresolved path would fail the
+/// forwarding assertion for a reason unrelated to the behaviour under test.
+///
 /// # Errors
 ///
-/// Returns an error when the directory cannot be created.
+/// Returns an error when the directory cannot be created or resolved.
 fn staging_directory(fixture: &BootstrapFixture, name: &str) -> Result<PathBuf, String> {
     let path = fixture.root().join(name);
     std::fs::create_dir_all(&path)
         .map_err(|error| format!("staging directory should be created: {error}"))?;
-    Ok(path)
+    path.canonicalize()
+        .map_err(|error| format!("staging directory should be resolved: {error}"))
 }
