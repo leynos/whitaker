@@ -1,4 +1,9 @@
 //! Shared fixtures and command helpers for CLI behaviour tests.
+//!
+//! The `rustc` spawns here (`rustc --version` through `rustup run`, and
+//! `rustc -vV`) only query the toolchain: they compile nothing, so they need
+//! no serial nextest group.
+// nested-cargo-allow: timed the rustc spawns only print toolchain versions
 
 use std::{
     cell::{Cell, RefCell},
