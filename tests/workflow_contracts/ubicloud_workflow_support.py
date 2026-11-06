@@ -61,6 +61,14 @@ UBICLOUD_JOBS: dict[str, str] = {
     "build-dependency-binaries": "rolling-release.yml",
 }
 
+#: The jobs in `UBICLOUD_JOBS` that run on a GitHub-hosted runner. They keep
+#: the cache rules of the jobs above, because they write the same Ubicloud
+#: lanes' cache keys, but their placement and compiler-cache backend are
+#: GitHub's: a main coverage upload blocks no one's work.
+HOSTED_RUNNER_JOBS: dict[str, str] = {
+    "coverage-upload": "coverage-main.yml",
+}
+
 #: Every job that runs this repository's own gates: the suite, the lints, the
 #: coverage run. They share a shape that a build job does not have, so the
 #: rules about that shape are keyed here rather than on every Ubicloud job.
