@@ -1739,9 +1739,9 @@ The workspace lint policy is declared in three places, and the compiler checks
 none of them against the others: the `[workspace.lints.*]` tables in the root
 `Cargo.toml`, the `[lints] workspace = true` opt-in in every member manifest,
 and the `lint` recipe that applies them through `cargo doc` and `cargo clippy`
-over `CARGO_FLAGS` with `-D warnings`. Each can drift without a diagnostic. A
-member that drops the opt-in compiles under Cargo's default lint set, and a
-narrowed recipe keeps exiting zero while checking fewer targets.
+with `-D warnings`. Each can drift without a diagnostic. A member that drops
+the opt-in compiles under Cargo's default lint set, and a narrowed recipe keeps
+exiting zero while checking fewer targets.
 
 [`tests/workflow_contracts/lint_gate_contract_test.py`](../tests/workflow_contracts/lint_gate_contract_test.py)
 pins all three, so any drift fails `make test-workflow-contracts` rather than
@@ -1751,18 +1751,19 @@ workspace table, so that crate carries its own inline `[lints.*]` tables. It
 stays a workspace member precisely so it is still built and linted, which the
 contract also pins.
 
-`make lint` runs two lanes over `CARGO_FLAGS`, which defaults to
-`--workspace --all-targets --all-features`:
+`make lint` runs two lanes:
 
 ```sh
 RUSTDOCFLAGS="$(RUSTDOC_FLAGS)" cargo doc --locked --workspace --no-deps
-cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+cargo clippy --locked $(CARGO_FLAGS) -- -D warnings
 ```
 
+`CARGO_FLAGS` defaults to `--workspace --all-targets --all-features` and
+narrows the Clippy lane only; `cargo doc` always covers `--workspace`.
 `RUSTDOC_FLAGS` defaults to `--cfg docsrs -D warnings`, so a rustdoc warning
-fails the gate as well as a Clippy one. The flags are Make variables: override
-`CARGO_FLAGS` to check a narrower set while iterating, but leave the `?=`
-defaults alone when validating a commit.
+fails the gate as well as a Clippy one. Both are Make variables: override
+`CARGO_FLAGS` to check a narrower Clippy set while iterating, but leave the
+`?=` defaults alone when validating a commit.
 
 ## Python script interpreter convention
 
@@ -2414,7 +2415,11 @@ toolchain bump must update the channel written here as part of the runbook
 
 1. Change `rust-toolchain.toml` to the target pinned nightly channel.
 2. Install or refresh the required components:
-   `rustup component add rust-src rustfmt clippy rustc-dev llvm-tools-preview`.
+
+   ```sh
+   rustup component add rust-src rustfmt clippy rustc-dev llvm-tools-preview rust-analyzer
+   ```
+
 3. Rebuild the whole workspace with the newly pinned channel before making
    feature changes. Fix `clippy_utils`, lint-crate, and `rustc_private` API
    drift in the production code rather than suppressing warnings.

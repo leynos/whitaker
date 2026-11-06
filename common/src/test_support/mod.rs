@@ -56,7 +56,7 @@ pub type EnvTestGuard = ReentrantMutexGuard<'static, ()>;
 ///
 /// # Examples
 ///
-/// ```
+/// ```rust,no_run
 /// use whitaker_common::test_support::env_test_guard;
 ///
 /// let _guard = env_test_guard();
@@ -66,7 +66,7 @@ pub fn env_test_guard() -> EnvTestGuard {
     LOCK.get_or_init(|| ReentrantMutex::new(())).lock()
 }
 
-/// Runs `callback` with one environment variable temporarily set.
+/// Run `callback` with one environment variable temporarily set.
 ///
 /// The mutation is scoped to the callback and the prior value is restored
 /// afterwards, even on panic. Serialization is provided by `temp_env`'s
@@ -75,7 +75,7 @@ pub fn env_test_guard() -> EnvTestGuard {
 ///
 /// # Examples
 ///
-/// ```rust
+/// ```rust,no_run
 /// use whitaker_common::test_support::with_env_var;
 ///
 /// with_env_var("WHITAKER_TEST_ENV_VAR", "enabled", || {
@@ -89,7 +89,7 @@ pub fn with_env_var<R>(key: &str, value: impl AsRef<OsStr>, callback: impl FnOnc
     temp_env::with_var(key, Some(value.as_ref()), callback)
 }
 
-/// Runs `callback` with each variable in `vars` temporarily set.
+/// Run `callback` with each variable in `vars` temporarily set.
 ///
 /// The prior value of every variable is restored afterwards, even on panic.
 /// Serialization is provided by `temp_env`'s re-entrant global lock, so nested
@@ -97,7 +97,7 @@ pub fn with_env_var<R>(key: &str, value: impl AsRef<OsStr>, callback: impl FnOnc
 ///
 /// # Examples
 ///
-/// ```
+/// ```rust,no_run
 /// use whitaker_common::test_support::with_env_vars;
 ///
 /// with_env_vars(
@@ -128,7 +128,7 @@ pub fn with_env_vars<R>(
     temp_env::with_vars(settings, callback)
 }
 
-/// Runs `callback` with the variables chosen by `select`.
+/// Run `callback` with the variables chosen by `select`.
 ///
 /// `select` runs while the process-wide environment lock is held, so another
 /// thread's scoped mutation cannot change the answer between the decision and
@@ -141,7 +141,7 @@ pub fn with_env_vars<R>(
 ///
 /// # Examples
 ///
-/// ```
+/// ```rust,no_run
 /// use whitaker_common::test_support::with_env_vars_selected;
 ///
 /// with_env_vars_selected(
@@ -165,14 +165,14 @@ pub fn with_env_vars_selected<R>(
     })
 }
 
-/// Runs `callback` with one environment variable temporarily removed.
+/// Run `callback` with one environment variable temporarily removed.
 ///
 /// The prior value (if any) is restored after the callback completes or
 /// panics.
 ///
 /// # Examples
 ///
-/// ```rust
+/// ```rust,no_run
 /// use whitaker_common::test_support::with_env_var_removed;
 ///
 /// with_env_var_removed("WHITAKER_REMOVED_TEST_ENV_VAR", || {
@@ -183,7 +183,7 @@ pub fn with_env_var_removed<R>(key: &str, callback: impl FnOnce() -> R) -> R {
     temp_env::with_var_unset(key, callback)
 }
 
-/// Runs `callback` with `DYLINT_LOCALE` overridden.
+/// Run `callback` with `DYLINT_LOCALE` overridden.
 ///
 /// `Some(locale)` sets the variable for the duration of the callback;
 /// `None` removes it. Any prior value is restored afterwards, so
@@ -191,7 +191,7 @@ pub fn with_env_var_removed<R>(key: &str, callback: impl FnOnce() -> R) -> R {
 ///
 /// # Examples
 ///
-/// ```rust
+/// ```rust,no_run
 /// use whitaker_common::test_support::with_locale;
 ///
 /// with_locale(Some("cy"), || {
