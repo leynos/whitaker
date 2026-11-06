@@ -5,6 +5,7 @@ use std::{ffi::OsString, io, io::Write};
 use thiserror::Error;
 use whitaker_installer::{
     cli::{InstallArgs, ListArgs},
+    error::InstallerError,
     installation_record::InstallationRecordError,
     scanner::InstalledLints,
 };
@@ -48,6 +49,19 @@ pub enum CliError {
         /// The record-layer failure.
         #[source]
         source: InstallationRecordError,
+    },
+    /// The active toolchain could not be determined.
+    ///
+    /// A directory that declares no toolchain is not an error: it means the
+    /// caller is outside a checkout. A `rust-toolchain.toml` that exists but
+    /// cannot be read or parsed is a real failure, and treating it as "no
+    /// toolchain" would silently drop the build and prebuilt candidates for a
+    /// toolchain the user explicitly selected.
+    #[error("could not detect the active toolchain: {source}")]
+    ToolchainDetection {
+        /// The toolchain-layer failure.
+        #[source]
+        source: InstallerError,
     },
     /// The prebuilt library directory for the active toolchain could not be
     /// resolved.

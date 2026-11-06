@@ -198,7 +198,9 @@ proof fn lemma_classification_agrees_with_predicates(tokens: Seq<TokenTag>)
     }
 }
 
-fn main() {
-}
+/// Provide the entry point Verus expects when it compiles this proof crate.
+///
+/// The proofs are checked at compile time, so there is nothing to run.
+fn main() {}
 
 } // verus!

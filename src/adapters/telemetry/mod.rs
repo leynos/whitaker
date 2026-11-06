@@ -233,6 +233,7 @@ pub const fn error_category(error: &CliError) -> &'static str {
         CliError::Forward { .. } => "dispatch",
         CliError::Output { .. } => "output",
         CliError::InstallationRecord { .. } => "installation_record",
+        CliError::ToolchainDetection { .. } => "toolchain_detection",
         CliError::PrebuiltLibraryPath { .. } => "prebuilt_library_path",
         CliError::LibraryPath { .. } => "library_path",
     }

@@ -138,18 +138,21 @@ pub fn installed_paths(dirs: &dyn BaseDirs) -> Result<Vec<Utf8PathBuf>, Installa
         .collect())
 }
 
+/// Resolve the record file inside the Whitaker data directory.
 fn record_path(dirs: &dyn BaseDirs) -> Result<PathBuf, InstallationRecordError> {
     dirs.whitaker_data()
         .map(|directory| directory.join(RECORD_FILENAME))
         .ok_or(InstallationRecordError::MissingDataDirectory)
 }
 
+/// Create the record file's parent directory when it is missing.
 fn ensure_parent(path: &std::path::Path) -> Result<(), InstallationRecordError> {
     let parent = path.parent().unwrap_or_else(|| std::path::Path::new("."));
     std::fs::create_dir_all(parent)
         .map_err(|source| record_io_error("create parent directory for", path, source))
 }
 
+/// Open the record for reading and writing, creating it when absent.
 fn open_record(path: &std::path::Path) -> Result<File, InstallationRecordError> {
     OpenOptions::new()
         .read(true)
@@ -160,6 +163,10 @@ fn open_record(path: &std::path::Path) -> Result<File, InstallationRecordError> 
         .map_err(|source| record_io_error("open", path, source))
 }
 
+/// Read the recorded toolchain-to-path map from an open record file.
+///
+/// An empty file is treated as an empty map, so a record that was created but
+/// never written reads back as "nothing installed" rather than as corruption.
 fn read_paths(
     path: &std::path::Path,
     file: &mut File,
@@ -180,6 +187,11 @@ fn read_paths(
     })
 }
 
+/// Replace the record's contents with `paths` and flush them to disk.
+///
+/// The file is truncated in place rather than replaced by a rename, so a
+/// concurrent reader holding the lock sees either the old or the new record
+/// and never a missing file.
 fn write_paths(
     path: &std::path::Path,
     file: &mut File,
@@ -195,6 +207,10 @@ fn write_paths(
         .map_err(|source| record_io_error("write", path, source))
 }
 
+/// Describe an operating-system failure against the record file.
+///
+/// The operation name is carried in the error so a caller can tell a lock
+/// failure from a read or write failure without parsing the message.
 fn record_io_error(
     operation: &'static str,
     path: &std::path::Path,

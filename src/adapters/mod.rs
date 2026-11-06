@@ -73,6 +73,10 @@ impl SystemServices {
 }
 
 impl InstallService for SystemServices {
+    /// Run a root `whitaker install` and translate installer failures.
+    ///
+    /// The installer's error type belongs to the installer crate, so it is
+    /// flattened into a message at this boundary rather than re-exported.
     fn install(
         &self,
         request: &InstallRequest,
@@ -88,6 +92,12 @@ impl InstallService for SystemServices {
 }
 
 impl LintInventory for SystemServices {
+    /// Collect the installed-lint inventory for `whitaker ls`.
+    ///
+    /// The active toolchain is display metadata only, so an unreadable
+    /// `rust-toolchain.toml` degrades the listing instead of failing it. The
+    /// library-path resolution that acts on the toolchain uses the typed
+    /// detection result instead.
     fn list(&self, request: &ListRequest) -> Result<StagedInventory, CliError> {
         let installed =
             collect_installed(&request.arguments).map_err(|error| CliError::Inventory {
@@ -269,12 +279,17 @@ fn child_exit_code(status: ExitStatus) -> i32 {
         .unwrap_or(1)
 }
 
+/// Map a terminating signal to the conventional 128 + signal exit code.
+///
+/// A child killed by a signal has no ordinary exit code, but this process
+/// still has to report something; 128 + signal is the shell's convention.
 #[cfg(unix)]
 fn signal_exit_code(status: ExitStatus) -> Option<i32> {
     use std::os::unix::process::ExitStatusExt as _;
     status.signal().map(|signal| 128 + signal)
 }
 
+/// Report no signal-derived exit code on platforms without POSIX signals.
 #[cfg(not(unix))]
 const fn signal_exit_code(_status: ExitStatus) -> Option<i32> { None }
 

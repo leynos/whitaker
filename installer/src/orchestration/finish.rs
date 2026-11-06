@@ -112,6 +112,9 @@ fn finish_install(context: &FinishInstallContext<'_>, stderr: &mut dyn Write) ->
     record_bootstrap(context.snapshot, context.toolchain, context.staging_path)?;
     if context.args.skip.skip_wrapper {
         write_shell_snippet(context.snapshot, context.staging_path, stderr);
+    } else if context.wrapper_scripts.is_root_cli() {
+        write_stderr_line(stderr, "");
+        report_installed_binary(stderr);
     } else {
         generate_and_report_wrapper(context.dirs, context.wrapper_scripts, stderr)?;
     }
@@ -126,10 +129,6 @@ fn generate_and_report_wrapper(
 ) -> Result<()> {
     let result = generate_wrapper_scripts_with(dirs, scripts)?;
     write_stderr_line(stderr, "");
-    if scripts.is_root_cli() {
-        report_installed_binary(&result, stderr)?;
-        return Ok(());
-    }
     write_stderr_line(stderr, "Wrapper scripts created:");
     if scripts == WrapperScripts::Both {
         write_stderr_line(stderr, format!("  - {}", result.whitaker_path.display()));
@@ -155,18 +154,14 @@ fn generate_and_report_wrapper(
 /// Reports how to use the installed root binary, which needs no script.
 ///
 /// The root CLI supplies `ls` itself, so the legacy `whitaker-ls` hint would
-/// name a script that the root install deliberately does not create.
-fn report_installed_binary(result: &WrapperResult, stderr: &mut dyn Write) -> Result<()> {
-    if result.in_path {
-        write_stderr_line(stderr, "You can now run:");
-    } else {
-        write_stderr_line(stderr, path_instructions(wrapper_bin_dir(result)?));
-        write_stderr_line(stderr, "");
-        write_stderr_line(stderr, "Then run:");
-    }
+/// name a script that the root install deliberately does not create. The hint
+/// is deliberately static: resolving the wrapper directory here would create
+/// an empty directory the root install has no use for, and the wrapper paths
+/// describe where scripts would go rather than where the root binary lives.
+fn report_installed_binary(stderr: &mut dyn Write) {
+    write_stderr_line(stderr, "You can now run:");
     write_stderr_line(stderr, "  whitaker ls");
     write_stderr_line(stderr, "  whitaker --all");
-    Ok(())
 }
 
 /// Resolves the directory that holds the conventional wrapper paths.

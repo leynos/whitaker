@@ -2147,6 +2147,42 @@ in the secondary suite, 19 `dylint_testing`), `make test-workflow-contracts`
 test comments; `c15be632` corrects them, and the markdownlint step proper then
 ran clean over 115 files.
 
+**CodeRabbit repair round, 2026-11-06.** The review of `3849310c` left three
+unresolved inline threads and eleven pre-merge rows. Each was verified against
+the tree before repair, and the repairs are behavioural rather than
+suppressions:
+
+- `.config/nextest.toml` carried a sentence claiming that a `test(ui::ui)`
+  filter does not capture other tests in the same binary. That is false — the
+  filter matches the test _name_, not the binary — and the sentence was
+  deleted. The authoritative later block, which explains that the binary clause
+  matches only the top-level `ui` test, is unchanged.
+- `installer/src/orchestration/finish.rs` reported wrapper-script paths for a
+  root install that deliberately writes no scripts. The root branch now reports
+  the installed binary statically (`whitaker ls`, `whitaker --all`) and never
+  resolves the wrapper directory, which would otherwise create an empty
+  directory the root install has no use for.
+- `installer/src/list.rs` swallowed every toolchain-detection failure into
+  `None`. A directory that declares no toolchain is still `None`, but a
+  `rust-toolchain.toml` that exists and cannot be read or parsed is now a typed
+  `InstallerError`, surfaced through the new `CliError::ToolchainDetection` in
+  the library-path adapter. The lossy `detect_active_toolchain` remains for
+  `whitaker ls`, where the toolchain is display metadata only.
+- `tests/root_install_e2e.rs` now seeds a pre-existing `whitaker` executable
+  in the bin root and asserts the install neither rewrites nor removes it, so
+  the "no wrapper scripts" claim is tested against a file that could collide
+  with one.
+- `tests/workflows/test_ci_workflow.py` gained the `Package the root CLI` step
+  in both the linux-full step list and the linux-only set, with an assertion
+  pinning its command, so the packaging contract is enforced rather than merely
+  documented.
+- The Docstring Coverage warning was answered with substance: the production
+  functions the diff introduced without a `///` comment now carry one, in
+  `src/adapters/mod.rs`, `src/main.rs`, `installer/src/bootstrap/run.rs`,
+  `installer/src/installation_record.rs`, and `verus/whitaker_cli_dispatch.rs`.
+  The remaining shortfall is test functions and fixtures, which the repository
+  does not document by policy.
+
 To be completed at each milestone boundary and at completion. Before setting
 this plan to `COMPLETE`, reconcile every entry in `Surprises & discoveries`
 against `docs/whitaker-cli-design.md`. In particular, `CLI-REQ-FWD` has no

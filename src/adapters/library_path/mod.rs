@@ -22,7 +22,7 @@ use whitaker_installer::{
     dependency_binaries::host_target,
     dirs::BaseDirs,
     installation_record::installed_paths,
-    list::detect_active_toolchain,
+    list::try_detect_active_toolchain,
     prebuilt_path::prebuilt_library_dir,
     stager::default_target_dir,
 };
@@ -157,16 +157,20 @@ impl LibraryPath {
 /// # Errors
 ///
 /// Returns [`CliError::InstallationRecord`] when an installation record exists
-/// but cannot be locked, read, or parsed, [`CliError::PrebuiltLibraryPath`]
-/// when the prebuilt directory cannot be derived, and [`CliError::LibraryPath`]
-/// when the surviving candidates cannot be joined. A missing record is not an
-/// error: it simply means no toolchain has been installed yet.
+/// but cannot be locked, read, or parsed, [`CliError::ToolchainDetection`] when
+/// a `rust-toolchain.toml` exists but cannot be read or parsed,
+/// [`CliError::PrebuiltLibraryPath`] when the prebuilt directory cannot be
+/// derived, and [`CliError::LibraryPath`] when the surviving candidates cannot
+/// be joined. A missing record, and a directory that declares no toolchain, are
+/// not errors: they simply mean nothing has been installed for this project
+/// yet.
 pub(super) fn active_library_path(dirs: Option<&dyn BaseDirs>) -> Result<LibraryPath, CliError> {
     if let Some(explicit) = explicit_library_path() {
         return Ok(LibraryPath::Explicit(explicit));
     }
     let recorded = recorded_library_paths(dirs)?;
-    let toolchain = detect_active_toolchain();
+    let toolchain =
+        try_detect_active_toolchain().map_err(|source| CliError::ToolchainDetection { source })?;
     let build = toolchain.as_deref().and_then(build_library_path);
     let prebuilt = toolchain
         .as_deref()

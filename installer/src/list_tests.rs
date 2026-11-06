@@ -197,24 +197,26 @@ fn run_list_returns_write_failed_on_stdout_error(
 }
 
 // -------------------------------------------------------------------------
-// detect_active_toolchain_in tests
+// try_detect_active_toolchain_in tests
 // -------------------------------------------------------------------------
 
 #[rstest]
-fn detect_active_toolchain_in_returns_none_when_no_toolchain_file(
+fn try_detect_active_toolchain_in_reports_no_toolchain_when_file_is_absent(
     #[from(temp_target)] temp_target_res: std::io::Result<TempTarget>,
 ) {
     let temp_target = temp_target_res.expect("temporary target directory should be created");
 
-    let result = detect_active_toolchain_in(&temp_target.path);
-    assert!(
-        result.is_none(),
-        "expected None for directory without rust-toolchain.toml"
+    let channel = try_detect_active_toolchain_in(&temp_target.path)
+        .expect("an absent toolchain file is not a detection failure");
+
+    assert_eq!(
+        channel, None,
+        "a directory without rust-toolchain.toml declares no toolchain"
     );
 }
 
 #[rstest]
-fn detect_active_toolchain_in_returns_channel_when_toolchain_file_exists(
+fn try_detect_active_toolchain_in_returns_the_declared_channel(
     #[from(temp_target)] temp_target_res: std::io::Result<TempTarget>,
 ) {
     let temp_target = temp_target_res.expect("temporary target directory should be created");
@@ -229,9 +231,30 @@ channel = "nightly-2026-05-28"
     )
     .expect("failed to write rust-toolchain.toml");
 
-    let result = detect_active_toolchain_in(&temp_target.path);
+    let channel = try_detect_active_toolchain_in(&temp_target.path)
+        .expect("a readable toolchain file should be detected");
 
-    assert_eq!(result, Some("nightly-2026-05-28".to_owned()));
+    assert_eq!(channel.as_deref(), Some("nightly-2026-05-28"));
+}
+
+#[rstest]
+fn try_detect_active_toolchain_in_reports_a_malformed_toolchain_file(
+    #[from(temp_target)] temp_target_res: std::io::Result<TempTarget>,
+) {
+    let temp_target = temp_target_res.expect("temporary target directory should be created");
+    fs::write(
+        temp_target.path.join("rust-toolchain.toml"),
+        "not = [valid toml",
+    )
+    .expect("failed to write rust-toolchain.toml");
+
+    let error = try_detect_active_toolchain_in(&temp_target.path)
+        .expect_err("a malformed toolchain file must not be reported as no toolchain");
+
+    assert!(
+        matches!(error, InstallerError::InvalidToolchainFile { .. }),
+        "expected InvalidToolchainFile, got: {error:?}"
+    );
 }
 
 // -------------------------------------------------------------------------

@@ -5,14 +5,16 @@ use std::{io::Write as _, process};
 use ortho_config::NoOpLocalizer;
 use whitaker::{adapters::SystemServices, cli, diagnostics};
 
+/// Run the CLI, converting its outcome into the process exit code.
+///
+/// Diagnostics are configured before routing so the forwarded Dylint route,
+/// which never reaches the clap parser, honours the same `-q`/`-v` policy.
 fn main() {
     let arguments: Vec<std::ffi::OsString> = std::env::args_os().collect();
     let services = SystemServices::new();
     let ports = services.ports();
     let mut stdout = std::io::stdout();
     let mut stderr = std::io::stderr();
-    // Configure diagnostics before routing, so the forwarded Dylint route —
-    // which never reaches the clap parser — honours the same `-q`/`-v` policy.
     if let Err(error) = diagnostics::configure(cli::diagnostic_settings(&arguments)) {
         writeln!(stderr, "whitaker: {error}").unwrap_or(());
     }

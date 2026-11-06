@@ -6,8 +6,9 @@
 //! installer's own behaviour tests use — a fixture Clippy snapshot, synthetic
 //! suite staging, and isolated data, bin, and home roots — and asserts the
 //! outcomes a successful root install must produce: the staged suite library,
-//! the installation record that points at it, no wrapper scripts, and the
-//! diagnostics that tell the user how to run the root CLI.
+//! the installation record that points at it, an untouched pre-existing
+//! `whitaker` executable in the bin directory, no compatibility scripts beside
+//! it, and the diagnostics that tell the user how to run the root CLI.
 
 use std::{
     path::{Path, PathBuf},
@@ -98,12 +99,20 @@ impl BaseDirs for FixtureDirs {
     fn whitaker_data(&self) -> Option<PathBuf> { Some(self.data.clone()) }
 }
 
+/// The name the fixture's pre-existing executable occupies in the bin root.
+const SEEDED_BINARY_NAME: &str = "whitaker";
+
+/// A recognisable payload for the executable a user may already have installed.
+const SEEDED_BINARY_BYTES: &[u8] = b"#!/bin/sh\nprintf 'pre-existing whitaker'\n";
+
 /// The isolated roots and Clippy snapshot one install run writes into.
 ///
 /// `--skip-wrapper` is deliberately not used: leaving wrapper generation in
 /// the run is what lets the test observe that a root install writes no
 /// compatibility scripts, while `XDG_BIN_HOME` and `HOME` keep the check away
-/// from the real user directories.
+/// from the real user directories. The bin root starts with a `whitaker`
+/// executable of its own, so the test also proves a root install leaves an
+/// existing binary alone rather than replacing it with a wrapper.
 struct InstallFixture {
     channel: String,
     snapshot: SnapshotFixture,
@@ -120,7 +129,7 @@ impl InstallFixture {
     ///
     /// Returns a description of the first fixture step that failed.
     fn new() -> Result<Self, String> {
-        Ok(Self {
+        let fixture = Self {
             channel: pinned_toolchain_channel()?,
             snapshot: SnapshotFixture::new()
                 .map_err(|error| format!("fixture Clippy snapshot should build: {error}"))?,
@@ -128,8 +137,35 @@ impl InstallFixture {
             data_home: temporary_directory("data home")?,
             bin_home: temporary_directory("bin home")?,
             home: temporary_directory("home")?,
-        })
+        };
+        fixture.seed_existing_binary()?;
+        Ok(fixture)
     }
+
+    /// Place an executable where a wrapper script would otherwise be written.
+    ///
+    /// The root install writes no scripts, so this file stands in for the
+    /// binary the user installed themselves; the test then proves the install
+    /// neither replaced nor removed it.
+    ///
+    /// # Errors
+    ///
+    /// Returns a description of the failed write or permission change.
+    fn seed_existing_binary(&self) -> Result<(), String> {
+        let path = self.seeded_binary();
+        std::fs::write(&path, SEEDED_BINARY_BYTES)
+            .map_err(|error| format!("{} should be written: {error}", path.display()))?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))
+                .map_err(|error| format!("{} should be executable: {error}", path.display()))?;
+        }
+        Ok(())
+    }
+
+    /// The path of the executable the fixture seeds in the bin root.
+    fn seeded_binary(&self) -> PathBuf { self.bin_home.path().join(SEEDED_BINARY_NAME) }
 
     /// The pinned toolchain channel the fixture installs for.
     fn channel(&self) -> &str { &self.channel }
@@ -256,21 +292,62 @@ fn assert_recorded_staging_directory(fixture: &InstallFixture) -> Result<(), Str
 
 /// Fail unless the root install wrote no compatibility wrapper scripts.
 ///
+/// The fixture's own `whitaker` executable is expected, so it is excluded; any
+/// other entry beginning with `whitaker` is a script the root install should
+/// never create.
+///
 /// # Errors
 ///
-/// Returns a description of the wrapper names that were written.
+/// Returns a description of the unexpected entry names.
 fn assert_no_wrapper_scripts(fixture: &InstallFixture) -> Result<(), String> {
     let names = directory_entry_names(fixture.bin_home.path())?;
-    let wrappers: Vec<&String> = names
+    let unexpected: Vec<&String> = names
         .iter()
-        .filter(|name| name.starts_with("whitaker"))
+        .filter(|name| name.starts_with("whitaker") && name.as_str() != SEEDED_BINARY_NAME)
         .collect();
-    if wrappers.is_empty() {
+    if unexpected.is_empty() {
         return Ok(());
     }
     Err(format!(
-        "a root install should write no wrapper scripts, found {wrappers:?}"
+        "a root install should write no compatibility scripts, found {unexpected:?}"
     ))
+}
+
+/// Fail unless the pre-existing executable survived the install unchanged.
+///
+/// # Errors
+///
+/// Returns a description of the missing or modified file.
+fn assert_existing_binary_preserved(fixture: &InstallFixture) -> Result<(), String> {
+    let path = fixture.seeded_binary();
+    let contents = std::fs::read(&path).map_err(|error| {
+        format!(
+            "the pre-existing {} should survive: {error}",
+            path.display()
+        )
+    })?;
+    if contents != SEEDED_BINARY_BYTES {
+        return Err(format!(
+            "the root install rewrote {}, got {:?}",
+            path.display(),
+            String::from_utf8_lossy(&contents)
+        ));
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        let mode = std::fs::metadata(&path)
+            .map_err(|error| format!("{} should be readable: {error}", path.display()))?
+            .permissions()
+            .mode();
+        if mode & 0o111 == 0 {
+            return Err(format!(
+                "{} should stay executable, mode {mode:o}",
+                path.display()
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// Fail unless the install output describes the root CLI contract.
@@ -310,5 +387,7 @@ fn root_install_stages_the_suite_and_records_its_directory() {
     assert_recorded_staging_directory(&fixture)
         .expect("the installation record should name the staging directory");
     assert_no_wrapper_scripts(&fixture).expect("a root install should write no wrapper scripts");
+    assert_existing_binary_preserved(&fixture)
+        .expect("a root install should preserve an existing whitaker executable");
     assert_output_contract(&output).expect("install output should describe the root CLI");
 }

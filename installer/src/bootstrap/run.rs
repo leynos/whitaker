@@ -105,6 +105,10 @@ pub fn run_with_cargo(
     run_inner(dirs, cargo, RunOptions::default(), args)
 }
 
+/// Run the bootstrap with every option exposed to the callers above.
+///
+/// The public entry points differ only in the defaults they supply, so they
+/// share this implementation and its instrumented span.
 #[tracing::instrument(name = "bootstrap.run", skip_all)]
 fn run_inner(
     dirs: &dyn BaseDirs,
