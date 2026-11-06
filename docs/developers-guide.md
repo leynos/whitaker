@@ -138,6 +138,14 @@ workspace metadata for Nextest and `--no-deps` metadata for `cargo-llvm-cov`.
 test recipe repeats preparation on a warm cache so direct local invocations and
 CI follow the same path.
 
+`dylint_testing::prepare_driver` is the library entry point behind the
+`warm_driver` example. It returns the path to the driver for the pinned
+toolchain and is fallible: the returned error carries the preparation context
+when the driver cannot be found or built, so a caller can report which step
+failed rather than only that preparation did. Call it once and pass the result
+on; re-deriving the keyed directory duplicates the work and can disagree with
+the slot the build actually used.
+
 For a direct Nextest run, prepare first and pass the saved metadata file. Keep
 the test process tree offline and invoke the `cargo-nextest` binary directly.
 Pass the Cargo executable and active Rustup toolchain explicitly so nested
