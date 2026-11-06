@@ -261,7 +261,33 @@ Crates that depend on `whitaker_installer` see these changes:
   `Command`.
 - `output::DryRunInfo` replaces its `skip_deps`, `skip_wrapper` and `no_update`
   fields with one `skip: SkipFlags` field, matching the `InstallArgs` grouping
-  below. The rendered dry-run text is unchanged; only the struct's shape moves.
+  below. Move the values into that field and read them through it:
+
+  ```rust
+  // Before 0.3.0
+  let info = DryRunInfo {
+      // ... other fields ...
+      skip_deps: args.skip_deps,
+      skip_wrapper: args.skip_wrapper,
+      no_update: args.no_update,
+  };
+
+  // From 0.3.0
+  let info = DryRunInfo {
+      // ... other fields ...
+      skip: SkipFlags {
+          skip_deps: args.skip.skip_deps,
+          skip_wrapper: args.skip.skip_wrapper,
+          no_update: args.skip.no_update,
+      },
+  };
+
+  if info.skip.skip_deps {
+      // ...
+  }
+  ```
+
+  The rendered dry-run text is unchanged; only the struct's shape moves.
 - `wrapper::generate_wrapper_scripts` takes one argument, `dirs`, instead of
   two. The `library_path` argument is removed because the wrappers no longer
   embed it:

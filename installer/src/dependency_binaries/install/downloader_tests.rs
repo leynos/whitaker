@@ -1,6 +1,6 @@
 //! Tests for downloader error mapping and archive checksum verification.
 
-use std::io::Write;
+use std::io::{Read, Write};
 
 use sha2::{Digest, Sha256};
 use tempfile::TempDir;
@@ -33,6 +33,42 @@ fn open_destination_dir_rejects_a_path_without_a_file_name() {
     assert!(
         error.to_string().contains("has no file name"),
         "error should identify the missing file name, got: {error}",
+    );
+}
+
+/// Check that reopening an archive for verification leaves it in place.
+///
+/// `open_archive` is the read side of the cleanup contract: only the explicit
+/// `remove_partial_archive` calls delete the file, so a successful verification
+/// must leave the archive for extraction to consume.
+#[test]
+fn open_archive_reads_the_archive_without_removing_it() {
+    let temp = TempDir::new().expect("create temp dir");
+    let temp_path = Utf8Path::from_path(temp.path()).expect("temp path is UTF-8");
+    let dir = Dir::open_ambient_dir(temp_path, ambient_authority()).expect("open capability");
+    let mut file = dir.create("archive.tgz").expect("create archive");
+    file.write_all(b"archive payload").expect("write archive");
+    drop(file);
+
+    let destination = DownloadDestination {
+        path: temp_path.join("archive.tgz"),
+        dir,
+        archive_name: "archive.tgz".to_owned(),
+    };
+
+    let mut archive = destination.open_archive().expect("open archive");
+    let mut contents = Vec::new();
+    archive.read_to_end(&mut contents).expect("read archive");
+    assert_eq!(contents, b"archive payload");
+    drop(archive);
+
+    // Re-open the directory independently of the handle under test, so the
+    // assertion observes the filesystem rather than the capability's view.
+    let destination_dir =
+        Dir::open_ambient_dir(temp_path, ambient_authority()).expect("reopen capability");
+    assert!(
+        destination_dir.exists("archive.tgz"),
+        "reading the archive must not remove it",
     );
 }
 

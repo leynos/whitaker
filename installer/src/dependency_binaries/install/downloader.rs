@@ -116,7 +116,11 @@ pub(super) fn download_from_urls(
     // a partial or unverified file.
     let expected_checksum =
         fetch_checksum_discarding_archive(agent, checksum_url, &destination_handle)?;
-    verify_downloaded_archive(archive_url, &destination_handle, &expected_checksum)
+    verify_downloaded_archive_discarding_failure(
+        archive_url,
+        &destination_handle,
+        &expected_checksum,
+    )
 }
 
 /// Report that a dependency archive download is starting.
@@ -138,7 +142,7 @@ fn fetch_checksum_discarding_archive(
 ///
 /// `verify_archive_checksum` consumes the reader, so the handle is closed
 /// before the cleanup below runs.
-fn verify_downloaded_archive(
+fn verify_downloaded_archive_discarding_failure(
     archive_url: &str,
     destination: &DownloadDestination,
     expected_checksum: &str,
@@ -146,7 +150,7 @@ fn verify_downloaded_archive(
     let archive = open_for_verification(destination)?;
     let verification =
         verify_archive_checksum(archive, destination.path.as_std_path(), expected_checksum);
-    report_verification(archive_url, destination, verification)
+    report_verification_discarding_failure(archive_url, destination, verification)
 }
 
 /// Re-open the archive for verification, removing it when it cannot be read.
@@ -157,7 +161,7 @@ fn open_for_verification(
 }
 
 /// Report the checksum outcome, removing the archive when it does not verify.
-fn report_verification(
+fn report_verification_discarding_failure(
     archive_url: &str,
     destination: &DownloadDestination,
     verification: Result<(), DependencyBinaryInstallError>,

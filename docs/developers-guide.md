@@ -1585,10 +1585,25 @@ multi-toolchain or multi-failure test failures much easier to diagnose.
 ### Other useful commands
 
 ```sh
-make lint       # Run Clippy
-make check-fmt  # Verify formatting
-make fmt        # Apply formatting
+make lint       # Run rustdoc and Clippy under the workspace lint policy
+make typecheck  # Type-check every target without producing code
+make test-doc   # Run the workspace doctests, which `make test` does not
+make check-fmt  # Verify Rust and Markdown formatting
+make fmt        # Apply Rust and Markdown formatting
 ```
+
+`make test-doc` is a separate lane, not a subset of `make test`:
+`cargo nextest` runs no doctests, and `--all-targets` excludes them, so only
+this target compiles the examples in the public API documentation. It passes
+`$(RUST_FLAGS)` and `$(DEV_STANDARD_FLAGS)` but deliberately omits the
+`-C prefer-dynamic -Z force-unstable-if-unmarked` pair that `make test` and
+`make typecheck` add; a doctest is compiled as its own crate, and
+`force-unstable-if-unmarked` makes it fail to load the library it tests.
+`DOCTEST_EXCLUDES` keeps out the crates whose doctests cannot compile without
+`#![feature(rustc_private)]`, leaving the packages that carry the documented
+public API. The recipe assigns `RUSTFLAGS` itself but not `RUSTDOCFLAGS`, so
+the rustdoc invocation inherits whatever the caller exported; the coverage
+workflow exports both for that reason.
 
 ## Module layout and test placement
 
@@ -1754,16 +1769,18 @@ contract also pins.
 `make lint` runs two lanes:
 
 ```sh
-RUSTDOCFLAGS="$(RUSTDOC_FLAGS)" cargo doc --locked --workspace --no-deps
-cargo clippy --locked $(CARGO_FLAGS) -- -D warnings
+RUSTDOCFLAGS="$(RUSTDOC_FLAGS)" cargo doc $(CARGO_LOCKED) --workspace --no-deps
+cargo clippy $(CARGO_LOCKED) $(CARGO_FLAGS) -- $(RUST_FLAGS)
 ```
 
 `CARGO_FLAGS` defaults to `--workspace --all-targets --all-features` and
 narrows the Clippy lane only; `cargo doc` always covers `--workspace`.
 `RUSTDOC_FLAGS` defaults to `--cfg docsrs -D warnings`, so a rustdoc warning
-fails the gate as well as a Clippy one. Both are Make variables: override
-`CARGO_FLAGS` to check a narrower Clippy set while iterating, but leave the
-`?=` defaults alone when validating a commit.
+fails the gate as well as a Clippy one, and `RUST_FLAGS` defaults to
+`-D warnings`. `CARGO_LOCKED` is empty by default, so a local run may update
+the lockfile; pass `CARGO_LOCKED=--locked` to require a clean one. All four are
+Make variables: override `CARGO_FLAGS` to check a narrower Clippy set while
+iterating, but leave the `?=` defaults alone when validating a commit.
 
 ## Python script interpreter convention
 
@@ -3699,6 +3716,19 @@ lock do not serialize with participants using only the other. Use
 `EnvTestGuard` when a fixture must retain the explicit guard beyond local
 scope, and keep all participants in that protocol on the same guard.
 
+For several variables in one scope, use `with_env_vars`, which applies every
+pair and restores all of them, or `with_env_vars_selected`, which evaluates its
+selector after taking the lock. `with_env_vars` chooses before the lock is
+taken and short-circuits without it when the list is empty, so it suits a fixed
+choice only. Use `with_env_vars_selected` whenever the set depends on the
+current environment — for example, "only the variables the process has not
+already set" — because another thread's scoped mutation cannot then change the
+answer between the decision and the mutation. Its selector runs with the lock
+held, and the callback runs under that same lock until every variable is
+restored; the lock is re-entrant, so a callback may open a nested scope. A
+repeated key is well defined: `temp_env` captures the original value once and
+applies the pairs in order, so the last value wins.
+
 For example:
 
 ```rust
@@ -3744,9 +3774,15 @@ case now pins the contract. The guard also sets
 `lib<crate>.so`, an empty `cdylib` for every Whitaker lint crate, over the
 toolchain-qualified library the harness built with `dylint-driver`. On Windows
 the guard also sets `VCPKG_ROOT` to `C:\vcpkg` when that directory exists and
-the variable is otherwise absent. Restoration uses the same shared environment
-mutex, but the runner callback itself executes without holding that mutex to
-avoid nested-lock deadlocks.
+the variable is otherwise absent.
+
+The guard selects and applies those variables through `with_env_vars_selected`,
+so the runner callback executes while holding `temp_env`'s re-entrant lock.
+Runners in one test binary therefore take turns instead of sharing a
+process-wide record: a runner that overlapped another would see that runner's
+temporary flag, select nothing, and then run after the flag had been removed. A
+runner that performs its own scoped environment setup still nests safely on the
+same thread because the lock is re-entrant.
 
 Any UI test that holds `env_test_guard()` while invoking Dylint must use
 `run_test_runner_with_env_guard()`. It catches a runner panic before releasing
@@ -4720,7 +4756,7 @@ whole Dylint dev-dependency graph, so a cold target recompiled 139 to 148
 seconds of dependencies for two tiny fixtures. Its fixtures were removed in
 favour of the existing `tests/analysis_behaviour.rs` public-path test and a
 `compile_fail,E0432` doctest on `normalize_settings`. The other discovered
-compile contracts therefore share a 75-minute allowance and disable retries,
+compile contracts therefore share a 120-minute allowance and disable retries,
 leaving one build more time to reach its fixtures without repeating the same
 work.
 
