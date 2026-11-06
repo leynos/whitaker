@@ -150,7 +150,7 @@ impl InstallFixture {
     ///
     /// `--build-only` keeps the prebuilt download out of the run and
     /// `--skip-deps` keeps the host's Dylint tools out of it, so the only work
-    /// left is the staged suite, the record, and the root finalisation.
+    /// left is the staged suite, the record, and the root finalization.
     fn command(&self) -> Command {
         let mut command = Command::new(env!("CARGO_BIN_EXE_whitaker"));
         command
@@ -221,7 +221,7 @@ fn assert_install_succeeded(output: &Output) -> Result<(), String> {
 ///
 /// # Errors
 ///
-/// Returns a description of the missing staging artifact.
+/// Returns a description of the missing staging artefact.
 fn assert_staged_library(fixture: &InstallFixture) -> Result<(), String> {
     let staged = expected_library_path(fixture.target_dir.path(), fixture.channel());
     if staged.is_file() {

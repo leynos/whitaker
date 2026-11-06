@@ -265,7 +265,7 @@ fn an_unrepresentable_recorded_directory_does_not_hide_valid_paths() {
 #[test]
 fn prebuilt_library_path_reports_an_unavailable_data_directory() {
     if host_target().is_none() {
-        // A host with no recognised target triple has no prebuilt candidate,
+        // A host with no recognized target triple has no prebuilt candidate,
         // so there is no directory call to fail.
         return;
     }
