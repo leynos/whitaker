@@ -1,6 +1,35 @@
-# NOTE: Dynamic linking for dylint lint crates is handled via RUSTFLAGS in the
-# Makefile's `test` and `typecheck` targets. Do not add workspace-wide
-# rustflags here as it would break `cargo install` for whitaker-installer.
+# Repository-wide Cargo defaults for the development build standard.
+#
+# The parallel `rustc` frontend is the default for every build, and the `mold`
+# linker is the default when building for Linux. Cargo auto-discovers this
+# file, so a bare `cargo build` gets both. The Makefile gate recipes assign
+# `RUSTFLAGS`, which displaces every `rustflags` source below, so they restate
+# both flags (`DEV_STANDARD_FLAGS`). Release and installer builds assign
+# `RUSTFLAGS` too and take neither.
+#
+# Cranelift is not configured here: it is a recorded exception on the pinned
+# toolchain (see "Cranelift" in docs/developers-guide.md).
+#
+# Cargo selects a single `rustflags` source rather than merging them: a
+# matching `[target.*]` table replaces `[build] rustflags` outright. Every flag
+# is therefore repeated in each source.
+#
+# Dynamic linking for the Dylint lint crates is still handled through
+# `RUSTFLAGS` in the Makefile's `test` and `typecheck` recipes: `-C
+# prefer-dynamic` must not be a workspace-wide default, because it would break
+# `cargo install` for whitaker-installer.
 
+[build]
+rustflags = ["-Zthreads=8"]
+
+# `mold` ships for Linux only, so the linker flag is gated behind a target
+# `cfg`. macOS and Windows fall through to `[build] rustflags` above and use
+# their platform default linker.
+[target.'cfg(target_os = "linux")']
+rustflags = ["-Zthreads=8", "-Clink-arg=-fuse-ld=mold"]
+
+# The dev-build footprint standard (DF-003). This key is tied to the dated
+# nightly pinned in `rust-toolchain.toml`; see "Development build defaults" in
+# docs/developers-guide.md.
 [unstable]
 no-embed-metadata = true

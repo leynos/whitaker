@@ -359,16 +359,6 @@ jobs:
       - name: Add target
         run: rustup target add "${{ matrix.target }}"
 
-      # The dependency tools' locked dependencies can require a newer rustc
-      # than the repository's pinned nightly (cargo-dylint 6.0.1 locked
-      # cargo-util 0.2.28, which needed rustc 1.93), so host-tool installs run
-      # under a current stable toolchain.
-      - name: Install stable toolchain for host tools
-        run: |
-          set -euxo pipefail
-          rustup toolchain install stable --profile minimal --no-self-update
-          rustup target add --toolchain stable "${{ matrix.target }}"
-
       - name: Build dependency packaging tool
         run: cargo build --release -p whitaker-installer --bin whitaker-package-dependency-binary
 
@@ -385,7 +375,7 @@ jobs:
             PACKAGER="./target/release/whitaker-package-dependency-binary"
           fi
           while IFS=$'\t' read -r package binary version; do
-            cargo +stable install \
+            cargo install \
               --locked \
               --force \
               --root dependency-root \

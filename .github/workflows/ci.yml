@@ -168,6 +168,7 @@ jobs:
           # Ubicloud only, so a missing cache proxy fails the job rather than
           # letting sccache compile against local disk unnoticed.
           expect-cache: ubicloud
+          install-mold: 'true'
           cache-provider: external
 
       - name: Provision the Clippy snapshot
@@ -408,6 +409,7 @@ jobs:
           # Ubicloud only, so a missing cache proxy fails the job rather than
           # letting sccache compile against local disk unnoticed.
           expect-cache: ubicloud
+          install-mold: 'true'
           cache-provider: external
 
       - name: Provision the Clippy snapshot
@@ -670,6 +672,7 @@ jobs:
         uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
         with:
           cache-provider: external
+          install-mold: 'true'
 
       - name: Provision the Clippy snapshot
         # The only producer step that may read public Clippy, and only on a

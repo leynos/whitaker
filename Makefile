@@ -73,6 +73,14 @@ COVERAGE_TARGET_DIR ?= $(CURDIR)/target/llvm-cov-target
 # cargo-llvm-cov's default `%p` pattern does.
 COVERAGE_PROFILE_FILE_NAME ?= whitaker-%m.profraw
 RUST_FLAGS ?= -D warnings
+# The build standard's parallel frontend and linker. `.cargo/config.toml`
+# carries both in its `rustflags` sources, but an assigned `RUSTFLAGS` replaces
+# every one of those sources, so the gate recipes that assign it restate both.
+# `mold` ships for Linux only, so the linker flag is set only on a Linux host.
+BUILD_HOST_OS ?= $(shell uname -s)
+DEV_LINUX_LINK_ARG := $(if $(filter Linux,$(BUILD_HOST_OS)),-Clink-arg=-fuse-ld=mold)
+DEV_THREADS_FLAG ?= -Zthreads=8
+DEV_STANDARD_FLAGS = $(DEV_THREADS_FLAG) $(DEV_LINUX_LINK_ARG)
 # The installer MSRV check and the publish check each build in a scratch
 # tree they discard afterwards. The trees live at fixed paths rather than
 # under `mktemp`, because sccache keys a compilation on its absolute paths: a
@@ -258,8 +266,8 @@ test: clippy-snapshot ## Run tests with warnings treated as errors
 		rm -f "$$WHITAKER_BACKUP"; \
 		WHITAKER_BACKUP=""; \
 	fi; \
-	RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS)" $(CARGO) $(TEST_RUNNER) $(CARGO_LOCKED) $(TEST_CARGO_FLAGS) $(BUILD_JOBS) $(if $(NEXTEST_PROFILE),--profile $(NEXTEST_PROFILE)); \
-	RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS)" $(CARGO) test $(CARGO_LOCKED) -p dylint_testing --lib --no-default-features $(BUILD_JOBS); \
+	RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS) $(DEV_STANDARD_FLAGS)" $(CARGO) $(TEST_RUNNER) $(CARGO_LOCKED) $(TEST_CARGO_FLAGS) $(BUILD_JOBS) $(if $(NEXTEST_PROFILE),--profile $(NEXTEST_PROFILE)); \
+	RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS) $(DEV_STANDARD_FLAGS)" $(CARGO) test $(CARGO_LOCKED) -p dylint_testing --lib --no-default-features $(BUILD_JOBS); \
 	if [ "$${ACT_WORKFLOW_TESTS:-0}" = "1" ]; then \
 		$(MAKE) workflow-test; \
 	fi
@@ -415,7 +423,7 @@ nixie:
 	TMPDIR="$$nixie_tmpdir" $(NIXIE) --no-sandbox
 
 typecheck:
-	RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS)" $(CARGO) check $(CARGO_LOCKED) $(CARGO_FLAGS)
+	RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS) $(DEV_STANDARD_FLAGS)" $(CARGO) check $(CARGO_LOCKED) $(CARGO_FLAGS)
 
 verus: ## Run the pinned Verus proof sidecar
 	./scripts/run-verus.sh

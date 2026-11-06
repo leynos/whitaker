@@ -330,6 +330,32 @@ nightly-only Cargo setting tied to the dated nightly pinned in
 onward must replace the key with `embed-metadata = false`. Stable and beta
 toolchains ignore it.
 
+### Build standard
+
+`.cargo/config.toml` makes the parallel frontend (`-Zthreads=8`) the default
+for every build and adds the `mold` linker on Linux, so a bare `cargo build`
+takes both. Cargo applies a single `rustflags` source rather than merging them,
+and an assigned `RUSTFLAGS` replaces every source, so each source repeats the
+frontend flag and the `test` and `typecheck` recipes restate both flags next to
+the Dylint-specific `-C prefer-dynamic -Z force-unstable-if-unmarked`
+(`DEV_STANDARD_FLAGS`). `-C prefer-dynamic` stays out of the configuration
+because it would break `cargo install` for `whitaker-installer`. The release
+workflows build on the pinned nightly from `rust-toolchain.toml`, as an
+application does, and install `mold` on their Linux runners; the
+`DYLINT_TOOLS_TOOLCHAIN` default follows the same pin. The Dylint lint-library
+toolchain (`nightly-2026-05-28` today) is the pinned channel itself, so the two
+are one. A local Linux build needs `mold` on the `PATH` (for example
+`sudo apt-get install mold`, or your distribution's package); without it the
+linker flag stops a linked `cargo build`.
+
+#### Cranelift backend support
+
+Exception: Cranelift is not the development-profile backend. The Dylint lint
+crates and the root `whitaker` crate are coupled to one nightly's
+`rustc_private` APIs, and the suite has not been measured under the Cranelift
+backend. Recorded state: the pin is `nightly-2026-05-28`; no measurement has
+been taken on it, and the review is deferred to 1 April 2027.
+
 ### Test profiles
 
 By default, `make test` excludes slow installer integration tests
