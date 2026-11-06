@@ -338,11 +338,12 @@ The estate build standard makes the parallel frontend (`-Zthreads=8`) and the
 so an auto-discovered linker flag would break source builds for users without
 `mold`. The flags live in the opt-in fragment `tools/dev-fast/config.toml`,
 selected with `cargo --config tools/dev-fast/config.toml`, and the `test`,
-`test-doc` and `typecheck` recipes restate them (`DEV_STANDARD_FLAGS`) next to
-the Dylint-specific `-C prefer-dynamic -Z force-unstable-if-unmarked`, because
+`test-doc` and `typecheck` recipes restate them (`DEV_STANDARD_FLAGS`), because
 they assign `RUSTFLAGS` and an assigned `RUSTFLAGS` replaces every
-configuration source. `.concordat` records the exception for BD-001, BD-002,
-BD-004 and BD-008, and
+configuration source. `test` and `typecheck` add the Dylint-specific
+`-C prefer-dynamic -Z force-unstable-if-unmarked` after them; `test-doc` omits
+that pair, since it would make every doctest fail to load at `E0658`.
+`.concordat` records the exception for BD-001, BD-002, BD-004 and BD-008, and
 [ADR 010](adr-010-keep-the-fast-linker-out-of-the-auto-discovered-cargo-config.md)
 gives the reasoning.
 

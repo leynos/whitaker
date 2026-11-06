@@ -73,9 +73,10 @@ COVERAGE_TARGET_DIR ?= $(CURDIR)/target/llvm-cov-target
 # cargo-llvm-cov's default `%p` pattern does.
 COVERAGE_PROFILE_FILE_NAME ?= whitaker-%m.profraw
 RUST_FLAGS ?= -D warnings
-# The build standard's parallel frontend and linker. `.cargo/config.toml`
-# carries both in its `rustflags` sources, but an assigned `RUSTFLAGS` replaces
-# every one of those sources, so the gate recipes that assign it restate both.
+# The build standard's parallel frontend and linker. The opt-in fragment
+# `tools/dev-fast/config.toml` carries both (`.cargo/config.toml` deliberately
+# does not; see ADR 010), and the gate recipes that assign `RUSTFLAGS` restate
+# them here, because an assigned `RUSTFLAGS` replaces every configuration source.
 # `mold` ships for Linux only, so the linker flag is set only on a Linux host.
 BUILD_HOST_OS ?= $(shell uname -s)
 DEV_LINUX_LINK_ARG := $(if $(filter Linux,$(BUILD_HOST_OS)),-Clink-arg=-fuse-ld=mold)
