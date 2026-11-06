@@ -102,7 +102,7 @@ impl BaseDirs for FixtureDirs {
 /// The name the fixture's pre-existing executable occupies in the bin root.
 const SEEDED_BINARY_NAME: &str = "whitaker";
 
-/// A recognisable payload for the executable a user may already have installed.
+/// A recognizable payload for the executable a user may already have installed.
 const SEEDED_BINARY_BYTES: &[u8] = b"#!/bin/sh\nprintf 'pre-existing whitaker'\n";
 
 /// The isolated roots and Clippy snapshot one install run writes into.
