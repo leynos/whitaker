@@ -3770,6 +3770,7 @@ dependencies = [
  "toml 1.1.8+spec-1.1.0",
  "tracing",
  "tracing-subscriber",
+ "trybuild",
  "whitaker-common",
  "whitaker-installer",
  "whitaker_test_macros",

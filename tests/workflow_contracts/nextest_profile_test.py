@@ -54,6 +54,7 @@ ISOLATED_CARGO_CHECKS_FILTER: typ.Final[str] = (
     "test(fluent_bundles_are_included_in_the_package_tarball)"
 )
 COMPILE_CONTRACT_FILTER: typ.Final[str] = (
+    "test(ortho_config_and_clap_derives_compile_together) | "
     "test(dependency_check_result_contract_is_public) | "
     "test(fixture_expansion_lint_attribute_contract) | "
     "test(public_const_api_works_in_const_context) | "
@@ -561,9 +562,9 @@ COVERAGE_KEPT_CONTRACT_TEST: typ.Final[str] = (
 def test_coverage_skips_the_override_contracts_but_the_one_that_counts() -> None:
     """The Makefile lists track the nextest override, less the one test that counts.
 
-    ``TRYBUILD_CONTRACT_FILTER`` combines the six standard compile-contract
+    ``TRYBUILD_CONTRACT_FILTER`` combines the seven standard compile-contract
     overrides with the separately budgeted nested trybuild test.
-    ``COVERAGE_SKIPPED_TRYBUILD_FILTER`` lists those seven tests less the one
+    ``COVERAGE_SKIPPED_TRYBUILD_FILTER`` lists those eight tests less the one
     that moves coverage, so adding a contract test to one place and not the
     other fails here instead of silently changing the coverage lane.
     """
@@ -586,7 +587,7 @@ def test_coverage_skips_the_override_contracts_but_the_one_that_counts() -> None
 def test_windows_compat_runs_the_contracts_that_coverage_skips() -> None:
     """``windows-compat`` runs ``make test NEXTEST_PROFILE=ci``, which includes them.
 
-    ``make coverage`` skips six compile-contract tests. They are compile-time API
+    ``make coverage`` skips seven compile-contract tests. They are compile-time API
     contracts, not platform-specific, and ``linux-full`` builds no test binaries
     (a step there cost a cold workspace test build, 1,693 s), so the Windows
     lane's full test run is their CI home.
