@@ -28,7 +28,14 @@ printf '%s\t%s\t%s\t%s\t%s\t%s\n' "${CARGO_NET_OFFLINE-<unset>}" "${CARGO-<unset
     "${CARGO_REAL-<unset>}" "${DYLINT_DRIVER_PATH-<unset>}" "$*" "${RUSTUP_TOOLCHAIN-<unset>}" \
     >> "$CARGO_LOCKED_ENV_LOG"
 case "$1" in
-metadata) echo '{"packages":[{"name":"whitaker-installer","version":"0.2.5"}]}' ;;
+metadata)
+    # The two preparation queries must be distinguishable, so a test can tell
+    # which output reached which destination.
+    case " $* " in
+    *" --no-deps "*) echo '{"packages":[]}' ;;
+    *) echo '{"packages":[{"name":"whitaker-installer","version":"0.2.5"}],"resolve":{"nodes":[]}}' ;;
+    esac
+    ;;
 build)
     target=""
     for argument in "$@"; do

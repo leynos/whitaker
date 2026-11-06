@@ -4,23 +4,21 @@
 //! entry point the example calls: they supply the prepared metadata, route to
 //! real child processes, and check the status and bytes the driver reports.
 
-use dylint_testing::cargo_test_driver::{DriverEnvironment, run};
 use std::{
     env,
     ffi::OsString,
-    fs, io,
+    fs,
+    io,
     path::{Path, PathBuf},
 };
 
+use dylint_testing::cargo_test_driver::{DriverEnvironment, run};
+
 /// The Cargo that invoked this test, falling back to a `PATH` lookup.
-fn cargo() -> OsString {
-    env::var_os("CARGO").unwrap_or_else(|| OsString::from("cargo"))
-}
+fn cargo() -> OsString { env::var_os("CARGO").unwrap_or_else(|| OsString::from("cargo")) }
 
 /// A path that no platform is expected to resolve.
-fn missing_program(name: &str) -> PathBuf {
-    Path::new("/nonexistent").join(name)
-}
+fn missing_program(name: &str) -> PathBuf { Path::new("/nonexistent").join(name) }
 
 /// A metadata request naming the prepared workspace is answered from the file.
 #[test]

@@ -10,22 +10,13 @@ use std::{
     fmt,
     fs,
     io::Cursor,
-    process::{Command, Output},
     path::{Path, PathBuf},
+    process::{Command, Output},
 };
 
 use cargo_metadata::{self, Message, Metadata, MetadataCommand};
 
 use super::HarnessError;
-
-
-//! Toolchain preparation helpers for the Whitaker UI harness.
-//!
-//! The harness needs the compiled lint library to exist under a
-//! toolchain-qualified filename so Dylint discovers the latest build each run.
-//! This module owns the Cargo metadata queries and artefact management needed
-//! to refresh that copy.
-};
 
 #[derive(Debug, Clone)]
 pub(super) struct CrateName(String);

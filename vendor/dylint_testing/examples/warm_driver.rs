@@ -5,6 +5,4 @@
 /// # Errors
 ///
 /// Return an error if the pinned driver cannot be prepared.
-fn main() -> anyhow::Result<()> {
-    dylint_testing::warm_driver::run_from_process()
-}
+fn main() -> anyhow::Result<()> { dylint_testing::warm_driver::run_from_process() }

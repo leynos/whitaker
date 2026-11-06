@@ -200,6 +200,59 @@ def test_fetch_clears_an_inherited_offline_mode(
     )
 
 
+def test_fetch_writes_each_metadata_query_to_its_own_file(
+    cargo_stub: tuple[Path, Path],
+) -> None:
+    """Preparation keeps the full and `--no-deps` metadata outputs apart.
+
+    The two files travel different routes: Nextest reads the full document
+    through `--cargo-metadata`, while the coverage driver reads the
+    `--no-deps` document through `CARGO_METADATA_CACHE`. Writing the wrong
+    query to either path would hand a consumer a silently incomplete or
+    over-complete document, so each destination is checked for its own query.
+    """
+    stub_dir, cargo = cargo_stub
+    environment = MakeRunEnvironment(cargo=cargo, locked=None, stub_dir=stub_dir)
+
+    _run_make("fetch", environment, extra_env={"CARGO_NET_OFFLINE": "true"})
+
+    warmup = stub_dir.parent / "workspace" / "target" / "dylint-warmup"
+    nextest_metadata = (warmup / "nextest-cargo-metadata.json").read_text(
+        encoding="utf-8"
+    )
+    coverage_metadata = (warmup / "llvm-cov-cargo-metadata.json").read_text(
+        encoding="utf-8"
+    )
+
+    assert '"resolve"' in nextest_metadata, (
+        "the Nextest file must hold the full metadata query"
+    )
+    assert '"resolve"' not in coverage_metadata, (
+        "the coverage file must hold the --no-deps query"
+    )
+    assert nextest_metadata != coverage_metadata, (
+        "the two preparation queries must not be interchangeable"
+    )
+
+
+def test_dylint_smoke_compares_the_driver_digest_after_each_offline_run() -> None:
+    """Both offline smoke runs must prove the driver was reused, not rebuilt.
+
+    The cold run builds the driver into an emptied slot; each later offline run
+    must be followed by a digest comparison. Dropping either comparison would
+    let a rebuild pass as a reuse, which is the property the target exists to
+    establish.
+    """
+    recipe = "\n".join(_makefile_recipe_lines("dylint-smoke"))
+
+    assert recipe.count('[ "$$(digest)" = "$$cold" ]') == 2, (
+        "each offline smoke run must compare the driver digest with the cold build"
+    )
+    assert recipe.count("smoke;") == 2, (
+        "the smoke target must run the offline suite twice"
+    )
+
+
 @pytest.mark.parametrize(
     ("locked", "should_use_locked"),
     [(None, True), ("", False), ("--locked", True)],

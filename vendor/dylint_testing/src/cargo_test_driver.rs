@@ -1,27 +1,18 @@
 //! Serve prepared workspace metadata and route Cargo's Nextest call directly.
 //!
 //! `cargo-llvm-cov` invokes Cargo with `--cargo-metadata` and a
-//! `--manifest-path` that Nextest rejects. The driver answers the metadata
-//! query from the file `make fetch` prepared, and forwards every other call
-//! unchanged. Routing drops a `--manifest-path` that names the prepared
-//! workspace, because the prepared metadata already describes it.
-
-use std::{
-    env,
-    ffi::{OsStr, OsString},
-    fs, io,
-    path::{Path, PathBuf},
-    process::Command,
-};
-
-
-//! Serve prepared workspace metadata and route Cargo's Nextest call directly.
-//!
-//! `cargo-llvm-cov` invokes Cargo with `--cargo-metadata` and a
 //! `--manifest-path` that Nextest rejects. The driver answers a `--no-deps`
 //! metadata query from the file `make fetch` prepared, and forwards every
 //! other call unchanged. Routing drops a `--manifest-path` that names the
 //! prepared workspace, because the prepared metadata already describes it.
+
+use std::{
+    env,
+    ffi::{OsStr, OsString},
+    fs,
+    io,
+    path::{Path, PathBuf},
+    process::Command,
 };
 
 /// The environment the driver reads, resolved by the caller.
@@ -239,38 +230,68 @@ fn manifest_is_workspace_root(
         })
 }
 
+/// How one manifest selector relates to the prepared workspace.
+#[derive(Debug)]
+enum ManifestMatch {
+    /// The selector names the prepared root manifest, and it can be read.
+    Prepared,
+    /// The selector names a file that is not the prepared root manifest.
+    Foreign,
+}
+
 /// Check whether a manifest argument names the workspace's root manifest.
 ///
 /// Both sides are canonicalized, so a checkout reached through a symlink, or a
 /// manifest spelled with `..`, still matches. A manifest that cannot be
-/// resolved — missing, or unreadable — is classified as foreign rather than
-/// compared lexically: the prepared cache describes a file that does not
-/// exist, so the real Cargo must report the problem instead of the driver
-/// answering from stale metadata. Both failure modes point the same way that
-/// Nextest routing needs, where keeping the selector is also the safe choice.
+/// resolved — missing, or unreadable — is not compared lexically: the prepared
+/// cache describes a file that does not exist, so the real Cargo must report
+/// the problem instead of the driver answering from stale metadata. That is
+/// also the answer Nextest routing needs, where keeping the selector is the
+/// safe choice.
+///
+/// An unresolvable selector therefore answers `false` here, but the cause is
+/// still reported by [`classify_manifest`] and can be inspected by a caller
+/// that wants to distinguish a broken path from a foreign one.
 fn manifest_path_is_workspace_root(manifest: &OsStr, workspace_root: &Path) -> bool {
-    manifest_names_prepared_root(manifest, workspace_root, is_readable_file)
+    matches!(
+        classify_manifest(manifest, workspace_root, is_readable_file),
+        Ok(ManifestMatch::Prepared)
+    )
 }
 
-/// Decide whether a manifest selector names the prepared root manifest.
+/// Classify a manifest selector against the prepared workspace root.
 ///
-/// Readability is injected so the unreadable-manifest rule can be tested
+/// Resolution and readability are injected so each outcome can be tested
 /// without permission bits, which a privileged test runner does not enforce.
-fn manifest_names_prepared_root(
+/// Canonicalization proves only that a path resolves, so a manifest that
+/// resolves but cannot be opened is reported as an error rather than as
+/// prepared.
+///
+/// # Errors
+///
+/// Return the I/O error that stopped the selector being resolved or read.
+fn classify_manifest(
     manifest: &OsStr,
     workspace_root: &Path,
     is_readable: impl Fn(&Path) -> bool,
-) -> bool {
-    let Ok(manifest_path) = fs::canonicalize(resolve_manifest(manifest, workspace_root)) else {
-        return false;
-    };
-    let Ok(workspace_root) = fs::canonicalize(workspace_root) else {
-        return false;
-    };
+) -> io::Result<ManifestMatch> {
+    let manifest_path = fs::canonicalize(resolve_manifest(manifest, workspace_root))?;
+    let workspace_root = fs::canonicalize(workspace_root)?;
 
-    manifest_path.file_name() == Some(OsStr::new("Cargo.toml"))
-        && manifest_path.parent() == Some(workspace_root.as_path())
-        && is_readable(&manifest_path)
+    if manifest_path.file_name() != Some(OsStr::new("Cargo.toml"))
+        || manifest_path.parent() != Some(workspace_root.as_path())
+    {
+        return Ok(ManifestMatch::Foreign);
+    }
+
+    if is_readable(&manifest_path) {
+        Ok(ManifestMatch::Prepared)
+    } else {
+        Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "the prepared root manifest cannot be read",
+        ))
+    }
 }
 
 /// Report whether a file can be opened for reading.

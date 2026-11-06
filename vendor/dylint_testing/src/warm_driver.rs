@@ -5,8 +5,9 @@
 //! is reported with the context that names the step rather than as a bare
 //! driver error.
 
-use anyhow::{Context as _, Result};
 use std::{io::Write, path::PathBuf};
+
+use anyhow::{Context as _, Result};
 
 /// Prepare the driver, write its path, and report preparation failures.
 ///
@@ -44,9 +45,11 @@ pub fn run_from_process() -> Result<()> {
 mod tests {
     //! Check that preparation failures keep the step's context.
 
-    use super::run_with;
-    use anyhow::anyhow;
     use std::{io::Cursor, path::PathBuf};
+
+    use anyhow::anyhow;
+
+    use super::run_with;
 
     /// Report a failed preparation with the step that failed.
     #[test]
