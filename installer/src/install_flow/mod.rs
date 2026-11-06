@@ -1,7 +1,17 @@
-//! Install-flow helpers for the installer binary.
+//! Building blocks shared by the installer binaries' command orchestration.
 //!
-//! This module keeps prebuilt-download fallback and metrics recording logic
-//! separate from CLI orchestration in `main.rs`.
+//! The subcommands themselves are sequenced by [`crate::orchestration`], which
+//! is the single place that knows the order of an install: verify the
+//! toolchain, install the Clippy snapshot, try the prebuilt download, build
+//! and stage the libraries, then record and report the result. This module
+//! supplies the individual steps that orchestration calls — prebuilt-download
+//! fallback, dependency checks, bootstrap installation, and metrics recording
+//! — and holds no flow of its own.
+//!
+//! Keeping the steps here rather than in a binary's `main.rs` is what lets the
+//! root `whitaker` binary and the legacy `whitaker-installer` binary share one
+//! implementation while differing only in the wrapper policy they pass to
+//! `orchestration::run_install`.
 
 use std::{collections::HashSet, fs, io, io::Write, time::Duration};
 

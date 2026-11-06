@@ -1176,15 +1176,15 @@ minus the eleven CI-excluded crates. Both coverage lanes run identical flags,
 so the pull-request gate and the trunk baseline are comparable.
 
 It differs from `make test` in one respect: it passes nextest a filterset
-(`COVERAGE_NEXTEST_FILTER`) that skips six of the seven trybuild
+(`COVERAGE_NEXTEST_FILTER`) that skips seven of the eight trybuild
 compile-contract tests, which assert that fixtures compile and add no coverage
-(about 250 s of the instrumented test phase). The seventh,
+(about 250 s of the instrumented test phase). The eighth,
 `fixture_expansion_lint_attribute_contract`, stays in because it expands the
 `whitaker_test_macros` proc macro inside rustc and is worth four lines of that
 crate's coverage. Naming a filterset replaces the profile's `default-filter`, so
 `COVERAGE_BASE_FILTER` repeats the default profile's. The skipped contracts
 run in the `windows-compat` lane, whose `make test NEXTEST_PROFILE=ci` includes
-all seven; they are compile-time API contracts, not platform-specific. No Linux
+all eight; they are compile-time API contracts, not platform-specific. No Linux
 lane runs them: `linux-full` builds no test binaries, so a step there would pay
 for a cold, uninstrumented workspace test build (a trial added 1,693 s and took
 `linux-full` from about 10 to 37 minutes). To run them yourself, use
@@ -3948,8 +3948,8 @@ entry point and delegates to `run_with_options` with `RunOptions::default()`.
 
 #### Library-path precedence
 
-`src/adapters/mod.rs::active_library_path` builds the value forwarded as
-`DYLINT_LIBRARY_PATH` from these candidates, in order:
+`src/adapters/library_path/mod.rs::active_library_path` builds the value
+forwarded as `DYLINT_LIBRARY_PATH` from these candidates, in order:
 
 - an explicit, non-empty `DYLINT_LIBRARY_PATH`, which wins outright and skips
   the rest;
@@ -3960,6 +3960,39 @@ entry point and delegates to `run_with_options` with `RunOptions::default()`.
 Recorded paths come first, and the build and prebuilt candidates are appended
 only when they are not already present, so a duplicate candidate is collapsed
 once. The joined value retains only absolute directories that exist.
+
+The result is a `LibraryPath` rather than an `Option`, so the caller can tell
+the three outcomes apart: `Explicit` (the user's setting, passed through
+untouched), `Resolved` (one or more existing directories, with the count kept
+for diagnostics), and `NoCandidate` (nothing installed yet, which leaves Dylint
+to find its own libraries). `LibraryPath::kind` returns the matching
+`LibraryPathKind` label.
+
+A missing record, a missing directory, and an unknown host target are normal
+states, not failures. A record that exists but cannot be locked, read, or
+parsed is reported as `CliError::InstallationRecord`; an unavailable data
+directory while deriving the prebuilt path is `CliError::PrebuiltLibraryPath`;
+and a candidate list that cannot be joined is `CliError::LibraryPath`. Each
+carries a typed source, so the command layer reports the failure without
+parsing text.
+
+#### Forwarding diagnostics
+
+`src/adapters/telemetry/mod.rs` records the forwarding boundary. Every label is
+drawn from a closed set: toolchain names, directory paths, and error messages
+are deliberately excluded, so metric cardinality cannot follow the user's
+filesystem. `SystemServices::forward` opens a `whitaker.forward` span carrying
+the operation, the route (`bootstrap` or `direct`), and the library-path kind,
+then records `whitaker.forward.total` and `whitaker.forward.duration_seconds`
+by source and bounded outcome (`succeeded`, `child_failed`, `signalled`,
+`dispatch_failed`, `library_path_failed`). Library-path resolutions record
+`whitaker.library_path.total` and `whitaker.library_path.candidates`, and
+installation-record reads record `whitaker.installation_record.total`.
+
+The root binary installs no metrics exporter, so these counters are inert
+unless a host embeds the crate and installs a recorder. That matches the
+installer library's policy: a library may describe and record metrics, but only
+an application chooses where they go.
 
 ### Installer internal architecture
 
@@ -4983,18 +5016,19 @@ failure and `tests/nextest_ui_filter.rs` requires the key.
 It discovers the compile-contract tests rather than listing them. A test that
 drives `trybuild` invokes a nested cargo build, so it costs what a build costs
 and the base per-test allowance is the wrong order of magnitude for it. The
-current discovery finds seven tests across
+current discovery finds eight tests across
 `common/tests/public_api_contract.rs`,
 `crates/whitaker_sarif/tests/api_contract.rs`, `installer/tests/ui.rs`,
-`crates/whitaker_test_macros/tests/ui.rs`, and
-`crates/rstest_helper_should_be_fixture/tests/ui.rs`. Three of those binaries
-are named `ui`, but their test functions have different names. For example,
-`whitaker-installer`'s test is in a binary named `ui` but is not itself named
-`ui`, so the `(binary(ui) & test(=ui))` clause never reached it. It ran under
-the base 300-second allowance, passed at 235 seconds, and timed out at 300.216
-seconds on the Windows lane, cancelling the run. A handwritten list would have
-had the same hole, and a discovery that stops recognizing the call would sweep
-a smaller set silently, so finding nothing is a failure rather than a pass.
+`crates/whitaker_test_macros/tests/ui.rs`,
+`crates/rstest_helper_should_be_fixture/tests/ui.rs`, and the root
+`tests/ui.rs`. Three of those binaries are named `ui`, but their test functions
+have different names. For example, `whitaker-installer`'s test is in a binary
+named `ui` but is not itself named `ui`, so the `(binary(ui) & test(=ui))`
+clause never reached it. It ran under the base 300-second allowance, passed at
+235 seconds, and timed out at 300.216 seconds on the Windows lane, cancelling
+the run. A handwritten list would have had the same hole, and a discovery that
+stops recognizing the call would sweep a smaller set silently, so finding
+nothing is a failure rather than a pass.
 
 It drives the lane discovery with workflow documents rather than only with the
 files. `_declared_jobs` takes parsed documents and reads the repository's own
