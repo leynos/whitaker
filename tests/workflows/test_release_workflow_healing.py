@@ -64,7 +64,7 @@ def _matrix_entries(workflow_path, job_name):
 
 
 def _assert_native_runners(workflow_path, job_name):
-    """Assert that every leg builds natively and covers the published target set."""
+    """Assert the target set, no cross builds, and native runners where mapped."""
     entries = _matrix_entries(workflow_path, job_name)
     targets = {entry["target"] for entry in entries}
     assert targets == DEPENDENCY_TARGETS, (

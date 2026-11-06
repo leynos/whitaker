@@ -269,7 +269,7 @@ class TestMeasurement:
     def test_statuses_and_retries_are_recorded(
         self, benchmark: types.ModuleType
     ) -> None:
-        """Check that statuses and retries are recorded from the JUnit report."""
+        """Check that test case statuses are recorded from the JUnit report."""
         xml = _report(
             _testcase(
                 name="ui", start="2026-10-31T10:00:00.000Z", seconds=10
@@ -293,7 +293,7 @@ class TestMeasurement:
     def test_retried_attempts_keep_only_the_last(
         self, benchmark: types.ModuleType
     ) -> None:
-        """Check that a retried test keeps only its last attempt."""
+        """Check that repeated test cases for one test keep the last attempt."""
         first = _testcase(
             name="ui",
             start="2026-10-31T10:00:00.000Z",
@@ -492,7 +492,7 @@ class TestOverlap:
     def test_skipped_tests_are_excluded_from_overlap(
         self, benchmark: types.ModuleType
     ) -> None:
-        """Check that skipped tests are excluded from overlap."""
+        """Check that an overlap report over non-skipped tests ignores a skipped one."""
         xml = _report(
             _testcase(
                 name="ui",
