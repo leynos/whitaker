@@ -73,6 +73,15 @@ COVERAGE_TARGET_DIR ?= $(CURDIR)/target/llvm-cov-target
 # cargo-llvm-cov's default `%p` pattern does.
 COVERAGE_PROFILE_FILE_NAME ?= whitaker-%m.profraw
 RUST_FLAGS ?= -D warnings
+# The build standard's parallel frontend and linker. The opt-in fragment
+# `tools/dev-fast/config.toml` carries both (`.cargo/config.toml` deliberately
+# does not; see ADR 010), and the gate recipes that assign `RUSTFLAGS` restate
+# them here, because an assigned `RUSTFLAGS` replaces every configuration source.
+# `mold` ships for Linux only, so the linker flag is set only on a Linux host.
+BUILD_HOST_OS ?= $(shell uname -s)
+DEV_LINUX_LINK_ARG := $(if $(filter Linux,$(BUILD_HOST_OS)),-Clink-arg=-fuse-ld=mold)
+DEV_THREADS_FLAG ?= -Zthreads=8
+DEV_STANDARD_FLAGS = $(DEV_THREADS_FLAG) $(DEV_LINUX_LINK_ARG)
 # The installer MSRV check and the publish check each build in a scratch
 # tree they discard afterwards. The trees live at fixed paths rather than
 # under `mktemp`, because sccache keys a compilation on its absolute paths: a
@@ -258,8 +267,8 @@ test: clippy-snapshot ## Run tests with warnings treated as errors
 		rm -f "$$WHITAKER_BACKUP"; \
 		WHITAKER_BACKUP=""; \
 	fi; \
-	RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS)" $(CARGO) $(TEST_RUNNER) $(CARGO_LOCKED) $(TEST_CARGO_FLAGS) $(BUILD_JOBS) $(if $(NEXTEST_PROFILE),--profile $(NEXTEST_PROFILE)); \
-	RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS)" $(CARGO) test $(CARGO_LOCKED) -p dylint_testing --lib --no-default-features $(BUILD_JOBS); \
+	RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS) $(DEV_STANDARD_FLAGS)" $(CARGO) $(TEST_RUNNER) $(CARGO_LOCKED) $(TEST_CARGO_FLAGS) $(BUILD_JOBS) $(if $(NEXTEST_PROFILE),--profile $(NEXTEST_PROFILE)); \
+	RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS) $(DEV_STANDARD_FLAGS)" $(CARGO) test $(CARGO_LOCKED) -p dylint_testing --lib --no-default-features $(BUILD_JOBS); \
 	if [ "$${ACT_WORKFLOW_TESTS:-0}" = "1" ]; then \
 		$(MAKE) workflow-test; \
 	fi
@@ -295,7 +304,7 @@ test-doc: ## Run the workspace doctests, which no other lane executes
 	@# pair the test lane uses: a doctest is compiled as a separate crate, and
 	@# `force-unstable-if-unmarked` then makes every one of them fail to load
 	@# its own library at `E0658`.
-	RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) test --doc $(CARGO_LOCKED) $(DOCTEST_CARGO_FLAGS) $(BUILD_JOBS)
+	RUSTFLAGS="$(RUST_FLAGS) $(DEV_STANDARD_FLAGS)" $(CARGO) test --doc $(CARGO_LOCKED) $(DOCTEST_CARGO_FLAGS) $(BUILD_JOBS)
 
 workflow-test: workflow-test-deps ## Run opt-in GitHub workflow smoke tests with act + pytest
 	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v act >/dev/null || { echo "Install act to run workflow tests"; exit 1; }
@@ -415,7 +424,7 @@ nixie:
 	TMPDIR="$$nixie_tmpdir" $(NIXIE) --no-sandbox
 
 typecheck:
-	RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS)" $(CARGO) check $(CARGO_LOCKED) $(CARGO_FLAGS)
+	RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS) $(DEV_STANDARD_FLAGS)" $(CARGO) check $(CARGO_LOCKED) $(CARGO_FLAGS)
 
 verus: ## Run the pinned Verus proof sidecar
 	./scripts/run-verus.sh

@@ -12,6 +12,13 @@ accepted = []
 
 [patterns]
 ignore = [
+  # Inline code spans are masked; the shared dictionary does not mask them yet.
+  '`[^`\n]+`',
+  # Preserve the external Linux linker name only in its command and flag forms.
+  "-Clink-arg=-fuse-ld=mold",
+  "sudo apt-get install mold",
+  # setup-rust's input that installs the linker.
+  "install-mold",
   "(?m)^            \\.env_remove\\(env::CARGO_TERM_COLOR\\)$",
   # PowerShell's `Start-Process -PassThru` parameter, an external API name.
   "(?m)^    return Start\\-Process \\-FilePath 'pwsh' \\-NoNewWindow \\-PassThru `$",

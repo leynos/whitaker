@@ -330,6 +330,41 @@ nightly-only Cargo setting tied to the dated nightly pinned in
 onward must replace the key with `embed-metadata = false`. Stable and beta
 toolchains ignore it.
 
+### Build standard
+
+The estate build standard makes the parallel frontend (`-Zthreads=8`) and the
+`mold` linker the defaults, but `.cargo/config.toml` here carries neither:
+`whitaker-installer` builds lint libraries from a checkout of this repository,
+so an auto-discovered linker flag would break source builds for users without
+`mold`. The flags live in the opt-in fragment `tools/dev-fast/config.toml`,
+selected with `cargo --config tools/dev-fast/config.toml`, and the `test`,
+`test-doc` and `typecheck` recipes restate them (`DEV_STANDARD_FLAGS`), because
+they assign `RUSTFLAGS` and an assigned `RUSTFLAGS` replaces every
+configuration source. `test` and `typecheck` add the Dylint-specific
+`-C prefer-dynamic -Z force-unstable-if-unmarked` alongside them; `test-doc`
+omits that pair, since it would make every doctest fail to load at `E0658`.
+`.concordat` records the exception for BD-001, BD-002, BD-004 and BD-008, and
+[ADR 010](adr-010-keep-the-fast-linker-out-of-the-auto-discovered-cargo-config.md)
+gives the reasoning.
+
+The release workflows build on the pinned nightly from `rust-toolchain.toml`,
+as an application does. The CI lanes that run the Makefile recipes install
+`mold` through `setup-rust`'s `install-mold` input. A local Linux build through
+the Makefile needs `mold` on the `PATH` (for example
+`sudo apt-get install mold`, or your distribution's package) and a GCC driver
+of 12.1 or newer; with an older GCC, upgrade it or select clang as the linker
+driver with `CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER=clang`. The Dylint
+lint-library toolchain (`nightly-2026-05-28` today) is the pinned channel
+itself, so the application pin and the lint-library toolchain are one.
+
+#### Cranelift backend support
+
+Exception: Cranelift is not the development-profile backend. The Dylint lint
+crates and the root `whitaker` crate are coupled to one nightly's
+`rustc_private` APIs, and the suite has not been measured under the Cranelift
+backend. Recorded state: the pin is `nightly-2026-05-28`; no measurement has
+been taken on it, and the review is deferred to 1 April 2027.
+
 ### Test profiles
 
 By default, `make test` excludes slow installer integration tests

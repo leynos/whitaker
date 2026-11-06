@@ -1,0 +1,22 @@
+# Opt-in Cargo configuration fragment for accelerated local builds.
+#
+# This file is deliberately kept out of `.cargo/config.toml`, which Cargo
+# auto-discovers. `whitaker-installer` builds lint libraries from a checkout of
+# this repository, so an auto-discovered `-fuse-ld=mold` would make a Linux
+# user without `mold` fail to link. Select the fragment explicitly with
+# `cargo --config tools/dev-fast/config.toml ...`; the Makefile's `test`,
+# `test-doc` and `typecheck` recipes restate the same flags themselves
+# (`DEV_STANDARD_FLAGS`), because they assign `RUSTFLAGS`.
+#
+# Cargo selects a single `rustflags` source rather than merging them, so the
+# parallel frontend is repeated in each source. `-C prefer-dynamic` stays out
+# of the fragment: the Dylint recipes add it where it is wanted.
+
+[build]
+rustflags = ["-Zthreads=8"]
+
+# `mold` ships for Linux only, so the linker flag is gated behind a target
+# `cfg`. macOS and Windows fall through to `[build] rustflags` above and use
+# their platform default linker.
+[target.'cfg(target_os = "linux")']
+rustflags = ["-Zthreads=8", "-Clink-arg=-fuse-ld=mold"]

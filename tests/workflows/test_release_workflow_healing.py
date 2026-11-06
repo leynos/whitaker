@@ -6,9 +6,9 @@ publication after the failures documented in issue #288:
 1. Every build leg runs on a native runner — no ``cross: true`` legs remain
    in either workflow, so ``openssl-sys`` cross builds and cross-architecture
    ``rustc-dev`` installs cannot recur.
-2. Dependency tools install under an explicit stable toolchain
-   (``cargo +stable install``), so the repository's pinned nightly can never
-   reimpose a rustc floor on host-tool builds.
+2. Dependency tools install under the repository's pinned nightly
+   (``cargo install``): the release builds as an application, with no stable
+   exemption.
 3. The rolling gate self-heals: when the manifest is unchanged it probes the
    rolling release for every expected dependency archive and rebuilds on any
    absence.
@@ -100,24 +100,22 @@ def _dependency_install_script(workflow_path):
     return step["run"]
 
 
-def test_dependency_installs_use_stable_toolchain() -> None:
-    """Host tools install under stable so the nightly pin imposes no floor."""
+def test_dependency_installs_use_the_pinned_nightly() -> None:
+    """Host tools install under the pinned nightly: an application takes no
+    stable exemption, and the pinned nightly is new enough for the tools."""
     for workflow_path in (RELEASE_WORKFLOW_PATH, WORKFLOW_PATH):
         script = _dependency_install_script(workflow_path)
-        assert "cargo +stable install" in script, (
-            f"{workflow_path.name} must install dependency tools with "
-            "`cargo +stable install`; the pinned nightly can be older than "
-            "the tools' locked rustc floor (issue #288)"
+        assert "cargo install" in script, (
+            f"{workflow_path.name} must install dependency tools with `cargo install`"
+        )
+        assert "+stable" not in script, (
+            f"{workflow_path.name} must not select the stable toolchain"
         )
         job = _job_from(workflow_path, "build-dependency-binaries")
-        toolchain_step = _find_step_by_name(
-            job["steps"], "Install stable toolchain for host tools"
-        )
-        assert toolchain_step is not None, (
-            f"{workflow_path.name} must install the stable toolchain before "
-            "dependency installs"
-        )
-        assert "rustup toolchain install stable" in toolchain_step["run"]
+        assert (
+            _find_step_by_name(job["steps"], "Install stable toolchain for host tools")
+            is None
+        ), f"{workflow_path.name} must not install a stable toolchain"
 
 
 def test_rolling_gate_probes_release_assets() -> None:
