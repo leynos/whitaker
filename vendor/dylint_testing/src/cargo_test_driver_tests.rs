@@ -7,6 +7,7 @@ use super::{is_workspace_metadata_query, routed_command};
 use std::{
     ffi::{OsStr, OsString},
     path::Path,
+    fs,
 };
 
 use rstest::rstest;
@@ -19,6 +20,28 @@ use rstest::rstest;
 
 use tempfile::tempdir;
 
+//! Check metadata selection and command routing without spawning tools.
+//!
+//! The property test repeats the enumerated argument shapes over generated
+//! arguments, so an unlisted ordering cannot slip through.
+};
+//! Check metadata selection and command routing without spawning tools.
+//!
+//! The property test repeats the enumerated argument shapes over generated
+//! arguments, so an unlisted ordering cannot slip through.
+};
+
+
+//! Check metadata selection and command routing without spawning tools.
+//!
+//! The property test repeats the enumerated argument shapes over generated
+//! arguments, so an unlisted ordering cannot slip through.
+};
+//! Check metadata selection and command routing without spawning tools.
+//!
+//! The property test repeats the enumerated argument shapes over generated
+//! arguments, so an unlisted ordering cannot slip through.
+};
 //! Check metadata selection and command routing without spawning tools.
 //!
 //! The property test repeats the enumerated argument shapes over generated
@@ -258,15 +281,55 @@ fn refuses_cached_metadata_for_a_dangling_manifest_flag() {
     assert!(!is_workspace_query);
 }
 
-/// Refuse the cache when the prepared workspace has no root manifest.
+/// Refuse the cache when a selector names a manifest that is not there.
 ///
-/// The workspace directory resolves, but its `Cargo.toml` does not. A lexical
-/// comparison would call that a match and answer from metadata describing a
-/// file that is gone; the classifier must leave it to the real Cargo.
+/// The prepared workspace's own manifest is readable, so only the selector is
+/// in question. A lexical comparison would call the missing path a match and
+/// answer from metadata describing a file that is gone; the classifier must
+/// leave it to the real Cargo.
 #[test]
-fn refuses_cached_metadata_when_the_root_manifest_is_missing() {
+fn refuses_cached_metadata_when_a_selector_names_a_missing_manifest() {
+    let workspace = tempdir().expect("a temporary workspace should be created");
+    fs::write(workspace.path().join("Cargo.toml"), b"[workspace]\n")
+        .expect("a root manifest should be written");
+    let arguments = [
+        "metadata",
+        "--no-deps",
+        "--manifest-path",
+        "missing/Cargo.toml",
+    ]
+    .map(OsString::from);
+
+    let is_workspace_query =
+        is_workspace_metadata_query(&arguments, workspace.path(), workspace.path())
+            .expect("an existing workspace directory should resolve");
+
+    assert!(!is_workspace_query);
+}
+
+/// Refuse the cache when the prepared workspace has no root manifest.
+#[test]
+fn refuses_cached_metadata_when_the_prepared_workspace_has_no_root_manifest() {
     let workspace = tempdir().expect("a temporary workspace should be created");
     let arguments = ["metadata", "--no-deps", "--manifest-path", "Cargo.toml"].map(OsString::from);
+
+    let is_workspace_query =
+        is_workspace_metadata_query(&arguments, workspace.path(), workspace.path())
+            .expect("an existing workspace directory should resolve");
+
+    assert!(!is_workspace_query);
+}
+
+/// Refuse the cache when a selector-free query has no root manifest.
+///
+/// A request without `--manifest-path` has no selector to classify, and
+/// `all()` over an empty list is vacuously true. The workspace's own manifest
+/// is the only thing left to check, so its absence must keep the query away
+/// from the cache.
+#[test]
+fn refuses_cached_metadata_when_a_selector_free_query_has_no_root_manifest() {
+    let workspace = tempdir().expect("a temporary workspace should be created");
+    let arguments = ["metadata", "--no-deps"].map(OsString::from);
 
     let is_workspace_query =
         is_workspace_metadata_query(&arguments, workspace.path(), workspace.path())

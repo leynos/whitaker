@@ -178,8 +178,11 @@ joined, separate, repeated, and malformed `--manifest-path` arguments. A
 selector counts as the prepared one only when it resolves to the prepared
 workspace's root `Cargo.toml`. A manifest that no longer exists is left
 foreign, so the real Cargo reports the missing file instead of the driver
-answering from metadata that describes it. `make test` runs the library tests,
-the integration test, and the example together.
+answering from metadata that describes it. The prepared workspace's own root
+manifest must also be readable before its metadata is served, so a request with
+no selector cannot be answered for a workspace whose manifest is gone or
+inaccessible. `make test` runs the library tests, the integration test, and the
+example together.
 
 If a nested command needs an unfetched crate, Cargo fails with an error like:
 

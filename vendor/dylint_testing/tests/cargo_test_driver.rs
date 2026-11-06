@@ -28,6 +28,9 @@ fn serves_the_prepared_metadata_file() -> io::Result<()> {
     let workspace = tempfile::tempdir()?;
     let cache = workspace.path().join("metadata.json");
     fs::write(&cache, br#"{"packages":[]}"#)?;
+    // The served bytes describe this workspace's root manifest, so the driver
+    // only answers while that manifest is there to be read.
+    fs::write(workspace.path().join("Cargo.toml"), b"[workspace]\n")?;
     let environment = DriverEnvironment {
         metadata_root: Some(workspace.path().to_path_buf()),
         metadata_cache: Some(cache),
@@ -70,6 +73,9 @@ fn refuses_to_serve_metadata_for_another_directory() -> io::Result<()> {
     let elsewhere = tempfile::tempdir()?;
     let cache = workspace.path().join("metadata.json");
     fs::write(&cache, b"prepared")?;
+    // Keep the prepared workspace intact so the directory mismatch is the
+    // only thing that can refuse the cache here.
+    fs::write(workspace.path().join("Cargo.toml"), b"[workspace]\n")?;
     let environment = DriverEnvironment {
         metadata_root: Some(workspace.path().to_path_buf()),
         metadata_cache: Some(cache),
@@ -93,14 +99,16 @@ fn refuses_to_serve_metadata_for_another_directory() -> io::Result<()> {
 
 /// A manifest request for a file that is gone is forwarded, not cached.
 ///
-/// The workspace directory still resolves, so a lexical comparison would call
-/// the request a match and hand back metadata for a manifest that no longer
-/// exists. The caller needs Cargo's own "manifest not found" error instead.
+/// The prepared workspace is intact, so only the selector is in question. A
+/// lexical comparison would call the missing path a match and hand back
+/// metadata for a manifest that no longer exists. The caller needs Cargo's own
+/// "manifest not found" error instead.
 #[test]
 fn forwards_a_manifest_request_whose_file_is_missing() -> io::Result<()> {
     let workspace = tempfile::tempdir()?;
     let cache = workspace.path().join("metadata.json");
     fs::write(&cache, b"prepared")?;
+    fs::write(workspace.path().join("Cargo.toml"), b"[workspace]\n")?;
     let environment = DriverEnvironment {
         metadata_root: Some(workspace.path().to_path_buf()),
         metadata_cache: Some(cache),
@@ -114,7 +122,7 @@ fn forwards_a_manifest_request_whose_file_is_missing() -> io::Result<()> {
             "metadata".into(),
             "--no-deps".into(),
             "--manifest-path".into(),
-            "Cargo.toml".into(),
+            "missing/Cargo.toml".into(),
         ],
         workspace.path(),
         &environment,
@@ -126,6 +134,40 @@ fn forwards_a_manifest_request_whose_file_is_missing() -> io::Result<()> {
     assert!(
         stdout.is_empty(),
         "the cache must not answer for a lost file"
+    );
+    Ok(())
+}
+
+/// A selector-free request is forwarded when the root manifest is gone.
+///
+/// With no `--manifest-path` there is no selector to classify, so the
+/// workspace's own manifest is the only evidence left. Serving the cache
+/// without it would answer a question Cargo must fail.
+#[test]
+fn forwards_a_selector_free_request_whose_manifest_is_missing() -> io::Result<()> {
+    let workspace = tempfile::tempdir()?;
+    let cache = workspace.path().join("metadata.json");
+    fs::write(&cache, b"prepared")?;
+    let environment = DriverEnvironment {
+        metadata_root: Some(workspace.path().to_path_buf()),
+        metadata_cache: Some(cache),
+        cargo_executable: Some(missing_program("cargo").into_os_string()),
+        nextest_executable: None,
+    };
+    let mut stdout = Vec::new();
+
+    let error = run(
+        &["metadata".into(), "--no-deps".into()],
+        workspace.path(),
+        &environment,
+        &mut stdout,
+    )
+    .expect_err("a missing root manifest should be forwarded to Cargo");
+
+    assert_eq!(error.kind(), io::ErrorKind::NotFound);
+    assert!(
+        stdout.is_empty(),
+        "the cache must not answer for a lost root"
     );
     Ok(())
 }

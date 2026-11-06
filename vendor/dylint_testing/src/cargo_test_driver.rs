@@ -125,7 +125,7 @@ fn is_workspace_metadata_query(
 
     let current_directory = fs::canonicalize(current_directory)?;
     let workspace_root = fs::canonicalize(workspace_root)?;
-    if current_directory != workspace_root {
+    if current_directory != workspace_root || !prepared_manifest_is_readable(&workspace_root) {
         return Ok(false);
     }
 
@@ -134,6 +134,18 @@ fn is_workspace_metadata_query(
         command_index,
         &workspace_root,
     ))
+}
+
+/// Check that the prepared workspace still holds a readable root manifest.
+///
+/// Canonicalization proves a path resolves; it does not prove the file can be
+/// opened. The prepared cache describes the workspace's root manifest, so
+/// serving it while that manifest is missing or unreadable would answer a
+/// question the real Cargo has to fail. A request with no `--manifest-path`
+/// has no selector to classify, so this check is what keeps it away from the
+/// cache.
+fn prepared_manifest_is_readable(workspace_root: &Path) -> bool {
+    fs::File::open(workspace_root.join("Cargo.toml")).is_ok()
 }
 
 /// Check whether the request is a `cargo metadata --no-deps` query.
