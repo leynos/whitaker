@@ -2183,6 +2183,20 @@ suppressions:
   The remaining shortfall is test functions and fixtures, which the repository
   does not document by policy.
 
+**Replay onto `main` after the repair round, 2026-11-06.** `main` advanced to
+`a3b4487f` ("Enforce Python docstring coverage in make lint (DF104)"), which
+made the branch conflict on `Makefile` and `AGENTS.md`. The branch was replayed
+onto `a3b4487f` with `zdiff3`; all 61 branch commits replayed without a
+conflict, and `git range-diff` reports every one as identical, so the replay
+changed only the base. The branch keeps main's `interrogate` gate and its own
+test-target wiring.
+
+The replay surfaced one spelling defect that the new base's stricter gate
+rejects: the root install end-to-end test's doc comment said `recognisable`,
+which en-GB-oxendict takes as `recognizable`. Fixed in `ebe1b454`. The new base
+also raises the diff to 161 files, +10,799/−1,157 (net +9,642 lines) against
+the 7,000-line soft tolerance, recorded as D-25.
+
 To be completed at each milestone boundary and at completion. Before setting
 this plan to `COMPLETE`, reconcile every entry in `Surprises & discoveries`
 against `docs/whitaker-cli-design.md`. In particular, `CLI-REQ-FWD` has no
