@@ -126,6 +126,10 @@ tests can preserve configured wrappers and compiler admission.
 - `docs/contents.md` is the documentation index and should be updated whenever
   documents are added, removed, or renamed.
 - `docs/roadmap.md` tracks longer-running product and implementation work.
+- `docs/adrs/` stores local architectural decision records and upstream
+  compatibility entry points; local records use `adr-nnnn-title-slug.md`.
+- `docs/rfcs/` stores requests for comments, one file per proposal, named
+  `rfc-nnnn-title-slug.md`.
 - `docs/execplans/` stores execution plans for branch-specific tasks and larger
   follow-up efforts.
 

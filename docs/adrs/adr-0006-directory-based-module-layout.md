@@ -1,4 +1,4 @@
-# Architectural decision record (ADR) 006: directory-based module layout
+# Architectural decision record (ADR) 0006: directory-based module layout
 
 ## Status
 

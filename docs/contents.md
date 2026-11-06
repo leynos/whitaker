@@ -86,89 +86,99 @@
 
 ## Decision records
 
-- [Architectural decision record (ADR) 001: prebuilt Dylint
-  libraries](adr-001-prebuilt-dylint-libraries.md) records the decision to ship
-  prebuilt Dylint libraries and the constraints that follow from that release
-  model.
-- [Architectural decision record (ADR) 002: Dylint `expect` attribute
-  macro](adr-002-dylint-expect-attribute-macro.md) records the support-macro
-  decision, migration phases, and known limitations for conditional
-  `#[expect(...)]` usage.
-- [Architectural decision record (ADR) 003: formal proof strategy for clone
+The `docs/adrs/` directory holds architectural decision records and
+compatibility entry points. Local ADR filenames follow
+`adr-nnnn-title-slug.md`, as the
+[documentation style guide](documentation-style-guide.md) prescribes.
+
+- [Architectural decision record (ADR) 0001: prebuilt Dylint
+  libraries](adrs/adr-0001-prebuilt-dylint-library-distribution.md) records the
+  decision to ship prebuilt Dylint libraries and the constraints that follow
+  from that release model.
+- [Architectural decision record (ADR) 0002: Dylint `expect` attribute
+  macro](adrs/adr-0002-attribute-macro-for-conditional-dylint-expect.md)
+  records the support-macro decision, migration phases, and known limitations
+  for conditional `#[expect(...)]` usage.
+- [Architectural decision record (ADR) 0003: formal proof strategy for clone
   detector
-  pipeline](adr-003-formal-proof-strategy-for-clone-detector-pipeline.md)
-  records the formal verification direction for the clone detector pipeline and
-  its proof boundaries.
-- [Architectural decision record (ADR) 004: pin-only mutation-testing
-  contract](adr-004-pin-only-mutation-testing-contract.md) records why the
-  shared mutation workflow tests its declared configuration without claiming
-  parity with the continuous integration test baseline.
-- [Architectural decision record (ADR) 005: adopt the shared CV-005 contract
-  library](adr-005-adopt-the-shared-cv005-contract-library.md) records the move
-  from a local copy of the CV-005 contract to the pinned shared check.
-- [Architectural decision record (ADR) 006: directory-based module
-  layout](adr-006-directory-based-module-layout.md) records the `mod.rs` module
-  convention and the extraction of oversized test modules into sibling files,
-  and states plainly that the 400-line budget is not yet machine-enforced here.
-- [Architectural decision record (ADR) 007: Rust source rewrite
-  substrate](adr-007-rust-rewrite-materialization-substrate.md) defines a
+  pipeline](adrs/adr-0003-formal-proof-strategy-for-the-clone-detector-pipeline.md)
+  records the formal verification direction for the clone detector pipeline
+  and its proof boundaries.
+- [Architectural decision record (ADR) 0004: pin-only mutation-testing
+  contract](adrs/adr-0004-pin-only-mutation-testing-contract.md) records why
+  the shared mutation workflow tests its declared configuration without
+  claiming parity with the continuous integration test baseline.
+- [Architectural decision record (ADR) 0005: adopt the shared CV-005 contract
+  library](adrs/adr-0005-adopt-the-shared-cv-005-contract-library.md) records
+  the move from a local copy of the CV-005 contract to the pinned shared check.
+- [Architectural decision record (ADR) 0006: directory-based module
+  layout](adrs/adr-0006-directory-based-module-layout.md) records the `mod.rs`
+  module convention and the extraction of oversized test modules into sibling
+  files, and states plainly that the 400-line budget is not yet
+  machine-enforced here.
+- [Architectural decision record (ADR) 0007: Rust source rewrite
+  substrate](adrs/adr-0007-rust-rewrite-materialization-substrate.md) defines a
   bounded comparative spike between ast-grep and `ra_ap_syntax::SyntaxEditor`,
   with source-fidelity gates and an evidence-based backend selection rule.
-- [Architectural decision record (ADR) 008: OrthoConfig CLI boundary](adr-008-ortho-config-cli-boundary.md)
+- [Architectural decision record (ADR) 0008: OrthoConfig CLI boundary](adrs/adr-0008-ortho-config-cli-boundary.md)
   records the configuration sources, compatibility bridge, and application
   boundary for the planned CLI.
-- [Architectural decision record (ADR) 009: verified Clippy snapshot for the
+- [Architectural decision record (ADR) 0009: verified Clippy snapshot for the
   Dylint driver
-  bootstrap](adr-009-verified-clippy-snapshot-for-dylint-driver-bootstrap.md)
+  bootstrap](adrs/adr-0009-verified-clippy-snapshot-for-the-dylint-driver-bootstrap.md)
   records the move to Dylint 6.3.0, the commit-named Clippy bundle that driver
   builds read instead of public Clippy, first-use driver construction in an
   identity-keyed directory, and the `whitaker-installer run` dispatcher.
 
 ## Requests for comments
 
+The `docs/rfcs/` directory holds requests for comments (RFCs). Each filename
+follows `rfc-nnnn-title-slug.md`, as the
+[documentation style guide](documentation-style-guide.md) prescribes.
+
 - [RFC 0001: lint candidates derived from CodeRabbit review
-  findings](rfcs/0001-coderabbit-derived-lint-candidates.md) proposes new
-  Whitaker lints distilled from recurring CodeRabbit review findings in Rust
-  code.
-- [RFC 0002: `string_continuation_style`](rfcs/0002-string-continuation-style.md)
+  findings](rfcs/rfc-0001-lint-candidates-derived-from-coderabbit-review-findings.md)
+  proposes new Whitaker lints distilled from recurring CodeRabbit review
+  findings in Rust code.
+- [RFC 0002: `string_continuation_style`](rfcs/rfc-0002-string-continuation-style.md)
   proposes a context-sensitive lint that prefers `concat!()` only when it can
   preserve a cooked string literal's semantics and surrounding grammar.
-- [RFC 0003: `missing_docs_in_test_functions`](rfcs/0003-missing-docs-in-test-functions.md)
+- [RFC 0003: `missing_docs_in_test_functions`](rfcs/rfc-0003-missing-docs-in-test-functions.md)
   proposes a pre-expansion lint that requires documentation for source-authored
   functions in configured Rust test-source paths without inspecting generated
   test code.
-- [RFC 0006: nested `cargo` lints for tests](rfcs/0006-nested-cargo-lints.md)
+- [RFC 0006: nested `cargo` lints for tests](rfcs/rfc-0006-nested-cargo-lints-for-tests.md)
   proposes three late-pass lints for tests that spawn `cargo` or `rustc` with a
   private target directory, directly, or without a time bound.
 - [RFC 0007: compiler-validated rewrite
-  checking](rfcs/0007-compiler-validated-rewrite-checking.md) proposes isolated
-  overlay compilation that classifies materialized rewrites under equivalent
-  NLL and Polonius configurations.
+  checking](rfcs/rfc-0007-compiler-validated-rewrite-checking.md) proposes
+  isolated overlay compilation that classifies materialized rewrites under
+  equivalent NLL and Polonius configurations.
 - [RFC 0008: borrow-workaround lint
-  family](rfcs/0008-borrow-workaround-lint-family.md) proposes rewrite-backed
-  rules for repeated lookups, remove-and-reinsert cycles, staged identifiers,
-  snapshots, lexical fences, and other indirect borrowing shapes.
+  family](rfcs/rfc-0008-borrow-workaround-lint-family.md) proposes
+  rewrite-backed rules for repeated lookups, remove-and-reinsert cycles, staged
+  identifiers, snapshots, lexical fences, and other indirect borrowing shapes.
 - [RFC 0009: validated ownership and borrow
-  rewriter](rfcs/0009-validated-ownership-and-borrow-rewriter.md) proposes
+  rewriter](rfcs/rfc-0009-validated-ownership-and-borrow-rewriter.md) proposes
   recipe materialization, alternative ranking, deterministic previews,
   transactional application, and byte-exact rollback.
-- [RFC 0010: macro-aware cognitive complexity](rfcs/0010-macro-aware-cognitive-complexity.md)
+- [RFC 0010: macro-aware cognitive complexity](rfcs/rfc-0010-macro-aware-cognitive-complexity.md)
   proposes a cognitive complexity lint that charges only author-written
   constructs, and a shared authored-versus-generated classifier for every
   complexity-sensitive Whitaker lint.
 - [RFC 0011: weak representations at domain
-  boundaries](rfcs/0011-weak-domain-boundaries.md) proposes the `DOMAIN` lint
-  family and rules for discarded parser witnesses, validation without
-  refinement, and repeated boundary parsing.
+  boundaries](rfcs/rfc-0011-weak-representations-at-domain-boundaries.md)
+  proposes the `DOMAIN` lint family and rules for discarded parser witnesses,
+  validation without refinement, and repeated boundary parsing.
 - [RFC 0012: fragile types and invalid-state
-  encodings](rfcs/0012-fragile-types.md) proposes rules for manual sum types,
-  mixed presence constraints, finite Boolean and sentinel state, redundant
-  dimensions, primitive-to-domain projections, invariant surfaces, and local
-  terminal protocols.
+  encodings](rfcs/rfc-0012-fragile-types-and-invalid-state-encodings.md)
+  proposes rules for manual sum types, mixed presence constraints, finite
+  Boolean and sentinel state, redundant dimensions, primitive-to-domain
+  projections, invariant surfaces, and local terminal protocols.
 - [RFC 0012 amendment: state-machine ADT and protocol
-  coverage](rfcs/0012-state-machine-adt-amendment.md) normatively broadens the
-  RFC 0012 rule contracts and establishes mdtablefix issues 443–449 as the
-  acceptance corpus.
+  coverage](rfcs/rfc-0012-amendment-state-machine-adt-and-protocol-coverage.md)
+  normatively broadens the RFC 0012 rule contracts and establishes mdtablefix
+  issues 443–449 as the acceptance corpus.
 - [Phase 17 DOMAIN roadmap amendment](roadmap-phase-17-domain-amendment.md)
   supersedes conflicting Phase 17 state-space tasks with the expanded RFC 0012
   rule catalogue and the mdtablefix 443–449 acceptance corpus.

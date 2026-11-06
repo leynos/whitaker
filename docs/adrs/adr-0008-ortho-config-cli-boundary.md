@@ -1,4 +1,4 @@
-# Architectural decision record (ADR) 008: OrthoConfig CLI boundary
+# Architectural decision record (ADR) 0008: OrthoConfig CLI boundary
 
 ## Status
 

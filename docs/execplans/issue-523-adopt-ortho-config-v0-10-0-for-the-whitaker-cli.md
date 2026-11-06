@@ -323,7 +323,7 @@ behaviour, and UI compile contracts.
   passed, followed by 1,852 nextest passes (five skipped) and 11 Dylint test
   passes. The corrected design review completed with zero findings.
 - [x] 2026-10-26: Rebased onto upstream `1fadb66b`, retaining its rewrite
-  command design and renumbering the configuration decision as ADR 008.
+  command design and renumbering the configuration decision as ADR 0008.
 - [x] The issue request explicitly authorizes implementation and draft PR
   delivery. Continue with the recorded design and sequential milestones.
 

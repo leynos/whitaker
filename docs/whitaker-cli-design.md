@@ -311,11 +311,11 @@ environment variables, and TOML configuration, including subcommand helpers and
 comma-separated environment values.
 
 The application configuration boundary is specified by
-[ADR 008](adr-008-ortho-config-cli-boundary.md). Roadmap item 3.6.3 introduces
-a configuration-only `whitaker-cli` package; later items add command execution
-and the shared presentation flags. The package owns OrthoConfig DTOs, source
-selection, compatibility notices, and conversion to validated settings. Domain
-and reusable library crates do not depend on OrthoConfig.
+[ADR 0008](adrs/adr-0008-ortho-config-cli-boundary.md). Roadmap item 3.6.3
+introduces a configuration-only `whitaker-cli` package; later items add command
+execution and the shared presentation flags. The package owns OrthoConfig DTOs,
+source selection, compatibility notices, and conversion to validated settings.
+Domain and reusable library crates do not depend on OrthoConfig.
 
 The package targets Rust 1.89.0, while the Dylint and `rustc` private crates
 retain their separately pinned nightly. It enables OrthoConfig v0.10.0's

@@ -214,8 +214,8 @@ return an error instead of being treated as permission to install.
 This release makes the Dylint driver bootstrap reproducible. Whitaker no longer
 lets Dylint clone public Clippy to build its driver; the installer provisions a
 verified Clippy snapshot instead, and never falls back to public Clippy. See
-[ADR 009](adr-009-verified-clippy-snapshot-for-dylint-driver-bootstrap.md) for
-the rationale and
+[ADR 0009](adrs/adr-0009-verified-clippy-snapshot-for-the-dylint-driver-bootstrap.md)
+for the rationale and
 [the users' guide](users-guide.md#the-installed-dylint-bootstrap) for the
 behaviour.
 

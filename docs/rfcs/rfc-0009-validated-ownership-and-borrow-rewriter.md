@@ -1387,10 +1387,10 @@ agents exactly the missing feedback loop:
     <https://rustc-dev-guide.rust-lang.org/diagnostics.html>
 
 [^3]: RFC 0007, compiler-validated rewrite checking:
-    `0007-compiler-validated-rewrite-checking.md`
+    `rfc-0007-compiler-validated-rewrite-checking.md`
 
 [^4]: RFC 0008, borrow-workaround lint family:
-    `0008-borrow-workaround-lint-family.md`
+    `rfc-0008-borrow-workaround-lint-family.md`
 
 [^5]: Whitaker test-support overlay design:
     `../technical-design-for-test-support-dead-code-and-masked-dead-code-expectations.md`
