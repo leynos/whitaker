@@ -45,7 +45,7 @@ jobs:
           ref: ${{ env.RELEASE_TAG }}
 
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
+        uses: leynos/shared-actions/.github/actions/setup-rust@d9c4e1ad5ce37404760ac02b85ba1e8db279b003
 
       - name: Add target
         run: rustup target add "${{ matrix.target }}"
@@ -151,7 +151,7 @@ jobs:
           ref: ${{ env.RELEASE_TAG }}
 
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
+        uses: leynos/shared-actions/.github/actions/setup-rust@d9c4e1ad5ce37404760ac02b85ba1e8db279b003
 
       - name: Add target
         run: rustup target add "${{ matrix.target }}"
@@ -241,7 +241,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
+        uses: leynos/shared-actions/.github/actions/setup-rust@d9c4e1ad5ce37404760ac02b85ba1e8db279b003
 
       - name: Read pinned toolchain
         id: toolchain
@@ -325,7 +325,7 @@ jobs:
           ref: ${{ env.RELEASE_TAG }}
 
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
+        uses: leynos/shared-actions/.github/actions/setup-rust@d9c4e1ad5ce37404760ac02b85ba1e8db279b003
 
       - name: Prepare the Clippy snapshot assets
         id: prepare
@@ -366,7 +366,7 @@ jobs:
           ref: ${{ env.RELEASE_TAG }}
 
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
+        uses: leynos/shared-actions/.github/actions/setup-rust@d9c4e1ad5ce37404760ac02b85ba1e8db279b003
 
       - name: Build dependency packaging tool
         run: cargo build --release -p whitaker-installer --bin whitaker-package-dependency-binary
@@ -608,7 +608,7 @@ jobs:
           ref: ${{ env.RELEASE_TAG }}
 
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
+        uses: leynos/shared-actions/.github/actions/setup-rust@d9c4e1ad5ce37404760ac02b85ba1e8db279b003
 
       - name: Install the installer from this checkout
         run: cargo install --locked --path installer --bin whitaker-installer
