@@ -372,9 +372,12 @@ binding. Store them under `docs/rfcs/`.
 Name RFC files using the pattern `rfcs/rfc-nnnn-title-slug.md`, relative to the
 `docs/` directory, for example `docs/rfcs/rfc-0007-streaming-step-results.md`.
 
-- `nnnn` is a four-digit, zero-padded serial number, unique among the RFCs in
-  the repository. RFC and ADR numbers are allocated independently, so
-  `rfc-0003` and `adr-0003` may both exist.
+- `nnnn` is a four-digit, zero-padded serial number, unique among the
+  non-amendment RFCs in the repository. RFC and ADR numbers are allocated
+  independently, so `rfc-0003` and `adr-0003` may both exist. An amendment that
+  extends an existing RFC reuses its parent RFC's serial instead of allocating
+  a new one, and marks the relationship with an `amendment-` segment in the
+  slug, as in `rfc-0012-amendment-state-machine-adt-and-protocol-coverage.md`.
 - `title-slug` is a kebab-case American Standard Code for Information
   Interchange (ASCII) rendering of the RFC title, without the `RFC nnnn:`
   prefix: lowercase letters, digits, and single hyphens only, with no leading
@@ -529,8 +532,11 @@ providing a historical record for future maintainers.
 Name ADR files using the pattern `adrs/adr-nnnn-title-slug.md`, relative to the
 `docs/` directory, for example `docs/adrs/adr-0001-async-fixtures-and-tests.md`.
 
-- `nnnn` is a four-digit, zero-padded serial number, unique among the ADRs in
-  the repository and allocated independently of RFC numbers.
+- `nnnn` is a four-digit, zero-padded serial number, unique among the locally
+  allocated ADRs and allocated independently of RFC numbers. An entry that only
+  preserves a link to another project's ADR, rather than recording a Whitaker
+  decision, mirrors that project's numbering and is excluded from local
+  allocation, so it may share a serial with a locally allocated ADR.
 - `title-slug` is a kebab-case ASCII rendering of the ADR title, without the
   `Architectural decision record (ADR) nnnn:` prefix, following the same slug
   rules as RFC filenames.
@@ -710,14 +716,17 @@ fn add(a: i32, b: i32) -> i32 {
 
 ## API doc comments (Rust)
 
-Use doc comments to document public APIs. Keep them consistent with the
-contents of the manual.
+Use doc comments to document Rust APIs and keep them consistent with the
+contents of the manual. In this repository, follow the more specific Rust rules
+in [AGENTS.md](../AGENTS.md): document public and private functions and
+methods, use imperative summary lines, and omit `# Arguments` and `# Returns`
+boilerplate. The guidance below applies where it is compatible with those rules.
 
 - Begin each block with `///`.
-- Keep the summary line short, followed by further detail.
-- Explicitly document all parameters with `# Parameters`, describing each
-  argument.
-- Document the return value with `# Returns`.
+- Keep the summary line short, imperative, and followed by further detail.
+- Describe parameters and return values in the summary or rationale when their
+  meaning is not obvious from the signature, rather than in `# Arguments` or
+  `# Returns` sections.
 - Document any panics or errors with `# Panics` or `# Errors` as appropriate.
 - Place examples under `# Examples`. Let examples run as documentation tests
   when they can execute correctly, so the compiler verifies that they compile
@@ -731,14 +740,9 @@ contents of the manual.
 - Put function attributes after the doc comment.
 
 ```rust,no_run
-/// Returns the sum of `a` and `b`.
+/// Add `b` to `a`.
 ///
-/// # Parameters
-/// - `a`: The first integer to add.
-/// - `b`: The second integer to add.
-///
-/// # Returns
-/// The sum of `a` and `b`.
+/// The result is the sum of `a` and `b`.
 ///
 /// # Examples
 ///
