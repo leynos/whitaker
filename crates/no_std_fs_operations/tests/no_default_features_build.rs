@@ -51,6 +51,7 @@ fn crate_builds_without_dylint_driver_feature() -> anyhow::Result<()> {
 
     let output = Command::new("cargo")
         .arg("check")
+        .arg("--frozen")
         .arg("--package")
         .arg(CRATE)
         .arg("--no-default-features")
