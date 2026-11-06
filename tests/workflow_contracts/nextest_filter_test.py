@@ -14,7 +14,7 @@ Run this contract with ``make test-workflow-contracts``.
 from __future__ import annotations
 
 import pytest
-from nextest_filter import FilterReader, filter_may_select_test
+from nextest_filter import FilterReader, FilterSubject, filter_may_select_test
 
 
 @pytest.mark.parametrize(
@@ -47,26 +47,65 @@ def test_filter_matching_evaluates_nextest_boolean_forms(
     selector: str, matches: bool
 ) -> None:
     """Evaluate test-name matchers and the boolean operators around them."""
-    assert (
-        filter_may_select_test(
-            selector, "trybuild_fixtures_compile_without_diagnostics"
-        )
-        is matches
-    )
+    test = FilterSubject("trybuild_fixtures_compile_without_diagnostics")
+    assert filter_may_select_test(selector, test) is matches
 
 
 @pytest.mark.parametrize(
     "selector",
     [
-        r"test(=call\(site\))",
-        r"test(call\(site)",
+        r"test(=call(site\))",
+        r"test(call(site)",
         r"test(~site\))",
-        r"test(#*\(site\))",
+        r"test(#*(site\))",
+        r"test(/call\(site\)/)",
     ],
 )
 def test_matcher_text_resolves_nextest_escapes(selector: str) -> None:
-    """Compare escaped parentheses as the characters they stand for."""
-    assert FilterReader(selector, "call(site)").value() is True
+    """End a matcher at an unescaped parenthesis, and a regex at its slash."""
+    assert FilterReader(selector, FilterSubject("call(site)")).value() is True
+
+
+@pytest.mark.parametrize(
+    ("selector", "matches"),
+    [
+        ("package(whitaker-installer)", True),
+        ("package(whitaker-*)", True),
+        ("package(installer)", False),
+        ("package(~installer)", True),
+        ("package(=whitaker-*)", False),
+        ("package(/^whitaker/)", True),
+        ("binary(u*)", True),
+        ("binary(other)", False),
+        ("kind(test)", True),
+        ("kind(te*)", False),
+        ("kind(#te*)", True),
+    ],
+)
+def test_metadata_predicates_use_their_documented_default_matchers(
+    selector: str, matches: bool
+) -> None:
+    """Glob ``package`` and ``binary`` by default, and compare ``kind`` exactly."""
+    test = FilterSubject("a", package="whitaker-installer", binary="ui", kind="test")
+    assert FilterReader(selector, test).value() is matches
+
+
+@pytest.mark.parametrize(
+    "selector",
+    [
+        "package(whitaker-installer)",
+        "binary(ui)",
+        "kind(test)",
+        "binary_id(whitaker-installer::ui)",
+        "platform(host)",
+        "default()",
+        "deps(whitaker-installer)",
+        "rdeps(whitaker-installer)",
+    ],
+)
+def test_predicates_without_data_are_unknown_rather_than_false(selector: str) -> None:
+    """Never read a predicate the reader has no data for as a definite miss."""
+    assert FilterReader(selector, FilterSubject("a")).value() is None
 
 
 @pytest.mark.parametrize(
@@ -83,9 +122,12 @@ def test_matcher_text_resolves_nextest_escapes(selector: str) -> None:
         pytest.param("test(a) or", id="word-operator-needs-its-right-side"),
         pytest.param("not", id="negation-needs-an-operand"),
         pytest.param("test(a) - test(b)", id="difference-is-outside-the-grammar"),
+        pytest.param("test(a) + test(b)", id="plus-is-outside-the-grammar"),
+        pytest.param(r"test(a\()", id="opening-parenthesis-is-not-an-escape"),
+        pytest.param("test(/a)", id="regex-must-close"),
     ],
 )
 def test_malformed_filters_raise_rather_than_read_as_no_match(expression: str) -> None:
     """Reject bad syntax, which a guard would otherwise read as no capture."""
     with pytest.raises(ValueError, match=r"\S"):
-        FilterReader(expression, "a").value()
+        FilterReader(expression, FilterSubject("a")).value()

@@ -4923,13 +4923,17 @@ profiles: the six contracts must match no `serial-dylint-ui` override, and the
 seventh must keep its own override in that group. Answering the first question
 with a real `cargo nextest list` would compile the workspace, so
 `tests/workflow_contracts/nextest_filter.py` evaluates a filter expression
-against a test name instead. It belongs to the workflow contracts and has no
-other callers: code that can afford a listing should take one, because Nextest
-remains the authority on what a filter selects. The reader treats a predicate
-it cannot evaluate from a name, such as `default()`, as unknown rather than as
-a miss, and raises `ValueError` on syntax outside its grammar, so a guard built
-on it errs towards reporting a capture. `nextest_filter_property_test.py`
-checks it against an independent oracle over generated expression trees.
+against what is known about a test instead. It belongs to the workflow
+contracts and has no other callers: code that can afford a listing should take
+one, because Nextest remains the authority on what a filter selects. The guard
+passes each contract's package, binary and kind from `COMPILE_CONTRACTS`, and a
+contract test checks that table against the source tree, because a name alone
+cannot rule out an override such as `binary(integration_exclusion)`. The reader
+treats a predicate it has no data for, such as `default()`, as unknown rather
+than as a miss, and raises `ValueError` on syntax outside its grammar, so a
+guard built on it errs towards reporting a capture.
+`nextest_filter_property_test.py` checks it against an independent oracle over
+generated expression trees.
 
 It drives the lane discovery with workflow documents rather than only with the
 files. `_declared_jobs` takes parsed documents and reads the repository's own

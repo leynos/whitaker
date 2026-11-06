@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import typing as typ
 
+from nextest_filter import FilterSubject
 
 # Parser-pin fixtures share one integration binary and Cargo package cache, so
 # the allowance must cover that whole binary and serialize it.
@@ -29,6 +30,83 @@ COMPILE_CONTRACT_FILTER: typ.Final[str] = (
     "test(renamed_sarif_api_is_public_and_legacy_names_stay_removed) | "
     "test(sha2_0_11_pre_migration_patterns_fail_to_compile)"
 )
+
+
+class CompileContract(typ.NamedTuple):
+    """One separately grouped compile contract and the crate that defines it.
+
+    Attributes
+    ----------
+    test : FilterSubject
+        What an override's filter is evaluated against for this contract.
+    crate_directory : str
+        The defining crate, relative to the repository root, so the identity
+        can be checked against the source rather than trusted.
+    """
+
+    test: FilterSubject
+    crate_directory: str
+
+
+#: ``COMPILE_CONTRACT_FILTER`` with the identity each name has in the workspace.
+#: Filters such as ``binary(integration_exclusion)`` can only be ruled out by
+#: knowing which binary a contract is in, and a name alone cannot say that.
+COMPILE_CONTRACTS: typ.Final[tuple[CompileContract, ...]] = (
+    CompileContract(
+        FilterSubject(
+            "dependency_check_result_contract_is_public",
+            package="whitaker-installer",
+            binary="ui",
+            kind="test",
+        ),
+        "installer",
+    ),
+    CompileContract(
+        FilterSubject(
+            "fixture_expansion_lint_attribute_contract",
+            package="whitaker_test_macros",
+            binary="ui",
+            kind="test",
+        ),
+        "crates/whitaker_test_macros",
+    ),
+    CompileContract(
+        FilterSubject(
+            "public_const_api_works_in_const_context",
+            package="whitaker-installer",
+            binary="ui",
+            kind="test",
+        ),
+        "installer",
+    ),
+    CompileContract(
+        FilterSubject(
+            "renamed_common_apis_are_public_and_legacy_names_stay_removed",
+            package="whitaker-common",
+            binary="public_api_contract",
+            kind="test",
+        ),
+        "common",
+    ),
+    CompileContract(
+        FilterSubject(
+            "renamed_sarif_api_is_public_and_legacy_names_stay_removed",
+            package="whitaker_sarif",
+            binary="api_contract",
+            kind="test",
+        ),
+        "crates/whitaker_sarif",
+    ),
+    CompileContract(
+        FilterSubject(
+            "sha2_0_11_pre_migration_patterns_fail_to_compile",
+            package="whitaker-installer",
+            binary="ui",
+            kind="test",
+        ),
+        "installer",
+    ),
+)
 NESTED_TRYBUILD_TEST_FILTER: typ.Final[str] = (
     "test(trybuild_fixtures_compile_without_diagnostics)"
 )
@@ -36,8 +114,7 @@ TRYBUILD_CONTRACT_FILTER: typ.Final[str] = (
     f"{COMPILE_CONTRACT_FILTER} | {NESTED_TRYBUILD_TEST_FILTER}"
 )
 NESTED_TRYBUILD_FILTER: typ.Final[str] = (
-    "package(rstest_helper_should_be_fixture) & "
-    f"{NESTED_TRYBUILD_TEST_FILTER}"
+    f"package(rstest_helper_should_be_fixture) & {NESTED_TRYBUILD_TEST_FILTER}"
 )
 NESTED_EXAMPLE_FILTER: typ.Final[str] = (
     "package(rstest_helper_should_be_fixture) & "

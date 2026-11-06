@@ -13,16 +13,19 @@ Run this contract with ``make test-workflow-contracts``.
 
 from __future__ import annotations
 
+import pathlib
 import typing as typ
 
 import pytest
+import tomllib
 from nextest_config import load_nextest_config
 from nextest_filter import filter_may_select_test
 from nextest_overrides import (
+    COMPILE_CONTRACT_FILTER,
+    COMPILE_CONTRACTS,
     NESTED_TRYBUILD_FILTER,
-    NESTED_TRYBUILD_TEST_FILTER,
     REQUIRED_TEST_GROUPS,
-    TRYBUILD_CONTRACT_FILTER,
+    CompileContract,
 )
 
 
@@ -70,36 +73,98 @@ def test_no_override_names_a_group_the_configuration_lacks(
     )
 
 
+def _contracts_captured_by(filters: typ.Iterable[str]) -> list[str]:
+    """Name the separately grouped contracts any of these filters may select."""
+    expressions = tuple(filters)
+    return [
+        contract.test.name
+        for contract in COMPILE_CONTRACTS
+        if any(
+            filter_may_select_test(expression, contract.test)
+            for expression in expressions
+        )
+    ]
+
+
 @pytest.mark.parametrize("profile_name", ("default", "ci"))
 def test_separately_grouped_trybuild_contracts_do_not_match_dylint_ui_overrides(
     parsed_nextest: dict[str, typ.Any], profile_name: str
 ) -> None:
     """Keep the six separately grouped contracts out of Dylint overrides."""
-    trybuild_filters = TRYBUILD_CONTRACT_FILTER.split(" | ")
-    assert NESTED_TRYBUILD_TEST_FILTER in trybuild_filters
-    trybuild_names = tuple(
-        clause.removeprefix("test(").removesuffix(")")
-        for clause in trybuild_filters
-        if clause != NESTED_TRYBUILD_TEST_FILTER
-    )
-    serial_dylint_filters = [
+    captured = _contracts_captured_by(
         override.get("filter") or ""
         for override in parsed_nextest["profile"][profile_name].get("overrides") or []
         if override.get("test-group") == "serial-dylint-ui"
-    ]
-    matching_names = [
-        test_name
-        for test_name in trybuild_names
-        if any(
-            filter_may_select_test(filter_expression, test_name)
-            for filter_expression in serial_dylint_filters
-        )
-    ]
+    )
 
-    assert not matching_names, (
+    assert not captured, (
         "the six separately grouped trybuild contracts must not match "
-        f"serial-dylint-ui overrides in {profile_name}; "
-        f"found {matching_names}"
+        f"serial-dylint-ui overrides in {profile_name}; found {captured}"
+    )
+
+
+@pytest.mark.parametrize(
+    "conflicting_filter",
+    [
+        "package(whitaker-installer)",
+        "package(whitaker-*)",
+        "package(=whitaker-installer) & test(dependency_check_result_contract)",
+        "binary(ui)",
+        "binary(public_api_contract)",
+        "binary(ui) & test(contract)",
+        "kind(test)",
+        "kind(test) & test(sha2_0_11)",
+        "not package(no_unwrap_or_else_panic)",
+        "default()",
+    ],
+)
+def test_guard_reports_a_filter_that_selects_by_test_metadata(
+    conflicting_filter: str,
+) -> None:
+    """Report captures that no ``test()`` clause on its own would reveal."""
+    assert _contracts_captured_by([conflicting_filter]), (
+        f"{conflicting_filter!r} selects a separately grouped contract"
+    )
+
+
+@pytest.mark.parametrize(
+    "unrelated_filter",
+    [
+        "binary(integration_exclusion)",
+        "package(no_unwrap_or_else_panic)",
+        "kind(example)",
+        "package(whitaker-installer) & test(=ui)",
+    ],
+)
+def test_guard_lets_a_filter_for_other_tests_through(unrelated_filter: str) -> None:
+    """Stay quiet about filters whose metadata rules every contract out."""
+    assert not _contracts_captured_by([unrelated_filter]), (
+        f"{unrelated_filter!r} selects no separately grouped contract"
+    )
+
+
+def test_contract_identities_name_the_filter_the_group_uses() -> None:
+    """Keep the identity table and the group's filter on the same six tests."""
+    filter_names = {
+        clause.removeprefix("test(").removesuffix(")")
+        for clause in COMPILE_CONTRACT_FILTER.split(" | ")
+    }
+    assert {contract.test.name for contract in COMPILE_CONTRACTS} == filter_names, (
+        "COMPILE_CONTRACTS must name exactly the tests COMPILE_CONTRACT_FILTER does"
+    )
+
+
+@pytest.mark.parametrize(
+    "contract", COMPILE_CONTRACTS, ids=lambda contract: contract.test.name
+)
+def test_contract_identities_match_the_source_tree(contract: CompileContract) -> None:
+    """Check each stated package and binary, because the guard trusts them."""
+    crate = pathlib.Path(__file__).resolve().parents[2] / contract.crate_directory
+    manifest = tomllib.loads((crate / "Cargo.toml").read_text(encoding="utf-8"))
+    assert manifest["package"]["name"] == contract.test.package
+    source = crate / "tests" / f"{contract.test.binary}.rs"
+    assert f"fn {contract.test.name}(" in source.read_text(encoding="utf-8"), (
+        f"{source} must define {contract.test.name}"
     )
 
 

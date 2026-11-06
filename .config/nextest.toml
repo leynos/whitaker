@@ -158,7 +158,7 @@ serial-nested-cargo-builds = { max-threads = 1 }
 # cross-process lock tests use this target lock and share the serial group with
 # the fixture builds they verify. The example-compilation override below gives
 # its library and example builds a 75-minute allowance after its earlier
-# 20-minute limit expired in the queue. The five trybuild compile contracts in
+# 20-minute limit expired in the queue. The six trybuild compile contracts in
 # other crates write to `target/tests/trybuild` and hold their own
 # `serial-trybuild-contracts` group; the nested trybuild test in this crate
 # stays here because it shares `ExampleHarnessLock` with the example tests.

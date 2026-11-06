@@ -14,10 +14,14 @@ import typing as typ
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
-from nextest_filter import FilterReader, filter_may_select_test
+from nextest_filter import FilterReader, FilterSubject, filter_may_select_test
 
 #: Contains parentheses so that generated selectors must escape them.
 _TEST_NAME: typ.Final[str] = "ui::call(site)_contract"
+_NAME_ONLY: typ.Final[FilterSubject] = FilterSubject(_TEST_NAME)
+_FULLY_KNOWN: typ.Final[FilterSubject] = FilterSubject(
+    _TEST_NAME, package="whitaker-installer", binary="ui", kind="test"
+)
 
 #: Generous because the host runs several agents at once; these are pure and
 #: the deadline is guarding against a hang, not measuring speed.
@@ -36,18 +40,24 @@ class _Node(typ.NamedTuple):
 
     operator: str
     spelling: str
-    operands: tuple[_Node, ...]
-    expected: bool | None
+    operands: tuple[_Node, ...] = ()
+    expected: bool | None = None
+    needs_metadata: bool = False
 
 
 def _atom(text: str, expected: bool | None) -> _Node:
     """Build a leaf whose truth value is known from how it was written."""
-    return _Node("atom", text, (), expected)
+    return _Node("atom", text, expected=expected)
+
+
+def _metadata_atom(text: str, *, expected: bool) -> _Node:
+    """Build a leaf that is only decidable when the test's metadata is known."""
+    return _Node("atom", text, expected=expected, needs_metadata=True)
 
 
 def _escape(text: str) -> str:
     """Escape matcher text the way a filter author must."""
-    return text.replace("(", r"\(").replace(")", r"\)")
+    return text.replace(")", r"\)")
 
 
 _FIXED_ATOMS: typ.Final[tuple[_Node, ...]] = (
@@ -57,15 +67,20 @@ _FIXED_ATOMS: typ.Final[tuple[_Node, ...]] = (
     _atom("test(absent)", expected=False),
     _atom(r"test(/^ui::call\(site\)/)", expected=True),
     _atom("test(/^absent/)", expected=False),
-    _atom(r"test(#ui::*\(site\)*)", expected=True),
+    _atom(r"test(#ui::*(site\)*)", expected=True),
     _atom("test(#absent*)", expected=False),
     _atom("all()", expected=True),
     _atom("none()", expected=False),
-    _atom("package(whitaker)", expected=False),
-    _atom("binary(ui)", expected=False),
-    _atom("kind(test)", expected=False),
+    _metadata_atom("package(whitaker-*)", expected=True),
+    _metadata_atom("package(=whitaker-installer)", expected=True),
+    _metadata_atom("package(other)", expected=False),
+    _metadata_atom("binary(ui)", expected=True),
+    _metadata_atom("binary(api_contract)", expected=False),
+    _metadata_atom("kind(test)", expected=True),
+    _metadata_atom("kind(te*)", expected=False),
     _atom("default()", expected=None),
     _atom("deps(whitaker)", expected=None),
+    _atom("binary_id(whitaker::ui)", expected=None),
 )
 
 
@@ -88,26 +103,29 @@ _substrings = (
 _atoms = st.one_of(st.sampled_from(_FIXED_ATOMS), _substrings)
 
 
-def _combine(operator: str, spelling: str, operands: tuple[_Node, ...]) -> _Node:
-    """Apply the oracle to an operator and its already-valued operands."""
-    ranks = [_RANK[operand.expected] for operand in operands]
-    if operator == "or":
-        rank = max(ranks)
-    elif operator == "and":
-        rank = min(ranks)
-    else:
-        rank = 2 - ranks[0]
-    return _Node(operator, spelling, operands, _VALUES[rank])
+def _oracle(node: _Node, *, metadata_known: bool) -> bool | None:
+    """Value an expression by ranking the truth values and taking extrema."""
+    if node.operator == "atom":
+        return None if node.needs_metadata and not metadata_known else node.expected
+    ranks = [
+        _RANK[_oracle(operand, metadata_known=metadata_known)]
+        for operand in node.operands
+    ]
+    if node.operator == "or":
+        return _VALUES[max(ranks)]
+    if node.operator == "and":
+        return _VALUES[min(ranks)]
+    return _VALUES[2 - ranks[0]]
 
 
 def _extend(children: st.SearchStrategy[_Node]) -> st.SearchStrategy[_Node]:
     """Generate one more level of operators over existing expressions."""
     pairs = st.tuples(children, children)
     return st.one_of(
-        st.builds(_combine, st.just("or"), st.sampled_from(("|", "or")), pairs),
-        st.builds(_combine, st.just("and"), st.sampled_from(("&", "and")), pairs),
+        st.builds(_Node, st.just("or"), st.sampled_from(("|", "or")), pairs),
+        st.builds(_Node, st.just("and"), st.sampled_from(("&", "and")), pairs),
         st.builds(
-            _combine,
+            _Node,
             st.just("not"),
             st.sampled_from(("not ", "!")),
             children.map(lambda child: (child,)),
@@ -148,14 +166,18 @@ def _render(node: _Node, *, always_parenthesize: bool, floor: int = _LOOSEST) ->
 
 
 @_SETTINGS
-@given(node=_expressions, always_parenthesize=st.booleans())
+@given(
+    node=_expressions, always_parenthesize=st.booleans(), metadata_known=st.booleans()
+)
 def test_the_reader_recovers_the_truth_value_of_any_expression(
-    node: _Node, always_parenthesize: bool
+    node: _Node, always_parenthesize: bool, metadata_known: bool
 ) -> None:
-    """Agree with the oracle, whichever parentheses the expression relies on."""
+    """Agree with the oracle, whichever parentheses and metadata are in play."""
     expression = _render(node, always_parenthesize=always_parenthesize)
-    assert FilterReader(expression, _TEST_NAME).value() is node.expected, (
-        f"{expression!r} must evaluate to {node.expected}"
+    test = _FULLY_KNOWN if metadata_known else _NAME_ONLY
+    expected = _oracle(node, metadata_known=metadata_known)
+    assert FilterReader(expression, test).value() is expected, (
+        f"{expression!r} must evaluate to {expected} against {test}"
     )
 
 
@@ -164,9 +186,22 @@ def test_the_reader_recovers_the_truth_value_of_any_expression(
 def test_only_a_definite_miss_rules_a_capture_out(node: _Node) -> None:
     """Count an unknown as a possible capture, never as a miss."""
     expression = _render(node, always_parenthesize=False)
-    assert filter_may_select_test(expression, _TEST_NAME) is (
-        node.expected is not False
-    ), f"{expression!r} is {node.expected}"
+    expected = _oracle(node, metadata_known=False)
+    assert filter_may_select_test(expression, _NAME_ONLY) is (expected is not False), (
+        f"{expression!r} is {expected}"
+    )
+
+
+@_SETTINGS
+@given(node=_expressions)
+def test_knowing_more_never_turns_a_decided_expression_around(node: _Node) -> None:
+    """Keep a value decided from the name alone once the metadata is supplied."""
+    expression = _render(node, always_parenthesize=False)
+    from_name = FilterReader(expression, _NAME_ONLY).value()
+    if from_name is not None:
+        assert FilterReader(expression, _FULLY_KNOWN).value() is from_name, (
+            f"{expression!r} was {from_name} from the name alone"
+        )
 
 
 @_SETTINGS
@@ -175,4 +210,4 @@ def test_a_stray_closing_parenthesis_is_never_ignored(node: _Node) -> None:
     """Refuse trailing tokens, whatever the expression before them says."""
     expression = f"{_render(node, always_parenthesize=False)})"
     with pytest.raises(ValueError, match="after a complete expression"):
-        FilterReader(expression, _TEST_NAME).value()
+        FilterReader(expression, _NAME_ONLY).value()
