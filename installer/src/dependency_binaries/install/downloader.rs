@@ -167,7 +167,7 @@ fn report_verification_discarding_failure(
     verification: Result<(), DependencyBinaryInstallError>,
 ) -> Result<(), DependencyBinaryInstallError> {
     if let Err(error) = verification {
-        log_verification_failure(archive_url, &error);
+        log_verification_failure(archive_url, destination, &error);
         // Remove the unverified archive so a retry never observes stale data.
         destination.remove_partial_archive();
         return Err(error);
@@ -176,14 +176,47 @@ fn report_verification_discarding_failure(
     Ok(())
 }
 
-/// Report an archive that could not be read back or failed its checksum.
-fn log_verification_failure(archive_url: &str, error: &DependencyBinaryInstallError) {
+/// Report why verification failed, in exactly one event.
+///
+/// Only [`DependencyBinaryInstallError::Checksum`] means the archive was read
+/// back and disagreed with its published digest. A reopen or read failure is a
+/// capability problem, so reporting it as a checksum mismatch would label the
+/// bytes as corrupt and hide the actual cause.
+fn log_verification_failure(
+    archive_url: &str,
+    destination: &DownloadDestination,
+    error: &DependencyBinaryInstallError,
+) {
+    if matches!(error, DependencyBinaryInstallError::Checksum { .. }) {
+        log_checksum_mismatch(archive_url, error);
+    } else {
+        log_unreadable_archive(archive_url, destination, error);
+    }
+}
+
+/// Report an archive whose digest differs from the published checksum.
+fn log_checksum_mismatch(archive_url: &str, error: &DependencyBinaryInstallError) {
     warn!(
         category = CATEGORY_CHECKSUM,
         checksum_state = CHECKSUM_STATE_MISMATCH,
         url = %archive_url,
         error = %error,
-        "archive verification failed",
+        "archive checksum mismatch",
+    );
+}
+
+/// Report an archive that could not be read back, so no checksum was computed.
+fn log_unreadable_archive(
+    archive_url: &str,
+    destination: &DownloadDestination,
+    error: &DependencyBinaryInstallError,
+) {
+    warn!(
+        category = CATEGORY_CAPABILITY,
+        archive_name = %destination.archive_name,
+        url = %archive_url,
+        error = %error,
+        "archive could not be read back for verification",
     );
 }
 
@@ -196,22 +229,15 @@ fn log_checksum_verified() {
     );
 }
 
-/// Re-open the written archive, reporting why it could not be read.
+/// Re-open the written archive for verification.
+///
+/// Read-only by design: the command that owns the discarding removes the
+/// archive and reports why, so a warning here would be a second event for one
+/// failure.
 fn reopen_for_verification(
     destination: &DownloadDestination,
 ) -> Result<cap_std::fs_utf8::File, DependencyBinaryInstallError> {
-    match destination.open_archive() {
-        Ok(archive) => Ok(archive),
-        Err(error) => {
-            warn!(
-                category = CATEGORY_CAPABILITY,
-                archive_name = %destination.archive_name,
-                error = %error,
-                "failed to reopen archive for verification",
-            );
-            Err(error.into())
-        }
-    }
+    destination.open_archive().map_err(Into::into)
 }
 
 /// A validated archive destination — UTF-8 path, capability-scoped parent

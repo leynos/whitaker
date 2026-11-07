@@ -113,6 +113,41 @@ fn verification_cleanup_removes_the_archive_it_could_not_verify() {
     );
 }
 
+/// Check that reopening an archive for verification has no side effects.
+///
+/// The command owns the discarding, so this helper must only report the
+/// failure: if it removed the file itself, the command's cleanup could not be
+/// told apart from the read and a future caller would lose the archive it
+/// meant to inspect.
+#[cfg(unix)]
+#[test]
+fn reopen_for_verification_leaves_the_archive_in_place_on_failure() {
+    let temp = TempDir::new().expect("create temp dir");
+    let temp_path = Utf8Path::from_path(temp.path()).expect("temp path is UTF-8");
+    let archive_path = temp.path().join("archive.tgz");
+    std::os::unix::fs::symlink("missing-target", &archive_path).expect("create dangling link");
+    let dir = Dir::open_ambient_dir(temp_path, ambient_authority()).expect("open capability");
+
+    let destination = DownloadDestination {
+        path: Utf8Path::from_path(&archive_path)
+            .expect("archive path is UTF-8")
+            .to_owned(),
+        dir,
+        archive_name: "archive.tgz".to_owned(),
+    };
+
+    let error = reopen_for_verification(&destination)
+        .expect_err("an archive that cannot be reopened must fail verification");
+    assert!(
+        matches!(error, DependencyBinaryInstallError::Io(_)),
+        "a reopen failure must surface as an I/O error, got: {error:?}",
+    );
+    assert!(
+        std::fs::symlink_metadata(&archive_path).is_ok(),
+        "the read helper must not remove the archive it could not read",
+    );
+}
+
 /// Check that the verification command removes an archive it cannot reopen.
 ///
 /// The read helper is deliberately read-only, so its failure has to be cleaned
