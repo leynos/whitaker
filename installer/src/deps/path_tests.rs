@@ -21,7 +21,12 @@ use crate::test_utils::{
 // such a function.
 
 /// The status reported when both Dylint tools resolve.
-fn both_tools_available() -> DylintToolStatus {
+///
+/// Shared with the `path_scan::path_discovery_tests` module, whose Windows
+/// `PATHEXT` regression asserts the same status shape. That module is a child
+/// of `path_scan` rather than of `deps`, so `pub(super)` here would not reach
+/// it.
+pub(crate) fn both_tools_available() -> DylintToolStatus {
     DylintToolStatus {
         cargo_dylint: true,
         dylint_link: true,
@@ -44,7 +49,13 @@ fn no_tools_available() -> DylintToolStatus {
     }
 }
 
-fn assert_status(status: DylintToolStatus, expected: DylintToolStatus) {
+/// Assert the observed status matches the expected one.
+///
+/// Shared with the `path_scan::path_discovery_tests` module for the Windows
+/// `PATHEXT` regression, which reports the same comparison. `pub(crate)` rather
+/// than `pub(super)` because that module is a descendant of `path_scan`, not a
+/// sibling of this one.
+pub(crate) fn assert_status(status: DylintToolStatus, expected: DylintToolStatus) {
     assert_eq!(status, expected, "unexpected Dylint tool status");
 }
 

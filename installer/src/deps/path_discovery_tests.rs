@@ -6,13 +6,34 @@ use camino::Utf8Path;
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use temp_env::with_vars_unset;
 
+// `is_executable_file` is exercised only by the `cfg(unix)` permission-bit
+// assertions; importing it unconditionally warns on Windows, which we deny.
+#[cfg(unix)]
+use super::is_executable_file;
 use super::{
     PathScanFailure,
     PathScanFailureCategory,
     PathScanResult,
     is_binary_on_path,
-    is_executable_file,
     scan_path_directories,
+};
+// The `PATHEXT` regression below is `cfg(windows)`, and these are the helpers
+// it drives. Before this module was split out of `path_tests` they were in
+// scope through `use super::*` and one wide `test_utils` import. Paths are
+// absolute because this module is a child of `path_scan`, not of `deps`.
+#[cfg(windows)]
+use crate::deps::{
+    check_dylint_tools,
+    path_tests::{assert_status, both_tools_available},
+};
+#[cfg(windows)]
+use crate::test_utils::{
+    StubExecutor,
+    dependency_binary_helpers::{
+        cargo_dylint_check,
+        dylint_link_install_list_check,
+        write_fake_binary_with_status,
+    },
 };
 use crate::{
     test_support::env_test_guard,
