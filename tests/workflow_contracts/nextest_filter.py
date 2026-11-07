@@ -272,6 +272,7 @@ class FilterReader:
     """
 
     def __init__(self, expression: str, test: FilterSubject) -> None:
+        """Tokenize the expression and hold the test it is evaluated against."""
         self._tokens = _tokenize(expression)
         self._test = test
         self._position = 0
