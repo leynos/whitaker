@@ -19,6 +19,12 @@ use crate::{
 /// differ after decoding need to appear.
 const ALPHABET: &[&str] = &["alpha", "λ", "🦄", "\\\"", "\\\\", "\\u{1F984}", "{{", "}}"];
 
+/// Returns `body` with every join's escape and skipped whitespace removed.
+///
+/// This is the "value the user meant" reference used by [`assert_preserved`];
+/// it is deliberately written without the production rewrite builder, so the
+/// two must agree rather than share a bug. `None` means the ranges did not
+/// splice cleanly, which the property treats as a failure.
 fn remove_ranges(body: &str, joins: &[Continuation]) -> Option<String> {
     let mut output = String::new();
     let mut previous_end = 0;
@@ -32,6 +38,7 @@ fn remove_ranges(body: &str, joins: &[Continuation]) -> Option<String> {
     Some(output)
 }
 
+/// Asserts the built rewrite preserves the joined value and source spelling.
 fn assert_preserved(body: &str, expected_joins: usize) -> Result<(), TestCaseError> {
     let wrapped = LiteralBody::new(body);
     let joins = joins_only(wrapped.scan());
@@ -107,6 +114,11 @@ fn deterministic_matrix_covers_each_join_count_and_non_bmp_presence() {
     }
 }
 
+/// Builds one body with exactly `join_count` joins and the requested alphabet.
+///
+/// The property suite is random and could in principle never visit some
+/// join-count and non-BMP combination, so this deterministic counterpart
+/// guarantees the matrix is covered.
 fn deterministic_body(join_count: usize, has_non_bmp: bool) -> String {
     let mut body = String::new();
     for fragment in 0..=join_count {

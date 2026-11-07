@@ -7,6 +7,7 @@
 //! A source-line join inside an attribute therefore passes silently. The
 //! paired control lives in `fail_join_beside_attribute.rs`, which carries an
 //! attribute and an ordinary expression in the same item.
+//! Control: fail_join_beside_attribute.rs
 
 #[doc = "alpha \
     beta"]

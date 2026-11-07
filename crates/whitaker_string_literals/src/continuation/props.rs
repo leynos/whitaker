@@ -15,6 +15,12 @@ use crate::{
 /// emoji that only matter once the value is decoded.
 const ALPHABET: &[&str] = &["alpha", "λ", "\\\"", "\\\\", "{{", "}}"];
 
+/// Asserts the structural invariants every scan result must satisfy.
+///
+/// The checks are ordering, containment, and consumed-whitespace content:
+/// ranges ascending and disjoint, the escape immediately followed by the
+/// skipped range, and the skipped bytes all consumed whitespace. They hold for
+/// any input, which is why both property suites share this one definition.
 fn assert_scan_well_formed(
     body: &str,
     continuations: &[Continuation],

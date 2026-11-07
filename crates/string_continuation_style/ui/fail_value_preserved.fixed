@@ -1,6 +1,12 @@
 // run-rustfix
 #![warn(string_continuation_style)]
 
+//! The rewrite preserves escapes that sit beside a join.
+//!
+//! The fragment before the continuation contains a tab escape. Splitting the
+//! literal must keep that escape in the first `concat!` argument rather than
+//! unescaping or moving it, so the evaluated bytes stay identical.
+
 #[path = "support.rs.inc"]
 mod support;
 

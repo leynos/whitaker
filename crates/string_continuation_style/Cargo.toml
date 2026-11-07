@@ -38,6 +38,7 @@ whitaker = { workspace = true, features = ["dylint-driver"], optional = true }
 whitaker_string_literals = { path = "../whitaker_string_literals", optional = true }
 
 [dev-dependencies]
+camino = { workspace = true }
 cap-std = { workspace = true }
 dylint_testing = { workspace = true }
 googletest = { workspace = true }
@@ -45,6 +46,7 @@ pretty_assertions = { workspace = true }
 rstest = { workspace = true }
 serial_test = { workspace = true }
 tempfile = { workspace = true }
+toml = { workspace = true }
 whitaker-common = { workspace = true }
 whitaker = { workspace = true }
 whitaker_test_macros = { workspace = true }

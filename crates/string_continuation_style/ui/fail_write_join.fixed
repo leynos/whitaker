@@ -1,6 +1,12 @@
 // run-rustfix
 #![warn(string_continuation_style)]
 
+//! A join in a `write!` format string is reported.
+//!
+//! `write!` forwards its arguments through a token-tree matcher, so the
+//! literal is in expression position and `concat!()` is legal. The pass
+//! suggests the rewrite and leaves the destination and argument list alone.
+
 use std::io::Write as _;
 
 fn main() {

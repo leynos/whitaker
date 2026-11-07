@@ -63,6 +63,7 @@ macro_rules! visit_with_span {
 }
 
 impl<'a> WrapperDepth<'a> {
+    /// Starts a walk at source depth with the crate as the first path segment.
     fn new(crate_name: &str, path_exclusions: &'a PathExclusions) -> Self {
         Self {
             expansion_depth: Some(0),
@@ -73,6 +74,11 @@ impl<'a> WrapperDepth<'a> {
         }
     }
 
+    /// Runs `visit` one expansion level deeper than the current depth.
+    ///
+    /// Depth saturates at `None` rather than wrapping: once an expansion chain
+    /// is deeper than `usize` can count, the answer is "cannot tell", and
+    /// [`Self::is_at_source_depth`] must treat that as not-at-source-depth.
     fn with_expansion(&mut self, is_expansion: bool, visit: impl FnOnce(&mut Self)) {
         let previous_depth = self.expansion_depth;
         if is_expansion {
@@ -82,10 +88,12 @@ impl<'a> WrapperDepth<'a> {
         self.expansion_depth = previous_depth;
     }
 
+    /// Runs `visit` at a depth one greater when `span` came from expansion.
     fn with_span(&mut self, span: Span, visit: impl FnOnce(&mut Self)) {
         self.with_expansion(span.from_expansion(), visit);
     }
 
+    /// Records a plain literal expression that no wrapper encloses.
     fn records_plain_candidate(&mut self, expression: &ast::Expr) {
         if plain_join_literal(expression).is_none() {
             return;
@@ -131,10 +139,12 @@ impl<'a> WrapperDepth<'a> {
         self.safe_format_spans.insert(arguments.span);
     }
 
+    /// Reports whether nothing expansion-derived encloses the current node.
     fn is_at_source_depth(&self) -> bool {
         self.expansion_depth == Some(0) && !self.is_path_excluded()
     }
 
+    /// Reports whether the current module path matches a configured exclusion.
     fn is_path_excluded(&self) -> bool {
         let module_path = self.module_path.join("::");
         self.path_exclusions
@@ -143,6 +153,7 @@ impl<'a> WrapperDepth<'a> {
 }
 
 impl<'ast> Visitor<'ast> for WrapperDepth<'_> {
+    /// Walks an item, tracking the module path for `excluded_paths`.
     fn visit_item(&mut self, item: &'ast ast::Item) {
         let previous_path_len = self.module_path.len();
         self.with_span(item.span, |visitor| {
@@ -154,6 +165,7 @@ impl<'ast> Visitor<'ast> for WrapperDepth<'_> {
         });
     }
 
+    /// Walks an associated item one depth deeper when its span is expanded.
     fn visit_assoc_item(&mut self, item: &'ast ast::AssocItem, context: visit::AssocCtxt) {
         self.with_span(item.span, |visitor| {
             visit::walk_assoc_item(visitor, item, context);
@@ -162,11 +174,13 @@ impl<'ast> Visitor<'ast> for WrapperDepth<'_> {
 
     visit_with_span!(visit_foreign_item, item: ForeignItem, item.span, walk_item);
 
+    /// Records candidates at this expression, then descends one level deeper.
+    ///
+    /// Ordering matters: both candidates are recorded before the enclosing
+    /// expression's own span joins the depth count. A format expression's span
+    /// is def-site-marked by the builtin, so counting it first would suppress
+    /// every format string in the crate.
     fn visit_expr(&mut self, expression: &'ast ast::Expr) {
-        // Both candidates are recorded before the enclosing expression's own
-        // span joins the depth count. A format expression's span is
-        // def-site-marked by the builtin, so counting it first would suppress
-        // every format string in the crate.
         self.records_plain_candidate(expression);
         if let ast::ExprKind::FormatArgs(arguments) = &expression.kind {
             self.records_format_candidate(expression, arguments);
@@ -184,6 +198,7 @@ impl<'ast> Visitor<'ast> for WrapperDepth<'_> {
     visit_with_span!(visit_field_def, field: FieldDef, field.span, walk_field_def);
     visit_with_span!(visit_variant, variant: Variant, variant.span, walk_variant);
 
+    /// Walks a pattern, skipping literal and range patterns entirely.
     fn visit_pat(&mut self, pattern: &'ast ast::Pat) {
         // Literal patterns are not replaceable value expressions.
         if matches!(
@@ -199,6 +214,7 @@ impl<'ast> Visitor<'ast> for WrapperDepth<'_> {
     visit_with_span!(visit_param, param: Param, param.span, walk_param);
     visit_with_span!(visit_generic_param, param: GenericParam, param.span(), walk_generic_param);
 
+    /// Walks generics, counting the where clause as its own wrapper.
     fn visit_generics(&mut self, generics: &'ast ast::Generics) {
         self.with_span(generics.span, |visitor| {
             visitor.with_span(generics.where_clause.span, |visitor| {
@@ -207,7 +223,9 @@ impl<'ast> Visitor<'ast> for WrapperDepth<'_> {
         });
     }
 
-    // The five-parameter shape is the `rustc_ast::visit::Visitor` trait's own
+    /// Walks a function, using the signature span rather than the whole item.
+    ///
+    /// The five-parameter shape is the `rustc_ast::visit::Visitor` trait's own
     // signature; it cannot be grouped into a struct without ceasing to be that
     // trait method, which would drop the walk. `_attrs` and `_id` are unused
     // because only the function's signature span and its body matter here.
@@ -234,13 +252,16 @@ impl<'ast> Visitor<'ast> for WrapperDepth<'_> {
     visit_with_span!(visit_poly_trait_ref, trait_ref: PolyTraitRef, trait_ref.span, walk_poly_trait_ref);
     visit_with_span!(visit_format_args, format_args: FormatArgs, format_args.span, walk_format_args);
 
-    // Attribute values are not replaceable expressions. `#[doc = "..."]` and
-    // friends carry their value as a meta-item literal, so walking them would
-    // record a span the lint hook must then decline to rewrite. `#[cfg]` is
-    // the only attribute that reaches macro expansion, where it is consumed
-    // rather than retained, so skipping the interior costs no real coverage.
+    /// Skips attributes, whose values are never replaceable expressions.
+    ///
+    /// `#[doc = "..."]` and friends carry their value as a meta-item literal,
+    /// so walking them would record a span the lint hook must then decline to
+    /// rewrite. `#[cfg]` is the only attribute that reaches macro expansion,
+    /// where it is consumed rather than retained, so skipping the interior
+    /// costs no real coverage.
     fn visit_attribute(&mut self, _attr: &'ast ast::Attribute) {}
 
+    /// Skips type-position patterns, which are not value expressions.
     fn visit_ty_pat(&mut self, _pattern: &'ast ast::TyPat) {}
 }
 

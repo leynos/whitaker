@@ -28,6 +28,12 @@ pub(crate) fn body_range_span(
 struct TokenOffset(usize);
 
 impl TokenOffset {
+    /// Converts a body-relative byte index to a token offset.
+    ///
+    /// The body starts one byte after the opening quote, so the conversion
+    /// adds one. An index past the end, or one that would overflow, is
+    /// rejected rather than clamped: a clamped span would point at a real but
+    /// wrong token, which is worse than declining the rewrite.
     fn from_body_index(index: usize, body_len: usize) -> Option<Self> {
         (index <= body_len)
             .then(|| index.checked_add(1).map(Self))

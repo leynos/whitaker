@@ -1,5 +1,5 @@
 warning: Cysylltwch linellau ffisegol y llinyn wedi'i goginio hwn â `concat!()`.
-  --> $DIR/fail_plain_join.rs:3:21
+  --> $DIR/fail_plain_join.rs:9:21
    |
 LL |    const VALUE: &str = "alpha /
    |   _____________________^      -
@@ -10,7 +10,7 @@ LL | ||     beta";
    |    uniad llinell ffynhonnell
    |
 note: Mae'r llinell newydd ddianc yn dileu'r toriad llinell a'r mewnoliad dilynol, gan guddio'r ffin rhwng y darnau mewn un llythrennol.
-  --> $DIR/fail_plain_join.rs:3:21
+  --> $DIR/fail_plain_join.rs:9:21
    |
 LL |   const VALUE: &str = "alpha /
    |  _____________________^

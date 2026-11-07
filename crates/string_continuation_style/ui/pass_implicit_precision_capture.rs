@@ -6,6 +6,7 @@
 //! argument. It exercises the same `Captured` variant as width through a
 //! different placeholder position, so a predicate that only inspected the
 //! placeholder kind rather than every argument would be caught here.
+//! Control: fail_explicit_format_arguments.rs
 
 fn main() {
     let value = "galloping";

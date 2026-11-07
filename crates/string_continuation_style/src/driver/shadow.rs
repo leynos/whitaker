@@ -73,10 +73,15 @@ struct ShadowDetector {
 }
 
 impl ShadowDetector {
+    /// Records a name the crate binds, if it is one the lint spells bare.
     fn record_name(&mut self, name: Symbol) {
         self.is_shadowed |= is_builtin_macro_name(name.as_str());
     }
 
+    /// Records an `extern crate` as shadowing when it carries `#[macro_use]`.
+    ///
+    /// Only `#[macro_use]` imports that crate's macro namespace into the
+    /// crate root; a plain `extern crate` binds the crate name alone.
     fn record_extern_crate(&mut self, item: &ast::Item) {
         self.is_shadowed |= item
             .attrs
@@ -95,6 +100,7 @@ impl ShadowDetector {
     /// a `concat` binding the suggested call would collide with.
     fn record_glob(&mut self, tree: &ast::UseTree) { self.is_shadowed |= !tree.span().is_dummy(); }
 
+    /// Records the name a `use` tree actually binds, recursing into nesting.
     fn record_use_tree(&mut self, tree: &ast::UseTree) {
         match &tree.kind {
             // A rename makes the source segment irrelevant: `use p::println as
@@ -125,6 +131,7 @@ impl ShadowDetector {
 }
 
 impl<'ast> Visitor<'ast> for ShadowDetector {
+    /// Records macro definitions and `#[macro_use] extern crate` items.
     fn visit_item(&mut self, item: &'ast ast::Item) {
         match &item.kind {
             ItemKind::MacroDef(ident, _) => self.record_name(ident.name),
@@ -134,6 +141,7 @@ impl<'ast> Visitor<'ast> for ShadowDetector {
         visit::walk_item(self, item);
     }
 
+    /// Records every name bound by a `use` declaration.
     fn visit_use_tree(&mut self, tree: &'ast ast::UseTree) { self.record_use_tree(tree); }
 }
 

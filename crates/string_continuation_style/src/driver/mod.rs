@@ -13,6 +13,7 @@ use crate::{
 };
 
 mod depth;
+mod edit_policy;
 mod facts;
 mod literal;
 mod shadow;
@@ -25,7 +26,8 @@ pub(super) use facts::LiteralRewrite;
 
 use self::{
     depth::{SafeSpans, safe_literal_spans},
-    facts::{format_args_rewrite, plain_literal_rewrite},
+    edit_policy::SourceEditPolicy,
+    facts::{SourceContext, format_args_rewrite, plain_literal_rewrite},
     shadow::shadows_builtin_macros,
 };
 
@@ -59,21 +61,28 @@ pub struct StringContinuationStyle {
     configuration: StringContinuationStyleConfig,
     localizer: whitaker_common::Localizer,
     safe_spans: SafeSpans,
+    edit_policy: Option<SourceEditPolicy>,
     is_disabled_crate: bool,
 }
 
 impl Default for StringContinuationStyle {
+    /// Starts the pass unconfigured, with no workspace policy resolved.
+    ///
+    /// `check_crate` replaces every field before the walk, so the defaults
+    /// here only matter for the window between construction and that call.
     fn default() -> Self {
         Self {
             configuration: StringContinuationStyleConfig::default(),
             localizer: whitaker_common::Localizer::new(None),
             safe_spans: SafeSpans::default(),
+            edit_policy: None,
             is_disabled_crate: false,
         }
     }
 }
 
 impl EarlyLintPass for StringContinuationStyle {
+    /// Loads configuration and resolves the crate-wide facts before the walk.
     fn check_crate(&mut self, cx: &EarlyContext<'_>, krate: &ast::Crate) {
         self.configuration = load_configuration();
         self.localizer = load_localizer();
@@ -89,19 +98,31 @@ impl EarlyLintPass for StringContinuationStyle {
             let exclusions = self.configuration.path_exclusions();
             safe_literal_spans(krate, &crate_name, &exclusions)
         };
+        // The workspace root and target directories are host facts, not
+        // per-literal ones. Resolve them once here so the query that runs for
+        // every candidate literal is a pure function of the path it is given.
+        self.edit_policy = SourceEditPolicy::from_env();
     }
 
+    /// Builds and emits a rewrite for one candidate expression, if any.
     fn check_expr(&mut self, cx: &EarlyContext<'_>, expression: &ast::Expr) {
         if self.is_disabled_crate {
             return;
         }
+        let Some(edit_policy) = self.edit_policy.as_ref() else {
+            return;
+        };
+        let context = SourceContext { cx, edit_policy };
         let rewrite = match &expression.kind {
             ast::ExprKind::Lit(_) => {
-                plain_literal_rewrite(cx, expression, &self.safe_spans.plain_literals)
+                plain_literal_rewrite(&context, expression, &self.safe_spans.plain_literals)
             }
-            ast::ExprKind::FormatArgs(arguments) => {
-                format_args_rewrite(cx, expression, arguments, &self.safe_spans.format_strings)
-            }
+            ast::ExprKind::FormatArgs(arguments) => format_args_rewrite(
+                &context,
+                expression,
+                arguments,
+                &self.safe_spans.format_strings,
+            ),
             _ => None,
         };
         let Some(rewrite) = rewrite else {
@@ -116,6 +137,10 @@ impl EarlyLintPass for StringContinuationStyle {
     }
 }
 
+/// Reads the crate name the compiler was invoked with.
+///
+/// Falls back to a placeholder rather than an empty string, so an exclusion
+/// entry can never match it by accident.
 fn crate_name(cx: &EarlyContext<'_>) -> String {
     cx.sess()
         .opts

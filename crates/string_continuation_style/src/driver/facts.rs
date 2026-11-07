@@ -4,9 +4,9 @@
 //! depth set gate source recovery, then the pure domain crate classifies and
 //! constructs the replacement. Any uncertain source fact yields no finding.
 
-use std::{collections::HashSet, env};
+use std::collections::HashSet;
 
-use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
+use camino::Utf8PathBuf;
 use log::debug;
 use rustc_ast::ast;
 use rustc_lint::{EarlyContext, LintContext};
@@ -18,6 +18,7 @@ use whitaker_string_literals::{
 };
 
 use super::{
+    edit_policy::SourceEditPolicy,
     literal::{
         has_captured_argument,
         join_format_string,
@@ -28,6 +29,18 @@ use super::{
     span::body_range_span,
 };
 use crate::config::LINT_NAME;
+
+/// Host services every rewrite query needs.
+///
+/// Bundled so adding a host fact does not change each query's arity, and so a
+/// query cannot accidentally pair one caller's compiler context with another's
+/// policy.
+pub(crate) struct SourceContext<'cx, 'tcx> {
+    /// Compiler context used for source lookup and span resolution.
+    pub(crate) cx: &'cx EarlyContext<'tcx>,
+    /// Workspace policy deciding whether a literal's file may be rewritten.
+    pub(crate) edit_policy: &'cx SourceEditPolicy,
+}
 
 /// A validated replacement and the continuation spans it will label.
 pub(crate) struct LiteralRewrite {
@@ -41,7 +54,7 @@ pub(crate) struct LiteralRewrite {
 
 /// Extracts a rewrite when `expression` is a safe, editable source literal.
 pub(crate) fn plain_literal_rewrite(
-    cx: &EarlyContext<'_>,
+    context: &SourceContext<'_, '_>,
     expression: &ast::Expr,
     safe_literal_spans: &HashSet<Span>,
 ) -> Option<LiteralRewrite> {
@@ -52,7 +65,7 @@ pub(crate) fn plain_literal_rewrite(
     }
 
     source_literal_rewrite(
-        cx,
+        context,
         expression.span,
         literal.symbol.as_str(),
         |is_editable| {
@@ -76,7 +89,7 @@ pub(crate) fn plain_literal_rewrite(
 /// and its own `source_callee()` is empty, while the def-site-marked
 /// expression's chain reaches the macro the user typed.
 pub(crate) fn format_args_rewrite(
-    cx: &EarlyContext<'_>,
+    context: &SourceContext<'_, '_>,
     expression: &ast::Expr,
     arguments: &ast::FormatArgs,
     safe_format_spans: &HashSet<Span>,
@@ -96,7 +109,7 @@ pub(crate) fn format_args_rewrite(
         CaptureStatus::NoneObserved
     };
 
-    source_literal_rewrite(cx, arguments.span, uncooked_body, |is_editable| {
+    source_literal_rewrite(context, arguments.span, uncooked_body, |is_editable| {
         if is_editable {
             LiteralContext::SourceFormatString { capture }
         } else {
@@ -105,13 +118,20 @@ pub(crate) fn format_args_rewrite(
     })
 }
 
+/// Turns a source literal span into a validated rewrite, if one is safe.
+///
+/// The `context_of` callback receives the editability answer rather than the
+/// path, so callers cannot disagree with the policy about what "generated"
+/// means. Every failure along the way returns `None`: a literal the lint
+/// cannot read, re-lex, or prove value-preserving is silently skipped, which
+/// is the same outcome as a literal with no join.
 fn source_literal_rewrite(
-    cx: &EarlyContext<'_>,
+    context: &SourceContext<'_, '_>,
     literal_span: Span,
     uncooked_body: &str,
     context_of: impl FnOnce(bool) -> LiteralContext,
 ) -> Option<LiteralRewrite> {
-    let source_map = cx.sess().source_map();
+    let source_map = context.cx.sess().source_map();
     let source_path = source_map
         .span_to_filename(literal_span)
         .into_local_path()?;
@@ -125,8 +145,11 @@ fn source_literal_rewrite(
         return None;
     }
 
-    let context = context_of(is_editable_source(source_path));
-    let facts = LiteralFacts::Cooked { body, context };
+    let literal_context = context_of(context.edit_policy.is_editable(&source_path));
+    let facts = LiteralFacts::Cooked {
+        body,
+        context: literal_context,
+    };
     let rewrite = match classify(&facts) {
         ContinuationDisposition::PreferConcat(rewrite) => {
             debug!(target: LINT_NAME, "literal classified for a concat rewrite");
@@ -170,48 +193,13 @@ fn source_literal_rewrite(
     })
 }
 
-fn is_editable_source(source_path: Utf8PathBuf) -> bool {
-    let Some(workspace_root) = env::current_dir()
-        .ok()
-        .and_then(|path| Utf8PathBuf::try_from(path).ok())
-    else {
-        return false;
-    };
-    let source_path = absolute_path(&workspace_root, source_path);
-
-    let configured_target_directory = match env::var("CARGO_TARGET_DIR") {
-        Ok(path) => Utf8PathBuf::from(path),
-        Err(env::VarError::NotPresent) => workspace_root.join("target"),
-        Err(env::VarError::NotUnicode(_)) => return false,
-    };
-    let configured_target_directory = absolute_path(&workspace_root, configured_target_directory);
-    source_path.starts_with(&workspace_root)
-        && !source_path.starts_with(configured_target_directory)
-        && !source_path.starts_with(workspace_root.join("target"))
-}
-
-fn absolute_path(root: &Utf8Path, path: Utf8PathBuf) -> Utf8PathBuf {
-    let path = if path.is_absolute() {
-        path
-    } else {
-        root.join(path)
-    };
-    let mut normalized = Utf8PathBuf::new();
-    for component in path.components() {
-        match component {
-            Utf8Component::Prefix(_) | Utf8Component::RootDir => {
-                normalized.push(component.as_str());
-            }
-            Utf8Component::CurDir => {}
-            Utf8Component::ParentDir => {
-                normalized.pop();
-            }
-            Utf8Component::Normal(segment) => normalized.push(segment),
-        }
-    }
-    normalized
-}
-
+/// Picks the newline style a rendered replacement should use.
+///
+/// A mixed file is resolved by majority, and the compiler's normalization map
+/// is used rather than counting raw bytes: `\r\n` has already been rewritten
+/// by the time the source is readable, so the removed bytes are what say how
+/// many line feeds were CRLF in the original file. A byte-order mark is
+/// subtracted first so it is not miscounted as part of a line ending.
 fn dominant_newline(source: &str, normalized_positions: &[NormalizedPos]) -> Newline {
     let line_feeds = source.bytes().filter(|byte| *byte == b'\n').count();
     let removed_bytes = normalized_positions

@@ -2122,9 +2122,21 @@ Use the Makefile targets for normal proof runs:
 ```sh
 make verus                 # Run all Verus proof files
 make verus-clone-detector  # Run clone-detector Verus proofs only
+make verus-string-literals # Run the string-literal Verus proof only
 make kani                  # Run all Kani harness groups
 make kani-clone-detector   # Run clone-detector Kani harnesses only
+make kani-string-literals  # Run string-literal Kani harnesses only
 ```
+
+`make verus` and `make kani` each cover both proof groups; the narrower targets
+exist so a change to one sidecar can be proved without paying for the other.
+Both narrow targets delegate to the same group argument in their script:
+`./scripts/run-verus.sh string-literals` reads
+`verus/string_continuation_rewrite.rs`, and
+`./scripts/run-kani.sh string-literals` runs the bounded continuation-scanner
+harness. `make proof`-style aggregate targets do not exist; run `make kani` and
+`make verus` as separate targets, in the order `.github/workflows/proofs.yml`
+uses.
 
 The Makefile prepends `~/.cargo/bin` and `~/.bun/bin` to `PATH` for all
 make-target invocations
@@ -2276,7 +2288,8 @@ The proof targets are thin wrappers over repository scripts:
   executable, and installs the Rust toolchain that Verus requests.
 - `scripts/run-verus.sh` selects proof groups and executes each `.rs` proof
   file in turn, including `verus/clone_detector_ast_features.rs` for the
-  clone-detector group.
+  clone-detector group and `verus/string_continuation_rewrite.rs` for the
+  `string-literals` group.
 - `scripts/install-kani.sh` downloads the pinned pre-built Kani release into
   `${XDG_CACHE_HOME:-$HOME/.cache}/whitaker/kani`, installs the matching
   nightly Rust toolchain via `rustup`, and symlinks that toolchain into the
@@ -2286,15 +2299,21 @@ The proof targets are thin wrappers over repository scripts:
   clone-detector harnesses one harness per `cargo-kani` invocation so each
   proof appears explicitly in the output, including the overflow-specific
   harness for `LshConfig::new`, the bounded `MinHasher::sketch` harnesses, and
-  the bounded `LshIndex` candidate-pair invariant harnesses. Clone-detector
-  Kani invocations use `--no-default-features` so parser-independent proofs do
-  not compile `ra_ap_syntax`. Every invocation runs through
-  `scripts/run-kani-limited.sh`, which applies an 8 GiB process-tree memory
-  cap, disables swap for that cgroup, and enforces a ten-minute timeout. It
-  records peak memory and duration. A timeout, resource failure, or missing
-  resource measurement is a failed or inconclusive proof, never a pass. The
-  `WHITAKER_KANI_MEMORY_MAX_BYTES` and `WHITAKER_KANI_TIMEOUT_SECONDS`
-  overrides can lower these limits but cannot raise them.
+  the bounded `LshIndex` candidate-pair invariant harnesses. The
+  `string-literals` group runs the bounded continuation-scanner harness
+  `verify_scanner_matches_bounded_parity_reference` from
+  `crates/whitaker_string_literals/src/continuation/kani.rs` at
+  `--default-unwind 9`, so it stays within the limited runner's budget. Each
+  group is invoked by name rather than by running every harness in the
+  workspace. Clone-detector Kani invocations use `--no-default-features` so
+  parser-independent proofs do not compile `ra_ap_syntax`. Every invocation
+  runs through `scripts/run-kani-limited.sh`, which applies an 8 GiB
+  process-tree memory cap, disables swap for that cgroup, and enforces a
+  ten-minute timeout. It records peak memory and duration. A timeout, resource
+  failure, or missing resource measurement is a failed or inconclusive proof,
+  never a pass. The `WHITAKER_KANI_MEMORY_MAX_BYTES` and
+  `WHITAKER_KANI_TIMEOUT_SECONDS` overrides can lower these limits but cannot
+  raise them.
 
 The limited runner requires Linux, a running user systemd session,
 `systemd-run`, `systemctl`, GNU `timeout`, and cgroup v2 with its memory
@@ -2316,6 +2335,16 @@ needs to exercise the same runner boundary.
 The installer scripts are idempotent. The first proof run may take longer while
 toolchains and verifier binaries are downloaded; later runs reuse the cached
 installation.
+
+### Release builds keep overflow checks on
+
+`[profile.release]` sets `overflow-checks = true`. Lint libraries are shipped
+as release builds — `installer/src/builder.rs` passes `--release` — while UI
+tests build in debug, where checks are already on. For byte-offset arithmetic
+that difference decides whether an underflow panics or wraps silently in the
+artefact users actually load. The `checked_*` calls in the source are the
+primary defence; this profile setting makes the fallback fail loudly instead of
+producing an off-by-a-huge-number span.
 
 ### Examples
 
@@ -3358,6 +3387,31 @@ The counterpart in the pure domain is the rewrite builder, which re-lexes its
 own output: a generated `concat!()` must parse back as one expression with the
 original fragments before any suggestion is offered.
 
+### Source editability is resolved once, at the compiler boundary
+
+`crates/string_continuation_style/src/driver/edit_policy.rs` decides whether a
+literal's file may be rewritten, and it is the only module in the lint that
+reads the environment. `SourceEditPolicy::from_env` runs once from
+`check_crate`; every later query is `is_editable(&Utf8Path) -> bool`, a pure
+function of a path and two fixed directory lists.
+
+Keep it that way. The query used to call `env::current_dir()` and read
+`CARGO_TARGET_DIR` for each candidate literal, which made it untestable without
+the process environment and gave four different failures one indistinguishable
+answer. Resolving the directories first collapses those failures into a single
+`Option`, which fails closed: an unresolvable workspace root means no
+diagnostic at all, because a missed hint costs the user less than an offered
+edit to generated code.
+
+`SourceEditPolicy::new` takes the workspace root and target directory
+explicitly and is what the unit tests drive. A relative path is anchored at the
+workspace root before the containment test, so `../` segments cannot walk out
+of the tree; the default `target` directory stays excluded even when
+`CARGO_TARGET_DIR` names somewhere else, so an override never re-admits it.
+
+Adding a new host fact follows the same shape: resolve it in `check_crate` and
+pass it down, rather than reading the environment from the per-literal path.
+
 ### One definition of "join", shared by the classifier and the gate
 
 `whitaker_string_literals::continuation::joins_only` is the only place that
@@ -3379,10 +3433,10 @@ that an expectation cannot encode a stale copy of the rule.
 The helper is `pub(crate)` and deliberately not part of the public API: it
 encodes an internal agreement, not a service this crate offers. Two kinds of
 call site are *not* covered and must not be folded in.
-`rewrite::is_selected_join` tests a single continuation for join-ness as one
-clause of a longer predicate, and the Kani harness in `continuation/kani.rs`
-counts kinds arithmetically so its loop-free model never depends on `Iterator`
-machinery.
+`rewrite::source_gate::is_selected_join` tests a single continuation for
+join-ness as one clause of a longer predicate, and the Kani harness in
+`continuation/kani.rs` counts kinds arithmetically so its loop-free model never
+depends on `Iterator` machinery.
 
 ### One generator for the continuation property bodies
 

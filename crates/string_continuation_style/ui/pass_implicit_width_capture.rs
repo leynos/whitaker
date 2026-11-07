@@ -6,6 +6,7 @@
 //! the parsed placeholder carries a `FormatArgumentKind::Captured` entry.
 //! Rewriting the format string to `concat!()` would disable that capture and
 //! stop the program compiling.
+//! Control: fail_explicit_format_arguments.rs
 
 fn main() {
     let value = 7;

@@ -1,4 +1,3 @@
-//! Bounded proofs for continuation-scanner invariants.
 //! Bounded verification of continuation parity and classification.
 //!
 //! The harness exhausts all bodies of length at most five over the ASCII
@@ -14,6 +13,13 @@ const KANI_SCAN_UNWIND: usize = 9;
 const _: () = assert!(KANI_SCAN_UNWIND == KANI_MAX_BODY_LEN + KANI_MAX_RECORDED_CONTINUATIONS + 1);
 const _: () = assert!(KANI_MAX_RECORDED_CONTINUATIONS >= 2);
 
+/// Counts continuations independently of the scanner under test.
+///
+/// This is the parity reference: it walks back to the start of each backslash
+/// run and counts only odd-length runs ending in LF, which is the language
+/// rule stated differently from the production scanner. Agreement between two
+/// independent formulations is what gives the harness its force; reusing the
+/// scanner's own helpers would make the proof circular.
 fn expected_continuation_count(body: &str) -> usize {
     let bytes = body.as_bytes();
     let mut count = 0_usize;
@@ -54,10 +60,16 @@ fn matching_kind_count(continuation: &Continuation) -> u8 {
         + u8::from(kind == ContinuationKind::TrailingLayoutTrim)
 }
 
+/// Reports whether `continuation` is classified as exactly one kind.
 fn exactly_one_continuation_kind(continuation: &Continuation) -> bool {
     matching_kind_count(continuation) == 1
 }
 
+/// Proves scanner parity, record well-formedness, and kind uniqueness.
+///
+/// Exhaustive over the bounded alphabet, so a failure is a counterexample
+/// rather than a flake. The unwind bound is derived from the body and record
+/// limits above, which the `const` assertions tie together.
 #[kani::proof]
 #[kani::unwind(9)]
 fn verify_scanner_matches_bounded_parity_reference() {

@@ -9,9 +9,12 @@
 //! disables the lint wholesale before the walk begins.
 //!
 //! The joined literal below would be flagged in any other crate. It must stay
-//! silent here. The paired control removes the shadow detector, after which
-//! this same file reports a diagnostic; that transcript is recorded in the
-//! ExecPlan rather than kept as a fixture.
+//! silent here. The committed control is `fail_plain_join.rs`: byte-identical
+//! joined literal, no shadowing construct, and it must report. If the shadow
+//! detector were inverted or unreachable, this fixture would start reporting
+//! too, and `tests/support/silence_control_tests.rs` fails when any `pass_*`
+//! fixture stops being silent.
+//! Control: fail_plain_join.rs
 
 macro_rules! println {
     ($($tokens:tt)*) => {{

@@ -98,6 +98,11 @@ pub(crate) trait ConfigReader {
 pub(crate) struct DylintConfigReader;
 
 impl ConfigReader for DylintConfigReader {
+    /// Reads the lint section through `dylint_linting::config`.
+    ///
+    /// The error type is boxed rather than preserved because the only caller
+    /// logs it and falls back to defaults; keeping the concrete type would
+    /// leak `dylint_linting`'s error into this crate's signature.
     fn read_config(
         &self,
         lint_name: &str,

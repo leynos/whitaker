@@ -1,6 +1,12 @@
 // run-rustfix
 #![warn(string_continuation_style)]
 
+//! Several joins in one literal yield one diagnostic, not one per join.
+//!
+//! Rewriting each boundary separately would produce overlapping suggestions
+//! that cannot apply together. The pass emits a single whole-literal rewrite
+//! so the fix applies once and converges.
+
 #[path = "support.rs.inc"]
 mod support;
 

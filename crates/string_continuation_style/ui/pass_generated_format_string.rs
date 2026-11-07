@@ -11,6 +11,7 @@
 //! The joined literal inside `concat!` is invisible to this lint for the same
 //! reason: it is matched by `concat!`'s own `$($e:expr),*` contract, so it is
 //! not a format string at all.
+//! Control: fail_println_join.rs
 
 fn main() {
     let rendered = format!(concat!("alpha ", "beta"));

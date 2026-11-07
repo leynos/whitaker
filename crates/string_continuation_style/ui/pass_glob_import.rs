@@ -16,6 +16,7 @@
 //! treated every glob as shadowing would silence the lint everywhere and every
 //! `fail_*` fixture would stop reporting. The detector tests that span instead:
 //! the injected prelude carries `DUMMY_SP`, a source glob does not.
+//! Control: fail_plain_join.rs
 
 mod helpers {
     pub fn reach() -> usize { 1 }

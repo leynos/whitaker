@@ -1,6 +1,12 @@
 // run-rustfix
 #![warn(string_continuation_style)]
 
+//! An explicit named format argument does not block the rewrite.
+//!
+//! `body = body` is passed as a named argument rather than captured from the
+//! scope. `concat!()` keeps named arguments intact, so the join is reported;
+//! only implicit capture makes the suggestion unsound.
+
 #[path = "support.rs.inc"]
 mod support;
 

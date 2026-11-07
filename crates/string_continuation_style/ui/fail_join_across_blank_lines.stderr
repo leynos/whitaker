@@ -1,5 +1,5 @@
 warning: multiple lines skipped by escaped newline
-  --> $DIR/fail_join_across_blank_lines.rs:7:28
+  --> $DIR/fail_join_across_blank_lines.rs:13:28
    |
 LL |   const VALUE: &str = "alpha /
    |  ____________________________^
@@ -8,7 +8,7 @@ LL | |         beta";
    | |________^ skipping everything up to and including this point
 
 warning: Join the physical lines in this cooked string with `concat!()`.
-  --> $DIR/fail_join_across_blank_lines.rs:7:21
+  --> $DIR/fail_join_across_blank_lines.rs:13:21
    |
 LL |    const VALUE: &str = "alpha /
    |  ______________________^      -
@@ -19,7 +19,7 @@ LL | |          beta";
    | |______________^ help: replace with a `concat!()` expression: `concat!("alpha ", "beta")`
    |
 note: The escaped newline removes the physical line break and following indentation, hiding the fragment boundary inside one literal.
-  --> $DIR/fail_join_across_blank_lines.rs:7:21
+  --> $DIR/fail_join_across_blank_lines.rs:13:21
    |
 LL |   const VALUE: &str = "alpha /
    |  _____________________^

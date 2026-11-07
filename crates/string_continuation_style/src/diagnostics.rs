@@ -72,6 +72,11 @@ pub(crate) fn emit_rewrite(
     );
 }
 
+/// Maps the configured applicability mode to the suggestion's edit kind.
+///
+/// The default is `MaybeIncorrect` rather than `MachineApplicable`: the
+/// rewrite changes how the source reads, and a human should see it before
+/// `cargo fix` applies it unattended.
 fn applicability(mode: ApplicabilityMode) -> Applicability {
     match mode {
         ApplicabilityMode::Manual => Applicability::MaybeIncorrect,
@@ -79,6 +84,7 @@ fn applicability(mode: ApplicabilityMode) -> Applicability {
     }
 }
 
+/// Resolves the localized label attached to each joined fragment.
 fn resolve_join_label(localizer: &Localizer, message: MessageResolution<'_>) -> String {
     safe_resolve_label(
         localizer,
@@ -91,6 +97,7 @@ fn resolve_join_label(localizer: &Localizer, message: MessageResolution<'_>) -> 
     )
 }
 
+/// Resolves the localized text shown beside the suggested replacement.
 fn resolve_suggestion(localizer: &Localizer, message: MessageResolution<'_>) -> String {
     safe_resolve_label(
         localizer,
@@ -103,6 +110,10 @@ fn resolve_suggestion(localizer: &Localizer, message: MessageResolution<'_>) -> 
     )
 }
 
+/// Supplies the English message set used when the locale bundle is unusable.
+///
+/// A missing or malformed bundle must not suppress the finding; the lint is
+/// still correct, only its wording degrades.
 fn fallback_messages() -> DiagnosticMessageSet {
     DiagnosticMessageSet::new(
         String::from("join these string fragments with `concat!()`"),

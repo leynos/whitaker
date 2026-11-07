@@ -1,17 +1,20 @@
 //! Builds and validates source replacements for classified continuations.
 
-use rustc_lexer::{LiteralKind, Token, TokenKind, tokenize};
-
 use crate::{
-    continuation::{Continuation, ContinuationKind, joins_only},
+    continuation::{Continuation, joins_only},
     facts::{BodyOffset, LiteralBody},
 };
 
 pub mod gate;
 #[cfg(test)]
 mod props;
+mod source_gate;
 #[cfg(test)]
 mod tests;
+mod validate;
+
+use source_gate::{is_selected_join, is_single_cooked_string_token};
+use validate::is_concat_macro_expression;
 
 /// Recovers the body of a snippet that is exactly one cooked string literal.
 ///
@@ -180,6 +183,7 @@ impl<'a> ConcatRewrite<'a> {
         self.render_multi_line(indent, newline)
     }
 
+    /// Renders the whole rewrite as one `concat!(...)` line.
     fn render_single_line(&self) -> String {
         let mut replacement = String::from("concat!(");
         for (index, fragment) in self.fragments.iter().enumerate() {
@@ -192,6 +196,7 @@ impl<'a> ConcatRewrite<'a> {
         replacement
     }
 
+    /// Renders one fragment per line at the original indentation plus four.
     fn render_multi_line(&self, indent: usize, newline: Newline) -> String {
         let line_ending = newline.as_str();
         let inner_indent = indent.saturating_add(CONTINUATION_INDENT);
@@ -251,129 +256,14 @@ impl Newline {
 const FORMATTER_WIDTH: usize = 100;
 const CONTINUATION_INDENT: usize = 4;
 
-fn is_single_cooked_string_token(source: &str) -> bool {
-    let mut tokens = tokenize(source);
-    let Some(token) = tokens.next() else {
-        return false;
-    };
-    let TokenKind::Literal {
-        kind: LiteralKind::Str { terminated: true },
-        suffix_start,
-    } = token.kind
-    else {
-        return false;
-    };
-
-    token.len == source.len() && suffix_start == token.len && tokens.next().is_none()
-}
-
-/// Returns whether `join` may be split out of `source` at this position.
-///
-/// Four conditions must hold together, and each is a separate defence against
-/// a caller passing continuations that the scanner would not itself produce:
-/// the join must be classified as an interior join, it must be one the body's
-/// own scan reported, it must not start before the previous split ended, and
-/// its byte ranges must spell exactly one unpaired backslash and LF followed
-/// by consumed whitespace. Folding them into one predicate keeps the builder's
-/// loop reading as "validate, then split" rather than as four early returns.
-fn is_selected_join(
-    source: &str,
-    join: &Continuation,
-    scanned_joins: &[Continuation],
-    previous_end: usize,
-) -> bool {
-    join.kind == ContinuationKind::Join
-        && scanned_joins.contains(join)
-        && join.escape_range.start.get() >= previous_end
-        && is_valid_join_range(source, join)
-}
-
-fn is_valid_join_range(source: &str, join: &Continuation) -> bool {
-    let escape_start = join.escape_range.start.get();
-    let escape_end = join.escape_range.end.get();
-    let skipped_start = join.skipped_whitespace_range.start.get();
-    let skipped_end = join.skipped_whitespace_range.end.get();
-    let Some(escape) = source.as_bytes().get(escape_start..escape_end) else {
-        return false;
-    };
-    let Some(skipped) = source.as_bytes().get(skipped_start..skipped_end) else {
-        return false;
-    };
-
-    escape == b"\\\n"
-        && escape_end == skipped_start
-        && skipped
-            .iter()
-            .all(|byte| matches!(byte, b' ' | b'\t' | b'\n' | b'\r'))
-}
-
-fn is_concat_macro_expression(source: &str) -> bool {
-    let mut tokens = tokenize(source).filter(|token| token.kind != TokenKind::Whitespace);
-    if !has_concat_macro_head(source, &mut tokens) {
-        return false;
-    }
-    if !has_concat_macro_arguments(&mut tokens) {
-        return false;
-    }
-
-    tokens.next().is_none()
-}
-
-fn has_concat_macro_head(source: &str, tokens: &mut impl Iterator<Item = Token>) -> bool {
-    let Some(ident) = tokens.next() else {
-        return false;
-    };
-    let Some(ident_source) = source.get(..ident.len) else {
-        return false;
-    };
-    if ident.kind != TokenKind::Ident || ident_source != "concat" {
-        return false;
-    }
-    if !matches!(tokens.next().map(|token| token.kind), Some(TokenKind::Not))
-        || !matches!(
-            tokens.next().map(|token| token.kind),
-            Some(TokenKind::OpenParen)
-        )
-    {
-        return false;
-    }
-
-    true
-}
-
-fn has_concat_macro_arguments(tokens: &mut impl Iterator<Item = Token>) -> bool {
-    let mut literal_count = 0_usize;
-    let mut expects_literal = true;
-    let mut can_close = false;
-    loop {
-        let Some(token) = tokens.next() else {
-            return false;
-        };
-
-        match token.kind {
-            TokenKind::Literal {
-                kind: LiteralKind::Str { terminated: true },
-                suffix_start,
-            } if expects_literal && suffix_start == token.len => {
-                literal_count = literal_count.saturating_add(1);
-                expects_literal = false;
-                can_close = true;
-            }
-            TokenKind::Comma if !expects_literal => expects_literal = true,
-            TokenKind::CloseParen if can_close => break,
-            _ => return false,
-        }
-    }
-
-    literal_count >= 2
-}
-
+/// Appends `fragment` wrapped in one pair of double quotes.
 fn push_quoted_fragment(replacement: &mut String, fragment: &str) {
     replacement.push('"');
     replacement.push_str(fragment);
     replacement.push('"');
 }
 
+/// Appends `count` spaces to `replacement`.
 fn push_spaces(replacement: &mut String, count: usize) {
     for _ in 0..count {
         replacement.push(' ');

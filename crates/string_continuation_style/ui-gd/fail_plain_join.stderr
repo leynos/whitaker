@@ -1,5 +1,5 @@
 warning: Cuir na loidhnichean corporra san t-sreang bruich seo ri chèile le `concat!()`.
-  --> $DIR/fail_plain_join.rs:3:21
+  --> $DIR/fail_plain_join.rs:9:21
    |
 LL |    const VALUE: &str = "alpha /
    |   _____________________^      -
@@ -10,7 +10,7 @@ LL | ||     beta";
    |    aonadh loidhne thùsail
    |
 note: Bheir an loidhne ùr theichte air falbh a' bhriseadh loidhne corporra agus an t-indent às a dèidh, a' falach na crìche eadar na pìosan ann an aon litireil.
-  --> $DIR/fail_plain_join.rs:3:21
+  --> $DIR/fail_plain_join.rs:9:21
    |
 LL |   const VALUE: &str = "alpha /
    |  _____________________^

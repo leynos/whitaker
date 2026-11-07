@@ -1,5 +1,5 @@
 warning: Join the physical lines in this cooked string with `concat!()`.
-  --> $DIR/fail_plain_join.rs:3:21
+  --> $DIR/fail_plain_join.rs:9:21
    |
 LL |    const VALUE: &str = "alpha /
    |   _____________________^      -
@@ -10,7 +10,7 @@ LL | ||     beta";
    |    source-line join
    |
 note: The escaped newline removes the physical line break and following indentation, hiding the fragment boundary inside one literal.
-  --> $DIR/fail_plain_join.rs:3:21
+  --> $DIR/fail_plain_join.rs:9:21
    |
 LL |   const VALUE: &str = "alpha /
    |  _____________________^

@@ -78,6 +78,10 @@ fn classifies_content_around_a_continuation(
     assert_eq!(continuation.kind, expected);
 }
 
+/// Unwraps a scan expected to hold exactly one continuation.
+///
+/// The length assertion runs first so a body that scanned to none or several
+/// reports that count rather than a confusing "no element" panic.
 fn only_continuation(continuations: Vec<Continuation>) -> Continuation {
     assert_eq!(continuations.len(), 1);
     continuations

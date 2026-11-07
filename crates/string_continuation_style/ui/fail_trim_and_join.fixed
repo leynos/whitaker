@@ -1,6 +1,12 @@
 // run-rustfix
 #![warn(string_continuation_style)]
 
+//! A leading layout trim does not mask an interior join.
+//!
+//! A trim on its own is layout and stays silent, but here a second
+//! continuation joins two fragments. The whole literal is reported, and the
+//! fixed file keeps the leading trim inside the first `concat!` argument.
+
 #[path = "support.rs.inc"]
 mod support;
 

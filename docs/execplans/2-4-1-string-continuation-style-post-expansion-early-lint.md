@@ -276,25 +276,28 @@ Hard invariants. Violating one requires escalation, not a workaround.
       adapter `src/` tree reached 1,400 lines, exceeding the 900-line
       stop-and-escalate tolerance. Implementation stopped and the owner then
       directed continuation; see `DEC-017` for the bounded response.
-- [ ] (2026-11-01) Resume within the existing 900-line cap. Stage EP-M3 after
-      EP-M2, and keep private unit tests under `tests/support` with `#[path]`
-      declarations, following existing repository practice. The EP-M2 source
-      tree is at the 900-line cap. The adapter sends recovered cooked bodies
-      through the pure classifier and checks evaluated values before emitting;
-      literal-pattern expressions are excluded from its positive candidate
-      set. The wrapper-depth matrix includes expanded let, item, statement,
-      derive, and nested-expansion fixtures. The UI harness supplies machine
-      applicability only to prove `run-rustfix`; the shipped default remains
-      manual. `make fmt` and `make check-fmt` pass. The first full package run
-      compiled the adapter and exercised the unit tests; remaining UI setup
-      evidence is recorded below. No commit has been made.
-- [ ] (2026-11-03) The first compiler-backed EP-M2 UI run reached all 18
-      fixtures after the harness switched to Whitaker's toolchain-qualified
-      runner. That run identified edition and proc-macro auxiliary metadata
-      mistakes, an identity-only nested-expansion fixture, and six missing
-      diagnostic goldens. The auxiliary now uses the standard proc-macro UI
-      directives; the C-string fixture's edition header now uses the parser's
-      unspaced `// edition:2024` form. The nested fixture now
+- [x] (2026-11-01, superseded) Resume within the existing 900-line cap. Stage
+      EP-M3 after EP-M2, and keep private unit tests under `tests/support` with
+      `#[path]` declarations, following existing repository practice. The EP-M2
+      source tree is at the 900-line cap. The adapter sends recovered cooked
+      bodies through the pure classifier and checks evaluated values before
+      emitting; literal-pattern expressions are excluded from its positive
+      candidate set. The wrapper-depth matrix includes expanded let, item,
+      statement, derive, and nested-expansion fixtures. The UI harness supplies
+      machine applicability only to prove `run-rustfix`; the shipped default
+      remains manual. `make fmt` and `make check-fmt` pass. The first full
+      package run compiled the adapter and exercised the unit tests; remaining
+      UI setup evidence is recorded below. This describes the work in flight;
+      it is retained for the sequence of events, not as outstanding work.
+      EP-M2, EP-M3 and EP-M5 are complete and committed — see the completion
+      entries below.
+- [x] (2026-11-03, superseded) The first compiler-backed EP-M2 UI run reached
+      all 18 fixtures after the harness switched to Whitaker's
+      toolchain-qualified runner. That run identified edition and proc-macro
+      auxiliary metadata mistakes, an identity-only nested-expansion fixture,
+      and six missing diagnostic goldens. The auxiliary now uses the standard
+      proc-macro UI directives; the C-string fixture's edition header now uses
+      the parser's unspaced `// edition:2024` form. The nested fixture now
       creates blocks and statements in both macro expansions. The six
       diagnostics were reviewed against their `.fixed` replacements and added
       explicitly. In the subsequent package run, the adapter compiled, 35
@@ -306,7 +309,9 @@ Hard invariants. Violating one requires escalation, not a workaround.
       `/tmp/test-whitaker-2-4-1-string-continuation-style-post-expansion-early-lint-package.out`.
       The locale directories are now run sequentially from one serialized test
       entry, with per-directory panic capture so a missing locale golden does
-      not prevent later locales from producing output.
+      not prevent later locales from producing output. Superseded: the
+      edition-header failure and the missing locale goldens were fixed, and the
+      2026-11-05 entry below records all four locale suites passing.
 - [x] (2026-11-04) Rebased onto `origin/main` and retargeted the pull request
       from `harden-lint-config` to `main`. Sixteen child commits were replayed
       across the exclusive boundary `afb1e4ac`; the twenty-one
@@ -372,6 +377,49 @@ Hard invariants. Violating one requires escalation, not a workaround.
       file's job set and because `ci.yml`'s triggers are unconditional; see
       `DEC-020`. `make test-workflow-contracts` passes with it in the tree:
       795 passed in 73.52 s.
+- [x] (2026-11-05) Every UI fixture root carries a `//!` module doc block.
+      The 23 reached by the first sweep, plus `ui-cy/`, `ui-gd/` and
+      `ui-fallback/fail_plain_join.rs`, which the sweep missed because the
+      locale variants live beside `ui/` rather than inside it. Each block is
+      placed after the compiletest directive and the crate attribute, and
+      before the first item, so `#![warn(...)]` stays on line 1 and the
+      `:1:9` lint-level citation in every golden is unaffected. Adding six
+      lines to a `fail_*` fixture moves its `const` from line 3 to line 9, so
+      the `.stderr` citations were renumbered by hand — `bless` is hardcoded
+      `false` in `compiletest_rs 0.11.2` (`common.rs:424`) and the vendored
+      harness passes `..Config::default()` with no override. The `.fixed`
+      files carry the same block, because `fail_join_beside_attribute.fixed`
+      sets that precedent. Evidence: `cargo nextest run -p
+      string_continuation_style --all-features --lib` is 79/79, including all
+      four locale UI suites; log
+      `/tmp/ui2-2-4-1-string-continuation-style-post-expansion-early-lint.md.out`.
+- [x] (2026-11-05) Source editability became an injected query. It used to read
+      `env::current_dir()` and `CARGO_TARGET_DIR` inside `is_editable_source`,
+      which runs once per candidate literal, and mapped every environmental
+      failure to `false`. `SourceEditPolicy` (`src/driver/edit_policy.rs`) now
+      resolves the workspace root and target directories once in `check_crate`
+      and is passed to both rewrite entry points; `is_editable` is a pure
+      function of the path it is given. The default `target` directory is
+      excluded whether or not `CARGO_TARGET_DIR` is set, so an override cannot
+      re-admit it. The policy is `Option`: `None` means the root could not be
+      resolved, and the pass then reports nothing rather than guessing. The
+      test that read the process working directory was replaced by seven cases
+      over fixed paths. See `DEC-022`.
+- [x] (2026-11-05) Silence fixtures now name a committed control. The pairing
+      was prose — `pass_shadowed_println.rs` said its control was "recorded in
+      the ExecPlan", which no gate reads — so `tests/silence_control_tests.rs`
+      now requires every `ui/pass_*.rs` to declare `//! Control: <fixture>.rs`,
+      requires that file to exist, and requires it to carry a `.stderr` golden.
+      A `pass_*` fixture alone cannot distinguish a working gate from a lint
+      that never fires; the control is what makes the silence meaningful.
+- [x] (2026-11-05) The configuration schema is now tested through TOML rather
+      than through constructed values. `config_tests.rs` previously injected a
+      finished `StringContinuationStyleConfig` via `StubReader`, so
+      `deny_unknown_fields` and `deserialize_string_set` were never exercised.
+      Nine cases now parse real TOML: both applicability spellings, each field
+      defaulted independently, an unknown field, an unknown applicability
+      value, a non-array exclusion value, non-string entries, malformed arrays,
+      and a fully populated section.
 
 ## Surprises & discoveries
 
@@ -982,6 +1030,30 @@ Note that this is the `rustc-src` component, not the `rust-src` component at
   is pre-existing and documented — roadmap item 6.4.6 left it open and
   `docs/brain-trust-lints-design.md` records CBMC state explosion in runtime
   containers. Date/Author: 2026-11-05, implementation agent.
+
+- **DEC-022: Resolve source editability once, at the compiler boundary.**
+  The lint only offers a rewrite for a file the user can edit, and that
+  decision was made by `is_editable_source`, which called `env::current_dir()`
+  and read `CARGO_TARGET_DIR` every time it ran. It runs once per candidate
+  literal, so the same two host facts were re-read for every string in the
+  crate, and each of the four failure modes collapsed to `false` — an
+  unreadable environment, an unreadable working directory, and a genuinely
+  generated file were indistinguishable to a caller and to a test.
+  `SourceEditPolicy` now resolves both facts once in `check_crate`, where the
+  compiler boundary already lives, and the per-literal query is
+  `is_editable(&Utf8Path) -> bool` over its fields. Three properties follow.
+  The decision is testable against fixed paths, which is why the test that read
+  the process working directory could be deleted rather than serialized. The
+  default `target` directory stays excluded when `CARGO_TARGET_DIR` points
+  elsewhere, because a build can still write there. And resolution failure is
+  visible in the type: `from_env` returns `Option`, `check_crate` stores it, and
+  `check_expr` returns early on `None`, so "cannot tell" reports nothing
+  instead of offering an edit to generated code. Rejected alternatives: keep
+  the env reads and inject only in tests (the production path would stay
+  untested), and return a `Result` per literal (it would rebuild the same
+  answer for every candidate and push a host failure into the diagnostic layer,
+  which has no vocabulary for it). Date/Author: 2026-11-05, implementation
+  agent.
 
 ## Outcomes & retrospective
 
