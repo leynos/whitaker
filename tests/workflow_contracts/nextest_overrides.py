@@ -137,9 +137,10 @@ NESTED_UI_HARNESS_FILTER: typ.Final[str] = (
 #: their own. The exclusion wraps the whole disjunction, not one clause: a bare
 #: `test(<name>)` matches that name in every package, so guarding one clause
 #: left the next free to capture `no_unwrap_or_else_panic`'s or
-#: `rstest_helper_should_be_fixture`'s harness and hold it to 20 minutes
-#: instead of its own 75. The lock tests join outside the guard because they
-#: belong to the excluded package but still need the serial group.
+#: `rstest_helper_should_be_fixture`'s harness and hold it to this lane's
+#: 30 minutes instead of its own 75. The lock tests join outside the guard
+#: because they belong to the excluded package but still need the serial
+#: group.
 BROAD_UI_FILTER: typ.Final[str] = (
     "((test(driver::ui::) | test(tests::ui::) | test(ui::ui) | "
     "test(example_harness_collects_call_site_evidence) | "
@@ -189,7 +190,7 @@ class Allowance(typ.NamedTuple):
 #: The filters are stated whole and matched exactly, per profile. A
 #: substring would accept a narrowed one: dropping a clause from a `ui`
 #: disjunction leaves each selected needle intact while the affected tests
-#: lose the 20-minute allowance and fall back to the base 300 seconds. The
+#: lose the 30-minute allowance and fall back to the base 300 seconds. The
 #: default profile includes platform-specific example tests that `ci` omits,
 #: but both profiles give expensive API contracts and nested Cargo fixtures
 #: their own explicit allowances.
@@ -276,7 +277,7 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
         ),
         BROAD_UI_FILTER: Allowance(
             slow_timeout={
-                "period": "20m",
+                "period": "30m",
                 "terminate-after": 1,
                 "grace-period": "5s",
             },
@@ -364,7 +365,7 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
         ),
         BROAD_UI_FILTER: Allowance(
             slow_timeout={
-                "period": "20m",
+                "period": "30m",
                 "terminate-after": 1,
                 "grace-period": "5s",
             },

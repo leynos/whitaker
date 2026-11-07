@@ -1822,41 +1822,41 @@ files contain a `#[path = "` anchor.
 
 ### Where the budget is checked
 
-Be precise about this, because the current answer is narrower than it looks.
+`make lint` runs three things, and the last of them is the one that enforces
+this budget:
 
-`make lint` runs Clippy with `--workspace --all-targets --all-features` and
-`-D warnings`, preceded by a `cargo doc` pass. The Dylint lint crates keep
-their UI fixtures under `examples/`, where every file deliberately contains the
-anti-pattern its lint detects; each fixture scopes those diagnostics with a
-narrowly targeted `#[expect(..., reason = "...")]` so the workspace policy
-still applies to every other line (see
-[the repository's assistant instructions](../AGENTS.md)). Neither `lint`
-command runs the 400-line budget. The budget is implemented by
-`module_max_lines`, one of Whitaker's own dylint lints, and a dylint lint is
-not a rustc or Clippy built-in: it is a separate compiler plugin that runs only
-when a workspace loads it deliberately. This workspace does not.
-`rg 'dylint run' Makefile scripts/` finds nothing, and the root `dylint.toml`
-configures `[no_std_fs_operations]` alone. The `[workspace.lints.rust]` and
-`[workspace.lints.rustdoc]` tables in `Cargo.toml` do not change this: they
-configure rustc and rustdoc lints, and neither names `module_max_lines`. Within
-the CI workflow the dylint host tools are restored for the `make publish-check`
-step alone, and that step's single dylint invocation is
-`dylint list --no-metadata --no-build` — it enumerates built libraries to
-verify packaging, and lints nothing.
+1. `cargo doc --workspace --no-deps` under `RUSTDOCFLAGS="-D warnings"`.
+2. `cargo clippy --workspace --all-targets --all-features -- -D warnings`.
+3. `make lint-whitaker`, which runs the Whitaker Dylint suite:
 
-So the budget is **not** currently enforced automatically against this
-repository's own source. The lint itself is real and tested — its UI fixtures
-under `crates/module_max_lines/ui/` pin both the failing and passing cases —
-but nothing runs it over these crates. Running Whitaker's lints over Whitaker
-is the final layer of the lint-hardening stack, and it has not landed yet.
+   ```sh
+   whitaker --lib whitaker_suite -- <packages> --all-targets --all-features
+   ```
 
-Until it does, the budget is held by review. That is a weaker guarantee than a
-gate, and the difference matters: a module that drifts past 400 lines will not
-turn a check red.
+`module_max_lines` is one of Whitaker's own Dylint lints, and the suite
+aggregate `whitaker_suite` includes it. Naming the aggregate library rather than
+`--all` is deliberate: `cargo-dylint` warns and exits zero when it discovers
+no libraries, so `--all` would let a missing or partially installed suite pass
+silently. The third step therefore fails the gate if the lint crates are not
+installed, and runs `module_max_lines` over every listed package's targets.
 
-The threshold, when self-linting arrives, is set as TOML under
-`[module_max_lines]`, not by a compiler flag. The shape is documented in
-[`docs/whitaker-cli-design.md`](./whitaker-cli-design.md).
+The lint measures each module's source span and fires above
+`ModuleMaxLinesConfig::default_max_lines()`, which is 400. Crate roots are not
+measured, which is why `installer/src/main.rs` and `tests/bootstrap_run.rs` may
+exceed the budget: they are entry points, not modules another file can split.
+Out-of-line `mod name;` declarations are measured by the file they reference,
+so moving tests into a sibling file reduces the parent's count.
+
+The threshold is configured as TOML under `[module_max_lines]`, not by a
+compiler flag. The shape is documented in
+[`docs/whitaker-cli-design.md`](./whitaker-cli-design.md). This workspace uses
+the default, so there is no `[module_max_lines]` table in `dylint.toml`.
+
+`dylint.toml` does configure one lint: `[no_std_fs_operations]` lists crates
+excluded from the capability-based filesystem policy. That table is the only
+working suppression for that lint, because the exclusion check matches on
+`tcx.crate_name()`, the Rust crate identifier, rather than the hyphenated Cargo
+package name.
 
 The layout convention itself is recorded in
 [ADR 0006](./adrs/adr-0006-directory-based-module-layout.md).
@@ -5092,20 +5092,24 @@ no-default-feature builds.
 The contract holds that policy, and its failure messages say so rather than
 claiming nextest requires it.
 
-The ordinary serial UI group has a 20-minute bound. The installer UI case
+The ordinary serial UI group has a 30-minute bound. The installer UI case
 measured 235 seconds and timed out at the 300-second base allowance on Windows.
 The wider allowance lets nested UI builds finish under contention while still
-terminating a stalled test. The example-harness lock is keyed by the canonical
-effective Cargo target directory. Resolution prefers Cargo's `.rustc_info.json`
-marker, then an absolute `CARGO_TARGET_DIR`, and finally the profile output
-directory inferred from the test executable. Relative overrides are ignored
-because Cargo resolves them from its invocation directory, which may differ
-from the test process. The lock directory is stored inside the resolved target,
-so differing `TMPDIR` values cannot split locks for a shared target. Test
-processes that share build artefacts share one lock and serialize, while
-independent target directories use independent locks. The direct acquisition
-regression test shares this serialized UI group because it exercises the
-target-scoped lock used by fixture builds.
+terminating a stalled test. Thirty minutes rather than twenty, because the
+group's trailing name terms also capture
+`cross_process_lock_contention_and_release`, which waits up to 25 minutes for
+the lock a real holder is holding; a 20-minute bound terminated it mid-wait.
+The example-harness lock is keyed by the canonical effective Cargo target
+directory. Resolution prefers Cargo's `.rustc_info.json` marker, then an
+absolute `CARGO_TARGET_DIR`, and finally the profile output directory inferred
+from the test executable. Relative overrides are ignored because Cargo resolves
+them from its invocation directory, which may differ from the test process. The
+lock directory is stored inside the resolved target, so differing `TMPDIR`
+values cannot split locks for a shared target. Test processes that share build
+artefacts share one lock and serialize, while independent target directories
+use independent locks. The direct acquisition regression test shares this
+serialized UI group because it exercises the target-scoped lock used by fixture
+builds.
 
 The alias UI fixture in `no_unwrap_or_else_panic` exceeded its 20-minute
 allowance while rebuilding its lint library through nested Cargo and waiting
