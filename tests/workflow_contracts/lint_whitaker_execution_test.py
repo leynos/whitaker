@@ -38,14 +38,33 @@ printf 'argv %s\\n' "$*" >>"$STUB_LOG"
 printf 'rustflags %s\\n' "${RUSTFLAGS-}" >>"$STUB_LOG"
 """
 
+# A silent, succeeding stand-in for the tools `lint`'s other prerequisites run.
+# It must *drain* standard input: `skill-frontmatter-lint` pipes an extracted
+# manifest into its linter, and a child that exits without reading closes the
+# pipe, so the feeding `awk` dies of SIGPIPE and the target fails with 141 even
+# though every recipe ran.
+_QUIET_STUB = """\
+#!/bin/sh
+cat >/dev/null
+exit 0
+"""
 
-def _observed_lines(target: str, *, variables: dict[str, str]) -> list[str]:
+
+def _observed_lines(
+    target: str, *, variables: dict[str, str], stood_down: tuple[str, ...] = ()
+) -> list[str]:
     """Run `target` with a stub `WHITAKER` and return what the stub observed.
 
     `variables` are passed as `make` command-line assignments, which override
     every `?=` default, so the surrounding environment cannot mask a broken
     recipe. The returned list is the stub's raw log lines: `argv ...` for the
     argument vector and `rustflags ...` for the environment it inherited.
+
+    `stood_down` names make variables that should resolve to the quiet
+    stand-in instead of a real tool. A composed target such as `lint` runs
+    prerequisites whose own contracts cover them, and which cannot run here:
+    this test pins a minimal `PATH` and a scratch `HOME`, so `uv` and `cargo`
+    alike would have to resolve from a directory that does not exist.
     """
     make = shutil.which("make")
     assert make is not None, "the workflow contract tests require GNU make"
@@ -55,8 +74,15 @@ def _observed_lines(target: str, *, variables: dict[str, str]) -> list[str]:
         stub = directory / "whitaker-stub"
         stub.write_text(_STUB, encoding="utf-8")
         stub.chmod(0o755)
+        quiet = directory / "quiet-stub"
+        quiet.write_text(_QUIET_STUB, encoding="utf-8")
+        quiet.chmod(0o755)
         log = directory / "observed.log"
         log.touch()
+        assignments = [
+            *(f"{name}={value}" for name, value in variables.items()),
+            *(f"{name}={quiet}" for name in stood_down),
+        ]
 
         # A minimal environment: the Makefile prepends `$HOME/.cargo/bin` and
         # friends to PATH itself, and the stub must resolve before any real
@@ -75,7 +101,7 @@ def _observed_lines(target: str, *, variables: dict[str, str]) -> list[str]:
                 str(REPO_ROOT),
                 target,
                 f"WHITAKER={stub}",
-                *[f"{name}={value}" for name, value in variables.items()],
+                *assignments,
             ],
             env=environment,
             capture_output=True,
@@ -244,14 +270,21 @@ def test_lint_runs_the_whitaker_gate_it_declares() -> None:
     run shows that the dependency is real. A `lint` recipe that shadowed its
     prerequisites would leave the suite unrun while the declaration still read
     correctly.
+
+    `CARGO` and `UV` are stood down because their halves of `lint` are
+    covered by their own contracts, and neither can run here: this test pins a
+    minimal `PATH` and a scratch `HOME`, and `uv` resolves from `~/.local/bin`
+    on the host and in CI alike. Leaving them live would make the assertion
+    depend on the machine rather than on the recipe, and would fail before
+    reaching the gate under test.
     """
     lines = _observed_lines(
         "lint",
         variables={
-            "CARGO": "/bin/true",
             "RUSTDOC_FLAGS": "-D warnings",
             "RUST_FLAGS": "-D warnings",
         },
+        stood_down=("CARGO", "UV"),
     )
 
     argv = _observed_argv(lines)
