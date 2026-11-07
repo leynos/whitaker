@@ -153,8 +153,8 @@ def test_make_test_runs_every_test_without_a_filter(tmp_path: Path) -> None:
     assert unfiltered == lines, f"make test must not filter tests; got: {lines}"
 
 
-def test_contracts_target_runs_all_seven_under_the_ci_profile(tmp_path: Path) -> None:
-    """``make trybuild-contracts`` filters both passes to the seven contract tests.
+def test_contracts_target_runs_all_eight_under_the_ci_profile(tmp_path: Path) -> None:
+    """``make trybuild-contracts`` filters both passes to the eight contract tests.
 
     The target runs the workspace pass and then the feature-free
     ``whitaker_lint_core`` pass. Both must carry the contract filter, otherwise
@@ -168,7 +168,7 @@ def test_contracts_target_runs_all_seven_under_the_ci_profile(tmp_path: Path) ->
         f"expected the workspace and core passes to share the filter; got: {filtered}"
     )
     for line in filtered:
-        assert f" -E {expected}" in line, f"expected the seven contract tests; got: {line}"
+        assert f" -E {expected}" in line, f"expected the eight contract tests; got: {line}"
         assert "--profile ci" in line, f"expected the ci profile; got: {line}"
     tolerated_emptiness = [a for a in filtered if "--no-tests=pass" in a]
     assert len(tolerated_emptiness) == 1, (
