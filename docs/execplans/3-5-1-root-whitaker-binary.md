@@ -2201,6 +2201,42 @@ which en-GB-oxendict takes as `recognizable`. Fixed in `ebe1b454`. The new base
 also raises the diff to 161 files, +10,799/−1,157 (net +9,642 lines) against
 the 7,000-line soft tolerance, recorded as D-25.
 
+**Base merges and the round-three repairs, 2026-11-07.** `main` advanced twice
+while the round-two repairs were under review. The branch merged it both times
+rather than being replayed, so its published history and the review evidence
+attached to it stay intact:
+
+- `origin/main` at `66155f55` merged as `77ef7abd`. The conflicts were the root
+  `Cargo.toml`, `Cargo.lock`, the two `context/mod.rs` files, `src/lib.rs`, and
+  the example harness sources; each kept the branch's structure and took main's
+  newer logic.
+- `origin/main` at `3a370bf9` (the #560 revert of the `nightly-2026-10-30`
+  move) merged as `f4929e7e`. Main's revert removes `crates/rustc_attr_ir` and
+  the `attributes_from_hir` helper this branch had adopted for the newer
+  toolchain, so both are gone again, and `convert_attributes` is back to main's
+  `&[hir::Attribute]` form with its import repointed at
+  `whitaker_lint_core::hir`. The root package keeps the CLI boundary and the
+  lint sources stay under `crates/whitaker_lint_core`.
+- `Option::map_or_default` is unstable on the restored `nightly-2026-05-28`, so
+  the `map_unwrap_or` repair in `tests/behaviour_whitaker/support.rs` uses
+  `map_or_else` instead: the same fix in a stable spelling.
+
+CodeScene then failed head `f4929e7e` on its advisory duplication rule:
+`counter_value` and `histogram_sample` in `src/adapters/telemetry/tests.rs`
+repeated the same name-and-label predicate. The predicate now lives in one
+`recorded_value` helper and each reader matches the `DebugValue` variant it
+expects, so `cs delta origin/main` reports no issues for the branch. The merge
+and repair round raises the diff to 168 files, +11,648/−1,207 (net +10,441
+lines) against the 7,000-line soft tolerance recorded as D-25.
+
+Gates on `2b4ec653` passed sequentially: `make check-fmt` (6 s), `make lint`
+(38 s, interrogate 100%, Clippy clean), `make typecheck` (32 s), `make test`
+(1830 s: 2225 nextest tests passed with 6 filtered by the default profile, 84
+lint-core tests, and 19 `dylint_testing` tests), `make markdownlint` (28 s), and
+`make nixie` (5 s). The filtered six are the installer behaviour binaries that
+CI runs under `NEXTEST_PROFILE=ci`; the hosted `linux-full` job is the evidence
+for those, not the local default profile.
+
 To be completed at each milestone boundary and at completion. Before setting
 this plan to `COMPLETE`, reconcile every entry in `Surprises & discoveries`
 against `docs/whitaker-cli-design.md`. In particular, `CLI-REQ-FWD` has no
