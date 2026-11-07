@@ -13,14 +13,23 @@ use bootstrap_support::{Installation, TOOLCHAIN, git};
 use whitaker_installer::bootstrap::BUILT_DRIVER_NOTICE;
 
 /// The value the stub recorded for `key`, from its most recent invocation.
+///
+/// This helper is a free function, not a `#[test]`, so Clippy's `expect_used`
+/// applies to it. A bare `panic!` is the only reporting form that satisfies
+/// both that lint and `no_unwrap_or_else_panic`, which inspects only
+/// `unwrap_or_else` closures. The recorded transcript is included because a
+/// missing key is usually a stub that ran with different arguments, and the
+/// transcript is what distinguishes that from a stub that never ran at all.
 fn last(recorded: &[String], key: &str) -> String {
     let prefix = format!("{key}=");
-    recorded
+    let Some(value) = recorded
         .iter()
         .rev()
         .find_map(|line| line.strip_prefix(&prefix))
-        .unwrap_or_else(|| panic!("the stub recorded no {key}"))
-        .to_owned()
+    else {
+        panic!("the stub recorded no {key} in {recorded:?}");
+    };
+    value.to_owned()
 }
 
 /// Assert a run succeeded, reporting its stderr when it did not.
