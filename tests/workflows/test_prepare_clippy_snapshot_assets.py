@@ -67,6 +67,7 @@ class Prepared(typ.NamedTuple):
 
 
 def _write_stub(directory: Path, name: str, body: str) -> None:
+    """Write an executable stub script called name into directory."""
     path = directory / name
     path.write_text(body, encoding="utf-8")
     path.chmod(path.stat().st_mode | stat.S_IXUSR)
@@ -81,6 +82,7 @@ def prepare(tmp_path: Path) -> typ.Callable[..., Prepared]:
     _write_stub(stubs, "make", _MAKE_STUB)
 
     def _run(*, published: list[str], verify_exit: int = 0) -> Prepared:
+        """Run the script against the stubs and return what it did."""
         dist = tmp_path / "dist"
         log = tmp_path / "stub.log"
         output = tmp_path / "github-output"

@@ -149,7 +149,11 @@ project:
     0.6.0 or later on `PATH`; Markdown linting runs through
     `make markdownlint` locally and the pinned markdownlint-cli2 action in
     CI.
-  - `make lint` executes:
+  - `make lint` first runs `make interrogate`, which needs `uv` and fails on any
+    Python definition under `installer/scripts`, `scripts` and `tests` without a
+    docstring (and on any `MISSED` row, since interrogate rounds its percentage
+    to one decimal; `tests/workflow_contracts/interrogate_gate_test.py` asserts
+    the wiring), and then executes:
 
     ```sh
     cargo clippy --workspace --all-targets --all-features -- -D warnings
