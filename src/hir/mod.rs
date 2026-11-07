@@ -349,9 +349,9 @@ fn is_harness_descriptor_const(item: &hir::Item<'_>) -> bool {
         item.kind,
         hir::ItemKind::Const(..) | hir::ItemKind::Static(..)
     ) && item
-            .kind
-            .ident()
-            .is_some_and(|ident| ident.name == *HARNESS_DESCRIPTOR_SYMBOL)
+        .kind
+        .ident()
+        .is_some_and(|ident| ident.name == *HARNESS_DESCRIPTOR_SYMBOL)
 }
 
 /// Whether `items` lists at least one `fn` with a same-span sibling `const` of
