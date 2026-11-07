@@ -26,6 +26,8 @@ const REMOVE_PANIC_KEY: &str = "WHITAKER_TEST_SUPPORT_REMOVE_PANIC";
 const SCOPED_KEY: &str = "WHITAKER_TEST_SUPPORT_SCOPED";
 const OVERLAPPING_KEY: &str = "WHITAKER_TEST_SUPPORT_OVERLAPPING";
 const SELECTED_KEY: &str = "WHITAKER_TEST_SUPPORT_SELECTED";
+const SELECTED_PANIC_KEY: &str = "WHITAKER_TEST_SUPPORT_SELECTED_PANIC";
+const EMPTY_SELECTION_KEY: &str = "WHITAKER_TEST_SUPPORT_EMPTY_SELECTION";
 const VARS_FIRST_KEY: &str = "WHITAKER_TEST_SUPPORT_VARS_FIRST";
 const VARS_SECOND_KEY: &str = "WHITAKER_TEST_SUPPORT_VARS_SECOND";
 const VARS_PANIC_KEY: &str = "WHITAKER_TEST_SUPPORT_VARS_PANIC";
@@ -317,6 +319,87 @@ fn with_env_vars_selected_applies_and_restores_the_selection() {
 
         assert!(std::env::var_os(VARS_FIRST_KEY).is_none());
     });
+}
+
+/// Check that an empty selection holds the lock for the whole callback.
+///
+/// This is the case [`with_env_vars`] short-circuits. The selecting helper must
+/// not: its callback runs on the decision the selection made, so another
+/// thread's scoped mutation has to wait until the callback returns even though
+/// nothing was applied.
+#[test]
+fn empty_selection_holds_the_lock_for_its_callback() {
+    let original_value = std::env::var_os(EMPTY_SELECTION_KEY);
+    let (entered_sender, entered_receiver) = mpsc::channel();
+    let (release_sender, release_receiver) = mpsc::channel();
+    let (finished_sender, finished_receiver) = mpsc::channel();
+    let holder = thread::spawn(move || {
+        with_env_vars_selected(Vec::new, || {
+            entered_sender
+                .send(())
+                .expect("empty selection entry must be reported");
+            release_receiver
+                .recv()
+                .expect("empty selection release must be received");
+        });
+        finished_sender
+            .send(())
+            .expect("empty selection completion must be reported");
+    });
+    let release_holder = ReleaseOnDrop(Some(release_sender));
+    entered_receiver
+        .recv_timeout(Duration::from_secs(1))
+        .expect("the empty selection callback should enter");
+
+    let contender = spawn_scoped_mutation(EMPTY_SELECTION_KEY, "contender");
+    let release_contender = ReleaseOnDrop(Some(contender.release_sender.clone()));
+    assert!(
+        contender
+            .entered_receiver
+            .recv_timeout(Duration::from_millis(100))
+            .is_err(),
+        "a scoped mutation must wait for an empty selection's callback",
+    );
+
+    release_holder.release();
+    finished_receiver
+        .recv_timeout(Duration::from_secs(1))
+        .expect("the empty selection should finish after release");
+    contender.wait_for_entry("the contender should enter once the empty selection returns");
+    release_contender.release();
+    contender.wait_for_restoration("the contender should restore its value");
+    holder
+        .join()
+        .expect("empty selection thread should complete");
+    contender.join();
+    assert_eq!(std::env::var_os(EMPTY_SELECTION_KEY), original_value);
+}
+
+/// Check that a panicking selection restores its value and releases the lock.
+///
+/// The selection takes `temp_env`'s lock before applying anything, so a panic
+/// has to release it as well as restore the value; otherwise every later
+/// scoped mutation on any thread would block for ever.
+#[test]
+fn with_env_vars_selected_restores_and_releases_after_a_panic() {
+    let original_value = std::env::var_os(SELECTED_PANIC_KEY);
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        with_env_vars_selected(
+            || vec![(SELECTED_PANIC_KEY, "temporary")],
+            || panic!("intentional test panic"),
+        );
+    }));
+
+    assert!(result.is_err());
+    assert_eq!(std::env::var_os(SELECTED_PANIC_KEY), original_value);
+
+    let after_panic = spawn_scoped_mutation(SELECTED_PANIC_KEY, "after panic");
+    let release = ReleaseOnDrop(Some(after_panic.release_sender.clone()));
+    after_panic.wait_for_entry("the lock must be available after a panicking selection");
+    release.release();
+    after_panic.wait_for_restoration("the later mutation must restore its value");
+    after_panic.join();
+    assert_eq!(std::env::var_os(SELECTED_PANIC_KEY), original_value);
 }
 
 /// Check that concurrent scoped mutations wait for the current callback.

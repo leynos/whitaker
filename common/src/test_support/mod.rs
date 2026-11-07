@@ -95,6 +95,11 @@ pub fn with_env_var<R>(key: &str, value: impl AsRef<OsStr>, callback: impl FnOnc
 /// Serialization is provided by `temp_env`'s re-entrant global lock, so nested
 /// scoped mutations from the same thread do not deadlock.
 ///
+/// An empty `vars` iterator runs `callback` directly, without taking that lock:
+/// the caller has already decided there is nothing to scope, so there is no
+/// mutation to serialize. Use [`with_env_vars_selected`] when the selection
+/// itself must be made under the lock.
+///
 /// # Examples
 ///
 /// ```rust,no_run
