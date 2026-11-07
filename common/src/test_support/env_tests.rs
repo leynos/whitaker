@@ -290,12 +290,15 @@ fn with_env_vars_applies_the_last_value_for_a_repeated_key() {
 }
 
 /// Check that an empty selection still runs the callback without locking.
+///
+/// The test asserts only the callback's result: reading a shared key here
+/// would race the tests that mutate it, because the empty selection is
+/// exactly the case that takes no lock.
 #[test]
 fn with_env_vars_without_variables_runs_the_callback() {
     let callback_result = with_env_vars(Vec::new(), || 42_u8);
 
     assert_eq!(callback_result, 42);
-    assert!(std::env::var_os(VARS_FIRST_KEY).is_none());
 }
 
 /// Check that the selecting helper applies and restores its selection.
@@ -600,6 +603,17 @@ fn transition_multi_variable_restores_after_panic(keys: &[&'static str]) -> bool
     panic.is_err()
 }
 
+/// Exercise restoration after a selected multi-variable callback panics.
+fn transition_selected_multi_variable_restores_after_panic(keys: &[&'static str]) -> bool {
+    let panic = catch_unwind(AssertUnwindSafe(|| {
+        with_env_vars_selected(
+            || settings_for(keys, "selected temporary"),
+            || panic!("test panic"),
+        );
+    }));
+    panic.is_err()
+}
+
 /// Exercise scoped environment transitions from several starting values.
 fn transition_exposes_temporary_value() -> bool {
     with_env_var(PROPERTY_KEY, "temporary", || {
@@ -658,9 +672,10 @@ fn apply_transition(transition: u8, keys: &[&'static str]) -> Result<bool, TestC
         8 => transition_nests_multi_variable_scopes(keys),
         9 => transition_keeps_the_last_repeated_value(keys),
         10 => transition_multi_variable_restores_after_panic(keys),
+        11 => transition_selected_multi_variable_restores_after_panic(keys),
         other => {
             return Err(TestCaseError::fail(format!(
-                "the transition strategy only yields values below eleven, got {other}"
+                "the transition strategy only yields values below twelve, got {other}"
             )));
         }
     };
@@ -692,7 +707,7 @@ proptest! {
             prop_oneof![Just(PROPERTY_KEY), Just(PROPERTY_COMPANION_KEY)],
             0..4,
         ),
-        transitions in prop::collection::vec(0_u8..11, 1..8),
+        transitions in prop::collection::vec(0_u8..12, 1..8),
     ) {
         let baseline = Baseline { primary, companion };
         with_baseline(baseline, || run_transitions(baseline, &keys, &transitions))?;

@@ -1229,6 +1229,14 @@ arguments each target passes.
 them, so without this step the workspace's doctest fences are compiled by
 `cargo doc` in `make lint` and never run.
 
+The recipe is `cargo test --doc $(CARGO_LOCKED) $(DOCTEST_CARGO_FLAGS)`, run
+with `RUSTFLAGS="$(RUST_FLAGS) $(DEV_STANDARD_FLAGS)"`. `DOCTEST_CARGO_FLAGS`
+defaults to `--workspace --all-features $(DOCTEST_EXCLUDES)`, so a bare
+`make test-doc` documents the whole workspace and the exclusions below are what
+narrow it; overriding the variable replaces the selection and the exclusions
+together. `CARGO_LOCKED` is empty by default and `CARGO_LOCKED=--locked` makes
+the run refuse to touch the lockfile, as it does for the other Cargo recipes.
+
 Two things about the doctest lane are easy to get wrong.
 
 Its `RUSTFLAGS` deliberately omit the
