@@ -133,7 +133,15 @@ impl LintRunner for SystemServices {
         let started = Instant::now();
         let library_path = match active_library_path(dirs) {
             Ok(path) => path,
-            Err(error) => return Err(report_resolution_failure(source, started, error)),
+            Err(error) => {
+                return Err(record_failure(FailedForward {
+                    source,
+                    outcome: ForwardOutcome::LibraryPathFailed,
+                    elapsed: started.elapsed(),
+                    error,
+                    message: "the Dylint library path could not be resolved",
+                }));
+            }
         };
         telemetry::record_library_path(library_path.kind(), library_path.candidate_count());
         let forwarding = Forwarding {
@@ -181,6 +189,23 @@ struct Forwarding<'a> {
     started: Instant,
 }
 
+/// One forward that failed, as the adapter reports it.
+///
+/// The fields travel together into the telemetry event and the returned error,
+/// so they are grouped rather than passed as separate parameters.
+struct FailedForward<'a> {
+    /// The route this machine supports.
+    source: ForwardSource,
+    /// How the forward ended.
+    outcome: ForwardOutcome,
+    /// Time spent resolving the library path and dispatching.
+    elapsed: Duration,
+    /// The error handed back to the command layer.
+    error: CliError,
+    /// The event message naming what failed.
+    message: &'a str,
+}
+
 /// Run the forwarded invocation and record how it ended.
 ///
 /// The elapsed time covers resolution and dispatch together, because a user
@@ -203,7 +228,15 @@ fn dispatch_forward(forwarding: Forwarding<'_>) -> Result<i32, CliError> {
     };
     let elapsed = started.elapsed();
     result.map_or_else(
-        |error| Err(record_dispatch_failure(source, error, elapsed)),
+        |error| {
+            Err(record_failure(FailedForward {
+                source,
+                outcome: ForwardOutcome::DispatchFailed,
+                elapsed,
+                error,
+                message: "forwarded invocation could not be dispatched",
+            }))
+        },
         |code| Ok(record_completion(source, code, elapsed)),
     )
 }
@@ -223,34 +256,28 @@ fn record_completion(source: ForwardSource, code: i32, elapsed: Duration) -> i32
     code
 }
 
-/// Record a child that could not be started and hand the error back.
-fn record_dispatch_failure(source: ForwardSource, error: CliError, elapsed: Duration) -> CliError {
-    telemetry::record_forward(source, ForwardOutcome::DispatchFailed, elapsed);
-    tracing::error!(
-        operation = "forward",
-        source = source.label(),
-        outcome = ForwardOutcome::DispatchFailed.label(),
-        error_category = telemetry::error_category(&error),
-        elapsed_seconds = elapsed.as_secs_f64(),
-        "forwarded invocation could not be dispatched"
-    );
-    error
-}
-
-/// Record a library-path failure and hand the error back to the caller.
+/// Record a forward that failed and hand the error back to the caller.
 ///
-/// Returning the error keeps the reporting at the boundary that owns the
-/// outcome, so the command layer still decides the process exit code.
-fn report_resolution_failure(source: ForwardSource, started: Instant, error: CliError) -> CliError {
-    let elapsed = started.elapsed();
-    telemetry::record_forward(source, ForwardOutcome::LibraryPathFailed, elapsed);
+/// Both forwarding failures report the same metadata and differ only in the
+/// outcome and its message, so the reporting lives in one place. Returning the
+/// error keeps it at the boundary that owns the outcome, so the command layer
+/// still decides the process exit code.
+fn record_failure(failure: FailedForward<'_>) -> CliError {
+    let FailedForward {
+        source,
+        outcome,
+        elapsed,
+        error,
+        message,
+    } = failure;
+    telemetry::record_forward(source, outcome, elapsed);
     tracing::error!(
         operation = "forward",
         source = source.label(),
-        outcome = ForwardOutcome::LibraryPathFailed.label(),
+        outcome = outcome.label(),
         error_category = telemetry::error_category(&error),
         elapsed_seconds = elapsed.as_secs_f64(),
-        "the Dylint library path could not be resolved"
+        "{message}"
     );
     error
 }
