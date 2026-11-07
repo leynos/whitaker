@@ -364,7 +364,7 @@ fn resolve_method_call_def_id<'tcx>(
     expr: &'tcx hir::Expr<'tcx>,
 ) -> Option<DefId> {
     let owner = expr.hir_id.owner;
-    cx.maybe_typeck_results()
+    cx.typeck_results
         .filter(|typeck_results| typeck_results.hir_owner == owner)
         .or_else(|| {
             cx.tcx

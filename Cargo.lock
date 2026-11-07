@@ -1050,6 +1050,7 @@ dependencies = [
  "rstest-bdd-macros",
  "rustc_ast",
  "rustc_attr_data_structures",
+ "rustc_attr_ir",
  "rustc_hir",
  "rustc_lint",
  "rustc_middle",
@@ -1764,6 +1765,7 @@ dependencies = [
  "rstest-bdd",
  "rstest-bdd-macros",
  "rustc_ast",
+ "rustc_attr_ir",
  "rustc_hir",
  "rustc_lint",
  "rustc_middle",
@@ -1822,6 +1824,7 @@ dependencies = [
  "rstest-bdd",
  "rstest-bdd-macros",
  "rustc_ast",
+ "rustc_attr_ir",
  "rustc_hir",
  "rustc_lint",
  "rustc_middle",
@@ -2569,6 +2572,7 @@ dependencies = [
  "proptest",
  "rstest",
  "rustc_ast",
+ "rustc_attr_ir",
  "rustc_hir",
  "rustc_lint",
  "rustc_session",
@@ -2658,6 +2662,10 @@ version = "0.2.11"
 
 [[package]]
 name = "rustc_attr_data_structures"
+version = "0.2.11"
+
+[[package]]
+name = "rustc_attr_ir"
 version = "0.2.11"
 
 [[package]]
@@ -3103,6 +3111,8 @@ dependencies = [
  "rstest",
  "rstest-bdd",
  "rstest-bdd-macros",
+ "rustc_ast",
+ "rustc_attr_ir",
  "rustc_hir",
  "rustc_lint",
  "rustc_span",
@@ -3729,6 +3739,7 @@ dependencies = [
  "rstest-bdd",
  "rstest-bdd-macros",
  "rustc_ast",
+ "rustc_attr_ir",
  "rustc_hir",
  "rustc_lint",
  "rustc_span",
@@ -3881,6 +3892,7 @@ dependencies = [
  "rstest-bdd",
  "rstest-bdd-macros",
  "rstest_helper_should_be_fixture",
+ "rustc_attr_ir",
  "rustc_hir",
  "rustc_lint",
  "rustc_session",

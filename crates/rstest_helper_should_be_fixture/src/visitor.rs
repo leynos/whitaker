@@ -6,7 +6,8 @@
 use std::collections::HashSet;
 
 use log::debug;
-use rustc_ast::AttrStyle;
+use rustc_ast::{AttrStyle, attr::AttributeExt};
+use rustc_attr_ir::Attribute as HirAttribute;
 use rustc_hir as hir;
 use rustc_hir::{
     def_id::DefId,
@@ -186,12 +187,12 @@ fn parameter_attributes(cx: &LateContext<'_>, hir_id: hir::HirId) -> Vec<Attribu
         .collect()
 }
 
-pub(crate) fn attribute_from_hir(attr: &hir::Attribute) -> Option<Attribute> {
+pub(crate) fn attribute_from_hir(attr: &HirAttribute) -> Option<Attribute> {
     Some(Attribute::new(attribute_path(attr)?, attribute_kind(attr)))
 }
 
-fn attribute_path(attr: &hir::Attribute) -> Option<AttributePath> {
-    let hir::Attribute::Unparsed(_) = attr else {
+fn attribute_path(attr: &HirAttribute) -> Option<AttributePath> {
+    let (HirAttribute::Tool(_) | HirAttribute::DeriveHelper(_)) = attr else {
         return None;
     };
 
@@ -200,7 +201,7 @@ fn attribute_path(attr: &hir::Attribute) -> Option<AttributePath> {
     Some(AttributePath::new(std::iter::once(first).chain(names)))
 }
 
-fn attribute_kind(attr: &hir::Attribute) -> AttributeKind {
+fn attribute_kind(attr: &HirAttribute) -> AttributeKind {
     match attribute_style(attr) {
         AttrStyle::Inner => AttributeKind::Inner,
         AttrStyle::Outer => AttributeKind::Outer,
@@ -209,10 +210,10 @@ fn attribute_kind(attr: &hir::Attribute) -> AttributeKind {
 
 /// Parsed attributes never reach this helper because `attribute_path` filters
 /// them out; treating them as outer keeps the mapping total.
-fn attribute_style(attr: &hir::Attribute) -> AttrStyle {
+fn attribute_style(attr: &HirAttribute) -> AttrStyle {
     match attr {
-        hir::Attribute::Unparsed(item) => item.style,
-        hir::Attribute::Parsed(_) => AttrStyle::Outer,
+        HirAttribute::Tool(item) | HirAttribute::DeriveHelper(item) => item.style,
+        HirAttribute::Parsed(_) => AttrStyle::Outer,
     }
 }
 

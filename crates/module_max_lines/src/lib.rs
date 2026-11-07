@@ -4,6 +4,7 @@
 //! `dylint-driver` feature gates the rustc-facing implementation so the crate
 //! also builds as an ordinary library.
 #![cfg_attr(feature = "dylint-driver", feature(rustc_private))]
+#![cfg_attr(feature = "dylint-driver", feature(default_field_values))]
 
 #[cfg(feature = "dylint-driver")]
 mod driver;

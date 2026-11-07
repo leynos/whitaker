@@ -2,9 +2,9 @@
 
 use std::{collections::HashSet, sync::LazyLock};
 
-use rustc_ast::AttrStyle;
+use rustc_ast::{AttrStyle, attr::AttributeExt};
+use rustc_attr_ir::{Attribute as HirAttribute, AttributeKind as HirAttributeKind};
 use rustc_hir as hir;
-use rustc_hir::attrs::AttributeKind as HirAttributeKind;
 use rustc_lint::LateContext;
 use rustc_span::Span;
 use whitaker_common::{Attribute, AttributeKind, AttributePath, SpanRecoveryFrame};
@@ -47,7 +47,7 @@ pub fn module_header_span(item_span: Span, ident_span: Span) -> Span {
 /// Returns whether any HIR attribute resolves to a recognized test marker.
 #[must_use]
 pub fn has_test_like_hir_attributes(
-    attrs: &[hir::Attribute],
+    attrs: &[HirAttribute],
     additional: &[AttributePath],
 ) -> bool {
     attrs
@@ -109,12 +109,12 @@ pub fn recover_user_editable_hir_span(span: Span) -> Option<Span> {
     walk_span_chain(span).find(|current| !current.from_expansion())
 }
 
-fn attribute_from_hir(attr: &hir::Attribute) -> Option<Attribute> {
+fn attribute_from_hir(attr: &HirAttribute) -> Option<Attribute> {
     Some(Attribute::new(attribute_path(attr)?, attribute_kind(attr)))
 }
 
-fn attribute_path(attr: &hir::Attribute) -> Option<AttributePath> {
-    let hir::Attribute::Unparsed(_) = attr else {
+fn attribute_path(attr: &HirAttribute) -> Option<AttributePath> {
+    let (HirAttribute::Tool(_) | HirAttribute::DeriveHelper(_)) = attr else {
         return None;
     };
 
@@ -123,18 +123,18 @@ fn attribute_path(attr: &hir::Attribute) -> Option<AttributePath> {
     Some(AttributePath::new(std::iter::once(first).chain(names)))
 }
 
-fn attribute_kind(attr: &hir::Attribute) -> AttributeKind {
+fn attribute_kind(attr: &HirAttribute) -> AttributeKind {
     match attribute_style(attr) {
         AttrStyle::Inner => AttributeKind::Inner,
         AttrStyle::Outer => AttributeKind::Outer,
     }
 }
 
-fn attribute_style(attr: &hir::Attribute) -> AttrStyle {
+fn attribute_style(attr: &HirAttribute) -> AttrStyle {
     match attr {
-        hir::Attribute::Unparsed(item) => item.style,
-        hir::Attribute::Parsed(HirAttributeKind::DocComment { style, .. }) => *style,
-        hir::Attribute::Parsed(_) => AttrStyle::Outer,
+        HirAttribute::Tool(item) | HirAttribute::DeriveHelper(item) => item.style,
+        HirAttribute::Parsed(HirAttributeKind::DocComment { style, .. }) => *style,
+        HirAttribute::Parsed(_) => AttrStyle::Outer,
     }
 }
 
@@ -184,7 +184,7 @@ pub fn collect_harness_test_functions(cx: &LateContext<'_>) -> HashSet<hir::HirI
         .into_iter()
         .filter(|(fn_id, name, span)| {
             descriptors.iter().any(|(desc_name, desc_span, desc_id)| {
-                desc_id != fn_id && *desc_name == *name && desc_span.source_equal(*span)
+                desc_id != fn_id && *desc_name == *name && desc_span.lo_hi() == span.lo_hi()
             })
         })
         .map(|(hir_id, ..)| hir_id)
@@ -353,7 +353,7 @@ fn module_has_inner_harness_descriptor_pairs<'tcx>(
                     |(s_id, s_name, _, s_span)| {
                         s_id != fn_id
                             && s_name == fn_name
-                            && (s_span.source_equal(fn_span)
+                            && (s_span.lo_hi() == fn_span.lo_hi()
                                 || (imports_test_crate && fn_index.abs_diff(const_index) == 1))
                     },
                 )

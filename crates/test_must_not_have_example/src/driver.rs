@@ -3,6 +3,8 @@
 use std::borrow::Cow;
 
 use log::debug;
+use rustc_ast::attr::AttributeExt;
+use rustc_attr_ir::Attribute as HirAttribute;
 use rustc_hir as hir;
 use rustc_hir::Node;
 use rustc_lint::{LateContext, LateLintPass, LintContext};
@@ -76,15 +78,15 @@ struct FunctionSite<'a> {
 enum ItemKindInfo<'a> {
     Item {
         ident: Ident,
-        attrs: &'a [hir::Attribute],
+        attrs: &'a [HirAttribute],
     },
     ImplItem {
         ident: &'a Ident,
-        attrs: &'a [hir::Attribute],
+        attrs: &'a [HirAttribute],
     },
     TraitItem {
         ident: &'a Ident,
-        attrs: &'a [hir::Attribute],
+        attrs: &'a [HirAttribute],
     },
 }
 
@@ -98,7 +100,7 @@ impl<'a> ItemKindInfo<'a> {
     }
 
     /// Return the attributes shared by each function-like item variant.
-    const fn attrs(&self) -> &'a [hir::Attribute] {
+    const fn attrs(&self) -> &'a [HirAttribute] {
         match self {
             ItemKindInfo::Item { attrs, .. }
             | ItemKindInfo::ImplItem { attrs, .. }
@@ -185,7 +187,7 @@ impl<'tcx> LateLintPass<'tcx> for TestMustNotHaveExample {
 
 impl TestMustNotHaveExample {
     /// Find a forbidden documentation example on a test function.
-    fn detect_violation(attrs: &[hir::Attribute], is_test: bool) -> Option<DocExampleViolation> {
+    fn detect_violation(attrs: &[HirAttribute], is_test: bool) -> Option<DocExampleViolation> {
         if !is_test {
             return None;
         }
@@ -257,7 +259,7 @@ impl TestMustNotHaveExample {
 fn is_test_function_item<'tcx>(
     cx: &LateContext<'tcx>,
     item: &'tcx hir::Item<'tcx>,
-    attrs: &[hir::Attribute],
+    attrs: &[HirAttribute],
     additional_test_attributes: &[AttributePath],
 ) -> bool {
     has_test_like_hir_attributes(attrs, additional_test_attributes)
@@ -336,9 +338,9 @@ fn is_matching_harness_test_descriptor(
             .is_some_and(|ident| ident.name == function_name && sibling.span == function_span)
 }
 
-fn collect_doc_text(attrs: &[hir::Attribute]) -> String {
+fn collect_doc_text(attrs: &[HirAttribute]) -> String {
     let mut doc_text = String::new();
-    for doc in attrs.iter().filter_map(hir::Attribute::doc_str) {
+    for doc in attrs.iter().filter_map(HirAttribute::doc_str) {
         doc_text.push_str(doc.as_str());
         doc_text.push('\n');
     }

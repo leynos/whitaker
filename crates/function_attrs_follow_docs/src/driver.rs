@@ -7,8 +7,8 @@
 use std::borrow::Cow;
 
 use rustc_ast::{AttrStyle, attr::AttributeExt};
+use rustc_attr_ir::{Attribute as HirAttribute, AttributeKind};
 use rustc_hir as hir;
-use rustc_hir::attrs::AttributeKind;
 use rustc_lint::{DiagDecorator, LateContext, LateLintPass, LintContext};
 use rustc_span::Span;
 use whitaker::{SharedConfig, recover_user_editable_hir_span};
@@ -176,14 +176,14 @@ impl AttrInfo {
     ///
     /// See `ui/pass_derive_macro_generated.rs` for the regression test covering
     /// compiler-generated attribute handling.
-    fn try_from_hir(attr: &hir::Attribute) -> Option<Self> {
-        // User-written attributes are Unparsed, or a parsed AttributeKind
-        // (including DocComment) whose original attribute span is
-        // recoverable. Parsed kinds without a recoverable span (for
+    fn try_from_hir(attr: &HirAttribute) -> Option<Self> {
+        // User-written attributes are tool or derive-helper attributes, or a
+        // parsed AttributeKind (including DocComment) whose original attribute
+        // span is recoverable. Parsed kinds without a recoverable span (for
         // example `#[cold]`) cannot participate in ordering.
         let span = match attr {
-            hir::Attribute::Unparsed(item) => item.span,
-            hir::Attribute::Parsed(kind) => parsed_attribute_span(kind)?,
+            HirAttribute::Tool(item) | HirAttribute::DeriveHelper(item) => item.span,
+            HirAttribute::Parsed(kind) => parsed_attribute_span(kind)?,
         };
 
         // Dummy spans indicate compiler-generated code without source location.
@@ -238,7 +238,7 @@ impl OrderedAttribute for AttrInfo {
 /// Context for checking function attributes.
 struct FunctionAttributeCheck<'tcx, 'a> {
     cx: &'a LateContext<'tcx>,
-    attrs: &'a [hir::Attribute],
+    attrs: &'a [HirAttribute],
     item_span: Span,
     kind: FunctionKind,
     localizer: &'a Localizer,

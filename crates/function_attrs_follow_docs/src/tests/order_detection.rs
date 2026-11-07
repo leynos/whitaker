@@ -8,7 +8,7 @@ use std::cell::RefCell;
 use rstest::{fixture, rstest};
 use rstest_bdd_macros::{given, scenario, then, when};
 use rustc_attr_data_structures::thin_vec::ThinVec;
-use rustc_hir::attrs::{AttributeKind as HirAttributeKind, InlineAttr, OptimizeAttr};
+use rustc_attr_ir::{AttributeKind as HirAttributeKind, InlineAttr, OptimizeAttr};
 use rustc_span::{BytePos, DUMMY_SP, Span};
 use whitaker_common::attributes::{Attribute, AttributeKind, AttributePath};
 
