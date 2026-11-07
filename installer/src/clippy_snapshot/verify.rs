@@ -20,6 +20,7 @@ use super::{
         SelectionExpectation,
         SelectionRejection,
         accept_integrity,
+        accept_recorded_commit,
         accept_selection,
         accept_self_contained,
         accept_structure,
@@ -81,15 +82,8 @@ pub(crate) fn check_installed_with(
     support: &SnapshotSupport<'_>,
 ) -> Result<(), ClippySnapshotError> {
     let metadata = support.metadata.read(path)?;
-    if metadata.commit != commit {
-        return Err(ClippySnapshotError::invalid(
-            path,
-            format!(
-                "its metadata records commit {}, expected {commit}",
-                metadata.commit
-            ),
-        ));
-    }
+    accept_recorded_commit(&metadata.commit, commit)
+        .map_err(|check| ClippySnapshotError::invalid(path, check))?;
     check_structure(path, commit, support.store, support.repository)
 }
 

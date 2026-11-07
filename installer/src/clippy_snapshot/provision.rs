@@ -12,7 +12,7 @@
 use camino::{Utf8Path, Utf8PathBuf};
 
 use super::{
-    download::download_bundle,
+    download::download_bundle_with,
     error::ClippySnapshotError,
     install::{from_sidecar_with, install_with, reuse_with},
     manifest::ClippySnapshotManifest,
@@ -66,7 +66,7 @@ pub fn provision_with(
 }
 
 /// Provision using injected ports.
-fn provision_support(
+pub(crate) fn provision_support(
     source: &BundleSource,
     manifest: &ClippySnapshotManifest,
     root: &Utf8Path,
@@ -122,7 +122,12 @@ fn install_release(
     // Download beside the generations so the clone stays on one filesystem.
     let downloads = support.store.staging(root, ".download-")?;
     let artefact = timed(Operation::Download, || {
-        download_bundle(support.downloader, manifest, downloads.path())
+        download_bundle_with(
+            support.store,
+            support.downloader,
+            manifest,
+            downloads.path(),
+        )
     })?;
     timed(Operation::Install, || {
         install_with(&artefact, manifest, root, support)

@@ -163,6 +163,17 @@ The module now separates the decision from the observation.
   order and what was never called, and `verify_tests.rs` and `tests.rs` keep
   real Git and a real filesystem so the adapters themselves stay honest.
 
+The ports were chosen after sweeping the installer for existing collaborators.
+Release downloads already had `DependencyArchiveDownloader`, the producer
+already used `RepositoryArchiveDownloader`, the Git adapter reuses the existing
+`run_git` helper, and both bundle construction and the production store hash
+through `compute_sha256`; all of these are reused rather than duplicated.
+Nothing in the installer described a repository query, a bundle operation, or a
+snapshot-root operation, so `RepositoryQueries`, `BundleOperations`,
+`SnapshotStore`, and `MetadataStore` are new. Each is owned by this module,
+implemented only by `git.rs` or `store.rs`, and reached by orchestration through
+`SnapshotSupport<'_>` rather than a concrete adapter type.
+
 A new acceptance rule belongs in `policy.rs` with a value test. A new
 observation belongs behind an existing port, or a new port only when none fits,
 implemented by an adapter that translates failures. Orchestration never calls

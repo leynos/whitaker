@@ -1,5 +1,7 @@
 //! Scripted ports and manifest fixtures shared by the orchestration tests.
 
+use std::sync::{Arc, Mutex};
+
 use camino::Utf8PathBuf;
 
 use super::super::{
@@ -83,6 +85,8 @@ pub(super) struct Ports {
     pub(super) bundles: FakeBundles,
     pub(super) store: FakeStore,
     pub(super) metadata: FakeMetadata,
+    /// Store and metadata calls in the order they happened.
+    shared: Arc<Mutex<Vec<String>>>,
 }
 
 impl Ports {
@@ -90,15 +94,23 @@ impl Ports {
     pub(super) fn accepting() -> Self {
         let mut bundles = FakeBundles::new();
         bundles.heads = Ok(pinned_heads());
+        let shared = Arc::new(Mutex::new(Vec::new()));
         Self {
             repo: valid_repository(),
             bundles,
-            store: FakeStore::new(digest('a')),
+            store: FakeStore::new(digest('a')).sharing(&shared),
             metadata: FakeMetadata::new(GenerationMetadata::for_manifest(
                 &manifest(),
                 digest('a').as_str(),
-            )),
+            ))
+            .sharing(&shared),
+            shared,
         }
+    }
+
+    /// Return the store and metadata calls in the order they happened.
+    pub(super) fn calls(&self) -> Vec<String> {
+        self.shared.lock().expect("lock shared log").clone()
     }
 
     /// Borrow the ports as one support bundle.

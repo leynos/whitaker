@@ -4,7 +4,11 @@
 //! network. Every fake records the calls it received, so a test can show both
 //! what happened and, just as importantly, what did not happen.
 
-use std::{collections::HashSet, path::Path, sync::Mutex};
+use std::{
+    collections::HashSet,
+    path::Path,
+    sync::{Arc, Mutex},
+};
 
 use camino::{Utf8Path, Utf8PathBuf};
 
@@ -26,6 +30,21 @@ fn record(log: &Mutex<Vec<String>>, entry: String) {
 
 /// Take a copy of a call log.
 fn recorded(log: &Mutex<Vec<String>>) -> Vec<String> { log.lock().expect("lock call log").clone() }
+
+/// Append `entry` to a fake's own log and, when it shares one, the shared log.
+///
+/// A shared log records calls from several ports in the order they happened,
+/// which is the only way to assert that one port was used before another.
+fn record_shared(
+    log: &Mutex<Vec<String>>,
+    shared: Option<&Arc<Mutex<Vec<String>>>>,
+    entry: String,
+) {
+    if let Some(shared) = shared {
+        record(shared, entry.clone());
+    }
+    record(log, entry);
+}
 
 /// Repository queries with scripted answers.
 pub(super) struct FakeRepository {
@@ -195,6 +214,8 @@ impl Staging for FakeStaging {
 /// Snapshot-root operations with scripted answers.
 pub(super) struct FakeStore {
     calls: Mutex<Vec<String>>,
+    /// A log shared with other ports, recording the same entries in order.
+    shared: Option<Arc<Mutex<Vec<String>>>>,
     /// Paths for which [`SnapshotStore::is_present`] answers `true`.
     present: Mutex<HashSet<String>>,
     /// Whether [`SnapshotStore::is_present_dir`] answers `true`.
@@ -212,12 +233,19 @@ impl FakeStore {
     pub(super) fn new(digest: Sha256Digest) -> Self {
         Self {
             calls: Mutex::new(Vec::new()),
+            shared: None,
             present: Mutex::new(HashSet::new()),
             present_dir: true,
             digest: Ok(digest),
             text: Ok(String::new()),
             publish: Ok(()),
         }
+    }
+
+    /// Record calls into `log` as well, so a test can assert cross-port order.
+    pub(super) fn sharing(mut self, log: &Arc<Mutex<Vec<String>>>) -> Self {
+        self.shared = Some(Arc::clone(log));
+        self
     }
 
     /// Make [`SnapshotStore::is_present`] answer `true` for `path`.
@@ -236,21 +264,24 @@ impl FakeStore {
     pub(super) fn has_call_starting_with(&self, prefix: &str) -> bool {
         self.calls().iter().any(|call| call.starts_with(prefix))
     }
+
+    /// Record `entry` in this fake's log and in the shared log, if any.
+    fn record(&self, entry: String) { record_shared(&self.calls, self.shared.as_ref(), entry); }
 }
 
 impl SnapshotStore for FakeStore {
     fn create_root(&self, root: &Utf8Path) -> Result<Utf8PathBuf, ClippySnapshotError> {
-        record(&self.calls, format!("create_root {root}"));
+        self.record(format!("create_root {root}"));
         Ok(root.to_owned())
     }
 
     fn absolute(&self, path: &Utf8Path) -> Result<Utf8PathBuf, ClippySnapshotError> {
-        record(&self.calls, format!("absolute {path}"));
+        self.record(format!("absolute {path}"));
         Ok(path.to_owned())
     }
 
     fn is_present(&self, path: &Utf8Path) -> Result<bool, ClippySnapshotError> {
-        record(&self.calls, format!("is_present {path}"));
+        self.record(format!("is_present {path}"));
         Ok(self
             .present
             .lock()
@@ -259,27 +290,27 @@ impl SnapshotStore for FakeStore {
     }
 
     fn is_present_dir(&self, path: &Utf8Path) -> Result<bool, ClippySnapshotError> {
-        record(&self.calls, format!("is_present_dir {path}"));
+        self.record(format!("is_present_dir {path}"));
         Ok(self.present_dir)
     }
 
     fn is_present_file(&self, path: &Utf8Path) -> Result<bool, ClippySnapshotError> {
-        record(&self.calls, format!("is_present_file {path}"));
+        self.record(format!("is_present_file {path}"));
         Ok(true)
     }
 
     fn digest(&self, path: &Utf8Path) -> Result<Sha256Digest, ClippySnapshotError> {
-        record(&self.calls, format!("digest {path}"));
+        self.record(format!("digest {path}"));
         self.digest.clone()
     }
 
     fn read_to_string(&self, path: &Utf8Path) -> Result<String, ClippySnapshotError> {
-        record(&self.calls, format!("read_to_string {path}"));
+        self.record(format!("read_to_string {path}"));
         self.text.clone()
     }
 
     fn lock(&self, root: &Utf8Path) -> Result<Box<dyn RootLock>, ClippySnapshotError> {
-        record(&self.calls, format!("lock {root}"));
+        self.record(format!("lock {root}"));
         Ok(Box::new(FakeLock))
     }
 
@@ -288,14 +319,14 @@ impl SnapshotStore for FakeStore {
         root: &Utf8Path,
         prefix: &str,
     ) -> Result<Box<dyn Staging>, ClippySnapshotError> {
-        record(&self.calls, format!("staging {root} {prefix}"));
+        self.record(format!("staging {root} {prefix}"));
         Ok(Box::new(FakeStaging {
             path: root.join(format!("{prefix}fake")),
         }))
     }
 
     fn publish(&self, staged: &Utf8Path, generation: &Utf8Path) -> Result<(), ClippySnapshotError> {
-        record(&self.calls, format!("publish {staged} {generation}"));
+        self.record(format!("publish {staged} {generation}"));
         self.publish.clone()
     }
 }
@@ -303,6 +334,8 @@ impl SnapshotStore for FakeStore {
 /// Metadata operations with scripted answers.
 pub(super) struct FakeMetadata {
     calls: Mutex<Vec<String>>,
+    /// A log shared with other ports, recording the same entries in order.
+    shared: Option<Arc<Mutex<Vec<String>>>>,
     /// The answer to [`MetadataStore::read`].
     pub(super) read: Result<GenerationMetadata, ClippySnapshotError>,
 }
@@ -312,8 +345,15 @@ impl FakeMetadata {
     pub(super) fn new(metadata: GenerationMetadata) -> Self {
         Self {
             calls: Mutex::new(Vec::new()),
+            shared: None,
             read: Ok(metadata),
         }
+    }
+
+    /// Record calls into `log` as well, so a test can assert cross-port order.
+    pub(super) fn sharing(mut self, log: &Arc<Mutex<Vec<String>>>) -> Self {
+        self.shared = Some(Arc::clone(log));
+        self
     }
 
     /// Return the calls received so far, in order.
@@ -323,11 +363,14 @@ impl FakeMetadata {
     pub(super) fn has_call_starting_with(&self, prefix: &str) -> bool {
         self.calls().iter().any(|call| call.starts_with(prefix))
     }
+
+    /// Record `entry` in this fake's log and in the shared log, if any.
+    fn record(&self, entry: String) { record_shared(&self.calls, self.shared.as_ref(), entry); }
 }
 
 impl MetadataStore for FakeMetadata {
     fn read(&self, generation: &Utf8Path) -> Result<GenerationMetadata, ClippySnapshotError> {
-        record(&self.calls, format!("read {generation}"));
+        self.record(format!("read {generation}"));
         self.read.clone()
     }
 
@@ -336,7 +379,7 @@ impl MetadataStore for FakeMetadata {
         generation: &Utf8Path,
         _metadata: &GenerationMetadata,
     ) -> Result<(), ClippySnapshotError> {
-        record(&self.calls, format!("write {generation}"));
+        self.record(format!("write {generation}"));
         Ok(())
     }
 }

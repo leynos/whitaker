@@ -172,6 +172,20 @@ pub(crate) fn accept_bundle_heads(heads: &str, commit: PinnedCommit<'_>) -> Resu
 /// Return whether the published and computed digests agree.
 pub(crate) fn digests_match(expected: &str, actual: &str) -> bool { expected == actual }
 
+/// Require the generation metadata to record the pinned commit.
+///
+/// The warm path trusts this agreement instead of re-hashing the object
+/// database, so the decision belongs here with every other acceptance rule
+/// rather than beside the metadata read.
+pub(crate) fn accept_recorded_commit(recorded: &str, expected: &str) -> Result<(), String> {
+    if recorded == expected {
+        return Ok(());
+    }
+    Err(format!(
+        "its metadata records commit {recorded}, expected {expected}"
+    ))
+}
+
 /// Why a selection check failed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum SelectionRejection {

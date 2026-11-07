@@ -159,12 +159,22 @@ fn metadata_is_written_before_the_generation_is_published() {
         vec![format!("write {staged}")],
         "metadata belongs inside the staged repository, before the rename"
     );
-    let calls = ports.store.calls();
+    // One shared log holds both ports' calls, so this compares the write
+    // against the publish rather than each port's calls in isolation. A
+    // publish recorded before the write would fail here.
+    let calls = ports.calls();
     let write = calls
         .iter()
-        .position(|call| call.starts_with("publish "))
+        .position(|call| call == &format!("write {staged}"))
+        .expect("metadata is written inside the staged repository");
+    let publish = calls
+        .iter()
+        .position(|call| call == &format!("publish {staged} {generation}"))
         .expect("the staged repository is published");
-    assert_eq!(calls[write], format!("publish {staged} {generation}"));
+    assert!(
+        write < publish,
+        "metadata must be written before the generation is published: {calls:?}"
+    );
 }
 
 #[test]

@@ -5,5 +5,6 @@
 //! failed check, and neither publishes nor records metadata after a failure.
 
 mod install;
+mod provision;
 mod support;
 mod verify;

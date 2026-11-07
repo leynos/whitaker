@@ -238,6 +238,23 @@ fn rejects_a_bundle_that_does_not_carry_the_pinned_main(
     );
 }
 
+#[test]
+fn accepts_metadata_recording_the_pinned_commit() {
+    assert_eq!(accept_recorded_commit(COMMIT, COMMIT), Ok(()));
+}
+
+#[rstest]
+#[case::another_commit("deadbeef")]
+#[case::empty_recorded("")]
+fn rejects_metadata_recording_another_commit(#[case] recorded: &str) {
+    assert_eq!(
+        accept_recorded_commit(recorded, COMMIT),
+        Err(format!(
+            "its metadata records commit {recorded}, expected {COMMIT}"
+        ))
+    );
+}
+
 #[rstest]
 #[case::equal("abc", "abc", true)]
 #[case::different("abc", "xyz", false)]
