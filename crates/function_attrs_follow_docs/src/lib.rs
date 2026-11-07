@@ -11,7 +11,6 @@
 //! configurations.
 
 #![cfg_attr(feature = "dylint-driver", feature(rustc_private))]
-#![cfg_attr(feature = "dylint-driver", feature(default_field_values))]
 
 #[cfg(feature = "dylint-driver")]
 mod driver;

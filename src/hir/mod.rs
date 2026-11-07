@@ -2,9 +2,9 @@
 
 use std::{collections::HashSet, sync::LazyLock};
 
-use rustc_ast::{AttrStyle, attr::AttributeExt};
-use rustc_attr_ir::{Attribute as HirAttribute, AttributeKind as HirAttributeKind};
+use rustc_ast::AttrStyle;
 use rustc_hir as hir;
+use rustc_hir::attrs::AttributeKind as HirAttributeKind;
 use rustc_lint::LateContext;
 use rustc_span::Span;
 use whitaker_common::{Attribute, AttributeKind, AttributePath, SpanRecoveryFrame};
@@ -46,10 +46,13 @@ pub fn module_header_span(item_span: Span, ident_span: Span) -> Span {
 
 /// Returns whether any HIR attribute resolves to a recognized test marker.
 #[must_use]
-pub fn has_test_like_hir_attributes(attrs: &[HirAttribute], additional: &[AttributePath]) -> bool {
+pub fn has_test_like_hir_attributes(
+    attrs: &[hir::Attribute],
+    additional: &[AttributePath],
+) -> bool {
     attrs
         .iter()
-        .flat_map(attributes_from_hir)
+        .filter_map(attribute_from_hir)
         .any(|attribute| attribute.is_test_like_with(additional))
 }
 
@@ -106,39 +109,12 @@ pub fn recover_user_editable_hir_span(span: Span) -> Option<Span> {
     walk_span_chain(span).find(|current| !current.from_expansion())
 }
 
-/// Converts a HIR attribute into the shared attribute representation.
-///
-/// A tool or derive-helper attribute yields one entry. From
-/// `nightly-2026-10-30` rustc folds every `allow`, `warn`, `deny`, `forbid`
-/// and `expect` attribute on an item into one parsed `LintCheck` attribute, so
-/// that yields one entry per distinct lint level it carries; the folded form
-/// records no inner or outer style, so those entries are reported as outer.
-/// Other parsed attributes carry no path and yield nothing.
-#[must_use]
-pub fn attributes_from_hir(attr: &HirAttribute) -> Vec<Attribute> {
-    if let HirAttribute::Parsed(HirAttributeKind::LintCheck(checks)) = attr {
-        let mut seen = HashSet::new();
-        return checks
-            .iter()
-            .map(|check| check.kind.sym())
-            .filter(|symbol| seen.insert(*symbol))
-            .map(|symbol| {
-                Attribute::new(
-                    AttributePath::new(std::iter::once(symbol.to_string())),
-                    AttributeKind::Outer,
-                )
-            })
-            .collect();
-    }
-
-    attribute_path(attr)
-        .map(|path| Attribute::new(path, attribute_kind(attr)))
-        .into_iter()
-        .collect()
+fn attribute_from_hir(attr: &hir::Attribute) -> Option<Attribute> {
+    Some(Attribute::new(attribute_path(attr)?, attribute_kind(attr)))
 }
 
-fn attribute_path(attr: &HirAttribute) -> Option<AttributePath> {
-    let (HirAttribute::Tool(_) | HirAttribute::DeriveHelper(_)) = attr else {
+fn attribute_path(attr: &hir::Attribute) -> Option<AttributePath> {
+    let hir::Attribute::Unparsed(_) = attr else {
         return None;
     };
 
@@ -147,18 +123,18 @@ fn attribute_path(attr: &HirAttribute) -> Option<AttributePath> {
     Some(AttributePath::new(std::iter::once(first).chain(names)))
 }
 
-fn attribute_kind(attr: &HirAttribute) -> AttributeKind {
+fn attribute_kind(attr: &hir::Attribute) -> AttributeKind {
     match attribute_style(attr) {
         AttrStyle::Inner => AttributeKind::Inner,
         AttrStyle::Outer => AttributeKind::Outer,
     }
 }
 
-fn attribute_style(attr: &HirAttribute) -> AttrStyle {
+fn attribute_style(attr: &hir::Attribute) -> AttrStyle {
     match attr {
-        HirAttribute::Tool(item) | HirAttribute::DeriveHelper(item) => item.style,
-        HirAttribute::Parsed(HirAttributeKind::DocComment { style, .. }) => *style,
-        HirAttribute::Parsed(_) => AttrStyle::Outer,
+        hir::Attribute::Unparsed(item) => item.style,
+        hir::Attribute::Parsed(HirAttributeKind::DocComment { style, .. }) => *style,
+        hir::Attribute::Parsed(_) => AttrStyle::Outer,
     }
 }
 
@@ -194,9 +170,7 @@ pub fn collect_harness_test_functions(cx: &LateContext<'_>) -> HashSet<hir::HirI
         };
 
         match item.kind {
-            // The harness emitted `const` descriptors until nightly-2026-10-30,
-            // which emits `static` ones.
-            hir::ItemKind::Const(..) | hir::ItemKind::Static(..) => {
+            hir::ItemKind::Const(..) => {
                 descriptors.push((ident.name, item.span, item.hir_id()));
             }
             hir::ItemKind::Fn { .. } => {
@@ -210,7 +184,7 @@ pub fn collect_harness_test_functions(cx: &LateContext<'_>) -> HashSet<hir::HirI
         .into_iter()
         .filter(|(fn_id, name, span)| {
             descriptors.iter().any(|(desc_name, desc_span, desc_id)| {
-                desc_id != fn_id && *desc_name == *name && desc_span.lo_hi() == span.lo_hi()
+                desc_id != fn_id && *desc_name == *name && desc_span.source_equal(*span)
             })
         })
         .map(|(hir_id, ..)| hir_id)
@@ -345,13 +319,11 @@ fn module_qualifies_as_rstest_companion_module<'tcx>(
 /// rstest emits (and manual fixtures replicate) as unambiguous synthesis
 /// evidence.
 fn is_harness_descriptor_const(item: &hir::Item<'_>) -> bool {
-    matches!(
-        item.kind,
-        hir::ItemKind::Const(..) | hir::ItemKind::Static(..)
-    ) && item
-        .kind
-        .ident()
-        .is_some_and(|ident| ident.name == *HARNESS_DESCRIPTOR_SYMBOL)
+    matches!(item.kind, hir::ItemKind::Const(..))
+        && item
+            .kind
+            .ident()
+            .is_some_and(|ident| ident.name == *HARNESS_DESCRIPTOR_SYMBOL)
 }
 
 /// Whether `items` lists at least one `fn` with a same-span sibling `const` of
@@ -365,17 +337,6 @@ fn module_has_inner_harness_descriptor_pairs<'tcx>(
     items: &[&'tcx hir::Item<'tcx>],
 ) -> bool {
     let imports_test_crate = module_imports_test_crate(items);
-
-    // From nightly-2026-10-30 the harness nests the test function inside a
-    // `static` descriptor, so the function is no longer a module item. A
-    // `static` beside `extern crate test` is the harness's descriptor.
-    if imports_test_crate
-        && items
-            .iter()
-            .any(|item| matches!(item.kind, hir::ItemKind::Static(..)))
-    {
-        return true;
-    }
 
     items
         .iter()
@@ -392,7 +353,7 @@ fn module_has_inner_harness_descriptor_pairs<'tcx>(
                     |(s_id, s_name, _, s_span)| {
                         s_id != fn_id
                             && s_name == fn_name
-                            && (s_span.lo_hi() == fn_span.lo_hi()
+                            && (s_span.source_equal(fn_span)
                                 || (imports_test_crate && fn_index.abs_diff(const_index) == 1))
                     },
                 )

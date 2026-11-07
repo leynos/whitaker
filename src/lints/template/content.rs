@@ -25,7 +25,6 @@ const LIB_RS_TEMPLATE: &str = r#"//! Lint crate for `{crate_name}`.
 //!
 //! Replace the placeholder implementation with crate-specific logic before shipping.
 #![cfg_attr(dylint_lib = "{crate_name}", feature(rustc_private))]
-#![cfg_attr(dylint_lib = "{crate_name}", feature(default_field_values))]
 
 #[cfg(dylint_lib = "{crate_name}")]
 extern crate rustc_driver;

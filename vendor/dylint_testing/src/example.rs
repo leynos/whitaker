@@ -76,8 +76,9 @@ pub(crate) fn run_example_test(context: &ExampleTestContext<'_>) -> Result<()> {
         )
     })?;
     for extension in ["fixed", "stderr", "stdout"] {
-        // Not every extension has a companion file; a failed copy is expected.
-        let _ = copy_with_extension(&target.src_path, &to, extension);
+        copy_with_extension(&target.src_path, &to, extension)
+            .map(|_| ())
+            .unwrap_or_default();
     }
 
     let mut config = config.clone();
