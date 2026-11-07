@@ -18,7 +18,6 @@ pub mod testing;
 pub use config::{ModuleMaxLinesConfig, SharedConfig};
 #[cfg(feature = "dylint-driver")]
 pub use hir::{
-    attributes_from_hir,
     module_body_span,
     module_header_span,
     recover_user_editable_hir_span,

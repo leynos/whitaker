@@ -10,17 +10,6 @@ use proc_macro::{Delimiter, Group, Ident, Punct, Spacing, Span, TokenStream, Tok
 /// Inserts `#[async_trait]` before doc attributes in the annotated item.
 #[proc_macro_attribute]
 pub fn async_trait(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    // The attributes this macro inserts are themselves attribute-macro
-    // invocations on the trait's methods. Before `nightly-2026-10-30` rustc
-    // did not expand them again; it now does, so only the trait itself is
-    // transformed and the methods pass through unchanged.
-    let is_trait = item
-        .clone()
-        .into_iter()
-        .any(|token| matches!(&token, TokenTree::Ident(ident) if ident.to_string() == "trait"));
-    if !is_trait {
-        return item;
-    }
     transform_stream(item, Span::call_site())
 }
 

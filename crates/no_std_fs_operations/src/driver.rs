@@ -96,14 +96,12 @@ impl<'tcx> LateLintPass<'tcx> for NoStdFsOperations {
         if self.should_skip() {
             return;
         }
-        if let hir::ItemKind::Use(tree) = item.kind {
-            let mut leaves = Vec::new();
-            collect_use_leaves(&tree, &mut leaves);
-            for (span, res) in leaves {
-                let site = LintSite {
-                    hir_id: item.hir_id(),
-                    span,
-                };
+        if let hir::ItemKind::Use(path, ..) = item.kind {
+            let site = LintSite {
+                hir_id: item.hir_id(),
+                span: path.span,
+            };
+            for res in path.res.present_items() {
                 let usage = classify_res(cx, res);
                 self.emit_optional(cx, site, usage);
             }
@@ -164,29 +162,6 @@ impl<'tcx> LateLintPass<'tcx> for NoStdFsOperations {
                     span: ty.span,
                 },
                 usage,
-            );
-        }
-    }
-}
-
-/// Collects the span and resolution of each leaf import beneath `tree`.
-///
-/// Nested imports (`use std::{fs, io}`) stay grouped in HIR from
-/// `nightly-2026-11-05`; earlier nightlies lowered each leaf to its own item.
-/// Walking the leaves keeps one diagnostic anchored at each imported path.
-fn collect_use_leaves(tree: &hir::UseTree<'_>, leaves: &mut Vec<(Span, hir::def::Res)>) {
-    match tree.kind {
-        hir::UseKind::Nested { items } => {
-            for (child, ..) in items {
-                collect_use_leaves(child, leaves);
-            }
-        }
-        hir::UseKind::Single(_) | hir::UseKind::Glob => {
-            leaves.extend(
-                tree.prefix
-                    .res
-                    .present_items()
-                    .map(|res| (tree.prefix.span, res)),
             );
         }
     }

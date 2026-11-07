@@ -136,8 +136,10 @@ impl BootstrapFixture {
 
     /// Every line the stub appended, in order.
     pub fn recorded(&self) -> Vec<String> {
-        std::fs::read_to_string(self.log_path())
-            .map_or_default(|log| log.lines().map(ToOwned::to_owned).collect())
+        std::fs::read_to_string(self.log_path()).map_or_else(
+            |_| Vec::new(),
+            |log| log.lines().map(ToOwned::to_owned).collect(),
+        )
     }
 
     /// The arguments the stub received, including the `dylint` subcommand.

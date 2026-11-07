@@ -39,13 +39,7 @@ impl CrateName {
 impl TryFrom<&str> for CrateName {
     type Error = CrateNameError;
 
-    fn try_from(value: &str) -> Result<Self, Self::Error> { value.parse() }
-}
-
-impl std::str::FromStr for CrateName {
-    type Err = CrateNameError;
-
-    fn from_str(value: &str) -> Result<Self, Self::Err> {
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
         let trimmed = value.trim();
         if trimmed.is_empty() {
             return Err(CrateNameError);

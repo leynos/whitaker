@@ -75,7 +75,6 @@ mockall = "0.15.0"
 clippy_utils = { path = "crates/clippy_utils", version = "0.2.11" }
 rustc_ast = { path = "crates/rustc_ast", version = "0.2.11" }
 rustc_attr_data_structures = { path = "crates/rustc_attr_data_structures", version = "0.2.11" }
-rustc_attr_ir = { path = "crates/rustc_attr_ir", version = "0.2.11" }
 rustc_hir = { path = "crates/rustc_hir", version = "0.2.11" }
 rustc_lint = { path = "crates/rustc_lint", version = "0.2.11" }
 rustc_middle = { path = "crates/rustc_middle", version = "0.2.11" }

@@ -4,7 +4,9 @@
 //! parsed attributes (e.g., `#[must_use]`) without panicking.
 
 #[cfg(feature = "dylint-driver")]
-use rustc_attr_ir::{Attribute as HirAttribute, AttributeKind as HirAttributeKind};
+use rustc_hir as hir;
+#[cfg(feature = "dylint-driver")]
+use rustc_hir::attrs::AttributeKind as HirAttributeKind;
 #[cfg(feature = "dylint-driver")]
 use rustc_span::DUMMY_SP;
 #[cfg(feature = "dylint-driver")]
@@ -20,7 +22,7 @@ use super::{convert_attribute, is_cfg_test_attribute};
 #[cfg(feature = "dylint-driver")]
 #[test]
 fn convert_attribute_handles_parsed_must_use() {
-    let parsed_attr = HirAttribute::Parsed(HirAttributeKind::MustUse {
+    let parsed_attr = hir::Attribute::Parsed(HirAttributeKind::MustUse {
         span: DUMMY_SP,
         reason: None,
     });
@@ -39,7 +41,7 @@ fn convert_attribute_handles_parsed_must_use() {
 #[cfg(feature = "dylint-driver")]
 #[test]
 fn is_cfg_test_attribute_handles_parsed_must_use() {
-    let parsed_attr = HirAttribute::Parsed(HirAttributeKind::MustUse {
+    let parsed_attr = hir::Attribute::Parsed(HirAttributeKind::MustUse {
         span: DUMMY_SP,
         reason: None,
     });

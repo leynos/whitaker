@@ -122,6 +122,10 @@ fn unknown_fields(config_source: &RefCell<Option<String>>) {
 
 /// Load shared configuration and record either its value or panic message.
 #[when("the shared configuration is loaded")]
+#[expect(
+    clippy::expect_used,
+    reason = "`expect` keeps the panic message concise per review guidance"
+)]
 fn load_config(
     config_source: &RefCell<Option<String>>,
     load_result: &RefCell<Option<Result<SharedConfig, String>>>,
