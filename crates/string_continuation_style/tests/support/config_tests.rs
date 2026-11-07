@@ -121,12 +121,12 @@ fn omission_of_each_field_is_independently_defaulted() {
 fn unknown_fields_are_rejected() {
     let error = parse(
         r#"applicability = "machine"
-unrecognised_key = true"#,
+unrecognized_key = true"#,
     )
     .expect_err("`deny_unknown_fields` must reject a mistyped key");
 
     assert!(
-        error.to_string().contains("unrecognised_key"),
+        error.to_string().contains("unrecognized_key"),
         "the error should name the offending key, got: {error}"
     );
 }
