@@ -110,9 +110,15 @@ const SEEDED_BINARY_BYTES: &[u8] = b"#!/bin/sh\nprintf 'pre-existing whitaker'\n
 /// `--skip-wrapper` is deliberately not used: leaving wrapper generation in
 /// the run is what lets the test observe that a root install writes no
 /// compatibility scripts, while `XDG_BIN_HOME` and `HOME` keep the check away
-/// from the real user directories. The bin root starts with a `whitaker`
-/// executable of its own, so the test also proves a root install leaves an
-/// existing binary alone rather than replacing it with a wrapper.
+/// from the real user directories on the platforms that honour them. The bin
+/// root starts with a `whitaker` executable of its own, so the test also proves
+/// a root install leaves an existing binary alone rather than replacing it with
+/// a wrapper.
+///
+/// The data root cannot be redirected everywhere: Windows and macOS resolve it
+/// from a platform API that ignores `XDG_DATA_HOME`, so on those platforms the
+/// record assertion reads the directory the install genuinely wrote rather than
+/// a fixture-owned one.
 struct InstallFixture {
     channel: String,
     snapshot: SnapshotFixture,
@@ -175,11 +181,33 @@ impl InstallFixture {
         self.target_dir.path().join(&self.channel).join("release")
     }
 
-    /// The data directories the root binary resolves through `XDG_DATA_HOME`.
+    /// The data directories the root binary resolves for this fixture.
     fn dirs(&self) -> FixtureDirs {
         FixtureDirs {
-            data: self.data_home.path().join("whitaker"),
+            data: self.data_root(),
         }
+    }
+
+    /// The data root the child process resolves under the fixture's environment.
+    ///
+    /// Linux honours the `XDG_DATA_HOME` redirect the command sets, so the root
+    /// stays inside the fixture. Windows and macOS resolve the data root from a
+    /// platform API that ignores that variable, so asking the same resolver the
+    /// child uses is the only way to name the directory the record lands in.
+    #[cfg(target_os = "linux")]
+    fn data_root(&self) -> PathBuf { self.data_home.path().join("whitaker") }
+
+    /// The data root the child process resolves under the fixture's environment.
+    ///
+    /// Windows and macOS resolve the data root from a platform API that ignores
+    /// the `XDG_DATA_HOME` the command sets, so the record lands outside the
+    /// fixture. Asking the same resolver the child uses names that directory
+    /// instead of assuming the redirect took effect.
+    #[cfg(not(target_os = "linux"))]
+    fn data_root(&self) -> PathBuf {
+        whitaker_installer::dirs::SystemBaseDirs::new()
+            .and_then(|dirs| dirs.whitaker_data())
+            .unwrap_or_else(|| self.data_home.path().join("whitaker"))
     }
 
     /// Build the `whitaker install` command for an offline fixture install.
