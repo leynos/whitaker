@@ -324,11 +324,11 @@ To debug, override the profile for one invocation rather than editing it. Pass
 in the environment. Never change the committed profile to get debug information
 back.
 
-The `[unstable] no-embed-metadata = true` key in `.cargo/config.toml` is a
+The `[unstable] embed-metadata = false` key in `.cargo/config.toml` is a
 nightly-only Cargo setting tied to the dated nightly pinned in
-`rust-toolchain.toml`. Whoever changes that pin to a nightly from 2026-07-31
-onward must replace the key with `embed-metadata = false`. Stable and beta
-toolchains ignore it.
+`rust-toolchain.toml`. Pins through 2026-07-18 need `no-embed-metadata = true`
+instead; whoever moves the pin across that boundary must swap the key. Stable
+and beta toolchains ignore it.
 
 ### Build standard
 
