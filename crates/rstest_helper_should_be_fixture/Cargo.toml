@@ -17,6 +17,7 @@ test = false
 default = []
 dylint-driver = [
     "dep:rustc_ast",
+    "dep:rustc_attr_ir",
     "dep:rustc_hir",
     "dep:whitaker-common",
     "dep:dylint_linting",
@@ -38,6 +39,7 @@ whitaker-common = { workspace = true, optional = true }
 dylint_linting = { workspace = true, optional = true }
 log = { workspace = true, optional = true }
 rustc_ast = { workspace = true, optional = true }
+rustc_attr_ir = { workspace = true, optional = true }
 rustc_hir = { workspace = true, optional = true }
 rustc_lint = { workspace = true, optional = true }
 rustc_session = { workspace = true, optional = true }

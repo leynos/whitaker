@@ -5,6 +5,7 @@
 //! run the lint directly by loading this crate as a Dylint library or use it
 //! via the aggregated suite, where it is included by default.
 #![cfg_attr(feature = "dylint-driver", feature(rustc_private))]
+#![cfg_attr(feature = "dylint-driver", feature(default_field_values))]
 
 pub mod analysis;
 

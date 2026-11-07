@@ -4,8 +4,14 @@ use std::path::Path;
 
 use rstest::rstest;
 use rustc_ast::AttrStyle;
-use rustc_hir::attrs::AttributeKind as HirAttributeKind;
-use rustc_span::{AttrId, DUMMY_SP, create_default_session_globals_then};
+use rustc_attr_ir::{
+    AttrArgs,
+    AttrItem,
+    AttrPath,
+    Attribute as HirAttribute,
+    AttributeKind as HirAttributeKind,
+};
+use rustc_span::{DUMMY_SP, create_default_session_globals_then};
 
 use super::*;
 
@@ -13,30 +19,27 @@ use super::*;
 // Test fixtures for HIR attributes
 // -------------------------------------------------------------------------
 
-fn hir_attribute_from_segments(segments: &[&str]) -> hir::Attribute {
+fn hir_attribute_from_segments(segments: &[&str]) -> HirAttribute {
     let path_segments = segments
         .iter()
         .map(|segment| rustc_span::Symbol::intern(segment))
         .collect::<Vec<_>>()
         .into_boxed_slice();
-    let attr_item = hir::AttrItem {
-        path: hir::AttrPath {
+    let attr_item = AttrItem {
+        path: AttrPath {
             segments: path_segments,
             span: DUMMY_SP,
         },
-        args: hir::AttrArgs::Empty,
-        id: hir::HashIgnoredAttrId {
-            attr_id: AttrId::from_u32(0),
-        },
+        args: AttrArgs::Empty,
         style: AttrStyle::Outer,
         span: DUMMY_SP,
     };
 
-    hir::Attribute::Unparsed(Box::new(attr_item))
+    HirAttribute::Tool(Box::new(attr_item))
 }
 
-const fn parsed_must_use_attribute() -> hir::Attribute {
-    hir::Attribute::Parsed(HirAttributeKind::MustUse {
+const fn parsed_must_use_attribute() -> HirAttribute {
+    HirAttribute::Parsed(HirAttributeKind::MustUse {
         span: DUMMY_SP,
         reason: None,
     })
@@ -109,7 +112,7 @@ fn assert_has_test_like_attributes(
     expected: bool,
 ) {
     create_default_session_globals_then(|| {
-        let attrs: Vec<hir::Attribute> = attr_segments
+        let attrs: Vec<HirAttribute> = attr_segments
             .iter()
             .map(|segments| hir_attribute_from_segments(segments))
             .collect();
@@ -142,7 +145,7 @@ fn has_test_like_hir_attributes_detects_test_attributes(#[case] case_index: usiz
 
 #[test]
 fn has_test_like_hir_attributes_returns_false_for_empty_array() {
-    let attrs: [hir::Attribute; 0] = [];
+    let attrs: [HirAttribute; 0] = [];
     assert!(!has_test_like_hir_attributes(&attrs, &[]));
 }
 

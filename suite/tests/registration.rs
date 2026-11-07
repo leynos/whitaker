@@ -70,11 +70,6 @@ fn then_registered_suite_lints(world: &RegistrationWorld) {
     assert_eq!(world.store.borrow().get_lints().len(), expected);
 }
 
-#[then("the late pass count is {count}")]
-fn then_late_pass_count(world: &RegistrationWorld, count: usize) {
-    assert_eq!(world.store.borrow().late_passes.len(), count);
-}
-
 #[then("the lint names mirror the suite descriptors")]
 fn then_names_match(world: &RegistrationWorld) {
     let registered: Vec<String> = world

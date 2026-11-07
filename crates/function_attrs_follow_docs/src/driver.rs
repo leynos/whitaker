@@ -7,8 +7,8 @@
 use std::borrow::Cow;
 
 use rustc_ast::{AttrStyle, attr::AttributeExt};
+use rustc_attr_ir::{Attribute as HirAttribute, AttributeKind, lint::LintCheck};
 use rustc_hir as hir;
-use rustc_hir::attrs::AttributeKind;
 use rustc_lint::{DiagDecorator, LateContext, LateLintPass, LintContext};
 use rustc_span::Span;
 use whitaker_common::i18n::{
@@ -154,17 +154,18 @@ struct AttrInfo {
 }
 
 impl AttrInfo {
-    /// Try to create attribute info from an HIR attribute.
+    /// Create attribute info for each user-written attribute an HIR attribute
+    /// stands for.
     ///
-    /// Returns `None` for compiler-generated attributes that don't correspond
+    /// Returns nothing for compiler-generated attributes that don't correspond
     /// to user-written code (e.g., inline hints from derive macros).
     ///
     /// # Behaviour
     ///
-    /// User-written attributes are represented as `Unparsed` (regular attributes
-    /// like `#[inline]` or `#[allow(...)]`) or `DocComment` (doc comments like
-    /// `///` or `//!`). These have source spans pointing to actual code locations
-    /// and are processed by this lint.
+    /// User-written attributes are represented as tool or derive-helper
+    /// attributes (regular attributes like `#[inline]`) or `DocComment` (doc
+    /// comments like `///` or `//!`). These have source spans pointing to
+    /// actual code locations and are processed by this lint.
     ///
     /// `Parsed` variants with a recoverable user-written span (for example
     /// `Inline` and `MustUse`; see `parsed_attribute_span` for the full
@@ -176,16 +177,27 @@ impl AttrInfo {
     ///
     /// See `ui/pass_derive_macro_generated.rs` for the regression test covering
     /// compiler-generated attribute handling.
-    fn try_from_hir(attr: &hir::Attribute) -> Option<Self> {
-        // User-written attributes are Unparsed, or a parsed AttributeKind
-        // (including DocComment) whose original attribute span is
-        // recoverable. Parsed kinds without a recoverable span (for
-        // example `#[cold]`) cannot participate in ordering.
-        let span = match attr {
-            hir::Attribute::Unparsed(item) => item.span,
-            hir::Attribute::Parsed(kind) => parsed_attribute_span(kind)?,
+    fn all_from_hir(attr: &HirAttribute) -> Vec<Self> {
+        // User-written attributes are tool or derive-helper attributes, or a
+        // parsed AttributeKind (including DocComment) whose original attribute
+        // span is recoverable. Parsed kinds without a recoverable span (for
+        // example `#[cold]`) cannot participate in ordering. rustc folds every
+        // lint-level attribute on an item into one parsed `LintCheck`, so that
+        // kind stands for one attribute per distinct attribute span.
+        let spans = match attr {
+            HirAttribute::Tool(item) | HirAttribute::DeriveHelper(item) => vec![item.span],
+            HirAttribute::Parsed(AttributeKind::LintCheck(checks)) => lint_check_spans(checks),
+            HirAttribute::Parsed(kind) => parsed_attribute_span(kind).into_iter().collect(),
         };
 
+        spans
+            .into_iter()
+            .filter_map(|span| Self::from_span(attr, span))
+            .collect()
+    }
+
+    /// Build attribute info for the attribute written at `span`.
+    fn from_span(attr: &HirAttribute, span: Span) -> Option<Self> {
         // Dummy spans indicate compiler-generated code without source location.
         if span.is_dummy() {
             return None;
@@ -238,7 +250,7 @@ impl OrderedAttribute for AttrInfo {
 /// Context for checking function attributes.
 struct FunctionAttributeCheck<'tcx, 'a> {
     cx: &'a LateContext<'tcx>,
-    attrs: &'a [hir::Attribute],
+    attrs: &'a [HirAttribute],
     item_span: Span,
     kind: FunctionKind,
     localizer: &'a Localizer,
@@ -250,7 +262,7 @@ fn check_function_attributes(check: &FunctionAttributeCheck<'_, '_>) {
     let mut infos: Vec<AttrInfo> = check
         .attrs
         .iter()
-        .filter_map(AttrInfo::try_from_hir)
+        .flat_map(AttrInfo::all_from_hir)
         .collect();
     infos.retain(|info| {
         attribute_within_item(
@@ -400,6 +412,17 @@ fn attribute_fallback(lookup: &impl BundleLookup) -> String {
     lookup
         .message(MessageKey::new("common-attribute-fallback"), &args)
         .unwrap_or_else(|_| "the preceding attribute".to_owned())
+}
+
+/// The distinct attribute spans folded into one parsed `LintCheck` attribute.
+fn lint_check_spans(checks: &[LintCheck]) -> Vec<Span> {
+    let mut spans: Vec<Span> = Vec::new();
+    for check in checks {
+        if !spans.contains(&check.attr_span) {
+            spans.push(check.attr_span);
+        }
+    }
+    spans
 }
 
 /// Recover the source span of a parsed attribute kind.

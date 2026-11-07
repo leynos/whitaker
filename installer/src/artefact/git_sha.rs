@@ -58,13 +58,19 @@ impl GitSha {
     pub fn into_inner(self) -> String { self.0 }
 }
 
-impl TryFrom<&str> for GitSha {
-    type Error = ArtefactError;
+impl std::str::FromStr for GitSha {
+    type Err = ArtefactError;
 
-    fn try_from(value: &str) -> Result<Self> {
+    fn from_str(value: &str) -> Result<Self> {
         validate_git_sha(value)?;
         Ok(Self(value.to_owned()))
     }
+}
+
+impl TryFrom<&str> for GitSha {
+    type Error = ArtefactError;
+
+    fn try_from(value: &str) -> Result<Self> { value.parse() }
 }
 
 impl TryFrom<String> for GitSha {

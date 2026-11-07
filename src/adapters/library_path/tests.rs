@@ -148,7 +148,7 @@ fn unreadable_installation_record_is_reported() {
 fn absent_directory_provider_yields_no_recorded_paths() {
     let recorded = recorded_library_paths(None).expect("no provider is not a failure");
 
-    assert!(recorded.is_empty());
+    assert_eq!(recorded, Vec::<Utf8PathBuf>::new());
 }
 
 #[test]
@@ -157,7 +157,7 @@ fn absent_installation_record_yields_no_recorded_paths() {
     let dirs = TempBaseDirs::new(&temporary);
 
     let recorded = recorded_library_paths(Some(&dirs)).expect("a missing record is not a failure");
-    assert!(recorded.is_empty());
+    assert_eq!(recorded, Vec::<Utf8PathBuf>::new());
 }
 
 #[test]

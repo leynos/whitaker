@@ -21,6 +21,7 @@ dylint-driver = [
     "dep:no_unwrap_or_else_panic",
     "dep:no_std_fs_operations",
     "dep:bumpy_road_function",
+    "dep:rustc_attr_ir",
     "dep:rustc_hir",
     "dep:rustc_lint",
     "dep:rustc_session",
@@ -34,6 +35,7 @@ experimental-rstest-helper-should-be-fixture = [
 [dependencies]
 whitaker-common = { workspace = true }
 dylint_linting = { workspace = true, optional = true }
+rustc_attr_ir = { workspace = true, optional = true }
 rustc_lint = { workspace = true, optional = true }
 rustc_session = { workspace = true, optional = true }
 rustc_hir = { workspace = true, optional = true }

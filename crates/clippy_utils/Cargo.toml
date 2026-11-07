@@ -9,7 +9,6 @@ publish = false
 [dependencies]
 rustc_hir = { workspace = true }
 rustc_lint = { workspace = true }
-rustc_span = { workspace = true }
 
 [lints.rust]
 missing_docs = "deny"

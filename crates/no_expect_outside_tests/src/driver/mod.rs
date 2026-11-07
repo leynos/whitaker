@@ -296,7 +296,7 @@ fn is_harness_marked_test_function(
 // covered by the example-based regression in `lib_ui_tests.rs`; this helper
 // still only inspects source-level HIR attributes.
 #[cfg(test)]
-fn is_test_attribute(attr: &hir::Attribute) -> bool {
+fn is_test_attribute(attr: &rustc_attr_ir::Attribute) -> bool {
     has_test_like_hir_attributes(std::slice::from_ref(attr), &[])
 }
 

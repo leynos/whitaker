@@ -1,0 +1,11 @@
+[package]
+name = "rustc_attr_ir"
+version = "0.2.11"
+edition = "2024"
+publish = false
+
+[lib]
+test = false
+
+[lints.rust]
+missing_docs = "deny"

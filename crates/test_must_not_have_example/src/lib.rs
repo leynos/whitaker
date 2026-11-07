@@ -1,5 +1,6 @@
 //! Dylint crate implementing the `test_must_not_have_example` lint.
 #![cfg_attr(feature = "dylint-driver", feature(rustc_private))]
+#![cfg_attr(feature = "dylint-driver", feature(default_field_values))]
 
 #[cfg(all(feature = "dylint-driver", test))]
 mod behaviour;

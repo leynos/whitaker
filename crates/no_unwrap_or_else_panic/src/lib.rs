@@ -8,6 +8,7 @@
 //! `|e| panic!("got: {e}")`) are also exempt, because the interpolation
 //! materially improves failure diagnostics beyond what `expect` can express.
 #![cfg_attr(feature = "dylint-driver", feature(rustc_private))]
+#![cfg_attr(feature = "dylint-driver", feature(default_field_values))]
 
 #[cfg(feature = "dylint-driver")]
 pub(crate) const LINT_NAME: &str = "no_unwrap_or_else_panic";
