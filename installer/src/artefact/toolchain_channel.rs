@@ -68,13 +68,7 @@ impl ToolchainChannel {
 impl TryFrom<&str> for ToolchainChannel {
     type Error = ArtefactError;
 
-    fn try_from(value: &str) -> Result<Self> { value.parse() }
-}
-
-impl std::str::FromStr for ToolchainChannel {
-    type Err = ArtefactError;
-
-    fn from_str(value: &str) -> Result<Self> {
+    fn try_from(value: &str) -> Result<Self> {
         if value.is_empty() {
             return Err(ArtefactError::InvalidToolchainChannel {
                 reason: "channel must not be empty".to_owned(),

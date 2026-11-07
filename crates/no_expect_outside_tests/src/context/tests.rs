@@ -10,21 +10,17 @@ use rustc_ast::ast::{DelimArgs, MetaItem, MetaItemInner, MetaItemKind, Path, Pat
 #[cfg(feature = "dylint-driver")]
 use rustc_ast::attr::data_structures::CfgEntry;
 #[cfg(feature = "dylint-driver")]
-use rustc_ast::token::{Delimiter, IdentKind, TokenKind};
+use rustc_ast::token::{Delimiter, IdentIsRaw, TokenKind};
 #[cfg(feature = "dylint-driver")]
 use rustc_ast::tokenstream::{DelimSpan, TokenStream, TokenTree};
 #[cfg(feature = "dylint-driver")]
-use rustc_attr_ir::{
-    AttrArgs,
-    AttrItem,
-    AttrPath,
-    Attribute as HirAttribute,
-    AttributeKind as HirAttributeKind,
-};
+use rustc_hir as hir;
+#[cfg(feature = "dylint-driver")]
+use rustc_hir::attrs::AttributeKind as HirAttributeKind;
 #[cfg(feature = "dylint-driver")]
 use rustc_span::symbol::Ident;
 #[cfg(feature = "dylint-driver")]
-use rustc_span::{DUMMY_SP, create_default_session_globals_then};
+use rustc_span::{AttrId, DUMMY_SP, create_default_session_globals_then};
 #[cfg(feature = "dylint-driver")]
 use whitaker_common::{AttributeKind, AttributePath, PARSED_ATTRIBUTE_PLACEHOLDER};
 
@@ -129,50 +125,57 @@ fn path_from_segments(segments: PathSegments) -> Path {
     Path {
         span: DUMMY_SP,
         segments: path_segments,
+        tokens: None,
     }
 }
 
 #[cfg(feature = "dylint-driver")]
-fn hir_attribute_from_segments(segments: PathSegments) -> HirAttribute {
+fn hir_attribute_from_segments(segments: PathSegments) -> hir::Attribute {
     let path_segments = segments
         .as_ref()
         .iter()
         .map(|segment| rustc_span::Symbol::intern(segment))
         .collect::<Vec<_>>()
         .into_boxed_slice();
-    let attr_item = AttrItem {
-        path: AttrPath {
+    let attr_item = hir::AttrItem {
+        path: hir::AttrPath {
             segments: path_segments,
             span: DUMMY_SP,
         },
-        args: AttrArgs::Empty,
+        args: hir::AttrArgs::Empty,
+        id: hir::HashIgnoredAttrId {
+            attr_id: AttrId::from_u32(0),
+        },
         style: rustc_ast::AttrStyle::Outer,
         span: DUMMY_SP,
     };
 
-    HirAttribute::Tool(Box::new(attr_item))
+    hir::Attribute::Unparsed(Box::new(attr_item))
 }
 
 #[cfg(feature = "dylint-driver")]
-fn hir_cfg_test_attribute() -> HirAttribute {
-    let attr_item = AttrItem {
-        path: AttrPath {
+fn hir_cfg_test_attribute() -> hir::Attribute {
+    let attr_item = hir::AttrItem {
+        path: hir::AttrPath {
             segments: vec![rustc_span::Symbol::intern("cfg")].into_boxed_slice(),
             span: DUMMY_SP,
         },
-        args: AttrArgs::Delimited(DelimArgs {
+        args: hir::AttrArgs::Delimited(DelimArgs {
             dspan: DelimSpan::from_single(DUMMY_SP),
             delim: Delimiter::Parenthesis,
             tokens: TokenStream::new(vec![TokenTree::token_alone(
-                TokenKind::Ident(rustc_span::sym::test, IdentKind::Normal),
+                TokenKind::Ident(rustc_span::sym::test, IdentIsRaw::No),
                 DUMMY_SP,
             )]),
         }),
+        id: hir::HashIgnoredAttrId {
+            attr_id: AttrId::from_u32(1),
+        },
         style: rustc_ast::AttrStyle::Outer,
         span: DUMMY_SP,
     };
 
-    HirAttribute::Tool(Box::new(attr_item))
+    hir::Attribute::Unparsed(Box::new(attr_item))
 }
 
 /// Verify that `convert_attribute` preserves path segments for attributes.
@@ -325,7 +328,7 @@ fn assert_converts_path(segments: PathSegments) {
 }
 
 #[cfg(feature = "dylint-driver")]
-fn build_test_attrs(fixture: AttributeFixture) -> Vec<HirAttribute> {
+fn build_test_attrs(fixture: AttributeFixture) -> Vec<hir::Attribute> {
     match fixture {
         AttributeFixture::None => Vec::new(),
         AttributeFixture::Allow => {
@@ -473,7 +476,7 @@ fn meta_contains_test_cfg_attr_test_allow() {
 #[cfg(feature = "dylint-driver")]
 #[test]
 fn convert_attribute_handles_parsed_must_use() {
-    let parsed_attr = HirAttribute::Parsed(HirAttributeKind::MustUse {
+    let parsed_attr = hir::Attribute::Parsed(HirAttributeKind::MustUse {
         span: DUMMY_SP,
         reason: None,
     });
@@ -492,7 +495,7 @@ fn convert_attribute_handles_parsed_must_use() {
 #[cfg(feature = "dylint-driver")]
 #[test]
 fn is_cfg_test_attribute_handles_parsed_must_use() {
-    let parsed_attr = HirAttribute::Parsed(HirAttributeKind::MustUse {
+    let parsed_attr = hir::Attribute::Parsed(HirAttributeKind::MustUse {
         span: DUMMY_SP,
         reason: None,
     });
@@ -505,10 +508,10 @@ fn is_cfg_test_attribute_handles_parsed_must_use() {
 ///
 /// Must be called within `create_default_session_globals_then`.
 #[cfg(feature = "dylint-driver")]
-fn cfg_trace_attribute(entry: CfgEntry) -> HirAttribute {
+fn cfg_trace_attribute(entry: CfgEntry) -> hir::Attribute {
     let mut entries = thin_vec::ThinVec::new();
     entries.push((entry, DUMMY_SP));
-    HirAttribute::Parsed(HirAttributeKind::CfgTrace(entries))
+    hir::Attribute::Parsed(HirAttributeKind::CfgTrace(entries))
 }
 
 /// Build a bare `cfg` name predicate such as `test`.

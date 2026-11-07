@@ -170,14 +170,6 @@ fn test_harness_flags(extra_flags: &[&str], extern_crates: &[&str]) -> Result<Ve
         "-L".to_owned(),
         format!("dependency={}", deps_dir.display()),
     ]);
-    // Cargo's build-dir layout keeps each dependency's artefacts in its own
-    // `build/<package>/<hash>/out` directory, so rustc must search them all.
-    for directory in layout_out_directories(&deps_dir) {
-        flags.extend([
-            "-L".to_owned(),
-            format!("dependency={}", directory.display()),
-        ]);
-    }
     for crate_name in extern_crates {
         let dependency_rlib = dependency_rlib(&deps_dir, crate_name)?;
         flags.extend([
@@ -209,9 +201,6 @@ fn dependency_directory() -> Result<PathBuf, String> {
 fn dependency_rlib(deps_dir: &Path, crate_name: &str) -> Result<PathBuf, String> {
     let prefix = format!("lib{crate_name}-");
     let mut matches = dependency_rlib_matches(deps_dir, &prefix)?;
-    for directory in layout_out_directories(deps_dir) {
-        matches.extend(dependency_rlib_matches(&directory, &prefix)?);
-    }
     matches.sort_by(|left, right| {
         // Prefer the artefact produced most recently by the current build, then
         // fall back to a stable path ordering when timestamps tie.
@@ -230,34 +219,6 @@ fn dependency_rlib(deps_dir: &Path, crate_name: &str) -> Result<PathBuf, String>
                 deps_dir.display()
             )
         })
-}
-
-/// Lists the sibling `build/<package>/<hash>/out` directories when `deps_dir`
-/// is itself one (cargo's build-dir layout); empty for the classic `deps`
-/// layout, where every artefact already sits in `deps_dir`.
-fn layout_out_directories(deps_dir: &Path) -> Vec<PathBuf> {
-    let Some(build_dir) = deps_dir
-        .ancestors()
-        .nth(3)
-        .filter(|build| build.file_name().is_some_and(|name| name == "build"))
-    else {
-        return Vec::new();
-    };
-    let subdirectories = |directory: &Path| -> Vec<PathBuf> {
-        std::fs::read_dir(directory)
-            .into_iter()
-            .flatten()
-            .flatten()
-            .map(|entry| entry.path())
-            .filter(|path| path.is_dir())
-            .collect()
-    };
-    subdirectories(build_dir)
-        .iter()
-        .flat_map(|package| subdirectories(package))
-        .map(|hash| hash.join("out"))
-        .filter(|out| out.is_dir() && out != deps_dir)
-        .collect()
 }
 
 /// Collects all `lib{crate_name}-*.rlib` candidates from `deps_dir` together

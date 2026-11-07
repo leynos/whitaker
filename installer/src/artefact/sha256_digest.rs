@@ -67,19 +67,13 @@ impl<'de> serde::Deserialize<'de> for Sha256Digest {
     }
 }
 
-impl std::str::FromStr for Sha256Digest {
-    type Err = ArtefactError;
-
-    fn from_str(value: &str) -> Result<Self> {
-        validate_sha256(value)?;
-        Ok(Self(value.to_owned()))
-    }
-}
-
 impl TryFrom<&str> for Sha256Digest {
     type Error = ArtefactError;
 
-    fn try_from(value: &str) -> Result<Self> { value.parse() }
+    fn try_from(value: &str) -> Result<Self> {
+        validate_sha256(value)?;
+        Ok(Self(value.to_owned()))
+    }
 }
 
 impl TryFrom<String> for Sha256Digest {

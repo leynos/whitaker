@@ -5,11 +5,10 @@
 use rustc_ast::{
     AttrStyle,
     ast::{MetaItem, MetaItemInner},
-    attr::{AttributeExt, data_structures::CfgEntry},
+    attr::data_structures::CfgEntry,
 };
-use rustc_attr_ir::{Attribute as HirAttribute, AttributeKind as HirAttributeKind};
 use rustc_hir as hir;
-use rustc_hir::Node;
+use rustc_hir::{Node, attrs::AttributeKind as HirAttributeKind};
 use rustc_lint::LateContext;
 use rustc_span::sym;
 use whitaker::hir::has_test_like_hir_attributes;
@@ -85,7 +84,7 @@ pub(crate) fn collect_context(
 
 fn has_test_ancestry(
     has_test_context_ancestry: bool,
-    attrs: &[HirAttribute],
+    attrs: &[hir::Attribute],
     is_function_item: bool,
     additional_test_attributes: &[AttributePath],
 ) -> bool {
@@ -133,7 +132,7 @@ pub(crate) fn summarize_context(
 }
 
 /// Convert a HIR node with its attributes into a context stack entry.
-fn context_entry_for(node: Node<'_>, attrs: &[HirAttribute]) -> Option<ContextEntry> {
+fn context_entry_for(node: Node<'_>, attrs: &[hir::Attribute]) -> Option<ContextEntry> {
     match node {
         Node::Item(item) => match &item.kind {
             hir::ItemKind::Fn { .. } => {
@@ -172,21 +171,12 @@ fn context_entry_for(node: Node<'_>, attrs: &[HirAttribute]) -> Option<ContextEn
     }
 }
 
-fn convert_attributes(attrs: &[HirAttribute]) -> Vec<Attribute> {
-    attrs
-        .iter()
-        .flat_map(|attr| match attr {
-            // rustc folds lint-level attributes into one parsed attribute.
-            HirAttribute::Parsed(HirAttributeKind::LintCheck(_)) => {
-                whitaker::hir::attributes_from_hir(attr)
-            }
-            _ => vec![convert_attribute(attr)],
-        })
-        .collect()
+fn convert_attributes(attrs: &[hir::Attribute]) -> Vec<Attribute> {
+    attrs.iter().map(convert_attribute).collect()
 }
 
 /// Convert a rustc attribute into the shared attribute representation.
-fn convert_attribute(attr: &HirAttribute) -> Attribute {
+fn convert_attribute(attr: &hir::Attribute) -> Attribute {
     let kind = match attribute_style(attr) {
         AttrStyle::Inner => AttributeKind::Inner,
         AttrStyle::Outer => AttributeKind::Outer,
@@ -196,7 +186,7 @@ fn convert_attribute(attr: &HirAttribute) -> Attribute {
     } else {
         // Parsed attributes (like #[must_use]) don't have an accessible path;
         // calling path() on them would panic.
-        let (HirAttribute::Tool(_) | HirAttribute::DeriveHelper(_)) = attr else {
+        let hir::Attribute::Unparsed(_) = attr else {
             return Attribute::new(AttributePath::from(PARSED_ATTRIBUTE_PLACEHOLDER), kind);
         };
         let mut names = attr.path().into_iter().map(|symbol| symbol.to_string());
@@ -250,11 +240,11 @@ where
 ///     // The enclosing item participates in test-only compilation.
 /// }
 /// ```
-pub(crate) fn is_cfg_test_attribute(attr: &HirAttribute) -> bool {
+pub(crate) fn is_cfg_test_attribute(attr: &hir::Attribute) -> bool {
     // rustc replaces an evaluated `#[cfg(..)]` with a parsed `cfg_trace` marker
     // that records the predicate that held, so an item that was compiled in
     // only because `cfg(test)` is active carries it rather than `cfg(test)`.
-    if let HirAttribute::Parsed(HirAttributeKind::CfgTrace(entries)) = attr {
+    if let hir::Attribute::Parsed(HirAttributeKind::CfgTrace(entries)) = attr {
         return entries
             .iter()
             .any(|(entry, _)| cfg_entry_requires_test(entry));
@@ -262,7 +252,7 @@ pub(crate) fn is_cfg_test_attribute(attr: &HirAttribute) -> bool {
 
     // Other parsed attributes (like #[must_use]) are not cfg-related; skip them
     // to avoid panics when calling path() on arbitrary parsed attributes.
-    let (HirAttribute::Tool(_) | HirAttribute::DeriveHelper(_)) = attr else {
+    let hir::Attribute::Unparsed(_) = attr else {
         return false;
     };
 
@@ -360,11 +350,11 @@ fn item_name(item: &hir::Item<'_>) -> Option<String> {
 }
 
 /// Return the shared outer or inner style of a rustc attribute.
-fn attribute_style(attr: &HirAttribute) -> AttrStyle {
+fn attribute_style(attr: &hir::Attribute) -> AttrStyle {
     match attr {
-        HirAttribute::Tool(item) | HirAttribute::DeriveHelper(item) => item.style,
-        HirAttribute::Parsed(HirAttributeKind::DocComment { style, .. }) => *style,
-        HirAttribute::Parsed(_) => AttrStyle::Outer,
+        hir::Attribute::Unparsed(item) => item.style,
+        hir::Attribute::Parsed(HirAttributeKind::DocComment { style, .. }) => *style,
+        hir::Attribute::Parsed(_) => AttrStyle::Outer,
     }
 }
 

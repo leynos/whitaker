@@ -1,8 +1,8 @@
 warning: Rhaid i sylwadau doc ar functions ddod o flaen priodoleddau allanol eraill.
-  --> $DIR/locale_smoke.rs:5:1
+  --> $DIR/locale_smoke.rs:4:1
    |
-LL | /// Function doc comment appears after `#[inline]`.
-   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+LL | #[inline]
+   | ^^^^^^^^^
    |
 note: Mae’r briodoledd #[inline] yn ymddangos cyn y sylw doc.
   --> $DIR/locale_smoke.rs:4:1
@@ -17,4 +17,3 @@ LL | #![warn(function_attrs_follow_docs)]
    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 warning: 1 warning emitted
-

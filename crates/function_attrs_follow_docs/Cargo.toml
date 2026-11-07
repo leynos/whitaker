@@ -18,7 +18,6 @@ dylint-driver = [
     "dep:log",
     "dep:rustc_ast",
     "dep:rustc_attr_data_structures",
-    "dep:rustc_attr_ir",
     "dep:rustc_hir",
     "dep:rustc_lint",
     "dep:rustc_middle",
@@ -32,7 +31,6 @@ constituent = ["dylint-driver", "dylint_linting/constituent"]
 dylint_linting = { workspace = true, optional = true }
 rustc_ast = { workspace = true, optional = true }
 rustc_attr_data_structures = { workspace = true, optional = true }
-rustc_attr_ir = { workspace = true, optional = true }
 rustc_hir = { workspace = true, optional = true }
 rustc_lint = { workspace = true, optional = true }
 rustc_middle = { workspace = true, optional = true }

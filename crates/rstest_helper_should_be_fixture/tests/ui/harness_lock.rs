@@ -155,20 +155,12 @@ fn effective_target_directory(
     ))
 }
 
-/// Find the active Cargo profile directory above a test binary.
-///
-/// The classic layout puts the binary under `<profile>/deps`; Cargo's build-dir
-/// layout puts it under `<profile>/build/<package>/<hash>/out`.
+/// Find the active Cargo profile directory above a test binary's `deps` path.
 fn target_profile_directory_for_test_binary(executable: &Path) -> Option<&Path> {
     let dependencies_directory = executable
         .ancestors()
         .find(|ancestor| ancestor.ends_with("deps"));
-    let build_directory = executable
-        .ancestors()
-        .find(|ancestor| ancestor.file_name().is_some_and(|name| name == "build"));
-    dependencies_directory
-        .or(build_directory)
-        .and_then(Path::parent)
+    dependencies_directory.and_then(Path::parent)
 }
 
 /// Hash one normalized target-directory path into a lock identity.

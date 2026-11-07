@@ -22,7 +22,6 @@
 //! Consumers typically depend on the compiled lint crate and point `dylint`
 //! (or `cargo dylint`) at the produced shared library.
 #![cfg_attr(feature = "dylint-driver", feature(rustc_private))]
-#![cfg_attr(feature = "dylint-driver", feature(default_field_values))]
 
 #[cfg(feature = "dylint-driver")]
 mod driver;

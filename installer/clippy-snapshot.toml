@@ -12,11 +12,11 @@
 schema_version = 1
 upstream = "https://github.com/rust-lang/rust-clippy"
 branch = "main"
-# Tip of Clippy `main` on 2026-11-07, which still pins `nightly-2026-10-30`.
-commit = "64329b08d6be3e6b5a56c0676a8b03243227adc3"
+# Tip of Clippy `main` on 2026-10-28, after the `master` to `main` rename.
+commit = "e4608a25c2e20116fbc1e97a51a73f094a1db7a1"
 # The nightly pinned in `rust-toolchain.toml`.
-toolchain = "nightly-2026-10-30"
+toolchain = "nightly-2026-05-28"
 # The revision Dylint 6.3.0 selects for `toolchain` from `commit`'s history:
-# "Rustup (#17955)", the commit that moved Clippy to `nightly-2026-10-30`.
-selected_revision = "b5b04e0ab65d4a062aab10f509d1ebd406b31d74"
+# "Rustup (#17109)", the commit that moved Clippy to `nightly-2026-05-28`.
+selected_revision = "9fca3bc9fc2bc83c60bde26d18ed68f11564b228"
 dylint_version = "6.3.0"

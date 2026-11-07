@@ -246,9 +246,10 @@ fn lower_path_arg<'tcx>(
 ) -> ArgAtom {
     match cx.qpath_res(qpath, expr.hir_id) {
         Res::Local(binding_id) => local_fixture_atom(qpath, binding_id, fixture_local_ids),
-        Res::Def(DefKind::Const | DefKind::AssocConst | DefKind::Static { .. }, def_id) => {
-            ArgAtom::const_path(cx.tcx.def_path_str(def_id))
-        }
+        Res::Def(
+            DefKind::Const { .. } | DefKind::AssocConst { .. } | DefKind::Static { .. },
+            def_id,
+        ) => ArgAtom::const_path(cx.tcx.def_path_str(def_id)),
         _ => {
             debug!(
                 target: "rstest_helper_should_be_fixture",
@@ -363,7 +364,7 @@ fn resolve_method_call_def_id<'tcx>(
     expr: &'tcx hir::Expr<'tcx>,
 ) -> Option<DefId> {
     let owner = expr.hir_id.owner;
-    cx.typeck_results
+    cx.maybe_typeck_results()
         .filter(|typeck_results| typeck_results.hir_owner == owner)
         .or_else(|| {
             cx.tcx
