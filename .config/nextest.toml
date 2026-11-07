@@ -86,9 +86,16 @@ test-group = "serial-toolchain-installs"
 # worse still, because the test excludes itself from its own lock, so a contended
 # run blocks only for as long as a real holder takes and reports that holder's
 # timeout rather than a waiter's.
+#
+# The retry policy is restated here for the same reason the allowances are:
+# this is the profile the Windows lane runs, and `dylint::driver_builder::get`
+# persists a `NamedTempFile` that Defender or the indexer can hold long enough
+# to fail the rename with "Access is denied (os error 5)". Without it, every
+# test in this lane gets one attempt at a host-level race.
 filter = "((test(driver::ui::) | test(tests::ui::) | test(ui::ui) | test(example_harness_collects_call_site_evidence) | test(ui::example_compiles_under_test_harness) | test(ui::rstest_unwrap_outside_tests_still_fails_in_non_harness_code) | test(ui::rstest_empty_companion_does_not_exempt_parent_function) | (binary(ui) & test(=ui))) & not package(no_unwrap_or_else_panic) & not package(rstest_helper_should_be_fixture)) | test(acquire_uses_the_effective_target_directory) | test(cross_process_lock_contention_and_release) | test(exported_entry_point_registers_suite_lints)"
 slow-timeout = { period = "30m", terminate-after = 1, grace-period = "5s" }
 test-group = "serial-dylint-ui"
+retries = { backoff = "exponential", count = 2, delay = "5s" }
 
 [[profile.ci.overrides]]
 # The alias UI fixture rebuilds its lint library and example through nested
@@ -194,7 +201,7 @@ serial-nested-cargo-builds = { max-threads = 1 }
 [[profile.default.overrides]]
 # Include crate-local UI entrypoints that wrap dylint UI fixtures.
 # The suite registration check also rebuilds the suite library through Dylint,
-# so give it the same serialized lane and 20-minute allowance.
+# so give it the same serialized lane and the allowance below.
 # On Windows, `dylint::driver_builder::get` persists a temporary file via
 # `tempfile::NamedTempFile::persist()`.  Windows Defender or indexing services
 # can briefly hold a handle on the file, causing the rename to fail with
@@ -219,7 +226,7 @@ serial-nested-cargo-builds = { max-threads = 1 }
 # name in every package, so `test(example_harness_collects_call_site_evidence)`
 # reaches `rstest_helper_should_be_fixture`'s harness, and
 # `test(ui::example_compiles_under_test_harness)` reaches
-# `no_unwrap_or_else_panic`'s; both were held to this 20-minute allowance
+# `no_unwrap_or_else_panic`'s; both were held to this lane's allowance
 # instead of the 75-minute ones below. Guarding each clause separately fixed
 # that symptom but left the next clause free to reintroduce it, and the
 # shadowing is invisible to inspection because every clause reads as belonging

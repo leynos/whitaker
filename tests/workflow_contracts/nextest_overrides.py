@@ -370,6 +370,7 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
                 "grace-period": "5s",
             },
             test_group="serial-dylint-ui",
+            retries={"backoff": "exponential", "count": 2, "delay": "5s"},
         ),
     },
 }
