@@ -7,7 +7,7 @@
 use std::borrow::Cow;
 
 use rustc_ast::{AttrStyle, attr::AttributeExt};
-use rustc_attr_ir::{Attribute as HirAttribute, AttributeKind};
+use rustc_attr_ir::{Attribute as HirAttribute, AttributeKind, lint::LintCheck};
 use rustc_hir as hir;
 use rustc_lint::{DiagDecorator, LateContext, LateLintPass, LintContext};
 use rustc_span::Span;
@@ -186,15 +186,7 @@ impl AttrInfo {
         // kind stands for one attribute per distinct attribute span.
         let spans = match attr {
             HirAttribute::Tool(item) | HirAttribute::DeriveHelper(item) => vec![item.span],
-            HirAttribute::Parsed(AttributeKind::LintCheck(checks)) => {
-                let mut spans: Vec<Span> = Vec::new();
-                for check in checks {
-                    if !spans.contains(&check.attr_span) {
-                        spans.push(check.attr_span);
-                    }
-                }
-                spans
-            }
+            HirAttribute::Parsed(AttributeKind::LintCheck(checks)) => lint_check_spans(checks),
             HirAttribute::Parsed(kind) => parsed_attribute_span(kind).into_iter().collect(),
         };
 
@@ -420,6 +412,17 @@ fn attribute_fallback(lookup: &impl BundleLookup) -> String {
     lookup
         .message(MessageKey::new("common-attribute-fallback"), &args)
         .unwrap_or_else(|_| "the preceding attribute".to_owned())
+}
+
+/// The distinct attribute spans folded into one parsed `LintCheck` attribute.
+fn lint_check_spans(checks: &[LintCheck]) -> Vec<Span> {
+    let mut spans: Vec<Span> = Vec::new();
+    for check in checks {
+        if !spans.contains(&check.attr_span) {
+            spans.push(check.attr_span);
+        }
+    }
+    spans
 }
 
 /// Recover the source span of a parsed attribute kind.
