@@ -42,46 +42,43 @@ type Recorded = (
 
 /// Return whether `recorded` holds `name` with `label` counted exactly once.
 fn counted_once(recorded: &[Recorded], name: &str, label: (&str, &str)) -> bool {
-    recorded.iter().any(|(key, _, _, value)| {
-        key.key().name() == name
+    counter_value(recorded, name, label) == Some(1)
+}
+
+/// Return the first value recorded for `name` and `label`, if any.
+///
+/// A metric name is bound to one instrument type by construction, so pairing
+/// the lookup with the type check at each call site costs nothing and keeps
+/// the key matching in one place.
+fn recorded_value<'a>(
+    recorded: &'a [Recorded],
+    name: &str,
+    label: (&str, &str),
+) -> Option<&'a DebugValue> {
+    recorded.iter().find_map(|(key, _, _, value)| {
+        let matches_key = key.key().name() == name
             && key
                 .key()
                 .labels()
-                .any(|entry| entry.key() == label.0 && entry.value() == label.1)
-            && matches!(value, DebugValue::Counter(1))
+                .any(|entry| entry.key() == label.0 && entry.value() == label.1);
+        matches_key.then_some(value)
     })
 }
 
 /// Return the counter value recorded for `name` and `label`, if any.
 fn counter_value(recorded: &[Recorded], name: &str, label: (&str, &str)) -> Option<u64> {
-    recorded.iter().find_map(|(key, _, _, value)| {
-        let matches_key = key.key().name() == name
-            && key
-                .key()
-                .labels()
-                .any(|entry| entry.key() == label.0 && entry.value() == label.1);
-        match value {
-            DebugValue::Counter(count) if matches_key => Some(*count),
-            _ => None,
-        }
-    })
+    match recorded_value(recorded, name, label)? {
+        DebugValue::Counter(count) => Some(*count),
+        _ => None,
+    }
 }
 
 /// Return the single histogram sample recorded for `name` and `label`.
 fn histogram_sample(recorded: &[Recorded], name: &str, label: (&str, &str)) -> Option<f64> {
-    recorded.iter().find_map(|(key, _, _, value)| {
-        let matches_key = key.key().name() == name
-            && key
-                .key()
-                .labels()
-                .any(|entry| entry.key() == label.0 && entry.value() == label.1);
-        match value {
-            DebugValue::Histogram(samples) if matches_key => {
-                samples.first().map(|sample| f64::from(*sample))
-            }
-            _ => None,
-        }
-    })
+    match recorded_value(recorded, name, label)? {
+        DebugValue::Histogram(samples) => samples.first().map(|sample| f64::from(*sample)),
+        _ => None,
+    }
 }
 
 /// A successful and a failed run are counted under their own labels.
