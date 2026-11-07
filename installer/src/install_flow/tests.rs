@@ -121,28 +121,45 @@ fn create_staged_library(
     library_path
 }
 
+/// One pruning scenario: what was asked for, and what that leaves on disk.
+///
+/// The three lists are only meaningful together — `retained` and `removed` must
+/// partition the staged set, and `requested` is what decides the partition — so
+/// they travel as one value rather than as three parallel `#[case]` columns.
+struct PruneScenario {
+    /// The crate names handed to `prune_prebuilt_libraries`.
+    requested: &'static [&'static str],
+    /// The staged crates the prune must keep.
+    retained: &'static [&'static str],
+    /// The staged crates the prune must delete.
+    removed: &'static [&'static str],
+}
+
 #[rstest]
-#[case::suite_only(
-    &[SUITE_CRATE],
-    &[SUITE_CRATE],
-    &["module_max_lines", "no_expect_outside_tests"]
-)]
-#[case::default_suite(
-    &[],
-    &[SUITE_CRATE],
-    &["module_max_lines", "no_expect_outside_tests"]
-)]
-#[case::individual_only(
-    &["module_max_lines"],
-    &["module_max_lines"],
-    &[SUITE_CRATE, "no_expect_outside_tests"]
-)]
+#[case::suite_only(PruneScenario {
+    requested: &[SUITE_CRATE],
+    retained: &[SUITE_CRATE],
+    removed: &["module_max_lines", "no_expect_outside_tests"],
+})]
+#[case::default_suite(PruneScenario {
+    requested: &[],
+    retained: &[SUITE_CRATE],
+    removed: &["module_max_lines", "no_expect_outside_tests"],
+})]
+#[case::individual_only(PruneScenario {
+    requested: &["module_max_lines"],
+    retained: &["module_max_lines"],
+    removed: &[SUITE_CRATE, "no_expect_outside_tests"],
+})]
 fn prune_prebuilt_libraries_keeps_only_requested_crates(
     staging_fixture: StagingFixture,
-    #[case] requested: &[&str],
-    #[case] retained: &[&str],
-    #[case] removed: &[&str],
+    #[case] scenario: PruneScenario,
 ) {
+    let PruneScenario {
+        requested,
+        retained,
+        removed,
+    } = scenario;
     let StagingFixture {
         staging_path,
         toolchain,

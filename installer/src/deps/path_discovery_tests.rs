@@ -6,10 +6,10 @@ use camino::Utf8Path;
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use temp_env::with_vars_unset;
 
-// `is_executable_file` is exercised only by the `cfg(unix)` permission-bit
+// `is_runnable_file` is exercised only by the `cfg(unix)` permission-bit
 // assertions; importing it unconditionally warns on Windows, which we deny.
 #[cfg(unix)]
-use super::is_executable_file;
+use super::is_runnable_file;
 use super::{
     PathScanFailure,
     PathScanFailureCategory,
@@ -90,7 +90,7 @@ fn assert_executable_matches(
     expected: bool,
 ) {
     assert_eq!(
-        is_executable_file(directory, name, &mut Vec::new()),
+        is_runnable_file(directory, name, &mut Vec::new()),
         expected,
         "the executable permission bit should decide classification"
     );
@@ -171,7 +171,7 @@ fn is_binary_on_path_checks_multiple_directories() -> std::io::Result<()> {
 #[rstest::rstest]
 #[case::non_executable(false, false)]
 #[case::executable(true, true)]
-fn is_executable_file_matches_executable_permission(
+fn is_runnable_file_matches_executable_permission(
     #[case] has_execute_permission: bool,
     #[case] expected_is_executable: bool,
 ) -> std::io::Result<()> {

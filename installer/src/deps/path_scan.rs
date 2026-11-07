@@ -167,7 +167,7 @@ fn find_binary_in_directory(
 
     let mut failure_categories = Vec::new();
     let candidate = binary_candidates(binary_name).into_iter().find(|name| {
-        is_executable_file(
+        is_runnable_file(
             &directory_capability,
             Utf8Path::new(name),
             &mut failure_categories,
@@ -234,44 +234,39 @@ fn windows_path_extensions() -> Vec<String> {
         .collect()
 }
 
+/// Decide whether a regular file's metadata marks it runnable.
+///
+/// Windows has no executable permission bit: the extension is what makes a
+/// file runnable, and `scan_path_directories` has already matched the candidate
+/// name against `PATHEXT` before calling this. Unix instead reads the mode.
+///
+/// Kept beside [`is_runnable_file`] rather than inlined so both platform arms
+/// stay one line, and so the reason the two differ is next to the difference.
+#[cfg(unix)]
+fn has_execute_permission(metadata: &cap_std::fs::Metadata) -> bool {
+    use cap_std::fs::PermissionsExt;
+
+    metadata.permissions().mode() & 0o111 != 0
+}
+
+/// Report that any regular file is runnable, because the extension decided it.
+#[cfg(not(unix))]
+const fn has_execute_permission(_metadata: &cap_std::fs::Metadata) -> bool { true }
+
 /// Classify a candidate through its containing directory capability.
 ///
-/// Return whether the candidate is a regular file with an executable bit.
+/// Return whether the candidate is a regular file that the platform considers
+/// runnable; see [`has_execute_permission`] for what that means per platform.
 ///
 /// Missing candidates return `false` without a failure category; other
 /// metadata errors add the bounded `Metadata` category and also return `false`.
-#[cfg(unix)]
-fn is_executable_file(
-    directory: &Dir,
-    candidate: &Utf8Path,
-    failures: &mut Vec<PathScanFailureCategory>,
-) -> bool {
-    use cap_std::fs::PermissionsExt;
-
-    match directory.metadata(candidate) {
-        Ok(metadata) => metadata.is_file() && metadata.permissions().mode() & 0o111 != 0,
-        Err(error) => {
-            if let Some(category) = metadata_failure_category(error.kind()) {
-                failures.push(category);
-            }
-            false
-        }
-    }
-}
-
-/// Classify a candidate as a regular file through its directory capability.
-///
-/// Missing candidates return `false` without a failure category; other
-/// metadata errors add the bounded `Metadata` category. Otherwise, return
-/// whether the candidate is a regular file.
-#[cfg(not(unix))]
-fn is_executable_file(
+fn is_runnable_file(
     directory: &Dir,
     candidate: &Utf8Path,
     failures: &mut Vec<PathScanFailureCategory>,
 ) -> bool {
     match directory.metadata(candidate) {
-        Ok(metadata) => metadata.is_file(),
+        Ok(metadata) => metadata.is_file() && has_execute_permission(&metadata),
         Err(error) => {
             if let Some(category) = metadata_failure_category(error.kind()) {
                 failures.push(category);
