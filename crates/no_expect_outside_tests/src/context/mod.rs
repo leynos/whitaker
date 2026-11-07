@@ -173,7 +173,16 @@ fn context_entry_for(node: Node<'_>, attrs: &[HirAttribute]) -> Option<ContextEn
 }
 
 fn convert_attributes(attrs: &[HirAttribute]) -> Vec<Attribute> {
-    attrs.iter().map(convert_attribute).collect()
+    attrs
+        .iter()
+        .flat_map(|attr| match attr {
+            // rustc folds lint-level attributes into one parsed attribute.
+            HirAttribute::Parsed(HirAttributeKind::LintCheck(_)) => {
+                whitaker::hir::attributes_from_hir(attr)
+            }
+            _ => vec![convert_attribute(attr)],
+        })
+        .collect()
 }
 
 /// Convert a rustc attribute into the shared attribute representation.

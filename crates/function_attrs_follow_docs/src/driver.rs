@@ -154,17 +154,18 @@ struct AttrInfo {
 }
 
 impl AttrInfo {
-    /// Try to create attribute info from an HIR attribute.
+    /// Create attribute info for each user-written attribute an HIR attribute
+    /// stands for.
     ///
-    /// Returns `None` for compiler-generated attributes that don't correspond
+    /// Returns nothing for compiler-generated attributes that don't correspond
     /// to user-written code (e.g., inline hints from derive macros).
     ///
     /// # Behaviour
     ///
-    /// User-written attributes are represented as `Unparsed` (regular attributes
-    /// like `#[inline]` or `#[allow(...)]`) or `DocComment` (doc comments like
-    /// `///` or `//!`). These have source spans pointing to actual code locations
-    /// and are processed by this lint.
+    /// User-written attributes are represented as tool or derive-helper
+    /// attributes (regular attributes like `#[inline]`) or `DocComment` (doc
+    /// comments like `///` or `//!`). These have source spans pointing to
+    /// actual code locations and are processed by this lint.
     ///
     /// `Parsed` variants with a recoverable user-written span (for example
     /// `Inline` and `MustUse`; see `parsed_attribute_span` for the full
@@ -176,16 +177,35 @@ impl AttrInfo {
     ///
     /// See `ui/pass_derive_macro_generated.rs` for the regression test covering
     /// compiler-generated attribute handling.
-    fn try_from_hir(attr: &HirAttribute) -> Option<Self> {
+    fn all_from_hir(attr: &HirAttribute) -> Vec<Self> {
         // User-written attributes are tool or derive-helper attributes, or a
         // parsed AttributeKind (including DocComment) whose original attribute
         // span is recoverable. Parsed kinds without a recoverable span (for
-        // example `#[cold]`) cannot participate in ordering.
-        let span = match attr {
-            HirAttribute::Tool(item) | HirAttribute::DeriveHelper(item) => item.span,
-            HirAttribute::Parsed(kind) => parsed_attribute_span(kind)?,
+        // example `#[cold]`) cannot participate in ordering. rustc folds every
+        // lint-level attribute on an item into one parsed `LintCheck`, so that
+        // kind stands for one attribute per distinct attribute span.
+        let spans = match attr {
+            HirAttribute::Tool(item) | HirAttribute::DeriveHelper(item) => vec![item.span],
+            HirAttribute::Parsed(AttributeKind::LintCheck(checks)) => {
+                let mut spans: Vec<Span> = Vec::new();
+                for check in checks {
+                    if !spans.contains(&check.attr_span) {
+                        spans.push(check.attr_span);
+                    }
+                }
+                spans
+            }
+            HirAttribute::Parsed(kind) => parsed_attribute_span(kind).into_iter().collect(),
         };
 
+        spans
+            .into_iter()
+            .filter_map(|span| Self::from_span(attr, span))
+            .collect()
+    }
+
+    /// Build attribute info for the attribute written at `span`.
+    fn from_span(attr: &HirAttribute, span: Span) -> Option<Self> {
         // Dummy spans indicate compiler-generated code without source location.
         if span.is_dummy() {
             return None;
@@ -250,7 +270,7 @@ fn check_function_attributes(check: &FunctionAttributeCheck<'_, '_>) {
     let mut infos: Vec<AttrInfo> = check
         .attrs
         .iter()
-        .filter_map(AttrInfo::try_from_hir)
+        .flat_map(AttrInfo::all_from_hir)
         .collect();
     infos.retain(|info| {
         attribute_within_item(
