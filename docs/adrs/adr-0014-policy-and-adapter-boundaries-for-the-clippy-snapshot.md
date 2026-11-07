@@ -1,0 +1,92 @@
+# Architectural decision record (ADR) 0014: policy and adapter boundaries for the Clippy snapshot
+
+## Status
+
+Accepted (2026-11-08): Separate the Clippy snapshot acceptance rules from the
+Git, filesystem, and operational adapters, so every rule is decided on values
+and every observation sits behind a port.
+
+## Date
+
+2026-11-08.
+
+## Context and problem statement
+
+[ADR 0009](adr-0009-verified-clippy-snapshot-for-the-dylint-driver-bootstrap.md)
+made the installer own a verified Clippy snapshot. It specified what the
+snapshot must satisfy, but every acceptance rule was decided beside the Git and
+filesystem calls that observed it. Testing "is this repository acceptable?"
+meant building a real repository, testing "is this generation installable?"
+meant touching a real directory, and an adapter failure could not be injected
+at all. The decision and the observation had no boundary between them.
+
+## Decision drivers
+
+- An acceptance rule must be testable from a literal value, without Git, a
+  filesystem, or a subprocess.
+- Orchestration must not reach for Git or the filesystem directly.
+- An adapter must translate infrastructure failure at its own boundary and
+  apply no acceptance rule.
+- Production wiring must have exactly one composition root.
+- Existing collaborators must be reused rather than duplicated.
+
+## Decision outcome / proposed direction
+
+The module separates the decision from the observation.
+
+- `policy.rs` owns the acceptance rules as pure functions over evidence and
+  recorded output. Nothing there reads a file, runs a command, or records
+  telemetry. `selection.rs` keeps `select_revision` as the pure kernel; policy
+  evaluates its result.
+- `ports.rs` owns the driven ports the orchestration needs:
+  `RepositoryQueries` (shape, self-containment, integrity, first-parent
+  toolchain history, and a file at a commit), `BundleOperations` (header
+  verification, head listing, and staging clone), `SnapshotStore` (root
+  creation, path resolution, presence probes, digest, text read, lock, staging,
+  and publish), and `MetadataStore` (read and write). `RootLock` and `Staging`
+  are RAII guards. Release downloads reuse the existing
+  `DependencyArchiveDownloader` rather than adding a second downloader port.
+- `git.rs` implements `RepositoryQueries` and `BundleOperations`; `store.rs`
+  implements `SnapshotStore` and `MetadataStore`. An adapter returns the
+  closest honest observation and translates every infrastructure failure into
+  `ClippySnapshotError` at that boundary. It applies no snapshot acceptance
+  rule, except that a failed `git bundle verify`, a failed staging clone, and
+  metadata that cannot be decoded or names an unknown schema are reported as
+  `Invalid`.
+- `SnapshotSupport<'_>` is the composition root for one operation: borrowed
+  trait objects for each port. `SnapshotSupport::production()` wires the
+  process-wide `SnapshotGit` and `ProductionStore`. The public entry points
+  (`verify_repository`, `check_installed`, `install_bundle`, `provision`) use
+  it, while their `*_with` variants accept explicit support for tests.
+- Query paths record no metrics. Provision, download, and install keep their
+  existing telemetry at the command boundaries, and the Git adapter keeps its
+  per-command debug events. Policy contributes neither.
+- Tests follow the same split. `policy_tests.rs` exercises acceptance rules on
+  values, the `orchestration_tests/` modules drive verification and
+  installation through the scripted ports in `fakes.rs` and assert both call
+  order and what was never called, and `verify_tests.rs` and `tests.rs` keep
+  real Git and a real filesystem so the adapters themselves stay honest.
+
+The ports were chosen after sweeping the installer for existing collaborators.
+Release downloads already had `DependencyArchiveDownloader`, the producer
+already used `RepositoryArchiveDownloader`, the Git adapter reuses the existing
+`run_git` helper, and both bundle construction and the production store hash
+through `compute_sha256`; all of these are reused rather than duplicated.
+Nothing in the installer described a repository query, a bundle operation, or a
+snapshot-root operation, so `RepositoryQueries`, `BundleOperations`,
+`SnapshotStore`, and `MetadataStore` are new. Each is owned by this module,
+implemented only by `git.rs` or `store.rs`, and reached by orchestration through
+`SnapshotSupport<'_>` rather than a concrete adapter type.
+
+A new acceptance rule belongs in `policy.rs` with a value test. A new
+observation belongs behind an existing port, or a new port only when none fits,
+implemented by an adapter that translates failures. Orchestration never calls
+Git or the filesystem directly.
+
+## Consequences
+
+- Every acceptance rule is covered by a value test that needs no repository.
+- A new observation needs a port method and an adapter implementation, which is
+  more ceremony than a direct call.
+- The adapters carry the translation surface, so an infrastructure failure
+  reaches the caller as a domain variant rather than as a raw error.

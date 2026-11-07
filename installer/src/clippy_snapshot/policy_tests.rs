@@ -10,22 +10,18 @@ use rstest::rstest;
 use super::*;
 use crate::clippy_snapshot::selection::ToolchainChange;
 
-/// A structure observation with every field accepted unless overridden.
-fn structure(is_bare: bool, head: &str, refs: &str) -> StructureEvidence {
+/// A structure observation whose symbolic HEAD names the snapshot branch.
+fn structure(is_bare: bool, refs: &str) -> StructureEvidence {
     StructureEvidence {
         is_bare: if is_bare { "true" } else { "false" }.to_owned(),
-        head: head.to_owned(),
+        head: main_ref(),
         refs: refs.to_owned(),
     }
 }
 
 /// The acceptance observation for a healthy repository at `commit`.
 fn healthy_structure(commit: PinnedCommit<'_>) -> StructureEvidence {
-    structure(
-        true,
-        &main_ref(),
-        &format!("{main} {commit}", main = main_ref()),
-    )
+    structure(true, &format!("{main} {commit}", main = main_ref()))
 }
 
 const COMMIT: &str = "0123456789abcdef0123456789abcdef01234567";
@@ -45,25 +41,23 @@ fn accepts_a_bare_repository_with_only_main() {
 struct ExpectedMessage(&'static str);
 
 #[rstest]
-#[case::not_bare(
-    structure(false, &main_ref(), ""),
-    ExpectedMessage("it is not a bare repository")
-)]
+#[case::not_bare(structure(false, ""), ExpectedMessage("it is not a bare repository"))]
 #[case::head_on_another_branch(
-    structure(true, "refs/heads/master", ""),
+    StructureEvidence {
+        is_bare: "true".to_owned(),
+        head: "refs/heads/master".to_owned(),
+        refs: String::new(),
+    },
     ExpectedMessage("HEAD is `refs/heads/master`, not a symbolic ref to refs/heads/main")
 )]
 #[case::main_at_another_object(
-    structure(true, &main_ref(), "refs/heads/main deadbeef"),
+    structure(true, "refs/heads/main deadbeef"),
     ExpectedMessage(
         "refs/heads/main is deadbeef, expected the pinned commit \
          0123456789abcdef0123456789abcdef01234567"
     )
 )]
-#[case::no_main(
-    structure(true, &main_ref(), ""),
-    ExpectedMessage("it has no refs/heads/main")
-)]
+#[case::no_main(structure(true, ""), ExpectedMessage("it has no refs/heads/main"))]
 fn rejects_the_wrong_repository_shape(
     #[case] evidence: StructureEvidence,
     #[case] reason: ExpectedMessage,
@@ -78,11 +72,7 @@ fn rejects_the_wrong_repository_shape(
 fn reports_extra_refs_before_comparing_the_pinned_object() {
     // The extra ref is the more serious fault, so it must win even though the
     // `main` line also points at the wrong object.
-    let evidence = structure(
-        true,
-        &main_ref(),
-        "refs/heads/main deadbeef\nrefs/tags/v1 deadbeef",
-    );
+    let evidence = structure(true, "refs/heads/main deadbeef\nrefs/tags/v1 deadbeef");
     assert_eq!(
         accept_structure(&evidence, PinnedCommit::new(COMMIT)),
         Err("it carries refs other than refs/heads/main: refs/tags/v1".to_owned())
@@ -95,7 +85,6 @@ fn ignores_lines_without_a_ref_and_object() {
     // with no object must not be mistaken for a ref.
     let evidence = structure(
         true,
-        &main_ref(),
         &format!("\nrefs/heads/main-not-a-ref\n{} {COMMIT}", main_ref()),
     );
     assert_eq!(
@@ -104,32 +93,32 @@ fn ignores_lines_without_a_ref_and_object() {
     );
 }
 
-fn contained(is_shallow: bool, remotes: &str) -> SelfContainedEvidence {
+fn contained(is_shallow: bool, remotes: &[&str]) -> SelfContainedEvidence {
     SelfContainedEvidence {
         is_shallow: if is_shallow { "true" } else { "false" }.to_owned(),
-        remotes: remotes.to_owned(),
+        remotes: remotes.join("\n"),
     }
 }
 
 #[test]
 fn accepts_complete_history_without_alternates_or_remotes() {
-    assert_eq!(accept_self_contained(&contained(false, ""), false), Ok(()));
+    assert_eq!(accept_self_contained(&contained(false, &[]), false), Ok(()));
 }
 
 #[rstest]
-#[case::shallow(contained(true, ""), false, ExpectedMessage("its history is shallow"))]
+#[case::shallow(contained(true, &[]), false, ExpectedMessage("its history is shallow"))]
 #[case::alternates(
-    contained(false, ""),
+    contained(false, &[]),
     true,
     ExpectedMessage("it borrows objects through objects/info/alternates")
 )]
 #[case::one_remote(
-    contained(false, "origin"),
+    contained(false, &["origin"]),
     false,
     ExpectedMessage("it has remotes (origin), so it could fetch")
 )]
 #[case::several_remotes(
-    contained(false, "origin\nupstream"),
+    contained(false, &["origin", "upstream"]),
     false,
     ExpectedMessage("it has remotes (origin, upstream), so it could fetch")
 )]
@@ -147,7 +136,7 @@ fn rejects_a_repository_that_could_reach_outside(
 #[test]
 fn reports_shallow_history_before_alternates() {
     assert_eq!(
-        accept_self_contained(&contained(true, "origin"), true),
+        accept_self_contained(&contained(true, &["origin"]), true),
         Err("its history is shallow".to_owned())
     );
 }

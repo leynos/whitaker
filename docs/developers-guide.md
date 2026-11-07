@@ -5059,7 +5059,7 @@ or token.
 the installer observes it. Extend it along the same split; the file-to-role
 mapping is in the [repository layout](repository-layout.md) and the boundary
 decision is in
-[ADR 009](adr-009-verified-clippy-snapshot-for-dylint-driver-bootstrap.md).
+[ADR 0014](adrs/adr-0014-policy-and-adapter-boundaries-for-the-clippy-snapshot.md).
 
 - Acceptance rules are pure: they take evidence values and recorded output,
   perform no I/O, and record no metrics. `select_revision` stays the pure

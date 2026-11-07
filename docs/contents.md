@@ -151,6 +151,12 @@ compatibility entry points. Local ADR filenames follow
   semantics](adrs/adr-0011-bumpy-road-reference-semantics.md) establishes
   CodeScene as the reference for intended classification and records the
   current compatibility limit.
+- [Architectural decision record (ADR) 0014: policy and adapter boundaries for
+  the Clippy
+  snapshot](adrs/adr-0014-policy-and-adapter-boundaries-for-the-clippy-snapshot.md)
+  separates the snapshot acceptance rules from the Git, filesystem, and
+  operational adapters, and names the ports each orchestration step observes
+  through.
 
 ## Requests for comments
 

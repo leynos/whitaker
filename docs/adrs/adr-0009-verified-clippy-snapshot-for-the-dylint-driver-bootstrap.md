@@ -2,15 +2,16 @@
 
 ## Status
 
-Accepted (2026-10-29, amended 2026-11-04): Adopt Dylint 6.3.0, publish the
-Clippy history its driver build reads as a commit-named, checksummed Git
-bundle, build the driver on first use in an identity-keyed directory, and route
-every installed run through `whitaker-installer run`. The amendment records the
-policy and adapter boundaries described below.
+Accepted (2026-10-29): Adopt Dylint 6.3.0, publish the Clippy history its
+driver build reads as a commit-named, checksummed Git bundle, build the driver
+on first use in an identity-keyed directory, and route every installed run
+through `whitaker-installer run`.
+
+Amended by ADR-0014 (2026-11-08).
 
 ## Date
 
-2026-11-04.
+2026-11-08.
 
 ## Context and problem statement
 
@@ -123,62 +124,6 @@ modified. Installation and verification permit only the `file` transport, so
 they cannot reach a remote by accident. Only `whitaker-clippy-snapshot build`
 may clone public Clippy, and only the producer runs it.
 
-### Policy and adapter boundaries
-
-Amended 2026-11-04 (issue #529). The checks above are decisions about values,
-but they were made beside the Git and filesystem calls that observed those
-values, so every rule needed a real repository and a real directory to test.
-The module now separates the decision from the observation.
-
-- `policy.rs` owns the acceptance rules as pure functions over evidence and
-  recorded output. Nothing there reads a file, runs a command, or records
-  telemetry. `selection.rs` keeps `select_revision` as the pure kernel; policy
-  evaluates its result.
-- `ports.rs` owns the driven ports the orchestration needs:
-  `RepositoryQueries` (shape, self-containment, integrity, first-parent
-  toolchain history, and a file at a commit), `BundleOperations` (header
-  verification, head listing, and staging clone), `SnapshotStore` (root
-  creation, path resolution, presence probes, digest, text read, lock, staging,
-  and publish), and `MetadataStore` (read and write). `RootLock` and `Staging`
-  are RAII guards. Release downloads reuse the existing
-  `DependencyArchiveDownloader` rather than adding a second downloader port.
-- `git.rs` implements `RepositoryQueries` and `BundleOperations`; `store.rs`
-  implements `SnapshotStore` and `MetadataStore`. An adapter returns the
-  closest honest observation and translates every infrastructure failure into
-  `ClippySnapshotError` at that boundary. It applies no snapshot acceptance
-  rule, except that a failed `git bundle verify`, a failed staging clone, and
-  metadata that cannot be decoded or names an unknown schema are reported as
-  `Invalid`.
-- `SnapshotSupport<'_>` is the composition root for one operation: borrowed
-  trait objects for each port. `SnapshotSupport::production()` wires the
-  process-wide `SnapshotGit` and `ProductionStore`. The public entry points
-  (`verify_repository`, `check_installed`, `install_bundle`, `provision`) use
-  it, while their `*_with` variants accept explicit support for tests.
-- Query paths record no metrics. Provision, download, and install keep their
-  existing telemetry at the command boundaries, and the Git adapter keeps its
-  per-command debug events. Policy contributes neither.
-- Tests follow the same split. `policy_tests.rs` exercises acceptance rules on
-  values, the `orchestration_tests/` modules drive verification and
-  installation through the scripted ports in `fakes.rs` and assert both call
-  order and what was never called, and `verify_tests.rs` and `tests.rs` keep
-  real Git and a real filesystem so the adapters themselves stay honest.
-
-The ports were chosen after sweeping the installer for existing collaborators.
-Release downloads already had `DependencyArchiveDownloader`, the producer
-already used `RepositoryArchiveDownloader`, the Git adapter reuses the existing
-`run_git` helper, and both bundle construction and the production store hash
-through `compute_sha256`; all of these are reused rather than duplicated.
-Nothing in the installer described a repository query, a bundle operation, or a
-snapshot-root operation, so `RepositoryQueries`, `BundleOperations`,
-`SnapshotStore`, and `MetadataStore` are new. Each is owned by this module,
-implemented only by `git.rs` or `store.rs`, and reached by orchestration through
-`SnapshotSupport<'_>` rather than a concrete adapter type.
-
-A new acceptance rule belongs in `policy.rs` with a value test. A new
-observation belongs behind an existing port, or a new port only when none fits,
-implemented by an adapter that translates failures. Orchestration never calls
-Git or the filesystem directly.
-
 ### No fallback
 
 A missing, corrupt, or insufficient snapshot is an error in every source-policy
@@ -250,5 +195,14 @@ either mode.
   developers' guide).
 - Shell users who set the variables themselves (`--skip-wrapper`) do not get
   the driver lock and must not start concurrent cold runs.
+
+## Amendments
+
+[ADR 0014](adr-0014-policy-and-adapter-boundaries-for-the-clippy-snapshot.md)
+(2026-11-08) records the policy and adapter boundaries that implement the
+verification and installation decided here (issue #529). It moves the
+acceptance rules into `policy.rs`, introduces the driven ports in `ports.rs`,
+and keeps the adapters in `git.rs` and `store.rs`. The decision in this ADR is
+unchanged.
 
 [dylint-2146]: https://github.com/trailofbits/dylint/issues/2146
