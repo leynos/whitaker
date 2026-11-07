@@ -102,9 +102,10 @@ The `whitaker-cli` application package owns the OrthoConfig v0.10.0 source
 boundary. It is a configuration foundation, with no executable or command
 dispatch. The root CLI integration can construct `Sources` with its selected
 command, optional file selector, injected discovery and scan environments, and
-explicit CLI values; `load_with_sources` returns validated settings and
-notices. The loader merges the OrthoConfig DTO and then converts it into
-`ValidatedSettings`: conversion rejects unsupported colour and progress
+explicit CLI values; `load_with_sources` borrows that `Sources` value and
+returns validated settings and notices, so the caller keeps ownership and can
+reuse the handle. The loader merges the OrthoConfig DTO and then converts it
+into `ValidatedSettings`: conversion rejects unsupported colour and progress
 policies and applies the same normalization policy as the lint crates, so
 callers never observe out-of-range tuning values. The executable owns
 localization, presentation, and exit statuses. Neither the configuration

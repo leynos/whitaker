@@ -6,6 +6,11 @@ Accepted (2026-10-16): Adopt `mod.rs`-rooted directory modules, and extract an
 inline test module that outgrows the 400-line budget into a sibling file wired
 with `#[cfg(test)] #[path = "..."] mod ...;`.
 
+Amended 2026-11-07 (see [Amendments](#amendments)): the two remaining
+single-child outliers described under Option B have since been converted, so
+the tree no longer contains a module reached through a same-named directory
+from a file module.
+
 ## Date
 
 2026-10-16.
@@ -64,11 +69,6 @@ and `crates/conditional_max_n_branches/src/driver.rs` resolves `mod numeric;` to
 `driver/numeric.rs`. Both are single-child outliers, and neither is a
 convention anyone is expected to follow. Adopting the form deliberately would
 make a module's location depend on which convention its author happened to use.
-
-Since this record was accepted, both outliers have been converted:
-`installer/src/cli.rs` became `installer/src/cli/mod.rs`, and
-`crates/conditional_max_n_branches/src/driver.rs` became `driver/mod.rs`. No
-path in the tree now has both `name.rs` and `name/mod.rs`.
 
 ### Option C: `mod.rs` directory modules with `#[path]` sibling test files
 
@@ -167,3 +167,23 @@ Both properties follow from treating the module layout as a repository-wide
 convention rather than a per-module judgement. 65 tracked `.rs` files already
 carry a `#[path = "` anchor, so the mechanism this record standardizes was
 already the repository's practice; the record fixes which cases use it and why.
+
+## Amendments
+
+### 2026-11-07: the file-module outliers were converted
+
+Option B rejected the self-named sibling form partly on a fact that has since
+changed. At the time this record was accepted, two file modules were the only
+path that reached a child through a same-named directory:
+`installer/src/cli.rs` resolved `mod source_policy;` to `cli/source_policy.rs`,
+and `crates/conditional_max_n_branches/src/driver.rs` resolved `mod numeric;` to
+`driver/numeric.rs`. Both have since been converted to `mod.rs` directory
+modules — `installer/src/cli/mod.rs` and
+`crates/conditional_max_n_branches/src/driver/mod.rs` — so no path in the tree
+now has both `name.rs` and `name/mod.rs`.
+
+The decision is unchanged: Option B is still rejected, and for the same reason,
+because the choice remains a repository-wide convention rather than a
+per-module judgement. What changes is only the supporting count, which is now
+zero rather than two. This amendment preserves the original text above as
+history; treat this section as the current statement of fact.
