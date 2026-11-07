@@ -308,7 +308,7 @@ coverage: ## Generate LCOV coverage over the CI-tested crate subset
 		$(CARGO) llvm-cov report --lcov --output-path $(COVERAGE_OUTPUT)
 
 trybuild-contracts: ## Run the trybuild compile-contract tests, which `make coverage` skips
-	@# `make coverage` leaves six of these out (see TRYBUILD_CONTRACT_FILTER), so
+	@# `make coverage` leaves seven of these out (see TRYBUILD_CONTRACT_FILTER), so
 	@# a developer runs them here, plain and uninstrumented, under the `ci`
 	@# profile that gives them their serial group and build-sized allowance.
 	@# Filter both passes: the separate `whitaker_lint_core` pass would

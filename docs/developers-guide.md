@@ -387,7 +387,7 @@ are never silently skipped in the pipeline.
 ### Coverage and nested Cargo builds
 
 `make coverage` uses the same selected crate set and warning policy as
-`make test`, but runs it through `cargo llvm-cov nextest` and skips six
+`make test`, but runs it through `cargo llvm-cov nextest` and skips seven
 trybuild contract tests (see the lane table below). The Makefile assigns the
 absolute `COVERAGE_TARGET_DIR` (by default, `$(CURDIR)/target/llvm-cov-target`)
 to both `CARGO_LLVM_COV_TARGET_DIR` and `CARGO_TARGET_DIR`. It also sets
@@ -5071,6 +5071,46 @@ clause never reached it. It ran under the base 300-second allowance, passed at
 the run. A handwritten list would have had the same hole, and a discovery that
 stops recognizing the call would sweep a smaller set silently, so finding
 nothing is a failure rather than a pass.
+
+Seven of the tests are members of the capacity-one `serial-trybuild-contracts`
+group: `ortho_config_and_clap_derives_compile_together`,
+`dependency_check_result_contract_is_public`,
+`fixture_expansion_lint_attribute_contract`,
+`public_const_api_works_in_const_context`,
+`renamed_common_apis_are_public_and_legacy_names_stay_removed`,
+`renamed_sarif_api_is_public_and_legacy_names_stay_removed`, and
+`sha2_0_11_pre_migration_patterns_fail_to_compile`. Trybuild writes under
+`target/tests/trybuild`, separate from Dylint's `debug` and `debug/examples`
+artefacts, so this group can run alongside the capacity-one `serial-dylint-ui`
+group. The eighth, `trybuild_fixtures_compile_without_diagnostics`, stays in
+`serial-dylint-ui`: it shares `ExampleHarnessLock` with the
+`rstest_helper_should_be_fixture` example-harness tests, and a separate group
+would let the two contend until the lock's six-minute ceiling expired under a
+queued nested build. That group still covers Dylint UI tests, those
+example-harness tests and `integration_exclusion`. The independence inventory
+for issue #513 records the target, environment and lock checks behind this
+split.
+
+`tests/workflow_contracts/nextest_group_test.py` holds that boundary in both
+profiles: the seven contracts must match no `serial-dylint-ui` override, and
+the eighth must keep its own override in that group. Answering the first
+question with a real `cargo nextest list` would compile the workspace, so
+`tests/workflow_contracts/nextest_filter.py` evaluates a filter expression
+against what is known about a test instead. It belongs to the workflow
+contracts and has no other callers: code that can afford a listing should take
+one, because Nextest remains the authority on what a filter selects. The guard
+passes each contract's package, binary and kind from `COMPILE_CONTRACTS`, and a
+contract test checks that table against the source tree, because a name alone
+cannot rule out an override such as `binary(integration_exclusion)`. The reader
+treats a predicate it has no data for, such as `default()`, as unknown rather
+than as a miss. It does the same for matchers that need Nextest's own engines:
+every regular expression and every glob with a metacharacter, because `re` and
+`fnmatch` disagree with Rust's `regex` and `globset` crates on patterns both
+accept. Its only definite answers come from comparing exact strings. It raises
+`ValueError` on syntax outside its grammar, including the `+` and `-`
+operators, so a guard built on it errs towards reporting a capture.
+`nextest_filter_property_test.py` checks it against an independent oracle over
+generated expression trees.
 
 It drives the lane discovery with workflow documents rather than only with the
 files. `_declared_jobs` takes parsed documents and reads the repository's own

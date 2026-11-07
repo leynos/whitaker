@@ -12,6 +12,10 @@
 //! `ui`, **not** `ui::ui`) and asserts that the nextest filter contains the
 //! clause needed to capture that pattern. It also protects the named nested
 //! Cargo UI harnesses that share compiler resources on constrained runners.
+//!
+//! The group is spread over several overrides, each carrying the allowance its
+//! own harnesses need, so the clauses are checked against the union of their
+//! filters rather than against whichever one happens to come first.
 
 use std::fs;
 
@@ -139,7 +143,7 @@ fn serial_dylint_ui_overrides() -> Vec<Value> {
 }
 
 #[rstest]
-fn serial_dylint_ui_filter_captures_integration_and_nested_cargo_ui_tests(
+fn serial_dylint_ui_filters_capture_integration_and_nested_cargo_ui_tests(
     serial_dylint_ui_overrides: Vec<Value>,
 ) {
     let overrides: Vec<&Value> = serial_dylint_ui_overrides.iter().collect();
@@ -183,7 +187,7 @@ fn serial_dylint_ui_filter_captures_integration_and_nested_cargo_ui_tests(
 }
 
 #[rstest]
-fn serial_dylint_ui_filter_has_retry_configuration(serial_dylint_ui_overrides: Vec<Value>) {
+fn serial_dylint_ui_filters_have_retry_configuration(serial_dylint_ui_overrides: Vec<Value>) {
     let overrides: Vec<&Value> = serial_dylint_ui_overrides.iter().collect();
     let broad = find_broad_ui_override(&overrides);
     // On Windows, dylint_testing::initialize() can transiently fail with
