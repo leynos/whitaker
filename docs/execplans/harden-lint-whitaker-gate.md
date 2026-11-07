@@ -1058,6 +1058,62 @@ each push rather than copying an earlier lease into the command.
   have been the wrong fix. `make markdownlint` then passed 78 files, 0 errors;
   `make check-fmt` passed; and `make test-nextest-filter` still reports 41/41,
   so the rename broke no reference.
+- [x] (2026-11-07) **The first `make lint` on this branch's `lint-whitaker`
+  lane found 25 diagnostics in six files, none of them in this increment's
+  diff.** All six are committed content that arrived with the rebase, so the
+  lane had never actually run over the rebased tree: the plan's earlier "5762
+  s, zero `error:` lines" row describes the pre-rebase tree. The diagnostics
+  were 1 × `module_must_have_inner_docs`, 2 × `no_unwrap_or_else_panic`, and 22
+  × `no_std_fs_operations`.
+- [x] (2026-11-07) Dispositions, each fixed rather than blanket-suppressed.
+  `installer/src/output.rs`'s `mod tests` gained an inner doc comment, matching
+  the ten other installer modules that already carry one.
+  `installer/tests/bootstrap_run.rs::last` and
+  `installer/tests/doc_extraction/extraction.rs`'s `LazyLock` initializer were
+  rewritten to `let-else` + `panic!`. The `no_std_fs_operations` diagnostics
+  were excluded by crate, because those suites stage fake toolchains, swap
+  permission bits, and copy lint bundles under a `TempDir` — the same rationale
+  the existing entries give.
+- [x] (2026-11-07) **The `let-else` choice is forced, not stylistic.** A free
+  helper in a test crate is not a `#[test]` context, so the three lints
+  intersect only on a bare `panic!`: `no_unwrap_or_else_panic` permits an
+  interpolated panic only when `ContextSummary::is_test` holds, Clippy's
+  `expect_used` is denied (`allow-expect-in-tests = true` does not reach
+  helpers outside `#[test]`), and `expect_fun_call` rejects
+  `expect(&format!(…))`. The first attempt used `expect(&format!(…))` and both
+  Clippy lints fired.
+- [x] (2026-11-07) Two control probes established that the green is not
+  vacuous, because an earlier probe had produced a false clean. A planted
+  `std::fs::write` in `tracing_cli` (not excluded) produced `GATE_EXIT=2`; a
+  planted `unwrap_or_else(|| panic!())` in `bootstrap_run` — which *is*
+  excluded from `no_std_fs_operations` but cannot be excluded from the panic
+  lint, which has no exclusion mechanism — also produced `GATE_EXIT=2`. Both
+  probes were reverted, and `git status` confirms the files hold only the
+  intended edits.
+- [x] (2026-11-07) The false clean is itself recorded as a lesson: the first
+  probe was planted in `bootstrap_run.rs` *after* that crate had been added to
+  `excluded_crates`, so its silent pass was evidence about the new exclusion,
+  not a gate failure. A probe must be planted in a crate the gate is still
+  expected to lint, or it proves nothing.
+- [x] (2026-11-07) The workflow-contract gate found three failures, and only
+  one was a candidate defect. `nextest_profile_test.py` failed on both profiles
+  because `51f36e26` raised the broad `serial-dylint-ui` clause from 20 to 30
+  minutes and updated the configuration but not the table asserting it; the
+  developers' guide carried the same stale claim. `origin/main` has no
+  `lint_whitaker_execution_test.py` at all, so that module was new on this
+  branch and had never executed: it runs the composed `lint` target with
+  `PATH=/usr/bin:/bin`, while `skill-manifest-check` needs `uv` from
+  `~/.local/bin`, so it could not have passed on any machine. Standing `uv`
+  down exposed a second layer — the stand-in must drain stdin, or
+  `skill-frontmatter-lint`'s feeding `awk` dies of SIGPIPE and the target fails
+  with 141.
+- [x] (2026-11-07) A gate run whose child outlives the tool's background
+  limit is not a failure. The first `make test` reported `SIGTERM [186.648s]`
+  and `59 tests were not run due to second signal`, with no `FAIL` line: the
+  wrapper's limit killed the harness, not a test. Re-running produced 2139/2146
+  passed with the same external-`SIGTERM` shape. Judge these runs by the
+  summary's pass/fail counts and the absence of `FAIL`, never by the process
+  exit status alone.
 
 ### The review round on `5767537108`
 
