@@ -7,7 +7,7 @@
 #![warn(function_attrs_follow_docs)]
 
 /// A struct with derive macros that may generate compiler-internal attributes.
-#[expect(dead_code, reason = "UI test fixture is not executed")]
+#[allow(dead_code, reason = "UI test fixture is not executed")]
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
 pub struct DerivedStruct {
     /// A field with documentation.
@@ -15,7 +15,7 @@ pub struct DerivedStruct {
 }
 
 /// An enum with derive macros.
-#[expect(dead_code, reason = "UI test fixture is not executed")]
+#[allow(dead_code, reason = "UI test fixture is not executed")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DerivedEnum {
     /// First variant.
@@ -24,5 +24,5 @@ pub enum DerivedEnum {
     Second,
 }
 
-#[expect(dead_code, reason = "UI test fixture is not executed")]
+#[allow(dead_code, reason = "UI test fixture is not executed")]
 fn main() {}

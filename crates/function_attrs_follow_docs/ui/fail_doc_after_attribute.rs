@@ -1,4 +1,4 @@
-//! Demonstrate the lint rejecting doc comments that follow outer attributes.
+// Plain comment, as the Welsh fixture `include!`s this file: the lint rejects doc comments after attributes.
 #![warn(function_attrs_follow_docs)]
 #![allow(dead_code)]
 
