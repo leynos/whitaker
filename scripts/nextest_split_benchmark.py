@@ -1,7 +1,7 @@
 """Prepare and summarize comparable Nextest runs for the issue-513 split.
 
 The benchmark compares two configurations that differ in exactly one thing:
-which capacity-one test group the seven trybuild compile contracts belong to.
+which capacity-one test group the six trybuild compile contracts belong to.
 The deliverable keeps the contracts in ``serial-trybuild-contracts``; the
 control rewrites only those ``test-group`` assignments back to
 ``serial-dylint-ui``. Both sides also need JUnit output, which Nextest
@@ -373,7 +373,7 @@ def membership_report(
         wants that equality checked.
     expected_counts
         Pins the size of a group, so a filter that silently stops selecting one
-        of the seven compile contracts cannot become evidence.
+        of the six compile contracts cannot become evidence.
     Returns
     -------
     dict
