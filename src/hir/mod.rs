@@ -46,10 +46,7 @@ pub fn module_header_span(item_span: Span, ident_span: Span) -> Span {
 
 /// Returns whether any HIR attribute resolves to a recognized test marker.
 #[must_use]
-pub fn has_test_like_hir_attributes(
-    attrs: &[HirAttribute],
-    additional: &[AttributePath],
-) -> bool {
+pub fn has_test_like_hir_attributes(attrs: &[HirAttribute], additional: &[AttributePath]) -> bool {
     attrs
         .iter()
         .filter_map(attribute_from_hir)

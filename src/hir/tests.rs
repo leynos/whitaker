@@ -15,13 +15,9 @@
 //! - `crates/no_expect_outside_tests/src/lib_ui_tests.rs` (`example_compiles_under_test_harness`)
 
 use rstest::{fixture, rstest};
-use rustc_data_structures::fingerprint::Fingerprint;
-use rustc_data_structures::stable_hash::{
-    RawDefId,
-    RawSpan,
-    StableHashControls,
-    StableHashCtxt,
-    StableHasher,
+use rustc_data_structures::{
+    fingerprint::Fingerprint,
+    stable_hash::{RawDefId, RawSpan, StableHashControls, StableHashCtxt, StableHasher},
 };
 use rustc_span::{
     BytePos,
