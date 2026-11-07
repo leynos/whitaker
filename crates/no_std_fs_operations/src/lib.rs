@@ -1,6 +1,7 @@
 //! Dylint crate implementing the `no_std_fs_operations` lint, which is only
 //! available when compiled with the `dylint-driver` feature enabled.
 #![cfg_attr(feature = "dylint-driver", feature(rustc_private))]
+#![cfg_attr(feature = "dylint-driver", feature(default_field_values))]
 
 #[cfg(all(feature = "dylint-driver", test))]
 mod behaviour;

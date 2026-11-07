@@ -3,4 +3,4 @@
 # rustflags here as it would break `cargo install` for whitaker-installer.
 
 [unstable]
-no-embed-metadata = true
+embed-metadata = false

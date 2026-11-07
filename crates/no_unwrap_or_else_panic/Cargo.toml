@@ -15,6 +15,7 @@ dylint-driver = [
     "dep:dylint_linting",
     "dep:log",
     "dep:rustc_ast",
+    "dep:rustc_attr_ir",
     "dep:rustc_hir",
     "dep:rustc_lint",
     "dep:rustc_middle",
@@ -34,6 +35,7 @@ rustc_lint = { workspace = true, optional = true }
 rustc_middle = { workspace = true, optional = true }
 rustc_span = { workspace = true, optional = true }
 rustc_ast = { workspace = true, optional = true }
+rustc_attr_ir = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
 whitaker = { workspace = true, features = ["dylint-driver"], optional = true }
 clippy_utils = { workspace = true, optional = true }

@@ -324,11 +324,11 @@ To debug, override the profile for one invocation rather than editing it. Pass
 in the environment. Never change the committed profile to get debug information
 back.
 
-The `[unstable] no-embed-metadata = true` key in `.cargo/config.toml` is a
+The `[unstable] embed-metadata = false` key in `.cargo/config.toml` is a
 nightly-only Cargo setting tied to the dated nightly pinned in
-`rust-toolchain.toml`. Whoever changes that pin to a nightly from 2026-07-31
-onward must replace the key with `embed-metadata = false`. Stable and beta
-toolchains ignore it.
+`rust-toolchain.toml`. Pins through 2026-07-18 need `no-embed-metadata = true`
+instead; whoever moves the pin across that boundary must swap the key. Stable
+and beta toolchains ignore it.
 
 ### Build standard
 
@@ -354,7 +354,7 @@ the Makefile needs `mold` on the `PATH` (for example
 `sudo apt-get install mold`, or your distribution's package) and a GCC driver
 of 12.1 or newer; with an older GCC, upgrade it or select clang as the linker
 driver with `CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER=clang`. The Dylint
-lint-library toolchain (`nightly-2026-05-28` today) is the pinned channel
+lint-library toolchain (`nightly-2026-10-30` today) is the pinned channel
 itself, so the application pin and the lint-library toolchain are one.
 
 #### Cranelift backend support
@@ -362,7 +362,7 @@ itself, so the application pin and the lint-library toolchain are one.
 Exception: Cranelift is not the development-profile backend. The Dylint lint
 crates and the root `whitaker` crate are coupled to one nightly's
 `rustc_private` APIs, and the suite has not been measured under the Cranelift
-backend. Recorded state: the pin is `nightly-2026-05-28`; no measurement has
+backend. Recorded state: the pin is `nightly-2026-10-30`; no measurement has
 been taken on it, and the review is deferred to 1 April 2027.
 
 ### Test profiles
@@ -2343,7 +2343,7 @@ parser APIs, snapshots, and proof tooling.
 The estate's `rust-toolchain-policy` rule (RT-023, RT-024, RT-025) expects a
 pinned nightly to be at most 56 days old and moved by Dependabot's
 `rust-toolchain` entry. Whitaker is the recorded exception: the pinned channel,
-`nightly-2026-05-28`, is coupled to the `ra_ap_syntax` parser snapshot and to
+`nightly-2026-10-30`, is coupled to the `ra_ap_syntax` parser snapshot and to
 the vendored `clippy_utils`, which track `rustc_private` APIs of one specific
 nightly. A bare date bump breaks both, so the pin moves only through the
 runbooks below, never through an automated bump or to satisfy the freshness
@@ -5012,7 +5012,7 @@ that agrees with them and with nothing else.
 
 ## Toolchain updates
 
-`rust-toolchain.toml` pins `nightly-2026-05-28`. Dependabot's `rust-toolchain`
+`rust-toolchain.toml` pins `nightly-2026-10-30`. Dependabot's `rust-toolchain`
 entry in `.github/dependabot.yml` (directory `/`, daily, the `rust-toolchain`
 label alone, one `minor-and-patch` catch-all group) opens a pull request when a
 newer toolchain exists. Review it like any other change: CI builds and tests
@@ -5023,7 +5023,7 @@ Dependabot's toolchain fetcher publishes no release date, so a cooldown would
 delay nothing.
 
 The whitaker pin is coupled to more than the toolchain file.
-`nightly-2026-05-28` goes with the `ra_ap_syntax` parser snapshot, the Dylint
+`nightly-2026-10-30` goes with the `ra_ap_syntax` parser snapshot, the Dylint
 and `clippy_utils` revisions, `installer/clippy-snapshot.toml` and the
 documents that name it. A bare Dependabot bump therefore will not build on its
 own: when the pull request appears, move those revisions and files in the same

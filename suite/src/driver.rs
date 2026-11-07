@@ -64,7 +64,7 @@ define_suite_pass!(
 /// ```
 pub fn register_suite_lints(store: &mut LintStore) {
     store.register_lints(SUITE_LINT_DECLS);
-    store.register_late_pass(|_| Box::new(SuitePass::new()));
+    store.register_late_lint_pass(Box::new(|_| Box::new(SuitePass::new())));
 }
 
 /// Returns the lint declarations bundled into the suite.

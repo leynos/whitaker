@@ -110,10 +110,10 @@ impl<'de> serde::Deserialize<'de> for TargetTriple {
     }
 }
 
-impl TryFrom<&str> for TargetTriple {
-    type Error = ArtefactError;
+impl std::str::FromStr for TargetTriple {
+    type Err = ArtefactError;
 
-    fn try_from(value: &str) -> Result<Self> {
+    fn from_str(value: &str) -> Result<Self> {
         if SUPPORTED_TARGETS.contains(&value) {
             Ok(Self(value.to_owned()))
         } else {
@@ -123,6 +123,12 @@ impl TryFrom<&str> for TargetTriple {
             })
         }
     }
+}
+
+impl TryFrom<&str> for TargetTriple {
+    type Error = ArtefactError;
+
+    fn try_from(value: &str) -> Result<Self> { value.parse() }
 }
 
 impl TryFrom<String> for TargetTriple {

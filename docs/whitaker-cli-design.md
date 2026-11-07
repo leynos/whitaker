@@ -527,7 +527,7 @@ smaller and more explicit contract:
 whitaker install
 whitaker install --build-from-source
 whitaker install --offline
-whitaker install --toolchain nightly-2026-05-28
+whitaker install --toolchain nightly-2026-10-30
 whitaker install --no-source-fallback
 ```
 
@@ -579,7 +579,7 @@ Each installed bundle should therefore carry a manifest:
   "whitaker_version": "0.3.0",
   "source_sha": "502edb6",
   "build_date": "2026-06-05T19:14:00Z",
-  "toolchain": "nightly-2026-05-28",
+  "toolchain": "nightly-2026-10-30",
   "target": "x86_64-unknown-linux-gnu",
   "origin": "prebuilt",
   "bundles": [
@@ -594,7 +594,7 @@ effective enablement:
 
 ```plaintext
 $ whitaker ls
-toolchain  nightly-2026-05-28
+toolchain  nightly-2026-10-30
 target     x86_64-unknown-linux-gnu
 version    0.3.0
 source     502edb6
@@ -663,7 +663,7 @@ and rotate the oldest entries first.
 ```plaintext
 error: failed to build Whitaker core lints from source
 phase: cargo build
-toolchain: nightly-2026-05-28
+toolchain: nightly-2026-10-30
 target: x86_64-unknown-linux-gnu
 source: 502edb6
 log: ~/.local/share/whitaker/state/failures/2026-06-12T14-22-03Z-build.log

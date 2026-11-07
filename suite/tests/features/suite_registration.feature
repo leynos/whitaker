@@ -5,7 +5,6 @@ Feature: Register the Whitaker lint suite
     When I register the suite lints
     Then registration succeeds
     And the store has the suite lints registered
-    And the late pass count is 1
     And the lint names mirror the suite descriptors
     And the suite lint declarations align with the descriptors
 

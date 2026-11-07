@@ -4,7 +4,7 @@
 //! resolved a commit-ish to a complete object ID. Callers retain the typed
 //! value through checkout and prebuilt provenance validation.
 
-use std::fmt;
+use std::{fmt, str::FromStr};
 
 use thiserror::Error;
 
@@ -28,7 +28,13 @@ impl CommitSha {
 impl TryFrom<&str> for CommitSha {
     type Error = CommitShaError;
 
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
+    fn try_from(value: &str) -> Result<Self, Self::Error> { value.parse() }
+}
+
+impl FromStr for CommitSha {
+    type Err = CommitShaError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
         if value.len() != 40 {
             return Err(CommitShaError {
                 reason: "SHA must contain exactly 40 characters",

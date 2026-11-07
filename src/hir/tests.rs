@@ -15,13 +15,9 @@
 //! - `crates/no_expect_outside_tests/src/lib_ui_tests.rs` (`example_compiles_under_test_harness`)
 
 use rstest::{fixture, rstest};
-use rustc_data_structures::stable_hash::{
-    RawDefId,
-    RawDefPathHash,
-    RawSpan,
-    StableHashControls,
-    StableHashCtxt,
-    StableHasher,
+use rustc_data_structures::{
+    fingerprint::Fingerprint,
+    stable_hash::{RawDefId, RawSpan, StableHashControls, StableHashCtxt, StableHasher},
 };
 use rustc_span::{
     BytePos,
@@ -44,7 +40,7 @@ struct TestHashStableContext;
 impl StableHashCtxt for TestHashStableContext {
     fn stable_hash_span(&mut self, _span: RawSpan, _hasher: &mut StableHasher) {}
 
-    fn def_path_hash(&self, _def_id: RawDefId) -> RawDefPathHash { RawDefPathHash([0; 16]) }
+    fn def_path_hash(&self, _def_id: RawDefId) -> Fingerprint { Fingerprint::ZERO }
 
     fn stable_hash_controls(&self) -> StableHashControls {
         StableHashControls { hash_spans: false }

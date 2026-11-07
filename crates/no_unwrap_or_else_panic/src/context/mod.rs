@@ -17,13 +17,15 @@ pub(crate) struct ContextSummary {
 #[cfg(feature = "dylint-driver")]
 use rustc_ast::ast::{MetaItem, MetaItemInner};
 #[cfg(feature = "dylint-driver")]
+use rustc_ast::attr::AttributeExt;
+#[cfg(feature = "dylint-driver")]
 use rustc_ast::{AttrStyle, Path as AstPath};
+#[cfg(feature = "dylint-driver")]
+use rustc_attr_ir::{Attribute as HirAttribute, AttributeKind as HirAttributeKind};
 #[cfg(feature = "dylint-driver")]
 use rustc_hir as hir;
 #[cfg(feature = "dylint-driver")]
 use rustc_hir::Node;
-#[cfg(feature = "dylint-driver")]
-use rustc_hir::attrs::AttributeKind as HirAttributeKind;
 #[cfg(feature = "dylint-driver")]
 use rustc_lint::LateContext;
 #[cfg(feature = "dylint-driver")]
@@ -60,7 +62,7 @@ pub(crate) fn summarize_context(cx: &LateContext<'_>, hir_id: hir::HirId) -> Con
 
 #[cfg(feature = "dylint-driver")]
 /// Convert a HIR node with its attributes into a context stack entry.
-fn context_entry_for(node: Node<'_>, attrs: &[hir::Attribute]) -> Option<ContextEntry> {
+fn context_entry_for(node: Node<'_>, attrs: &[HirAttribute]) -> Option<ContextEntry> {
     match node {
         Node::Item(item) => match &item.kind {
             hir::ItemKind::Fn { .. } => {
@@ -100,13 +102,22 @@ fn context_entry_for(node: Node<'_>, attrs: &[hir::Attribute]) -> Option<Context
 }
 
 #[cfg(feature = "dylint-driver")]
-fn convert_attributes(attrs: &[hir::Attribute]) -> Vec<Attribute> {
-    attrs.iter().map(convert_attribute).collect()
+fn convert_attributes(attrs: &[HirAttribute]) -> Vec<Attribute> {
+    attrs
+        .iter()
+        .flat_map(|attr| match attr {
+            // rustc folds lint-level attributes into one parsed attribute.
+            HirAttribute::Parsed(HirAttributeKind::LintCheck(_)) => {
+                whitaker::hir::attributes_from_hir(attr)
+            }
+            _ => vec![convert_attribute(attr)],
+        })
+        .collect()
 }
 
 #[cfg(feature = "dylint-driver")]
 /// Convert a rustc attribute into the shared attribute representation.
-fn convert_attribute(attr: &hir::Attribute) -> Attribute {
+fn convert_attribute(attr: &HirAttribute) -> Attribute {
     let kind = match attribute_style(attr) {
         AttrStyle::Inner => AttributeKind::Inner,
         AttrStyle::Outer => AttributeKind::Outer,
@@ -116,7 +127,7 @@ fn convert_attribute(attr: &hir::Attribute) -> Attribute {
     } else {
         // Parsed attributes (like #[must_use]) don't have an accessible path;
         // calling path() on them would panic.
-        let hir::Attribute::Unparsed(_) = attr else {
+        let (HirAttribute::Tool(_) | HirAttribute::DeriveHelper(_)) = attr else {
             return Attribute::new(AttributePath::from(PARSED_ATTRIBUTE_PLACEHOLDER), kind);
         };
         let mut names = attr.path().into_iter().map(|symbol| symbol.to_string());
@@ -131,11 +142,11 @@ fn convert_attribute(attr: &hir::Attribute) -> Attribute {
 
 #[cfg(feature = "dylint-driver")]
 /// Return the shared outer or inner style of a rustc attribute.
-fn attribute_style(attr: &hir::Attribute) -> AttrStyle {
+fn attribute_style(attr: &HirAttribute) -> AttrStyle {
     match attr {
-        hir::Attribute::Unparsed(item) => item.style,
-        hir::Attribute::Parsed(HirAttributeKind::DocComment { style, .. }) => *style,
-        hir::Attribute::Parsed(_) => AttrStyle::Outer,
+        HirAttribute::Tool(item) | HirAttribute::DeriveHelper(item) => item.style,
+        HirAttribute::Parsed(HirAttributeKind::DocComment { style, .. }) => *style,
+        HirAttribute::Parsed(_) => AttrStyle::Outer,
     }
 }
 
@@ -147,10 +158,10 @@ fn item_name(item: &hir::Item<'_>) -> Option<String> {
 #[cfg(feature = "dylint-driver")]
 /// Returns `true` when the attribute is `#[cfg(test)]` or a `cfg_attr(test, cfg(test))`
 /// wrapper, ensuring test-only scopes are treated as exempt.
-fn is_cfg_test_attribute(attr: &hir::Attribute) -> bool {
+fn is_cfg_test_attribute(attr: &HirAttribute) -> bool {
     // Parsed attributes (like #[must_use]) are not cfg-related; skip them to
     // avoid panics when calling path() on arbitrary parsed attributes.
-    let hir::Attribute::Unparsed(_) = attr else {
+    let (HirAttribute::Tool(_) | HirAttribute::DeriveHelper(_)) = attr else {
         return false;
     };
 
