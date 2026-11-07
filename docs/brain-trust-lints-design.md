@@ -526,9 +526,14 @@ further decomposition analysis was omitted.
   `scripts/install-kani.sh` pins Kani 0.67.0 and downloads the pre-built
   tarball into `${XDG_CACHE_HOME:-$HOME/.cache}/whitaker/kani`.
   `scripts/run-kani.sh` invokes the pinned `cargo-kani` binary against the
-  `common` crate, running all harnesses by default; passing a harness name as
-  an argument filters to that specific harness. `make kani` exposes the
-  workflow as a top-level quality gate.
+  `common` crate; passing a harness name as an argument filters to that
+  specific harness. The default decomposition run attempts only
+  `verify_propagate_labels_zero_iterations_keeps_initial_labels`, because the
+  other three propagation harnesses exhaust CBMC's budget without discharging
+  their assertions (see 6.4.6). The run prints an `INCONCLUSIVE` line for each
+  omitted harness and a "proved 1 of 4" summary, so a green `make kani` does
+  not read as full propagation coverage. `make kani` exposes the workflow as a
+  top-level quality gate.
 - **Generated graph tests cover adjacency invariants**: the Proptest calls the
   production `build_adjacency` function and checks row count, sorted rows,
   exact directed edge tuples, symmetry, bounds, edge preservation, and the
@@ -606,6 +611,16 @@ further decomposition analysis was omitted.
   assertions. Roadmap item 6.4.6 is complete modulo this documented CBMC
   state-explosion blocker; follow-up work can simplify the proof model or make
   the runtime path more Kani-friendly without changing behaviour.
+- **The propagation blocker is per harness, so splitting the group cannot fix
+  it**: measured on 2026-11-05 against a warm cache, the three harnesses that
+  enter the propagation loop each timed out at a 300 s cap, peaking at 3.7-4.0
+  GiB, while `verify_propagate_labels_zero_iterations_keeps_initial_labels` —
+  the one that returns before the loop — proved in 43 s at 1.5 GiB. The longest
+  single harness consumed 578 s of a 600 s cap and was still climbing in
+  memory, so neither a larger time budget nor a per-harness scope produces a
+  verdict. Consequently `make kani` runs only the provable harness by default
+  and the three intractable ones stay addressable by name, so a timeout is
+  never reported as a pass.
 - **`propagate_labels` wrapper removed**: the thin `propagate_labels`
   convenience wrapper introduced in this iteration was subsequently removed
   after zero genuine callers were identified. All production code

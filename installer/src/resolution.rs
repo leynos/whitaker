@@ -24,6 +24,7 @@ pub const LINT_CRATES: &[&str] = &[
     "test_must_not_have_example",
     "no_std_fs_operations",
     "no_unwrap_or_else_panic",
+    "string_continuation_style",
 ];
 
 /// Static list of experimental lint crates.

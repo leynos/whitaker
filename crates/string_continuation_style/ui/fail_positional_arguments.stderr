@@ -1,0 +1,27 @@
+warning: Join the physical lines in this cooked string with `concat!()`.
+  --> $DIR/fail_positional_arguments.rs:15:27
+   |
+LL |        let message = format!("alpha /
+   |   ___________________________^      -
+   |  |__________________________________|
+LL | ||         beta {}", body);
+   | ||_-______________^ help: replace with a `concat!()` expression: `concat!("alpha ", "beta {}")`
+   | |__|
+   |    source-line join
+   |
+note: The escaped newline removes the physical line break and following indentation, hiding the fragment boundary inside one literal.
+  --> $DIR/fail_positional_arguments.rs:15:27
+   |
+LL |       let message = format!("alpha /
+   |  ___________________________^
+LL | |         beta {}", body);
+   | |________________^
+   = help: Split the cooked string into `concat!()` arguments at each source-line join.
+note: the lint level is defined here
+  --> $DIR/fail_positional_arguments.rs:2:9
+   |
+LL | #![warn(string_continuation_style)]
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: 1 warning emitted
+

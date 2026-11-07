@@ -161,7 +161,7 @@ fn execute_build_command(
     Ok(output)
 }
 
-fn package_for_crate<'a>(
+pub(super) fn package_for_crate<'a>(
     metadata: &'a Metadata,
     crate_name: &CrateName,
 ) -> Result<&'a cargo_metadata::Package, HarnessError> {
@@ -224,7 +224,7 @@ fn extract_cdylib_path(
         .map(|path| path.clone().into_std_path_buf())
 }
 
-fn fetch_metadata() -> Result<Metadata, HarnessError> {
+pub(super) fn fetch_metadata() -> Result<Metadata, HarnessError> {
     MetadataCommand::new()
         .no_deps()
         .exec()

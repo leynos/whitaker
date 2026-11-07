@@ -1,0 +1,27 @@
+warning: Cuir na loidhnichean corporra san t-sreang bruich seo ri chèile le `concat!()`.
+  --> $DIR/fail_plain_join.rs:9:21
+   |
+LL |    const VALUE: &str = "alpha /
+   |   _____________________^      -
+   |  |____________________________|
+LL | ||     beta";
+   | ||_-_______^ help: cuir abairt `concat!()` na àite: `concat!("alpha ", "beta")`
+   | |__|
+   |    aonadh loidhne thùsail
+   |
+note: Bheir an loidhne ùr theichte air falbh a' bhriseadh loidhne corporra agus an t-indent às a dèidh, a' falach na crìche eadar na pìosan ann an aon litireil.
+  --> $DIR/fail_plain_join.rs:9:21
+   |
+LL |   const VALUE: &str = "alpha /
+   |  _____________________^
+LL | |     beta";
+   | |_________^
+   = help: Sgar an t-sreang bruich ann an argamaidean `concat!()` aig gach aonadh loidhne thùsail.
+note: the lint level is defined here
+  --> $DIR/fail_plain_join.rs:1:9
+   |
+LL | #![warn(string_continuation_style)]
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: 1 warning emitted
+
