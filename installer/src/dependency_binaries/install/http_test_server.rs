@@ -208,5 +208,5 @@ fn serve_connection(
         .and_then(|()| stream.write_all(body))
         .and_then(|()| stream.flush());
     // The client may disconnect early; there is nothing further to serve.
-    let _ = write_result;
+    drop(write_result);
 }

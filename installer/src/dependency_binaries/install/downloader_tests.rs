@@ -1,6 +1,6 @@
 //! Tests for downloader error mapping and archive checksum verification.
 
-use std::io::Write;
+use std::io::{Read, Write};
 
 use sha2::{Digest, Sha256};
 use tempfile::TempDir;
@@ -36,6 +36,119 @@ fn open_destination_dir_rejects_a_path_without_a_file_name() {
     );
 }
 
+/// Check that reopening an archive for verification leaves it in place.
+///
+/// `open_archive` is the read side of the cleanup contract: only the explicit
+/// `remove_partial_archive` calls delete the file, so a successful verification
+/// must leave the archive for extraction to consume.
+#[test]
+fn open_archive_reads_the_archive_without_removing_it() {
+    let temp = TempDir::new().expect("create temp dir");
+    let temp_path = Utf8Path::from_path(temp.path()).expect("temp path is UTF-8");
+    let dir = Dir::open_ambient_dir(temp_path, ambient_authority()).expect("open capability");
+    let mut file = dir.create("archive.tgz").expect("create archive");
+    file.write_all(b"archive payload").expect("write archive");
+    drop(file);
+
+    let destination = DownloadDestination {
+        path: temp_path.join("archive.tgz"),
+        dir,
+        archive_name: "archive.tgz".to_owned(),
+    };
+
+    let mut archive = destination.open_archive().expect("open archive");
+    let mut contents = Vec::new();
+    archive.read_to_end(&mut contents).expect("read archive");
+    assert_eq!(contents, b"archive payload");
+    drop(archive);
+
+    // Re-open the directory independently of the handle under test, so the
+    // assertion observes the filesystem rather than the capability's view.
+    let destination_dir =
+        Dir::open_ambient_dir(temp_path, ambient_authority()).expect("reopen capability");
+    assert!(
+        destination_dir.exists("archive.tgz"),
+        "reading the archive must not remove it",
+    );
+}
+
+/// Check that a failed verification removes the archive it could not verify.
+///
+/// A reopen failure and a checksum mismatch both reach this command, so the
+/// cleanup it performs is what keeps a retry from observing an unverified
+/// archive.
+#[test]
+fn verification_cleanup_removes_the_archive_it_could_not_verify() {
+    let temp = TempDir::new().expect("create temp dir");
+    let temp_path = Utf8Path::from_path(temp.path()).expect("temp path is UTF-8");
+    let dir = Dir::open_ambient_dir(temp_path, ambient_authority()).expect("open capability");
+    dir.create("archive.tgz").expect("create archive");
+
+    let destination = DownloadDestination {
+        path: temp_path.join("archive.tgz"),
+        dir,
+        archive_name: "archive.tgz".to_owned(),
+    };
+    let reopen_failure = DependencyBinaryInstallError::Io(io::Error::new(
+        io::ErrorKind::NotFound,
+        "archive disappeared before verification",
+    ));
+
+    let error = report_verification_discarding_failure(
+        "https://example.test/a.tgz",
+        &destination,
+        Err(reopen_failure),
+    )
+    .expect_err("a failed verification must be reported");
+
+    assert!(
+        matches!(error, DependencyBinaryInstallError::Io(_)),
+        "the original failure must be propagated, got: {error:?}",
+    );
+    let destination_dir =
+        Dir::open_ambient_dir(temp_path, ambient_authority()).expect("reopen capability");
+    assert!(
+        !destination_dir.exists("archive.tgz"),
+        "a failed verification must remove the archive",
+    );
+}
+
+/// Check that the verification command removes an archive it cannot reopen.
+///
+/// The read helper is deliberately read-only, so its failure has to be cleaned
+/// up by the command that owns the discarding. A dangling symbolic link stands
+/// in for an archive whose bytes cannot be read back: the directory entry
+/// exists, but opening it fails.
+#[cfg(unix)]
+#[test]
+fn verify_downloaded_archive_removes_an_archive_it_cannot_reopen() {
+    let temp = TempDir::new().expect("create temp dir");
+    let temp_path = Utf8Path::from_path(temp.path()).expect("temp path is UTF-8");
+    let archive_path = temp.path().join("archive.tgz");
+    std::os::unix::fs::symlink("missing-target", &archive_path).expect("create dangling link");
+    let dir = Dir::open_ambient_dir(temp_path, ambient_authority()).expect("open capability");
+
+    let destination = DownloadDestination {
+        path: Utf8Path::from_path(&archive_path)
+            .expect("archive path is UTF-8")
+            .to_owned(),
+        dir,
+        archive_name: "archive.tgz".to_owned(),
+    };
+
+    verify_downloaded_archive_discarding_failure(
+        "https://example.test/a.tgz",
+        &destination,
+        "unused-checksum",
+    )
+    .expect_err("an archive that cannot be reopened must fail verification");
+
+    assert!(
+        std::fs::symlink_metadata(&archive_path).is_err(),
+        "the command must remove an archive it cannot reopen",
+    );
+}
+
 /// Removes a probe file from a capability-scoped directory when dropped, so
 /// a leaked artefact is cleaned up even if an assertion panics first.
 struct ProbeCleanup {
@@ -47,7 +160,7 @@ impl Drop for ProbeCleanup {
     fn drop(&mut self) {
         // A correct run never writes the probe into this directory, so a
         // missing file is the expected case.
-        let _ = self.dir.remove_file(&self.name);
+        drop(self.dir.remove_file(&self.name));
     }
 }
 

@@ -32,8 +32,6 @@ impl CrateName {
     fn new_unchecked(name: String) -> Self { Self(name) }
 
     pub const fn as_str(&self) -> &str { self.0.as_str() }
-
-    pub fn into_inner(self) -> String { self.0 }
 }
 
 impl TryFrom<&str> for CrateName {

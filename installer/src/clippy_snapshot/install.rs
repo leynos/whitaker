@@ -52,8 +52,8 @@ impl BundleArtefact {
         }
         // Git later runs from other directories, so a caller's relative path
         // must be fixed against the caller's directory now.
-        let bundle = absolute(bundle)?;
-        let sidecar = Utf8PathBuf::from(format!("{bundle}.sha256"));
+        let resolved_bundle = absolute(bundle)?;
+        let sidecar = Utf8PathBuf::from(format!("{resolved_bundle}.sha256"));
         let sidecar_error = |reason: String| ClippySnapshotError::Sidecar {
             path: sidecar.to_string(),
             reason,
@@ -66,7 +66,10 @@ impl BundleArtefact {
             .ok_or_else(|| sidecar_error("it is empty".to_owned()))?;
         let sha256 =
             Sha256Digest::try_from(token).map_err(|error| sidecar_error(error.to_string()))?;
-        Ok(Self { bundle, sha256 })
+        Ok(Self {
+            bundle: resolved_bundle,
+            sha256,
+        })
     }
 }
 
@@ -91,16 +94,16 @@ pub fn install_bundle(
     let bundle = absolute(&artefact.bundle)?;
     verify_bundle_heads(&bundle, manifest)?;
     std::fs::create_dir_all(root).map_err(|error| ClippySnapshotError::io(root, &error))?;
-    let root = absolute(root)?;
-    let _lock = lock_root(&root)?;
-    let generation = root.join(manifest.commit.as_str());
+    let resolved_root = absolute(root)?;
+    let _lock = lock_root(&resolved_root)?;
+    let generation = resolved_root.join(manifest.commit.as_str());
     if is_present(&generation)? {
         return reuse_generation(&generation, manifest);
     }
     let staging = tempfile::Builder::new()
         .prefix(".incoming-")
-        .tempdir_in(&root)
-        .map_err(|error| ClippySnapshotError::io(&root, &error))?;
+        .tempdir_in(&resolved_root)
+        .map_err(|error| ClippySnapshotError::io(&resolved_root, &error))?;
     let staged = utf8(staging.path())?.join("snapshot.git");
     clone_bundle(&bundle, &staged)?;
     verify_repository(&staged, manifest)?;
@@ -152,15 +155,15 @@ fn verify_bundle_heads(
 ) -> Result<(), ClippySnapshotError> {
     let git = SnapshotGit::local();
     let scratch = tempfile::tempdir().map_err(|error| ClippySnapshotError::io(bundle, &error))?;
-    let scratch = utf8(scratch.path())?.to_owned();
+    let scratch_dir = utf8(scratch.path())?.to_owned();
     git.stdout(
         "init",
         None,
-        &["init", "--quiet", "--bare", scratch.as_str()],
+        &["init", "--quiet", "--bare", scratch_dir.as_str()],
     )?;
     let verify = git.output(
         "bundle verify",
-        Some(&scratch),
+        Some(&scratch_dir),
         &["bundle", "verify", bundle.as_str()],
     )?;
     if !verify.status.success() {
@@ -172,7 +175,7 @@ fn verify_bundle_heads(
     }
     let heads = git.stdout(
         "bundle list-heads",
-        Some(&scratch),
+        Some(&scratch_dir),
         &["bundle", "list-heads", bundle.as_str()],
     )?;
     let commit = manifest.commit.as_str();

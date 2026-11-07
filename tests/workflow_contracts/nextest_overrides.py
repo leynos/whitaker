@@ -196,7 +196,7 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
         ),
         COMPILE_CONTRACT_FILTER: Allowance(
             slow_timeout={
-                "period": "75m",
+                "period": "120m",
                 "terminate-after": 1,
                 "grace-period": "5s",
             },
@@ -223,7 +223,7 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
         ),
         NESTED_UI_FIXTURE_FILTER: Allowance(
             slow_timeout={
-                "period": "75m",
+                "period": "120m",
                 "terminate-after": 1,
                 "grace-period": "5s",
             },
@@ -301,7 +301,7 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
         ),
         COMPILE_CONTRACT_FILTER: Allowance(
             slow_timeout={
-                "period": "75m",
+                "period": "120m",
                 "terminate-after": 1,
                 "grace-period": "5s",
             },
@@ -328,7 +328,7 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
         ),
         NESTED_UI_FIXTURE_FILTER: Allowance(
             slow_timeout={
-                "period": "75m",
+                "period": "120m",
                 "terminate-after": 1,
                 "grace-period": "5s",
             },

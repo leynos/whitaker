@@ -62,7 +62,7 @@ pub struct MultiformatMessageString {
 
 #[cfg(test)]
 mod tests {
-    //! Test ReportingDescriptor round trips and field serialization with the
+    //! Test `ReportingDescriptor` round trips and field serialization with the
     //! shared JSON assertion helpers.
 
     use super::*;

@@ -11,8 +11,15 @@ use crate::{artefact::error::ArtefactError, binstall_metadata};
 // Shared fixtures
 // ---------------------------------------------------------------------------
 
-/// Reports whether `name` has the required case-sensitive `.tgz` suffix.
-fn has_tgz_suffix(name: &str) -> bool { name.ends_with(".tgz") }
+/// Reports whether `name` has the required `.tgz` archive suffix.
+///
+/// Extensions are compared case-insensitively so a differently cased suffix
+/// is still recognized as the same archive format.
+fn has_tgz_suffix(name: &str) -> bool {
+    std::path::Path::new(name)
+        .extension()
+        .is_some_and(|extension| extension.eq_ignore_ascii_case(std::ffi::OsStr::new("tgz")))
+}
 
 /// A temporary directory with a fake binary suitable for packaging.
 struct PackagingFixture {

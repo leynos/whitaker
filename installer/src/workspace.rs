@@ -130,7 +130,7 @@ impl WorkspacePlan {
     /// assert!(plan.suite_ref.is_none());
     /// ```
     #[must_use]
-    pub fn updating(should_update: bool) -> Self {
+    pub const fn updating(should_update: bool) -> Self {
         Self {
             should_update,
             suite_ref: None,

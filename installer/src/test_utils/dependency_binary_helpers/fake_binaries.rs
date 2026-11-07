@@ -68,12 +68,12 @@ pub fn write_fake_binary_with_status(
 }
 
 fn fixture_parent(path: &Path) -> io::Result<(Dir, &str)> {
-    let path = Utf8Path::from_path(path)
+    let utf8_path = Utf8Path::from_path(path)
         .ok_or_else(|| io::Error::other("fake binary path must be valid UTF-8"))?;
-    let parent = path
+    let parent = utf8_path
         .parent()
         .ok_or_else(|| io::Error::other("fake binary path must have a parent directory"))?;
-    let name = path
+    let name = utf8_path
         .file_name()
         .ok_or_else(|| io::Error::other("fake binary path must have a file name"))?;
     let directory = Dir::open_ambient_dir(parent, ambient_authority())?;
@@ -111,13 +111,28 @@ pub fn with_fake_path<T>(
 /// Runs a closure with `PATH` containing a fake executable in the first entry.
 pub fn with_fake_binary_on_path<T>(binary_name: &str, run: impl FnOnce() -> T) -> io::Result<T> {
     with_fake_path(
-        |directories| write_fake_binary(&path_binary_location(&directories[0], binary_name), true),
+        |directories| write_fake_binary_in_first_directory(directories, binary_name),
         run,
     )
 }
 
+/// Write an executable fake into the leading entry of a fake `PATH`.
+///
+/// The leading entry is where the process looks first, so a fake placed there
+/// shadows any real binary of the same name.
+fn write_fake_binary_in_first_directory(
+    directories: &[PathBuf],
+    binary_name: &str,
+) -> io::Result<()> {
+    let first = directories
+        .first()
+        .ok_or_else(|| io::Error::other("fake PATH must contain at least one directory"))?;
+    write_fake_binary(&path_binary_location(first, binary_name), true)
+}
+
 /// Joins `binary_name` onto `directory` with the platform executable suffix,
 /// so directly probed fakes are runnable on Windows as well as Unix.
+#[must_use]
 pub fn path_binary_location(directory: &Path, binary_name: &str) -> PathBuf {
     #[cfg(windows)]
     {

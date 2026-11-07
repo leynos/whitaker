@@ -307,7 +307,7 @@ where
 }
 
 /// Update parenthesis depth and identify top-level commas.
-fn is_top_level_meta_separator(ch: char, depth: &mut usize) -> bool {
+const fn is_top_level_meta_separator(ch: char, depth: &mut usize) -> bool {
     match ch {
         '(' => *depth += 1,
         ')' => *depth = depth.saturating_sub(1),

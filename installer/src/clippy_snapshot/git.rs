@@ -129,8 +129,8 @@ impl<'env> SnapshotGit<'env> {
         args: &[&str],
     ) -> Result<Output, ClippySnapshotError> {
         let envs: Vec<(&str, &str)> = ENVIRONMENT.iter().chain(self.envs).copied().collect();
-        let full_args = self.full_args(args);
-        let full_args: Vec<&str> = full_args.iter().map(String::as_str).collect();
+        let owned_args = self.full_args(args);
+        let full_args: Vec<&str> = owned_args.iter().map(String::as_str).collect();
         let invocation = GitInvocation {
             args: &full_args,
             working_dir: dir,

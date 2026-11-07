@@ -26,41 +26,54 @@ struct Cli {
 
 impl Cli {
     /// Build the fixture and a scratch directory.
-    fn new() -> Self {
-        let fixture = SnapshotFixture::new().expect("build the snapshot fixture");
-        let scratch_dir = TempDir::new().expect("create scratch dir");
-        let scratch =
-            Utf8PathBuf::from_path_buf(scratch_dir.path().to_path_buf()).expect("UTF-8 scratch");
-        Self {
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the fixture or scratch directory cannot be created.
+    fn new() -> Result<Self, Box<dyn std::error::Error>> {
+        let fixture = SnapshotFixture::new()?;
+        let scratch_dir = TempDir::new()?;
+        let scratch = Utf8PathBuf::from_path_buf(scratch_dir.path().to_path_buf())
+            .map_err(|path| format!("scratch directory is not UTF-8: {}", path.display()))?;
+        Ok(Self {
             fixture,
             _scratch: scratch_dir,
             scratch,
-        }
+        })
     }
 
     /// Run the binary with `args`, pinned to the fixture's manifest.
-    fn run(&self, args: &[&str]) -> Output {
-        Command::new(env!("CARGO_BIN_EXE_whitaker-clippy-snapshot"))
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the binary cannot be launched or awaited.
+    fn run(&self, args: &[&str]) -> Result<Output, Box<dyn std::error::Error>> {
+        Ok(Command::new(env!("CARGO_BIN_EXE_whitaker-clippy-snapshot"))
             .args(args)
             .env(
                 TEST_CLIPPY_SNAPSHOT_MANIFEST_ENV,
                 self.fixture.manifest_path(),
             )
-            .output()
-            .expect("run whitaker-clippy-snapshot")
+            .output()?)
     }
 
     /// Install the fixture bundle under `root`, returning the printed path.
-    fn install(&self, root: &Utf8Path) -> Utf8PathBuf {
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the binary cannot be run or reports failure.
+    fn install(&self, root: &Utf8Path) -> Result<Utf8PathBuf, Box<dyn std::error::Error>> {
         let output = self.run(&[
             "install",
             "--root",
             root.as_str(),
             "--bundle",
             self.fixture.bundle().as_str(),
-        ]);
-        assert!(output.status.success(), "{}", stderr(&output));
-        Utf8PathBuf::from(stdout(&output).trim())
+        ])?;
+        if !output.status.success() {
+            return Err(stderr(&output).into());
+        }
+        Ok(Utf8PathBuf::from(stdout(&output).trim()))
     }
 }
 
@@ -87,81 +100,188 @@ fn assert_fails_with(output: &Output, expected: &str) {
 
 /// Check that `path` prints the generation and creates nothing.
 #[test]
-fn path_prints_the_generation_without_installing_it() {
-    let cli = Cli::new();
+fn path_prints_the_generation_without_installing_it() -> Result<(), Box<dyn std::error::Error>> {
+    let cli = Cli::new()?;
     let root = cli.scratch.join("clippy");
 
-    let output = cli.run(&["path", "--root", root.as_str()]);
+    let output = cli.run(&["path", "--root", root.as_str()])?;
 
-    assert!(output.status.success(), "{}", stderr(&output));
+    assert_path_generation(&output, &root, cli.fixture.commit());
+    Ok(())
+}
+
+/// Check `path` printed the generation without creating it.
+fn assert_path_generation(output: &Output, root: &Utf8Path, commit: &str) {
+    assert!(output.status.success(), "{}", stderr(output));
     assert_eq!(
-        stdout(&output).trim(),
-        root.join(cli.fixture.commit()).as_str()
+        stdout(output).trim(),
+        root.join(commit).as_str(),
+        "`path` should print the generation it would install"
     );
     assert!(!root.exists(), "`path` is a query and creates nothing");
 }
 
 /// Check that `install` persists a verified generation and prints its path.
 #[test]
-fn install_persists_a_verified_generation_and_prints_its_path() {
-    let cli = Cli::new();
+fn install_persists_a_verified_generation_and_prints_its_path()
+-> Result<(), Box<dyn std::error::Error>> {
+    let cli = Cli::new()?;
     let root = cli.scratch.join("clippy");
 
-    let generation = cli.install(&root);
+    let generation = cli.install(&root)?;
 
+    let metadata = std::fs::read_to_string(generation.join(METADATA_FILE))?;
+    let head = fixture_git(&generation, &["rev-parse", "refs/heads/main"])?;
+    assert_generation_path(&generation, &root, cli.fixture.commit());
+    assert_generation_metadata(&metadata, &head, cli.fixture.commit());
+    Ok(())
+}
+
+/// Check `install` persisted the generation at the printed path.
+fn assert_generation_path(generation: &Utf8Path, root: &Utf8Path, commit: &str) {
     assert!(generation.is_absolute(), "{generation}");
-    assert_eq!(generation, root.join(cli.fixture.commit()));
-    let metadata =
-        std::fs::read_to_string(generation.join(METADATA_FILE)).expect("read generation metadata");
-    assert!(metadata.contains(cli.fixture.commit()), "{metadata}");
-    let head = fixture_git(&generation, &["rev-parse", "refs/heads/main"]).expect("read main");
-    assert_eq!(head.trim(), cli.fixture.commit());
+    assert_eq!(
+        generation,
+        root.join(commit),
+        "the generation should live under the requested root"
+    );
+}
+
+/// Check the persisted generation records the fixture commit.
+fn assert_generation_metadata(metadata: &str, head: &str, commit: &str) {
+    assert!(
+        metadata.contains(commit),
+        "the metadata should record {commit}: {metadata}"
+    );
+    assert_eq!(
+        head.trim(),
+        commit,
+        "the persisted repository should be at the fixture commit"
+    );
 }
 
 /// Check that installing twice reuses the first generation.
 #[test]
-fn a_second_install_reuses_the_generation() {
-    let cli = Cli::new();
+fn a_second_install_reuses_the_generation() -> Result<(), Box<dyn std::error::Error>> {
+    let cli = Cli::new()?;
     let root = cli.scratch.join("clippy");
-    let first = cli.install(&root);
+    let first = cli.install(&root)?;
 
-    let second = cli.install(&root);
+    let second = cli.install(&root)?;
 
-    assert_eq!(first, second);
+    assert_same_generation(&first, &second);
+    Ok(())
+}
+
+/// Check both installs printed the same generation.
+fn assert_same_generation(first: &Utf8Path, second: &Utf8Path) {
+    assert_eq!(
+        first, second,
+        "a second install should reuse the first generation"
+    );
 }
 
 /// Check that `verify` accepts an installed generation without output.
 #[test]
-fn verify_accepts_an_installed_generation_silently() {
-    let cli = Cli::new();
-    let generation = cli.install(&cli.scratch.join("clippy"));
+fn verify_accepts_an_installed_generation_silently() -> Result<(), Box<dyn std::error::Error>> {
+    let cli = Cli::new()?;
+    let generation = cli.install(&cli.scratch.join("clippy"))?;
 
-    let output = cli.run(&["verify", "--repo", generation.as_str()]);
+    let output = cli.run(&["verify", "--repo", generation.as_str()])?;
 
-    assert!(output.status.success(), "{}", stderr(&output));
-    assert!(stdout(&output).is_empty() && stderr(&output).is_empty());
+    assert_silent_success(&output);
+    Ok(())
+}
+
+/// Check a run succeeded and printed nothing.
+fn assert_silent_success(output: &Output) {
+    assert!(output.status.success(), "{}", stderr(output));
+    assert!(
+        stdout(output).is_empty() && stderr(output).is_empty(),
+        "a successful `verify` should print nothing"
+    );
+}
+
+/// Check no generation was installed under `root`.
+fn assert_nothing_installed(root: &Utf8Path, commit: &str) {
+    assert!(
+        !root.join(commit).exists(),
+        "nothing should be installed under {root}"
+    );
+}
+
+/// Check `build` printed a bundle inside `output_dir` with a sidecar.
+fn assert_built_bundle(output: &Output, output_dir: &Utf8Path) -> Utf8PathBuf {
+    assert!(output.status.success(), "{}", stderr(output));
+    let bundle = Utf8PathBuf::from(stdout(output).trim());
+    assert!(
+        bundle.starts_with(output_dir),
+        "the bundle should live under {output_dir}: {bundle}"
+    );
+    assert!(
+        Utf8PathBuf::from(format!("{bundle}.sha256")).is_file(),
+        "the sidecar should exist for {bundle}"
+    );
+    bundle
+}
+
+/// Check a command succeeded without constraining its output.
+fn assert_succeeded(output: &Output) {
+    assert!(output.status.success(), "{}", stderr(output));
+}
+
+/// Check an unknown subcommand is reported as a usage error.
+fn assert_usage_error(output: &Output) {
+    assert_eq!(output.status.code(), Some(2), "{}", stderr(output));
+    assert!(
+        stderr(output).contains("Usage:"),
+        "the usage text is missing from: {}",
+        stderr(output)
+    );
+}
+
+/// Check `path` resolved a relative root beneath the working directory.
+fn assert_relative_root_path(output: &Output, scratch: &Utf8Path, commit: &str) {
+    assert_succeeded(output);
+    let printed = Utf8PathBuf::from(stdout(output).trim());
+    assert!(printed.is_absolute(), "{printed}");
+    assert_eq!(
+        printed,
+        scratch.join("clippy").join(commit),
+        "the relative root should resolve under the working directory"
+    );
+}
+
+/// Check the fixture neither used nor created the decoy `GIT_DIR`.
+fn assert_fixture_ignores_decoy(fixture: &SnapshotFixture, decoy: &Utf8Path) {
+    assert!(!decoy.exists(), "the inherited GIT_DIR was not used");
+    assert_eq!(
+        fixture.commit().len(),
+        40,
+        "the fixture commit should be a full SHA"
+    );
 }
 
 /// Check that `verify` rejects a generation that gained a remote.
 #[test]
-fn verify_rejects_a_generation_that_gained_a_remote() {
-    let cli = Cli::new();
-    let generation = cli.install(&cli.scratch.join("clippy"));
+fn verify_rejects_a_generation_that_gained_a_remote() -> Result<(), Box<dyn std::error::Error>> {
+    let cli = Cli::new()?;
+    let generation = cli.install(&cli.scratch.join("clippy"))?;
     fixture_git(
         &generation,
         &["remote", "add", "upstream", "https://example.invalid/x"],
-    )
-    .expect("add a remote");
+    )?;
 
-    let output = cli.run(&["verify", "--repo", generation.as_str()]);
+    let output = cli.run(&["verify", "--repo", generation.as_str()])?;
 
     assert_fails_with(&output, "it has remotes");
+    Ok(())
 }
 
 /// Check that `install` reports a missing bundle and installs nothing.
 #[test]
-fn install_reports_a_missing_bundle() {
-    let cli = Cli::new();
+fn install_reports_a_missing_bundle() -> Result<(), Box<dyn std::error::Error>> {
+    let cli = Cli::new()?;
     let missing = cli.scratch.join("absent.bundle");
 
     let output = cli.run(&[
@@ -170,29 +290,23 @@ fn install_reports_a_missing_bundle() {
         cli.scratch.join("clippy").as_str(),
         "--bundle",
         missing.as_str(),
-    ]);
+    ])?;
 
     assert_fails_with(&output, "is missing");
-    assert!(
-        !cli.scratch
-            .join("clippy")
-            .join(cli.fixture.commit())
-            .exists(),
-        "nothing is installed"
-    );
+    assert_nothing_installed(&cli.scratch.join("clippy"), cli.fixture.commit());
+    Ok(())
 }
 
 /// Check that `install` refuses a bundle whose sidecar disagrees.
 #[test]
-fn install_rejects_a_bundle_whose_sidecar_disagrees() {
-    let cli = Cli::new();
+fn install_rejects_a_bundle_whose_sidecar_disagrees() -> Result<(), Box<dyn std::error::Error>> {
+    let cli = Cli::new()?;
     let bundle = cli.scratch.join("tampered.bundle");
-    std::fs::copy(cli.fixture.bundle(), &bundle).expect("copy the bundle");
+    std::fs::copy(cli.fixture.bundle(), &bundle)?;
     std::fs::write(
         format!("{bundle}.sha256"),
         format!("{}  tampered.bundle\n", "0".repeat(64)),
-    )
-    .expect("write a wrong sidecar");
+    )?;
     let root = cli.scratch.join("clippy");
 
     let output = cli.run(&[
@@ -201,19 +315,18 @@ fn install_rejects_a_bundle_whose_sidecar_disagrees() {
         root.as_str(),
         "--bundle",
         bundle.as_str(),
-    ]);
+    ])?;
 
     assert_fails_with(&output, "failed SHA-256 verification");
-    assert!(
-        !root.join(cli.fixture.commit()).exists(),
-        "nothing is installed"
-    );
+    assert_nothing_installed(&root, cli.fixture.commit());
+    Ok(())
 }
 
 /// Check that `build` writes a bundle and sidecar that `install` accepts.
 #[test]
-fn build_writes_a_bundle_and_sidecar_that_install_accepts() {
-    let cli = Cli::new();
+fn build_writes_a_bundle_and_sidecar_that_install_accepts() -> Result<(), Box<dyn std::error::Error>>
+{
+    let cli = Cli::new()?;
     let output_dir = cli.scratch.join("dist");
     let source = cli.fixture.source();
 
@@ -223,12 +336,9 @@ fn build_writes_a_bundle_and_sidecar_that_install_accepts() {
         output_dir.as_str(),
         "--source",
         source.as_str(),
-    ]);
+    ])?;
 
-    assert!(output.status.success(), "{}", stderr(&output));
-    let bundle = Utf8PathBuf::from(stdout(&output).trim());
-    assert!(bundle.starts_with(&output_dir), "{bundle}");
-    assert!(Utf8PathBuf::from(format!("{bundle}.sha256")).is_file());
+    let bundle = assert_built_bundle(&output, &output_dir);
     let root = cli.scratch.join("clippy");
     let installed = cli.run(&[
         "install",
@@ -236,25 +346,26 @@ fn build_writes_a_bundle_and_sidecar_that_install_accepts() {
         root.as_str(),
         "--bundle",
         bundle.as_str(),
-    ]);
-    assert!(installed.status.success(), "{}", stderr(&installed));
+    ])?;
+    assert_succeeded(&installed);
+    Ok(())
 }
 
 /// Check that an unknown subcommand is a usage error.
 #[test]
-fn an_unknown_subcommand_is_a_usage_error() {
-    let cli = Cli::new();
+fn an_unknown_subcommand_is_a_usage_error() -> Result<(), Box<dyn std::error::Error>> {
+    let cli = Cli::new()?;
 
-    let output = cli.run(&["publish"]);
+    let output = cli.run(&["publish"])?;
 
-    assert_eq!(output.status.code(), Some(2), "{}", stderr(&output));
-    assert!(stderr(&output).contains("Usage:"), "{}", stderr(&output));
+    assert_usage_error(&output);
+    Ok(())
 }
 
 /// Check that `path` resolves a relative root, as `install` does.
 #[test]
-fn path_resolves_a_relative_root() {
-    let cli = Cli::new();
+fn path_resolves_a_relative_root() -> Result<(), Box<dyn std::error::Error>> {
+    let cli = Cli::new()?;
 
     let output = Command::new(env!("CARGO_BIN_EXE_whitaker-clippy-snapshot"))
         .args(["path", "--root", "clippy"])
@@ -263,28 +374,23 @@ fn path_resolves_a_relative_root() {
             TEST_CLIPPY_SNAPSHOT_MANIFEST_ENV,
             cli.fixture.manifest_path(),
         )
-        .output()
-        .expect("run whitaker-clippy-snapshot");
+        .output()?;
 
-    assert!(output.status.success(), "{}", stderr(&output));
-    let printed = Utf8PathBuf::from(stdout(&output).trim());
-    assert!(printed.is_absolute(), "{printed}");
-    assert_eq!(
-        printed,
-        cli.scratch.join("clippy").join(cli.fixture.commit())
-    );
+    assert_relative_root_path(&output, &cli.scratch, cli.fixture.commit());
+    Ok(())
 }
 
 /// Check that the fixture's Git ignores an inherited `GIT_DIR`.
 #[test]
-fn the_fixture_ignores_an_inherited_git_dir() {
-    let elsewhere = TempDir::new().expect("create a decoy directory");
-    let decoy = Utf8PathBuf::from_path_buf(elsewhere.path().join("decoy.git")).expect("UTF-8");
+fn the_fixture_ignores_an_inherited_git_dir() -> Result<(), Box<dyn std::error::Error>> {
+    let elsewhere = TempDir::new()?;
+    let decoy = Utf8PathBuf::from_path_buf(elsewhere.path().join("decoy.git"))
+        .map_err(|path| format!("decoy path is not UTF-8: {}", path.display()))?;
     let _guard = whitaker_installer::test_support::env_test_guard();
 
-    let fixture = temp_env::with_var("GIT_DIR", Some(decoy.as_str()), SnapshotFixture::new);
+    let built = temp_env::with_var("GIT_DIR", Some(decoy.as_str()), SnapshotFixture::new);
 
-    let fixture = fixture.expect("the fixture builds in its own work tree");
-    assert!(!decoy.exists(), "the inherited GIT_DIR was not used");
-    assert_eq!(fixture.commit().len(), 40);
+    let fixture = built?;
+    assert_fixture_ignores_decoy(&fixture, &decoy);
+    Ok(())
 }

@@ -53,5 +53,5 @@ whitaker-common = { workspace = true }
 camino = { workspace = true }
 tempfile = { workspace = true }
 
-[lints.rust]
-missing_docs = "deny"
+[lints]
+workspace = true

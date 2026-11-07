@@ -148,6 +148,22 @@ mod tests {
         Ok((temporary_directory, path))
     }
 
+    /// Check the reported error names the step that failed.
+    fn assert_error_mentions(error: &anyhow::Error, expected: &str) {
+        assert!(
+            error.to_string().contains(expected),
+            "the reported error should name the failing step"
+        );
+    }
+
+    /// Check workspace discovery reported the expected recognition verdict.
+    fn assert_workspace_root(is_root: bool, expected: bool) {
+        assert_eq!(
+            is_root, expected,
+            "workspace discovery should match the manifest under test"
+        );
+    }
+
     /// Recognize a readable manifest that declares a workspace.
     ///
     /// # Errors
@@ -160,7 +176,7 @@ mod tests {
         let directory = Dir::open_ambient_dir(&path, ambient_authority())?;
         directory.write("Cargo.toml", "[workspace]\nmembers = []\n")?;
 
-        assert!(is_workspace_root(&path)?);
+        assert_workspace_root(is_workspace_root(&path)?, true);
         Ok(())
     }
 
@@ -173,11 +189,11 @@ mod tests {
     #[rstest]
     fn absent_or_non_workspace_manifest_is_not_a_root() -> anyhow::Result<()> {
         let (_temporary_directory, path) = temporary_directory()?;
-        assert!(!is_workspace_root(&path)?);
+        assert_workspace_root(is_workspace_root(&path)?, false);
 
         let directory = Dir::open_ambient_dir(&path, ambient_authority())?;
         directory.write("Cargo.toml", "[package]\nname = \"fixture\"\n")?;
-        assert!(!is_workspace_root(&path)?);
+        assert_workspace_root(is_workspace_root(&path)?, false);
         Ok(())
     }
 
@@ -196,11 +212,7 @@ mod tests {
 
         let error = is_workspace_root(&candidate)
             .expect_err("opening a regular file as a directory should fail");
-        assert!(
-            error
-                .to_string()
-                .contains("failed to open candidate directory")
-        );
+        assert_error_mentions(&error, "failed to open candidate directory");
         Ok(())
     }
 
@@ -218,11 +230,7 @@ mod tests {
 
         let error =
             is_workspace_root(&path).expect_err("reading a directory as a manifest should fail");
-        assert!(
-            error
-                .to_string()
-                .contains("failed to read workspace manifest")
-        );
+        assert_error_mentions(&error, "failed to read workspace manifest");
         Ok(())
     }
 }

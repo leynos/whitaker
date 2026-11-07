@@ -80,7 +80,11 @@ fn dependency_query_returns_path_diagnostics_without_emitting_events() {
     assert_eq!(event_count.load(Ordering::Relaxed), 0);
     assert_eq!(check.path_scan_failures.len(), 1);
     assert_eq!(
-        check.path_scan_failures[0].category,
+        check
+            .path_scan_failures
+            .first()
+            .expect("one PATH failure should be reported")
+            .category,
         PathScanFailureCategory::DirectoryOpen
     );
     assert!(check.status.all_installed());

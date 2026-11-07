@@ -28,6 +28,114 @@ use crate::{
     },
 };
 
+// Assertions live in these helpers because the tests below return `Result` to
+// propagate fixture errors, and `panic_in_result_fn` denies asserting inside
+// such a function.
+
+/// The status reported when both Dylint tools resolve.
+fn both_tools_available() -> DylintToolStatus {
+    DylintToolStatus {
+        cargo_dylint: true,
+        dylint_link: true,
+    }
+}
+
+/// The status reported when only `cargo-dylint` resolves.
+fn cargo_dylint_only() -> DylintToolStatus {
+    DylintToolStatus {
+        cargo_dylint: true,
+        dylint_link: false,
+    }
+}
+
+/// The status reported when neither tool resolves.
+fn no_tools_available() -> DylintToolStatus {
+    DylintToolStatus {
+        cargo_dylint: false,
+        dylint_link: false,
+    }
+}
+
+fn assert_status(status: DylintToolStatus, expected: DylintToolStatus) {
+    assert_eq!(status, expected, "unexpected Dylint tool status");
+}
+
+fn assert_binary_present(binary_name: &str) {
+    assert!(
+        is_binary_on_path(binary_name),
+        "{binary_name} should resolve from PATH"
+    );
+}
+
+#[cfg(windows)]
+fn assert_binary_state(binary_name: &str, expected: bool) {
+    assert_eq!(
+        is_binary_on_path(binary_name),
+        expected,
+        "unexpected PATH resolution for {binary_name}"
+    );
+}
+
+fn assert_binary_absent(binary_name: &str) {
+    assert!(
+        !is_binary_on_path(binary_name),
+        "{binary_name} should not resolve from PATH"
+    );
+}
+
+fn assert_scan_found(scan: &PathScanResult, expected: &std::path::Path) {
+    assert_eq!(
+        scan.binary.as_deref(),
+        Some(expected),
+        "the scan should find the staged executable"
+    );
+}
+
+fn assert_version_parse_error(error: &impl std::fmt::Display) {
+    assert!(
+        error
+            .to_string()
+            .contains("without reporting a semantic version"),
+        "unparsable version output should be reported, got: {error}"
+    );
+}
+
+fn assert_scan_has_no_failures(scan: &PathScanResult) {
+    assert!(
+        scan.failures.is_empty(),
+        "no PATH entry should be reported: {:?}",
+        scan.failures
+    );
+}
+
+#[cfg(unix)]
+fn assert_executable_matches(directory: &Dir, name: &Utf8Path, expected: bool) {
+    assert_eq!(
+        is_executable_file(directory, name, &mut Vec::new()),
+        expected,
+        "the executable permission bit should decide classification"
+    );
+}
+
+#[cfg(unix)]
+fn assert_scan_classified(scan: &PathScanResult, expected: &std::path::Path) {
+    assert_scan_found(scan, expected);
+    assert_eq!(
+        scan.failures,
+        vec![
+            PathScanFailure {
+                binary_name: "dylint-link".to_owned(),
+                category: PathScanFailureCategory::NonUtf8Path,
+            },
+            PathScanFailure {
+                binary_name: "dylint-link".to_owned(),
+                category: PathScanFailureCategory::DirectoryOpen,
+            },
+        ],
+        "invalid PATH entries should be classified in scan order"
+    );
+}
+
 /// Verify both installed tools are reported as available.
 ///
 /// # Errors
@@ -45,13 +153,7 @@ fn check_dylint_tools_reports_installed_tools() -> std::io::Result<()> {
         let status =
             check_dylint_tools(&executor).expect("available dependency checks should complete");
 
-        assert_eq!(
-            status,
-            DylintToolStatus {
-                cargo_dylint: true,
-                dylint_link: true,
-            }
-        );
+        assert_status(status, both_tools_available());
         executor.assert_finished();
     })?;
     Ok(())
@@ -78,13 +180,7 @@ fn check_dylint_tools_rejects_unusable_cargo_dylint_output(
             let status =
                 check_dylint_tools(&executor).expect("available dependency checks should complete");
 
-            assert_eq!(
-                status,
-                DylintToolStatus {
-                    cargo_dylint: false,
-                    dylint_link: false,
-                }
-            );
+            assert_status(status, no_tools_available());
             executor.assert_finished();
         },
     )?;
@@ -108,11 +204,7 @@ fn check_dylint_tools_rejects_unparsable_cargo_dylint_output() -> std::io::Resul
             let error = check_dylint_tools(&executor)
                 .expect_err("unparsable version output must not authorize installation");
 
-            assert!(
-                error
-                    .to_string()
-                    .contains("without reporting a semantic version")
-            );
+            assert_version_parse_error(&error);
             executor.assert_finished();
         },
     )?;
@@ -143,13 +235,7 @@ fn check_dylint_tools_rejects_unpinned_dylint_link(
         let status =
             check_dylint_tools(&executor).expect("available dependency checks should complete");
 
-        assert_eq!(
-            status,
-            DylintToolStatus {
-                cargo_dylint: true,
-                dylint_link: false,
-            }
-        );
+        assert_status(status, cargo_dylint_only());
         executor.assert_finished();
     })?;
     Ok(())
@@ -160,7 +246,7 @@ fn check_dylint_tools_rejects_unpinned_dylint_link(
 fn check_dylint_tools_does_not_invoke_dylint_link_on_path() -> std::io::Result<()> {
     with_fake_path(
         |directories| {
-            let first_dir = &directories[0];
+            let first_dir = directories.first().expect("fake PATH has one directory");
             #[cfg(windows)]
             let binary_path = first_dir.join("dylint-link.cmd");
             #[cfg(not(windows))]
@@ -178,12 +264,12 @@ fn check_dylint_tools_does_not_invoke_dylint_link_on_path() -> std::io::Result<(
             let status =
                 check_dylint_tools(&executor).expect("available dependency checks should complete");
 
-            assert_eq!(
+            assert_status(
                 status,
                 DylintToolStatus {
                     cargo_dylint: true,
                     dylint_link: true,
-                }
+                },
             );
             executor.assert_finished();
         },
@@ -195,7 +281,7 @@ fn check_dylint_tools_does_not_invoke_dylint_link_on_path() -> std::io::Result<(
 fn is_binary_on_path_returns_false_when_path_is_unset() {
     let _guard = env_test_guard();
     with_vars_unset(["PATH"], || {
-        assert!(!is_binary_on_path("dylint-link"));
+        assert_binary_absent("dylint-link");
     });
 }
 
@@ -203,7 +289,7 @@ fn is_binary_on_path_returns_false_when_path_is_unset() {
 fn is_binary_on_path_returns_false_when_path_is_empty() {
     let _guard = env_test_guard();
     temp_env::with_var("PATH", Some(""), || {
-        assert!(!is_binary_on_path("dylint-link"));
+        assert_binary_absent("dylint-link");
     });
 }
 
@@ -213,7 +299,7 @@ fn is_binary_on_path_returns_false_when_binary_is_missing_from_all_directories()
     with_fake_path(
         |_| Ok(()),
         || {
-            assert!(!is_binary_on_path("dylint-link"));
+            assert_binary_absent("dylint-link");
         },
     )?;
     Ok(())
@@ -223,7 +309,7 @@ fn is_binary_on_path_returns_false_when_binary_is_missing_from_all_directories()
 fn is_binary_on_path_checks_multiple_directories() -> std::io::Result<()> {
     with_fake_path(
         |directories| {
-            let second_dir = &directories[1];
+            let second_dir = directories.get(1).expect("fake PATH has two directories");
             #[cfg(windows)]
             let binary_path = second_dir.join("dylint-link.exe");
             #[cfg(not(windows))]
@@ -232,7 +318,7 @@ fn is_binary_on_path_checks_multiple_directories() -> std::io::Result<()> {
             write_fake_binary(&binary_path, true)
         },
         || {
-            assert!(is_binary_on_path("dylint-link"));
+            assert_binary_present("dylint-link");
         },
     )?;
     Ok(())
@@ -261,8 +347,9 @@ fn is_executable_file_matches_executable_permission(
     )
     .expect("open temp-dir capability");
 
-    assert_eq!(
-        is_executable_file(&directory, Utf8Path::new("dylint-link"), &mut Vec::new(),),
+    assert_executable_matches(
+        &directory,
+        Utf8Path::new("dylint-link"),
         expected_is_executable,
     );
     Ok(())
@@ -299,20 +386,7 @@ fn path_scan_classifies_invalid_entries_and_continues_to_a_later_binary() -> std
         "dylint-link",
     );
 
-    assert_eq!(scan.binary, Some(expected_binary));
-    assert_eq!(
-        scan.failures,
-        vec![
-            PathScanFailure {
-                binary_name: "dylint-link".to_owned(),
-                category: PathScanFailureCategory::NonUtf8Path,
-            },
-            PathScanFailure {
-                binary_name: "dylint-link".to_owned(),
-                category: PathScanFailureCategory::DirectoryOpen,
-            },
-        ]
-    );
+    assert_scan_classified(&scan, &expected_binary);
     Ok(())
 }
 
@@ -340,8 +414,8 @@ fn path_scan_skips_missing_candidates_and_returns_the_first_binary() -> std::io:
         binary_name,
     );
 
-    assert_eq!(scan.binary, Some(expected_binary));
-    assert!(scan.failures.is_empty());
+    assert_scan_found(&scan, &expected_binary);
+    assert_scan_has_no_failures(&scan);
     Ok(())
 }
 
@@ -364,8 +438,8 @@ fn path_scan_skips_missing_directories_and_returns_a_later_binary() -> std::io::
         binary_name,
     );
 
-    assert_eq!(scan.binary, Some(expected_binary));
-    assert!(scan.failures.is_empty());
+    assert_scan_found(&scan, &expected_binary);
+    assert_scan_has_no_failures(&scan);
     Ok(())
 }
 
@@ -439,9 +513,14 @@ fn is_binary_on_path_handles_windows_executable_suffixes(
     #[case] expected: bool,
 ) -> std::io::Result<()> {
     with_fake_path(
-        |directories| write_fake_binary(&directories[dir_index].join(binary_name), true),
+        |directories| {
+            let directory = directories
+                .get(dir_index)
+                .expect("fake PATH has the requested directory");
+            write_fake_binary(&directory.join(binary_name), true)
+        },
         || {
-            assert_eq!(is_binary_on_path(binary_name), expected);
+            assert_binary_state(binary_name, expected);
         },
     )?;
     Ok(())
@@ -457,7 +536,8 @@ fn is_binary_on_path_handles_windows_executable_suffixes(
 fn check_dylint_tools_detects_dylint_link_via_pathext_suffix() -> std::io::Result<()> {
     with_fake_path(
         |directories| {
-            write_fake_binary_with_status(&directories[0].join("dylint-link.cmd"), true, 0)
+            let directory = directories.first().expect("fake PATH has one directory");
+            write_fake_binary_with_status(&directory.join("dylint-link.cmd"), true, 0)
         },
         || {
             temp_env::with_var("PATHEXT", Some(".CMD;.BAT"), || {
@@ -470,13 +550,7 @@ fn check_dylint_tools_detects_dylint_link_via_pathext_suffix() -> std::io::Resul
                 let status = check_dylint_tools(&executor)
                     .expect("available dependency checks should complete");
 
-                assert_eq!(
-                    status,
-                    DylintToolStatus {
-                        cargo_dylint: true,
-                        dylint_link: true,
-                    }
-                );
+                assert_status(status, both_tools_available());
                 executor.assert_finished();
             });
         },

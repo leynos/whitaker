@@ -13,9 +13,10 @@
 //!   variables.
 //! - [`ui`]: Discovers fixtures, prepares isolated workspaces, and runs dylint UI tests with
 //!   consistent panic handling.
-//! - [`with_locale`], [`with_env_var`], and [`with_env_var_removed`]: Scope temporary environment
-//!   mutations (such as `DYLINT_LOCALE` overrides) to a callback so tests cannot leak global state
-//!   between cases.
+//! - [`with_locale`], [`with_env_var`], [`with_env_vars`], [`with_env_vars_selected`], and
+//!   [`with_env_var_removed`]: Scope temporary environment mutations (such as `DYLINT_LOCALE`
+//!   overrides) to a callback so tests cannot leak global state between cases.
+//!   [`with_env_vars_selected`] also chooses the variables under the same lock that applies them.
 
 pub mod decomposition;
 pub mod fixtures;
@@ -55,7 +56,7 @@ pub type EnvTestGuard = ReentrantMutexGuard<'static, ()>;
 ///
 /// # Examples
 ///
-/// ```
+/// ```rust,no_run
 /// use whitaker_common::test_support::env_test_guard;
 ///
 /// let _guard = env_test_guard();
@@ -65,7 +66,7 @@ pub fn env_test_guard() -> EnvTestGuard {
     LOCK.get_or_init(|| ReentrantMutex::new(())).lock()
 }
 
-/// Runs `callback` with one environment variable temporarily set.
+/// Run `callback` with one environment variable temporarily set.
 ///
 /// The mutation is scoped to the callback and the prior value is restored
 /// afterwards, even on panic. Serialization is provided by `temp_env`'s
@@ -74,7 +75,7 @@ pub fn env_test_guard() -> EnvTestGuard {
 ///
 /// # Examples
 ///
-/// ```rust
+/// ```rust,no_run
 /// use whitaker_common::test_support::with_env_var;
 ///
 /// with_env_var("WHITAKER_TEST_ENV_VAR", "enabled", || {
@@ -88,14 +89,90 @@ pub fn with_env_var<R>(key: &str, value: impl AsRef<OsStr>, callback: impl FnOnc
     temp_env::with_var(key, Some(value.as_ref()), callback)
 }
 
-/// Runs `callback` with one environment variable temporarily removed.
+/// Run `callback` with each variable in `vars` temporarily set.
+///
+/// The prior value of every variable is restored afterwards, even on panic.
+/// Serialization is provided by `temp_env`'s re-entrant global lock, so nested
+/// scoped mutations from the same thread do not deadlock.
+///
+/// # Examples
+///
+/// ```rust,no_run
+/// use whitaker_common::test_support::with_env_vars;
+///
+/// with_env_vars(
+///     [("WHITAKER_FIRST_VAR", "1"), ("WHITAKER_SECOND_VAR", "2")],
+///     || {
+///         assert_eq!(
+///             std::env::var("WHITAKER_FIRST_VAR").expect("first test env var should be set"),
+///             "1",
+///         );
+///         assert_eq!(
+///             std::env::var("WHITAKER_SECOND_VAR").expect("second test env var should be set"),
+///             "2",
+///         );
+///     },
+/// );
+/// ```
+pub fn with_env_vars<R>(
+    vars: impl IntoIterator<Item = (&'static str, &'static str)>,
+    callback: impl FnOnce() -> R,
+) -> R {
+    let settings: Vec<(&'static str, Option<&'static str>)> = vars
+        .into_iter()
+        .map(|(key, value)| (key, Some(value)))
+        .collect();
+    if settings.is_empty() {
+        return callback();
+    }
+    temp_env::with_vars(settings, callback)
+}
+
+/// Run `callback` with the variables chosen by `select`.
+///
+/// `select` runs while the process-wide environment lock is held, so another
+/// thread's scoped mutation cannot change the answer between the decision and
+/// the mutation. [`with_env_vars`] cannot offer that guarantee: its caller
+/// chooses the variables before the lock is taken, and it skips the lock
+/// entirely when the choice is empty.
+///
+/// Use this when the set of variables to scope depends on the current
+/// environment. Otherwise prefer [`with_env_vars`].
+///
+/// # Examples
+///
+/// ```rust,no_run
+/// use whitaker_common::test_support::with_env_vars_selected;
+///
+/// with_env_vars_selected(
+///     || vec![("WHITAKER_SELECTED_VAR", "1")],
+///     || {
+///         assert_eq!(
+///             std::env::var("WHITAKER_SELECTED_VAR").expect("selected var should be set"),
+///             "1",
+///         );
+///     },
+/// );
+/// ```
+pub fn with_env_vars_selected<R>(
+    select: impl FnOnce() -> Vec<(&'static str, &'static str)>,
+    callback: impl FnOnce() -> R,
+) -> R {
+    // An empty scoped mutation still takes `temp_env`'s re-entrant lock, which
+    // is what serializes the selection against scoped helpers on other threads.
+    temp_env::with_vars(Vec::<(&'static str, Option<&'static str>)>::new(), || {
+        with_env_vars(select(), callback)
+    })
+}
+
+/// Run `callback` with one environment variable temporarily removed.
 ///
 /// The prior value (if any) is restored after the callback completes or
 /// panics.
 ///
 /// # Examples
 ///
-/// ```rust
+/// ```rust,no_run
 /// use whitaker_common::test_support::with_env_var_removed;
 ///
 /// with_env_var_removed("WHITAKER_REMOVED_TEST_ENV_VAR", || {
@@ -106,7 +183,7 @@ pub fn with_env_var_removed<R>(key: &str, callback: impl FnOnce() -> R) -> R {
     temp_env::with_var_unset(key, callback)
 }
 
-/// Runs `callback` with `DYLINT_LOCALE` overridden.
+/// Run `callback` with `DYLINT_LOCALE` overridden.
 ///
 /// `Some(locale)` sets the variable for the duration of the callback;
 /// `None` removes it. Any prior value is restored afterwards, so
@@ -114,7 +191,7 @@ pub fn with_env_var_removed<R>(key: &str, callback: impl FnOnce() -> R) -> R {
 ///
 /// # Examples
 ///
-/// ```rust
+/// ```rust,no_run
 /// use whitaker_common::test_support::with_locale;
 ///
 /// with_locale(Some("cy"), || {

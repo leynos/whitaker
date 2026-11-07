@@ -54,7 +54,7 @@ impl Default for SarifLog {
 
 #[cfg(test)]
 mod tests {
-    //! Test SarifLog defaults, schema fields and empty runs with shared JSON
+    //! Test `SarifLog` defaults, schema fields and empty runs with shared JSON
     //! assertion helpers.
 
     use super::*;
