@@ -3,9 +3,9 @@
 use std::path::PathBuf;
 
 use tempfile::TempDir;
-use whitaker_installer::bootstrap::BootstrapError;
 
 use super::*;
+use crate::bootstrap::BootstrapError;
 
 /// Platform directories rooted in a temporary directory.
 struct TempDirs(PathBuf);

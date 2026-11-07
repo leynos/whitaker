@@ -19,12 +19,36 @@ use crate::{
 /// Result of wrapper script generation.
 #[derive(Debug)]
 pub struct WrapperResult {
-    /// Path to the `whitaker` wrapper script.
+    /// Conventional path for the `whitaker` wrapper, whether or not that
+    /// script was selected for creation.
     pub whitaker_path: std::path::PathBuf,
     /// Path to the `whitaker-ls` wrapper script.
     pub whitaker_ls_path: std::path::PathBuf,
     /// Whether the bin directory is in PATH.
     pub in_path: bool,
+}
+
+/// Selects which compatibility scripts an installer invocation may create.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WrapperScripts {
+    /// Write both scripts used by the legacy `whitaker-installer` command.
+    Both,
+    /// Write no script, because the `whitaker` binary now provides `ls`.
+    ///
+    /// The generated lister calls `whitaker-installer run`, so writing it from
+    /// the root binary would leave a script that fails unless the installer is
+    /// installed separately. The root CLI offers the same listing itself.
+    None,
+}
+
+impl WrapperScripts {
+    /// Reports whether this policy belongs to the root binary.
+    ///
+    /// The root CLI forwards into the recorded staging directory from any
+    /// working directory, so it cannot continue after a record failure the way
+    /// the legacy installer can.
+    #[must_use]
+    pub const fn is_root_cli(self) -> bool { matches!(self, Self::None) }
 }
 
 /// Generates wrapper scripts for invoking Whitaker lints.
@@ -58,6 +82,37 @@ pub struct WrapperResult {
 /// # Ok::<(), whitaker_installer::error::InstallerError>(())
 /// ```
 pub fn generate_wrapper_scripts(dirs: &dyn BaseDirs) -> Result<WrapperResult> {
+    generate_wrapper_scripts_with(dirs, WrapperScripts::Both)
+}
+
+/// Generates the selected compatibility scripts for invoking Whitaker lints.
+///
+/// The returned paths name the conventional locations even when a script was
+/// not selected for writing. This lets callers report a consistent PATH
+/// location while preserving an executable installed at the `whitaker` path.
+///
+/// # Examples
+///
+/// ```no_run
+/// use whitaker_installer::{
+///     dirs::SystemBaseDirs,
+///     wrapper::{WrapperScripts, generate_wrapper_scripts_with},
+/// };
+///
+/// let dirs = SystemBaseDirs::new().expect("platform directories should exist");
+/// let result = generate_wrapper_scripts_with(&dirs, WrapperScripts::None)?;
+/// assert!(!result.whitaker_ls_path.exists());
+/// # Ok::<(), whitaker_installer::error::InstallerError>(())
+/// ```
+///
+/// # Errors
+///
+/// Returns a wrapper-generation error if the bin directory cannot be created
+/// or a selected script cannot be written.
+pub fn generate_wrapper_scripts_with(
+    dirs: &dyn BaseDirs,
+    scripts: WrapperScripts,
+) -> Result<WrapperResult> {
     let bin_dir = dirs.executables().ok_or_else(|| {
         InstallerError::WrapperGeneration("could not determine bin directory".to_owned())
     })?;
@@ -67,10 +122,10 @@ pub fn generate_wrapper_scripts(dirs: &dyn BaseDirs) -> Result<WrapperResult> {
     })?;
 
     #[cfg(unix)]
-    let (whitaker_path, whitaker_ls_path) = generate_unix_scripts(&bin_dir)?;
+    let (whitaker_path, whitaker_ls_path) = generate_unix_scripts(&bin_dir, scripts)?;
 
     #[cfg(windows)]
-    let (whitaker_path, whitaker_ls_path) = generate_windows_scripts(&bin_dir)?;
+    let (whitaker_path, whitaker_ls_path) = generate_windows_scripts(&bin_dir, scripts)?;
 
     #[cfg(not(any(unix, windows)))]
     return Err(InstallerError::WrapperGeneration(
@@ -121,13 +176,30 @@ fn unix_whitaker_ls_script() -> String {
     )
 }
 
+/// Write the Unix wrapper scripts selected by `scripts`.
+///
+/// The conventional `whitaker` and `whitaker-ls` paths are returned whether or
+/// not anything was written, so the caller can report where the wrappers live
+/// even when [`WrapperScripts::None`] suppresses generation.
+///
+/// # Errors
+///
+/// Returns [`InstallerError::WrapperGeneration`] when a script cannot be
+/// written or made executable.
 #[cfg(unix)]
-fn generate_unix_scripts(bin_dir: &Path) -> Result<(std::path::PathBuf, std::path::PathBuf)> {
+fn generate_unix_scripts(
+    bin_dir: &Path,
+    scripts: WrapperScripts,
+) -> Result<(std::path::PathBuf, std::path::PathBuf)> {
     let whitaker_path = bin_dir.join("whitaker");
-    write_unix_script(&whitaker_path, &unix_whitaker_script())?;
-
     let whitaker_ls_path = bin_dir.join("whitaker-ls");
-    write_unix_script(&whitaker_ls_path, &unix_whitaker_ls_script())?;
+    match scripts {
+        WrapperScripts::Both => {
+            write_unix_script(&whitaker_path, &unix_whitaker_script())?;
+            write_unix_script(&whitaker_ls_path, &unix_whitaker_ls_script())?;
+        }
+        WrapperScripts::None => {}
+    }
 
     Ok((whitaker_path, whitaker_ls_path))
 }
@@ -166,19 +238,34 @@ if (-not (Test-Path -LiteralPath $installer -PathType Leaf)) {
     $installer = $command.Source
 }"#;
 
+/// Write the PowerShell wrapper scripts selected by `scripts`.
+///
+/// The conventional `whitaker.ps1` and `whitaker-ls.ps1` paths are returned
+/// whether or not anything was written, so the caller can report where the
+/// wrappers live even when [`WrapperScripts::None`] suppresses generation.
+///
+/// # Errors
+///
+/// Returns [`InstallerError::WrapperGeneration`] when a script cannot be
+/// written.
 #[cfg(windows)]
-fn generate_windows_scripts(bin_dir: &Path) -> Result<(std::path::PathBuf, std::path::PathBuf)> {
+fn generate_windows_scripts(
+    bin_dir: &Path,
+    scripts: WrapperScripts,
+) -> Result<(std::path::PathBuf, std::path::PathBuf)> {
     let whitaker_path = bin_dir.join("whitaker.ps1");
-    let whitaker_content = windows_whitaker_script();
-
-    std::fs::write(&whitaker_path, whitaker_content)
-        .map_err(|e| InstallerError::WrapperGeneration(format!("failed to write script: {e}")))?;
-
     let whitaker_ls_path = bin_dir.join("whitaker-ls.ps1");
-    let whitaker_ls_content = windows_ls_script();
-
-    std::fs::write(&whitaker_ls_path, whitaker_ls_content)
-        .map_err(|e| InstallerError::WrapperGeneration(format!("failed to write script: {e}")))?;
+    match scripts {
+        WrapperScripts::Both => {
+            std::fs::write(&whitaker_path, windows_whitaker_script()).map_err(|e| {
+                InstallerError::WrapperGeneration(format!("failed to write script: {e}"))
+            })?;
+            std::fs::write(&whitaker_ls_path, windows_ls_script()).map_err(|e| {
+                InstallerError::WrapperGeneration(format!("failed to write script: {e}"))
+            })?;
+        }
+        WrapperScripts::None => {}
+    }
 
     Ok((whitaker_path, whitaker_ls_path))
 }

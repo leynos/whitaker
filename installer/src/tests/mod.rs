@@ -5,12 +5,19 @@ mod fast_path;
 use std::{path::PathBuf, time::Duration};
 
 use rstest::{fixture, rstest};
-use whitaker_installer::{
+
+use super::*;
+use crate::{
     cli::{InstallArgs, LintSelectionFlags},
+    crate_name::CrateName,
     dependency_binaries::DependencyBinaryInstaller,
     deps::{DependencyInstallOptions, SourcePolicy, install_dylint_tools_with_options},
     dirs::BaseDirs,
+    error::InstallerError,
+    install_flow::{MetricsWriteContext, write_install_metrics},
+    install_metrics::InstallMode,
     installer_packaging::TargetTriple,
+    orchestration::{exit_code_for_run_result, report_suite_source, resolve_requested_crates},
     test_utils::{
         dependency_binary_helpers::{
             AlwaysNotFoundRepositoryInstaller,
@@ -23,16 +30,11 @@ use whitaker_installer::{
     },
 };
 
-use super::*;
-
 fn dependency_install_options<'a>(
     dirs: &'a TestBaseDirs,
     repository_installer: &'a dyn DependencyBinaryInstaller,
     quiet: bool,
-) -> std::result::Result<
-    DependencyInstallOptions<'a>,
-    whitaker_installer::artefact::error::ArtefactError,
-> {
+) -> std::result::Result<DependencyInstallOptions<'a>, crate::artefact::error::ArtefactError> {
     Ok(DependencyInstallOptions {
         dirs,
         repository_installer,

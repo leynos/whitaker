@@ -20,18 +20,22 @@ CARGO_FLAGS ?= --workspace --all-targets --all-features
 # diagnostics, so exercise its parser tests separately without all features.
 TEST_EXCLUDES ?= --exclude rustc_ast --exclude rustc_attr_data_structures \
 	--exclude rustc_hir --exclude rustc_lint --exclude rustc_middle \
-	--exclude rustc_session --exclude rustc_span --exclude whitaker \
+	--exclude rustc_session --exclude rustc_span --exclude whitaker_lint_core \
 	--exclude function_attrs_follow_docs --exclude module_max_lines \
 	--exclude no_expect_outside_tests --exclude dylint_testing
 TEST_CARGO_FLAGS ?= $(CARGO_FLAGS) $(TEST_EXCLUDES)
+# The Dylint driver feature links compiler-private crates. Cargo unifies that
+# feature for the all-workspace pass, so exercise core's ordinary tests in a
+# dedicated feature-free invocation rather than excluding their coverage.
+CORE_TEST_CARGO_FLAGS ?= -p whitaker_lint_core --no-default-features
 # Doctests cannot run for a crate that links `rustc_private` unless the example
 # opts into it. A doctest is compiled as its own crate without
 # `#![feature(rustc_private)]`, so most lint crates, the `rustc_*` proxy shims,
-# `clippy_utils`, the `whitaker` root, and the suite fail at `E0658` before a
-# single assertion runs. The remaining packages hold the documented public API
-# and are the doctest lane. `bumpy_road_function` is doctested: its examples
-# carry hidden `rustc_private` setup lines, including the compile-fail contract
-# for the removed legacy settings name.
+# `clippy_utils`, the `whitaker_lint_core` crate, and the suite fail at `E0658`
+# before a single assertion runs. The remaining packages hold the documented
+# public API and are the doctest lane. `bumpy_road_function` is doctested: its
+# examples carry hidden `rustc_private` setup lines, including the compile-fail
+# contract for the removed legacy settings name.
 DOCTEST_EXCLUDES ?= --exclude clippy_utils \
 	--exclude conditional_max_n_branches --exclude function_attrs_follow_docs \
 	--exclude module_max_lines --exclude module_must_have_inner_docs \
@@ -40,18 +44,21 @@ DOCTEST_EXCLUDES ?= --exclude clippy_utils \
 	--exclude rustc_ast --exclude rustc_attr_data_structures --exclude rustc_hir \
 	--exclude rustc_lint --exclude rustc_middle --exclude rustc_session \
 	--exclude rustc_span --exclude test_must_not_have_example \
-	--exclude whitaker --exclude whitaker_suite
+	--exclude whitaker_lint_core --exclude whitaker_suite
 DOCTEST_CARGO_FLAGS ?= --workspace --all-features $(DOCTEST_EXCLUDES)
 NEXTEST_PROFILE ?=
 # The cargo test driver. `test` runs `cargo nextest run`; `coverage`
 # overrides this with `cargo llvm-cov nextest ...` so instrumentation runs
 # over the exact same crate subset (TEST_CARGO_FLAGS) and RUSTFLAGS.
 TEST_RUNNER ?= nextest run
+# The driver for the feature-free `whitaker_lint_core` pass. `coverage`
+# overrides this as well, so instrumenting both passes composes one report.
+CORE_TEST_RUNNER ?= nextest run
 # The trybuild contract tests assert that small fixtures compile or fail to
 # compile; they run no workspace code the coverage report attributes. Under
 # instrumentation they only cost build time (about 250 s of the 616 s test
-# phase), so `make coverage` leaves six of the seven out and `make trybuild-contracts`
-# runs all seven in a plain, uninstrumented run (the `windows-compat` lane's
+# phase), so `make coverage` leaves seven of the eight out and `make trybuild-contracts`
+# runs all eight in a plain, uninstrumented run (the `windows-compat` lane's
 # `make test` runs them in CI; this target is for running them locally).
 # The names are the ones `.config/nextest.toml` gives its compile-contract
 # override. `fixture_expansion_lint_attribute_contract` stays in the coverage
@@ -59,8 +66,8 @@ TEST_RUNNER ?= nextest run
 # it out lowers that crate's line coverage by 4 lines. A workflow contract keeps
 # the lists in step. Naming a filterset replaces the profile's
 # `default-filter`, so COVERAGE_BASE_FILTER repeats the default profile's.
-TRYBUILD_CONTRACT_FILTER ?= test(dependency_check_result_contract_is_public) | test(fixture_expansion_lint_attribute_contract) | test(public_const_api_works_in_const_context) | test(renamed_common_apis_are_public_and_legacy_names_stay_removed) | test(renamed_sarif_api_is_public_and_legacy_names_stay_removed) | test(sha2_0_11_pre_migration_patterns_fail_to_compile) | test(trybuild_fixtures_compile_without_diagnostics)
-COVERAGE_SKIPPED_TRYBUILD_FILTER ?= test(dependency_check_result_contract_is_public) | test(public_const_api_works_in_const_context) | test(renamed_common_apis_are_public_and_legacy_names_stay_removed) | test(renamed_sarif_api_is_public_and_legacy_names_stay_removed) | test(sha2_0_11_pre_migration_patterns_fail_to_compile) | test(trybuild_fixtures_compile_without_diagnostics)
+TRYBUILD_CONTRACT_FILTER ?= test(ortho_config_and_clap_derives_compile_together) | test(dependency_check_result_contract_is_public) | test(fixture_expansion_lint_attribute_contract) | test(public_const_api_works_in_const_context) | test(renamed_common_apis_are_public_and_legacy_names_stay_removed) | test(renamed_sarif_api_is_public_and_legacy_names_stay_removed) | test(sha2_0_11_pre_migration_patterns_fail_to_compile) | test(trybuild_fixtures_compile_without_diagnostics)
+COVERAGE_SKIPPED_TRYBUILD_FILTER ?= test(ortho_config_and_clap_derives_compile_together) | test(dependency_check_result_contract_is_public) | test(public_const_api_works_in_const_context) | test(renamed_common_apis_are_public_and_legacy_names_stay_removed) | test(renamed_sarif_api_is_public_and_legacy_names_stay_removed) | test(sha2_0_11_pre_migration_patterns_fail_to_compile) | test(trybuild_fixtures_compile_without_diagnostics)
 COVERAGE_BASE_FILTER ?= not (binary(behaviour_toolchain) | binary(behaviour_cli) | kind(example))
 COVERAGE_NEXTEST_FILTER ?= $(COVERAGE_BASE_FILTER) & not ($(COVERAGE_SKIPPED_TRYBUILD_FILTER))
 COVERAGE_OUTPUT ?= lcov.info
@@ -268,6 +275,7 @@ test: clippy-snapshot ## Run tests with warnings treated as errors
 		WHITAKER_BACKUP=""; \
 	fi; \
 	RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS) $(DEV_STANDARD_FLAGS)" $(CARGO) $(TEST_RUNNER) $(CARGO_LOCKED) $(TEST_CARGO_FLAGS) $(BUILD_JOBS) $(if $(NEXTEST_PROFILE),--profile $(NEXTEST_PROFILE)); \
+	RUSTFLAGS="$(RUST_FLAGS) $(DEV_STANDARD_FLAGS)" $(CARGO) $(CORE_TEST_RUNNER) $(CARGO_LOCKED) $(CORE_TEST_CARGO_FLAGS) $(BUILD_JOBS) $(if $(NEXTEST_PROFILE),--profile $(NEXTEST_PROFILE)); \
 	RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS) $(DEV_STANDARD_FLAGS)" $(CARGO) test $(CARGO_LOCKED) -p dylint_testing --lib --no-default-features $(BUILD_JOBS); \
 	if [ "$${ACT_WORKFLOW_TESTS:-0}" = "1" ]; then \
 		$(MAKE) workflow-test; \
@@ -276,26 +284,42 @@ test: clippy-snapshot ## Run tests with warnings treated as errors
 coverage: ## Generate LCOV coverage over the CI-tested crate subset
 	@# Reuse the `test` recipe verbatim (same TEST_CARGO_FLAGS excludes,
 	@# same prefer-dynamic RUSTFLAGS, same WHITAKER_SCRIPT safeguard) but
-	@# swap the driver to `cargo llvm-cov nextest`. This keeps the
+	@# swap both drivers to `cargo llvm-cov nextest`. This keeps the
 	@# instrumented run in lockstep with the plain test run: the 11
-	@# CI-excluded crates (rustc_* proxy shims, the whitaker root, and the
+	@# CI-excluded crates (rustc_* proxy shims, `whitaker_lint_core`, and the
 	@# three lint crates whose dylint UI tests are excluded) stay excluded,
 	@# so coverage never attempts a bare `--workspace` build the suite
-	@# cannot support.
+	@# cannot support, and the separate feature-free `whitaker_lint_core`
+	@# pass still contributes its lines to the same report.
+	@# Both passes use `--no-report`, which retains coverage data between
+	@# them so one final `report` step writes the composed LCOV file.
+	@# `--no-report` and `--no-clean` are mutually exclusive in
+	@# cargo-llvm-cov, so neither pass may add `--no-clean`.
 	@# LLVM coverage maps carry source locations without DWARF debug info.
 	@# Omit optional symbols from this throwaway target to limit runner disk use.
 	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v cargo-llvm-cov >/dev/null || { echo "Install cargo-llvm-cov (cargo install cargo-llvm-cov)"; exit 1; }
-	@CARGO_LLVM_COV_TARGET_DIR="$(COVERAGE_TARGET_DIR)" \
+	@export CARGO_LLVM_COV_TARGET_DIR="$(COVERAGE_TARGET_DIR)" \
 		CARGO_TARGET_DIR="$(COVERAGE_TARGET_DIR)" \
 		LLVM_PROFILE_FILE_NAME="$(COVERAGE_PROFILE_FILE_NAME)" \
-		CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 \
-		$(MAKE) test TEST_RUNNER="llvm-cov nextest --lcov --output-path $(COVERAGE_OUTPUT) -E '$(COVERAGE_NEXTEST_FILTER)'"
+		CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0; \
+		$(CARGO) llvm-cov clean --workspace && \
+		$(MAKE) test TEST_RUNNER="llvm-cov nextest --no-report -E '$(COVERAGE_NEXTEST_FILTER)'" \
+			CORE_TEST_RUNNER="llvm-cov nextest --no-report" && \
+		$(CARGO) llvm-cov report --lcov --output-path $(COVERAGE_OUTPUT)
 
 trybuild-contracts: ## Run the trybuild compile-contract tests, which `make coverage` skips
 	@# `make coverage` leaves six of these out (see TRYBUILD_CONTRACT_FILTER), so
 	@# a developer runs them here, plain and uninstrumented, under the `ci`
 	@# profile that gives them their serial group and build-sized allowance.
-	@$(MAKE) test NEXTEST_PROFILE=ci TEST_RUNNER="nextest run -E '$(TRYBUILD_CONTRACT_FILTER)'"
+	@# Filter both passes: the separate `whitaker_lint_core` pass would
+	@# otherwise run that crate's whole suite, so an unrelated core failure
+	@# could fail this focused target. No contract test lives in
+	@# `whitaker_lint_core` today, so its filtered pass matches nothing;
+	@# `--no-tests=pass` keeps that expected emptiness from failing the target
+	@# while still running a contract test if one moves there.
+	@$(MAKE) test NEXTEST_PROFILE=ci \
+		TEST_RUNNER="nextest run -E '$(TRYBUILD_CONTRACT_FILTER)'" \
+		CORE_TEST_RUNNER="nextest run --no-tests=pass -E '$(TRYBUILD_CONTRACT_FILTER)'"
 
 test-doc: ## Run the workspace doctests, which no other lane executes
 	@# `cargo llvm-cov nextest` runs no doctests and `--all-targets` excludes
@@ -305,6 +329,11 @@ test-doc: ## Run the workspace doctests, which no other lane executes
 	@# `force-unstable-if-unmarked` then makes every one of them fail to load
 	@# its own library at `E0658`.
 	RUSTFLAGS="$(RUST_FLAGS) $(DEV_STANDARD_FLAGS)" $(CARGO) test --doc $(CARGO_LOCKED) $(DOCTEST_CARGO_FLAGS) $(BUILD_JOBS)
+	@# `whitaker_lint_core` is excluded above because Cargo unifies the
+	@# `dylint-driver` feature for an all-features run. Its doctests do run in
+	@# the feature-free configuration, which is the same configuration
+	@# CORE_TEST_CARGO_FLAGS exercises for its unit tests.
+	RUSTFLAGS="$(RUST_FLAGS) $(DEV_STANDARD_FLAGS)" $(CARGO) test $(CARGO_LOCKED) $(CORE_TEST_CARGO_FLAGS) --doc $(BUILD_JOBS)
 
 workflow-test: workflow-test-deps ## Run opt-in GitHub workflow smoke tests with act + pytest
 	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v act >/dev/null || { echo "Install act to run workflow tests"; exit 1; }

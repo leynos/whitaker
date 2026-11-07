@@ -194,6 +194,13 @@ pub enum InstallerError {
     #[error(transparent)]
     Bootstrap(#[from] crate::bootstrap::BootstrapError),
 
+    /// Persisting the successful installation path failed.
+    #[error("failed to record installed lint path: {message}")]
+    InstallationRecord {
+        /// Description of the persistence failure.
+        message: String,
+    },
+
     /// Failed to scan the staging directory for installed lints.
     #[error("failed to scan staging directory")]
     ScanFailed {
@@ -292,17 +299,9 @@ impl InstallerError {
     }
 }
 
-impl Clone for InstallerError {
-    /// Clone every error variant while preserving its displayable details.
-    fn clone(&self) -> Self {
-        if let Some(value) = self
-            .clone_toolchain_variant()
-            .or_else(|| self.clone_io_variant())
-            .or_else(|| self.clone_source_policy_variant())
-        {
-            return value;
-        }
-
+impl InstallerError {
+    /// Clone the variants whose payloads are ordinary owned values.
+    fn clone_simple_variant(&self) -> Self {
         match self {
             Self::BuildFailed { crate_name, reason } => Self::BuildFailed {
                 crate_name: crate_name.clone(),
@@ -310,6 +309,9 @@ impl Clone for InstallerError {
             },
             Self::StagingFailed { reason } => Self::StagingFailed {
                 reason: reason.clone(),
+            },
+            Self::InstallationRecord { message } => Self::InstallationRecord {
+                message: message.clone(),
             },
             Self::TargetNotWritable { path, reason } => Self::TargetNotWritable {
                 path: path.clone(),
@@ -363,6 +365,16 @@ impl Clone for InstallerError {
                 message: message.clone(),
             },
         }
+    }
+}
+
+impl Clone for InstallerError {
+    /// Clone every error variant while preserving its displayable details.
+    fn clone(&self) -> Self {
+        self.clone_toolchain_variant()
+            .or_else(|| self.clone_io_variant())
+            .or_else(|| self.clone_source_policy_variant())
+            .unwrap_or_else(|| self.clone_simple_variant())
     }
 }
 

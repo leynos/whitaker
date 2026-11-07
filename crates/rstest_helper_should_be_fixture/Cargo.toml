@@ -25,7 +25,7 @@ dylint-driver = [
     "dep:rustc_session",
     "dep:rustc_span",
     "dep:serde",
-    "dep:whitaker",
+    "dep:whitaker_lint_core",
     "dep:camino",
     "dep:cap-std",
 ]
@@ -43,7 +43,7 @@ rustc_lint = { workspace = true, optional = true }
 rustc_session = { workspace = true, optional = true }
 rustc_span = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
-whitaker = { workspace = true, features = ["dylint-driver"], optional = true }
+whitaker_lint_core = { workspace = true, features = ["dylint-driver"], optional = true }
 
 [dev-dependencies]
 dylint_testing = { workspace = true }

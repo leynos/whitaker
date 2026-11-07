@@ -3,9 +3,9 @@
 use std::cell::Cell;
 
 use rstest::rstest;
-use whitaker_installer::error::InstallerError;
 
 use super::dependency_check::ensure_dylint_tools_with_query;
+use crate::error::InstallerError;
 
 /// Verify failed availability queries stop before tool installation begins.
 #[rstest]

@@ -223,8 +223,8 @@ dependencies = [
  "serde",
  "tempfile",
  "toml 1.1.8+spec-1.1.0",
- "whitaker",
  "whitaker-common",
+ "whitaker_lint_core",
  "whitaker_test_macros",
 ]
 
@@ -448,8 +448,8 @@ dependencies = [
  "serde",
  "serial_test",
  "tempfile",
- "whitaker",
  "whitaker-common",
+ "whitaker_lint_core",
  "whitaker_test_macros",
 ]
 
@@ -1056,8 +1056,8 @@ dependencies = [
  "rustc_session",
  "rustc_span",
  "serial_test",
- "whitaker",
  "whitaker-common",
+ "whitaker_lint_core",
  "whitaker_test_macros",
 ]
 
@@ -1192,6 +1192,29 @@ dependencies = [
  "log",
  "regex-automata",
  "regex-syntax",
+]
+
+[[package]]
+name = "googletest"
+version = "0.14.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "07de445a934242060307c2570b9f2dc4788b02ff3637de2f42268756a3eaad4c"
+dependencies = [
+ "googletest_macro",
+ "num-traits",
+ "regex",
+ "rustversion",
+]
+
+[[package]]
+name = "googletest_macro"
+version = "0.14.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "088fcbe402e99d60ed6611e1b5105ab556b8a984a6a420977850d806c2aba882"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
 ]
 
 [[package]]
@@ -1709,8 +1732,8 @@ dependencies = [
  "rustc_session",
  "rustc_span",
  "tempfile",
- "whitaker",
  "whitaker-common",
+ "whitaker_lint_core",
  "whitaker_test_macros",
 ]
 
@@ -1732,8 +1755,8 @@ dependencies = [
  "rustc_session",
  "rustc_span",
  "serial_test",
- "whitaker",
  "whitaker-common",
+ "whitaker_lint_core",
  "whitaker_test_macros",
 ]
 
@@ -1772,8 +1795,8 @@ dependencies = [
  "serde",
  "temp-env",
  "tokio",
- "whitaker",
  "whitaker-common",
+ "whitaker_lint_core",
  "whitaker_test_macros",
 ]
 
@@ -1804,8 +1827,8 @@ dependencies = [
  "serial_test",
  "tempfile",
  "toml 1.1.8+spec-1.1.0",
- "whitaker",
  "whitaker-common",
+ "whitaker_lint_core",
  "whitaker_test_macros",
 ]
 
@@ -1828,8 +1851,8 @@ dependencies = [
  "rustc_span",
  "serde",
  "temp-env",
- "whitaker",
  "whitaker-common",
+ "whitaker_lint_core",
  "whitaker_test_macros",
 ]
 
@@ -2092,6 +2115,16 @@ checksum = "d0de1b847b39c8131db0467e9df1ff60e6d0562ab8e9a16e568ad0fdb372e2f2"
 dependencies = [
  "predicates-core",
  "termtree",
+]
+
+[[package]]
+name = "pretty_assertions"
+version = "1.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3ae130e2f271fbc2ac3a40fb1d07180839cdbbe443c7a27e1e3c13c5cac0116d"
+dependencies = [
+ "diff",
+ "yansi",
 ]
 
 [[package]]
@@ -2577,8 +2610,8 @@ dependencies = [
  "tempfile",
  "toml 1.1.8+spec-1.1.0",
  "trybuild",
- "whitaker",
  "whitaker-common",
+ "whitaker_lint_core",
 ]
 
 [[package]]
@@ -3107,8 +3140,8 @@ dependencies = [
  "rustc_lint",
  "rustc_span",
  "serde",
- "whitaker",
  "whitaker-common",
+ "whitaker_lint_core",
  "whitaker_test_macros",
 ]
 
@@ -3721,20 +3754,25 @@ version = "0.2.11"
 dependencies = [
  "camino",
  "cap-std",
- "cargo_metadata",
  "clap",
- "dylint_linting",
- "dylint_testing",
+ "googletest",
+ "insta",
+ "metrics",
+ "metrics-util",
+ "ortho_config",
+ "pretty_assertions",
+ "proptest",
  "rstest",
  "rstest-bdd",
  "rstest-bdd-macros",
- "rustc_ast",
- "rustc_hir",
- "rustc_lint",
- "rustc_span",
  "serde",
+ "serde_json",
+ "tempfile",
  "thiserror 2.0.21",
  "toml 1.1.8+spec-1.1.0",
+ "tracing",
+ "tracing-subscriber",
+ "trybuild",
  "whitaker-common",
  "whitaker-installer",
  "whitaker_test_macros",
@@ -3790,6 +3828,7 @@ dependencies = [
  "dylint_internal",
  "flate2",
  "fs2",
+ "insta",
  "log",
  "metrics",
  "metrics-util",
@@ -3847,6 +3886,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "whitaker_lint_core"
+version = "0.2.11"
+dependencies = [
+ "camino",
+ "cargo_metadata",
+ "clap",
+ "dylint_linting",
+ "dylint_testing",
+ "rstest",
+ "rstest-bdd",
+ "rstest-bdd-macros",
+ "rustc_ast",
+ "rustc_hir",
+ "rustc_lint",
+ "rustc_span",
+ "serde",
+ "thiserror 2.0.21",
+ "toml 1.1.8+spec-1.1.0",
+ "whitaker-common",
+ "whitaker_test_macros",
+]
+
+[[package]]
 name = "whitaker_sarif"
 version = "0.2.11"
 dependencies = [
@@ -3886,8 +3948,8 @@ dependencies = [
  "rustc_session",
  "rustc_span",
  "test_must_not_have_example",
- "whitaker",
  "whitaker-common",
+ "whitaker_lint_core",
  "whitaker_test_macros",
 ]
 

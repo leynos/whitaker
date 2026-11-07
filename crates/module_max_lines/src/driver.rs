@@ -8,7 +8,6 @@ use log::debug;
 use rustc_hir as hir;
 use rustc_lint::{LateContext, LateLintPass, LintContext};
 use rustc_span::{Span, source_map::SourceMap, symbol::Ident};
-use whitaker::{ModuleMaxLinesConfig, SharedConfig, module_body_span, module_header_span};
 use whitaker_common::i18n::{
     Arguments,
     DiagnosticMessageSet,
@@ -18,6 +17,12 @@ use whitaker_common::i18n::{
     get_localizer_for_lint,
     noop_reporter,
     safe_resolve_message_set,
+};
+use whitaker_lint_core::{
+    ModuleMaxLinesConfig,
+    SharedConfig,
+    module_body_span,
+    module_header_span,
 };
 
 const LINT_NAME: &str = "module_max_lines";

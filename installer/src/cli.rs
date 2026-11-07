@@ -97,7 +97,7 @@ pub struct RunArgs {
 }
 
 /// Arguments for the install command.
-#[derive(Parser, Debug, Clone)]
+#[derive(Parser, Debug, Clone, PartialEq, Eq)]
 pub struct InstallArgs {
     /// Staging directory for built libraries [default: platform-specific].
     #[arg(short, long, value_name = "DIR")]
@@ -185,7 +185,7 @@ pub struct InstallArgs {
 /// Flags selecting which lint crates are built.
 ///
 /// Flattened into [`InstallArgs`] so the command-line surface is unchanged.
-#[derive(clap::Args, Debug, Clone, Default)]
+#[derive(clap::Args, Debug, Clone, Default, PartialEq, Eq)]
 pub struct LintSelectionFlags {
     /// Build all individual lint crates instead of the aggregated suite.
     #[arg(long, conflicts_with = "lint")]
@@ -199,7 +199,7 @@ pub struct LintSelectionFlags {
 /// Flags adjusting how the installer executes the build.
 ///
 /// Flattened into [`InstallArgs`] so the command-line surface is unchanged.
-#[derive(clap::Args, Debug, Clone, Default)]
+#[derive(clap::Args, Debug, Clone, Default, PartialEq, Eq)]
 pub struct ExecutionFlags {
     /// Install rustc-codegen-cranelift via rustup.
     #[arg(long, default_value_t = false)]
@@ -213,7 +213,7 @@ pub struct ExecutionFlags {
 /// Flags that skip individual installation steps.
 ///
 /// Flattened into [`InstallArgs`] so the command-line surface is unchanged.
-#[derive(clap::Args, Debug, Clone, Default)]
+#[derive(clap::Args, Debug, Clone, Default, PartialEq, Eq)]
 pub struct SkipFlags {
     /// Skip installation of cargo-dylint and dylint-link.
     #[arg(long)]
@@ -325,9 +325,9 @@ impl Default for InstallArgs {
             quiet: false,
             skip: SkipFlags::default(),
             suite_version: None,
-            no_source_fallback: false,
             is_build_only: false,
             clippy_snapshot_bundle: None,
+            no_source_fallback: false,
         }
     }
 }
@@ -365,7 +365,7 @@ impl Cli {
     /// install arguments. Callers should check `self.command` before calling
     /// this method if the `List` case needs different handling.
     #[must_use]
-    pub fn install_args(&self) -> &InstallArgs {
+    pub const fn install_args(&self) -> &InstallArgs {
         match &self.command {
             Some(Command::Install(args)) => args,
             Some(Command::List(_) | Command::Run(_)) | None => &self.install,

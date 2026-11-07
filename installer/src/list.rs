@@ -13,7 +13,7 @@ use crate::{
     dirs::{BaseDirs, SystemBaseDirs},
     error::{InstallerError, Result},
     list_output::{format_human, format_json},
-    scanner::{InstalledLints, scan_installed},
+    scanner::InstalledLints,
     stager::default_target_dir,
     toolchain::Toolchain,
 };
@@ -26,6 +26,19 @@ use crate::{
 ///
 /// Output is written to stdout (human-readable by default, JSON with `--json`).
 ///
+/// # Examples
+///
+/// ```no_run
+/// use std::io;
+///
+/// use clap::Parser as _;
+/// use whitaker_installer::{cli::ListArgs, list::run_list};
+///
+/// let arguments = ListArgs::try_parse_from(["whitaker-installer"])?;
+/// run_list(&arguments, &mut io::stdout())?;
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+///
 /// # Errors
 ///
 /// Returns an error if:
@@ -35,19 +48,48 @@ pub fn run_list(args: &ListArgs, stdout: &mut dyn Write) -> Result<()> {
     run_list_with(args, stdout, detect_active_toolchain)
 }
 
+/// Collects installed lint metadata without formatting or writing output.
+///
+/// This is the inventory boundary used by the root `whitaker ls` command.
+/// Callers can select their own stable or evolving presentation while sharing
+/// the installer's scan-root and ordering rules.
+///
+/// # Examples
+///
+/// ```no_run
+/// use clap::Parser;
+/// use whitaker_installer::{cli::ListArgs, list::collect_installed};
+///
+/// let arguments = ListArgs::try_parse_from(["whitaker"])?;
+/// let installed = collect_installed(&arguments)?;
+/// println!(
+///     "{} toolchains have staged lints",
+///     installed.by_toolchain.len()
+/// );
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+///
+/// # Errors
+///
+/// Returns an error if a selected staging directory cannot be scanned.
+pub fn collect_installed(args: &ListArgs) -> Result<crate::scanner::InstalledLints> {
+    let scan_roots = determine_scan_roots(args.target_dir.as_deref())?;
+    let mut installed = crate::scanner::InstalledLints::default();
+    for root in scan_roots {
+        let discovered = crate::scanner::scan_installed(&root)
+            .map_err(|source| InstallerError::ScanFailed { source })?;
+        merge_installed(&mut installed, discovered);
+    }
+    sort_installed_libraries(&mut installed);
+    Ok(installed)
+}
+
 /// Internal implementation with injectable toolchain detection for testability.
 fn run_list_with<F>(args: &ListArgs, stdout: &mut dyn Write, detect_toolchain: F) -> Result<()>
 where
     F: FnOnce() -> Option<String>,
 {
-    let scan_roots = determine_scan_roots(args.target_dir.as_deref())?;
-    let mut installed = InstalledLints::default();
-    for root in scan_roots {
-        let discovered =
-            scan_installed(&root).map_err(|e| InstallerError::ScanFailed { source: e })?;
-        merge_installed(&mut installed, discovered);
-    }
-    sort_installed_libraries(&mut installed);
+    let installed = collect_installed(args)?;
 
     let active_toolchain = detect_toolchain();
 
@@ -105,47 +147,61 @@ fn determine_scan_roots(cli_target: Option<&Utf8Path>) -> Result<Vec<Utf8PathBuf
     Ok(roots)
 }
 
-/// Detect the active toolchain from `rust-toolchain.toml` in the current directory.
+/// Detect the active toolchain, reporting why detection failed.
 ///
-/// Returns `None` if:
-/// - The current directory cannot be determined
-/// - The path is not valid UTF-8
-/// - No `rust-toolchain.toml` file exists
-/// - The toolchain file cannot be parsed
-#[must_use]
-pub fn detect_active_toolchain() -> Option<String> {
-    let cwd = match std::env::current_dir() {
-        Ok(path) => path,
-        Err(e) => {
-            trace!("detect_active_toolchain: failed to get current dir: {e}");
-            return None;
-        }
-    };
+/// Returns `Ok(None)` when the working directory declares no toolchain, which
+/// is the normal case outside a checkout. Every other failure is returned so a
+/// caller whose behaviour depends on the answer can report it instead of
+/// silently falling back to "nothing is installed".
+///
+/// # Errors
+///
+/// Returns [`InstallerError::ToolchainDetection`] when the working directory
+/// cannot be determined or is not valid UTF-8, and propagates the read or parse
+/// failure when `rust-toolchain.toml` exists but cannot be used.
+pub fn try_detect_active_toolchain() -> Result<Option<String>> {
+    let cwd = std::env::current_dir().map_err(|error| InstallerError::ToolchainDetection {
+        reason: format!("could not determine the current directory: {error}"),
+    })?;
+    let utf8_cwd =
+        Utf8PathBuf::try_from(cwd).map_err(|error| InstallerError::ToolchainDetection {
+            reason: format!("the current directory is not valid UTF-8: {error}"),
+        })?;
 
-    let utf8_cwd = match Utf8PathBuf::try_from(cwd) {
-        Ok(path) => path,
-        Err(e) => {
-            trace!("detect_active_toolchain: current dir is not valid UTF-8: {e}");
-            return None;
-        }
-    };
-
-    detect_active_toolchain_in(&utf8_cwd)
+    try_detect_active_toolchain_in(&utf8_cwd)
 }
 
-/// Detect the active toolchain from `rust-toolchain.toml` in the given directory.
+/// Detect the active toolchain in a directory, distinguishing absence from
+/// failure.
 ///
-/// This is the internal implementation that accepts a path for testability.
-/// Use [`detect_active_toolchain`] for production code.
+/// This is the internal implementation that accepts a path for testability;
+/// [`try_detect_active_toolchain`] supplies the working directory.
 ///
-/// Returns `None` if:
-/// - No `rust-toolchain.toml` file exists in the directory
-/// - The toolchain file cannot be parsed
-pub(crate) fn detect_active_toolchain_in(dir: &Utf8Path) -> Option<String> {
+/// # Errors
+///
+/// Propagates [`InstallerError::Io`] when the toolchain file cannot be read and
+/// [`InstallerError::InvalidToolchainFile`] when it cannot be parsed. A missing
+/// file is not an error and yields `Ok(None)`.
+pub(crate) fn try_detect_active_toolchain_in(dir: &Utf8Path) -> Result<Option<String>> {
     match Toolchain::detect(dir) {
-        Ok(tc) => Some(tc.channel().to_owned()),
-        Err(e) => {
-            trace!("detect_active_toolchain_in: toolchain detection failed: {e}");
+        Ok(toolchain) => Ok(Some(toolchain.channel().to_owned())),
+        Err(InstallerError::ToolchainFileNotFound { .. }) => Ok(None),
+        Err(error) => Err(error),
+    }
+}
+
+/// Detect the active toolchain, treating every failure as "no toolchain".
+///
+/// This is for display only: a listing with no active toolchain still shows
+/// what was installed. A caller that acts on the result must use
+/// [`try_detect_active_toolchain`], which distinguishes an absent toolchain
+/// file from one that exists but cannot be read or parsed.
+#[must_use]
+pub fn detect_active_toolchain() -> Option<String> {
+    match try_detect_active_toolchain() {
+        Ok(channel) => channel,
+        Err(error) => {
+            trace!("detect_active_toolchain: toolchain detection failed: {error}");
             None
         }
     }

@@ -13,6 +13,32 @@ They do not change the SARIF 2.1.0 serialized representation. Serde renames
 keep the JSON keys `artifacts` and `artifactLocation`, so no serialized-data
 migration is needed.
 
+## Root `whitaker` package
+
+The root package is now the `whitaker` command-line application. It still
+declares a library target, but that library is the CLI's own application
+boundary — the `adapters`, `cli`, `diagnostics`, and `ports` modules — rather
+than the shared support APIs 0.2.x consumers imported from the `whitaker`
+crate. Those APIs are no longer available there.
+
+The shared support APIs and the `dylint-driver` feature moved to
+`whitaker_lint_core`, which exposes the `config`, `lints`, and `testing`
+modules plus a `hir` module behind that feature. Import the same items from the
+new crate path:
+
+```rust
+use whitaker_lint_core::SharedConfig;
+```
+
+Depend on `whitaker_lint_core` when shared configuration, lint templates, or
+test helpers are what the consumer actually needs; it is not published to
+crates.io, so reach it through a path or Git dependency. Consumers that use one
+lint should depend on that lint crate directly.
+
+`whitaker-installer` is unchanged in this respect. It continues to own
+installation and lint staging, and the root `whitaker` command drives
+installation through it.
+
 ## `whitaker_common` APIs
 
 Update the locale helper import and calls:
@@ -227,6 +253,25 @@ by an earlier release do not do this, so re-run `whitaker-installer` to
 regenerate them. The run also provisions the verified Clippy snapshot and writes
 `bootstrap.json` beside it.
 
+### `whitaker ls` replaces the `whitaker-ls` script
+
+The root `whitaker` command now provides `ls` itself, so an install run by the
+root binary writes no wrapper scripts at all: it is already the `whitaker`
+executable, and a generated `whitaker-ls` script would need a separately
+installed `whitaker-installer`. Replace `whitaker-ls` with `whitaker ls`:
+
+```sh
+# Before 0.3.0
+whitaker-ls
+
+# From 0.3.0
+whitaker ls
+```
+
+`whitaker ls --json` is also available. The legacy `whitaker-installer install`
+command still writes both scripts, so a machine that installs through it keeps
+working unchanged; only the root binary's install path omits them.
+
 ### The `run` subcommand
 
 `whitaker-installer run -- ARGS...` runs `cargo dylint` with `ARGS` passed
@@ -255,10 +300,22 @@ others, because nothing else serializes the first driver build.
 Crates that depend on `whitaker_installer` see these changes:
 
 - The public `bootstrap` and `clippy_snapshot` modules are new.
-- `InstallerError` gains the `ClippySnapshot` and `Bootstrap` variants. Update
-  exhaustive matches.
+- `InstallerError` gains the `ClippySnapshot`, `Bootstrap`, and
+  `InstallationRecord` variants. Update exhaustive matches on `InstallerError`.
+  `InstallationRecord` reports that the successful staging path could not be
+  persisted; the root CLI treats it as fatal because forwarding depends on that
+  record, while the legacy installer warns and continues.
 - The CLI gains `Command::Run(RunArgs)`. Update exhaustive matches on
   `Command`.
+- `DryRunInfo` groups its three skip flags into a `DryRunSkips` value. Update
+  struct literals:
+
+  | 0.2.x field    | 0.3.0 field     |
+  | -------------- | --------------- |
+  | `skip_deps`    | `skips.deps`    |
+  | `skip_wrapper` | `skips.wrapper` |
+  | `no_update`    | `skips.update`  |
+
 - `wrapper::generate_wrapper_scripts` takes one argument, `dirs`, instead of
   two. The `library_path` argument is removed because the wrappers no longer
   embed it:

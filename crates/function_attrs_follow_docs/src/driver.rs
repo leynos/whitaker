@@ -11,7 +11,6 @@ use rustc_hir as hir;
 use rustc_hir::attrs::AttributeKind;
 use rustc_lint::{DiagDecorator, LateContext, LateLintPass, LintContext};
 use rustc_span::Span;
-use whitaker::{SharedConfig, recover_user_editable_hir_span};
 use whitaker_common::i18n::{
     Arguments,
     BundleLookup,
@@ -26,6 +25,7 @@ use whitaker_common::i18n::{
 };
 #[cfg(test)]
 use whitaker_common::i18n::{I18nError, resolve_message_set};
+use whitaker_lint_core::{SharedConfig, recover_user_editable_hir_span};
 
 /// Lint pass that validates the ordering of doc comments on functions and methods.
 pub struct FunctionAttrsFollowDocs {

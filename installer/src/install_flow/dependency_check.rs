@@ -3,7 +3,8 @@
 use std::io::Write;
 
 use tracing::debug;
-use whitaker_installer::{
+
+use crate::{
     deps::{
         CommandExecutor,
         DylintToolStatus,
@@ -14,9 +15,7 @@ use whitaker_installer::{
 };
 
 /// Query dependency availability and emit bounded PATH diagnostics.
-pub(crate) fn check_dylint_tools_for_command(
-    executor: &dyn CommandExecutor,
-) -> Result<DylintToolStatus> {
+pub fn check_dylint_tools_for_command(executor: &dyn CommandExecutor) -> Result<DylintToolStatus> {
     let check = check_dylint_tools_with_diagnostics(executor)?;
     report_path_scan_failures(&check.path_scan_failures);
     Ok(check.status)

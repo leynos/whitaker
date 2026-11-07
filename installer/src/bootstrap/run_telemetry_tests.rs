@@ -47,7 +47,8 @@ fn a_run_classifies_its_child_exit(#[case] code: i32, #[case] outcome: &str) {
              'cargo-dylint 6.3.0'; exit 0; }}\nexit {code}\n"
         ),
     );
-    let prepared = prepare(&installed.layout, cargo.as_os_str()).expect("prepare");
+    let prepared =
+        prepare(&installed.layout, cargo.as_os_str(), RunOptions::default()).expect("prepare");
     let recorder = DebuggingRecorder::new();
     let snapshotter = recorder.snapshotter();
 
@@ -78,7 +79,8 @@ fn a_cold_run_opens_spans_for_each_boundary() {
         // Tests running alongside without a subscriber may already have cached
         // "not interested" for these callsites; recompute with this one active.
         tracing::callsite::rebuild_interest_cache();
-        let prepared = prepare(&installed.layout, cargo.as_os_str()).expect("prepare");
+        let prepared =
+            prepare(&installed.layout, cargo.as_os_str(), RunOptions::default()).expect("prepare");
         execute(&prepared, cargo.as_os_str(), &[]).expect("execute");
     });
 

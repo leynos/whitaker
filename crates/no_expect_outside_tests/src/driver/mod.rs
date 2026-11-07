@@ -17,8 +17,8 @@ use rustc_lint::{LateContext, LateLintPass};
 use rustc_middle::ty::{self, Ty};
 use rustc_span::{RemapPathScopeComponents, sym};
 use serde::Deserialize;
-use whitaker::{SharedConfig, hir::has_test_like_hir_attributes};
 use whitaker_common::{AttributePath, Localizer, get_localizer_for_lint};
+use whitaker_lint_core::{SharedConfig, hir::has_test_like_hir_attributes};
 
 use crate::{
     context::{collect_context, is_cfg_test_attribute, summarize_context},
@@ -85,8 +85,8 @@ impl<'tcx> LateLintPass<'tcx> for NoExpectOutsideTests {
             .is_some();
         self.is_test_harness = cx.tcx.sess.opts.test;
         self.harness_marked_test_functions = if self.is_test_harness {
-            let mut marked = whitaker::hir::collect_harness_test_functions(cx);
-            marked.extend(whitaker::hir::collect_rstest_companion_test_functions(cx));
+            let mut marked = whitaker_lint_core::hir::collect_harness_test_functions(cx);
+            marked.extend(whitaker_lint_core::hir::collect_rstest_companion_test_functions(cx));
             marked
         } else {
             HashSet::new()

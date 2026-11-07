@@ -39,9 +39,21 @@ use crate::{clippy_snapshot::check_installed, dirs::BaseDirs};
 /// A validated installation, ready to run.
 #[derive(Debug, Clone)]
 struct PreparedRun {
-    library_dir: Utf8PathBuf,
+    library_dir: OsString,
     snapshot: Utf8PathBuf,
     slot: DriverSlot,
+}
+
+/// Adjustments a caller makes to a run of the installed bootstrap.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct RunOptions<'a> {
+    /// Exports this library path in place of the one the installation records.
+    ///
+    /// The root CLI passes the per-toolchain paths it recorded when
+    /// installing, so Dylint can still select the toolchain a project
+    /// declares. The value is a complete `DYLINT_LIBRARY_PATH`; the caller
+    /// checks that its directories exist. `None` keeps the recorded directory.
+    pub library_path: Option<&'a OsStr>,
 }
 
 /// What a finished run reports to its caller.
@@ -64,7 +76,20 @@ pub struct RunOutcome {
 /// invalid, or when `cargo dylint` cannot be started. Lint failures are not
 /// errors: they come back as the child's non-zero exit code.
 pub fn run(dirs: &dyn BaseDirs, args: &[OsString]) -> Result<RunOutcome, BootstrapError> {
-    run_with_cargo(dirs, OsStr::new("cargo"), args)
+    run_with_options(dirs, RunOptions::default(), args)
+}
+
+/// [`run`] with caller-supplied adjustments.
+///
+/// # Errors
+///
+/// As for [`run`].
+pub fn run_with_options(
+    dirs: &dyn BaseDirs,
+    options: RunOptions<'_>,
+    args: &[OsString],
+) -> Result<RunOutcome, BootstrapError> {
+    run_inner(dirs, OsStr::new("cargo"), options, args)
 }
 
 /// [`run`] with an explicit `cargo` program, for tests and diagnostics.
@@ -72,28 +97,51 @@ pub fn run(dirs: &dyn BaseDirs, args: &[OsString]) -> Result<RunOutcome, Bootstr
 /// # Errors
 ///
 /// As for [`run`].
-#[tracing::instrument(name = "bootstrap.run", skip_all)]
 pub fn run_with_cargo(
     dirs: &dyn BaseDirs,
     cargo: &OsStr,
     args: &[OsString],
 ) -> Result<RunOutcome, BootstrapError> {
+    run_inner(dirs, cargo, RunOptions::default(), args)
+}
+
+/// Run the bootstrap with every option exposed to the callers above.
+///
+/// The public entry points differ only in the defaults they supply, so they
+/// share this implementation and its instrumented span.
+#[tracing::instrument(name = "bootstrap.run", skip_all)]
+fn run_inner(
+    dirs: &dyn BaseDirs,
+    cargo: &OsStr,
+    options: RunOptions<'_>,
+    args: &[OsString],
+) -> Result<RunOutcome, BootstrapError> {
     let started = Instant::now();
-    match BootstrapLayout::from_dirs(dirs).and_then(|layout| prepare(&layout, cargo)) {
+    match BootstrapLayout::from_dirs(dirs).and_then(|layout| prepare(&layout, cargo, options)) {
         Ok(prepared) => execute(&prepared, cargo, args),
         Err(error) => finish(DriverPath::Unresolved, Err(error), started),
     }
 }
 
 /// Check the installation and resolve the Dylint environment.
-fn prepare(layout: &BootstrapLayout, cargo: &OsStr) -> Result<PreparedRun, BootstrapError> {
+fn prepare(
+    layout: &BootstrapLayout,
+    cargo: &OsStr,
+    options: RunOptions<'_>,
+) -> Result<PreparedRun, BootstrapError> {
     let metadata = BootstrapMetadata::read(&layout.metadata_path())?;
-    let library_dir = metadata.library_dir.resolve(layout.data_root());
-    if !is_present_dir(&library_dir)? {
-        return Err(BootstrapError::LibrariesMissing {
-            path: library_dir.to_string(),
-        });
-    }
+    let library_dir = match options.library_path {
+        Some(path) => path.to_owned(),
+        None => {
+            let recorded = metadata.library_dir.resolve(layout.data_root());
+            if !is_present_dir(&recorded)? {
+                return Err(BootstrapError::LibrariesMissing {
+                    path: recorded.to_string(),
+                });
+            }
+            recorded.into_os_string()
+        }
+    };
     let snapshot = layout.snapshot(&metadata.snapshot_commit);
     check_installed(&snapshot, &metadata.snapshot_commit)?;
     check_cargo_dylint(cargo, &metadata.dylint_version)?;
