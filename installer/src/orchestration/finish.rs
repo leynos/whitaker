@@ -27,6 +27,37 @@ use crate::{
     wrapper::{WrapperResult, WrapperScripts, generate_wrapper_scripts_with, path_instructions},
 };
 
+/// Counts installation-record operations by operation and outcome.
+///
+/// The root CLI's forwarding boundary emits the `read` side under the same
+/// name, so one metric covers the record's whole lifecycle.
+const INSTALLATION_RECORD_TOTAL: &str = "whitaker.installation_record.total";
+
+/// Count one installation-record write and whether it succeeded.
+///
+/// The outcome is recorded here rather than folded into the install result
+/// because the legacy installer treats a record failure as a warning, so the
+/// install still succeeds and nothing else would report the failure.
+fn record_write_outcome(scripts: WrapperScripts, succeeded: bool) {
+    let installer = if scripts.is_root_cli() {
+        "root"
+    } else {
+        "legacy"
+    };
+    let outcome = if succeeded { "ok" } else { "failed" };
+    metrics::describe_counter!(
+        INSTALLATION_RECORD_TOTAL,
+        "Installation-record operations, by operation and outcome"
+    );
+    metrics::counter!(
+        INSTALLATION_RECORD_TOTAL,
+        "operation" => "write",
+        "outcome" => outcome,
+        "installer" => installer
+    )
+    .increment(1);
+}
+
 /// Aggregates final-step inputs required after a successful install run.
 pub(super) struct FinishInstallContext<'a> {
     pub(super) args: &'a InstallArgs,
@@ -90,9 +121,9 @@ pub(super) fn finish_install_and_record_metrics(
 /// directory. The legacy installer can still be invoked from within the
 /// repository, where the default target is discoverable, so it warns instead.
 fn record_installed_path(record: &StagingRecord<'_>, stderr: &mut dyn Write) -> Result<()> {
-    if let Err(record_error) =
-        record_installation(record.dirs, record.toolchain, record.staging_path)
-    {
+    let recorded = record_installation(record.dirs, record.toolchain, record.staging_path);
+    record_write_outcome(record.wrapper_scripts, recorded.is_ok());
+    if let Err(record_error) = recorded {
         let error = InstallerError::InstallationRecord {
             message: record_error.to_string(),
         };
@@ -181,10 +212,34 @@ mod tests {
     use std::path::PathBuf;
 
     use camino::Utf8PathBuf;
+    use metrics_util::{
+        CompositeKey,
+        debugging::{DebugValue, DebuggingRecorder},
+    };
     use tempfile::TempDir;
 
-    use super::{StagingRecord, record_installed_path};
+    use super::{INSTALLATION_RECORD_TOTAL, StagingRecord, record_installed_path};
     use crate::{dirs::BaseDirs, error::InstallerError, wrapper::WrapperScripts};
+
+    /// One recorded metric, as a debugging snapshot lists it.
+    type Recorded = (
+        CompositeKey,
+        Option<metrics::Unit>,
+        Option<metrics::SharedString>,
+        DebugValue,
+    );
+
+    /// Return whether `recorded` holds the record-write counter with `label`.
+    fn counted_once(recorded: &[Recorded], label: (&str, &str)) -> bool {
+        recorded.iter().any(|(key, _, _, value)| {
+            key.key().name() == INSTALLATION_RECORD_TOTAL
+                && key
+                    .key()
+                    .labels()
+                    .any(|entry| entry.key() == label.0 && entry.value() == label.1)
+                && matches!(value, DebugValue::Counter(1))
+        })
+    }
 
     /// A directory provider with no Whitaker data directory.
     ///
@@ -218,9 +273,12 @@ mod tests {
             wrapper_scripts: WrapperScripts::None,
         };
         let mut stderr = Vec::new();
+        let recorder = DebuggingRecorder::new();
+        let snapshotter = recorder.snapshotter();
 
-        let error = record_installed_path(&record, &mut stderr)
-            .expect_err("the root CLI cannot forward without a recorded path");
+        let error =
+            metrics::with_local_recorder(&recorder, || record_installed_path(&record, &mut stderr))
+                .expect_err("the root CLI cannot forward without a recorded path");
 
         assert!(
             matches!(error, InstallerError::InstallationRecord { .. }),
@@ -230,6 +288,15 @@ mod tests {
             stderr.is_empty(),
             "a fatal record failure should not also warn: {}",
             String::from_utf8_lossy(&stderr)
+        );
+        let captured = snapshotter.snapshot().into_vec();
+        assert!(
+            counted_once(&captured, ("installer", "root")),
+            "{captured:#?}"
+        );
+        assert!(
+            counted_once(&captured, ("outcome", "failed")),
+            "{captured:#?}"
         );
     }
 
@@ -243,10 +310,21 @@ mod tests {
             wrapper_scripts: WrapperScripts::Both,
         };
         let mut stderr = Vec::new();
+        let recorder = DebuggingRecorder::new();
+        let snapshotter = recorder.snapshotter();
 
-        record_installed_path(&record, &mut stderr)
+        metrics::with_local_recorder(&recorder, || record_installed_path(&record, &mut stderr))
             .expect("the legacy installer can still run from inside the repository");
 
+        let captured = snapshotter.snapshot().into_vec();
+        assert!(
+            counted_once(&captured, ("installer", "legacy")),
+            "{captured:#?}"
+        );
+        assert!(
+            counted_once(&captured, ("outcome", "failed")),
+            "{captured:#?}"
+        );
         let warning = String::from_utf8(stderr).expect("the warning should be UTF-8");
         assert!(
             warning.starts_with("Warning: "),

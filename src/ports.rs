@@ -73,6 +73,17 @@ pub enum CliError {
         /// Human-readable installer error details.
         message: String,
     },
+    /// A library-path candidate exists but could not be used.
+    ///
+    /// A candidate that is merely absent is dropped silently, because an
+    /// earlier install may have been removed. A candidate that exists but
+    /// cannot be inspected or represented is a real failure, and forwarding
+    /// with no library path would hide it.
+    #[error("could not use the Dylint library path candidates: {message}")]
+    LibraryPathUnusable {
+        /// Human-readable details of each unusable candidate.
+        message: String,
+    },
     /// The resolved candidate directories could not be joined into one
     /// platform path list.
     ///

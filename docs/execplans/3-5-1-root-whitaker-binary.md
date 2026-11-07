@@ -2096,21 +2096,25 @@ executable, the absence of both generated wrapper scripts, and the root
 diagnostics. `installer/src/orchestration/finish.rs` additionally carries unit
 coverage for the record-failure policy in both directions — fatal for the root
 CLI, warn-and-continue for the legacy installer. The dry-run behaviour scenario
-still proves argument routing and the no-wrapper policy without building the
-workspace, so the route is covered at three levels rather than delegated
-entirely to the installer's own `behaviour_cli` suite.
+still proves argument routing without building the workspace, but it does not
+prove the no-wrapper policy: a dry run generates nothing, so its absence proves
+nothing. Only the end-to-end test, which inspects the bin root after a real
+install, establishes that policy. The route is therefore covered at three
+levels rather than delegated entirely to the installer's own `behaviour_cli`
+suite.
 
-**Gate evidence for the repair commit.** Commit `625a0600` carries the two P1
+**Gate evidence for the repair commit.** Commit `620cf541` carries the two P1
 repairs, the bootstrap fixture correction, and the remaining mechanical
-findings. `make fmt`, `make check-fmt`, `make lint` and `make typecheck` all
-exit zero on that tree. `make test` was split into
-`nextest run --partition count:1/2` and `count:2/2` because a single invocation
-of the full suite exceeds the harness's two-hour background cap; the pass runs
-after the partition filter, so each half is a different set of tests rather
-than a repeat. Together they run 2199 workspace tests, all passing, plus 84
-`whitaker_lint_core --no-default-features` tests and 19 `dylint_testing` tests
-that the two invocations each execute in full. The earlier uninterrupted run
-reached 2185 of 2199 with no failures before the cap stopped it, which is
+findings. (The pre-replay history recorded the same change as `625a0600`;
+`620cf541` is its replay onto current `main`.) `make fmt`, `make check-fmt`,
+`make lint` and `make typecheck` all exit zero on that tree. `make test` was
+split into `nextest run --partition count:1/2` and `count:2/2` because a single
+invocation of the full suite exceeds the harness's two-hour background cap; the
+pass runs after the partition filter, so each half is a different set of tests
+rather than a repeat. Together they run 2199 workspace tests, all passing, plus
+84 `whitaker_lint_core --no-default-features` tests and 19 `dylint_testing`
+tests that the two invocations each execute in full. The earlier uninterrupted
+run reached 2185 of 2199 with no failures before the cap stopped it, which is
 consistent with the split result.
 
 **Replay onto current `main`, 2026-11-06.** The branch was replayed onto

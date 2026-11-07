@@ -3609,9 +3609,13 @@ Integration tests therefore install a small, real snapshot instead:
 
 The fixture replaces only the manifest and the bundle: download-free
 installation, every integrity check, and Dylint's selection all run for real. A
-test that runs the installer with the real data directory must also set
-`XDG_DATA_HOME` to a temporary directory, because installation records
-`bootstrap.json` there. `installer/tests/bootstrap_run.rs` exercises
+test that runs the installer with the real data directory must also redirect
+that directory, because the installation records `bootstrap.json` and
+`installed_lint_paths.json` there. On Linux, setting `XDG_DATA_HOME` to a
+temporary directory does that. Windows and macOS resolve the data directory
+from a platform API that ignores `XDG_DATA_HOME`, so a test on those platforms
+must either inject a `BaseDirs` implementation or read the directory the
+install actually wrote. `installer/tests/bootstrap_run.rs` exercises
 `whitaker-installer run` the same way against a stub `cargo`, covering cold and
 warm runs, concurrent cold runs, relocation, overwritten variables, exit-status
 preservation, and each refusal.
@@ -3936,6 +3940,24 @@ successful `record_installation` discards the unreadable contents and starts a
 fresh map. Both functions resolve the record from the platform data directory
 alone, so callers pass a single `BaseDirs` view.
 
+`read_installation_record(dirs)` exposes the same read without collapsing it.
+It returns an `InstallationRecord`, whose `contents()` reports `Missing`,
+`Empty`, `Stale`, or `Current`, so a caller can tell "nothing has been
+installed" from "the installation has gone away"; an empty path list cannot
+express that difference on its own. `installed_paths` is a thin wrapper that
+keeps only `into_surviving_paths()`, and the forwarding boundary uses the
+classification to label its read metric.
+
+The two installers treat a failed record write differently, and the difference
+is policy rather than plumbing. `installer/src/orchestration/finish.rs` makes
+the failure fatal for the root CLI, because the root binary forwards into the
+recorded path from an arbitrary directory and a missing record would leave it
+pointing nowhere. The legacy installer only warns, because it can still be
+driven from inside the repository, where the default target is discoverable.
+Both outcomes increment `whitaker.installation_record.total` with
+`operation="write"`, `installer="root"` or `"legacy"`, and `outcome="ok"` or
+`"failed"`, so a warn-and-continue failure is still countable.
+
 #### Bootstrap boundary
 
 `installer/src/bootstrap/` exposes `is_installed`, `RunOptions`, `run`,
@@ -3968,13 +3990,21 @@ for diagnostics), and `NoCandidate` (nothing installed yet, which leaves Dylint
 to find its own libraries). `LibraryPath::kind` returns the matching
 `LibraryPathKind` label.
 
+Each candidate is classified before it is joined. A path that no longer names a
+directory is `Absent` and is dropped silently, because an earlier install may
+have been removed. A path that exists but cannot be inspected or represented in
+a platform path list is `Unusable`: it is logged, counted, and — when no
+candidate survives — reported as `CliError::LibraryPathUnusable`. Inspecting
+the metadata rather than calling `is_dir()` is what keeps a permission or I/O
+failure from being mistaken for "nothing installed".
+
 A missing record, a missing directory, and an unknown host target are normal
 states, not failures. A record that exists but cannot be locked, read, or
 parsed is reported as `CliError::InstallationRecord`; an unavailable data
 directory while deriving the prebuilt path is `CliError::PrebuiltLibraryPath`;
-and a candidate list that cannot be joined is `CliError::LibraryPath`. Each
-carries a typed source, so the command layer reports the failure without
-parsing text.
+a candidate set with no usable survivor is `CliError::LibraryPathUnusable`; and
+a candidate list that cannot be joined is `CliError::LibraryPath`. Each carries
+a typed source, so the command layer reports the failure without parsing text.
 
 #### Forwarding diagnostics
 
@@ -3986,8 +4016,20 @@ the operation, the route (`bootstrap` or `direct`), and the library-path kind,
 then records `whitaker.forward.total` and `whitaker.forward.duration_seconds`
 by source and bounded outcome (`succeeded`, `child_failed`, `signalled`,
 `dispatch_failed`, `library_path_failed`). Library-path resolutions record
-`whitaker.library_path.total` and `whitaker.library_path.candidates`, and
-installation-record reads record `whitaker.installation_record.total`.
+`whitaker.library_path.total`, `whitaker.library_path.candidates`, and
+`whitaker.library_path.duration_seconds`; dropped candidates are counted by
+reason (`absent` or `unusable`) as `whitaker.library_path.dropped`. Resolution
+stats the filesystem once per candidate, so its duration is kept separate from
+the forward it feeds.
+
+Installation-record reads record `whitaker.installation_record.total` with
+`operation="read"` and one outcome from `missing`, `empty`, `stale`, `current`,
+or `failed`. CLI diagnostics record `whitaker.diagnostic.total` with the
+`stream` (`stdout` or `stderr`) and whether the write succeeded, so a failed
+diagnostic cannot disappear just because the command had already failed.
+`ForwardOutcome::classify_exit` treats only codes 129 through 192 as signals,
+the window a POSIX shell reports as `128 + signal`; an unrelated status such as
+the Windows code 256 stays `child_failed`.
 
 The root binary installs no metrics exporter, so these counters are inert
 unless a host embeds the crate and installs a recorder. That matches the

@@ -10,15 +10,22 @@ use metrics_util::{
 use rstest::rstest;
 
 use super::{
+    DIAGNOSTIC_TOTAL,
+    DiagnosticStream,
     FORWARD_SECONDS,
     FORWARD_TOTAL,
     ForwardOutcome,
     ForwardSource,
     INSTALLATION_RECORD_TOTAL,
     LIBRARY_PATH_CANDIDATES,
+    LIBRARY_PATH_DROPPED,
+    LIBRARY_PATH_SECONDS,
     LIBRARY_PATH_TOTAL,
+    RecordReadOutcome,
     error_category,
     forward_span,
+    record_diagnostic_write,
+    record_dropped_candidates,
     record_forward,
     record_installation_record_read,
     record_library_path,
@@ -42,6 +49,21 @@ fn counted_once(recorded: &[Recorded], name: &str, label: (&str, &str)) -> bool 
                 .labels()
                 .any(|entry| entry.key() == label.0 && entry.value() == label.1)
             && matches!(value, DebugValue::Counter(1))
+    })
+}
+
+/// Return the counter value recorded for `name` and `label`, if any.
+fn counter_value(recorded: &[Recorded], name: &str, label: (&str, &str)) -> Option<u64> {
+    recorded.iter().find_map(|(key, _, _, value)| {
+        let matches_key = key.key().name() == name
+            && key
+                .key()
+                .labels()
+                .any(|entry| entry.key() == label.0 && entry.value() == label.1);
+        match value {
+            DebugValue::Counter(count) if matches_key => Some(*count),
+            _ => None,
+        }
     })
 }
 
@@ -107,7 +129,7 @@ fn library_path_resolutions_record_their_candidate_count() {
     let snapshotter = recorder.snapshotter();
 
     metrics::with_local_recorder(&recorder, || {
-        record_library_path(LibraryPathKind::Resolved, 3);
+        record_library_path(LibraryPathKind::Resolved, 3, Duration::from_millis(12));
     });
 
     let captured = snapshotter.snapshot().into_vec();
@@ -120,27 +142,86 @@ fn library_path_resolutions_record_their_candidate_count() {
         Some(3.0),
         "{captured:#?}"
     );
+    assert!(
+        histogram_sample(&captured, LIBRARY_PATH_SECONDS, ("kind", "resolved")).is_some(),
+        "{captured:#?}"
+    );
 }
 
-/// Both record-read outcomes are distinguishable, so a broken record is
-/// visible rather than merely absent.
+/// A resolution reports dropped candidates separately by reason, so a broken
+/// directory is distinguishable from one that was simply removed.
 #[test]
-fn installation_record_reads_record_both_outcomes() {
+fn dropped_candidates_are_counted_by_reason() {
     let recorder = DebuggingRecorder::new();
     let snapshotter = recorder.snapshotter();
 
     metrics::with_local_recorder(&recorder, || {
-        record_installation_record_read(true);
-        record_installation_record_read(false);
+        record_dropped_candidates(2, 1);
+    });
+
+    let captured = snapshotter.snapshot().into_vec();
+    assert_eq!(
+        counter_value(&captured, LIBRARY_PATH_DROPPED, ("reason", "absent")),
+        Some(2),
+        "{captured:#?}"
+    );
+    assert_eq!(
+        counter_value(&captured, LIBRARY_PATH_DROPPED, ("reason", "unusable")),
+        Some(1),
+        "{captured:#?}"
+    );
+}
+
+/// Every record-read outcome is distinguishable, so a stale record is visible
+/// rather than merely absent.
+#[test]
+fn installation_record_reads_record_every_outcome() {
+    let recorder = DebuggingRecorder::new();
+    let snapshotter = recorder.snapshotter();
+
+    metrics::with_local_recorder(&recorder, || {
+        for outcome in [
+            RecordReadOutcome::Missing,
+            RecordReadOutcome::Empty,
+            RecordReadOutcome::Stale,
+            RecordReadOutcome::Current,
+            RecordReadOutcome::Failed,
+        ] {
+            record_installation_record_read(outcome);
+        }
+    });
+
+    let captured = snapshotter.snapshot().into_vec();
+    for label in ["missing", "empty", "stale", "current", "failed"] {
+        assert!(
+            counted_once(&captured, INSTALLATION_RECORD_TOTAL, ("outcome", label)),
+            "{label} should be counted: {captured:#?}"
+        );
+    }
+}
+
+/// A diagnostic that could not be written is counted against its stream.
+#[test]
+fn diagnostic_writes_are_counted_by_stream_and_outcome() {
+    let recorder = DebuggingRecorder::new();
+    let snapshotter = recorder.snapshotter();
+
+    metrics::with_local_recorder(&recorder, || {
+        record_diagnostic_write(DiagnosticStream::Stderr, true);
+        record_diagnostic_write(DiagnosticStream::Stdout, false);
     });
 
     let captured = snapshotter.snapshot().into_vec();
     assert!(
-        counted_once(&captured, INSTALLATION_RECORD_TOTAL, ("outcome", "ok")),
+        counted_once(&captured, DIAGNOSTIC_TOTAL, ("outcome", "ok")),
         "{captured:#?}"
     );
     assert!(
-        counted_once(&captured, INSTALLATION_RECORD_TOTAL, ("outcome", "failed")),
+        counted_once(&captured, DIAGNOSTIC_TOTAL, ("outcome", "failed")),
+        "{captured:#?}"
+    );
+    assert!(
+        counted_once(&captured, DIAGNOSTIC_TOTAL, ("stream", "stdout")),
         "{captured:#?}"
     );
 }
@@ -150,6 +231,7 @@ fn installation_record_reads_record_both_outcomes() {
 #[case::clean(0, ForwardOutcome::Succeeded)]
 #[case::lints_fired(3, ForwardOutcome::ChildFailed)]
 #[case::interrupted(130, ForwardOutcome::Signalled)]
+#[case::beyond_the_signal_window(256, ForwardOutcome::ChildFailed)]
 fn exit_codes_are_classified_into_bounded_outcomes(
     #[case] code: i32,
     #[case] expected: ForwardOutcome,

@@ -99,6 +99,137 @@ pub fn record_installation(
     write_paths(&record_path, &mut file, &paths)
 }
 
+/// What a read installation record says about the directories it names.
+///
+/// An empty path list alone cannot distinguish "nothing has been installed"
+/// from "the installation has gone away", so a reader that reports on the
+/// record needs this classification as well as the surviving paths.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RecordContents {
+    /// No record file exists, so nothing has been installed yet.
+    Missing,
+    /// The record exists but stores no staging paths.
+    Empty,
+    /// The record stores paths, but none of them still exist.
+    Stale,
+    /// At least one recorded staging directory still exists.
+    Current,
+}
+
+/// An installation record as read from disk, before stale entries are dropped.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InstallationRecord {
+    is_present: bool,
+    recorded: Vec<Utf8PathBuf>,
+}
+
+impl InstallationRecord {
+    /// A record with no file behind it.
+    const fn missing() -> Self {
+        Self {
+            is_present: false,
+            recorded: Vec::new(),
+        }
+    }
+
+    /// A record read from an existing file.
+    const fn present(recorded: Vec<Utf8PathBuf>) -> Self {
+        Self {
+            is_present: true,
+            recorded,
+        }
+    }
+
+    /// Classify the record against the filesystem it describes.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use whitaker_installer::{
+    ///     dirs::SystemBaseDirs,
+    ///     installation_record::{RecordContents, read_installation_record},
+    /// };
+    ///
+    /// let dirs = SystemBaseDirs::new().ok_or("platform data directory unavailable")?;
+    /// let record = read_installation_record(&dirs)?;
+    /// assert_ne!(record.contents(), RecordContents::Stale);
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[must_use]
+    pub fn contents(&self) -> RecordContents {
+        if !self.is_present {
+            return RecordContents::Missing;
+        }
+        if self.recorded.is_empty() {
+            return RecordContents::Empty;
+        }
+        if self.recorded.iter().any(is_live_directory) {
+            RecordContents::Current
+        } else {
+            RecordContents::Stale
+        }
+    }
+
+    /// Consume the record and keep only the paths that still name directories.
+    ///
+    /// Stale entries and relative paths are ignored so a moved or deleted
+    /// install cannot poison forwarding.
+    #[must_use]
+    pub fn into_surviving_paths(self) -> Vec<Utf8PathBuf> {
+        self.recorded
+            .into_iter()
+            .filter(is_live_directory)
+            .collect()
+    }
+}
+
+/// Report whether `path` is an absolute path that still names a directory.
+fn is_live_directory(path: &Utf8PathBuf) -> bool { path.is_absolute() && path.is_dir() }
+
+/// Read the installation record, keeping enough detail to classify it.
+///
+/// A missing record is not an error: it means nothing has been installed yet.
+/// The returned record distinguishes that case from a record whose entries
+/// have all gone away, which [`installed_paths`] cannot express.
+///
+/// # Examples
+///
+/// ```no_run
+/// use whitaker_installer::{dirs::SystemBaseDirs, installation_record::read_installation_record};
+///
+/// let dirs = SystemBaseDirs::new().ok_or("platform data directory unavailable")?;
+/// let record = read_installation_record(&dirs)?;
+/// for path in record.into_surviving_paths() {
+///     println!("{}", path);
+/// }
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+///
+/// # Errors
+///
+/// Returns an error if the record exists but cannot be locked, read, or parsed.
+pub fn read_installation_record(
+    dirs: &dyn BaseDirs,
+) -> Result<InstallationRecord, InstallationRecordError> {
+    let record_path = record_path(dirs)?;
+    let mut file = match OpenOptions::new().read(true).open(&record_path) {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(InstallationRecord::missing());
+        }
+        Err(source) => return Err(record_io_error("open", &record_path, source)),
+    };
+    // `File::lock_shared` is stable only from Rust 1.89; naming the trait
+    // keeps the 1.85-compatible implementation selected where the inherent
+    // method would otherwise shadow it.
+    FileExt::lock_shared(&file).map_err(|source| record_io_error("lock", &record_path, source))?;
+    let recorded = read_paths(&record_path, &mut file)?
+        .into_values()
+        .map(Utf8PathBuf::from)
+        .collect();
+    Ok(InstallationRecord::present(recorded))
+}
+
 /// Returns recorded staging directories that still exist.
 ///
 /// Missing records yield an empty vector. Stale entries and relative paths are
@@ -120,22 +251,7 @@ pub fn record_installation(
 ///
 /// Returns an error if the record exists but cannot be locked, read, or parsed.
 pub fn installed_paths(dirs: &dyn BaseDirs) -> Result<Vec<Utf8PathBuf>, InstallationRecordError> {
-    let record_path = record_path(dirs)?;
-    let mut file = match OpenOptions::new().read(true).open(&record_path) {
-        Ok(file) => file,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-        Err(source) => return Err(record_io_error("open", &record_path, source)),
-    };
-    // `File::lock_shared` is stable only from Rust 1.89; naming the trait
-    // keeps the 1.85-compatible implementation selected where the inherent
-    // method would otherwise shadow it.
-    FileExt::lock_shared(&file).map_err(|source| record_io_error("lock", &record_path, source))?;
-    let paths = read_paths(&record_path, &mut file)?;
-    Ok(paths
-        .into_values()
-        .map(Utf8PathBuf::from)
-        .filter(|path| path.is_absolute() && path.is_dir())
-        .collect())
+    read_installation_record(dirs).map(InstallationRecord::into_surviving_paths)
 }
 
 /// Resolve the record file inside the Whitaker data directory.
@@ -224,138 +340,5 @@ fn record_io_error(
 }
 
 #[cfg(test)]
-mod tests {
-    //! Tests for exact installed-path persistence.
-
-    use std::path::PathBuf;
-
-    use camino::Utf8Path;
-    use tempfile::TempDir;
-
-    use super::{InstallationRecordError, installed_paths, record_installation};
-    use crate::dirs::{BaseDirs, MockBaseDirs};
-
-    fn mock_dirs(data: PathBuf) -> MockBaseDirs {
-        let mut dirs = MockBaseDirs::new();
-        dirs.expect_whitaker_data().return_const(Some(data));
-        dirs
-    }
-
-    #[test]
-    fn installation_paths_preserve_toolchains_and_replace_the_same_channel() {
-        let temporary = TempDir::new().expect("temporary directory should be created");
-        let stable = temporary.path().join("stable");
-        let nightly = temporary.path().join("nightly");
-        let replacement = temporary.path().join("stable-replacement");
-        std::fs::create_dir_all(&stable).expect("stable staging directory should be created");
-        std::fs::create_dir_all(&nightly).expect("nightly staging directory should be created");
-        std::fs::create_dir_all(&replacement)
-            .expect("replacement staging directory should be created");
-        let expected_nightly = Utf8Path::from_path(&nightly)
-            .expect("nightly path should be UTF-8")
-            .canonicalize_utf8()
-            .expect("nightly path should be canonicalized");
-        let expected_replacement = Utf8Path::from_path(&replacement)
-            .expect("replacement path should be UTF-8")
-            .canonicalize_utf8()
-            .expect("replacement path should be canonicalized");
-        let dirs = mock_dirs(temporary.path().join("data"));
-
-        record_installation(
-            &dirs,
-            "stable",
-            Utf8Path::from_path(&stable).expect("stable path should be UTF-8"),
-        )
-        .expect("stable path should be recorded");
-        record_installation(
-            &dirs,
-            "nightly",
-            Utf8Path::from_path(&nightly).expect("nightly path should be UTF-8"),
-        )
-        .expect("nightly path should be recorded");
-        record_installation(
-            &dirs,
-            "stable",
-            Utf8Path::from_path(&replacement).expect("replacement path should be UTF-8"),
-        )
-        .expect("replacement path should be recorded");
-
-        let recorded = installed_paths(&dirs).expect("recorded paths should load");
-        assert_eq!(recorded.len(), 2);
-        assert!(recorded.contains(&expected_replacement));
-        assert!(recorded.contains(&expected_nightly));
-    }
-
-    #[test]
-    fn installed_paths_ignore_stale_records_and_missing_files() {
-        let temporary = TempDir::new().expect("temporary directory should be created");
-        let staging = temporary.path().join("staging");
-        std::fs::create_dir_all(&staging).expect("staging directory should be created");
-        let dirs = mock_dirs(temporary.path().join("data"));
-        assert!(
-            installed_paths(&dirs)
-                .expect("a missing record should be an empty inventory")
-                .is_empty()
-        );
-        record_installation(
-            &dirs,
-            "gone",
-            Utf8Path::from_path(&staging).expect("stale path should be UTF-8"),
-        )
-        .expect("existing staging directory should be recorded");
-        std::fs::remove_dir(&staging).expect("staging directory should be removed");
-        assert!(
-            installed_paths(&dirs)
-                .expect("stale records should be ignored")
-                .is_empty()
-        );
-    }
-
-    #[test]
-    fn successful_install_replaces_a_malformed_record() {
-        let temporary = TempDir::new().expect("temporary directory should be created");
-        let data = temporary.path().join("data");
-        let staging = temporary.path().join("staging");
-        std::fs::create_dir_all(&data).expect("data directory should be created");
-        std::fs::create_dir_all(&staging).expect("staging directory should be created");
-        std::fs::write(data.join(super::RECORD_FILENAME), "not JSON")
-            .expect("malformed record should be written");
-        let dirs = mock_dirs(data);
-
-        assert!(matches!(
-            installed_paths(&dirs),
-            Err(InstallationRecordError::Parse { .. })
-        ));
-        record_installation(
-            &dirs,
-            "nightly",
-            Utf8Path::from_path(&staging).expect("staging path should be UTF-8"),
-        )
-        .expect("successful install should replace malformed record");
-
-        assert_eq!(
-            installed_paths(&dirs)
-                .expect("new record should load")
-                .len(),
-            1
-        );
-    }
-
-    #[test]
-    fn the_record_api_uses_only_the_whitaker_data_directory() {
-        let temporary = TempDir::new().expect("temporary directory should be created");
-        let staging = temporary.path().join("staging");
-        std::fs::create_dir_all(&staging).expect("staging directory should be created");
-        let dirs = mock_dirs(temporary.path().join("data"));
-
-        record_installation(
-            &dirs,
-            "nightly",
-            Utf8Path::from_path(&staging).expect("staging path should be UTF-8"),
-        )
-        .expect("staging path should be recorded");
-
-        let data_dir = dirs.whitaker_data().expect("data directory should exist");
-        assert!(data_dir.join("installed_lint_paths.json").is_file());
-    }
-}
+#[path = "installation_record_tests.rs"]
+mod tests;

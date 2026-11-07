@@ -14,7 +14,10 @@ use super::{
     exit::Outcome,
     parser::is_common_cluster,
 };
-use crate::ports::{CliError, InstallRequest, ListRequest, Services};
+use crate::{
+    adapters::telemetry::{self, DiagnosticStream},
+    ports::{CliError, InstallRequest, ListRequest, Services},
+};
 
 /// Separate output sinks passed through a root command invocation.
 pub struct CommandStreams<'a> {
@@ -145,12 +148,14 @@ fn write_inventory(
 /// Writes an operational CLI error and returns its failure outcome.
 ///
 /// A failed write cannot change the outcome, because the command has already
-/// failed. It is still reported through `tracing` so a broken diagnostic
-/// stream is visible rather than silently discarded.
+/// failed. It is still reported through `tracing` and counted as a failed
+/// diagnostic so a broken stream is visible rather than silently discarded.
 fn print_cli_error(error: &CliError, stderr: &mut dyn Write) -> Outcome {
-    if let Err(source) = writeln!(stderr, "{error}") {
+    let written = writeln!(stderr, "{error}");
+    if let Err(source) = &written {
         tracing::error!(%source, "failed to write the CLI error to stderr");
     }
+    telemetry::record_diagnostic_write(DiagnosticStream::Stderr, written.is_ok());
     Outcome::OperationalFailure
 }
 
@@ -160,14 +165,20 @@ fn print_clap_error(
     outcome: Outcome,
     streams: &mut CommandStreams<'_>,
 ) -> Outcome {
-    let result = if error.use_stderr() {
-        write!(streams.stderr, "{}", error.render())
+    let stream = if error.use_stderr() {
+        DiagnosticStream::Stderr
     } else {
-        write!(streams.stdout, "{}", error.render())
+        DiagnosticStream::Stdout
     };
-    match result {
-        Ok(()) => outcome,
-        Err(_) => Outcome::OperationalFailure,
+    let written = match stream {
+        DiagnosticStream::Stderr => write!(streams.stderr, "{}", error.render()),
+        DiagnosticStream::Stdout => write!(streams.stdout, "{}", error.render()),
+    };
+    telemetry::record_diagnostic_write(stream, written.is_ok());
+    if written.is_ok() {
+        outcome
+    } else {
+        Outcome::OperationalFailure
     }
 }
 

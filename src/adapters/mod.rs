@@ -15,7 +15,7 @@ use whitaker_installer::{
 };
 
 use self::{
-    library_path::active_library_path,
+    library_path::{LibraryPathKind, active_library_path},
     telemetry::{ForwardOutcome, ForwardSource},
 };
 use crate::ports::{
@@ -131,9 +131,15 @@ impl LintRunner for SystemServices {
         let dirs = system_dirs.as_ref().map(|system| system as &dyn BaseDirs);
         let source = forward_source(dirs);
         let started = Instant::now();
+        let resolution_started = Instant::now();
         let library_path = match active_library_path(dirs) {
             Ok(path) => path,
             Err(error) => {
+                telemetry::record_library_path(
+                    LibraryPathKind::Failed,
+                    0,
+                    resolution_started.elapsed(),
+                );
                 return Err(record_failure(FailedForward {
                     source,
                     outcome: ForwardOutcome::LibraryPathFailed,
@@ -143,7 +149,11 @@ impl LintRunner for SystemServices {
                 }));
             }
         };
-        telemetry::record_library_path(library_path.kind(), library_path.candidate_count());
+        telemetry::record_library_path(
+            library_path.kind(),
+            library_path.candidate_count(),
+            resolution_started.elapsed(),
+        );
         let forwarding = Forwarding {
             args,
             stderr,

@@ -262,6 +262,33 @@ fn an_unrepresentable_recorded_directory_does_not_hide_valid_paths() {
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn an_unusable_candidate_with_no_survivors_is_reported() {
+    let temporary = TempDir::new().expect("temporary directories should be created");
+    let invalid = create_test_directory(&temporary, "invalid:directory");
+
+    let error = resolve_library_path(vec![invalid], None, None)
+        .expect_err("an unusable candidate must not look like nothing installed");
+
+    assert!(
+        matches!(error, CliError::LibraryPathUnusable { .. }),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn a_candidate_that_is_no_longer_a_directory_is_stale_not_broken() {
+    let temporary = TempDir::new().expect("temporary directories should be created");
+    let file = utf8_path(&temporary.path().join("recorded-file"));
+    std::fs::write(&file, b"not a directory").expect("the file should be written");
+
+    let actual = resolve_library_path(vec![file], None, None)
+        .expect("a path that is no longer a directory is a stale record");
+
+    assert_eq!(actual, LibraryPath::NoCandidate);
+}
+
 #[test]
 fn prebuilt_library_path_reports_an_unavailable_data_directory() {
     if host_target().is_none() {

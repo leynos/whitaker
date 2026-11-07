@@ -66,17 +66,32 @@ impl ExampleHarnessLock {
     /// Return an error when Cargo's target directory cannot be resolved or the
     /// lock cannot be acquired before its timeout.
     pub(crate) fn acquire() -> io::Result<Self> {
+        Self::acquire_at(
+            &Self::resolved_path()?,
+            Some(EXAMPLE_HARNESS_LOCK_ACQUIRE_TIMEOUT),
+        )
+    }
+
+    /// Resolve the lock path that [`Self::acquire`] targets for this binary.
+    ///
+    /// Splitting resolution from acquisition lets a unit test assert the
+    /// production path without queueing behind a live owner; the trybuild test
+    /// holds the real lock for as long as its compilation takes.
+    ///
+    /// # Errors
+    ///
+    /// Return an error when Cargo's target directory cannot be resolved.
+    fn resolved_path() -> io::Result<PathBuf> {
         let executable = std::env::current_exe()?;
         let configured_target_directory = std::env::var_os("CARGO_TARGET_DIR");
         let target_directory = effective_target_directory(
             &executable,
             configured_target_directory.as_deref().map(Path::new),
         )?;
-        Self::acquire_for_target_directory(
+        Ok(example_harness_lock_path(
             &target_directory,
             &target_directory,
-            Some(EXAMPLE_HARNESS_LOCK_ACQUIRE_TIMEOUT),
-        )
+        ))
     }
 
     /// Acquire the lock selected for `target_directory` under `lock_root`.

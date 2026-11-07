@@ -14,6 +14,7 @@ use std::time::Duration;
 
 use metrics::{counter, describe_counter, describe_histogram, histogram};
 use tracing::Span;
+use whitaker_installer::installation_record::RecordContents;
 
 use super::library_path::LibraryPathKind;
 use crate::ports::CliError;
@@ -24,10 +25,16 @@ pub const FORWARD_TOTAL: &str = "whitaker.forward.total";
 pub const FORWARD_SECONDS: &str = "whitaker.forward.duration_seconds";
 /// Counts library-path resolutions by the outcome that produced them.
 pub const LIBRARY_PATH_TOTAL: &str = "whitaker.library_path.total";
+/// Records how long a library-path resolution took.
+pub const LIBRARY_PATH_SECONDS: &str = "whitaker.library_path.duration_seconds";
 /// Records how many candidate directories a resolution contributed.
 pub const LIBRARY_PATH_CANDIDATES: &str = "whitaker.library_path.candidates";
-/// Counts installation-record reads by whether they succeeded.
+/// Counts candidate directories dropped during a resolution, by reason.
+pub const LIBRARY_PATH_DROPPED: &str = "whitaker.library_path.dropped";
+/// Counts installation-record operations by operation and outcome.
 pub const INSTALLATION_RECORD_TOTAL: &str = "whitaker.installation_record.total";
+/// Counts writes of CLI diagnostics by stream and outcome.
+pub const DIAGNOSTIC_TOTAL: &str = "whitaker.diagnostic.total";
 
 /// Where a forwarded invocation ran.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -97,10 +104,12 @@ impl ForwardOutcome {
     /// Classify a child's numeric exit status.
     ///
     /// The bootstrap entry point reports only a code, so a signal is inferred
-    /// from the shell convention of `128 + signal`. A child that genuinely
-    /// exits with such a code is indistinguishable here; the direct path
-    /// could tell them apart, but one classification keeps the two sources
-    /// comparable.
+    /// from the shell convention of `128 + signal`. That convention only
+    /// covers the signals a POSIX shell can report, 1 through 64, so the
+    /// window is bounded: an unrelated status such as the Windows code 256 is
+    /// a failure of its own rather than a signal. A child that genuinely exits
+    /// inside the window is still indistinguishable from one killed by a
+    /// signal, because a bare code carries no more information than that.
     ///
     /// # Examples
     ///
@@ -116,15 +125,100 @@ impl ForwardOutcome {
     ///     ForwardOutcome::classify_exit(130),
     ///     ForwardOutcome::Signalled
     /// );
+    /// assert_eq!(
+    ///     ForwardOutcome::classify_exit(256),
+    ///     ForwardOutcome::ChildFailed
+    /// );
     /// ```
     #[must_use]
     pub const fn classify_exit(code: i32) -> Self {
         if code == 0 {
             Self::Succeeded
-        } else if code >= 128 {
+        } else if matches!(code, 129..=192) {
             Self::Signalled
         } else {
             Self::ChildFailed
+        }
+    }
+}
+
+/// The bounded outcome of reading the installation record.
+///
+/// An empty path list cannot distinguish "nothing has been installed" from
+/// "the installation has gone away", so the read outcome names which of those
+/// happened. Every label is drawn from this closed set.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RecordReadOutcome {
+    /// No record exists, so nothing has been installed yet.
+    Missing,
+    /// The record exists but stores no staging paths.
+    Empty,
+    /// The record stores paths, but none of them still exist.
+    Stale,
+    /// At least one recorded staging directory survives.
+    Current,
+    /// The record exists but could not be locked, read, or parsed.
+    Failed,
+}
+
+impl RecordReadOutcome {
+    /// The bounded label recorded for this outcome.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use whitaker::adapters::telemetry::RecordReadOutcome;
+    ///
+    /// assert_eq!(RecordReadOutcome::Stale.label(), "stale");
+    /// assert_eq!(RecordReadOutcome::Failed.label(), "failed");
+    /// ```
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Missing => "missing",
+            Self::Empty => "empty",
+            Self::Stale => "stale",
+            Self::Current => "current",
+            Self::Failed => "failed",
+        }
+    }
+}
+
+impl From<RecordContents> for RecordReadOutcome {
+    fn from(contents: RecordContents) -> Self {
+        match contents {
+            RecordContents::Missing => Self::Missing,
+            RecordContents::Empty => Self::Empty,
+            RecordContents::Stale => Self::Stale,
+            RecordContents::Current => Self::Current,
+        }
+    }
+}
+
+/// The stream a CLI diagnostic was written to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DiagnosticStream {
+    /// Standard output, where clap writes help and version text.
+    Stdout,
+    /// Standard error, where errors and progress go.
+    Stderr,
+}
+
+impl DiagnosticStream {
+    /// The bounded label recorded for this stream.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use whitaker::adapters::telemetry::DiagnosticStream;
+    ///
+    /// assert_eq!(DiagnosticStream::Stderr.label(), "stderr");
+    /// ```
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Stdout => "stdout",
+            Self::Stderr => "stderr",
         }
     }
 }
@@ -149,12 +243,25 @@ fn describe_metrics() {
         "Library-path resolutions, by the outcome that produced them"
     );
     describe_histogram!(
+        LIBRARY_PATH_SECONDS,
+        metrics::Unit::Seconds,
+        "Elapsed time of library-path resolutions"
+    );
+    describe_histogram!(
         LIBRARY_PATH_CANDIDATES,
         "Candidate directories contributed to a resolved library path"
     );
     describe_counter!(
+        LIBRARY_PATH_DROPPED,
+        "Candidate directories dropped during resolution, by reason"
+    );
+    describe_counter!(
         INSTALLATION_RECORD_TOTAL,
-        "Installation-record reads, by whether they succeeded"
+        "Installation-record operations, by operation and outcome"
+    );
+    describe_counter!(
+        DIAGNOSTIC_TOTAL,
+        "CLI diagnostics, by stream and whether writing them succeeded"
     );
 }
 
@@ -191,22 +298,53 @@ pub fn record_forward(source: ForwardSource, outcome: ForwardOutcome, elapsed: D
     histogram!(FORWARD_SECONDS, "source" => source.label()).record(elapsed.as_secs_f64());
 }
 
-/// Record one library-path resolution and how many directories it contributed.
-pub fn record_library_path(kind: LibraryPathKind, candidates: usize) {
+/// Record one library-path resolution, how many directories it contributed,
+/// and how long it took.
+///
+/// Resolution stats the filesystem once per candidate, so its duration is
+/// recorded separately from the forward it feeds: a slow resolution and a slow
+/// child would otherwise be indistinguishable in the forwarding histogram.
+pub fn record_library_path(kind: LibraryPathKind, candidates: usize, elapsed: Duration) {
     describe_metrics();
     // A `usize` to `f64` cast can lose precision above 2^53; a machine cannot
     // contribute that many directories, so the conversion is saturating and
     // explicit rather than lossy and implicit.
     let sample = f64::from(u32::try_from(candidates).unwrap_or(u32::MAX));
     counter!(LIBRARY_PATH_TOTAL, "kind" => kind.label()).increment(1);
+    histogram!(LIBRARY_PATH_SECONDS, "kind" => kind.label()).record(elapsed.as_secs_f64());
     histogram!(LIBRARY_PATH_CANDIDATES, "kind" => kind.label()).record(sample);
 }
 
-/// Record whether reading the installation record succeeded.
-pub fn record_installation_record_read(succeeded: bool) {
+/// Record how many candidate directories a resolution dropped, by reason.
+///
+/// `absent` counts candidates that no longer exist, which is the normal result
+/// of an earlier install being removed. `unusable` counts candidates that do
+/// exist but could not be inspected or represented, which is the signal that a
+/// data directory is broken rather than stale.
+pub fn record_dropped_candidates(absent: usize, unusable: usize) {
+    describe_metrics();
+    counter!(LIBRARY_PATH_DROPPED, "reason" => "absent")
+        .increment(u64::try_from(absent).unwrap_or(u64::MAX));
+    counter!(LIBRARY_PATH_DROPPED, "reason" => "unusable")
+        .increment(u64::try_from(unusable).unwrap_or(u64::MAX));
+}
+
+/// Record how reading the installation record turned out.
+pub fn record_installation_record_read(outcome: RecordReadOutcome) {
+    describe_metrics();
+    counter!(INSTALLATION_RECORD_TOTAL, "operation" => "read", "outcome" => outcome.label())
+        .increment(1);
+}
+
+/// Record whether one CLI diagnostic reached its stream.
+///
+/// A failed diagnostic write cannot change an outcome that has already been
+/// decided, so it is recorded here instead of being folded into the exit
+/// status the caller sees.
+pub fn record_diagnostic_write(stream: DiagnosticStream, succeeded: bool) {
     describe_metrics();
     let outcome = if succeeded { "ok" } else { "failed" };
-    counter!(INSTALLATION_RECORD_TOTAL, "operation" => "read", "outcome" => outcome).increment(1);
+    counter!(DIAGNOSTIC_TOTAL, "stream" => stream.label(), "outcome" => outcome).increment(1);
 }
 
 /// Classify a command error without exposing its message.
@@ -235,6 +373,7 @@ pub const fn error_category(error: &CliError) -> &'static str {
         CliError::InstallationRecord { .. } => "installation_record",
         CliError::ToolchainDetection { .. } => "toolchain_detection",
         CliError::PrebuiltLibraryPath { .. } => "prebuilt_library_path",
+        CliError::LibraryPathUnusable { .. } => "library_path_unusable",
         CliError::LibraryPath { .. } => "library_path",
     }
 }
