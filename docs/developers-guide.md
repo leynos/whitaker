@@ -666,19 +666,23 @@ registries hold different crate sets and their keys hash different manifests.
 Their compiler cache is not an archive at all: like every Ubicloud job's, it
 reads and writes Ubicloud's cache proxy through `setup-rust`.
 
-Every caller pins one revision, `6cec89bac47a21cf756d68d638a9a510998e57f8`, the
-merge of leynos/shared-actions#546, which sits on #523. From #523 `setup-rust`
-selects sccache's backend from the runner (ADR 0005 there); the `sccache`
-paragraphs below say what that retired here. It keeps the rules the previous
-pin brought: the built-in provider does not archive `target/<profile>`, the
-caller's Actions cache-service selection is restored after
-`mozilla-actions/sccache-action` runs, and the `sccache` server starts from a
-`run:` step after those exports. #546 adds a 60 s server startup timeout, where
-sccache's own is a fixed 10 s that Ubicloud's cache proxy intermittently
-outlasts, and makes a start that still fails fall back to an uncached build
-instead of failing the job: a `sccache-fallback` warning annotation, the line
-`sccache: FALLBACK (cache disabled for this job)` in the job summary, and
-`sccache-status` on the action's outputs (`fallback`, or `started`).
+Every caller pins one revision, a full 40-character SHA that
+`tests/workflow_contracts/shared_action_pin_test.py` holds identical across all
+workflows (it compares them with each other and with `ci.yml`, not with a
+constant, so a shared-actions bump edits the workflows alone). At the time of
+writing it was the merge of leynos/shared-actions#546, which sits on #523. From
+that change `setup-rust` selects sccache's backend from the runner (ADR 0005
+there); the `sccache` paragraphs below say what that retired here. It keeps the
+rules the previous pin brought: the built-in provider does not archive
+`target/<profile>`, the caller's Actions cache-service selection is restored
+after `mozilla-actions/sccache-action` runs, and the `sccache` server starts
+from a `run:` step after those exports. #546 adds a 60 s server startup
+timeout, where sccache's own is a fixed 10 s that Ubicloud's cache proxy
+intermittently outlasts, and makes a start that still fails fall back to an
+uncached build instead of failing the job: a `sccache-fallback` warning
+annotation, the line `sccache: FALLBACK (cache disabled for this job)` in the
+job summary, and `sccache-status` on the action's outputs (`fallback`, or
+`started`).
 
 The lanes were briefly split, with the release boundaries held back until "a
 tag has run on the newer wiring". That exit condition was the wrong one for
