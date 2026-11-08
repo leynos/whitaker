@@ -1,4 +1,4 @@
-.PHONY: help all clean fetch test trybuild-contracts test-doc coverage build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke installer-msrv-check release-installer-dry-run package-root-cli package-lints workflow-test workflow-test-deps test-workflow-contracts test-markdown-format test-glibc-baseline test-prune-safety test-sccache-health verus kani install-verus install-kani verus-clone-detector kani-clone-detector verus-string-literals kani-string-literals spelling skill-frontmatter-lint skill-manifest-validate skill-metadata-check skill-manifest-check test-skill-metadata-check clippy-snapshot clippy-snapshot-bundle dylint-env dylint-smoke dylint-tools interrogate test-root-lib test-nextest-filter lint-clippy lint-whitaker
+.PHONY: help all clean fetch test trybuild-contracts test-doc coverage build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke installer-msrv-check release-installer-dry-run package-root-cli package-lints workflow-test workflow-test-deps test-workflow-contracts test-markdown-format test-glibc-baseline test-prune-safety test-sccache-health verus kani install-verus install-kani verus-clone-detector kani-clone-detector verus-string-literals kani-string-literals verus-node-origin spelling skill-frontmatter-lint skill-manifest-validate skill-metadata-check skill-manifest-check test-skill-metadata-check clippy-snapshot clippy-snapshot-bundle dylint-env dylint-smoke dylint-tools interrogate test-root-lib test-nextest-filter lint-clippy lint-whitaker
 
 # Make chooses the recipe shell itself, so the `shell: bash` default in the
 # workflows does not reach recipes; the `/bin/sh` it would otherwise use
@@ -643,6 +643,9 @@ verus-clone-detector: ## Run clone-detector Verus proofs
 
 verus-string-literals: ## Run pure string-literal Verus proof
 	./scripts/run-verus.sh string-literals
+
+verus-node-origin: ## Run the node-origin provenance Verus proof
+	./scripts/run-verus.sh verus/node_origin.rs
 
 kani: ## Run practical Kani sidecar harnesses
 	./scripts/run-kani.sh

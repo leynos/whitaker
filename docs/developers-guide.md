@@ -2495,6 +2495,7 @@ Use the Makefile targets for normal proof runs:
 ```sh
 make verus                 # Run all Verus proof files
 make verus-clone-detector  # Run clone-detector Verus proofs only
+make verus-node-origin     # Run the node-origin provenance proof only
 make verus-string-literals # Run the string-literal Verus proof only
 make kani                  # Run all Kani harness groups
 make kani-clone-detector   # Run clone-detector Kani harnesses only
@@ -2503,8 +2504,10 @@ make kani-string-literals  # Run string-literal Kani harnesses only
 
 `make verus` and `make kani` each cover both proof groups; the narrower targets
 exist so a change to one sidecar can be proved without paying for the other.
-Both narrow targets delegate to the same group argument in their script:
-`./scripts/run-verus.sh string-literals` reads
+`make verus-node-origin` wraps the explicit-file invocation
+`./scripts/run-verus.sh verus/node_origin.rs`; it is also part of the `all`
+group, so `make verus` covers it. Both narrow targets delegate to the same
+group argument in their script: `./scripts/run-verus.sh string-literals` reads
 `verus/string_continuation_rewrite.rs`, and
 `./scripts/run-kani.sh string-literals` runs the bounded continuation-scanner
 harness. `make proof`-style aggregate targets do not exist; run `make kani` and
@@ -2662,6 +2665,52 @@ For the current clone-detector constructors, the split is:
   `FragmentId` ordering contract that the `CandidatePair` proof's bridge still
   trusts rather than proving from `String` internals, and they pin the AST
   adapter's parser-facing behaviour.
+
+### Node-origin provenance facility
+
+Lints that charge complexity must distinguish authored code from code a macro
+or compiler pass produced. That policy lives in `whitaker_common::node_origin`;
+the rustc adapter that reads a `Span`'s syntax context lives in
+`crates/whitaker_lint_core/src/hir/node_origin/mod.rs` and is compiled only behind the `dylint-driver`
+feature. The decision and its evidence are recorded in
+[ADR 0013](adrs/adr-0013-node-origin-provenance-classifier.md).
+
+The contract is:
+
+- `ExpansionMark` is `Desugaring`, `Macro`, or `AstPass`.
+- `classify` reads marks outermost first. A desugaring is transparent; the
+  first macro or AST-pass mark returns `Generated`; an exhausted sequence,
+  including the empty one, returns `Authored`.
+- `MarkCursor` pops outermost marks with `SyntaxContext::remove_mark` and maps
+  `ExpnKind` exhaustively. `Root` yields no mark; the cursor stops first.
+
+Reuse rules:
+
+- `whitaker_common::node_origin` is the only policy. Do not re-derive origin
+  with `Span::from_expansion`, `Span::source_callsite`, span chains, or
+  `recover_user_editable_hir_span`.
+- The policy stays free of rustc types and I/O. Only the adapter names
+  `SyntaxContext`, `ExpnId`, or `ExpnKind`.
+- A consumer receives an origin and nothing else. It still descends into every
+  expression, including generated wrappers. Generated nodes do not update
+  return-adjacency state, and a match guard's origin is independent of its
+  enclosing match.
+- Adding a mark kind requires changing `ExpansionMark` and the adapter's
+  `ExpnKind` match together; the exhaustive match makes omission a compile
+  error.
+
+The proof boundary is narrow and must be described accurately.
+`verus/node_origin.rs` proves the mark-sequence policy: `scan`'s early exit
+agrees with an existential specification, both classes have non-empty
+witnesses, concatenation is generated when either part is, and inserting a
+desugaring leaves the origin unchanged. It does not prove rustc hygiene
+extraction, `MarkCursor`'s iterator plumbing, HIR visitor order, or body
+boundaries. The adapter's synthetic tests and the real-lowering fixtures cover
+those, and the correspondence between production transitions and model
+transitions is tabulated in ADR 0013. `make verus-node-origin` runs the proof.
+Injected wrong rules were required to fail: making `Macro` transparent failed 8
+policy tests and 2 proof assertions, and stopping at an outermost desugaring
+failed 7 policy tests and the `scan` postcondition.
 
 ### Tooling scripts
 

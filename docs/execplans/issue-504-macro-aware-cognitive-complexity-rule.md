@@ -144,11 +144,11 @@ recovery is diagnostic-only. Its synthetic hygiene tests are in
 `src/hir/tests.rs`. A repository sweep found no shared classifier with the
 required Macro/Desugaring/AstPass policy.
 
-Add `common/src/node_origin.rs`, exported by `common/src/lib.rs`, with
+Add `common/src/node_origin/mod.rs`, exported by `common/src/lib.rs`, with
 `NodeOrigin::{Authored, Generated}`, a three-variant mark enum, and
 `classify(marks)` accepting outermost-to-innermost marks. Skip desugarings; the
 first Macro or AstPass returns Generated; exhaustion returns Authored. Add
-`src/hir/node_origin.rs`, exported behind `dylint-driver`, with
+`crates/whitaker_lint_core/src/hir/node_origin/mod.rs`, exported behind `dylint-driver`, with
 `node_origin(span: Span) -> NodeOrigin` and `is_generated(span: Span) -> bool`.
 An internal context-taking helper may support tests without duplicating policy.
 Root returns Authored immediately.
@@ -586,6 +586,31 @@ may be slow; queued work is not hung and must not be duplicated.
 - [x] 2026-11-08: Gate and publish the toolchain clarification.
 - [x] 2026-11-08: Explicit user approval received; implementation begins.
 - [ ] M1: classifier, adapter, evidence, and Verus proof.
+  - [x] Compiler-generation receipt established: `nightly-2026-05-28`,
+        rustc `57d06900fd7d9ee06d3a7f323bb77f17ab3cfaf8`, Clippy snapshot
+        `e4608a25c2e20116fbc1e97a51a73f094a1db7a1`, selected revision
+        `9fca3bc9fc2bc83c60bde26d18ed68f11564b228`, Dylint 6.3.0. Upstream
+        Clippy `main` at `146674fd0b6b414a2ae3e0a0b05a1b4885567b08`
+        (2026-11-08) pins `nightly-2026-10-30`, a gap of about 155 days left
+        to #561/#579.
+  - [x] Red policy, synthetic adapter, and real-compiler probes recorded.
+  - [x] Real rustc lowering inspected with a temporary Dylint probe; contexts
+        retain parent origin, so the M1 decision gate did not trigger.
+  - [x] Chain-walk decision recorded in
+        `docs/adrs/adr-0013-node-origin-provenance-classifier.md` and indexed
+        in `docs/contents.md`.
+  - [x] `whitaker_common::node_origin` policy added with exhaustive and
+        property tests.
+  - [x] `src/hir/node_origin/mod.rs` adapter added with synthetic `ExpnKind`
+        cases
+        and a direction-pinning test.
+  - [x] `verus/node_origin.rs` added; `make verus-node-origin` wraps it and
+        `make verus` includes it. Result: 8 verified, 0 errors.
+  - [x] Four mutation receipts recorded (policy and model, Macro-transparent
+        and outermost-desugaring-stop).
+  - [x] `docs/developers-guide.md` records reuse rules and proof boundaries.
+  - [ ] Run focused commands and the ordinary gates via the scrutineer;
+        commit the coherent shared facility.
 - [ ] M2: standalone lint, parity, localization, and logging matrix.
 - [ ] M3: experimental suite/installer registration and documentation.
 - [ ] M4: separately gated adoption by both existing lints.
@@ -601,6 +626,26 @@ Pinned source inspection confirms Clippy adds guards outside the multi-arm
 condition and conditionally subtracts returns. A source question mark therefore
 needs raw-event assertions as well as a final-score assertion. `docs/design.md`
 is absent, and the conditional driver has moved into `driver/mod.rs`.
+
+Real lowering confirmed the chain direction and the mark shapes. `remove_mark`
+pops the outermost mark, while `SyntaxContext::marks()` reports
+innermost-first, so passing `marks()` straight to an outermost-first policy
+would invert a future order-sensitive rule. Macro arguments carry no mark at
+all, including arguments to a macro whose definition body is marked. A
+desugared macro-body span can carry the same macro `ExpnId` twice, and a nested
+macro chain can retain only the inner macro mark; origin must be a presence
+test, never a count or depth test. `Root` never appears as a chain element.
+
+The workspace's `self_named_module_files` Clippy policy requires
+`mod.rs`-rooted directories, so the planned `common/src/node_origin.rs` plus
+sibling test directory became `common/src/node_origin/mod.rs`; the HIR adapter
+followed the same layout. RFC 0010 and the roadmap still show the proposed
+paths and are reconciled in M3.
+
+Verus rejected `by (compute)` on a datatype existential with
+`vir/src/poly.rs:454:66: no entry found for key`, so the class witnesses are
+written as explicit ground assertions instead. The Clippy snapshot lags upstream
+`main` by about 155 days at this revision; that gap is recorded, not closed.
 
 ## Decision log
 
@@ -619,6 +664,13 @@ is absent, and the conditional driver has moved into `driver/mod.rs`.
   tests for the rest. Preserve the proof/runtime boundary explicitly.
 - 2026-11-08: Preserve default body boundaries and skip generated bodies;
   document generated-closure loss rather than implementing RFC extensions.
+- 2026-11-08: Accept ADR 0013's chain walk. Read marks outermost first with
+  `SyntaxContext::remove_mark`, treat every desugaring as transparent, and let
+  the first macro or AST-pass mark prove generation. Keep `ExpnKind` matching
+  exhaustive and keep the policy rustc-free in `whitaker-common`.
+- 2026-11-08: Model the policy with an existential sequence specification
+  rather than by restating the loop, and record a production-to-model
+  transition table plus mutation receipts as the correspondence evidence.
 
 ## Outcomes & retrospective
 
@@ -626,11 +678,20 @@ The Wyvern reconnaissance and six-lens expert review are complete. Review
 corrections distinguish Cargo package/import names, keep policy dependencies
 ungated, enable library tests explicitly, make proof mutations independent, and
 isolate matrix library staging. The initial documentation gates passed and
-draft PR #574 was published. The toolchain clarification is prepared for its
-own documentation gates and publication. No lint implementation, compiler probe
-execution, formal proof, or runtime acceptance is complete. Update this section
-after review/publication and at each approved implementation milestone; retain
-both remaining gaps and evidence that discharged earlier obligations.
+draft PR #574 was published; the toolchain clarification was gated and
+published in follow-up commits.
+
+M1 is implemented but not yet gated or committed. The shared facility consists
+of the compiler-free policy in `common/src/node_origin/mod.rs`, the adapter in
+`src/hir/node_origin/mod.rs`, shared hygiene test support, the Verus sidecar
+`verus/node_origin.rs`, the `make verus-node-origin` target, ADR 0013, and the
+reuse and proof-boundary text in the developer's guide. Focused results: 16
+policy tests pass, 16 adapter tests pass, and the proof reports 8 verified, 0
+errors. The real-lowering probe covered source, macro-argument, macro-body,
+mixed-`when!`, desugaring, and nested-macro cases. Four injected-rule mutations
+failed as required. No lint implementation or runtime acceptance exists yet;
+M2-M4 remain. Update this section after each approved milestone and retain both
+remaining gaps and the evidence that discharged earlier obligations.
 
 ## References and implementation reading
 

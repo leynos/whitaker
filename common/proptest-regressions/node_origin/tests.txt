@@ -1,0 +1,10 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc e4b41e327680ea8aeee398422f1bb2f42b29be8efae6de4f31f13d25e7a865f0 # shrinks to marks = [Macro]
+cc af3e10f8d8f63b5426ebd026c9cc04a880d96b81cf3f12e4077b900604624705 # shrinks to marks = [Desugaring, Macro]
+cc 194acffeedfc24fc3ae30ccb9f71d70e646a251a166bae41b2e60c50d0bec2c6 # shrinks to marks = [Desugaring], position = 1, generated = Macro
+cc 26375bc052c5d6282f57f77ff56f0618619ddf2d8ba7b5381687760013bc04d8 # shrinks to prefix = [Desugaring], suffix = [Macro]

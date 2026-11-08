@@ -20,6 +20,7 @@ pub use config::{ModuleMaxLinesConfig, SharedConfig};
 pub use hir::{
     module_body_span,
     module_header_span,
+    node_origin::{is_generated, node_origin},
     recover_user_editable_hir_span,
     span_recovery_frames,
 };

@@ -151,6 +151,12 @@ compatibility entry points. Local ADR filenames follow
   semantics](adrs/adr-0011-bumpy-road-reference-semantics.md) establishes
   CodeScene as the reference for intended classification and records the
   current compatibility limit.
+- [Architectural decision record (ADR) 0013: classify HIR node origin from
+  expansion marks](adrs/adr-0013-node-origin-provenance-classifier.md) records
+  the compiler-generation receipt, the outermost-first mark walk, the decision
+  gate that syntax contexts retain parent origin, the real-lowering evidence,
+  the Verus correspondence receipt, and the reuse rules for the shared
+  provenance facility.
 
 ## Requests for comments
 
