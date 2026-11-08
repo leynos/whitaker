@@ -67,10 +67,7 @@ impl FakeRepository {
         file: &str,
         contents: &str,
     ) -> &mut Self {
-        self.files
-            .lock()
-            .expect("lock files")
-            .push(((commit.to_owned(), file.to_owned()), contents.to_owned()));
+        record_keyed(&self.files, commit, file, contents.to_owned());
         self
     }
 
@@ -85,12 +82,22 @@ impl FakeRepository {
         file: &str,
         error: ClippySnapshotError,
     ) -> &mut Self {
-        self.failures
-            .lock()
-            .expect("lock failures")
-            .push(((commit.to_owned(), file.to_owned()), error));
+        record_keyed(&self.failures, commit, file, error);
         self
     }
+}
+
+/// Record `value` under the `(commit, file)` key it answers for.
+fn record_keyed<T>(
+    entries: &Mutex<Vec<((String, String), T)>>,
+    commit: &str,
+    file: &str,
+    value: T,
+) {
+    entries
+        .lock()
+        .expect("lock keyed entries")
+        .push(((commit.to_owned(), file.to_owned()), value));
 }
 
 impl RepositoryQueries for FakeRepository {
