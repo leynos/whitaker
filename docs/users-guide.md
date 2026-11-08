@@ -336,12 +336,12 @@ complete artefact set for the release. For production installs, pin to a stable
 release tag rather than consuming `rolling`.
 
 The rolling lint archive holds `libwhitaker_suite` and the standalone libraries
-of the nine individual lints that installers v0.2.9 to v0.2.11 can prune. It
-does not hold `libstring_continuation_style`: those installers cannot prune it,
-and loading it beside the suite, which already registers the lint, fails the
-lint run with a duplicate-specification error (issue #565). The suite still
-provides that lint. The rolling archive does not offer it as a standalone
-library until the installer prunes by what it staged.
+of the nine standard lints. It holds no experimental lint, so
+`string_continuation_style` is neither in the archive nor registered by the
+published suite. Installing it needs `--experimental`, which builds from
+source. (An earlier rolling release shipped it as a standalone library beside a
+suite that already registered it, and the lint run failed with a
+duplicate-specification error; see issue #565.)
 
 Scripts or CI pipelines that consume rolling-release archives should verify
 that the required target archive exists before proceeding. Treat missing
@@ -420,8 +420,9 @@ Whitaker lints are divided into two categories:
   explicitly enabled.
 
 The default `whitaker_suite` pattern includes only standard lints. Whitaker
-currently ships one experimental lint, `rstest_helper_should_be_fixture`, which
-is available only when experimental lints are enabled.
+currently ships two experimental lints, `rstest_helper_should_be_fixture` and
+`string_continuation_style`, which are available only when experimental lints
+are enabled.
 
 ### Enabling experimental lints
 
@@ -1068,6 +1069,8 @@ interpolated-only `panic!` fallbacks are permitted there.
 ______________________________________________________________________
 
 ### `string_continuation_style`
+
+This lint is experimental. It runs only when you opt in with `--experimental`.
 
 Flags string literals that hide a fragment boundary inside a source-line join:
 

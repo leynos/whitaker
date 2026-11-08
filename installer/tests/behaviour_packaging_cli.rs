@@ -99,8 +99,8 @@ fn package_lints_binary_creates_archive_and_manifest() {
 }
 
 /// The libraries a rolling archive must hold, named independently of the
-/// packaging code: the suite and the nine crates the oldest pinned installer
-/// (v0.2.9 to v0.2.11) can prune.
+/// packaging code: the suite and the nine standard lints, which installers
+/// v0.2.9 to v0.2.11 can prune.
 const EXPECTED_ARCHIVE_CRATES: [&str; 10] = [
     "bumpy_road_function",
     "conditional_max_n_branches",
@@ -114,8 +114,8 @@ const EXPECTED_ARCHIVE_CRATES: [&str; 10] = [
     "whitaker_suite",
 ];
 
-/// Crate whose standalone library the pinned installer cannot prune
-/// (whitaker #565), so the archive must not carry it.
+/// Experimental crate whose standalone library installers v0.2.9 to v0.2.11
+/// cannot prune (whitaker #565), so the archive must not carry it.
 const UNPRUNABLE_CRATE: &str = "string_continuation_style";
 
 /// Return the crate name behind an archive or manifest entry such as
