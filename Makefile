@@ -568,8 +568,13 @@ install-smoke: ## Install whitaker-installer and verify basic functionality
 	whitaker-installer --version >/dev/null
 
 installer-msrv-check: ## Install whitaker-installer with its declared MSRV
+	set -eu; \
 	$(SCRATCH_ROOT_CHECK); \
-	CARGO="$(CARGO)" INSTALLER_MSRV_SCRATCH="$(INSTALLER_MSRV_DIR)" python3 scripts/check_installer_msrv.py
+	TMP_DIR="$(INSTALLER_MSRV_DIR)"; \
+	rm -rf -- "$$TMP_DIR"; \
+	mkdir -p "$$TMP_DIR"; \
+	trap 'rm -rf -- "$$TMP_DIR"' EXIT INT TERM HUP; \
+	CARGO="$(CARGO)" INSTALLER_MSRV_SCRATCH="$$TMP_DIR" python3 scripts/check_installer_msrv.py
 
 release-installer-dry-run: ## Build and package the host-platform installer archive
 	set -eu; \

@@ -132,21 +132,17 @@ def _scratch_root() -> Iterator[Path]:
 
     The Makefile names a fixed directory (`INSTALLER_MSRV_SCRATCH`) in the
     user's private cache: sccache keys compilations on absolute paths, so a
-    fresh random directory per run would miss every time. It is cleared first
-    and removed on exit. A direct run falls back to a random directory under
-    the ignored `target/`. Either way the root holds the copied workspace and
+    fresh random directory per run would miss every time. The recipe clears,
+    recreates and (on exit) removes it; this check only builds inside it. A
+    direct run falls back to a random directory under the ignored `target/`. Either way the root holds the copied workspace and
     the extracted installer as siblings, so Cargo never walks up from the
     installer into a workspace root.
     """
     fixed = os.environ.get("INSTALLER_MSRV_SCRATCH")
     if fixed:
         root = Path(fixed)
-        shutil.rmtree(root, ignore_errors=True)
-        root.mkdir(parents=True)
-        try:
-            yield root
-        finally:
-            shutil.rmtree(root, ignore_errors=True)
+        root.mkdir(parents=True, exist_ok=True)
+        yield root
         return
     build_root = REPOSITORY / "target"
     build_root.mkdir(exist_ok=True)
