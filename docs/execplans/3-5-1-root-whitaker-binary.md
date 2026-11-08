@@ -2237,6 +2237,57 @@ lint-core tests, and 19 `dylint_testing` tests), `make markdownlint` (28 s), and
 CI runs under `NEXTEST_PROFILE=ci`; the hosted `linux-full` job is the evidence
 for those, not the local default profile.
 
+**Third base merge, 2026-11-08.** `main` advanced again while the round-three
+repairs were queued for review, to `cfa208c4` (`string_continuation_style` as a
+post-expansion early lint, #355, and the rolling-release restore, #563). The
+branch merged it as `d0bf6227` so the published history and the review evidence
+attached to it stay intact.
+
+- `crates/no_unwrap_or_else_panic/src/lib_ui_tests.rs`: main's #355 moved the
+  environment guard into `run_with_runner` itself (it now holds
+  `runner_env_guard`, which serializes and sets the toolchain variables) and
+  deleted the per-harness `temp_env` workaround from all three example
+  harnesses. This branch already carries that central guard, so the merge takes
+  main's simplified runner body with the branch's
+  `whitaker_lint_core::testing::ui` path; the local `with_vars_unset` guard and
+  its two imports are gone, matching `no_expect_outside_tests`.
+- `scripts/run-kani.sh` and `scripts/run-verus.sh`: main's `string-literals`
+  harness group and this branch's `whitaker-cli` / `cli` group are both kept,
+  in the default run, the case dispatch, and the `all` proof list.
+- `docs/contents.md`: main indexes the early-lint ADR as 010, so the
+  CLI-boundary record this branch added becomes **ADR 011**
+  (`docs/adr-011-whitaker-cli-boundary.md`), and every inbound link — the
+  design document and this plan's own references — moves with it. That keeps
+  the locally allocated serials unique; main's own
+  `adr-010-keep-the-fast-linker…` file stays untouched.
+- `docs/repository-layout.md`: the lint-crate list gains
+  `string_continuation_style`, the support-crate list keeps
+  `whitaker_lint_core`, and main's pure-domain crate entry
+  (`whitaker_string_literals`) is kept.
+- `docs/v0-3-0-migration-guide.md`: main's note that
+  `string_continuation_style` joins the default suite now precedes this
+  branch's root-package section.
+- `crates/string_continuation_style` depended on the root `whitaker` package
+  for `SharedConfig` and the UI runner. On this branch those live in
+  `whitaker_lint_core`, so the crate's manifest, `src/diagnostics.rs`, and
+  `tests/support/ui.rs` are repointed at it.
+- The root `Cargo.toml` auto-merged into a duplicate `googletest` and
+  `pretty_assertions` in `[workspace.dependencies]`, which Cargo rejects as a
+  duplicate key; the branch's copies are kept and main's are removed.
+- `Cargo.lock` starts from main's file and is regenerated against the merged
+  manifests; the only package it adds is the path crate `whitaker_lint_core`.
+
+`c57529ce` then removes the `weave explain` comment the merge driver appends
+and lets rustfmt order the `whitaker_lint_core` import in the new crate.
+
+Gates on `5cf6e2c5` passed sequentially: `make check-fmt` (10 s), `make lint`
+(43 s, interrogate 100%, Clippy clean), `make typecheck` (7 s), `make test`
+(2690 s: 2373 nextest tests passed with 6 filtered by the default profile, 84
+lint-core tests, and 19 `dylint_testing` tests), `make markdownlint` (34 s), and
+`make nixie` (3 s). The filtered six are the installer behaviour binaries that
+CI runs under `NEXTEST_PROFILE=ci`; the hosted `linux-full` job is the evidence
+for those, not the local default profile.
+
 To be completed at each milestone boundary and at completion. Before setting
 this plan to `COMPLETE`, reconcile every entry in `Surprises & discoveries`
 against `docs/whitaker-cli-design.md`. In particular, `CLI-REQ-FWD` has no
