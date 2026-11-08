@@ -297,10 +297,10 @@ pub fn format_help(diagnostic: &BrainTypeDiagnostic) -> String {
     }
 
     if parts.is_empty() {
-        return String::from(
-            "Consider extracting related methods into separate types or modules to reduce \
-             complexity and improve cohesion.",
-        );
+        return String::from(concat!(
+            "Consider extracting related methods into separate types or modules to reduce ",
+            "complexity and improve cohesion.",
+        ));
     }
 
     format!("Consider {}.", parts.join(", "))
