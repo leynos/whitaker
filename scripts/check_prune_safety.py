@@ -107,13 +107,16 @@ def crate_of_entry(entry: str) -> str:
 
     Unix libraries (``.so``, ``.dylib``) carry a ``lib`` prefix; Windows
     ``.dll`` files do not, and a Windows ``libfoo.dll`` is the crate
-    ``libfoo``, which the installer would not prune as ``foo``. The staged
-    ``foo@toolchain.ext`` form is also understood.
+    ``libfoo``, which the installer would not prune as ``foo``. Archive entries
+    are canonical; anything else (an ``@toolchain`` suffix, extra dots, another
+    extension) is returned whole, because the installer would not prune it.
 
     >>> crate_of_entry("libbumpy_road_function.so")
     'bumpy_road_function'
     >>> crate_of_entry("libfoo@nightly-2026-05-28-x86_64-unknown-linux-gnu.so")
-    'foo'
+    'libfoo@nightly-2026-05-28-x86_64-unknown-linux-gnu.so'
+    >>> crate_of_entry("whitaker_suite.txt")
+    'whitaker_suite.txt'
     >>> crate_of_entry("whitaker_suite.dll")
     'whitaker_suite'
     >>> crate_of_entry("libmodule_max_lines.dll")
@@ -123,14 +126,13 @@ def crate_of_entry(entry: str) -> str:
     """
     name = Path(entry).name
     stem, _, extension = name.rpartition(".")
-    if not stem:
+    if extension not in {"so", "dylib", "dll"}:
         return name
-    base = stem.split("@", maxsplit=1)[0]
-    if extension in {"so", "dylib"} and base.startswith("lib"):
-        base = base[3:]
+    base = stem.removeprefix("lib") if extension != "dll" else stem
     if not re.fullmatch(r"[A-Za-z0-9_-]+", base):
         # A name the installer would not stage or prune as a plain crate
-        # library (`libfoo.extra.so`): report the whole name, so it survives.
+        # library (`libfoo.extra.so`, `libfoo@old-toolchain.so`, `x.txt`):
+        # report the whole name, so it survives the prune.
         return name
     return base
 
@@ -256,7 +258,9 @@ def check_directory(directory: Path, known: Sequence[str]) -> list[str]:
     for archive in archives:
         problems.extend(check_archive(archive, known))
         manifest = sidecar_manifest(archive)
-        if manifest.is_file():
+        if not manifest.is_file():
+            problems.append(f"{archive.name}: its sidecar {manifest.name} is missing")
+        else:
             problems.extend(check_manifest(manifest, archive))
     return problems
 

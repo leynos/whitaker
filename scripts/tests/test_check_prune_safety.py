@@ -299,3 +299,24 @@ def test_snapshot_table_without_the_installer_row_is_an_error(
          "--snapshots-tsv", str(table), str(tmp_path / "dist")]
     )
     assert status == 2
+
+
+@pytest.mark.parametrize(
+    "entry",
+    ["libalpha@nightly-2020-01-01.so", "whitaker_suite.txt", "libalpha.extra.so"],
+)
+def test_non_canonical_entries_are_not_pruned_as_known_crates(entry: str) -> None:
+    """Only canonical library names are pruned; anything else survives."""
+    assert checker.surviving_crates([entry, "libwhitaker_suite.so"], ["alpha"]) == sorted(
+        [entry, "whitaker_suite"]
+    )
+
+
+def test_archive_without_its_manifest_fails(
+    repository: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A missing sidecar cannot let an archive skip the manifest checks."""
+    _publish(tmp_path / "dist", [*OLD_CRATES, "whitaker_suite"])
+    (tmp_path / "dist" / f"manifest-{TARGET}.json").unlink()
+    assert _check(repository, tmp_path / "dist") == 1
+    assert "sidecar" in capsys.readouterr().err
