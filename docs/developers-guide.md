@@ -2792,6 +2792,19 @@ Without explicit declarations, Cargo would infer fallback names such as
 workflow invocations, so release and rolling-release builds would fail even
 though the source files exist.
 
+### Which libraries the rolling archive ships
+
+`whitaker-package-lints --release-dir` ships `libwhitaker_suite` and, of the
+crates in `LINT_CRATES`, only those named in `PINNED_INSTALLER_LINT_CRATES`
+(`installer/src/bin/package_lints.rs`). That list is the `LINT_CRATES` of the
+oldest installer that `install-whitaker` still pins. Such an installer prunes
+an unrequested standalone library only when it knows the crate's name, so a
+library for a newer crate would load beside the suite and rustc would reject
+the duplicate lint registration (issue #565). Add a crate to the list only when
+the oldest pinned installer lists it. The unit tests in
+`installer/src/bin/package_lints/tests.rs` fail if the archive would ship any
+other library.
+
 ### Validation coverage and purpose
 
 Workflow validation in `tests/workflows/` protects this contract from drift:

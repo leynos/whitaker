@@ -163,8 +163,32 @@ fn run_with_stdout(cli: PackageCli, stdout: &mut impl Write) -> Result<(), Packa
     Ok(())
 }
 
-/// Discover library files in `release_dir` using the canonical crate
-/// list.  Fails if any expected library is missing or not a regular file.
+/// Lint crates that the oldest installer a caller still pins can prune.
+///
+/// This is the `LINT_CRATES` list of the installer at the oldest tag pinned
+/// by `leynos/shared-actions` `install-whitaker` (v0.2.11 today). That
+/// installer removes unrequested standalone libraries only when it knows
+/// their crate names. A standalone library for any other crate stays beside
+/// `libwhitaker_suite`, both load, and rustc rejects the duplicate lint
+/// registration (whitaker #565). The rolling archive therefore ships only
+/// these crates, plus the suite, until every pinned installer prunes by what
+/// it staged. Add a crate here only when the oldest pinned installer lists it.
+pub(crate) const PINNED_INSTALLER_LINT_CRATES: &[&str] = &[
+    "bumpy_road_function",
+    "conditional_max_n_branches",
+    "function_attrs_follow_docs",
+    "module_max_lines",
+    "module_must_have_inner_docs",
+    "no_expect_outside_tests",
+    "test_must_not_have_example",
+    "no_std_fs_operations",
+    "no_unwrap_or_else_panic",
+];
+
+/// Discover library files in `release_dir`: the suite plus every crate in
+/// [`LINT_CRATES`] that the pinned installer can prune
+/// ([`PINNED_INSTALLER_LINT_CRATES`]). Fails if any expected library is
+/// missing or not a regular file.
 fn discover_library_files(
     release_dir: &Path,
     target: &TargetTriple,
@@ -173,6 +197,7 @@ fn discover_library_files(
     LINT_CRATES
         .iter()
         .copied()
+        .filter(|name| PINNED_INSTALLER_LINT_CRATES.contains(name))
         .chain(std::iter::once(SUITE_CRATE))
         .map(|name| {
             let filename = format!("{prefix}{name}{ext}");

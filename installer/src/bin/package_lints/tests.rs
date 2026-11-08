@@ -98,7 +98,48 @@ fn discover_library_files_finds_expected_files(
         fs::write(dir.path().join(format!("lib{name}.so")), b"fake").expect("write");
     }
     let found = discover_library_files(dir.path(), &linux_target).expect("all present");
-    assert_eq!(found.len(), LINT_CRATES.len() + 1);
+    assert_eq!(found.len(), PINNED_INSTALLER_LINT_CRATES.len() + 1);
+}
+
+/// Every crate that `PINNED_INSTALLER_LINT_CRATES` names must still exist, or
+/// the exclusion list has drifted from the canonical list.
+#[test]
+fn pinned_installer_crates_are_known_lint_crates() {
+    for name in PINNED_INSTALLER_LINT_CRATES {
+        assert!(LINT_CRATES.contains(name), "{name} is not in LINT_CRATES");
+    }
+}
+
+/// The archive must not ship a standalone library the pinned installer cannot
+/// prune (whitaker #565): the suite, and nothing outside the pinned list.
+#[rstest]
+fn discover_library_files_ships_only_prunable_libraries(
+    #[from(linux_target)] linux_target_res: Result<TargetTriple, ArtefactError>,
+) {
+    let linux_target = linux_target_res.expect("linux target triple should validate");
+
+    let dir = tempfile::tempdir().expect("temp dir");
+    for name in LINT_CRATES.iter().chain(std::iter::once(&SUITE_CRATE)) {
+        fs::write(dir.path().join(format!("lib{name}.so")), b"fake").expect("write");
+    }
+    let found = discover_library_files(dir.path(), &linux_target).expect("all present");
+    for path in &found {
+        let stem = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .and_then(|s| s.strip_prefix("lib"))
+            .expect("library file name");
+        assert!(
+            stem == SUITE_CRATE || PINNED_INSTALLER_LINT_CRATES.contains(&stem),
+            "archive would ship {stem}, which the pinned installer cannot prune"
+        );
+    }
+    assert!(
+        found
+            .iter()
+            .any(|p| p.ends_with(format!("lib{SUITE_CRATE}.so"))),
+        "the suite must always ship"
+    );
 }
 
 #[test]
