@@ -220,16 +220,7 @@ fn try_prebuilt_installation_with(
             delivered,
         } => (staging_path, delivered),
         PrebuiltResult::Fallback { reason } => {
-            // `attempt_prebuilt` has already written the unavailable notice
-            // and, where a fallback is permitted, the fallback line. Repeating
-            // either here would print it twice, so only the refusal is added.
-            if context.policy.no_source_fallback {
-                return Err(InstallerError::SourceFallbackForbidden {
-                    artefact: "a prebuilt lint library".to_owned(),
-                    reason,
-                });
-            }
-            return Ok(None);
+            return fall_back_or_refuse(&context.policy, reason);
         }
     };
     if let Err(error) = prune_prebuilt_libraries(
@@ -246,6 +237,21 @@ fn try_prebuilt_installation_with(
         );
     }
     Ok(Some(staging_path))
+}
+
+/// Decide what an unavailable prebuilt artefact means for the caller.
+///
+/// `attempt_prebuilt` has already written the unavailable notice and, where a
+/// fallback is permitted, the fallback line. Repeating either here would print
+/// it twice, so only the refusal is added.
+fn fall_back_or_refuse(policy: &SourcePolicy, reason: String) -> Result<Option<Utf8PathBuf>> {
+    if policy.no_source_fallback {
+        return Err(InstallerError::SourceFallbackForbidden {
+            artefact: "a prebuilt lint library".to_owned(),
+            reason,
+        });
+    }
+    Ok(None)
 }
 
 fn requested_crate_names(requested_crates: &[CrateName]) -> HashSet<&str> {
@@ -308,45 +314,59 @@ fn prune_prebuilt_libraries(
     requested_crates: &[CrateName],
     delivered: &[String],
 ) -> Result<()> {
+    remove_unrequested_libraries(staging_path, toolchain_channel, requested_crates)?;
+    require_delivered_libraries(staging_path, toolchain_channel, requested_crates, delivered)
+}
+
+fn staging_error(reason: String) -> InstallerError { InstallerError::StagingFailed { reason } }
+
+/// Remove every library staged for `toolchain_channel` whose crate was not requested.
+fn remove_unrequested_libraries(
+    staging_path: &Utf8Path,
+    toolchain_channel: &str,
+    requested_crates: &[CrateName],
+) -> Result<()> {
     let requested: HashSet<String> = requested_crate_names(requested_crates)
         .into_iter()
         .map(|name| name.replace('-', "_"))
         .collect();
+    let read_error = |error: io::Error| {
+        staging_error(format!(
+            "failed to read staged libraries in {staging_path}: {error}"
+        ))
+    };
 
-    let entries = fs::read_dir(staging_path.as_std_path()).map_err(|error| {
-        InstallerError::StagingFailed {
-            reason: format!("failed to read staged libraries in {staging_path}: {error}"),
-        }
-    })?;
-    for dir_entry in entries {
-        let entry = dir_entry.map_err(|error| InstallerError::StagingFailed {
-            reason: format!("failed to read staged libraries in {staging_path}: {error}"),
-        })?;
+    for dir_entry in fs::read_dir(staging_path.as_std_path()).map_err(read_error)? {
+        let entry = dir_entry.map_err(read_error)?;
         let file_name = entry.file_name();
-        let Some(crate_name) = file_name
+        let unrequested = file_name
             .to_str()
             .and_then(|name| staged_crate_name(name, toolchain_channel))
-        else {
-            continue;
-        };
-        if requested.contains(crate_name) {
-            continue;
-        }
-        let stale_path = entry.path();
-        match fs::remove_file(&stale_path) {
-            Ok(()) => {}
-            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
-            Err(error) => {
-                return Err(InstallerError::StagingFailed {
-                    reason: format!(
-                        "failed to remove stale prebuilt library {}: {error}",
-                        stale_path.display()
-                    ),
-                });
-            }
+            .is_some_and(|crate_name| !requested.contains(crate_name));
+        if unrequested {
+            remove_stale_file(&entry.path())?;
         }
     }
+    Ok(())
+}
 
+fn remove_stale_file(path: &std::path::Path) -> Result<()> {
+    match fs::remove_file(path) {
+        Err(error) if error.kind() != io::ErrorKind::NotFound => Err(staging_error(format!(
+            "failed to remove stale prebuilt library {}: {error}",
+            path.display()
+        ))),
+        _ => Ok(()),
+    }
+}
+
+/// Fail unless this archive delivered, and the directory holds, every requested library.
+fn require_delivered_libraries(
+    staging_path: &Utf8Path,
+    toolchain_channel: &str,
+    requested_crates: &[CrateName],
+    delivered: &[String],
+) -> Result<()> {
     let mut missing: Vec<&str> = requested_crate_names(requested_crates)
         .into_iter()
         .filter(|name| {
@@ -354,18 +374,15 @@ fn prune_prebuilt_libraries(
             !delivered.contains(&staged) || !staging_path.join(&staged).as_std_path().is_file()
         })
         .collect();
-    if !missing.is_empty() {
-        missing.sort_unstable();
-        return Err(InstallerError::StagingFailed {
-            reason: format!(
-                "the prebuilt archive does not hold the requested librar{}: {}",
-                if missing.len() == 1 { "y" } else { "ies" },
-                missing.join(", ")
-            ),
-        });
+    if missing.is_empty() {
+        return Ok(());
     }
-
-    Ok(())
+    missing.sort_unstable();
+    Err(staging_error(format!(
+        "the prebuilt archive does not hold the requested librar{}: {}",
+        if missing.len() == 1 { "y" } else { "ies" },
+        missing.join(", ")
+    )))
 }
 
 /// Detect the host target triple by parsing `rustc -vV` output.
