@@ -134,3 +134,7 @@ fn log_out_of_bounds(start: u32, end: u32, len: usize, message: &'static str) {
 fn log_generic_failure(error: &AstError, message: &'static str) {
     error!(?error, "{message}");
 }
+
+#[cfg(test)]
+#[path = "lowering_diagnostics_tests.rs"]
+mod tests;
