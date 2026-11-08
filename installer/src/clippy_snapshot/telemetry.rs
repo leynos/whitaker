@@ -71,22 +71,41 @@ pub(crate) fn timed<T>(
     let elapsed = started.elapsed();
     let outcome = result.as_ref().map_or_else(failure_label, |_| OUTCOME_OK);
     record_operation(operation, outcome, elapsed);
-    let elapsed_ms = millis(elapsed);
-    if result.is_ok() {
-        tracing::debug!(
-            operation = operation.label(),
-            elapsed_ms,
-            "snapshot operation finished"
-        );
-    } else {
-        tracing::warn!(
-            operation = operation.label(),
-            outcome,
-            elapsed_ms,
-            "snapshot operation failed"
-        );
-    }
+    log_operation(operation, outcome, elapsed);
     result
+}
+
+/// Log one operation at the level its outcome warrants.
+///
+/// `tracing`'s macros expand to enough control flow that each call spends most
+/// of the module's cognitive-complexity budget, so the two outcomes get their
+/// own one-event helpers.
+fn log_operation(operation: Operation, outcome: &'static str, elapsed: Duration) {
+    let elapsed_ms = millis(elapsed);
+    if outcome == OUTCOME_OK {
+        log_operation_ok(operation, elapsed_ms);
+    } else {
+        log_operation_failed(operation, outcome, elapsed_ms);
+    }
+}
+
+/// Log a snapshot operation that finished successfully.
+fn log_operation_ok(operation: Operation, elapsed_ms: u64) {
+    tracing::debug!(
+        operation = operation.label(),
+        elapsed_ms,
+        "snapshot operation finished"
+    );
+}
+
+/// Log a snapshot operation that failed, naming only its bounded outcome.
+fn log_operation_failed(operation: Operation, outcome: &'static str, elapsed_ms: u64) {
+    tracing::warn!(
+        operation = operation.label(),
+        outcome,
+        elapsed_ms,
+        "snapshot operation failed"
+    );
 }
 
 /// Whole milliseconds in `elapsed`, saturating, for log fields.

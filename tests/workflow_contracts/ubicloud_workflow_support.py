@@ -53,12 +53,22 @@ UBICLOUD_JOBS: dict[str, str] = {
     "coverage-check": "ci.yml",
     "linux-full": "ci.yml",
     "coverage-upload": "coverage-main.yml",
+    "coverage-warmup": "coverage-main.yml",
     # A matrix job, and only two of its five legs are on Ubicloud. The rules
     # keyed on this mapping are about the step list, which every leg shares,
     # so the job belongs here whole; which legs run where is `RunnerLane`'s
     # to say, and `runner_placement_contract_test` holds the two together.
     "build-lints": "rolling-release.yml",
     "build-dependency-binaries": "rolling-release.yml",
+}
+
+#: The jobs in `UBICLOUD_JOBS` that run on a GitHub-hosted runner. A main
+#: coverage upload blocks no one's work, so it runs hosted with sccache off:
+#: it writes no cache the Ubicloud lanes read, and GitHub's cache service
+#: throttled its compiler-cache writes. The rules about the compiler cache
+#: therefore do not apply to it; the rules about the gates it runs still do.
+HOSTED_RUNNER_JOBS: dict[str, str] = {
+    "coverage-upload": "coverage-main.yml",
 }
 
 #: Every job that runs this repository's own gates: the suite, the lints, the
@@ -71,6 +81,7 @@ SUITE_JOBS: dict[str, str] = {
     "coverage-check": "ci.yml",
     "linux-full": "ci.yml",
     "coverage-upload": "coverage-main.yml",
+    "coverage-warmup": "coverage-main.yml",
 }
 
 #: Every job that owns cache archives, including the GitHub-hosted Windows
@@ -80,12 +91,12 @@ CACHING_JOBS: dict[str, str] = UBICLOUD_JOBS | {"windows-compat": "ci.yml"}
 
 #: The single job permitted to save each cache key family.
 CACHE_KEY_WRITERS: dict[str, str] = {
-    "cargo-registry-coverage-v1-": "coverage-upload",
+    "cargo-registry-coverage-v1-": "coverage-warmup",
     "cargo-registry-lint-v1-": "linux-full",
-    "tools-coverage-v1-": "coverage-upload",
+    "tools-coverage-v1-": "coverage-warmup",
     "tools-lint-v1-": "linux-full",
     "dylint-tools-v1-": "linux-full",
-    "clippy-snapshot-v1-": "coverage-upload",
+    "clippy-snapshot-v1-": "coverage-warmup",
     # No `sccache-*` family is listed, and none may be. `setup-rust` points
     # every Ubicloud lane's sccache at Ubicloud's cache proxy, so no lane
     # archives `~/.cache/sccache` and there is no directory for a family to

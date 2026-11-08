@@ -126,7 +126,11 @@ impl Release {
 #[fixture]
 fn release() -> Release {
     let repo = FixtureRepo::new(&DEFAULT_HISTORY);
-    let manifest = repo.manifest(repo.tip(), &repo.commits[DEFAULT_SELECTED]);
+    let selected = repo
+        .commits
+        .get(DEFAULT_SELECTED)
+        .expect("the default selection is in range");
+    let manifest = FixtureRepo::manifest(repo.tip(), selected);
     let served = repo.path("served");
     std::fs::create_dir_all(&served).expect("create served directory");
     let bundle = repo.bundle(&manifest.bundle_asset_name(), &PINNED_REFS);

@@ -1,4 +1,4 @@
-.PHONY: help all clean fetch test trybuild-contracts test-doc coverage build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke installer-msrv-check release-installer-dry-run package-lints workflow-test workflow-test-deps test-workflow-contracts test-markdown-format test-glibc-baseline test-sccache-health verus kani verus-clone-detector kani-clone-detector spelling skill-frontmatter-lint skill-manifest-validate skill-metadata-check skill-manifest-check test-skill-metadata-check clippy-snapshot clippy-snapshot-bundle dylint-env dylint-smoke dylint-tools
+.PHONY: help all clean fetch test trybuild-contracts test-doc coverage build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke installer-msrv-check release-installer-dry-run package-lints workflow-test workflow-test-deps test-workflow-contracts test-markdown-format test-glibc-baseline test-sccache-health verus kani verus-clone-detector kani-clone-detector verus-string-literals kani-string-literals spelling skill-frontmatter-lint skill-manifest-validate skill-metadata-check skill-manifest-check test-skill-metadata-check clippy-snapshot clippy-snapshot-bundle dylint-env dylint-smoke dylint-tools interrogate
 
 # Make chooses the recipe shell itself, so the `shell: bash` default in the
 # workflows does not reach recipes; the `/bin/sh` it would otherwise use
@@ -25,6 +25,13 @@ NEXTTEST_CARGO_METADATA ?= $(DYLINT_WARMUP_TARGET_DIR)/nextest-cargo-metadata.js
 LLVM_COV_CARGO_METADATA ?= $(DYLINT_WARMUP_TARGET_DIR)/llvm-cov-cargo-metadata.json
 BUILD_JOBS ?=
 CARGO_FLAGS ?= --workspace --all-targets --all-features
+# Dylint UI fixtures live under `examples/` because `dylint_testing::Test::example`
+# builds them with each lint crate's dev-dependencies (tokio, rstest); `ui/`
+# fixtures are standalone and cannot carry those. Every file there is a
+# `fail_*`/`pass_*` fixture that deliberately contains the anti-patterns the
+# suite detects, so each fixture scopes those diagnostics with a narrowly
+# targeted `#[expect(..., reason = "...")]` rather than weakening the
+# workspace policy.
 # The patched UI helper has a `deny_warnings` feature that changes fixture
 # diagnostics, so exercise its parser tests separately without all features.
 TEST_EXCLUDES ?= --exclude rustc_ast --exclude rustc_attr_data_structures \
@@ -324,6 +331,18 @@ coverage: ## Generate LCOV coverage over the CI-tested crate subset
 			CARGO_TEST_METADATA_CACHE="$(LLVM_COV_CARGO_METADATA)" \
 			TEST_RUNNER="$(CARGO_LLVM_COV) llvm-cov nextest --lcov --output-path $(COVERAGE_OUTPUT) -E '$(COVERAGE_NEXTEST_FILTER)'"
 
+coverage-build: ## Compile the instrumented tests `make coverage` builds, without running them
+	@# Same crate subset, RUSTFLAGS and target directory as `coverage`, so the
+	@# compiler cache a later `make coverage` reads is warm. `cargo llvm-cov
+	@# nextest --no-run` would only report, so the stand-in script builds with
+	@# `cargo nextest run --no-run` under `cargo llvm-cov show-env`.
+	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v cargo-llvm-cov >/dev/null || { echo "Install cargo-llvm-cov (cargo install cargo-llvm-cov)"; exit 1; }
+	@CARGO_LLVM_COV_TARGET_DIR="$(COVERAGE_TARGET_DIR)" \
+		CARGO_TARGET_DIR="$(COVERAGE_TARGET_DIR)" \
+		LLVM_PROFILE_FILE_NAME="$(COVERAGE_PROFILE_FILE_NAME)" \
+		CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 \
+		$(MAKE) test CARGO="$(CURDIR)/scripts/cargo-coverage-build.sh" TEST_RUNNER="nextest run --no-run -E '$(COVERAGE_NEXTEST_FILTER)'"
+
 trybuild-contracts: ## Run the trybuild compile-contract tests, which `make coverage` skips
 	@# `make coverage` leaves six of these out (see TRYBUILD_CONTRACT_FILTER), so
 	@# a developer runs them here, plain and uninstrumented, under the `ci`
@@ -415,7 +434,30 @@ skill-metadata-check: ## Reject skill metadata that is not a mapping of strings
 
 skill-manifest-check: skill-frontmatter-lint skill-manifest-validate skill-metadata-check ## Validate every shipped skill manifest
 
-lint: skill-manifest-check ## Run Clippy with warnings denied
+# Interrogate measures docstring presence over every Python file the repository
+# owns. Add a new Python directory to INTERROGATE_TARGETS. No `--python` pin: a
+# managed interpreter would be downloaded, and a PyO3 build could link it.
+INTERROGATE_VERSION ?= 1.7.0
+INTERROGATE_TARGETS ?= installer/scripts scripts tests
+# Level 2 prints a MISSED row per undocumented definition, which the
+# `interrogate` target fails on: the rounded percentage alone passes a lone gap.
+INTERROGATE_FLAGS ?= -vv --fail-under 100
+INTERROGATE = $(UV) tool run \
+	--from 'interrogate==$(INTERROGATE_VERSION)' interrogate
+
+# Interrogate rounds its percentage to one decimal, so `--fail-under 100` alone
+# passes a lone gap in a large repository; fail on any MISSED row as well.
+interrogate: ## Enforce complete Python docstring coverage
+	@report="$$($(INTERROGATE) $(INTERROGATE_FLAGS) $(INTERROGATE_TARGETS))"; \
+	  status=$$?; \
+	  printf '%s\n' "$$report"; \
+	  test "$$status" -eq 0 || exit "$$status"; \
+	  if printf '%s\n' "$$report" | grep -q '| *MISSED *|'; then \
+	    printf '%s\n' 'interrogate: undocumented definitions remain; see the MISSED rows above' >&2; \
+	    exit 1; \
+	  fi
+
+lint: interrogate skill-manifest-check ## Run Clippy with warnings denied
 	RUSTDOCFLAGS="$(RUSTDOC_FLAGS)" $(CARGO) doc $(CARGO_LOCKED) --workspace --no-deps
 	$(CARGO) clippy $(CARGO_LOCKED) $(CARGO_FLAGS) -- $(RUST_FLAGS)
 
@@ -465,11 +507,17 @@ verus: ## Run the pinned Verus proof sidecar
 verus-clone-detector: ## Run clone-detector Verus proofs
 	./scripts/run-verus.sh clone-detector
 
+verus-string-literals: ## Run pure string-literal Verus proof
+	./scripts/run-verus.sh string-literals
+
 kani: ## Run practical Kani sidecar harnesses
 	./scripts/run-kani.sh
 
 kani-clone-detector: ## Run clone-detector Kani harnesses
 	./scripts/run-kani.sh clone-detector
+
+kani-string-literals: ## Run pure string-literal Kani harnesses
+	./scripts/run-kani.sh string-literals
 
 install-smoke: ## Install whitaker-installer and verify basic functionality
 	set -eu; \

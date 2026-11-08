@@ -31,6 +31,11 @@ experimental-rstest-helper-should-be-fixture = [
     "dep:rstest_helper_should_be_fixture",
 ]
 
+experimental-string-continuation-style = [
+    "dylint-driver",
+    "dep:string_continuation_style",
+]
+
 [dependencies]
 whitaker-common = { workspace = true }
 dylint_linting = { workspace = true, optional = true }
@@ -47,6 +52,7 @@ module_max_lines = { path = "../crates/module_max_lines", optional = true, featu
 no_unwrap_or_else_panic = { path = "../crates/no_unwrap_or_else_panic", optional = true, features = ["dylint-driver", "constituent"] }
 no_std_fs_operations = { path = "../crates/no_std_fs_operations", optional = true, features = ["dylint-driver", "constituent"] }
 bumpy_road_function = { path = "../crates/bumpy_road_function", optional = true, features = ["dylint-driver", "constituent"] }
+string_continuation_style = { path = "../crates/string_continuation_style", optional = true, features = ["dylint-driver", "constituent"] }
 rstest_helper_should_be_fixture = { path = "../crates/rstest_helper_should_be_fixture", optional = true, features = ["dylint-driver", "constituent"] }
 
 [dev-dependencies]
@@ -57,5 +63,5 @@ rstest = { workspace = true }
 rstest-bdd = { workspace = true }
 rstest-bdd-macros = { workspace = true }
 
-[lints.rust]
-missing_docs = "deny"
+[lints]
+workspace = true

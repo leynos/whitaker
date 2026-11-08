@@ -33,7 +33,11 @@ impl Published {
 fn published() -> Published {
     let repo = FixtureRepo::new(&DEFAULT_HISTORY);
     let bundle = repo.bundle("snapshot.bundle", &PINNED_REFS);
-    let manifest = repo.manifest(repo.tip(), &repo.commits[DEFAULT_SELECTED]);
+    let selected = repo
+        .commits
+        .get(DEFAULT_SELECTED)
+        .expect("the default selection is in range");
+    let manifest = FixtureRepo::manifest(repo.tip(), selected);
     let root = repo.path("root");
     Published {
         repo,
@@ -123,9 +127,17 @@ fn rejects_a_bundle_that_also_carries_master(published: Published) {
 
 #[rstest]
 fn rejects_a_bundle_for_a_different_commit(published: Published) {
-    let manifest = published.repo.manifest(
-        &published.repo.commits[5],
-        &published.repo.commits[DEFAULT_SELECTED],
+    let manifest = FixtureRepo::manifest(
+        published
+            .repo
+            .commits
+            .get(5)
+            .expect("the fixture history contains this commit"),
+        published
+            .repo
+            .commits
+            .get(DEFAULT_SELECTED)
+            .expect("the default selection is in range"),
     );
     let artefact = BundleArtefact::from_sidecar(&published.bundle, &manifest).expect("sidecar");
 
@@ -139,7 +151,14 @@ fn rejects_a_bundle_for_a_different_commit(published: Published) {
 /// A bundle with prerequisites lacks the history Dylint walks.
 #[rstest]
 fn rejects_a_bundle_cut_above_the_selected_revision(published: Published) {
-    let cut = format!("^{}", published.repo.commits[DEFAULT_SELECTED]);
+    let cut = format!(
+        "^{}",
+        published
+            .repo
+            .commits
+            .get(DEFAULT_SELECTED)
+            .expect("the default selection is in range")
+    );
     let bundle = published
         .repo
         .bundle("cut.bundle", &["refs/heads/main", "HEAD", &cut]);
@@ -157,7 +176,12 @@ fn rejects_a_bundle_cut_above_the_selected_revision(published: Published) {
 fn rejects_history_without_the_channel_introduction() {
     let repo = FixtureRepo::new(&[Step::Channel("nightly-2026-05-28"), Step::Unrelated]);
     let bundle = repo.bundle("short.bundle", &PINNED_REFS);
-    let manifest = repo.manifest(repo.tip(), &repo.commits[0]);
+    let manifest = FixtureRepo::manifest(
+        repo.tip(),
+        repo.commits
+            .first()
+            .expect("the fixture has a first commit"),
+    );
     let root = repo.path("root");
     let artefact = BundleArtefact::from_sidecar(&bundle, &manifest).expect("sidecar");
 
@@ -172,9 +196,14 @@ fn rejects_history_without_the_channel_introduction() {
 
 #[rstest]
 fn rejects_a_manifest_recording_a_different_selection(published: Published) {
-    let manifest = published
-        .repo
-        .manifest(published.repo.tip(), &published.repo.commits[1]);
+    let manifest = FixtureRepo::manifest(
+        published.repo.tip(),
+        published
+            .repo
+            .commits
+            .get(1)
+            .expect("the fixture history contains this commit"),
+    );
     let artefact = BundleArtefact::from_sidecar(&published.bundle, &manifest).expect("sidecar");
 
     let error = install_bundle(&artefact, &manifest, &published.root)
@@ -243,13 +272,18 @@ impl Corruption {
             }
             Self::FlipByte => {
                 let mut bytes = std::fs::read(bundle).expect("read bundle");
-                let last = bytes.len() - 1;
-                bytes[last] ^= 0xff;
+                let last_byte = bytes.last_mut().expect("the bundle is non-empty");
+                *last_byte ^= 0xff;
                 std::fs::write(bundle, bytes).expect("write bundle");
             }
             Self::Truncate => {
                 let bytes = std::fs::read(bundle).expect("read bundle");
-                std::fs::write(bundle, &bytes[..bytes.len() / 2]).expect("write bundle");
+                let half = bytes.len().div_euclid(2);
+                std::fs::write(
+                    bundle,
+                    bytes.get(..half).expect("half the bundle is within it"),
+                )
+                .expect("write bundle");
                 // Re-publish the digest so only Git's own checks can object.
                 write_sidecar(bundle);
             }

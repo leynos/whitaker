@@ -2,7 +2,7 @@
 //!
 //! Kept beside the argument definitions rather than inside them: the
 //! policy is read by the install flow and the dependency installer as
-//! well as by the parser, and `cli.rs` is at the repository's file-size
+//! well as by the parser, and `cli/mod.rs` is at the repository's file-size
 //! limit.
 
 use super::InstallArgs;

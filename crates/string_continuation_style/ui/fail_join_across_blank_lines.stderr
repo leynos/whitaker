@@ -1,0 +1,37 @@
+warning: multiple lines skipped by escaped newline
+  --> $DIR/fail_join_across_blank_lines.rs:13:28
+   |
+LL |   const VALUE: &str = "alpha /
+   |  ____________________________^
+LL | |     
+LL | |         beta";
+   | |________^ skipping everything up to and including this point
+
+warning: Join the physical lines in this cooked string with `concat!()`.
+  --> $DIR/fail_join_across_blank_lines.rs:13:21
+   |
+LL |    const VALUE: &str = "alpha /
+   |  ______________________^      -
+   | | ____________________________|
+LL | ||     
+   | ||_- source-line join
+LL | |          beta";
+   | |______________^ help: replace with a `concat!()` expression: `concat!("alpha ", "beta")`
+   |
+note: The escaped newline removes the physical line break and following indentation, hiding the fragment boundary inside one literal.
+  --> $DIR/fail_join_across_blank_lines.rs:13:21
+   |
+LL |   const VALUE: &str = "alpha /
+   |  _____________________^
+LL | |     
+LL | |         beta";
+   | |_____________^
+   = help: Split the cooked string into `concat!()` arguments at each source-line join.
+note: the lint level is defined here
+  --> $DIR/fail_join_across_blank_lines.rs:2:9
+   |
+LL | #![warn(string_continuation_style)]
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: 2 warnings emitted
+

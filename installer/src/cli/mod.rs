@@ -40,7 +40,8 @@ use crate::{
     "  no_unwrap_or_else_panic       Deny panicking unwrap_or_else fallbacks\n",
     "  test_must_not_have_example    Forbid examples in test documentation\n\n",
     "EXPERIMENTAL LINTS (requires --experimental):\n",
-    "  (none currently)\n\n",
+    "  rstest_helper_should_be_fixture  Extract repeated rstest helper calls into fixtures\n",
+    "  string_continuation_style     Prefer concat!() over source-line joins\n\n",
     "EXAMPLES:\n",
     "  Build and stage the aggregated suite:\n",
     "    $ whitaker-installer\n\n",
@@ -251,7 +252,7 @@ impl InstallArgs {
     /// condition: the caller asked to build, the caller asked for experimental
     /// lints which are never published, or the caller pinned a suite that the
     /// rolling release cannot carry.
-    fn arguments_force_a_source_build(&self) -> bool {
+    const fn arguments_force_a_source_build(&self) -> bool {
         self.is_build_only || self.lint_selection.experimental || self.suite_version.is_some()
     }
 
@@ -365,7 +366,7 @@ impl Cli {
     /// install arguments. Callers should check `self.command` before calling
     /// this method if the `List` case needs different handling.
     #[must_use]
-    pub fn install_args(&self) -> &InstallArgs {
+    pub const fn install_args(&self) -> &InstallArgs {
         match &self.command {
             Some(Command::Install(args)) => args,
             Some(Command::List(_) | Command::Run(_)) | None => &self.install,

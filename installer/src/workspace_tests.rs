@@ -33,6 +33,68 @@ fn write_cargo_toml(dir: &Utf8Path, package_name: &str) -> std::io::Result<()> {
     )
 }
 
+// Assertions live in these helpers because several tests return `Result` to
+// propagate fixture errors, and `panic_in_result_fn` denies asserting inside
+// such a function.
+
+/// Assert the plan refused a pin inside a Whitaker checkout, naming it.
+fn assert_pin_refused(result: Result<WorkspaceAction>, reference: &str) {
+    let error = result.expect_err("a pin here should be refused");
+    assert!(
+        matches!(error, InstallerError::SuitePinInWorkspace { .. }),
+        "expected SuitePinInWorkspace, got: {error:?}"
+    );
+    let rendered = error.to_string();
+    assert!(
+        rendered.contains(reference),
+        "the refusal should name {reference}: {rendered}"
+    );
+}
+
+/// Assert the plan resolved to using the current workspace directory.
+fn assert_uses_current_dir(action: &WorkspaceAction, expected: &Utf8Path) {
+    assert_eq!(
+        action,
+        &WorkspaceAction::UseCurrentDir(expected.to_owned()),
+        "an unpinned in-tree run should use the current workspace"
+    );
+}
+
+/// Assert the plan resolved to cloning into the cached directory.
+fn assert_clones_to(action: &WorkspaceAction, expected: &Utf8Path) {
+    assert_eq!(
+        action,
+        &WorkspaceAction::CloneTo(expected.to_owned()),
+        "a pin outside a workspace should clone into the cache"
+    );
+}
+
+/// Assert the clone's HEAD is detached.
+fn assert_detached_head(clone: &Utf8Path) {
+    assert!(
+        crate::git::is_detached_head(clone).expect("HEAD should be readable"),
+        "the clone should be on a detached HEAD"
+    );
+}
+
+/// Assert the clone's HEAD is back on a branch.
+fn assert_on_branch(clone: &Utf8Path) {
+    assert!(
+        !crate::git::is_detached_head(clone).expect("HEAD should be readable"),
+        "the clone should be back on a branch"
+    );
+}
+
+/// Assert a clone update succeeded.
+fn assert_update_succeeded(result: &Result<()>) {
+    assert!(result.is_ok(), "the update should succeed: {result:?}");
+}
+
+/// Assert an external command that the test ran itself succeeded.
+fn assert_command_succeeded(status: std::process::ExitStatus, message: &str) {
+    assert!(status.success(), "{message}");
+}
+
 #[rstest]
 #[case::whitaker_project(Some("whitaker"), true)]
 #[case::other_project(Some("other-project"), false)]
@@ -181,13 +243,7 @@ fn plan_refuses_a_pin_inside_a_whitaker_workspace(
 
     let result = plan_workspace_action(&temp_workspace.path, &clone_dir, &plan);
 
-    let error = result.expect_err("a pin here should be refused");
-    assert!(
-        matches!(error, InstallerError::SuitePinInWorkspace { .. }),
-        "expected SuitePinInWorkspace, got: {error:?}"
-    );
-    let rendered = error.to_string();
-    assert!(rendered.contains("v0.2.7"), "{rendered}");
+    assert_pin_refused(result, "v0.2.7");
     Ok(())
 }
 
@@ -208,10 +264,7 @@ fn plan_uses_a_whitaker_workspace_when_nothing_is_pinned(
     )
     .expect("no pin, so no refusal");
 
-    assert_eq!(
-        action,
-        WorkspaceAction::UseCurrentDir(temp_workspace.path.clone())
-    );
+    assert_uses_current_dir(&action, &temp_workspace.path);
     Ok(())
 }
 
@@ -231,7 +284,7 @@ fn plan_clones_and_pins_from_outside_a_workspace(
     let action = plan_workspace_action(&temp_workspace.path, &clone_dir, &plan)
         .expect("a pin outside a workspace is fine");
 
-    assert_eq!(action, WorkspaceAction::CloneTo(clone_dir));
+    assert_clones_to(&action, &clone_dir);
     Ok(())
 }
 
@@ -259,8 +312,7 @@ fn init_clone(root: &Utf8Path) -> Option<(Utf8PathBuf, Utf8PathBuf)> {
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .status()
-            .map(|status| status.success())
-            .unwrap_or(false)
+            .is_ok_and(|status| status.success())
     };
     let origin = root.join("origin");
     let clone = root.join("clone");
@@ -293,17 +345,11 @@ fn an_unpinned_update_recovers_a_clone_left_detached(
     };
     crate::git::checkout_ref(&clone, &"main".try_into().expect("valid reference"))
         .expect("checkout should succeed");
-    assert!(
-        crate::git::is_detached_head(&clone).expect("HEAD should be readable"),
-        "the pin should have left HEAD detached"
-    );
+    assert_detached_head(&clone);
 
     update_existing_clone(&clone, &WorkspacePlan::updating(true)).expect("update should recover");
 
-    assert!(
-        !crate::git::is_detached_head(&clone).expect("HEAD should be readable"),
-        "the update should have returned to a branch"
-    );
+    assert_on_branch(&clone);
     Ok(())
 }
 
@@ -326,11 +372,8 @@ fn a_pinned_update_never_pulls(
 
     let result = update_existing_clone(&clone, &plan);
 
-    assert!(result.is_ok(), "{result:?}");
-    assert!(
-        crate::git::is_detached_head(&clone).expect("HEAD should be readable"),
-        "a pinned plan should leave the pin in place"
-    );
+    assert_update_succeeded(&result);
+    assert_detached_head(&clone);
     Ok(())
 }
 
@@ -349,10 +392,7 @@ fn an_unpinned_reuse_does_not_inherit_a_previous_pin(
 
     reuse_existing_clone(&clone, &WorkspacePlan::updating(false)).expect("reuse should recover");
 
-    assert!(
-        !crate::git::is_detached_head(&clone).expect("HEAD should be readable"),
-        "reuse should have returned to a branch"
-    );
+    assert_on_branch(&clone);
     Ok(())
 }
 
@@ -371,7 +411,7 @@ fn a_local_pin_does_not_require_origin(
         .current_dir(clone.as_std_path())
         .status()
         .expect("set-url should run");
-    assert!(changed_origin.success(), "set-url should succeed");
+    assert_command_succeeded(changed_origin, "set-url should succeed");
 
     crate::git::checkout_ref(&clone, &"main".try_into().expect("valid reference"))
         .expect("checkout should succeed");

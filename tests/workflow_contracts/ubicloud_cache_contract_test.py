@@ -115,6 +115,7 @@ def test_cache_restores_precede_every_expensive_install_or_build() -> None:
 #: archive, which does not vary by platform or by disk size.
 SCRATCH_DISCARD_STEPS: dict[str, str] = {
     "coverage-upload": "Discard the instrumented target tree",
+    "coverage-warmup": "Discard the instrumented target tree",
     "linux-full": "Discard the build target tree",
     "windows-compat": "Discard the build target tree",
     "build-lints": "Discard the build target tree",

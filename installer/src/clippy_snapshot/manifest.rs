@@ -75,7 +75,7 @@ impl ClippySnapshotManifest {
 
 /// Return the manifest text compiled into the installer.
 #[must_use]
-pub fn manifest_contents() -> &'static str { include_str!("../../clippy-snapshot.toml") }
+pub const fn manifest_contents() -> &'static str { include_str!("../../clippy-snapshot.toml") }
 
 /// Parse and validate a snapshot manifest.
 ///

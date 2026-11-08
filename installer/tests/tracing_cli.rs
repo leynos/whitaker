@@ -36,7 +36,7 @@ enum CliMode {
 
 impl CliMode {
     /// Return the arguments that select this mode.
-    fn arguments(self) -> &'static [&'static str] {
+    const fn arguments(self) -> &'static [&'static str] {
         match self {
             Self::Default => &[],
             Self::Verbose => &["-v"],
@@ -45,7 +45,7 @@ impl CliMode {
     }
 
     /// Return the short label used in assertion messages.
-    fn label(self) -> &'static str {
+    const fn label(self) -> &'static str {
         match self {
             Self::Default => "default",
             Self::Verbose => "verbose",
@@ -54,7 +54,7 @@ impl CliMode {
     }
 
     /// Report whether this mode enables debug diagnostics.
-    fn is_verbose(self) -> bool { matches!(self, Self::Verbose) }
+    const fn is_verbose(self) -> bool { matches!(self, Self::Verbose) }
 }
 
 /// Identify one pinned installer dependency without passing package strings.
@@ -66,7 +66,7 @@ enum DependencyPackage {
 
 impl DependencyPackage {
     /// Return this dependency's embedded manifest key.
-    fn manifest_name(self) -> &'static str {
+    const fn manifest_name(self) -> &'static str {
         match self {
             Self::CargoDylint => "cargo-dylint",
             Self::DylintLink => "dylint-link",
@@ -282,10 +282,14 @@ fn run_cli_mode(fixture: &TracingFixture, mode: CliMode) -> io::Result<Output> {
 fn assert_cli_output(output: &Output, fixture: &TracingFixture, mode: CliMode) {
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
-    let diagnostic = "skipping PATH scan candidate after lookup failure";
-    let mode_label = mode.label();
-    let is_verbose = mode.is_verbose();
 
+    assert_controlled_failure(output, &stderr, mode.label());
+    assert_verbose_only_diagnostics(&stderr, mode.label(), mode.is_verbose());
+    assert_streams_stay_clean(&stdout, &stderr, fixture.root_path.as_str());
+}
+
+/// Assert the run reached the fake rustup failure rather than an earlier one.
+fn assert_controlled_failure(output: &Output, stderr: &str, mode_label: &str) {
     assert_eq!(
         output.status.code(),
         Some(1),
@@ -296,30 +300,49 @@ fn assert_cli_output(output: &Output, fixture: &TracingFixture, mode: CliMode) {
         "{mode_label} mode must reach the controlled failure after dependency checks; stderr: \
          {stderr}"
     );
-    assert_eq!(
-        stderr.contains(diagnostic),
-        is_verbose,
-        "{mode_label} mode stderr: {stderr}"
+}
+
+/// Assert PATH-scan diagnostics reach stderr exactly when verbose.
+fn assert_verbose_only_diagnostics(stderr: &str, mode_label: &str, is_verbose: bool) {
+    for diagnostic in [
+        "skipping PATH scan candidate after lookup failure",
+        "binary_name=\"dylint-link\"",
+        "failure_category=\"directory_open\"",
+    ] {
+        assert_eq!(
+            stderr.contains(diagnostic),
+            is_verbose,
+            "{mode_label} mode stderr: {stderr}"
+        );
+    }
+}
+
+/// Assert neither stream leaks diagnostics, fixture paths, or escape codes.
+fn assert_streams_stay_clean(stdout: &str, stderr: &str, root_path: &str) {
+    assert!(
+        !stdout.contains("skipping PATH scan candidate after lookup failure"),
+        "the PATH-scan diagnostic must stay on stderr"
     );
-    assert_eq!(
-        stderr.contains("binary_name=\"dylint-link\""),
-        is_verbose,
-        "{mode_label} mode stderr: {stderr}"
+    assert!(
+        !stdout.contains(root_path),
+        "the fixture path must not leak onto stdout"
     );
-    assert_eq!(
-        stderr.contains("failure_category=\"directory_open\""),
-        is_verbose,
-        "{mode_label} mode stderr: {stderr}"
+    assert!(
+        !stderr.contains(root_path),
+        "the fixture path must not leak onto stderr"
     );
-    assert!(!stdout.contains(diagnostic), "diagnostic must be on stderr");
-    assert!(!stdout.contains(fixture.root_path.as_str()));
-    assert!(!stderr.contains(fixture.root_path.as_str()));
-    assert!(!stdout.contains('\u{1b}'));
-    assert!(!stderr.contains('\u{1b}'));
+    assert!(
+        !stdout.contains('\u{1b}'),
+        "stdout must not carry terminal escape codes"
+    );
+    assert!(
+        !stderr.contains('\u{1b}'),
+        "stderr must not carry terminal escape codes"
+    );
 }
 
 /// Build the fake Cargo responses from the versions required by the installer.
-fn fake_cargo_script(versions: DependencyVersions) -> String {
+fn fake_cargo_script(versions: &DependencyVersions) -> String {
     format!(
         concat!(
             "#!/bin/sh\n",
@@ -362,7 +385,7 @@ fn dependency_version(package: DependencyPackage) -> Result<&'static str, Box<dy
 /// cannot be written.
 fn write_executable(directory: &Dir, executable: FixtureExecutable) -> io::Result<()> {
     let (path, contents) = match executable {
-        FixtureExecutable::Cargo(versions) => ("cargo", fake_cargo_script(versions)),
+        FixtureExecutable::Cargo(versions) => ("cargo", fake_cargo_script(&versions)),
         FixtureExecutable::DylintLink => ("dylint-link", String::from("#!/bin/sh\nexit 0\n")),
         FixtureExecutable::Rustup => (
             "rustup",

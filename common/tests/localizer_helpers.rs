@@ -287,6 +287,55 @@ fn scenario_localization_success(world: HelperWorld) { let _ = world; }
 #[scenario("tests/features/localizer_helpers.feature", index = 4)]
 fn scenario_interpolation_failure(world: HelperWorld) { let _ = world; }
 
+// Assertions live in these helpers because several tests return `Result` to
+// propagate fixture errors, and `panic_in_result_fn` denies asserting inside
+// such a function.
+
+/// Assert the logger recorded the unsupported-locale warning.
+fn assert_locale_warning_logged(logger: &mut Logger) {
+    let warned = std::iter::from_fn(|| logger.pop()).any(|record| {
+        record
+            .args()
+            .to_owned()
+            .contains("unsupported DYLINT_LOCALE `xx-XX`")
+    });
+    assert!(warned, "expected unsupported locale warning to be logged");
+}
+
+/// Assert both resolution attempts recorded a missing-key bug.
+fn assert_missing_key_bugs_recorded(recorded: Vec<String>) {
+    assert_eq!(
+        recorded.len(),
+        2,
+        "both resolution attempts should record a bug"
+    );
+    assert!(
+        recorded
+            .into_iter()
+            .all(|message| message.contains("missing-key")),
+        "every recorded message should name the missing key"
+    );
+}
+
+/// Assert a failed resolution reproduced the fallback messages exactly.
+fn assert_matches_fallback(messages: &DiagnosticMessageSet, fallback: &DiagnosticMessageSet) {
+    assert_eq!(
+        messages.primary(),
+        fallback.primary(),
+        "the primary message should come from the fallback"
+    );
+    assert_eq!(
+        messages.note(),
+        fallback.note(),
+        "the note should come from the fallback"
+    );
+    assert_eq!(
+        messages.help(),
+        fallback.help(),
+        "the help should come from the fallback"
+    );
+}
+
 #[test]
 fn invalid_locale_warns_and_falls_back() -> Result<(), String> {
     let mut logger = Logger::start();
@@ -296,19 +345,7 @@ fn invalid_locale_warns_and_falls_back() -> Result<(), String> {
     world.request_localizer("function_attrs_follow_docs");
     world.assert_locale("en-GB")?;
 
-    let mut warned = false;
-    while let Some(record) = logger.pop() {
-        if record
-            .args()
-            .to_owned()
-            .contains("unsupported DYLINT_LOCALE `xx-XX`")
-        {
-            warned = true;
-            break;
-        }
-    }
-
-    assert!(warned, "expected unsupported locale warning to be logged");
+    assert_locale_warning_logged(&mut logger);
     Ok(())
 }
 
@@ -324,13 +361,7 @@ fn repeated_failures_record_all_bugs() -> Result<(), String> {
     world.resolve_messages()?;
     world.resolve_messages()?;
 
-    let recorded = world.recorded_messages();
-    assert_eq!(recorded.len(), 2);
-    assert!(
-        recorded
-            .into_iter()
-            .all(|message| message.contains("missing-key"))
-    );
+    assert_missing_key_bugs_recorded(world.recorded_messages());
     Ok(())
 }
 
@@ -353,8 +384,6 @@ fn missing_key_with_noop_reporter_uses_fallback(world: HelperWorld) -> Result<()
     let messages =
         safe_resolve_message_set(&localizer, resolution, noop_reporter, || fallback.clone());
 
-    assert_eq!(messages.primary(), fallback.primary());
-    assert_eq!(messages.note(), fallback.note());
-    assert_eq!(messages.help(), fallback.help());
+    assert_matches_fallback(&messages, &fallback);
     Ok(())
 }

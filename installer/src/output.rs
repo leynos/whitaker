@@ -8,7 +8,7 @@ use std::io::Write;
 
 use camino::Utf8Path;
 
-use crate::crate_name::CrateName;
+use crate::{cli::SkipFlags, crate_name::CrateName};
 
 /// Write a line to stderr, ignoring write failures.
 ///
@@ -131,7 +131,7 @@ pub fn success_message(count: usize, target_dir: &Utf8Path) -> String {
 ///
 /// ```
 /// use camino::Utf8PathBuf;
-/// use whitaker_installer::{crate_name::CrateName, output::DryRunInfo};
+/// use whitaker_installer::{cli::SkipFlags, crate_name::CrateName, output::DryRunInfo};
 ///
 /// let workspace = Utf8PathBuf::from("/home/user/whitaker");
 /// let target = Utf8PathBuf::from("/home/user/.local/share/dylint/lib");
@@ -143,9 +143,7 @@ pub fn success_message(count: usize, target_dir: &Utf8Path) -> String {
 ///     target_dir: &target,
 ///     verbosity: 0,
 ///     quiet: false,
-///     skip_deps: false,
-///     skip_wrapper: false,
-///     no_update: false,
+///     skip: SkipFlags::default(),
 ///     suite_ref: None,
 ///     jobs: None,
 ///     crates: &crates,
@@ -167,12 +165,8 @@ pub struct DryRunInfo<'a> {
     pub verbosity: u8,
     /// Whether quiet mode is enabled.
     pub quiet: bool,
-    /// Whether dependency installation is skipped.
-    pub skip_deps: bool,
-    /// Whether wrapper script generation is skipped.
-    pub skip_wrapper: bool,
-    /// Whether repository updates are disabled.
-    pub no_update: bool,
+    /// Which optional installation steps the caller skipped.
+    pub skip: SkipFlags,
     /// The reference the lint suite is pinned to, if any.
     pub suite_ref: Option<&'a str>,
     /// Optional parallel job count.
@@ -193,9 +187,9 @@ impl DryRunInfo<'_> {
             format!("Target directory: {}", self.target_dir),
             format!("Verbosity level: {}", self.verbosity),
             format!("Quiet: {}", self.quiet),
-            format!("Skip deps: {}", self.skip_deps),
-            format!("Skip wrapper: {}", self.skip_wrapper),
-            format!("No update: {}", self.no_update),
+            format!("Skip deps: {}", self.skip.skip_deps),
+            format!("Skip wrapper: {}", self.skip.skip_wrapper),
+            format!("No update: {}", self.skip.no_update),
             // Named even when absent, because "which suite is this?" is the
             // question a dry run is most often used to answer.
             format!(

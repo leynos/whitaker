@@ -171,13 +171,14 @@ write_membership() {
 
   # The reader accepts the JSON line inside the log, which `make test` follows
   # with the dylint_testing library tests.
-  # Seven compile contracts must be under measurement: six standard ones and
-  # the nested-rstest-helper contract.
+  # Six compile contracts must be under measurement. The seventh,
+  # the nested rstest-helper fixture, stays in serial-dylint-ui with the
+  # example tests it shares ExampleHarnessLock with, so no configuration moves it.
   benchmark membership \
     --group "serial-trybuild-contracts=$OUT/logs/membership-trybuild.log" \
     --group "serial-dylint-ui=$OUT/logs/membership-ui.log" \
     --control "$OUT/logs/membership-control.log" \
-    --expect-count serial-trybuild-contracts=7 \
+    --expect-count serial-trybuild-contracts=6 \
     --output "$OUT/membership.json"
 }
 

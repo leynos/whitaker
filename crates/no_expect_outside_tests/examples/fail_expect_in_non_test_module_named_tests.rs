@@ -6,7 +6,11 @@
 //! crate is built with `--test`. A genuine production `expect()` in a function
 //! and in an inherent method beside it must fire as well.
 
-#[allow(dead_code)]
+#[expect(dead_code, reason = "the fixture exercises a module merely named tests")]
+#[expect(
+    clippy::expect_used,
+    reason = "the fixture deliberately calls expect outside test-only code"
+)]
 mod tests {
     //! Ordinary production code that happens to be called `tests`.
 
@@ -18,6 +22,10 @@ mod tests {
 }
 
 /// Production code that calls `expect` in a free function.
+#[expect(
+    clippy::expect_used,
+    reason = "the fixture deliberately calls expect outside test-only code"
+)]
 fn production() -> u32 {
     std::iter::once(7_u32)
         .next()
@@ -29,6 +37,10 @@ struct Config;
 
 impl Config {
     /// Load a value, calling `expect` in an ordinary inherent method.
+    #[expect(
+        clippy::expect_used,
+        reason = "the fixture deliberately calls expect outside test-only code"
+    )]
     fn load() -> u32 {
         std::iter::once(7_u32)
             .next()

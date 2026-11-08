@@ -166,10 +166,15 @@ mod tests {
             current in any::<u64>(),
             value in any::<u16>(),
         ) {
-            prop_assert_eq!(
-                mix_u16(current, value),
-                mix_bytes(current, &value.to_le_bytes())
-            );
+            // `to_le_bytes` is the independent oracle. Rebuilding the bytes with
+            // the production mask-and-shift logic would copy any mistake in
+            // `mix_u16` into the expectation, leaving the test unable to see it.
+            #[expect(
+                clippy::little_endian_bytes,
+                reason = "pinning the mixer's little-endian contract needs the standard converter"
+            )]
+            let expected = value.to_le_bytes();
+            prop_assert_eq!(mix_u16(current, value), mix_bytes(current, &expected));
         }
 
         /// Check that the `u64` mixer matches mixing its little-endian bytes.
@@ -178,10 +183,14 @@ mod tests {
             current in any::<u64>(),
             value in any::<u64>(),
         ) {
-            prop_assert_eq!(
-                mix_u64(current, value),
-                mix_bytes(current, &value.to_le_bytes())
-            );
+            // See `u16_mixer_matches_little_endian_bytes`: the expectation must
+            // come from the standard library, not from `mix_u64`'s own loop.
+            #[expect(
+                clippy::little_endian_bytes,
+                reason = "pinning the mixer's little-endian contract needs the standard converter"
+            )]
+            let expected = value.to_le_bytes();
+            prop_assert_eq!(mix_u64(current, value), mix_bytes(current, &expected));
         }
     }
 }

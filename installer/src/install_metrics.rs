@@ -117,7 +117,7 @@ impl InstallMetrics {
     /// assert_eq!(InstallMetrics::default().download_rate_permille(), 0);
     /// ```
     #[must_use]
-    pub const fn download_rate_permille(&self) -> u64 {
+    pub fn download_rate_permille(&self) -> u64 {
         rate_permille(self.download_installs, self.total_installs)
     }
 
@@ -131,7 +131,7 @@ impl InstallMetrics {
     /// assert_eq!(InstallMetrics::default().build_rate_permille(), 0);
     /// ```
     #[must_use]
-    pub const fn build_rate_permille(&self) -> u64 {
+    pub fn build_rate_permille(&self) -> u64 {
         rate_permille(self.build_installs, self.total_installs)
     }
 
@@ -348,17 +348,23 @@ fn persist_metrics(
 /// Return `part / whole` in permille, rounded to the nearest integer.
 ///
 /// Return zero when `whole` is zero and cap inconsistent persisted counts at
-/// 1000 permille. Wider intermediate arithmetic keeps large counters exact.
-pub(crate) const fn rate_permille(part: u64, whole: u64) -> u64 {
+/// 1000 permille.
+///
+/// The scaling is widened to `u128` before multiplying. In `u64`,
+/// `part * 1000` overflows once `whole` exceeds `u64::MAX / 1000`, and
+/// saturating there under-reports the rate (it yields 1 permille for
+/// `part == whole` at the maximum counters). Widening keeps the rounded
+/// result exact for every representable count.
+pub(crate) fn rate_permille(part: u64, whole: u64) -> u64 {
     if whole == 0 {
-        0
-    } else {
-        let part = if part > whole { whole } else { part };
-        let denominator = whole as u128;
-        let numerator = (part as u128) * 1000 + denominator / 2;
-        let rounded = numerator / denominator;
-        if rounded > 1000 { 1000 } else { rounded as u64 }
+        return 0;
     }
+    let bounded_part = if part > whole { whole } else { part };
+    let denominator = u128::from(whole);
+    let numerator = u128::from(bounded_part) * 1_000 + denominator.div_euclid(2);
+    let rounded = numerator.div_euclid(denominator);
+    let capped = rounded.min(1_000);
+    u64::try_from(capped).unwrap_or(1_000)
 }
 
 /// Render a permille value as a percentage with one decimal place.

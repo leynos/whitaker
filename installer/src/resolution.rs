@@ -30,7 +30,10 @@ pub const LINT_CRATES: &[&str] = &[
 ///
 /// These lints are not included in the default suite but can be enabled via
 /// the `--experimental` flag.
-pub const EXPERIMENTAL_LINT_CRATES: &[&str] = &["rstest_helper_should_be_fixture"];
+pub const EXPERIMENTAL_LINT_CRATES: &[&str] = &[
+    "rstest_helper_should_be_fixture",
+    "string_continuation_style",
+];
 
 /// The aggregated suite crate name.
 pub const SUITE_CRATE: &str = "whitaker_suite";
@@ -173,12 +176,17 @@ mod tests {
             "module_max_lines",
             "bumpy_road_function",
             "rstest_helper_should_be_fixture",
+            "string_continuation_style",
         ],
     })]
     #[case::individual_lints(ResolveCratesCase {
         options: CrateResolutionOptions { individual_lints: true, experimental: false },
         expected_present: &["module_max_lines", "bumpy_road_function"],
-        expected_absent: &[SUITE_CRATE, "rstest_helper_should_be_fixture"],
+        expected_absent: &[
+            SUITE_CRATE,
+            "rstest_helper_should_be_fixture",
+            "string_continuation_style",
+        ],
     })]
     #[case::individual_with_experimental(ResolveCratesCase {
         options: CrateResolutionOptions { individual_lints: true, experimental: true },
@@ -186,6 +194,7 @@ mod tests {
             "module_max_lines",
             "bumpy_road_function",
             "rstest_helper_should_be_fixture",
+            "string_continuation_style",
         ],
         expected_absent: &[SUITE_CRATE],
     })]
@@ -227,6 +236,8 @@ mod tests {
     #[case::bumpy_road_function(&["bumpy_road_function"], false, true)]
     #[case::experimental_with_flag(&["rstest_helper_should_be_fixture"], true, true)]
     #[case::experimental_without_flag(&["rstest_helper_should_be_fixture"], false, false)]
+    #[case::string_continuation_with_flag(&["string_continuation_style"], true, true)]
+    #[case::string_continuation_without_flag(&["string_continuation_style"], false, false)]
     #[case::unknown(&["nonexistent_lint"], false, false)]
     fn validate_crate_names_variants(
         #[case] names: &[&str],

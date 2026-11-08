@@ -15,7 +15,11 @@ use crate::clippy_snapshot::test_fixtures::{
 /// A bare clone of the default fixture, damaged by `damage`.
 fn damaged(damage: Damage) -> (FixtureRepo, Utf8PathBuf, ClippySnapshotManifest) {
     let repo = FixtureRepo::new(&DEFAULT_HISTORY);
-    let manifest = repo.manifest(repo.tip(), &repo.commits[DEFAULT_SELECTED]);
+    let selected = repo
+        .commits
+        .get(DEFAULT_SELECTED)
+        .expect("the default selection is in range");
+    let manifest = FixtureRepo::manifest(repo.tip(), selected);
     let bare = repo.path("snapshot.git");
     git(
         &utf8(repo.dir.path()),
@@ -54,7 +58,10 @@ impl Damage {
                 git(bare, &["branch", "--delete", "main"]);
             }
             Self::Shallow => {
-                let parent = &repo.commits[DEFAULT_SELECTED - 1];
+                let parent = repo
+                    .commits
+                    .get(DEFAULT_SELECTED - 1)
+                    .expect("the selected commit has a parent");
                 std::fs::write(bare.join("shallow"), format!("{parent}\n")).expect("write shallow");
             }
             Self::Alternates => {
@@ -93,8 +100,10 @@ fn corrupt_loose_object(bare: &Utf8Path) {
     permissions.set_readonly(false);
     std::fs::set_permissions(&pack, permissions).expect("make pack writable");
     let mut bytes = std::fs::read(&pack).expect("read pack");
-    let middle = bytes.len() / 2;
-    bytes[middle] ^= 0xff;
+    let middle = bytes.len().div_euclid(2);
+    *bytes
+        .get_mut(middle)
+        .expect("the middle is within the pack") ^= 0xff;
     std::fs::write(&pack, bytes).expect("write pack");
 }
 
@@ -124,7 +133,11 @@ fn rejects_damaged_snapshots(#[case] damage: Damage, #[case] expected: &str) {
 #[test]
 fn rejects_a_work_tree() {
     let repo = FixtureRepo::new(&DEFAULT_HISTORY);
-    let manifest = repo.manifest(repo.tip(), &repo.commits[DEFAULT_SELECTED]);
+    let selected = repo
+        .commits
+        .get(DEFAULT_SELECTED)
+        .expect("the default selection is in range");
+    let manifest = FixtureRepo::manifest(repo.tip(), selected);
 
     let error = verify_repository(&repo.work, &manifest).expect_err("work trees are rejected");
 

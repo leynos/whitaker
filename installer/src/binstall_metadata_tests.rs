@@ -8,6 +8,16 @@ use rstest::rstest;
 
 use super::*;
 
+/// Report whether a URL's final path segment carries the given extension.
+///
+/// An extension comparison is case-insensitive by convention, so the archive
+/// suffix check must not depend on the casing of a generated URL.
+fn has_extension(url: &str, expected: &str) -> bool {
+    std::path::Path::new(url)
+        .extension()
+        .is_some_and(|extension| extension.eq_ignore_ascii_case(std::ffi::OsStr::new(expected)))
+}
+
 #[rstest]
 fn pkg_url_matches_design_document() {
     let table = load_cargo_toml().expect("load installer Cargo.toml");
@@ -101,7 +111,7 @@ fn essential_binstall_fields_present() {
 fn non_windows_targets_expand_to_tgz(#[case] target: &str) {
     let url = expand_pkg_url("0.2.0", target);
     assert!(
-        url.ends_with(".tgz"),
+        has_extension(&url, "tgz"),
         "expected URL for {target} to end with .tgz, got {url}"
     );
     assert!(url.contains(target));
@@ -112,7 +122,7 @@ fn non_windows_targets_expand_to_tgz(#[case] target: &str) {
 fn windows_target_expands_to_zip() {
     let url = expand_pkg_url("0.2.0", WINDOWS_OVERRIDE_TARGET);
     assert!(
-        url.ends_with(".zip"),
+        has_extension(&url, "zip"),
         "expected URL for Windows to end with .zip, got {url}"
     );
 }

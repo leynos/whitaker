@@ -16,7 +16,8 @@ and packaging work. Its former uninstrumented run inside
 
 The two remaining executions are not duplicates: `windows-compat` runs the
 suite on a different platform, and `coverage-upload` runs it on `main`
-pushes, never on the same event as `coverage-check`.
+pushes, never on the same event as `coverage-check`. `coverage-warmup` also
+runs on `main` pushes but only compiles the lane's tests.
 
 These tests fail if a second Linux execution appears, if the surviving gate
 narrows what it executes, or if the doctest half of that gate goes missing.
@@ -71,6 +72,7 @@ TEST_COMMANDS = (
 JUSTIFIED_TEST_LANES: dict[str, str] = {
     "coverage-check": "the single Linux pull-request execution",
     "coverage-upload": "the main-branch coverage writer, a different trigger",
+    "coverage-warmup": "compiles the coverage lane's tests and runs none",
     "windows-compat": "a different platform",
 }
 

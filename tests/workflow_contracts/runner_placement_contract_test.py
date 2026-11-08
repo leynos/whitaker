@@ -40,9 +40,11 @@ from runner_lanes import (
     matrix_legs,
 )
 from ubicloud_workflow_support import (
+    HOSTED_RUNNER_JOBS,
     REPOSITORY_ROOT,
     UBICLOUD_JOBS,
     all_jobs,
+    load_job,
     restore_steps,
     steps_by_name,
 )
@@ -80,8 +82,23 @@ def test_the_lane_list_and_the_job_list_name_the_same_whole_jobs() -> None:
     with every contract still green.
     """
     from_lanes = {(lane.workflow, lane.job) for lane in UBICLOUD_LANES}
-    from_jobs = {(workflow, job) for job, workflow in UBICLOUD_JOBS.items()}
+    from_jobs = {
+        (workflow, job)
+        for job, workflow in UBICLOUD_JOBS.items()
+        if job not in HOSTED_RUNNER_JOBS
+    }
     assert from_lanes == from_jobs
+
+
+@pytest.mark.parametrize("job_name", sorted(HOSTED_RUNNER_JOBS))
+def test_a_job_moved_to_a_hosted_runner_names_one(job_name: str) -> None:
+    """The exemption from the lane list holds only for a hosted placement."""
+    job = load_job(job_name)
+    labels = declared_labels(job)
+    assert labels
+    assert labels <= GITHUB_HOSTED_LABELS, (
+        f"{job_name} is exempt from the Ubicloud lanes but runs on {sorted(labels)}"
+    )
 
 
 def test_no_lane_takes_its_label_from_a_broken_folded_scalar() -> None:

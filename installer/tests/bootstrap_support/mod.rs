@@ -57,24 +57,35 @@ exit "${STUB_EXIT:-0}"
 
 /// A temporary installation.
 pub struct Installation {
-    /// Owns every path below.
-    pub dir: TempDir,
+    /// Owns every path below; dropped with the installation.
+    ///
+    /// The field is never read directly, but it must stay alive for as long as
+    /// the installation so the temporary directory is not removed early.
+    pub _dir: TempDir,
     /// The current `XDG_DATA_HOME`.
     pub data_root: Utf8PathBuf,
     /// The installed snapshot commit.
     pub commit: String,
+    /// The temporary base directory, resolved once at construction.
+    base: Utf8PathBuf,
 }
 
 impl Installation {
     /// Install a snapshot, lint directory, metadata, and stub `cargo`.
-    pub fn new() -> Self {
-        let dir = TempDir::new().expect("create temp dir");
-        let base = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("UTF-8");
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the temporary directory, snapshot, metadata, or
+    /// stub `cargo` cannot be created.
+    pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
+        let dir = TempDir::new()?;
+        let base = Utf8PathBuf::from_path_buf(dir.path().to_path_buf())
+            .map_err(|path| format!("temporary directory is not UTF-8: {}", path.display()))?;
         let data_root = base.join("data");
         let layout = BootstrapLayout::at(&data_root.join("whitaker-bootstrap"));
-        let commit = install_snapshot(&layout.clippy_root());
+        let commit = install_snapshot(&layout.clippy_root())?;
         let library_dir = data_root.join("whitaker/lints/lib");
-        std::fs::create_dir_all(&library_dir).expect("create library dir");
+        std::fs::create_dir_all(&library_dir)?;
         BootstrapMetadata {
             schema_version: BOOTSTRAP_SCHEMA,
             dylint_version: "6.3.0".to_owned(),
@@ -82,20 +93,18 @@ impl Installation {
             toolchain: TOOLCHAIN.to_owned(),
             library_dir: StoredPath::new(&library_dir, &data_root),
         }
-        .write(&layout.metadata_path())
-        .expect("write metadata");
-        write_executable(&base.join("bin/cargo"), STUB_CARGO);
-        Self {
-            dir,
+        .write(&layout.metadata_path())?;
+        write_executable(&base.join("bin/cargo"), STUB_CARGO)?;
+        Ok(Self {
+            _dir: dir,
             data_root,
             commit,
-        }
+            base,
+        })
     }
 
     /// The temporary base directory.
-    pub fn base(&self) -> Utf8PathBuf {
-        Utf8PathBuf::from_path_buf(self.dir.path().to_path_buf()).expect("UTF-8")
-    }
+    pub fn base(&self) -> Utf8PathBuf { self.base.clone() }
 
     /// The bootstrap layout under the current data root.
     pub fn layout(&self) -> BootstrapLayout {
@@ -103,10 +112,15 @@ impl Installation {
     }
 
     /// Move the whole data root, as relocating a home directory would.
-    pub fn relocate(&mut self, to: &str) {
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the data root cannot be moved.
+    pub fn relocate(&mut self, to: &str) -> Result<(), Box<dyn std::error::Error>> {
         let destination = self.base().join(to);
-        std::fs::rename(&self.data_root, &destination).expect("move data root");
+        std::fs::rename(&self.data_root, &destination)?;
         self.data_root = destination;
+        Ok(())
     }
 
     /// A `whitaker-installer run -- <args>` command against this installation.
@@ -136,17 +150,18 @@ impl Installation {
     }
 
     /// Run with `args` and wait for the result.
-    pub fn run(&self, args: &[&str]) -> Output {
-        self.run_command(args)
-            .output()
-            .expect("run whitaker-installer")
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the installer cannot be launched or awaited.
+    pub fn run(&self, args: &[&str]) -> Result<Output, Box<dyn std::error::Error>> {
+        Ok(self.run_command(args).output()?)
     }
 
     /// How many cold driver builds the stub has performed.
     pub fn builds(&self) -> usize {
         std::fs::read_to_string(self.base().join("stub.builds"))
-            .map(|log| log.lines().count())
-            .unwrap_or(0)
+            .map_or(0, |log| log.lines().count())
     }
 
     /// The environment lines the stub recorded, in order.
@@ -158,21 +173,32 @@ impl Installation {
 }
 
 /// Install the shared fixture snapshot under `clippy_root`; return its commit.
-fn install_snapshot(clippy_root: &Utf8Path) -> String {
-    let fixture = SnapshotFixture::new().expect("build the fixture snapshot");
-    fixture
-        .install(clippy_root)
-        .expect("install the fixture snapshot");
-    fixture.commit().to_owned()
+fn install_snapshot(clippy_root: &Utf8Path) -> Result<String, Box<dyn std::error::Error>> {
+    let fixture = SnapshotFixture::new()?;
+    fixture.install(clippy_root)?;
+    Ok(fixture.commit().to_owned())
 }
 
-/// Run fixture Git, failing the test on error.
-pub fn git(dir: &Utf8Path, args: &[&str]) -> String { fixture_git(dir, args).expect("fixture git") }
+/// Run fixture Git, returning its output.
+///
+/// # Errors
+///
+/// Returns an error if Git cannot be run or exits unsuccessfully.
+pub fn git(dir: &Utf8Path, args: &[&str]) -> Result<String, Box<dyn std::error::Error>> {
+    Ok(fixture_git(dir, args)?)
+}
 
 /// Write an executable script.
-pub fn write_executable(path: &Utf8Path, contents: &str) {
+///
+/// # Errors
+///
+/// Returns an error if the parent directory, script, or permissions cannot be
+/// written.
+pub fn write_executable(path: &Utf8Path, contents: &str) -> Result<(), Box<dyn std::error::Error>> {
     use std::os::unix::fs::PermissionsExt;
-    std::fs::create_dir_all(path.parent().expect("script has a parent")).expect("create dir");
-    std::fs::write(path, contents).expect("write script");
-    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+    let parent = path.parent().ok_or("script path has no parent directory")?;
+    std::fs::create_dir_all(parent)?;
+    std::fs::write(path, contents)?;
+    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755))?;
+    Ok(())
 }

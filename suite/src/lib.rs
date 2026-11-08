@@ -10,7 +10,13 @@
 
 mod lints;
 
-pub use lints::{LintDescriptor, SUITE_LINTS, suite_lint_names};
+pub use lints::{
+    LintDescriptor,
+    PassKind,
+    SUITE_LINTS,
+    suite_lint_names,
+    suite_lint_names_for_pass,
+};
 
 #[cfg(feature = "dylint-driver")]
 mod driver;

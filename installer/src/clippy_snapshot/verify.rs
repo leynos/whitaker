@@ -86,8 +86,8 @@ fn check_structure(
             "it is not a bare repository",
         ));
     }
-    let head = git.output("symbolic-ref", Some(path), &["symbolic-ref", "HEAD"])?;
-    let head = String::from_utf8_lossy(&head.stdout).trim().to_owned();
+    let symbolic = git.output("symbolic-ref", Some(path), &["symbolic-ref", "HEAD"])?;
+    let head = String::from_utf8_lossy(&symbolic.stdout).trim().to_owned();
     if head != main_ref() {
         return Err(ClippySnapshotError::invalid(
             path,

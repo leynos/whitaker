@@ -51,18 +51,22 @@ struct Installed {
 
 impl Installed {
     /// Install a snapshot, a lint directory, and the bootstrap metadata.
-    fn new() -> Self {
-        let dir = TempDir::new().expect("create temp dir");
-        let base = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("UTF-8 temp path");
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the temporary directory, snapshot fixture, or
+    /// metadata cannot be created.
+    fn new() -> Result<Self, Box<dyn std::error::Error>> {
+        let dir = TempDir::new()?;
+        let base = Utf8PathBuf::from_path_buf(dir.path().to_path_buf())
+            .map_err(|path| format!("temp path is not UTF-8: {}", path.display()))?;
         let data_root = base.join("data");
         let layout = BootstrapLayout::at(&data_root.join("whitaker-bootstrap"));
-        let fixture = SnapshotFixture::new().expect("build the snapshot fixture");
-        fixture
-            .install(&layout.clippy_root())
-            .expect("install the fixture snapshot");
+        let fixture = SnapshotFixture::new()?;
+        fixture.install(&layout.clippy_root())?;
         let commit = fixture.commit().to_owned();
         let library_dir = data_root.join("whitaker/lints/lib");
-        std::fs::create_dir_all(&library_dir).expect("create library dir");
+        std::fs::create_dir_all(&library_dir)?;
         BootstrapMetadata {
             schema_version: BOOTSTRAP_SCHEMA,
             dylint_version: "6.3.0".to_owned(),
@@ -70,26 +74,28 @@ impl Installed {
             toolchain: FIXTURE_TOOLCHAIN.to_owned(),
             library_dir: StoredPath::new(&library_dir, &data_root),
         }
-        .write(&layout.metadata_path())
-        .expect("write metadata");
-        Self {
+        .write(&layout.metadata_path())?;
+        Ok(Self {
             _dir: dir,
             _fixture: fixture,
             layout,
             library_dir,
             commit,
-        }
+        })
     }
 
     /// Write a stub `cargo` beside the data root and return its path.
-    fn cargo(&self, builds: bool) -> Utf8PathBuf {
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the stub cannot be written or made executable.
+    fn cargo(&self, builds: bool) -> Result<Utf8PathBuf, Box<dyn std::error::Error>> {
         use std::os::unix::fs::PermissionsExt;
         let name = if builds { "cargo-builds" } else { "cargo-idle" };
         let path = self.library_dir.join("../../..").join(name);
-        std::fs::write(&path, stub_cargo(builds)).expect("write stub cargo");
-        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))
-            .expect("chmod stub cargo");
-        path
+        std::fs::write(&path, stub_cargo(builds))?;
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))?;
+        Ok(path)
     }
 
     /// The driver slot this installation resolves to.
@@ -118,8 +124,8 @@ fn counted_once(recorded: &[Recorded], name: &str, label: (&str, &str)) -> bool 
 
 #[test]
 fn prepare_resolves_the_run_without_creating_the_slot() {
-    let installed = Installed::new();
-    let cargo = installed.cargo(true);
+    let installed = Installed::new().expect("build the installation");
+    let cargo = installed.cargo(true).expect("write stub cargo");
 
     let prepared = prepare(&installed.layout, cargo.as_os_str()).expect("prepare");
 
@@ -137,8 +143,8 @@ fn prepare_resolves_the_run_without_creating_the_slot() {
 /// Regression: `is_dir` once reported any I/O failure as missing libraries.
 #[test]
 fn prepare_reports_a_library_dir_it_cannot_inspect() {
-    let installed = Installed::new();
-    let cargo = installed.cargo(true);
+    let installed = Installed::new().expect("build the installation");
+    let cargo = installed.cargo(true).expect("write stub cargo");
     let parent = installed
         .library_dir
         .parent()
@@ -155,8 +161,8 @@ fn prepare_reports_a_library_dir_it_cannot_inspect() {
 
 #[test]
 fn a_missing_library_dir_is_still_reported_as_missing() {
-    let installed = Installed::new();
-    let cargo = installed.cargo(true);
+    let installed = Installed::new().expect("build the installation");
+    let cargo = installed.cargo(true).expect("write stub cargo");
     std::fs::remove_dir_all(&installed.library_dir).expect("remove the library dir");
 
     let error = prepare(&installed.layout, cargo.as_os_str()).expect_err("missing");
@@ -171,8 +177,8 @@ fn a_missing_library_dir_is_still_reported_as_missing() {
 #[case::builds_a_driver(true, "built")]
 #[case::leaves_the_slot_cold(false, "not_built")]
 fn a_cold_run_records_its_path_and_outcome(#[case] builds: bool, #[case] outcome: &str) {
-    let installed = Installed::new();
-    let cargo = installed.cargo(builds);
+    let installed = Installed::new().expect("build the installation");
+    let cargo = installed.cargo(builds).expect("write stub cargo");
     let prepared = prepare(&installed.layout, cargo.as_os_str()).expect("prepare");
     let recorder = DebuggingRecorder::new();
     let snapshotter = recorder.snapshotter();
@@ -202,8 +208,8 @@ fn a_cold_run_records_its_path_and_outcome(#[case] builds: bool, #[case] outcome
 
 #[test]
 fn a_run_after_the_build_is_warm() {
-    let installed = Installed::new();
-    let cargo = installed.cargo(true);
+    let installed = Installed::new().expect("build the installation");
+    let cargo = installed.cargo(true).expect("write stub cargo");
     let prepared = prepare(&installed.layout, cargo.as_os_str()).expect("prepare");
     execute(&prepared, cargo.as_os_str(), &[]).expect("cold run");
     let recorder = DebuggingRecorder::new();
@@ -215,10 +221,14 @@ fn a_run_after_the_build_is_warm() {
 
     assert!(!finished.built_driver, "a warm run reuses the driver");
 
-    let recorded = snapshotter.snapshot().into_vec();
-    assert!(counted_once(&recorded, RUN_TOTAL, ("driver", "warm")));
+    let snapshot_metrics = snapshotter.snapshot().into_vec();
+    assert!(counted_once(
+        &snapshot_metrics,
+        RUN_TOTAL,
+        ("driver", "warm")
+    ));
     assert!(
-        !recorded
+        !snapshot_metrics
             .iter()
             .any(|(key, ..)| key.key().name() == DRIVER_BUILD_TOTAL),
         "a warm run builds nothing"
@@ -242,8 +252,8 @@ fn a_failed_cold_run_records_why(
     #[case] build_outcome: &str,
     #[case] run_outcome: &str,
 ) {
-    let installed = Installed::new();
-    let cargo = installed.cargo(true);
+    let installed = Installed::new().expect("build the installation");
+    let cargo = installed.cargo(true).expect("write stub cargo");
     let prepared = prepare(&installed.layout, cargo.as_os_str()).expect("prepare");
     let run_cargo = match failure {
         ColdFailure::SnapshotTampered => {
@@ -276,8 +286,8 @@ fn a_failed_cold_run_records_why(
 #[test]
 fn a_contended_cold_run_records_its_lock_wait() {
     const HELD: std::time::Duration = std::time::Duration::from_millis(400);
-    let installed = Installed::new();
-    let cargo = installed.cargo(true);
+    let installed = Installed::new().expect("build the installation");
+    let cargo = installed.cargo(true).expect("write stub cargo");
     let prepared = prepare(&installed.layout, cargo.as_os_str()).expect("prepare");
     prepared.slot.create().expect("create the slot");
     let holder = prepared
@@ -286,13 +296,15 @@ fn a_contended_cold_run_records_its_lock_wait() {
         .expect("hold the exclusive lock");
 
     let worker = {
-        let prepared = prepared.clone();
-        let cargo = cargo.clone();
+        let worker_prepared = prepared.clone();
+        let worker_cargo = cargo.clone();
         std::thread::spawn(move || {
             let recorder = DebuggingRecorder::new();
             let snapshotter = recorder.snapshotter();
-            metrics::with_local_recorder(&recorder, || execute(&prepared, cargo.as_os_str(), &[]))
-                .expect("the run completes once the lock is released");
+            metrics::with_local_recorder(&recorder, || {
+                execute(&worker_prepared, worker_cargo.as_os_str(), &[])
+            })
+            .expect("the run completes once the lock is released");
             snapshotter.snapshot().into_vec()
         })
     };
@@ -309,11 +321,10 @@ fn a_contended_cold_run_records_its_lock_wait() {
                     .labels()
                     .any(|l| l.key() == "mode" && l.value() == "exclusive")
         })
-        .filter_map(|(_, _, _, value)| match value {
+        .find_map(|(_, _, _, value)| match value {
             DebugValue::Histogram(samples) => samples.first().map(|s| s.into_inner()),
             _ => None,
         })
-        .next()
         .expect("an exclusive lock wait was recorded");
     // The hold is 400 ms; a worker that started within 350 ms of it waited at
     // least 50 ms. A wait near zero would mean the lock was never contended.

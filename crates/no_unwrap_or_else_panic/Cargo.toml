@@ -45,11 +45,6 @@ dylint_testing = { workspace = true }
 rstest = { workspace = true }
 rstest-bdd = { workspace = true }
 rstest-bdd-macros = { workspace = true }
-temp-env = { workspace = true }
 
-[lints.rust]
-missing_docs = "deny"
-
-[lints.clippy]
-expect_used = "deny"
-unwrap_used = "deny"
+[lints]
+workspace = true

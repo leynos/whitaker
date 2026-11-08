@@ -75,10 +75,11 @@ fn generated_valid_graphs_satisfy_adjacency_contract() {
                 raw_edges
                     .into_iter()
                     .filter_map(|(left, right, weight)| {
-                        let left = left % node_count;
-                        let right = right % node_count;
-                        let endpoints = (left.min(right), left.max(right));
-                        (left != right && seen.insert(endpoints))
+                        // `node_count` is non-zero here, so both remainders exist.
+                        let start = left.checked_rem(node_count)?;
+                        let end = right.checked_rem(node_count)?;
+                        let endpoints = (start.min(end), start.max(end));
+                        (start != end && seen.insert(endpoints))
                             .then(|| edge(endpoints.0, endpoints.1, weight))
                     })
                     .collect()
@@ -100,7 +101,11 @@ fn generated_valid_graphs_satisfy_adjacency_contract() {
             prop_assert_eq!(emitted_entries, edges.len() * 2);
 
             for (node, bucket) in adjacency.iter().enumerate() {
-                prop_assert!(bucket.windows(2).all(|window| window[0].0 <= window[1].0));
+                prop_assert!(
+                    bucket
+                        .windows(2)
+                        .all(|pair| matches!(pair, [left, right] if left.0 <= right.0))
+                );
 
                 for &(neighbour, weight) in bucket {
                     actual_entries.insert((node, neighbour, weight));

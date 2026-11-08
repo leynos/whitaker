@@ -1,5 +1,5 @@
 error: Avoid calling expect on `std::option::Option<&str>` outside test-only code.
-  --> $DIR/fail_expect_in_rstest_non_test_module.rs:14:13
+  --> $DIR/fail_expect_in_rstest_non_test_module.rs:18:13
    |
 LL |     let _ = parsed.expect("ordinary code must not inherit rstest harness status");
    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

@@ -98,7 +98,48 @@ fn discover_library_files_finds_expected_files(
         fs::write(dir.path().join(format!("lib{name}.so")), b"fake").expect("write");
     }
     let found = discover_library_files(dir.path(), &linux_target).expect("all present");
-    assert_eq!(found.len(), LINT_CRATES.len() + 1);
+    assert_eq!(found.len(), PINNED_INSTALLER_LINT_CRATES.len() + 1);
+}
+
+/// Every crate that `PINNED_INSTALLER_LINT_CRATES` names must still exist, or
+/// the exclusion list has drifted from the canonical list.
+#[test]
+fn pinned_installer_crates_are_known_lint_crates() {
+    for name in PINNED_INSTALLER_LINT_CRATES {
+        assert!(LINT_CRATES.contains(name), "{name} is not in LINT_CRATES");
+    }
+}
+
+/// The archive must not ship a standalone library the pinned installer cannot
+/// prune (whitaker #565): the suite, and nothing outside the pinned list.
+#[rstest]
+fn discover_library_files_ships_only_prunable_libraries(
+    #[from(linux_target)] linux_target_res: Result<TargetTriple, ArtefactError>,
+) {
+    let linux_target = linux_target_res.expect("linux target triple should validate");
+
+    let dir = tempfile::tempdir().expect("temp dir");
+    for name in LINT_CRATES.iter().chain(std::iter::once(&SUITE_CRATE)) {
+        fs::write(dir.path().join(format!("lib{name}.so")), b"fake").expect("write");
+    }
+    let found = discover_library_files(dir.path(), &linux_target).expect("all present");
+    for path in &found {
+        let stem = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .and_then(|s| s.strip_prefix("lib"))
+            .expect("library file name");
+        assert!(
+            stem == SUITE_CRATE || PINNED_INSTALLER_LINT_CRATES.contains(&stem),
+            "archive would ship {stem}, which the pinned installer cannot prune"
+        );
+    }
+    assert!(
+        found
+            .iter()
+            .any(|p| p.ends_with(format!("lib{SUITE_CRATE}.so"))),
+        "the suite must always ship"
+    );
 }
 
 #[test]
@@ -141,28 +182,32 @@ proptest! {
     #[test]
     fn civil_from_epoch_round_trips_any_epoch_seconds(epoch_secs in any::<u64>()) {
         let (year, month, day) = civil_from_epoch(epoch_secs);
-        let seconds_of_day = epoch_secs % 86_400;
-        let hour = seconds_of_day / 3_600;
-        let minute = seconds_of_day % 3_600 / 60;
-        let second = seconds_of_day % 60;
+        let seconds_of_day = epoch_secs.rem_euclid(86_400);
+        let hour = seconds_of_day.div_euclid(3_600);
+        let minute = seconds_of_day.rem_euclid(3_600).div_euclid(60);
+        let second = seconds_of_day.rem_euclid(60);
 
         prop_assert!((1..=12).contains(&month));
         prop_assert!((1..=days_in_month(year, month)).contains(&day));
         prop_assert!(hour < 24);
         prop_assert!(minute < 60);
         prop_assert!(second < 60);
-        prop_assert_eq!(days_from_civil(year, month, day), epoch_secs / 86_400);
+        prop_assert_eq!(
+            days_from_civil(year, month, day),
+            epoch_secs.div_euclid(86_400)
+        );
     }
 }
 
 /// Convert a Gregorian date to days since the Unix epoch using era arithmetic.
 fn days_from_civil(year: u64, month: u64, day: u64) -> u64 {
-    let adjusted_year = year - if month <= 2 { 1 } else { 0 };
-    let era = adjusted_year / 400;
+    let adjusted_year = year - u64::from(month <= 2);
+    let era = adjusted_year.div_euclid(400);
     let year_of_era = adjusted_year - era * 400;
     let month_of_year = if month > 2 { month - 3 } else { month + 9 };
-    let day_of_year = (153 * month_of_year + 2) / 5 + day - 1;
-    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
+    let day_of_year = (153 * month_of_year + 2).div_euclid(5) + day - 1;
+    let day_of_era =
+        year_of_era * 365 + year_of_era.div_euclid(4) - year_of_era.div_euclid(100) + day_of_year;
     era * 146_097 + day_of_era - 719_468
 }
 
@@ -178,7 +223,9 @@ fn days_in_month(year: u64, month: u64) -> u64 {
 }
 
 /// Return whether a year is a leap year in the Gregorian calendar.
-fn is_gregorian_leap_year(year: u64) -> bool { year % 400 == 0 || year % 4 == 0 && year % 100 != 0 }
+fn is_gregorian_leap_year(year: u64) -> bool {
+    year.rem_euclid(400) == 0 || year.rem_euclid(4) == 0 && year.rem_euclid(100) != 0
+}
 
 #[test]
 fn now_utc_iso8601_format_is_valid() {

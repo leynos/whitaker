@@ -108,7 +108,9 @@ fn every_failure_ends_with_what_to_do_next() {
             .filter_map(|separator| body.rfind(separator).map(|at| at + separator.len()))
             .max()
             .unwrap_or(0);
-        let last_clause = &body[clause_start..];
+        let last_clause = body
+            .get(clause_start..)
+            .expect("a clause separator ends on a character boundary");
         let first_word = last_clause
             .split_whitespace()
             .next()

@@ -1,0 +1,34 @@
+warning: Join the physical lines in this cooked string with `concat!()`.
+  --> $DIR/fail_trim_and_join.rs:13:21
+   |
+LL |    const VALUE: &str = "/
+   |  ______________________^
+LL | |      alpha /
+   | | ___________-
+LL | ||     beta";
+   | ||_-_______^
+   |  |_|
+   |    source-line join
+   |
+note: The escaped newline removes the physical line break and following indentation, hiding the fragment boundary inside one literal.
+  --> $DIR/fail_trim_and_join.rs:13:21
+   |
+LL |   const VALUE: &str = "/
+   |  _____________________^
+LL | |     alpha /
+LL | |     beta";
+   | |_________^
+   = help: Split the cooked string into `concat!()` arguments at each source-line join.
+note: the lint level is defined here
+  --> $DIR/fail_trim_and_join.rs:2:9
+   |
+LL | #![warn(string_continuation_style)]
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^
+help: replace with a `concat!()` expression
+   |
+LL ~ const VALUE: &str = concat!("/
+LL ~     alpha ", "beta");
+   |
+
+warning: 1 warning emitted
+

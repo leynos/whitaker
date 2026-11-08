@@ -63,14 +63,21 @@ fn strict_policy() -> SourcePolicy {
     }
 }
 
-fn stub_detect_host_target() -> Result<String> { Ok("x86_64-unknown-linux-gnu".to_owned()) }
+/// Feed the real parser a canned `rustc -vV` line, so the stub stays fallible.
+fn stub_detect_host_target() -> Result<String> {
+    parse_host_target("host: x86_64-unknown-linux-gnu\n")
+}
 
 fn stub_resolve_destination_dir(
     _dirs: &dyn BaseDirs,
     _toolchain_channel: &str,
     _host_target: &str,
 ) -> Result<Utf8PathBuf> {
-    Ok(Utf8PathBuf::from("/tmp/whitaker-test-data/lints"))
+    Utf8PathBuf::from_path_buf(PathBuf::from("/tmp/whitaker-test-data/lints")).map_err(|path| {
+        InstallerError::WorkspaceNotFound {
+            reason: format!("test destination is not UTF-8: {}", path.display()),
+        }
+    })
 }
 
 fn stub_attempt_prebuilt(_config: &PrebuiltConfig<'_>, _stderr: &mut dyn Write) -> PrebuiltResult {
@@ -137,9 +144,9 @@ fn prune_prebuilt_libraries_keeps_only_requested_crates(
     #[case] removed: &[&str],
 ) {
     let StagingFixture {
-        _temp_dir: _,
         staging_path,
         toolchain,
+        ..
     } = staging_fixture;
 
     let foreign_path = staging_path.join("libforeign_lint@nightly-2026-05-28.so");
@@ -212,7 +219,7 @@ fn try_prebuilt_installation_prune_error_falls_back_to_local_build() {
     let result = try_prebuilt_installation_with(
         &context,
         &mut stderr,
-        PrebuiltInstallationHooks {
+        &PrebuiltInstallationHooks {
             detect_host_target: stub_detect_host_target,
             resolve_destination_dir: stub_resolve_destination_dir,
             attempt_prebuilt: stub_attempt_prebuilt,
@@ -228,14 +235,14 @@ fn try_prebuilt_installation_prune_error_falls_back_to_local_build() {
         PRUNE_HOOK_CALLED.load(Ordering::SeqCst),
         "prune hook should be invoked"
     );
-    let stderr = String::from_utf8(stderr).expect("stderr should be utf-8");
+    let stderr_text = String::from_utf8(stderr).expect("stderr should be utf-8");
     assert!(
-        stderr.contains("Prebuilt download unavailable: staging failed: forced prune failure"),
-        "fallback reason should include prune error, stderr: {stderr}"
+        stderr_text.contains("Prebuilt download unavailable: staging failed: forced prune failure"),
+        "fallback reason should include prune error, stderr: {stderr_text}"
     );
     assert!(
-        stderr.contains("Falling back to local compilation."),
-        "fallback message should be emitted, stderr: {stderr}"
+        stderr_text.contains("Falling back to local compilation."),
+        "fallback message should be emitted, stderr: {stderr_text}"
     );
 }
 
@@ -283,15 +290,15 @@ fn run_with_unavailable_prebuilt(args: &InstallArgs) -> (Result<Option<Utf8PathB
     let result = try_prebuilt_installation_with(
         &context,
         &mut stderr,
-        PrebuiltInstallationHooks {
+        &PrebuiltInstallationHooks {
             detect_host_target: stub_detect_host_target,
             resolve_destination_dir: stub_resolve_destination_dir,
             attempt_prebuilt: stub_attempt_prebuilt_unavailable,
             prune_prebuilt_libraries: stub_prune_prebuilt_libraries,
         },
     );
-    let stderr = String::from_utf8(stderr).expect("stderr should be utf-8");
-    (result, stderr)
+    let stderr_text = String::from_utf8(stderr).expect("stderr should be utf-8");
+    (result, stderr_text)
 }
 
 #[test]
@@ -320,17 +327,17 @@ fn a_missing_suite_artefact_fails_under_the_flag() {
         ..InstallArgs::default()
     };
 
-    let (result, _stderr) = run_with_unavailable_prebuilt(&args);
+    let (result, stderr_text) = run_with_unavailable_prebuilt(&args);
 
     let error = result.expect_err("an absent artefact must fail when a source build is forbidden");
     assert!(
-        _stderr.contains("Prebuilt download unavailable"),
-        "the artefact's absence is worth reporting either way, stderr: {_stderr}"
+        stderr_text.contains("Prebuilt download unavailable"),
+        "the artefact's absence is worth reporting either way, stderr: {stderr_text}"
     );
     assert!(
-        !_stderr.contains("Falling back to local compilation."),
+        !stderr_text.contains("Falling back to local compilation."),
         "promising a fallback the policy forbids says the opposite of what happens next, stderr: \
-         {_stderr}"
+         {stderr_text}"
     );
     assert!(
         matches!(error, InstallerError::SourceFallbackForbidden { .. }),
@@ -381,9 +388,9 @@ fn run_prebuilt_flow(
         toolchain_channel: "nightly-2026-05-28",
     };
     let mut stderr = Vec::new();
-    let result = try_prebuilt_installation_with(&context, &mut stderr, hooks);
-    let stderr = String::from_utf8(stderr).expect("stderr should be utf-8");
-    (result, stderr)
+    let result = try_prebuilt_installation_with(&context, &mut stderr, &hooks);
+    let stderr_text = String::from_utf8(stderr).expect("stderr should be utf-8");
+    (result, stderr_text)
 }
 
 fn hooks_with_failing_host_target() -> PrebuiltInstallationHooks {

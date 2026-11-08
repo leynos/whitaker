@@ -226,142 +226,83 @@ fn clone_io_error(source: &std::io::Error) -> std::io::Error {
     std::io::Error::new(source.kind(), source.to_string())
 }
 
-impl InstallerError {
-    /// Clone the source-policy variants while preserving their policy details.
-    fn clone_source_policy_variant(&self) -> Option<Self> {
-        match self {
-            Self::ConflictingSourceOptions { option } => Some(Self::ConflictingSourceOptions {
-                option: option.clone(),
-            }),
-            Self::SourceFallbackForbidden { artefact, reason } => {
-                Some(Self::SourceFallbackForbidden {
-                    artefact: artefact.clone(),
-                    reason: reason.clone(),
-                })
-            }
-            _ => None,
+/// Generate the field-by-field `Clone` match for [`InstallerError`].
+///
+/// Written out, the twenty-six arms outgrow the function-length budget once
+/// rustfmt expands each struct literal, and a partial match would need an
+/// unreachable arm. Listing the variants once as data keeps the match total —
+/// there is no catch-all — and makes drift a compile error: a variant missing
+/// from a table, or a field added to one, no longer builds.
+macro_rules! clone_error {
+    (
+        $error:expr;
+        fields {
+            $( $(#[$attr:meta])* $variant:ident { $($field:ident),* $(,)? } ),* $(,)?
         }
-    }
-
-    /// Clone the I/O-backed variants while preserving their error details.
-    fn clone_io_variant(&self) -> Option<Self> {
-        match self {
-            Self::Io(source) => Some(Self::Io(clone_io_error(source))),
-            Self::ScanFailed { source } => Some(Self::ScanFailed {
-                source: clone_io_error(source),
-            }),
-            Self::WriteFailed { source } => Some(Self::WriteFailed {
-                source: clone_io_error(source),
-            }),
-            _ => None,
+        wrapped { $($wrapped:ident($payload:ident)),* $(,)? }
+        io_tuple { $($io_tuple:ident),* $(,)? }
+        io_fields { $($io_field:ident),* $(,)? }
+    ) => {
+        match $error {
+            $(
+                $(#[$attr])*
+                InstallerError::$variant { $($field),* } => InstallerError::$variant {
+                    $($field: Clone::clone($field)),*
+                },
+            )*
+            $(
+                InstallerError::$wrapped($payload) => {
+                    InstallerError::$wrapped(Clone::clone($payload))
+                }
+            )*
+            $(
+                InstallerError::$io_tuple(source) => {
+                    InstallerError::$io_tuple(clone_io_error(source))
+                }
+            )*
+            $(
+                InstallerError::$io_field { source } => InstallerError::$io_field {
+                    source: clone_io_error(source),
+                },
+            )*
         }
-    }
-
-    /// Clone the toolchain variants while preserving their semantic details.
-    fn clone_toolchain_variant(&self) -> Option<Self> {
-        match self {
-            Self::ToolchainDetection { reason } => Some(Self::ToolchainDetection {
-                reason: reason.clone(),
-            }),
-            Self::ToolchainFileNotFound { path } => {
-                Some(Self::ToolchainFileNotFound { path: path.clone() })
-            }
-            Self::InvalidToolchainFile { reason } => Some(Self::InvalidToolchainFile {
-                reason: reason.clone(),
-            }),
-            Self::ToolchainNotInstalled { toolchain } => Some(Self::ToolchainNotInstalled {
-                toolchain: toolchain.clone(),
-            }),
-            Self::ToolchainInstallFailed { toolchain, message } => {
-                Some(Self::ToolchainInstallFailed {
-                    toolchain: toolchain.clone(),
-                    message: message.clone(),
-                })
-            }
-            Self::ToolchainComponentInstallFailed {
-                toolchain,
-                components,
-                message,
-            } => Some(Self::ToolchainComponentInstallFailed {
-                toolchain: toolchain.clone(),
-                components: components.clone(),
-                message: message.clone(),
-            }),
-            _ => None,
-        }
-    }
+    };
 }
 
 impl Clone for InstallerError {
     /// Clone every error variant while preserving its displayable details.
+    ///
+    /// The I/O-backed variants are cloned lossily: the original source chain is
+    /// discarded, but the error kind and message survive.
     fn clone(&self) -> Self {
-        if let Some(value) = self
-            .clone_toolchain_variant()
-            .or_else(|| self.clone_io_variant())
-            .or_else(|| self.clone_source_policy_variant())
-        {
-            return value;
-        }
-
-        match self {
-            Self::BuildFailed { crate_name, reason } => Self::BuildFailed {
-                crate_name: crate_name.clone(),
-                reason: reason.clone(),
-            },
-            Self::StagingFailed { reason } => Self::StagingFailed {
-                reason: reason.clone(),
-            },
-            Self::TargetNotWritable { path, reason } => Self::TargetNotWritable {
-                path: path.clone(),
-                reason: reason.clone(),
-            },
-            Self::LintCrateNotFound { name } => Self::LintCrateNotFound { name: name.clone() },
-            Self::ExperimentalLintRequiresFlag { name } => {
-                Self::ExperimentalLintRequiresFlag { name: name.clone() }
+        clone_error! {
+            self;
+            fields {
+                ConflictingSourceOptions { option },
+                SourceFallbackForbidden { artefact, reason },
+                ToolchainDetection { reason },
+                ToolchainFileNotFound { path },
+                InvalidToolchainFile { reason },
+                ToolchainNotInstalled { toolchain },
+                ToolchainInstallFailed { toolchain, message },
+                ToolchainComponentInstallFailed { toolchain, components, message },
+                BuildFailed { crate_name, reason },
+                StagingFailed { reason },
+                TargetNotWritable { path, reason },
+                LintCrateNotFound { name },
+                ExperimentalLintRequiresFlag { name },
+                WorkspaceNotFound { reason },
+                SuitePinInWorkspace { reference, path },
+                InvalidCargoToml { path, reason },
+                Git { operation, message },
+                DependencyInstall { tool, message },
+                DependencyCheck { tool, reason },
+                #[cfg(any(test, feature = "test-support"))]
+                StubMismatch { message },
             }
-            Self::WorkspaceNotFound { reason } => Self::WorkspaceNotFound {
-                reason: reason.clone(),
-            },
-            Self::SuitePinInWorkspace { reference, path } => Self::SuitePinInWorkspace {
-                reference: reference.clone(),
-                path: path.clone(),
-            },
-            Self::InvalidCargoToml { path, reason } => Self::InvalidCargoToml {
-                path: path.clone(),
-                reason: reason.clone(),
-            },
-            Self::Git { operation, message } => Self::Git {
-                operation,
-                message: message.clone(),
-            },
-            Self::DependencyInstall { tool, message } => Self::DependencyInstall {
-                tool,
-                message: message.clone(),
-            },
-            Self::DependencyCheck { tool, reason } => Self::DependencyCheck {
-                tool,
-                reason: reason.clone(),
-            },
-            Self::WrapperGeneration(message) => Self::WrapperGeneration(message.clone()),
-            Self::ClippySnapshot(error) => Self::ClippySnapshot(error.clone()),
-            Self::Bootstrap(error) => Self::Bootstrap(error.clone()),
-            Self::ConflictingSourceOptions { .. }
-            | Self::SourceFallbackForbidden { .. }
-            | Self::ToolchainDetection { .. }
-            | Self::ToolchainFileNotFound { .. }
-            | Self::InvalidToolchainFile { .. }
-            | Self::ToolchainNotInstalled { .. }
-            | Self::ToolchainInstallFailed { .. }
-            | Self::ToolchainComponentInstallFailed { .. }
-            | Self::Io(_)
-            | Self::ScanFailed { .. }
-            | Self::WriteFailed { .. } => {
-                unreachable!("handled by a clone helper")
-            }
-            #[cfg(any(test, feature = "test-support"))]
-            Self::StubMismatch { message } => Self::StubMismatch {
-                message: message.clone(),
-            },
+            wrapped { WrapperGeneration(message), ClippySnapshot(error), Bootstrap(error) }
+            io_tuple { Io }
+            io_fields { ScanFailed, WriteFailed }
         }
     }
 }

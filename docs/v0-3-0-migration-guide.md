@@ -8,10 +8,16 @@ are not provided for the removed spellings.
 
 ## Migration scope
 
-The changes affect Rust imports, type names, field access, and method calls.
+Most changes affect Rust imports, type names, field access, and method calls.
 They do not change the SARIF 2.1.0 serialized representation. Serde renames
 keep the JSON keys `artifacts` and `artifactLocation`, so no serialized-data
 migration is needed.
+
+One change affects the diagnostics a suite user sees rather than an API a
+library consumer calls:
+[`string_continuation_style`](#string_continuation_style) joins the default
+suite in 0.3.0, so a workspace that adopts the suite reports source-line joins
+it did not report before.
 
 ## `whitaker_common` APIs
 
@@ -189,6 +195,58 @@ The Rust names change while the SARIF wire names remain fixed. The
 uses the SARIF 2.1.0 keys `artifacts` and `artifactLocation`; no update to
 stored SARIF data or downstream SARIF readers is required.
 
+## `string_continuation_style`
+
+`string_continuation_style` is new in 0.3.0. It is registered in
+`whitaker_suite` and listed in the installer's default lint set, so a workspace
+that installs and runs the default suite starts reporting source-line joins:
+
+```rust
+let message = "first fragment \
+               second fragment";
+```
+
+The suggestion rewrites the literal as
+`concat!("first fragment ", "second fragment")`, which preserves the value and
+makes the fragment boundary explicit. The replacement is offered as
+`MaybeIncorrect` by default, so `cargo fix` leaves it for a human to accept.
+
+The lint is silent for a whole crate when that crate could substitute the bare
+`concat` or a format-macro name with its own definition: a `macro_rules!` or
+`macro` definition, a `use` that binds such a name, a glob import, or a
+`#[macro_use] extern crate`. That is deliberate. Detection is syntactic and
+crate-wide, so it can silence the lint where the name could not actually have
+collided, but it never rewrites working code into a call to something else.
+
+A workspace that does not want the diagnostics can exclude it in `dylint.toml`
+at the workspace root:
+
+```toml
+[string_continuation_style]
+applicability = "manual"
+excluded_crates = ["my_cli_app"]
+excluded_paths = ["my_app::legacy_text"]
+```
+
+`applicability = "manual"` is the default and keeps the rewrite a hint. Setting
+it to `"machine"` makes the fix machine applicable, so `cargo fix` can apply it
+unattended. `excluded_crates` and `excluded_paths` take Rust identifiers with
+underscores rather than Cargo package names with hyphens; the latter exempts a
+module and everything nested beneath it.
+
+The lint offers no rewrite for a file outside the workspace root, or for a
+generated file beneath the target directory. Those files are build output or
+dependencies, so a suggestion would point at code the user does not maintain.
+If a build invokes the compiler from a directory other than the workspace root,
+or does not run the linter through Cargo, the workspace cannot be located; the
+lint then treats every literal as generated and reports nothing rather than
+guessing. Run the linter from the workspace root, as `cargo dylint` does.
+
+See
+[`string_continuation_style` in the users' guide](users-guide.md#string_continuation_style)
+for the full behaviour, including which format macros are recognized and which
+literals are left alone.
+
 ## Installer dependency query
 
 `whitaker_installer::deps::check_dylint_tools` now returns
@@ -259,6 +317,35 @@ Crates that depend on `whitaker_installer` see these changes:
   exhaustive matches.
 - The CLI gains `Command::Run(RunArgs)`. Update exhaustive matches on
   `Command`.
+- `output::DryRunInfo` replaces its `skip_deps`, `skip_wrapper` and `no_update`
+  fields with one `skip: SkipFlags` field, matching the `InstallArgs` grouping
+  below. Move the values into that field and read them through it:
+
+  ```rust
+  // Before 0.3.0
+  let info = DryRunInfo {
+      // ... other fields ...
+      skip_deps: args.skip_deps,
+      skip_wrapper: args.skip_wrapper,
+      no_update: args.no_update,
+  };
+
+  // From 0.3.0
+  let info = DryRunInfo {
+      // ... other fields ...
+      skip: SkipFlags {
+          skip_deps: args.skip.skip_deps,
+          skip_wrapper: args.skip.skip_wrapper,
+          no_update: args.skip.no_update,
+      },
+  };
+
+  if info.skip.skip_deps {
+      // ...
+  }
+  ```
+
+  The rendered dry-run text is unchanged; only the struct's shape moves.
 - `wrapper::generate_wrapper_scripts` takes one argument, `dirs`, instead of
   two. The `library_path` argument is removed because the wrappers no longer
   embed it:
@@ -320,7 +407,12 @@ to 1000) instead of floating-point rates:
 | `download_rate()` | `download_rate_permille()` |
 | `build_rate()`    | `build_rate_permille()`    |
 
-Each unit is a tenth of a percentage point: 333 permille represents 33.3%.
+Each unit is a tenth of a percentage point: 333 permille represents 33.3%. Both
+accessors are ordinary functions rather than `const` items, because they work
+out the rate from the counters at runtime. Code written against an earlier
+development build of 0.3.0 that called them in a `const` context has to move
+the call to runtime.
+
 Packaging functions now borrow their parameter structs. Pass a reference to
 `package_artefact`, `package_installer` and `package_dependency_binary`:
 
@@ -334,6 +426,18 @@ package_dependency_binary(dependency_params)?;
 package_artefact(&artefact_params)?;
 package_installer(&installer_params)?;
 package_dependency_binary(&dependency_params)?;
+```
+
+`ClippySnapshotError::invalid` and `ClippySnapshotError::io` borrow their path
+argument. Earlier development builds of 0.3.0 took it by value, so pass a
+reference:
+
+```rust
+// Earlier 0.3.0 development builds
+let error = ClippySnapshotError::invalid(path, "archive is missing");
+
+// From 0.3.0
+let error = ClippySnapshotError::invalid(&path, "archive is missing");
 ```
 
 The binstall metadata helpers `load_cargo_toml()` and

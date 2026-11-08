@@ -14,6 +14,8 @@ use no_unwrap_or_else_panic::NoUnwrapOrElsePanic;
 use rstest_helper_should_be_fixture::RstestHelperShouldBeFixture;
 use rustc_lint::{Lint, LintStore, LintVec, declare_combined_late_lint_pass};
 use rustc_session::Session;
+#[cfg(feature = "experimental-string-continuation-style")]
+use string_continuation_style::StringContinuationStyle;
 use test_must_not_have_example::TestMustNotHaveExample;
 
 use crate::lints::SUITE_LINT_DECLS;
@@ -53,6 +55,17 @@ define_suite_pass!(
 /// Callers should initialize configuration with
 /// `dylint_linting::init_config` when integrating with the Dylint driver.
 ///
+/// The early pass, present only under the
+/// `experimental-string-continuation-style` feature, is registered
+/// *separately* from the combined late pass. An
+/// early lint cannot join `late_lint_methods!` — that macro declares
+/// `LateLintPass` methods — so forcing it in for visual uniformity is not
+/// possible. The consequence is that this call has no compile-time guard: drop
+/// the `register_early_pass` line and the suite still declares the lint, still
+/// passes the descriptor-alignment tests, and never fires. The registration
+/// tests assert which pass was wired for exactly that reason. Without the
+/// feature the suite registers no early pass.
+///
 /// # Examples
 ///
 /// ```ignore
@@ -64,6 +77,8 @@ define_suite_pass!(
 /// ```
 pub fn register_suite_lints(store: &mut LintStore) {
     store.register_lints(SUITE_LINT_DECLS);
+    #[cfg(feature = "experimental-string-continuation-style")]
+    store.register_early_pass(|| Box::new(StringContinuationStyle::default()));
     store.register_late_pass(|_| Box::new(SuitePass::new()));
 }
 

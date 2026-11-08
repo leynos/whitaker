@@ -7,5 +7,5 @@ publish = false
 [lib]
 test = false
 
-[lints.rust]
-missing_docs = "deny"
+[lints]
+workspace = true

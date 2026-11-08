@@ -149,14 +149,23 @@ project:
     0.6.0 or later on `PATH`; Markdown linting runs through
     `make markdownlint` locally and the pinned markdownlint-cli2 action in
     CI.
-  - `make lint` executes:
+  - `make lint` first runs `make interrogate`, which needs `uv` and fails on any
+    Python definition under `installer/scripts`, `scripts` and `tests` without a
+    docstring (and on any `MISSED` row, since interrogate rounds its percentage
+    to one decimal; `tests/workflow_contracts/interrogate_gate_test.py` asserts
+    the wiring), and then executes:
 
     ```sh
     cargo clippy --workspace --all-targets --all-features -- -D warnings
     ```
 
     linting every target with all features enabled and denying all Clippy
-    warnings.
+    warnings. The Dylint lint crates keep their UI fixtures under `examples/`
+    because `dylint_testing::Test::example` builds them with each crate's
+    dev-dependencies, which standalone `ui/` fixtures cannot carry. Each
+    fixture scopes the diagnostics its own anti-pattern raises with a
+    narrowly targeted `#[expect(..., reason = "...")]`, so the workspace
+    policy still applies to every other line.
   - `make test` executes:
 
     ```sh

@@ -69,7 +69,7 @@ def test_the_scan_finds_the_steps_it_is_meant_to_hold() -> None:
         "rolling-release.yml:build-dependency-binaries",
         "ci.yml:coverage-check",
         "ci.yml:linux-full",
-        "coverage-main.yml:coverage-upload",
+        "coverage-main.yml:coverage-warmup",
     } <= labels, sorted(labels)
 
 

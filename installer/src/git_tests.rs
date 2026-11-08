@@ -39,7 +39,7 @@ fn git_stdout(args: &[&str], cwd: &Utf8Path) -> String {
         .stderr(Stdio::inherit())
         .output()
         .expect("git command should run");
-    assert!(output.status.success(), "git {:?} should succeed", args);
+    assert!(output.status.success(), "git {args:?} should succeed");
     String::from_utf8(output.stdout)
         .expect("git output should be UTF-8")
         .trim()

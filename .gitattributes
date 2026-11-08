@@ -2,3 +2,8 @@
 *.stderr text eol=lf
 *.stdout text eol=lf
 *.fixed text eol=lf
+# A `// run-rustfix` fixture is compared byte-for-byte with its `*.fixed`
+# expectation, and rustfix copies the lines it does not replace verbatim.
+# A CRLF checkout therefore turns a correct fix into a whole-file diff, so
+# the fixture inputs are pinned to the same encoding as their expectations.
+*.rs text eol=lf

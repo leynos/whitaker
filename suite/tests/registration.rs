@@ -10,7 +10,13 @@ use std::{
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use rustc_lint::LintStore;
-use whitaker_suite::{register_suite_lints, suite_lint_decls, suite_lint_names};
+use whitaker_suite::{
+    PassKind,
+    register_suite_lints,
+    suite_lint_decls,
+    suite_lint_names,
+    suite_lint_names_for_pass,
+};
 
 struct RegistrationWorld {
     store: RefCell<LintStore>,
@@ -75,6 +81,58 @@ fn then_late_pass_count(world: &RegistrationWorld, count: usize) {
     assert_eq!(world.store.borrow().late_passes.len(), count);
 }
 
+#[then("the early pass count is {count}")]
+fn then_early_pass_count(world: &RegistrationWorld, count: usize) {
+    assert_eq!(world.store.borrow().early_passes.len(), count);
+}
+
+/// Asserts the registered early pass reports the string-continuation lint.
+///
+/// This is the assertion the RFC asks for. A count alone passes when the wrong
+/// pass has been registered, and unlike a late lint omitted from
+/// `late_lint_methods!`, a missing or mistaken `register_early_pass` line is
+/// not a compile error.
+#[cfg(feature = "experimental-string-continuation-style")]
+#[then("the early pass is the string continuation style pass")]
+fn then_early_pass_is_string_continuation(world: &RegistrationWorld) {
+    let store = world.store.borrow();
+    let registered: Vec<String> = store
+        .early_passes
+        .iter()
+        .flat_map(|factory| factory().get_lints())
+        .map(rustc_lint::Lint::name_lower)
+        .collect();
+
+    assert_eq!(
+        registered,
+        vec![String::from("string_continuation_style")],
+        "the registered early pass must declare exactly the string-continuation lint",
+    );
+}
+
+/// Asserts every descriptor tagged `Early` has a pass actually registered.
+///
+/// The descriptor list and the `register_early_pass` call are separate sources
+/// of truth. Tying the assertion to `suite_lint_names_for_pass` means adding a
+/// second early lint without registering it fails here rather than silently
+/// declaring a lint that never runs.
+#[then("every early lint descriptor has a registered early pass")]
+fn then_every_early_descriptor_is_registered(world: &RegistrationWorld) {
+    let store = world.store.borrow();
+    let registered: Vec<String> = store
+        .early_passes
+        .iter()
+        .flat_map(|factory| factory().get_lints())
+        .map(rustc_lint::Lint::name_lower)
+        .collect();
+
+    let expected: Vec<String> = suite_lint_names_for_pass(PassKind::Early)
+        .map(str::to_owned)
+        .collect();
+
+    assert_eq!(registered, expected);
+}
+
 #[then("the lint names mirror the suite descriptors")]
 fn then_names_match(world: &RegistrationWorld) {
     let registered: Vec<String> = world
@@ -113,7 +171,18 @@ fn then_registration_succeeds(world: &RegistrationWorld) {
 #[scenario(path = "tests/features/suite_registration.feature", index = 0)]
 fn scenario_registers_cleanly(world: RegistrationWorld) { let _ = world; }
 
+#[cfg(not(feature = "experimental-string-continuation-style"))]
 #[scenario(path = "tests/features/suite_registration.feature", index = 1)]
+fn scenario_registers_no_early_pass_by_default(world: RegistrationWorld) { let _ = world; }
+
+#[cfg(feature = "experimental-string-continuation-style")]
+#[scenario(
+    path = "tests/features/suite_registration_experimental.feature",
+    index = 0
+)]
+fn scenario_registers_early_pass(world: RegistrationWorld) { let _ = world; }
+
+#[scenario(path = "tests/features/suite_registration.feature", index = 2)]
 fn scenario_double_registration(world: RegistrationWorld) { let _ = world; }
 
 /// Verify that Dylint loads the suite through its exported `register_lints` entry point.

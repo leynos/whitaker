@@ -41,7 +41,7 @@ pub(super) fn ensure_dylint_tools_with_query(
     install: impl FnOnce(&DylintToolStatus, &mut dyn Write) -> Result<()>,
 ) -> Result<()> {
     let status = query()?;
-    super::ensure_dylint_tools_core(quiet, stderr, status.all_installed(), |stderr| {
-        install(&status, stderr)
+    super::ensure_dylint_tools_core(quiet, stderr, status.all_installed(), |output| {
+        install(&status, output)
     })
 }

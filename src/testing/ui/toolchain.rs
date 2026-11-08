@@ -32,8 +32,6 @@ impl CrateName {
     fn new_unchecked(name: String) -> Self { Self(name) }
 
     pub const fn as_str(&self) -> &str { self.0.as_str() }
-
-    pub fn into_inner(self) -> String { self.0 }
 }
 
 impl TryFrom<&str> for CrateName {
@@ -176,7 +174,7 @@ fn lint_library_build_command(
     command
 }
 
-fn package_for_crate<'a>(
+pub(super) fn package_for_crate<'a>(
     metadata: &'a Metadata,
     crate_name: &CrateName,
 ) -> Result<&'a cargo_metadata::Package, HarnessError> {
@@ -239,7 +237,7 @@ fn extract_cdylib_path(
         .map(|path| path.clone().into_std_path_buf())
 }
 
-fn fetch_metadata() -> Result<Metadata, HarnessError> {
+pub(super) fn fetch_metadata() -> Result<Metadata, HarnessError> {
     MetadataCommand::new()
         .no_deps()
         .other_options(vec!["--frozen".to_owned()])

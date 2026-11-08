@@ -10,20 +10,22 @@ fn recorded_outcome(run: impl FnOnce()) -> String {
     let recorder = DebuggingRecorder::new();
     let snapshotter = recorder.snapshotter();
     metrics::with_local_recorder(&recorder, run);
-    let recorded = snapshotter.snapshot().into_vec();
-    let counters: Vec<_> = recorded
+    let entries = snapshotter.snapshot().into_vec();
+    let counters: Vec<_> = entries
         .iter()
         .filter(|(key, _, _, value)| {
             key.key().name() == OPERATION_TOTAL && matches!(value, DebugValue::Counter(1))
         })
         .collect();
-    assert_eq!(counters.len(), 1, "{recorded:#?}");
-    let has_duration = recorded.iter().any(|(key, _, _, value)| {
+    assert_eq!(counters.len(), 1, "{entries:#?}");
+    let has_duration = entries.iter().any(|(key, _, _, value)| {
         key.key().name() == OPERATION_SECONDS
             && matches!(value, DebugValue::Histogram(samples) if samples.len() == 1)
     });
-    assert!(has_duration, "{recorded:#?}");
-    counters[0]
+    assert!(has_duration, "{entries:#?}");
+    counters
+        .first()
+        .expect("exactly one operation counter was recorded")
         .0
         .key()
         .labels()

@@ -204,7 +204,7 @@ mod tests {
         match (expected_error, error) {
             (ExpectedPackageError::Target, CliError::Target(_)) => {}
             (ExpectedPackageError::UnknownPackage(expected), CliError::UnknownPackage(actual)) => {
-                assert_eq!(actual, expected)
+                assert_eq!(actual, expected);
             }
             (expected, actual) => {
                 panic!("expected {expected:?}, got {actual:?}");
