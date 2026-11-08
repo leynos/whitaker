@@ -27,9 +27,15 @@
 #      exists means a consumer reads either the old manifest and the old
 #      archive, or the new manifest and the new archive. Never a manifest
 #      pointing at something absent.
-#   3. Move the tag, so a consumer that resolved the tag earlier in the run
-#      still finds every asset it was promised.
-#   4. Delete superseded assets, last of all.
+#   3. Delete superseded assets, last of all.
+#
+# The `rolling` tag is never moved. Installs resolve assets through the
+# release by tag name, not by the commit the tag points at, and each manifest
+# records the commit it was built from. Moving the tag also needed a token that
+# may update a ref onto commits that touch `.github/workflows`, which
+# `GITHUB_TOKEN` is not: the move failed with HTTP 403 and, running before the
+# clean-up, left superseded archives behind. The tag is created once, with the
+# release, and then left alone.
 #
 # `gh release upload --clobber` deletes before it uploads, by its own
 # documentation, so it is used only where an asset is genuinely being replaced.
@@ -38,7 +44,7 @@
 # broke chutoro, and it now involves no delete at all.
 set -euo pipefail
 
-: "${RELEASE_SHA:?RELEASE_SHA must name the commit the tag should point at}"
+: "${RELEASE_SHA:?RELEASE_SHA must name the commit being published}"
 : "${RELEASE_SHORT_SHA:?RELEASE_SHORT_SHA must be set for the release title}"
 repository=${GITHUB_REPOSITORY:?GITHUB_REPOSITORY must be set}
 tag=${ROLLING_TAG:-rolling}
@@ -58,24 +64,9 @@ mapfile -t assets <"${asset_list}"
 title="Rolling Release (${RELEASE_SHORT_SHA})"
 notes="Prebuilt lint libraries from commit ${RELEASE_SHA}."
 
-# The release names the tag, and its `target_commitish` is the branch rather
-# than a commit, so moving the tag is a plain ref update. GitHub ignores
-# `target_commitish` when patching a published release, which is why the tag
-# and not the release is what moves.
-move_tag() {
-    echo "Moving ${tag} to ${RELEASE_SHA}."
-    gh api \
-        --method PATCH \
-        "repos/${repository}/git/refs/tags/${tag}" \
-        -f "sha=${RELEASE_SHA}" \
-        -F force=true >/dev/null
-}
-
 # A release that does not exist yet cannot be updated in place, and there is no
-# window to protect because there is nothing published to lose. The tag still
-# moves: a deleted release can leave its tag behind, and `gh release create`
-# binds to an existing tag rather than repointing it, so without this the tag
-# would sit at an older commit while the notes named this one.
+# window to protect because there is nothing published to lose. `--target`
+# names the commit a new tag is created at; an existing tag is left where it is.
 if ! published=$(gh release view "${tag}" --json assets --jq '.assets[].name' 2>/dev/null); then
     echo "Rolling release absent; creating it with the full asset set."
     gh release create "${tag}" \
@@ -83,8 +74,8 @@ if ! published=$(gh release view "${tag}" --json assets --jq '.assets[].name' 2>
         --notes "${notes}" \
         --prerelease \
         --latest=false \
+        --target "${RELEASE_SHA}" \
         "${assets[@]}"
-    move_tag
     exit 0
 fi
 
@@ -200,25 +191,67 @@ if [[ "${#manifest_assets[@]}" -gt 0 ]]; then
     gh release upload "${tag}" --clobber "${manifest_assets[@]}"
 fi
 
-move_tag
-
 gh release edit "${tag}" --title "${title}" --notes "${notes}" >/dev/null
+
+# Archives that a manifest now on the release still names. A leg that failed to
+# build publishes no new archive or manifest for its target, so that target's
+# old manifest stays and keeps naming its old archive; the clean-up below must
+# not remove it. Manifests are read from the release itself, after this run's
+# uploads, so the rule covers exactly what a consumer can read.
+referenced_archives() {
+    local manifest_dir manifest status=0
+    manifest_dir=$(mktemp -d)
+    gh release download "${tag}" --pattern 'manifest-*.json' --dir "${manifest_dir}" \
+        --clobber >/dev/null || status=$?
+    if [[ "${status}" -eq 0 ]]; then
+        shopt -s nullglob
+        for manifest in "${manifest_dir}"/manifest-*.json; do
+            jq -er '"whitaker-lints-\(.git_sha // error("no git_sha"))-\(.toolchain // error("no toolchain"))-\(.target // error("no target")).tar.zst"' \
+                "${manifest}" || { status=$?; break; }
+        done
+        shopt -u nullglob
+    fi
+    rm -rf -- "${manifest_dir}"
+    return "${status}"
+}
+# Cleanup fails closed: if any manifest cannot be downloaded or parsed, nothing
+# is deleted, because an incomplete reference list could remove an archive a
+# retained manifest still names. `set -e` stops the script at this assignment.
+referenced_output=$(referenced_archives)
+referenced=()
+if [[ -n "${referenced_output}" ]]; then
+    mapfile -t referenced <<<"${referenced_output}"
+fi
+
+is_referenced() {
+    local needle=$1 name
+    for name in ${referenced+"${referenced[@]}"}; do
+        [[ "${name}" == "${needle}" ]] && return 0
+    done
+    return 1
+}
 
 # Superseded lint archives only. A dependency archive absent from this run's
 # set is not stale, it is unchanged and deliberately left in place; deleting it
 # here would recreate the very gap this script exists to close. Clippy
 # snapshots are never removed either: every installer release downloads the
 # generation it pins from this tag, including installers built before a
-# re-pin.
+# re-pin. A lint archive that any manifest still on the release names is kept
+# even when this run did not rebuild it.
 for name in ${published_names+"${published_names[@]}"}; do
     case "${name}" in
         whitaker-lints-*) ;;
         *) continue ;;
     esac
-    if ! is_wanted "${name}"; then
-        echo "Removing superseded asset ${name}."
-        gh release delete-asset "${tag}" "${name}" --yes
+    if is_wanted "${name}"; then
+        continue
     fi
+    if is_referenced "${name}"; then
+        echo "Keeping ${name}: a manifest on the release still names it."
+        continue
+    fi
+    echo "Removing superseded asset ${name}."
+    gh release delete-asset "${tag}" "${name}" --yes
 done
 
 echo "Rolling release republished at ${RELEASE_SHA} with no empty interval."

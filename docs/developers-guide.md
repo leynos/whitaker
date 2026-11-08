@@ -2833,6 +2833,25 @@ checks, both offline after fetching the tag and one table:
   `leynos/shared-actions` `install-whitaker/clippy-snapshots.tsv` maps that
   installer to. A mismatch names both values and stops the publish (issue #555).
 
+Library names are checked with the archive's target rules (`lib` prefix and
+`.so`, `.dylib` or `.dll` as the installer derives them), and each archive's
+file name must equal the one its manifest implies (`git_sha`, `toolchain`,
+`target`).
+
+The clean-up after an upload removes a superseded lint archive only when no
+manifest currently on the release still names it. A build leg that failed
+publishes nothing for its target, so that target's old manifest stays and keeps
+its archive. (The `publish` job runs with `always()` after partial matrices, so
+this case is reachable.)
+
+Publishing never moves the `rolling` tag. Installs read assets through the
+release by tag name, and the manifest records the commit built. A tag move
+needs a token that may update a ref onto commits touching `.github/workflows`,
+which `GITHUB_TOKEN` is not (HTTP 403), and it ran before the
+superseded-archive clean-up, so a failure left stale archives behind. The
+release is created once, with `--target` at the published commit, and the tag
+is left where it is.
+
 An unreadable tag or table, a missing `git` or `tar`, or a malformed manifest
 exits 2: a failed check never counts as a pass. A failure ends the job before
 the upload, so the published `rolling` release stays as it was.
@@ -3266,11 +3285,11 @@ A forced manual rebuild now has a prepublication gate. Both five-target build
 matrices must finish successfully. The gate then requires each target's lint
 archive and manifest, and every dependency archive and matching SHA-256 sidecar
 declared by `installer/dependency-binaries.toml`. If a build, download, or
-checksum fails, the run fails before changing the `rolling` release or tag.
-This strict rule applies only to a manual run with the force input enabled;
-ordinary pushes and unforced manual runs retain the rolling release's
-documented partial-publication policy. `scripts/check-forced-rolling-assets.sh`
-owns this local preflight for the rolling workflow's publish job. It is not a
+checksum fails, the run fails before changing the `rolling` release. This
+strict rule applies only to a manual run with the force input enabled; ordinary
+pushes and unforced manual runs retain the rolling release's documented
+partial-publication policy. `scripts/check-forced-rolling-assets.sh` owns this
+local preflight for the rolling workflow's publish job. It is not a
 tagged-release or consumer asset validator; those paths keep their own checks.
 
 Each sidecar has one GNU checksum record: a digest, a text marker of two spaces

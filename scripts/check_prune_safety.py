@@ -102,48 +102,93 @@ def installer_lint_crates(tag: str, repository: Path) -> list[str]:
     return parse_lint_crates(result.stdout)
 
 
-def crate_of_entry(entry: str) -> str:
-    """Return the crate behind a library file name.
+_ARCHIVE_NAME = re.compile(
+    r"^whitaker-lints-(?P<sha>[0-9a-f]+)-(?P<toolchain>.+?)-"
+    r"(?P<target>(?:x86_64|aarch64|i686|armv7)-[A-Za-z0-9_.-]+)\.tar\.zst$"
+)
 
-    Unix libraries (``.so``, ``.dylib``) carry a ``lib`` prefix; Windows
-    ``.dll`` files do not, and a Windows ``libfoo.dll`` is the crate
-    ``libfoo``, which the installer would not prune as ``foo``. Archive entries
-    are canonical; anything else (an ``@toolchain`` suffix, extra dots, another
-    extension) is returned whole, because the installer would not prune it.
+
+def parse_archive_name(name: str) -> dict[str, str]:
+    """Split ``whitaker-lints-<sha>-<toolchain>-<target>.tar.zst`` into parts.
+
+    >>> parts = parse_archive_name(
+    ...     "whitaker-lints-abc1234-nightly-2026-05-28-x86_64-unknown-linux-gnu.tar.zst"
+    ... )
+    >>> parts["sha"], parts["toolchain"], parts["target"]
+    ('abc1234', 'nightly-2026-05-28', 'x86_64-unknown-linux-gnu')
+    """
+    match = _ARCHIVE_NAME.match(name)
+    if match is None:
+        raise PruneSafetyError(f"{name} does not follow the whitaker-lints archive naming")
+    return match.groupdict()
+
+
+def library_affixes(target: str) -> tuple[str, str]:
+    """Return the library file ``(prefix, extension)`` the installer expects.
+
+    Mirrors the installer's target rules: Windows has no prefix and ``.dll``,
+    macOS ``lib`` and ``.dylib``, everything else ``lib`` and ``.so``.
+
+    >>> library_affixes("x86_64-pc-windows-msvc")
+    ('', '.dll')
+    >>> library_affixes("aarch64-apple-darwin")
+    ('lib', '.dylib')
+    >>> library_affixes("x86_64-unknown-linux-gnu")
+    ('lib', '.so')
+    """
+    if "windows" in target:
+        return "", ".dll"
+    if "darwin" in target:
+        return "lib", ".dylib"
+    return "lib", ".so"
+
+
+DEFAULT_TARGET = "x86_64-unknown-linux-gnu"
+
+
+def crate_of_entry(entry: str, target: str = DEFAULT_TARGET) -> str:
+    """Return the crate behind a library file name for ``target``.
+
+    The installer stages and prunes ``<prefix><crate><extension>`` with the
+    target's own prefix and extension. A name that does not have exactly that
+    shape (a missing ``lib`` on Linux, a ``.so`` on Windows, extra dots, an
+    ``@toolchain`` suffix, another extension) is returned whole: the installer
+    would not prune it, and it is not the suite either.
 
     >>> crate_of_entry("libbumpy_road_function.so")
     'bumpy_road_function'
-    >>> crate_of_entry("libfoo@nightly-2026-05-28-x86_64-unknown-linux-gnu.so")
-    'libfoo@nightly-2026-05-28-x86_64-unknown-linux-gnu.so'
-    >>> crate_of_entry("whitaker_suite.txt")
-    'whitaker_suite.txt'
-    >>> crate_of_entry("whitaker_suite.dll")
+    >>> crate_of_entry("whitaker_suite.dll", "x86_64-pc-windows-msvc")
     'whitaker_suite'
-    >>> crate_of_entry("libmodule_max_lines.dll")
+    >>> crate_of_entry("libmodule_max_lines.dll", "x86_64-pc-windows-msvc")
     'libmodule_max_lines'
+    >>> crate_of_entry("module_max_lines.so")
+    'module_max_lines.so'
+    >>> crate_of_entry("whitaker_suite.so")
+    'whitaker_suite.so'
     >>> crate_of_entry("libmodule_max_lines.extra.so")
     'libmodule_max_lines.extra.so'
+    >>> crate_of_entry("libfoo@nightly-2026-05-28.so")
+    'libfoo@nightly-2026-05-28.so'
+    >>> crate_of_entry("libfoo.dylib")
+    'libfoo.dylib'
     """
     name = Path(entry).name
-    stem, _, extension = name.rpartition(".")
-    if extension not in {"so", "dylib", "dll"}:
+    prefix, extension = library_affixes(target)
+    if not (name.startswith(prefix) and name.endswith(extension)):
         return name
-    base = stem.removeprefix("lib") if extension != "dll" else stem
-    if not re.fullmatch(r"[A-Za-z0-9_-]+", base):
-        # A name the installer would not stage or prune as a plain crate
-        # library (`libfoo.extra.so`, `libfoo@old-toolchain.so`, `x.txt`):
-        # report the whole name, so it survives the prune.
-        return name
-    return base
+    base = name.removeprefix(prefix).removesuffix(extension)
+    return base if re.fullmatch(r"[A-Za-z0-9_-]+", base) else name
 
 
-def surviving_crates(entries: Sequence[str], known: Sequence[str]) -> list[str]:
+def surviving_crates(
+    entries: Sequence[str], known: Sequence[str], target: str = DEFAULT_TARGET
+) -> list[str]:
     """Return the crates left after a suite install prunes the ``known`` ones.
 
     >>> surviving_crates(["liba.so", "libb.so", "libwhitaker_suite.so"], ["a"])
     ['b', 'whitaker_suite']
     """
-    crates = {crate_of_entry(entry) for entry in entries}
+    crates = {crate_of_entry(entry, target) for entry in entries}
     return sorted(crates - set(known))
 
 
@@ -170,7 +215,8 @@ def manifest_files(manifest: Path) -> list[str]:
 def check_archive(archive: Path, known: Sequence[str]) -> list[str]:
     """Return the problems with one archive, empty when it is safe."""
     problems: list[str] = []
-    left = surviving_crates(archive_entries(archive), known)
+    target = parse_archive_name(archive.name)["target"]
+    left = surviving_crates(archive_entries(archive), known, target)
     if left != [SUITE_CRATE]:
         problems.append(
             f"{archive.name}: after the oldest installer's prune, {left} would remain "
@@ -180,15 +226,41 @@ def check_archive(archive: Path, known: Sequence[str]) -> list[str]:
     return problems
 
 
+def manifest_field(manifest: Path, field: str) -> object:
+    """Return one top-level field of a sidecar manifest."""
+    try:
+        return json.loads(manifest.read_text(encoding="utf-8"))[field]
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        raise PruneSafetyError(f"cannot read {field} from {manifest}: {error}") from error
+
+
+def check_archive_name(manifest: Path, archive: Path) -> list[str]:
+    """Return the problems when the archive's name is not the manifest's.
+
+    The installer derives ``whitaker-lints-<sha>-<toolchain>-<target>.tar.zst``
+    from the manifest, so an archive published under any other name is never
+    the one a consumer downloads.
+    """
+    parts = parse_archive_name(archive.name)
+    wanted = {"sha": "git_sha", "toolchain": "toolchain", "target": "target"}
+    return [
+        f"{archive.name}: its {part} is {parts[part]!r} but {manifest.name} records "
+        f"{field} {manifest_field(manifest, field)!r}"
+        for part, field in wanted.items()
+        if manifest_field(manifest, field) != parts[part]
+    ]
+
+
 def check_manifest(manifest: Path, archive: Path) -> list[str]:
     """Return the problems when a manifest disagrees with its archive."""
     in_archive = sorted(archive_entries(archive))
     in_manifest = sorted(manifest_files(manifest))
+    problems = check_archive_name(manifest, archive)
     if in_archive != in_manifest:
-        return [
+        problems.append(
             f"{manifest.name}: lists {in_manifest} but {archive.name} holds {in_archive}"
-        ]
-    return []
+        )
+    return problems
 
 
 def snapshot_toolchain(tsv: Path, version: str) -> str:
@@ -241,12 +313,11 @@ def check_toolchain(directory: Path, expected: str) -> list[str]:
 def sidecar_manifest(archive: Path) -> Path:
     """Return the manifest path that pairs with ``archive``.
 
-    >>> sidecar_manifest(Path("d/whitaker-lints-abc-nightly-2026-05-28-t-u-v.tar.zst")).name
-    'manifest-t-u-v.json'
+    >>> name = "whitaker-lints-abc-nightly-2026-05-28-x86_64-unknown-linux-gnu.tar.zst"
+    >>> sidecar_manifest(Path("d") / name).name
+    'manifest-x86_64-unknown-linux-gnu.json'
     """
-    target = re.search(r"-nightly-[0-9-]+-(?P<target>.+)\.tar\.zst$", archive.name)
-    name = f"manifest-{target.group('target')}.json" if target else "manifest-unmatched.json"
-    return archive.with_name(name)
+    return archive.with_name(f"manifest-{parse_archive_name(archive.name)['target']}.json")
 
 
 def check_directory(directory: Path, known: Sequence[str]) -> list[str]:
