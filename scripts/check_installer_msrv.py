@@ -134,7 +134,8 @@ def _scratch_root() -> Iterator[Path]:
     user's private cache: sccache keys compilations on absolute paths, so a
     fresh random directory per run would miss every time. The recipe clears,
     recreates and (on exit) removes it; this check only builds inside it. A
-    direct run falls back to a random directory under the ignored `target/`. Either way the root holds the copied workspace and
+    direct run falls back to a random directory in the system temporary
+    directory. Either way the root holds the copied workspace and
     the extracted installer as siblings, so Cargo never walks up from the
     installer into a workspace root.
     """
@@ -144,9 +145,9 @@ def _scratch_root() -> Iterator[Path]:
         root.mkdir(parents=True, exist_ok=True)
         yield root
         return
-    build_root = REPOSITORY / "target"
-    build_root.mkdir(exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="installer-msrv-", dir=build_root) as temporary:
+    # Outside the repository: Cargo walks up from the extracted installer, and
+    # one under the checkout would find the root `Cargo.toml` and refuse.
+    with tempfile.TemporaryDirectory(prefix="installer-msrv-") as temporary:
         yield Path(temporary)
 
 

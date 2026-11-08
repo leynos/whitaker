@@ -672,7 +672,7 @@ publish-check: clippy-snapshot ## Build and validate packages before publishing
 	cd "$$ORIG_DIR"; \
 	for crate in $(PUBLISH_PACKAGES); do \
 		if [ "$$crate" = whitaker-installer ]; then \
-			CARGO="$(CARGO)" python3 scripts/check_installer_msrv.py; \
+			CARGO="$(CARGO)" INSTALLER_MSRV_SCRATCH="$$TMP_DIR/installer-msrv" python3 scripts/check_installer_msrv.py; \
 		else \
 			$(CARGO) package $(CARGO_LOCKED) -p $$crate --allow-dirty; \
 		fi; \
