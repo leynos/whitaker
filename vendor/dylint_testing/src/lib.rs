@@ -131,6 +131,8 @@ use compiletest_rs as compiletest;
 use dylint_internal::{CommandExt, env, link::dylint_libs};
 use once_cell::sync::OnceCell;
 
+mod argfile;
+
 pub mod cargo_test_driver;
 
 mod example;
@@ -220,7 +222,13 @@ fn copy_with_extension<P: AsRef<Path>, Q: AsRef<Path>>(
 
 static MUTEX: Mutex<()> = Mutex::new(());
 
-fn run_tests(driver: &Path, src_base: &Path, config: &ui::Config) {
+/// Run `compiletest` over `src_base` with `driver` as the compiler.
+///
+/// # Errors
+///
+/// Returns an error if the compiler flags cannot be encoded for
+/// `compiletest`'s string-only interface.
+fn run_tests(driver: &Path, src_base: &Path, config: &ui::Config) -> Result<()> {
     let _lock = MUTEX.lock().unwrap();
 
     // smoelius: There doesn't seem to be a way to set environment variables using `compiletest`'s
@@ -236,24 +244,31 @@ fn run_tests(driver: &Path, src_base: &Path, config: &ui::Config) {
         .as_ref()
         .map(|value| VarGuard::set(env::DYLINT_TOML, value));
 
+    // Whitaker patch: `compiletest` splits `target_rustcflags` on literal
+    // spaces, so spaced dependency paths must travel as response files. The
+    // owner keeps those files alive until rustc has run.
+    let argfile::EncodedFlags {
+        text,
+        owner: _response_files,
+    } = argfile::encode(&config.rustc_flags)?;
+    let mut target_rustcflags = text;
+    target_rustcflags.push_str(" --emit=metadata");
+    if cfg!(feature = "deny_warnings") {
+        target_rustcflags.push_str(" -Dwarnings");
+    }
+    target_rustcflags.push_str(" -Zui-testing");
+
     let config = compiletest::Config {
         mode: compiletest::common::Mode::Ui,
         rustc_path: driver.to_path_buf(),
         src_base: src_base.to_path_buf(),
-        target_rustcflags: Some(
-            config.rustc_flags.clone().join(" ")
-                + " --emit=metadata"
-                + if cfg!(feature = "deny_warnings") {
-                    " -Dwarnings"
-                } else {
-                    ""
-                }
-                + " -Zui-testing",
-        ),
+        target_rustcflags: Some(target_rustcflags),
         ..compiletest::Config::default()
     };
 
     compiletest::run_tests(&config);
+
+    Ok(())
 }
 
 // smoelius: `VarGuard` was copied from:
