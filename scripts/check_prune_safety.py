@@ -206,11 +206,19 @@ def snapshot_toolchain(tsv: Path, version: str) -> str:
         lines = tsv.read_text(encoding="utf-8").splitlines()
     except OSError as error:
         raise PruneSafetyError(f"cannot read {tsv}: {error}") from error
-    for line in lines:
-        fields = line.split()
-        if len(fields) >= 4 and not line.startswith("#") and fields[0] == version:
-            return fields[3]
-    raise PruneSafetyError(f"{tsv} has no row for installer {version}")
+    rows = [line.split() for line in lines if not line.startswith("#")]
+    toolchains = {row[0]: row[3] for row in rows if len(row) >= 4}
+    if version not in toolchains:
+        raise PruneSafetyError(f"{tsv} has no row for installer {version}")
+    return toolchains[version]
+
+
+def manifest_toolchain(manifest: Path) -> object:
+    """Return the ``toolchain`` field of a sidecar manifest."""
+    try:
+        return json.loads(manifest.read_text(encoding="utf-8"))["toolchain"]
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        raise PruneSafetyError(f"cannot read the toolchain of {manifest}: {error}") from error
 
 
 def check_toolchain(directory: Path, expected: str) -> list[str]:
@@ -220,18 +228,23 @@ def check_toolchain(directory: Path, expected: str) -> list[str]:
     its version. Publishing libraries built for another toolchain breaks every
     caller on that installer at once (whitaker issue 555).
     """
-    problems: list[str] = []
-    for manifest in sorted(directory.glob("manifest-*.json")):
-        try:
-            toolchain = json.loads(manifest.read_text(encoding="utf-8"))["toolchain"]
-        except (OSError, ValueError, KeyError, TypeError) as error:
-            raise PruneSafetyError(f"cannot read the toolchain of {manifest}: {error}") from error
-        if toolchain != expected:
-            problems.append(
-                f"{manifest.name}: built for toolchain {toolchain!r} but the oldest "
-                f"installer's snapshot row maps to {expected!r}"
-            )
-    return problems
+    return [
+        f"{manifest.name}: built for toolchain {toolchain!r} but the oldest "
+        f"installer's snapshot row maps to {expected!r}"
+        for manifest in sorted(directory.glob("manifest-*.json"))
+        if (toolchain := manifest_toolchain(manifest)) != expected
+    ]
+
+
+def sidecar_manifest(archive: Path) -> Path:
+    """Return the manifest path that pairs with ``archive``.
+
+    >>> sidecar_manifest(Path("d/whitaker-lints-abc-nightly-2026-05-28-t-u-v.tar.zst")).name
+    'manifest-t-u-v.json'
+    """
+    target = re.search(r"-nightly-[0-9-]+-(?P<target>.+)\.tar\.zst$", archive.name)
+    name = f"manifest-{target.group('target')}.json" if target else "manifest-unmatched.json"
+    return archive.with_name(name)
 
 
 def check_directory(directory: Path, known: Sequence[str]) -> list[str]:
@@ -242,9 +255,8 @@ def check_directory(directory: Path, known: Sequence[str]) -> list[str]:
     problems: list[str] = []
     for archive in archives:
         problems.extend(check_archive(archive, known))
-        target = re.search(r"-nightly-[0-9-]+-(?P<target>.+)\.tar\.zst$", archive.name)
-        manifest = directory / f"manifest-{target.group('target')}.json" if target else None
-        if manifest is not None and manifest.is_file():
+        manifest = sidecar_manifest(archive)
+        if manifest.is_file():
             problems.extend(check_manifest(manifest, archive))
     return problems
 
@@ -265,27 +277,35 @@ def main(arguments: Sequence[str] | None = None) -> int:
         help="shared-actions install-whitaker clippy-snapshots.tsv; when given, every "
         "manifest's toolchain must equal the one it maps the installer tag to",
     )
-    options = parser.parse_args(arguments)
+    return run(parser.parse_args(arguments))
+
+
+def collect_problems(options: argparse.Namespace) -> tuple[list[str], int]:
+    """Return every problem found and how many crates the installer prunes."""
+    known = installer_lint_crates(options.installer_tag, options.repository)
+    problems = check_directory(options.directory, known)
+    if options.snapshots_tsv is not None:
+        version = options.installer_tag.removeprefix("v")
+        expected = snapshot_toolchain(options.snapshots_tsv, version)
+        problems.extend(check_toolchain(options.directory, expected))
+    return problems, len(known)
+
+
+def run(options: argparse.Namespace) -> int:
+    """Report the problems for ``options`` and return the exit status."""
     try:
-        known = installer_lint_crates(options.installer_tag, options.repository)
-        problems = check_directory(options.directory, known)
-        if options.snapshots_tsv is not None:
-            expected = snapshot_toolchain(
-                options.snapshots_tsv, options.installer_tag.removeprefix("v")
-            )
-            problems.extend(check_toolchain(options.directory, expected))
+        problems, known_count = collect_problems(options)
     except PruneSafetyError as error:
         print(f"error: {error}", file=sys.stderr)
         return 2
     for problem in problems:
         print(f"error: {problem}", file=sys.stderr)
-    if problems:
-        return 1
-    print(
-        f"Every archive leaves only {SUITE_CRATE} after installer "
-        f"{options.installer_tag} prunes by name ({len(known)} known crates)."
-    )
-    return 0
+    if not problems:
+        print(
+            f"Every archive leaves only {SUITE_CRATE} after installer "
+            f"{options.installer_tag} prunes by name ({known_count} known crates)."
+        )
+    return int(bool(problems))
 
 
 if __name__ == "__main__":
