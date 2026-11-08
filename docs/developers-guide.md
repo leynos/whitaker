@@ -3234,7 +3234,8 @@ Release automation uses the `whitaker-package-dependency-binary` helper in
 Package one executable:
 
 ```sh
-cargo run -p whitaker-installer --bin whitaker-package-dependency-binary -- \
+cargo run -p whitaker-installer --features release-tools \
+  --bin whitaker-package-dependency-binary -- \
   package \
   --package cargo-dylint \
   --target x86_64-unknown-linux-gnu \
@@ -3245,7 +3246,8 @@ cargo run -p whitaker-installer --bin whitaker-package-dependency-binary -- \
 Generate the shared provenance document:
 
 ```sh
-cargo run -p whitaker-installer --bin whitaker-package-dependency-binary -- \
+cargo run -p whitaker-installer --features release-tools \
+  --bin whitaker-package-dependency-binary -- \
   provenance \
   --output-dir /tmp/dist
 ```
