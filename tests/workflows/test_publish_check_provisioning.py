@@ -211,9 +211,18 @@ def _write_harness(
 def _run_publish_check(
     stub_dir: Path, overrides: dict[str, str]
 ) -> subprocess.CompletedProcess[str]:
-    """Run the real publish-check target with stubs first on PATH."""
+    """Run the real publish-check target with stubs first on PATH.
+
+    ``PATH`` is also passed as a make command-line override, not only
+    exported through the environment: the Makefile sets ``PATH :=`` at
+    parse time, and a makefile assignment beats the inherited environment.
+    Without the override, a host that already has the pinned ``cargo-dylint``
+    in ``$(HOME)/.cargo/bin`` satisfies the version probe and the stale-tool
+    stubs this harness depends on are never consulted.
+    """
+    stub_path = f"{stub_dir}:/usr/bin:/bin"
     env = os.environ.copy()
-    env["PATH"] = f"{stub_dir}:/usr/bin:/bin"
+    env["PATH"] = stub_path
     env.update(overrides)
     # The Makefile prepends `$HOME/.cargo/bin`; isolate it so a host-installed
     # cargo-dylint cannot bypass the harness's deliberately stale stub.
@@ -239,6 +248,7 @@ def _run_publish_check(
             "make",
             "publish-check",
             f"CARGO={stub_dir}/cargo",
+            f"PATH={stub_path}",
             "LINT_CRATES=test_lint",
             "PUBLISH_PACKAGES=pkg_one",
         ],

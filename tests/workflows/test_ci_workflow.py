@@ -429,12 +429,14 @@ def test_linux_full_keeps_the_full_linux_validation_stack(
             "Enforce en-GB-oxendict spelling",
             "Nixie",
             "Markdown lint",
+            "Install Whitaker",
             "Lint",
             "Publish dry run",
         ],
         (
             "linux-full must remain the only CI lane that runs format, Mermaid, "
-            "Nixie, Markdown lint, Clippy/doc linting, and publish-check"
+            "Nixie, Markdown lint, Whitaker installation, the lint gate, and "
+            "publish-check"
         ),
     )
     assert _find_step(linux_job, "Publish dry run").get("run") == (
