@@ -21,6 +21,14 @@ pub const SERIAL_UI_GROUP: &str = "serial-dylint-ui";
 pub const INTEGRATION_UI_CLAUSE: &str = "(binary(ui) & test(=ui))";
 
 /// Parses `.config/nextest.toml` into a [`Value`].
+///
+/// # Panics
+///
+/// Panics when the configuration cannot be read or parsed. These helpers are a
+/// guard harness, not production code: an unreadable config is the drift the
+/// guards exist to detect, so stopping at the offending file beats returning a
+/// `Result` that a caller could ignore — which would turn the guard's own
+/// failure into a silent pass.
 pub fn load_nextest_config() -> Value {
     let config_path = Path::new(env!("CARGO_MANIFEST_DIR")).join(".config/nextest.toml");
     let contents = fs::read_to_string(&config_path)
