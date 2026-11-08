@@ -1062,6 +1062,49 @@ documentation can assert the wiring without needing a `Session`. Behaviour
 coverage uses `rstest-bdd 0.5.0` to prove the happy path registration and to
 surface the duplicate-lint panic when called twice.
 
+### Early-pass registration addendum
+
+`string_continuation_style` is the suite's first `EarlyLintPass`. It cannot join
+`SuitePass`, because `declare_combined_late_lint_pass!` expands `LateLintPass`
+methods, so the suite registers it on its own line:
+
+```rust
+store.register_early_pass(|| Box::new(StringContinuationStyle::default()));
+```
+
+That line has no compile-time guard. Control flow keeps it honest by putting
+the descriptor list and the registration in different files, so a divergence is
+visible in review:
+
+- `suite/src/lints.rs` owns `SUITE_LINTS`, one `LintDescriptor` per lint, each
+  carrying a `pass: PassKind` tag. `suite_lint_names_for_pass` projects that
+  list by phase.
+- `suite/src/driver.rs` owns the `register_early_pass` and `register_late_pass`
+  calls.
+
+A late lint omitted from `late_lint_methods!` fails to compile. An early lint
+whose `register_early_pass` call is deleted compiles cleanly, still appears in
+every descriptor-alignment assertion, and simply never runs. The registration
+behaviour test therefore asserts *which* pass was registered:
+`suite/tests/registration.rs` invokes each stored `early_passes` factory and
+compares the lint names it reports against
+`suite_lint_names_for_pass( PassKind::Early)`. A count would also pass if the
+wrong pass had been wired, and adding a second early lint without registering
+it now fails that comparison.
+
+`EarlyLintPassObject` is `pub(crate)` in `rustc_lint`, so the test cannot build
+a pass directly. Invoking the stored factories is the supported way to see what
+the store will run. The factories execute once per crate during a real
+compilation (`rustc_lint/src/early.rs`), so calling one from a test has no side
+effects beyond producing a fresh pass value.
+
+Any later early lint should follow the same shape: a `PassKind::Early`
+descriptor, its own `register_early_pass` call, and no addition to `SuitePass`.
+
+The decision that produced the first early pass — and in particular the
+position test that makes a rewrite safe to suggest — is recorded in
+[ADR 010](adr-010-early-lint-pass-position-proof.md).
+
 ## 6) Installer CLI — optional
 
 - Builds/stages the CDyLibs, runs `dylint-link`, copies them to a target dir,

@@ -1195,6 +1195,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "googletest"
+version = "0.14.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "07de445a934242060307c2570b9f2dc4788b02ff3637de2f42268756a3eaad4c"
+dependencies = [
+ "googletest_macro",
+ "num-traits",
+ "regex",
+ "rustversion",
+]
+
+[[package]]
+name = "googletest_macro"
+version = "0.14.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "088fcbe402e99d60ed6611e1b5105ab556b8a984a6a420977850d806c2aba882"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
 name = "hashbrown"
 version = "0.14.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1827,7 +1850,6 @@ dependencies = [
  "rustc_middle",
  "rustc_span",
  "serde",
- "temp-env",
  "whitaker",
  "whitaker-common",
  "whitaker_test_macros",
@@ -2092,6 +2114,16 @@ checksum = "d0de1b847b39c8131db0467e9df1ff60e6d0562ab8e9a16e568ad0fdb372e2f2"
 dependencies = [
  "predicates-core",
  "termtree",
+]
+
+[[package]]
+name = "pretty_assertions"
+version = "1.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3ae130e2f271fbc2ac3a40fb1d07180839cdbbe443c7a27e1e3c13c5cac0116d"
+dependencies = [
+ "diff",
+ "yansi",
 ]
 
 [[package]]
@@ -2985,6 +3017,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "string_continuation_style"
+version = "0.2.11"
+dependencies = [
+ "camino",
+ "cap-std",
+ "dylint_linting",
+ "dylint_testing",
+ "googletest",
+ "log",
+ "pretty_assertions",
+ "rstest",
+ "rustc_ast",
+ "rustc_lint",
+ "rustc_span",
+ "serde",
+ "serial_test",
+ "tempfile",
+ "toml 1.1.8+spec-1.1.0",
+ "whitaker",
+ "whitaker-common",
+ "whitaker_string_literals",
+ "whitaker_test_macros",
+]
+
+[[package]]
 name = "strsim"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3864,6 +3921,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "whitaker_string_literals"
+version = "0.2.11"
+dependencies = [
+ "googletest",
+ "insta",
+ "pretty_assertions",
+ "proptest",
+ "rstest",
+ "rstest-bdd",
+ "rstest-bdd-macros",
+ "rustc_lexer",
+ "whitaker_test_macros",
+]
+
+[[package]]
 name = "whitaker_suite"
 version = "0.2.7"
 dependencies = [
@@ -3885,6 +3957,7 @@ dependencies = [
  "rustc_lint",
  "rustc_session",
  "rustc_span",
+ "string_continuation_style",
  "test_must_not_have_example",
  "whitaker",
  "whitaker-common",
