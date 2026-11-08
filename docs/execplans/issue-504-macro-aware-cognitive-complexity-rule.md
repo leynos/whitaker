@@ -67,12 +67,33 @@ Macro/AstPass.
 
 ## Constraints
 
-Keep `nightly-2026-05-28`; the reference rustc revision is
-`57d06900fd7d9ee06d3a7f323bb77f17ab3cfaf8`. Issue measurements used
-`nightly-2026-08-23` and are motivating evidence, not verified expected output
-for this checkout. Re-establish lowering-sensitive expectations on the
-repository pin. Do not upgrade the toolchain or import full Clippy utilities to
-avoid an adapter problem.
+Track the same dated nightly as Clippy. The initial inspection used
+`nightly-2026-05-28`, rustc `57d06900fd7d9ee06d3a7f323bb77f17ab3cfaf8`; that is
+a historical evidence baseline, not a requirement to retain that toolchain.
+Issue #504's August measurements are also historical evidence, not acceptance
+results for a later compiler.
+
+[Issue #561](https://github.com/leynos/whitaker/issues/561) governs safe
+nightly rollout so existing installer callers retain a working generation.
+[Issue #579](https://github.com/leynos/whitaker/issues/579) proposes scheduled
+monitoring of the gap from Clippy's own dated nightly: warning at 45 days,
+failure above 60 days. That monitoring threshold is not the alignment goal or
+proof that an upgrade is safe. Both issues were open when read for this
+revision; their proposals must not be represented as implemented safeguards.
+
+At implementation start, read Clippy's `main` toolchain at a recorded commit
+and Whitaker's current toolchain and embedded Clippy snapshot. Record the
+nightly, rustc commit, Clippy revision, and Dylint version used by this work.
+Use the repository's safely adopted Clippy-aligned generation; if a gap
+remains, record it and coordinate with #561 rather than silently treating May
+as the permanent target or moving the pin from this lint branch. Upgrade
+rollout and drift-monitor implementation remain owned by #561 and #579.
+
+Keep each acceptance run on one coherent compiler generation. After an adopted
+pin change, recheck the HIR APIs, lowering, origin chains, and Clippy
+arithmetic, then rerun V2–V5 and affected milestone gates before reusing their
+conclusions. Refresh the evidence links and version tuple. Do not import full
+Clippy utilities or freeze an obsolete toolchain to avoid an adapter problem.
 
 Keep domain policy free of rustc types and I/O. The compiler adapter depends
 inward on that policy; no additional trait hierarchy or compatibility facade is
@@ -132,15 +153,16 @@ first Macro or AstPass returns Generated; exhaustion returns Authored. Add
 An internal context-taking helper may support tests without duplicating policy.
 Root returns Authored immediately.
 
-At the pinned upstream source, `SyntaxContext::remove_mark(&mut self)` returns
-an `ExpnId` and changes the context to its parent. `marks()` collects marks and
-reverses them, so do not assume it already yields the required direction.
-`outer_expn_data()` returns `ExpnData`. Prefer incremental mark removal without
-allocating a vector per HIR expression. Pinned `Span::mark_with_reason` applies
-a desugaring mark to its input span, and lowering forwards that span unchanged.
-This supports the original context scan. Transparent-mark hygiene normalization
-remains a caveat: M1 must establish that real HIR retains the required parent
-origin. Synthetic nested marks alone cannot answer that question.
+At the historical May source revision, `SyntaxContext::remove_mark(&mut self)`
+returns an `ExpnId` and changes the context to its parent. `marks()` collects
+marks and reverses them, so do not assume it already yields the required
+direction. `outer_expn_data()` returns `ExpnData`. Prefer incremental mark
+removal without allocating a vector per HIR expression. Pinned
+`Span::mark_with_reason` applies a desugaring mark to its input span, and
+lowering forwards that span unchanged. This supports the original context scan.
+Transparent-mark hygiene normalization remains a caveat: M1 must establish that
+real HIR retains the required parent origin. Synthetic nested marks alone
+cannot answer that question.
 
 Permitted consumers are provenance-sensitive lint drivers. They may gate
 charges, predicates, or segments, but must not derive traversal from origin.
@@ -325,12 +347,14 @@ that limit.
 
 ### M1 — Establish and prove origin classification (R1, R4)
 
-After approval, first add the smallest failing policy/synthetic/real-compiler
-probes, record the red result, and inspect pinned lowering. Record the chain
-walk decision in a new ADR using the next available independent ADR number; do
-not reserve a number now. If contexts lose the parent origin, stop at this
-decision gate before implementing a misleading classifier. The required
-contract must not be weakened to make a synthetic test green.
+After approval, first establish the compiler-generation receipt described in
+Constraints and resolve any rollout dependency with #561. Then add the smallest
+failing policy/synthetic/real-compiler probes, record the red result, and
+inspect lowering on that generation. Record the chain walk decision in a new
+ADR using the next available independent ADR number; do not reserve a number
+now. If contexts lose the parent origin, stop at this decision gate before
+implementing a misleading classifier. The required contract must not be
+weakened to make a synthetic test green.
 
 Implement the common policy and adapter, then make focused tests pass. Add
 Verus specification, scan/refinement proof, and the production bridge review.
@@ -531,11 +555,13 @@ nested-body boundaries intentionally leave the generated-closure blind spot.
 Procedural macro re-spanning also limits origin fidelity. Document both rather
 than adding ad hoc macro allowlists.
 
-The reference compiler differs from the original experiment. Freeze parity
-corpus and dependency locks on the repository pin; never relabel August
-measurements as reproduced. The test matrix must use truly separate feature
-graphs, and ignored tests need explicit execution. Comparing entire Cargo
-stderr would add path noise; compare only deliberately normalized diagnostics.
+Compiler generations can change between planning and implementation. Freeze the
+parity corpus, dependency locks, and compiler-generation receipt for each
+acceptance run, not the repository nightly indefinitely. Never relabel May
+source inspection or August measurements as evidence for an upgraded compiler.
+The test matrix must use truly separate feature graphs, and ignored tests need
+explicit execution. Comparing entire Cargo stderr would add path noise; compare
+only deliberately normalized diagnostics.
 
 A pure proof can drift from runtime code. Maintain the representation mapping,
 transition comparison, and mutation evidence whenever the policy changes.
@@ -553,7 +579,11 @@ may be slow; queued work is not hung and must not be duplicated.
 - [x] 2026-11-08: Six expert lenses reviewed the draft; executable commands,
   policy-test discovery, proof mutation correspondence, and matrix staging
   isolation were corrected.
-- [ ] Documentation gates, commit, push, upstream verification, and draft PR.
+- [x] 2026-11-08: Initial documentation gates passed; commit `c0d2c4a7`
+  published with verified upstream in draft PR #574.
+- [x] 2026-11-08: Read #561 and #579; replace the fixed-May constraint with
+  Clippy alignment, safe-rollout dependency, and per-generation revalidation.
+- [ ] Gate and publish the toolchain clarification.
 - [ ] Explicit user approval.
 - [ ] M1: classifier, adapter, evidence, and Verus proof.
 - [ ] M2: standalone lint, parity, localization, and logging matrix.
@@ -574,6 +604,12 @@ is absent, and the conditional driver has moved into `driver/mod.rs`.
 
 ## Decision log
 
+- 2026-11-08: The user clarified that Whitaker should track Clippy's nightly.
+  Supersede the initial fixed-May constraint. Keep historical evidence
+  labelled, coordinate safe adoption through #561, and distinguish #579's drift
+  alarm from release safety and the alignment target. Revalidate
+  compiler-dependent evidence after each adopted pin change.
+
 - 2026-11-08: Treat the user's detailed four-task plan as controlling scope;
   retain RFC 0010 as prior design and record each material difference.
 - 2026-11-08: Keep a pure shared classifier and thin compiler adapter, with no
@@ -589,11 +625,12 @@ is absent, and the conditional driver has moved into `driver/mod.rs`.
 The Wyvern reconnaissance and six-lens expert review are complete. Review
 corrections distinguish Cargo package/import names, keep policy dependencies
 ungated, enable library tests explicitly, make proof mutations independent, and
-isolate matrix library staging. Documentation validation and publication remain
-pending. No lint implementation, compiler probe execution, formal proof, or
-runtime acceptance is complete. Update this section after review/publication
-and at each approved implementation milestone; retain both remaining gaps and
-evidence that discharged earlier obligations.
+isolate matrix library staging. The initial documentation gates passed and
+draft PR #574 was published. The toolchain clarification is prepared for its
+own documentation gates and publication. No lint implementation, compiler probe
+execution, formal proof, or runtime acceptance is complete. Update this section
+after review/publication and at each approved implementation milestone; retain
+both remaining gaps and evidence that discharged earlier obligations.
 
 ## References and implementation reading
 
