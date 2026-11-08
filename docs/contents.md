@@ -135,6 +135,10 @@ compatibility entry points. Local ADR filenames follow
   `$l:literal` hole `is_root()` leaves open, the built-in macro set, the
   crate-wide shadow switch, and the separate `register_early_pass` wiring the
   suite needs.
+- [Architectural decision record (ADR) 0011: Bumpy Road reference
+  semantics](adrs/adr-0011-bumpy-road-reference-semantics.md) establishes
+  CodeScene as the reference for intended classification and records the
+  current compatibility limit.
 
 ## Requests for comments
 
@@ -188,6 +192,10 @@ follows `rfc-nnnn-title-slug.md`, as the
 - [Phase 17 DOMAIN roadmap amendment](roadmap-phase-17-domain-amendment.md)
   supersedes conflicting Phase 17 state-space tasks with the expanded RFC 0012
   rule catalogue and the mdtablefix 443–449 acceptance corpus.
+- [RFC 0013: Bumpy Road semantic
+  alignment](rfcs/rfc-0013-bumpy-road-semantic-alignment.md) reproduces the
+  two-region discrepancy and proposes structural detection with a versioned
+  reference corpus and a weighted compatibility strategy.
 
 ## Planning material
 

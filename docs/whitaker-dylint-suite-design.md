@@ -1318,12 +1318,17 @@ intervals shorter than `min_bump_lines` (default 2). Warn when the function has
 two or more such bumps. Record severity via the area above the threshold and
 highlight the top two intervals in the diagnostic.
 
-> The threshold was lowered from 3.0 to 2.5 to detect legitimate bumpy road
-> patterns in match expressions with nested conditionals. The moving-average
-> smoothing reduces raw peaks by approximately 15–20%, so a threshold of 3.0
-> could mask genuine two-bump patterns in match arms. Users who experience
-> false positives can raise the threshold back to 3.0 or higher via
-> `dylint.toml`.
+**Reference semantics and known gap.** Semantic alignment with CodeScene is the
+project goal established by
+[ADR 0011](adrs/adr-0011-bumpy-road-reference-semantics.md). The shipped
+weighted detector does not yet meet that goal: two shallow nested regions can
+fail the score, smoothing or minimum-span filters. Direct HIR `let` conditions
+add no predicate segment, and `let ... else` adds no dedicated `if` region.
+Enclosing depth and match-arm weights still contribute. Smoothing depends on
+neighbouring samples; it has no universal percentage reduction.
+[RFC 0013](rfcs/rfc-0013-bumpy-road-semantic-alignment.md) records the
+reproduction, gap analysis and proposed structural strategy. That proposal does
+not change the current defaults or configuration schema.
 
 **Phase 5 implementation decisions.**
 

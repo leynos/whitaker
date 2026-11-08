@@ -578,10 +578,25 @@ regions above the configured threshold. Detection smooths the local complexity
 signal with the configured `window` and only considers peaks spanning at least
 `min_bump_lines`.
 
-The default threshold was lowered from 3.0 to 2.5 to detect bumpy road patterns
-in match expressions with nested conditionals. The moving-average smoothing
-(window=3) reduces raw peaks by approximately 15–20%, so a threshold of 3.0 can
-mask genuine two-bump patterns in match arms with nested `if` guards.
+The defaults are a weighted smoothed score of at least `2.5`, a minimum of `2`
+contiguous qualifying lines per bump and a centred moving-average window of
+`3`. Depth contributes `1.0`, each predicate branch `0.5`, and match-arm
+control flow `0.5`. Overlapping contributions add. Smoothing contracts at
+function boundaries and can suppress short peaks or merge nearby regions; its
+effect is not a fixed percentage reduction.
+
+Direct `let` conditions contribute no predicate segment, including those in
+`if let` and `while let`; their bodies can still contribute depth. A
+`let ... else` declaration does not itself create a scored `if` region.
+
+**CodeScene difference:** the current lint is a weighted heuristic, not a
+CodeScene-equivalent structural detector. Two shallow nested regions can
+produce no warning even when CodeScene reports Bumpy Road. The
+`relative_to_manifest` reproduction and the proposed alignment strategy are in
+[RFC 0013](rfcs/rfc-0013-bumpy-road-semantic-alignment.md). Semantic alignment
+is a project goal, recorded in
+[ADR 0011](adrs/adr-0011-bumpy-road-reference-semantics.md), rather than a
+claim about the current implementation.
 
 #### Configuration <!-- bumpy_road_function -->
 
@@ -591,6 +606,14 @@ threshold = 2.5  # Raise to 3.0 or higher to reduce false positives
 window = 3
 min_bump_lines = 2
 ```
+
+Lowering `threshold`, choosing `window = 1` to disable smoothing, or setting
+`min_bump_lines = 1` can expose shorter or weaker peaks, but can also increase
+false positives. These settings do not change predicate exclusions or establish
+CodeScene parity. There is currently no structural strategy switch; the RFC's
+proposed `strategy` key is not supported. Keep the defaults when reproducible
+existing behaviour matters, and use CodeScene separately when its diagnostic is
+the required authority.
 
 #### What is allowed <!-- bumpy_road_function -->
 
