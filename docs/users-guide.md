@@ -335,6 +335,14 @@ Stable releases differ from `rolling`: a stable tag is expected to contain the
 complete artefact set for the release. For production installs, pin to a stable
 release tag rather than consuming `rolling`.
 
+The rolling lint archive holds `libwhitaker_suite` and the standalone libraries
+of the nine individual lints that installers v0.2.9 to v0.2.11 can prune. It
+does not hold `libstring_continuation_style`: those installers cannot prune it,
+and loading it beside the suite, which already registers the lint, fails the
+lint run with a duplicate-specification error (issue #565). The suite still
+provides that lint. The rolling archive does not offer it as a standalone
+library until the installer prunes by what it staged.
+
 Scripts or CI pipelines that consume rolling-release archives should verify
 that the required target archive exists before proceeding. Treat missing
 archives as an expected condition for rolling releases rather than assuming the

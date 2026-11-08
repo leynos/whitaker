@@ -163,10 +163,11 @@ fn run_with_stdout(cli: PackageCli, stdout: &mut impl Write) -> Result<(), Packa
     Ok(())
 }
 
-/// Lint crates that the oldest installer a caller still pins can prune.
+/// Lint crates that the oldest installer a caller can still select can prune.
 ///
-/// This is the `LINT_CRATES` list of the installer at the oldest tag pinned
-/// by `leynos/shared-actions` `install-whitaker` (v0.2.11 today). That
+/// This is the `LINT_CRATES` list of the oldest installer that
+/// `leynos/shared-actions` `install-whitaker` still offers (v0.2.9, which
+/// lists the same nine crates as v0.2.10 and v0.2.11). That
 /// installer removes unrequested standalone libraries only when it knows
 /// their crate names. A standalone library for any other crate stays beside
 /// `libwhitaker_suite`, both load, and rustc rejects the duplicate lint

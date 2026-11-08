@@ -98,6 +98,120 @@ fn package_lints_binary_creates_archive_and_manifest() {
     );
 }
 
+/// The libraries a rolling archive must hold, named independently of the
+/// packaging code: the suite and the nine crates the oldest pinned installer
+/// (v0.2.9 to v0.2.11) can prune.
+const EXPECTED_ARCHIVE_CRATES: [&str; 10] = [
+    "bumpy_road_function",
+    "conditional_max_n_branches",
+    "function_attrs_follow_docs",
+    "module_max_lines",
+    "module_must_have_inner_docs",
+    "no_expect_outside_tests",
+    "no_std_fs_operations",
+    "no_unwrap_or_else_panic",
+    "test_must_not_have_example",
+    "whitaker_suite",
+];
+
+/// Crate whose standalone library the pinned installer cannot prune
+/// (whitaker #565), so the archive must not carry it.
+const UNPRUNABLE_CRATE: &str = "string_continuation_style";
+
+/// Return the crate name behind an archive or manifest entry such as
+/// `libfoo@nightly-2026-05-28-x86_64-unknown-linux-gnu.so`.
+fn crate_of_entry(entry: &str) -> String {
+    let stem = entry.strip_prefix("lib").unwrap_or(entry);
+    stem.split(['@', '.']).next().unwrap_or(stem).to_owned()
+}
+
+/// Sort a list of entry names reduced to crate names.
+fn sorted_crates<'a>(entries: impl IntoIterator<Item = &'a str>) -> Vec<String> {
+    let mut crates: Vec<String> = entries.into_iter().map(crate_of_entry).collect();
+    crates.sort();
+    crates
+}
+
+#[test]
+fn package_lints_release_dir_ships_only_libraries_the_pinned_installer_prunes() {
+    let temp_dir = tempdir().expect("temporary directory");
+    let release_dir = temp_dir.path().join("release");
+    let output_dir = temp_dir.path().join("dist");
+    fs::create_dir(&release_dir).expect("create release directory");
+    for name in EXPECTED_ARCHIVE_CRATES.iter().chain(&[UNPRUNABLE_CRATE]) {
+        fs::write(release_dir.join(format!("lib{name}.so")), b"fixture").expect("write library");
+    }
+
+    let output = Command::new(env!("CARGO_BIN_EXE_whitaker-package-lints"))
+        .args([
+            "--git-sha",
+            "abc1234",
+            "--toolchain",
+            "nightly-2026-05-28",
+            "--target",
+            "x86_64-unknown-linux-gnu",
+            "--generated-at",
+            "2026-02-12T10:00:00Z",
+            "--output-dir",
+        ])
+        .arg(&output_dir)
+        .arg("--release-dir")
+        .arg(&release_dir)
+        .output()
+        .expect("run package-lints binary");
+    assert_success(&output, "whitaker-package-lints");
+
+    let expected: Vec<String> = EXPECTED_ARCHIVE_CRATES
+        .iter()
+        .map(|s| (*s).to_owned())
+        .collect();
+
+    let manifest: serde_json::Value = serde_json::from_slice(
+        &fs::read(output_dir.join("manifest-x86_64-unknown-linux-gnu.json"))
+            .expect("read manifest"),
+    )
+    .expect("parse manifest");
+    let manifest_files: Vec<&str> = manifest["files"]
+        .as_array()
+        .expect("manifest files array")
+        .iter()
+        .map(|file| file.as_str().expect("manifest file name"))
+        .collect();
+    assert_eq!(sorted_crates(manifest_files), expected, "manifest files");
+
+    let archive_path = fs::read_dir(&output_dir)
+        .expect("read distribution directory")
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .find(|path| path.extension().is_some_and(|ext| ext == "zst"))
+        .expect("archive written");
+    let decoder = zstd::Decoder::new(fs::File::open(archive_path).expect("open archive"))
+        .expect("zstd decoder");
+    let entries: Vec<String> = tar::Archive::new(decoder)
+        .entries()
+        .expect("archive entries")
+        .map(|entry| {
+            entry
+                .expect("archive entry")
+                .path()
+                .expect("entry path")
+                .to_string_lossy()
+                .into_owned()
+        })
+        .collect();
+    assert_eq!(
+        sorted_crates(entries.iter().map(String::as_str)),
+        expected,
+        "archive entries"
+    );
+    assert!(
+        entries
+            .iter()
+            .all(|entry| !entry.contains(UNPRUNABLE_CRATE)),
+        "the archive must not carry {UNPRUNABLE_CRATE}"
+    );
+}
+
 #[test]
 fn package_installer_binary_creates_release_archive() {
     let temp_dir = tempdir().expect("temporary directory");
