@@ -83,10 +83,6 @@ jobs:
     # Above the 300 m nextest global timeout plus a cold build and the work
     # either side of the suite; kept in step with ci.yml's coverage lane.
     timeout-minutes: 335
-    env:
-      # A hosted runner left to the setup action gets local-disk sccache; this
-      # asks for GitHub's cache service, as the Windows lane in ci.yml does.
-      SCCACHE_GHA_ENABLED: 'true'
     defaults:
       run:
         shell: bash
@@ -170,9 +166,11 @@ jobs:
         id: setup-rust
         uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
         with:
-          # GitHub's cache service only, so a missing service fails the job
-          # rather than letting sccache compile against local disk unnoticed.
-          expect-cache: github
+          # No compiler cache on a hosted runner: it can only reach GitHub's
+          # store, which throttled this job's writes (681 errors in 1,852
+          # attempts on the first main run) and which the Ubicloud lanes never
+          # read. The job compiles cold and costs nothing.
+          use-sccache: 'false'
           cache-provider: external
           install-mold: 'true'
 
@@ -276,21 +274,6 @@ jobs:
         # them. It is the second half of one executed set, not a second lane.
         run: make test-doc
 
-      - name: Record sccache effectiveness
-        if: always() && steps.setup-rust.outputs.sccache-status != 'fallback'
-        env:
-          SETUP_RUST_CACHE_BACKEND: ${{ steps.setup-rust.outputs.cache-backend }}
-        run: bash scripts/record-sccache-effectiveness.sh
-
-      - name: Upload sccache statistics
-        if: always() && steps.setup-rust.outputs.sccache-status != 'fallback'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
-        with:
-          name: sccache-stats-coverage-upload
-          path: sccache-stats.json
-          if-no-files-found: error
-          retention-days: 14
-
       # Publishes whether the token exists, and nothing else. The token is
       # in no `env` on this workflow: the upload is a composite action, and a
       # composite action's nested steps inherit the calling step's `env`, so
@@ -320,10 +303,7 @@ jobs:
       # No cache saves here: a hosted runner writes GitHub's store, which the
       # Ubicloud lanes never read, so `coverage-warmup` is the sole writer.
       #
-      # No sccache health check either. GitHub's cache service throttled this
-      # job's writes (681 errors in 1,852 attempts on the first main run), and
-      # the check exists to catch a broken Ubicloud integration. The statistics
-      # are still recorded and uploaded above.
+      # No sccache statistics or health check either: sccache is off here.
 
   # Compiles the instrumented tests `coverage-check` builds, without running
   # them, and saves the cache keys that lane restores. A hosted runner writes

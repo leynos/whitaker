@@ -188,7 +188,9 @@ def _setup_rust(job_name: str) -> dict[str, typ.Any]:
     return calls[0]
 
 
-JOBS = sorted(UBICLOUD_JOBS)
+#: The jobs this module holds to the compiler-cache rules: every Ubicloud job.
+#: A hosted job runs with sccache off, and its own rule is below.
+JOBS = sorted(set(UBICLOUD_JOBS) - set(HOSTED_RUNNER_JOBS))
 
 
 def test_the_rule_reaches_every_ubicloud_job() -> None:
@@ -197,7 +199,7 @@ def test_the_rule_reaches_every_ubicloud_job() -> None:
     They were the ones on the retired local directory, so a rule that had
     quietly lost them would pass over the very lanes it exists for.
     """
-    for job_name in ("coverage-check", "linux-full", "coverage-upload",
+    for job_name in ("coverage-check", "linux-full", "coverage-warmup",
                      "build-lints", "build-dependency-binaries"):
         assert job_name in JOBS, f"{job_name} must be held by this rule"
 
@@ -250,20 +252,19 @@ def test_no_ubicloud_job_keeps_a_retired_piece(job_name: str) -> None:
 
 
 @pytest.mark.parametrize("job_name", sorted(HOSTED_RUNNER_JOBS))
-def test_a_hosted_job_asks_for_the_github_service(job_name: str) -> None:
-    """Left to the action, a hosted runner gets local disk, and ghac is demanded.
+def test_a_hosted_job_runs_with_sccache_off(job_name: str) -> None:
+    """A hosted runner only reaches GitHub's cache service, which throttles.
 
-    The statistics check reads `ghac`, so a hosted job that does not switch
-    the service on would fail it after a full cold build.
+    The job's compiler-cache writes failed in 681 of 1,852 attempts on its
+    first main run, and no Ubicloud lane reads that store, so the job compiles
+    without a compiler cache and owns no sccache wiring.
     """
     job = load_job(job_name)
-    env = job.get("env") or {}
-    assert str(env.get("SCCACHE_GHA_ENABLED")).lower() == "true", (
-        f"{job_name} runs on a hosted runner and must set SCCACHE_GHA_ENABLED "
-        "to true in its own env"
+    assert "SCCACHE_GHA_ENABLED" not in (job.get("env") or {}), (
+        f"{job_name} runs with sccache off and must not switch the service on"
     )
     inputs = _setup_rust(job_name).get("with") or {}
-    assert inputs.get("expect-cache") == "github"
+    assert str(inputs.get("use-sccache")).lower() == "false"
 
 
 @pytest.mark.parametrize("job_name", JOBS)

@@ -976,8 +976,9 @@ wiring and the pin. `windows-compat` carries the pair too; its record says
 pair reads as a missing record to the collector.
 
 On the three lanes that use the `gha` backend, `coverage-check`, `linux-full`
-and `coverage-upload`, the statistics are uploaded as a `sccache-stats-<job>`
-artefact under `if: always()`, and then
+and `coverage-warmup` (the hosted `coverage-upload` runs with sccache off,
+since GitHub's cache service throttled its writes), the statistics are uploaded
+as a `sccache-stats-<job>` artefact under `if: always()`, and then
 `scripts/check_sccache_health.py --expect-location ghac` reads the JSON and
 fails the job on a broken integration: a cache location other than `ghac`, zero
 compile requests, every store failing, or every read failing. Those last two

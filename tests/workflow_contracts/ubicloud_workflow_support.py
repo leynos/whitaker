@@ -62,10 +62,11 @@ UBICLOUD_JOBS: dict[str, str] = {
     "build-dependency-binaries": "rolling-release.yml",
 }
 
-#: The jobs in `UBICLOUD_JOBS` that run on a GitHub-hosted runner. They keep
-#: the cache rules of the jobs above, because they write the same Ubicloud
-#: lanes' cache keys, but their placement and compiler-cache backend are
-#: GitHub's: a main coverage upload blocks no one's work.
+#: The jobs in `UBICLOUD_JOBS` that run on a GitHub-hosted runner. A main
+#: coverage upload blocks no one's work, so it runs hosted with sccache off:
+#: it writes no cache the Ubicloud lanes read, and GitHub's cache service
+#: throttled its compiler-cache writes. The rules about the compiler cache
+#: therefore do not apply to it; the rules about the gates it runs still do.
 HOSTED_RUNNER_JOBS: dict[str, str] = {
     "coverage-upload": "coverage-main.yml",
 }
