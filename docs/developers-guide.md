@@ -666,19 +666,23 @@ registries hold different crate sets and their keys hash different manifests.
 Their compiler cache is not an archive at all: like every Ubicloud job's, it
 reads and writes Ubicloud's cache proxy through `setup-rust`.
 
-Every caller pins one revision, `6cec89bac47a21cf756d68d638a9a510998e57f8`, the
-merge of leynos/shared-actions#546, which sits on #523. From #523 `setup-rust`
-selects sccache's backend from the runner (ADR 0005 there); the `sccache`
-paragraphs below say what that retired here. It keeps the rules the previous
-pin brought: the built-in provider does not archive `target/<profile>`, the
-caller's Actions cache-service selection is restored after
-`mozilla-actions/sccache-action` runs, and the `sccache` server starts from a
-`run:` step after those exports. #546 adds a 60 s server startup timeout, where
-sccache's own is a fixed 10 s that Ubicloud's cache proxy intermittently
-outlasts, and makes a start that still fails fall back to an uncached build
-instead of failing the job: a `sccache-fallback` warning annotation, the line
-`sccache: FALLBACK (cache disabled for this job)` in the job summary, and
-`sccache-status` on the action's outputs (`fallback`, or `started`).
+Every caller pins one revision, a full 40-character SHA that
+`tests/workflow_contracts/shared_action_pin_test.py` holds identical across all
+workflows (it compares them with each other and with `ci.yml`, not with a
+constant, so a shared-actions bump edits the workflows alone). At the time of
+writing it was the merge of leynos/shared-actions#546, which sits on #523. From
+that change `setup-rust` selects sccache's backend from the runner (ADR 0005
+there); the `sccache` paragraphs below say what that retired here. It keeps the
+rules the previous pin brought: the built-in provider does not archive
+`target/<profile>`, the caller's Actions cache-service selection is restored
+after `mozilla-actions/sccache-action` runs, and the `sccache` server starts
+from a `run:` step after those exports. #546 adds a 60 s server startup
+timeout, where sccache's own is a fixed 10 s that Ubicloud's cache proxy
+intermittently outlasts, and makes a start that still fails fall back to an
+uncached build instead of failing the job: a `sccache-fallback` warning
+annotation, the line `sccache: FALLBACK (cache disabled for this job)` in the
+job summary, and `sccache-status` on the action's outputs (`fallback`, or
+`started`).
 
 The lanes were briefly split, with the release boundaries held back until "a
 tag has run on the newer wiring". That exit condition was the wrong one for
@@ -1164,8 +1168,11 @@ shapes. `coverage-warmup` writes for `coverage-check`. `linux-full` writes for
 itself, because `ci.yml` runs it on the push. That makes its shapes the lane's
 by construction, where a separate job would be a copy that could drift, and the
 lane's non-compiling steps add under a minute to a warm run. No other job may
-run on that push, since each would be a second writer to `main`'s scope, so
-`windows-compat` is excluded from it and `coverage-check` already runs on pull
+run on that push, since each would be a second writer to `main`'s scope.
+`windows-compat` is the exception that proves it: it runs there to write
+GitHub's own store, which the Ubicloud lanes never read, so a pull request's
+first Windows push starts from a warm compiler cache and a restored Dylint
+driver instead of a cold one (#457). `coverage-check` already runs on pull
 requests alone. A pull request cannot write `main`'s scope at all. Its writes
 land in its own ref's scope, so the pull-request lanes only ever read the
 trunk's store.
@@ -2787,6 +2794,15 @@ Current explicit targets:
 - `whitaker-package-dependency-binary` from
   `src/bin/package_dependency_binary.rs`
 
+The four helpers (`whitaker-package-lints`, `whitaker-package-installer`,
+`whitaker-package-dependency-binary` and `whitaker-clippy-snapshot`) declare
+`required-features = ["release-tools"]`, so `cargo install` and
+`cargo binstall` build and expect only `whitaker-installer` (issue #509). Every
+command that builds or runs a helper passes `--features release-tools`; the
+test build enables it through the self dev-dependency. The contract in
+`tests/workflow_contracts/helper_binaries_feature_test.py` fails when a command
+naming a helper omits the feature.
+
 Without explicit declarations, Cargo would infer fallback names such as
 `package_lints` and `package_installer_bin`. Those names do not match the
 workflow invocations, so release and rolling-release builds would fail even
@@ -2809,6 +2825,51 @@ only when the oldest pinned installer lists it. The unit tests and the process
 test in `installer/tests/behaviour_packaging_cli.rs` package a release
 directory that holds every library and assert the archive and manifest hold
 exactly the standard lints and the suite.
+
+### The pre-publish installer check
+
+The `publish` job runs `scripts/check_prune_safety.py` before it uploads
+anything. It reproduces the behaviour of the oldest installer any caller pins
+(`OLDEST_INSTALLER_TAG` in `rolling-release.yml`, today v0.2.11); it does not
+run that installer, which has no route to install from a local archive. Two
+checks, both offline after fetching the tag and one table:
+
+- **Prune.** The script reads the installer's `LINT_CRATES` and
+  `EXPERIMENTAL_LINT_CRATES` from its release tag (never a committed copy),
+  lists the real entries of every built `.tar.zst` archive, removes the crates
+  that installer prunes from a suite install, and fails unless only
+  `libwhitaker_suite` is left. A standalone library the installer cannot prune
+  loads beside the suite, and rustc rejects the duplicate lint registration
+  (issues #355 and #565). It also fails when a sidecar manifest's `files`
+  disagree with its archive.
+- **Toolchain.** Each manifest's `toolchain` must equal the toolchain that
+  `leynos/shared-actions` `install-whitaker/clippy-snapshots.tsv` maps that
+  installer to. A mismatch names both values and stops the publish (issue #555).
+
+Library names are checked with the archive's target rules (`lib` prefix and
+`.so`, `.dylib` or `.dll` as the installer derives them), and each archive's
+file name must equal the one its manifest implies (`git_sha`, `toolchain`,
+`target`).
+
+The clean-up after an upload removes a superseded lint archive only when no
+manifest currently on the release still names it. A build leg that failed
+publishes nothing for its target, so that target's old manifest stays and keeps
+its archive. (The `publish` job runs with `always()` after partial matrices, so
+this case is reachable.)
+
+Publishing never moves the `rolling` tag. Installs read assets through the
+release by tag name, and the manifest records the commit built. A tag move
+needs a token that may update a ref onto commits touching `.github/workflows`,
+which `GITHUB_TOKEN` is not (HTTP 403), and it ran before the
+superseded-archive clean-up, so a failure left stale archives behind. The
+release is created once, with `--target` at the published commit, and the tag
+is left where it is.
+
+An unreadable tag or table, a missing `git` or `tar`, or a malformed manifest
+exits 2: a failed check never counts as a pass. A failure ends the job before
+the upload, so the published `rolling` release stays as it was.
+`make test-prune-safety` runs the tests, including the #565 and #555 shapes. The
+`verify-published-bootstrap` job still lints a fixture after publication.
 
 ### Validation coverage and purpose
 
@@ -3196,7 +3257,8 @@ Release automation uses the `whitaker-package-dependency-binary` helper in
 Package one executable:
 
 ```sh
-cargo run -p whitaker-installer --bin whitaker-package-dependency-binary -- \
+cargo run -p whitaker-installer --features release-tools \
+  --bin whitaker-package-dependency-binary -- \
   package \
   --package cargo-dylint \
   --target x86_64-unknown-linux-gnu \
@@ -3207,7 +3269,8 @@ cargo run -p whitaker-installer --bin whitaker-package-dependency-binary -- \
 Generate the shared provenance document:
 
 ```sh
-cargo run -p whitaker-installer --bin whitaker-package-dependency-binary -- \
+cargo run -p whitaker-installer --features release-tools \
+  --bin whitaker-package-dependency-binary -- \
   provenance \
   --output-dir /tmp/dist
 ```
@@ -3237,11 +3300,11 @@ A forced manual rebuild now has a prepublication gate. Both five-target build
 matrices must finish successfully. The gate then requires each target's lint
 archive and manifest, and every dependency archive and matching SHA-256 sidecar
 declared by `installer/dependency-binaries.toml`. If a build, download, or
-checksum fails, the run fails before changing the `rolling` release or tag.
-This strict rule applies only to a manual run with the force input enabled;
-ordinary pushes and unforced manual runs retain the rolling release's
-documented partial-publication policy. `scripts/check-forced-rolling-assets.sh`
-owns this local preflight for the rolling workflow's publish job. It is not a
+checksum fails, the run fails before changing the `rolling` release. This
+strict rule applies only to a manual run with the force input enabled; ordinary
+pushes and unforced manual runs retain the rolling release's documented
+partial-publication policy. `scripts/check-forced-rolling-assets.sh` owns this
+local preflight for the rolling workflow's publish job. It is not a
 tagged-release or consumer asset validator; those paths keep their own checks.
 
 Each sidecar has one GNU checksum record: a digest, a text marker of two spaces

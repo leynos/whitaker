@@ -28,26 +28,6 @@ CACHE_ACTION_SHA = "55cc8345863c7cc4c66a329aec7e433d2d1c52a9"
 RESTORE_ACTION = f"actions/cache/restore@{CACHE_ACTION_SHA}"
 SAVE_ACTION = f"actions/cache/save@{CACHE_ACTION_SHA}"
 INSTALL_ACTION = "taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68"
-#: shared-actions `main` at the merge of #546, which sits on #523 (ADR 0005
-#: there) and adds a 60 s sccache startup timeout with a fail-open start (a
-#: `sccache-fallback` warning, a summary line and an `sccache-status` output
-#: instead of a failed job). From #523 `setup-rust` owns sccache outright: it selects the backend from the
-#: runner, and on Ubicloud it exports the cache-proxy credentials, clears the
-#: v2 cache-service flag the proxy does not serve, and carries that cleared
-#: value past `mozilla-actions/sccache-action`, which sets it again. That is
-#: what retired the credentials step, the backend selector and the
-#: rolling-release local directory this repository used to wire by hand. It
-#: keeps the rules the previous pin (#458) brought: the built-in `github`
-#: provider archives no `target/<profile>`, and the server starts from a `run:`
-#: step after the exports.
-#:
-#: Asserted by value rather than by shape, so a bump has to update this
-#: constant and someone has to confirm the new revision still leaves this
-#: repository the sole owner of its caches.
-SHARED_ACTIONS_REF: Final[str] = "6cec89bac47a21cf756d68d638a9a510998e57f8"
-
-SETUP_RUST_ACTION = f"leynos/shared-actions/.github/actions/setup-rust@{SHARED_ACTIONS_REF}"
-
 #: Every Ubicloud job, mapped to the workflow that declares it.
 UBICLOUD_JOBS: dict[str, str] = {
     "coverage-check": "ci.yml",
@@ -103,6 +83,7 @@ CACHE_KEY_WRITERS: dict[str, str] = {
     # name. The rolling-release lanes' `sccache-rolling-v1-` and
     # `sccache-depbin-v1-` families went with the local-directory backend.
     "cargo-registry-windows-v1-": "windows-compat",
+    "dylint-driver-windows-v1-": "windows-compat",
     "cargo-registry-rolling-v1-": "build-lints",
     "cargo-registry-depbin-v1-": "build-dependency-binaries",
 }
@@ -196,6 +177,32 @@ def load_workflow(workflow_name: str) -> dict[str, Any]:
     workflow = parse_workflow(workflow_path.read_text(encoding="utf-8"))
     assert isinstance(workflow, dict), f"{workflow_name} must parse to a mapping"
     return workflow
+
+
+SETUP_RUST_PREFIX = "leynos/shared-actions/.github/actions/setup-rust@"
+
+
+def _ci_setup_rust_reference() -> str:
+    """Return the shared-actions revision `ci.yml` pins `setup-rust` at.
+
+    The revision is read from the workflow rather than restated here, so a
+    shared-actions bump edits the workflows alone. What the contracts hold is
+    that every workflow names the same revision, as a full 40-character SHA
+    (`shared_action_pin_test.py`); this is the one they compare against.
+    """
+    jobs = load_workflow("ci.yml").get("jobs", {})
+    for job in jobs.values():
+        for step in job.get("steps", []) if isinstance(job, dict) else []:
+            uses = step.get("uses") if isinstance(step, dict) else None
+            if isinstance(uses, str) and uses.startswith(SETUP_RUST_PREFIX):
+                return uses.removeprefix(SETUP_RUST_PREFIX)
+    raise AssertionError("ci.yml calls no setup-rust, so there is no pin to compare with")
+
+
+#: The shared-actions revision every workflow pins, as read from `ci.yml`.
+SHARED_ACTIONS_REF: Final[str] = _ci_setup_rust_reference()
+
+SETUP_RUST_ACTION = f"{SETUP_RUST_PREFIX}{SHARED_ACTIONS_REF}"
 
 
 def load_job(job_name: str) -> dict[str, Any]:
