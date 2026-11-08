@@ -2,7 +2,7 @@
 
 ## Status and purpose
 
-Status: DRAFT — awaiting explicit user approval before implementation.
+Status: IN PROGRESS — approved for implementation on 2026-11-08.
 
 This plan delivers an experimental `macro_aware_cognitive_complexity` lint. A
 function containing four logging calls should score 1 regardless of whether
@@ -583,8 +583,8 @@ may be slow; queued work is not hung and must not be duplicated.
   published with verified upstream in draft PR #574.
 - [x] 2026-11-08: Read #561 and #579; replace the fixed-May constraint with
   Clippy alignment, safe-rollout dependency, and per-generation revalidation.
-- [ ] Gate and publish the toolchain clarification.
-- [ ] Explicit user approval.
+- [x] 2026-11-08: Gate and publish the toolchain clarification.
+- [x] 2026-11-08: Explicit user approval received; implementation begins.
 - [ ] M1: classifier, adapter, evidence, and Verus proof.
 - [ ] M2: standalone lint, parity, localization, and logging matrix.
 - [ ] M3: experimental suite/installer registration and documentation.
