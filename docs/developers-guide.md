@@ -3811,9 +3811,13 @@ test that runs the installer with the real data directory must also redirect
 that directory, because the installation records `bootstrap.json` and
 `installed_lint_paths.json` there. On Linux, setting `XDG_DATA_HOME` to a
 temporary directory does that. Windows and macOS resolve the data directory
-from a platform API that ignores `XDG_DATA_HOME`, so a test on those platforms
-must either inject a `BaseDirs` implementation or read the directory the
-install actually wrote. `installer/tests/bootstrap_run.rs` exercises
+from a platform API that ignores `XDG_DATA_HOME`, so a test that drives the
+binary cannot rely on it. `SystemBaseDirs` honours an absolute
+`WHITAKER_INSTALLER_TEST_DATA_HOME` (`test_support::TEST_DATA_HOME_ENV`) in
+debug builds instead, which keeps the record inside the test's temporary tree
+on every platform; release builds ignore the variable. A test that needs the
+directories in process can inject its own `BaseDirs` implementation rather than
+setting the variable. `installer/tests/bootstrap_run.rs` exercises
 `whitaker-installer run` the same way against a stub `cargo`, covering cold and
 warm runs, concurrent cold runs, relocation, overwritten variables, exit-status
 preservation, and each refusal.

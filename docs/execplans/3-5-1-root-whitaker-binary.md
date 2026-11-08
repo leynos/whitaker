@@ -1747,6 +1747,23 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
   not mark the plan `COMPLETE`. Date/Author: 2026-11-08, implementation
   supervisor.
 
+- **D-27: Isolate the root-install end-to-end test through a debug-only data
+  root.** CodeRabbit's approval-response comment on `7f57dd75` observed that
+  `tests/root_install_fixture` resolved the child's data root from the platform
+  API on Windows and macOS, so the test wrote an installation record into a
+  developer's real data directory. Windows resolves the data directory from the
+  known-folder API and ignores `XDG_DATA_HOME`, and the CLI offers no injection
+  point for it, so the fixture cannot isolate the child by environment alone. A
+  debug-only override, `WHITAKER_INSTALLER_TEST_DATA_HOME`, follows the
+  existing test seams (`WHITAKER_INSTALLER_TEST_STAGE_SUITE`,
+  `WHITAKER_INSTALLER_TEST_CLIPPY_SNAPSHOT_MANIFEST`): debug builds honour an
+  absolute value and release builds ignore it, so it cannot relocate a real
+  installation. The same review found that `recorded_library_paths` filtered
+  recorded paths with `is_dir()` before the resolver could inspect them, hiding
+  an unreadable data directory behind the ordinary "nothing installed" state;
+  `InstallationRecord::into_absolute_paths` now leaves that distinction to
+  `classify_candidate`. Date/Author: 2026-11-08, implementation supervisor.
+
 ## Outcomes & retrospective
 
 - **EP-M0, 2026-08-24.** Complete. Extracted the compiler-private driver into
@@ -2320,6 +2337,20 @@ failed to exec the cached dylint driver under
 `~/.cache/whitaker-dylint-drivers/dylint-6.3.0/clippy-e4608a25…/` while that
 directory was still being populated, and passed on nextest's automatic retry.
 That is a driver-cache race, not a candidate failure.
+
+CodeRabbit's approval-response comment on `7f57dd75` raised two findings that
+still applied to that head, and both were verified against the source before
+repair. The first: `tests/root_install_fixture` resolved the child's data root
+from the platform API on Windows and macOS, so the end-to-end install wrote its
+installation record into a developer's real data directory. The fixture now
+names the data root through a debug-only installer override
+(`WHITAKER_INSTALLER_TEST_DATA_HOME`), which keeps the record inside the
+fixture's temporary tree on every platform, and the test asserts that the real
+record is byte-for-byte unchanged. The second: `recorded_library_paths`
+filtered recorded paths with `is_dir()` before `classify_candidate` could
+inspect them, so a directory that exists but cannot be read was reported as
+"nothing installed". `InstallationRecord::into_absolute_paths` leaves that
+distinction to the resolver, whose error branch is now reachable and covered.
 
 To be completed at each milestone boundary and at completion. Before setting
 this plan to `COMPLETE`, reconcile every entry in `Surprises & discoveries`
