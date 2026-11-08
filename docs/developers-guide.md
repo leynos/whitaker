@@ -2792,6 +2792,24 @@ Without explicit declarations, Cargo would infer fallback names such as
 workflow invocations, so release and rolling-release builds would fail even
 though the source files exist.
 
+### Which libraries the rolling archive ships
+
+`whitaker-package-lints --release-dir` ships `libwhitaker_suite` and the crates
+in the installer's `LINT_CRATES` that `PINNED_INSTALLER_LINT_CRATES`
+(`installer/src/bin/package_lints.rs`) also names. `LINT_CRATES` holds standard
+lints only; experimental lints, in `EXPERIMENTAL_LINT_CRATES`, are never
+packaged and are absent from the default suite. The pinned list is the
+`LINT_CRATES` of the oldest installer that `install-whitaker` still offers
+(v0.2.9, whose nine crates v0.2.10 and v0.2.11 share). It is a second guard: an
+installer prunes an unrequested standalone library only when it knows the
+crate's name, so a library for any newer crate would load beside the suite and
+rustc would reject the duplicate lint registration (issue #565, where
+`string_continuation_style` shipped both ways). Add a crate to the pinned list
+only when the oldest pinned installer lists it. The unit tests and the process
+test in `installer/tests/behaviour_packaging_cli.rs` package a release
+directory that holds every library and assert the archive and manifest hold
+exactly the standard lints and the suite.
+
 ### Validation coverage and purpose
 
 Workflow validation in `tests/workflows/` protects this contract from drift:
@@ -4501,10 +4519,12 @@ Whitaker categorizes lints into two tiers:
   false positives or undergo breaking changes. They require explicit opt-in via
   the `--experimental` flag.
 
-The current experimental set contains `rstest_helper_should_be_fixture`. It is
-feature-gated in the suite as `experimental-rstest-helper-should-be-fixture`
-and listed in `installer/src/resolution.rs` so the installer can derive the
-matching suite feature automatically.
+The current experimental set contains `rstest_helper_should_be_fixture` and
+`string_continuation_style`. They are feature-gated in the suite as
+`experimental-rstest-helper-should-be-fixture` and
+`experimental-string-continuation-style`, and listed in
+`installer/src/resolution.rs` so the installer can derive the matching suite
+feature automatically.
 
 `rstest_helper_should_be_fixture` currently uses an in-crate collector rather
 than a shared adapter. The collector stores passive call-site evidence in

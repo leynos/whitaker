@@ -92,6 +92,7 @@ fn then_early_pass_count(world: &RegistrationWorld, count: usize) {
 /// pass has been registered, and unlike a late lint omitted from
 /// `late_lint_methods!`, a missing or mistaken `register_early_pass` line is
 /// not a compile error.
+#[cfg(feature = "experimental-string-continuation-style")]
 #[then("the early pass is the string continuation style pass")]
 fn then_early_pass_is_string_continuation(world: &RegistrationWorld) {
     let store = world.store.borrow();
@@ -170,7 +171,15 @@ fn then_registration_succeeds(world: &RegistrationWorld) {
 #[scenario(path = "tests/features/suite_registration.feature", index = 0)]
 fn scenario_registers_cleanly(world: RegistrationWorld) { let _ = world; }
 
+#[cfg(not(feature = "experimental-string-continuation-style"))]
 #[scenario(path = "tests/features/suite_registration.feature", index = 1)]
+fn scenario_registers_no_early_pass_by_default(world: RegistrationWorld) { let _ = world; }
+
+#[cfg(feature = "experimental-string-continuation-style")]
+#[scenario(
+    path = "tests/features/suite_registration_experimental.feature",
+    index = 0
+)]
 fn scenario_registers_early_pass(world: RegistrationWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/suite_registration.feature", index = 2)]
