@@ -1164,8 +1164,11 @@ shapes. `coverage-warmup` writes for `coverage-check`. `linux-full` writes for
 itself, because `ci.yml` runs it on the push. That makes its shapes the lane's
 by construction, where a separate job would be a copy that could drift, and the
 lane's non-compiling steps add under a minute to a warm run. No other job may
-run on that push, since each would be a second writer to `main`'s scope, so
-`windows-compat` is excluded from it and `coverage-check` already runs on pull
+run on that push, since each would be a second writer to `main`'s scope.
+`windows-compat` is the exception that proves it: it runs there to write
+GitHub's own store, which the Ubicloud lanes never read, so a pull request's
+first Windows push starts from a warm compiler cache and a restored Dylint
+driver instead of a cold one (#457). `coverage-check` already runs on pull
 requests alone. A pull request cannot write `main`'s scope at all. Its writes
 land in its own ref's scope, so the pull-request lanes only ever read the
 trunk's store.
