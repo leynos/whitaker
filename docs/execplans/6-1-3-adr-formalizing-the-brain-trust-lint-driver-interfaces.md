@@ -1342,6 +1342,18 @@ Thresholds that trigger escalation, not quality targets.
   rather than inferred. Date/Author: 2026-11-08, implementation agent, in
   response to round-12 review.
 
+- **Decision: withdraw the `log::debug!` observability channel from ADR 005 and
+  route the unresolved-subject count through the emitted run's counters
+  instead.** Rationale: a two-run probe falsified the rule as written. Dylint's
+  driver installs `env_logger` in its own `log` instance, but `dylint_driver`
+  loads lint libraries `RTLD_LOCAL`, so a lint cdylib keeps its own statically
+  linked `log` and cannot reach that logger; the lint's `info!` arm was proven
+  to execute while emitting nothing. This supersedes the round-11 rebuttal,
+  which had accepted the `tracing` finding's premise but rejected its remedy on
+  reasoning that applied to the driver rather than the lint. Date/Author:
+  2026-11-08, implementation agent, after CodeRabbit declined to accept the
+  round-11 reply and requested the runtime check.
+
 ## Outcomes & retrospective
 
 Completed 2026-09-27.
@@ -2652,29 +2664,62 @@ Normative rules:
    an internal compiler error when the compilation is otherwise clean
    (`rustc_errors/src/lib.rs:1480-1486`), and a warn-only lint never emits a
    real error, so *every* delayed bug it creates aborts the build. Unresolvable
-   input is reported through the `log::debug!` event specified in rule 9 —
-   never through `tracing`, for the reason given there — and the run's
-   counters. The precedent to follow is
-   `crates/module_max_lines/src/driver.rs:86-93`, which logs and returns.
+   input is reported the way rule 9 specifies — never through `tracing`, and
+   not through `log` either, for the reason given there — and through the run's
+   counters. The control flow to follow is
+   `crates/module_max_lines/src/driver.rs:86-93`, which reports and returns
+   rather than escalating; its `log::debug!` sink is inert, as rule 9 records.
    **Known limitation**: four existing call sites carry this hazard today —
    `crates/bumpy_road_function/src/driver/mod.rs:224` and `:235`, and
    `segment_builder.rs:164` and `:186` — recorded as follow-up work.
-9. **Observability.** Every drop emits one `log::debug!` naming the subject and
-   the reason, matching the discipline in
-   `crates/rstest_helper_should_be_fixture/src/collector.rs:140-144`. The
-   emitted run carries an unresolved-subject count per reason **even when it is
-   zero**, so "clean" is falsifiably different from "resolution broken". `VP-5`
-   is the obligation this creates. **`log`, not `tracing`**, deliberately
-   against the `AGENTS.md` preference, because `log` is the only sink installed
-   in a lint driver: Dylint generates the driver's `main` and calls
-   `env_logger::init()` there (`dylint` 6.0.1, `src/driver_builder.rs:35`).
-   This workspace builds `tracing` with `default-features = false` and only
-   `attributes` and `std` (`Cargo.toml:31`), leaving the `log` bridge off, and
-   no `tracing-subscriber` exists in the tree, so a `tracing::debug!` here
-   would compile and silently emit nothing. Structured content is carried as
-   named fields inside the `log` message (`subject`, `reason`, and the file
-   identifier where one resolved), following the `target:`-tagged form at
-   `crates/module_max_lines/src/driver.rs:86-93`.
+9. **Observability.** Every drop is counted, naming the subject and the reason.
+   The emitted run carries an unresolved-subject count per reason **even when
+   it is zero**, so "clean" is falsifiably different from "resolution broken".
+   `VP-5` is the obligation this creates.
+
+   **Neither `log` nor `tracing` may carry that count**, which reverses the
+   rule as first drafted. The drafting error was to reason from the driver's
+   `env_logger` call to the lint's reachability, and a probe shows the
+   inference is false. Dylint does generate the driver's `main` and call
+   `env_logger::init()` there (`dylint` 6.0.1, `src/driver_builder.rs:35`), but
+   that logger belongs to the **driver's** `log` instance, and each lint
+   library statically links its own. `dylint_driver` opens each lint library
+   with `libloading` under `RTLD_LAZY | RTLD_LOCAL | RTLD_NODELETE`
+   (`dylint_driver` 6.3.0, `src/lib.rs:120-131` — the version the probe ran,
+   and the one PR 372 and `main` select), and `RTLD_LOCAL` withholds the
+   library's symbols from global scope, so the lint's `log` statics can neither
+   see the driver's logger nor be interposed by it. The installed binaries
+   confirm the linkage: four built lint cdylibs define 83–96 `log` symbols and
+   import none, with `MAX_LOG_LEVEL_FILTER` bound `LOCAL`, while the driver's is
+   `GLOBAL`. The loading flag is a property of `dylint_driver`, not of the
+   `dylint` version in `Cargo.lock`, so the conclusion does not depend on which
+   `dylint` release a given layer pins; only the citation is versioned.
+
+   The behavioural probe is the decisive evidence, and it uses the branch
+   itself as the control. With
+   `[no_std_fs_operations] excluded_crates = ["logprobe"]`, that lint takes its
+   `info!` arm (`crates/no_std_fs_operations/src/driver.rs:86-89`): the
+   diagnostic that the same file emits under an empty exclusion list
+   disappears, so the arm provably ran. Run under `RUST_LOG=debug` in the same
+   process, the driver's own `log::debug!` prints and the lint's `info!` prints
+   nothing. `log` is therefore **not** a live sink for lint code, and the
+   earlier claim that it was is superseded by this record.
+
+   `tracing` is no better, though for a different reason. This workspace builds
+   `tracing` with `default-features = false` and only `attributes` and `std`
+   (`Cargo.toml:31`), leaving its `log` bridge off, and no `tracing-subscriber`
+   exists in the tree. `AGENTS.md` forbids a library installing a global
+   subscriber, so a lint crate cannot wire one up, and `RTLD_LOCAL` would keep
+   any such subscriber local to the lint anyway.
+
+   The count therefore travels through the **lint diagnostic and the run's
+   counters**, which are the channels that do cross the library boundary. A
+   resolution failure degrades the SARIF region, not the compiler diagnostic:
+   the lint still emits its finding, and the failure is visible as a counter in
+   the emitted run. Where a per-item record is needed for diagnosis, it is
+   attached to the finding's own properties rather than logged. This keeps the
+   rule's purpose — a clean run must be distinguishable from a broken one —
+   while using a channel that demonstrably arrives.
 10. **`uriBaseId`.** Brain trust results emit `artifactLocation.uri` as the
     repository-relative path with `uriBaseId` absent. SARIF §3.4.4 permits
     this, and GitHub code scanning documents a repository-root-relative path as
@@ -3712,40 +3757,31 @@ check reads. The lesson is that a normative formula needs to be evaluated, not
 just bracketed — the fix now states the arithmetic explicitly (`2 + 2 = 4`) so
 the next reader can check it without reconstructing it.
 
-**Finding 2, verified and only partly accepted: `tracing` cannot be the sink
-here.** The finding observed correctly that `AGENTS.md` prefers `tracing` over
+**Finding 2, superseded in Round 14: `tracing` is not a sink, but neither is
+`log`.** The finding observed correctly that `AGENTS.md` prefers `tracing` over
 direct `log` macros, and asked that rules 8 and 9 be rewritten to specify
-`tracing::debug!` with subject and reason fields. The observation about the
-house style is right; the prescribed remedy would have been a regression, and
-the reason is checkable in three places:
+`tracing::debug!` with subject and reason fields. Round 11 rejected that remedy
+and kept `log::debug!`, reasoning that Dylint's generated driver `main` calls
+`env_logger::init()` (`dylint` 6.0.1, `src/driver_builder.rs:35`) and that
+`log` is therefore "the sink that is actually installed at run time". Two
+further facts were cited: this workspace builds `tracing` with
+`default-features = false` plus `attributes` and `std` (`Cargo.toml:31`),
+leaving its `log` bridge off, and no `tracing-subscriber` appears in
+`Cargo.lock`.
 
-- Dylint generates each lint driver's `main` and calls `env_logger::init()` in
-  it (`dylint` 6.0.1, `src/driver_builder.rs:35`). `log` is the sink that is
-  actually installed at run time.
-- This workspace builds `tracing` with `default-features = false` and only the
-  `attributes` and `std` features (`Cargo.toml:31`), so `tracing`'s `log`
-  bridge — which is what would forward events to that `env_logger` — is off.
-  `cargo tree -e features -i tracing --workspace` confirms it: no
-  `tracing feature "log"` appears anywhere in the graph.
-- No `tracing-subscriber` appears in `Cargo.lock` at all, and `AGENTS.md`
-  forbids a library installing a global subscriber, so a lint crate could not
-  wire one up even if it wanted to.
+Those three facts are each still true, and they do establish that `tracing`
+would emit nothing here. They do not establish what Round 11 concluded from
+them. The `env_logger` instance belongs to the **driver's** `log`, and each
+lint library statically links its own copy, so a lint's `log::debug!` reaches
+that logger no more than a `tracing::debug!` would. Round 11 checked the
+driver's initialization and never checked the lint's reachability to it — the
+same class of error as Finding 1, a relation read as a literal. Round 14
+records the probe that settled it and the rule 8/9 text that replaces this one.
 
-So `tracing::debug!` in `resolve_subject_location` would compile, pass clippy,
-and silently discard every event — producing precisely the "clean looks
-identical to broken" ambiguity that rule 9's counted reasons exist to remove.
-`AGENTS.md`'s own rule is about preferring structured events over `println!`
-and unstructured text; it does not require a sink that drops the message.
-
-**What changed instead.** Rules 8 and 9 now keep `log::debug!` and *justify* it
-in place, naming the Dylint `env_logger` line, the workspace feature selection,
-and the absence of any subscriber — a reader who wonders why the house style is
-not followed gets the reason beside the rule rather than in a review thread.
-The structured content the finding asked for is preserved by carrying `subject`
-and `reason` as named fields inside the `log` message, following the existing
-`target:`-tagged form at `crates/module_max_lines/src/driver.rs:86-93`. The
-mirror of rules 8 and 9 in `BTD-REQ-01` above carries the same correction and
-the same justification.
+**What changed in Round 11.** Rules 8 and 9 kept `log::debug!` and justified it
+in place, and the mirror of rules 8 and 9 in `BTD-REQ-01` carried the same
+correction and justification. That justification has since been withdrawn; see
+Round 14 for the current text.
 
 Nothing else changed. No code, no manifest, no test.
 
@@ -3860,3 +3896,68 @@ that this assignment does not own.
 documentation edits is green in hosted CI. Locally, `make markdownlint` (79
 files, 0 errors), `make nixie` (all diagrams validated), and the canonical
 `mdtablefix` check (`2 files left unchanged`) all pass on `e1fb9b68`.
+
+### Round 14 — the `log` sink does not cross the library boundary, 2026-11-08
+
+CodeRabbit declined to accept Round 11's rebuttal of its `tracing` finding, and
+it was right to. Its reply asked for one specific check: run an existing lint
+with debug logging enabled and see whether the lint's output reaches stderr.
+That check was run, and it **falsifies the rule as Round 11 wrote it**. `log`
+is not a live sink for lint code either.
+
+**Why the Round 11 reasoning failed.** Round 11 established that the driver
+calls `env_logger::init()` and inferred that a lint's `log::debug!` would
+therefore reach stderr. The inference skips a step: the logger is installed in
+the *driver's* `log` instance, and the question is whether the lint shares it.
+It does not. `dylint_driver` loads every lint library with `libloading` under
+`RTLD_LAZY | RTLD_LOCAL | RTLD_NODELETE` (`dylint_driver` 6.3.0,
+`src/lib.rs:120-131`), and `RTLD_LOCAL` excludes the library's symbols from
+global scope. Each lint cdylib therefore keeps its own statically linked `log`,
+with its own `LOGGER` and `MAX_LOG_LEVEL_FILTER`. This is the same mistake as
+Finding 1 of Round 12 and Finding 2 of Round 11: a true literal (the
+`env_logger::init()` call) read as a relation (that the lint reaches it) it
+does not establish.
+
+**Static evidence.** Four lint cdylibs built in a sibling worktree were
+inspected with `readelf`. Each defines 83–96 `log` symbols and imports zero,
+and binds `MAX_LOG_LEVEL_FILTER` `LOCAL`; the driver binds the same symbol
+`GLOBAL`. A library that shares the driver's `log` would import those symbols
+as undefined. None does.
+
+**Behavioural evidence, with the branch used as its own control.** The
+`no_std_fs_operations` lint emits `info!` when the current crate is excluded
+(`crates/no_std_fs_operations/src/driver.rs:86-89`). Two runs of the real
+driver against a scratch crate, differing only in `dylint.toml`:
+
+| `excluded_crates` | diagnostic emitted | log lines under `RUST_LOG=debug` |
+| ----------------- | ------------------ | -------------------------------- |
+| `[]` (control)    | 1                  | — (arm not taken)                |
+| `["logprobe"]`    | 0                  | 0                                |
+
+The disappearance of the diagnostic in the treatment proves the `info!` arm
+executed, so the call was reached; the zero log lines prove it produced
+nothing. In the same process, and in the same treatment run, the driver's own
+`log::debug!` (`dylint_driver`, `src/lib.rs:411`) printed normally. The
+contrast is within a single process, which rules out an environment or
+`RUST_LOG` parsing explanation.
+
+**What changed.** Rule 9 no longer routes the unresolved-subject count through
+`log`. The count travels in the emitted run's counters and in the finding's own
+properties, both of which do cross the library boundary; rule 8's reference to
+`log::debug!` as the reporting channel is corrected to match, and its citation
+of `module_max_lines` is narrowed to the control-flow precedent it actually
+supports. The mirror in `BTD-REQ-01` carries the same correction. The
+`AGENTS.md` preference for structured events is no longer the operative
+question: with neither `log` nor `tracing` live in a lint, the choice is
+between channels that arrive and channels that do not.
+
+**Lesson recorded.** Round 11 was not a careless reading — it cited three true
+facts — but all three described the *driver* rather than the *lint*, and no
+check exercised the lint's side. A rule about observability has to be validated
+by observing something, and the cheapest such validation was a two-run probe
+that took minutes. Rounds 12 and 14 both found defects that survived earlier
+rounds for the same reason: literals were tallied while relations went
+unchecked. The plan now treats "does this claim name a relation?" as the
+question to ask of every normative sentence before accepting it.
+
+Nothing else changed. No code, no manifest, no test.

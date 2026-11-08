@@ -536,35 +536,62 @@ The normative rules are these.
    an internal compiler error when the compilation is otherwise clean
    (`rustc_errors/src/lib.rs:1480-1486`), and a warn-only lint never emits a
    real error, so every delayed bug it creates aborts the build. Unresolvable
-   input is reported through the `log::debug!` event specified in rule 9 —
-   never through `tracing`, for the reason given there — and the run's
-   counters. The precedent to follow is
-   `crates/module_max_lines/src/driver.rs:86-93`, which logs and returns.
+   input is reported the way rule 9 specifies — never through `tracing`, and
+   not through `log` either, for the reason given there — and through the run's
+   counters. The control flow to follow is
+   `crates/module_max_lines/src/driver.rs:86-93`, which reports and returns
+   rather than escalating; its `log::debug!` sink is inert, as rule 9 records.
    **Known limitation**: four existing call sites carry this hazard today —
    `crates/bumpy_road_function/src/driver/mod.rs:224` and `:235`, and
    `segment_builder.rs:164` and `:186` — recorded here as follow-up work.
-9. **Observability.** Every drop emits one `log::debug!` naming the subject
-   and the reason, matching the discipline in
-   `crates/rstest_helper_should_be_fixture/src/collector.rs:140-144`. The
-   emitted run carries an unresolved-subject count per reason **even when it is
-   zero**, so that "clean" is falsifiably different from "resolution broken".
+9. **Observability.** Every drop is counted, naming the subject and the reason.
+   The emitted run carries an unresolved-subject count per reason **even when
+   it is zero**, so that "clean" is falsifiably different from "resolution
+   broken". `VP-5` is the obligation this creates.
 
-   **Why `log` and not `tracing`**, which is a deliberate deviation from the
-   `AGENTS.md` preference for structured `tracing` events: `log` is the only
-   sink actually installed in a lint driver. Dylint generates the driver's
-   `main` and calls `env_logger::init()` in it (`dylint` 6.0.1,
-   `src/driver_builder.rs:35`), so a `log::debug!` reaches stderr whereas a
-   `tracing::debug!` would reach nothing. This workspace builds `tracing` with
-   `default-features = false` and only `attributes` and `std`
-   (`Cargo.toml:31`), which leaves the `log` bridge off, and no
+   **Neither `log` nor `tracing` may carry that count**, which reverses the
+   rule as first drafted. The drafting error was to reason from the driver's
+   `env_logger` call to the lint's reachability, and a probe shows the
+   inference is false. Dylint does generate the driver's `main` and call
+   `env_logger::init()` in it (`dylint` 6.0.1, `src/driver_builder.rs:35`), but
+   that logger belongs to the **driver's** `log` instance, and each lint
+   library statically links its own. `dylint_driver` opens each lint library
+   with `libloading` under `RTLD_LAZY | RTLD_LOCAL | RTLD_NODELETE`
+   (`dylint_driver` 6.3.0, `src/lib.rs:120-131` — the version the probe ran,
+   and the one PR 372 and `main` select), and `RTLD_LOCAL` withholds the
+   library's symbols from global scope, so the lint's `log` statics can neither
+   see the driver's logger nor be interposed by it. The installed binaries
+   confirm the linkage: four built lint cdylibs define 83–96 `log` symbols and
+   import none, with `MAX_LOG_LEVEL_FILTER` bound `LOCAL`, while the driver's is
+   `GLOBAL`. The loading flag is a property of `dylint_driver`, not of the
+   `dylint` version in `Cargo.lock`, so the conclusion does not depend on which
+   `dylint` release a given layer pins; only the citation is versioned.
+
+   The behavioural probe is the decisive evidence, and it uses the branch
+   itself as the control. With
+   `[no_std_fs_operations] excluded_crates = ["logprobe"]`, that lint takes its
+   `info!` arm (`crates/no_std_fs_operations/src/driver.rs:86-89`): the
+   diagnostic that the same file emits under an empty exclusion list
+   disappears, so the arm provably ran. Run under `RUST_LOG=debug` in the same
+   process, the driver's own `log::debug!` prints and the lint's `info!` prints
+   nothing. `log` is therefore **not** a live sink for lint code, and the
+   earlier claim that it was is superseded by this record.
+
+   `tracing` is no better, though for a different reason. This workspace builds
+   `tracing` with `default-features = false` and only `attributes` and `std`
+   (`Cargo.toml:31`), which leaves its `log` bridge off, and no
    `tracing-subscriber` exists anywhere in the tree. `AGENTS.md` forbids a
-   library installing a global subscriber, so a lint crate cannot wire that up
-   itself. Emitting through `tracing` here would compile and silently discard
-   every event — the very "clean versus broken" ambiguity this rule exists to
-   remove. Structured content is therefore carried as named fields inside the
-   `log` message (`subject`, `reason`, and the file identifier where one
-   resolved), following the `target:`-tagged form at
-   `crates/module_max_lines/src/driver.rs:86-93`.
+   library installing a global subscriber, so a lint crate cannot wire one up,
+   and `RTLD_LOCAL` would keep any such subscriber local to the lint anyway.
+
+   The count therefore travels through the **lint diagnostic and the run's
+   counters**, which are the channels that do cross the library boundary. A
+   resolution failure degrades the SARIF region, not the compiler diagnostic:
+   the lint still emits its finding, and the failure is visible as a counter in
+   the emitted run. Where a per-item record is needed for diagnosis, it is
+   attached to the finding's own properties rather than logged. This keeps the
+   rule's purpose — a clean run must be distinguishable from a broken one —
+   while using a channel that demonstrably arrives.
 10. **`uriBaseId`.** Brain trust results emit `artifactLocation.uri` as the
     repository-relative path with `uriBaseId` absent. SARIF §3.4.4 permits
     this, and GitHub code scanning documents a repository-root-relative path
