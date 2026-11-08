@@ -27,7 +27,19 @@ use crate::{
 
 mod install;
 mod install_repository;
-use install::*;
+// Re-exported to the sibling test modules under `deps::tests`, which name the
+// mode through this module rather than importing it themselves.
+#[cfg(test)]
+use install::InstallMode;
+use install::{
+    InstallContext,
+    RepositoryInstallContext,
+    cargo_fallback_mode,
+    command_error_message,
+    command_succeeds,
+    install_missing_tools,
+    repository_install_context,
+};
 
 /// Abstraction for running external commands.
 pub trait CommandExecutor {
@@ -87,6 +99,7 @@ pub enum PathScanFailureCategory {
 
 impl PathScanFailureCategory {
     /// Return the low-cardinality field value used by trace events.
+    #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::NonUtf8Path => "non_utf8_path",
@@ -115,7 +128,7 @@ pub(crate) struct PathScanResult {
 impl PathScanResult {
     /// Build a result for a found binary and any skipped-entry failures.
     #[cfg(test)]
-    fn new(binary: Option<std::path::PathBuf>, failures: Vec<PathScanFailure>) -> Self {
+    const fn new(binary: Option<std::path::PathBuf>, failures: Vec<PathScanFailure>) -> Self {
         Self { binary, failures }
     }
 }
@@ -167,7 +180,7 @@ pub struct DylintToolStatus {
 impl DylintToolStatus {
     /// Returns `true` when both tools are installed.
     #[must_use]
-    pub fn all_installed(&self) -> bool { self.cargo_dylint && self.dylint_link }
+    pub const fn all_installed(&self) -> bool { self.cargo_dylint && self.dylint_link }
 }
 
 /// How a run should react when a published artefact is missing.
@@ -255,6 +268,10 @@ pub(crate) fn check_dylint_tools_with_locator(
 }
 
 /// Install missing tools without emitting progress output.
+///
+/// # Errors
+///
+/// Returns query, installation, or source-policy errors from the install flow.
 pub fn install_dylint_tools(
     executor: &dyn CommandExecutor,
     status: &DylintToolStatus,
@@ -289,7 +306,7 @@ pub fn install_dylint_tools_with_output(
     let cargo_fallback_mode = cargo_fallback_mode(executor)?;
     install_missing_tools(
         executor,
-        status,
+        *status,
         stderr,
         &InstallContext {
             repo: repository_install_context(
@@ -317,20 +334,26 @@ pub fn install_dylint_tools_with_options(
     stderr: &mut dyn Write,
     options: DependencyInstallOptions<'_>,
 ) -> Result<()> {
+    let DependencyInstallOptions {
+        dirs,
+        repository_installer,
+        target,
+        policy,
+    } = options;
     let cargo_fallback_mode = cargo_fallback_mode(executor)?;
     install_missing_tools(
         executor,
-        status,
+        *status,
         stderr,
         &InstallContext {
             repo: repository_install_context(
-                Some(options.dirs),
-                Some(options.repository_installer),
-                options.target.as_ref(),
+                Some(dirs),
+                Some(repository_installer),
+                target.as_ref(),
             ),
             cargo_fallback_mode,
-            quiet: options.policy.quiet,
-            no_source_fallback: options.policy.no_source_fallback,
+            quiet: policy.quiet,
+            no_source_fallback: policy.no_source_fallback,
         },
     )
 }
@@ -576,15 +599,13 @@ fn find_binary_in_directory(
     };
 
     let mut failure_categories = Vec::new();
-    let candidate = binary_candidates(binary_name)
-        .into_iter()
-        .find(|candidate| {
-            is_executable_file(
-                &directory_capability,
-                Utf8Path::new(candidate),
-                &mut failure_categories,
-            )
-        });
+    let candidate = binary_candidates(binary_name).into_iter().find(|name| {
+        is_executable_file(
+            &directory_capability,
+            Utf8Path::new(name),
+            &mut failure_categories,
+        )
+    });
     failures.extend(
         failure_categories
             .into_iter()
@@ -593,7 +614,7 @@ fn find_binary_in_directory(
                 category,
             }),
     );
-    candidate.map(|candidate| directory.join(candidate))
+    candidate.map(|found| directory.join(found))
 }
 
 /// Return executable candidate names in their PATH-search order.

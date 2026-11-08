@@ -1,8 +1,13 @@
-//! Bounded operational metrics for `whitaker-installer run`.
+//! Bounded operational metrics and logs for `whitaker-installer run`.
 //!
-//! The installer installs no recorder, so these are no-ops unless an embedding
-//! process provides one. Every label value is a fixed constant: no paths,
-//! toolchains, or error text reach a label.
+//! The installer installs no recorder, so the metrics are no-ops unless an
+//! embedding process provides one. Every label value is a fixed constant: no
+//! paths, toolchains, or error text reach a label.
+//!
+//! The log helpers live here for the same reason: `tracing`'s macros expand to
+//! enough control flow that a single call spends most of the workspace's
+//! cognitive-complexity budget, so each event gets its own one-call helper
+//! rather than sharing a function with the run's branching.
 
 use std::time::Duration;
 
@@ -118,6 +123,45 @@ pub(crate) const fn failure_label(error: &BootstrapError) -> &'static str {
         BootstrapError::Io { .. } => "io",
         BootstrapError::Spawn { .. } => "spawn_failed",
     }
+}
+
+/// Log a finished run at the level its result warrants.
+pub(crate) fn log_run(path: DriverPath, outcome: &'static str, succeeded: bool, elapsed_ms: u64) {
+    if succeeded {
+        log_run_ok(path, outcome, elapsed_ms);
+    } else {
+        log_run_failed(path, outcome, elapsed_ms);
+    }
+}
+
+/// Log a run that completed, whatever its child's exit code.
+fn log_run_ok(path: DriverPath, outcome: &'static str, elapsed_ms: u64) {
+    tracing::debug!(
+        driver = path.label(),
+        outcome,
+        elapsed_ms,
+        "bootstrap run finished"
+    );
+}
+
+/// Log a run that failed before or around the child.
+fn log_run_failed(path: DriverPath, outcome: &'static str, elapsed_ms: u64) {
+    tracing::warn!(
+        driver = path.label(),
+        outcome,
+        elapsed_ms,
+        "bootstrap run failed"
+    );
+}
+
+/// Log that the driver changed since it was verified, so this run goes cold.
+pub(crate) fn log_driver_changed(toolchain: &str) {
+    tracing::debug!(toolchain, "the driver changed since it was verified");
+}
+
+/// Log that the run is about to share an already verified driver.
+pub(crate) fn log_using_ready_driver(toolchain: &str) {
+    tracing::debug!(toolchain, "using the ready driver");
 }
 
 /// Record one finished run: the path it took, its outcome, and its duration.

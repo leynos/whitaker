@@ -317,6 +317,35 @@ Crates that depend on `whitaker_installer` see these changes:
   exhaustive matches.
 - The CLI gains `Command::Run(RunArgs)`. Update exhaustive matches on
   `Command`.
+- `output::DryRunInfo` replaces its `skip_deps`, `skip_wrapper` and `no_update`
+  fields with one `skip: SkipFlags` field, matching the `InstallArgs` grouping
+  below. Move the values into that field and read them through it:
+
+  ```rust
+  // Before 0.3.0
+  let info = DryRunInfo {
+      // ... other fields ...
+      skip_deps: args.skip_deps,
+      skip_wrapper: args.skip_wrapper,
+      no_update: args.no_update,
+  };
+
+  // From 0.3.0
+  let info = DryRunInfo {
+      // ... other fields ...
+      skip: SkipFlags {
+          skip_deps: args.skip.skip_deps,
+          skip_wrapper: args.skip.skip_wrapper,
+          no_update: args.skip.no_update,
+      },
+  };
+
+  if info.skip.skip_deps {
+      // ...
+  }
+  ```
+
+  The rendered dry-run text is unchanged; only the struct's shape moves.
 - `wrapper::generate_wrapper_scripts` takes one argument, `dirs`, instead of
   two. The `library_path` argument is removed because the wrappers no longer
   embed it:
@@ -360,7 +389,12 @@ to 1000) instead of floating-point rates:
 | `download_rate()` | `download_rate_permille()` |
 | `build_rate()`    | `build_rate_permille()`    |
 
-Each unit is a tenth of a percentage point: 333 permille represents 33.3%.
+Each unit is a tenth of a percentage point: 333 permille represents 33.3%. Both
+accessors are ordinary functions rather than `const` items, because they work
+out the rate from the counters at runtime. Code written against an earlier
+development build of 0.3.0 that called them in a `const` context has to move
+the call to runtime.
+
 Packaging functions now borrow their parameter structs. Pass a reference to
 `package_artefact`, `package_installer` and `package_dependency_binary`:
 
@@ -374,6 +408,18 @@ package_dependency_binary(dependency_params)?;
 package_artefact(&artefact_params)?;
 package_installer(&installer_params)?;
 package_dependency_binary(&dependency_params)?;
+```
+
+`ClippySnapshotError::invalid` and `ClippySnapshotError::io` borrow their path
+argument. Earlier development builds of 0.3.0 took it by value, so pass a
+reference:
+
+```rust
+// Earlier 0.3.0 development builds
+let error = ClippySnapshotError::invalid(path, "archive is missing");
+
+// From 0.3.0
+let error = ClippySnapshotError::invalid(&path, "archive is missing");
 ```
 
 The binstall metadata helpers `load_cargo_toml()` and

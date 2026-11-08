@@ -22,6 +22,7 @@ use crate::{
     dependency_binaries::DependencyBinaryInstaller,
     error::{InstallerError, Result},
     installer_packaging::TargetTriple,
+    output::write_stderr_line,
 };
 
 pub(super) struct RepositoryInstallContext<'a> {
@@ -50,14 +51,14 @@ pub(super) struct InstallContext<'a> {
 /// query fails.
 pub(super) fn install_missing_tools(
     executor: &dyn CommandExecutor,
-    status: &DylintToolStatus,
+    status: DylintToolStatus,
     stderr: &mut dyn Write,
     context: &InstallContext<'_>,
 ) -> Result<()> {
-    let mut remaining_status = *status;
+    let mut remaining_status = status;
 
-    for tool in DEPENDENCY_TOOLS.iter() {
-        if !should_install_tool(&remaining_status, tool) {
+    for tool in &DEPENDENCY_TOOLS {
+        if !should_install_tool(remaining_status, tool) {
             continue;
         }
 
@@ -79,11 +80,13 @@ pub(super) fn repository_install_context<'a>(
     target: Option<&'a TargetTriple>,
 ) -> Option<RepositoryInstallContext<'a>> {
     match (dirs, installer, target) {
-        (Some(dirs), Some(installer), Some(target)) => Some(RepositoryInstallContext {
-            dirs,
-            installer,
-            target,
-        }),
+        (Some(base_dirs), Some(repo_installer), Some(host_target)) => {
+            Some(RepositoryInstallContext {
+                dirs: base_dirs,
+                installer: repo_installer,
+                target: host_target,
+            })
+        }
         _ => None,
     }
 }
@@ -101,7 +104,7 @@ pub(super) fn cargo_fallback_mode(executor: &dyn CommandExecutor) -> Result<Inst
     })
 }
 
-pub(super) fn should_install_tool(status: &DylintToolStatus, tool: &DependencyTool) -> bool {
+pub(super) fn should_install_tool(status: DylintToolStatus, tool: &DependencyTool) -> bool {
     if tool == &CARGO_DYLINT_TOOL {
         !status.cargo_dylint
     } else if tool == &DYLINT_LINK_TOOL {
@@ -214,7 +217,7 @@ struct CargoInstallPlan<'a> {
 }
 
 impl<'a> CargoInstallPlan<'a> {
-    fn new(tool: &'a DependencyTool) -> Self {
+    const fn new(tool: &'a DependencyTool) -> Self {
         Self {
             tool,
             version: None,
@@ -222,14 +225,14 @@ impl<'a> CargoInstallPlan<'a> {
         }
     }
 
-    fn with_version(self, version: &'a str) -> Self {
+    const fn with_version(self, version: &'a str) -> Self {
         Self {
             version: Some(version),
             ..self
         }
     }
 
-    fn skip_binstall(self) -> Self {
+    const fn skip_binstall(self) -> Self {
         Self {
             skip_binstall: true,
             ..self
@@ -354,11 +357,10 @@ pub(super) fn command_error_message(output: &Output) -> String {
     }
 }
 
-pub(super) fn write_message(stderr: &mut dyn Write, quiet: bool, message: String) {
-    if quiet {
-        return;
+pub(super) fn write_message(stderr: &mut dyn Write, quiet: bool, message: impl std::fmt::Display) {
+    if !quiet {
+        write_stderr_line(stderr, message);
     }
-    let _ = writeln!(stderr, "{message}");
 }
 
 /// Run a command and report whether it exits successfully.
@@ -374,7 +376,7 @@ pub(super) fn command_succeeds(
     Ok(executor.run(cmd, args)?.status.success())
 }
 
-fn should_refresh_companions(outcome: InstallOutcome, status: &DylintToolStatus) -> bool {
+fn should_refresh_companions(outcome: InstallOutcome, status: DylintToolStatus) -> bool {
     outcome != InstallOutcome::RepositoryRelease && !status.dylint_link
 }
 
@@ -392,7 +394,7 @@ fn update_status_after_install(
     if tool == &CARGO_DYLINT_TOOL {
         status.cargo_dylint = true;
 
-        if should_refresh_companions(outcome, status) {
+        if should_refresh_companions(outcome, *status) {
             // Installing cargo-dylint locally can also provide dylint-link.
             status.dylint_link = is_tool_installed(executor, &DYLINT_LINK_TOOL)?;
         }

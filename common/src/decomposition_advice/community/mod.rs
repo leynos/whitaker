@@ -142,5 +142,5 @@ fn sort_communities(
 mod tests;
 
 #[cfg(kani)]
-#[path = "community_kani/mod.rs"]
+#[path = "../community_kani/mod.rs"]
 mod verify;

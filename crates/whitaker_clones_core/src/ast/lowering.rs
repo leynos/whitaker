@@ -13,7 +13,7 @@ use ra_ap_syntax::{
     TextRange,
     TextSize,
 };
-use tracing::{debug, error, warn};
+use tracing::debug;
 
 use super::{
     AstError,
@@ -24,30 +24,22 @@ use super::{
     NormalizedNode,
     NormalizedTree,
     cover::{candidate_covers_target, should_select_covering_candidate},
+    lowering_diagnostics::{
+        log_covering_failure,
+        log_lowering_depth_budget,
+        log_lowering_failure,
+        log_lowering_node_budget,
+        log_parser_recovery,
+        log_selection_depth_budget,
+        log_selection_node_budget,
+        log_span_validation_failure,
+    },
     metrics::record_lower_span_metrics,
 };
 pub use crate::hashing::PARSER_SCHEMA_VERSION;
 
 const MAX_AST_NODES: usize = 10_000;
 const MAX_AST_DEPTH: usize = 256;
-
-fn trace_ast_error(
-    error: AstError,
-    span_out_of_bounds_message: &'static str,
-    generic_message: &'static str,
-) -> AstError {
-    if let AstError::SpanOutOfBounds { start, end, len } = &error {
-        error!(
-            start = *start,
-            end = *end,
-            len = *len,
-            "{span_out_of_bounds_message}"
-        );
-    } else {
-        error!(?error, "{generic_message}");
-    }
-    error
-}
 
 /// Parses `file_text`, maps `span` to the smallest covering syntax node, and
 /// lowers that subtree into a [`NormalizedTree`].
@@ -91,87 +83,72 @@ pub fn lower_span(file_text: &str, span: ByteSpan) -> AstResult<NormalizedTree> 
 
 /// Lower the span and report whether parsing recovered.
 fn lower_span_inner(file_text: &str, span: ByteSpan) -> (AstResult<NormalizedTree>, bool) {
-    let mut recovered = false;
-    let result = (|| -> AstResult<NormalizedTree> {
-        ByteSpan::new(file_text, span.start(), span.end()).map_err(|error| {
-            trace_ast_error(
-                error,
-                "AST span lies outside the supplied source text",
-                "AST span validation failed",
-            )
-        })?;
-        let parse = SourceFile::parse(file_text, Edition::CURRENT);
-        let parse_errors = parse.errors();
-        recovered = !parse_errors.is_empty();
-        if recovered {
-            // This is the designated logging boundary for parser recovery in
-            // this adapter; the lowered AST domain remains parser-agnostic.
-            warn!(
-                start = span.start(),
-                end = span.end(),
-                errors = parse_errors.len(),
-                "lowered AST span from source with parser recovery errors"
-            );
-        }
-        let root = parse.tree().syntax().clone();
-        let target_range = text_range(span);
-        let selected = select_covering_node(&root, span).map_err(|error| {
-            trace_ast_error(
-                error,
-                "no AST syntax node covers the requested span",
-                "AST covering-node selection failed",
-            )
-        })?;
-        debug!(
-            kind = ?selected.kind(),
-            span_width = u32::from(selected.text_range().len()),
-            "selected AST covering node"
-        );
+    let parse = match validate_requested_span(file_text, span) {
+        Ok(()) => SourceFile::parse(file_text, Edition::CURRENT),
+        Err(error) => return (Err(error), false),
+    };
+    let recovered = report_parser_recovery(span, parse.errors().len());
+    (lower_parsed_source(parse.tree().syntax(), span), recovered)
+}
 
-        // Lowering doubles as parser-error detection: a single descent both
-        // builds the normalized subtree and rejects any `ERROR` node or token,
-        // so the selected span is never walked twice.
-        let lowered = LoweringLimits::new(span)
-            .lower(&selected, 0)
-            .map_err(|error| {
-                if matches!(error, AstError::UnparsableSpan { .. }) {
-                    error!(
-                        start = span.start(),
-                        end = span.end(),
-                        "selected AST span contains parser error elements"
-                    );
-                }
-                error
-            })?;
+/// Re-validate `span` against `file_text` before any parsing work.
+fn validate_requested_span(file_text: &str, span: ByteSpan) -> AstResult<()> {
+    ByteSpan::new(file_text, span.start(), span.end())
+        .map(|_| ())
+        .map_err(log_span_validation_failure)
+}
 
-        debug_assert!(selected.text_range().contains_range(target_range));
-        Ok(NormalizedTree::new(lowered, span))
-    })();
+/// Report parser recovery errors and return whether the parse recovered.
+fn report_parser_recovery(span: ByteSpan, error_count: usize) -> bool {
+    if error_count == 0 {
+        return false;
+    }
+    log_parser_recovery(span, error_count);
+    true
+}
 
-    (result, recovered)
+/// Lower the selected covering subtree of an already parsed source file.
+fn lower_parsed_source(root: &SyntaxNode, span: ByteSpan) -> AstResult<NormalizedTree> {
+    let target_range = text_range(span);
+    let selected = select_covering_node(root, span).map_err(log_covering_failure)?;
+    log_selected_node(&selected);
+
+    // Lowering doubles as parser-error detection: a single descent both builds
+    // the normalized subtree and rejects any `ERROR` node or token, so the
+    // selected span is never walked twice.
+    let lowered = LoweringLimits::new(span)
+        .lower(&selected, 0)
+        .map_err(|error| log_lowering_failure(span, error))?;
+
+    debug_assert!(
+        selected.text_range().contains_range(target_range),
+        "the selected covering node must contain the requested span"
+    );
+    Ok(NormalizedTree::new(lowered, span))
+}
+
+/// Report the syntax node selected to cover the requested span.
+///
+/// This is the one diagnostic that names a parser type. It lives here rather
+/// than beside the other reports so that `lowering_diagnostics` stays free of
+/// parser crates, as the AST boundary test requires.
+fn log_selected_node(node: &SyntaxNode) {
+    debug!(
+        kind = ?node.kind(),
+        span_width = u32::from(node.text_range().len()),
+        "selected AST covering node"
+    );
 }
 
 fn validate_covering_node_budget(span: ByteSpan, depth: usize, node_count: usize) -> AstResult<()> {
     if depth > MAX_AST_DEPTH {
-        error!(
-            start = span.start(),
-            end = span.end(),
-            depth,
-            limit = MAX_AST_DEPTH,
-            "AST covering-node selection exceeded the depth budget"
-        );
+        log_selection_depth_budget(span, depth, MAX_AST_DEPTH);
         return Err(AstError::TreeTooDeep {
             limit: MAX_AST_DEPTH,
         });
     }
     if node_count == MAX_AST_NODES {
-        error!(
-            start = span.start(),
-            end = span.end(),
-            node_count,
-            limit = MAX_AST_NODES,
-            "AST covering-node selection exceeded the node budget"
-        );
+        log_selection_node_budget(span, node_count, MAX_AST_NODES);
         return Err(AstError::TreeTooLarge {
             limit: MAX_AST_NODES,
         });
@@ -288,26 +265,14 @@ impl LoweringLimits {
     /// Reserve one normalized node at `depth`, enforcing both lowering budgets.
     fn claim_node(&self, depth: usize) -> AstResult<()> {
         if depth > self.maximum_depth {
-            error!(
-                start = self.span.start(),
-                end = self.span.end(),
-                depth,
-                limit = self.maximum_depth,
-                "AST lowering exceeded the depth budget"
-            );
+            log_lowering_depth_budget(self.span, depth, self.maximum_depth);
             return Err(AstError::TreeTooDeep {
                 limit: self.maximum_depth,
             });
         }
         let lowered_nodes = self.lowered_node_count.get();
         if lowered_nodes == self.maximum_nodes {
-            error!(
-                start = self.span.start(),
-                end = self.span.end(),
-                normalized_node_count = lowered_nodes,
-                limit = self.maximum_nodes,
-                "AST lowering exceeded the normalized-node budget"
-            );
+            log_lowering_node_budget(self.span, lowered_nodes, self.maximum_nodes);
             return Err(AstError::TreeTooLarge {
                 limit: self.maximum_nodes,
             });

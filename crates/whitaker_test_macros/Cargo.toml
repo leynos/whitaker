@@ -16,5 +16,5 @@ syn = { version = "3.0", features = ["full"] }
 [dev-dependencies]
 trybuild = { workspace = true }
 
-[lints.rust]
-missing_docs = "deny"
+[lints]
+workspace = true

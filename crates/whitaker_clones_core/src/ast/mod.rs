@@ -36,6 +36,8 @@ mod lowering {
 }
 #[cfg(feature = "parser")]
 mod lowering;
+#[cfg(feature = "parser")]
+mod lowering_diagnostics;
 #[cfg(test)]
 mod tests;
 mod tree;

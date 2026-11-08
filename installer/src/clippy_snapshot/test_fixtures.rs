@@ -86,7 +86,7 @@ impl FixtureRepo {
     }
 
     /// A manifest pinning `commit`, selecting `selected`, for the fixture nightly.
-    pub(super) fn manifest(&self, commit: &str, selected: &str) -> ClippySnapshotManifest {
+    pub(super) fn manifest(commit: &str, selected: &str) -> ClippySnapshotManifest {
         parse_manifest(&format!(
             concat!(
                 "schema_version = 1\n",

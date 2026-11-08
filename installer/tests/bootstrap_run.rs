@@ -7,7 +7,7 @@
 
 mod bootstrap_support;
 
-use std::process::Stdio;
+use std::process::{Output, Stdio};
 
 use bootstrap_support::{Installation, TOOLCHAIN, git};
 use whitaker_installer::bootstrap::BUILT_DRIVER_NOTICE;
@@ -23,57 +23,67 @@ fn last(recorded: &[String], key: &str) -> String {
         .to_owned()
 }
 
+/// Assert a run succeeded, reporting its stderr when it did not.
+fn assert_succeeded(output: &Output) {
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+/// Assert the stub performed `expected` cold builds.
+fn assert_builds(installation: &Installation, expected: usize, message: &str) {
+    assert_eq!(installation.builds(), expected, "{message}");
+}
+
 #[test]
-fn cold_then_warm_runs_build_the_driver_once() {
-    let installation = Installation::new();
+fn cold_then_warm_runs_build_the_driver_once() -> Result<(), Box<dyn std::error::Error>> {
+    let installation = Installation::new()?;
 
-    let cold = installation.run(&["--all"]);
-    assert!(
-        cold.status.success(),
-        "{}",
-        String::from_utf8_lossy(&cold.stderr)
-    );
-    let warm = installation.run(&["--all"]);
-    assert!(
-        warm.status.success(),
-        "{}",
-        String::from_utf8_lossy(&warm.stderr)
-    );
+    let cold = installation.run(&["--all"])?;
+    assert_succeeded(&cold);
+    let warm = installation.run(&["--all"])?;
+    assert_succeeded(&warm);
 
+    assert_driver_reused(&installation, &cold, &warm);
+    Ok(())
+}
+
+/// Check the cold run built once and the warm run reused the driver.
+fn assert_driver_reused(installation: &Installation, cold: &Output, warm: &Output) {
     assert_eq!(installation.builds(), 1, "the warm run reuses the driver");
-    let notices = |output: &std::process::Output| {
+    let notices = |output: &Output| {
         String::from_utf8_lossy(&output.stderr)
             .matches(BUILT_DRIVER_NOTICE)
             .count()
     };
-    assert_eq!(notices(&cold), 1, "the cold run reports its build");
-    assert_eq!(notices(&warm), 0, "the warm run builds nothing to report");
+    assert_eq!(notices(cold), 1, "the cold run reports its build");
+    assert_eq!(notices(warm), 0, "the warm run builds nothing to report");
 }
 
 /// Regression: the build notice once came from the dispatcher's own path
 /// choice, so a warm run whose child replaced the driver with identical bytes
 /// reported nothing and verification could not see the rebuild.
 #[test]
-fn a_warm_run_that_replaces_the_driver_reports_the_build() {
-    let installation = Installation::new();
-    let cold = installation.run(&["--all"]);
-    assert!(
-        cold.status.success(),
-        "{}",
-        String::from_utf8_lossy(&cold.stderr)
-    );
+fn a_warm_run_that_replaces_the_driver_reports_the_build() -> Result<(), Box<dyn std::error::Error>>
+{
+    let installation = Installation::new()?;
+    let cold = installation.run(&["--all"])?;
+    assert_succeeded(&cold);
 
     let warm = installation
         .run_command(&["--all"])
         .env("STUB_REPLACE_DRIVER", "1")
-        .output()
-        .expect("run whitaker-installer");
+        .output()?;
 
-    assert!(
-        warm.status.success(),
-        "{}",
-        String::from_utf8_lossy(&warm.stderr)
-    );
+    assert_succeeded(&warm);
+    assert_replacement_reported(&warm);
+    Ok(())
+}
+
+/// Check that replacing the driver with identical bytes is reported.
+fn assert_replacement_reported(warm: &Output) {
     assert_eq!(
         String::from_utf8_lossy(&warm.stderr)
             .matches(BUILT_DRIVER_NOTICE)
@@ -87,14 +97,11 @@ fn a_warm_run_that_replaces_the_driver_reports_the_build() {
 /// verification, so the installer verifies it afterwards: a snapshot that
 /// fails fails the run and leaves the slot cold.
 #[test]
-fn a_warm_rebuild_from_an_unverifiable_snapshot_fails_and_goes_cold() {
-    let installation = Installation::new();
-    let cold = installation.run(&["--all"]);
-    assert!(
-        cold.status.success(),
-        "{}",
-        String::from_utf8_lossy(&cold.stderr)
-    );
+fn a_warm_rebuild_from_an_unverifiable_snapshot_fails_and_goes_cold()
+-> Result<(), Box<dyn std::error::Error>> {
+    let installation = Installation::new()?;
+    let cold = installation.run(&["--all"])?;
+    assert_succeeded(&cold);
     let snapshot = installation.layout().snapshot(&installation.commit);
     // Full verification refuses remotes; the cheaper installed check does not.
     git(
@@ -105,21 +112,31 @@ fn a_warm_rebuild_from_an_unverifiable_snapshot_fails_and_goes_cold() {
             "upstream",
             "https://example.invalid/clippy",
         ],
-    );
+    )?;
 
     let warm = installation
         .run_command(&["--all"])
         .env("STUB_REPLACE_DRIVER", "1")
-        .output()
-        .expect("run whitaker-installer");
+        .output()?;
+    assert_unverified_rebuild_refused(&warm);
 
+    let next = installation.run(&["--all"])?;
+    assert_slot_is_cold(&next);
+    Ok(())
+}
+
+/// Check that a warm rebuild from a snapshot with remotes is refused.
+fn assert_unverified_rebuild_refused(warm: &Output) {
     assert!(
         !warm.status.success(),
         "the unverified rebuild must not succeed"
     );
     let stderr = String::from_utf8_lossy(&warm.stderr);
     assert!(stderr.contains("it has remotes"), "{stderr}");
-    let next = installation.run(&["--all"]);
+}
+
+/// Check that the refused rebuild left the slot cold.
+fn assert_slot_is_cold(next: &Output) {
     assert!(
         !next.status.success(),
         "the slot is cold and verification refuses it"
@@ -134,40 +151,41 @@ fn a_warm_rebuild_from_an_unverifiable_snapshot_fails_and_goes_cold() {
 /// A cold run removes an unmarked driver, so it builds from the snapshot it
 /// has just verified rather than adopting a leftover.
 #[test]
-fn a_cold_run_rebuilds_an_unmarked_driver() {
-    let installation = Installation::new();
-    let first = installation.run(&["--all"]);
-    assert!(
-        first.status.success(),
-        "{}",
-        String::from_utf8_lossy(&first.stderr)
-    );
+fn a_cold_run_rebuilds_an_unmarked_driver() -> Result<(), Box<dyn std::error::Error>> {
+    let installation = Installation::new()?;
+    let first = installation.run(&["--all"])?;
+    assert_succeeded(&first);
     let slot = installation
         .layout()
         .driver_dir("6.3.0", &installation.commit);
-    std::fs::remove_file(slot.join(format!(".{TOOLCHAIN}.ready"))).expect("forget readiness");
+    std::fs::remove_file(slot.join(format!(".{TOOLCHAIN}.ready")))?;
 
-    let second = installation.run(&["--all"]);
+    let second = installation.run(&["--all"])?;
+    assert_succeeded(&second);
 
-    assert!(
-        second.status.success(),
-        "{}",
-        String::from_utf8_lossy(&second.stderr)
-    );
-    assert_eq!(installation.builds(), 2, "the unmarked driver is rebuilt");
+    assert_builds(&installation, 2, "the unmarked driver is rebuilt");
+    Ok(())
 }
 
 /// Replace the ready driver with identical bytes, as a concurrent warm run's
 /// rebuild would, leaving the marker naming the driver it replaced. This is
 /// the state between that run's rebuild and its verification of the snapshot.
-fn replace_driver_mid_verification(installation: &Installation) {
+///
+/// # Errors
+///
+/// Returns an error if the replacement driver cannot be written or moved into
+/// place.
+fn replace_driver_mid_verification(
+    installation: &Installation,
+) -> Result<(), Box<dyn std::error::Error>> {
     let toolchain_dir = installation
         .layout()
         .driver_dir("6.3.0", &installation.commit)
         .join(TOOLCHAIN);
     let partial = toolchain_dir.join("dylint-driver.partial");
-    std::fs::write(&partial, "#!/bin/sh\n").expect("write the replacement");
-    std::fs::rename(&partial, toolchain_dir.join("dylint-driver")).expect("persist it");
+    std::fs::write(&partial, "#!/bin/sh\n")?;
+    std::fs::rename(&partial, toolchain_dir.join("dylint-driver"))?;
+    Ok(())
 }
 
 /// Regression: a run that started while another warm run was still verifying
@@ -176,14 +194,12 @@ fn replace_driver_mid_verification(installation: &Installation) {
 #[rstest::rstest]
 #[case::snapshot_fails_verification(true)]
 #[case::snapshot_verifies(false)]
-fn a_run_never_uses_a_rebuild_another_run_has_not_verified(#[case] is_corrupt: bool) {
-    let installation = Installation::new();
-    let cold = installation.run(&["--all"]);
-    assert!(
-        cold.status.success(),
-        "{}",
-        String::from_utf8_lossy(&cold.stderr)
-    );
+fn a_run_never_uses_a_rebuild_another_run_has_not_verified(
+    #[case] is_corrupt: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let installation = Installation::new()?;
+    let cold = installation.run(&["--all"])?;
+    assert_succeeded(&cold);
     if is_corrupt {
         let snapshot = installation.layout().snapshot(&installation.commit);
         git(
@@ -194,12 +210,18 @@ fn a_run_never_uses_a_rebuild_another_run_has_not_verified(#[case] is_corrupt: b
                 "upstream",
                 "https://example.invalid/clippy",
             ],
-        );
+        )?;
     }
-    replace_driver_mid_verification(&installation);
+    replace_driver_mid_verification(&installation)?;
 
-    let next = installation.run(&["--all"]);
+    let next = installation.run(&["--all"])?;
 
+    assert_unverified_driver_not_used(is_corrupt, &installation, &next);
+    Ok(())
+}
+
+/// Check the run rebuilt rather than adopting an unverified driver.
+fn assert_unverified_driver_not_used(is_corrupt: bool, installation: &Installation, next: &Output) {
     let stderr = String::from_utf8_lossy(&next.stderr);
     if is_corrupt {
         assert!(
@@ -215,43 +237,54 @@ fn a_run_never_uses_a_rebuild_another_run_has_not_verified(#[case] is_corrupt: b
 }
 
 #[test]
-fn exports_the_bootstrap_and_overwrites_stale_values() {
-    let installation = Installation::new();
+fn exports_the_bootstrap_and_overwrites_stale_values() -> Result<(), Box<dyn std::error::Error>> {
+    let installation = Installation::new()?;
+
+    let output = installation.run(&["--all"])?;
+    assert_succeeded(&output);
+    assert_bootstrap_env(&installation);
+
+    Ok(())
+}
+
+/// Check the child saw the bootstrap paths, not the stale values.
+fn assert_bootstrap_env(installation: &Installation) {
     let layout = installation.layout();
-
-    let output = installation.run(&["--all"]);
-
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
     let recorded = installation.recorded();
     assert_eq!(
         last(&recorded, "CLIPPY"),
-        layout.snapshot(&installation.commit).as_str()
+        layout.snapshot(&installation.commit).as_str(),
+        "the child should see the installed snapshot path"
     );
     assert_eq!(
         last(&recorded, "DRIVER"),
-        layout.driver_dir("6.3.0", &installation.commit).as_str()
+        layout.driver_dir("6.3.0", &installation.commit).as_str(),
+        "the child should see the installed driver path"
     );
     assert_eq!(
         last(&recorded, "LIB"),
-        installation.data_root.join("whitaker/lints/lib").as_str()
+        installation.data_root.join("whitaker/lints/lib").as_str(),
+        "the child should see the built lint library path"
     );
 }
 
 #[test]
-fn preserves_arguments_exit_status_and_compiler_wrapper() {
-    let installation = Installation::new();
+fn preserves_arguments_exit_status_and_compiler_wrapper() -> Result<(), Box<dyn std::error::Error>>
+{
+    let installation = Installation::new()?;
 
     let output = installation
         .run_command(&["--all", "--", "a spaced argument"])
         .env("STUB_EXIT", "3")
         .env("RUSTC_WRAPPER", "sccache")
-        .output()
-        .expect("run whitaker-installer");
+        .output()?;
 
+    assert_arguments_preserved(&installation, &output);
+    Ok(())
+}
+
+/// Check the child received the arguments, exit status, and wrapper.
+fn assert_arguments_preserved(installation: &Installation, output: &Output) {
     assert_eq!(
         output.status.code(),
         Some(3),
@@ -262,12 +295,16 @@ fn preserves_arguments_exit_status_and_compiler_wrapper() {
         recorded.contains(&"ARG=a spaced argument".to_owned()),
         "{recorded:?}"
     );
-    assert_eq!(last(&recorded, "WRAPPER"), "sccache");
+    assert_eq!(
+        last(&recorded, "WRAPPER"),
+        "sccache",
+        "the compiler wrapper should reach the child unchanged"
+    );
 }
 
 #[test]
-fn concurrent_cold_runs_build_the_driver_once() {
-    let installation = Installation::new();
+fn concurrent_cold_runs_build_the_driver_once() -> Result<(), Box<dyn std::error::Error>> {
+    let installation = Installation::new()?;
     let spawn = || {
         installation
             .run_command(&["--all"])
@@ -277,39 +314,30 @@ fn concurrent_cold_runs_build_the_driver_once() {
             .expect("spawn whitaker-installer")
     };
 
-    let (first, second) = (spawn(), spawn());
-    let first = first.wait_with_output().expect("first run");
-    let second = second.wait_with_output().expect("second run");
+    let (first_child, second_child) = (spawn(), spawn());
+    let first = first_child.wait_with_output()?;
+    let second = second_child.wait_with_output()?;
 
-    assert!(
-        first.status.success(),
-        "{}",
-        String::from_utf8_lossy(&first.stderr)
-    );
-    assert!(
-        second.status.success(),
-        "{}",
-        String::from_utf8_lossy(&second.stderr)
-    );
-    assert_eq!(
-        installation.builds(),
-        1,
-        "the lock serializes cold construction"
-    );
+    assert_succeeded(&first);
+    assert_succeeded(&second);
+    assert_builds(&installation, 1, "the lock serializes cold construction");
+    Ok(())
 }
 
 #[test]
-fn a_relocated_data_root_keeps_working() {
-    let mut installation = Installation::new();
-    installation.relocate("moved-data");
+fn a_relocated_data_root_keeps_working() -> Result<(), Box<dyn std::error::Error>> {
+    let mut installation = Installation::new()?;
+    installation.relocate("moved-data")?;
 
-    let output = installation.run(&["--all"]);
+    let output = installation.run(&["--all"])?;
+    assert_succeeded(&output);
 
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
+    assert_paths_follow_move(&installation);
+    Ok(())
+}
+
+/// Check the recorded bootstrap paths followed the moved data root.
+fn assert_paths_follow_move(installation: &Installation) {
     let moved = installation.data_root.as_str();
     let recorded = installation.recorded();
     for key in ["CLIPPY", "DRIVER", "LIB"] {
@@ -321,14 +349,23 @@ fn a_relocated_data_root_keeps_working() {
 }
 
 #[test]
-fn a_deleted_snapshot_fails_before_cargo_dylint_runs() {
-    let installation = Installation::new();
+fn a_deleted_snapshot_fails_before_cargo_dylint_runs() -> Result<(), Box<dyn std::error::Error>> {
+    let installation = Installation::new()?;
     let snapshot = installation.layout().snapshot(&installation.commit);
-    std::fs::remove_dir_all(&snapshot).expect("delete the snapshot generation");
+    std::fs::remove_dir_all(&snapshot)?;
 
-    let output = installation.run(&["--all"]);
+    let output = installation.run(&["--all"])?;
 
-    assert!(!output.status.success());
+    assert_deleted_snapshot_refused(&installation, &output);
+    Ok(())
+}
+
+/// Check a deleted snapshot fails before `cargo dylint` starts.
+fn assert_deleted_snapshot_refused(installation: &Installation, output: &Output) {
+    assert!(
+        !output.status.success(),
+        "a deleted snapshot should fail the run"
+    );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("is not installed"), "{stderr}");
     assert!(
@@ -342,14 +379,23 @@ fn a_deleted_snapshot_fails_before_cargo_dylint_runs() {
 }
 
 #[test]
-fn a_snapshot_that_gained_master_is_rejected() {
-    let installation = Installation::new();
+fn a_snapshot_that_gained_master_is_rejected() -> Result<(), Box<dyn std::error::Error>> {
+    let installation = Installation::new()?;
     let snapshot = installation.layout().snapshot(&installation.commit);
-    git(&snapshot, &["branch", "master", "main"]);
+    git(&snapshot, &["branch", "master", "main"])?;
 
-    let output = installation.run(&["--all"]);
+    let output = installation.run(&["--all"])?;
 
-    assert!(!output.status.success());
+    assert_master_branch_refused(&installation, &output);
+    Ok(())
+}
+
+/// Check a snapshot that gained a `master` ref is rejected.
+fn assert_master_branch_refused(installation: &Installation, output: &Output) {
+    assert!(
+        !output.status.success(),
+        "a snapshot with a master ref should fail the run"
+    );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("refs/heads/master"), "{stderr}");
     assert!(
@@ -359,28 +405,45 @@ fn a_snapshot_that_gained_master_is_rejected() {
 }
 
 #[test]
-fn a_different_cargo_dylint_release_is_rejected() {
-    let installation = Installation::new();
+fn a_different_cargo_dylint_release_is_rejected() -> Result<(), Box<dyn std::error::Error>> {
+    let installation = Installation::new()?;
 
     let output = installation
         .run_command(&["--all"])
         .env("STUB_DYLINT_VERSION", "6.0.1")
-        .output()
-        .expect("run whitaker-installer");
+        .output()?;
 
-    assert!(!output.status.success());
+    assert_wrong_dylint_version_refused(&output);
+    Ok(())
+}
+
+/// Check a different `cargo dylint` release is rejected.
+fn assert_wrong_dylint_version_refused(output: &Output) {
+    assert!(
+        !output.status.success(),
+        "a mismatched cargo dylint release should fail the run"
+    );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("reports version 6.0.1"), "{stderr}");
 }
 
 #[test]
-fn a_missing_installation_points_at_the_installer() {
-    let installation = Installation::new();
-    std::fs::remove_file(installation.layout().metadata_path()).expect("delete metadata");
+fn a_missing_installation_points_at_the_installer() -> Result<(), Box<dyn std::error::Error>> {
+    let installation = Installation::new()?;
+    std::fs::remove_file(installation.layout().metadata_path())?;
 
-    let output = installation.run(&["--all"]);
+    let output = installation.run(&["--all"])?;
 
-    assert!(!output.status.success());
+    assert_missing_installation_reported(&output);
+    Ok(())
+}
+
+/// Check a missing installation tells the user to run the installer.
+fn assert_missing_installation_reported(output: &Output) {
+    assert!(
+        !output.status.success(),
+        "a missing installation should fail the run"
+    );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("run whitaker-installer"), "{stderr}");
 }

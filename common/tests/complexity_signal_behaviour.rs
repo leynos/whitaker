@@ -246,7 +246,13 @@ proptest! {
     ) {
         let left = f64::from_bits(left_bits);
         let right = f64::from_bits(right_bits);
-        prop_assume!(left.is_finite() && right.is_finite() && left != right);
+        // `partial_cmp` distinguishes the values without a strict float
+        // comparison; finite unequal values always order.
+        prop_assume!(
+            left.is_finite()
+                && right.is_finite()
+                && left.partial_cmp(&right).is_some_and(std::cmp::Ordering::is_ne)
+        );
 
         prop_assert_eq!(left < right, monotonic_bits(left) < monotonic_bits(right));
         prop_assert_eq!(left > right, monotonic_bits(left) > monotonic_bits(right));

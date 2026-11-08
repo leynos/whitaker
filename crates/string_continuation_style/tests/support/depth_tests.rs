@@ -29,9 +29,9 @@ fn observe_sequence(
     let Some((&is_expansion, nested)) = sequence.split_first() else {
         return;
     };
-    visitor.with_expansion(is_expansion, |visitor| {
-        observed.push(visitor.expansion_depth);
-        observe_sequence(visitor, nested, observed);
+    visitor.with_expansion(is_expansion, |nested_visitor| {
+        observed.push(nested_visitor.expansion_depth);
+        observe_sequence(nested_visitor, nested, observed);
     });
 }
 

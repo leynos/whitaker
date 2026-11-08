@@ -114,7 +114,7 @@ impl LshConfig {
 /// # Errors
 ///
 /// Return an error when multiplication overflows or the product is not the
-/// configured MinHash size.
+/// configured `MinHash` size.
 const fn validate_product(bands: NonZeroUsize, rows: NonZeroUsize) -> IndexResult<()> {
     match bands.get().checked_mul(rows.get()) {
         Some(MINHASH_SIZE) => Ok(()),
@@ -130,7 +130,7 @@ const fn validate_product(bands: NonZeroUsize, rows: NonZeroUsize) -> IndexResul
 pub struct MinHashSignature([u64; MINHASH_SIZE]);
 
 impl MinHashSignature {
-    /// Copy a complete MinHash sketch into its fixed-size representation.
+    /// Copy a complete `MinHash` sketch into its fixed-size representation.
     #[must_use]
     pub(crate) const fn new(values: &[u64; MINHASH_SIZE]) -> Self { Self(*values) }
 

@@ -3,6 +3,15 @@
 use proptest::prelude::*;
 
 use super::{is_valid_window, normalize, normalize_provider_attributes, validate_output};
+
+/// Compare two floats by bit pattern, avoiding a direct float equality check.
+fn assert_same_bits(actual: f64, expected: f64) {
+    assert_eq!(
+        actual.to_bits(),
+        expected.to_bits(),
+        "expected {expected}, got {actual}"
+    );
+}
 use crate::{
     lint_config::{BumpyWeights, RstestHelper},
     settings::Configuration,
@@ -19,11 +28,11 @@ fn normalizes_bumpy_road_tuning() {
     configuration.bumpy_road_function.weights.flow = f64::NAN;
     let settings = normalize(configuration);
     let bumpy = &settings.bumpy_road_function;
-    assert_eq!(bumpy.threshold, 2.5);
+    assert_same_bits(bumpy.threshold, 2.5);
     assert_eq!(bumpy.window, 3);
     assert_eq!(bumpy.min_bump_lines, 1);
-    assert_eq!(bumpy.weights.depth, 1.0);
-    assert_eq!(bumpy.weights.flow, 0.5);
+    assert_same_bits(bumpy.weights.depth, 1.0);
+    assert_same_bits(bumpy.weights.flow, 0.5);
 }
 
 /// Clamp branch and fixture thresholds with the domain limits.
@@ -198,11 +207,11 @@ proptest! {
         bumpy.min_bump_lines = min_bump_lines;
         bumpy.weights = BumpyWeights { depth, predicate, flow };
         let normalized = normalize(configuration).bumpy_road_function;
-        prop_assert_eq!(normalized.threshold, threshold);
+        prop_assert_eq!(normalized.threshold.to_bits(), threshold.to_bits());
         prop_assert_eq!(normalized.window, window);
         prop_assert_eq!(normalized.min_bump_lines, min_bump_lines);
-        prop_assert_eq!(normalized.weights.depth, depth);
-        prop_assert_eq!(normalized.weights.predicate, predicate);
-        prop_assert_eq!(normalized.weights.flow, flow);
+        prop_assert_eq!(normalized.weights.depth.to_bits(), depth.to_bits());
+        prop_assert_eq!(normalized.weights.predicate.to_bits(), predicate.to_bits());
+        prop_assert_eq!(normalized.weights.flow.to_bits(), flow.to_bits());
     }
 }

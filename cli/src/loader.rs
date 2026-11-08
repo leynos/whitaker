@@ -66,12 +66,12 @@ pub struct LoadedConfiguration {
 ///     command: None,
 ///     cli: json!({}),
 /// };
-/// let loaded = load_with_sources(sources)?;
+/// let loaded = load_with_sources(&sources)?;
 /// assert_eq!(loaded.settings.diagnostics.locale, "en-GB");
 /// # Ok::<(), std::sync::Arc<ortho_config::OrthoError>>(())
 /// ```
-pub fn load_with_sources(sources: Sources) -> OrthoResult<LoadedConfiguration> {
-    let files = discover_files(&sources)?;
+pub fn load_with_sources(sources: &Sources) -> OrthoResult<LoadedConfiguration> {
+    let files = discover_files(sources)?;
     compose_sources(sources, files)
 }
 
@@ -184,7 +184,7 @@ fn discover_legacy(sources: &Sources) -> OrthoResult<FileLayers> {
 fn legacy_file_notice() -> String { String::from("dylint.toml is deprecated; use whitaker.toml") }
 
 /// Compose the discovered files, environment layers, and explicit CLI values.
-fn compose_sources(sources: Sources, files: FileLayers) -> OrthoResult<LoadedConfiguration> {
+fn compose_sources(sources: &Sources, files: FileLayers) -> OrthoResult<LoadedConfiguration> {
     let mut notices = files.notices;
     let mut composer = MergeComposer::new();
     composer.push_defaults(
@@ -305,13 +305,13 @@ fn apply_command_table(
     commands: &Value,
     selected: Option<&str>,
 ) -> OrthoResult<()> {
-    let Some(commands) = commands.as_object() else {
+    let Some(table) = commands.as_object() else {
         return Err(invalid("cmds", "expected a table"));
     };
-    for name in commands.keys() {
+    for name in table.keys() {
         validate_command_name(Some(name), &format!("cmds.{name}"))?;
     }
-    if let Some(command) = selected.and_then(|name| commands.get(name)) {
+    if let Some(command) = selected.and_then(|name| table.get(name)) {
         if !command.is_object() {
             return Err(invalid("cmds", "command settings must be a table"));
         }
@@ -322,7 +322,7 @@ fn apply_command_table(
 
 /// Reject an unrecognized command namespace.
 fn validate_command_name(name: Option<&str>, key: &str) -> OrthoResult<()> {
-    if name.is_some_and(|name| !is_command(name)) {
+    if name.is_some_and(|candidate| !is_command(candidate)) {
         return Err(invalid(key, "unknown command namespace"));
     }
     Ok(())

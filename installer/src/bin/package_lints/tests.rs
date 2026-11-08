@@ -141,28 +141,32 @@ proptest! {
     #[test]
     fn civil_from_epoch_round_trips_any_epoch_seconds(epoch_secs in any::<u64>()) {
         let (year, month, day) = civil_from_epoch(epoch_secs);
-        let seconds_of_day = epoch_secs % 86_400;
-        let hour = seconds_of_day / 3_600;
-        let minute = seconds_of_day % 3_600 / 60;
-        let second = seconds_of_day % 60;
+        let seconds_of_day = epoch_secs.rem_euclid(86_400);
+        let hour = seconds_of_day.div_euclid(3_600);
+        let minute = seconds_of_day.rem_euclid(3_600).div_euclid(60);
+        let second = seconds_of_day.rem_euclid(60);
 
         prop_assert!((1..=12).contains(&month));
         prop_assert!((1..=days_in_month(year, month)).contains(&day));
         prop_assert!(hour < 24);
         prop_assert!(minute < 60);
         prop_assert!(second < 60);
-        prop_assert_eq!(days_from_civil(year, month, day), epoch_secs / 86_400);
+        prop_assert_eq!(
+            days_from_civil(year, month, day),
+            epoch_secs.div_euclid(86_400)
+        );
     }
 }
 
 /// Convert a Gregorian date to days since the Unix epoch using era arithmetic.
 fn days_from_civil(year: u64, month: u64, day: u64) -> u64 {
-    let adjusted_year = year - if month <= 2 { 1 } else { 0 };
-    let era = adjusted_year / 400;
+    let adjusted_year = year - u64::from(month <= 2);
+    let era = adjusted_year.div_euclid(400);
     let year_of_era = adjusted_year - era * 400;
     let month_of_year = if month > 2 { month - 3 } else { month + 9 };
-    let day_of_year = (153 * month_of_year + 2) / 5 + day - 1;
-    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
+    let day_of_year = (153 * month_of_year + 2).div_euclid(5) + day - 1;
+    let day_of_era =
+        year_of_era * 365 + year_of_era.div_euclid(4) - year_of_era.div_euclid(100) + day_of_year;
     era * 146_097 + day_of_era - 719_468
 }
 
@@ -178,7 +182,9 @@ fn days_in_month(year: u64, month: u64) -> u64 {
 }
 
 /// Return whether a year is a leap year in the Gregorian calendar.
-fn is_gregorian_leap_year(year: u64) -> bool { year % 400 == 0 || year % 4 == 0 && year % 100 != 0 }
+fn is_gregorian_leap_year(year: u64) -> bool {
+    year.rem_euclid(400) == 0 || year.rem_euclid(4) == 0 && year.rem_euclid(100) != 0
+}
 
 #[test]
 fn now_utc_iso8601_format_is_valid() {

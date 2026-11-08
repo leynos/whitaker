@@ -9,7 +9,7 @@ use tempfile::tempdir;
 use whitaker_installer::dependency_binaries::find_dependency_binary;
 
 /// Assert that a packaging CLI succeeded and reported its output path.
-fn assert_success(output: Output, command: &str) {
+fn assert_success(output: &Output, command: &str) {
     assert!(
         output.status.success(),
         "{command} failed: {}",
@@ -26,12 +26,13 @@ fn assert_success(output: Output, command: &str) {
     );
 }
 
-/// Assert that a packaging CLI rejects missing input with a diagnostic.
-fn assert_missing_input_is_rejected(command: &str) {
-    let output = Command::new(command)
-        .output()
-        .expect("packaging CLI should launch");
+/// Launch a packaging CLI with no arguments, capturing its output.
+fn run_without_arguments(command: &str) -> std::io::Result<Output> {
+    Command::new(command).output()
+}
 
+/// Assert that a packaging CLI rejects missing input with a diagnostic.
+fn assert_missing_input_is_rejected(output: &Output, command: &str) {
     assert!(
         !output.status.success(),
         "{command} should reject missing required input"
@@ -48,9 +49,14 @@ fn assert_missing_input_is_rejected(command: &str) {
 
 #[test]
 fn packaging_binaries_reject_missing_required_input() {
-    assert_missing_input_is_rejected(env!("CARGO_BIN_EXE_whitaker-package-lints"));
-    assert_missing_input_is_rejected(env!("CARGO_BIN_EXE_whitaker-package-installer"));
-    assert_missing_input_is_rejected(env!("CARGO_BIN_EXE_whitaker-package-dependency-binary"));
+    for command in [
+        env!("CARGO_BIN_EXE_whitaker-package-lints"),
+        env!("CARGO_BIN_EXE_whitaker-package-installer"),
+        env!("CARGO_BIN_EXE_whitaker-package-dependency-binary"),
+    ] {
+        let output = run_without_arguments(command).expect("packaging CLI should launch");
+        assert_missing_input_is_rejected(&output, command);
+    }
 }
 
 #[test]
@@ -76,7 +82,7 @@ fn package_lints_binary_creates_archive_and_manifest() {
         .output()
         .expect("run package-lints binary");
 
-    assert_success(output, "whitaker-package-lints");
+    assert_success(&output, "whitaker-package-lints");
     assert!(
         output_dir
             .join("manifest-x86_64-unknown-linux-gnu.json")
@@ -85,8 +91,10 @@ fn package_lints_binary_creates_archive_and_manifest() {
     assert!(
         fs::read_dir(output_dir)
             .expect("read distribution directory")
-            .any(|entry| entry
-                .is_ok_and(|entry| entry.path().extension().is_some_and(|ext| ext == "zst")))
+            .any(|entry| entry.is_ok_and(|dir_entry| dir_entry
+                .path()
+                .extension()
+                .is_some_and(|ext| ext == "zst")))
     );
 }
 
@@ -111,7 +119,7 @@ fn package_installer_binary_creates_release_archive() {
         .output()
         .expect("run package-installer binary");
 
-    assert_success(output, "whitaker-package-installer");
+    assert_success(&output, "whitaker-package-installer");
     assert!(
         output_dir
             .join("whitaker-installer-x86_64-unknown-linux-gnu-v0.2.9.tgz")
@@ -148,6 +156,6 @@ fn package_dependency_binary_creates_release_archive() {
         .output()
         .expect("run package-dependency-binary");
 
-    assert_success(output, "whitaker-package-dependency-binary");
+    assert_success(&output, "whitaker-package-dependency-binary");
     assert!(output_dir.join(archive_name).is_file());
 }

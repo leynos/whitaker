@@ -222,12 +222,13 @@ fn cargo_command_scopes_build_output_to_its_fixture() -> Result<(), Box<dyn Erro
     let fixture = build_fixture(Some("=0.0.334"))?;
     let command = cargo_command("check", &fixture);
     let arguments: Vec<_> = command.get_args().collect();
+    let expected = [
+        OsStr::new("--target-dir"),
+        fixture.target_dir.as_std_path().as_os_str(),
+    ];
 
-    assert!(arguments.windows(2).any(|pair| {
-        pair == [
-            OsStr::new("--target-dir"),
-            fixture.target_dir.as_std_path().as_os_str(),
-        ]
-    }));
-    Ok(())
+    if arguments.windows(2).any(|pair| pair == expected) {
+        return Ok(());
+    }
+    Err(format!("cargo arguments must scope output to the fixture: {arguments:?}").into())
 }

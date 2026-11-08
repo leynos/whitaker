@@ -16,6 +16,13 @@ CARGO ?= $(or $(shell command -v cargo 2>/dev/null),$(shell [ -x "$(HOME)/.cargo
 CARGO_LOCKED ?=
 BUILD_JOBS ?=
 CARGO_FLAGS ?= --workspace --all-targets --all-features
+# Dylint UI fixtures live under `examples/` because `dylint_testing::Test::example`
+# builds them with each lint crate's dev-dependencies (tokio, rstest); `ui/`
+# fixtures are standalone and cannot carry those. Every file there is a
+# `fail_*`/`pass_*` fixture that deliberately contains the anti-patterns the
+# suite detects, so each fixture scopes those diagnostics with a narrowly
+# targeted `#[expect(..., reason = "...")]` rather than weakening the
+# workspace policy.
 # The patched UI helper has a `deny_warnings` feature that changes fixture
 # diagnostics, so exercise its parser tests separately without all features.
 TEST_EXCLUDES ?= --exclude rustc_ast --exclude rustc_attr_data_structures \

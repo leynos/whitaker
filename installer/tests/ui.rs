@@ -30,5 +30,7 @@ fn dependency_check_result_contract_is_public() {
 
 #[test]
 fn public_const_api_works_in_const_context() {
-    trybuild::TestCases::new().pass("tests/ui/pass_const_schema_version.rs");
+    let cases = trybuild::TestCases::new();
+    cases.pass("tests/ui/pass_const_schema_version.rs");
+    cases.pass("tests/ui/pass_const_public_api.rs");
 }

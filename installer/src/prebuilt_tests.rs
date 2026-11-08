@@ -256,7 +256,7 @@ fn a_quiet_forbidden_run_returns_the_reason_without_writing_to_stderr() {
             reason.contains("artefact not found"),
             "the reason must survive the quiet guard so the refusal can name it, got: {reason}"
         ),
-        other => panic!("expected Fallback, got {other:?}"),
+        other @ PrebuiltResult::Success { .. } => panic!("expected Fallback, got {other:?}"),
     }
 }
 

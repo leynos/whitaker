@@ -252,7 +252,7 @@ impl InstallArgs {
     /// condition: the caller asked to build, the caller asked for experimental
     /// lints which are never published, or the caller pinned a suite that the
     /// rolling release cannot carry.
-    fn arguments_force_a_source_build(&self) -> bool {
+    const fn arguments_force_a_source_build(&self) -> bool {
         self.is_build_only || self.lint_selection.experimental || self.suite_version.is_some()
     }
 
@@ -366,7 +366,7 @@ impl Cli {
     /// install arguments. Callers should check `self.command` before calling
     /// this method if the `List` case needs different handling.
     #[must_use]
-    pub fn install_args(&self) -> &InstallArgs {
+    pub const fn install_args(&self) -> &InstallArgs {
         match &self.command {
             Some(Command::Install(args)) => args,
             Some(Command::List(_) | Command::Run(_)) | None => &self.install,

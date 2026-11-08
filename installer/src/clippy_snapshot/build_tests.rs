@@ -20,7 +20,11 @@ fn build(
 #[test]
 fn builds_a_self_verified_bundle_and_sidecar() {
     let repo = FixtureRepo::new(&DEFAULT_HISTORY);
-    let manifest = repo.manifest(repo.tip(), &repo.commits[DEFAULT_SELECTED]);
+    let selected = repo
+        .commits
+        .get(DEFAULT_SELECTED)
+        .expect("the default selection is in range");
+    let manifest = FixtureRepo::manifest(repo.tip(), selected);
 
     let built = build(&repo, &manifest).expect("the producer build succeeds");
 
@@ -51,8 +55,16 @@ fn builds_a_self_verified_bundle_and_sidecar() {
 #[test]
 fn pins_main_to_an_older_first_parent_commit() {
     let repo = FixtureRepo::new(&DEFAULT_HISTORY);
-    let pinned = repo.commits[5].clone();
-    let manifest = repo.manifest(&pinned, &repo.commits[DEFAULT_SELECTED]);
+    let pinned = repo
+        .commits
+        .get(5)
+        .expect("the fixture history contains this commit")
+        .clone();
+    let selected = repo
+        .commits
+        .get(DEFAULT_SELECTED)
+        .expect("the default selection is in range");
+    let manifest = FixtureRepo::manifest(&pinned, selected);
 
     let built = build(&repo, &manifest).expect("the producer build succeeds");
 
@@ -71,7 +83,15 @@ fn refuses_a_commit_that_is_not_on_mains_first_parent_history() {
     let repo = FixtureRepo::new(&DEFAULT_HISTORY);
     git(
         &repo.work,
-        &["checkout", "--quiet", "-b", "side", &repo.commits[4]],
+        &[
+            "checkout",
+            "--quiet",
+            "-b",
+            "side",
+            repo.commits
+                .get(4)
+                .expect("the fixture history contains this commit"),
+        ],
     );
     std::fs::write(repo.work.join("side.txt"), "side\n").expect("write side file");
     git(&repo.work, &["add", "--all"]);
@@ -82,7 +102,11 @@ fn refuses_a_commit_that_is_not_on_mains_first_parent_history() {
         &repo.work,
         &["merge", "--quiet", "--no-ff", "--no-edit", "side"],
     );
-    let manifest = repo.manifest(&side, &repo.commits[DEFAULT_SELECTED]);
+    let selected = repo
+        .commits
+        .get(DEFAULT_SELECTED)
+        .expect("the default selection is in range");
+    let manifest = FixtureRepo::manifest(&side, selected);
 
     let error = build(&repo, &manifest).expect_err("a side-branch commit is refused");
 
@@ -123,7 +147,11 @@ fn the_retry_header_is_scoped_to_github(#[case] url: &str, #[case] is_sent: bool
 fn writes_the_bundle_into_a_relative_output_directory() {
     use crate::clippy_snapshot::test_fixtures::{build_tree_scratch, relative_to_cwd, utf8};
     let repo = FixtureRepo::new(&DEFAULT_HISTORY);
-    let manifest = repo.manifest(repo.tip(), &repo.commits[DEFAULT_SELECTED]);
+    let selected = repo
+        .commits
+        .get(DEFAULT_SELECTED)
+        .expect("the default selection is in range");
+    let manifest = FixtureRepo::manifest(repo.tip(), selected);
     let scratch = build_tree_scratch();
     let output = utf8(scratch.path()).join("relative-dist");
     let relative_output = relative_to_cwd(&output);

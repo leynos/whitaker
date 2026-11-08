@@ -77,7 +77,7 @@ pub(crate) fn emit_rewrite(
 /// The default is `MaybeIncorrect` rather than `MachineApplicable`: the
 /// rewrite changes how the source reads, and a human should see it before
 /// `cargo fix` applies it unattended.
-fn applicability(mode: ApplicabilityMode) -> Applicability {
+const fn applicability(mode: ApplicabilityMode) -> Applicability {
     match mode {
         ApplicabilityMode::Manual => Applicability::MaybeIncorrect,
         ApplicabilityMode::Machine => Applicability::MachineApplicable,

@@ -3899,6 +3899,7 @@ dependencies = [
  "thiserror 2.0.21",
  "toml 1.1.8+spec-1.1.0",
  "tracing",
+ "tracing-subscriber",
  "whitaker_sarif",
  "whitaker_test_macros",
 ]
