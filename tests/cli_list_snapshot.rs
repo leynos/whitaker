@@ -8,8 +8,11 @@ use pretty_assertions::assert_eq;
 use tempfile::TempDir;
 use whitaker_installer::builder::{library_extension, library_prefix};
 
-#[test]
-fn json_inventory_keeps_its_current_shape() {
+/// Stages an empty suite marker for one fake toolchain.
+///
+/// Returns the temporary directory alongside its UTF-8 path so the caller
+/// keeps the staging area alive for the duration of the command it runs.
+fn staged_target_dir() -> (TempDir, Utf8PathBuf) {
     let staging = TempDir::new().expect("temporary staging directory should be created");
     let staging_dir = Dir::open_ambient_dir(
         camino::Utf8Path::from_path(staging.path()).expect("temporary path should be UTF-8"),
@@ -29,6 +32,12 @@ fn json_inventory_keeps_its_current_shape() {
         .expect("suite marker should be written");
     let target_dir = Utf8PathBuf::from_path_buf(staging.path().to_owned())
         .expect("temporary path should be UTF-8");
+    (staging, target_dir)
+}
+
+#[test]
+fn json_inventory_keeps_its_current_shape() {
+    let (_staging, target_dir) = staged_target_dir();
 
     let output = Command::new(env!("CARGO_BIN_EXE_whitaker"))
         .args(["ls", "--json", "--target-dir"])
