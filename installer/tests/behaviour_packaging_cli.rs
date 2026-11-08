@@ -132,6 +132,43 @@ fn sorted_crates<'a>(entries: impl IntoIterator<Item = &'a str>) -> Vec<String> 
     crates
 }
 
+/// Boxed error for the helpers below, which propagate rather than panic.
+type TestResult<T> = Result<T, Box<dyn std::error::Error>>;
+
+/// Read the `files` list of the linux manifest written to `output_dir`.
+fn read_manifest_files(output_dir: &std::path::Path) -> TestResult<Vec<String>> {
+    let bytes = fs::read(output_dir.join("manifest-x86_64-unknown-linux-gnu.json"))?;
+    let manifest: serde_json::Value = serde_json::from_slice(&bytes)?;
+    let files = manifest
+        .get("files")
+        .and_then(serde_json::Value::as_array)
+        .ok_or("manifest has no files array")?;
+    files
+        .iter()
+        .map(|file| {
+            file.as_str()
+                .map(str::to_owned)
+                .ok_or_else(|| "manifest file name is not a string".into())
+        })
+        .collect()
+}
+
+/// List the entry paths of the `.tar.zst` archive written to `output_dir`.
+fn read_archive_entries(output_dir: &std::path::Path) -> TestResult<Vec<String>> {
+    let archive_path = fs::read_dir(output_dir)?
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .find(|path| path.extension().is_some_and(|ext| ext == "zst"))
+        .ok_or("no archive written")?;
+    let decoder = zstd::Decoder::new(fs::File::open(archive_path)?)?;
+    let mut archive = tar::Archive::new(decoder);
+    let mut paths = Vec::new();
+    for entry in archive.entries()? {
+        paths.push(entry?.path()?.to_string_lossy().into_owned());
+    }
+    Ok(paths)
+}
+
 #[test]
 fn package_lints_release_dir_ships_only_libraries_the_pinned_installer_prunes() {
     let temp_dir = tempdir().expect("temporary directory");
@@ -165,40 +202,13 @@ fn package_lints_release_dir_ships_only_libraries_the_pinned_installer_prunes() 
         .iter()
         .map(|s| (*s).to_owned())
         .collect();
-
-    let manifest: serde_json::Value = serde_json::from_slice(
-        &fs::read(output_dir.join("manifest-x86_64-unknown-linux-gnu.json"))
-            .expect("read manifest"),
-    )
-    .expect("parse manifest");
-    let manifest_files: Vec<&str> = manifest["files"]
-        .as_array()
-        .expect("manifest files array")
-        .iter()
-        .map(|file| file.as_str().expect("manifest file name"))
-        .collect();
-    assert_eq!(sorted_crates(manifest_files), expected, "manifest files");
-
-    let archive_path = fs::read_dir(&output_dir)
-        .expect("read distribution directory")
-        .filter_map(Result::ok)
-        .map(|entry| entry.path())
-        .find(|path| path.extension().is_some_and(|ext| ext == "zst"))
-        .expect("archive written");
-    let decoder = zstd::Decoder::new(fs::File::open(archive_path).expect("open archive"))
-        .expect("zstd decoder");
-    let entries: Vec<String> = tar::Archive::new(decoder)
-        .entries()
-        .expect("archive entries")
-        .map(|entry| {
-            entry
-                .expect("archive entry")
-                .path()
-                .expect("entry path")
-                .to_string_lossy()
-                .into_owned()
-        })
-        .collect();
+    let manifest_files = read_manifest_files(&output_dir).expect("read manifest files");
+    assert_eq!(
+        sorted_crates(manifest_files.iter().map(String::as_str)),
+        expected,
+        "manifest files"
+    );
+    let entries = read_archive_entries(&output_dir).expect("read archive entries");
     assert_eq!(
         sorted_crates(entries.iter().map(String::as_str)),
         expected,
