@@ -115,11 +115,20 @@ def crate_of_entry(entry: str) -> str:
     'whitaker_suite'
     >>> crate_of_entry("libmodule_max_lines.dll")
     'libmodule_max_lines'
+    >>> crate_of_entry("libmodule_max_lines.extra.so")
+    'libmodule_max_lines.extra.so'
     """
     name = Path(entry).name
-    base = name.split(".", maxsplit=1)[0].split("@", maxsplit=1)[0]
-    if name.endswith((".so", ".dylib")) and base.startswith("lib"):
+    stem, _, extension = name.rpartition(".")
+    if not stem:
+        return name
+    base = stem.split("@", maxsplit=1)[0]
+    if extension in {"so", "dylib"} and base.startswith("lib"):
         base = base[3:]
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", base):
+        # A name the installer would not stage or prune as a plain crate
+        # library (`libfoo.extra.so`): report the whole name, so it survives.
+        return name
     return base
 
 

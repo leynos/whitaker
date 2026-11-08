@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -206,3 +207,42 @@ def test_command_line_exit_statuses() -> None:
     )
     assert result.returncode == 2
     assert "error:" in result.stderr
+
+
+def test_non_canonical_library_name_is_not_mistaken_for_a_known_crate() -> None:
+    """``libalpha.extra.so`` is not pruned as ``alpha`` and so must survive."""
+    left = checker.surviving_crates(["libalpha.extra.so", "libwhitaker_suite.so"], ["alpha"])
+    assert left == ["libalpha.extra.so", "whitaker_suite"]
+
+
+def test_failed_guard_exits_non_zero_as_a_process(repository: Path, tmp_path: Path) -> None:
+    """Run as a process, an unsafe archive exits 1 and a safe one exits 0."""
+    script = str(SCRIPTS / "check_prune_safety.py")
+    arguments = ["--installer-tag", "v0.0.1", "--repository", str(repository)]
+    _publish(tmp_path / "safe", [*OLD_CRATES, "whitaker_suite"])
+    _publish(tmp_path / "unsafe", [*OLD_CRATES, "newcomer", "whitaker_suite"])
+    safe = subprocess.run([sys.executable, script, *arguments, str(tmp_path / "safe")], check=False)
+    unsafe = subprocess.run([sys.executable, script, *arguments, str(tmp_path / "unsafe")], check=False)
+    assert (safe.returncode, unsafe.returncode) == (0, 1)
+
+
+def test_missing_tar_at_process_start_is_an_error(repository: Path, tmp_path: Path) -> None:
+    """With no ``tar`` on PATH the process exits 2 rather than raising."""
+    _publish(tmp_path / "dist", [*OLD_CRATES, "whitaker_suite"])
+    git = shutil.which("git")
+    assert git is not None
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "git").symlink_to(git)
+    result = subprocess.run(
+        [
+            sys.executable, str(SCRIPTS / "check_prune_safety.py"),
+            "--installer-tag", "v0.0.1", "--repository", str(repository), str(tmp_path / "dist"),
+        ],
+        env={"PATH": str(bin_dir)},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 2
+    assert "tar" in result.stderr
