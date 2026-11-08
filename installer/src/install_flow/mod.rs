@@ -3,11 +3,10 @@
 //! This module keeps prebuilt-download fallback and metrics recording logic
 //! separate from CLI orchestration in `main.rs`.
 
-use std::{collections::HashSet, fs, io, io::Write, time::Duration};
+use std::{io::Write, time::Duration};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use whitaker_installer::{
-    builder::{library_extension, library_prefix},
     cli::InstallArgs,
     crate_name::CrateName,
     deps::{CommandExecutor, DylintToolStatus, SourcePolicy},
@@ -17,10 +16,13 @@ use whitaker_installer::{
     output::write_stderr_line,
     prebuilt::{PrebuiltConfig, PrebuiltResult, attempt_prebuilt},
     prebuilt_path::prebuilt_library_dir,
-    resolution::SUITE_CRATE,
 };
 
 pub(crate) mod bootstrap_step;
+mod prune;
+use prune::prune_prebuilt_libraries;
+#[cfg(test)]
+use prune::{requested_crate_names, staged_library_filename};
 mod dependency_check;
 #[cfg(all(test, unix))]
 pub(crate) use dependency_check::check_dylint_tools_for_command;
@@ -252,139 +254,6 @@ fn fall_back_or_refuse(policy: SourcePolicy, reason: String) -> Result<Option<Ut
         });
     }
     Ok(None)
-}
-
-fn requested_crate_names(requested_crates: &[CrateName]) -> HashSet<&str> {
-    if requested_crates.is_empty() {
-        return HashSet::from([SUITE_CRATE]);
-    }
-    requested_crates.iter().map(CrateName::as_str).collect()
-}
-
-fn staged_library_filename(crate_name: &str, toolchain_channel: &str) -> String {
-    let normalized = crate_name.replace('-', "_");
-    format!(
-        "{}{}@{}{}",
-        library_prefix(),
-        normalized,
-        toolchain_channel,
-        library_extension()
-    )
-}
-
-/// Return the crate behind a staged library file name for this toolchain.
-///
-/// A staged name is `<prefix><crate>@<toolchain><extension>`, as built by
-/// [`staged_library_filename`]. Anything else, including a library staged for
-/// another toolchain, yields `None`.
-fn staged_crate_name<'a>(file_name: &'a str, toolchain_channel: &str) -> Option<&'a str> {
-    let suffix = format!("@{toolchain_channel}{}", library_extension());
-    file_name
-        .strip_prefix(library_prefix())?
-        .strip_suffix(suffix.as_str())
-        .filter(|name| !name.is_empty())
-}
-
-/// Remove staged prebuilt libraries that were not requested for this install.
-///
-/// Prebuilt archives can contain both suite and constituent crates, while local
-/// builds stage only requested crates. Pruning keeps prebuilt installs aligned
-/// with local-build behaviour and avoids duplicate lint registration when the
-/// wrapper runs `cargo dylint --all`.
-///
-/// The prune is driven by what is staged, not by a list of crates this
-/// installer was compiled with. An archive from a newer Whitaker can hold a
-/// crate this build has never heard of; if that crate is registered by the
-/// suite, leaving its standalone library beside the suite makes rustc reject
-/// the duplicate lint registration (issue #565). Every library staged for
-/// `toolchain_channel` whose crate was not requested is therefore removed.
-/// Files for another toolchain, and files that are not staged libraries, are
-/// left alone.
-///
-/// After pruning, every requested crate must have been delivered by this
-/// archive (`delivered`) and be staged. The directory is reused between
-/// installs, so a library left by an earlier install must not satisfy the
-/// check. A selection the archive cannot satisfy (a crate that is not in the rolling archive, such
-/// as an experimental lint) is reported as an error, which the caller turns into
-/// a source-build fallback or, where that is forbidden, a refusal, rather than
-/// an install that succeeds without the lint.
-fn prune_prebuilt_libraries(
-    staging_path: &Utf8Path,
-    toolchain_channel: &str,
-    requested_crates: &[CrateName],
-    delivered: &[String],
-) -> Result<()> {
-    remove_unrequested_libraries(staging_path, toolchain_channel, requested_crates)?;
-    require_delivered_libraries(staging_path, toolchain_channel, requested_crates, delivered)
-}
-
-const fn staging_error(reason: String) -> InstallerError {
-    InstallerError::StagingFailed { reason }
-}
-
-/// Remove every library staged for `toolchain_channel` whose crate was not requested.
-fn remove_unrequested_libraries(
-    staging_path: &Utf8Path,
-    toolchain_channel: &str,
-    requested_crates: &[CrateName],
-) -> Result<()> {
-    let requested: HashSet<String> = requested_crate_names(requested_crates)
-        .into_iter()
-        .map(|name| name.replace('-', "_"))
-        .collect();
-    let read_error = |error: io::Error| {
-        staging_error(format!(
-            "failed to read staged libraries in {staging_path}: {error}"
-        ))
-    };
-
-    for dir_entry in fs::read_dir(staging_path.as_std_path()).map_err(read_error)? {
-        let entry = dir_entry.map_err(read_error)?;
-        let file_name = entry.file_name();
-        let unrequested = file_name
-            .to_str()
-            .and_then(|name| staged_crate_name(name, toolchain_channel))
-            .is_some_and(|crate_name| !requested.contains(crate_name));
-        if unrequested {
-            remove_stale_file(&entry.path())?;
-        }
-    }
-    Ok(())
-}
-
-fn remove_stale_file(path: &std::path::Path) -> Result<()> {
-    match fs::remove_file(path) {
-        Err(error) if error.kind() != io::ErrorKind::NotFound => Err(staging_error(format!(
-            "failed to remove stale prebuilt library {}: {error}",
-            path.display()
-        ))),
-        _ => Ok(()),
-    }
-}
-
-/// Fail unless this archive delivered, and the directory holds, every requested library.
-fn require_delivered_libraries(
-    staging_path: &Utf8Path,
-    toolchain_channel: &str,
-    requested_crates: &[CrateName],
-    delivered: &[String],
-) -> Result<()> {
-    let mut missing: Vec<&str> = requested_crate_names(requested_crates)
-        .into_iter()
-        .filter(|name| {
-            let staged = staged_library_filename(name, toolchain_channel);
-            !delivered.contains(&staged) || !staging_path.join(&staged).as_std_path().is_file()
-        })
-        .collect();
-    if missing.is_empty() {
-        return Ok(());
-    }
-    missing.sort_unstable();
-    Err(staging_error(format!(
-        "the prebuilt archive does not hold the requested librar{}: {}",
-        if missing.len() == 1 { "y" } else { "ies" },
-        missing.join(", ")
-    )))
 }
 
 /// Detect the host target triple by parsing `rustc -vV` output.

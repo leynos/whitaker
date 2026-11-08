@@ -1,12 +1,15 @@
 //! Unit tests for install-flow prebuilt staging and fallback behaviour.
 
 use std::{
+    collections::HashSet,
+    fs,
     path::PathBuf,
     sync::atomic::{AtomicBool, Ordering},
 };
 
 use camino::Utf8PathBuf;
 use rstest::{fixture, rstest};
+use whitaker_installer::resolution::SUITE_CRATE;
 
 use super::*;
 
