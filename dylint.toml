@@ -67,3 +67,13 @@ excluded_crates = [
     "bootstrap_run",
     "clippy_snapshot_cli",
 ]
+
+# Module-scoped rather than crate-wide, so the policy still covers the crate's
+# production code. This test module captures `tracing` output by writing to an
+# anonymous `tempfile::tempfile()` and rewinding it; that handle has no parent
+# capability to scope a `Dir` to, so the ambient `File` operations are inherent
+# to how the capture works rather than a shortcut. The module is declared as
+# `mod tests`, so the configured path names it accordingly.
+excluded_paths = [
+    "whitaker_clones_core::ast::lowering_diagnostics::tests",
+]
