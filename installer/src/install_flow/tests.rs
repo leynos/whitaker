@@ -149,9 +149,11 @@ fn prune_prebuilt_libraries_keeps_only_requested_crates(
         ..
     } = staging_fixture;
 
-    let foreign_path = staging_path.join("libforeign_lint@nightly-2026-05-28.so");
-    fs::write(foreign_path.as_std_path(), b"foreign library")
-        .expect("test setup should write foreign library");
+    let other_toolchain_path =
+        create_staged_library(&staging_path, "module_max_lines", "nightly-2020-01-01");
+    let unrelated_path = staging_path.join("README.txt");
+    fs::write(unrelated_path.as_std_path(), b"not a library")
+        .expect("test setup should write unrelated file");
 
     let mut staged = Vec::new();
     for crate_name in retained.iter().chain(removed.iter()) {
@@ -193,9 +195,73 @@ fn prune_prebuilt_libraries_keeps_only_requested_crates(
     }
 
     assert!(
-        foreign_path.exists(),
-        "non-whitaker libraries should remain untouched"
+        other_toolchain_path.exists(),
+        "a library staged for another toolchain should remain untouched"
     );
+    assert!(
+        unrelated_path.exists(),
+        "files that are not staged libraries should remain untouched"
+    );
+}
+
+/// Regression test for whitaker issue 565.
+///
+/// A newer archive stages a crate this installer was not compiled to know. The
+/// suite registers that crate's lint, so its standalone library must not
+/// survive beside the suite: both would load and rustc would reject the
+/// duplicate registration.
+#[rstest]
+fn prune_prebuilt_libraries_removes_unknown_crates_registered_by_the_suite(
+    staging_fixture: StagingFixture,
+) {
+    let StagingFixture {
+        staging_path,
+        toolchain,
+        ..
+    } = staging_fixture;
+    let suite = create_staged_library(&staging_path, SUITE_CRATE, toolchain);
+    let constituent = create_staged_library(&staging_path, "module_max_lines", toolchain);
+    let unknown =
+        create_staged_library(&staging_path, "a_crate_added_after_this_release", toolchain);
+
+    prune_prebuilt_libraries(&staging_path, toolchain, &[]).expect("pruning should succeed");
+
+    assert!(suite.exists(), "the suite must survive");
+    assert!(!constituent.exists(), "a known constituent must be removed");
+    assert!(!unknown.exists(), "an unknown constituent must be removed");
+    let remaining: Vec<_> = fs::read_dir(staging_path.as_std_path())
+        .expect("staging directory should be readable")
+        .map(|entry| entry.expect("entry").file_name())
+        .collect();
+    assert_eq!(
+        remaining.len(),
+        1,
+        "only the suite should remain: {remaining:?}"
+    );
+}
+
+#[rstest]
+fn prune_prebuilt_libraries_keeps_an_unknown_crate_that_was_requested(
+    staging_fixture: StagingFixture,
+) {
+    let StagingFixture {
+        staging_path,
+        toolchain,
+        ..
+    } = staging_fixture;
+    let requested =
+        create_staged_library(&staging_path, "a_crate_added_after_this_release", toolchain);
+    let suite = create_staged_library(&staging_path, SUITE_CRATE, toolchain);
+
+    prune_prebuilt_libraries(
+        &staging_path,
+        toolchain,
+        &[CrateName::from("a_crate_added_after_this_release")],
+    )
+    .expect("pruning should succeed");
+
+    assert!(requested.exists(), "a requested crate must survive");
+    assert!(!suite.exists(), "an unrequested suite must be removed");
 }
 
 #[test]
@@ -470,5 +536,29 @@ fn every_prebuilt_failure_falls_back_by_default(#[case] hooks: PrebuiltInstallat
     assert!(
         matches!(result, Ok(None)),
         "the default policy should fall back to a local build"
+    );
+}
+
+#[rstest]
+fn prune_prebuilt_libraries_reports_a_requested_library_the_archive_lacks(
+    staging_fixture: StagingFixture,
+) {
+    let StagingFixture {
+        staging_path,
+        toolchain,
+        ..
+    } = staging_fixture;
+    create_staged_library(&staging_path, SUITE_CRATE, toolchain);
+
+    let error = prune_prebuilt_libraries(
+        &staging_path,
+        toolchain,
+        &[CrateName::from("string_continuation_style")],
+    )
+    .expect_err("a missing requested library must not pass as an install");
+
+    assert!(
+        matches!(&error, InstallerError::StagingFailed { reason } if reason.contains("string_continuation_style")),
+        "unexpected error: {error:?}"
     );
 }

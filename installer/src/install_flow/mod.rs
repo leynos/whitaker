@@ -17,7 +17,7 @@ use whitaker_installer::{
     output::write_stderr_line,
     prebuilt::{PrebuiltConfig, PrebuiltResult, attempt_prebuilt},
     prebuilt_path::prebuilt_library_dir,
-    resolution::{EXPERIMENTAL_LINT_CRATES, LINT_CRATES, SUITE_CRATE},
+    resolution::SUITE_CRATE,
 };
 
 pub(crate) mod bootstrap_step;
@@ -262,41 +262,102 @@ fn staged_library_filename(crate_name: &str, toolchain_channel: &str) -> String 
     )
 }
 
+/// Return the crate behind a staged library file name for this toolchain.
+///
+/// A staged name is `<prefix><crate>@<toolchain><extension>`, as built by
+/// [`staged_library_filename`]. Anything else, including a library staged for
+/// another toolchain, yields `None`.
+fn staged_crate_name<'a>(file_name: &'a str, toolchain_channel: &str) -> Option<&'a str> {
+    let suffix = format!("@{toolchain_channel}{}", library_extension());
+    file_name
+        .strip_prefix(library_prefix())?
+        .strip_suffix(suffix.as_str())
+        .filter(|name| !name.is_empty())
+}
+
 /// Remove staged prebuilt libraries that were not requested for this install.
 ///
 /// Prebuilt archives can contain both suite and constituent crates, while local
 /// builds stage only requested crates. Pruning keeps prebuilt installs aligned
 /// with local-build behaviour and avoids duplicate lint registration when the
 /// wrapper runs `cargo dylint --all`.
+///
+/// The prune is driven by what is staged, not by a list of crates this
+/// installer was compiled with. An archive from a newer Whitaker can hold a
+/// crate this build has never heard of; if that crate is registered by the
+/// suite, leaving its standalone library beside the suite makes rustc reject
+/// the duplicate lint registration (issue #565). Every library staged for
+/// `toolchain_channel` whose crate was not requested is therefore removed.
+/// Files for another toolchain, and files that are not staged libraries, are
+/// left alone.
+///
+/// After pruning, every requested crate must be staged. A selection the
+/// archive cannot satisfy (a crate that is not in the rolling archive, such as
+/// an experimental lint) is reported as an error, which the caller turns into
+/// a source-build fallback or, where that is forbidden, a refusal, rather than
+/// an install that succeeds without the lint.
 fn prune_prebuilt_libraries(
     staging_path: &Utf8Path,
     toolchain_channel: &str,
     requested_crates: &[CrateName],
 ) -> Result<()> {
-    let requested = requested_crate_names(requested_crates);
-    let known_crates = LINT_CRATES
-        .iter()
-        .copied()
-        .chain(EXPERIMENTAL_LINT_CRATES.iter().copied())
-        .chain(std::iter::once(SUITE_CRATE));
+    let requested: HashSet<String> = requested_crate_names(requested_crates)
+        .into_iter()
+        .map(|name| name.replace('-', "_"))
+        .collect();
 
-    for crate_name in known_crates {
+    let entries = fs::read_dir(staging_path.as_std_path()).map_err(|error| {
+        InstallerError::StagingFailed {
+            reason: format!("failed to read staged libraries in {staging_path}: {error}"),
+        }
+    })?;
+    for entry in entries {
+        let entry = entry.map_err(|error| InstallerError::StagingFailed {
+            reason: format!("failed to read staged libraries in {staging_path}: {error}"),
+        })?;
+        let file_name = entry.file_name();
+        let Some(crate_name) = file_name
+            .to_str()
+            .and_then(|name| staged_crate_name(name, toolchain_channel))
+        else {
+            continue;
+        };
         if requested.contains(crate_name) {
             continue;
         }
-
-        let stale_path = staging_path.join(staged_library_filename(crate_name, toolchain_channel));
-        match fs::remove_file(stale_path.as_std_path()) {
+        let stale_path = entry.path();
+        match fs::remove_file(&stale_path) {
             Ok(()) => {}
             Err(error) if error.kind() == io::ErrorKind::NotFound => {}
             Err(error) => {
                 return Err(InstallerError::StagingFailed {
                     reason: format!(
-                        "failed to remove stale prebuilt library {stale_path}: {error}"
+                        "failed to remove stale prebuilt library {}: {error}",
+                        stale_path.display()
                     ),
                 });
             }
         }
+    }
+
+    let mut missing: Vec<&str> = requested_crate_names(requested_crates)
+        .into_iter()
+        .filter(|name| {
+            !staging_path
+                .join(staged_library_filename(name, toolchain_channel))
+                .as_std_path()
+                .is_file()
+        })
+        .collect();
+    if !missing.is_empty() {
+        missing.sort_unstable();
+        return Err(InstallerError::StagingFailed {
+            reason: format!(
+                "the prebuilt archive does not hold the requested librar{}: {}",
+                if missing.len() == 1 { "y" } else { "ies" },
+                missing.join(", ")
+            ),
+        });
     }
 
     Ok(())
