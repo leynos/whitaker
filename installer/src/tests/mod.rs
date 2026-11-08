@@ -55,6 +55,58 @@ fn test_base_dirs() -> TestBaseDirs {
     }
 }
 
+// Assertions live in these helpers because the dependency-check tests return
+// `Result` to propagate fixture errors, and `panic_in_result_fn` denies
+// asserting inside such a function.
+
+/// Assert the dependency check reported success.
+fn assert_check_succeeded(result: &std::result::Result<(), InstallerError>) {
+    assert!(
+        result.is_ok(),
+        "the dependency check should succeed: {result:?}"
+    );
+}
+
+/// Assert a check that found both tools installed said nothing at all.
+fn assert_silent_skip(stderr: &[u8]) {
+    assert!(
+        stderr.is_empty(),
+        "a skipped install should write no output, got: {stderr:?}"
+    );
+}
+
+/// Assert the install wrote the progress lines that `quiet` selects.
+fn assert_install_progress(stderr: &[u8], quiet: bool, expected_start: &str, expected_end: &str) {
+    let stderr_text = std::str::from_utf8(stderr).expect("stderr was not UTF-8");
+    if quiet {
+        assert!(
+            stderr_text.is_empty(),
+            "expected stderr to be empty when quiet, got {stderr_text:?}"
+        );
+    } else {
+        assert!(
+            stderr_text.starts_with(expected_start),
+            "expected stderr to start with {expected_start:?}, got {stderr_text:?}"
+        );
+        assert!(
+            stderr_text.ends_with(expected_end),
+            "expected stderr to end with {expected_end:?}, got {stderr_text:?}"
+        );
+    }
+}
+
+/// Assert the failed install surfaced as the typed `cargo-dylint` error.
+fn assert_cargo_dylint_install_failed(error: &InstallerError) {
+    assert!(
+        matches!(
+            error,
+            InstallerError::DependencyInstall { tool, message }
+                if *tool == "cargo-dylint" && message == "cargo install failed"
+        ),
+        "expected a cargo-dylint install failure, got: {error:?}"
+    );
+}
+
 #[test]
 fn exit_code_for_run_result_returns_zero_on_success() {
     let mut stderr = Vec::new();
@@ -148,18 +200,18 @@ fn ensure_dylint_tools_skips_install_when_installed(
         ]);
         let repository_installer = AlwaysNotFoundRepositoryInstaller;
 
-        let mut stderr = Vec::new();
+        let mut stderr_output = Vec::new();
         let options = dependency_install_options(&test_base_dirs, &repository_installer, false)
             .expect("dependency install options should build");
         let result = ensure_dylint_tools_with_executor(
             &executor,
             options.policy,
-            &mut stderr,
+            &mut stderr_output,
             |status, stderr| install_dylint_tools_with_options(&executor, status, stderr, options),
         );
 
-        assert!(result.is_ok());
-        assert!(stderr.is_empty());
+        assert_check_succeeded(&result);
+        assert_silent_skip(&stderr_output);
         executor.assert_finished();
     })?;
     Ok(())
@@ -202,33 +254,18 @@ fn ensure_dylint_tools_installs_missing_tools(
         ]);
         let repository_installer = AlwaysNotFoundRepositoryInstaller;
 
-        let mut stderr = Vec::new();
+        let mut stderr_output = Vec::new();
         let options = dependency_install_options(&test_base_dirs, &repository_installer, quiet)
             .expect("dependency install options should build");
         let result = ensure_dylint_tools_with_executor(
             &executor,
             options.policy,
-            &mut stderr,
+            &mut stderr_output,
             |status, stderr| install_dylint_tools_with_options(&executor, status, stderr, options),
         );
 
-        assert!(result.is_ok());
-        let stderr_text = String::from_utf8(stderr).expect("stderr was not UTF-8");
-        if quiet {
-            assert!(
-                stderr_text.is_empty(),
-                "expected stderr to be empty when quiet, got {stderr_text:?}"
-            );
-        } else {
-            assert!(
-                stderr_text.starts_with(expected_start),
-                "expected stderr to start with {expected_start:?}, got {stderr_text:?}"
-            );
-            assert!(
-                stderr_text.ends_with(expected_end),
-                "expected stderr to end with {expected_end:?}, got {stderr_text:?}"
-            );
-        }
+        assert_check_succeeded(&result);
+        assert_install_progress(&stderr_output, quiet, expected_start, expected_end);
         executor.assert_finished();
     })?;
     Ok(())
@@ -261,23 +298,18 @@ fn ensure_dylint_tools_propagates_install_failures(
         ]);
         let repository_installer = AlwaysNotFoundRepositoryInstaller;
 
-        let mut stderr = Vec::new();
+        let mut stderr_output = Vec::new();
         let options = dependency_install_options(&test_base_dirs, &repository_installer, false)
             .expect("dependency install options should build");
-        let err = ensure_dylint_tools_with_executor(
+        let error = ensure_dylint_tools_with_executor(
             &executor,
             options.policy,
-            &mut stderr,
+            &mut stderr_output,
             |status, stderr| install_dylint_tools_with_options(&executor, status, stderr, options),
         )
         .expect_err("expected install failure");
 
-        assert!(matches!(
-            err,
-            InstallerError::DependencyInstall { tool, message }
-                if tool == "cargo-dylint"
-                    && message == "cargo install failed"
-        ));
+        assert_cargo_dylint_install_failed(&error);
         executor.assert_finished();
     })?;
     Ok(())

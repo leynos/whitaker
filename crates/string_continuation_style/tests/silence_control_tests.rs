@@ -7,26 +7,13 @@
 //! stops reporting, the gate is not live and the silence fixture is vacuous.
 //!
 //! That pairing used to be prose. `pass_shadowed_println.rs` said its control
-//! was "recorded in the ExecPlan", which is a document no gate reads, so the
+//! was "recorded in the `ExecPlan`", which is a document no gate reads, so the
 //! claim could rot silently. This test makes the pairing a checked property:
 //! each `pass_*` fixture must declare `Control: <fixture>.rs`, the named file
 //! must exist beside it, and it must carry a `.stderr` golden proving it still
 //! emits a diagnostic.
 
-use std::sync::OnceLock;
-
 use camino::{Utf8Path, Utf8PathBuf};
-
-/// Directory holding the UI fixtures, resolved once from the crate manifest.
-fn ui_directory() -> &'static Utf8Path {
-    static DIRECTORY: OnceLock<Utf8PathBuf> = OnceLock::new();
-    DIRECTORY.get_or_init(|| {
-        Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("ui")
-            .canonicalize_utf8()
-            .expect("the ui fixture directory should exist")
-    })
-}
 
 /// Collects fixture file names in `directory` with the given prefix and suffix.
 fn fixture_names(directory: &Utf8Path, prefix: &str, suffix: &str) -> Vec<String> {
@@ -50,8 +37,11 @@ fn declared_control(source: &str) -> Option<&str> {
 
 #[test]
 fn every_silence_fixture_names_a_committed_control() {
-    let directory = ui_directory();
-    let mut silence_fixtures = fixture_names(directory, "pass_", ".rs");
+    let directory = Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("ui")
+        .canonicalize_utf8()
+        .expect("the ui fixture directory should exist");
+    let mut silence_fixtures = fixture_names(&directory, "pass_", ".rs");
     silence_fixtures.sort();
     assert!(
         !silence_fixtures.is_empty(),

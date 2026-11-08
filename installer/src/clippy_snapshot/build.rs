@@ -66,19 +66,17 @@ pub fn build_bundle(request: &BuildRequest<'_>) -> Result<BuiltBundle, ClippySna
     // must be fixed against the caller's directory first.
     let work_dir = absolute(request.work_dir)?;
     let output_dir = absolute(request.output_dir)?;
-    let request = &BuildRequest {
+    let scoped = &BuildRequest {
         work_dir: &work_dir,
         output_dir: &output_dir,
         ..request.clone()
     };
-    let mirror = request.work_dir.join("upstream.git");
-    clone_upstream(request, &mirror)?;
-    pin_main(&mirror, request.manifest)?;
-    std::fs::create_dir_all(request.output_dir)
-        .map_err(|error| ClippySnapshotError::io(request.output_dir, &error))?;
-    let bundle = request
-        .output_dir
-        .join(request.manifest.bundle_asset_name());
+    let mirror = scoped.work_dir.join("upstream.git");
+    clone_upstream(scoped, &mirror)?;
+    pin_main(&mirror, scoped.manifest)?;
+    std::fs::create_dir_all(scoped.output_dir)
+        .map_err(|error| ClippySnapshotError::io(scoped.output_dir, &error))?;
+    let bundle = scoped.output_dir.join(scoped.manifest.bundle_asset_name());
     SnapshotGit::local().stdout(
         "bundle create",
         Some(&mirror),
@@ -96,13 +94,13 @@ pub fn build_bundle(request: &BuildRequest<'_>) -> Result<BuiltBundle, ClippySna
         reason: error.to_string(),
     })?;
     let sidecar = Utf8PathBuf::from(format!("{bundle}.sha256"));
-    let line = format!("{sha256}  {}\n", request.manifest.bundle_asset_name());
+    let line = format!("{sha256}  {}\n", scoped.manifest.bundle_asset_name());
     std::fs::write(&sidecar, line).map_err(|error| ClippySnapshotError::io(&sidecar, &error))?;
-    let artefact = BundleArtefact::from_sidecar(&bundle, request.manifest)?;
+    let artefact = BundleArtefact::from_sidecar(&bundle, scoped.manifest)?;
     install_bundle(
         &artefact,
-        request.manifest,
-        &request.work_dir.join("self-check"),
+        scoped.manifest,
+        &scoped.work_dir.join("self-check"),
     )?;
     Ok(BuiltBundle { artefact, sidecar })
 }
@@ -122,52 +120,9 @@ fn clone_upstream(
     let mut last_error = None;
     for attempt in 1..=CLONE_ATTEMPTS {
         remove_partial_clone(mirror)?;
-        let header = (attempt > 1)
-            .then_some(request.token)
-            .flatten()
-            .map(|token| format!("Authorization: Bearer {token}"));
-        // `GIT_CONFIG_*` scopes the header to this one command, and the URL in
-        // the key scopes it to GitHub.
-        let envs: Vec<(&str, &str)> = header.as_deref().map_or_else(Vec::new, |value| {
-            vec![
-                ("GIT_CONFIG_COUNT", "1"),
-                ("GIT_CONFIG_KEY_0", GITHUB_HEADER_KEY),
-                ("GIT_CONFIG_VALUE_0", value),
-            ]
-        });
-        let args = [
-            "clone",
-            "--quiet",
-            "--bare",
-            "--single-branch",
-            "--no-tags",
-            "--branch",
-            SNAPSHOT_BRANCH,
-            request.source,
-            mirror.as_str(),
-        ];
-        let started = Instant::now();
-        match SnapshotGit::network()
-            .with_env(&envs)
-            .stdout("clone", None, &args)
-        {
-            Ok(_) => {
-                record_clone_attempt(OUTCOME_OK, started.elapsed());
-                return Ok(());
-            }
+        match run_clone_attempt(request, mirror, attempt) {
+            Ok(()) => return Ok(()),
             Err(error) => {
-                let outcome = failed_attempt_label(attempt, CLONE_ATTEMPTS);
-                let elapsed = started.elapsed();
-                record_clone_attempt(outcome, elapsed);
-                // The error reaches the caller once attempts run out; the log
-                // carries only bounded fields.
-                tracing::warn!(
-                    attempt,
-                    outcome,
-                    failure = failure_label(&error),
-                    elapsed_ms = millis(elapsed),
-                    "Clippy clone attempt failed"
-                );
                 last_error = Some(error);
                 if attempt < CLONE_ATTEMPTS {
                     std::thread::sleep(CLONE_BACKOFF * attempt);
@@ -179,6 +134,60 @@ fn clone_upstream(
         operation: "clone",
         message: "no clone attempt ran".to_owned(),
     }))
+}
+
+/// Run one clone attempt, recording its duration and outcome.
+fn run_clone_attempt(
+    request: &BuildRequest<'_>,
+    mirror: &Utf8Path,
+    attempt: u32,
+) -> Result<(), ClippySnapshotError> {
+    let header = (attempt > 1)
+        .then_some(request.token)
+        .flatten()
+        .map(|token| format!("Authorization: Bearer {token}"));
+    // `GIT_CONFIG_*` scopes the header to this one command, and the URL in the
+    // key scopes it to GitHub.
+    let envs: Vec<(&str, &str)> = header.as_deref().map_or_else(Vec::new, |value| {
+        vec![
+            ("GIT_CONFIG_COUNT", "1"),
+            ("GIT_CONFIG_KEY_0", GITHUB_HEADER_KEY),
+            ("GIT_CONFIG_VALUE_0", value),
+        ]
+    });
+    let args = [
+        "clone",
+        "--quiet",
+        "--bare",
+        "--single-branch",
+        "--no-tags",
+        "--branch",
+        SNAPSHOT_BRANCH,
+        request.source,
+        mirror.as_str(),
+    ];
+    let started = Instant::now();
+    let result = SnapshotGit::network()
+        .with_env(&envs)
+        .stdout("clone", None, &args);
+    let elapsed = started.elapsed();
+    let outcome = result.as_ref().map_or_else(
+        |_| failed_attempt_label(attempt, CLONE_ATTEMPTS),
+        |_| OUTCOME_OK,
+    );
+    record_clone_attempt(outcome, elapsed);
+    if let Err(error) = &result {
+        // The error reaches the caller once attempts run out; the log carries
+        // only bounded fields.
+        tracing::warn!(
+            attempt,
+            outcome,
+            failure = failure_label(error),
+            elapsed_ms = millis(elapsed),
+            "Clippy clone attempt failed"
+        );
+    }
+    result.map(|_| ())
 }
 
 /// Discard a half-written clone from an earlier failed attempt.

@@ -6,6 +6,7 @@ import re
 
 from runner_lanes import linux_arm, runs_even_when_the_job_fails
 from ubicloud_workflow_support import (
+    HOSTED_RUNNER_JOBS,
     INSTALL_ACTION,
     REPOSITORY_ROOT,
     SETUP_RUST_ACTION,
@@ -99,6 +100,10 @@ def test_setup_rust_delegates_cache_and_compiler_cache_ownership() -> None:
             f"{job_name} must use the reviewed shared Rust setup pin"
         )
         declared = setup["with"]
+        if job_name in HOSTED_RUNNER_JOBS:
+            # Hosted, sccache off: its own rule holds that switch.
+            assert set(declared) - {"install-mold"} == {"cache-provider", "use-sccache"}
+            continue
         assert set(declared) - {"install-mold"} == {"cache-provider", "expect-cache"}, (
             f"{job_name} must pass the shared action nothing but the cache "
             "provider and the backend it expects; `use-sccache: false` would "
@@ -200,7 +205,7 @@ def _assert_the_shared_action_owns_the_compiler_cache(
 
 def test_compiler_cache_effectiveness_is_always_recorded() -> None:
     """Zero compile requests is a broken integration, not a clean run."""
-    for job_name in UBICLOUD_JOBS:
+    for job_name in set(UBICLOUD_JOBS) - set(HOSTED_RUNNER_JOBS):
         job = load_job(job_name)
         names = step_names(job)
         assert names.index("Setup Rust") < names.index(

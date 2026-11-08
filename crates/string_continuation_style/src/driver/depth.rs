@@ -216,9 +216,9 @@ impl<'ast> Visitor<'ast> for WrapperDepth<'_> {
 
     /// Walks generics, counting the where clause as its own wrapper.
     fn visit_generics(&mut self, generics: &'ast ast::Generics) {
-        self.with_span(generics.span, |visitor| {
-            visitor.with_span(generics.where_clause.span, |visitor| {
-                visit::walk_generics(visitor, generics);
+        self.with_span(generics.span, |with_generics| {
+            with_generics.with_span(generics.where_clause.span, |with_where_clause| {
+                visit::walk_generics(with_where_clause, generics);
             });
         });
     }
@@ -237,11 +237,11 @@ impl<'ast> Visitor<'ast> for WrapperDepth<'_> {
         span: Span,
         _id: ast::NodeId,
     ) {
-        let span = match &kind {
+        let effective_span = match &kind {
             visit::FnKind::Fn(_, _, function) => function.sig.span,
             visit::FnKind::Closure(..) => span,
         };
-        self.with_span(span, |visitor| visit::walk_fn(visitor, kind));
+        self.with_span(effective_span, |visitor| visit::walk_fn(visitor, kind));
     }
 
     visit_with_span!(visit_where_predicate, predicate: WherePredicate, predicate.span, walk_where_predicate);

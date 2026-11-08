@@ -313,6 +313,12 @@ mod tests {
         )
         .expect("one-based line range should build");
 
-        assert_eq!(segment.value(), f64::from(u32::MAX) * 0.5);
+        // Halving an exact integer is exact, so the saturated weight is
+        // bit-identical to the expectation; comparing those bits states the
+        // exactness that a tolerance would only approximate.
+        assert_eq!(
+            segment.value().to_bits(),
+            (f64::from(u32::MAX) * 0.5).to_bits(),
+        );
     }
 }

@@ -252,7 +252,7 @@ impl InstallArgs {
     /// condition: the caller asked to build, the caller asked for experimental
     /// lints which are never published, or the caller pinned a suite that the
     /// rolling release cannot carry.
-    fn arguments_force_a_source_build(&self) -> bool {
+    const fn arguments_force_a_source_build(&self) -> bool {
         self.is_build_only || self.lint_selection.experimental || self.suite_version.is_some()
     }
 

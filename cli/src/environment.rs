@@ -1,4 +1,4 @@
-//! Translate injected environment variables into OrthoConfig merge layers.
+//! Translate injected environment variables into `OrthoConfig` merge layers.
 
 use std::ffi::OsStr;
 
@@ -17,9 +17,9 @@ use crate::{commands::environment_key, error::invalid, source_fallback_override}
 /// Returns an error if a recognized value is non-Unicode or cannot be parsed.
 pub(crate) fn collect(source: &dyn ScanEnvSource) -> OrthoResult<(Value, Value, bool)> {
     let mut layers = EnvironmentLayers::default();
-    for (key, value) in source.scan() {
-        if let Some(key) = key.to_str() {
-            layers.insert_variable(EnvironmentName(key), &value)?;
+    for (raw_name, value) in source.scan() {
+        if let Some(name) = raw_name.to_str() {
+            layers.insert_variable(EnvironmentName(name), &value)?;
         }
     }
     Ok((
@@ -284,11 +284,11 @@ fn insert_command(
     setting: SettingPath<'_>,
     value: Value,
 ) {
-    let commands = root.entry("cmds").or_insert_with(|| json!({}));
-    if let Value::Object(commands) = commands {
-        let command = commands.entry(command).or_insert_with(|| json!({}));
-        if let Value::Object(command) = command {
-            insert(command, setting, value);
+    let cmds = root.entry("cmds").or_insert_with(|| json!({}));
+    if let Value::Object(command_table) = cmds {
+        let section = command_table.entry(command).or_insert_with(|| json!({}));
+        if let Value::Object(command_section) = section {
+            insert(command_section, setting, value);
         }
     }
 }

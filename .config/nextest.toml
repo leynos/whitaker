@@ -74,19 +74,28 @@ test-group = "serial-dylint-ui"
 retries = { backoff = "exponential", count = 2, delay = "5s" }
 
 [[profile.ci.overrides]]
-# The alias UI fixture rebuilds its lint library through nested Cargo. Its
-# 20-minute attempt timed out while compiler admission was queued; let one
-# build finish rather than restarting it on retry.
+# The alias UI fixture rebuilds its lint library and example through nested
+# Cargo. A 20-minute attempt timed out while compiler admission was queued, and
+# so did a 75-minute one on a host whose pool reported a healthy 100-200 queued
+# compiler groups; give one build the same build-sized allowance as the
+# trybuild contracts rather than restarting it on retry. Keep the provider in
+# step with `NESTED_UI_FIXTURE_FILTER` in
+# `tests/workflow_contracts/nextest_profile_test.py`.
 filter = "package(no_unwrap_or_else_panic) & test(ui::aliased_test_crate_non_companion_does_not_exempt_parent_function)"
-slow-timeout = { period = "75m", terminate-after = 1, grace-period = "5s" }
+slow-timeout = { period = "120m", terminate-after = 1, grace-period = "5s" }
 test-group = "serial-dylint-ui"
 retries = 0
 
 [[profile.ci.overrides]]
 # The other trybuild compile contracts build fixtures through nested Cargo.
 # Keep them under one build-sized allowance and avoid retries that repeat work.
+# The allowance has to cover a cold fixture project, not just the cases: one
+# run under a saturated compiler-admission pool measured 51m39s in the nested
+# build alone and was then terminated 47s into the first case, so a cold build
+# and the cases after it must both fit. 120m leaves that room while still
+# bounding a genuinely hung fixture.
 filter = "test(ortho_config_and_clap_derives_compile_together) | test(dependency_check_result_contract_is_public) | test(fixture_expansion_lint_attribute_contract) | test(public_const_api_works_in_const_context) | test(renamed_common_apis_are_public_and_legacy_names_stay_removed) | test(renamed_sarif_api_is_public_and_legacy_names_stay_removed) | test(sha2_0_11_pre_migration_patterns_fail_to_compile)"
-slow-timeout = { period = "75m", terminate-after = 1, grace-period = "5s" }
+slow-timeout = { period = "120m", terminate-after = 1, grace-period = "5s" }
 test-group = "serial-trybuild-contracts"
 retries = 0
 
@@ -209,11 +218,15 @@ test-group = "serial-dylint-ui"
 retries = 0
 
 [[profile.default.overrides]]
-# This UI fixture rebuilds its lint library through nested Cargo. A 20-minute
-# attempt timed out while compiler admission was queued; let one build finish
-# instead of restarting it on retry.
+# This UI fixture rebuilds its lint library and example through nested Cargo. A
+# 20-minute attempt timed out while compiler admission was queued, and so did a
+# 75-minute one on a host whose pool reported a healthy 100-200 queued compiler
+# groups; give one build the same build-sized allowance as the trybuild
+# contracts instead of restarting it on retry. Keep the period in step with
+# `NESTED_UI_FIXTURE_FILTER` in
+# `tests/workflow_contracts/nextest_profile_test.py`.
 filter = "package(no_unwrap_or_else_panic) & test(ui::aliased_test_crate_non_companion_does_not_exempt_parent_function)"
-slow-timeout = { period = "75m", terminate-after = 1, grace-period = "5s" }
+slow-timeout = { period = "120m", terminate-after = 1, grace-period = "5s" }
 test-group = "serial-dylint-ui"
 retries = 0
 
@@ -229,8 +242,13 @@ retries = { backoff = "exponential", count = 2, delay = "5s" }
 [[profile.default.overrides]]
 # The other trybuild compile contracts build fixtures through nested Cargo.
 # Keep them under one build-sized allowance and avoid retries that repeat work.
+# The allowance has to cover a cold fixture project, not just the cases: one
+# run under a saturated compiler-admission pool measured 51m39s in the nested
+# build alone and was then terminated 47s into the first case, so a cold build
+# and the cases after it must both fit. 120m leaves that room while still
+# bounding a genuinely hung fixture.
 filter = "test(ortho_config_and_clap_derives_compile_together) | test(dependency_check_result_contract_is_public) | test(fixture_expansion_lint_attribute_contract) | test(public_const_api_works_in_const_context) | test(renamed_common_apis_are_public_and_legacy_names_stay_removed) | test(renamed_sarif_api_is_public_and_legacy_names_stay_removed) | test(sha2_0_11_pre_migration_patterns_fail_to_compile)"
-slow-timeout = { period = "75m", terminate-after = 1, grace-period = "5s" }
+slow-timeout = { period = "120m", terminate-after = 1, grace-period = "5s" }
 test-group = "serial-trybuild-contracts"
 retries = 0
 

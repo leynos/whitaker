@@ -24,9 +24,9 @@ mod unix {
     #[test]
     fn fluent_bundles_are_included_in_the_package_tarball() -> TestResult {
         let target_dir = package_target_dir()?;
-        let target_dir = Utf8Path::from_path(target_dir.path())
+        let target_path = Utf8Path::from_path(target_dir.path())
             .ok_or("temporary package target directory must be UTF-8")?;
-        let crate_path = package_crate_path(target_dir)?;
+        let crate_path = package_crate_path(target_path)?;
         let tar_listing = package_tar_listing(&crate_path)?;
         let expected_entry = packaged_fallback_locale_path()
             .to_string_lossy()

@@ -10,5 +10,5 @@ publish = false
 rustc_hir = { workspace = true }
 rustc_lint = { workspace = true }
 
-[lints.rust]
-missing_docs = "deny"
+[lints]
+workspace = true

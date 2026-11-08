@@ -21,6 +21,7 @@ use super::{
     error::BootstrapError,
     metadata::BootstrapMetadata,
     probe::is_present_dir,
+    run_readiness::{record_readiness, record_verification},
     snapshot_check::verify_snapshot,
     telemetry::{
         BuildOutcome,
@@ -28,6 +29,9 @@ use super::{
         LockMode,
         child_label,
         failure_label,
+        log_driver_changed,
+        log_run,
+        log_using_ready_driver,
         record_driver_build,
         record_lock_failure,
         record_lock_wait,
@@ -84,6 +88,7 @@ pub fn run(dirs: &dyn BaseDirs, args: &[OsString]) -> Result<RunOutcome, Bootstr
 /// # Errors
 ///
 /// As for [`run`].
+#[tracing::instrument(name = "bootstrap.run", skip_all)]
 pub fn run_with_options(
     dirs: &dyn BaseDirs,
     options: RunOptions<'_>,
@@ -97,6 +102,7 @@ pub fn run_with_options(
 /// # Errors
 ///
 /// As for [`run`].
+#[tracing::instrument(name = "bootstrap.run", skip_all)]
 pub fn run_with_cargo(
     dirs: &dyn BaseDirs,
     cargo: &OsStr,
@@ -108,8 +114,9 @@ pub fn run_with_cargo(
 /// Run the bootstrap with every option exposed to the callers above.
 ///
 /// The public entry points differ only in the defaults they supply, so they
-/// share this implementation and its instrumented span.
-#[tracing::instrument(name = "bootstrap.run", skip_all)]
+/// share this implementation. The span lives on the entry points rather than
+/// here because its expansion, added to this function's branching, would
+/// exceed the cognitive-complexity budget.
 fn run_inner(
     dirs: &dyn BaseDirs,
     cargo: &OsStr,
@@ -130,18 +137,7 @@ fn prepare(
     options: RunOptions<'_>,
 ) -> Result<PreparedRun, BootstrapError> {
     let metadata = BootstrapMetadata::read(&layout.metadata_path())?;
-    let library_dir = match options.library_path {
-        Some(path) => path.to_owned(),
-        None => {
-            let recorded = metadata.library_dir.resolve(layout.data_root());
-            if !is_present_dir(&recorded)? {
-                return Err(BootstrapError::LibrariesMissing {
-                    path: recorded.to_string(),
-                });
-            }
-            recorded.into_os_string()
-        }
-    };
+    let library_dir = resolve_library_dir(layout, &metadata, options)?;
     let snapshot = layout.snapshot(&metadata.snapshot_commit);
     check_installed(&snapshot, &metadata.snapshot_commit)?;
     check_cargo_dylint(cargo, &metadata.dylint_version)?;
@@ -154,6 +150,34 @@ fn prepare(
         snapshot,
         slot,
     })
+}
+
+/// Resolve the library directory the child should export.
+///
+/// A caller-supplied path wins outright: the root CLI forwards the per-toolchain
+/// directories it recorded during its own install, and checking the install's
+/// single recorded directory instead would reject a perfectly good override.
+/// Without an override the recorded directory is used, and must still exist.
+///
+/// # Errors
+///
+/// Returns [`BootstrapError::LibrariesMissing`] when the recorded directory is
+/// absent, or the inspection error when it exists but cannot be read.
+fn resolve_library_dir(
+    layout: &BootstrapLayout,
+    metadata: &BootstrapMetadata,
+    options: RunOptions<'_>,
+) -> Result<OsString, BootstrapError> {
+    if let Some(path) = options.library_path {
+        return Ok(path.to_owned());
+    }
+    let recorded = metadata.library_dir.resolve(layout.data_root());
+    if !is_present_dir(&recorded)? {
+        return Err(BootstrapError::LibrariesMissing {
+            path: recorded.to_string(),
+        });
+    }
+    Ok(recorded.into_os_string())
 }
 
 /// Run the child under the driver lock, recording the run's path and outcome.
@@ -194,7 +218,7 @@ fn choose_and_run(prepared: &PreparedRun, cargo: &OsStr, args: &[OsString]) -> R
             return Ok((DriverPath::Warm, outcome));
         }
     }
-    let _exclusive =
+    let exclusive =
         timed_lock(LockMode::Exclusive, || slot.lock_exclusive()).map_err(unresolved)?;
     if !slot.is_ready().map_err(unresolved)? {
         return reached(DriverPath::Cold, run_cold(prepared, cargo, args));
@@ -202,16 +226,14 @@ fn choose_and_run(prepared: &PreparedRun, cargo: &OsStr, args: &[OsString]) -> R
     // Another process built and verified the driver while this one waited.
     // Trade the exclusive lock for a shared one rather than make every run
     // that queued behind the build wait for the others in turn.
-    drop(_exclusive);
-    match warm_or_none(DriverPath::WarmAfterWait, prepared, cargo, args)? {
-        Some(outcome) => Ok((DriverPath::WarmAfterWait, outcome)),
-        // Replaced again in between: build under the exclusive lock.
-        None => {
-            let _exclusive = timed_lock(LockMode::Exclusive, || slot.lock_exclusive())
-                .map_err(|error| (DriverPath::Cold, error))?;
-            reached(DriverPath::Cold, run_cold(prepared, cargo, args))
-        }
+    drop(exclusive);
+    if let Some(outcome) = warm_or_none(DriverPath::WarmAfterWait, prepared, cargo, args)? {
+        return Ok((DriverPath::WarmAfterWait, outcome));
     }
+    // Replaced again in between: build under the exclusive lock.
+    let _exclusive = timed_lock(LockMode::Exclusive, || slot.lock_exclusive())
+        .map_err(|error| (DriverPath::Cold, error))?;
+    reached(DriverPath::Cold, run_cold(prepared, cargo, args))
 }
 
 /// [`run_warm`] tagged with `path`, keeping its "not ready after all" answer.
@@ -239,21 +261,7 @@ fn finish(
         .map_or_else(failure_label, |run| child_label(run.code));
     record_run(path, outcome, elapsed);
     let elapsed_ms = u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX);
-    if result.is_ok() {
-        tracing::debug!(
-            driver = path.label(),
-            outcome,
-            elapsed_ms,
-            "bootstrap run finished"
-        );
-    } else {
-        tracing::warn!(
-            driver = path.label(),
-            outcome,
-            elapsed_ms,
-            "bootstrap run failed"
-        );
-    }
+    log_run(path, outcome, result.is_ok(), elapsed_ms);
     result
 }
 
@@ -285,14 +293,11 @@ fn run_warm(
     // after this read changes the identity the child leaves, which the
     // comparison below catches.
     let before = slot.driver_identity()?;
-    if before.is_none() || slot.ready_identity()? != before {
-        tracing::debug!(
-            toolchain = slot.toolchain(),
-            "the driver changed since it was verified"
-        );
+    if !is_marked_ready(slot, before)? {
+        log_driver_changed(slot.toolchain());
         return Ok(None);
     }
-    tracing::debug!(toolchain = slot.toolchain(), "using the ready driver");
+    log_using_ready_driver(slot.toolchain());
     // Dylint re-probes a cached driver and rebuilds it if the probe fails, so
     // a warm run can still build; compare identities rather than assume.
     let started = Instant::now();
@@ -305,6 +310,14 @@ fn run_warm(
         code: exit_code(status),
         built_driver,
     }))
+}
+
+/// Return whether `before` is still the driver the ready marker records.
+fn is_marked_ready(
+    slot: &DriverSlot,
+    before: Option<DriverIdentity>,
+) -> Result<bool, BootstrapError> {
+    Ok(before.is_some() && slot.ready_identity()? == before)
 }
 
 /// Verify the snapshot a warm run's rebuild just read, before trusting it.
@@ -322,24 +335,7 @@ fn check_warm_rebuild(prepared: &PreparedRun, started: Instant) -> Result<(), Bo
         "Dylint rebuilt a ready driver; verifying the snapshot it read"
     );
     let verified = verify_snapshot(&prepared.snapshot);
-    let outcome = if verified.is_ok() {
-        // Record the verified replacement, so other runs may share it.
-        if let Err(error) = prepared.slot.mark_ready() {
-            tracing::warn!(
-                failure = failure_label(&error),
-                "could not record the rebuilt driver as ready"
-            );
-        }
-        BuildOutcome::Built
-    } else {
-        if let Err(error) = prepared.slot.clear_ready() {
-            tracing::warn!(
-                failure = failure_label(&error),
-                "could not mark the driver cold after a failed verification"
-            );
-        }
-        BuildOutcome::VerifyFailed
-    };
+    let outcome = record_verification(&prepared.slot, &verified);
     record_driver_build(outcome, started.elapsed());
     verified
 }
@@ -392,36 +388,6 @@ fn run_cold(
         code: exit_code(status),
         built_driver: was_replaced(&prepared.slot, before),
     })
-}
-
-/// Mark the slot ready when the child left a driver behind.
-///
-/// Failures here are reported but not returned: the child has already run,
-/// and its exit status matters more than the marker. An unmarked slot is
-/// simply cold again next time.
-fn record_readiness(slot: &DriverSlot) -> BuildOutcome {
-    match slot.has_driver().and_then(|has_driver| {
-        has_driver
-            .then(|| slot.mark_ready())
-            .transpose()
-            .map(|marked| marked.is_some())
-    }) {
-        Ok(true) => BuildOutcome::Built,
-        Ok(false) => {
-            tracing::warn!(
-                toolchain = slot.toolchain(),
-                "cargo dylint exited without building a driver"
-            );
-            BuildOutcome::NotBuilt
-        }
-        Err(error) => {
-            tracing::warn!(
-                failure = failure_label(&error),
-                "could not record the driver as ready"
-            );
-            BuildOutcome::Unrecorded
-        }
-    }
 }
 
 /// Start `cargo dylint` with the bootstrap's variables and wait for it.

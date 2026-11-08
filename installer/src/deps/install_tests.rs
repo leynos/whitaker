@@ -8,6 +8,12 @@ use crate::test_utils::dependency_binary_helpers::{
     with_fake_binary_on_path,
 };
 
+/// Assert the status refresh found both tools installed.
+fn assert_both_tools_installed(status: DylintToolStatus) {
+    assert!(status.cargo_dylint, "cargo-dylint should be installed");
+    assert!(status.dylint_link, "dylint-link should be installed");
+}
+
 /// Verify local Cargo installs refresh companion link status.
 #[rstest]
 #[case(InstallOutcome::CargoBinstall)]
@@ -30,8 +36,7 @@ fn update_status_after_install_refreshes_link_for_local_cargo_dylint_installs(
         update_status_after_install(&mut status, &executor, &CARGO_DYLINT_TOOL, outcome)
             .expect("local Cargo install status should refresh");
 
-        assert!(status.cargo_dylint);
-        assert!(status.dylint_link);
+        assert_both_tools_installed(status);
         executor.assert_finished();
     })?;
     Ok(())
@@ -76,7 +81,7 @@ fn should_install_tool_returns_expected(
         dylint_link,
     };
 
-    assert_eq!(should_install_tool(&status, tool), expected);
+    assert_eq!(should_install_tool(status, tool), expected);
 }
 
 /// Verify companion refresh decisions for install outcomes and current status.
@@ -101,5 +106,5 @@ fn should_refresh_companions_returns_expected(
     #[case] status: DylintToolStatus,
     #[case] expected: bool,
 ) {
-    assert_eq!(should_refresh_companions(outcome, &status), expected);
+    assert_eq!(should_refresh_companions(outcome, status), expected);
 }

@@ -373,5 +373,5 @@ mod tests {
 }
 
 #[cfg(test)]
-#[path = "tests/behaviour.rs"]
+#[path = "../tests/behaviour.rs"]
 mod behaviour;

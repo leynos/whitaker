@@ -25,14 +25,32 @@ macro_rules! macro_only_inner_closure {
 
 fn main() {
     let value = helper(fixture(), "literal", PREFIX, SUFFIX);
-    assert_eq!(value, "prefix-fixture-literal-suffix");
+    assert_eq!(
+        value, "prefix-fixture-literal-suffix",
+        "the helper should join every part in order"
+    );
 
     let built = Builder { fixture: fixture() }.build(SUFFIX);
-    assert_eq!(built, "fixture-suffix");
+    assert_eq!(
+        built, "fixture-suffix",
+        "the builder should join the fixture with the suffix"
+    );
 
-    assert_eq!(nested_helper(fixture()), "fixture");
-    assert_eq!(call_nested_helper!(fixture()), "fixture");
-    assert_eq!(macro_only_inner_closure!(fixture())(), "fixture");
+    assert_eq!(
+        nested_helper(fixture()),
+        "fixture",
+        "a direct helper call should return the fixture value"
+    );
+    assert_eq!(
+        call_nested_helper!(fixture()),
+        "fixture",
+        "the macro invocation should reach the helper"
+    );
+    assert_eq!(
+        macro_only_inner_closure!(fixture())(),
+        "fixture",
+        "the closure the macro produces should return the fixture value"
+    );
 }
 
 #[fixture]

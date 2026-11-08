@@ -118,7 +118,7 @@ pub struct SarifResult {
 
 #[cfg(test)]
 mod tests {
-    //! Test SarifResult defaults, level encoding and field omission with shared
+    //! Test `SarifResult` defaults, level encoding and field omission with shared
     //! JSON assertion helpers.
 
     use super::*;

@@ -19,22 +19,29 @@ pub fn select_smallest_covering(
     candidates: &[std::ops::Range<u32>],
     target: &std::ops::Range<u32>,
 ) -> Option<usize> {
-    let mut selected: Option<usize> = None;
+    let mut selected: Option<(usize, u32)> = None;
     for (index, candidate) in candidates.iter().enumerate() {
-        let selected_width = selected.map(|selected_index| {
-            let selected = &candidates[selected_index];
-            selected.end - selected.start
-        });
+        let selected_width = selected.map(|(_, width)| width);
         if should_select_covering_candidate(candidate, target, selected_width) {
-            selected = Some(index);
+            // The width is carried with the index so selection never indexes
+            // back into `candidates` to re-measure the candidate it chose.
+            selected = Some((index, candidate_width(candidate)));
         }
     }
 
-    selected
+    selected.map(|(index, _)| index)
+}
+
+/// Width of a range whose bounds are known to be ordered.
+///
+/// Callers reach this only after [`candidate_covers_target`] has accepted the
+/// range, which is what guarantees the subtraction cannot underflow.
+const fn candidate_width(candidate: &std::ops::Range<u32>) -> u32 {
+    candidate.end - candidate.start
 }
 
 /// Return whether `candidate` covers a valid `target` range.
-pub(super) fn candidate_covers_target(
+pub(super) const fn candidate_covers_target(
     candidate: &std::ops::Range<u32>,
     target: &std::ops::Range<u32>,
 ) -> bool {

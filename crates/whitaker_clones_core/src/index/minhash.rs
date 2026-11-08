@@ -290,7 +290,7 @@ pub(super) fn minimum_mixed_hash(seed: Seed, hashes: &[u64]) -> u64 {
     })
 }
 
-/// Mix a hash value with its seed using the stable SplitMix transformation.
+/// Mix a hash value with its seed using the stable `SplitMix` transformation.
 const fn mix_hash(seed: u64, hash: u64) -> u64 { splitmix64(seed ^ hash.wrapping_mul(HASH_MIX)) }
 
 /// Generates the next seed in the deterministic stream.

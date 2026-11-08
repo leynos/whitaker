@@ -8,13 +8,17 @@
 
 use rstest::rstest;
 
-#[expect(dead_code)]
+#[expect(dead_code, reason = "example fixture not used at runtime")]
+#[expect(
+    clippy::expect_used,
+    reason = "the fixture deliberately calls expect outside test-only code"
+)]
 fn parse() {
     let parsed = std::iter::once("value").next();
     let _ = parsed.expect("ordinary code must not inherit rstest harness status");
 }
 
-#[expect(dead_code)]
+#[expect(dead_code, reason = "example fixture not used at runtime")]
 mod parse {
     pub const VERSION: &str = "1";
 }

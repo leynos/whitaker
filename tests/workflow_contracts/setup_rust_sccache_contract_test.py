@@ -33,6 +33,7 @@ import pytest
 from runner_lanes import GITHUB_HOSTED_LABELS, LINUX_ARM_TEMPLATE, declared_labels
 from sccache_steps import mentions_sccache
 from ubicloud_workflow_support import (
+    HOSTED_RUNNER_JOBS,
     SCCACHE_DIRECTORY,
     SETUP_RUST_ACTION,
     UBICLOUD_JOBS,
@@ -165,8 +166,13 @@ def expected_expect_cache(labels: typ.Iterable[str]) -> str:
     "${{ runner.os == 'Linux' && 'ubicloud' || 'any' }}"
     >>> expected_expect_cache(["ubicloud-standard-2-ubuntu-2404"])
     'ubicloud'
+    >>> expected_expect_cache(["ubuntu-24.04"])
+    'github'
     """
-    if set(labels) & GITHUB_HOSTED_LABELS:
+    placed = set(labels)
+    if placed and placed <= GITHUB_HOSTED_LABELS:
+        return "github"
+    if placed & GITHUB_HOSTED_LABELS:
         return MIXED_MATRIX_EXPECT_CACHE
     return "ubicloud"
 
@@ -182,7 +188,9 @@ def _setup_rust(job_name: str) -> dict[str, typ.Any]:
     return calls[0]
 
 
-JOBS = sorted(UBICLOUD_JOBS)
+#: The jobs this module holds to the compiler-cache rules: every Ubicloud job.
+#: A hosted job runs with sccache off, and its own rule is below.
+JOBS = sorted(set(UBICLOUD_JOBS) - set(HOSTED_RUNNER_JOBS))
 
 
 def test_the_rule_reaches_every_ubicloud_job() -> None:
@@ -191,7 +199,7 @@ def test_the_rule_reaches_every_ubicloud_job() -> None:
     They were the ones on the retired local directory, so a rule that had
     quietly lost them would pass over the very lanes it exists for.
     """
-    for job_name in ("coverage-check", "linux-full", "coverage-upload",
+    for job_name in ("coverage-check", "linux-full", "coverage-warmup",
                      "build-lints", "build-dependency-binaries"):
         assert job_name in JOBS, f"{job_name} must be held by this rule"
 
@@ -231,10 +239,32 @@ def test_each_job_demands_the_backend_its_placement_allows(job_name: str) -> Non
 @pytest.mark.parametrize("job_name", JOBS)
 def test_no_ubicloud_job_keeps_a_retired_piece(job_name: str) -> None:
     """A caller's wrapper, directory or switch overrides `setup-rust` silently."""
-    findings = retired_findings(
-        load_workflow(UBICLOUD_JOBS[job_name]).get("env"), load_job(job_name)
-    )
+    job = load_job(job_name)
+    if job_name in HOSTED_RUNNER_JOBS:
+        # A hosted job opts in to GitHub's cache service with the one switch
+        # the action honours; `test_a_hosted_job_asks_for_the_github_service`
+        # holds that value, so only it is set aside here.
+        env = dict(job.get("env") or {})
+        env.pop("SCCACHE_GHA_ENABLED", None)
+        job = {**job, "env": env}
+    findings = retired_findings(load_workflow(UBICLOUD_JOBS[job_name]).get("env"), job)
     assert not findings, f"{job_name} still hand-rolls sccache: {findings}"
+
+
+@pytest.mark.parametrize("job_name", sorted(HOSTED_RUNNER_JOBS))
+def test_a_hosted_job_runs_with_sccache_off(job_name: str) -> None:
+    """A hosted runner only reaches GitHub's cache service, which throttles.
+
+    The job's compiler-cache writes failed in 681 of 1,852 attempts on its
+    first main run, and no Ubicloud lane reads that store, so the job compiles
+    without a compiler cache and owns no sccache wiring.
+    """
+    job = load_job(job_name)
+    assert "SCCACHE_GHA_ENABLED" not in (job.get("env") or {}), (
+        f"{job_name} runs with sccache off and must not switch the service on"
+    )
+    inputs = _setup_rust(job_name).get("with") or {}
+    assert str(inputs.get("use-sccache")).lower() == "false"
 
 
 @pytest.mark.parametrize("job_name", JOBS)

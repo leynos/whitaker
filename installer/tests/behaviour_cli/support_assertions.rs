@@ -8,15 +8,24 @@ use std::path::{Path, PathBuf};
 use super::{CliWorld, PINNED_SUITE_REF, expected_prebuilt_target_dir, matching_files};
 use crate::prebuilt_markers::PREBUILT_INSTALL_MARKER;
 
+/// Unwraps a fallible lookup, panicking with its diagnostic message.
+///
+/// Keeps the assertion wrappers flat: matching on every lookup inline inflates
+/// their cognitive complexity without adding clarity.
+#[track_caller]
+fn require<T>(result: Result<T, String>) -> T {
+    match result {
+        Ok(value) => value,
+        Err(message) => panic!("{message}"),
+    }
+}
+
 fn assert_exit_status(cli_world: &CliWorld, expected_success: bool) {
     if cli_world.skip_assertions.get() {
         return;
     }
 
-    let output = match captured_output(cli_world) {
-        Ok(output) => output,
-        Err(message) => panic!("{message}"),
-    };
+    let output = require(captured_output(cli_world));
     assert_eq!(
         output.success, expected_success,
         "expected success={expected_success}, stdout={}, stderr={}",
@@ -29,10 +38,7 @@ fn assert_error_output_is_shown(cli_world: &CliWorld, error_kind: &str, expected
         return;
     }
 
-    let output = match captured_output(cli_world) {
-        Ok(output) => output,
-        Err(message) => panic!("{message}"),
-    };
+    let output = require(captured_output(cli_world));
     let stderr = output.stderr;
 
     assert!(
@@ -55,10 +61,7 @@ pub(crate) fn assert_pinned_suite_is_named(cli_world: &CliWorld) {
         return;
     }
 
-    let output = match captured_output(cli_world) {
-        Ok(output) => output,
-        Err(message) => panic!("{message}"),
-    };
+    let output = require(captured_output(cli_world));
     let stderr = output.stderr;
 
     assert!(
@@ -68,10 +71,7 @@ pub(crate) fn assert_pinned_suite_is_named(cli_world: &CliWorld) {
 }
 
 pub(crate) fn assert_rejected_suite_ref_is_named(cli_world: &CliWorld) {
-    let output = match captured_output(cli_world) {
-        Ok(output) => output,
-        Err(message) => panic!("{message}"),
-    };
+    let output = require(captured_output(cli_world));
     let stderr = output.stderr;
 
     assert!(
@@ -90,14 +90,8 @@ pub(crate) fn assert_dry_run_output_is_shown(cli_world: &CliWorld) {
         return;
     }
 
-    let toolchain = match configured_toolchain(cli_world) {
-        Ok(toolchain) => toolchain,
-        Err(message) => panic!("{message}"),
-    };
-    let output = match captured_output(cli_world) {
-        Ok(output) => output,
-        Err(message) => panic!("{message}"),
-    };
+    let toolchain = require(configured_toolchain(cli_world));
+    let output = require(captured_output(cli_world));
     let stderr = output.stderr;
 
     assert!(
@@ -121,10 +115,7 @@ pub(crate) fn assert_dry_run_output_is_shown(cli_world: &CliWorld) {
         "individual lint crate should not appear in suite-only mode, stderr: {stderr}"
     );
 
-    let target_dir = match temp_target_path(cli_world) {
-        Ok(path) => path,
-        Err(message) => panic!("{message}"),
-    };
+    let target_dir = require(temp_target_path(cli_world));
     let expected_target_dir = expected_dry_run_target_dir(&toolchain, &target_dir);
     assert!(
         stderr.contains(&format!("Target directory: {expected_target_dir}")),
@@ -157,10 +148,7 @@ pub(crate) fn assert_experimental_lint_dry_run_output_is_shown(cli_world: &CliWo
         return;
     }
 
-    let output = match captured_output(cli_world) {
-        Ok(output) => output,
-        Err(message) => panic!("{message}"),
-    };
+    let output = require(captured_output(cli_world));
     let stderr = output.stderr;
 
     assert!(
@@ -189,10 +177,7 @@ pub(crate) fn assert_installation_succeeds_or_is_skipped(cli_world: &CliWorld) {
         return;
     }
 
-    let output = match captured_output(cli_world) {
-        Ok(output) => output,
-        Err(message) => panic!("{message}"),
-    };
+    let output = require(captured_output(cli_world));
     assert!(output.success, "installation failed: {}", output.stderr);
 }
 
@@ -225,14 +210,8 @@ pub(crate) fn assert_suite_library_is_staged(cli_world: &CliWorld) {
         return;
     }
 
-    let channel = match configured_toolchain(cli_world) {
-        Ok(channel) => channel,
-        Err(message) => panic!("{message}"),
-    };
-    let output = match captured_output(cli_world) {
-        Ok(output) => output,
-        Err(message) => panic!("{message}"),
-    };
+    let channel = require(configured_toolchain(cli_world));
+    let output = require(captured_output(cli_world));
     let needle = format!("whitaker_suite@{channel}");
 
     if output.stderr.contains(PREBUILT_INSTALL_MARKER)
@@ -242,20 +221,14 @@ pub(crate) fn assert_suite_library_is_staged(cli_world: &CliWorld) {
         return;
     }
 
-    let target_dir = match temp_target_path(cli_world) {
-        Ok(path) => path,
-        Err(message) => panic!("{message}"),
-    };
+    let target_dir = require(temp_target_path(cli_world));
     let staging_dir = target_dir.join(&channel).join("release");
     assert_staged_library_unique(&staging_dir, &needle, &output);
 }
 
 /// Assert that a refusal explains both halves of the source-option contradiction.
 pub(crate) fn assert_source_option_contradiction_is_explained(cli_world: &CliWorld) {
-    let output = match captured_output(cli_world) {
-        Ok(output) => output,
-        Err(message) => panic!("{message}"),
-    };
+    let output = require(captured_output(cli_world));
 
     assert!(
         output.stderr.contains("--no-source-fallback"),
@@ -275,10 +248,7 @@ pub(crate) fn assert_suite_source_marker_names_the_path(cli_world: &CliWorld) {
         return;
     }
 
-    let output = match captured_output(cli_world) {
-        Ok(output) => output,
-        Err(message) => panic!("{message}"),
-    };
+    let output = require(captured_output(cli_world));
     let expected = if output.stderr.contains(PREBUILT_INSTALL_MARKER) {
         "whitaker-installer: suite-source=prebuilt"
     } else {
@@ -295,10 +265,7 @@ pub(crate) fn assert_suite_source_marker_names_the_path(cli_world: &CliWorld) {
 
 /// Assert that a dry run does not claim to have selected a suite source.
 pub(crate) fn assert_no_suite_source_marker(cli_world: &CliWorld) {
-    let output = match captured_output(cli_world) {
-        Ok(output) => output,
-        Err(message) => panic!("{message}"),
-    };
+    let output = require(captured_output(cli_world));
     assert!(
         !output.stdout.contains("suite-source="),
         "a dry run must not claim a suite source, stdout: {}",

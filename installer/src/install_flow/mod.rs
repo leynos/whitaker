@@ -155,7 +155,7 @@ pub(crate) fn try_prebuilt_installation(
     try_prebuilt_installation_with(
         context,
         stderr,
-        PrebuiltInstallationHooks {
+        &PrebuiltInstallationHooks {
             detect_host_target,
             resolve_destination_dir: prebuilt_library_dir,
             attempt_prebuilt,
@@ -172,6 +172,7 @@ type AttemptPrebuiltFn = fn(&PrebuiltConfig<'_>, &mut dyn Write) -> PrebuiltResu
 
 type PruneLibrariesFn = fn(&Utf8Path, &str, &[CrateName]) -> Result<()>;
 
+#[derive(Clone, Copy)]
 struct PrebuiltInstallationHooks {
     detect_host_target: DetectHostTargetFn,
     resolve_destination_dir: ResolveDestinationDirFn,
@@ -182,14 +183,14 @@ struct PrebuiltInstallationHooks {
 fn try_prebuilt_installation_with(
     context: &PrebuiltInstallationContext<'_>,
     stderr: &mut dyn Write,
-    hooks: PrebuiltInstallationHooks,
+    hooks: &PrebuiltInstallationHooks,
 ) -> Result<Option<Utf8PathBuf>> {
     let PrebuiltInstallationHooks {
         detect_host_target,
         resolve_destination_dir,
         attempt_prebuilt,
         prune_prebuilt_libraries,
-    } = hooks;
+    } = *hooks;
 
     if !context
         .args
@@ -335,8 +336,15 @@ pub(crate) fn detect_host_target() -> Result<String> {
         });
     }
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    for line in stdout.lines() {
+    parse_host_target(&String::from_utf8_lossy(&output.stdout))
+}
+
+/// Extract the `host:` line from `rustc -vV` output.
+///
+/// Splitting the parse out of the process call lets tests exercise the real
+/// fallibility of host-target detection without spawning `rustc`.
+fn parse_host_target(rustc_output: &str) -> Result<String> {
+    for line in rustc_output.lines() {
         if let Some(host) = line.strip_prefix("host: ") {
             return Ok(host.trim().to_owned());
         }

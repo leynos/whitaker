@@ -61,13 +61,14 @@ fn effective_target_directory_contains_the_running_test_binary() {
         configured_target_directory.as_deref().map(Path::new),
     )
     .expect("resolve Cargo target directory");
-    let executable = std::fs::canonicalize(executable).expect("canonicalize test executable");
+    let canonical_executable =
+        std::fs::canonicalize(executable).expect("canonicalize test executable");
 
     assert!(
-        executable.starts_with(&target_directory),
+        canonical_executable.starts_with(&target_directory),
         "target directory {} should contain the test executable {}",
         target_directory.display(),
-        executable.display()
+        canonical_executable.display()
     );
 }
 

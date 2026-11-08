@@ -34,9 +34,12 @@ pub(super) fn predicate_segment_weight(branches: usize, weight: f64) -> f64 {
 
 /// Convert production snippet offsets to compiler byte positions.
 pub(super) fn span_byte_offset_range(start: usize, end: usize) -> Option<(u32, u32)> {
-    let start = u64::try_from(start).ok()?;
-    let end = u64::try_from(end).ok()?;
-    Some((span_byte_offset(start)?, span_byte_offset(end)?))
+    let start_offset = u64::try_from(start).ok()?;
+    let end_offset = u64::try_from(end).ok()?;
+    Some((
+        span_byte_offset(start_offset)?,
+        span_byte_offset(end_offset)?,
+    ))
 }
 
 /// Map an inclusive line range to checked compiler byte offsets.
@@ -119,9 +122,12 @@ mod tests {
     fn production_predicate_weight_saturates_excess_branches() {
         let oversized =
             usize::try_from(u64::from(u32::MAX) + 1).expect("oversized branch count fits usize");
+        // Halving an exact integer is exact, so the saturated weight is
+        // bit-identical to the expectation; comparing those bits states the
+        // exactness that a tolerance would only approximate.
         assert_eq!(
-            predicate_segment_weight(oversized, 0.5),
-            f64::from(u32::MAX) * 0.5,
+            predicate_segment_weight(oversized, 0.5).to_bits(),
+            (f64::from(u32::MAX) * 0.5).to_bits(),
         );
     }
 

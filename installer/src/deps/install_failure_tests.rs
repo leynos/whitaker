@@ -14,10 +14,10 @@ fn assert_spawn_error(error: InstallerError, expected_message: &str) {
 
 /// Assert that a failed dependency path did not report a successful install.
 fn assert_no_install_success_message(stderr: &[u8]) {
-    let stderr = String::from_utf8_lossy(stderr);
+    let text = String::from_utf8_lossy(stderr);
     assert!(
-        !stderr.contains("Installed "),
-        "failure path emitted a success message: {stderr}"
+        !text.contains("Installed "),
+        "failure path emitted a success message: {text}"
     );
 }
 
@@ -62,56 +62,73 @@ impl QueryFailure {
         }
     }
 
-    /// Build the command sequence that reaches this failing query.
-    fn expected_calls(self) -> Vec<ExpectedCall> {
-        if let Self::BinstallAvailability = self {
-            return vec![binstall_version_check_with_result(Err(InstallerError::Io(
-                std::io::Error::other(self.message()),
-            )))];
-        }
+    /// The I/O error the failing query in this scenario reports.
+    fn failure(self) -> InstallerError { InstallerError::Io(std::io::Error::other(self.message())) }
 
-        let binstall_available = matches!(self, Self::PostBinstallVerification);
-        let mut calls = vec![binstall_version_check_with_result(if binstall_available {
+    /// The binstall probe that leads to this failing query.
+    fn binstall_version_call(self) -> ExpectedCall {
+        let result = if matches!(self, Self::PostBinstallVerification) {
             Ok(success_output())
         } else {
             Ok(failure_output("missing binstall"))
-        })];
+        };
+        binstall_version_check_with_result(result)
+    }
 
-        if binstall_available {
-            calls.push(
-                binstall_install("cargo-dylint", Ok(success_output()))
-                    .expect("binstall install call should be configured"),
-            );
-        }
+    /// The successful binstall install, when this path reaches one.
+    fn binstall_install_call(self) -> Option<ExpectedCall> {
+        matches!(self, Self::PostBinstallVerification).then(|| {
+            binstall_install("cargo-dylint", Ok(success_output()))
+                .expect("binstall install call should be configured")
+        })
+    }
 
-        if matches!(
+    /// The Cargo source install, when this path reaches one.
+    fn cargo_install_call(self) -> Option<ExpectedCall> {
+        matches!(
             self,
             Self::PostCargoInstallVerification | Self::CompanionRefresh
-        ) {
-            calls.push(ExpectedCall {
-                cmd: "cargo",
-                args: vec!["install", "--locked", "--version", "6.3.0", "cargo-dylint"],
-                result: Ok(success_output()),
-            });
-        }
+        )
+        .then(|| ExpectedCall {
+            cmd: "cargo",
+            args: vec!["install", "--locked", "--version", "6.3.0", "cargo-dylint"],
+            result: Ok(success_output()),
+        })
+    }
 
-        match self {
-            Self::PostBinstallVerification
-            | Self::PostCargoInstallVerification
-            | Self::RepositoryVerification => calls.push(cargo_dylint_check_with_result(Err(
-                InstallerError::Io(std::io::Error::other(self.message())),
-            ))),
-            Self::CompanionRefresh => {
-                calls.push(cargo_dylint_check().expect("cargo-dylint verification is configured"));
-                calls.push(ExpectedCall {
+    /// The verification queries that follow the install attempt.
+    fn cargo_dylint_query_calls(self) -> Vec<ExpectedCall> {
+        if matches!(self, Self::CompanionRefresh) {
+            vec![
+                cargo_dylint_check().expect("cargo-dylint verification is configured"),
+                ExpectedCall {
                     cmd: "cargo",
                     args: vec!["install", "--list"],
-                    result: Err(InstallerError::Io(std::io::Error::other(self.message()))),
-                });
-            }
-            Self::BinstallAvailability => unreachable!("handled before building calls"),
+                    result: Err(self.failure()),
+                },
+            ]
+        } else if matches!(
+            self,
+            Self::PostBinstallVerification
+                | Self::PostCargoInstallVerification
+                | Self::RepositoryVerification
+        ) {
+            vec![cargo_dylint_check_with_result(Err(self.failure()))]
+        } else {
+            Vec::new()
+        }
+    }
+
+    /// Build the command sequence that reaches this failing query.
+    fn expected_calls(self) -> Vec<ExpectedCall> {
+        if let Self::BinstallAvailability = self {
+            return vec![binstall_version_check_with_result(Err(self.failure()))];
         }
 
+        let mut calls = vec![self.binstall_version_call()];
+        calls.extend(self.binstall_install_call());
+        calls.extend(self.cargo_install_call());
+        calls.extend(self.cargo_dylint_query_calls());
         calls
     }
 

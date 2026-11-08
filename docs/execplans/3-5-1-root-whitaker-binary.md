@@ -211,6 +211,19 @@ that becomes the commit:
 | `make nixie`                   | pass                         | `/tmp/nixie-whitaker-3-5-1-root-whitaker-binary.out`                   |
 | `make test-workflow-contracts` | pass, 793 passed             | `/tmp/test-workflow-contracts-whitaker-3-5-1-root-whitaker-binary.out` |
 
+**Base merge, 2026-11-08.** `origin/main` advanced to `9fc35c08` (PR #371)
+while the candidate was being gated, which made the PR `DIRTY`. The merge of
+`origin/main` into `330cb3dd` resolved eleven conflicts by keeping this
+branch's product changes and `main`'s hardened gate configuration (see D-28).
+Two semantic conflicts surfaced only under the compiler rather than in a
+conflict marker: `crates/string_continuation_style/tests/support/ui.rs` still
+named `whitaker::testing::ui::HarnessError` after `main` introduced that
+harness into a crate this branch moved, and `bootstrap/run.rs` had two
+independent complexity repairs for the same function. Both are resolved.
+`Cargo.lock` merged without conflict; the packaging lock file policy (take
+`main`'s, then rebuild) needs no change because the manifests' dependency sets
+did not disagree.
+
 ## Constraints
 
 Hard invariants. Violation requires escalation, not a workaround.
@@ -1527,6 +1540,18 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
   filter, and the rule is recorded in the developers' guide beside the timeout
   budgets.
 
+- Observation: Weave was selected for path `*.rs` by the user-wide attributes
+  file, not by tracked repository policy. `git check-attr merge -- <path>`
+  reported `weave`, `git config --get core.attributesFile` printed nothing (so
+  the default `$XDG_CONFIG_HOME/git/attributes` applied), no attribute file
+  existed under `.git/info`, and the tracked `.gitattributes` never mentions
+  `merge`. The user-wide file carries an ansible-managed Weave enrolment block.
+  Because an unattended merge across a long-lived branch is not repository
+  consent, the merge ran under
+  `git -c core.attributesFile=/dev/null -c merge.conflictStyle=zdiff3`, and
+  `git check-attr` was re-run under the same override to confirm `unspecified`
+  before starting.
+
 ## Decision log
 
 - **D-1: Extract the Dylint driver library into `crates/whitaker_lint_core` as
@@ -1763,6 +1788,29 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
   an unreadable data directory behind the ordinary "nothing installed" state;
   `InstallationRecord::into_absolute_paths` now leaves that distinction to
   `classify_candidate`. Date/Author: 2026-11-08, implementation supervisor.
+
+- **D-28: Merge `9fc35c08` and adopt `main`'s workspace-inheritance model for
+  lints.** While the candidate was being gated, `origin/main` advanced to
+  `9fc35c08` (PR #371, "Harden workspace lint, format, and documentation
+  gates") and the PR turned `DIRTY`. Both branches had independently moved the
+  lint configuration into `Cargo.toml`'s workspace tables; `main` did the
+  188-file work needed to satisfy the strict pedantic set in every crate and
+  gave each package `[lints] workspace = true`, while this branch had reached a
+  narrower root-only `[lints]` block for the four packages it touched. The
+  merge keeps `main`'s model and drops this branch's package-level
+  `[lints.rust]`/`[lints.rustdoc]` duplication, because two mechanisms for the
+  same policy would drift and the branch's version covered less. The two
+  independent `DryRunInfo` redesigns (this branch's `DryRunSkips` type and
+  `main`'s reuse of `cli::SkipFlags`) reconciled in favour of `main`'s, which
+  removes a duplicate type; `main`'s `clone_error!` macro in
+  `installer/src/error.rs` was adopted and this branch's `InstallationRecord`
+  variant added to its field table. The two independent complexity-budget
+  repairs for `bootstrap::run` reconciled by keeping this branch's `RunOptions`
+  plumbing inside `main`'s instrumentation strategy, with the span moved to the
+  public entry points and `resolve_library_dir` extracted. All of `main`'s
+  changes that landed in paths this branch had moved were verified present in
+  the moved form, so no `main` work was silently dropped. Date/Author:
+  2026-11-08, implementation supervisor.
 
 ## Outcomes & retrospective
 

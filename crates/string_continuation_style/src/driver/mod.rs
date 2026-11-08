@@ -113,7 +113,7 @@ impl EarlyLintPass for StringContinuationStyle {
             return;
         };
         let context = SourceContext { cx, edit_policy };
-        let rewrite = match &expression.kind {
+        let candidate = match &expression.kind {
             ast::ExprKind::Lit(_) => {
                 plain_literal_rewrite(&context, expression, &self.safe_spans.plain_literals)
             }
@@ -125,7 +125,7 @@ impl EarlyLintPass for StringContinuationStyle {
             ),
             _ => None,
         };
-        let Some(rewrite) = rewrite else {
+        let Some(rewrite) = candidate else {
             return;
         };
         emit_rewrite(

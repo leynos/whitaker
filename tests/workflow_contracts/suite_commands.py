@@ -27,8 +27,10 @@ SUITE_COMMANDS: typ.Final[tuple[str, ...]] = ("make test", "make coverage")
 #: else entirely. `make test-doc` is doctests, outside nextest; the others
 #: are checkers that happen to be named for what they check.
 #: `make test-sccache-health` runs the sccache health checker's own pytest
-#: suite on the gha lanes, not nextest.
+#: suite on the gha lanes, not nextest. `make coverage-build` compiles the
+#: instrumented tests and runs none of them.
 NOT_SUITE_COMMANDS: typ.Final[tuple[str, ...]] = (
+    "make coverage-build",
     "make test-doc",
     "make test-glibc-baseline",
     "make test-workflow-contracts",

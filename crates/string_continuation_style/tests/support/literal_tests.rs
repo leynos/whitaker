@@ -24,14 +24,14 @@ use rustc_span::{DUMMY_SP, Ident, Symbol, create_default_session_globals_then};
 
 use super::{has_captured_argument, join_format_string};
 
-fn dummy_expr() -> Box<Expr> {
-    Box::new(Expr {
+fn dummy_expr() -> Expr {
+    Expr {
         id: DUMMY_NODE_ID,
         kind: ExprKind::Dummy,
         span: DUMMY_SP,
         attrs: AttrVec::new(),
         tokens: None,
-    })
+    }
 }
 
 /// Builds the smallest `FormatArgs` the predicates inspect.
@@ -52,14 +52,14 @@ fn format_args(body: &str, is_source_literal: bool, arguments: Vec<FormatArgumen
 fn captured(name: &str) -> FormatArgument {
     FormatArgument {
         kind: FormatArgumentKind::Captured(Ident::with_dummy_span(Symbol::intern(name))),
-        expr: dummy_expr(),
+        expr: Box::new(dummy_expr()),
     }
 }
 
 fn normal() -> FormatArgument {
     FormatArgument {
         kind: FormatArgumentKind::Normal,
-        expr: dummy_expr(),
+        expr: Box::new(dummy_expr()),
     }
 }
 

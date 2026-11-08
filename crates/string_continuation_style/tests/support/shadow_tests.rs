@@ -98,8 +98,8 @@ impl From<&'static str> for Name {
     fn from(name: &'static str) -> Self { Self(name) }
 }
 
-fn path(segments: Name) -> Path {
-    let segments = segments
+fn path(name: Name) -> Path {
+    let segments = name
         .0
         .split("::")
         .map(|segment| PathSegment::from_ident(Name::from(segment).ident()))

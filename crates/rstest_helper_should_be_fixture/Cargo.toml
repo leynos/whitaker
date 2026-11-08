@@ -55,5 +55,5 @@ tempfile = { workspace = true }
 toml = { workspace = true }
 trybuild = { workspace = true }
 
-[lints.rust]
-missing_docs = "deny"
+[lints]
+workspace = true

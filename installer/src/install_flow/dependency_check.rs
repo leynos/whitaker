@@ -15,6 +15,11 @@ use crate::{
 };
 
 /// Query dependency availability and emit bounded PATH diagnostics.
+///
+/// # Errors
+///
+/// Returns the executor's error when the platform check cannot run, in which
+/// case no diagnostics are emitted.
 pub fn check_dylint_tools_for_command(executor: &dyn CommandExecutor) -> Result<DylintToolStatus> {
     let check = check_dylint_tools_with_diagnostics(executor)?;
     report_path_scan_failures(&check.path_scan_failures);
@@ -40,7 +45,7 @@ pub(super) fn ensure_dylint_tools_with_query(
     install: impl FnOnce(&DylintToolStatus, &mut dyn Write) -> Result<()>,
 ) -> Result<()> {
     let status = query()?;
-    super::ensure_dylint_tools_core(quiet, stderr, status.all_installed(), |stderr| {
-        install(&status, stderr)
+    super::ensure_dylint_tools_core(quiet, stderr, status.all_installed(), |output| {
+        install(&status, output)
     })
 }

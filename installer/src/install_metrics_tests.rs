@@ -61,8 +61,8 @@ proptest! {
     ) {
         let part = part_seed.min(whole);
         let denominator = u128::from(whole);
-        let numerator = u128::from(part) * 1_000 + denominator / 2;
-        let expected = u64::try_from(numerator / denominator)
+        let numerator = u128::from(part) * 1_000 + denominator.div_euclid(2);
+        let expected = u64::try_from(numerator.div_euclid(denominator))
             .expect("a valid ratio is at most 1000 permille");
 
         prop_assert_eq!(rate_permille(part, whole), expected);

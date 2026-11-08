@@ -1,105 +1,31 @@
-//! Regression tests for process-wide environment synchronization.
+//! Regression tests for scoped environment mutation semantics.
+//!
+//! These cases run on the calling thread and cover how each helper sets,
+//! removes, and restores a variable, including when the callback panics.
+//! Cross-thread serialization lives in [`super::env_concurrency_tests`].
 
 use std::{
     ffi::OsStr,
     panic::{AssertUnwindSafe, catch_unwind},
-    sync::mpsc,
-    thread::{self, JoinHandle},
-    time::Duration,
 };
 
-use proptest::prelude::*;
-
-use super::{env_test_guard, with_env_var, with_env_var_removed, with_locale};
+use super::{
+    env_test_guard,
+    with_env_var,
+    with_env_var_removed,
+    with_env_vars,
+    with_env_vars_selected,
+    with_locale,
+};
 
 const ABSENT_SET_KEY: &str = "WHITAKER_TEST_SUPPORT_ABSENT_SET";
 const REMOVED_KEY: &str = "WHITAKER_TEST_SUPPORT_REMOVED";
 const SET_PANIC_KEY: &str = "WHITAKER_TEST_SUPPORT_SET_PANIC";
 const REMOVE_PANIC_KEY: &str = "WHITAKER_TEST_SUPPORT_REMOVE_PANIC";
 const SCOPED_KEY: &str = "WHITAKER_TEST_SUPPORT_SCOPED";
-const OVERLAPPING_KEY: &str = "WHITAKER_TEST_SUPPORT_OVERLAPPING";
-const PROPERTY_KEY: &str = "WHITAKER_TEST_SUPPORT_PROPERTY";
-
-enum NestedMutation {
-    Set,
-    Remove,
-}
-
-struct ReleaseOnDrop(Option<mpsc::Sender<()>>);
-
-impl ReleaseOnDrop {
-    /// Release a worker blocked inside a scoped mutation.
-    fn release(mut self) {
-        if let Some(sender) = self.0.take() {
-            let _ = sender.send(());
-        }
-    }
-}
-
-impl Drop for ReleaseOnDrop {
-    /// Unblock a worker if an earlier assertion unwinds the test.
-    fn drop(&mut self) {
-        if let Some(sender) = self.0.take() {
-            let _ = sender.send(());
-        }
-    }
-}
-
-struct ScopedMutationThread {
-    release_sender: mpsc::Sender<()>,
-    entered_receiver: mpsc::Receiver<()>,
-    restored_receiver: mpsc::Receiver<()>,
-    thread: JoinHandle<()>,
-}
-
-impl ScopedMutationThread {
-    /// Waits until the scoped environment callback has entered.
-    fn wait_for_entry(&self, description: &str) {
-        self.entered_receiver
-            .recv_timeout(Duration::from_secs(1))
-            .expect(description);
-    }
-
-    /// Waits until the scoped environment value has been restored.
-    fn wait_for_restoration(&self, description: &str) {
-        self.restored_receiver
-            .recv_timeout(Duration::from_secs(1))
-            .expect(description);
-    }
-
-    /// Joins the worker after its environment callback has completed.
-    fn join(self) {
-        self.thread
-            .join()
-            .expect("scoped environment thread should complete");
-    }
-}
-
-/// Starts a thread that holds a scoped value until the test releases it.
-fn spawn_scoped_mutation(value: &'static str) -> ScopedMutationThread {
-    let (entered_sender, entered_receiver) = mpsc::channel();
-    let (release_sender, release_receiver) = mpsc::channel();
-    let (restored_sender, restored_receiver) = mpsc::channel();
-    let thread = thread::spawn(move || {
-        with_env_var(OVERLAPPING_KEY, value, || {
-            entered_sender
-                .send(())
-                .expect("scoped callback entry must be reported");
-            release_receiver
-                .recv()
-                .expect("scoped callback release must be received");
-        });
-        restored_sender
-            .send(())
-            .expect("environment restoration must be reported");
-    });
-    ScopedMutationThread {
-        release_sender,
-        entered_receiver,
-        restored_receiver,
-        thread,
-    }
-}
+const VARS_FIRST_KEY: &str = "WHITAKER_TEST_SUPPORT_VARS_FIRST";
+const VARS_SECOND_KEY: &str = "WHITAKER_TEST_SUPPORT_VARS_SECOND";
+const VARS_PANIC_KEY: &str = "WHITAKER_TEST_SUPPORT_VARS_PANIC";
 
 /// Check that a scoped set exposes its value and restores an absent variable.
 #[test]
@@ -162,72 +88,145 @@ fn with_env_var_removed_restores_a_value_after_a_panic() {
     });
 }
 
-/// Check that concurrent scoped mutations wait for the current callback.
+/// Check that one scoped call sets every variable and restores absent values.
 #[test]
-fn scoped_mutations_wait_for_callback_restoration() {
-    let original_value = std::env::var_os(OVERLAPPING_KEY);
-    let first = spawn_scoped_mutation("first");
-    let release_first = ReleaseOnDrop(Some(first.release_sender.clone()));
-    first.wait_for_entry("first callback should enter before the second starts");
+fn with_env_vars_sets_every_variable_and_restores_absent_values() {
+    with_env_var_removed(VARS_FIRST_KEY, || {
+        with_env_var_removed(VARS_SECOND_KEY, || {
+            with_env_vars(
+                [(VARS_FIRST_KEY, "first"), (VARS_SECOND_KEY, "second")],
+                || {
+                    assert_eq!(
+                        std::env::var_os(VARS_FIRST_KEY).as_deref(),
+                        Some(OsStr::new("first"))
+                    );
+                    assert_eq!(
+                        std::env::var_os(VARS_SECOND_KEY).as_deref(),
+                        Some(OsStr::new("second"))
+                    );
+                },
+            );
 
-    let (attempted_sender, attempted_receiver) = mpsc::channel();
-    let second = {
-        let (entered_sender, entered_receiver) = mpsc::channel();
-        let (release_sender, release_receiver) = mpsc::channel();
-        let (restored_sender, restored_receiver) = mpsc::channel();
-        let thread = thread::spawn(move || {
-            attempted_sender
-                .send(())
-                .expect("second mutation attempt must be reported");
-            with_env_var(OVERLAPPING_KEY, "second", || {
-                entered_sender
-                    .send(())
-                    .expect("second callback entry must be reported");
-                release_receiver
-                    .recv()
-                    .expect("second callback release must be received");
-            });
-            restored_sender
-                .send(())
-                .expect("second environment restoration must be reported");
+            assert!(std::env::var_os(VARS_FIRST_KEY).is_none());
+            assert!(std::env::var_os(VARS_SECOND_KEY).is_none());
         });
-        ScopedMutationThread {
-            release_sender,
-            entered_receiver,
-            restored_receiver,
-            thread,
-        }
-    };
-    let release_second = ReleaseOnDrop(Some(second.release_sender.clone()));
-    attempted_receiver
-        .recv()
-        .expect("second mutation attempt should start");
+    });
+}
 
-    assert_eq!(
-        std::env::var_os(OVERLAPPING_KEY).as_deref(),
-        Some(OsStr::new("first"))
-    );
-    assert!(
-        second
-            .entered_receiver
-            .recv_timeout(Duration::from_millis(100))
-            .is_err(),
-        "the second callback must wait for the first scoped mutation"
-    );
+/// Check that one scoped call restores every pre-existing value.
+#[test]
+fn with_env_vars_restores_existing_values() {
+    with_env_vars(
+        [
+            (VARS_FIRST_KEY, "original first"),
+            (VARS_SECOND_KEY, "original second"),
+        ],
+        || {
+            with_env_vars(
+                [
+                    (VARS_FIRST_KEY, "temporary first"),
+                    (VARS_SECOND_KEY, "temporary second"),
+                ],
+                || {
+                    assert_eq!(
+                        std::env::var_os(VARS_FIRST_KEY).as_deref(),
+                        Some(OsStr::new("temporary first"))
+                    );
+                },
+            );
 
-    release_first.release();
-    first.wait_for_restoration("the first value should restore before the second enters");
-    second.wait_for_entry("the second callback should enter after restoration");
-    assert_eq!(
-        std::env::var_os(OVERLAPPING_KEY).as_deref(),
-        Some(OsStr::new("second"))
+            assert_eq!(
+                std::env::var_os(VARS_FIRST_KEY).as_deref(),
+                Some(OsStr::new("original first"))
+            );
+            assert_eq!(
+                std::env::var_os(VARS_SECOND_KEY).as_deref(),
+                Some(OsStr::new("original second"))
+            );
+        },
     );
+}
 
-    release_second.release();
-    second.wait_for_restoration("the second value should restore after release");
-    first.join();
-    second.join();
-    assert_eq!(std::env::var_os(OVERLAPPING_KEY), original_value);
+/// Check that a multi-variable scope restores every value after a panic.
+#[test]
+fn with_env_vars_restores_every_value_after_a_panic() {
+    with_env_var_removed(VARS_PANIC_KEY, || {
+        with_env_var_removed(VARS_SECOND_KEY, || {
+            let result = catch_unwind(AssertUnwindSafe(|| {
+                with_env_vars(
+                    [
+                        (VARS_PANIC_KEY, "temporary"),
+                        (VARS_SECOND_KEY, "temporary"),
+                    ],
+                    || panic!("intentional test panic"),
+                );
+            }));
+
+            assert!(result.is_err());
+            assert!(std::env::var_os(VARS_PANIC_KEY).is_none());
+            assert!(std::env::var_os(VARS_SECOND_KEY).is_none());
+        });
+    });
+}
+
+/// Check that a repeated key keeps the value applied last.
+///
+/// `temp_env` applies the settings in order and records the original value
+/// once, so a repeated key is well defined rather than a hazard callers must
+/// avoid.
+#[test]
+fn with_env_vars_applies_the_last_value_for_a_repeated_key() {
+    with_env_var_removed(VARS_FIRST_KEY, || {
+        with_env_vars(
+            [
+                (VARS_FIRST_KEY, "first"),
+                (VARS_SECOND_KEY, "second"),
+                (VARS_FIRST_KEY, "last"),
+            ],
+            || {
+                assert_eq!(
+                    std::env::var_os(VARS_FIRST_KEY).as_deref(),
+                    Some(OsStr::new("last"))
+                );
+                assert_eq!(
+                    std::env::var_os(VARS_SECOND_KEY).as_deref(),
+                    Some(OsStr::new("second"))
+                );
+            },
+        );
+
+        assert!(std::env::var_os(VARS_FIRST_KEY).is_none());
+    });
+}
+
+/// Check that an empty selection still runs the callback without locking.
+///
+/// The test asserts only the callback's result: reading a shared key here
+/// would race the tests that mutate it, because the empty selection is
+/// exactly the case that takes no lock.
+#[test]
+fn with_env_vars_without_variables_runs_the_callback() {
+    let callback_result = with_env_vars(Vec::new(), || 42_u8);
+
+    assert_eq!(callback_result, 42);
+}
+
+/// Check that the selecting helper applies and restores its selection.
+#[test]
+fn with_env_vars_selected_applies_and_restores_the_selection() {
+    with_env_var_removed(VARS_FIRST_KEY, || {
+        with_env_vars_selected(
+            || vec![(VARS_FIRST_KEY, "selected")],
+            || {
+                assert_eq!(
+                    std::env::var_os(VARS_FIRST_KEY).as_deref(),
+                    Some(OsStr::new("selected"))
+                );
+            },
+        );
+
+        assert!(std::env::var_os(VARS_FIRST_KEY).is_none());
+    });
 }
 
 /// Check that nested scoped overrides restore the outer value.
@@ -265,90 +264,11 @@ fn locale_scopes_restore_set_and_removed_values() {
         );
 
         with_locale(None, || {
-            assert!(std::env::var_os("DYLINT_LOCALE").is_none())
+            assert!(std::env::var_os("DYLINT_LOCALE").is_none());
         });
         assert_eq!(
             std::env::var_os("DYLINT_LOCALE").as_deref(),
             Some(OsStr::new("en-GB"))
         );
     });
-}
-
-/// Exercise scoped environment transitions from several starting values.
-fn transition_exposes_temporary_value() -> bool {
-    with_env_var(PROPERTY_KEY, "temporary", || {
-        std::env::var_os(PROPERTY_KEY).as_deref() == Some(OsStr::new("temporary"))
-    })
-}
-
-/// Exercise scoped removal while the generated baseline is active.
-fn transition_removes_temporary_value() -> bool {
-    with_env_var_removed(PROPERTY_KEY, || std::env::var_os(PROPERTY_KEY).is_none())
-}
-
-/// Exercise nested mutation and restoration of the outer value.
-fn transition_restores_outer_value_after_nested_mutation(nested_mutation: NestedMutation) -> bool {
-    with_env_var(PROPERTY_KEY, "outer", || {
-        let inner_mutation_applied = match nested_mutation {
-            NestedMutation::Set => with_env_var(PROPERTY_KEY, "inner", || {
-                std::env::var_os(PROPERTY_KEY).as_deref() == Some(OsStr::new("inner"))
-            }),
-            NestedMutation::Remove => {
-                with_env_var_removed(PROPERTY_KEY, || std::env::var_os(PROPERTY_KEY).is_none())
-            }
-        };
-        let outer_restored = std::env::var_os(PROPERTY_KEY).as_deref() == Some(OsStr::new("outer"));
-        inner_mutation_applied && outer_restored
-    })
-}
-
-/// Exercise restoration after a set callback panics.
-fn transition_restores_value_after_set_callback_panic() -> bool {
-    let panic = catch_unwind(AssertUnwindSafe(|| {
-        with_env_var(PROPERTY_KEY, "temporary", || panic!("test panic"));
-    }));
-    panic.is_err()
-}
-
-/// Exercise restoration after a removal callback panics.
-fn transition_restores_value_after_remove_callback_panic() -> bool {
-    let panic = catch_unwind(AssertUnwindSafe(|| {
-        with_env_var_removed(PROPERTY_KEY, || panic!("test panic"));
-    }));
-    panic.is_err()
-}
-
-/// Run a generated sequence and confirm every scoped transition restores its baseline.
-fn run_transitions(initial: Option<&str>, transitions: &[u8]) -> Result<(), TestCaseError> {
-    for transition in transitions {
-        let transition_succeeded = match transition {
-            0 => transition_exposes_temporary_value(),
-            1 => transition_removes_temporary_value(),
-            2 => transition_restores_outer_value_after_nested_mutation(NestedMutation::Remove),
-            3 => transition_restores_outer_value_after_nested_mutation(NestedMutation::Set),
-            4 => transition_restores_value_after_set_callback_panic(),
-            5 => transition_restores_value_after_remove_callback_panic(),
-            _ => unreachable!("the transition strategy only yields values below six"),
-        };
-        prop_assert!(transition_succeeded);
-
-        let restored = std::env::var_os(PROPERTY_KEY);
-        prop_assert_eq!(restored.as_deref(), initial.map(OsStr::new));
-    }
-    Ok(())
-}
-
-proptest! {
-    /// Check that varied scoped mutations restore the original environment value.
-    #[test]
-    fn scoped_environment_transitions_restore_the_initial_value(
-        initial in prop_oneof![Just(None), Just(Some("first")), Just(Some("second"))],
-        transitions in prop::collection::vec(0_u8..6, 1..8),
-    ) {
-        let result = match initial {
-            Some(value) => with_env_var(PROPERTY_KEY, value, || run_transitions(Some(value), &transitions)),
-            None => with_env_var_removed(PROPERTY_KEY, || run_transitions(None, &transitions)),
-        };
-        result?;
-    }
 }

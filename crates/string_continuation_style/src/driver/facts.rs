@@ -135,7 +135,7 @@ fn source_literal_rewrite(
     let source_path = source_map
         .span_to_filename(literal_span)
         .into_local_path()?;
-    let source_path = Utf8PathBuf::try_from(source_path).ok()?;
+    let utf8_source_path = Utf8PathBuf::try_from(source_path).ok()?;
     let source_file = source_map.lookup_source_file(literal_span.lo());
     let source = source_file.src.as_deref()?;
     let newline = dominant_newline(source, &source_file.normalized_pos);
@@ -145,7 +145,7 @@ fn source_literal_rewrite(
         return None;
     }
 
-    let literal_context = context_of(context.edit_policy.is_editable(&source_path));
+    let literal_context = context_of(context.edit_policy.is_editable(&utf8_source_path));
     let facts = LiteralFacts::Cooked {
         body,
         context: literal_context,

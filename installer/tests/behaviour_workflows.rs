@@ -64,33 +64,28 @@ fn is_toolchain_installed(channel: &str) -> bool {
 }
 
 /// Reports a skipped workflow scenario through the test tracing stream.
-fn report_skip(reason: &str) -> Result<(), String> {
+fn report_skip(reason: &str) {
     tracing::info!(%reason, "skipping workflow scenario");
-    Ok(())
 }
 
-fn skip_scenario_when_toolchain_missing(
-    world: &WorkflowWorld,
-    channel: &str,
-) -> Result<(), String> {
+fn skip_scenario_when_toolchain_missing(world: &WorkflowWorld, channel: &str) {
     if !is_toolchain_installed(channel) {
         report_skip(&format!(
             "Skipping scenario because rustup toolchain '{channel}' is not installed."
-        ))?;
+        ));
         world.skip_assertions.set(true);
         rstest_bdd::skip!(
             "rustup toolchain '{channel}' is not installed.",
             channel = channel
         );
     }
-    Ok(())
 }
 
 fn ensure_required_toolchain_available(world: &WorkflowWorld) -> Result<Option<String>, String> {
     let channel = pinned_toolchain_channel()?;
     world.requires_toolchain.set(true);
 
-    skip_scenario_when_toolchain_missing(world, &channel)?;
+    skip_scenario_when_toolchain_missing(world, &channel);
 
     Ok((!world.skip_assertions.get()).then_some(channel))
 }
@@ -210,12 +205,12 @@ fn when_installer_cli_run(world: &WorkflowWorld) -> Result<(), String> {
     cmd.args(args.iter());
     cmd.current_dir(workspace_root()?);
     // Kept alive until the command finishes; it owns the bundle and data root.
-    let isolation = world.use_test_staged_suite.get().then(|| {
+    let isolation_setup = world.use_test_staged_suite.get().then(|| {
         let snapshot = SnapshotFixture::new()?;
         let data_home = TempDir::new().map_err(|error| error.to_string())?;
         Ok::<_, String>((snapshot, data_home))
     });
-    let isolation = isolation.transpose()?;
+    let isolation = isolation_setup.transpose()?;
     if let Some((snapshot, data_home)) = &isolation {
         cmd.env(TEST_STAGE_SUITE_ENV, "1");
         // An installation records its bootstrap; keep it out of the real data root.

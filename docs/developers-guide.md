@@ -6,7 +6,10 @@ Whitaker itself. For using Whitaker lints in a project, see the
 
 ## Prerequisites
 
-- Rust nightly toolchain (version specified in `rust-toolchain.toml`)
+- Rust nightly toolchain (version and components specified in
+  `rust-toolchain.toml`; `rustup` installs them on first use in the workspace).
+  The component list includes `rust-analyzer` for editor support, alongside
+  `rustfmt`, `clippy`, `rustc-dev`, `llvm-tools-preview` and `rust-src`.
 - `jq` for extracting package metadata in release dry runs
 - Python 3 for workflow tests and release checksum generation
 - `cargo-dylint` and `dylint-link` installed:
@@ -99,9 +102,10 @@ The `whitaker-cli` application package owns the OrthoConfig v0.10.0 source
 boundary. It is a configuration foundation, with no executable or command
 dispatch. The root CLI integration can construct `Sources` with its selected
 command, optional file selector, injected discovery and scan environments, and
-explicit CLI values; `load_with_sources` returns validated settings and
-notices. The loader merges the OrthoConfig DTO and then converts it into
-`ValidatedSettings`: conversion rejects unsupported colour and progress
+explicit CLI values; `load_with_sources` borrows that `Sources` value and
+returns validated settings and notices, so the caller keeps ownership and can
+reuse the handle. The loader merges the OrthoConfig DTO and then converts it
+into `ValidatedSettings`: conversion rejects unsupported colour and progress
 policies and applies the same normalization policy as the lint crates, so
 callers never observe out-of-range tuning values. The executable owns
 localization, presentation, and exit statuses. Neither the configuration
@@ -140,6 +144,33 @@ make test
 
 This executes unit, behaviour, and UI harness tests. The shared target enables
 `rstest` fixtures and `rstest-bdd` scenarios.
+
+### Assertions in fallible tests
+
+The `panic_in_result_fn` lint denies a direct `assert!` or `assert_eq!` in any
+function that returns `Result`. Tests whose fixtures can fail must therefore be
+fallible, because `rstest` supplies `#[from(...)]` fixtures as a `Result` that
+the test unwraps with `?`. Two idioms keep those tests lint-clean.
+
+Name the fixture binding apart from the value it supplies, so the unwrapped
+binding does not shadow the parameter and trip `shadow_reuse`:
+
+```rust
+fn loads_a_locale(
+    #[from(root)] root_res: std::io::Result<TempDir>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let root = root_res?;
+    // ...
+}
+```
+
+Move each assertion into a `()`-returning helper, or use the `ensure` and
+`ensure_eq` helpers in `cli/tests/configuration/support.rs`, which report a
+failure as an error naming both values. The helpers are crate-internal to the
+CLI configuration test suite; they are not a general assertion library and must
+not be exported, moved into the shared test-support crate, or used to bypass a
+lint elsewhere. Extend them there when a second call site needs the same
+comparison.
 
 ### Fixture expansion lint macro
 
@@ -697,7 +728,7 @@ and the compiled-tool keys add the Ubuntu release because a binary built on
 Ubuntu 24.04 must never be restored onto 22.04.
 
 The Clippy snapshot key omits those discriminators on purpose. Its content is
-platform-independent Git history, its one writer (`coverage-upload`) and its
+platform-independent Git history, its one writer (`coverage-warmup`) and its
 readers all run on Ubicloud Linux, and the Windows lane never restores it.
 
 Restores run on every event. Saves are guarded by
@@ -712,13 +743,21 @@ compiler cache" below explains what that means for a pull request's first push.
 `rolling-release.yml`'s Linux legs reach the same proxy through `setup-rust`;
 only its registry families are archives, and those follow the rule above.
 
-`coverage-main.yml`'s `coverage-upload` is the writer for the coverage-lane
-keys and for the shared Clippy snapshot. `ci.yml`'s `linux-full` runs on push to
-`main` as well as on pull requests, and on that push it publishes the
-lint-lane keys. A merge that `GITHUB_TOKEN` performs, as the Dependabot
-automerge does, starts no push-event workflow, so after one, or after changing
-a lint-lane tool pin, the pinned toolchain, or a cache generation, dispatch
-both writers against `main`:
+`coverage-main.yml` runs as two jobs on a push to `main`. `coverage-upload`
+measures coverage and uploads it to CodeScene on a GitHub-hosted `ubuntu-24.04`
+runner, which is free on a public repository; a hosted runner writes GitHub's
+cache store, which the Ubicloud lanes never read, so it saves no cache.
+`coverage-warmup`, on Ubicloud, runs `make coverage-build` and `make test-doc`
+and is the writer for the coverage-lane keys and for the shared Clippy snapshot.
+`make coverage-build` compiles the instrumented tests `make coverage` builds
+and stops: `cargo llvm-cov nextest --no-run` would only report, so
+`scripts/cargo-coverage-build.sh` runs `cargo nextest run --no-run` under
+`cargo llvm-cov show-env`, in the same target directory and under the same
+RUSTFLAGS. `ci.yml`'s `linux-full` runs on push to `main` as well as on pull
+requests, and on that push it publishes the lint-lane keys. A merge that
+`GITHUB_TOKEN` performs, as the Dependabot automerge does, starts no push-event
+workflow, so after one, or after changing a lint-lane tool pin, the pinned
+toolchain, or a cache generation, dispatch both writers against `main`:
 
 ```sh
 gh workflow run ci.yml --repo leynos/whitaker --ref main
@@ -773,7 +812,7 @@ In CI, the three Linux suite lanes restore `~/.cache/whitaker-clippy-snapshot`
 before `Setup Rust`. After it, "Provision the Clippy snapshot" runs
 `make clippy-snapshot-bundle` only on a cache miss, installs with
 `make clippy-snapshot`, and appends `make dylint-env` to `GITHUB_ENV`.
-`coverage-upload` is the snapshot cache's only writer. The Windows lane cannot
+`coverage-warmup` is the snapshot cache's only writer. The Windows lane cannot
 restore a Linux archive, so it bundles and verifies on every run.
 
 As its last validation step, `linux-full` runs `make dylint-tools`, whose
@@ -968,8 +1007,9 @@ wiring and the pin. `windows-compat` carries the pair too; its record says
 pair reads as a missing record to the collector.
 
 On the three lanes that use the `gha` backend, `coverage-check`, `linux-full`
-and `coverage-upload`, the statistics are uploaded as a `sccache-stats-<job>`
-artefact under `if: always()`, and then
+and `coverage-warmup` (the hosted `coverage-upload` runs with sccache off,
+since GitHub's cache service throttled its writes), the statistics are uploaded
+as a `sccache-stats-<job>` artefact under `if: always()`, and then
 `scripts/check_sccache_health.py --expect-location ghac` reads the JSON and
 fails the job on a broken integration: a cache location other than `ghac`, zero
 compile requests, every store failing, or every read failing. Those last two
@@ -991,7 +1031,7 @@ Isolated errors below it produce warnings instead. A proxy hiccup costs one
 compile, and failing the lane on it would make a pull request depend on an
 external service's good day, which is what moving CodeScene off the
 pull-request lane removed. The upload comes before the check so the evidence
-survives the failure, and `coverage-upload` runs the check last so a failure
+survives the failure, and `coverage-warmup` runs the check last so a failure
 cannot cost it its cache saves.
 `tests/workflow_contracts/sccache_health_contract_test.py` holds that order in
 every gha lane, and `make test-sccache-health` tests the checker, including its
@@ -1108,7 +1148,8 @@ The measurements that showed it are these:
   `linux-full` read 0 of 1,077 compilations from the cache and took 29m07s,
   against 11 to 14 minutes warm. Nothing in `main`'s scope had compiled its
   shapes: `ci.yml` then ran only on `pull_request` and `workflow_dispatch`, and
-  `coverage-upload`, the only trunk job, builds the instrumented shape.
+  `coverage-upload`, the only trunk job, built the instrumented shape (it is now
+  `coverage-warmup`, on Ubicloud).
 - Run [35825656071][whitaker-run-35825656071], the first trunk run on the
   proxy, which was cold as well. It spent 35m54s in `Generate coverage` and was
   cancelled at the 40-minute limit before it reached its saves.
@@ -1119,7 +1160,7 @@ The rule is therefore that every pull-request lane on the Actions backend has
 exactly one trunk writer: a job that runs on a push to `main` and nothing
 broader, runs unconditionally there, declares the same compile environment, and
 runs every `make` or `cargo` command the lane runs, so the two compile the same
-shapes. `coverage-upload` writes for `coverage-check`. `linux-full` writes for
+shapes. `coverage-warmup` writes for `coverage-check`. `linux-full` writes for
 itself, because `ci.yml` runs it on the push. That makes its shapes the lane's
 by construction, where a separate job would be a copy that could drift, and the
 lane's non-compiling steps add under a minute to a warm run. No other job may
@@ -1174,11 +1215,12 @@ per pull request on Linux, and no other Linux job executes tests at all.
 
 Table: Jobs that execute the Rust test suite.
 
-| Job               | Platform         | Command                          | Role                                      |
-| ----------------- | ---------------- | -------------------------------- | ----------------------------------------- |
-| `coverage-check`  | Ubicloud Linux   | `make coverage`, `make test-doc` | the single Linux pull-request execution   |
-| `coverage-upload` | Ubicloud Linux   | `make coverage`, `make test-doc` | the trunk baseline, on `main` pushes only |
-| `windows-compat`  | `windows-latest` | `make test NEXTEST_PROFILE=ci`   | a different platform                      |
+| Job               | Platform         | Command                                | Role                                               |
+| ----------------- | ---------------- | -------------------------------------- | -------------------------------------------------- |
+| `coverage-check`  | Ubicloud Linux   | `make coverage`, `make test-doc`       | the single Linux pull-request execution            |
+| `coverage-upload` | `ubuntu-24.04`   | `make coverage`, `make test-doc`       | the trunk baseline, on `main` pushes only          |
+| `coverage-warmup` | Ubicloud Linux   | `make coverage-build`, `make test-doc` | compiles the lane's tests for its cache; runs none |
+| `windows-compat`  | `windows-latest` | `make test NEXTEST_PROFILE=ci`         | a different platform                               |
 
 `make coverage` delegates to the `make test` recipe and swaps the driver to
 `cargo llvm-cov nextest`, so the instrumented run keeps one package set, one
@@ -1209,6 +1251,14 @@ arguments each target passes.
 `cargo llvm-cov nextest` executes no doctests and `--all-targets` excludes
 them, so without this step the workspace's doctest fences are compiled by
 `cargo doc` in `make lint` and never run.
+
+The recipe is `cargo test --doc $(CARGO_LOCKED) $(DOCTEST_CARGO_FLAGS)`, run
+with `RUSTFLAGS="$(RUST_FLAGS) $(DEV_STANDARD_FLAGS)"`. `DOCTEST_CARGO_FLAGS`
+defaults to `--workspace --all-features $(DOCTEST_EXCLUDES)`, so a bare
+`make test-doc` documents the whole workspace and the exclusions below are what
+narrow it; overriding the variable replaces the selection and the exclusions
+together. `CARGO_LOCKED` is empty by default and `CARGO_LOCKED=--locked` makes
+the run refuse to touch the lockfile, as it does for the other Cargo recipes.
 
 Two things about the doctest lane are easy to get wrong.
 
@@ -1296,7 +1346,8 @@ Table: Runner placement for repository-owned jobs.
 | ------------------------------------------------- | -------------------------- | --------------------------------------------------------------------------- | --------------------------------------- |
 | `coverage-check`                                  | `ci.yml`                   | `ubicloud-standard-2-ubuntu-2404`                                           | Blocking Linux gate                     |
 | `linux-full`                                      | `ci.yml`                   | `ubicloud-standard-2-ubuntu-2404`                                           | Blocking Linux gate; trunk cache writer |
-| `coverage-upload`                                 | `coverage-main.yml`        | `ubicloud-standard-2-ubuntu-2404`                                           | Trunk Linux gate and cache writer       |
+| `coverage-warmup`                                 | `coverage-main.yml`        | `ubicloud-standard-2-ubuntu-2404`                                           | Trunk cache writer for `coverage-check` |
+| `coverage-upload`                                 | `coverage-main.yml`        | `ubuntu-24.04`                                                              | Blocks no one; GitHub-hosted            |
 | `windows-compat`                                  | `ci.yml`                   | `windows-latest`                                                            | Ubicloud has no Windows image           |
 | `mutation`                                        | `mutation-testing.yml`     | Reusable workflow's own choice                                              | Nightly, not blocking                   |
 | `automerge`                                       | `dependabot-automerge.yml` | Reusable workflow's own choice                                              | API-bound                               |
@@ -1566,10 +1617,34 @@ multi-toolchain or multi-failure test failures much easier to diagnose.
 ### Other useful commands
 
 ```sh
-make lint       # Run Clippy
-make check-fmt  # Verify formatting
-make fmt        # Apply formatting
+make lint       # Run rustdoc and Clippy under the workspace lint policy
+make typecheck  # Type-check every target without producing code
+make test-doc   # Run the workspace doctests, which `make test` does not
+make check-fmt  # Verify Rust and Markdown formatting
+make fmt        # Apply Rust and Markdown formatting
 ```
+
+`make test-doc` is a separate lane, not a subset of `make test`:
+`cargo nextest` runs no doctests, and `--all-targets` excludes them, so only
+this target compiles the examples in the public API documentation. It passes
+`$(RUST_FLAGS)` and `$(DEV_STANDARD_FLAGS)` but deliberately omits the
+`-C prefer-dynamic -Z force-unstable-if-unmarked` pair that `make test` and
+`make typecheck` add; a doctest is compiled as its own crate, and
+`force-unstable-if-unmarked` makes it fail to load the library it tests.
+`DOCTEST_EXCLUDES` keeps out the crates whose doctests cannot compile without
+`#![feature(rustc_private)]`, leaving the packages that carry the documented
+public API.
+
+The selector handed to `cargo test --doc` is `DOCTEST_CARGO_FLAGS`, whose
+default is `--workspace --all-features $(DOCTEST_EXCLUDES)`. Override it to run
+a smaller selection, for example
+`make test-doc DOCTEST_CARGO_FLAGS='-p whitaker_common'`. `CARGO_FLAGS` does
+not narrow doctests: this lane never reads it, so a caller who narrows
+`CARGO_FLAGS` still doctests the whole workspace.
+
+The recipe assigns `RUSTFLAGS` itself but not `RUSTDOCFLAGS`, so the rustdoc
+invocation inherits whatever the caller exported; the coverage workflow exports
+both for that reason.
 
 ## Module layout and test placement
 
@@ -1597,11 +1672,10 @@ A module that has grown into submodules becomes a directory whose root file is
 `mod.rs`, for example `installer/src/install_flow/mod.rs` and
 `installer/src/toolchain/mod.rs`. The self-named-sibling form, where
 `install_flow.rs` sits next to an `install_flow/` directory, is not the
-convention here: 46 `mod.rs` files are tracked outside `vendor/`, and no path
-has both `name.rs` and `name/mod.rs`. Two file modules do reach a child that
-way — `installer/src/cli.rs` and
-`crates/conditional_max_n_branches/src/driver.rs` — but they are single-child
-outliers, not the pattern to copy.
+convention here: 48 `mod.rs` files are tracked outside `vendor/`, and no path
+has both `name.rs` and `name/mod.rs`. The last two single-child outliers,
+`installer/src/cli.rs` and `crates/conditional_max_n_branches/src/driver.rs`,
+were converted, so the form is now absent rather than merely discouraged.
 
 Directory modules nest. `installer/src/toolchain/tests/` is a `tests/`
 directory module with its own `mod.rs`, holding `test_helpers.rs` and a further
@@ -1678,12 +1752,17 @@ files contain a `#[path = "` anchor.
 
 Be precise about this, because the current answer is narrower than it looks.
 
-`make lint` runs
-`cargo clippy --workspace --all-targets --all-features -- -D warnings`,
-preceded by a `cargo doc` pass. Neither runs the 400-line budget. The budget is
-implemented by `module_max_lines`, one of Whitaker's own dylint lints, and a
-dylint lint is not a rustc or Clippy built-in: it is a separate compiler plugin
-that runs only when a workspace loads it deliberately. This workspace does not.
+`make lint` runs Clippy with `--workspace --all-targets --all-features` and
+`-D warnings`, preceded by a `cargo doc` pass. The Dylint lint crates keep
+their UI fixtures under `examples/`, where every file deliberately contains the
+anti-pattern its lint detects; each fixture scopes those diagnostics with a
+narrowly targeted `#[expect(..., reason = "...")]` so the workspace policy
+still applies to every other line (see
+[the repository's assistant instructions](../AGENTS.md)). Neither `lint`
+command runs the 400-line budget. The budget is implemented by
+`module_max_lines`, one of Whitaker's own dylint lints, and a dylint lint is
+not a rustc or Clippy built-in: it is a separate compiler plugin that runs only
+when a workspace loads it deliberately. This workspace does not.
 `rg 'dylint run' Makefile scripts/` finds nothing, and the root `dylint.toml`
 configures `[no_std_fs_operations]` alone. The `[workspace.lints.rust]` and
 `[workspace.lints.rustdoc]` tables in `Cargo.toml` do not change this: they
@@ -1709,6 +1788,40 @@ The threshold, when self-linting arrives, is set as TOML under
 
 The layout convention itself is recorded in
 [ADR 0006](./adrs/adr-0006-directory-based-module-layout.md).
+
+## Lint policy checks
+
+The workspace lint policy is declared in three places, and the compiler checks
+none of them against the others: the `[workspace.lints.*]` tables in the root
+`Cargo.toml`, the `[lints] workspace = true` opt-in in every member manifest,
+and the `lint` recipe that applies them through `cargo doc` and `cargo clippy`
+with `-D warnings`. Each can drift without a diagnostic. A member that drops
+the opt-in compiles under Cargo's default lint set, and a narrowed recipe keeps
+exiting zero while checking fewer targets.
+
+[`tests/workflow_contracts/lint_gate_contract_test.py`](../tests/workflow_contracts/lint_gate_contract_test.py)
+pins all three, so any drift fails `make test-workflow-contracts` rather than
+quietly reducing coverage. `vendor/dylint_testing` is the recorded exception:
+`cargo vendor` writes a Cargo-normalized manifest that cannot inherit the
+workspace table, so that crate carries its own inline `[lints.*]` tables. It
+stays a workspace member precisely so it is still built and linted, which the
+contract also pins.
+
+`make lint` runs two lanes:
+
+```sh
+RUSTDOCFLAGS="$(RUSTDOC_FLAGS)" cargo doc $(CARGO_LOCKED) --workspace --no-deps
+cargo clippy $(CARGO_LOCKED) $(CARGO_FLAGS) -- $(RUST_FLAGS)
+```
+
+`CARGO_FLAGS` defaults to `--workspace --all-targets --all-features` and
+narrows the Clippy lane only; `cargo doc` always covers `--workspace`.
+`RUSTDOC_FLAGS` defaults to `--cfg docsrs -D warnings`, so a rustdoc warning
+fails the gate as well as a Clippy one, and `RUST_FLAGS` defaults to
+`-D warnings`. `CARGO_LOCKED` is empty by default, so a local run may update
+the lockfile; pass `CARGO_LOCKED=--locked` to require a clean one. All four are
+Make variables: override `CARGO_FLAGS` to check a narrower Clippy set while
+iterating, but leave the `?=` defaults alone when validating a commit.
 
 ## Python script interpreter convention
 
@@ -2409,7 +2522,11 @@ toolchain bump must update the channel written here as part of the runbook
 
 1. Change `rust-toolchain.toml` to the target pinned nightly channel.
 2. Install or refresh the required components:
-   `rustup component add rust-src rustfmt clippy rustc-dev llvm-tools-preview`.
+
+   ```sh
+   rustup component add rust-src rustfmt clippy rustc-dev llvm-tools-preview rust-analyzer
+   ```
+
 3. Rebuild the whole workspace with the newly pinned channel before making
    feature changes. Fix `clippy_utils`, lint-crate, and `rustc_private` API
    drift in the production code rather than suppressing warnings.
@@ -3850,6 +3967,19 @@ lock do not serialize with participants using only the other. Use
 `EnvTestGuard` when a fixture must retain the explicit guard beyond local
 scope, and keep all participants in that protocol on the same guard.
 
+For several variables in one scope, use `with_env_vars`, which applies every
+pair and restores all of them, or `with_env_vars_selected`, which evaluates its
+selector after taking the lock. `with_env_vars` chooses before the lock is
+taken and short-circuits without it when the list is empty, so it suits a fixed
+choice only. Use `with_env_vars_selected` whenever the set depends on the
+current environment — for example, "only the variables the process has not
+already set" — because another thread's scoped mutation cannot then change the
+answer between the decision and the mutation. Its selector runs with the lock
+held, and the callback runs under that same lock until every variable is
+restored; the lock is re-entrant, so a callback may open a nested scope. A
+repeated key is well defined: `temp_env` captures the original value once and
+applies the pairs in order, so the last value wins.
+
 For example:
 
 ```rust
@@ -3895,9 +4025,15 @@ regression case now pins the contract. The guard also sets
 `lib<crate>.so`, an empty `cdylib` for every Whitaker lint crate, over the
 toolchain-qualified library the harness built with `dylint-driver`. On Windows
 the guard also sets `VCPKG_ROOT` to `C:\vcpkg` when that directory exists and
-the variable is otherwise absent. Restoration uses the same shared environment
-mutex, but the runner callback itself executes without holding that mutex to
-avoid nested-lock deadlocks.
+the variable is otherwise absent.
+
+The guard selects and applies those variables through `with_env_vars_selected`,
+so the runner callback executes while holding `temp_env`'s re-entrant lock.
+Runners in one test binary therefore take turns instead of sharing a
+process-wide record: a runner that overlapped another would see that runner's
+temporary flag, select nothing, and then run after the flag had been removed. A
+runner that performs its own scoped environment setup still nests safely on the
+same thread because the lock is re-entrant.
 
 Example targets are run with `dylint_testing::ui::Test::example`. The workspace
 patches `dylint_testing`, and the patched decoder tolerates a wrapper chain (see
@@ -4934,12 +5070,12 @@ of the rule lives in the `generate-coverage` README in
 this repository sets, what each value is sized against, and where the third
 tier went.
 
-| Tier                     | What it bounds                     | Where it is set                             | Current value                                                                                                                                                                                                                                                                                                                                                   |
-| ------------------------ | ---------------------------------- | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`, both profiles       | 300 s default; 20 m for ordinary serialized UI and no-default-feature builds; 30 m for isolated package checks; 75 m for parser-pin, most trybuild, nested example-build, alias UI and whole UI harness fixtures; 120 m for `rstest_helper_should_be_fixture::ui::trybuild_fixtures_compile_without_diagnostics`; 30 m for toolchain-installing behaviour tests |
-| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, both profiles       | 300 m                                                                                                                                                                                                                                                                                                                                                           |
-| Cargo watchdog           | one `cargo` invocation, wall clock | not used here, see below                    | absent                                                                                                                                                                                                                                                                                                                                                          |
-| Job `timeout-minutes`    | the whole job                      | `ci.yml` and `coverage-main.yml`, job level | 335 m for every lane that runs the suite                                                                                                                                                                                                                                                                                                                        |
+| Tier                     | What it bounds                     | Where it is set                             | Current value                                                                                                                                                                                                                                                                                                                                                                                   |
+| ------------------------ | ---------------------------------- | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`, both profiles       | 300 s default; 20 m for ordinary serialized UI and no-default-feature builds; 30 m for isolated package checks; 75 m for parser-pin, nested example-build and whole UI harness fixtures; 120 m for the alias UI fixture, the trybuild compile contracts and `rstest_helper_should_be_fixture::ui::trybuild_fixtures_compile_without_diagnostics`; 30 m for toolchain-installing behaviour tests |
+| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, both profiles       | 300 m                                                                                                                                                                                                                                                                                                                                                                                           |
+| Cargo watchdog           | one `cargo` invocation, wall clock | not used here, see below                    | absent                                                                                                                                                                                                                                                                                                                                                                                          |
+| Job `timeout-minutes`    | the whole job                      | `ci.yml` and `coverage-main.yml`, job level | 335 m for every lane that runs the suite                                                                                                                                                                                                                                                                                                                                                        |
 
 *Table: the timers that can end a run, innermost first.*
 
@@ -5016,8 +5152,11 @@ target-scoped lock used by fixture builds.
 The alias UI fixture in `no_unwrap_or_else_panic` exceeded its 20-minute
 allowance while rebuilding its lint library through nested Cargo and waiting
 for compiler admission. A retry began the same build again and was cut short by
-the whole-run timeout. It now has a 75-minute allowance and no retry, so one
-queued build can finish without repeating its setup.
+the whole-run timeout. It was raised to 75 minutes, and a later attempt expired
+at that bound for the same reason while the admission pool reported itself
+healthy with 100-200 compiler groups queued, so it now shares the 120-minute
+build-sized allowance the trybuild contracts use. It still takes no retry, so
+one queued build can finish without repeating its setup.
 
 The same crate's whole `ui::ui` harness reached the 150-minute global deadline
 with a retry rebuilding the lint library while Cargo waited for the shared
@@ -5070,7 +5209,7 @@ whole Dylint dev-dependency graph, so a cold target recompiled 139 to 148
 seconds of dependencies for two tiny fixtures. Its fixtures were removed in
 favour of the existing `tests/analysis_behaviour.rs` public-path test and a
 `compile_fail,E0432` doctest on `normalize_settings`. The other discovered
-compile contracts therefore share a 75-minute allowance and disable retries,
+compile contracts therefore share a 120-minute allowance and disable retries,
 leaving one build more time to reach its fixtures without repeating the same
 work.
 
@@ -5134,6 +5273,13 @@ whole-run budget covers the 45 m per-test increase and leaves 15 m for the
 remaining fixtures; the workflow ceiling rises with it so the job can report a
 nextest overrun. The preceding 150 m run completed 1,841 tests; the 110 m run
 completed 1,834 tests, and the earlier 85 m runs reached 1,842 and 1,846 tests.
+
+The remaining trybuild compile contracts had a 75 m allowance. One local run
+measured 51 minutes 39 seconds in a single nested fixture build while compiler
+admission was saturated, and terminated the first case 47 seconds later, so the
+allowance has to cover a cold fixture project and the cases after it rather
+than the cases alone. It is now 120 m, matching the fixture suite, which still
+bounds a genuinely hung fixture.
 
 The example-compilation test in `rstest_helper_should_be_fixture` also exceeded
 its 20 m per-test allowance during the recovery run: Cargo built the library,

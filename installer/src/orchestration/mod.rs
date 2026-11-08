@@ -249,8 +249,8 @@ fn plan_install(
 /// Checks for and installs Dylint tools if missing.
 fn ensure_dylint_tools(policy: SourcePolicy, stderr: &mut dyn Write) -> Result<()> {
     let executor = SystemCommandExecutor;
-    ensure_dylint_tools_with_executor(&executor, policy, stderr, |status, stderr| {
-        install_dylint_tools_with_output(&executor, status, policy, stderr)
+    ensure_dylint_tools_with_executor(&executor, policy, stderr, |status, output| {
+        install_dylint_tools_with_output(&executor, status, policy, output)
     })
 }
 
@@ -266,7 +266,7 @@ fn report_suite_source(install_mode: InstallMode, stdout: &mut dyn Write) -> Res
         InstallMode::Build => "source",
     };
     writeln!(stdout, "whitaker-installer: suite-source={source}")
-        .map_err(|source| InstallerError::WriteFailed { source })
+        .map_err(|error| InstallerError::WriteFailed { source: error })
 }
 
 /// Ensures a Whitaker workspace is available.

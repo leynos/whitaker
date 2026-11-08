@@ -16,6 +16,13 @@ CARGO ?= $(or $(shell command -v cargo 2>/dev/null),$(shell [ -x "$(HOME)/.cargo
 CARGO_LOCKED ?=
 BUILD_JOBS ?=
 CARGO_FLAGS ?= --workspace --all-targets --all-features
+# Dylint UI fixtures live under `examples/` because `dylint_testing::Test::example`
+# builds them with each lint crate's dev-dependencies (tokio, rstest); `ui/`
+# fixtures are standalone and cannot carry those. Every file there is a
+# `fail_*`/`pass_*` fixture that deliberately contains the anti-patterns the
+# suite detects, so each fixture scopes those diagnostics with a narrowly
+# targeted `#[expect(..., reason = "...")]` rather than weakening the
+# workspace policy.
 # The patched UI helper has a `deny_warnings` feature that changes fixture
 # diagnostics, so exercise its parser tests separately without all features.
 TEST_EXCLUDES ?= --exclude rustc_ast --exclude rustc_attr_data_structures \
@@ -306,6 +313,18 @@ coverage: ## Generate LCOV coverage over the CI-tested crate subset
 		$(MAKE) test TEST_RUNNER="llvm-cov nextest --no-report -E '$(COVERAGE_NEXTEST_FILTER)'" \
 			CORE_TEST_RUNNER="llvm-cov nextest --no-report" && \
 		$(CARGO) llvm-cov report --lcov --output-path $(COVERAGE_OUTPUT)
+
+coverage-build: ## Compile the instrumented tests `make coverage` builds, without running them
+	@# Same crate subset, RUSTFLAGS and target directory as `coverage`, so the
+	@# compiler cache a later `make coverage` reads is warm. `cargo llvm-cov
+	@# nextest --no-run` would only report, so the stand-in script builds with
+	@# `cargo nextest run --no-run` under `cargo llvm-cov show-env`.
+	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v cargo-llvm-cov >/dev/null || { echo "Install cargo-llvm-cov (cargo install cargo-llvm-cov)"; exit 1; }
+	@CARGO_LLVM_COV_TARGET_DIR="$(COVERAGE_TARGET_DIR)" \
+		CARGO_TARGET_DIR="$(COVERAGE_TARGET_DIR)" \
+		LLVM_PROFILE_FILE_NAME="$(COVERAGE_PROFILE_FILE_NAME)" \
+		CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 \
+		$(MAKE) test CARGO="$(CURDIR)/scripts/cargo-coverage-build.sh" TEST_RUNNER="nextest run --no-run -E '$(COVERAGE_NEXTEST_FILTER)'"
 
 trybuild-contracts: ## Run the trybuild compile-contract tests, which `make coverage` skips
 	@# `make coverage` leaves seven of these out (see TRYBUILD_CONTRACT_FILTER), so

@@ -116,7 +116,7 @@ fn an_unresolvable_repository_context_still_refuses_a_source_build() {
 
     let error = install_missing_tools(
         &executor,
-        &DylintToolStatus {
+        DylintToolStatus {
             cargo_dylint: false,
             dylint_link: true,
         },

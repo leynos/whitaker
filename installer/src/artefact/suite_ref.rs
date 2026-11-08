@@ -148,7 +148,11 @@ const RULES: &[Rule] = &[
         reason: "must not begin or end with '/'",
     },
     Rule {
-        breaks: |value| value.ends_with(".lock"),
+        // Deliberately case-sensitive: `git check-ref-format` refuses `x.lock`
+        // and accepts `x.LOCK`, so a case-insensitive comparison would reject
+        // a reference git allows. `strip_suffix` states the suffix rule
+        // directly rather than looking like a file-extension test.
+        breaks: |value| value.strip_suffix(".lock").is_some(),
         reason: "must not end with '.lock'",
     },
     Rule {
@@ -188,13 +192,15 @@ const RULES: &[Rule] = &[
 /// Reject a reference git would refuse, or that would reach a command line
 /// as something other than a reference.
 fn validate_suite_ref(value: &str) -> Result<()> {
-    match RULES.iter().find(|rule| (rule.breaks)(value)) {
-        Some(rule) => Err(ArtefactError::InvalidSuiteRef {
-            value: value.to_owned(),
-            reason: rule.reason.to_owned(),
-        }),
-        None => Ok(()),
-    }
+    RULES
+        .iter()
+        .find(|rule| (rule.breaks)(value))
+        .map_or(Ok(()), |rule| {
+            Err(ArtefactError::InvalidSuiteRef {
+                value: value.to_owned(),
+                reason: rule.reason.to_owned(),
+            })
+        })
 }
 
 #[cfg(test)]

@@ -18,7 +18,7 @@ pub(crate) const OUTCOME_DEPTH_BUDGET_EXHAUSTED: &str = "depth_budget_exhausted"
 pub(crate) const OUTCOME_PARSER_UNAVAILABLE: &str = "parser_unavailable";
 
 /// Map an AST lowering result to its bounded metric outcome label.
-pub(crate) fn outcome_label(result: &AstResult<NormalizedTree>) -> &'static str {
+pub(crate) const fn outcome_label(result: &AstResult<NormalizedTree>) -> &'static str {
     match result {
         Ok(_) => OUTCOME_SUCCESS,
         Err(AstError::TreeTooLarge { .. }) => OUTCOME_NODE_BUDGET_EXHAUSTED,

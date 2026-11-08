@@ -168,31 +168,27 @@ fn runner_env_guard_marks_the_toolchain_library_as_prepared(
     }
 }
 
-/// Overlapping runners keep the flag until the last one finishes.
+/// Only variables the process does not set are selected for the override.
 ///
-/// Regression: each runner used to remove the variables it set, so under plain
-/// `cargo test` one runner could remove the flag while another still relied on
-/// it, and that UI test loaded the default-feature stub.
+/// Regression: the harness must not replace a value supplied by the caller or
+/// CI, because a runner then sees that explicit setting rather than its own.
 #[test]
-fn overlapping_runner_guards_keep_the_flag_until_the_last_drops() {
+fn absent_runner_env_settings_skip_variables_already_set() {
     const FLAG: &str = "DYLINT_LINK_ENABLE_COPY_LIBRARY";
     let _serial_guard = runner_env_guard_test_lock();
 
-    with_env_var_removed(FLAG, || {
-        let first = super::runner_env_guard();
-        let second = super::runner_env_guard();
-        drop(first);
-        assert_eq!(
-            env::var_os(FLAG),
-            Some("1".into()),
-            "the second runner still needs it"
+    with_env_var(FLAG, "0", || {
+        assert!(
+            !super::absent_runner_env_settings()
+                .iter()
+                .any(|(key, _)| *key == FLAG),
+            "a caller-supplied flag should not be overridden",
         );
-
-        drop(second);
-        assert_eq!(
-            env::var_os(FLAG),
-            None,
-            "the last runner restores the environment"
+    });
+    with_env_var_removed(FLAG, || {
+        assert!(
+            super::absent_runner_env_settings().contains(&(FLAG, "1")),
+            "an absent flag should be supplied by the harness",
         );
     });
 }

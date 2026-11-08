@@ -46,5 +46,5 @@ rstest-bdd-macros = { workspace = true }
 dylint_testing = { workspace = true }
 serial_test = { workspace = true }
 
-[lints.rust]
-missing_docs = "deny"
+[lints]
+workspace = true

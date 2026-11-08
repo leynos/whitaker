@@ -25,7 +25,12 @@ from sccache_steps import (
     normalized_condition,
 )
 from shell_commands import runs_unconditionally
-from ubicloud_workflow_support import SUITE_JOBS, job_steps, load_job
+from ubicloud_workflow_support import (
+    HOSTED_RUNNER_JOBS,
+    SUITE_JOBS,
+    job_steps,
+    load_job,
+)
 
 #: The command each gha lane runs, as its step's whole script.
 HEALTH_COMMAND: typ.Final[str] = (
@@ -106,12 +111,14 @@ def _gha_lanes() -> list[str]:
     its health; the rolling-release build jobs report their statistics and
     stop there.
     """
-    return sorted(SUITE_JOBS)
+    # A GitHub-hosted job's cache service throttles writes, so the health check
+    # that guards the Ubicloud proxy does not apply to it.
+    return sorted(set(SUITE_JOBS) - set(HOSTED_RUNNER_JOBS))
 
 
 def test_there_are_gha_lanes_to_hold() -> None:
     """The presence half: a rule over no lanes passes by deleting them."""
-    assert {"coverage-check", "linux-full", "coverage-upload"} <= set(_gha_lanes())
+    assert {"coverage-check", "linux-full", "coverage-warmup"} <= set(_gha_lanes())
 
 
 @pytest.mark.parametrize("job_name", _gha_lanes())

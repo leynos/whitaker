@@ -38,11 +38,12 @@ UBICLOUD_LINUX_JOBS: dict[str, dict[str, str]] = {
         "coverage-check": UBICLOUD_LINUX_RUNNER,
         "linux-full": UBICLOUD_LINUX_RUNNER,
     },
-    "coverage-main.yml": {"coverage-upload": UBICLOUD_LINUX_RUNNER},
+    "coverage-main.yml": {"coverage-warmup": UBICLOUD_LINUX_RUNNER},
 }
 
 GITHUB_HOSTED_RUNNERS = {
     "ci.yml": {"windows-compat": "windows-latest"},
+    "coverage-main.yml": {"coverage-upload": "ubuntu-24.04"},
     "release.yml": {
         "build-installer": "${{ matrix.os }}",
         "build-dependency-binaries": "${{ matrix.os }}",

@@ -84,7 +84,7 @@ pub enum BootstrapError {
 
 impl BootstrapError {
     /// Build an [`Self::Io`] error for `path`.
-    pub(crate) fn io(path: impl ToString, error: &std::io::Error) -> Self {
+    pub(crate) fn io<P: ToString + ?Sized>(path: &P, error: &std::io::Error) -> Self {
         Self::Io {
             path: path.to_string(),
             reason: error.to_string(),
