@@ -2790,6 +2790,15 @@ Current explicit targets:
 - `whitaker-package-dependency-binary` from
   `src/bin/package_dependency_binary.rs`
 
+The four helpers (`whitaker-package-lints`, `whitaker-package-installer`,
+`whitaker-package-dependency-binary` and `whitaker-clippy-snapshot`) declare
+`required-features = ["release-tools"]`, so `cargo install` and
+`cargo binstall` build and expect only `whitaker-installer` (issue #509). Every
+command that builds or runs a helper passes `--features release-tools`; the
+test build enables it through the self dev-dependency. The contract in
+`tests/workflow_contracts/helper_binaries_feature_test.py` fails when a command
+naming a helper omits the feature.
+
 Without explicit declarations, Cargo would infer fallback names such as
 `package_lints` and `package_installer_bin`. Those names do not match the
 workflow invocations, so release and rolling-release builds would fail even

@@ -28,7 +28,7 @@ fail() {
 }
 
 tool() {
-    cargo run --locked --quiet -p whitaker-installer --bin whitaker-clippy-snapshot -- "$@"
+    cargo run --locked --quiet -p whitaker-installer --features release-tools --bin whitaker-clippy-snapshot -- "$@"
 }
 
 commit=$(awk -F '"' '/^commit = / {print $2}' installer/clippy-snapshot.toml)
