@@ -214,4 +214,8 @@ pub fn with_locale<R>(locale: Option<&str>, callback: impl FnOnce() -> R) -> R {
 }
 
 #[cfg(test)]
+mod env_concurrency_tests;
+#[cfg(test)]
+mod env_property_tests;
+#[cfg(test)]
 mod env_tests;
