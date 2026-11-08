@@ -335,14 +335,15 @@ for correct serialized execution because nextest runs each test in a separate
 process, so the in-process `#[serial]` mutex alone is not sufficient. They are
 also marked `#[ignore]` by default because they depend on external tooling and
 a buildable workspace. Before running them, install `cargo-dylint` and
-`dylint-link`, export the prepared driver environment with
-`eval "$(make dylint-env | sed 's/^/export /')"`, then run `make fetch` to
-prepare the locked workspace and Dylint driver. The harness calls
-`build_lint_library()` before running `cargo dylint`, so the workspace build is
-handled automatically. Run them with one of the following commands:
+`dylint-link`, export the prepared driver environment with the read loop shown
+in [Running Tests](#running-tests), then run `make fetch` to prepare the locked
+workspace and Dylint driver. The harness calls `build_lint_library()` before
+running `cargo dylint`, so the workspace build is handled automatically. Run
+them with one of the following commands:
 
 ```sh
-eval "$(make dylint-env | sed 's/^/export /')"
+while IFS='=' read -r name value; do export "$name=$value"; done \
+    < <(make dylint-env)
 CARGO_NET_OFFLINE=true cargo test --frozen -p no_std_fs_operations \
     --test integration_exclusion -- --ignored
 CARGO_NET_OFFLINE=true cargo nextest run --frozen -p no_std_fs_operations \

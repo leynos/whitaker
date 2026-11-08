@@ -269,9 +269,11 @@ Crates that depend on `whitaker_installer` see these changes:
 
 ## UI test harness builds with `--frozen`
 
-`whitaker::testing::ui` now compiles the lint library with `--frozen`, so a UI
-test no longer resolves dependencies or reaches the network. Crates that use
-the harness must fetch their dependencies before running tests:
+`whitaker::testing::ui` now compiles the lint library with `--frozen`, so that
+build resolves dependencies from local data and neither reaches the network nor
+updates `Cargo.lock`. A wholly offline test run additionally needs
+`CARGO_NET_OFFLINE=true` and a prepared Dylint driver. Crates that use the
+harness must fetch their dependencies before running tests:
 
 ```sh
 cargo fetch --locked

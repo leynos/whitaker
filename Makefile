@@ -649,7 +649,12 @@ clippy-snapshot-bundle: ## Build the Clippy snapshot bundle from upstream into C
 		$(if $(CLIPPY_SNAPSHOT_SOURCE),--source "$(CLIPPY_SNAPSHOT_SOURCE)")
 
 dylint-env: ## Print the Dylint bootstrap variables as NAME=value lines
-	@printf 'DYLINT_CLIPPY_REPO=%s\nDYLINT_DRIVER_PATH=%s\n' "$(DYLINT_CLIPPY_REPO)" "$(DYLINT_DRIVER_PATH)"
+	@# `$(info)` writes straight to stdout, so a path holding a quote, a space,
+	@# or a semicolon reaches the reader as data. Pasting the value into a shell
+	@# command instead would let the shell re-parse it.
+	$(info DYLINT_CLIPPY_REPO=$(DYLINT_CLIPPY_REPO))
+	$(info DYLINT_DRIVER_PATH=$(DYLINT_DRIVER_PATH))
+	@:
 
 dylint-tools: ## Install the pinned cargo-dylint and dylint-link into DYLINT_TOOLS_DIR
 	@# Reuses a cached install whose version marker matches, so it is cheap to
