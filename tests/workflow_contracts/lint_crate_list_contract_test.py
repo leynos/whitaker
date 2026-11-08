@@ -1,4 +1,4 @@
-"""Hold every hand-maintained lint-crate list to the installer's constants.
+"""Hold the workflow and Makefile lint-crate lists to the installer's constants.
 
 The rolling release builds one lint library per crate named in its
 ``LINT_CRATES`` workflow env, then hands the whole ``target/<triple>/release``
@@ -16,14 +16,17 @@ rolling release failed on `main`. An equivalent check lived in
 ``tests/workflows/test_rolling_release_workflow.py``, but that directory is an
 opt-in ``act`` suite that no workflow runs, so nothing gated the drift.
 
-Two other copies of the same list exist, and both are checked here:
+Two lists are checked here:
 
-* `rolling-release.yml` builds from its own `LINT_CRATES` env before packaging,
-  so a missing entry fails packaging on every matrix leg. Order is part of that
+* `rolling-release.yml` builds from its own `LINT_CRATES` env and then packages;
+  a missing entry fails packaging on every matrix leg. Order is part of that
   contract, since both definitions drive deterministic build logs.
-* The `Makefile`'s `LINT_CRATES ?=` feeds `make package-lints` and
-  `make publish-check`, which run the same packager. It is deliberately in a
-  different order, so it is compared as a set.
+* The `Makefile`'s `LINT_CRATES ?=` is read by `make package-lints`, which does
+  invoke ``whitaker-package-lints``, and therefore fails the same way. It is in
+  a deliberately different order, so it is compared as a set. `make
+  publish-check` reads the same variable but only copies each
+  ``lib$$lint.so`` into a Dylint library directory, so drift there surfaces as
+  a failing `cp` rather than a packaging error.
 
 These tests live in `tests/workflow_contracts` because ``make
 test-workflow-contracts`` runs inside the required ``linux-full`` job.
