@@ -193,21 +193,54 @@ fi
 
 gh release edit "${tag}" --title "${title}" --notes "${notes}" >/dev/null
 
+# Archives that a manifest now on the release still names. A leg that failed to
+# build publishes no new archive or manifest for its target, so that target's
+# old manifest stays and keeps naming its old archive; the clean-up below must
+# not remove it. Manifests are read from the release itself, after this run's
+# uploads, so the rule covers exactly what a consumer can read.
+referenced_archives() {
+    local manifest_dir manifest
+    manifest_dir=$(mktemp -d)
+    gh release download "${tag}" --pattern 'manifest-*.json' --dir "${manifest_dir}" \
+        --clobber >/dev/null
+    shopt -s nullglob
+    for manifest in "${manifest_dir}"/manifest-*.json; do
+        jq -r '"whitaker-lints-\(.git_sha)-\(.toolchain)-\(.target).tar.zst"' "${manifest}"
+    done
+    shopt -u nullglob
+    rm -rf -- "${manifest_dir}"
+}
+mapfile -t referenced < <(referenced_archives)
+
+is_referenced() {
+    local needle=$1 name
+    for name in ${referenced+"${referenced[@]}"}; do
+        [[ "${name}" == "${needle}" ]] && return 0
+    done
+    return 1
+}
+
 # Superseded lint archives only. A dependency archive absent from this run's
 # set is not stale, it is unchanged and deliberately left in place; deleting it
 # here would recreate the very gap this script exists to close. Clippy
 # snapshots are never removed either: every installer release downloads the
 # generation it pins from this tag, including installers built before a
-# re-pin.
+# re-pin. A lint archive that any manifest still on the release names is kept
+# even when this run did not rebuild it.
 for name in ${published_names+"${published_names[@]}"}; do
     case "${name}" in
         whitaker-lints-*) ;;
         *) continue ;;
     esac
-    if ! is_wanted "${name}"; then
-        echo "Removing superseded asset ${name}."
-        gh release delete-asset "${tag}" "${name}" --yes
+    if is_wanted "${name}"; then
+        continue
     fi
+    if is_referenced "${name}"; then
+        echo "Keeping ${name}: a manifest on the release still names it."
+        continue
+    fi
+    echo "Removing superseded asset ${name}."
+    gh release delete-asset "${tag}" "${name}" --yes
 done
 
 echo "Rolling release republished at ${RELEASE_SHA} with no empty interval."

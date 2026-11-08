@@ -2838,6 +2838,12 @@ Library names are checked with the archive's target rules (`lib` prefix and
 file name must equal the one its manifest implies (`git_sha`, `toolchain`,
 `target`).
 
+The clean-up after an upload removes a superseded lint archive only when no
+manifest currently on the release still names it. A build leg that failed
+publishes nothing for its target, so that target's old manifest stays and keeps
+its archive. (The `publish` job runs with `always()` after partial matrices, so
+this case is reachable.)
+
 Publishing never moves the `rolling` tag. Installs read assets through the
 release by tag name, and the manifest records the commit built. A tag move
 needs a token that may update a ref onto commits touching `.github/workflows`,

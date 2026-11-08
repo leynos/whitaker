@@ -16,6 +16,7 @@ whether a delete was sent.
 
 from __future__ import annotations
 
+import json
 import os
 import stat
 import subprocess
@@ -40,6 +41,16 @@ if [[ "$1 $2" == "release view" ]]; then
     fi
     if [[ -n "${PUBLISHED_NAMES}" ]]; then
         printf '%s\\n' ${PUBLISHED_NAMES}
+    fi
+fi
+if [[ "$1 $2" == "release download" ]]; then
+    # The manifests currently on the release, written where --dir points.
+    while [[ $# -gt 0 ]]; do
+        [[ "$1" == "--dir" ]] && dir="$2"
+        shift
+    done
+    if [[ -n "${RELEASE_MANIFESTS:-}" && -d "${RELEASE_MANIFESTS}" ]]; then
+        cp "${RELEASE_MANIFESTS}"/*.json "${dir}"/
     fi
 fi
 exit 0
@@ -77,6 +88,7 @@ def publish(tmp_path: Path, repo_root: Path) -> typ.Callable[..., PublishRun]:
         local_assets: list[str],
         published: list[str],
         release_exists: bool = True,
+        release_manifests: dict[str, dict[str, str]] | None = None,
     ) -> PublishRun:
         """Run the publish script against a stubbed gh and return what it did."""
         workspace = tmp_path / "workspace"
@@ -89,6 +101,12 @@ def publish(tmp_path: Path, repo_root: Path) -> typ.Callable[..., PublishRun]:
         for name in local_assets:
             (dist / name).write_text("payload", encoding="utf-8")
         log.write_text("", encoding="utf-8")
+        manifest_dir = tmp_path / "release-manifests"
+        manifest_dir.mkdir(exist_ok=True)
+        for old in manifest_dir.glob("*.json"):
+            old.unlink()
+        for name, fields in (release_manifests or {}).items():
+            (manifest_dir / name).write_text(json.dumps(fields), encoding="utf-8")
 
         result = subprocess.run(  # noqa: S603 - fixed argument vector
             ["bash", str(repo_root / SCRIPT)],  # noqa: S607 - PATH lookup intended
@@ -102,6 +120,7 @@ def publish(tmp_path: Path, repo_root: Path) -> typ.Callable[..., PublishRun]:
                 "GH_LOG": str(log),
                 "RELEASE_EXISTS": "true" if release_exists else "false",
                 "PUBLISHED_NAMES": " ".join(published),
+                "RELEASE_MANIFESTS": str(manifest_dir),
                 "GITHUB_REPOSITORY": "leynos/whitaker",
                 "RELEASE_SHA": "0123456789abcdef0123456789abcdef01234567",
                 "RELEASE_SHORT_SHA": "0123456",
@@ -453,3 +472,44 @@ def test_a_sidecar_derived_from_the_published_bundle_joins_it(
     assert run.returncode == 0, run.stdout
     assert run.matching("release upload", f"{SNAPSHOT}.sha256")
     assert not run.matching("delete-asset", SNAPSHOT)
+
+
+def test_a_failed_leg_keeps_the_archive_its_old_manifest_still_names(
+    publish: typ.Callable[..., PublishRun],
+) -> None:
+    """Partial publication must not strand a target on a missing archive.
+
+    The linux leg built; the darwin leg failed, so no new darwin archive or
+    manifest is published and the old darwin manifest stays on the release,
+    still naming the old darwin archive. Only the replaced linux archive goes.
+    """
+    old_linux = "whitaker-lints-old1234-nightly-2026-05-28-x86_64-unknown-linux-gnu.tar.zst"
+    old_darwin = "whitaker-lints-old1234-nightly-2026-05-28-aarch64-apple-darwin.tar.zst"
+    new_linux = "whitaker-lints-0123456-nightly-2026-05-28-x86_64-unknown-linux-gnu.tar.zst"
+    run = publish(
+        local_assets=[new_linux, "manifest-x86_64-unknown-linux-gnu.json"],
+        published=[
+            old_linux,
+            old_darwin,
+            "manifest-x86_64-unknown-linux-gnu.json",
+            "manifest-aarch64-apple-darwin.json",
+        ],
+        release_manifests={
+            "manifest-x86_64-unknown-linux-gnu.json": {
+                "git_sha": "0123456",
+                "toolchain": "nightly-2026-05-28",
+                "target": "x86_64-unknown-linux-gnu",
+            },
+            "manifest-aarch64-apple-darwin.json": {
+                "git_sha": "old1234",
+                "toolchain": "nightly-2026-05-28",
+                "target": "aarch64-apple-darwin",
+            },
+        },
+    )
+
+    assert run.returncode == 0, run.stdout
+    assert run.matching("delete-asset", old_linux), "the replaced archive must go"
+    assert not run.matching("delete-asset", old_darwin), (
+        "an archive that a manifest still on the release names must be kept"
+    )
