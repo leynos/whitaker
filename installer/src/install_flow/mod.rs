@@ -220,7 +220,7 @@ fn try_prebuilt_installation_with(
             delivered,
         } => (staging_path, delivered),
         PrebuiltResult::Fallback { reason } => {
-            return fall_back_or_refuse(&context.policy, reason);
+            return fall_back_or_refuse(context.policy, reason);
         }
     };
     if let Err(error) = prune_prebuilt_libraries(
@@ -244,7 +244,7 @@ fn try_prebuilt_installation_with(
 /// `attempt_prebuilt` has already written the unavailable notice and, where a
 /// fallback is permitted, the fallback line. Repeating either here would print
 /// it twice, so only the refusal is added.
-fn fall_back_or_refuse(policy: &SourcePolicy, reason: String) -> Result<Option<Utf8PathBuf>> {
+fn fall_back_or_refuse(policy: SourcePolicy, reason: String) -> Result<Option<Utf8PathBuf>> {
     if policy.no_source_fallback {
         return Err(InstallerError::SourceFallbackForbidden {
             artefact: "a prebuilt lint library".to_owned(),
@@ -318,7 +318,9 @@ fn prune_prebuilt_libraries(
     require_delivered_libraries(staging_path, toolchain_channel, requested_crates, delivered)
 }
 
-fn staging_error(reason: String) -> InstallerError { InstallerError::StagingFailed { reason } }
+const fn staging_error(reason: String) -> InstallerError {
+    InstallerError::StagingFailed { reason }
+}
 
 /// Remove every library staged for `toolchain_channel` whose crate was not requested.
 fn remove_unrequested_libraries(
