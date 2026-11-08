@@ -14,6 +14,14 @@
 # through untouched.
 set -euo pipefail
 
+# An encoded flag set outranks RUSTFLAGS in cargo, so an inherited one would
+# defeat the instrumentation show-env asks for.
+unset CARGO_ENCODED_RUSTFLAGS
+
+if [[ "${1:-}" == test ]]; then
+  # The recipe also builds `dylint_testing`'s library tests; compile them only.
+  exec cargo "$@" --no-run
+fi
 if [[ "${1:-}" != nextest ]]; then
   exec cargo "$@"
 fi

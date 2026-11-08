@@ -999,7 +999,7 @@ Isolated errors below it produce warnings instead. A proxy hiccup costs one
 compile, and failing the lane on it would make a pull request depend on an
 external service's good day, which is what moving CodeScene off the
 pull-request lane removed. The upload comes before the check so the evidence
-survives the failure, and `coverage-upload` runs the check last so a failure
+survives the failure, and `coverage-warmup` runs the check last so a failure
 cannot cost it its cache saves.
 `tests/workflow_contracts/sccache_health_contract_test.py` holds that order in
 every gha lane, and `make test-sccache-health` tests the checker, including its
@@ -1116,7 +1116,8 @@ The measurements that showed it are these:
   `linux-full` read 0 of 1,077 compilations from the cache and took 29m07s,
   against 11 to 14 minutes warm. Nothing in `main`'s scope had compiled its
   shapes: `ci.yml` then ran only on `pull_request` and `workflow_dispatch`, and
-  `coverage-upload`, the only trunk job, builds the instrumented shape.
+  `coverage-upload`, the only trunk job, built the instrumented shape (it is now
+  `coverage-warmup`, on Ubicloud).
 - Run [35825656071][whitaker-run-35825656071], the first trunk run on the
   proxy, which was cold as well. It spent 35m54s in `Generate coverage` and was
   cancelled at the 40-minute limit before it reached its saves.

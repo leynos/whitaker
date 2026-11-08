@@ -9,6 +9,10 @@ proxy, a fresh branch's `linux-full` read 0 of 1,077 compilations and took
 29 minutes against 11 to 14 warm (run 35825720438), because `ci.yml` ran only
 on `pull_request` and `workflow_dispatch`.
 
+A job on a GitHub-hosted runner writes GitHub's store, which the Ubicloud
+lanes never read, so `coverage-upload` is no trunk writer: `coverage-warmup`
+is the coverage lane's.
+
 The rule this module reads is therefore "every pull-request lane on the
 Actions backend has exactly one trunk writer": a job that runs on a push to
 `main` and nothing broader, runs unconditionally there, selects the same
