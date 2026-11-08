@@ -95,14 +95,17 @@ pub(crate) trait BundleOperations {
     /// A scratch repository is therefore permitted, under these limits: it
     /// lives in the system temporary directory (or a test-supplied parent),
     /// carries a recognizable prefix, and is removed before this call returns,
-    /// whether the Git command succeeded or failed. Callers must not assume
-    /// the process wrote nothing at all to disk; they may assume nothing it
-    /// wrote outlives the call.
+    /// whether the Git command succeeded or failed. A removal that fails is
+    /// reported rather than ignored. Callers must not assume the process wrote
+    /// nothing at all to disk; they may assume nothing it wrote outlives the
+    /// call.
     ///
     /// # Errors
     ///
     /// Returns [`ClippySnapshotError::Io`] when the scratch repository cannot
-    /// be created, and [`ClippySnapshotError::Git`] when Git cannot run.
+    /// be created or removed, [`ClippySnapshotError::Invalid`] when the
+    /// listing carries a line that names no head, and
+    /// [`ClippySnapshotError::Git`] when Git cannot run.
     fn list_heads(&self, bundle: &Utf8Path) -> Result<Vec<BundleHead>, ClippySnapshotError>;
 
     /// Clone the bundle as a bare repository and remove `origin`.

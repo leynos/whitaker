@@ -200,11 +200,12 @@ impl<'env> SnapshotGit<'env> {
 impl RepositoryQueries for SnapshotGit<'_> {
     /// Observe the repository's shape, symbolic HEAD, and refs.
     fn structure(&self, path: &Utf8Path) -> Result<StructureEvidence, ClippySnapshotError> {
-        let is_bare = self.stdout(
+        let bare = self.stdout(
             "rev-parse",
             Some(path),
             &["rev-parse", "--is-bare-repository"],
-        )? == "true";
+        )?;
+        let is_bare = boolean_answer("rev-parse", "bare repository", &bare)?;
         // A detached HEAD (exit 1 under `--quiet`) is evidence, not a failure:
         // the policy reports it. Any other failure, such as a malformed or
         // unreadable HEAD, is an infrastructure fault and stays an error, so
@@ -235,11 +236,12 @@ impl RepositoryQueries for SnapshotGit<'_> {
         &self,
         path: &Utf8Path,
     ) -> Result<SelfContainedEvidence, ClippySnapshotError> {
-        let is_shallow = self.stdout(
+        let shallow = self.stdout(
             "rev-parse",
             Some(path),
             &["rev-parse", "--is-shallow-repository"],
-        )? == "true";
+        )?;
+        let is_shallow = boolean_answer("rev-parse", "shallow repository", &shallow)?;
         let remotes = self.stdout("remote", Some(path), &["remote"])?;
         Ok(SelfContainedEvidence {
             is_shallow,
@@ -309,31 +311,34 @@ impl RepositoryQueries for SnapshotGit<'_> {
 impl BundleOperations for SnapshotGit<'_> {
     /// Check the bundle's header in a scratch repository.
     fn verify_header(&self, bundle: &Utf8Path) -> Result<(), ClippySnapshotError> {
-        let (_scratch, scratch) = self.scratch_repository(bundle)?;
-        let verify = self.output(
-            "bundle verify",
-            Some(&scratch),
-            &["bundle", "verify", bundle.as_str()],
-        )?;
-        if verify.status.success() {
-            return Ok(());
-        }
-        let stderr = String::from_utf8_lossy(&verify.stderr);
-        Err(ClippySnapshotError::invalid(
-            bundle,
-            format!("git bundle verify failed: {}", stderr.trim()),
-        ))
+        self.with_scratch_repository(bundle, |scratch| {
+            let verify = self.output(
+                "bundle verify",
+                Some(scratch),
+                &["bundle", "verify", bundle.as_str()],
+            )?;
+            if verify.status.success() {
+                return Ok(());
+            }
+            let stderr = String::from_utf8_lossy(&verify.stderr);
+            Err(ClippySnapshotError::invalid(
+                bundle,
+                format!("git bundle verify failed: {}", stderr.trim()),
+            ))
+        })
     }
 
     /// List the bundle's heads; the port records the scratch state needed.
     fn list_heads(&self, bundle: &Utf8Path) -> Result<Vec<BundleHead>, ClippySnapshotError> {
-        let (_scratch, scratch) = self.scratch_repository(bundle)?;
-        let listing = self.stdout(
-            "bundle list-heads",
-            Some(&scratch),
-            &["bundle", "list-heads", bundle.as_str()],
-        )?;
-        Ok(parse_bundle_heads(&listing))
+        self.with_scratch_repository(bundle, |scratch| {
+            let listing = self.stdout(
+                "bundle list-heads",
+                Some(scratch),
+                &["bundle", "list-heads", bundle.as_str()],
+            )?;
+            parse_bundle_heads(&listing)
+                .map_err(|reason| ClippySnapshotError::invalid(bundle, reason))
+        })
     }
 
     /// Clone the bundle bare, then drop the remote the clone records.
@@ -374,6 +379,29 @@ impl BundleOperations for SnapshotGit<'_> {
 }
 
 impl SnapshotGit<'_> {
+    /// Run `operation` in a fresh scratch repository, then remove it.
+    ///
+    /// `git bundle verify` and `git bundle list-heads` both insist on a
+    /// repository, so each call needs one. `close` is used rather than the
+    /// `TempDir` drop so a removal failure is reported: the port promises the
+    /// scratch state never outlives the call, and a silently ignored error
+    /// would break that promise. A failed command is reported ahead of a
+    /// failed removal, since the command's diagnosis is the more useful one.
+    fn with_scratch_repository<T>(
+        self,
+        bundle: &Utf8Path,
+        operation: impl FnOnce(&Utf8Path) -> Result<T, ClippySnapshotError>,
+    ) -> Result<T, ClippySnapshotError> {
+        let (scratch, path) = self.scratch_repository(bundle)?;
+        let outcome = operation(&path);
+        let removed = scratch
+            .close()
+            .map_err(|error| ClippySnapshotError::io(bundle, &error));
+        let value = outcome?;
+        removed?;
+        Ok(value)
+    }
+
     /// Create an empty bare repository for bundle header commands.
     ///
     /// `git bundle verify` insists on a repository even for a bundle without
@@ -405,6 +433,29 @@ impl SnapshotGit<'_> {
             Some(parent) => builder.tempdir_in(parent),
             None => builder.tempdir(),
         }
+    }
+}
+
+/// Interpret one of Git's `true`/`false` answers, refusing anything else.
+///
+/// Git documents these questions as printing `true` or `false`. Treating any
+/// other successful output as "not shallow" would accept history whose depth
+/// the adapter never established, so an unrecognized answer is reported as an
+/// infrastructure fault instead of becoming evidence.
+fn boolean_answer(
+    operation: &'static str,
+    question: &str,
+    answer: &str,
+) -> Result<bool, ClippySnapshotError> {
+    match answer {
+        "true" => Ok(true),
+        "false" => Ok(false),
+        other => Err(ClippySnapshotError::Git {
+            operation,
+            message: format!(
+                "expected `true` or `false` for the {question} question, got `{other}`"
+            ),
+        }),
     }
 }
 

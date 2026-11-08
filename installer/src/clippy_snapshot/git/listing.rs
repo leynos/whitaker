@@ -27,14 +27,21 @@ pub(super) fn parse_refs(listing: &str) -> Vec<RefEntry> {
 ///
 /// `git bundle list-heads` prints the object first and the ref second, the
 /// reverse of `for-each-ref`, so the fields swap here. A line without a
-/// separator names no head and is dropped.
-pub(super) fn parse_bundle_heads(listing: &str) -> Vec<BundleHead> {
+/// separator names no head. Dropping such a line would let the rest of the
+/// listing pass as complete evidence, so it is reported instead: the bundle's
+/// own header is what policy must judge, and it must see the whole of it.
+pub(super) fn parse_bundle_heads(listing: &str) -> Result<Vec<BundleHead>, String> {
     listing
         .lines()
-        .filter_map(|line| line.split_once(' '))
-        .map(|(object, name)| BundleHead {
-            object: object.to_owned(),
-            name: name.to_owned(),
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| {
+            let (object, name) = line.split_once(' ').ok_or_else(|| {
+                format!("the bundle head listing has a line without a ref: `{line}`")
+            })?;
+            Ok(BundleHead {
+                object: object.to_owned(),
+                name: name.to_owned(),
+            })
         })
         .collect()
 }
@@ -48,3 +55,7 @@ pub(super) fn listing_lines(listing: &str) -> Vec<String> {
         .map(ToOwned::to_owned)
         .collect()
 }
+
+#[cfg(test)]
+#[path = "listing_tests.rs"]
+mod tests;

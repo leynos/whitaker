@@ -60,6 +60,31 @@ fn a_clone_that_cannot_start_is_an_infrastructure_failure() {
 }
 
 #[test]
+fn git_boolean_answers_are_interpreted_strictly() {
+    assert_eq!(
+        super::boolean_answer("rev-parse", "shallow repository", "true"),
+        Ok(true)
+    );
+    assert_eq!(
+        super::boolean_answer("rev-parse", "shallow repository", "false"),
+        Ok(false)
+    );
+}
+
+#[test]
+fn an_unexpected_answer_to_a_boolean_question_is_an_infrastructure_failure() {
+    // Accepting any other output as "not shallow" would admit history whose
+    // depth was never established, so it must not become evidence.
+    let error = super::boolean_answer("rev-parse", "shallow repository", "maybe")
+        .expect_err("only `true` and `false` answer a Git boolean question");
+
+    assert!(
+        matches!(&error, ClippySnapshotError::Git { operation, .. } if *operation == "rev-parse"),
+        "{error}"
+    );
+}
+
+#[test]
 fn listing_heads_leaves_the_bundle_and_its_directory_untouched() {
     // `git bundle list-heads` needs a repository, so the adapter makes a
     // scratch one. The port promises an observation, so the scratch state must

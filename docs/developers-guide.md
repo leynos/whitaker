@@ -5070,8 +5070,13 @@ decision is in
 - Adapters return the closest honest observation and translate infrastructure
   failures into `ClippySnapshotError`; they do not decide whether an
   observation is acceptable. The exceptions are the checks only an adapter can
-  make: a failed `git bundle verify`, a failed staging clone, and metadata that
-  cannot be decoded or names an unknown schema are reported as `Invalid`.
+  make: a failed `git bundle verify`, a failed staging clone, a bundle head
+  listing with a line that names no head, and metadata that cannot be decoded
+  or names an unknown schema are reported as `Invalid`.
+- The Git adapter translates listings into values before policy sees them:
+  refs and bundle heads become typed entries, and Git's `true`/`false` answers
+  become booleans. An answer that is neither is reported as a Git failure, so
+  unexpected output can never be read as "not shallow".
 - Orchestration runs through `SnapshotSupport<'_>`, a struct of borrowed
   ports. `SnapshotSupport::production()` composes the process-wide adapters;
   the public entry points use it and the `*_with` variants take explicit

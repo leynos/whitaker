@@ -53,14 +53,18 @@ The module separates the decision from the observation.
   into the values policy compares, such as `RefEntry`, `BundleHead`, and the
   bare and shallow observations as booleans, so policy never parses another
   tool's line format. It applies no snapshot acceptance rule, except that a
-  failed `git bundle verify`, a failed staging clone, and metadata that cannot
-  be decoded or names an unknown schema are reported as `Invalid`.
+  failed `git bundle verify`, a failed staging clone, a bundle head listing
+  with a line that names no head, and metadata that cannot be decoded or names
+  an unknown schema are reported as `Invalid`.
 - `list_heads` is an observation with one bounded write.
   `git bundle list-heads` refuses to run outside a repository, so the adapter
   creates a prefixed scratch repository under the system temporary directory,
   or a parent a test supplies, and removes it before returning whether the
-  command succeeded or failed. Nothing it writes outlives the call, and the
-  bundle and the caller's snapshot paths are never touched.
+  command succeeded or failed. A removal that fails is reported as `Io` rather
+  than ignored, and a listing line that names no head is reported as `Invalid`,
+  so an incomplete listing never passes as complete evidence. Nothing it writes
+  outlives the call, and the bundle and the caller's snapshot paths are never
+  touched.
 - `SnapshotSupport<'_>` is the composition root for one operation: borrowed
   trait objects for each port. `SnapshotSupport::production()` wires the
   process-wide `SnapshotGit` and `ProductionStore`. The public entry points
