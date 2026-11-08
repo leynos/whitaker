@@ -2,7 +2,9 @@
 
 ## Status and purpose
 
-Status: IN PROGRESS — approved for implementation on 2026-11-08.
+Status: IN PROGRESS
+
+Approved for implementation on 2026-11-08.
 
 This plan delivers an experimental `macro_aware_cognitive_complexity` lint. A
 function containing four logging calls should score 1 regardless of whether
@@ -11,10 +13,11 @@ chargeable. Source desugarings remain visible, while generated branching does
 not increase the score. This is a structural proxy, not a validated measurement
 of human understanding.
 
-The present change contains planning documentation only. Implementation,
-compiler experiments, proof construction, and lint adoption begin only after
-approval. The draft pull request must not close issue #504; its implementor adds
-`Closes #504` only after completing the feature and its acceptance gates.
+Implementation began after approval on 2026-11-08. M1 delivered the shared
+origin classifier, its adapter, the Verus proof, and ADR 0011; the standalone
+lint and its delivery follow. The pull request must not close issue #504 until
+the feature and its acceptance gates are complete; `Closes #504` is added only
+then.
 
 ## Conformance basis
 
@@ -26,9 +29,11 @@ including its proof and testing instructions. The branch is
 
 [RFC 0010](../rfcs/rfc-0010-macro-aware-cognitive-complexity.md), currently
 Proposed, and [roadmap](../roadmap.md) phases 15 and 16 supply prior design,
-not authority to expand this task. No approved task-specific ADR exists.
-`docs/design.md`, requested as a reference, does not exist at this baseline;
-use the indexed [suite design](../whitaker-dylint-suite-design.md) instead.
+not authority to expand this task.
+[ADR 0011](../adrs/adr-0011-node-origin-provenance-classifier.md) records the
+accepted provenance-classifier decision implemented by M1. `docs/design.md`,
+requested as a reference, does not exist at this baseline; use the indexed
+[suite design](../whitaker-dylint-suite-design.md) instead.
 [Documentation contents](../contents.md) and
 [repository layout](../repository-layout.md) identify the other owners.
 
@@ -585,7 +590,7 @@ may be slow; queued work is not hung and must not be duplicated.
   Clippy alignment, safe-rollout dependency, and per-generation revalidation.
 - [x] 2026-11-08: Gate and publish the toolchain clarification.
 - [x] 2026-11-08: Explicit user approval received; implementation begins.
-- [ ] M1: classifier, adapter, evidence, and Verus proof.
+- [x] M1: classifier, adapter, evidence, and Verus proof.
   - [x] Compiler-generation receipt established: `nightly-2026-05-28`,
         rustc `57d06900fd7d9ee06d3a7f323bb77f17ab3cfaf8`, Clippy snapshot
         `e4608a25c2e20116fbc1e97a51a73f094a1db7a1`, selected revision
@@ -609,8 +614,11 @@ may be slow; queued work is not hung and must not be duplicated.
   - [x] Four mutation receipts recorded (policy and model, Macro-transparent
         and outermost-desugaring-stop).
   - [x] `docs/developers-guide.md` records reuse rules and proof boundaries.
-  - [ ] Run focused commands and the ordinary gates via the scrutineer;
-        commit the coherent shared facility.
+  - [x] Focused commands and the ordinary gates passed via the scrutineer;
+        commit `b229d604` records the shared facility.
+  - [x] Milestone CodeRabbit CLI review completed; its two trivial
+        documentation findings are corrected in a follow-up documentation
+        commit.
 - [ ] M2: standalone lint, parity, localization, and logging matrix.
 - [ ] M3: experimental suite/installer registration and documentation.
 - [ ] M4: separately gated adoption by both existing lints.
@@ -681,16 +689,20 @@ isolate matrix library staging. The initial documentation gates passed and
 draft PR #574 was published; the toolchain clarification was gated and
 published in follow-up commits.
 
-M1 is implemented but not yet gated or committed. The shared facility consists
-of the compiler-free policy in `common/src/node_origin/mod.rs`, the adapter in
-`src/hir/node_origin/mod.rs`, shared hygiene test support, the Verus sidecar
-`verus/node_origin.rs`, the `make verus-node-origin` target, ADR 0013, and the
-reuse and proof-boundary text in the developer's guide. Focused results: 16
-policy tests pass, 16 adapter tests pass, and the proof reports 8 verified, 0
-errors. The real-lowering probe covered source, macro-argument, macro-body,
-mixed-`when!`, desugaring, and nested-macro cases. Four injected-rule mutations
-failed as required. No lint implementation or runtime acceptance exists yet;
-M2-M4 remain. Update this section after each approved milestone and retain both
+M1 is implemented, gated, and committed as `93cc4f2c`. The shared facility
+consists of the compiler-free policy in `common/src/node_origin/mod.rs`, the
+adapter in `crates/whitaker_lint_core/src/hir/node_origin/mod.rs`, shared hygiene test support, the Verus
+sidecar `verus/node_origin.rs`, the `make verus-node-origin` target, ADR 0013,
+and the reuse and proof-boundary text in the developer's guide. Focused
+results: 16 policy tests pass, 16 adapter tests pass, and the proof reports 8
+verified, 0 errors. The real-lowering probe covered source, macro-argument,
+macro-body, mixed-`when!`, desugaring, and nested-macro cases. Four
+injected-rule mutations failed as required. The scrutineer recorded a clean
+`make lint`, `make test` (2324 passed plus 19 `dylint_testing` tests), Markdown
+lint, Mermaid validation, the Verus proof, and `make check-fmt`. The milestone
+CodeRabbit CLI review raised two trivial documentation findings and no code
+findings. No lint implementation or runtime acceptance exists yet; M2-M4
+remain. Update this section after each approved milestone and retain both
 remaining gaps and the evidence that discharged earlier obligations.
 
 ## References and implementation reading
