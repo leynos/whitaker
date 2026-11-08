@@ -6,9 +6,10 @@
 //! `lowering_tests`; these cases prove the report names the same facts, which
 //! is what an operator reading the log actually depends on.
 //!
-//! The helpers are exercised through small parameterized tables: the two
-//! wrappers share a shape, and the four budget reports differ only in the
-//! field they name, so a table states that once rather than four times.
+//! Cases are described by small expectation structs rather than bags of string
+//! arguments. That keeps each helper's parameter list short and typed, and it
+//! states the expected diagnostic once instead of repeating its parts at every
+//! call site.
 
 use std::io::{Read, Seek, SeekFrom};
 
@@ -36,6 +37,28 @@ type ErrorFactory = fn() -> AstError;
 /// A budget reporter that logs its usage and limit.
 type BudgetReporter = fn(ByteSpan, usize, usize);
 
+/// The diagnostic a case expects the subscriber to render.
+#[derive(Clone, Copy)]
+struct ExpectedReport<'a> {
+    /// The level the event must carry.
+    level: &'a str,
+    /// The message the event must contain.
+    message: &'a str,
+    /// The structured fields the event must name.
+    fields: &'a [&'a str],
+}
+
+/// One budget report case: the wrapper under test and what it must say.
+#[derive(Clone, Copy)]
+struct BudgetCase {
+    /// The budget reporter to invoke with an exhausted budget.
+    report: BudgetReporter,
+    /// The message the rendered event must contain.
+    message: &'static str,
+    /// The usage field the event must name alongside the limit.
+    field: &'static str,
+}
+
 /// Render the events emitted while `run` executes, without timestamps' noise.
 fn capture_events(run: impl FnOnce()) -> String {
     let mut capture = tempfile::tempfile().expect("diagnostic capture file should be created");
@@ -55,17 +78,19 @@ fn capture_events(run: impl FnOnce()) -> String {
     output
 }
 
-/// Assert `output` names `message`, `level`, and every one of `fields`.
-fn assert_reports(output: &str, level: &str, message: &str, fields: &[&str]) {
+/// Assert `output` renders the level, message, and fields a case expects.
+fn assert_reports(output: &str, expected: ExpectedReport<'_>) {
     assert!(
-        output.contains(message),
-        "`{message}` missing from:\n{output}"
+        output.contains(expected.message),
+        "`{}` missing from:\n{output}",
+        expected.message
     );
     assert!(
-        output.contains(level),
-        "`{level}` level missing from:\n{output}"
+        output.contains(expected.level),
+        "`{}` level missing from:\n{output}",
+        expected.level
     );
-    for field in fields {
+    for field in expected.fields {
         assert!(output.contains(field), "`{field}` missing from:\n{output}");
     }
 }
@@ -95,8 +120,7 @@ fn non_char_boundary_error() -> AstError { AstError::NonCharBoundary { offset: 6
 fn assert_error_report(
     report: AstReporter,
     make_error: ErrorFactory,
-    message: &str,
-    fields: &[&str],
+    expected: ExpectedReport<'_>,
 ) {
     let output = capture_events(|| {
         let returned = report(make_error());
@@ -106,23 +130,32 @@ fn assert_error_report(
             "the helper returns its input unchanged"
         );
     });
-    assert_reports(&output, "ERROR", message, fields);
+    assert_reports(&output, expected);
 }
 
 /// Check that an out-of-bounds span reports its bounds and length.
 #[rstest]
 #[case(
     log_span_validation_failure,
-    "AST span lies outside the supplied source text"
+    ExpectedReport {
+        level: "ERROR",
+        message: "AST span lies outside the supplied source text",
+        fields: &["start=2", "end=9", "len=7"],
+    }
 )]
-#[case(log_covering_failure, "no AST syntax node covers the requested span")]
-fn span_out_of_bounds_reports_the_offsets(#[case] report: AstReporter, #[case] message: &str) {
-    assert_error_report(
-        report,
-        out_of_bounds_error,
-        message,
-        &["start=2", "end=9", "len=7"],
-    );
+#[case(
+    log_covering_failure,
+    ExpectedReport {
+        level: "ERROR",
+        message: "no AST syntax node covers the requested span",
+        fields: &["start=2", "end=9", "len=7"],
+    }
+)]
+fn span_out_of_bounds_reports_the_offsets(
+    #[case] report: AstReporter,
+    #[case] expected: ExpectedReport<'static>,
+) {
+    assert_error_report(report, out_of_bounds_error, expected);
 }
 
 /// Check that any other failure reports the error itself.
@@ -130,22 +163,27 @@ fn span_out_of_bounds_reports_the_offsets(#[case] report: AstReporter, #[case] m
 #[case(
     log_span_validation_failure,
     empty_span_error,
-    "AST span validation failed",
-    &["EmptySpan", "offset: 3"]
+    ExpectedReport {
+        level: "ERROR",
+        message: "AST span validation failed",
+        fields: &["EmptySpan", "offset: 3"],
+    }
 )]
 #[case(
     log_covering_failure,
     non_char_boundary_error,
-    "AST covering-node selection failed",
-    &["NonCharBoundary", "offset: 6"]
+    ExpectedReport {
+        level: "ERROR",
+        message: "AST covering-node selection failed",
+        fields: &["NonCharBoundary", "offset: 6"],
+    }
 )]
 fn other_errors_are_reported_by_debug(
     #[case] report: AstReporter,
     #[case] make_error: ErrorFactory,
-    #[case] message: &str,
-    #[case] fields: &[&str],
+    #[case] expected: ExpectedReport<'static>,
 ) {
-    assert_error_report(report, make_error, message, fields);
+    assert_error_report(report, make_error, expected);
 }
 
 /// Check that a lowering failure names the parser's error elements.
@@ -163,9 +201,11 @@ fn lowering_failure_names_parser_errors() {
 
     assert_reports(
         &output,
-        "ERROR",
-        "selected AST span contains parser error elements",
-        &["start=1", "end=5"],
+        ExpectedReport {
+            level: "ERROR",
+            message: "selected AST span contains parser error elements",
+            fields: &["start=1", "end=5"],
+        },
     );
 }
 
@@ -194,41 +234,46 @@ fn parser_recovery_reports_the_error_count() {
 
     assert_reports(
         &output,
-        "WARN",
-        "lowered AST span from source with parser recovery errors",
-        &["start=1", "end=5", "errors=4"],
+        ExpectedReport {
+            level: "WARN",
+            message: "lowered AST span from source with parser recovery errors",
+            fields: &["start=1", "end=5", "errors=4"],
+        },
     );
 }
 
 /// Check that every exhausted budget names its usage field and the limit.
 #[rstest]
-#[case(
-    log_selection_depth_budget,
-    "AST covering-node selection exceeded the depth budget",
-    "depth"
-)]
-#[case(
-    log_selection_node_budget,
-    "AST covering-node selection exceeded the node budget",
-    "node_count"
-)]
-#[case(
-    log_lowering_depth_budget,
-    "AST lowering exceeded the depth budget",
-    "depth"
-)]
-#[case(
-    log_lowering_node_budget,
-    "AST lowering exceeded the normalized-node budget",
-    "normalized_node_count"
-)]
-fn exhausted_budget_reports_the_usage_and_limit(
-    #[case] report: BudgetReporter,
-    #[case] message: &str,
-    #[case] field: &str,
-) {
-    let usage = format!("{field}=9");
-    let output = capture_events(|| report(whole_span(), 9, 8));
+#[case(BudgetCase {
+    report: log_selection_depth_budget,
+    message: "AST covering-node selection exceeded the depth budget",
+    field: "depth",
+})]
+#[case(BudgetCase {
+    report: log_selection_node_budget,
+    message: "AST covering-node selection exceeded the node budget",
+    field: "node_count",
+})]
+#[case(BudgetCase {
+    report: log_lowering_depth_budget,
+    message: "AST lowering exceeded the depth budget",
+    field: "depth",
+})]
+#[case(BudgetCase {
+    report: log_lowering_node_budget,
+    message: "AST lowering exceeded the normalized-node budget",
+    field: "normalized_node_count",
+})]
+fn exhausted_budget_reports_the_usage_and_limit(#[case] case: BudgetCase) {
+    let usage = format!("{}=9", case.field);
+    let output = capture_events(|| (case.report)(whole_span(), 9, 8));
 
-    assert_reports(&output, "ERROR", message, &[usage.as_str(), "limit=8"]);
+    assert_reports(
+        &output,
+        ExpectedReport {
+            level: "ERROR",
+            message: case.message,
+            fields: &[usage.as_str(), "limit=8"],
+        },
+    );
 }
