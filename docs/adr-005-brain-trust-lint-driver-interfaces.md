@@ -30,10 +30,10 @@ SARIF, and 6.6.2 and 6.6.3 localize the diagnostics. Six roadmap items would
 otherwise each decide for themselves how a `rustc_span::Span` becomes a file
 identifier, which HIR callbacks capture what, when a suggestion is computed,
 how a finding reaches the compiler, and which text is translated. Those choices
-interlock: the location rule determines which `#[allow]` attribute works, the
+interlock: the location rule determines what the diagnostic can point at, the
 capture rule determines whether the lightweight threshold can see a complete
-method set, and the emission rule determines whether a reader can suppress the
-lint at all.
+method set, and the emission rule determines whether the diagnostic is raised
+at the node it names.
 
 The question is therefore not what the lints should measure — the design
 document settles that — but where the seam lies between compiler-facing code
@@ -77,7 +77,8 @@ merged.
   that have already crossed a threshold.
 - Keep compiler-facing code out of the pure domain, so the domain can be
   tested without a compiler.
-- Give a reader a way to suppress each lint at the item it complains about.
+- Give a reader a way to suppress each lint, through `dylint.toml`
+  configuration rather than through source annotations.
 
 ## Requirements
 
@@ -199,9 +200,9 @@ calling `cx.emit_span_lint`. For a per-item lint that is correct, because the
 context's notion of "the item currently being linted" is the item just visited.
 
 It is rejected here because the deferred lifecycle is the one both lints need,
-and because deferral changes which suppression attributes work. The two lints
-reach that requirement by different routes, which is worth stating plainly
-rather than papering over.
+and because deferral moves the node at which the lint level is resolved away
+from the item being linted. The two lints reach that requirement by different
+routes, which is worth stating plainly rather than papering over.
 
 `brain_type` is whole-crate by necessity. A type's methods are spread across
 arbitrarily many `impl` items, so no single callback has seen enough to decide
@@ -223,23 +224,25 @@ demonstrably available.
 `brain_trait` is nonetheless deferred. The reason is uniformity of the seam,
 not a constraint that forced the choice. Both lints share this ADR, and a
 future contributor reading one lifecycle contract with a single carve-out is
-more likely to reintroduce the suppression bug below in the lint that has the
-exception than to reproduce the exception faithfully. Deferral also gives the
-two lints one deterministic-order guarantee and one artefact handoff instead of
-two. The cost is real and is accepted: `brain_trait` pays a deferral it did not
-need.
+more likely to reintroduce the level-resolution bug below in the lint that has
+the exception than to reproduce the exception faithfully. Deferral also gives
+the two lints one deterministic-order guarantee and one artefact handoff
+instead of two. The cost is real and is accepted: `brain_trait` pays a deferral
+it did not need.
 
-Deferral changes which suppression attributes work.
-`LateContext::opt_span_lint` resolves the lint level at
-`self.last_node_with_lint_attrs` (`rustc_lint/src/context.rs:600-615`, field at
-`:500`), which at crate-post time is the crate root. The ordinary
-`cx.emit_span_lint` path would therefore silently ignore an
-`#[allow(brain_trait)]` on the trait and ship an unsuppressable lint — and it
-is precisely because `brain_trait` could otherwise emit immediately that the
+Deferral moves where the lint level is resolved. `LateContext::opt_span_lint`
+resolves the lint level at `self.last_node_with_lint_attrs`
+(`rustc_lint/src/context.rs:600-615`, field at `:500`), which at crate-post
+time is the crate root. The ordinary `cx.emit_span_lint` path would therefore
+resolve the level at the crate root rather than at the trait — and it is
+precisely because `brain_trait` could otherwise emit immediately that the
 hazard is worth stating for it explicitly.
 
 The chosen lifecycle is deferred emission through a path that takes the
-subject's `HirId` explicitly, so the level is resolved at the offending item.
+subject's `HirId` explicitly, so the level is resolved at the subject. Note
+that this is a correctness property of the emission path, not an undertaking
+that `#[allow]` is how users suppress the lint; see lifecycle rule 1 and
+`Goals and non-goals`.
 
 ## Decision outcome / proposed direction
 
@@ -549,9 +552,9 @@ capture at finalization for gated subjects only.
    `ItemKind::Impl`, and from `check_item` for `ItemKind::Struct`,
    `ItemKind::Enum`, and `ItemKind::Union`. The latter is what supplies the
    subject's **declaration** span and `HirId`; without it the diagnostic has
-   nowhere to point and, per the lifecycle rules below, no site at which the
-   lint can be suppressed. `brain_trait` captures from `check_item` for
-   `ItemKind::Trait`. No capture callback emits.
+   nowhere to point and, per lifecycle rule 1, no node at which the lint level
+   is resolved. `brain_trait` captures from `check_item` for `ItemKind::Trait`.
+   No capture callback emits.
 2. **Phase one records scalars only, and only the scalars an item has.** For a
    method _with a body_ — an inherent or trait-impl method, or a trait default
    method — phase one records the `DefId`, the name, the `BodyId`, the `Span`,
@@ -706,20 +709,33 @@ _Table 2: Responsibilities of each lint-pass callback._
 1. **Emission must be `HirId`-aware.** `LateContext::opt_span_lint` resolves
    the level at `self.last_node_with_lint_attrs`
    (`rustc_lint/src/context.rs:600-615`), which at crate-post time is the crate
-   root — so the ordinary `cx.emit_span_lint` path silently ignores
-   `#[allow(brain_type)]` and `#[expect(...)]` on the subject entirely, leaving
-   an unsuppressable lint. Deferred emission must therefore capture the
-   subject's `HirId` and emit through `TyCtxt::emit_node_span_lint`
+   root — so the ordinary `cx.emit_span_lint` path resolves the level at the
+   wrong node. Deferred emission must therefore capture the subject's `HirId`
+   and emit through `TyCtxt::emit_node_span_lint`
    (`rustc_middle/src/ty/context.rs:2461-2470`), which resolves the level at
-   the supplied node. The suppression sites are that node and the modules
+   the supplied node. The resolution sites are that node and the modules
    enclosing it — for `brain_type`, the type's own declaration, which is the
    item capture rule 1 takes the `HirId` from, and any module around it. An
    `impl` block is not a site: the captured `HirId` belongs to the declaration,
-   and the ancestor chain it resolves along does not pass through the `impl`, so
-   `#[allow(brain_type)]` written there is ignored even on the emitting path.
+   and the ancestor chain it resolves along does not pass through the `impl`.
    The lint crates gain `rustc_middle` under `dylint-driver` for this;
    `crates/clippy_utils` is a local stub carrying only `macros::is_panic`
    (`crates/clippy_utils/src/lib.rs:1-12`) and provides no alternative.
+
+   **Scope: `#[allow]` and `#[expect]` on the subject are out of scope.** This
+   ADR does not make an attribute the supported suppression mechanism. Emitting
+   through the `HirId`-aware path is still mandatory, because emitting at the
+   wrong node would make the lint's behaviour depend on an accident of the
+   callback rather than on the subject it names, and would produce a diagnostic
+   whose level cannot be reasoned about at all. But a user suppresses a brain
+   trust finding through `dylint.toml`, following the `no_std_fs_operations`
+   precedent: `excluded_crates` exempts a whole crate and `excluded_paths`
+   exempts an individual module and everything nested beneath it
+   (`crates/no_std_fs_operations/src/config.rs:26-32`). A dedicated Whitaker
+   expectation macro is planned separately (roadmap items 1.3.1 to 1.3.3, ADR
+   002) and this ADR neither specifies nor depends on it. The prose above about
+   resolution sites therefore describes how the compiler resolves a level, not
+   a user-facing contract this ADR is undertaking to provide.
 2. **Finalize once, by construction.** The accumulator is consumed by
    finalization and yields a distinct finalized type, so reading unfinalized
    state is unrepresentable rather than merely discouraged. The nearest
@@ -778,9 +794,9 @@ _Table 2: Responsibilities of each lint-pass callback._
     `brain_type` and `WHK005` for `brain_trait`, continuing the sequence
     `WHK001` to `WHK003` that the clone detector already holds
     (`crates/whitaker_sarif/src/rules.rs:13-19`). Identifiers are never
-    reused and never renumbered, because users write suppressions against
-    them. Rule metadata — `shortDescription`, `fullDescription`, and
-    `helpUri` — is English-only static data.
+    reused and never renumbered, because downstream configuration, baselines,
+    and code-scanning filters key on them. Rule metadata — `shortDescription`,
+    `fullDescription`, and `helpUri` — is English-only static data.
 
 ## Language boundary
 
@@ -863,6 +879,17 @@ _Table 2: Responsibilities of each lint-pass callback._
   - Adding per-method spans to `DecompositionSuggestion` to enable true SARIF
     related locations.
   - Settling whether `uriBaseId` should be emitted, which spans both producers.
+  - **Deciding how a user suppresses a brain trust finding.** `#[allow]` and
+    `#[expect]` annotations on the subject are explicitly out of scope. The
+    supported mechanism is `dylint.toml` configuration, following the
+    `no_std_fs_operations` precedent: `excluded_crates` exempts a whole crate
+    and `excluded_paths` exempts an individual module and everything nested
+    beneath it (`crates/no_std_fs_operations/src/config.rs:26-32`). Because
+    `excluded_paths` entries are module paths rather than filenames, the
+    granularity it reaches is the module — which for a file-backed module
+    amounts to a per-file exclusion. A dedicated Whitaker expectation macro is
+    planned separately and is not this ADR's to specify; see
+    `Known risks and limitations`.
 
 ## Known risks and limitations
 
@@ -914,6 +941,22 @@ _Table 2: Responsibilities of each lint-pass callback._
   (`crates/clippy_utils/src/lib.rs:1-12`), so no rule may reach for a
   diagnostic helper such as `span_lint_hir`. The `rustc_middle` route is the
   only one available.
+- **`#[allow]` and `#[expect]` are out of scope as a suppression mechanism.**
+  The supported mechanism is `dylint.toml` configuration, per the
+  `no_std_fs_operations` precedent: `excluded_crates` for a whole crate and
+  `excluded_paths` for one module and its descendants
+  (`crates/no_std_fs_operations/src/config.rs:26-32`). Two consequences are
+  worth stating. First, the granularity is the module, not the item: a user who
+  wants one type exempted exempts its whole module. Since `excluded_paths`
+  entries are module paths rather than filenames, a file-backed module gets
+  per-file granularity by construction, but a module declared inline in its
+  parent file does not. Second, lifecycle rule 1's `HirId`-aware emission is
+  still mandatory even though attributes are not the supported route — it keeps
+  the diagnostic raised at the node it names rather than at the crate root. A
+  dedicated Whitaker expectation macro is planned separately (roadmap items
+  1.3.1 to 1.3.3, ADR 002). Its eventual shape is not decided here; the
+  `HirId`-aware emission path is the part of this lifecycle that a
+  level-attribute mechanism would depend on, and that path is fixed.
 - **Per-target duplication is stated but the resolution is deferred** to the
   merge step, which does not exist yet.
 - **Incremental builds produce stale-but-valid artefacts** for unchanged
@@ -936,3 +979,7 @@ milestone closes.
 - **Whether per-method spans should be added to `DecompositionSuggestion`**, to
   enable true SARIF related locations rather than property-bag data (suggestion
   rule 6).
+- **What the planned Whitaker expectation macro offers**, and whether the brain
+  trust lints adopt it once it exists (roadmap items 1.3.1 to 1.3.3, ADR 002).
+  Out of scope here: this ADR fixes the `dylint.toml` route and the
+  `HirId`-aware emission path, and neither forecloses the macro.
