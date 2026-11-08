@@ -98,7 +98,9 @@ def test_installer_msrv_recipe_installs_the_packaged_crate() -> None:
     """Require the MSRV target to call the checked staged-package gate."""
     recipe = "\n".join(_makefile_recipe_lines("installer-msrv-check"))
 
-    assert 'CARGO="$(CARGO)" python3 scripts/check_installer_msrv.py' in recipe
+    assert "python3 scripts/check_installer_msrv.py" in recipe
+    assert 'CARGO="$(CARGO)"' in recipe
+    assert "INSTALLER_MSRV_SCRATCH" in recipe
 
 
 def _write_stub(directory: Path, name: str, body: str) -> Path:

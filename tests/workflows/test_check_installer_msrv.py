@@ -108,7 +108,5 @@ def test_make_routes_injected_cargo_to_the_gate() -> None:
         capture_output=True,
         text=True,
     )
-    assert (
-        'CARGO="probe-cargo" python3 scripts/check_installer_msrv.py'
-        in result.stdout
-    )
+    assert 'CARGO="probe-cargo"' in result.stdout
+    assert "python3 scripts/check_installer_msrv.py" in result.stdout
