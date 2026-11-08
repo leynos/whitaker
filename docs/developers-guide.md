@@ -2810,6 +2810,32 @@ test in `installer/tests/behaviour_packaging_cli.rs` package a release
 directory that holds every library and assert the archive and manifest hold
 exactly the standard lints and the suite.
 
+### The pre-publish installer check
+
+The `publish` job runs `scripts/check_prune_safety.py` before it uploads
+anything. It reproduces the behaviour of the oldest installer any caller pins
+(`OLDEST_INSTALLER_TAG` in `rolling-release.yml`, today v0.2.11); it does not
+run that installer, which has no route to install from a local archive. Two
+checks, both offline after fetching the tag and one table:
+
+- **Prune.** The script reads the installer's `LINT_CRATES` and
+  `EXPERIMENTAL_LINT_CRATES` from its release tag (never a committed copy),
+  lists the real entries of every built `.tar.zst` archive, removes the crates
+  that installer prunes from a suite install, and fails unless only
+  `libwhitaker_suite` is left. A standalone library the installer cannot prune
+  loads beside the suite, and rustc rejects the duplicate lint registration
+  (issues #355 and #565). It also fails when a sidecar manifest's `files`
+  disagree with its archive.
+- **Toolchain.** Each manifest's `toolchain` must equal the toolchain that
+  `leynos/shared-actions` `install-whitaker/clippy-snapshots.tsv` maps that
+  installer to. A mismatch names both values and stops the publish (issue #555).
+
+An unreadable tag or table, a missing `git` or `tar`, or a malformed manifest
+exits 2: a failed check never counts as a pass. A failure ends the job before
+the upload, so the published `rolling` release stays as it was.
+`make test-prune-safety` runs the tests, including the #565 and #555 shapes. The
+`verify-published-bootstrap` job still lints a fixture after publication.
+
 ### Validation coverage and purpose
 
 Workflow validation in `tests/workflows/` protects this contract from drift:
