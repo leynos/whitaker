@@ -50,6 +50,11 @@ impl BundleArtefact {
 }
 
 /// Pair a bundle with its sidecar using an injected store.
+///
+/// # Errors
+///
+/// As for [`BundleArtefact::from_sidecar`], plus [`ClippySnapshotError::Io`]
+/// when the store cannot inspect the bundle or read its sidecar.
 pub(crate) fn from_sidecar_with(
     store: &dyn SnapshotStore,
     bundle: &Utf8Path,
@@ -106,6 +111,10 @@ pub fn install_bundle(
 }
 
 /// Install a bundle using injected ports.
+///
+/// # Errors
+///
+/// As for [`install_bundle`].
 pub(crate) fn install_with(
     artefact: &BundleArtefact,
     manifest: &ClippySnapshotManifest,
@@ -147,6 +156,11 @@ pub fn reuse_generation(
 }
 
 /// Reuse a generation using injected ports.
+///
+/// # Errors
+///
+/// As for [`reuse_generation`], plus [`ClippySnapshotError::Io`] when the
+/// store cannot read the generation metadata.
 pub(crate) fn reuse_with(
     generation: &Utf8Path,
     manifest: &ClippySnapshotManifest,

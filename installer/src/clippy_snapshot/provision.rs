@@ -66,6 +66,13 @@ pub fn provision_with(
 }
 
 /// Provision using injected ports.
+///
+/// # Errors
+///
+/// Returns [`ClippySnapshotError::Io`] when the store cannot create the root
+/// or inspect the generation, and otherwise propagates the errors of
+/// [`reuse_with`], [`from_sidecar_with`], [`download_bundle_with`], and
+/// [`install_with`].
 pub(crate) fn provision_support(
     source: &BundleSource,
     manifest: &ClippySnapshotManifest,
