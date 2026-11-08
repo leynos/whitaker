@@ -16,13 +16,7 @@ use rstest::rstest;
 use toml::Value;
 
 use super::{
-    config::{
-        SERIAL_UI_GROUP,
-        effective_overrides,
-        governing_override,
-        nextest_config,
-        slow_timeout_period_secs,
-    },
+    config::{effective_overrides, governing_override, nextest_config, slow_timeout_period_secs},
     filter_model::{BinaryName, PackageName, ProfileName, TestIdentity, TestName},
 };
 
@@ -69,9 +63,19 @@ const SHA2_ALLOWANCE_SECS: u64 = 120 * 60;
 /// its own fresh target directory.
 const PACKAGING_ALLOWANCE_SECS: u64 = 30 * 60;
 
+/// The group the `trybuild` compile contracts serialize in.
+///
+/// Mainline moved the six compile contracts out of `serial-dylint-ui` into this
+/// group so they run beside the Dylint UI harnesses instead of queueing behind
+/// them. `sha2_0_11_pre_migration_patterns_fail_to_compile` is one of the six,
+/// and `serial-trybuild-contracts` has capacity one, which is what keeps its
+/// nested Cargo build from racing another fixture build over one target
+/// directory.
+const TRYBUILD_CONTRACT_GROUP: &str = "serial-trybuild-contracts";
+
 /// The group the package-isolated and feature-disabled builds serialize in.
 ///
-/// Separate from [`SERIAL_UI_GROUP`] because these tests share no target
+/// Separate from the Dylint UI group because these tests share no target
 /// directory with the Dylint UI harnesses; putting them in one group would
 /// serialize two independent build queues against each other.
 const NESTED_BUILD_GROUP: &str = "serial-nested-cargo-builds";
@@ -104,14 +108,20 @@ struct Allowance {
 /// property of the *names*, and an earlier override that did select them would
 /// silently win the setting. Assert the effective allowance, which is what
 /// nextest applies.
+///
+/// The `sha2` contract has since moved out of `serial-dylint-ui` into
+/// `serial-trybuild-contracts`, beside the other five compile contracts. Its
+/// allowance is unchanged by that move; its group is not, and the group is
+/// asserted here because it is what stops two fixture builds sharing a target
+/// directory.
 #[rstest]
 #[case::default_sha2(
     ProfileName("default"),
-    Allowance { identity: SHA2_CONTRACT, secs: SHA2_ALLOWANCE_SECS, group: SERIAL_UI_GROUP, retries: Some(0) }
+    Allowance { identity: SHA2_CONTRACT, secs: SHA2_ALLOWANCE_SECS, group: TRYBUILD_CONTRACT_GROUP, retries: Some(0) }
 )]
 #[case::ci_sha2(
     ProfileName("ci"),
-    Allowance { identity: SHA2_CONTRACT, secs: SHA2_ALLOWANCE_SECS, group: SERIAL_UI_GROUP, retries: Some(0) }
+    Allowance { identity: SHA2_CONTRACT, secs: SHA2_ALLOWANCE_SECS, group: TRYBUILD_CONTRACT_GROUP, retries: Some(0) }
 )]
 #[case::default_packaging(
     ProfileName("default"),
