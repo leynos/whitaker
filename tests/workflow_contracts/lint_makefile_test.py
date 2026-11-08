@@ -473,6 +473,16 @@ def test_ci_pins_the_installer_version_and_keys_its_cache_on_it() -> None:
 
     path = cache_with.get("path")
     assert path is not None, "the installer cache step must set a path"
-    assert "whitaker-installer" in "\n".join(
-        path if isinstance(path, list) else [str(path)]
-    ), "the installer cache must cover the whitaker-installer binary itself"
+    cached_paths = path if isinstance(path, list) else [str(path)]
+    cached = "\n".join(cached_paths)
+    assert "whitaker-installer" in cached, (
+        "the installer cache must cover the whitaker-installer binary itself"
+    )
+    # `cargo binstall` stages its download under `~/.cache/cargo-binstall`
+    # before placing the binary in `~/.cargo/bin`. Caching only the installed
+    # binary would restore a binary with no matching download cache, so a cache
+    # hit still pays for the fetch the cache exists to avoid.
+    assert "cargo-binstall" in cached, (
+        "the installer cache must also cover `~/.cache/cargo-binstall`, or a "
+        f"restored binary is not reusable by binstall; found {cached!r}"
+    )
