@@ -1,6 +1,6 @@
 """Keep the staged MSRV package gate bound to publishable Cargo metadata.
 
-The full gate builds the real packaged installer under Rust 1.85. These fast
+The full gate builds the real packaged installer under the declared MSRV. These fast
 controls catch a leaked local override and lost Make routing before that build.
 """
 

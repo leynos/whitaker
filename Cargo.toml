@@ -47,7 +47,7 @@ semver = "1.0.28"
 tar = "0.4.44"
 ureq = "3.2.0"
 zstd = "0.14.0"
-# Version 8 requires Rust 1.88; the installer supports Rust 1.85. The
+# Version 8 requires Rust 1.88, which is the installer's minimum. The
 # installer creates and reads Deflate-compressed archives, so it does not need
 # ZIP's optional codecs or date/time crate integration.
 zip = { version = "7.2.0", default-features = false, features = ["deflate"] }

@@ -21,7 +21,19 @@ from collections.abc import Iterator
 from pathlib import Path
 
 REPOSITORY = Path(__file__).resolve().parents[1]
-TOOLCHAIN = "+1.85.0"
+INSTALLER_MANIFEST = REPOSITORY / "installer" / "Cargo.toml"
+
+
+def _toolchain() -> str:
+    """Return the Cargo toolchain selector for the installer's declared MSRV.
+
+    `rust-version` in `installer/Cargo.toml` is the single place the minimum
+    lives; this check, and the CI step that installs the toolchain, follow it.
+    A two-part version such as `1.88` selects `+1.88.0`.
+    """
+    manifest = tomllib.loads(INSTALLER_MANIFEST.read_text(encoding="utf-8"))
+    version = manifest["package"]["rust-version"]
+    return f"+{version}.0" if version.count(".") == 1 else f"+{version}"
 
 
 def _has_package_override(package: dict[str, object]) -> bool:
@@ -83,11 +95,11 @@ def _copy_workspace(destination: Path) -> None:
 
 
 def _cargo(cargo: list[str], directory: Path, target: Path, *args: str) -> None:
-    """Run one Cargo 1.85 stage with the shared package cache and isolated target."""
+    """Run one Cargo stage under the declared MSRV with the shared package cache and isolated target."""
     environment = os.environ.copy()
     environment["CARGO_TARGET_DIR"] = str(target)
     subprocess.run(
-        [*cargo, TOOLCHAIN, *args],
+        [*cargo, _toolchain(), *args],
         cwd=directory,
         env=environment,
         check=True,
@@ -143,7 +155,7 @@ def _scratch_root() -> Iterator[Path]:
 
 
 def _main() -> None:
-    """Package and install the installer under Rust 1.85 using staged common."""
+    """Package and install the installer under its declared MSRV using staged common."""
     cargo = shlex.split(os.environ.get("CARGO", "cargo"))
     if not cargo:
         raise ValueError("CARGO must name an executable")

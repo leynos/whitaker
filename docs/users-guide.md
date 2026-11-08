@@ -27,7 +27,7 @@ Install `cargo-dylint` and `dylint-link`:
 cargo install cargo-dylint dylint-link
 ```
 
-The published `whitaker-installer` crate requires Rust 1.85 or newer. This is
+The published `whitaker-installer` crate requires Rust 1.88 or newer. This is
 the first stable compiler that supports the Rust 2024 edition used by the
 installer.
 

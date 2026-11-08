@@ -24,7 +24,7 @@ and depends on the shared support crate
 Submit the lockstep bump for review before publishing either crate. CI's
 `installer-msrv-check` packages `whitaker-common` in a temporary copy of the
 workspace, then uses that package only for command-scoped verification of the
-packaged installer under Rust 1.85. The source manifests and lockfile remain
+packaged installer under Rust 1.88. The source manifests and lockfile remain
 unchanged. The installer's normalized archive manifest must still declare only
 the registry version of `whitaker-common`, and the release must publish
 `whitaker-common` first. The temporary patch proves the package builds before
@@ -80,7 +80,7 @@ path. If either install fails, the script exits non-zero and the gate fails
 fast rather than proceeding with stale or unverified tools. This behaviour is
 covered by `tests/workflows/test_install_dylint_tools.py`.
 
-The installer declares Rust 1.85 as its minimum supported Rust version. Before
+The installer declares Rust 1.88 as its minimum supported Rust version. Before
 publishing, run the locked staged packaged-crate install check as well as the
 publish gate:
 
@@ -91,7 +91,7 @@ make installer-msrv-check
 The installer keeps `zip` at the 7.2-compatible line because `zip` 8 requires
 Rust 1.88. Its dependency configuration enables only the Deflate feature needed
 by the installer, so do not broaden that constraint without rechecking the Rust
-1.85 build.
+1.88 build.
 
 To validate the installer archive path used by the release workflow on the
 current host platform, run:
