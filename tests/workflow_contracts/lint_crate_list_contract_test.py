@@ -25,8 +25,9 @@ Two lists are checked here:
   invoke ``whitaker-package-lints``, and therefore fails the same way. It is in
   a deliberately different order, so it is compared as a set. `make
   publish-check` reads the same variable but only copies each
-  ``lib$$lint.so`` into a Dylint library directory, so drift there surfaces as
-  a failing `cp` rather than a packaging error.
+  ``lib$$lint.so`` into a Dylint library directory. A crate omitted there is
+  never attempted, so it is silently absent from that directory; a `cp` failure
+  means a *listed* crate did not produce a library.
 
 These tests live in `tests/workflow_contracts` because ``make
 test-workflow-contracts`` runs inside the required ``linux-full`` job.
