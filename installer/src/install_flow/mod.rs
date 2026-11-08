@@ -311,8 +311,8 @@ fn prune_prebuilt_libraries(
             reason: format!("failed to read staged libraries in {staging_path}: {error}"),
         }
     })?;
-    for entry in entries {
-        let entry = entry.map_err(|error| InstallerError::StagingFailed {
+    for dir_entry in entries {
+        let entry = dir_entry.map_err(|error| InstallerError::StagingFailed {
             reason: format!("failed to read staged libraries in {staging_path}: {error}"),
         })?;
         let file_name = entry.file_name();
