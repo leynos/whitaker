@@ -33,11 +33,16 @@ fn a_git_that_cannot_start_is_an_infrastructure_failure() {
     );
 }
 
+/// The clone path reports a Git that cannot start as an infrastructure fault.
+///
+/// Unix only: an empty `PATH` in the child's environment hides `git` from
+/// `execvp`, but Windows resolves the executable against the parent's search
+/// path, so the same trick still starts Git there and reports the missing
+/// bundle instead. The working-directory case above covers spawn failure on
+/// both platforms.
+#[cfg(unix)]
 #[test]
 fn a_clone_that_cannot_start_is_an_infrastructure_failure() {
-    // An empty `PATH` leaves the child unable to find `git` at all, which is
-    // the same class of fault as a missing binary: the clone never ran, so the
-    // bundle is not implicated.
     let envs = [("PATH", "")];
 
     let error = SnapshotGit::local()
