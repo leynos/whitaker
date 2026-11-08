@@ -1329,6 +1329,19 @@ Thresholds that trigger escalation, not quality targets.
   entry. Date/Author: 2026-11-08, implementation agent, on maintainer
   instruction.
 
+- **Decision: accept all three hosted-Review findings against ADR 005, and
+  repair this plan's mirrored copies in the same commit.** Rationale: each was
+  verified against the rustc source or against observed Cargo behaviour first,
+  and each was a defect in a *relation* rather than in a literal. The path rule
+  conflated the workspace frame with the repository frame — harmless in this
+  repository, wrong in any nested workspace. The line rule said the two
+  accessors "differ" and then added one to both, which would have put every
+  region one line too high. The artefact name used package, crate, and target
+  kind, which do not separate a library's ordinary and `--test` compilations of
+  one target; that collision was observed in `cargo test --no-run` output
+  rather than inferred. Date/Author: 2026-11-08, implementation agent, in
+  response to round-12 review.
+
 ## Outcomes & retrospective
 
 Completed 2026-09-27.
@@ -2579,14 +2592,24 @@ Normative rules:
    (`src/lib.rs:13-25`), already depended on by every lint crate with that
    feature, and not in the publish set. A new module rather than `src/hir/`,
    which is 374 lines against the 400-line cap in `AGENTS.md:31`.
-2. **Path source.** Obtain the file from the session's `SourceMap`. A path the
-   compiler reports as relative is used unchanged; an absolute path has the
-   compiler's working directory stripped. Stage B confirms which case occurs
-   under Cargo — **and it confirms the relative case: `cargo` sets the
-   compiler's working directory to the workspace root and hands rustc a
-   workspace-root-relative source path, so the stripping branch is a fallback
-   for the non-Cargo case rather than the live path.** See
-   `Artefacts and notes`.
+2. **Path source, and the root it is relative to.** Obtain the file from the
+   session's `SourceMap`. A path the compiler reports as relative is resolved
+   against the compiler's working directory; an absolute path is used as
+   reported. Either way the result is derived against the repository root and
+   validated there, because the promise is a *repository*-relative path. The
+   two frames are distinct, and only coincide when the workspace is the
+   repository. Stage B confirms which compiler frame occurs under Cargo — **the
+   relative one: `cargo` sets the compiler's working directory to the workspace
+   root and hands rustc a workspace-root-relative source path, so the absolute
+   branch is a fallback for the non-Cargo case rather than the live path.**
+   That makes the working directory the workspace root, not necessarily the
+   repository root, so the repository-root derivation is a required step rather
+   than a no-op: in a nested workspace a path left workspace-relative names the
+   wrong file at repository level. This repository is not nested — its root
+   `Cargo.toml` is the `[workspace]` manifest and no member carries its own —
+   so here the two roots agree; the rule is written for the general case rather
+   than calibrated to this one, and an escaping path is `OutwithRepositoryRoot`
+   under rule 7. See `Artefacts and notes`.
 3. **Normalization.** Forward slashes on every platform, no leading `./`, no
    leading slash, no `..` component, per SARIF 2.1.0 §3.4.3, which requires a
    relative-path reference under RFC 3986 §4.2. Note that no source-path
@@ -2600,8 +2623,14 @@ Normative rules:
    (`crates/whitaker_sarif/src/builders/location_builder.rs:91`). The compiler
    reports zero-based `CharPos` columns, and its two line accessors differ:
    `span_to_lines` yields a zero-based `line_index` while `lookup_char_pos`
-   yields a one-based `Loc::line`. The ADR states the conversion per accessor.
-   `VP-3` is the obligation this creates.
+   yields a one-based `Loc::line`. The bases are opposite on the line axis and
+   alike on the column axis, so the conversion is stated per accessor: add one
+   to `line_index`, take `Loc::line` unchanged, and add one to either `CharPos`
+   column after converting it to UTF-16 code units. The ADR records both
+   accessors because it is a normative contract a later implementer may
+   consult, and specifies `span_to_lines` for the resolver because it returns
+   the file and both line indices in one call. `VP-3` is the obligation this
+   creates.
 5. **Enforcement point.** `SourceLocation::new` is an infallible `const fn` and
    does not enforce the convention (`common/src/span.rs:31`). The single
    enforcement point is `span_to_region`, which **rejects** a zero line or
@@ -2843,11 +2872,17 @@ at finalization, for gated subjects only.**
    implementable on its own. The ADR specifies: one artefact per *compilation
    unit*, written under `target/whitaker/` following the existing layout
    convention (`crates/whitaker_sarif/src/paths.rs:10-39`), with a name derived
-   from the package, crate, and target kind; written to a unique temporary file
-   in the same directory and then renamed, never appended. `cargo dylint` runs
-   one rustc process per crate *and per target*, concurrently, so an
-   unsynchronized append interleaves and corrupts the file — which is what the
-   only in-tree precedent does today
+   from the package, crate, target kind, **and compilation mode**; written to a
+   unique temporary file in the same directory and then renamed, never
+   appended. The mode is load-bearing: Cargo builds one library target twice
+   under `cargo test`, ordinarily and as a test harness, with the same package,
+   crate, and target kind, so those three alone would let two concurrent
+   processes rename one artefact over the other. rustc exposes the
+   discriminating bit as `Options::test` (`rustc_session/src/options.rs:328`),
+   set from `--test` (`config.rs:1805`, `:2651`) and reachable as
+   `cx.sess().opts.test`. `cargo dylint` runs one rustc process per crate *and
+   per target*, concurrently, so an unsynchronized append interleaves and
+   corrupts the file — which is what the only in-tree precedent does today
    (`crates/rstest_helper_should_be_fixture/src/driver.rs:325-328`). A separate
    merge step reduces the per-unit runs through the shipped `merge_runs` and
    `deduplicate_results`, and that step — not the lint — owns the final
@@ -3711,5 +3746,56 @@ and `reason` as named fields inside the `log` message, following the existing
 `target:`-tagged form at `crates/module_max_lines/src/driver.rs:86-93`. The
 mirror of rules 8 and 9 in `BTD-REQ-01` above carries the same correction and
 the same justification.
+
+Nothing else changed. No code, no manifest, no test.
+
+### Round 12 — three hosted-review findings, all three accepted, 2026-11-08
+
+A hosted CodeRabbit review of `4104888` raised three findings against ADR 005.
+All three were verified against the rustc source or against observed Cargo
+behaviour before being actioned, and all three described real defects.
+
+**Finding 1 of 3, path frame.** The ADR told the resolver to use a
+compiler-relative path "unchanged", which conflates two frames. `cargo` gives
+rustc a *workspace*-root-relative path; `RepoRelativePath` and SARIF's
+`artifactLocation.uri` require a *repository*-relative one. In this repository
+the roots coincide — verified: `cargo locate-project --workspace` returns the
+repository's own root `Cargo.toml`, and no tracked member carries a
+`[workspace]` table — so nothing here exposes the bug. It becomes live in a
+nested workspace, where every finding would name the wrong file. Rule 2 now
+requires deriving and validating against a discovered repository root, notes the
+`OutwithRepositoryRoot` consequence (rule 7) rather than silent acceptance,
+and says plainly that this repository is not nested so the rule is written for
+the general case.
+
+**Finding 2 of 3, line bases.** The ADR said the two line accessors differ and
+then concluded "adding one to each axis", which contradicts its own preceding
+clause. rustc documents them as `LineInfo::line_index` "starting from 0"
+(`rustc_span/src/lib.rs:2727-2728`) and `Loc::line` "the (1-based) line number"
+(`:2704-2705`). Adding one to `Loc::line` would put every SARIF region one line
+too high. Rule 4 now states the offset per accessor. The plan's own research
+had this right at `Q5`/`Q7` — "the bases are opposite and must be normalized
+explicitly" — so the ADR sentence was the only place the conclusion was garbled.
+
+**Finding 3 of 3, artefact collision.** Rule 5 named artefacts by package,
+crate, and target kind. Under `cargo test` Cargo compiles one library target
+twice, ordinarily and as a test harness, and those three components are
+identical between the two — so two concurrent rustc processes would rename one
+artefact over the other. Observed directly rather than argued:
+`cargo test --workspace --no-run --message-format=json` reports two
+`whitaker_common` `["lib"]` artefacts differing only in `profile.test`. rustc
+tracks that bit as `Options::test` (`rustc_session/src/options.rs:328`), set
+from `--test` (`config.rs:1805`, `:2651`), reachable from a lint as
+`cx.sess().opts.test` (`rustc_lint/src/context.rs:596`), so the discriminating
+value is available where the name is built. Rule 5 now requires the mode in the
+name.
+
+**What the three had in common.** Each was a *relation* between two correct
+statements, not a wrong literal: the frames "workspace" and "repository" used
+as if synonymous; "the bases differ" followed by "add one to each"; three
+naming components that are genuinely distinct and yet do not separate two real
+compilations. Literal checks pass on all three. The checked-in conclusion is
+the thing that needs reading, and the plan's own mirrored prose was repaired
+alongside the ADR so the two do not diverge again.
 
 Nothing else changed. No code, no manifest, no test.
