@@ -319,9 +319,11 @@ jobs:
 
       # No cache saves here: a hosted runner writes GitHub's store, which the
       # Ubicloud lanes never read, so `coverage-warmup` is the sole writer.
-      - name: Check sccache health
-        if: steps.setup-rust.outputs.sccache-status != 'fallback'
-        run: python3 scripts/check_sccache_health.py --expect-location ghac sccache-stats.json
+      #
+      # No sccache health check either. GitHub's cache service throttled this
+      # job's writes (681 errors in 1,852 attempts on the first main run), and
+      # the check exists to catch a broken Ubicloud integration. The statistics
+      # are still recorded and uploaded above.
 
   # Compiles the instrumented tests `coverage-check` builds, without running
   # them, and saves the cache keys that lane restores. A hosted runner writes
