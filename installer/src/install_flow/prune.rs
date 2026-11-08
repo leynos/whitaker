@@ -32,17 +32,76 @@ pub(super) fn staged_library_filename(crate_name: &str, toolchain_channel: &str)
     )
 }
 
-/// Return the crate behind a staged library file name for this toolchain.
-///
-/// A staged name is `<prefix><crate>@<toolchain><extension>`, as built by
-/// [`staged_library_filename`]. Anything else, including a library staged for
-/// another toolchain, yields `None`.
-fn staged_crate_name<'a>(file_name: &'a str, toolchain_channel: &str) -> Option<&'a str> {
-    let suffix = format!("@{toolchain_channel}{}", library_extension());
-    file_name
-        .strip_prefix(library_prefix())?
-        .strip_suffix(suffix.as_str())
-        .filter(|name| !name.is_empty())
+/// A directory of staged libraries for one toolchain.
+struct Staging<'a> {
+    path: &'a Utf8Path,
+    toolchain: &'a str,
+}
+
+impl Staging<'_> {
+    /// Return the crate behind a staged library file name for this toolchain.
+    ///
+    /// A staged name is `<prefix><crate>@<toolchain><extension>`, as built by
+    /// [`staged_library_filename`]. Anything else, including a library staged
+    /// for another toolchain, yields `None`.
+    fn crate_of<'f>(&self, file_name: &'f str) -> Option<&'f str> {
+        let suffix = format!("@{}{}", self.toolchain, library_extension());
+        file_name
+            .strip_prefix(library_prefix())?
+            .strip_suffix(suffix.as_str())
+            .filter(|name| !name.is_empty())
+    }
+
+    /// Remove every library staged for this toolchain whose crate was not requested.
+    fn remove_unrequested(&self, requested_crates: &[CrateName]) -> Result<()> {
+        let requested: HashSet<String> = requested_crate_names(requested_crates)
+            .into_iter()
+            .map(|name| name.replace('-', "_"))
+            .collect();
+        let read_error = |error: io::Error| {
+            staging_error(format!(
+                "failed to read staged libraries in {}: {error}",
+                self.path
+            ))
+        };
+
+        for dir_entry in fs::read_dir(self.path.as_std_path()).map_err(read_error)? {
+            let entry = dir_entry.map_err(read_error)?;
+            let file_name = entry.file_name();
+            let unrequested = file_name
+                .to_str()
+                .and_then(|name| self.crate_of(name))
+                .is_some_and(|crate_name| !requested.contains(crate_name));
+            if unrequested {
+                remove_stale_file(&entry.path())?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Fail unless this archive delivered, and the directory holds, every requested library.
+    fn require_delivered(
+        &self,
+        requested_crates: &[CrateName],
+        delivered: &[String],
+    ) -> Result<()> {
+        let mut missing: Vec<&str> = requested_crate_names(requested_crates)
+            .into_iter()
+            .filter(|name| {
+                let staged = staged_library_filename(name, self.toolchain);
+                !delivered.contains(&staged) || !self.path.join(&staged).as_std_path().is_file()
+            })
+            .collect();
+        if missing.is_empty() {
+            return Ok(());
+        }
+        missing.sort_unstable();
+        Err(staging_error(format!(
+            "the prebuilt archive does not hold the requested librar{}: {}",
+            if missing.len() == 1 { "y" } else { "ies" },
+            missing.join(", ")
+        )))
+    }
 }
 
 /// Remove staged prebuilt libraries that were not requested for this install.
@@ -74,42 +133,16 @@ pub(super) fn prune_prebuilt_libraries(
     requested_crates: &[CrateName],
     delivered: &[String],
 ) -> Result<()> {
-    remove_unrequested_libraries(staging_path, toolchain_channel, requested_crates)?;
-    require_delivered_libraries(staging_path, toolchain_channel, requested_crates, delivered)
+    let staging = Staging {
+        path: staging_path,
+        toolchain: toolchain_channel,
+    };
+    staging.remove_unrequested(requested_crates)?;
+    staging.require_delivered(requested_crates, delivered)
 }
 
 const fn staging_error(reason: String) -> InstallerError {
     InstallerError::StagingFailed { reason }
-}
-
-/// Remove every library staged for `toolchain_channel` whose crate was not requested.
-fn remove_unrequested_libraries(
-    staging_path: &Utf8Path,
-    toolchain_channel: &str,
-    requested_crates: &[CrateName],
-) -> Result<()> {
-    let requested: HashSet<String> = requested_crate_names(requested_crates)
-        .into_iter()
-        .map(|name| name.replace('-', "_"))
-        .collect();
-    let read_error = |error: io::Error| {
-        staging_error(format!(
-            "failed to read staged libraries in {staging_path}: {error}"
-        ))
-    };
-
-    for dir_entry in fs::read_dir(staging_path.as_std_path()).map_err(read_error)? {
-        let entry = dir_entry.map_err(read_error)?;
-        let file_name = entry.file_name();
-        let unrequested = file_name
-            .to_str()
-            .and_then(|name| staged_crate_name(name, toolchain_channel))
-            .is_some_and(|crate_name| !requested.contains(crate_name));
-        if unrequested {
-            remove_stale_file(&entry.path())?;
-        }
-    }
-    Ok(())
 }
 
 fn remove_stale_file(path: &std::path::Path) -> Result<()> {
@@ -120,29 +153,4 @@ fn remove_stale_file(path: &std::path::Path) -> Result<()> {
         ))),
         _ => Ok(()),
     }
-}
-
-/// Fail unless this archive delivered, and the directory holds, every requested library.
-fn require_delivered_libraries(
-    staging_path: &Utf8Path,
-    toolchain_channel: &str,
-    requested_crates: &[CrateName],
-    delivered: &[String],
-) -> Result<()> {
-    let mut missing: Vec<&str> = requested_crate_names(requested_crates)
-        .into_iter()
-        .filter(|name| {
-            let staged = staged_library_filename(name, toolchain_channel);
-            !delivered.contains(&staged) || !staging_path.join(&staged).as_std_path().is_file()
-        })
-        .collect();
-    if missing.is_empty() {
-        return Ok(());
-    }
-    missing.sort_unstable();
-    Err(staging_error(format!(
-        "the prebuilt archive does not hold the requested librar{}: {}",
-        if missing.len() == 1 { "y" } else { "ies" },
-        missing.join(", ")
-    )))
 }
