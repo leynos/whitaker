@@ -3,12 +3,12 @@ Feature: Strict rstest detection
   Scenario: Detect an rstest test from a direct attribute
     Given a function annotated with rstest
     When I check whether the function is an rstest test
-    Then the function is recognised as an rstest test
+    Then the function is recognized as an rstest test
 
   Scenario: Detect an rstest fixture from a direct attribute
     Given a function annotated with rstest::fixture
     When I check whether the function is an rstest fixture
-    Then the function is recognised as an rstest fixture
+    Then the function is recognized as an rstest fixture
 
   Scenario: Classify a plain identifier parameter as fixture-local
     Given a parameter named db
@@ -30,18 +30,18 @@ Feature: Strict rstest detection
   Scenario: Ignore expansion traces while fallback is disabled
     Given the expansion trace contains rstest
     When I check whether the function is an rstest test
-    Then the function is recognised as not being an rstest test
+    Then the function is recognized as not being an rstest test
 
   Scenario: Use expansion traces when fallback is enabled
     Given the expansion trace contains rstest
     And expansion fallback is enabled
     When I check whether the function is an rstest test
-    Then the function is recognised as an rstest test
+    Then the function is recognized as an rstest test
 
   Scenario: Detect rstest test with multiple attributes
     Given a function annotated with rstest and allow
     When I check whether the function is an rstest test
-    Then the function is recognised as an rstest test
+    Then the function is recognized as an rstest test
 
   Scenario: Classify custom provider parameters
     Given a parameter annotated with a custom provider attribute
@@ -53,4 +53,4 @@ Feature: Strict rstest detection
     Given the expansion trace contains outer_macro and rstest
     And expansion fallback is enabled
     When I check whether the function is an rstest test
-    Then the function is recognised as an rstest test
+    Then the function is recognized as an rstest test

@@ -4,8 +4,6 @@
 //! parsed attributes (e.g., `#[must_use]`) without panicking.
 
 #[cfg(feature = "dylint-driver")]
-use super::{convert_attribute, is_cfg_test_attribute};
-#[cfg(feature = "dylint-driver")]
 use rustc_hir as hir;
 #[cfg(feature = "dylint-driver")]
 use rustc_hir::attrs::AttributeKind as HirAttributeKind;
@@ -13,6 +11,9 @@ use rustc_hir::attrs::AttributeKind as HirAttributeKind;
 use rustc_span::DUMMY_SP;
 #[cfg(feature = "dylint-driver")]
 use whitaker_common::{AttributeKind, PARSED_ATTRIBUTE_PLACEHOLDER};
+
+#[cfg(feature = "dylint-driver")]
+use super::{convert_attribute, is_cfg_test_attribute};
 
 /// Verify that `convert_attribute` handles parsed attributes without panicking.
 ///
@@ -31,7 +32,7 @@ fn convert_attribute_handles_parsed_must_use() {
     // Should return a placeholder "parsed" path instead of panicking.
     assert_eq!(
         attribute.path().segments(),
-        &[PARSED_ATTRIBUTE_PLACEHOLDER.to_string()]
+        &[PARSED_ATTRIBUTE_PLACEHOLDER.to_owned()]
     );
     assert_eq!(attribute.kind(), AttributeKind::Outer);
 }

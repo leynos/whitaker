@@ -3,11 +3,15 @@
 //! Validates detection of standard test attributes (`#[rstest]`, `#[tokio::test]`)
 //! and custom attributes configured via the additional attribute set.
 
+use std::cell::RefCell;
+
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
-use std::cell::RefCell;
-use whitaker_common::attributes::{Attribute, AttributeKind, AttributePath};
-use whitaker_common::context::{ContextEntry, in_test_like_context_with, is_test_fn_with};
+use whitaker_common::{
+    attributes::{Attribute, AttributeKind, AttributePath},
+    context::{ContextEntry, in_test_like_context_with, is_test_fn_with},
+};
+use whitaker_test_macros::allow_fixture_expansion_lints;
 
 #[derive(Clone, Debug, Default)]
 struct FunctionFixture {
@@ -40,37 +44,29 @@ impl FunctionFixture {
         self.additional.borrow_mut().clear();
     }
 
-    fn attributes(&self) -> std::cell::Ref<'_, Vec<Attribute>> {
-        self.attributes.borrow()
-    }
+    fn attributes(&self) -> std::cell::Ref<'_, Vec<Attribute>> { self.attributes.borrow() }
 
-    fn context(&self) -> std::cell::Ref<'_, Vec<ContextEntry>> {
-        self.context.borrow()
-    }
+    fn context(&self) -> std::cell::Ref<'_, Vec<ContextEntry>> { self.context.borrow() }
 
-    fn additional(&self) -> std::cell::Ref<'_, Vec<AttributePath>> {
-        self.additional.borrow()
-    }
+    fn additional(&self) -> std::cell::Ref<'_, Vec<AttributePath>> { self.additional.borrow() }
 
     fn configure_additional(&self, path: &str) {
         self.additional.borrow_mut().push(AttributePath::from(path));
     }
 }
 
+#[allow_fixture_expansion_lints]
 #[fixture]
-fn function() -> FunctionFixture {
-    FunctionFixture::new()
-}
+fn function() -> FunctionFixture { FunctionFixture::new() }
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 struct Evaluation {
     is_test: bool,
     in_context: bool,
 }
 
+#[allow_fixture_expansion_lints]
 #[fixture]
-fn evaluation() -> Evaluation {
-    Evaluation::default()
-}
+fn evaluation() -> Evaluation { Evaluation::default() }
 
 #[given("a function annotated with rstest")]
 fn given_rstest(function: &FunctionFixture) {
@@ -85,11 +81,9 @@ fn given_tokio(function: &FunctionFixture) {
 }
 
 #[given("a function without test attributes")]
-fn given_plain(function: &FunctionFixture) {
-    function.clear();
-}
+fn given_plain(function: &FunctionFixture) { function.clear(); }
 
-#[given("the lint recognises {path} as a test attribute")]
+#[given("the lint recognizes {path} as a test attribute")]
 fn given_custom_attribute(function: &FunctionFixture, path: String) {
     function.configure_additional(&path);
 }
@@ -111,7 +105,7 @@ fn when_check(function: &FunctionFixture) -> Evaluation {
     }
 }
 
-#[then("the function is recognised as test-like")]
+#[then("the function is recognized as test-like")]
 fn then_positive(evaluation: &Evaluation) {
     assert!(evaluation.is_test);
 }
@@ -121,7 +115,7 @@ fn then_context_positive(evaluation: &Evaluation) {
     assert!(evaluation.in_context);
 }
 
-#[then("the function is recognised as not test-like")]
+#[then("the function is recognized as not test-like")]
 fn then_negative(evaluation: &Evaluation) {
     assert!(!evaluation.is_test);
 }
@@ -147,6 +141,6 @@ fn scenario_ignores_plain(function: FunctionFixture, evaluation: Evaluation) {
 }
 
 #[scenario(path = "tests/features/context_detection.feature", index = 3)]
-fn scenario_recognises_custom(function: FunctionFixture, evaluation: Evaluation) {
+fn scenario_recognizes_custom(function: FunctionFixture, evaluation: Evaluation) {
     let _ = (function, evaluation);
 }

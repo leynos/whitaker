@@ -1,0 +1,17 @@
+language:
+  rust:
+    build_defaults:
+      exceptions:
+        - clauses: [BD-001, BD-002, BD-004, BD-008]
+          route: tools/dev-fast/config.toml
+          adr: docs/adr-010-keep-the-fast-linker-out-of-the-auto-discovered-cargo-config.md
+          rationale: >-
+            whitaker-installer builds lint libraries from a checkout of this
+            repository, so a linker flag in the auto-discovered Cargo
+            configuration would break source builds for users without `mold`.
+            The parallel frontend and the linker live in an explicit
+            fragment, and the Makefile restates them for its own recipes.
+          review_trigger: >-
+            Revisit when the installer builds from sources outside the
+            repository checkout, or when `mold` ships with the supported
+            toolchains.

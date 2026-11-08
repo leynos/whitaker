@@ -35,7 +35,7 @@ fn parse() {
 /// Const-only sibling module used as a fixture.
 ///
 /// Verifies that `collect_rstest_companion_test_functions` does not mistake an
-/// arbitrary `const`-only module for a synthesised rstest harness descriptor.
+/// arbitrary `const`-only module for a synthesized rstest harness descriptor.
 /// A genuine rstest companion module contains `#[test]` functions generated
 /// by the proc-macro; a module containing only `pub const` items must never
 /// be treated as one.

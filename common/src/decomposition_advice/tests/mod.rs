@@ -1,0 +1,327 @@
+//! Unit tests covering decomposition feature extraction and clustering.
+
+mod adjacency;
+mod cosine_threshold;
+mod propagation;
+mod test_fixtures;
+mod vector_algebra;
+
+use self::test_fixtures::{
+    ExpectedSuggestion,
+    MethodInput,
+    assert_suggestion,
+    assert_type_decomposition_is_empty,
+    parser_serde_fs_fixture,
+    profile,
+};
+use super::{
+    community::{build_similarity_edges, detect_communities},
+    profile::{DecompositionContext, SubjectKind},
+    suggestion::{SuggestedExtractionKind, suggest_decomposition},
+    vector::build_feature_vector,
+};
+
+#[path = "feature_extraction.rs"]
+mod feature_extraction;
+
+/// Connect only profiles that share enough feature weight.
+#[test]
+fn similarity_edges_include_related_methods_only() {
+    let vectors = vec![
+        build_feature_vector(&profile(MethodInput {
+            name: "parse_tokens",
+            fields: &["grammar"],
+            signature_types: &[],
+            local_types: &[],
+            domains: &[],
+        })),
+        build_feature_vector(&profile(MethodInput {
+            name: "parse_nodes",
+            fields: &["grammar"],
+            signature_types: &[],
+            local_types: &[],
+            domains: &[],
+        })),
+        build_feature_vector(&profile(MethodInput {
+            name: "write_file",
+            fields: &[],
+            signature_types: &[],
+            local_types: &[],
+            domains: &["std::fs"],
+        })),
+    ];
+
+    let edges = build_similarity_edges(&vectors);
+
+    assert_eq!(edges.len(), 1);
+    let edge = edges
+        .first()
+        .expect("similarity edges should contain the related parser pair");
+    assert_eq!((edge.left(), edge.right()), (0, 1));
+    assert!(edge.weight() > 0);
+}
+
+/// Preserve community output when method input order changes.
+#[test]
+fn detect_communities_is_order_invariant() {
+    let fixture = parser_serde_fs_fixture();
+    let mut original_vectors: Vec<_> = fixture.iter().map(build_feature_vector).collect();
+    original_vectors.sort();
+
+    let fixture_method = |index: usize| {
+        fixture
+            .get(index)
+            .cloned()
+            .expect("parser fixture should provide six methods")
+    };
+    let reordered_fixture = [
+        fixture_method(4),
+        fixture_method(1),
+        fixture_method(5),
+        fixture_method(0),
+        fixture_method(3),
+        fixture_method(2),
+    ];
+    let mut reordered_vectors: Vec<_> =
+        reordered_fixture.iter().map(build_feature_vector).collect();
+    reordered_vectors.sort();
+
+    assert_eq!(
+        detect_communities(&original_vectors).expect("original vectors form a valid graph"),
+        detect_communities(&reordered_vectors).expect("reordered vectors form a valid graph")
+    );
+}
+
+/// Return no advice when methods form fewer than two communities.
+#[test]
+fn suggest_decomposition_returns_empty_for_single_community() {
+    assert_type_decomposition_is_empty(
+        "Parser",
+        &[
+            profile(MethodInput {
+                name: "parse_tokens",
+                fields: &["grammar"],
+                signature_types: &[],
+                local_types: &[],
+                domains: &[],
+            }),
+            profile(MethodInput {
+                name: "parse_nodes",
+                fields: &["grammar"],
+                signature_types: &[],
+                local_types: &[],
+                domains: &[],
+            }),
+            profile(MethodInput {
+                name: "parse_tree",
+                fields: &["grammar"],
+                signature_types: &[],
+                local_types: &[],
+                domains: &[],
+            }),
+            profile(MethodInput {
+                name: "parse_stream",
+                fields: &["grammar"],
+                signature_types: &[],
+                local_types: &[],
+                domains: &[],
+            }),
+        ],
+    );
+}
+
+/// Choose module and helper-struct advice for type communities.
+#[test]
+fn suggest_decomposition_for_type_prefers_domain_module_and_field_helper_struct() {
+    let context = DecompositionContext::new("Foo", SubjectKind::Type);
+    let suggestions = suggest_decomposition(&context, &parser_serde_fs_fixture())
+        .expect("fixture profiles should analyse");
+
+    assert_eq!(suggestions.len(), 3);
+    let suggestion_at = |index: usize| {
+        suggestions
+            .get(index)
+            .expect("decomposition should yield three suggestions")
+    };
+    assert_suggestion(
+        suggestion_at(0),
+        ExpectedSuggestion {
+            label: "grammar",
+            extraction_kind: SuggestedExtractionKind::HelperStruct,
+            methods: &["parse_nodes", "parse_tokens"],
+        },
+    );
+    assert_suggestion(
+        suggestion_at(1),
+        ExpectedSuggestion {
+            label: "serde::json",
+            extraction_kind: SuggestedExtractionKind::Module,
+            methods: &["decode_json", "encode_json"],
+        },
+    );
+    assert_suggestion(
+        suggestion_at(2),
+        ExpectedSuggestion {
+            label: "std::fs",
+            extraction_kind: SuggestedExtractionKind::Module,
+            methods: &["load_from_disk", "save_to_disk"],
+        },
+    );
+}
+
+/// Suggest focused sub-traits for trait communities.
+#[test]
+fn suggest_decomposition_for_trait_returns_sub_trait_suggestions() {
+    let context = DecompositionContext::new("Transport", SubjectKind::Trait);
+    let methods = vec![
+        profile(MethodInput {
+            name: "encode_request",
+            fields: &[],
+            signature_types: &[],
+            local_types: &[],
+            domains: &["serde::json"],
+        }),
+        profile(MethodInput {
+            name: "decode_request",
+            fields: &[],
+            signature_types: &[],
+            local_types: &[],
+            domains: &["serde::json"],
+        }),
+        profile(MethodInput {
+            name: "read_frame",
+            fields: &[],
+            signature_types: &["IoBuffer"],
+            local_types: &[],
+            domains: &["std::io"],
+        }),
+        profile(MethodInput {
+            name: "write_frame",
+            fields: &[],
+            signature_types: &["IoBuffer"],
+            local_types: &[],
+            domains: &["std::io"],
+        }),
+    ];
+
+    let suggestions =
+        suggest_decomposition(&context, &methods).expect("fixture profiles should analyse");
+
+    assert_eq!(suggestions.len(), 2);
+    assert!(
+        suggestions.iter().all(|suggestion| {
+            suggestion.extraction_kind() == SuggestedExtractionKind::SubTrait
+        })
+    );
+}
+
+/// Preserve suggestions when duplicate method names arrive in a new order.
+#[test]
+fn suggest_decomposition_is_order_invariant_for_duplicate_method_names() {
+    let context = DecompositionContext::new("Importer", SubjectKind::Type);
+    let methods = vec![
+        profile(MethodInput {
+            name: "load",
+            fields: &[],
+            signature_types: &["JsonDecoder"],
+            local_types: &[],
+            domains: &["serde::json"],
+        }),
+        profile(MethodInput {
+            name: "load",
+            fields: &[],
+            signature_types: &["JsonReader"],
+            local_types: &[],
+            domains: &["serde::json"],
+        }),
+        profile(MethodInput {
+            name: "load",
+            fields: &["cache"],
+            signature_types: &[],
+            local_types: &["PathBuf"],
+            domains: &["std::fs"],
+        }),
+        profile(MethodInput {
+            name: "load",
+            fields: &["cache"],
+            signature_types: &[],
+            local_types: &["PathBuf"],
+            domains: &["std::fs"],
+        }),
+    ];
+
+    let method_at = |index: usize| {
+        methods
+            .get(index)
+            .cloned()
+            .expect("importer fixture should provide four methods")
+    };
+    let reordered = vec![method_at(2), method_at(0), method_at(3), method_at(1)];
+
+    assert_eq!(
+        suggest_decomposition(&context, &methods).expect("fixture profiles should analyse"),
+        suggest_decomposition(&context, &reordered).expect("fixture profiles should analyse")
+    );
+}
+
+/// Exclude singleton methods that do not belong to a useful group.
+#[test]
+fn suggestions_drop_singleton_noise_methods() {
+    let context = DecompositionContext::new("Foo", SubjectKind::Type);
+    let mut methods = parser_serde_fs_fixture();
+    methods.push(profile(MethodInput {
+        name: "run",
+        fields: &[],
+        signature_types: &[],
+        local_types: &[],
+        domains: &[],
+    }));
+
+    let suggestions =
+        suggest_decomposition(&context, &methods).expect("fixture profiles should analyse");
+
+    assert_eq!(suggestions.len(), 3);
+    assert!(
+        suggestions
+            .iter()
+            .all(|suggestion| !suggestion.methods().contains(&String::from("run")))
+    );
+}
+
+/// Drop groups that have no extractable feature label.
+#[test]
+fn suggestions_skip_degenerate_groups_without_features() {
+    assert_type_decomposition_is_empty(
+        "Runner",
+        &[
+            profile(MethodInput {
+                name: "build",
+                fields: &[],
+                signature_types: &[],
+                local_types: &[],
+                domains: &[],
+            }),
+            profile(MethodInput {
+                name: "make",
+                fields: &[],
+                signature_types: &[],
+                local_types: &[],
+                domains: &[],
+            }),
+            profile(MethodInput {
+                name: "load_from_disk",
+                fields: &[],
+                signature_types: &[],
+                local_types: &["PathBuf"],
+                domains: &["std::fs"],
+            }),
+            profile(MethodInput {
+                name: "save_to_disk",
+                fields: &[],
+                signature_types: &[],
+                local_types: &["PathBuf"],
+                domains: &["std::fs"],
+            }),
+        ],
+    );
+}

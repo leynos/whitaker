@@ -8,6 +8,7 @@ use std::{error::Error, io};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
+use semver::Version;
 const PARSER_DEPENDENCY: &str = "ra_ap_syntax";
 
 pub(crate) fn parser_dependency_requirement(manifest: &str) -> Result<String, Box<dyn Error>> {
@@ -27,11 +28,17 @@ pub(crate) fn parser_dependency_requirement(manifest: &str) -> Result<String, Bo
         .ok_or_else(|| invalid_workspace_dependency().into())
 }
 
+/// Return the complete release version from one exact equality requirement.
+///
+/// `Version::parse` rejects partial versions and comma-separated comparators,
+/// so the schema seed cannot silently accept a range that Cargo may resolve to
+/// a different parser release.
 pub(crate) fn exact_version(requirement: &str) -> Result<&str, io::Error> {
-    requirement
+    let version = requirement
         .strip_prefix('=')
-        .filter(|version| !version.is_empty())
-        .ok_or_else(|| non_exact_workspace_dependency(requirement))
+        .ok_or_else(|| non_exact_workspace_dependency(requirement))?;
+    Version::parse(version).map_err(|_| non_exact_workspace_dependency(requirement))?;
+    Ok(version)
 }
 
 pub(crate) fn find_workspace_manifest(
@@ -76,8 +83,8 @@ fn read_manifest_text(candidate: &Utf8Path) -> Result<Option<String>, Box<dyn Er
     let Some(filename) = candidate.file_name() else {
         return Ok(None);
     };
-    let directory = Dir::open_ambient_dir(directory, ambient_authority())?;
-    match directory.read_to_string(filename) {
+    let directory_handle = Dir::open_ambient_dir(directory, ambient_authority())?;
+    match directory_handle.read_to_string(filename) {
         Ok(manifest) => Ok(Some(manifest)),
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
         Err(error) => Err(error.into()),
@@ -114,12 +121,12 @@ fn manifest_not_readable(path: &Utf8Path) -> io::Error {
     )
 }
 
+/// Describe the missing workspace manifest at a crate's manifest directory.
 fn workspace_manifest_not_found(manifest_dir: &Utf8Path) -> io::Error {
     io::Error::new(
         io::ErrorKind::NotFound,
         format!(
-            "could not find a parent Cargo.toml with a [workspace] table from `{}`",
-            manifest_dir
+            "could not find a parent Cargo.toml with a [workspace] table from `{manifest_dir}`"
         ),
     )
 }

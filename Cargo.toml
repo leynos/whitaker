@@ -1,18 +1,23 @@
 [workspace]
-members = ["common", "crates/*", "installer", "suite"]
+members = ["cli", "common", "crates/*", "installer", "suite", "vendor/dylint_testing"]
 resolver = "2"
+
+# Dylint 6.3.0 must recognize rustc commands prefixed by Cargo's compiler
+# wrapper so UI tests can retain compiler admission.
+[patch.crates-io]
+dylint_testing = { path = "vendor/dylint_testing" }
 
 [workspace.package]
 license = "ISC"
 repository = "https://github.com/leynos/whitaker"
 homepage = "https://df12.studio/docs.html"
 documentation = "https://github.com/leynos/whitaker/tree/main/docs/users-guide.md"
-version = "0.2.8"
+version = "0.2.11"
 
 [workspace.dependencies]
-whitaker-common = { path = "common", version = "0.2.8" }
-whitaker-installer = { path = "installer", version = "0.2.8" }
-whitaker = { path = ".", version = "0.2.8" }
+whitaker-common = { path = "common", version = "0.2.11" }
+whitaker-installer = { path = "installer", version = "0.2.11" }
+whitaker = { path = ".", version = "0.2.11" }
 camino = "1.2.1"
 cap-std = { version = "4.0.2", features = ["fs_utf8"] }
 cargo_metadata = "0.23.0"
@@ -20,20 +25,25 @@ clap = "4.5.38"
 directories-next = "2.0.0"
 dylint_linting = "6"
 dylint_testing = "6"
-libc = "0.2"
 fluent-templates = "^0.15.0"
 insta = { version = "1", features = ["json"] }
 once_cell = "^1.21.3"
+parking_lot = "0.12.5"
 unic-langid = "^0.9.4"
 serde = { version = "1.0.228", features = ["derive"] }
 flate2 = "1.1"
 serde_json = "1.0.149"
+shlex = "2.0.1"
 toml = "1.1.2"
+metrics = "0.24.2"
+metrics-util = "0.20.1"
 tracing = { version = "0.1.44", default-features = false, features = ["attributes", "std"] }
+tracing-subscriber = "0.3.20"
 thiserror = "2"
 trybuild = "1.0.116"
 log = "0.4.28"
 sha2 = "0.11.0"
+semver = "1.0.28"
 tar = "0.4.44"
 ureq = "3.2.0"
 zstd = "0.14.0"
@@ -42,32 +52,41 @@ zstd = "0.14.0"
 # ZIP's optional codecs or date/time crate integration.
 zip = { version = "7.2.0", default-features = false, features = ["deflate"] }
 rstest = "0.27.0"
-rstest-bdd = "0.5.0"
-rstest-bdd-macros = "0.5.0"
+rstest-bdd = "0.6.0"
+rstest-bdd-macros = "0.6.0"
 proptest = "1"
 rustc_lexer = "0.1.0"
 # Exact-pin rust-analyzer's unstable parser snapshot so AST hashes stay tied to
 # the parser schema. Whenever the nightly toolchain changes, bump this version
 # in lockstep to prevent AST hash drift.
 ra_ap_syntax = "=0.0.334"
-whitaker_clones_core = { path = "crates/whitaker_clones_core", version = "0.2.8" }
-whitaker_sarif = { path = "crates/whitaker_sarif", version = "0.2.8" }
+whitaker_clones_core = { path = "crates/whitaker_clones_core", version = "0.2.11" }
+whitaker_sarif = { path = "crates/whitaker_sarif", version = "0.2.11" }
+# Path-only (no `version`): the crate is `publish = false`, and Cargo strips
+# versionless dev-dependencies when packaging, so the published crates do not
+# gain an unresolvable requirement.
+whitaker_test_macros = { path = "crates/whitaker_test_macros" }
 temp-env = "0.3.6"
 tempfile = "3.19.1"
 wait-timeout = "0.2.1"
 mockall = "0.15.0"
-clippy_utils = { path = "crates/clippy_utils", version = "0.2.8" }
-rustc_ast = { path = "crates/rustc_ast", version = "0.2.8" }
-rustc_attr_data_structures = { path = "crates/rustc_attr_data_structures", version = "0.2.8" }
-rustc_hir = { path = "crates/rustc_hir", version = "0.2.8" }
-rustc_lint = { path = "crates/rustc_lint", version = "0.2.8" }
-rustc_middle = { path = "crates/rustc_middle", version = "0.2.8" }
-rustc_session = { path = "crates/rustc_session", version = "0.2.8" }
-rustc_span = { path = "crates/rustc_span", version = "0.2.8" }
+googletest = "0.14.3"
+pretty_assertions = "1.4.1"
+# Promoted from four identical per-crate pins (`SURP-008`); the version here
+# matches them exactly so the migration is a no-op resolution-wise.
+serial_test = "4.0.1"
+clippy_utils = { path = "crates/clippy_utils", version = "0.2.11" }
+rustc_ast = { path = "crates/rustc_ast", version = "0.2.11" }
+rustc_attr_data_structures = { path = "crates/rustc_attr_data_structures", version = "0.2.11" }
+rustc_hir = { path = "crates/rustc_hir", version = "0.2.11" }
+rustc_lint = { path = "crates/rustc_lint", version = "0.2.11" }
+rustc_middle = { path = "crates/rustc_middle", version = "0.2.11" }
+rustc_session = { path = "crates/rustc_session", version = "0.2.11" }
+rustc_span = { path = "crates/rustc_span", version = "0.2.11" }
 
 [package]
 name = "whitaker"
-version = "0.2.8"
+version = "0.2.11"
 edition = "2024"
 
 [features]
@@ -104,8 +123,13 @@ rstest = { workspace = true }
 rstest-bdd = { workspace = true }
 rstest-bdd-macros = { workspace = true }
 dylint_testing = { workspace = true }
+proptest = { workspace = true }
+whitaker_test_macros = { workspace = true }
 
-[lints.clippy]
+[lints]
+workspace = true
+
+[workspace.lints.clippy]
 pedantic = { level = "warn", priority = -1 }
 
 # 1. hygiene
@@ -113,8 +137,10 @@ allow_attributes = "deny"
 allow_attributes_without_reason = "deny"
 blanket_clippy_restriction_lints = "deny"
 cognitive_complexity = "deny"
+disallowed_methods = "deny"
 needless_pass_by_value = "deny"
 implicit_hasher = "deny"
+missing_assert_message = "deny"
 
 # 2. debugging leftovers
 dbg_macro = "deny"
@@ -170,6 +196,7 @@ result_large_err = "deny"
 [workspace.lints.rust]
 unknown_lints = "deny"
 renamed_and_removed_lints = "deny"
+unsafe_code = "forbid"
 missing_docs = "deny"
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }
 
@@ -181,3 +208,17 @@ bare_urls = "deny"
 invalid_html_tags = "deny"
 invalid_codeblock_attributes = "deny"
 unescaped_backticks = "deny"
+
+[profile.dev]
+incremental = false
+debug = 0
+
+# Lint libraries are shipped as release builds (`installer/src/builder.rs`
+# passes `--release`), while UI tests build in debug. For a lint whose
+# correctness is byte-offset arithmetic, that difference decides whether an
+# underflow panics or wraps silently in the artefact users actually load.
+# `checked_*` arithmetic in the source is the primary defence; this makes the
+# fallback fail loudly too. See `Risk: release builds have overflow checks
+# off` in the 2.4.1 plan.
+[profile.release]
+overflow-checks = true

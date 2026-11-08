@@ -1,19 +1,33 @@
 //! Tests for Dylint tool dependency installation and fallback behaviour.
 
-use super::*;
-use crate::dependency_binaries::{DependencyBinaryInstallError, MockDependencyBinaryInstaller};
-use crate::installer_packaging::TargetTriple;
-use crate::test_utils::dependency_binary_helpers::{
-    binstall_install, binstall_version_check_with_result, cargo_dylint_check,
-    cargo_dylint_check_with_result, dylint_link_install_list_check, with_fake_binary_on_path,
-};
-use crate::test_utils::{ExpectedCall, StubDirs, StubExecutor, failure_output, success_output};
 use std::path::PathBuf;
 
-fn install_options<'a>(
-    repository_installer: &'a dyn DependencyBinaryInstaller,
+use super::*;
+use crate::{
+    dependency_binaries::{DependencyBinaryInstallError, MockDependencyBinaryInstaller},
+    installer_packaging::TargetTriple,
+    test_utils::{
+        ExpectedCall,
+        StubDirs,
+        StubExecutor,
+        dependency_binary_helpers::{
+            binstall_install,
+            binstall_version_check_with_result,
+            cargo_dylint_check,
+            cargo_dylint_check_with_result,
+            dylint_link_install_list_check,
+            with_fake_binary_on_path,
+        },
+        failure_output,
+        stdout_output,
+        success_output,
+    },
+};
+
+fn install_options(
+    repository_installer: &dyn DependencyBinaryInstaller,
     quiet: bool,
-) -> DependencyInstallOptions<'a> {
+) -> DependencyInstallOptions<'_> {
     let dirs = StubDirs {
         bin_dir: Some(PathBuf::from("/tmp/bin")),
     };
@@ -49,7 +63,7 @@ fn install_dylint_tools_uses_repository_release_first() {
         .returning(|_, _, _| Ok(PathBuf::from("/tmp/bin/cargo-dylint")));
     let executor = StubExecutor::new(vec![
         binstall_version_check_with_result(Ok(success_output())),
-        cargo_dylint_check(),
+        cargo_dylint_check().expect("cargo-dylint dependency version should resolve"),
     ]);
     let mut stderr = Vec::new();
 
@@ -69,6 +83,9 @@ fn install_dylint_tools_uses_repository_release_first() {
     executor.assert_finished();
 }
 
+#[path = "install_failure_tests.rs"]
+mod failure_tests;
+
 #[test]
 fn install_dylint_tools_falls_back_to_binstall_when_repository_unavailable() {
     let mut repository_installer = MockDependencyBinaryInstaller::new();
@@ -80,8 +97,9 @@ fn install_dylint_tools_falls_back_to_binstall_when_repository_unavailable() {
     });
     let executor = StubExecutor::new(vec![
         binstall_version_check_with_result(Ok(success_output())),
-        binstall_install("cargo-dylint", Ok(success_output())),
-        cargo_dylint_check(),
+        binstall_install("cargo-dylint", Ok(success_output()))
+            .expect("cargo-dylint dependency version should resolve"),
+        cargo_dylint_check().expect("cargo-dylint dependency version should resolve"),
     ]);
     let mut stderr = Vec::new();
 
@@ -112,10 +130,10 @@ fn install_dylint_tools_falls_back_to_cargo_install_when_binstall_missing() {
         binstall_version_check_with_result(Ok(failure_output("missing binstall"))),
         ExpectedCall {
             cmd: "cargo",
-            args: vec!["install", "--locked", "--version", "6.0.1", "cargo-dylint"],
+            args: vec!["install", "--locked", "--version", "6.3.0", "cargo-dylint"],
             result: Ok(success_output()),
         },
-        cargo_dylint_check(),
+        cargo_dylint_check().expect("cargo-dylint dependency version should resolve"),
     ]);
     let mut stderr = Vec::new();
 
@@ -135,17 +153,19 @@ fn install_dylint_tools_falls_back_to_cargo_install_when_binstall_missing() {
     executor.assert_finished();
 }
 
+/// Exercise source fallback when repository verification reports a stale version.
 #[test]
-fn install_dylint_tools_falls_back_when_repository_verification_fails() {
+fn install_dylint_tools_falls_back_when_repository_verification_reports_a_stale_version() {
     let mut repository_installer = MockDependencyBinaryInstaller::new();
     repository_installer
         .expect_install()
         .returning(|_, _, _| Ok(PathBuf::from("/tmp/bin/cargo-dylint")));
     let executor = StubExecutor::new(vec![
         binstall_version_check_with_result(Ok(success_output())),
-        cargo_dylint_check_with_result(Ok(failure_output("still missing"))),
-        binstall_install("cargo-dylint", Ok(success_output())),
-        cargo_dylint_check(),
+        cargo_dylint_check_with_result(Ok(stdout_output("cargo-dylint 5.0.0\n"))),
+        binstall_install("cargo-dylint", Ok(success_output()))
+            .expect("cargo-dylint dependency version should resolve"),
+        cargo_dylint_check().expect("cargo-dylint dependency version should resolve"),
     ]);
     let mut stderr = Vec::new();
 
@@ -173,10 +193,11 @@ fn install_dylint_tools_reports_total_failure_after_all_fallbacks() {
         .returning(|_, _, _| Err(DependencyBinaryInstallError::MissingBinDir));
     let executor = StubExecutor::new(vec![
         binstall_version_check_with_result(Ok(success_output())),
-        binstall_install("cargo-dylint", Ok(failure_output("binstall failed"))),
+        binstall_install("cargo-dylint", Ok(failure_output("binstall failed")))
+            .expect("cargo-dylint dependency version should resolve"),
         ExpectedCall {
             cmd: "cargo",
-            args: vec!["install", "--locked", "--version", "6.0.1", "cargo-dylint"],
+            args: vec!["install", "--locked", "--version", "6.3.0", "cargo-dylint"],
             result: Ok(failure_output("cargo install failed")),
         },
     ]);
@@ -208,17 +229,17 @@ fn install_dylint_tools_builds_from_source_when_repository_asset_is_missing() {
     let mut repository_installer = MockDependencyBinaryInstaller::new();
     repository_installer.expect_install().returning(|_, _, _| {
         Err(DependencyBinaryInstallError::NotFound {
-            url: "https://example.test/cargo-dylint-x86_64-unknown-linux-gnu-v6.0.1.tgz".to_owned(),
+            url: "https://example.test/cargo-dylint-x86_64-unknown-linux-gnu-v6.3.0.tgz".to_owned(),
         })
     });
     let executor = StubExecutor::new(vec![
         binstall_version_check_with_result(Ok(success_output())),
         ExpectedCall {
             cmd: "cargo",
-            args: vec!["install", "--locked", "--version", "6.0.1", "cargo-dylint"],
+            args: vec!["install", "--locked", "--version", "6.3.0", "cargo-dylint"],
             result: Ok(success_output()),
         },
-        cargo_dylint_check(),
+        cargo_dylint_check().expect("cargo-dylint dependency version should resolve"),
     ]);
     let mut stderr = Vec::new();
 
@@ -247,7 +268,7 @@ fn install_dylint_tools_skips_dylint_link_when_cargo_dylint_source_build_install
         .once()
         .returning(|_, _, _| {
             Err(DependencyBinaryInstallError::NotFound {
-                url: "https://example.test/cargo-dylint-x86_64-unknown-linux-gnu-v6.0.1.tgz"
+                url: "https://example.test/cargo-dylint-x86_64-unknown-linux-gnu-v6.3.0.tgz"
                     .to_owned(),
             })
         });
@@ -255,13 +276,13 @@ fn install_dylint_tools_skips_dylint_link_when_cargo_dylint_source_build_install
         binstall_version_check_with_result(Ok(success_output())),
         ExpectedCall {
             cmd: "cargo",
-            args: vec!["install", "--locked", "--version", "6.0.1", "cargo-dylint"],
+            args: vec!["install", "--locked", "--version", "6.3.0", "cargo-dylint"],
             result: Ok(success_output()),
         },
-        cargo_dylint_check(),
+        cargo_dylint_check().expect("cargo-dylint dependency version should resolve"),
         // Refreshing the companion dylint-link status consults Cargo's
         // installed-binary registry once the PATH probe passes.
-        dylint_link_install_list_check(),
+        dylint_link_install_list_check().expect("dylint-link dependency version should resolve"),
     ]);
     let mut stderr = Vec::new();
 
@@ -276,7 +297,8 @@ fn install_dylint_tools_skips_dylint_link_when_cargo_dylint_source_build_install
             install_options(&repository_installer, false),
         )
         .expect("cargo-dylint source build should satisfy both tools");
-    });
+    })
+    .expect("stage fake dylint-link on PATH");
 
     let output = String::from_utf8(stderr).expect("stderr should be UTF-8");
     assert!(output.contains("Installed cargo-dylint from source with cargo install."));
@@ -284,271 +306,8 @@ fn install_dylint_tools_skips_dylint_link_when_cargo_dylint_source_build_install
     executor.assert_finished();
 }
 
-/// Writes a fake `dylint-link` into a temporary directory and returns the
-/// directory guard alongside the binary path.
-///
-/// The fake is staged with a failing exit status so that any attempt to
-/// execute it as a health check would be observable as a verification
-/// failure.
-fn staged_unrunnable_dylint_link() -> std::io::Result<(tempfile::TempDir, PathBuf)> {
-    let dir = tempfile::tempdir()?;
-    let path = crate::test_utils::dependency_binary_helpers::path_binary_location(
-        dir.path(),
-        "dylint-link",
-    );
-    crate::test_utils::dependency_binary_helpers::write_fake_binary_with_status(&path, true, 1);
-    Ok((dir, path))
-}
+#[path = "policy_tests.rs"]
+mod policy;
 
-#[test]
-fn install_dylint_tools_accepts_repository_dylint_link_without_executing_it() {
-    // `dylint-link` forwards its argument list to the underlying linker and
-    // has no reliable self-reporting subcommand, so a successful repository
-    // install is accepted on the strength of the download, checksum,
-    // extraction, and permission steps alone. Staging a fake that exits
-    // non-zero proves the binary is never executed as a health check: any
-    // such probe would reject it and fall back to Cargo.
-    let (_dir, binary_path) = staged_unrunnable_dylint_link().expect("stage fake dylint-link");
-    let mut repository_installer = MockDependencyBinaryInstaller::new();
-    repository_installer
-        .expect_install()
-        .once()
-        .returning(move |_, _, _| Ok(binary_path.clone()));
-    let executor = StubExecutor::new(vec![binstall_version_check_with_result(Ok(
-        success_output(),
-    ))]);
-    let mut stderr = Vec::new();
-
-    install_dylint_tools_with_options(
-        &executor,
-        &DylintToolStatus {
-            cargo_dylint: true,
-            dylint_link: false,
-        },
-        &mut stderr,
-        install_options(&repository_installer, false),
-    )
-    .expect("repository install should satisfy dylint-link");
-
-    let output = String::from_utf8(stderr).expect("stderr should be UTF-8");
-    assert!(output.contains("Installed dylint-link from repository release."));
-    assert!(!output.contains("failed verification"));
-    // No Cargo command beyond the binstall-availability probe may run: a
-    // source build of dylint-link cannot succeed on toolchains below the
-    // crate's rustc floor.
-    executor.assert_finished();
-}
-
-#[test]
-fn install_dylint_tools_falls_back_when_repository_dylint_link_install_fails() {
-    // Genuine repository failures — missing asset, checksum mismatch,
-    // extraction failure, or an unwritable executable — must still fall back
-    // to Cargo.
-    let mut repository_installer = MockDependencyBinaryInstaller::new();
-    repository_installer.expect_install().returning(|_, _, _| {
-        Err(DependencyBinaryInstallError::Install {
-            binary: "dylint-link".to_owned(),
-            reason: "checksum mismatch".to_owned(),
-        })
-    });
-    let executor = StubExecutor::new(vec![
-        binstall_version_check_with_result(Ok(success_output())),
-        binstall_install("dylint-link", Ok(success_output())),
-        // The post-binstall check resolves the PATH binary and then confirms
-        // the version against Cargo's installed-binary registry.
-        dylint_link_install_list_check(),
-    ]);
-    let mut stderr = Vec::new();
-
-    with_fake_binary_on_path("dylint-link", || {
-        install_dylint_tools_with_options(
-            &executor,
-            &DylintToolStatus {
-                cargo_dylint: true,
-                dylint_link: false,
-            },
-            &mut stderr,
-            install_options(&repository_installer, false),
-        )
-        .expect("binstall fallback should succeed");
-    });
-
-    let output = String::from_utf8(stderr).expect("stderr should be UTF-8");
-    assert!(output.contains("Repository install for dylint-link unavailable"));
-    assert!(output.contains("Installed dylint-link with cargo binstall."));
-    executor.assert_finished();
-}
-
-#[test]
-fn install_tool_errors_when_dependency_manifest_entry_is_missing() {
-    let missing_tool = DependencyTool {
-        package: "missing-tool",
-        command: "missing-tool",
-        args: &["--version"],
-    };
-    let executor = StubExecutor::new(vec![]);
-    let mut repository_installer = MockDependencyBinaryInstaller::new();
-    repository_installer.expect_install().never();
-    let dirs = StubDirs {
-        bin_dir: Some(PathBuf::from("/tmp/bin")),
-    };
-    let target = TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid target");
-    let mut stderr = Vec::new();
-
-    let error = install_tool(
-        &executor,
-        &missing_tool,
-        &mut stderr,
-        &InstallContext {
-            repo: repository_install_context(
-                Some(&dirs),
-                Some(&repository_installer as &dyn DependencyBinaryInstaller),
-                Some(&target),
-            ),
-            cargo_fallback_mode: InstallMode::Binstall,
-            quiet: false,
-            no_source_fallback: false,
-        },
-    )
-    .expect_err("missing dependency manifest entry should be an install error");
-
-    match error {
-        InstallerError::DependencyInstall { tool, message } => {
-            assert_eq!(tool, "missing-tool");
-            assert_eq!(
-                message,
-                "dependency manifest is missing an entry for missing-tool"
-            );
-        }
-        other => panic!("unexpected error: {other}"),
-    }
-
-    assert!(stderr.is_empty());
-    executor.assert_finished();
-}
-
-/// Install options that refuse a source build, as CI sets them.
-fn strict_install_options(
-    repository_installer: &dyn DependencyBinaryInstaller,
-) -> DependencyInstallOptions<'_> {
-    let mut options = install_options(repository_installer, false);
-    options.policy.no_source_fallback = true;
-    options
-}
-
-/// A repository installer whose archive is absent, as during a republish.
-fn installer_missing_its_archive() -> MockDependencyBinaryInstaller {
-    let mut repository_installer = MockDependencyBinaryInstaller::new();
-    repository_installer.expect_install().returning(|_, _, _| {
-        Err(DependencyBinaryInstallError::Download {
-            url: "https://example.test/cargo-dylint-x86_64-unknown-linux-gnu-v6.0.1.tgz".to_owned(),
-            reason: "not found".to_owned(),
-        })
-    });
-    repository_installer
-}
-
-#[test]
-fn a_missing_dylint_archive_fails_under_the_no_source_fallback_policy() {
-    // The executor expects nothing: refusing means no Cargo command runs at
-    // all, which is the assertion that matters. A test that only checked the
-    // error would pass while `cargo install` had already been attempted.
-    let repository_installer = installer_missing_its_archive();
-    let executor = StubExecutor::new(vec![binstall_version_check_with_result(Ok(
-        success_output(),
-    ))]);
-    let mut stderr = Vec::new();
-
-    let error = install_dylint_tools_with_options(
-        &executor,
-        &DylintToolStatus {
-            cargo_dylint: false,
-            dylint_link: true,
-        },
-        &mut stderr,
-        strict_install_options(&repository_installer),
-    )
-    .expect_err("an absent archive must fail when a source build is forbidden");
-
-    assert!(
-        matches!(error, InstallerError::SourceFallbackForbidden { .. }),
-        "expected a source-fallback refusal, got: {error}"
-    );
-    assert!(
-        error.to_string().contains("cargo-dylint"),
-        "the refusal must name the tool, got: {error}"
-    );
-}
-
-#[test]
-fn the_same_missing_archive_falls_back_without_the_policy() {
-    // The pair is the point: the flag changes the outcome for one input, so
-    // the default path is asserted on the same input rather than assumed.
-    let repository_installer = installer_missing_its_archive();
-    let executor = StubExecutor::new(vec![
-        binstall_version_check_with_result(Ok(success_output())),
-        binstall_install("cargo-dylint", Ok(success_output())),
-        cargo_dylint_check(),
-    ]);
-    let mut stderr = Vec::new();
-
-    install_dylint_tools_with_options(
-        &executor,
-        &DylintToolStatus {
-            cargo_dylint: false,
-            dylint_link: true,
-        },
-        &mut stderr,
-        install_options(&repository_installer, false),
-    )
-    .expect("the default path should still fall back");
-
-    let output = String::from_utf8(stderr).expect("stderr should be UTF-8");
-    assert!(output.contains("Repository install for cargo-dylint unavailable"));
-    executor.assert_finished();
-}
-
-#[test]
-fn an_unresolvable_repository_context_still_refuses_a_source_build() {
-    // The hole this closes: with no base directories the repository install is
-    // never attempted, so the refusals inside the failure arms never run and
-    // `cargo install` was reached unguarded. A run that forbade a source build
-    // would have taken one, and reported success.
-    //
-    // The executor expects nothing. Asserting only the error would pass while
-    // Cargo had already been invoked, which is the failure itself.
-    let executor = StubExecutor::new(vec![]);
-    let mut stderr = Vec::new();
-
-    let error = install_missing_tools(
-        &executor,
-        &DylintToolStatus {
-            cargo_dylint: false,
-            dylint_link: true,
-        },
-        &mut stderr,
-        &InstallContext {
-            repo: None,
-            cargo_fallback_mode: InstallMode::CargoInstall,
-            quiet: false,
-            no_source_fallback: true,
-        },
-    )
-    .expect_err("no repository context must not become a licence to build");
-
-    assert!(
-        matches!(error, InstallerError::SourceFallbackForbidden { .. }),
-        "expected a source-fallback refusal, got: {error}"
-    );
-    let message = error.to_string();
-    assert!(
-        message.contains("cargo-dylint"),
-        "the refusal must name the tool, got: {message}"
-    );
-    assert!(
-        message.contains("base") && message.contains("directories"),
-        "the reason must say why no repository install was attempted, not \
-         repeat the generic one, got: {message}"
-    );
-    executor.assert_finished();
-}
+#[path = "tests_repository.rs"]
+mod repository;

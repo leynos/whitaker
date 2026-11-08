@@ -4,11 +4,11 @@
 //! detection for both parsed and unparsed attribute variants.
 
 #[cfg(feature = "dylint-driver")]
-use super::{convert_attribute, has_test_ancestry, is_cfg_test_attribute, meta_contains_test_cfg};
-#[cfg(feature = "dylint-driver")]
 use rstest::rstest;
 #[cfg(feature = "dylint-driver")]
 use rustc_ast::ast::{DelimArgs, MetaItem, MetaItemInner, MetaItemKind, Path, PathSegment, Safety};
+#[cfg(feature = "dylint-driver")]
+use rustc_ast::attr::data_structures::CfgEntry;
 #[cfg(feature = "dylint-driver")]
 use rustc_ast::token::{Delimiter, IdentIsRaw, TokenKind};
 #[cfg(feature = "dylint-driver")]
@@ -24,6 +24,9 @@ use rustc_span::{AttrId, DUMMY_SP, create_default_session_globals_then};
 #[cfg(feature = "dylint-driver")]
 use whitaker_common::{AttributeKind, AttributePath, PARSED_ATTRIBUTE_PLACEHOLDER};
 
+#[cfg(feature = "dylint-driver")]
+use super::{convert_attribute, has_test_ancestry, is_cfg_test_attribute, meta_contains_test_cfg};
+
 /// Type-safe wrapper for AST path segments.
 #[cfg(feature = "dylint-driver")]
 #[derive(Debug, Clone, Copy)]
@@ -31,16 +34,12 @@ struct PathSegments(&'static [&'static str]);
 
 #[cfg(feature = "dylint-driver")]
 impl PathSegments {
-    const fn new(segments: &'static [&'static str]) -> Self {
-        Self(segments)
-    }
+    const fn new(segments: &'static [&'static str]) -> Self { Self(segments) }
 }
 
 #[cfg(feature = "dylint-driver")]
 impl AsRef<[&'static str]> for PathSegments {
-    fn as_ref(&self) -> &[&'static str] {
-        self.0
-    }
+    fn as_ref(&self) -> &[&'static str] { self.0 }
 }
 
 #[cfg(feature = "dylint-driver")]
@@ -54,6 +53,25 @@ enum AttributeFixture {
     CfgAndBuiltInTest,
 }
 
+/// Outcome expected from `has_test_ancestry` for a table-driven case.
+#[cfg(feature = "dylint-driver")]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum AncestryOutcome {
+    TestContext,
+    NotTestContext,
+}
+
+#[cfg(feature = "dylint-driver")]
+impl AncestryOutcome {
+    const fn from_detection(is_test_context: bool) -> Self {
+        if is_test_context {
+            Self::TestContext
+        } else {
+            Self::NotTestContext
+        }
+    }
+}
+
 #[cfg(feature = "dylint-driver")]
 #[derive(Clone, Copy, Debug)]
 struct HasTestAncestryCase {
@@ -61,28 +79,37 @@ struct HasTestAncestryCase {
     attr_fixture: AttributeFixture,
     is_function_item: bool,
     include_custom_attribute: bool,
-    expected: bool,
+    expected: AncestryOutcome,
 }
 
 // Common path constants
 #[cfg(feature = "dylint-driver")]
 const PATH_CFG: PathSegments = PathSegments::new(&["cfg"]);
+
 #[cfg(feature = "dylint-driver")]
 const PATH_TEST: PathSegments = PathSegments::new(&["test"]);
+
 #[cfg(feature = "dylint-driver")]
 const PATH_ANY: PathSegments = PathSegments::new(&["any"]);
+
 #[cfg(feature = "dylint-driver")]
 const PATH_ALL: PathSegments = PathSegments::new(&["all"]);
+
 #[cfg(feature = "dylint-driver")]
 const PATH_NOT: PathSegments = PathSegments::new(&["not"]);
+
 #[cfg(feature = "dylint-driver")]
 const PATH_CFG_ATTR: PathSegments = PathSegments::new(&["cfg_attr"]);
+
 #[cfg(feature = "dylint-driver")]
 const PATH_ALLOW: PathSegments = PathSegments::new(&["allow"]);
+
 #[cfg(feature = "dylint-driver")]
 const PATH_DOCTEST: PathSegments = PathSegments::new(&["doctest"]);
+
 #[cfg(feature = "dylint-driver")]
 const PATH_UNIX: PathSegments = PathSegments::new(&["unix"]);
+
 #[cfg(feature = "dylint-driver")]
 const PATH_DEAD_CODE: PathSegments = PathSegments::new(&["dead_code"]);
 
@@ -183,9 +210,7 @@ fn meta_list(segments: PathSegments, children: Vec<MetaItemInner>) -> MetaItem {
 }
 
 #[cfg(feature = "dylint-driver")]
-fn meta_inner(meta: MetaItem) -> MetaItemInner {
-    MetaItemInner::MetaItem(meta)
-}
+fn meta_inner(meta: MetaItem) -> MetaItemInner { MetaItemInner::MetaItem(meta) }
 
 // ---------------------------------------------------------------------------
 // cfg pattern helpers
@@ -257,9 +282,7 @@ fn build_cfg_all_test_unix() -> MetaItem {
 
 /// Builds `cfg(not(test))`.
 #[cfg(feature = "dylint-driver")]
-fn build_cfg_not_test() -> MetaItem {
-    cfg_not(meta_word(PATH_TEST))
-}
+fn build_cfg_not_test() -> MetaItem { cfg_not(meta_word(PATH_TEST)) }
 
 /// Builds `cfg_attr(test, cfg(test))`.
 #[cfg(feature = "dylint-driver")]
@@ -279,8 +302,12 @@ fn build_cfg_attr_test_allow() -> MetaItem {
 /// Helper function to test `meta_contains_test_cfg` behaviour.
 /// Must be called within `create_default_session_globals_then`.
 #[cfg(feature = "dylint-driver")]
-fn assert_meta_test_cfg(meta: MetaItem, expected: bool) {
-    assert_eq!(meta_contains_test_cfg(&meta), expected);
+fn assert_meta_test_cfg(meta: &MetaItem, expected: bool) {
+    assert_eq!(
+        meta_contains_test_cfg(meta),
+        expected,
+        "meta item should report test-cfg detection as {expected}"
+    );
 }
 
 /// Asserts that `convert_attribute` preserves path segments for the given
@@ -340,42 +367,42 @@ fn build_additional_test_attributes(include_custom: bool) -> Vec<AttributePath> 
     attr_fixture: AttributeFixture::None,
     is_function_item: false,
     include_custom_attribute: false,
-    expected: true,
+    expected: AncestryOutcome::TestContext,
 })]
 #[case::cfg_test_attribute_detected(HasTestAncestryCase {
     has_test_context_ancestry: false,
     attr_fixture: AttributeFixture::CfgTest,
     is_function_item: false,
     include_custom_attribute: false,
-    expected: true,
+    expected: AncestryOutcome::TestContext,
 })]
 #[case::built_in_test_attribute_on_function_item(HasTestAncestryCase {
     has_test_context_ancestry: false,
     attr_fixture: AttributeFixture::BuiltInTest,
     is_function_item: true,
     include_custom_attribute: false,
-    expected: true,
+    expected: AncestryOutcome::TestContext,
 })]
 #[case::configured_test_attribute_on_function_item(HasTestAncestryCase {
     has_test_context_ancestry: false,
     attr_fixture: AttributeFixture::CustomTest,
     is_function_item: true,
     include_custom_attribute: true,
-    expected: true,
+    expected: AncestryOutcome::TestContext,
 })]
 #[case::all_detection_paths_together(HasTestAncestryCase {
     has_test_context_ancestry: true,
     attr_fixture: AttributeFixture::CfgAndBuiltInTest,
     is_function_item: true,
     include_custom_attribute: true,
-    expected: true,
+    expected: AncestryOutcome::TestContext,
 })]
 #[case::negative_case(HasTestAncestryCase {
     has_test_context_ancestry: false,
     attr_fixture: AttributeFixture::Allow,
     is_function_item: false,
     include_custom_attribute: false,
-    expected: false,
+    expected: AncestryOutcome::NotTestContext,
 })]
 fn has_test_ancestry_detects_test_context(#[case] case: HasTestAncestryCase) {
     create_default_session_globals_then(|| {
@@ -383,14 +410,16 @@ fn has_test_ancestry_detects_test_context(#[case] case: HasTestAncestryCase) {
         let additional_test_attributes =
             build_additional_test_attributes(case.include_custom_attribute);
 
+        let outcome = AncestryOutcome::from_detection(has_test_ancestry(
+            case.has_test_context_ancestry,
+            &attrs,
+            case.is_function_item,
+            &additional_test_attributes,
+        ));
+
         assert_eq!(
-            has_test_ancestry(
-                case.has_test_context_ancestry,
-                &attrs,
-                case.is_function_item,
-                &additional_test_attributes,
-            ),
-            case.expected,
+            outcome, case.expected,
+            "test-ancestry detection should match the expected outcome for {case:?}"
         );
     });
 }
@@ -400,7 +429,7 @@ fn has_test_ancestry_detects_test_context(#[case] case: HasTestAncestryCase) {
 #[test]
 fn meta_contains_test_cfg_any_test_doctest() {
     create_default_session_globals_then(|| {
-        assert_meta_test_cfg(build_cfg_any_test_doctest(), true);
+        assert_meta_test_cfg(&build_cfg_any_test_doctest(), true);
     });
 }
 
@@ -409,7 +438,7 @@ fn meta_contains_test_cfg_any_test_doctest() {
 #[test]
 fn meta_contains_test_cfg_all_test_unix() {
     create_default_session_globals_then(|| {
-        assert_meta_test_cfg(build_cfg_all_test_unix(), true);
+        assert_meta_test_cfg(&build_cfg_all_test_unix(), true);
     });
 }
 
@@ -418,7 +447,7 @@ fn meta_contains_test_cfg_all_test_unix() {
 #[test]
 fn meta_contains_test_cfg_not_test() {
     create_default_session_globals_then(|| {
-        assert_meta_test_cfg(build_cfg_not_test(), false);
+        assert_meta_test_cfg(&build_cfg_not_test(), false);
     });
 }
 
@@ -427,7 +456,7 @@ fn meta_contains_test_cfg_not_test() {
 #[test]
 fn meta_contains_test_cfg_attr_test_cfg_test() {
     create_default_session_globals_then(|| {
-        assert_meta_test_cfg(build_cfg_attr_test_cfg_test(), true);
+        assert_meta_test_cfg(&build_cfg_attr_test_cfg_test(), true);
     });
 }
 
@@ -436,7 +465,7 @@ fn meta_contains_test_cfg_attr_test_cfg_test() {
 #[test]
 fn meta_contains_test_cfg_attr_test_allow() {
     create_default_session_globals_then(|| {
-        assert_meta_test_cfg(build_cfg_attr_test_allow(), false);
+        assert_meta_test_cfg(&build_cfg_attr_test_allow(), false);
     });
 }
 
@@ -457,7 +486,7 @@ fn convert_attribute_handles_parsed_must_use() {
     // Should return a placeholder "parsed" path instead of panicking.
     assert_eq!(
         attribute.path().segments(),
-        &[PARSED_ATTRIBUTE_PLACEHOLDER.to_string()]
+        &[PARSED_ATTRIBUTE_PLACEHOLDER.to_owned()]
     );
     assert_eq!(attribute.kind(), AttributeKind::Outer);
 }
@@ -473,4 +502,75 @@ fn is_cfg_test_attribute_handles_parsed_must_use() {
 
     // Should return false (not a cfg(test) attribute) without panicking.
     assert!(!is_cfg_test_attribute(&parsed_attr));
+}
+
+/// Build the parsed `cfg_trace` attribute rustc leaves for an evaluated `cfg`.
+///
+/// Must be called within `create_default_session_globals_then`.
+#[cfg(feature = "dylint-driver")]
+fn cfg_trace_attribute(entry: CfgEntry) -> hir::Attribute {
+    let mut entries = thin_vec::ThinVec::new();
+    entries.push((entry, DUMMY_SP));
+    hir::Attribute::Parsed(HirAttributeKind::CfgTrace(entries))
+}
+
+/// Build a bare `cfg` name predicate such as `test`.
+#[cfg(feature = "dylint-driver")]
+fn cfg_name(name: &str) -> CfgEntry {
+    CfgEntry::NameValue {
+        name: rustc_span::Symbol::intern(name),
+        value: None,
+        span: DUMMY_SP,
+    }
+}
+
+/// Collect predicates into the list an `all` or `any` combinator holds.
+#[cfg(feature = "dylint-driver")]
+fn cfg_list(entries: &[CfgEntry]) -> thin_vec::ThinVec<CfgEntry> {
+    entries.iter().cloned().collect()
+}
+
+/// Verify that the parsed `cfg_trace` marker of an evaluated `cfg(..)` counts as
+/// test-only evidence exactly when its predicate can hold only under `cfg(test)`.
+///
+/// rustc replaces a true `#[cfg(test)]` with this marker, so a file-backed
+/// `#[cfg(test)] mod tests;` is recognized through it (leynos/whitaker#311).
+#[cfg(feature = "dylint-driver")]
+#[rstest]
+#[case::test("test", true)]
+#[case::doctest("doctest", true)]
+#[case::feature_gate("unix", false)]
+#[case::not_test_name("tests", false)]
+fn cfg_trace_of_a_single_name_is_test_only_for_test(#[case] name: &str, #[case] expected: bool) {
+    create_default_session_globals_then(|| {
+        assert_eq!(
+            is_cfg_test_attribute(&cfg_trace_attribute(cfg_name(name))),
+            expected
+        );
+    });
+}
+
+/// Verify that `all`, `any`, `not` and boolean predicates keep their polarity.
+#[cfg(feature = "dylint-driver")]
+#[test]
+fn cfg_trace_combinators_follow_their_polarity() {
+    create_default_session_globals_then(|| {
+        let test = cfg_name("test");
+        let unix = cfg_name("unix");
+        let all = |entries: &[CfgEntry]| CfgEntry::All(cfg_list(entries), DUMMY_SP);
+        let any = |entries: &[CfgEntry]| CfgEntry::Any(cfg_list(entries), DUMMY_SP);
+        let not = |entry: CfgEntry| CfgEntry::Not(Box::new(entry), DUMMY_SP);
+        let marks = |entry: CfgEntry| is_cfg_test_attribute(&cfg_trace_attribute(entry));
+
+        assert!(marks(all(&[test.clone(), unix.clone()])), "all(test, ..)");
+        assert!(!marks(all(std::slice::from_ref(&unix))), "all(unix)");
+        assert!(marks(any(&[test.clone(), test.clone()])), "any(test, test)");
+        assert!(
+            !marks(any(&[test.clone(), unix.clone()])),
+            "any(test, unix)"
+        );
+        assert!(!marks(any(&[])), "any()");
+        assert!(!marks(not(test.clone())), "not(test) is production code");
+        assert!(!marks(CfgEntry::Bool(true, DUMMY_SP)), "cfg(true)");
+    });
 }

@@ -17,6 +17,7 @@ without being governed by that rule is rejected rather than pinned by nobody.
 
 from __future__ import annotations
 
+import re
 import typing as typ
 from typing import Final
 
@@ -33,7 +34,13 @@ SETUP_RUST_PREFIX: Final[str] = "leynos/shared-actions/.github/actions/setup-rus
 #: new caller has to be added deliberately. `test_every_setup_rust_call_is_in_a
 #: _listed_workflow` is what makes the list load-bearing.
 PINNED_WORKFLOWS: Final[frozenset[str]] = frozenset(
-    {"ci.yml", "coverage-main.yml", "release.yml", "rolling-release.yml"}
+    {
+        "ci.yml",
+        "coverage-main.yml",
+        "nextest-split-benchmark.yml",
+        "release.yml",
+        "rolling-release.yml",
+    }
 )
 
 
@@ -84,14 +91,22 @@ def test_every_listed_workflow_calls_setup_rust() -> None:
     )
 
 
+def test_the_pin_is_a_full_commit_sha() -> None:
+    """A tag or branch can move; only a 40-character SHA names one revision."""
+    assert re.fullmatch(r"[0-9a-f]{40}", SHARED_ACTIONS_REF), (
+        f"setup-rust must be pinned by a full 40-character SHA, got {SHARED_ACTIONS_REF!r}"
+    )
+
+
 @pytest.mark.parametrize("workflow", sorted(PINNED_WORKFLOWS))
-def test_each_workflow_pins_the_reviewed_revision(workflow: str) -> None:
-    """One revision, asserted by value, across every lane."""
+def test_each_workflow_pins_the_same_revision(workflow: str) -> None:
+    """One revision across every lane: the one `ci.yml` pins."""
     mismatched = [
         (workflow_name, job_name, reference)
         for workflow_name, job_name, reference in _setup_rust_uses()
         if workflow_name == workflow and reference != SHARED_ACTIONS_REF
     ]
     assert not mismatched, (
-        f"{workflow} must pin {SHARED_ACTIONS_REF}; found {mismatched}"
+        f"{workflow} must pin the same revision as ci.yml, {SHARED_ACTIONS_REF}; "
+        f"found {mismatched}"
     )

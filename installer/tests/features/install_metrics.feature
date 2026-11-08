@@ -9,8 +9,8 @@ Feature: Installer metrics recording
     Then total installs is 1
     And download installs is 1
     And build installs is 0
-    And download rate is 1.0
-    And build rate is 0.0
+    And download rate is 1000 permille
+    And build rate is 0 permille
     And total installation time is 1200 milliseconds
     And summary line contains "download 1/1 (100.0%)"
     And summary line contains "build 0/1 (0.0%)"
@@ -21,8 +21,8 @@ Feature: Installer metrics recording
     Then total installs is 1
     And download installs is 0
     And build installs is 1
-    And download rate is 0.0
-    And build rate is 1.0
+    And download rate is 0 permille
+    And build rate is 1000 permille
     And total installation time is 900 milliseconds
     And summary line contains "download 0/1 (0.0%)"
     And summary line contains "build 1/1 (100.0%)"
@@ -34,8 +34,8 @@ Feature: Installer metrics recording
     Then total installs is 2
     And download installs is 1
     And build installs is 1
-    And download rate is 0.5
-    And build rate is 0.5
+    And download rate is 500 permille
+    And build rate is 500 permille
     And total installation time is 3000 milliseconds
     And summary line contains "download 1/2 (50.0%)"
     And summary line contains "build 1/2 (50.0%)"
@@ -57,5 +57,5 @@ Feature: Installer metrics recording
   Scenario: Zero-state rates are zero
     Given an in-memory zero metrics aggregate
     When download and build rates are calculated
-    Then download rate is 0.0
-    And build rate is 0.0
+    Then download rate is 0 permille
+    And build rate is 0 permille

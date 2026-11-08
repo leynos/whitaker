@@ -117,12 +117,12 @@ pub fn whk003_rule() -> ReportingDescriptor {
 /// assert_eq!(rules.len(), 3);
 /// ```
 #[must_use]
-pub fn all_rules() -> Vec<ReportingDescriptor> {
-    vec![whk001_rule(), whk002_rule(), whk003_rule()]
-}
+pub fn all_rules() -> Vec<ReportingDescriptor> { vec![whk001_rule(), whk002_rule(), whk003_rule()] }
 
 #[cfg(test)]
 mod tests {
+    //! Behavioural tests for SARIF rule registration and lookup.
+
     use super::*;
 
     #[test]

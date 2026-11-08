@@ -1,0 +1,22 @@
+# The Clippy Git history Whitaker publishes for Dylint's driver build.
+#
+# Dylint selects the Clippy revision that matches a dated nightly by walking
+# the first-parent history of the repository named by `DYLINT_CLIPPY_REPO`
+# back from its `HEAD`. Whitaker pins that history here and publishes it as
+# `whitaker-clippy-snapshot-<commit>.bundle` with a `.sha256` sidecar, so no
+# driver build ever reads mutable public Clippy history.
+#
+# Re-pinning means changing `commit` (and, when the nightly moves,
+# `toolchain` and `selected_revision`) together, then publishing the new
+# bundle. `docs/developers-guide.md` records the runbook.
+schema_version = 1
+upstream = "https://github.com/rust-lang/rust-clippy"
+branch = "main"
+# Tip of Clippy `main` on 2026-10-28, after the `master` to `main` rename.
+commit = "e4608a25c2e20116fbc1e97a51a73f094a1db7a1"
+# The nightly pinned in `rust-toolchain.toml`.
+toolchain = "nightly-2026-05-28"
+# The revision Dylint 6.3.0 selects for `toolchain` from `commit`'s history:
+# "Rustup (#17109)", the commit that moved Clippy to `nightly-2026-05-28`.
+selected_revision = "9fca3bc9fc2bc83c60bde26d18ed68f11564b228"
+dylint_version = "6.3.0"

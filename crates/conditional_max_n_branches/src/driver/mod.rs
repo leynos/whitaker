@@ -1,0 +1,377 @@
+//! Detect conditionals that exceed the configured number of predicate branches.
+//!
+//! The lint counts boolean branches within `if`, `while`, and `match` guard
+//! predicates, flagging expressions that involve more than the configured
+//! number of short-circuit branches. Diagnostics are localized through the
+//! shared Fluent bundles so helper text stays consistent with other lints.
+
+use std::borrow::Cow;
+
+use fluent_templates::fluent_bundle::FluentValue;
+use log::debug;
+use rustc_hir as hir;
+use rustc_hir::{BinOpKind, ExprKind, LoopSource, UnOp};
+use rustc_lint::{LateContext, LateLintPass, LintContext};
+use rustc_span::{DesugaringKind, Span};
+use serde::Deserialize;
+use whitaker::SharedConfig;
+use whitaker_common::{
+    Arguments,
+    FALLBACK_LOCALE,
+    Localizer,
+    MessageResolution,
+    branch_phrase,
+    get_localizer_for_lint,
+    i18n::{DiagnosticMessageSet, MessageKey},
+    noop_reporter,
+    safe_resolve_message_set,
+};
+
+mod numeric;
+use self::numeric::diagnostic_integer_argument;
+
+const LINT_NAME: &str = "conditional_max_n_branches";
+const MESSAGE_KEY: MessageKey<'static> = MessageKey::new(LINT_NAME);
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
+#[serde(default, deny_unknown_fields)]
+struct Config {
+    #[serde(default = "Config::default_max_branches")]
+    max_branches: usize,
+}
+
+impl Config {
+    const fn default_max_branches() -> usize { 2 }
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            max_branches: Self::default_max_branches(),
+        }
+    }
+}
+
+/// Lint pass enforcing predicate branch limits.
+pub struct ConditionalMaxNBranches {
+    max_branches: usize,
+    localizer: Localizer,
+}
+
+impl Default for ConditionalMaxNBranches {
+    fn default() -> Self {
+        Self {
+            max_branches: Config::default().max_branches,
+            localizer: Localizer::new(None),
+        }
+    }
+}
+
+mod registration {
+    //! Provides the public Dylint registration for this lint.
+    //!
+    //! The `dylint_linting::impl_late_lint!` macro generates undocumented
+    //! public registration items, so its expansion is scoped to this private
+    //! module and only the documented lint static is re-exported.
+    #![expect(
+        missing_docs,
+        reason = "dylint_linting macro expansion emits items with no documentable source location"
+    )]
+
+    use super::ConditionalMaxNBranches;
+
+    dylint_linting::impl_late_lint! {
+        /// Lint flagging conditionals whose predicate exceeds the configured
+        /// number of short-circuit branches.
+        pub CONDITIONAL_MAX_N_BRANCHES,
+        Warn,
+        "complex conditionals should be decomposed when they exceed the configured branch limit",
+        ConditionalMaxNBranches::default()
+    }
+}
+
+pub use registration::CONDITIONAL_MAX_N_BRANCHES;
+
+impl<'tcx> LateLintPass<'tcx> for ConditionalMaxNBranches {
+    fn check_crate(&mut self, _cx: &LateContext<'tcx>) {
+        self.max_branches = load_configuration().max_branches.max(1);
+        let shared_config = SharedConfig::load();
+        self.localizer = get_localizer_for_lint(LINT_NAME, shared_config.locale());
+    }
+
+    fn check_expr(&mut self, cx: &LateContext<'tcx>, expr: &'tcx hir::Expr<'tcx>) {
+        match expr.kind {
+            ExprKind::If(cond, ..) => {
+                if expr.span.desugaring_kind() == Some(DesugaringKind::WhileLoop) {
+                    return;
+                }
+                self.inspect_condition(cx, ConditionKind::If, cond);
+            }
+            ExprKind::Loop(block, _, LoopSource::While, _) => {
+                if let Some(cond) = extract_while_condition(block) {
+                    self.inspect_condition(cx, ConditionKind::While, cond);
+                }
+            }
+            ExprKind::Match(_, arms, _) => self.inspect_match_guards(cx, arms),
+            _ => {}
+        }
+    }
+}
+
+fn load_configuration() -> Config {
+    match dylint_linting::config::<Config>(LINT_NAME) {
+        Ok(Some(config)) => config,
+        Ok(None) => Config::default(),
+        Err(error) => {
+            debug!(
+                target: LINT_NAME,
+                "failed to parse `{LINT_NAME}` configuration: {error}; using defaults"
+            );
+            Config::default()
+        }
+    }
+}
+
+impl ConditionalMaxNBranches {
+    fn inspect_condition(&self, cx: &LateContext<'_>, kind: ConditionKind, expr: &hir::Expr<'_>) {
+        if matches!(expr.kind, ExprKind::Let(..)) {
+            return;
+        }
+
+        let branches = count_branches(expr);
+        if evaluate_condition(branches, self.max_branches) == ConditionDisposition::WithinLimit {
+            return;
+        }
+
+        let metadata = ConditionMetadata {
+            kind,
+            span: expr.span,
+            branches,
+        };
+        emit_diagnostic(cx, &metadata, self.max_branches, &self.localizer);
+    }
+
+    fn inspect_match_guards(&self, cx: &LateContext<'_>, arms: &[hir::Arm<'_>]) {
+        for arm in arms {
+            if let Some(expr) = arm.guard {
+                self.inspect_condition(cx, ConditionKind::MatchGuard, expr);
+            }
+        }
+    }
+}
+
+fn extract_while_condition<'hir>(block: &'hir hir::Block<'hir>) -> Option<&'hir hir::Expr<'hir>> {
+    let expr = block.expr?;
+    if let ExprKind::If(cond, ..) = expr.kind {
+        Some(cond)
+    } else {
+        None
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ConditionDisposition {
+    WithinLimit,
+    ExceedsLimit,
+}
+
+const fn evaluate_condition(branches: usize, limit: usize) -> ConditionDisposition {
+    if branches > limit {
+        ConditionDisposition::ExceedsLimit
+    } else {
+        ConditionDisposition::WithinLimit
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+struct ConditionMetadata {
+    kind: ConditionKind,
+    span: Span,
+    branches: usize,
+}
+
+#[derive(Clone, Copy, Debug)]
+enum ConditionKind {
+    If,
+    While,
+    MatchGuard,
+}
+
+impl ConditionKind {
+    const fn display_name(self) -> &'static str {
+        match self {
+            Self::If => "if condition",
+            Self::While => "while condition",
+            Self::MatchGuard => "match guard",
+        }
+    }
+}
+
+/// Count logical branches, treating `&&` and `||` as sums of their operands.
+///
+/// Negation, blocks, and `if` expressions are transparent; every other
+/// expression contributes one branch.
+fn count_branches(expr: &hir::Expr<'_>) -> usize {
+    match expr.kind {
+        ExprKind::Binary(op, lhs, rhs) if matches!(op.node, BinOpKind::And | BinOpKind::Or) => {
+            count_branches(lhs) + count_branches(rhs)
+        }
+        ExprKind::Unary(UnOp::Not, inner) | ExprKind::DropTemps(inner) => count_branches(inner),
+        ExprKind::Block(block, _) => block.expr.map_or(1, count_branches),
+        ExprKind::If(cond, ..) => count_branches(cond),
+        _ => 1,
+    }
+}
+
+/// Emit the localized branch-count diagnostic for one condition.
+///
+/// Counts are saturated to Fluent's signed 64-bit range, and missing
+/// translations fall back to the built-in English message set.
+fn emit_diagnostic(
+    cx: &LateContext<'_>,
+    metadata: &ConditionMetadata,
+    limit: usize,
+    localizer: &Localizer,
+) {
+    let args = diagnostic_arguments(metadata.kind, metadata.branches, limit, localizer);
+
+    let resolution = MessageResolution {
+        lint_name: LINT_NAME,
+        key: MESSAGE_KEY,
+        args: &args,
+    };
+    let messages = safe_resolve_message_set(localizer, resolution, noop_reporter, || {
+        fallback_messages(metadata.kind, metadata.branches, limit)
+    });
+
+    let primary = normalize_isolation_marks(messages.primary());
+    let note = normalize_isolation_marks(messages.note());
+    let help = normalize_isolation_marks(messages.help());
+
+    cx.emit_span_lint(
+        CONDITIONAL_MAX_N_BRANCHES,
+        metadata.span,
+        rustc_lint::errors::DiagDecorator(move |lint| {
+            lint.primary_message(primary);
+            lint.span_note(metadata.span, note);
+            lint.help(help);
+        }),
+    );
+}
+
+/// Build the production branch-count and limit arguments for a diagnostic.
+fn diagnostic_arguments(
+    kind: ConditionKind,
+    branches: usize,
+    limit: usize,
+    localizer: &Localizer,
+) -> Arguments<'static> {
+    let mut args: Arguments<'static> = Arguments::default();
+    args.insert(
+        Cow::Borrowed("name"),
+        FluentValue::from(kind.display_name()),
+    );
+    args.insert(
+        Cow::Borrowed("branches"),
+        FluentValue::from(diagnostic_integer_argument(branches)),
+    );
+    args.insert(
+        Cow::Borrowed("limit"),
+        FluentValue::from(diagnostic_integer_argument(limit)),
+    );
+    let branch_phrase_text = branch_phrase(localizer.locale(), branches);
+    args.insert(
+        Cow::Borrowed("branch_phrase"),
+        FluentValue::String(Cow::Owned(branch_phrase_text)),
+    );
+    let limit_phrase_text = branch_phrase(localizer.locale(), limit);
+    args.insert(
+        Cow::Borrowed("limit_phrase"),
+        FluentValue::String(Cow::Owned(limit_phrase_text)),
+    );
+    args
+}
+
+/// Replace injected bidi isolates and replacement characters in diagnostics.
+///
+/// Each such character becomes a double quote; text without these characters
+/// is returned unchanged apart from allocating the owned result.
+fn normalize_isolation_marks(text: &str) -> String {
+    if text
+        .chars()
+        .any(|character| matches!(character, '\u{2068}' | '\u{2069}' | '\u{FFFD}'))
+    {
+        text.chars()
+            .map(|character| match character {
+                '\u{2068}' | '\u{2069}' | '\u{FFFD}' => '"',
+                other => other,
+            })
+            .collect()
+    } else {
+        text.to_owned()
+    }
+}
+
+/// Build the built-in English diagnostic messages for a condition.
+///
+/// The branch and limit values are rendered as locale-aware English phrases
+/// when no translated message is available.
+fn fallback_messages(kind: ConditionKind, branches: usize, limit: usize) -> DiagnosticMessageSet {
+    let branch_phrase_text = branch_phrase(FALLBACK_LOCALE, branches);
+    let limit_phrase_text = branch_phrase(FALLBACK_LOCALE, limit);
+    let primary = format!(
+        "Collapse the {} to {} or fewer.",
+        kind.display_name(),
+        limit_phrase_text
+    );
+    let note = format!(
+        "The {} currently contains {branch_phrase_text}.",
+        kind.display_name()
+    );
+    let help = format!(
+        "Extract helper functions or simplify the {} to reduce branching.",
+        kind.display_name()
+    );
+
+    DiagnosticMessageSet::new(primary, note, help)
+}
+
+#[cfg(test)]
+mod tests {
+    //! Verify branch thresholds and the production diagnostic argument path.
+
+    use rstest::rstest;
+
+    use super::*;
+
+    /// Verify branch counts below, at, and above the configured limit.
+    #[rstest]
+    #[case(1, 2, ConditionDisposition::WithinLimit)]
+    #[case(2, 2, ConditionDisposition::WithinLimit)]
+    #[case(3, 2, ConditionDisposition::ExceedsLimit)]
+    fn evaluate_condition_respects_limit(
+        #[case] branches: usize,
+        #[case] limit: usize,
+        #[case] expected: ConditionDisposition,
+    ) {
+        assert_eq!(evaluate_condition(branches, limit), expected);
+    }
+
+    /// Verify oversized branch counts saturate before Fluent argument creation.
+    #[cfg(target_pointer_width = "64")]
+    #[test]
+    fn diagnostic_arguments_saturate_oversized_branch_counts() {
+        let oversized = usize::try_from(u64::try_from(i64::MAX).expect("i64 max fits u64") + 1)
+            .expect("oversized branch count fits usize");
+        let localizer = Localizer::new(None);
+
+        let args = diagnostic_arguments(ConditionKind::If, oversized, oversized, &localizer);
+
+        assert_eq!(args.get("branches"), Some(&FluentValue::from(i64::MAX)));
+        assert_eq!(args.get("limit"), Some(&FluentValue::from(i64::MAX)));
+    }
+}
+
+#[cfg(test)]
+#[path = "../tests/behaviour.rs"]
+mod behaviour;

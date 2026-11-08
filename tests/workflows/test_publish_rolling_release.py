@@ -16,6 +16,7 @@ whether a delete was sent.
 
 from __future__ import annotations
 
+import json
 import os
 import stat
 import subprocess
@@ -40,6 +41,17 @@ if [[ "$1 $2" == "release view" ]]; then
     fi
     if [[ -n "${PUBLISHED_NAMES}" ]]; then
         printf '%s\\n' ${PUBLISHED_NAMES}
+    fi
+fi
+if [[ "$1 $2" == "release download" ]]; then
+    [[ "${DOWNLOAD_FAILS:-}" == "true" ]] && exit 1
+    # The manifests currently on the release, written where --dir points.
+    while [[ $# -gt 0 ]]; do
+        [[ "$1" == "--dir" ]] && dir="$2"
+        shift
+    done
+    if [[ -n "${RELEASE_MANIFESTS:-}" && -d "${RELEASE_MANIFESTS}" ]]; then
+        cp "${RELEASE_MANIFESTS}"/*.json "${dir}"/
     fi
 fi
 exit 0
@@ -77,7 +89,10 @@ def publish(tmp_path: Path, repo_root: Path) -> typ.Callable[..., PublishRun]:
         local_assets: list[str],
         published: list[str],
         release_exists: bool = True,
+        release_manifests: dict[str, dict[str, str]] | None = None,
+        download_fails: bool = False,
     ) -> PublishRun:
+        """Run the publish script against a stubbed gh and return what it did."""
         workspace = tmp_path / "workspace"
         dist = workspace / "dist"
         dist.mkdir(parents=True, exist_ok=True)
@@ -88,6 +103,12 @@ def publish(tmp_path: Path, repo_root: Path) -> typ.Callable[..., PublishRun]:
         for name in local_assets:
             (dist / name).write_text("payload", encoding="utf-8")
         log.write_text("", encoding="utf-8")
+        manifest_dir = tmp_path / "release-manifests"
+        manifest_dir.mkdir(exist_ok=True)
+        for old in manifest_dir.glob("*.json"):
+            old.unlink()
+        for name, fields in (release_manifests or {}).items():
+            (manifest_dir / name).write_text(json.dumps(fields), encoding="utf-8")
 
         result = subprocess.run(  # noqa: S603 - fixed argument vector
             ["bash", str(repo_root / SCRIPT)],  # noqa: S607 - PATH lookup intended
@@ -101,6 +122,8 @@ def publish(tmp_path: Path, repo_root: Path) -> typ.Callable[..., PublishRun]:
                 "GH_LOG": str(log),
                 "RELEASE_EXISTS": "true" if release_exists else "false",
                 "PUBLISHED_NAMES": " ".join(published),
+                "RELEASE_MANIFESTS": str(manifest_dir),
+                "DOWNLOAD_FAILS": "true" if download_fails else "false",
                 "GITHUB_REPOSITORY": "leynos/whitaker",
                 "RELEASE_SHA": "0123456789abcdef0123456789abcdef01234567",
                 "RELEASE_SHORT_SHA": "0123456",
@@ -238,30 +261,25 @@ def test_manifests_are_replaced_after_the_archives_they_name(
     )
 
 
-def test_the_tag_moves_after_every_upload(
+def test_the_tag_is_never_moved_and_clean_up_still_runs(
     publish: typ.Callable[..., PublishRun],
 ) -> None:
-    """A consumer resolving the tag must find everything the tag promises."""
+    """Publishing leaves the tag alone and still removes superseded archives.
+
+    Moving the tag needed a token that may update a ref onto commits touching
+    workflow files, so it failed with HTTP 403 and, running before the
+    clean-up, left stale archives behind. Installs read assets through the
+    release, and the manifest records the built commit.
+    """
     run = publish(
         local_assets=["whitaker-lints-0123456-linux.tar.zst", "manifest-linux.json"],
         published=["whitaker-lints-old1234-linux.tar.zst", "manifest-linux.json"],
     )
 
     assert run.returncode == 0, run.stdout
-    tag_moves = [
-        index
-        for index, command in enumerate(run.commands)
-        if "git/refs/tags/rolling" in command
-    ]
-    assert len(tag_moves) == 1, "the tag must move exactly once"
-    uploads = [
-        index
-        for index, command in enumerate(run.commands)
-        if "release upload" in command
-    ]
-    assert uploads, "no upload was recorded, so the ordering proves nothing"
-    assert max(uploads) < tag_moves[0], (
-        "the tag moved while assets were still being uploaded"
+    assert not run.matching("git/refs"), "the tag must never be moved"
+    assert run.matching("delete-asset", "whitaker-lints-old1234-linux.tar.zst"), (
+        "the superseded archive must be removed in the same publish"
     )
 
 
@@ -317,16 +335,10 @@ def test_an_empty_asset_list_refuses_to_publish(
     assert not run.matching("release upload")
 
 
-def test_the_tag_moves_even_when_the_release_is_absent(
+def test_a_new_release_is_created_at_the_published_commit_without_moving_a_tag(
     publish: typ.Callable[..., PublishRun],
 ) -> None:
-    """A deleted release can leave its tag behind at an older commit.
-
-    `gh release create` binds to an existing tag rather than repointing it, so
-    without an explicit move the tag would sit at the previous commit while the
-    release notes named this one, and every consumer would fetch the wrong
-    generation while the run reported success.
-    """
+    """The bootstrap path names its commit at creation and moves nothing."""
     run = publish(
         local_assets=["whitaker-lints-0123456-linux.tar.zst", "manifest-linux.json"],
         published=[],
@@ -334,16 +346,10 @@ def test_the_tag_moves_even_when_the_release_is_absent(
     )
 
     assert run.returncode == 0, run.stdout
-    moves = run.matching("git/refs/tags/rolling")
-    assert len(moves) == 1, "the bootstrap path must move the tag exactly once"
-    creation = next(
-        index
-        for index, command in enumerate(run.commands)
-        if "release create" in command
-    )
-    assert creation < run.commands.index(moves[0]), (
-        "the tag must be repointed after the release binds to it"
-    )
+    assert not run.matching("git/refs"), "the tag must never be moved"
+    creation = run.matching("release create")
+    assert len(creation) == 1
+    assert "--target" in creation[0]
 
 
 def test_a_rebuilt_archive_never_disagrees_with_its_checksum(
@@ -381,4 +387,159 @@ def test_a_rebuilt_archive_never_disagrees_with_its_checksum(
     assert withdrawal_index < archive_upload < checksum_upload, (
         "the order must be withdraw the checksum, replace the archive, then "
         f"publish the new checksum; got {run.commands}"
+    )
+
+
+SNAPSHOT: str = "whitaker-clippy-snapshot-e4608a25c2e20116fbc1e97a51a73f094a1db7a1.bundle"
+
+
+def test_a_published_clippy_snapshot_is_never_replaced(
+    publish: typ.Callable[..., PublishRun],
+) -> None:
+    """A rebuilt snapshot under a published name leaves the original alone.
+
+    Bundles are content-identical under one name but not byte-identical, so
+    replacing one would change its digest under an installer mid-download.
+    """
+    run = publish(
+        local_assets=[
+            "whitaker-lints-0123456-linux.tar.zst",
+            "manifest-linux.json",
+            SNAPSHOT,
+            f"{SNAPSHOT}.sha256",
+        ],
+        published=["manifest-linux.json", SNAPSHOT, f"{SNAPSHOT}.sha256"],
+    )
+
+    assert run.returncode == 0, run.stdout
+    assert not run.matching(SNAPSHOT), "no command may touch a published snapshot"
+
+
+def test_a_new_clippy_snapshot_uploads_without_clobbering(
+    publish: typ.Callable[..., PublishRun],
+) -> None:
+    """A snapshot for a new pin is an ordinary new asset."""
+    run = publish(
+        local_assets=["manifest-linux.json", SNAPSHOT, f"{SNAPSHOT}.sha256"],
+        published=["manifest-linux.json"],
+    )
+
+    assert run.returncode == 0, run.stdout
+    uploads = run.matching("release upload", SNAPSHOT)
+    assert uploads, "the new snapshot must be uploaded"
+    assert not any("--clobber" in command for command in uploads)
+
+
+def test_snapshots_for_older_pins_are_retained(
+    publish: typ.Callable[..., PublishRun],
+) -> None:
+    """Installers built before a re-pin still download their own snapshot."""
+    older = "whitaker-clippy-snapshot-0000000000000000000000000000000000000001.bundle"
+    run = publish(
+        local_assets=["manifest-linux.json", SNAPSHOT, f"{SNAPSHOT}.sha256"],
+        published=["manifest-linux.json", older, f"{older}.sha256"],
+    )
+
+    assert run.returncode == 0, run.stdout
+    assert not run.matching("delete-asset", older), "an older snapshot must stay"
+
+
+def test_a_rebuilt_snapshot_sidecar_is_not_paired_with_a_published_bundle(
+    publish: typ.Callable[..., PublishRun],
+) -> None:
+    """A rebuilt bundle's checksum must never sit beside a different bundle.
+
+    Bundles are content-identical but not byte-identical, so after an
+    interrupted publication left only the bundle, a rebuild's sidecar would
+    give consumers a permanent checksum mismatch.
+    """
+    run = publish(
+        local_assets=["manifest-linux.json", SNAPSHOT, f"{SNAPSHOT}.sha256"],
+        published=["manifest-linux.json", SNAPSHOT],
+    )
+
+    assert run.returncode != 0, run.stdout
+    assert "refusing to pair" in run.stdout
+    assert not run.matching("release upload", f"{SNAPSHOT}.sha256")
+
+
+def test_a_sidecar_derived_from_the_published_bundle_joins_it(
+    publish: typ.Callable[..., PublishRun],
+) -> None:
+    """A repaired sidecar, staged without a bundle, completes the pair."""
+    run = publish(
+        local_assets=["manifest-linux.json", f"{SNAPSHOT}.sha256"],
+        published=["manifest-linux.json", SNAPSHOT],
+    )
+
+    assert run.returncode == 0, run.stdout
+    assert run.matching("release upload", f"{SNAPSHOT}.sha256")
+    assert not run.matching("delete-asset", SNAPSHOT)
+
+
+def test_a_failed_leg_keeps_the_archive_its_old_manifest_still_names(
+    publish: typ.Callable[..., PublishRun],
+) -> None:
+    """Partial publication must not strand a target on a missing archive.
+
+    The linux leg built; the darwin leg failed, so no new darwin archive or
+    manifest is published and the old darwin manifest stays on the release,
+    still naming the old darwin archive. Only the replaced linux archive goes.
+    """
+    old_linux = "whitaker-lints-old1234-nightly-2026-05-28-x86_64-unknown-linux-gnu.tar.zst"
+    old_darwin = "whitaker-lints-old1234-nightly-2026-05-28-aarch64-apple-darwin.tar.zst"
+    new_linux = "whitaker-lints-0123456-nightly-2026-05-28-x86_64-unknown-linux-gnu.tar.zst"
+    run = publish(
+        local_assets=[new_linux, "manifest-x86_64-unknown-linux-gnu.json"],
+        published=[
+            old_linux,
+            old_darwin,
+            "manifest-x86_64-unknown-linux-gnu.json",
+            "manifest-aarch64-apple-darwin.json",
+        ],
+        release_manifests={
+            "manifest-x86_64-unknown-linux-gnu.json": {
+                "git_sha": "0123456",
+                "toolchain": "nightly-2026-05-28",
+                "target": "x86_64-unknown-linux-gnu",
+            },
+            "manifest-aarch64-apple-darwin.json": {
+                "git_sha": "old1234",
+                "toolchain": "nightly-2026-05-28",
+                "target": "aarch64-apple-darwin",
+            },
+        },
+    )
+
+    assert run.returncode == 0, run.stdout
+    assert run.matching("delete-asset", old_linux), "the replaced archive must go"
+    assert not run.matching("delete-asset", old_darwin), (
+        "an archive that a manifest still on the release names must be kept"
+    )
+
+
+@pytest.mark.parametrize(
+    ("download_fails", "manifests"),
+    [
+        pytest.param(True, {}, id="download-fails"),
+        pytest.param(False, {"manifest-x.json": {"git_sha": "abc"}}, id="malformed-manifest"),
+    ],
+)
+def test_cleanup_deletes_nothing_when_the_manifests_cannot_be_read(
+    publish: typ.Callable[..., PublishRun],
+    download_fails: bool,
+    manifests: dict[str, dict[str, str]],
+) -> None:
+    """An incomplete reference list must never let cleanup delete an archive."""
+    old = "whitaker-lints-old1234-nightly-2026-05-28-aarch64-apple-darwin.tar.zst"
+    run = publish(
+        local_assets=["whitaker-lints-0123456-linux.tar.zst", "manifest-linux.json"],
+        published=[old, "manifest-aarch64-apple-darwin.json"],
+        release_manifests=manifests,
+        download_fails=download_fails,
+    )
+
+    assert run.returncode != 0, run.stdout
+    assert not run.matching("delete-asset", "whitaker-lints-"), (
+        "a lint archive was deleted although the manifests could not be read"
     )

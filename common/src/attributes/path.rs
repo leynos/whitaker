@@ -7,8 +7,11 @@ pub type AttributePath = SimplePath;
 
 #[cfg(test)]
 mod tests {
-    use super::AttributePath;
+    //! Tests for `AttributePath` segment matching and comparison.
+
     use rstest::rstest;
+
+    use super::AttributePath;
 
     #[rstest]
     fn parses_paths() {

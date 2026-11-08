@@ -26,19 +26,30 @@ libraries = [
 ]
 ```
 
-Then run:
+Install the standalone installer and let it set up the lints and their Dylint
+bootstrap, then run the lints through it:
 
 ```sh
-cargo dylint --all
+cargo install whitaker-installer
+whitaker-installer
+whitaker --all
 ```
+
+With [cargo-binstall](https://github.com/cargo-bins/cargo-binstall) installed,
+`cargo binstall whitaker-installer` fetches the prebuilt installer instead.
+
+`whitaker` is shorthand for `whitaker-installer run -- --all`, which supplies
+the verified Clippy snapshot and driver directory Dylint needs. Plain
+`cargo dylint --all` does not use them and would try to clone public Clippy; see
+[Running the lints directly](docs/users-guide.md#running-the-lints-directly).
 
 For version pinning, installation details, and configuration options, see the
 [User's Guide](docs/users-guide.md).
 
 ## The Lints
 
-Whitaker currently ships nine standard lints plus one experimental lint that
-requires explicit opt-in.
+Whitaker currently ships nine standard lints plus two experimental lints that
+require explicit opt-in.
 
 | Lint                          | What it does                                                                                                           |
 | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
@@ -52,9 +63,11 @@ requires explicit opt-in.
 | `no_unwrap_or_else_panic`     | Catches sneaky panics hidden inside `unwrap_or_else` closures. If you're going to panic, at least be upfront about it. |
 | `no_std_fs_operations`        | Forbids `std::fs` operations, nudging you toward capability-based filesystem access via `cap_std`.                     |
 
-Experimental lints are not enabled by default. The current experimental lint is
-`rstest_helper_should_be_fixture`, which is available only when installer and
-suite flows opt in with `--experimental` or the corresponding suite feature.
+Experimental lints are not enabled by default. The current experimental lints
+are `rstest_helper_should_be_fixture` and `string_continuation_style` (flags
+source-line joins hiding a fragment boundary inside one literal, and suggests
+`concat!()` instead). They are available only when installer and suite flows
+opt in with `--experimental` or the corresponding suite feature.
 
 ## Features
 

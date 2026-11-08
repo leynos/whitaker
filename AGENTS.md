@@ -149,23 +149,52 @@ project:
     0.6.0 or later on `PATH`; Markdown linting runs through
     `make markdownlint` locally and the pinned markdownlint-cli2 action in
     CI.
-  - `make lint` executes:
+  - `make lint` first runs `make interrogate`, which needs `uv` and fails on any
+    Python definition under `installer/scripts`, `scripts` and `tests` without a
+    docstring (and on any `MISSED` row, since interrogate rounds its percentage
+    to one decimal; `tests/workflow_contracts/interrogate_gate_test.py` asserts
+    the wiring), and then executes:
 
     ```sh
-    cargo clippy --workspace --all-targets --all-features -- -D warnings
+    RUSTDOCFLAGS="--cfg docsrs -D warnings" cargo doc --workspace --no-deps
+    cargo clippy --workspace --lib --bins --tests --benches --all-features \
+        -- -D warnings
+    RUSTFLAGS="-D warnings" whitaker --lib whitaker_suite -- \
+        -p whitaker-common -p whitaker-installer -p whitaker_clones_core \
+        -p whitaker_sarif --all-targets --all-features
     ```
 
     linting every target with all features enabled and denying all Clippy
-    warnings.
-  - `make test` executes:
+    warnings. The Dylint lint crates keep their UI fixtures under `examples/`
+    because `dylint_testing::Test::example` builds them with each crate's
+    dev-dependencies, which standalone `ui/` fixtures cannot carry. Each
+    fixture scopes the diagnostics its own anti-pattern raises with a
+    narrowly targeted `#[expect(..., reason = "...")]`, so the workspace
+    policy still applies to every other line. `make lint-clippy` runs the
+    rustdoc and Clippy subset; `make lint-whitaker` additionally runs the
+    Whitaker Dylint suite over the support crates (install via
+    `cargo install whitaker-installer && whitaker-installer`).
+  - `make test` executes `cargo nextest run` over the CI crate subset and
+    then the workspace doctests:
 
     ```sh
-    cargo test --workspace
+    RUSTFLAGS="-D warnings" cargo test --workspace --doc --all-features \
+      --exclude rustc_ast --exclude rustc_attr_data_structures \
+      --exclude rustc_hir --exclude rustc_lint --exclude rustc_middle \
+      --exclude rustc_session --exclude rustc_span --exclude whitaker \
+      --exclude rstest_helper_should_be_fixture \
+      --exclude bumpy_road_function --exclude conditional_max_n_branches \
+      --exclude function_attrs_follow_docs --exclude module_max_lines \
+      --exclude module_must_have_inner_docs --exclude no_expect_outside_tests \
+      --exclude test_must_not_have_example --exclude no_std_fs_operations \
+      --exclude no_unwrap_or_else_panic --exclude whitaker_suite
     ```
 
-    running the full workspace test suite. Use `make fmt`
-    (`cargo fmt --workspace`) to apply formatting fixes reported by the
-    formatter check.
+    running the workspace doctests for every package except those named in
+    `DOCTEST_EXCLUDES`. The excluded crates need `rustc_private` plumbing that
+    a doctest crate cannot link, so their examples are covered by the unit and
+    UI suites instead. Use `make fmt` (`cargo fmt --workspace`) to apply
+    formatting fixes reported by the formatter check.
 - Clippy warnings MUST be disallowed.
 - Fix any warnings emitted during tests in the code itself rather than
   silencing them.
@@ -335,13 +364,22 @@ project:
 - Use GitHub-flavoured Markdown footnotes (`[^1]`) for references and
   footnotes.
 
-## Spelling policy
+<!-- typos-config-builder:agents-md:start -->
 
-- Enforce en-GB-oxendict spelling with `make spelling`. `make markdownlint`
-  runs the same gate.
-- `typos.toml` is regenerated on every run from the live shared dictionary and
-  the `typos.local.toml` overlay. Never edit generated entries by hand; add
-  narrow repository-specific entries to `typos.local.toml` instead.
+## Spelling
+
+- `make spelling` runs the pinned `typos-config-builder gate`, which
+  regenerates `typos.toml` from the shared en-GB-oxendict dictionary and
+  `typos.local.toml`, then checks spelling and the shared phrase corrections.
+- `typos.toml` is generated: never edit it by hand. Put narrow
+  repository-specific exceptions in `typos.local.toml`, as exact or full-line
+  patterns rather than bare accepted words.
+- When `make spelling` changes `typos.toml`, commit the regenerated file. If
+  the change is unrelated to your work, commit it in a separate base pull
+  request and stack your branch on it, so each review diff stays focused.
+
+<!-- typos-config-builder:agents-md:end -->
+
 - The gate refreshes the untracked shared dictionary cache only when the
   authoritative copy is newer, so a valid cache remains usable offline.
 - Preserve external APIs, identifiers, fixtures, snapshots, formal names and

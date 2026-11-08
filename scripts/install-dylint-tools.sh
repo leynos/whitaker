@@ -69,7 +69,7 @@ toolchain=${5:-}
 
 # The single release whose archive digests are pinned below. Bumping the
 # tool versions means bumping this constant and every digest with it.
-pinned_release_version=6.0.1
+pinned_release_version=6.3.0
 release_base_url=https://github.com/trailofbits/dylint/releases/download
 
 fail() {
@@ -92,20 +92,20 @@ resolve_target() {
     esac
 }
 
-# Digests for the v6.0.1 archives, verified by download on 2026-09-03.
+# Digests for the v6.3.0 archives, verified by download on 2026-10-28.
 pinned_sha256() {
     case "$1:$2" in
         cargo-dylint:x86_64-unknown-linux-gnu)
-            echo 9f130d915efbfd1d04160ac9874c617a5d74b48971881e25b5ea6c69e74597f7
+            echo 2932ea7e589a47236ec92681b9b5e41af42266c6fa2b8a16f03f53b601a09127
             ;;
         cargo-dylint:aarch64-unknown-linux-gnu)
-            echo b22864164bfeb6faa391f034dc11d9537c7d9c8c3286bb528219f29bad35c603
+            echo b2c4effa8c884b1a27deed850fc710cda50f299a531a98ad41e561ff5e65b247
             ;;
         dylint-link:x86_64-unknown-linux-gnu)
-            echo c47c31479a44ed6d6c8aaf43dfe6a1db65f5e4c4b834c7e7365a1d309e7c1bfd
+            echo a5d3268ff24269cdb7da42126720f13c24869098bd4b152f6a95ed9e9f8e82f4
             ;;
         dylint-link:aarch64-unknown-linux-gnu)
-            echo 0d4d9d2e3154a02be9d44383d6ff794a5618b27323b968424b70d00ec2a282ea
+            echo dbd74ce8824008b46bc6d3813619216bbba3b9d712a5ced31a15e0fb2653f1f3
             ;;
     esac
 }

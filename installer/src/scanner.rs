@@ -3,14 +3,15 @@
 //! This module provides utilities to scan the staging directory and parse
 //! library filenames to extract lint metadata.
 
-use std::collections::BTreeMap;
-use std::io;
+use std::{collections::BTreeMap, io};
 
 use camino::{Utf8Path, Utf8PathBuf};
 
-use crate::builder::{library_extension, library_prefix};
-use crate::crate_name::CrateName;
-use crate::resolution::{EXPERIMENTAL_LINT_CRATES, LINT_CRATES, SUITE_CRATE};
+use crate::{
+    builder::{library_extension, library_prefix},
+    crate_name::CrateName,
+    resolution::{EXPERIMENTAL_LINT_CRATES, LINT_CRATES, SUITE_CRATE},
+};
 
 /// Metadata about an installed lint library.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -33,9 +34,7 @@ pub struct InstalledLints {
 impl InstalledLints {
     /// Returns true if no lints are installed.
     #[must_use]
-    pub fn is_empty(&self) -> bool {
-        self.by_toolchain.is_empty()
-    }
+    pub fn is_empty(&self) -> bool { self.by_toolchain.is_empty() }
 }
 
 /// Scan the staging directory for installed libraries.
@@ -57,8 +56,8 @@ pub fn scan_installed(target_dir: &Utf8Path) -> io::Result<InstalledLints> {
     }
 
     // Iterate over toolchain subdirectories
-    for entry in target_dir.read_dir_utf8()? {
-        let entry = entry?;
+    for entry_result in target_dir.read_dir_utf8()? {
+        let entry = entry_result?;
         let toolchain_path = entry.path();
 
         if !toolchain_path.is_dir() {
@@ -84,8 +83,8 @@ fn scan_toolchain_layouts(
     if release_path.is_dir() {
         libraries.extend(scan_toolchain_release(&release_path, toolchain)?);
     }
-    for entry in toolchain_path.read_dir_utf8()? {
-        let entry = entry?;
+    for entry_result in toolchain_path.read_dir_utf8()? {
+        let entry = entry_result?;
         if !entry.path().is_dir() || entry.file_name() == "release" {
             continue;
         }
@@ -99,8 +98,8 @@ fn scan_toolchain_layouts(
 }
 
 fn contains_libraries_in_layout(lib_path: &Utf8Path) -> io::Result<bool> {
-    for entry in lib_path.read_dir_utf8()? {
-        let entry = entry?;
+    for entry_result in lib_path.read_dir_utf8()? {
+        let entry = entry_result?;
         if entry.path().is_file() && parse_library_filename(entry.file_name()).is_some() {
             return Ok(true);
         }
@@ -115,8 +114,8 @@ fn scan_toolchain_release(
 ) -> io::Result<Vec<InstalledLibrary>> {
     let mut libraries = Vec::new();
 
-    for entry in release_path.read_dir_utf8()? {
-        let entry = entry?;
+    for entry_result in release_path.read_dir_utf8()? {
+        let entry = entry_result?;
         let file_name = entry.file_name();
 
         if let Some((crate_name, parsed_toolchain)) = parse_library_filename(file_name) {
@@ -141,9 +140,15 @@ fn scan_toolchain_release(
 /// # Examples
 ///
 /// ```
-/// use whitaker_installer::scanner::parse_library_filename;
+/// use whitaker_installer::{
+///     builder::{library_extension, library_prefix},
+///     scanner::parse_library_filename,
+/// };
 ///
-/// let result = parse_library_filename("libmodule_max_lines@nightly-2026-05-28.so");
+/// let prefix = library_prefix();
+/// let extension = library_extension();
+/// let filename = format!("{prefix}module_max_lines@nightly-2026-05-28{extension}");
+/// let result = parse_library_filename(&filename);
 /// assert!(result.is_some());
 /// let (crate_name, toolchain) = result.expect("valid library filename");
 /// assert_eq!(crate_name.as_str(), "module_max_lines");
@@ -161,9 +166,7 @@ pub fn parse_library_filename(filename: &str) -> Option<(CrateName, String)> {
     let without_ext = without_prefix.strip_suffix(extension)?;
 
     // Split on @ to get crate name and toolchain
-    let at_pos = without_ext.find('@')?;
-    let crate_name = &without_ext[..at_pos];
-    let toolchain = &without_ext[at_pos + 1..];
+    let (crate_name, toolchain) = without_ext.split_once('@')?;
 
     if crate_name.is_empty() || toolchain.is_empty() {
         return None;
@@ -185,8 +188,7 @@ pub fn parse_library_filename(filename: &str) -> Option<(CrateName, String)> {
 /// # Examples
 ///
 /// ```
-/// use whitaker_installer::scanner::lints_for_library;
-/// use whitaker_installer::crate_name::CrateName;
+/// use whitaker_installer::{crate_name::CrateName, scanner::lints_for_library};
 ///
 /// let suite_lints = lints_for_library(&CrateName::from("whitaker_suite"));
 /// assert!(suite_lints.len() > 1);
@@ -208,8 +210,7 @@ pub fn lints_for_library(crate_name: &CrateName) -> Vec<&'static str> {
 /// # Examples
 ///
 /// ```
-/// use whitaker_installer::scanner::lints_for_library_with_experimental;
-/// use whitaker_installer::crate_name::CrateName;
+/// use whitaker_installer::{crate_name::CrateName, scanner::lints_for_library_with_experimental};
 ///
 /// let lints = lints_for_library_with_experimental(&CrateName::from("whitaker_suite"), true);
 /// assert!(lints.contains(&"bumpy_road_function"));
@@ -240,162 +241,5 @@ pub fn lints_for_library_with_experimental(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use rstest::rstest;
-    use tempfile::TempDir;
-
-    /// Skip test execution on non-Linux platforms where library extensions differ.
-    macro_rules! skip_unless_linux {
-        () => {
-            if !cfg!(target_os = "linux") {
-                return;
-            }
-        };
-    }
-
-    #[rstest]
-    #[case::standard_linux(
-        "libmodule_max_lines@nightly-2026-05-28.so",
-        "module_max_lines",
-        "nightly-2026-05-28"
-    )]
-    #[case::suite(
-        "libwhitaker_suite@nightly-2026-05-28.so",
-        "whitaker_suite",
-        "nightly-2026-05-28"
-    )]
-    #[case::stable_toolchain(
-        "libno_expect_outside_tests@stable-1.80.0.so",
-        "no_expect_outside_tests",
-        "stable-1.80.0"
-    )]
-    fn parse_library_filename_valid(
-        #[case] filename: &str,
-        #[case] expected_crate: &str,
-        #[case] expected_toolchain: &str,
-    ) {
-        skip_unless_linux!();
-
-        let result = parse_library_filename(filename);
-        assert!(result.is_some(), "expected Some for {filename}");
-
-        let (crate_name, toolchain) = result.expect("already checked");
-        assert_eq!(crate_name.as_str(), expected_crate);
-        assert_eq!(toolchain, expected_toolchain);
-    }
-
-    #[rstest]
-    #[case::no_at_sign("libmodule_max_lines.so")]
-    #[case::empty_crate("lib@nightly-2026-05-28.so")]
-    #[case::empty_toolchain("libmodule_max_lines@.so")]
-    #[case::wrong_prefix("module_max_lines@nightly-2026-05-28.so")]
-    #[case::wrong_extension("libmodule_max_lines@nightly-2026-05-28.dll")]
-    #[case::random_file("readme.txt")]
-    fn parse_library_filename_invalid(#[case] filename: &str) {
-        skip_unless_linux!();
-
-        let result = parse_library_filename(filename);
-        assert!(result.is_none(), "expected None for {filename}");
-    }
-
-    #[test]
-    fn lints_for_suite_returns_standard_lints_only() {
-        let lints = lints_for_library(&CrateName::from("whitaker_suite"));
-        // Suite reports only standard lints; experimental lints depend on build flags
-        assert_eq!(lints.len(), LINT_CRATES.len());
-
-        for lint in LINT_CRATES {
-            assert!(lints.contains(lint), "missing standard lint: {lint}");
-        }
-        for lint in EXPERIMENTAL_LINT_CRATES {
-            assert!(
-                !lints.contains(lint),
-                "suite should not report experimental lint: {lint}"
-            );
-        }
-    }
-
-    #[test]
-    fn lints_for_suite_includes_experimental_when_requested() {
-        let lints = lints_for_library_with_experimental(&CrateName::from("whitaker_suite"), true);
-
-        assert_eq!(
-            lints.len(),
-            LINT_CRATES.len() + EXPERIMENTAL_LINT_CRATES.len(),
-            "suite should report standard and experimental lints"
-        );
-        for lint in LINT_CRATES {
-            assert!(lints.contains(lint), "missing standard lint: {lint}");
-        }
-        for lint in EXPERIMENTAL_LINT_CRATES {
-            assert!(
-                lints.contains(lint),
-                "suite should include experimental lint when requested: {lint}"
-            );
-        }
-    }
-
-    #[test]
-    fn lints_for_individual_crate_returns_single_lint() {
-        let lints = lints_for_library(&CrateName::from("module_max_lines"));
-        assert_eq!(lints, vec!["module_max_lines"]);
-    }
-
-    #[test]
-    fn lints_for_bumpy_road_crate_returns_single_lint() {
-        let lints = lints_for_library(&CrateName::from("bumpy_road_function"));
-        assert_eq!(lints, vec!["bumpy_road_function"]);
-    }
-
-    #[test]
-    fn lints_for_unknown_crate_returns_empty() {
-        let lints = lints_for_library(&CrateName::from("unknown_crate"));
-        assert!(lints.is_empty());
-    }
-
-    #[test]
-    fn scan_empty_directory_returns_empty() {
-        let temp = TempDir::new().expect("failed to create temp dir");
-        let target_dir = Utf8Path::from_path(temp.path()).expect("non-UTF8 path");
-
-        let result = scan_installed(target_dir).expect("scan should succeed");
-        assert!(result.is_empty());
-    }
-
-    #[test]
-    fn scan_nonexistent_directory_returns_empty() {
-        let result =
-            scan_installed(Utf8Path::new("/nonexistent/path")).expect("scan should succeed");
-        assert!(result.is_empty());
-    }
-
-    #[test]
-    fn scan_finds_installed_libraries() {
-        skip_unless_linux!();
-
-        let temp = TempDir::new().expect("failed to create temp dir");
-        let target_dir = Utf8Path::from_path(temp.path()).expect("non-UTF8 path");
-
-        // Create toolchain directory structure
-        let toolchain = "nightly-2026-05-28";
-        let release_dir = target_dir.join(toolchain).join("release");
-        std::fs::create_dir_all(&release_dir).expect("failed to create dirs");
-
-        // Create fake library files
-        let lib_name = format!("libwhitaker_suite@{toolchain}.so");
-        std::fs::write(release_dir.join(&lib_name), b"fake").expect("failed to write file");
-
-        let result = scan_installed(target_dir).expect("scan should succeed");
-        assert!(!result.is_empty());
-        assert!(result.by_toolchain.contains_key(toolchain));
-
-        let libs = result
-            .by_toolchain
-            .get(toolchain)
-            .expect("toolchain should exist");
-        assert_eq!(libs.len(), 1);
-        assert_eq!(libs[0].crate_name.as_str(), "whitaker_suite");
-        assert_eq!(libs[0].toolchain, toolchain);
-    }
-}
+#[path = "scanner_tests.rs"]
+mod tests;

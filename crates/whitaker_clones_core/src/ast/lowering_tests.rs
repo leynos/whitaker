@@ -1,24 +1,54 @@
 //! Adapter-scoped tests for Rust syntax lowering.
 
 use insta::assert_json_snapshot;
+use proptest::prelude::*;
+use ra_ap_syntax::{AstNode, Edition, SourceFile};
 use rstest::rstest;
 use serde_json::json;
 
-use ra_ap_syntax::{AstNode, Edition, SourceFile};
-
 use super::{
-    LoweringLimits, MAX_AST_DEPTH, MAX_AST_NODES, kind_id, leaf_class,
+    LoweringLimits,
+    MAX_AST_DEPTH,
+    MAX_AST_NODES,
+    kind_id,
+    leaf_class,
     validate_covering_node_budget,
 };
 use crate::{
-    AstError, ByteSpan, Production,
+    AstError,
+    AstResult,
+    ByteSpan,
+    Production,
     ast::{KindId, LeafClass, NormalizedNode, NormalizedTree, PARSER_SCHEMA_VERSION},
-    canonical_hash, kind_counts, lower_span, production_multiset,
+    canonical_hash,
+    kind_counts,
+    lower_span,
+    production_multiset,
 };
 
+/// Format a parser kind identifier for snapshot assertions.
 fn kind_name(kind: KindId) -> String {
     let parser_kind = ra_ap_syntax::SyntaxKind::from(kind.get());
     format!("{parser_kind:?}")
+}
+
+/// Convert a byte offset to the span type's `u32` representation.
+///
+/// # Errors
+///
+/// Return [`AstError::OffsetTooLarge`] when the offset exceeds `u32::MAX`.
+fn offset_u32(offset: usize) -> AstResult<u32> {
+    u32::try_from(offset).map_err(|_| AstError::OffsetTooLarge(offset))
+}
+
+/// Create a span covering the entire source string.
+///
+/// # Errors
+///
+/// Return an offset or span validation error when the source length cannot be
+/// represented or does not form a valid span.
+fn whole_span(source: &str) -> AstResult<ByteSpan> {
+    ByteSpan::new(source, 0, offset_u32(source.len())?)
 }
 
 #[rstest]
@@ -49,35 +79,33 @@ fn two_sibling_span_selects_common_expression_ancestor() {
 }
 
 #[rstest]
-fn whole_file_span_selects_source_file() -> Result<(), AstError> {
+fn whole_file_span_selects_source_file() {
     let source = "fn f() {}";
-    let span = ByteSpan::new(source, 0, source.len() as u32)?;
-    let tree = lower_span(source, span)?;
+    let span = whole_span(source).expect("span should validate");
+    let tree = lower_span(source, span).expect("source should lower");
     assert_eq!(kind_name(tree.root().kind()), "SOURCE_FILE");
-    Ok(())
 }
 
 #[rstest]
-fn large_synthetic_source_still_lowers() -> Result<(), AstError> {
+fn large_synthetic_source_still_lowers() {
     let statements = (0..600)
         .map(|index| format!("let value_{index} = {index};"))
         .collect::<Vec<_>>()
         .join(" ");
     let source = format!("fn generated() {{ {statements} }}");
-    let span = ByteSpan::new(&source, 0, source.len() as u32)?;
-    let tree = lower_span(&source, span)?;
+    let span = whole_span(&source).expect("span should validate");
+    let tree = lower_span(&source, span).expect("source should lower");
     assert_eq!(kind_name(tree.root().kind()), "SOURCE_FILE");
-    Ok(())
 }
 
 #[rstest]
-fn oversized_source_is_rejected_by_the_node_budget() -> Result<(), AstError> {
+fn oversized_source_is_rejected_by_the_node_budget() {
     let statements = (0..=MAX_AST_NODES)
         .map(|index| format!("let value_{index} = {index};"))
         .collect::<Vec<_>>()
         .join(" ");
     let source = format!("fn generated() {{ {statements} }}");
-    let span = ByteSpan::new(&source, 0, source.len() as u32)?;
+    let span = whole_span(&source).expect("span should validate");
 
     assert_eq!(
         lower_span(&source, span),
@@ -85,30 +113,46 @@ fn oversized_source_is_rejected_by_the_node_budget() -> Result<(), AstError> {
             limit: MAX_AST_NODES
         })
     );
-    Ok(())
+}
+
+/// Check that a flat macro token tree exceeding the node budget is rejected.
+#[rstest]
+fn flat_macro_token_tree_is_rejected_by_the_normalized_node_budget() {
+    let tokens = (0..=MAX_AST_NODES)
+        .map(|index| format!("token_{index}"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let source = format!("macro_rules! generated {{ () => {{ {tokens} }} }}");
+    let span = whole_span(&source).expect("span should validate");
+
+    assert_eq!(
+        lower_span(&source, span),
+        Err(AstError::TreeTooLarge {
+            limit: MAX_AST_NODES
+        })
+    );
 }
 
 #[rstest]
-fn deeply_nested_syntax_obeys_the_lowering_depth_budget() -> Result<(), AstError> {
+fn deeply_nested_syntax_obeys_the_lowering_depth_budget() {
     let source = "fn f() { if true { if true { if true { if true { 0; } } } } }";
     let root = SourceFile::parse(source, Edition::CURRENT)
         .tree()
         .syntax()
         .clone();
-    let span = ByteSpan::new(source, 0, source.len() as u32)?;
+    let span = whole_span(source).expect("span should validate");
 
     assert_eq!(
         LoweringLimits::with_depth_limit(2, span).lower(&root, 0),
         Err(AstError::TreeTooDeep { limit: 2 })
     );
-    Ok(())
 }
 
 #[rstest]
-fn covering_node_selection_budget_surfaces_typed_errors() -> Result<(), AstError> {
+fn covering_node_selection_budget_surfaces_typed_errors() {
     // The selection budget guards the covering-node walk independently of the
     // lowering budget, and both breaches must surface as the same typed errors.
-    let span = ByteSpan::new("fn f() {}", 0, 2)?;
+    let span = ByteSpan::new("fn f() {}", 0, 2).expect("span should validate");
     assert_eq!(
         validate_covering_node_budget(span, MAX_AST_DEPTH + 1, 0),
         Err(AstError::TreeTooDeep {
@@ -121,11 +165,10 @@ fn covering_node_selection_budget_surfaces_typed_errors() -> Result<(), AstError
             limit: MAX_AST_NODES
         })
     );
-    Ok(())
 }
 
 #[rstest]
-fn small_candidate_amid_unrelated_nodes_is_not_rejected_by_the_budget() -> Result<(), AstError> {
+fn small_candidate_amid_unrelated_nodes_is_not_rejected_by_the_budget() {
     // A tiny valid candidate (`a + b`) buried in a function whose remaining
     // statements far exceed the node budget. Pruned covering-node selection must
     // descend only the ancestor chain, so the unrelated statements neither count
@@ -138,7 +181,6 @@ fn small_candidate_amid_unrelated_nodes_is_not_rejected_by_the_budget() -> Resul
 
     let tree = lower_span_for(&source, "a + b").expect("small candidate should lower");
     assert_eq!(kind_name(tree.root().kind()), "BIN_EXPR");
-    Ok(())
 }
 
 #[rstest]
@@ -165,18 +207,17 @@ fn span_validation_reports_specific_errors(
 }
 
 #[rstest]
-fn source_mismatch_non_char_boundary_is_reported_by_lowering() -> Result<(), AstError> {
-    let span = ByteSpan::new("ab", 0, 1)?;
+fn source_mismatch_non_char_boundary_is_reported_by_lowering() {
+    let span = ByteSpan::new("ab", 0, 1).expect("span should validate");
     assert_eq!(
         lower_span("é", span),
         Err(AstError::NonCharBoundary { offset: 1 })
     );
-    Ok(())
 }
 
 #[rstest]
-fn source_mismatch_out_of_bounds_is_reported_by_lowering() -> Result<(), AstError> {
-    let span = ByteSpan::new("longer", 0, 6)?;
+fn source_mismatch_out_of_bounds_is_reported_by_lowering() {
+    let span = ByteSpan::new("longer", 0, 6).expect("span should validate");
     assert_eq!(
         lower_span("short", span),
         Err(AstError::SpanOutOfBounds {
@@ -185,31 +226,63 @@ fn source_mismatch_out_of_bounds_is_reported_by_lowering() -> Result<(), AstErro
             len: 5
         })
     );
-    Ok(())
 }
 
 #[rstest]
-fn error_subtree_is_rejected() -> Result<(), AstError> {
+fn error_subtree_is_rejected() {
     let source = "@error@";
-    let span = ByteSpan::new(source, 0, source.len() as u32)?;
+    let end = offset_u32(source.len()).expect("source length should fit in u32");
+    let span = ByteSpan::new(source, 0, end).expect("span should validate");
     assert_eq!(
         lower_span(source, span),
-        Err(AstError::UnparsableSpan {
-            start: 0,
-            end: source.len() as u32
-        })
+        Err(AstError::UnparsableSpan { start: 0, end })
     );
-    Ok(())
 }
 
+proptest! {
+    /// Check that identifier and literal payloads do not change normalized hashes.
+    #[test]
+    fn generated_source_payloads_do_not_change_normalized_ast_hash(
+        left_name in "[a-z][a-z0-9]{0,8}",
+        right_name in "[a-z][a-z0-9]{0,8}",
+        left_literal in 0_u32..u32::MAX,
+        right_literal in 0_u32..u32::MAX,
+    ) {
+        let left_source = format!(
+            "fn function_{left_name}() {{ let binding_{left_name} = {left_literal}; }}"
+        );
+        let right_source = format!(
+            "fn function_{right_name}() {{ let binding_{right_name} = {right_literal}; }}"
+        );
+        let left_span = whole_span(&left_source).expect("generated source span should validate");
+        let right_span = whole_span(&right_source).expect("generated source span should validate");
+        let left = lower_span(&left_source, left_span)
+            .expect("generated source with identifier and integer literal should parse");
+        let right = lower_span(&right_source, right_span)
+            .expect("generated source with identifier and integer literal should parse");
+
+        prop_assert_eq!(canonical_hash(&left), canonical_hash(&right));
+    }
+}
+
+/// Lower the first occurrence of `needle` within `source`.
+///
+/// # Errors
+///
+/// Return an unparsable-span error when `needle` is absent, an offset or span
+/// error when its byte range is invalid, or a lowering error for invalid syntax.
 fn lower_span_for(source: &str, needle: &str) -> Result<NormalizedTree, AstError> {
     let start = source
         .find(needle)
         .ok_or(AstError::UnparsableSpan { start: 0, end: 0 })?;
     let end = start + needle.len();
-    lower_span(source, ByteSpan::new(source, start as u32, end as u32)?)
+    lower_span(
+        source,
+        ByteSpan::new(source, offset_u32(start)?, offset_u32(end)?)?,
+    )
 }
 
+/// Check whether `node` or any descendant has the requested leaf class.
 fn contains_leaf_class(node: &NormalizedNode, leaf_class: LeafClass) -> bool {
     node.leaf() == Some(leaf_class)
         || node
@@ -236,7 +309,7 @@ fn kind_names_are_available_for_adapter_snapshots() {
 #[rstest]
 fn ast_feature_vector_snapshot() -> Result<(), AstError> {
     let source = "fn add(a: i32, b: i32) -> i32 { a + b }";
-    let span = ByteSpan::new(source, 0, source.len() as u32)?;
+    let span = whole_span(source)?;
     let tree = lower_span(source, span)?;
     let counts = kind_counts(&tree)
         .iter()
@@ -279,6 +352,7 @@ fn parser_schema_version_snapshot() {
     );
 }
 
+/// Format a production's kinds for snapshot assertions.
 fn production_name(production: Production) -> String {
     match production {
         Production::Bigram(parent, child) => {

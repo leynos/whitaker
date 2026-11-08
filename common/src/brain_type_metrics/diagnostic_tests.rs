@@ -1,11 +1,13 @@
 //! Unit tests for brain type diagnostic formatting.
 
-use super::*;
-use crate::brain_type_metrics::TypeMetricsBuilder;
-use crate::brain_type_metrics::evaluation::BrainTypeDisposition;
-use crate::decomposition_advice::SubjectKind;
-use crate::test_support::decomposition::{decomposition_suggestions, parser_serde_fs_fixture};
 use rstest::rstest;
+
+use super::*;
+use crate::{
+    brain_type_metrics::{TypeMetricsBuilder, evaluation::BrainTypeDisposition},
+    decomposition_advice::SubjectKind,
+    test_support::decomposition::{decomposition_suggestions, parser_serde_fs_fixture},
+};
 
 // ---------------------------------------------------------------------------
 // Diagnostic — primary message (one brain method)
@@ -33,10 +35,13 @@ fn one_brain_method_message() -> String {
 #[case("a brain method", "singular form")]
 fn one_brain_method_message_contains_expected_fragment(
     #[case] fragment: &str,
-    #[case] _description: &str,
+    #[case] description: &str,
 ) {
     let msg = one_brain_method_message();
-    assert!(msg.contains(fragment), "missing fragment: {fragment}");
+    assert!(
+        msg.contains(fragment),
+        "missing {description} fragment: {fragment}"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -197,7 +202,8 @@ fn decomposition_note_delegates_to_shared_renderer_for_types() {
         diagnostic.type_name(),
         SubjectKind::Type,
         &parser_serde_fs_fixture(),
-    );
+    )
+    .expect("fixture profiles should analyse");
 
     assert_eq!(
         format_decomposition_note(&diagnostic, &suggestions),
@@ -329,5 +335,9 @@ fn diagnostic_brain_methods_count_accessor() {
 #[rstest]
 fn diagnostic_brain_methods_name_accessor() {
     let diag = accessor_diagnostic();
-    assert_eq!(diag.brain_methods()[0].name(), "big");
+    let brain_method = diag
+        .brain_methods()
+        .first()
+        .expect("diagnostic should expose one brain method");
+    assert_eq!(brain_method.name(), "big");
 }

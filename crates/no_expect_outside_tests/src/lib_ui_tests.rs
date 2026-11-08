@@ -1,13 +1,15 @@
 //! Additional UI-style regressions that need compiler flags or example-target
 //! support beyond the basic `ui/` source fixtures.
 
+use std::{
+    path::{Path, PathBuf},
+    time::SystemTime,
+};
+
 use camino::Utf8Path;
 use dylint_testing::ui::Test;
 use rstest::rstest;
-use std::path::{Path, PathBuf};
-use std::time::SystemTime;
-use temp_env::with_vars_unset;
-use whitaker_common::test_support::{env_test_guard, prepare_fixture, run_test_runner};
+use whitaker_common::test_support::{prepare_fixture, run_test_runner};
 
 /// Describes a single example-based regression to run under the test harness.
 ///
@@ -25,7 +27,7 @@ struct ExampleHarnessRun<'a> {
 
 impl<'a> ExampleHarnessRun<'a> {
     /// Creates a run spec using the default `--test` harness flag.
-    fn new(name: &'a str, label: &'a str) -> Self {
+    const fn new(name: &'a str, label: &'a str) -> Self {
         Self {
             name,
             label,
@@ -35,7 +37,7 @@ impl<'a> ExampleHarnessRun<'a> {
 
     /// Creates a run spec with caller-supplied rustc flags (no defaults
     /// applied).
-    fn with_flags(name: &'a str, label: &'a str, rustc_flags: &'a [&'a str]) -> Self {
+    const fn with_flags(name: &'a str, label: &'a str, rustc_flags: &'a [&'a str]) -> Self {
         Self {
             name,
             label,
@@ -81,22 +83,17 @@ struct DependencyRlib {
 fn run_example_under_test_harness(spec: &ExampleHarnessRun<'_>) {
     let crate_name = env!("CARGO_PKG_NAME");
     let directory = "examples";
-    whitaker::testing::ui::run_with_runner(crate_name, directory, |crate_name, _| {
+    whitaker::testing::ui::run_with_runner(crate_name, directory, |_, _| {
         run_test_runner(spec.name, || {
-            let _guard = env_test_guard();
-            with_vars_unset(
-                ["RUSTC_WRAPPER", "RUSTC_WORKSPACE_WRAPPER", "CARGO_BUILD_RUSTC_WRAPPER"],
-                || {
-                    let mut test = Test::example(crate_name, spec.name);
-                    test.rustc_flags(spec.rustc_flags);
-                    test.run();
-                },
-            );
+            let mut test = Test::example(crate_name, spec.name);
+            test.rustc_flags(spec.rustc_flags);
+            test.run();
         })
     })
     .unwrap_or_else(|error| {
         panic!(
-            "{} example regression should execute without diffs: RunnerFailure {{ crate_name: \"{crate_name}\", directory: \"{directory}\", message: {error:?} }}",
+            "{} example regression should execute without diffs: RunnerFailure {{ crate_name: \
+             \"{crate_name}\", directory: \"{directory}\", message: {error:?} }}",
             spec.label
         )
     });
@@ -119,22 +116,12 @@ fn run_fixture_under_test_harness(
     let harness_flag_refs: Vec<_> = harness_flags.iter().map(String::as_str).collect();
 
     run_test_runner(spec.fixture_name, || {
-        let _guard = env_test_guard();
-        with_vars_unset(
-            [
-                "RUSTC_WRAPPER",
-                "RUSTC_WORKSPACE_WRAPPER",
-                "CARGO_BUILD_RUSTC_WRAPPER",
-            ],
-            || {
-                let mut test = Test::src_base(spec.crate_name, env.workdir());
-                if let Some(config) = env.take_config() {
-                    test.dylint_toml(config);
-                }
-                test.rustc_flags(harness_flag_refs.as_slice());
-                test.run();
-            },
-        );
+        let mut test = Test::src_base(spec.crate_name, env.workdir());
+        if let Some(config) = env.take_config() {
+            test.dylint_toml(config);
+        }
+        test.rustc_flags(harness_flag_refs.as_slice());
+        test.run();
     })
 }
 
@@ -150,9 +137,8 @@ fn run_fixture_harness_test(spec: &FixtureHarnessRun<'_>) {
     })
     .unwrap_or_else(|error| {
         panic!(
-            "{} regression should execute without diffs: \
-             RunnerFailure {{ crate_name: \"{crate_name}\", \
-             directory: \"{directory}\", message: {error:?} }}",
+            "{} regression should execute without diffs: RunnerFailure {{ crate_name: \
+             \"{crate_name}\", directory: \"{directory}\", message: {error:?} }}",
             spec.label
         )
     });
@@ -252,7 +238,7 @@ fn dependency_rlib_matches(deps_dir: &Path, prefix: &str) -> Result<Vec<Dependen
             })?;
             dependency_rlib_candidate(entry.path(), prefix)
         })
-        .filter_map(|candidate| candidate.transpose())
+        .filter_map(std::result::Result::transpose)
         .collect()
 }
 
@@ -281,10 +267,14 @@ fn dependency_rlib_candidate(
 /// Returns `true` when `path` names a file that starts with `prefix` and has
 /// the `.rlib` extension.
 fn is_dependency_rlib(path: &Path, prefix: &str) -> bool {
-    path.file_name().is_some_and(|name| {
-        name.to_str()
-            .is_some_and(|name| name.starts_with(prefix) && name.ends_with(".rlib"))
-    })
+    let has_rlib_extension = path
+        .extension()
+        .is_some_and(|extension| extension == "rlib");
+    has_rlib_extension
+        && path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.starts_with(prefix))
 }
 
 #[rstest]
@@ -317,6 +307,18 @@ fn example_compiles_under_test_harness(#[case] name: &str, #[case] label: &str) 
     "File-backed cfg(test)",
     &[],
 )]
+#[case(
+    "ui",
+    "pass_expect_in_file_backed_test_helper",
+    "File-backed cfg(test) helper",
+    &[],
+)]
+#[case(
+    "ui",
+    "pass_expect_in_cfg_test_items",
+    "cfg(test) function, impl and trait items",
+    &[],
+)]
 fn fixture_compiles_under_test_harness(
     #[case] directory: &str,
     #[case] fixture_name: &str,
@@ -338,6 +340,15 @@ fn rstest_expect_outside_tests_still_fails_in_non_harness_code() {
     run_example_under_test_harness(&ExampleHarnessRun::with_flags(
         "fail_expect_in_rstest_non_test_module",
         "rstest non-harness",
+        &["--test", "-D", "no_expect_outside_tests"],
+    ));
+}
+
+#[test]
+fn module_named_tests_without_cfg_test_still_fails() {
+    run_example_under_test_harness(&ExampleHarnessRun::with_flags(
+        "fail_expect_in_non_test_module_named_tests",
+        "non-test module named tests",
         &["--test", "-D", "no_expect_outside_tests"],
     ));
 }

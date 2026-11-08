@@ -988,7 +988,7 @@ assert_eq!(row_number, 2);
 assert_eq!(column_index, 2);
 assert!(err
     .to_string()
-    .contains("unrecognised boolean value 'maybe'"));
+    .contains("unrecognized boolean value 'maybe'"));
 ```
 
 [`DataTableError`]: crate::datatable::DataTableError

@@ -1,0 +1,27 @@
+warning: Join the physical lines in this cooked string with `concat!()`.
+  --> $DIR/fail_join_beside_attribute.rs:17:18
+   |
+LL |        let joined = "alpha /
+   |   __________________^      -
+   |  |_________________________|
+LL | ||         beta";
+   | ||_-___________^ help: replace with a `concat!()` expression: `concat!("alpha ", "beta")`
+   | |__|
+   |    source-line join
+   |
+note: The escaped newline removes the physical line break and following indentation, hiding the fragment boundary inside one literal.
+  --> $DIR/fail_join_beside_attribute.rs:17:18
+   |
+LL |       let joined = "alpha /
+   |  __________________^
+LL | |         beta";
+   | |_____________^
+   = help: Split the cooked string into `concat!()` arguments at each source-line join.
+note: the lint level is defined here
+  --> $DIR/fail_join_beside_attribute.rs:2:9
+   |
+LL | #![warn(string_continuation_style)]
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: 1 warning emitted
+

@@ -1,9 +1,11 @@
 //! Behaviour-driven coverage for brain trait metric collection.
 
+use std::cell::RefCell;
+
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
-use std::cell::RefCell;
 use whitaker_common::brain_trait_metrics::{TraitMetrics, TraitMetricsBuilder};
+use whitaker_test_macros::allow_fixture_expansion_lints;
 
 #[derive(Clone, Debug)]
 enum PendingTraitItem {
@@ -24,14 +26,13 @@ struct TraitMetricsWorld {
     metrics: RefCell<Option<TraitMetrics>>,
 }
 
+#[allow_fixture_expansion_lints]
 #[fixture]
-fn world() -> TraitMetricsWorld {
-    TraitMetricsWorld::default()
-}
+fn world() -> TraitMetricsWorld { TraitMetricsWorld::default() }
 
 fn with_metrics(world: &TraitMetricsWorld, assert_fn: impl FnOnce(&TraitMetrics)) {
-    let metrics = world.metrics.borrow();
-    match metrics.as_ref() {
+    let metrics_ref = world.metrics.borrow();
+    match metrics_ref.as_ref() {
         Some(metrics) => assert_fn(metrics),
         None => panic!("metrics must be built before running assertions"),
     }
@@ -124,35 +125,55 @@ fn when_metrics_are_built(world: &TraitMetricsWorld) {
 #[then("total trait items is {count}")]
 fn then_total_trait_items(world: &TraitMetricsWorld, count: usize) {
     with_metrics(world, |metrics| {
-        assert_eq!(metrics.total_item_count(), count);
+        assert_eq!(
+            metrics.total_item_count(),
+            count,
+            "expected total trait item count of {count}"
+        );
     });
 }
 
 #[then("required method count is {count}")]
 fn then_required_method_count(world: &TraitMetricsWorld, count: usize) {
     with_metrics(world, |metrics| {
-        assert_eq!(metrics.required_method_count(), count);
+        assert_eq!(
+            metrics.required_method_count(),
+            count,
+            "expected required method count of {count}"
+        );
     });
 }
 
 #[then("default method count is {count}")]
 fn then_default_method_count(world: &TraitMetricsWorld, count: usize) {
     with_metrics(world, |metrics| {
-        assert_eq!(metrics.default_method_count(), count);
+        assert_eq!(
+            metrics.default_method_count(),
+            count,
+            "expected default method count of {count}"
+        );
     });
 }
 
 #[then("default method CC sum is {sum}")]
 fn then_default_method_cc_sum(world: &TraitMetricsWorld, sum: usize) {
     with_metrics(world, |metrics| {
-        assert_eq!(metrics.default_method_cc_sum(), sum);
+        assert_eq!(
+            metrics.default_method_cc_sum(),
+            sum,
+            "expected default method CC sum of {sum}"
+        );
     });
 }
 
 #[then("implementor burden is {count}")]
 fn then_implementor_burden(world: &TraitMetricsWorld, count: usize) {
     with_metrics(world, |metrics| {
-        assert_eq!(metrics.implementor_burden(), count);
+        assert_eq!(
+            metrics.implementor_burden(),
+            count,
+            "expected implementor burden of {count}"
+        );
     });
 }
 
@@ -160,31 +181,19 @@ fn then_implementor_burden(world: &TraitMetricsWorld, count: usize) {
 // `tests/features/brain_trait_metrics.feature`.
 
 #[scenario(path = "tests/features/brain_trait_metrics.feature", index = 0)]
-fn scenario_mixed_trait_items(world: TraitMetricsWorld) {
-    let _ = world;
-}
+fn scenario_mixed_trait_items(world: TraitMetricsWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/brain_trait_metrics.feature", index = 1)]
-fn scenario_without_default_methods(world: TraitMetricsWorld) {
-    let _ = world;
-}
+fn scenario_without_default_methods(world: TraitMetricsWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/brain_trait_metrics.feature", index = 2)]
-fn scenario_empty_trait(world: TraitMetricsWorld) {
-    let _ = world;
-}
+fn scenario_empty_trait(world: TraitMetricsWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/brain_trait_metrics.feature", index = 3)]
-fn scenario_expansion_filter(world: TraitMetricsWorld) {
-    let _ = world;
-}
+fn scenario_expansion_filter(world: TraitMetricsWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/brain_trait_metrics.feature", index = 4)]
-fn scenario_implementor_burden(world: TraitMetricsWorld) {
-    let _ = world;
-}
+fn scenario_implementor_burden(world: TraitMetricsWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/brain_trait_metrics.feature", index = 5)]
-fn scenario_only_default_methods(world: TraitMetricsWorld) {
-    let _ = world;
-}
+fn scenario_only_default_methods(world: TraitMetricsWorld) { let _ = world; }

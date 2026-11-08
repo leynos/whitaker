@@ -5,6 +5,7 @@
 //! value through checkout and prebuilt provenance validation.
 
 use std::fmt;
+
 use thiserror::Error;
 
 /// A validated, full lowercase hexadecimal Git commit object ID.
@@ -21,9 +22,7 @@ pub struct CommitShaError {
 impl CommitSha {
     /// Returns the full commit object ID as a string slice.
     #[must_use]
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
+    pub fn as_str(&self) -> &str { &self.0 }
 }
 
 impl TryFrom<&str> for CommitSha {
@@ -57,8 +56,9 @@ impl fmt::Display for CommitSha {
 mod tests {
     //! Validates `CommitSha` parsing and rejection behaviour.
 
-    use super::CommitSha;
     use rstest::rstest;
+
+    use super::CommitSha;
 
     #[rstest]
     #[case::valid("abc12340000000000000000000000000000000ab", true)]

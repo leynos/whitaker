@@ -1,60 +1,152 @@
-//! Tests for PATH-based dependency-binary discovery helpers.
+//! Tests for the dependency-availability query against a fake PATH.
 
 use super::*;
-use crate::test_support::env_test_guard;
-use crate::test_utils::dependency_binary_helpers::{
-    cargo_dylint_check, cargo_dylint_check_with_result, dylint_link_install_list_check,
-    dylint_link_install_list_check_with_version, with_fake_binary_on_path, with_fake_path,
-    write_fake_binary, write_fake_binary_with_status,
+use crate::test_utils::{
+    ExpectedCall,
+    StubExecutor,
+    dependency_binary_helpers::{
+        cargo_dylint_check,
+        cargo_dylint_check_with_result,
+        dylint_link_install_list_check,
+        dylint_link_install_list_check_with_version,
+        with_fake_binary_on_path,
+        with_fake_path,
+        write_fake_binary_with_status,
+    },
+    stdout_output,
 };
-use crate::test_utils::{ExpectedCall, StubExecutor, stdout_output};
-use temp_env::with_vars_unset;
 
-#[test]
-fn check_dylint_tools_reports_installed_tools() {
-    with_fake_binary_on_path("dylint-link", || {
-        let executor =
-            StubExecutor::new(vec![cargo_dylint_check(), dylint_link_install_list_check()]);
+// Assertions live in these helpers because the tests below return `Result` to
+// propagate fixture errors, and `panic_in_result_fn` denies asserting inside
+// such a function.
 
-        let status = check_dylint_tools(&executor);
-
-        assert_eq!(
-            status,
-            DylintToolStatus {
-                cargo_dylint: true,
-                dylint_link: true,
-            }
-        );
-        executor.assert_finished();
-    });
+/// The status reported when both Dylint tools resolve.
+///
+/// Shared with the `path_scan::path_discovery_tests` module, whose Windows
+/// `PATHEXT` regression asserts the same status shape. That module is a child
+/// of `path_scan` rather than of `deps`, so `pub(super)` here would not reach
+/// it.
+pub(crate) fn both_tools_available() -> DylintToolStatus {
+    DylintToolStatus {
+        cargo_dylint: true,
+        dylint_link: true,
+    }
 }
 
+/// The status reported when only `cargo-dylint` resolves.
+fn cargo_dylint_only() -> DylintToolStatus {
+    DylintToolStatus {
+        cargo_dylint: true,
+        dylint_link: false,
+    }
+}
+
+/// The status reported when neither tool resolves.
+fn no_tools_available() -> DylintToolStatus {
+    DylintToolStatus {
+        cargo_dylint: false,
+        dylint_link: false,
+    }
+}
+
+/// Assert the observed status matches the expected one.
+///
+/// Shared with the `path_scan::path_discovery_tests` module for the Windows
+/// `PATHEXT` regression, which reports the same comparison. `pub(crate)` rather
+/// than `pub(super)` because that module is a descendant of `path_scan`, not a
+/// sibling of this one.
+pub(crate) fn assert_status(status: DylintToolStatus, expected: DylintToolStatus) {
+    assert_eq!(status, expected, "unexpected Dylint tool status");
+}
+
+fn assert_version_parse_error(error: &impl std::fmt::Display) {
+    assert!(
+        error
+            .to_string()
+            .contains("without reporting a semantic version"),
+        "unparsable version output should be reported, got: {error}"
+    );
+}
+/// Verify both installed tools are reported as available.
+///
+/// # Errors
+///
+/// Returns an I/O error if the temporary PATH fixture cannot be created.
+#[test]
+fn check_dylint_tools_reports_installed_tools() -> std::io::Result<()> {
+    with_fake_binary_on_path("dylint-link", || {
+        let executor = StubExecutor::new(vec![
+            cargo_dylint_check().expect("cargo-dylint dependency version should resolve"),
+            dylint_link_install_list_check()
+                .expect("dylint-link dependency version should resolve"),
+        ]);
+
+        let status =
+            check_dylint_tools(&executor).expect("available dependency checks should complete");
+
+        assert_status(status, both_tools_available());
+        executor.assert_finished();
+    })?;
+    Ok(())
+}
+
+/// Reject Cargo output that does not report the pinned `cargo-dylint` version.
+///
+/// # Errors
+///
+/// Returns an I/O error if the temporary PATH fixture cannot be created.
 #[rstest::rstest]
 #[case::stale_version("cargo-dylint 5.0.0\n")]
-#[case::unparsable_output("not a version\n")]
-fn check_dylint_tools_rejects_unusable_cargo_dylint_output(#[case] version_stdout: &str) {
+fn check_dylint_tools_rejects_unusable_cargo_dylint_output(
+    #[case] version_stdout: &str,
+) -> std::io::Result<()> {
     // The fake PATH keeps dylint-link absent so only cargo-dylint is probed.
     with_fake_path(
-        |_| {},
+        |_| Ok(()),
         || {
             let executor = StubExecutor::new(vec![cargo_dylint_check_with_result(Ok(
                 stdout_output(version_stdout),
             ))]);
 
-            let status = check_dylint_tools(&executor);
+            let status =
+                check_dylint_tools(&executor).expect("available dependency checks should complete");
 
-            assert_eq!(
-                status,
-                DylintToolStatus {
-                    cargo_dylint: false,
-                    dylint_link: false,
-                }
-            );
+            assert_status(status, no_tools_available());
             executor.assert_finished();
         },
-    );
+    )?;
+    Ok(())
 }
 
+/// Reject successful Cargo output that contains no parseable version.
+///
+/// # Errors
+///
+/// Returns an I/O error if the temporary PATH fixture cannot be created.
+#[test]
+fn check_dylint_tools_rejects_unparsable_cargo_dylint_output() -> std::io::Result<()> {
+    with_fake_path(
+        |_| Ok(()),
+        || {
+            let executor = StubExecutor::new(vec![cargo_dylint_check_with_result(Ok(
+                stdout_output("not a version\n"),
+            ))]);
+
+            let error = check_dylint_tools(&executor)
+                .expect_err("unparsable version output must not authorize installation");
+
+            assert_version_parse_error(&error);
+            executor.assert_finished();
+        },
+    )?;
+    Ok(())
+}
+
+/// Reject `dylint-link` when Cargo does not record the pinned installed version.
+///
+/// # Errors
+///
+/// Returns an I/O error if the temporary PATH fixture cannot be created.
 #[rstest::rstest]
 #[case::stale_version(dylint_link_install_list_check_with_version("5.0.0"))]
 #[case::missing_from_list(ExpectedCall {
@@ -62,154 +154,56 @@ fn check_dylint_tools_rejects_unusable_cargo_dylint_output(#[case] version_stdou
     args: vec!["install", "--list"],
     result: Ok(stdout_output("ripgrep v14.1.0:\n    rg\n")),
 })]
-fn check_dylint_tools_rejects_unpinned_dylint_link(#[case] install_list_check: ExpectedCall) {
+fn check_dylint_tools_rejects_unpinned_dylint_link(
+    #[case] install_list_check: ExpectedCall,
+) -> std::io::Result<()> {
     with_fake_binary_on_path("dylint-link", || {
-        let executor = StubExecutor::new(vec![cargo_dylint_check(), install_list_check]);
+        let executor = StubExecutor::new(vec![
+            cargo_dylint_check().expect("cargo-dylint dependency version should resolve"),
+            install_list_check,
+        ]);
 
-        let status = check_dylint_tools(&executor);
+        let status =
+            check_dylint_tools(&executor).expect("available dependency checks should complete");
 
-        assert_eq!(
-            status,
-            DylintToolStatus {
-                cargo_dylint: true,
-                dylint_link: false,
-            }
-        );
+        assert_status(status, cargo_dylint_only());
         executor.assert_finished();
-    });
+    })?;
+    Ok(())
 }
 
+/// Verify PATH detection never executes the discovered dylint-link wrapper.
 #[test]
-fn check_dylint_tools_rejects_non_invocable_dylint_link_on_path() {
+fn check_dylint_tools_does_not_invoke_dylint_link_on_path() -> std::io::Result<()> {
     with_fake_path(
         |directories| {
+            let first_dir = directories.first().expect("fake PATH has one directory");
             #[cfg(windows)]
-            let binary_path = directories[0].join("dylint-link.cmd");
+            let binary_path = first_dir.join("dylint-link.cmd");
             #[cfg(not(windows))]
-            let binary_path = directories[0].join("dylint-link");
+            let binary_path = first_dir.join("dylint-link");
 
-            write_fake_binary_with_status(&binary_path, true, 1);
+            write_fake_binary_with_status(&binary_path, true, 1)
         },
         || {
-            let executor = StubExecutor::new(vec![cargo_dylint_check()]);
+            let executor = StubExecutor::new(vec![
+                cargo_dylint_check().expect("cargo-dylint dependency version should resolve"),
+                dylint_link_install_list_check()
+                    .expect("dylint-link dependency version should resolve"),
+            ]);
 
-            let status = check_dylint_tools(&executor);
+            let status =
+                check_dylint_tools(&executor).expect("available dependency checks should complete");
 
-            assert_eq!(
+            assert_status(
                 status,
                 DylintToolStatus {
                     cargo_dylint: true,
-                    dylint_link: false,
-                }
+                    dylint_link: true,
+                },
             );
             executor.assert_finished();
         },
-    );
-}
-
-#[test]
-fn is_binary_on_path_returns_false_when_path_is_unset() {
-    let _guard = env_test_guard();
-    with_vars_unset(["PATH"], || {
-        assert!(!is_binary_on_path("dylint-link"));
-    });
-}
-
-#[test]
-fn is_binary_on_path_returns_false_when_path_is_empty() {
-    let _guard = env_test_guard();
-    temp_env::with_var("PATH", Some(""), || {
-        assert!(!is_binary_on_path("dylint-link"));
-    });
-}
-
-#[test]
-fn is_binary_on_path_returns_false_when_binary_is_missing_from_all_directories() {
-    with_fake_path(
-        |_| {},
-        || {
-            assert!(!is_binary_on_path("dylint-link"));
-        },
-    );
-}
-
-#[test]
-fn is_binary_on_path_checks_multiple_directories() {
-    with_fake_path(
-        |directories| {
-            #[cfg(windows)]
-            let binary_path = directories[1].join("dylint-link.exe");
-            #[cfg(not(windows))]
-            let binary_path = directories[1].join("dylint-link");
-
-            write_fake_binary(&binary_path, true);
-        },
-        || {
-            assert!(is_binary_on_path("dylint-link"));
-        },
-    );
-}
-
-#[cfg(unix)]
-#[test]
-fn is_executable_file_rejects_non_executable_files() {
-    let temp_dir = tempfile::tempdir().expect("create temp dir");
-    let binary_path = temp_dir.path().join("dylint-link");
-    write_fake_binary(&binary_path, false);
-
-    assert!(!is_executable_file(&binary_path));
-}
-
-#[cfg(unix)]
-#[test]
-fn is_executable_file_accepts_executable_files() {
-    let temp_dir = tempfile::tempdir().expect("create temp dir");
-    let binary_path = temp_dir.path().join("dylint-link");
-    write_fake_binary(&binary_path, true);
-
-    assert!(is_executable_file(&binary_path));
-}
-
-#[cfg(windows)]
-#[rstest::rstest]
-#[case("dylint-link.exe", 0, true)]
-#[case("dylint-link", 1, false)]
-fn is_binary_on_path_handles_windows_executable_suffixes(
-    #[case] binary_name: &str,
-    #[case] dir_index: usize,
-    #[case] expected: bool,
-) {
-    with_fake_path(
-        |directories| write_fake_binary(&directories[dir_index].join(binary_name), true),
-        || {
-            assert_eq!(is_binary_on_path(binary_name), expected);
-        },
-    );
-}
-
-#[cfg(windows)]
-#[test]
-fn check_dylint_tools_detects_dylint_link_via_pathext_suffix() {
-    with_fake_path(
-        |directories| {
-            write_fake_binary_with_status(&directories[0].join("dylint-link.cmd"), true, 0)
-        },
-        || {
-            temp_env::with_var("PATHEXT", Some(".CMD;.BAT"), || {
-                let executor =
-                    StubExecutor::new(vec![cargo_dylint_check(), dylint_link_install_list_check()]);
-
-                let status = check_dylint_tools(&executor);
-
-                assert_eq!(
-                    status,
-                    DylintToolStatus {
-                        cargo_dylint: true,
-                        dylint_link: true,
-                    }
-                );
-                executor.assert_finished();
-            });
-        },
-    );
+    )?;
+    Ok(())
 }

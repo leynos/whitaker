@@ -1,0 +1,242 @@
+//! Context discovery for `unwrap_or_else` sites.
+//!
+//! Converts HIR ancestors into simplified context entries so the lint can
+//! detect test-like scopes, doctest guards, and `main` functions.
+
+#[cfg(feature = "dylint-driver")]
+use whitaker_common::PARSED_ATTRIBUTE_PLACEHOLDER;
+use whitaker_common::{Attribute, AttributeKind, AttributePath, ContextEntry, ContextKind};
+
+/// Summary of the surrounding context for a HIR node.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(crate) struct ContextSummary {
+    pub(crate) is_test: bool,
+    pub(crate) in_main: bool,
+}
+
+#[cfg(feature = "dylint-driver")]
+use rustc_ast::ast::{MetaItem, MetaItemInner};
+#[cfg(feature = "dylint-driver")]
+use rustc_ast::{AttrStyle, Path as AstPath};
+#[cfg(feature = "dylint-driver")]
+use rustc_hir as hir;
+#[cfg(feature = "dylint-driver")]
+use rustc_hir::Node;
+#[cfg(feature = "dylint-driver")]
+use rustc_hir::attrs::AttributeKind as HirAttributeKind;
+#[cfg(feature = "dylint-driver")]
+use rustc_lint::LateContext;
+#[cfg(feature = "dylint-driver")]
+use rustc_span::sym;
+
+/// Derive test status and `main` membership from a HIR node's ancestry.
+///
+/// Ancestor `cfg(test)` attributes contribute to test status alongside the
+/// test-like scopes and attributes represented by context entries.
+#[cfg(feature = "dylint-driver")]
+pub(crate) fn summarize_context(cx: &LateContext<'_>, hir_id: hir::HirId) -> ContextSummary {
+    let mut entries = Vec::new();
+    let mut has_cfg_test = false;
+
+    let mut ancestors: Vec<_> = cx.tcx.hir_parent_iter(hir_id).collect();
+    ancestors.reverse();
+
+    for (ancestor_id, node) in ancestors {
+        let attrs = cx.tcx.hir_attrs(ancestor_id);
+        if attrs.iter().any(is_cfg_test_attribute) {
+            has_cfg_test = true;
+        }
+
+        if let Some(entry) = context_entry_for(node, attrs) {
+            entries.push(entry);
+        }
+    }
+
+    let is_test = has_cfg_test || whitaker_common::in_test_like_context(entries.as_slice());
+    let in_main = whitaker_common::is_in_main_fn(entries.as_slice());
+
+    ContextSummary { is_test, in_main }
+}
+
+#[cfg(feature = "dylint-driver")]
+/// Convert a HIR node with its attributes into a context stack entry.
+fn context_entry_for(node: Node<'_>, attrs: &[hir::Attribute]) -> Option<ContextEntry> {
+    match node {
+        Node::Item(item) => match &item.kind {
+            hir::ItemKind::Fn { .. } => {
+                item_name(item).map(|name| ContextEntry::function(name, convert_attributes(attrs)))
+            }
+            hir::ItemKind::Mod { .. } => item_name(item).map(|name| {
+                ContextEntry::new(name, ContextKind::Module, convert_attributes(attrs))
+            }),
+            hir::ItemKind::Impl(..) => Some(ContextEntry::new(
+                "impl".to_owned(),
+                ContextKind::Impl,
+                convert_attributes(attrs),
+            )),
+            _ => None,
+        },
+        Node::ImplItem(item) => match item.kind {
+            hir::ImplItemKind::Fn(..) => Some(ContextEntry::function(
+                item.ident.name.to_string(),
+                convert_attributes(attrs),
+            )),
+            _ => None,
+        },
+        Node::TraitItem(item) => match item.kind {
+            hir::TraitItemKind::Fn(..) => Some(ContextEntry::function(
+                item.ident.name.to_string(),
+                convert_attributes(attrs),
+            )),
+            _ => None,
+        },
+        Node::Block(_) => Some(ContextEntry::new(
+            "block".to_owned(),
+            ContextKind::Block,
+            convert_attributes(attrs),
+        )),
+        _ => None,
+    }
+}
+
+#[cfg(feature = "dylint-driver")]
+fn convert_attributes(attrs: &[hir::Attribute]) -> Vec<Attribute> {
+    attrs.iter().map(convert_attribute).collect()
+}
+
+#[cfg(feature = "dylint-driver")]
+/// Convert a rustc attribute into the shared attribute representation.
+fn convert_attribute(attr: &hir::Attribute) -> Attribute {
+    let kind = match attribute_style(attr) {
+        AttrStyle::Inner => AttributeKind::Inner,
+        AttrStyle::Outer => AttributeKind::Outer,
+    };
+    let path = if attr.doc_str().is_some() {
+        AttributePath::from("doc")
+    } else {
+        // Parsed attributes (like #[must_use]) don't have an accessible path;
+        // calling path() on them would panic.
+        let hir::Attribute::Unparsed(_) = attr else {
+            return Attribute::new(AttributePath::from(PARSED_ATTRIBUTE_PLACEHOLDER), kind);
+        };
+        let mut names = attr.path().into_iter().map(|symbol| symbol.to_string());
+        names.next().map_or_else(
+            || AttributePath::from("unknown"),
+            |first| AttributePath::new(std::iter::once(first).chain(names)),
+        )
+    };
+
+    Attribute::new(path, kind)
+}
+
+#[cfg(feature = "dylint-driver")]
+/// Return the shared outer or inner style of a rustc attribute.
+fn attribute_style(attr: &hir::Attribute) -> AttrStyle {
+    match attr {
+        hir::Attribute::Unparsed(item) => item.style,
+        hir::Attribute::Parsed(HirAttributeKind::DocComment { style, .. }) => *style,
+        hir::Attribute::Parsed(_) => AttrStyle::Outer,
+    }
+}
+
+#[cfg(feature = "dylint-driver")]
+fn item_name(item: &hir::Item<'_>) -> Option<String> {
+    item.kind.ident().map(|ident| ident.name.to_string())
+}
+
+#[cfg(feature = "dylint-driver")]
+/// Returns `true` when the attribute is `#[cfg(test)]` or a `cfg_attr(test, cfg(test))`
+/// wrapper, ensuring test-only scopes are treated as exempt.
+fn is_cfg_test_attribute(attr: &hir::Attribute) -> bool {
+    // Parsed attributes (like #[must_use]) are not cfg-related; skip them to
+    // avoid panics when calling path() on arbitrary parsed attributes.
+    let hir::Attribute::Unparsed(_) = attr else {
+        return false;
+    };
+
+    let path = attr.path();
+    let [name] = path.as_slice() else {
+        return false;
+    };
+
+    if *name == sym::cfg {
+        return attr
+            .meta_item_list()
+            .is_some_and(|items| items.iter().cloned().any(meta_item_inner_contains_test));
+    }
+
+    if *name != sym::cfg_attr {
+        return false;
+    }
+
+    attr.meta_item_list().is_some_and(check_cfg_attr_for_test)
+}
+
+#[cfg(feature = "dylint-driver")]
+fn check_cfg_attr_for_test<I>(items: I) -> bool
+where
+    I: IntoIterator<Item = MetaItemInner>,
+{
+    let mut iter = items.into_iter();
+    let Some(condition) = iter.next() else {
+        return false;
+    };
+
+    if !meta_item_inner_contains_test(condition) {
+        return false;
+    }
+
+    iter.any(|item| match item {
+        MetaItemInner::MetaItem(inner) => meta_contains_test_cfg(&inner),
+        MetaItemInner::Lit(_) => false,
+    })
+}
+
+#[cfg(feature = "dylint-driver")]
+fn meta_item_inner_contains_test(item: MetaItemInner) -> bool {
+    meta_item_inner_contains_test_with_polarity(item, true)
+}
+
+#[cfg(feature = "dylint-driver")]
+fn meta_item_inner_contains_test_with_polarity(item: MetaItemInner, is_positive: bool) -> bool {
+    match item {
+        MetaItemInner::MetaItem(meta) => meta_contains_test_with_polarity(&meta, is_positive),
+        MetaItemInner::Lit(_) => false,
+    }
+}
+
+#[cfg(feature = "dylint-driver")]
+/// Check whether a meta item expresses a positive or negated test condition.
+fn meta_contains_test_with_polarity(meta: &MetaItem, is_positive: bool) -> bool {
+    if path_is_ident(&meta.path, sym::test) || path_is_ident(&meta.path, sym::doctest) {
+        return is_positive;
+    }
+
+    if path_is_ident(&meta.path, sym::not) {
+        return meta.meta_item_list().is_some_and(|items| {
+            items
+                .iter()
+                .cloned()
+                .any(|item| meta_item_inner_contains_test_with_polarity(item, !is_positive))
+        });
+    }
+
+    meta.meta_item_list()
+        .is_some_and(|items| items.iter().cloned().any(meta_item_inner_contains_test))
+}
+
+#[cfg(feature = "dylint-driver")]
+/// Check whether a meta item names the built-in test configuration.
+fn meta_contains_test_cfg(meta: &MetaItem) -> bool {
+    meta.meta_item_list()
+        .is_some_and(|items| items.iter().cloned().any(meta_item_inner_contains_test))
+}
+
+#[cfg(feature = "dylint-driver")]
+/// Check whether a one-segment AST path names the supplied identifier.
+fn path_is_ident(path: &AstPath, ident: rustc_span::Symbol) -> bool {
+    matches!(&*path.segments, [segment] if segment.ident.name == ident)
+}
+
+#[cfg(test)]
+mod tests;

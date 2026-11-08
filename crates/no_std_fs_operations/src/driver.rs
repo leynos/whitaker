@@ -1,12 +1,6 @@
 //! Lint crate enforcing capability-based filesystem access by forbidding
 //! `std::fs` operations.
 
-use crate::config::{LINT_NAME, load_configuration};
-use crate::diagnostics::emit_diagnostic;
-use crate::exclusion::PathExclusions;
-use crate::usage::{
-    StdFsUsage, UsageCategory, classify_def_id, classify_qpath, classify_res, label_is_std_fs,
-};
 use log::{debug, info};
 use rustc_hir as hir;
 use rustc_hir::AmbigArg;
@@ -14,10 +8,20 @@ use rustc_lint::{LateContext, LateLintPass};
 use rustc_middle::ty;
 use rustc_span::{Span, sym};
 use whitaker::SharedConfig;
-use whitaker_common::SimplePath;
-use whitaker_common::i18n::Localizer;
-use whitaker_common::i18n::get_localizer_for_lint;
+use whitaker_common::{
+    SimplePath,
+    i18n::{Localizer, get_localizer_for_lint},
+};
 
+use crate::{
+    config::{LINT_NAME, load_configuration},
+    diagnostics::emit_diagnostic,
+    exclusion::PathExclusions,
+    usage::{StdFsUsage, classify_def_id, classify_qpath, classify_res, label_is_std_fs},
+};
+
+/// Lint pass that tracks localization and exclusion state while checking
+/// `std::fs` usage.
 pub struct NoStdFsOperations {
     localizer: Localizer,
     excluded: bool,
@@ -34,12 +38,30 @@ impl Default for NoStdFsOperations {
     }
 }
 
-dylint_linting::impl_late_lint! {
-    pub NO_STD_FS_OPERATIONS,
-    Deny,
-    "std::fs operations bypass Whitaker's capability-based filesystem policy",
-    NoStdFsOperations::default()
+/// Dylint lint declaration and registration glue.
+///
+/// `impl_late_lint!` expands to the Dylint ABI entry point and the
+/// `impl_lint_pass!` accessor, neither of which has a source location that
+/// could carry documentation. Isolating the invocation keeps the expectation
+/// scoped to exactly those generated items.
+mod declaration {
+    #![expect(
+        missing_docs,
+        reason = "dylint_linting macro expansion emits items with no documentable source location"
+    )]
+
+    use super::NoStdFsOperations;
+
+    dylint_linting::impl_late_lint! {
+        /// Denies direct `std::fs` use that bypasses the capability policy.
+        pub NO_STD_FS_OPERATIONS,
+        Deny,
+        "std::fs operations bypass Whitaker's capability-based filesystem policy",
+        NoStdFsOperations::default()
+    }
 }
+
+pub use declaration::NO_STD_FS_OPERATIONS;
 
 impl<'tcx> LateLintPass<'tcx> for NoStdFsOperations {
     fn check_crate(&mut self, cx: &LateContext<'tcx>) {
@@ -66,6 +88,10 @@ impl<'tcx> LateLintPass<'tcx> for NoStdFsOperations {
         }
     }
 
+    /// Classify resolved imports and emit diagnostics for `std::fs` usages.
+    ///
+    /// Excluded crates are skipped, as are non-`use` items; each resolved item
+    /// in a use tree is classified at the import's span.
     fn check_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx hir::Item<'tcx>) {
         if self.should_skip() {
             return;
@@ -76,12 +102,17 @@ impl<'tcx> LateLintPass<'tcx> for NoStdFsOperations {
                 span: path.span,
             };
             for res in path.res.present_items() {
-                let usage = classify_res(cx, res, UsageCategory::Import);
+                let usage = classify_res(cx, res);
                 self.emit_optional(cx, site, usage);
             }
         }
     }
 
+    /// Classify path, struct-construction, and method-call expressions.
+    ///
+    /// Excluded crates and unrelated expression kinds are ignored. Method
+    /// calls use their resolved definition first, then inspect the receiver
+    /// type when resolution did not identify a `std::fs` operation.
     fn check_expr(&mut self, cx: &LateContext<'tcx>, expr: &'tcx hir::Expr<'tcx>) {
         if self.should_skip() {
             return;
@@ -92,21 +123,21 @@ impl<'tcx> LateLintPass<'tcx> for NoStdFsOperations {
         };
         match &expr.kind {
             hir::ExprKind::Path(qpath) => {
-                let usage = classify_qpath(cx, qpath, expr.hir_id, UsageCategory::Call);
+                let usage = classify_qpath(cx, qpath, expr.hir_id);
                 self.emit_optional(cx, site, usage);
             }
             hir::ExprKind::Struct(qpath, ..) => {
-                let usage = classify_qpath(cx, qpath, expr.hir_id, UsageCategory::Call);
+                let usage = classify_qpath(cx, qpath, expr.hir_id);
                 self.emit_optional(cx, site, usage);
             }
             hir::ExprKind::MethodCall(segment, receiver, ..) => {
                 let mut usage = cx
                     .typeck_results()
                     .type_dependent_def_id(expr.hir_id)
-                    .and_then(|def_id| classify_def_id(cx, def_id, UsageCategory::Call));
+                    .and_then(|def_id| classify_def_id(cx, def_id));
 
                 if usage.is_none() {
-                    usage = self.receiver_usage_for_method(cx, receiver, segment.ident.as_str());
+                    usage = Self::receiver_usage_for_method(cx, receiver, segment.ident.as_str());
                 }
 
                 self.emit_optional(cx, site, usage);
@@ -115,12 +146,15 @@ impl<'tcx> LateLintPass<'tcx> for NoStdFsOperations {
         }
     }
 
+    /// Classify path types and emit a diagnostic for a resolved `std::fs` use.
+    ///
+    /// Excluded crates and non-path type expressions are ignored.
     fn check_ty(&mut self, cx: &LateContext<'tcx>, ty: &'tcx hir::Ty<'tcx, AmbigArg>) {
         if self.should_skip() {
             return;
         }
         if let hir::TyKind::Path(qpath) = &ty.kind {
-            let usage = classify_qpath(cx, qpath, ty.hir_id, UsageCategory::Type);
+            let usage = classify_qpath(cx, qpath, ty.hir_id);
             self.emit_optional(
                 cx,
                 LintSite {
@@ -147,15 +181,14 @@ struct LintSite {
 impl NoStdFsOperations {
     /// Centralizes exclusion logic for all lint pass methods.
     #[inline]
-    fn should_skip(&self) -> bool {
-        self.excluded
-    }
+    const fn should_skip(&self) -> bool { self.excluded }
 
+    /// Emit a diagnostic when the site contains a recognized filesystem use.
     fn emit_optional(&self, cx: &LateContext<'_>, site: LintSite, usage: Option<StdFsUsage>) {
         if self.should_skip() {
             return;
         }
-        let Some(usage) = usage else {
+        let Some(detected) = usage else {
             return;
         };
         // Resolve the enclosing item's path only for genuine `std::fs` hits
@@ -164,7 +197,7 @@ impl NoStdFsOperations {
         if self.is_path_excluded(cx, site.hir_id) {
             return;
         }
-        self.emit(cx, site.span, usage);
+        self.emit(cx, site.span, &detected);
     }
 
     /// Returns `true` when the item enclosing `hir_id` falls within a
@@ -177,12 +210,16 @@ impl NoStdFsOperations {
             .excludes(&enclosing_item_path(cx, hir_id))
     }
 
-    fn emit(&self, cx: &LateContext<'_>, span: Span, usage: StdFsUsage) {
+    /// Emit the diagnostic for a detected standard filesystem operation.
+    fn emit(&self, cx: &LateContext<'_>, span: Span, usage: &StdFsUsage) {
         emit_diagnostic(cx, span, usage, &self.localizer);
     }
 
+    /// Infer a filesystem operation from a method receiver's standard type.
+    ///
+    /// Returns `None` for non-ADT receivers, types outside `std`, or standard
+    /// types outside `std::fs`; otherwise returns the qualified operation label.
     fn receiver_usage_for_method(
-        &self,
         cx: &LateContext<'_>,
         receiver: &hir::Expr<'_>,
         method: &str,
@@ -204,7 +241,7 @@ impl NoStdFsOperations {
         }
 
         let operation = format!("{label}::{method}");
-        Some(StdFsUsage::new(operation, UsageCategory::Call))
+        Some(StdFsUsage::new(operation))
     }
 }
 

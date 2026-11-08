@@ -89,12 +89,13 @@ class RunnerLane(typ.NamedTuple):
 
 
 #: Every placement this repository puts on an Ubicloud runner, matrix legs
-#: included. The three whole jobs restate `UBICLOUD_JOBS`, and a contract
-#: holds the two lists to each other so neither can be extended alone.
+#: included. The whole jobs restate `UBICLOUD_JOBS` less `HOSTED_RUNNER_JOBS`,
+#: and a contract holds the lists to each other so neither can be extended
+#: alone.
 UBICLOUD_LANES: Final[tuple[RunnerLane, ...]] = (
     RunnerLane("ci.yml", "coverage-check"),
     RunnerLane("ci.yml", "linux-full"),
-    RunnerLane("coverage-main.yml", "coverage-upload"),
+    RunnerLane("coverage-main.yml", "coverage-warmup"),
     RunnerLane("rolling-release.yml", "build-lints", "x86_64-unknown-linux-gnu"),
     RunnerLane("rolling-release.yml", "build-lints", "aarch64-unknown-linux-gnu"),
     RunnerLane(
@@ -196,11 +197,12 @@ def leg_guard_selects(condition: object, leg: str) -> bool:
 LEG_DISCRIMINATOR: Final[str] = "${{ runner.arch }}"
 
 
-#: The longest `timeout-minutes` any lane here may declare. Not a limit on
-#: what a job needs, but a bound on what a hang can cost: the slowest observed
-#: leg in this repository is under ten minutes, so anything approaching two
-#: hours is a typo or a hang nobody has looked at.
+#: The ordinary lane ceiling limits the cost of a hung paid runner.
 MAXIMUM_LANE_TIMEOUT_MINUTES: Final[int] = 120
+
+#: The test-suite lanes have a separately derived ceiling because their
+#: nextest budgets exceed the ordinary Ubicloud build-lane limit.
+SUITE_LANE_TIMEOUT_MINUTES: Final[int] = 335
 
 
 #: Every lane whose runner image sets the glibc floor for a consumer of

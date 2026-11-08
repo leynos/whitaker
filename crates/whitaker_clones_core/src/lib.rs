@@ -7,7 +7,7 @@
 //! - `k`-shingling over normalized token streams.
 //! - 64-bit Rabin-Karp rolling hashes for shingles.
 //! - Winnowing to retain stable representative fingerprints.
-//! - Deterministic MinHash sketches over retained fingerprints.
+//! - Deterministic `MinHash` sketches over retained fingerprints.
 //! - Locality-sensitive hashing (LSH) candidate generation.
 //! - Token-pass acceptance and SARIF Run 0 emission for accepted pairs.
 
@@ -18,20 +18,57 @@ pub mod run0;
 pub mod token;
 
 pub use ast::{
-    AstError, AstHash, AstResult, ByteSpan, KindCounts, KindHistogram, KindWeight, NormalizedTree,
-    Production, ProductionMultiset, canonical_hash, kind_counts, kind_histogram, lower_span,
-    production_multiset, weighted_histogram,
+    AstError,
+    AstHash,
+    AstResult,
+    ByteSpan,
+    KindCounts,
+    KindHistogram,
+    KindWeight,
+    NormalizedTree,
+    Production,
+    ProductionMultiset,
+    canonical_hash,
+    kind_counts,
+    kind_histogram,
+    lower_span,
+    production_multiset,
+    weighted_histogram,
 };
 pub use index::{
-    CandidatePair, FragmentId, IndexError, IndexResult, LshConfig, LshIndex, MINHASH_SIZE,
-    MinHashSignature, MinHasher,
+    CandidatePair,
+    FragmentId,
+    IndexError,
+    IndexResult,
+    LshConfig,
+    LshIndex,
+    MINHASH_SIZE,
+    MinHashSignature,
+    MinHasher,
 };
 pub use run0::{
-    AcceptedPair, Run0Error, Run0Result, SimilarityRatio, SimilarityThreshold, TokenFragment,
-    TokenPassConfig, accept_candidate_pairs, emit_run0,
+    AcceptedPair,
+    Run0Error,
+    Run0Result,
+    SimilarityRatio,
+    SimilarityThreshold,
+    TokenFragment,
+    TokenPassConfig,
+    accept_candidate_pairs,
+    emit_run0,
 };
 pub use token::{
-    Fingerprint, IdentifierSymbol, LiteralSymbol, NormProfile, NormalizedToken,
-    NormalizedTokenKind, Result, ShingleSize, TokenPassError, WinnowWindow, hash_shingles,
-    normalize, winnow,
+    Fingerprint,
+    IdentifierSymbol,
+    LiteralSymbol,
+    NormProfile,
+    NormalizedToken,
+    NormalizedTokenKind,
+    Result,
+    ShingleSize,
+    TokenPassError,
+    WinnowWindow,
+    hash_shingles,
+    normalize,
+    winnow,
 };

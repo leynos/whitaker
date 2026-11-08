@@ -3,12 +3,13 @@
 //! Split from `workspace.rs` to keep each file inside the repository's
 //! 400-line limit; the module they exercise is unchanged.
 
+use std::{fs, path::PathBuf};
+
+use rstest::{fixture, rstest};
+use tempfile::TempDir;
+
 use super::*;
 use crate::dirs::{MockBaseDirs, SystemBaseDirs};
-use rstest::{fixture, rstest};
-use std::fs;
-use std::path::PathBuf;
-use tempfile::TempDir;
 
 /// A temporary directory converted to a UTF-8 path for workspace tests.
 struct TempWorkspace {
@@ -17,19 +18,81 @@ struct TempWorkspace {
 }
 
 #[fixture]
-fn temp_workspace() -> TempWorkspace {
-    let temp = TempDir::new().expect("failed to create temp dir");
-    let path = Utf8PathBuf::try_from(temp.path().to_owned()).expect("non-UTF8 temp path");
-    TempWorkspace { _temp: temp, path }
+fn temp_workspace() -> std::io::Result<TempWorkspace> {
+    let temp = TempDir::new()?;
+    let path = Utf8PathBuf::try_from(temp.path().to_owned())
+        .map_err(|_| std::io::Error::other("temporary directory path must be UTF-8"))?;
+    Ok(TempWorkspace { _temp: temp, path })
 }
 
-fn write_cargo_toml(dir: &Utf8Path, package_name: &str) {
+fn write_cargo_toml(dir: &Utf8Path, package_name: &str) -> std::io::Result<()> {
     let cargo_toml = dir.join("Cargo.toml");
     fs::write(
         cargo_toml,
         format!("[package]\nname = \"{package_name}\"\nversion = \"0.1.0\"\n"),
     )
-    .expect("failed to write Cargo.toml");
+}
+
+// Assertions live in these helpers because several tests return `Result` to
+// propagate fixture errors, and `panic_in_result_fn` denies asserting inside
+// such a function.
+
+/// Assert the plan refused a pin inside a Whitaker checkout, naming it.
+fn assert_pin_refused(result: Result<WorkspaceAction>, reference: &str) {
+    let error = result.expect_err("a pin here should be refused");
+    assert!(
+        matches!(error, InstallerError::SuitePinInWorkspace { .. }),
+        "expected SuitePinInWorkspace, got: {error:?}"
+    );
+    let rendered = error.to_string();
+    assert!(
+        rendered.contains(reference),
+        "the refusal should name {reference}: {rendered}"
+    );
+}
+
+/// Assert the plan resolved to using the current workspace directory.
+fn assert_uses_current_dir(action: &WorkspaceAction, expected: &Utf8Path) {
+    assert_eq!(
+        action,
+        &WorkspaceAction::UseCurrentDir(expected.to_owned()),
+        "an unpinned in-tree run should use the current workspace"
+    );
+}
+
+/// Assert the plan resolved to cloning into the cached directory.
+fn assert_clones_to(action: &WorkspaceAction, expected: &Utf8Path) {
+    assert_eq!(
+        action,
+        &WorkspaceAction::CloneTo(expected.to_owned()),
+        "a pin outside a workspace should clone into the cache"
+    );
+}
+
+/// Assert the clone's HEAD is detached.
+fn assert_detached_head(clone: &Utf8Path) {
+    assert!(
+        crate::git::is_detached_head(clone).expect("HEAD should be readable"),
+        "the clone should be on a detached HEAD"
+    );
+}
+
+/// Assert the clone's HEAD is back on a branch.
+fn assert_on_branch(clone: &Utf8Path) {
+    assert!(
+        !crate::git::is_detached_head(clone).expect("HEAD should be readable"),
+        "the clone should be back on a branch"
+    );
+}
+
+/// Assert a clone update succeeded.
+fn assert_update_succeeded(result: &Result<()>) {
+    assert!(result.is_ok(), "the update should succeed: {result:?}");
+}
+
+/// Assert an external command that the test ran itself succeeded.
+fn assert_command_succeeded(status: std::process::ExitStatus, message: &str) {
+    assert!(status.success(), "{message}");
 }
 
 #[rstest]
@@ -37,69 +100,16 @@ fn write_cargo_toml(dir: &Utf8Path, package_name: &str) {
 #[case::other_project(Some("other-project"), false)]
 #[case::empty_dir(None, false)]
 fn is_whitaker_workspace_detection(
-    temp_workspace: TempWorkspace,
+    #[from(temp_workspace)] temp_workspace_res: std::io::Result<TempWorkspace>,
     #[case] package_name: Option<&str>,
     #[case] expected: bool,
 ) {
+    let temp_workspace = temp_workspace_res.expect("temporary workspace should be created");
+
     if let Some(name) = package_name {
-        write_cargo_toml(&temp_workspace.path, name);
+        write_cargo_toml(&temp_workspace.path, name).expect("Cargo.toml should be written");
     }
     assert_eq!(is_whitaker_workspace(&temp_workspace.path), expected);
-}
-
-#[test]
-fn clone_directory_returns_some_on_supported_platforms() {
-    // This test may fail on unsupported platforms, but should pass on
-    // Linux, macOS, and Windows.
-    let dirs = SystemBaseDirs::new().expect("failed to create SystemBaseDirs");
-    let dir = clone_directory(&dirs);
-    assert!(dir.is_some(), "expected clone_directory to return Some");
-    assert!(
-        dir.as_ref()
-            .is_some_and(|p| p.as_str().contains("whitaker")),
-        "expected path to contain 'whitaker'"
-    );
-}
-
-#[rstest]
-fn decide_workspace_action_uses_cwd_when_whitaker(temp_workspace: TempWorkspace) {
-    write_cargo_toml(&temp_workspace.path, "whitaker");
-    let clone_dir = Utf8PathBuf::from("/nonexistent/clone/dir");
-
-    let action = decide_workspace_action(&temp_workspace.path, &clone_dir, true);
-
-    assert_eq!(action, WorkspaceAction::UseCurrentDir(temp_workspace.path));
-}
-
-#[rstest]
-fn decide_workspace_action_clones_when_empty(temp_workspace: TempWorkspace) {
-    // temp_workspace.path is empty (no Cargo.toml), clone_dir doesn't exist
-    let clone_dir = temp_workspace.path.join("clone_target");
-
-    let action = decide_workspace_action(&temp_workspace.path, &clone_dir, true);
-
-    assert_eq!(action, WorkspaceAction::CloneTo(clone_dir));
-}
-
-#[rstest]
-fn decide_workspace_action_updates_when_clone_exists(temp_workspace: TempWorkspace) {
-    // Create a clone directory (not a whitaker workspace, just exists)
-    let clone_dir = temp_workspace.path.join("clone_target");
-    fs::create_dir(&clone_dir).expect("failed to create clone dir");
-
-    let action = decide_workspace_action(&temp_workspace.path, &clone_dir, true);
-
-    assert_eq!(action, WorkspaceAction::UpdateAt(clone_dir));
-}
-
-#[rstest]
-fn decide_workspace_action_uses_existing_when_no_update(temp_workspace: TempWorkspace) {
-    let clone_dir = temp_workspace.path.join("clone_target");
-    fs::create_dir(&clone_dir).expect("failed to create clone dir");
-
-    let action = decide_workspace_action(&temp_workspace.path, &clone_dir, false);
-
-    assert_eq!(action, WorkspaceAction::UseExisting(clone_dir));
 }
 
 // -------------------------------------------------------------------------
@@ -108,31 +118,37 @@ fn decide_workspace_action_uses_existing_when_no_update(temp_workspace: TempWork
 
 fn mock_dirs_returning(data_dir: Option<PathBuf>) -> MockBaseDirs {
     let mut mock = MockBaseDirs::new();
-    mock.expect_whitaker_data_dir().return_const(data_dir);
+    mock.expect_whitaker_data().return_const(data_dir);
     mock
 }
 
 #[rstest]
-fn resolve_workspace_path_returns_clone_dir_when_not_in_workspace(temp_workspace: TempWorkspace) {
+fn resolve_workspace_path_returns_clone_dir_when_not_in_workspace(
+    #[from(temp_workspace)] temp_workspace_res: std::io::Result<TempWorkspace>,
+) {
+    let temp_workspace = temp_workspace_res.expect("temporary workspace should be created");
+
     // Mock returns a data directory inside temp workspace
     let expected_dir = temp_workspace.path.join("data").join("whitaker");
     let mock = mock_dirs_returning(Some(expected_dir.clone().into_std_path_buf()));
 
     let result = resolve_workspace_path(&mock);
 
-    assert!(result.is_ok());
-    assert_eq!(result.unwrap(), expected_dir);
+    assert_eq!(result.expect("workspace path should resolve"), expected_dir);
 }
 
 #[rstest]
-fn resolve_workspace_path_errors_when_data_dir_unavailable(temp_workspace: TempWorkspace) {
+fn resolve_workspace_path_errors_when_data_dir_unavailable(
+    #[from(temp_workspace)] temp_workspace_res: std::io::Result<TempWorkspace>,
+) {
+    let temp_workspace = temp_workspace_res.expect("temporary workspace should be created");
+
     let _ = temp_workspace; // Ensure fixture is used
     let mock = mock_dirs_returning(None);
 
     let result = resolve_workspace_path(&mock);
 
-    assert!(result.is_err());
-    let err = result.unwrap_err();
+    let err = result.expect_err("resolution should fail without a data directory");
     assert!(
         matches!(err, InstallerError::WorkspaceNotFound { .. }),
         "expected WorkspaceNotFound error, got: {err:?}"
@@ -140,11 +156,14 @@ fn resolve_workspace_path_errors_when_data_dir_unavailable(temp_workspace: TempW
 }
 
 #[rstest]
-fn plan_refuses_a_pin_inside_a_whitaker_workspace(temp_workspace: TempWorkspace) {
+fn plan_refuses_a_pin_inside_a_whitaker_workspace(
+    #[from(temp_workspace)] temp_workspace_res: std::io::Result<TempWorkspace>,
+) -> std::io::Result<()> {
+    let temp_workspace = temp_workspace_res?;
     // Checking out a reference here would move the caller's own working
     // tree, discarding whatever they were doing. Refused rather than
     // done, and the error says where to run it instead.
-    write_cargo_toml(&temp_workspace.path, "whitaker");
+    write_cargo_toml(&temp_workspace.path, "whitaker")?;
     let clone_dir = temp_workspace.path.join("clone_target");
     let plan = WorkspacePlan {
         should_update: false,
@@ -153,20 +172,18 @@ fn plan_refuses_a_pin_inside_a_whitaker_workspace(temp_workspace: TempWorkspace)
 
     let result = plan_workspace_action(&temp_workspace.path, &clone_dir, &plan);
 
-    let error = result.expect_err("a pin here should be refused");
-    assert!(
-        matches!(error, InstallerError::SuitePinInWorkspace { .. }),
-        "expected SuitePinInWorkspace, got: {error:?}"
-    );
-    let rendered = error.to_string();
-    assert!(rendered.contains("v0.2.7"), "{rendered}");
+    assert_pin_refused(result, "v0.2.7");
+    Ok(())
 }
 
 #[rstest]
-fn plan_uses_a_whitaker_workspace_when_nothing_is_pinned(temp_workspace: TempWorkspace) {
+fn plan_uses_a_whitaker_workspace_when_nothing_is_pinned(
+    #[from(temp_workspace)] temp_workspace_res: std::io::Result<TempWorkspace>,
+) -> std::io::Result<()> {
+    let temp_workspace = temp_workspace_res?;
     // The counterpart: without a pin the current workspace is used, which
     // is what a Whitaker developer running the installer in-tree expects.
-    write_cargo_toml(&temp_workspace.path, "whitaker");
+    write_cargo_toml(&temp_workspace.path, "whitaker")?;
     let clone_dir = temp_workspace.path.join("clone_target");
 
     let action = plan_workspace_action(
@@ -176,14 +193,15 @@ fn plan_uses_a_whitaker_workspace_when_nothing_is_pinned(temp_workspace: TempWor
     )
     .expect("no pin, so no refusal");
 
-    assert_eq!(
-        action,
-        WorkspaceAction::UseCurrentDir(temp_workspace.path.clone())
-    );
+    assert_uses_current_dir(&action, &temp_workspace.path);
+    Ok(())
 }
 
 #[rstest]
-fn plan_clones_and_pins_from_outside_a_workspace(temp_workspace: TempWorkspace) {
+fn plan_clones_and_pins_from_outside_a_workspace(
+    #[from(temp_workspace)] temp_workspace_res: std::io::Result<TempWorkspace>,
+) -> std::io::Result<()> {
+    let temp_workspace = temp_workspace_res?;
     // The CI case: not in a Whitaker checkout, so the pin applies to the
     // installer's own clone and nothing of the caller's is touched.
     let clone_dir = temp_workspace.path.join("clone_target");
@@ -195,7 +213,8 @@ fn plan_clones_and_pins_from_outside_a_workspace(temp_workspace: TempWorkspace) 
     let action = plan_workspace_action(&temp_workspace.path, &clone_dir, &plan)
         .expect("a pin outside a workspace is fine");
 
-    assert_eq!(action, WorkspaceAction::CloneTo(clone_dir));
+    assert_clones_to(&action, &clone_dir);
+    Ok(())
 }
 
 #[rstest]
@@ -222,8 +241,7 @@ fn init_clone(root: &Utf8Path) -> Option<(Utf8PathBuf, Utf8PathBuf)> {
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .status()
-            .map(|status| status.success())
-            .unwrap_or(false)
+            .is_ok_and(|status| status.success())
     };
     let origin = root.join("origin");
     let clone = root.join("clone");
@@ -243,35 +261,36 @@ fn init_clone(root: &Utf8Path) -> Option<(Utf8PathBuf, Utf8PathBuf)> {
 }
 
 #[rstest]
-fn an_unpinned_update_recovers_a_clone_left_detached(temp_workspace: TempWorkspace) {
+fn an_unpinned_update_recovers_a_clone_left_detached(
+    #[from(temp_workspace)] temp_workspace_res: std::io::Result<TempWorkspace>,
+) -> std::io::Result<()> {
+    let temp_workspace = temp_workspace_res?;
     // The defect this guards: one pinned install leaves HEAD detached, and
     // every later update in that clone then runs `git pull` there, where git
     // refuses with "You are not currently on a branch". Without the recovery
     // a single pin would break the cache permanently.
     let Some((_origin, clone)) = init_clone(&temp_workspace.path) else {
-        return; // git unavailable; the assertion needs a real repository.
+        return Ok(()); // git unavailable; the assertion needs a real repository.
     };
     crate::git::checkout_ref(&clone, &"main".try_into().expect("valid reference"))
         .expect("checkout should succeed");
-    assert!(
-        crate::git::is_detached_head(&clone).expect("HEAD should be readable"),
-        "the pin should have left HEAD detached"
-    );
+    assert_detached_head(&clone);
 
     update_existing_clone(&clone, &WorkspacePlan::updating(true)).expect("update should recover");
 
-    assert!(
-        !crate::git::is_detached_head(&clone).expect("HEAD should be readable"),
-        "the update should have returned to a branch"
-    );
+    assert_on_branch(&clone);
+    Ok(())
 }
 
 #[rstest]
-fn a_pinned_update_never_pulls(temp_workspace: TempWorkspace) {
+fn a_pinned_update_never_pulls(
+    #[from(temp_workspace)] temp_workspace_res: std::io::Result<TempWorkspace>,
+) -> std::io::Result<()> {
+    let temp_workspace = temp_workspace_res?;
     // A pinned plan must not pull at all, because checkout_ref fetches for
     // itself and a pull would fail on the detached HEAD a previous pin left.
     let Some((_origin, clone)) = init_clone(&temp_workspace.path) else {
-        return;
+        return Ok(());
     };
     crate::git::checkout_ref(&clone, &"main".try_into().expect("valid reference"))
         .expect("checkout should succeed");
@@ -282,95 +301,53 @@ fn a_pinned_update_never_pulls(temp_workspace: TempWorkspace) {
 
     let result = update_existing_clone(&clone, &plan);
 
-    assert!(result.is_ok(), "{result:?}");
-    assert!(
-        crate::git::is_detached_head(&clone).expect("HEAD should be readable"),
-        "a pinned plan should leave the pin in place"
-    );
+    assert_update_succeeded(&result);
+    assert_detached_head(&clone);
+    Ok(())
 }
 
 #[rstest]
-fn an_unpinned_reuse_does_not_inherit_a_previous_pin(temp_workspace: TempWorkspace) {
+fn an_unpinned_reuse_does_not_inherit_a_previous_pin(
+    #[from(temp_workspace)] temp_workspace_res: std::io::Result<TempWorkspace>,
+) -> std::io::Result<()> {
+    let temp_workspace = temp_workspace_res?;
     // `--no-update` after a pin would otherwise silently mean "somebody
     // else's pin" rather than "the suite as it stands".
     let Some((_origin, clone)) = init_clone(&temp_workspace.path) else {
-        return;
+        return Ok(());
     };
     crate::git::checkout_ref(&clone, &"main".try_into().expect("valid reference"))
         .expect("checkout should succeed");
 
     reuse_existing_clone(&clone, &WorkspacePlan::updating(false)).expect("reuse should recover");
 
-    assert!(
-        !crate::git::is_detached_head(&clone).expect("HEAD should be readable"),
-        "reuse should have returned to a branch"
-    );
+    assert_on_branch(&clone);
+    Ok(())
 }
 
 #[rstest]
-fn a_local_pin_does_not_require_origin(temp_workspace: TempWorkspace) {
+fn a_local_pin_does_not_require_origin(
+    #[from(temp_workspace)] temp_workspace_res: std::io::Result<TempWorkspace>,
+) -> std::io::Result<()> {
+    let temp_workspace = temp_workspace_res?;
     // A local pin must remain usable with `--no-update` when the origin is
     // unavailable, rather than turning a cached checkout into a network call.
     let Some((_origin, clone)) = init_clone(&temp_workspace.path) else {
-        return;
+        return Ok(());
     };
     let changed_origin = std::process::Command::new("git")
         .args(["remote", "set-url", "origin", "/unavailable-origin"])
         .current_dir(clone.as_std_path())
         .status()
         .expect("set-url should run");
-    assert!(changed_origin.success(), "set-url should succeed");
+    assert_command_succeeded(changed_origin, "set-url should succeed");
 
     crate::git::checkout_ref(&clone, &"main".try_into().expect("valid reference"))
         .expect("checkout should succeed");
+    Ok(())
 }
 
-#[test]
-fn clone_directory_returns_none_when_data_dir_unavailable() {
-    let mock = mock_dirs_returning(None);
-    assert!(clone_directory(&mock).is_none());
-}
-
-#[rstest]
-fn clone_directory_returns_path_from_mock(temp_workspace: TempWorkspace) {
-    let expected = temp_workspace.path.join("data").join("whitaker");
-    let mock = mock_dirs_returning(Some(expected.clone().into_std_path_buf()));
-    assert_eq!(clone_directory(&mock), Some(expected));
-}
-
-// Tests for find_workspace_root
-
-fn write_workspace_cargo_toml(dir: &Utf8Path) {
-    fs::write(
-        dir.join("Cargo.toml"),
-        "[workspace]\nmembers = [\"crates/*\"]\n",
-    )
-    .expect("failed to write workspace Cargo.toml");
-}
-
-#[rstest]
-fn find_workspace_root_finds_workspace_in_current_dir(temp_workspace: TempWorkspace) {
-    write_workspace_cargo_toml(&temp_workspace.path);
-    assert_eq!(
-        find_workspace_root(&temp_workspace.path).unwrap(),
-        temp_workspace.path
-    );
-}
-
-#[rstest]
-fn find_workspace_root_finds_workspace_in_parent_dir(temp_workspace: TempWorkspace) {
-    write_workspace_cargo_toml(&temp_workspace.path);
-    let subdir = temp_workspace.path.join("crates").join("my_crate");
-    fs::create_dir_all(&subdir).expect("failed to create subdirs");
-    assert_eq!(find_workspace_root(&subdir).unwrap(), temp_workspace.path);
-}
-
-#[rstest]
-fn find_workspace_root_errors_when_no_workspace_found(temp_workspace: TempWorkspace) {
-    write_cargo_toml(&temp_workspace.path, "not_a_workspace");
-    let result = find_workspace_root(&temp_workspace.path);
-    assert!(matches!(
-        result.unwrap_err(),
-        InstallerError::WorkspaceNotFound { .. }
-    ));
-}
+#[path = "workspace_tests/find_workspace_root.rs"]
+mod find_workspace_root;
+#[path = "workspace_tests/planning.rs"]
+mod planning;

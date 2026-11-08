@@ -162,7 +162,7 @@ download the correct archive.
 - Decision: Place the new module at `installer/src/installer_packaging.rs`
   (top-level peer to `binstall_metadata.rs`) rather than inside the `artefact/`
   subtree. Rationale: The `artefact/` module covers the prebuilt lint library
-  artefact system (ADR-001). Installer binary packaging is a separate concern:
+  artefact system (ADR 0001). Installer binary packaging is a separate concern:
   it packages the installer itself for end-user distribution via
   cargo-binstall. This parallels the rationale from the 4.2.1 execplan, where
   `binstall_metadata` was placed at top level. Date/Author: 2026-03-01 / plan

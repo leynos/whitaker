@@ -1,11 +1,16 @@
 //! Behaviour-driven coverage for decomposition adjacency construction.
 
+use std::cell::RefCell;
+
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
-use std::cell::RefCell;
 use whitaker_common::test_support::decomposition::{
-    AdjacencyError, AdjacencyReport, EdgeInput, adjacency_report,
+    AdjacencyError,
+    AdjacencyReport,
+    EdgeInput,
+    adjacency_report,
 };
+use whitaker_test_macros::allow_fixture_expansion_lints;
 
 #[derive(Debug, Default)]
 struct AdjacencyWorld {
@@ -14,10 +19,9 @@ struct AdjacencyWorld {
     result: RefCell<Option<Result<AdjacencyReport, AdjacencyError>>>,
 }
 
+#[allow_fixture_expansion_lints]
 #[fixture]
-fn world() -> AdjacencyWorld {
-    AdjacencyWorld::default()
-}
+fn world() -> AdjacencyWorld { AdjacencyWorld::default() }
 
 #[given("a graph with {count} nodes")]
 fn given_graph_with_nodes(world: &AdjacencyWorld, count: usize) {
@@ -46,13 +50,26 @@ fn with_report(
     assert_fn: impl FnOnce(&AdjacencyReport) -> Result<(), String>,
 ) -> Result<(), String> {
     let result = world.result.borrow();
-    let report = result
+    let outcome = result
         .as_ref()
         .ok_or_else(|| String::from("adjacency must be built before assertions"))?;
-    match report {
+    match outcome {
         Ok(report) => assert_fn(report),
         Err(message) => Err(format!("expected successful build, got error: {message}")),
     }
+}
+
+fn with_neighbours_of_node(
+    world: &AdjacencyWorld,
+    node: usize,
+    assert_fn: impl FnOnce(&[(usize, u64)]) -> Result<(), String>,
+) -> Result<(), String> {
+    with_report(world, |report| {
+        let neighbours = report
+            .neighbours_of(node)
+            .ok_or_else(|| format!("node {node} is out of bounds"))?;
+        assert_fn(neighbours)
+    })
 }
 
 #[then("the adjacency is symmetric")]
@@ -93,10 +110,7 @@ fn then_build_is_rejected(world: &AdjacencyWorld) -> Result<(), String> {
 
 #[then("node {node} has no neighbours")]
 fn then_node_has_no_neighbours(world: &AdjacencyWorld, node: usize) -> Result<(), String> {
-    with_report(world, |report| {
-        let neighbours = report
-            .neighbours_of(node)
-            .ok_or_else(|| format!("node {node} is out of bounds"))?;
+    with_neighbours_of_node(world, node, |neighbours| {
         if neighbours.is_empty() {
             Ok(())
         } else {
@@ -107,11 +121,8 @@ fn then_node_has_no_neighbours(world: &AdjacencyWorld, node: usize) -> Result<()
 
 #[then("the neighbours of node {node} are sorted")]
 fn then_neighbours_of_node_are_sorted(world: &AdjacencyWorld, node: usize) -> Result<(), String> {
-    with_report(world, |report| {
-        let neighbours = report
-            .neighbours_of(node)
-            .ok_or_else(|| format!("node {node} is out of bounds"))?;
-        let is_sorted = neighbours.windows(2).all(|pair| pair[0].0 <= pair[1].0);
+    with_neighbours_of_node(world, node, |neighbours| {
+        let is_sorted = neighbours.is_sorted_by_key(|neighbour| neighbour.0);
         if is_sorted {
             Ok(())
         } else {
@@ -124,21 +135,13 @@ fn then_neighbours_of_node_are_sorted(world: &AdjacencyWorld, node: usize) -> Re
 // `tests/features/decomposition_adjacency.feature`.
 
 #[scenario(path = "tests/features/decomposition_adjacency.feature", index = 0)]
-fn scenario_valid_edges_produce_symmetric_neighbour_lists(world: AdjacencyWorld) {
-    let _ = world;
-}
+fn scenario_valid_edges_produce_symmetric_neighbour_lists(world: AdjacencyWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/decomposition_adjacency.feature", index = 1)]
-fn scenario_malformed_edge_input_rejected_canonical_order(world: AdjacencyWorld) {
-    let _ = world;
-}
+fn scenario_malformed_edge_input_rejected_canonical_order(world: AdjacencyWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/decomposition_adjacency.feature", index = 2)]
-fn scenario_isolated_nodes_have_empty_neighbour_lists(world: AdjacencyWorld) {
-    let _ = world;
-}
+fn scenario_isolated_nodes_have_empty_neighbour_lists(world: AdjacencyWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/decomposition_adjacency.feature", index = 3)]
-fn scenario_multiple_neighbours_appear_in_sorted_order(world: AdjacencyWorld) {
-    let _ = world;
-}
+fn scenario_multiple_neighbours_appear_in_sorted_order(world: AdjacencyWorld) { let _ = world; }

@@ -47,7 +47,9 @@ pub enum Level {
 /// ```
 /// use whitaker_sarif::Message;
 ///
-/// let msg = Message { text: "clone detected".into() };
+/// let msg = Message {
+///     text: "clone detected".into(),
+/// };
 /// assert_eq!(msg.text, "clone detected");
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -64,12 +66,14 @@ pub struct Message {
 /// # Examples
 ///
 /// ```
-/// use whitaker_sarif::{SarifResult, Level, Message};
+/// use whitaker_sarif::{Level, Message, SarifResult};
 ///
 /// let result = SarifResult {
 ///     rule_id: "WHK001".into(),
 ///     level: Level::Warning,
-///     message: Message { text: "clone detected".into() },
+///     message: Message {
+///         text: "clone detected".into(),
+///     },
 ///     locations: Vec::new(),
 ///     related_locations: Vec::new(),
 ///     partial_fingerprints: Default::default(),
@@ -114,25 +118,23 @@ pub struct SarifResult {
 
 #[cfg(test)]
 mod tests {
+    //! Test `SarifResult` defaults, level encoding and field omission with shared
+    //! JSON assertion helpers.
+
     use super::*;
+    use crate::test_support::{assert_json_round_trip, assert_serialized_json};
 
     #[test]
     fn level_serializes_lowercase() {
-        match serde_json::to_string(&Level::Warning) {
-            Ok(json) => assert_eq!(json, "\"warning\""),
-            Err(e) => panic!("failed to serialize Warning: {e}"),
-        }
-        match serde_json::to_string(&Level::Note) {
-            Ok(json) => assert_eq!(json, "\"note\""),
-            Err(e) => panic!("failed to serialize Note: {e}"),
-        }
-        match serde_json::to_string(&Level::Error) {
-            Ok(json) => assert_eq!(json, "\"error\""),
-            Err(e) => panic!("failed to serialize Error: {e}"),
-        }
-        match serde_json::to_string(&Level::None) {
-            Ok(json) => assert_eq!(json, "\"none\""),
-            Err(e) => panic!("failed to serialize None: {e}"),
+        for (level, expected) in [
+            (Level::Warning, "\"warning\""),
+            (Level::Note, "\"note\""),
+            (Level::Error, "\"error\""),
+            (Level::None, "\"none\""),
+        ] {
+            assert_serialized_json(&level, |json| {
+                assert_eq!(json, expected, "unexpected serialization of {level:?}");
+            });
         }
     }
 
@@ -155,13 +157,7 @@ mod tests {
             properties: None,
             baseline_state: None,
         };
-        match serde_json::to_string(&result) {
-            Ok(json) => match serde_json::from_str::<SarifResult>(&json) {
-                Ok(parsed) => assert_eq!(result, parsed),
-                Err(e) => panic!("failed to deserialize: {e}"),
-            },
-            Err(e) => panic!("failed to serialize: {e}"),
-        }
+        assert_json_round_trip(&result);
     }
 
     #[test]
@@ -176,14 +172,20 @@ mod tests {
             properties: None,
             baseline_state: None,
         };
-        match serde_json::to_string(&result) {
-            Ok(json) => {
-                assert!(!json.contains("\"locations\""));
-                assert!(!json.contains("\"relatedLocations\""));
-                assert!(!json.contains("\"partialFingerprints\""));
-            }
-            Err(e) => panic!("failed to serialize: {e}"),
-        }
+        assert_serialized_json(&result, |json| {
+            assert!(
+                !json.contains("\"locations\""),
+                "empty locations present: {json}"
+            );
+            assert!(
+                !json.contains("\"relatedLocations\""),
+                "empty relatedLocations present: {json}"
+            );
+            assert!(
+                !json.contains("\"partialFingerprints\""),
+                "empty partialFingerprints present: {json}"
+            );
+        });
     }
 
     #[test]
@@ -200,12 +202,15 @@ mod tests {
             properties: None,
             baseline_state: None,
         };
-        match serde_json::to_string(&result) {
-            Ok(json) => {
-                assert!(json.contains("\"partialFingerprints\""));
-                assert!(json.contains("\"whitakerFragment\""));
-            }
-            Err(e) => panic!("failed to serialize: {e}"),
-        }
+        assert_serialized_json(&result, |json| {
+            assert!(
+                json.contains("\"partialFingerprints\""),
+                "partialFingerprints missing: {json}"
+            );
+            assert!(
+                json.contains("\"whitakerFragment\""),
+                "whitakerFragment key missing: {json}"
+            );
+        });
     }
 }

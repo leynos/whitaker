@@ -1,0 +1,23 @@
+error[E0432]: unresolved import `whitaker_common::complexity_signal::rasterise_signal`
+ --> tests/ui/legacy_common_apis.rs:3:5
+  |
+3 | use whitaker_common::complexity_signal::rasterise_signal;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no `rasterise_signal` in `complexity_signal`
+  |
+help: a similar name exists in the module
+  |
+3 - use whitaker_common::complexity_signal::rasterise_signal;
+3 + use whitaker_common::complexity_signal::rasterize_signal;
+  |
+
+error[E0432]: unresolved import `whitaker_common::normalise_locale`
+ --> tests/ui/legacy_common_apis.rs:4:5
+  |
+4 | use whitaker_common::normalise_locale;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no `normalise_locale` in the root
+  |
+help: a similar name exists in the module
+  |
+4 - use whitaker_common::normalise_locale;
+4 + use whitaker_common::normalize_locale;
+  |

@@ -4,10 +4,10 @@
 //! to users when installation fails. Each error includes recovery hints where
 //! applicable.
 
-use crate::artefact::suite_ref::SuiteRef;
-use crate::crate_name::CrateName;
 use camino::Utf8PathBuf;
 use thiserror::Error;
+
+use crate::{artefact::suite_ref::SuiteRef, crate_name::CrateName};
 
 /// Errors that can occur during the installation process.
 #[derive(Debug, Error)]
@@ -25,8 +25,8 @@ pub enum InstallerError {
     /// A published artefact was absent and `--no-source-fallback` forbade the
     /// source build that would otherwise have replaced it.
     #[error(
-        "{artefact} is not available and --no-source-fallback is set, so the \
-         source build that would have replaced it did not run: {reason}"
+        "{artefact} is not available and --no-source-fallback is set, so the source build that \
+         would have replaced it did not run: {reason}"
     )]
     SourceFallbackForbidden {
         /// What could not be fetched, in terms a caller can act on.
@@ -132,8 +132,8 @@ pub enum InstallerError {
     /// A suite pin was requested from inside a Whitaker working tree.
     #[error(
         "cannot pin the suite to \"{reference}\" from inside a Whitaker workspace at {path}; \
-         checking out a reference here would move your own working tree. \
-         Run the installer from another directory, or check out the reference yourself."
+         checking out a reference here would move your own working tree. Run the installer from \
+         another directory, or check out the reference yourself."
     )]
     SuitePinInWorkspace {
         /// The requested reference.
@@ -173,9 +173,26 @@ pub enum InstallerError {
         message: String,
     },
 
+    /// A dependency availability query could not establish whether a tool is installed.
+    #[error("failed to check whether {tool} is installed: {reason}")]
+    DependencyCheck {
+        /// Name of the tool whose availability could not be established.
+        tool: &'static str,
+        /// Description of the command or filesystem query failure.
+        reason: String,
+    },
+
     /// Wrapper script generation failed.
     #[error("wrapper script generation failed: {0}")]
     WrapperGeneration(String),
+
+    /// The Clippy snapshot could not be provisioned or trusted.
+    #[error(transparent)]
+    ClippySnapshot(#[from] crate::clippy_snapshot::ClippySnapshotError),
+
+    /// The installed Dylint bootstrap could not be recorded or used.
+    #[error(transparent)]
+    Bootstrap(#[from] crate::bootstrap::BootstrapError),
 
     /// Failed to scan the staging directory for installed lints.
     #[error("failed to scan staging directory")]
@@ -202,115 +219,90 @@ pub enum InstallerError {
     },
 }
 
-// Helper to clone io::Error by preserving ErrorKind and formatted message.
-// This is lossy: the original source chain is discarded.
+/// Clone an I/O error while preserving its kind and formatted message.
+///
+/// The clone is lossy because the original source chain is discarded.
 fn clone_io_error(source: &std::io::Error) -> std::io::Error {
     std::io::Error::new(source.kind(), source.to_string())
 }
 
-impl InstallerError {
-    fn clone_toolchain_variant(&self) -> Option<Self> {
-        match self {
-            Self::ToolchainDetection { reason } => Some(Self::ToolchainDetection {
-                reason: reason.clone(),
-            }),
-            Self::ToolchainFileNotFound { path } => {
-                Some(Self::ToolchainFileNotFound { path: path.clone() })
-            }
-            Self::InvalidToolchainFile { reason } => Some(Self::InvalidToolchainFile {
-                reason: reason.clone(),
-            }),
-            Self::ToolchainNotInstalled { toolchain } => Some(Self::ToolchainNotInstalled {
-                toolchain: toolchain.clone(),
-            }),
-            Self::ToolchainInstallFailed { toolchain, message } => {
-                Some(Self::ToolchainInstallFailed {
-                    toolchain: toolchain.clone(),
-                    message: message.clone(),
-                })
-            }
-            Self::ToolchainComponentInstallFailed {
-                toolchain,
-                components,
-                message,
-            } => Some(Self::ToolchainComponentInstallFailed {
-                toolchain: toolchain.clone(),
-                components: components.clone(),
-                message: message.clone(),
-            }),
-            _ => None,
+/// Generate the field-by-field `Clone` match for [`InstallerError`].
+///
+/// Written out, the twenty-six arms outgrow the function-length budget once
+/// rustfmt expands each struct literal, and a partial match would need an
+/// unreachable arm. Listing the variants once as data keeps the match total —
+/// there is no catch-all — and makes drift a compile error: a variant missing
+/// from a table, or a field added to one, no longer builds.
+macro_rules! clone_error {
+    (
+        $error:expr;
+        fields {
+            $( $(#[$attr:meta])* $variant:ident { $($field:ident),* $(,)? } ),* $(,)?
         }
-    }
+        wrapped { $($wrapped:ident($payload:ident)),* $(,)? }
+        io_tuple { $($io_tuple:ident),* $(,)? }
+        io_fields { $($io_field:ident),* $(,)? }
+    ) => {
+        match $error {
+            $(
+                $(#[$attr])*
+                InstallerError::$variant { $($field),* } => InstallerError::$variant {
+                    $($field: Clone::clone($field)),*
+                },
+            )*
+            $(
+                InstallerError::$wrapped($payload) => {
+                    InstallerError::$wrapped(Clone::clone($payload))
+                }
+            )*
+            $(
+                InstallerError::$io_tuple(source) => {
+                    InstallerError::$io_tuple(clone_io_error(source))
+                }
+            )*
+            $(
+                InstallerError::$io_field { source } => InstallerError::$io_field {
+                    source: clone_io_error(source),
+                },
+            )*
+        }
+    };
 }
 
 impl Clone for InstallerError {
+    /// Clone every error variant while preserving its displayable details.
+    ///
+    /// The I/O-backed variants are cloned lossily: the original source chain is
+    /// discarded, but the error kind and message survive.
     fn clone(&self) -> Self {
-        if let Some(value) = self.clone_toolchain_variant() {
-            return value;
-        }
-
-        match self {
-            Self::BuildFailed { crate_name, reason } => Self::BuildFailed {
-                crate_name: crate_name.clone(),
-                reason: reason.clone(),
-            },
-            Self::StagingFailed { reason } => Self::StagingFailed {
-                reason: reason.clone(),
-            },
-            Self::TargetNotWritable { path, reason } => Self::TargetNotWritable {
-                path: path.clone(),
-                reason: reason.clone(),
-            },
-            Self::LintCrateNotFound { name } => Self::LintCrateNotFound { name: name.clone() },
-            Self::ExperimentalLintRequiresFlag { name } => {
-                Self::ExperimentalLintRequiresFlag { name: name.clone() }
+        clone_error! {
+            self;
+            fields {
+                ConflictingSourceOptions { option },
+                SourceFallbackForbidden { artefact, reason },
+                ToolchainDetection { reason },
+                ToolchainFileNotFound { path },
+                InvalidToolchainFile { reason },
+                ToolchainNotInstalled { toolchain },
+                ToolchainInstallFailed { toolchain, message },
+                ToolchainComponentInstallFailed { toolchain, components, message },
+                BuildFailed { crate_name, reason },
+                StagingFailed { reason },
+                TargetNotWritable { path, reason },
+                LintCrateNotFound { name },
+                ExperimentalLintRequiresFlag { name },
+                WorkspaceNotFound { reason },
+                SuitePinInWorkspace { reference, path },
+                InvalidCargoToml { path, reason },
+                Git { operation, message },
+                DependencyInstall { tool, message },
+                DependencyCheck { tool, reason },
+                #[cfg(any(test, feature = "test-support"))]
+                StubMismatch { message },
             }
-            Self::WorkspaceNotFound { reason } => Self::WorkspaceNotFound {
-                reason: reason.clone(),
-            },
-            Self::SuitePinInWorkspace { reference, path } => Self::SuitePinInWorkspace {
-                reference: reference.clone(),
-                path: path.clone(),
-            },
-            Self::InvalidCargoToml { path, reason } => Self::InvalidCargoToml {
-                path: path.clone(),
-                reason: reason.clone(),
-            },
-            Self::Io(source) => Self::Io(clone_io_error(source)),
-            Self::Git { operation, message } => Self::Git {
-                operation,
-                message: message.clone(),
-            },
-            Self::DependencyInstall { tool, message } => Self::DependencyInstall {
-                tool,
-                message: message.clone(),
-            },
-            Self::ConflictingSourceOptions { option } => Self::ConflictingSourceOptions {
-                option: option.clone(),
-            },
-            Self::SourceFallbackForbidden { artefact, reason } => Self::SourceFallbackForbidden {
-                artefact: artefact.clone(),
-                reason: reason.clone(),
-            },
-            Self::WrapperGeneration(message) => Self::WrapperGeneration(message.clone()),
-            Self::ScanFailed { source } => Self::ScanFailed {
-                source: clone_io_error(source),
-            },
-            Self::WriteFailed { source } => Self::WriteFailed {
-                source: clone_io_error(source),
-            },
-            Self::ToolchainDetection { .. }
-            | Self::ToolchainFileNotFound { .. }
-            | Self::InvalidToolchainFile { .. }
-            | Self::ToolchainNotInstalled { .. }
-            | Self::ToolchainInstallFailed { .. }
-            | Self::ToolchainComponentInstallFailed { .. } => {
-                unreachable!("handled by clone_toolchain_variant")
-            }
-            #[cfg(any(test, feature = "test-support"))]
-            Self::StubMismatch { message } => Self::StubMismatch {
-                message: message.clone(),
-            },
+            wrapped { WrapperGeneration(message), ClippySnapshot(error), Bootstrap(error) }
+            io_tuple { Io }
+            io_fields { ScanFailed, WriteFailed }
         }
     }
 }

@@ -1,40 +1,45 @@
 //! rstest-based unit tests for [`super::cohesion_components`] and supporting types.
 
-use super::*;
-use rstest::rstest;
 use std::collections::BTreeSet;
+
+use rstest::rstest;
+
+use super::*;
 
 // --- Fixtures (shared setup) ---
 
+/// Build method information containing the requested field accesses.
 #[rstest::fixture]
 fn method_with_fields() -> fn(&str, &[&str]) -> MethodInfo {
     |name: &str, fields: &[&str]| -> MethodInfo {
         MethodInfo::new(
             name,
-            fields.iter().map(|s| (*s).to_string()).collect(),
+            fields.iter().map(|s| (*s).to_owned()).collect(),
             BTreeSet::new(),
         )
     }
 }
 
+/// Build method information containing the requested method calls.
 #[rstest::fixture]
 fn method_with_calls() -> fn(&str, &[&str]) -> MethodInfo {
     |name: &str, calls: &[&str]| -> MethodInfo {
         MethodInfo::new(
             name,
             BTreeSet::new(),
-            calls.iter().map(|s| (*s).to_string()).collect(),
+            calls.iter().map(|s| (*s).to_owned()).collect(),
         )
     }
 }
 
+/// Build method information containing requested fields and method calls.
 #[rstest::fixture]
 fn method_with_fields_and_calls() -> fn(&str, &[&str], &[&str]) -> MethodInfo {
     |name: &str, fields: &[&str], calls: &[&str]| -> MethodInfo {
         MethodInfo::new(
             name,
-            fields.iter().map(|s| (*s).to_string()).collect(),
-            calls.iter().map(|s| (*s).to_string()).collect(),
+            fields.iter().map(|s| (*s).to_owned()).collect(),
+            calls.iter().map(|s| (*s).to_owned()).collect(),
         )
     }
 }

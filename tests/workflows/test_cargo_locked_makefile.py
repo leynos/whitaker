@@ -12,6 +12,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.workflows.clippy_snapshot_harness import provide_clippy_snapshot
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # A lock-relevant Cargo call: `$(CARGO)` (optionally `+<toolchain>`) followed by
@@ -188,6 +190,7 @@ def _run_make(
         # This contract tests Cargo flags, not the skill-manifest tools that
         # now precede Clippy in the lint target.
         _write_stub(environment.stub_dir, "uv", "exit 0")
+    snapshot_arguments = provide_clippy_snapshot(workspace)
 
     log = environment.stub_dir / f"{target}-{environment.locked or 'unlocked'}.log"
     process_env = os.environ | {
@@ -195,7 +198,12 @@ def _run_make(
         "PATH": _stub_path(target, environment.stub_dir),
     }
     process_env.pop("CARGO_LOCKED", None)
-    make_arguments = ["make", target, f"CARGO={environment.cargo}"]
+    make_arguments = [
+        "make",
+        target,
+        f"CARGO={environment.cargo}",
+        *snapshot_arguments,
+    ]
     if environment.locked:
         make_arguments.append(f"CARGO_LOCKED={environment.locked}")
     if extra_make_args:

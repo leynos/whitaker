@@ -1,11 +1,17 @@
 //! Tests that verify the UI harness runner validates inputs and propagates
 //! errors from custom runners.
-use super::{HarnessError, run_with_runner};
+use std::env;
+
 use camino::{Utf8Path, Utf8PathBuf};
 use rstest::rstest;
-use std::env;
-use std::sync::{Mutex, MutexGuard, OnceLock};
-use whitaker_common::test_support::EnvVarGuard;
+use whitaker_common::test_support::{
+    EnvTestGuard,
+    env_test_guard,
+    with_env_var,
+    with_env_var_removed,
+};
+
+use super::{HarnessError, run_ui_test, run_with_runner};
 
 #[rstest]
 #[case(
@@ -95,51 +101,143 @@ fn propagates_runner_failures() {
 }
 
 #[test]
-fn runner_env_guard_clears_and_restores_rustc_wrapper() {
+fn run_ui_test_panics_with_context_from_runner_failure() {
     let _serial_guard = runner_env_guard_test_lock();
-    let _guard = EnvVarGuard::set("RUSTC_WRAPPER", "sccache");
-
-    run_with_runner("lint", "ui", |_, _| {
-        assert_eq!(env::var_os("RUSTC_WRAPPER"), None);
-        Ok(())
+    let panic = std::panic::catch_unwind(|| {
+        run_ui_test("lint", "ui", |_, _| {
+            Err(String::from("known runner failure"))
+        });
     })
-    .expect("runner should execute with RUSTC_WRAPPER cleared");
+    .expect_err("runner failure should panic at the UI test boundary");
+    let message = panic
+        .downcast::<String>()
+        .map(|message| *message)
+        .expect("the formatted UI-test panic should carry a string message");
 
-    assert_eq!(env::var_os("RUSTC_WRAPPER"), Some("sccache".into()));
+    assert!(message.contains("lint"));
+    assert!(message.contains("ui"));
+    assert!(message.contains("known runner failure"));
+}
+
+// A configured wrapper caches or admits compilations, so the runner must not
+// strip it. Example staging tolerates wrappers instead.
+#[test]
+fn runner_env_guard_preserves_rustc_wrapper() {
+    let _serial_guard = runner_env_guard_test_lock();
+
+    with_env_var("RUSTC_WRAPPER", "sccache", || {
+        run_with_runner("lint", "ui", |_, _| {
+            assert_eq!(env::var_os("RUSTC_WRAPPER"), Some("sccache".into()));
+            Ok(())
+        })
+        .expect("runner should execute with RUSTC_WRAPPER preserved");
+
+        // The runner may not clobber a caller-supplied value when it finishes.
+        assert_eq!(env::var_os("RUSTC_WRAPPER"), Some("sccache".into()));
+    });
+}
+
+/// The runner sees the copy-library flag set, and the caller's environment is
+/// restored afterwards.
+///
+/// Regression: without the flag, Dylint 6.3.0's `dylint_testing` copies the
+/// default-feature stub over the harness-built library, and the UI test fails
+/// with ``could not find `dylint_version` ``. A caller's explicit value is
+/// neither replaced nor removed.
+#[rstest]
+#[case::absent_is_set_then_removed(None, "1")]
+#[case::explicit_value_is_kept(Some("0"), "0")]
+fn runner_env_guard_marks_the_toolchain_library_as_prepared(
+    #[case] caller_value: Option<&'static str>,
+    #[case] seen_by_runner: &'static str,
+) {
+    const FLAG: &str = "DYLINT_LINK_ENABLE_COPY_LIBRARY";
+    let _serial_guard = runner_env_guard_test_lock();
+    let scenario = || {
+        run_with_runner("lint", "ui", |_, _| {
+            assert_eq!(env::var_os(FLAG), Some(seen_by_runner.into()));
+            Ok(())
+        })
+        .expect("runner should execute with the copy-library flag set");
+
+        assert_eq!(env::var_os(FLAG), caller_value.map(Into::into));
+    };
+    match caller_value {
+        Some(value) => with_env_var(FLAG, value, scenario),
+        None => with_env_var_removed(FLAG, scenario),
+    }
+}
+
+/// Only variables the process does not set are selected for the override.
+///
+/// Regression: the harness must not replace a value supplied by the caller or
+/// CI, because a runner then sees that explicit setting rather than its own.
+#[test]
+fn absent_runner_env_settings_skip_variables_already_set() {
+    const FLAG: &str = "DYLINT_LINK_ENABLE_COPY_LIBRARY";
+    let _serial_guard = runner_env_guard_test_lock();
+
+    with_env_var(FLAG, "0", || {
+        assert!(
+            !super::absent_runner_env_settings()
+                .iter()
+                .any(|(key, _)| *key == FLAG),
+            "a caller-supplied flag should not be overridden",
+        );
+    });
+    with_env_var_removed(FLAG, || {
+        assert!(
+            super::absent_runner_env_settings().contains(&(FLAG, "1")),
+            "an absent flag should be supplied by the harness",
+        );
+    });
 }
 
 #[cfg(windows)]
 #[test]
 fn windows_env_guard_leaves_absent_rustc_wrapper_untouched() {
     let _serial_guard = runner_env_guard_test_lock();
-    let _vcpkg_root = EnvVarGuard::set("VCPKG_ROOT", r"C:\vcpkg");
-    let _rustc_wrapper = EnvVarGuard::remove("RUSTC_WRAPPER");
 
-    run_with_runner("lint", "ui", |_, _| {
-        assert_eq!(env::var_os("RUSTC_WRAPPER"), None);
-        Ok(())
-    })
-    .expect("runner should execute without installing RUSTC_WRAPPER");
+    with_env_var("VCPKG_ROOT", r"C:\vcpkg", || {
+        with_env_var_removed("RUSTC_WRAPPER", || {
+            run_with_runner("lint", "ui", |_, _| {
+                assert_eq!(env::var_os("RUSTC_WRAPPER"), None);
+                Ok(())
+            })
+            .expect("runner should execute without installing RUSTC_WRAPPER");
 
-    assert_eq!(env::var_os("RUSTC_WRAPPER"), None);
+            assert_eq!(env::var_os("RUSTC_WRAPPER"), None);
+        });
+    });
 }
 
 #[test]
-fn runner_env_guard_test_lock_recovers_after_panic() {
+fn runner_env_guard_test_lock_releases_after_panic() {
     let result = std::panic::catch_unwind(|| {
         let _serial_guard = runner_env_guard_test_lock();
-        panic!("intentionally poison the UI environment test lock");
+        panic!("intentionally release the UI environment test lock");
     });
 
     assert!(result.is_err());
-    let _serial_guard = runner_env_guard_test_lock();
+    let (acquired_sender, acquired_receiver) = std::sync::mpsc::channel();
+    let thread = std::thread::spawn(move || {
+        let _serial_guard = runner_env_guard_test_lock();
+        acquired_sender
+            .send(())
+            .expect("second thread must report lock acquisition");
+    });
+
+    acquired_receiver
+        .recv_timeout(std::time::Duration::from_secs(1))
+        .expect("second thread should acquire the released environment lock");
+    thread
+        .join()
+        .expect("second environment-lock test thread should complete");
 }
 
-fn runner_env_guard_test_lock() -> MutexGuard<'static, ()> {
+/// Acquires the production environment protocol for assertions spanning a callback.
+fn runner_env_guard_test_lock() -> EnvTestGuard {
     // These tests inspect process-global environment state after callbacks,
     // so their whole bodies must run serially rather than only each mutation.
-    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-    LOCK.get_or_init(|| Mutex::new(()))
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
+    env_test_guard()
 }

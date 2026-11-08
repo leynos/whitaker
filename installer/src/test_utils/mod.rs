@@ -1,0 +1,349 @@
+//! Shared test utilities for the installer crate.
+
+use std::{
+    cell::RefCell,
+    collections::VecDeque,
+    path::PathBuf,
+    process::{ExitStatus, Output},
+};
+
+#[cfg(any(test, feature = "test-support"))]
+use crate::deps::CommandExecutor;
+#[cfg(any(test, feature = "test-support"))]
+use crate::error::InstallerError;
+use crate::{dirs::BaseDirs, error::Result};
+
+#[cfg(any(test, feature = "test-support"))]
+mod snapshot_fixture;
+#[cfg(any(test, feature = "test-support"))]
+pub use snapshot_fixture::{FIXTURE_TOOLCHAIN, SnapshotFixture, git as fixture_git};
+
+/// Creates an `ExitStatus` from an exit code (Unix implementation).
+///
+/// # Examples
+///
+/// ```
+/// use whitaker_installer::test_utils::exit_status;
+///
+/// let success = exit_status(0);
+/// assert!(success.success());
+///
+/// let failure = exit_status(1);
+/// assert!(!failure.success());
+/// ```
+#[cfg(unix)]
+#[must_use]
+pub fn exit_status(code: i32) -> ExitStatus {
+    use std::os::unix::process::ExitStatusExt;
+
+    ExitStatus::from_raw(code << 8)
+}
+
+/// Creates an `ExitStatus` from an exit code (Windows implementation).
+///
+/// # Examples
+///
+/// ```ignore
+/// use whitaker_installer::test_utils::exit_status;
+///
+/// let success = exit_status(0);
+/// assert!(success.success());
+///
+/// let failure = exit_status(1);
+/// assert!(!failure.success());
+/// ```
+#[cfg(windows)]
+#[must_use]
+pub fn exit_status(code: i32) -> ExitStatus {
+    use std::os::windows::process::ExitStatusExt;
+
+    ExitStatus::from_raw(code as u32)
+}
+
+/// Creates a successful command `Output` with empty stdout and stderr.
+///
+/// # Examples
+///
+/// ```
+/// use whitaker_installer::test_utils::success_output;
+///
+/// let output = success_output();
+/// assert!(output.status.success());
+/// assert!(output.stdout.is_empty());
+/// assert!(output.stderr.is_empty());
+/// ```
+#[must_use]
+pub fn success_output() -> Output {
+    Output {
+        status: exit_status(0),
+        stdout: Vec::new(),
+        stderr: Vec::new(),
+    }
+}
+
+/// Creates a successful command `Output` with the given stdout text.
+///
+/// # Examples
+///
+/// ```
+/// use whitaker_installer::test_utils::stdout_output;
+///
+/// let output = stdout_output("cargo-dylint 1.2.3");
+/// assert!(output.status.success());
+/// assert_eq!(output.stdout, b"cargo-dylint 1.2.3");
+/// assert!(output.stderr.is_empty());
+/// ```
+pub fn stdout_output(stdout: impl AsRef<str>) -> Output {
+    Output {
+        status: exit_status(0),
+        stdout: stdout.as_ref().as_bytes().to_vec(),
+        stderr: Vec::new(),
+    }
+}
+
+/// Creates a failed command `Output` with the given stderr message.
+///
+/// # Examples
+///
+/// ```
+/// use whitaker_installer::test_utils::failure_output;
+///
+/// let output = failure_output("command failed");
+/// assert!(!output.status.success());
+/// assert!(output.stdout.is_empty());
+/// assert_eq!(output.stderr, b"command failed");
+/// ```
+pub fn failure_output(stderr: impl AsRef<str>) -> Output {
+    let stderr_text = stderr.as_ref();
+    Output {
+        status: exit_status(1),
+        stdout: Vec::new(),
+        stderr: stderr_text.as_bytes().to_vec(),
+    }
+}
+
+/// Minimal directory stub for tests that only care about the binary path.
+#[derive(Debug, Clone, Default)]
+pub struct StubDirs {
+    /// Directory returned by [`BaseDirs::executables`].
+    pub bin_dir: Option<PathBuf>,
+}
+
+impl BaseDirs for StubDirs {
+    fn home(&self) -> Option<PathBuf> { None }
+
+    fn executables(&self) -> Option<PathBuf> { self.bin_dir.clone() }
+
+    fn whitaker_data(&self) -> Option<PathBuf> { None }
+}
+
+/// Compute the SHA-256 hex digest of a byte slice for test fixtures.
+#[cfg(any(test, feature = "test-support"))]
+#[must_use]
+pub fn sha256_hex(data: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    crate::hex::to_lower_hex(&Sha256::digest(data))
+}
+
+/// Build prebuilt manifest JSON for tests with configurable fields.
+#[cfg(any(test, feature = "test-support"))]
+pub fn prebuilt_manifest_json(
+    toolchain: impl AsRef<str>,
+    target: impl AsRef<str>,
+    sha256: impl AsRef<str>,
+) -> String {
+    let toolchain_value = toolchain.as_ref();
+    let target_value = target.as_ref();
+    let sha256_value = sha256.as_ref();
+    format!(
+        concat!(
+            r#"{{"git_sha":"abc1234","schema_version":1,"#,
+            r#""toolchain":"{toolchain}","#,
+            r#""target":"{target}","#,
+            r#""generated_at":"2026-02-03T00:00:00Z","#,
+            r#""files":["libwhitaker_suite.so"],"#,
+            r#""sha256":"{sha256}"}}"#,
+        ),
+        toolchain = toolchain_value,
+        target = target_value,
+        sha256 = sha256_value,
+    )
+}
+
+/// Represents an expected command invocation for testing.
+///
+/// # Examples
+///
+/// ```
+/// use whitaker_installer::test_utils::{ExpectedCall, success_output};
+///
+/// let call = ExpectedCall {
+///     cmd: "cargo",
+///     args: vec!["build", "--release"],
+///     result: Ok(success_output()),
+/// };
+///
+/// assert_eq!(call.cmd, "cargo");
+/// assert_eq!(call.args, vec!["build", "--release"]);
+/// assert!(call.result.is_ok());
+/// ```
+#[derive(Debug)]
+pub struct ExpectedCall {
+    /// The command to execute (e.g., "cargo").
+    pub cmd: &'static str,
+    /// The arguments to pass to the command.
+    pub args: Vec<&'static str>,
+    /// The result to return when this command is invoked.
+    pub result: Result<Output>,
+}
+
+/// A stub implementation of `CommandExecutor` for testing.
+///
+/// Records expected command invocations and returns predefined results,
+/// allowing tests to verify command execution without side effects.
+///
+/// # Examples
+///
+/// ```
+/// use whitaker_installer::{
+///     deps::CommandExecutor,
+///     test_utils::{ExpectedCall, StubExecutor, success_output},
+/// };
+///
+/// let executor = StubExecutor::new(vec![ExpectedCall {
+///     cmd: "cargo",
+///     args: vec!["--version"],
+///     result: Ok(success_output()),
+/// }]);
+///
+/// let output = executor
+///     .run("cargo", &["--version"])
+///     .expect("command failed");
+/// assert!(output.status.success());
+///
+/// executor.assert_finished();
+/// ```
+#[derive(Debug)]
+pub struct StubExecutor {
+    expected: RefCell<VecDeque<ExpectedCall>>,
+}
+
+impl StubExecutor {
+    /// Creates a new `StubExecutor` with the given expected calls.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use whitaker_installer::test_utils::{ExpectedCall, StubExecutor, success_output};
+    ///
+    /// let executor = StubExecutor::new(vec![ExpectedCall {
+    ///     cmd: "cargo",
+    ///     args: vec!["build"],
+    ///     result: Ok(success_output()),
+    /// }]);
+    /// ```
+    #[must_use]
+    pub fn new(expected: Vec<ExpectedCall>) -> Self {
+        Self {
+            expected: RefCell::new(expected.into()),
+        }
+    }
+
+    /// Asserts that all expected command invocations have been consumed.
+    ///
+    /// # Panics
+    ///
+    /// Panics if there are remaining expected calls that were not invoked.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use whitaker_installer::{
+    ///     deps::CommandExecutor,
+    ///     test_utils::{ExpectedCall, StubExecutor, success_output},
+    /// };
+    ///
+    /// let executor = StubExecutor::new(vec![ExpectedCall {
+    ///     cmd: "cargo",
+    ///     args: vec!["test"],
+    ///     result: Ok(success_output()),
+    /// }]);
+    ///
+    /// // Execute the expected command
+    /// let _ = executor.run("cargo", &["test"]);
+    ///
+    /// // Verify all expected calls were consumed
+    /// executor.assert_finished();
+    /// ```
+    pub fn assert_finished(&self) {
+        assert!(
+            self.expected.borrow().is_empty(),
+            "expected no further command invocations"
+        );
+    }
+}
+
+#[cfg(any(test, feature = "test-support"))]
+impl CommandExecutor for StubExecutor {
+    fn run(&self, cmd: &str, args: &[&str]) -> Result<Output> {
+        let mut expected = self.expected.borrow_mut();
+        let call = expected
+            .pop_front()
+            .ok_or_else(|| InstallerError::StubMismatch {
+                message: format!("unexpected command invocation: {cmd} {}", args.join(" ")),
+            })?;
+
+        if call.cmd != cmd {
+            return Err(InstallerError::StubMismatch {
+                message: format!("command mismatch: expected {}, got {cmd}", call.cmd),
+            });
+        }
+
+        if call.args.as_slice() != args {
+            return Err(InstallerError::StubMismatch {
+                message: format!(
+                    "argument mismatch for {cmd}: expected {:?}, got {args:?}",
+                    call.args
+                ),
+            });
+        }
+
+        call.result
+    }
+}
+
+/// Test helpers for dependency binary installation behaviour tests.
+#[cfg(any(test, feature = "test-support"))]
+pub mod dependency_binary_helpers;
+#[cfg(test)]
+mod dependency_binary_helpers_tests;
+
+#[cfg(test)]
+mod tests {
+    //! Tests asserting `sha256_hex` against known SHA-256 test vectors.
+
+    use super::sha256_hex;
+
+    #[test]
+    fn sha256_hex_matches_known_vector() {
+        // SHA-256 of "abc" is a well-known NIST test vector.
+        assert_eq!(
+            sha256_hex(b"abc"),
+            concat!(
+                "ba7816bf8f01cfea414140de5dae2223",
+                "b00361a396177a9cb410ff61f20015ad",
+            ),
+        );
+    }
+
+    #[test]
+    fn sha256_hex_of_empty_input_is_the_known_constant() {
+        assert_eq!(
+            sha256_hex(b""),
+            concat!(
+                "e3b0c44298fc1c149afbf4c8996fb924",
+                "27ae41e4649b934ca495991b7852b855",
+            ),
+        );
+    }
+}

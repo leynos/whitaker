@@ -23,6 +23,7 @@ from runner_lanes import (
     GITHUB_HOSTED_LABELS,
     LEG_DISCRIMINATOR,
     MAXIMUM_LANE_TIMEOUT_MINUTES,
+    SUITE_LANE_TIMEOUT_MINUTES,
     billable_labels,
     declared_labels,
     GLIBC_BASELINE_IMAGE,
@@ -39,12 +40,24 @@ from runner_lanes import (
     matrix_legs,
 )
 from ubicloud_workflow_support import (
+    HOSTED_RUNNER_JOBS,
     REPOSITORY_ROOT,
     UBICLOUD_JOBS,
     all_jobs,
+    load_job,
     restore_steps,
     steps_by_name,
 )
+from suite_lanes import read_suite_lanes
+
+
+@pytest.fixture(scope="module")
+def suite_job_keys() -> frozenset[tuple[str, str]]:
+    """Return the workflow jobs that execute the Nextest suite."""
+    return frozenset(
+        (lane.workflow, lane.job)
+        for lane in read_suite_lanes()
+    )
 
 
 @pytest.mark.parametrize("lane", UBICLOUD_LANES, ids=str)
@@ -69,8 +82,23 @@ def test_the_lane_list_and_the_job_list_name_the_same_whole_jobs() -> None:
     with every contract still green.
     """
     from_lanes = {(lane.workflow, lane.job) for lane in UBICLOUD_LANES}
-    from_jobs = {(workflow, job) for job, workflow in UBICLOUD_JOBS.items()}
+    from_jobs = {
+        (workflow, job)
+        for job, workflow in UBICLOUD_JOBS.items()
+        if job not in HOSTED_RUNNER_JOBS
+    }
     assert from_lanes == from_jobs
+
+
+@pytest.mark.parametrize("job_name", sorted(HOSTED_RUNNER_JOBS))
+def test_a_job_moved_to_a_hosted_runner_names_one(job_name: str) -> None:
+    """The exemption from the lane list holds only for a hosted placement."""
+    job = load_job(job_name)
+    labels = declared_labels(job)
+    assert labels
+    assert labels <= GITHUB_HOSTED_LABELS, (
+        f"{job_name} is exempt from the Ubicloud lanes but runs on {sorted(labels)}"
+    )
 
 
 def test_no_lane_takes_its_label_from_a_broken_folded_scalar() -> None:
@@ -227,7 +255,9 @@ def test_the_actionlint_registry_matches_the_labels_in_use() -> None:
 
 
 @pytest.mark.parametrize("lane", UBICLOUD_LANES, ids=str)
-def test_every_ubicloud_lane_declares_a_timeout(lane: RunnerLane) -> None:
+def test_every_ubicloud_lane_declares_a_timeout(
+    lane: RunnerLane, suite_job_keys: frozenset[tuple[str, str]]
+) -> None:
     """A hung Ubicloud job bills until something stops it.
 
     Ubicloud runners register as self-hosted just-in-time runners, so GitHub's
@@ -246,9 +276,14 @@ def test_every_ubicloud_lane_declares_a_timeout(lane: RunnerLane) -> None:
         f"{lane} runs on a paid runner and must declare timeout-minutes; "
         f"got {timeout!r}"
     )
-    assert 0 < timeout <= MAXIMUM_LANE_TIMEOUT_MINUTES, (
+    maximum = (
+        SUITE_LANE_TIMEOUT_MINUTES
+        if (lane.workflow, lane.job) in suite_job_keys
+        else MAXIMUM_LANE_TIMEOUT_MINUTES
+    )
+    assert 0 < timeout <= maximum, (
         f"{lane} declares timeout-minutes {timeout}, outside the reviewed "
-        f"range of 1 to {MAXIMUM_LANE_TIMEOUT_MINUTES}"
+        f"range of 1 to {maximum}"
     )
 
 

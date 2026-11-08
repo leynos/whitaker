@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import re
+
 from runner_lanes import linux_arm, runs_even_when_the_job_fails
 from ubicloud_workflow_support import (
+    HOSTED_RUNNER_JOBS,
     INSTALL_ACTION,
     REPOSITORY_ROOT,
     SETUP_RUST_ACTION,
@@ -45,13 +48,20 @@ def _tools_restore_key(job_name: str) -> str:
     return str(step["with"]["key"])
 
 
+#: Jobs whose purpose is to compile the binaries the release publishes.
+PRODUCES_PUBLISHED_BINARIES = frozenset({"build-dependency-binaries"})
+
+
 def test_no_ubicloud_job_compiles_a_tool_from_source() -> None:
     """Paid runner minutes must never be spent rebuilding a published binary."""
     for job_name in UBICLOUD_JOBS:
         job = load_job(job_name)
-        assert "cargo install" not in run_scripts(job), (
-            f"{job_name} must not build a tool from source"
-        )
+        # The dependency-binaries job exists to compile the binaries that the
+        # release publishes, on the pinned toolchain, so it is the one job
+        # whose `cargo install` is the product and not a rebuild.
+        assert job_name in PRODUCES_PUBLISHED_BINARIES or "cargo install" not in run_scripts(
+            job
+        ), f"{job_name} must not build a tool from source"
         for step in job_steps(job):
             if str(step.get("uses", "")).startswith("taiki-e/install-action@"):
                 assert step["uses"] == INSTALL_ACTION, (
@@ -62,12 +72,20 @@ def test_no_ubicloud_job_compiles_a_tool_from_source() -> None:
                 )
 
 
-def test_mdtablefix_is_installed_from_a_checksum_verified_release() -> None:
+def test_mdtablefix_is_installed_by_the_shared_action() -> None:
     """The Markdown formatter defines canonical output, so its build must match."""
-    script = str(steps_by_name(load_job("linux-full"))["Install mdtablefix"]["run"])
-    assert "releases/download/v${MDTABLEFIX_VERSION}/mdtablefix-linux-x86_64" in script
-    assert "sha256sum --check --status" in script
-    assert "cargo install" not in script
+    step = steps_by_name(load_job("linux-full"))["Install mdtablefix"]
+    assert re.fullmatch(
+        r"leynos/shared-actions/\.github/actions/install-mdtablefix@[0-9a-f]{40}",
+        str(step.get("uses", "")),
+    ), "mdtablefix must install through the shared action at a full commit SHA"
+    assert step["with"]["version"] == "${{ env.MDTABLEFIX_VERSION }}", (
+        "install-mdtablefix must take its version from the workflow-level pin"
+    )
+    assert step["with"]["sha256"] == "${{ env.MDTABLEFIX_LINUX_X64_SHA256 }}", (
+        "the executable must be verified against the pinned digest"
+    )
+    assert "run" not in step, "mdtablefix must not be downloaded by a script"
 
 
 def test_setup_rust_delegates_cache_and_compiler_cache_ownership() -> None:
@@ -82,9 +100,14 @@ def test_setup_rust_delegates_cache_and_compiler_cache_ownership() -> None:
             f"{job_name} must use the reviewed shared Rust setup pin"
         )
         declared = setup["with"]
-        assert set(declared) == {"cache-provider"}, (
+        if job_name in HOSTED_RUNNER_JOBS:
+            # Hosted, sccache off: its own rule holds that switch.
+            assert set(declared) - {"install-mold"} == {"cache-provider", "use-sccache"}
+            continue
+        assert set(declared) - {"install-mold"} == {"cache-provider", "expect-cache"}, (
             f"{job_name} must pass the shared action nothing but the cache "
-            "provider; `use-sccache: false` would disable the compiler-cache arm"
+            "provider and the backend it expects; `use-sccache: false` would "
+            "disable the compiler-cache arm"
         )
         assert linux_arm(declared["cache-provider"]) == "external", (
             f"{job_name} must own its Cargo cache on its Ubicloud legs rather "
@@ -133,23 +156,15 @@ def test_no_workflow_requests_unbounded_pytest_parallelism() -> None:
             )
 
 
-def test_compiler_cache_uses_exactly_one_selected_backend() -> None:
-    """Two configured backends make the reported hit rate unattributable.
+def test_the_shared_action_alone_configures_the_compiler_cache() -> None:
+    """A second configurer makes the reported hit rate unattributable.
 
-    Which backend each workflow selects, and what that selection obliges the
-    lane to carry, live in `sccache_backend_contract_test`. What is asserted
-    here is narrower and belongs with tool provenance: whatever the selection,
-    the selector script is the only thing that acts on it.
+    Which backend `setup-rust` may select, and which retired pieces must stay
+    gone, live in `setup_rust_sccache_contract_test`. What is asserted here is
+    narrower and belongs with tool provenance: no workflow names the wrapper
+    or a backend switch, and no job installs or starts a compiler cache of
+    its own.
     """
-    declared = {
-        workflow_name: load_workflow(workflow_name)["env"]["SCCACHE_BACKEND"]
-        for workflow_name in set(UBICLOUD_JOBS.values())
-    }
-    assert set(declared.values()) <= {"gha", "local"}, (
-        "SCCACHE_BACKEND must name a backend scripts/select-sccache-backend.sh "
-        f"understands, not {sorted(set(declared.values()))}"
-    )
-
     for workflow_name in set(UBICLOUD_JOBS.values()):
         workflow = load_workflow(workflow_name)
         # The shared action exports the wrapper as the absolute path of the
@@ -161,18 +176,13 @@ def test_compiler_cache_uses_exactly_one_selected_backend() -> None:
             "for the sccache it installed"
         )
         assert "SCCACHE_GHA_ENABLED" not in workflow["env"], (
-            f"{workflow_name} must let the selector export the backend variables"
+            f"{workflow_name} must let the shared action select the backend"
         )
 
     for job_name in UBICLOUD_JOBS:
-        job = load_job(job_name)
-        names = step_names(job)
-        selector = steps_by_name(job)["Select the compiler cache backend"]
-        assert "scripts/select-sccache-backend.sh" in str(selector["run"])
-        assert names.index("Select the compiler cache backend") < names.index(
-            "Setup Rust"
-        ), f"{job_name} must choose a backend before any Cargo invocation"
-        _assert_the_shared_action_owns_the_compiler_cache(job_name, names)
+        _assert_the_shared_action_owns_the_compiler_cache(
+            job_name, step_names(load_job(job_name))
+        )
 
 
 def _assert_the_shared_action_owns_the_compiler_cache(
@@ -189,27 +199,25 @@ def _assert_the_shared_action_owns_the_compiler_cache(
             f"{job_name} must not run its own {bespoke!r}; the shared action "
             "installs sccache, starts the server and zeroes the counters"
         )
-    # Only the local-directory lanes have a directory to restore. Whether a
-    # lane should have one at all is `sccache_backend_contract_test`'s to say;
-    # this only places the restore correctly when one exists.
-    if "Restore the compiler cache directory" in names:
-        restore_index = names.index("Restore the compiler cache directory")
-        assert restore_index < names.index("Setup Rust"), (
-            f"{job_name} must restore the compiler cache directory before the "
-            "shared action starts the server, which binds the directory once"
-        )
+    # No job restores a compiler cache directory any more; that it has none
+    # is `setup_rust_sccache_contract_test`'s to say.
 
 
 def test_compiler_cache_effectiveness_is_always_recorded() -> None:
     """Zero compile requests is a broken integration, not a clean run."""
-    for job_name in UBICLOUD_JOBS:
+    for job_name in set(UBICLOUD_JOBS) - set(HOSTED_RUNNER_JOBS):
         job = load_job(job_name)
         names = step_names(job)
         assert names.index("Setup Rust") < names.index(
             "Record sccache effectiveness"
         ), f"{job_name} must zero the counters before the build"
         record = steps_by_name(job)["Record sccache effectiveness"]
-        assert runs_even_when_the_job_fails(record.get("if")), (
+        # The fallback skip is `sccache_health_contract_test`'s to hold; here
+        # only the "even when the job fails" half is read.
+        condition = str(record.get("if")).replace(
+            " && steps.setup-rust.outputs.sccache-status != 'fallback'", ""
+        )
+        assert runs_even_when_the_job_fails(condition), (
             f"{job_name} must publish sccache statistics even when the build fails"
         )
         assert "scripts/record-sccache-effectiveness.sh" in str(record["run"])
@@ -229,27 +237,84 @@ def test_tools_cache_keys_name_every_pin_they_depend_on() -> None:
 def test_dylint_host_tool_key_matches_the_makefile_pins() -> None:
     """The cached archive must be invalidated by the versions the build installs."""
     makefile = (REPOSITORY_ROOT / "Makefile").read_text(encoding="utf-8")
-    assert "CARGO_DYLINT_VERSION ?= 6.0.1" in makefile
-    assert "DYLINT_LINK_VERSION ?= 6.0.1" in makefile
+    assert "CARGO_DYLINT_VERSION ?= 6.3.0" in makefile
+    assert "DYLINT_LINK_VERSION ?= 6.3.0" in makefile
     step = steps_by_name(load_job("linux-full"))["Restore the Dylint host tools"]
     key = str(step["with"]["key"])
-    assert "cargo-dylint6.0.1" in key
-    assert "dylint-link6.0.1" in key
+    assert "cargo-dylint6.3.0" in key
+    assert "dylint-link6.3.0" in key
     assert step["with"]["path"].strip() == "~/.cache/whitaker-dylint-tools", (
         "the Dylint host tools cache must own the durable Makefile directory"
     )
 
 
-def test_clippy_mirror_is_owned_and_provisioned_after_its_restore() -> None:
-    """The mirror removes an unowned multi-hundred-megabyte upstream clone."""
+def test_clippy_snapshot_is_restored_then_provisioned_after_setup_rust() -> None:
+    """The snapshot is the only Clippy source a gate lane may read.
+
+    The restore comes before the first expensive step, like every restore.
+    Provisioning needs a Rust toolchain, because it runs the installer's own
+    verifier, so it follows `Setup Rust`; it exports `DYLINT_CLIPPY_REPO`
+    and `DYLINT_DRIVER_PATH` for every later step.
+    """
     for job_name in SUITE_JOBS:
         job = load_job(job_name)
         names = step_names(job)
-        mirror = steps_by_name(job)["Restore the Clippy source mirror"]
-        assert "clippy-mirror-v1-dylint6.0.1" in str(mirror["with"]["key"])
-        assert names.index("Restore the Clippy source mirror") < names.index(
-            "Provision the Clippy source mirror"
-        ), f"{job_name} must restore the mirror before provisioning it"
+        steps = steps_by_name(job)
+        restore = steps["Restore the Clippy snapshot"]
+        assert str(restore["with"]["key"]) == (
+            "clippy-snapshot-v1-${{ hashFiles('installer/clippy-snapshot.toml') }}"
+        ), f"{job_name} must key the snapshot by its manifest"
+        assert restore["with"]["path"].strip() == "~/.cache/whitaker-clippy-snapshot"
+        assert names.index("Setup Rust") < names.index(
+            "Provision the Clippy snapshot"
+        ), f"{job_name} must provision the snapshot after Setup Rust"
+        provision = str(steps["Provision the Clippy snapshot"]["run"])
+        assert "make clippy-snapshot " in provision
+        assert 'make --no-print-directory dylint-env >> "$GITHUB_ENV"' in provision
+
+
+def test_no_lane_redirects_public_clippy() -> None:
+    """The mirror's `insteadOf` rewrite is gone and nothing replaces it."""
+    for job_name in [*SUITE_JOBS, "windows-compat"]:
+        for step in load_job(job_name).get("steps") or []:
+            run = str(step.get("run", ""))
+            assert "insteadOf" not in run, f"{job_name}: {step.get('name')}"
+            assert "provision-clippy-mirror" not in run, f"{job_name}: {step.get('name')}"
+
+
+def test_windows_lane_provisions_the_snapshot_without_a_cache() -> None:
+    """Windows cannot restore a Linux archive, so it builds and verifies."""
+    job = load_job("windows-compat")
+    names = step_names(job)
+    assert names.index("Setup Rust") < names.index("Provision the Clippy snapshot")
+    assert names.index("Provision the Clippy snapshot") < names.index("Test")
+    provision = steps_by_name(job)["Provision the Clippy snapshot"]
+    assert provision["env"]["CLIPPY_SNAPSHOT_HIT"] == "false"
+
+
+def test_linux_full_proves_the_driver_bootstrap_with_github_denied() -> None:
+    """The smoke step denies github.com, checks a canary, and runs cold+warm.
+
+    It runs after every other validation step, because the runner's resolver
+    can keep the denial after the hosts entry is removed (PR #528's second
+    run lost `make lint` that way).
+    """
+    job = load_job("linux-full")
+    names = step_names(job)
+    smoke_name = "Prove the Dylint driver bootstrap without public Clippy"
+    assert names.index("Provision the Clippy snapshot") < names.index(smoke_name)
+    # Last validation step: nothing after the github.com denial may need GitHub.
+    assert names.index("Publish dry run") < names.index(smoke_name)
+    assert names.index(smoke_name) < names.index("Discard the build target tree")
+    assert names.index("Install the Dylint host tools") < names.index(smoke_name), (
+        "the pinned tools download from github.com, so they must precede the denial"
+    )
+    run = str(steps_by_name(job)[smoke_name]["run"])
+    assert "0.0.0.0 github.com" in run
+    assert "git ls-remote https://github.com/rust-lang/rust-clippy" in run
+    assert "RUSTC_WRAPPER" in run
+    assert "make dylint-smoke" in run
+
 
 
 def test_nested_cargo_builds_share_one_absolute_target_directory() -> None:

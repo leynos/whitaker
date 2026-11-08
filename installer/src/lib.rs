@@ -7,18 +7,18 @@
 //! # Modules
 //!
 //! - [`artefact`] - Artefact naming, manifest schema, and verification policy
-//! - [`binstall_metadata`] - Cargo-binstall metadata constants and template
-//!   expansion
+//! - [`bootstrap`] - The installed Dylint bootstrap behind `whitaker-installer run`
+//! - [`binstall_metadata`] - Cargo-binstall metadata constants and template expansion
 //! - [`builder`] - Cargo build orchestration for lint crates
 //! - [`cli`] - Command-line argument definitions
+//! - [`clippy_snapshot`] - Verified Clippy history for Dylint driver builds
 //! - [`crate_name`] - Semantic wrapper for lint crate names
 //! - [`deps`] - Dylint tool dependency management
 //! - [`dirs`] - Directory resolution abstraction for platform-specific paths
 //! - [`error`] - Semantic error types with recovery hints
 //! - [`git`] - Repository cloning and updating
 //! - [`install_metrics`] - Local installer metrics persistence and summaries
-//! - [`installer_packaging`] - Installer binary archive packaging for release
-//!   distribution
+//! - [`installer_packaging`] - Installer binary archive packaging for release distribution
 //! - [`list`] - List command implementation
 //! - [`list_output`] - Output formatting for lint listing
 //! - [`output`] - Shell snippet generation for environment configuration
@@ -28,8 +28,8 @@
 //! - [`resolution`] - Crate resolution and validation
 //! - [`scanner`] - Lint scanner for discovering installed libraries
 //! - [`stager`] - File staging with platform-specific naming conventions
-//! - [`test_support`] - Hidden test-only hooks shared by installer behavioural
-//!   and integration tests
+//! - [`test_support`] - Hidden test-only hooks shared by installer behavioural and integration
+//!   tests
 //! - [`toolchain`] - Rust toolchain detection and validation
 //! - [`version`] - Semantic crate version wrapper
 //! - [`workspace`] - Workspace detection and path resolution
@@ -37,8 +37,10 @@
 
 pub mod artefact;
 pub mod binstall_metadata;
+pub mod bootstrap;
 pub mod builder;
 pub mod cli;
+pub mod clippy_snapshot;
 pub mod crate_name;
 
 pub mod dependency_binaries;
@@ -71,6 +73,8 @@ pub mod version;
 pub mod workspace;
 pub mod wrapper;
 
+#[cfg(test)]
+mod archive_entry_type_tests;
 #[cfg(test)]
 mod dependency_packaging_tests;
 #[cfg(test)]

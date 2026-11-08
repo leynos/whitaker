@@ -11,15 +11,21 @@ mod label_propagation;
 #[path = "decomposition_vector_algebra.rs"]
 mod vector_algebra;
 
+pub use self::{
+    adjacency::{AdjacencyError, AdjacencyReport, EdgeInput, adjacency_report},
+    label_propagation::{LabelPropagationReport, label_propagation_report},
+    vector_algebra::{MethodVectorAlgebraReport, method_vector_algebra},
+};
 use crate::decomposition_advice::{
-    DecompositionContext, DecompositionSuggestion, MethodProfile, MethodProfileBuilder,
-    SubjectKind, methods_meet_cosine_threshold as runtime_methods_meet_cosine_threshold,
+    DecompositionContext,
+    DecompositionError,
+    DecompositionSuggestion,
+    MethodProfile,
+    MethodProfileBuilder,
+    SubjectKind,
+    methods_meet_cosine_threshold as runtime_methods_meet_cosine_threshold,
     suggest_decomposition,
 };
-
-pub use self::adjacency::{AdjacencyError, AdjacencyReport, EdgeInput, adjacency_report};
-pub use self::label_propagation::{LabelPropagationReport, label_propagation_report};
-pub use self::vector_algebra::{MethodVectorAlgebraReport, method_vector_algebra};
 
 /// Input data for building a [`MethodProfile`] in tests.
 ///
@@ -38,11 +44,17 @@ pub use self::vector_algebra::{MethodVectorAlgebraReport, method_vector_algebra}
 ///
 /// assert_eq!(profile.name(), "parse_tokens");
 /// ```
+#[derive(Clone, Copy)]
 pub struct MethodInput<'a> {
+    /// Method name recorded on the resulting profile.
     pub name: &'a str,
+    /// Struct fields the method accesses.
     pub fields: &'a [&'a str],
+    /// Types that appear in the method signature.
     pub signature_types: &'a [&'a str],
+    /// Types bound locally within the method body.
     pub local_types: &'a [&'a str],
+    /// External domains (modules or crates) the method touches.
     pub domains: &'a [&'a str],
 }
 
@@ -185,6 +197,11 @@ pub fn transport_trait_fixture() -> Vec<MethodProfile> {
 
 /// Computes decomposition suggestions for `methods`.
 ///
+/// # Errors
+///
+/// Returns the analysis error when the supplied profiles describe inconsistent
+/// graph or feature state.
+///
 /// # Examples
 ///
 /// ```ignore
@@ -196,18 +213,17 @@ pub fn transport_trait_fixture() -> Vec<MethodProfile> {
 ///
 /// let methods = parser_serde_fs_fixture();
 /// let (_context, suggestions) =
-///     decomposition_suggestions("Foo", SubjectKind::Type, &methods);
+///     decomposition_suggestions("Foo", SubjectKind::Type, &methods)?;
 /// assert!(!suggestions.is_empty());
 /// ```
-#[must_use]
 pub fn decomposition_suggestions(
     subject: &str,
     kind: SubjectKind,
     methods: &[MethodProfile],
-) -> (DecompositionContext, Vec<DecompositionSuggestion>) {
+) -> Result<(DecompositionContext, Vec<DecompositionSuggestion>), DecompositionError> {
     let context = DecompositionContext::new(subject, kind);
-    let suggestions = suggest_decomposition(&context, methods);
-    (context, suggestions)
+    let suggestions = suggest_decomposition(&context, methods)?;
+    Ok((context, suggestions))
 }
 
 /// Evaluates whether two methods satisfy Whitaker's cosine threshold.

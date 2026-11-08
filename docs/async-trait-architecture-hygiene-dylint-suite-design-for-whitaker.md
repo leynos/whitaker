@@ -512,7 +512,7 @@ approvals.[^1][^3]
 ## 8. References
 
 [^1]: Axinite ADR 006, `Dual-trait pattern for dyn-backed async interfaces`.
-      <https://raw.githubusercontent.com/leynos/axinite/refs/heads/main/docs/adr-006-dual-trait-pattern-for-dyn-backed-async-interfaces.md>
+      <https://raw.githubusercontent.com/leynos/axinite/refs/heads/main/docs/adrs/adr-0006-dual-trait-pattern-for-dyn-backed-async-interfaces.md>
 [^2]: Whitaker design and implementation references: brain-trust lints design,
       Dylint suite design, suite driver wiring, suite lint registry,
       `dylint-driver` feature configuration, root `lib.rs`, and `src/hir.rs`.

@@ -4,8 +4,7 @@
 //! stripping whitespace and quotation marks to normalize values before they are
 //! passed to locale resolution and configuration helpers.
 
-use std::convert::Infallible;
-use std::str::FromStr;
+use std::{convert::Infallible, str::FromStr};
 
 /// Wrapper for locale values supplied via behaviour-driven test steps.
 #[derive(Clone, Debug)]
@@ -28,7 +27,5 @@ impl FromStr for StepLocale {
 
 impl StepLocale {
     /// Consumes the step value, yielding the parsed string.
-    pub fn into_inner(self) -> String {
-        self.raw
-    }
+    pub fn into_inner(self) -> String { self.raw }
 }

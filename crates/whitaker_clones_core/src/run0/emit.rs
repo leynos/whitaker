@@ -4,11 +4,19 @@ use std::collections::BTreeMap;
 
 use sha2::{Digest, Sha256};
 use whitaker_sarif::{
-    Level, LocationBuilder, RelatedLocation, ResultBuilder, Run, RunBuilder, WHITAKER_FRAGMENT_KEY,
-    WHK001_ID, WHK002_ID, WhitakerPropertiesBuilder, all_rules, deduplicate_results,
+    Level,
+    LocationBuilder,
+    RelatedLocation,
+    ResultBuilder,
+    Run,
+    RunBuilder,
+    WHITAKER_FRAGMENT_KEY,
+    WHK001_ID,
+    WHK002_ID,
+    WhitakerPropertiesBuilder,
+    all_rules,
+    deduplicate_results,
 };
-
-use crate::{CandidatePair, NormProfile};
 
 use super::{
     error::{Run0Error, Run0Result},
@@ -16,6 +24,7 @@ use super::{
     span::region_for_range,
     types::{AcceptedPair, TokenFragment, TokenPassConfig},
 };
+use crate::{CandidatePair, NormProfile};
 
 /// Accepts canonical candidate pairs for later Run 0 emission.
 ///
@@ -109,6 +118,11 @@ pub fn emit_run0(
     Ok(run.build())
 }
 
+/// Build one SARIF result for an accepted pair of clone fragments.
+///
+/// The primary fragment becomes the result location and the peer becomes a
+/// related location. Fingerprint, region, score-conversion, or property-build
+/// failures are returned to the caller rather than emitting a partial result.
 fn build_result(
     primary: &TokenFragment,
     peer: &TokenFragment,
@@ -160,7 +174,7 @@ fn build_result(
                 text: format!("Peer clone fragment: {}", peer.id().as_str()),
             }),
             physical_location: whitaker_sarif::PhysicalLocation {
-                artifact_location: whitaker_sarif::ArtifactLocation {
+                artefact_location: whitaker_sarif::ArtefactLocation {
                     uri: peer.file_uri().to_owned(),
                     uri_base_id: None,
                 },
@@ -189,6 +203,7 @@ fn build_message(
     )
 }
 
+/// Format a source region as a compact line and column span.
 fn compact_span(region: &whitaker_sarif::Region) -> String {
     format!(
         "{}:{}-{}:{}",
@@ -197,25 +212,28 @@ fn compact_span(region: &whitaker_sarif::Region) -> String {
         region.end_line.unwrap_or(region.start_line),
         region
             .end_column
-            .unwrap_or(region.start_column.unwrap_or(1))
+            .unwrap_or_else(|| region.start_column.unwrap_or(1))
     )
 }
 
-fn profile_number(profile: NormProfile) -> &'static str {
+/// Return the stable numeric suffix for a normalization profile.
+const fn profile_number(profile: NormProfile) -> &'static str {
     match profile {
         NormProfile::T1 => "1",
         NormProfile::T2 => "2",
     }
 }
 
-fn profile_name(profile: NormProfile) -> &'static str {
+/// Return the stable display name for a normalization profile.
+const fn profile_name(profile: NormProfile) -> &'static str {
     match profile {
         NormProfile::T1 => "T1",
         NormProfile::T2 => "T2",
     }
 }
 
-fn profile_sort_key(profile: NormProfile) -> u8 {
+/// Return the stable ordering key for a normalization profile.
+const fn profile_sort_key(profile: NormProfile) -> u8 {
     match profile {
         NormProfile::T1 => 1,
         NormProfile::T2 => 2,
@@ -283,6 +301,7 @@ fn pair_fingerprint(accepted: &AcceptedPair) -> String {
     digest_hex(hasher.finalize())
 }
 
+/// Format the two token fingerprints used in a clone-pair result.
 fn token_hash(left: &TokenFragment, right: &TokenFragment) -> String {
     let mut values = left
         .retained_fingerprints()
@@ -295,9 +314,23 @@ fn token_hash(left: &TokenFragment, right: &TokenFragment) -> String {
 
     let mut hasher = Sha256::new();
     for value in values {
-        hasher.update(value.to_be_bytes());
+        hasher.update(u64_big_endian_bytes(value));
     }
     digest_hex(hasher.finalize())
+}
+
+/// Serializes a `u64` as big-endian bytes with explicit masks and shifts.
+///
+/// The digest contract fixes the byte order, so the decomposition is spelled
+/// out here rather than delegated to an endianness-specific method.
+fn u64_big_endian_bytes(value: u64) -> [u8; 8] {
+    let mut bytes = [0_u8; 8];
+    let mut remaining = value;
+    for slot in bytes.iter_mut().rev() {
+        *slot = (remaining & 0xff) as u8;
+        remaining >>= 8;
+    }
+    bytes
 }
 
 fn digest_hex(bytes: impl AsRef<[u8]>) -> String {
@@ -330,4 +363,29 @@ fn result_sort_key(
                 .cmp(&other.partial_fingerprints.get(WHITAKER_FRAGMENT_KEY))
         })
         .then_with(|| result.message.text.cmp(&other.message.text))
+}
+
+#[cfg(test)]
+mod tests {
+    //! Property checks for the digest byte-order helper.
+
+    use proptest::prelude::*;
+
+    use super::u64_big_endian_bytes;
+
+    proptest! {
+        /// Check that the digest serializer matches `u64::to_be_bytes`.
+        #[test]
+        fn big_endian_bytes_match_to_be_bytes(value in any::<u64>()) {
+            // `to_be_bytes` is the independent oracle. Rebuilding the bytes with
+            // the production reverse-iteration loop would let a mistake shared
+            // by both copies pass, and `token_hash` depends on this order.
+            #[expect(
+                clippy::big_endian_bytes,
+                reason = "pinning the digest's big-endian contract needs the standard converter"
+            )]
+            let expected = value.to_be_bytes();
+            prop_assert_eq!(u64_big_endian_bytes(value), expected);
+        }
+    }
 }

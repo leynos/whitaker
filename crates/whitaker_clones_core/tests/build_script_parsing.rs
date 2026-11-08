@@ -4,7 +4,10 @@
 mod build_support;
 
 use build_support::{
-    exact_version, find_workspace_manifest, is_workspace_manifest, parser_dependency_requirement,
+    exact_version,
+    find_workspace_manifest,
+    is_workspace_manifest,
+    parser_dependency_requirement,
     read_workspace_manifest,
 };
 use camino::{Utf8Path, Utf8PathBuf};
@@ -82,15 +85,25 @@ fn rejects_invalid_dependency_forms(#[case] manifest: &str, #[case] expected: &s
 #[case::caret("0.0.334")]
 #[case::caret_explicit("^0.0.334")]
 #[case::empty_exact("=")]
+#[case::partial_major("=1")]
+#[case::partial_minor("=1.2")]
+#[case::additional_comparator("=1.2.3, <1.2.4")]
+#[case::double_equality("==1.2.3")]
+#[case::whitespace("=1.2.3 ")]
 fn rejects_non_exact_requirements(#[case] requirement: &str) {
     assert!(exact_version(requirement).is_err());
 }
 
+/// Accept exact release, prerelease and build-metadata versions unchanged.
 #[rstest]
-fn accepts_exact_requirement() {
+#[case::release("0.0.334")]
+#[case::prerelease("1.2.3-alpha.1")]
+#[case::build_metadata("1.2.3+build.7")]
+fn accepts_exact_requirement(#[case] expected: &str) {
+    let requirement = format!("={expected}");
     assert_eq!(
-        exact_version("=0.0.334").expect("exact requirement should parse"),
-        "0.0.334"
+        exact_version(&requirement).expect("exact requirement should parse"),
+        expected
     );
 }
 
@@ -111,7 +124,13 @@ fn finds_nearest_workspace_manifest(
     let member = fixture.root.join("nested-workspace").join("member");
     let workspace = fixture.root.join("nested-workspace").join("Cargo.toml");
 
-    assert_eq!(find_workspace_manifest(&member)?, workspace);
+    let located = find_workspace_manifest(&member)?;
+    if located != workspace {
+        return Err(format!(
+            "expected the nearest workspace manifest at `{workspace}`, found `{located}`"
+        )
+        .into());
+    }
     Ok(())
 }
 
@@ -124,7 +143,9 @@ fn ignores_non_workspace_manifests(
 
     let manifest = fixture.root.join("Cargo.toml");
 
-    assert!(!is_workspace_manifest(&manifest)?);
+    if is_workspace_manifest(&manifest)? {
+        return Err("a package-only manifest must not count as a workspace manifest".into());
+    }
     Ok(())
 }
 
@@ -139,12 +160,12 @@ fn reports_missing_workspace_manifest(
     let error = find_workspace_manifest(&nested)
         .expect_err("a directory without a workspace manifest should fail");
 
-    assert_eq!(
-        error
-            .downcast_ref::<std::io::Error>()
-            .map(std::io::Error::kind),
-        Some(std::io::ErrorKind::NotFound)
-    );
+    let kind = error
+        .downcast_ref::<std::io::Error>()
+        .map(std::io::Error::kind);
+    if kind != Some(std::io::ErrorKind::NotFound) {
+        return Err(format!("expected a NotFound I/O error, found {kind:?}").into());
+    }
     Ok(())
 }
 
@@ -157,7 +178,10 @@ fn reads_a_located_manifest(
 
     let manifest = fixture.root.join("Cargo.toml");
 
-    assert_eq!(read_workspace_manifest(&manifest)?, WORKSPACE_MANIFEST);
+    let contents = read_workspace_manifest(&manifest)?;
+    if contents != WORKSPACE_MANIFEST {
+        return Err(format!("manifest contents must round-trip, found `{contents}`").into());
+    }
     Ok(())
 }
 
@@ -166,28 +190,44 @@ fn read_of_absent_manifest_reports_not_found() -> Result<(), Box<dyn std::error:
     let directory = tempdir()?;
     let manifest = directory.path().join("Cargo.toml");
 
-    let manifest = Utf8PathBuf::from_path_buf(manifest).expect("temporary paths must be UTF-8");
-    let error =
-        read_workspace_manifest(&manifest).expect_err("reading an absent manifest should fail");
+    let manifest_path = Utf8PathBuf::from_path_buf(manifest)
+        .map_err(|path| format!("temporary path `{}` must be UTF-8", path.display()))?;
+    let error = read_workspace_manifest(&manifest_path)
+        .expect_err("reading an absent manifest should fail");
 
-    assert_eq!(
-        error
-            .downcast_ref::<std::io::Error>()
-            .map(std::io::Error::kind),
-        Some(std::io::ErrorKind::NotFound)
-    );
+    let kind = error
+        .downcast_ref::<std::io::Error>()
+        .map(std::io::Error::kind);
+    if kind != Some(std::io::ErrorKind::NotFound) {
+        return Err(format!("expected a NotFound I/O error, found {kind:?}").into());
+    }
     Ok(())
 }
 
 proptest! {
+    /// Check that complete generated semantic versions are accepted as exact pins.
     #[test]
-    fn exact_version_accepts_only_non_empty_exact_pins(
-        prefix in prop_oneof![Just("=".to_owned()), Just("^".to_owned()), Just("".to_owned())],
-        suffix in "[A-Za-z0-9._-]{0,32}",
+    fn exact_version_accepts_generated_complete_release_pins(
+        major in 0_u64..u64::MAX,
+        minor in 0_u64..u64::MAX,
+        patch in 0_u64..u64::MAX,
     ) {
-        let requirement = format!("{prefix}{suffix}");
-        let is_exact_pin = prefix == "=" && !suffix.is_empty();
+        let version = format!("{major}.{minor}.{patch}");
+        let requirement = format!("={version}");
 
-        prop_assert_eq!(exact_version(&requirement).is_ok(), is_exact_pin);
+        prop_assert_eq!(exact_version(&requirement).ok(), Some(version.as_str()));
+    }
+
+    /// Reject generated complete versions with non-exact requirement operators.
+    #[test]
+    fn exact_version_rejects_generated_non_exact_requirements(
+        operator in proptest::sample::select(vec!["", "^", "~", ">", ">=", "<", "<="]),
+        major in 0_u64..u64::MAX,
+        minor in 0_u64..u64::MAX,
+        patch in 0_u64..u64::MAX,
+    ) {
+        let requirement = format!("{operator}{major}.{minor}.{patch}");
+
+        prop_assert!(exact_version(&requirement).is_err(), "accepted {}", requirement);
     }
 }

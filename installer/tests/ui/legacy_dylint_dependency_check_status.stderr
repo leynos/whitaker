@@ -1,0 +1,14 @@
+error[E0308]: mismatched types
+ --> tests/ui/legacy_dylint_dependency_check_status.rs:7:36
+  |
+7 |     let status: DylintToolStatus = check_dylint_tools(executor);
+  |                 ----------------   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `DylintToolStatus`, found `Result<DylintToolStatus, InstallerError>`
+  |                 |
+  |                 expected due to this
+  |
+  = note: expected struct `DylintToolStatus`
+               found enum `Result<DylintToolStatus, InstallerError>`
+help: consider using `Result::expect` to unwrap the `Result<DylintToolStatus, InstallerError>` value, panicking if the value is a `Result::Err`
+  |
+7 |     let status: DylintToolStatus = check_dylint_tools(executor).expect("REASON");
+  |                                                                +++++++++++++++++

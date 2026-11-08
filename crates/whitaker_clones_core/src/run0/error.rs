@@ -24,7 +24,8 @@ pub enum Run0Error {
 
     /// The pair resolved to fragments emitted under different normalization profiles.
     #[error(
-        "candidate pair `{left_fragment}` and `{right_fragment}` must share the same normalization profile"
+        "candidate pair `{left_fragment}` and `{right_fragment}` must share the same \
+         normalization profile"
     )]
     MixedProfiles {
         /// Left fragment identifier.
@@ -42,7 +43,8 @@ pub enum Run0Error {
 
     /// A retained fingerprint byte range could not be mapped back to source text.
     #[error(
-        "fingerprint range {start}..{end} for `{fragment_id}` is invalid for source length {source_len}"
+        "fingerprint range {start}..{end} for `{fragment_id}` is invalid for source length \
+         {source_len}"
     )]
     InvalidFingerprintRange {
         /// Fragment identifier.

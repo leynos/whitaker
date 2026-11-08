@@ -7,20 +7,24 @@
 //! directory.  On any failure the caller receives [`PrebuiltResult::Fallback`]
 //! and should proceed with local compilation.
 
-use camino::{Utf8Path, Utf8PathBuf};
-use std::io::Write;
-use std::path::Path;
+use std::{io::Write, path::Path};
 
-use crate::artefact::download::{ArtefactDownloader, DownloadError, HttpDownloader};
-use crate::artefact::extraction::{ArtefactExtractor, ZstdExtractor};
-use crate::artefact::manifest::Manifest;
-use crate::artefact::manifest_parser::{ManifestParseError, parse_manifest};
-use crate::artefact::naming::ArtefactName;
-use crate::artefact::packaging::compute_sha256;
-use crate::artefact::packaging_error::PackagingError;
-use crate::artefact::verification::VerificationPolicy;
-use crate::builder::{library_extension, library_prefix};
-use crate::output::write_stderr_line;
+use camino::{Utf8Path, Utf8PathBuf};
+
+use crate::{
+    artefact::{
+        download::{ArtefactDownloader, DownloadError, HttpDownloader},
+        extraction::{ArtefactExtractor, ZstdExtractor},
+        manifest::Manifest,
+        manifest_parser::{ManifestParseError, parse_manifest},
+        naming::ArtefactName,
+        packaging::compute_sha256,
+        packaging_error::PackagingError,
+        verification::VerificationPolicy,
+    },
+    builder::{library_extension, library_prefix},
+    output::write_stderr_line,
+};
 
 /// The outcome of a prebuilt download attempt.
 ///
@@ -33,6 +37,10 @@ pub enum PrebuiltResult {
     Success {
         /// Path to the directory containing the extracted libraries.
         staging_path: Utf8PathBuf,
+        /// File names, in the staged `lib<crate>@<toolchain>.<ext>` form, of
+        /// the libraries this archive delivered. The directory may also hold
+        /// files from an earlier install; only these came from this archive.
+        delivered: Vec<String>,
     },
     /// The prebuilt attempt failed; the caller should build locally.
     Fallback {
@@ -112,7 +120,10 @@ pub fn attempt_prebuilt_with(
     stderr: &mut dyn Write,
 ) -> PrebuiltResult {
     match run_pipeline(config, downloader, extractor, stderr) {
-        Ok(staging_path) => PrebuiltResult::Success { staging_path },
+        Ok((staging_path, delivered)) => PrebuiltResult::Success {
+            staging_path,
+            delivered,
+        },
         Err(e) => {
             let reason = e.to_string();
             if !config.quiet {
@@ -133,7 +144,7 @@ fn run_pipeline(
     downloader: &dyn ArtefactDownloader,
     extractor: &dyn ArtefactExtractor,
     stderr: &mut dyn Write,
-) -> Result<Utf8PathBuf, PrebuiltError> {
+) -> Result<(Utf8PathBuf, Vec<String>), PrebuiltError> {
     // Step 1: Download manifest.
     if !config.quiet {
         write_stderr_line(
@@ -175,13 +186,17 @@ fn run_pipeline(
     }
     let extracted = extractor.extract(&archive_path, staging_path.as_std_path())?;
     apply_staging_filenames(&extracted, &staging_path, config.toolchain)?;
+    let delivered = extracted
+        .iter()
+        .map(|name| staged_filename(name, config.toolchain))
+        .collect();
 
     if !config.quiet {
         write_stderr_line(stderr, "Prebuilt libraries installed successfully.");
         write_stderr_line(stderr, "");
     }
 
-    Ok(staging_path)
+    Ok((staging_path, delivered))
 }
 
 /// Validate that the manifest toolchain matches the expected channel.

@@ -730,7 +730,7 @@ If validation fails, inspect the matching
 changing code. Record persistent failures in `Surprises & Discoveries` or
 `Decision Log` with the command and log path.
 
-## Artifacts and notes
+## Artefacts and notes
 
 Wyvern repository-pattern findings:
 

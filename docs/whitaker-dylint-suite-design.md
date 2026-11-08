@@ -68,8 +68,8 @@ check-cfg = ["cfg(dylint_lib, values(any()))"]
 
 [workspace.dependencies]
 camino = "1"
-dylint_linting = "6.0.1"
-dylint_testing = "6.0.1"
+dylint_linting = "6.3.0"
+dylint_testing = "6.3.0"
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
 toml = "0.9"
@@ -100,7 +100,7 @@ libraries = [ { git = "https://example.com/your/repo.git", pattern = "crates/*" 
   std/core keeps `rustc_private` consumers (for example `rustc_driver` in
   Dylint) from pulling mixed static and dynamic runtimes, eliminating the
   duplicate symbol errors seen on newer nightlies while staying on a toolchain
-  recent enough for `dylint_linting` 6.0.1.
+  recent enough for `dylint_linting` 6.3.0.
 - UI harness helpers now prepare the cdylib expected by the driver. Before each
   run, the harness copies `lib<crate>.so` to the `lib<crate>@<toolchain>.so`
   name derived from `RUSTUP_TOOLCHAIN`. The copy is skipped for synthetic crate
@@ -469,16 +469,20 @@ is exactly `doc` (including those injected via `cfg_attr`) mark the module as
 documented. The attribute parser tolerates spacing after the `#!` marker and
 traces the first-level `cfg_attr` meta list to find `doc` entries, which avoids
 substring-based false positives such as `#![allow(undocumented_unsafe_blocks)]`
-and misclassifying `documentation = "…"`. If the snippet starts with an inner
-attribute marker (`#`) before any doc, the lint emits `FirstInnerIsNotDoc` and
-highlights the offending token when a later inner doc exists; if no inner doc
-appears at all (including a lone inner attribute), it falls back to
-`MissingDocs` so the diagnostic targets the module start. A doc-less `cfg_attr`
-wrapper also maps to `MissingDocs`. The shared span helpers from
-`whitaker::hir` supply consistent ranges for inline and file modules. Localized
-strings pull from `common/locales/*/module_must_have_inner_docs.ftl`, passing
-the module name via the Fluent argument map, and fall back to a deterministic
-English message whenever localization fails.
+and misclassifying `documentation = "…"`. A crate-private meta-list walker
+handles nested parentheses and quoted string literals, including escapes and
+raw strings; callers supply the identifier predicate for doc recognition or
+case-mismatch detection. Reuse stays within this lint's `driver` parser and
+does not extend to general Rust tokenization. If the snippet starts with an
+inner attribute marker (`#`) before any doc, the lint emits
+`FirstInnerIsNotDoc` and highlights the offending token when a later inner doc
+exists; if no inner doc appears at all (including a lone inner attribute), it
+falls back to `MissingDocs` so the diagnostic targets the module start. A
+doc-less `cfg_attr` wrapper also maps to `MissingDocs`. The shared span helpers
+from `whitaker::hir` supply consistent ranges for inline and file modules.
+Localized strings pull from `common/locales/*/module_must_have_inner_docs.ftl`,
+passing the module name via the Fluent argument map, and fall back to a
+deterministic English message whenever localization fails.
 
 **Testing.** Unit tests (rstest) and `rstest-bdd` scenarios exercise the
 snippet classifier, covering happy paths, missing docs, inner attributes that
@@ -731,10 +735,9 @@ qualified paths (`std::fs::read_to_string`) and items pulled in via
   into a `SimplePath` parser. A match requires the first two segments to equal
   `["std", "fs"]`. Re-exports remain covered because the resolved `DefId`
   points back to `std`.
-- Each finding produces a `StdFsUsage` struct containing the resolved operation
-  label (for diagnostics) and a category (`Import`, `Type`, or `Call`). The
-  category drives unit tests and future config knobs but diagnostics currently
-  emphasize the operation name only to keep translations succinct.
+- Each finding produces a `StdFsUsage` value that stores only the resolved
+  operation label. Classifiers return operation-only usage values, and
+  diagnostics use that label to keep translations succinct.
 - Diagnostics reuse Fluent bundles (`no_std_fs_operations.ftl`) with the
   operation label supplied via `{ $operation }`. The note explains why ambient
   access is disallowed and the help recommends `cap_std::fs` + `camino`.
@@ -813,8 +816,8 @@ sequenceDiagram
 
 - Unit tests cover the operation classifier, ensuring paths such as
   `std::fs::File::open`, `std::fs::remove_file`, bare module references, and
-  renamed imports all register as `StdFsUsage` while `cap_std::fs` remains
-  untouched.
+  renamed imports all produce operation-only usage values while `cap_std::fs`
+  remains untouched.
 - Behaviour-driven tests (via `rstest-bdd 0.5.0`) exercise localization, failure
   fallbacks, and the world state used to model capability hints. Scenarios
   cover en-GB, cy, and gd locales, as well as missing-message paths.
@@ -985,8 +988,9 @@ Pair each `.rs` with a `.stderr` expectation using `dylint_testing::ui_test`.
 
 Bundle all lint crates for users who prefer a single dynamic library. The
 `whitaker_suite` crate enables the `constituent` feature on each lint
-dependency so their individual dylint entrypoints stay dormant while the
-combined pass exposes a single `register_lints` symbol.
+dependency so their individual Dylint entrypoints stay dormant. The shared
+entrypoint macro exports Dylint's required `register_lints` symbol and forwards
+to the suite's internal `register_suite_entry` function.
 
 <!-- markdownlint-disable MD033 MD013 -->
 <pre><code class="language-toml">[package] name = "whitaker_suite" version =
@@ -994,8 +998,9 @@ combined pass exposes a single `register_lints` symbol.
 
 [lib] crate-type = ["cdylib", "rlib"]
 
-[dependencies] dylint_linting = { workspace = true } function_attrs_follow_docs
-= { path = "../crates/function_attrs_follow_docs", features = ["dylint-driver",
+[dependencies] dylint_linting = { workspace = true } whitaker-common = {
+workspace = true } function_attrs_follow_docs = { path =
+"../crates/function_attrs_follow_docs", features = ["dylint-driver",
 "constituent"] } no_expect_outside_tests = { path =
 "../crates/no_expect_outside_tests", features = ["dylint-driver",
 "constituent"] } module_must_have_inner_docs = { path =
@@ -1034,8 +1039,7 @@ declare_combined_late_lint_pass!(SuitePass => [
     NoStdFsOperations,
 ]);
 
-#[no_mangle]
-pub extern "C" fn register_lints(sess: &Session, store: &mut LintStore) {
+fn register_suite_entry(sess: &Session, store: &mut LintStore) {
     dylint_linting::init_config(sess);
     store.register_lints(&[
         function_attrs_follow_docs::FUNCTION_ATTRS_FOLLOW_DOCS,
@@ -1047,13 +1051,59 @@ pub extern "C" fn register_lints(sess: &Session, store: &mut LintStore) {
         no_std_fs_operations::NO_STD_FS_OPERATIONS,
     ]);
     store.register_late_pass(|_| Box::new(SuitePass));
-} </code></pre>
+}
+
+whitaker_common::declare_dylint_register_entry!(register_suite_entry);
+</code></pre>
 <!-- markdownlint-enable MD033 MD013 -->
 
 Re-export `register_suite_lints` and `suite_lint_decls` so tests and
 documentation can assert the wiring without needing a `Session`. Behaviour
 coverage uses `rstest-bdd 0.5.0` to prove the happy path registration and to
 surface the duplicate-lint panic when called twice.
+
+### Early-pass registration addendum
+
+`string_continuation_style` is the suite's first `EarlyLintPass`. It cannot join
+`SuitePass`, because `declare_combined_late_lint_pass!` expands `LateLintPass`
+methods, so the suite registers it on its own line:
+
+```rust
+store.register_early_pass(|| Box::new(StringContinuationStyle::default()));
+```
+
+That line has no compile-time guard. Control flow keeps it honest by putting
+the descriptor list and the registration in different files, so a divergence is
+visible in review:
+
+- `suite/src/lints.rs` owns `SUITE_LINTS`, one `LintDescriptor` per lint, each
+  carrying a `pass: PassKind` tag. `suite_lint_names_for_pass` projects that
+  list by phase.
+- `suite/src/driver.rs` owns the `register_early_pass` and `register_late_pass`
+  calls.
+
+A late lint omitted from `late_lint_methods!` fails to compile. An early lint
+whose `register_early_pass` call is deleted compiles cleanly, still appears in
+every descriptor-alignment assertion, and simply never runs. The registration
+behaviour test therefore asserts *which* pass was registered:
+`suite/tests/registration.rs` invokes each stored `early_passes` factory and
+compares the lint names it reports against
+`suite_lint_names_for_pass( PassKind::Early)`. A count would also pass if the
+wrong pass had been wired, and adding a second early lint without registering
+it now fails that comparison.
+
+`EarlyLintPassObject` is `pub(crate)` in `rustc_lint`, so the test cannot build
+a pass directly. Invoking the stored factories is the supported way to see what
+the store will run. The factories execute once per crate during a real
+compilation (`rustc_lint/src/early.rs`), so calling one from a test has no side
+effects beyond producing a fresh pass value.
+
+Any later early lint should follow the same shape: a `PassKind::Early`
+descriptor, its own `register_early_pass` call, and no addition to `SuitePass`.
+
+The decision that produced the first early pass — and in particular the
+position test that makes a rewrite safe to suggest — is recorded in
+[ADR 010](adr-010-early-lint-pass-position-proof.md).
 
 ## 6) Installer CLI — optional
 
@@ -1237,7 +1287,7 @@ and predicate complexity.
 
 Collect segments `(start_line, end_line, value)` using `SourceMap` mapping and
 accumulate contributions with weights (`wD = 1.0`, `wP = 0.5`, `wK = 0.5`).
-Rasterise once per function to produce a per-line signal `C[line]` representing
+Rasterize once per function to produce a per-line signal `C[line]` representing
 local complexity.
 
 ```rust
@@ -1291,11 +1341,39 @@ highlight the top two intervals in the diagnostic.
 - Include the lint in the aggregated `whitaker_suite` crate by default as a
   stable rule, while still allowing direct usage by loading the lint crate.
 
+**Numeric and span boundaries.** Fluent diagnostic integer arguments are signed
+64-bit values, so `diagnostic_integer_argument` and
+`saturating_diagnostic_integer` clamp oversized counts at `i64::MAX`.
+`SegmentWeight::Fixed` keeps its supplied value, while
+`SegmentWeight::Predicate` uses `saturating_branch_count` and
+`predicate_segment_weight` to cap branch counts at `u32::MAX` before scaling.
+Compiler `BytePos` offsets are `u32`; `span_byte_offset_range` rejects any
+highlighted range with an unrepresentable endpoint. `line_range_byte_offsets`
+also rejects starts before the snippet's base line, reversed ranges, and starts
+missing from its line table; when the end line has no following entry, it uses
+the snippet length as the end offset. A rejected or unrepresentable range omits
+the secondary label while preserving the primary diagnostic. The
+conditional-branch lint uses the same signed boundary for Fluent counts.
+Boundary tests cover the maximum accepted values and the first values above
+them.
+
+Production tests that pass values beyond a `usize` boundary use
+`#[cfg(target_pointer_width = "64")]`; 32-bit targets cannot represent those
+inputs. Bumpy Road tests `diagnostic_arguments_saturate_oversized_bump_counts`
+and `span_mapping_omits_unrepresentable_offsets` in `driver/diagnostic.rs`, plus
+`production_diagnostic_arguments_saturate_at_the_signed_boundary`,
+`production_predicate_weight_saturates_excess_branches`,
+`production_span_offset_ranges_reject_an_unrepresentable_end`, and
+`production_line_range_mapping_rejects_an_unrepresentable_offset` in
+`driver/numeric.rs`. The conditional-branch test is
+`production_diagnostic_arguments_saturate_at_the_signed_boundary` in its
+`driver/numeric.rs`.
+
 **Algorithm sketch.**
 
 1. Walk the function HIR, updating depth and collecting segments for blocks,
    branches, and predicate spans.
-2. Rasterise segments to per-line values, then smooth with the configured
+2. Rasterize segments to per-line values, then smooth with the configured
    window.
 3. Detect bumps where the smoothed value meets or exceeds `threshold`.
 4. Emit a diagnostic on the function name span when bumps ≥ 2, attaching labels
@@ -1321,7 +1399,7 @@ functions typically remain below the threshold after smoothing. Deep single
 nests fall under other lints such as `excessive_nesting`.
 
 **Performance.** The pass is linear in the size of each function’s HIR. Segment
-rasterisation touches at most the number of lines in the function, keeping the
+rasterization touches at most the number of lines in the function, keeping the
 overhead negligible for typical Rust code.
 
 **Test plan.** Provide UI cases covering two separated nested blocks,
@@ -1366,7 +1444,7 @@ function and is suitable as a stable Dylint rule in the default suite.
 
 ### Phase 0 — Repo scaffolding
 
-- Initialise workspace
+- Initialize workspace
   - Create `Cargo.toml` with `[workspace]`, resolver = 2, members = `crates/*`,
     `common`, `suite`, `installer`.
   - Add `rust-toolchain.toml` (pin nightly) and `rustfmt.toml`.
@@ -1651,7 +1729,10 @@ used by the installer itself.
 - Extend `.github/workflows/release.yml` so tagged releases publish the same
   dependency-binary archives and provenance document next to the
   `whitaker-installer` archives.
-- Teach `installer/src/deps.rs` to install missing tools in this order:
+- Keep the dependency-tool installer in `installer/src/deps/mod.rs` so its
+  implementation children, including `install.rs`, remain colocated with the
+  module that owns the fallback policy.
+- Teach `installer/src/deps/mod.rs` to install missing tools in this order:
   repository archive, `cargo binstall`, then `cargo install`. Repository-path
   failures stay non-fatal and degrade cleanly into the Cargo fallback path.
 
@@ -1674,10 +1755,11 @@ the latest assets discoverable without tagging every commit.
 
 **Scope notes:** Linux builds target a conservative glibc baseline; musl
 artefacts remain optional. The decision is recorded in
-`docs/adr-001-prebuilt-dylint-libraries.md` (Accepted 2026-02-03).
+`docs/adrs/adr-0001-prebuilt-dylint-library-distribution.md` (Accepted
+2026-02-03).
 
 **Implementation decision (2026-02-18):** The installer now derives prebuilt
-extraction paths from `BaseDirs::whitaker_data_dir()` and writes libraries to
+extraction paths from `BaseDirs::whitaker_data()` and writes libraries to
 `<data_dir>/lints/<toolchain>/<target>/lib`. Wrapper scripts and shell snippets
 use that exact `lib` directory for `DYLINT_LIBRARY_PATH`. Local build staging
 continues to honour `--target-dir` and existing release-layout behaviour.

@@ -12,8 +12,9 @@ use camino::{Utf8Path, Utf8PathBuf};
 
 mod toolchain;
 
+use whitaker_common::test_support::with_env_vars_selected;
+
 use self::toolchain::{CrateName, ensure_toolchain_library};
-use whitaker_common::test_support::env_test_guard;
 
 /// Errors produced when preparing or executing Dylint UI tests.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -161,110 +162,94 @@ pub fn run_with_runner(
     let crate_name_owned =
         CrateName::try_from(crate_name).map_err(|_| HarnessError::EmptyCrateName)?;
     let crate_name_str = crate_name_owned.as_str();
-    let _runner_env_guard = runner_env_guard();
-    ensure_toolchain_library(&crate_name_owned)?;
 
-    match runner(crate_name_str, directory.as_ref()) {
-        Ok(()) => Ok(()),
-        Err(message) => Err(HarnessError::RunnerFailure {
-            crate_name: crate_name_owned.into_inner(),
-            directory,
+    with_env_vars_selected(absent_runner_env_settings, || {
+        ensure_toolchain_library(&crate_name_owned)?;
+        runner(crate_name_str, directory.as_ref()).map_err(|message| HarnessError::RunnerFailure {
+            crate_name: crate_name_owned.as_str().to_owned(),
+            directory: directory.clone(),
             message,
-        }),
-    }
-}
-
-/// Serializes environment mutations required by `run_with_runner`.
-///
-/// `RUSTC_WRAPPER` must be cleared on every platform when set (for example to
-/// `sccache`), because `dylint_testing::Test::example` scans
-/// `cargo build --message-format=json` output for bare `rustc` invocations.
-/// When a wrapper is active, Cargo invokes `<wrapper> rustc ...` instead, and
-/// `dylint_testing` finds zero invocations, causing a panic.
-///
-/// On Windows, one additional environment variable needs temporary adjustment:
-///
-/// - `VCPKG_ROOT`: must be set to `C:\vcpkg` when that directory exists and the
-///   variable is otherwise absent, so downstream `cargo` invocations resolve vcpkg.
-///
-/// Each mutation and restoration step acquires `env_test_guard()` only for the
-/// environment write itself. The guard deliberately does not hold that mutex
-/// across the UI runner callback, because runner closures can perform their
-/// own environment-guarded setup.
-struct RunnerEnvGuard {
-    #[cfg(windows)]
-    vcpkg_root_was_absent: bool,
-    rustc_wrapper_previous: Option<std::ffi::OsString>,
-}
-
-impl Drop for RunnerEnvGuard {
-    fn drop(&mut self) {
-        let _env_guard = env_test_guard();
-
-        // SAFETY: `env_test_guard` serializes the restoration writes below.
-        #[cfg(windows)]
-        {
-            if self.vcpkg_root_was_absent {
-                unsafe {
-                    env::remove_var("VCPKG_ROOT");
-                }
-            }
-        }
-        if let Some(prev) = &self.rustc_wrapper_previous {
-            unsafe {
-                env::set_var("RUSTC_WRAPPER", prev);
-            }
-        }
-    }
-}
-
-fn runner_env_guard() -> Option<RunnerEnvGuard> {
-    #[cfg(windows)]
-    let vcpkg_candidate = Utf8Path::new(r"C:\vcpkg");
-    #[cfg(windows)]
-    let vcpkg_applicable = vcpkg_candidate.is_dir();
-
-    let _env_guard = env_test_guard();
-    let has_rustc_wrapper = env::var_os("RUSTC_WRAPPER").is_some();
-
-    #[cfg(windows)]
-    if !vcpkg_applicable && !has_rustc_wrapper {
-        return None;
-    }
-    #[cfg(not(windows))]
-    if !has_rustc_wrapper {
-        return None;
-    }
-
-    // All environment reads and writes below are serialized by `_env_guard`.
-    #[cfg(windows)]
-    let vcpkg_root_was_absent = if vcpkg_applicable && env::var_os("VCPKG_ROOT").is_none() {
-        // SAFETY: `_env_guard` serializes concurrent environment mutations.
-        unsafe {
-            env::set_var("VCPKG_ROOT", vcpkg_candidate.as_std_path());
-        }
-        true
-    } else {
-        false
-    };
-
-    let rustc_wrapper_previous = env::var_os("RUSTC_WRAPPER").inspect(|_| {
-        // SAFETY: `_env_guard` serializes concurrent environment mutations.
-        unsafe {
-            env::remove_var("RUSTC_WRAPPER");
-        }
-    });
-    #[cfg(windows)]
-    if !vcpkg_root_was_absent && rustc_wrapper_previous.is_none() {
-        // Nothing was mutated; release the guard early.
-        return None;
-    }
-
-    Some(RunnerEnvGuard {
-        #[cfg(windows)]
-        vcpkg_root_was_absent,
-        rustc_wrapper_previous,
+        })
     })
+}
+
+/// Runs a UI test and reports runner failures using the standard panic format.
+///
+/// Use this at a UI-test entry point that only needs the usual failure
+/// behaviour. Call [`run_with_runner`] instead when the caller must handle a
+/// [`HarnessError`] itself.
+///
+/// # Panics
+///
+/// Panics when [`run_with_runner`] returns a harness or runner error. The
+/// panic preserves crate and UI-directory context while using
+/// [`HarnessError`]'s display implementation for the precise error details.
+///
+/// # Examples
+///
+/// ```no_run
+/// use whitaker::testing::ui::run_ui_test;
+///
+/// run_ui_test("example_lint", "ui", |_, _| Ok(()));
+/// ```
+pub fn run_ui_test(
+    crate_name: &str,
+    ui_directory: impl Into<Utf8PathBuf>,
+    runner: impl Fn(&str, &Utf8Path) -> Result<(), String>,
+) {
+    let directory = ui_directory.into();
+    run_with_runner(crate_name, directory.clone(), runner).unwrap_or_else(|error| {
+        panic!("UI tests should execute without diffs for {crate_name} in {directory}: {error}")
+    });
+}
+
+/// Tells `dylint_testing` that the toolchain-qualified library is prepared.
+const COPY_LIBRARY_FLAG: (&str, &str) = ("DYLINT_LINK_ENABLE_COPY_LIBRARY", "1");
+
+/// List the variables the UI runner needs on this platform.
+fn runner_env_settings() -> Vec<(&'static str, &'static str)> {
+    #[cfg(windows)]
+    {
+        let mut settings = vec![COPY_LIBRARY_FLAG];
+        if Utf8Path::new(r"C:\vcpkg").is_dir() {
+            settings.push(("VCPKG_ROOT", r"C:\vcpkg"));
+        }
+        settings
+    }
+
+    #[cfg(not(windows))]
+    {
+        vec![COPY_LIBRARY_FLAG]
+    }
+}
+
+/// Select the runner variables the process does not already set.
+///
+/// Every platform needs one variable, and Windows can need a second:
+///
+/// - `DYLINT_LINK_ENABLE_COPY_LIBRARY`: set to `1` when absent. Since Dylint 6.3.0,
+///   `dylint_testing` copies `lib<crate>.so` over the toolchain-qualified library unless this flag
+///   says the copy already exists. The harness has just built that copy with the `dylint-driver`
+///   feature, while `dylint_testing` first rebuilds the plain library with default features, which
+///   for every Whitaker lint crate is an empty `cdylib`. Without the flag the UI test loads that
+///   stub and fails with ``could not find `dylint_version` ``.
+/// - `VCPKG_ROOT` (Windows only): set to `C:\vcpkg` when that directory exists and the variable is
+///   otherwise absent, so downstream `cargo` invocations resolve vcpkg.
+///
+/// A value the caller or CI already supplied is left in place, so the scoped
+/// override cannot hide a deliberate setting. The selection runs through
+/// [`with_env_vars_selected`], which holds `temp_env`'s re-entrant lock from
+/// before this query until the callback returns. Runners in one test binary
+/// therefore take turns instead of sharing a process-wide record: a runner
+/// that overlapped another would otherwise see that runner's temporary flag,
+/// select nothing, and then run after the flag was removed. A runner that
+/// performs its own scoped environment setup still nests safely on the same
+/// thread.
+fn absent_runner_env_settings() -> Vec<(&'static str, &'static str)> {
+    runner_env_settings()
+        .into_iter()
+        .filter(|(key, _)| env::var_os(key).is_none())
+        .collect()
 }
 
 fn directory_is_rooted(path: &Utf8Path) -> bool {

@@ -1,8 +1,11 @@
 [package]
 name = "rustc_lint"
-version = "0.2.8"
+version = "0.2.11"
 edition = "2024"
 publish = false
 
 [lib]
 test = false
+
+[lints]
+workspace = true

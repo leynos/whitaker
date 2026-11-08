@@ -1,0 +1,312 @@
+//! Tests for the installer CLI entrypoint.
+
+mod dylint_tools;
+mod fast_path;
+
+use std::{path::PathBuf, time::Duration};
+
+use rstest::{fixture, rstest};
+use whitaker_installer::{
+    cli::{InstallArgs, LintSelectionFlags},
+    dependency_binaries::DependencyBinaryInstaller,
+    deps::{DependencyInstallOptions, SourcePolicy},
+    dirs::BaseDirs,
+    installer_packaging::TargetTriple,
+};
+
+use super::*;
+
+fn dependency_install_options<'a>(
+    dirs: &'a TestBaseDirs,
+    repository_installer: &'a dyn DependencyBinaryInstaller,
+    quiet: bool,
+) -> std::result::Result<
+    DependencyInstallOptions<'a>,
+    whitaker_installer::artefact::error::ArtefactError,
+> {
+    Ok(DependencyInstallOptions {
+        dirs,
+        repository_installer,
+        target: Some(TargetTriple::try_from("x86_64-unknown-linux-gnu")?),
+        policy: SourcePolicy {
+            quiet,
+            no_source_fallback: false,
+        },
+    })
+}
+
+#[fixture]
+fn test_base_dirs() -> TestBaseDirs {
+    TestBaseDirs {
+        home: Some(PathBuf::from("/tmp")),
+        bin: Some(PathBuf::from("/tmp/bin")),
+        data: Some(PathBuf::from("/tmp")),
+    }
+}
+
+// Assertions live in these helpers because the dependency-check tests return
+// `Result` to propagate fixture errors, and `panic_in_result_fn` denies
+// asserting inside such a function.
+
+/// Assert the dependency check reported success.
+fn assert_check_succeeded(result: &std::result::Result<(), InstallerError>) {
+    assert!(
+        result.is_ok(),
+        "the dependency check should succeed: {result:?}"
+    );
+}
+
+/// Assert a check that found both tools installed said nothing at all.
+fn assert_silent_skip(stderr: &[u8]) {
+    assert!(
+        stderr.is_empty(),
+        "a skipped install should write no output, got: {stderr:?}"
+    );
+}
+
+/// Assert the install wrote the progress lines that `quiet` selects.
+fn assert_install_progress(stderr: &[u8], quiet: bool, expected_start: &str, expected_end: &str) {
+    let stderr_text = std::str::from_utf8(stderr).expect("stderr was not UTF-8");
+    if quiet {
+        assert!(
+            stderr_text.is_empty(),
+            "expected stderr to be empty when quiet, got {stderr_text:?}"
+        );
+    } else {
+        assert!(
+            stderr_text.starts_with(expected_start),
+            "expected stderr to start with {expected_start:?}, got {stderr_text:?}"
+        );
+        assert!(
+            stderr_text.ends_with(expected_end),
+            "expected stderr to end with {expected_end:?}, got {stderr_text:?}"
+        );
+    }
+}
+
+/// Assert the failed install surfaced as the typed `cargo-dylint` error.
+fn assert_cargo_dylint_install_failed(error: &InstallerError) {
+    assert!(
+        matches!(
+            error,
+            InstallerError::DependencyInstall { tool, message }
+                if *tool == "cargo-dylint" && message == "cargo install failed"
+        ),
+        "expected a cargo-dylint install failure, got: {error:?}"
+    );
+}
+
+#[test]
+fn exit_code_for_run_result_returns_zero_on_success() {
+    let mut stderr = Vec::new();
+    let exit_code = exit_code_for_run_result(Ok(()), &mut stderr);
+    assert_eq!(exit_code, 0);
+    assert!(stderr.is_empty());
+}
+
+#[test]
+fn exit_code_for_run_result_prints_error_and_returns_one() {
+    let err = InstallerError::LintCrateNotFound {
+        name: CrateName::from("nonexistent_lint"),
+    };
+
+    let mut stderr = Vec::new();
+    let exit_code = exit_code_for_run_result(Err(err), &mut stderr);
+    assert_eq!(exit_code, 1);
+
+    let stderr_text = String::from_utf8(stderr).expect("stderr was not UTF-8");
+    assert!(stderr_text.contains("lint crate nonexistent_lint not found"));
+}
+
+#[rstest]
+#[case::default_suite_only(InstallArgs::default(), false, true)]
+#[case::individual_lints(
+    InstallArgs {
+        lint_selection: LintSelectionFlags {
+            individual_lints: true,
+            ..LintSelectionFlags::default()
+        },
+        ..InstallArgs::default()
+    },
+    true,
+    false
+)]
+fn resolve_requested_crates_respects_individual_lints_flag(
+    #[case] args: InstallArgs,
+    #[case] expect_lint: bool,
+    #[case] expect_suite: bool,
+) {
+    let crates = resolve_requested_crates(&args).expect("expected crate resolution to succeed");
+    assert_eq!(
+        crates.contains(&CrateName::from("module_max_lines")),
+        expect_lint
+    );
+    assert_eq!(
+        crates.contains(&CrateName::from("whitaker_suite")),
+        expect_suite
+    );
+}
+
+#[test]
+fn resolve_requested_crates_returns_specific_lints_when_provided() {
+    let args = InstallArgs {
+        lint: vec!["module_max_lines".to_owned()],
+        ..InstallArgs::default()
+    };
+
+    let crates = resolve_requested_crates(&args).expect("expected crate resolution to succeed");
+    assert_eq!(crates, vec![CrateName::from("module_max_lines")]);
+}
+
+#[test]
+fn resolve_requested_crates_rejects_unknown_lints() {
+    let args = InstallArgs {
+        lint: vec!["nonexistent_lint".to_owned()],
+        ..InstallArgs::default()
+    };
+
+    let err = resolve_requested_crates(&args).expect_err("expected crate resolution to fail");
+    assert!(matches!(
+        err,
+        InstallerError::LintCrateNotFound { name } if name == CrateName::from("nonexistent_lint")
+    ));
+}
+
+#[derive(Debug, Clone)]
+struct TestBaseDirs {
+    home: Option<PathBuf>,
+    bin: Option<PathBuf>,
+    data: Option<PathBuf>,
+}
+
+impl BaseDirs for TestBaseDirs {
+    fn home(&self) -> Option<PathBuf> { self.home.clone() }
+
+    fn executables(&self) -> Option<PathBuf> { self.bin.clone() }
+
+    fn whitaker_data(&self) -> Option<PathBuf> { self.data.clone() }
+}
+
+#[test]
+fn write_install_metrics_prints_summary_and_persists_metrics() {
+    let temp_dir = tempfile::tempdir().expect("create temp dir");
+    let dirs = TestBaseDirs {
+        home: Some(temp_dir.path().to_path_buf()),
+        bin: Some(temp_dir.path().join("bin")),
+        data: Some(temp_dir.path().to_path_buf()),
+    };
+
+    let mut stderr = Vec::new();
+    let context = MetricsWriteContext {
+        quiet: false,
+        dirs: &dirs,
+        install_mode: InstallMode::Download,
+        elapsed: Duration::from_millis(1250),
+    };
+    write_install_metrics(&context, &mut stderr);
+
+    let stderr_text = String::from_utf8(stderr).expect("stderr UTF-8");
+    assert!(stderr_text.contains("Install metrics:"));
+    assert!(stderr_text.contains("download 1/1 (100.0%)"));
+    assert!(stderr_text.contains("build 0/1 (0.0%)"));
+    assert!(stderr_text.contains("total installation time 1.250s"));
+
+    let metrics_path = temp_dir.path().join("metrics").join("install_metrics.json");
+    assert!(
+        metrics_path.exists(),
+        "expected metrics file at {metrics_path:?}"
+    );
+}
+
+#[test]
+fn write_install_metrics_warns_when_recording_fails() {
+    let dirs = TestBaseDirs {
+        home: None,
+        bin: None,
+        data: None,
+    };
+
+    let mut stderr = Vec::new();
+    let context = MetricsWriteContext {
+        quiet: false,
+        dirs: &dirs,
+        install_mode: InstallMode::Build,
+        elapsed: Duration::from_secs(1),
+    };
+    write_install_metrics(&context, &mut stderr);
+
+    let stderr_text = String::from_utf8(stderr).expect("stderr UTF-8");
+    assert!(stderr_text.contains("Warning: could not record install metrics"));
+}
+
+#[test]
+fn write_install_metrics_suppresses_output_in_quiet_mode() {
+    let temp_dir = tempfile::tempdir().expect("create temp dir");
+    let dirs = TestBaseDirs {
+        home: Some(temp_dir.path().to_path_buf()),
+        bin: Some(temp_dir.path().join("bin")),
+        data: Some(temp_dir.path().to_path_buf()),
+    };
+
+    let mut stderr = Vec::new();
+    let context = MetricsWriteContext {
+        quiet: true,
+        dirs: &dirs,
+        install_mode: InstallMode::Build,
+        elapsed: Duration::from_millis(500),
+    };
+    write_install_metrics(&context, &mut stderr);
+
+    assert!(stderr.is_empty(), "expected no stderr output in quiet mode");
+}
+
+/// A writer that always fails, for the marker's error path.
+struct FailingWriter;
+
+impl std::io::Write for FailingWriter {
+    fn write(&mut self, _buf: &[u8]) -> std::io::Result<usize> {
+        Err(std::io::Error::other("simulated write failure"))
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Err(std::io::Error::other("simulated flush failure"))
+    }
+}
+
+/// The suite-source marker is a machine-readable contract.
+///
+/// `install-whitaker` parses this line to decide whether a published artefact
+/// was used, so the assertion is on the exact bytes rather than a substring: a
+/// rephrasing is the defect the marker exists to prevent, and a looser
+/// assertion would not catch one.
+#[rstest]
+#[case::prebuilt(InstallMode::Download, "whitaker-installer: suite-source=prebuilt\n")]
+#[case::source(InstallMode::Build, "whitaker-installer: suite-source=source\n")]
+fn the_suite_source_marker_names_the_path_taken(
+    #[case] install_mode: InstallMode,
+    #[case] expected: &str,
+) {
+    let mut stdout = Vec::new();
+
+    report_suite_source(install_mode, &mut stdout).expect("writing the marker should succeed");
+
+    let written = String::from_utf8(stdout).expect("the marker should be utf-8");
+    assert_eq!(written, expected);
+}
+
+/// A failed write is reported rather than swallowed.
+///
+/// The marker is the caller's only signal of which path ran, so losing it
+/// silently would leave a consumer inferring from nothing.
+#[test]
+fn a_failed_marker_write_is_reported() {
+    let mut stdout = FailingWriter;
+
+    let error = report_suite_source(InstallMode::Download, &mut stdout)
+        .expect_err("a failing writer must surface as an error");
+
+    assert!(
+        matches!(error, InstallerError::WriteFailed { .. }),
+        "expected a write failure, got: {error}"
+    );
+}

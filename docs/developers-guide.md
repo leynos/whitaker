@@ -6,7 +6,10 @@ Whitaker itself. For using Whitaker lints in a project, see the
 
 ## Prerequisites
 
-- Rust nightly toolchain (version specified in `rust-toolchain.toml`)
+- Rust nightly toolchain (version and components specified in
+  `rust-toolchain.toml`; `rustup` installs them on first use in the workspace).
+  The component list includes `rust-analyzer` for editor support, alongside
+  `rustfmt`, `clippy`, `rustc-dev`, `llvm-tools-preview` and `rust-src`.
 - `jq` for extracting package metadata in release dry runs
 - Python 3.12 or newer for workflow tests, release checks, and safe extraction
   in `installer-msrv-check`
@@ -34,20 +37,49 @@ dependencies, or packaging:
 make installer-msrv-check
 ```
 
-The target copies the workspace into an ignored `target/` scratch directory,
+The target copies the workspace into the scratch directory described below,
 packages `whitaker-common` there, and uses a command-scoped Cargo patch to
 verify and install the packaged `whitaker-installer` with Rust 1.85. It
 extracts the installer outside both source and copied workspaces, checks that
 the normalized archive manifest contains only the registry version of
 `whitaker-common`, and runs the installed binary's `--version`. The scratch
-lockfile and patch are removed on exit; neither changes source manifests or
-enters the published archive. This keeps a lockstep version-bump pull request
-green before the common crate exists on crates.io while retaining a real
-packaged-source build. The script `scripts/check_installer_msrv.py` owns only
-this MSRV check; other release and registry publication checks remain in their
-existing targets. Within that script, the manifest validator owns its
-package-override and local-root predicates; they compose only for the packaged
-installer archive and must not validate source manifests or Cargo configuration.
+directory, with its lockfile and patch, is removed on exit; neither changes
+source manifests or enters the published archive. This keeps a lockstep
+version-bump pull request green before the common crate exists on crates.io
+while retaining a real packaged-source build. The script
+`scripts/check_installer_msrv.py` owns only this MSRV check; other release and
+registry publication checks remain in their existing targets. Within that
+script, the manifest validator owns its package-override and local-root
+predicates; they compose only for the packaged installer archive and must not
+validate source manifests or Cargo configuration.
+
+The scratch directory is `INSTALLER_MSRV_DIR`, and `make publish-check` uses
+`PUBLISH_CHECK_DIR` in the same way. Both are fixed paths in the user's cache
+directory, `$XDG_CACHE_HOME/whitaker/scratch` (or `~/.cache/whitaker/scratch`),
+named after the target plus the first 16 hex digits of the SHA-256 of the
+checkout's path, for example `~/.cache/whitaker/scratch/installer-msrv-<id>`.
+
+- They are not `mktemp` directories, because sccache keys a compilation on its
+  absolute paths. When each run named a fresh directory, every compilation in
+  these two targets missed on every run: a per-step probe of `linux-full` (run
+  36126452531) found 151 recurring Rust misses in the MSRV check and 189 in the
+  publish check, all 340 that lane missed.
+- They are not under the workspace, because Cargo walks up from the extracted
+  package it installs, finds the root `Cargo.toml`, and refuses to build.
+- They are not in a shared temporary directory, because the recipes clear them
+  first, and another user could pre-create or swap a tree there.
+- Before either recipe clears anything, it creates the root with mode `700` if
+  it is missing, and stops unless the root belongs to the current user and no
+  one else can write to it. `XDG_CACHE_HOME` can point anywhere, so the
+  location alone proves nothing.
+- The digest keeps the name short and distinct: two checkouts never share a
+  tree however their paths are spelled, while one checkout gets the same tree
+  on every run.
+
+`stable_build_dirs_contract_test` expands both recipes with `make -n` under a
+supplied `HOME` and `XDG_CACHE_HOME`, and refuses any other directory. Two
+concurrent runs of one of these targets in the same checkout would still share
+a tree, so do not run them in parallel.
 
 ### Linux release compatibility
 
@@ -74,6 +106,44 @@ inspect their executable payloads before publishing. `make test-glibc-baseline`
 runs the checker’s acceptance, rejection, and generated parser/invariant tests;
 the Linux CI lane executes that target.
 
+## CLI configuration boundary
+
+The `whitaker-cli` application package owns the OrthoConfig v0.10.0 source
+boundary. It is a configuration foundation, with no executable or command
+dispatch. The root CLI integration can construct `Sources` with its selected
+command, optional file selector, injected discovery and scan environments, and
+explicit CLI values; `load_with_sources` borrows that `Sources` value and
+returns validated settings and notices, so the caller keeps ownership and can
+reuse the handle. The loader merges the OrthoConfig DTO and then converts it
+into `ValidatedSettings`: conversion rejects unsupported colour and progress
+policies and applies the same normalization policy as the lint crates, so
+callers never observe out-of-range tuning values. The executable owns
+localization, presentation, and exit statuses. Neither the configuration
+package nor reusable lint libraries print notices or terminate processes.
+
+`Sources` keeps environment lookup and enumeration separate so tests can use
+`MapEnv` and an isolated project root without changing the process environment.
+The loader resolves one file chain, maps legacy names to their canonical shape,
+and overlays each source in precedence order. The package's private command
+namespace table is shared by file validation and environment mapping; add a
+planned namespace there before using it in either source. The environment
+adapter's private name and setting-path types keep source identifiers distinct
+from their values; they are scoped to that adapter. A command namespace is
+applied within its own source before the next source is merged. Keep the
+application package on Rust 1.89.0 and the Dylint workspace on its separately
+pinned nightly. The release uses OrthoConfig's default features.
+
+## Shared diagnostic localization
+
+`whitaker-common::i18n` owns shared label and message resolution, fallback
+reporting, and Fluent output normalization. Lint crates own their message keys,
+arguments, and fallback wording; use `LabelResolution` to pair the message
+context with an attribute for `safe_resolve_label`, and use
+`safe_resolve_message_set` for a primary/note/help set. These helpers remove
+Fluent's U+2068 and U+2069 isolation marks while preserving U+FFFD, which
+signals an unresolved placeable. Add lint-specific fallback text at the call
+site, and extend the common helpers only for policy reused across lint crates.
+
 ## Running Tests
 
 Run the test suite from the workspace root:
@@ -84,6 +154,63 @@ make test
 
 This executes unit, behaviour, and UI harness tests. The shared target enables
 `rstest` fixtures and `rstest-bdd` scenarios.
+
+### Assertions in fallible tests
+
+The `panic_in_result_fn` lint denies a direct `assert!` or `assert_eq!` in any
+function that returns `Result`. Tests whose fixtures can fail must therefore be
+fallible, because `rstest` supplies `#[from(...)]` fixtures as a `Result` that
+the test unwraps with `?`. Two idioms keep those tests lint-clean.
+
+Name the fixture binding apart from the value it supplies, so the unwrapped
+binding does not shadow the parameter and trip `shadow_reuse`:
+
+```rust
+fn loads_a_locale(
+    #[from(root)] root_res: std::io::Result<TempDir>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let root = root_res?;
+    // ...
+}
+```
+
+Move each assertion into a `()`-returning helper, or use the `ensure` and
+`ensure_eq` helpers in `cli/tests/configuration/support.rs`, which report a
+failure as an error naming both values. The helpers are crate-internal to the
+CLI configuration test suite; they are not a general assertion library and must
+not be exported, moved into the shared test-support crate, or used to bypass a
+lint elsewhere. Extend them there when a second call site needs the same
+comparison.
+
+### Fixture expansion lint macro
+
+The workspace-owned `whitaker_test_macros` crate provides
+`allow_fixture_expansion_lints` for one narrow test-support case: an
+`#[rstest::fixture]` declaration whose macro expansion triggers the
+`unused_braces` lint. Apply the attribute only to that fixture declaration. It
+must not be used on test functions, production code, or as a general mechanism
+for suppressing unrelated lints.
+
+The crate is a non-publishable, path-only workspace dependency. It is available
+to workspace test-support code, but is not a public distribution or runtime
+dependency.
+
+Reuse the shared macro rather than adding crate-local equivalents. Compose it
+with `#[fixture]` by placing it immediately before that attribute:
+
+```rust
+use rstest::fixture;
+use whitaker_test_macros::allow_fixture_expansion_lints;
+
+#[allow_fixture_expansion_lints]
+#[fixture]
+fn world() -> World {
+    World::default()
+}
+```
+
+The macro owns only the narrowly scoped expansion-lint allowance; fixture
+definition and expansion remain the responsibility of `rstest`.
 
 ### Integration tests for lint exclusion behaviour
 
@@ -188,9 +315,107 @@ the artefact from the dependency directory next to the current test binary.
 most recently modified artefact from the current build, and falls back to a
 stable path ordering when timestamps tie before emitting the `--extern` flag.
 
+Standard UI-test entry points should use
+`whitaker::testing::ui::run_ui_test(crate_name, directory, runner)`. This
+helper owns the common runner error handling and panics with crate and
+UI-directory context; it formats the underlying `HarnessError` through its
+`Display` implementation. Entry points that need custom result handling should
+continue to use `run_with_runner` instead.
+
 This split keeps ordinary UI fixtures simple while still letting regression
 tests cover `rustc --test`, file-backed modules, per-case configuration, and
 real proc-macro crates where needed.
+
+### Installer toolchain scenarios
+
+The installer toolchain scenarios in `installer/tests/behaviour_toolchain.rs`
+share their step implementations from `installer/tests/toolchain_steps`. The
+`ToolchainWorld` state is populated in scenario order: a `given` setup step
+records CLI arguments and its temporary target directory, install-oriented
+setup also records the pinned channel and isolated `RUSTUP_HOME` and
+`CARGO_HOME`, the `when` step captures command output, and `then` steps inspect
+that output and the resulting installation. Step authors must preserve this
+`given` → `when` → `then` order because each phase consumes state established
+by the preceding phase.
+
+Use the feature-specific setup helpers rather than assembling this state in a
+scenario binding. `setup_dry_run_scenario` prepares detection cases,
+`setup_install_scenario` creates isolated rustup and Cargo homes for an install,
+`setup_failure_scenario` selects the synthetic `FAKE_TOOLCHAIN`, and
+`setup_auto_install_scenario` adds the auto-install options used by the success
+cases. These helpers allocate a temporary target directory and the command
+runner removes `RUSTUP_TOOLCHAIN` and sets `RUSTUP_AUTO_INSTALL=0`, so host
+toolchain settings cannot affect a scenario. Install cases also use
+`--skip-wrapper` where applicable to avoid writing to the developer's wrapper
+directory.
+
+Scenarios that require the pinned toolchain skip when it is not installed.
+Auto-install scenarios skip on Windows because downloads are too slow for the
+behaviour suite. A skip sets `ToolchainWorld::should_skip_assertions`, allowing
+later assertion steps to return without inspecting missing output, and is
+reported through `rstest_bdd::skip!`. Keep these skip rules in the shared setup
+helpers so all scenario variants retain the same isolation and lifecycle.
+
+The PATH-scan tracing test in `installer/src/tracing_config.rs` re-executes its
+test binary in a child process to exercise the real CLI flags and diagnostic.
+Its probe helper belongs only to that test; the child boundary keeps tracing
+subscriber setup and the test `PATH` isolated from the parent process.
+
+### Development build defaults
+
+Ordinary local development and test builds do not compile incrementally and
+carry no debug information. The committed `[profile.dev]` sets
+`incremental = false` and `debug = 0`, which keeps `target` small: the
+`Coverage (main)` run at 8460cb02 ran out of disk under
+`target/llvm-cov-target`. Local backtraces and debugger sessions therefore lack
+source-level debug information.
+
+To debug, override the profile for one invocation rather than editing it. Pass
+`--config 'profile.dev.debug=2'` on the Cargo command line, and optionally
+`--config 'profile.dev.incremental=true'`, or set `CARGO_PROFILE_DEV_DEBUG=2`
+in the environment. Never change the committed profile to get debug information
+back.
+
+The `[unstable] no-embed-metadata = true` key in `.cargo/config.toml` is a
+nightly-only Cargo setting tied to the dated nightly pinned in
+`rust-toolchain.toml`. Whoever changes that pin to a nightly from 2026-07-31
+onward must replace the key with `embed-metadata = false`. Stable and beta
+toolchains ignore it.
+
+### Build standard
+
+The estate build standard makes the parallel frontend (`-Zthreads=8`) and the
+`mold` linker the defaults, but `.cargo/config.toml` here carries neither:
+`whitaker-installer` builds lint libraries from a checkout of this repository,
+so an auto-discovered linker flag would break source builds for users without
+`mold`. The flags live in the opt-in fragment `tools/dev-fast/config.toml`,
+selected with `cargo --config tools/dev-fast/config.toml`, and the `test`,
+`test-doc` and `typecheck` recipes restate them (`DEV_STANDARD_FLAGS`), because
+they assign `RUSTFLAGS` and an assigned `RUSTFLAGS` replaces every
+configuration source. `test` and `typecheck` add the Dylint-specific
+`-C prefer-dynamic -Z force-unstable-if-unmarked` alongside them; `test-doc`
+omits that pair, since it would make every doctest fail to load at `E0658`.
+`.concordat` records the exception for BD-001, BD-002, BD-004 and BD-008, and
+[ADR 010](adr-010-keep-the-fast-linker-out-of-the-auto-discovered-cargo-config.md)
+gives the reasoning.
+
+The release workflows build on the pinned nightly from `rust-toolchain.toml`,
+as an application does. The CI lanes that run the Makefile recipes install
+`mold` through `setup-rust`'s `install-mold` input. A local Linux build through
+the Makefile needs `mold` on the `PATH` (for example
+`sudo apt-get install mold`, or your distribution's package) and a GCC driver
+of 12.1 or newer; with an older GCC, upgrade it or select clang as the linker
+driver with `CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER=clang`. The Dylint
+lint-library toolchain (`nightly-2026-05-28` today) is the pinned channel
+itself, so the application pin and the lint-library toolchain are one.
+
+#### Cranelift backend support
+
+Exception: Cranelift is not the development-profile backend. The Dylint lint
+crates and the root `whitaker` crate are coupled to one nightly's
+`rustc_private` APIs, and the suite has not been measured under the Cranelift
+backend. Recorded state: the pin is `nightly-2026-05-28`; no measurement has
+been taken on it, and the review is deferred to 1 April 2027.
 
 ### Test profiles
 
@@ -214,10 +439,13 @@ are never silently skipped in the pipeline.
 ### Coverage and nested Cargo builds
 
 `make coverage` uses the same selected crate set and warning policy as
-`make test`, but runs it through `cargo llvm-cov nextest`. The Makefile assigns
-the absolute `COVERAGE_TARGET_DIR` (by default,
-`$(CURDIR)/target/llvm-cov-target`) to both `CARGO_LLVM_COV_TARGET_DIR` and
-`CARGO_TARGET_DIR`.
+`make test`, but runs it through `cargo llvm-cov nextest` and skips six
+trybuild contract tests (see the lane table below). The Makefile assigns the
+absolute `COVERAGE_TARGET_DIR` (by default, `$(CURDIR)/target/llvm-cov-target`)
+to both `CARGO_LLVM_COV_TARGET_DIR` and `CARGO_TARGET_DIR`. It also sets
+`LLVM_PROFILE_FILE_NAME` to `whitaker-%m.profraw`, so LLVM merges each
+instrumented binary's counters online instead of retaining a separate raw
+profile for every Nextest process.
 
 The first variable makes `cargo-llvm-cov` instrument its output in that
 directory. The second is inherited by nested Cargo commands that Dylint UI
@@ -231,6 +459,12 @@ either environment variable individually. Fixture workspaces that intentionally
 use the same package identity must still select their own nested `--target-dir`
 to avoid reusing one another's build-script output.
 
+Both coverage workflows remove a stale root `lcov.info`, run `make coverage`
+with `COVERAGE_OUTPUT=lcov.info`, and validate the newly generated report. The
+validation requires at least one complete `SF:` source record and at least one
+valid `DA:` line measurement. Only `coverage-main.yml` uploads `lcov.info` to
+CodeScene, and its upload is restricted to `main`.
+
 #### Who may talk to CodeScene
 
 `coverage-main.yml` owns the CodeScene surface entirely. It runs on a push to
@@ -238,38 +472,76 @@ the trunk, it uploads the report, and it is the only workflow here that may
 hold the CodeScene credential. No pull-request lane may invoke the CodeScene
 action, run a `cs-coverage` command, name the `codescene.io` host, or carry
 that credential, whether by name or through `secrets: inherit`, and
-`tests/workflow_contracts/coverage_boundary_test.py` enforces all of them over
-every workflow a pull request can reach.
+`make test-workflow-contracts` enforces all of them over every workflow a pull
+request can reach. It runs `cv005-contracts check`, the shared contract library
+in `leynos/shared-actions` (`packages/cv005-contracts`), from the full commit
+named by `CV005_CONTRACTS_REF` in the Makefile, then the pytest contracts in
+`tests/workflow_contracts/`. A fix to a rule reaches this repository as a pin
+bump. The target needs `uv`, which fetches the Python 3.13 the library runs
+under. `.github/cv005.toml` holds the repository's parameters and three
+exceptions on the record, all under ruling leynos/whitaker#444: coverage comes
+from `make coverage`, not `generate-coverage`, so the publisher-wiring,
+selection-parity and pull-request-lane clauses are waived, and each exception
+requires the publisher to run `make coverage`.
+`tests/workflow_contracts/cv005_wiring_test.py` fails if the pin is not a full
+commit, the target stops running the pinned checker, the repository parameter
+is wrong, or CI stops running the target. The decision is recorded in
+[ADR 0005](adrs/adr-0005-adopt-the-shared-cv-005-contract-library.md).
 
-"Every workflow a pull request can reach" is a closure, not a trigger list.
-`tests/workflow_contracts/pull_request_reach.py` starts from the workflows
-declaring `pull_request`, `pull_request_target` or `workflow_run`, in any of
-the scalar, sequence or mapping forms `on:` accepts, and adds every workflow of
-this repository they call through a job-level `uses:`, transitively. A workflow
-declaring only `workflow_call` still runs on a pull request when one of those
-calls it, and `secrets: inherit` hands it the credential. A local call is
-recognized by its shape: the reference is read as a path and must name a file
-directly under `.github/workflows/`, so no list of spellings has to be kept.
+"Every workflow a pull request can reach" is a closure, not a trigger list. The
+shared checker computes its own, wider closure: it also follows local composite
+actions and seeds every event outside a short list of non-pull-request events.
+`tests/workflow_contracts/pull_request_reach.py` keeps a narrower local copy
+for the trunk-writer contract, which only needs called workflows, and starts
+from the workflows declaring `pull_request`, `pull_request_target` or
+`workflow_run`, in any of the scalar, sequence or mapping forms `on:` accepts,
+and adds every workflow of this repository they call through a job-level
+`uses:`, transitively. A workflow declaring only `workflow_call` still runs on
+a pull request when one of those calls it, and `secrets: inherit` hands it the
+credential. A local call is recognized by its shape: the reference is read as a
+path and must name a file directly under `.github/workflows/`, so no list of
+spellings has to be kept.
 
 The publisher answers `workflow_dispatch` as well as a push to `main`, and a
 dispatch can name any branch, so the trigger filter does not confine the
 upload. The upload step's condition carries `github.ref == 'refs/heads/main'`
-and `env.CS_ACCESS_TOKEN != ''` as conjuncts, the second so that an absent
-secret skips the upload rather than failing the run.
-`tests/workflow_contracts/publisher_guard_test.py` requires both, reading the
-condition as a conjunction: it splits on `&&` and refuses any `||` outside a
-quoted string, because a trailing `|| github.event_name == 'workflow_dispatch'`
-would contain the ref test and make it optional. The credential test is only
-half of the arrangement, because GitHub evaluates a missing context property as
-an empty string: with the step's `env` binding deleted, the guard would read
-the same and the upload would skip on every run.
-`tests/workflow_contracts/publisher_credential_test.py` therefore requires the
-upload step to bind `CS_ACCESS_TOKEN` to `${{ secrets.CS_ACCESS_TOKEN }}` and
-to pass `${{ env.CS_ACCESS_TOKEN }}` as `access-token`, and refuses the binding
-in any other scope: the workflow's or a job's `env`, or another step. The guard
-contract also refuses a concurrency group that cancels a publisher run: a
-cancelled run abandons its upload and the cache state it writes, while
-overlapping runs that both finish leave the later push's state in place.
+and `steps.codescene_token.outputs.available == 'true'` as conjuncts, the
+second so that an absent secret skips the upload rather than failing the run.
+The shared checker requires both, reading the condition as a conjunction: it
+splits on `&&` and refuses any `||` outside a quoted string, because a trailing
+`|| github.event_name == 'workflow_dispatch'` would contain the ref test and
+make it optional.
+
+The credential is in no `env` at all. The upload is a composite action, and a
+composite action's nested steps inherit the calling step's `env`, so a token
+bound there reached every one of them. A `Check CodeScene token availability`
+step (id `codescene_token`) runs exactly
+`echo "available=${{ secrets.CS_ACCESS_TOKEN != '' }}" >> "$GITHUB_OUTPUT"`,
+with no `if:` and no `env`; GitHub evaluates the expression before it sends the
+command to the runner, so the check's shell receives only a literal `true` or
+`false`, and the upload alone receives the token. The upload takes
+`access-token: ${{ secrets.CS_ACCESS_TOKEN }}` directly. The shared checker
+requires that check before each upload in its job and that input on the upload,
+refuses the credential in any workflow, job or step `env`, keys and values
+alike and case folded, and holds its mentions to exactly the check's command
+and the upload's input. The positive half is what a prohibition alone leaves
+out: deleting the credential would keep every `env` clean while the upload
+skipped on every run. A merge made by the Dependabot automerge workflow's
+`GITHUB_TOKEN` fires no push event, so it publishes nothing until a dispatch or
+the next push to `main`; that is a known exception (see
+[shared-actions issue 518](https://github.com/leynos/shared-actions/issues/518)).
+
+The publisher queues on the concurrency group `coverage-main-${{ github.ref }}`
+with `cancel-in-progress: false`, and the shared checker asserts that block
+whole. Runs in the group never overlap, and a newer trigger replaces an older
+pending run; GitHub does not promise to start runs in trigger order, so the
+workflow makes no commit-order promise. The publisher writes no ratchet
+baseline, because its coverage comes from `make coverage` rather than the
+shared action, so a dispatch on `main` only republishes coverage. A manual
+"Re-run jobs" keeps its run ID and republishes that commit's coverage until a
+newer run replaces it. The guard contract also refuses a concurrency group that
+cancels a publisher run anywhere: a cancelled run abandons its upload and the
+cache state it writes.
 
 Every workflow contract reads a workflow file through `parse_workflow` in
 `tests/workflow_contracts/ubicloud_workflow_support.py`, a `SafeLoader` that
@@ -284,10 +556,9 @@ unavailable or the token has rotated. The changed-line gate that used to sit in
 changed-line feedback. That is what the rule takes from every repository that
 adopts it, not something particular to this one.
 
-The credential's name does not appear in any pull-request workflow, not even in
-a comment. The contract reads the raw text as well as the parsed values,
-because a workflow that names it is a workflow somebody is about to wire it
-into.
+The shared CV-005 checker rejects the credential's name in parsed keys and
+scalar values of workflows reachable by a pull request. It does not scan raw
+workflow text, so YAML comments do not count.
 
 A pull-request workflow also may not publish the coverage report as an
 artefact. The contract judges an `actions/upload-artifact` step by whether its
@@ -355,9 +626,9 @@ when a caller has already set the variable. A workflow-level
 `RUSTC_WRAPPER=sccache` would therefore leave every lane wrapped by whichever
 `sccache` happened to be on `PATH` rather than the one the action provisioned,
 which is reported as `metric setup-rust.sccache.wrapper=caller-set`. Cache
-storage is job-specific. The Linux lanes read one workflow-level
-`SCCACHE_BACKEND` switch, while `windows-compat` sets
-`SCCACHE_GHA_ENABLED=true` in its own job environment because it is
+storage is job-specific. The Linux lanes leave the backend to `setup-rust`,
+which selects Ubicloud's cache proxy from the runner, while `windows-compat`
+sets `SCCACHE_GHA_ENABLED=true` in its own job environment because it is
 GitHub-hosted and shares none of the Ubicloud constants.
 
 ### CI build caching
@@ -396,20 +667,32 @@ archiving exactly that until it moved to the external provider and gained its
 own registry cache. `release.yml` still calls the shared action with its default
 `github` provider, as do the non-Linux legs of the two rolling-release
 matrices, because nothing owns a cache for them; they no longer archive a
-`target` tree either. The Linux legs pass `external` and own a family pair each:
-`cargo-registry-rolling-v1-` and `sccache-rolling-v1-` for `build-lints`,
-which rebuilds ten lint crates from cold on every merge to `main`, and
-`cargo-registry-depbin-v1-` and `sccache-depbin-v1-` for
+`target` tree either. The Linux legs pass `external` and own one registry
+family each: `cargo-registry-rolling-v1-` for `build-lints`, which rebuilds ten
+lint crates on every merge to `main`, and `cargo-registry-depbin-v1-` for
 `build-dependency-binaries`, which installs every dependency crate from source
 with `cargo install --locked`. The two jobs are keyed apart because their
 registries hold different crate sets and their keys hash different manifests.
+Their compiler cache is not an archive at all: like every Ubicloud job's, it
+reads and writes Ubicloud's cache proxy through `setup-rust`.
 
-Every caller pins one revision, `7cb894fe62c40951cccf33819548095e64a1291e`. It
-keeps the rule that the built-in provider does not archive `target/<profile>`,
-and adds two things the previous pin lacked: it restores the caller's Actions
-cache-service selection, and it starts the `sccache` server from a `run:` step
-after those exports. Expect one cold Cargo cache on a lane the first time it
-moves because the key no longer carries the build profile.
+Every caller pins one revision, a full 40-character SHA that
+`tests/workflow_contracts/shared_action_pin_test.py` holds identical across all
+workflows (it compares them with each other and with `ci.yml`, not with a
+constant, so a shared-actions bump edits the workflows alone). At the time of
+writing it was the merge of leynos/shared-actions#546, which sits on #523. From
+that change `setup-rust` selects sccache's backend from the runner (ADR 0005
+there); the `sccache` paragraphs below say what that retired here. It keeps the
+rules the previous pin brought: the built-in provider does not archive
+`target/<profile>`, the caller's Actions cache-service selection is restored
+after `mozilla-actions/sccache-action` runs, and the `sccache` server starts
+from a `run:` step after those exports. #546 adds a 60 s server startup
+timeout, where sccache's own is a fixed 10 s that Ubicloud's cache proxy
+intermittently outlasts, and makes a start that still fails fall back to an
+uncached build instead of failing the job: a `sccache-fallback` warning
+annotation, the line `sccache: FALLBACK (cache disabled for this job)` in the
+job summary, and `sccache-status` on the action's outputs (`fallback`, or
+`started`).
 
 The lanes were briefly split, with the release boundaries held back until "a
 tag has run on the newer wiring". That exit condition was the wrong one for
@@ -429,31 +712,38 @@ has exactly one job permitted to write it.
 
 Table: Cache ownership for the Ubicloud Linux lanes.
 
-| Key family                    | Cached paths                                                                    | Writer                      | Restore-only lanes             |
-| ----------------------------- | ------------------------------------------------------------------------------- | --------------------------- | ------------------------------ |
-| `cargo-registry-coverage-v1-` | `~/.cargo/registry`, `~/.cargo/git`                                             | `coverage-upload`           | `coverage-check`               |
-| `cargo-registry-lint-v1-`     | `~/.cargo/registry`, `~/.cargo/git`                                             | `linux-full`                | `linux-full`                   |
-| `tools-coverage-v1-`          | `~/.rustup`, `~/.cargo/bin`, `~/.local/bin`, `~/.cache/uv`, `~/.local/share/uv` | `coverage-upload`           | `coverage-check`               |
-| `tools-lint-v1-`              | the same paths plus `~/.bun/install/cache` and `~/.cache/merman`                | `linux-full`                | `linux-full`                   |
-| `dylint-tools-v1-`            | `~/.cache/whitaker-dylint-tools`                                                | `linux-full`                | `linux-full`                   |
-| `clippy-mirror-v1-`           | `~/.cache/whitaker-mirrors`                                                     | `coverage-upload`           | `linux-full`, `coverage-check` |
-| `sccache-rolling-v1-`         | `~/.cache/sccache`                                                              | `build-lints`               | `build-lints`                  |
-| `sccache-depbin-v1-`          | `~/.cache/sccache`                                                              | `build-dependency-binaries` | `build-dependency-binaries`    |
+| Key family                    | Cached paths                                                                    | Writer            | Restore-only lanes             |
+| ----------------------------- | ------------------------------------------------------------------------------- | ----------------- | ------------------------------ |
+| `cargo-registry-coverage-v1-` | `~/.cargo/registry`, `~/.cargo/git`                                             | `coverage-upload` | `coverage-check`               |
+| `cargo-registry-lint-v1-`     | `~/.cargo/registry`, `~/.cargo/git`                                             | `linux-full`      | `linux-full`                   |
+| `tools-coverage-v1-`          | `~/.rustup`, `~/.cargo/bin`, `~/.local/bin`, `~/.cache/uv`, `~/.local/share/uv` | `coverage-upload` | `coverage-check`               |
+| `tools-lint-v1-`              | the same paths plus `~/.bun/install/cache` and `~/.cache/merman`                | `linux-full`      | `linux-full`                   |
+| `dylint-tools-v1-`            | `~/.cache/whitaker-dylint-tools`                                                | `linux-full`      | `linux-full`                   |
+| `clippy-snapshot-v1-`         | `~/.cache/whitaker-clippy-snapshot`                                             | `coverage-upload` | `linux-full`, `coverage-check` |
 
-`coverage-check`, `linux-full` and `coverage-upload` archive no compiler cache.
-Their sccache runs on the `gha` backend and reads and writes Ubicloud's cache
-proxy directly, so the two `sccache-*` rows belong to the rolling-release lanes
-alone, which stay on the local-directory backend.
+No Ubicloud leg archives a compiler cache, and no `sccache-*` family may appear
+in the table. Every Ubicloud job's sccache reads and writes Ubicloud's cache
+proxy directly, through `setup-rust`. The GitHub-hosted macOS and Windows legs
+of the two rolling-release matrices are different: there `setup-rust` keeps
+sccache on a local directory and, because those legs pass
+`cache-provider: github`, archives that directory itself under its own keys,
+saving only on a push to `main`. Those entries belong to the action, not to
+this table.
 
 Each key carries an explicit `v1` schema generation so the whole family can be
 invalidated deliberately. Registry keys hash `rust-toolchain.toml` and
 `Cargo.lock`; tool keys spell out each pinned tool version and hash
 `rust-toolchain.toml`; the Dylint host-tools key names the `cargo-dylint` and
-`dylint-link` versions the Makefile installs; and the Clippy mirror key names
-the Dylint version whose build script performs the clone. Every key also carries
-`runner.os`, `runner.arch`, and `runner.environment`, and the compiled-tool
-keys add the Ubuntu release because a binary built on Ubuntu 24.04 must never
-be restored onto 22.04.
+`dylint-link` versions the Makefile installs; and the Clippy snapshot key hashes
+`installer/clippy-snapshot.toml`, which pins both the snapshot commit and the
+Dylint release whose selection it records. Every key except the Clippy
+snapshot's also carries `runner.os`, `runner.arch`, and `runner.environment`,
+and the compiled-tool keys add the Ubuntu release because a binary built on
+Ubuntu 24.04 must never be restored onto 22.04.
+
+The Clippy snapshot key omits those discriminators on purpose. Its content is
+platform-independent Git history, its one writer (`coverage-warmup`) and its
+readers all run on Ubicloud Linux, and the Windows lane never restores it.
 
 Restores run on every event. Saves are guarded by
 `github.ref == 'refs/heads/main'` and by a missed restore. A pull request
@@ -461,24 +751,35 @@ therefore reads the trusted generation without publishing a competing write and
 without the `Unable to reserve cache` noise that two racing lanes produce.
 
 The compiler cache is not one of these archives on the Linux lanes. It runs on
-the Actions backend against Ubicloud's cache proxy, which is not branch
-restricted, so every run both reads and writes it and a pull request warms the
-store for the next one. `rolling-release.yml` keeps a local directory and its
-own key families, and those follow the rule above.
+the Actions backend against Ubicloud's cache proxy, and every run both reads
+and writes it, but the proxy is ref-scoped in the same way. "Who writes the
+compiler cache" below explains what that means for a pull request's first push.
+`rolling-release.yml`'s Linux legs reach the same proxy through `setup-rust`;
+only its registry families are archives, and those follow the rule above.
 
-`coverage-main.yml` is the only Whitaker job that runs automatically on the
-trunk, so it is the writer for the coverage-lane keys and for the shared Clippy
-mirror. `ci.yml` has no push trigger, so `linux-full` publishes the lint-lane
-keys when it is dispatched against `main`:
+`coverage-main.yml` runs as two jobs on a push to `main`. `coverage-upload`
+measures coverage and uploads it to CodeScene on a GitHub-hosted `ubuntu-24.04`
+runner, which is free on a public repository; a hosted runner writes GitHub's
+cache store, which the Ubicloud lanes never read, so it saves no cache.
+`coverage-warmup`, on Ubicloud, runs `make coverage-build` and `make test-doc`
+and is the writer for the coverage-lane keys and for the shared Clippy snapshot.
+`make coverage-build` compiles the instrumented tests `make coverage` builds
+and stops: `cargo llvm-cov nextest --no-run` would only report, so
+`scripts/cargo-coverage-build.sh` runs `cargo nextest run --no-run` under
+`cargo llvm-cov show-env`, in the same target directory and under the same
+RUSTFLAGS. `ci.yml`'s `linux-full` runs on push to `main` as well as on pull
+requests, and on that push it publishes the lint-lane keys. A merge that
+`GITHUB_TOKEN` performs, as the Dependabot automerge does, starts no push-event
+workflow, so after one, or after changing a lint-lane tool pin, the pinned
+toolchain, or a cache generation, dispatch both writers against `main`:
 
 ```sh
 gh workflow run ci.yml --repo leynos/whitaker --ref main
+gh workflow run coverage-main.yml --repo leynos/whitaker --ref main
 ```
 
-Dispatch that run after changing a lint-lane tool pin, the pinned toolchain, or
-a cache generation, and before comparing warm pull requests. Until it runs, the
-lint lane restores the previous generation through its `restore-keys` prefix
-and reports the miss in the job summary.
+Until they run, each lane restores the previous generation through its
+`restore-keys` prefix and reports the miss in the job summary.
 
 An archive-based cache needs no empty-directory guard. A restore whose key
 misses creates nothing at all, so a script cannot mistake a materialized mount
@@ -486,46 +787,67 @@ point for a populated cache. That hazard belonged to the Namespace cache
 volume, which appeared as an existing directory whether or not it held a
 generation.
 
-The Clippy source fetch needs a single cache owner. `dylint_driver` 6.0.1's
-build script reads `clippy_utils/src/sym.rs` at the revision matching the
-pinned dated nightly and obtains it by running a full
-`git clone https://github.com/rust-lang/rust-clippy` into a temporary
-directory. The build script performs that clone for any dated nightly on or
-after 2025-05-06, and Whitaker pins `nightly-2026-05-28`, so every cold build of
-`dylint_driver` repeats an unowned multi-hundred-megabyte network clone. That
-clone is intermittent rather than merely occasionally broken: run 33692863541
-hit `fatal: could not read Username for 'https://github.com'` on nextest tries
-1 and 2 and passed only on try 3, while run 33704041072 failed all three tries
-and failed the job. `scripts/provision-clippy-mirror.sh` gives that fetch one
-owner. It maintains a bare mirror and rewrites the upstream URL to it with
-`url.<mirror>.insteadOf`, so the build script's clone becomes a local,
-hard-linking copy. The mirror sits below the cached directory rather than at
-the cache path itself, so discarding a stale generation can never attempt to
-remove the directory the cache action manages. A cold clone is authenticated
-with the job token when one is present and retried with backoff; a refresh
-failure on a warm mirror is only a warning because the revision the build
-script needs is historical and is already present. All three Linux lanes now
-restore the mirror and provision it before any Cargo invocation.
+Dylint's driver build reads Clippy history, and Whitaker owns that history.
+`dylint_driver`'s build script reads `clippy_utils/src/sym.rs` at the revision
+Dylint selects for the pinned nightly, and Dylint selects it by walking
+first-parent history from the `HEAD` of the repository named by
+`DYLINT_CLIPPY_REPO`. Left unset, Dylint clones public Clippy for every cold
+driver build: an unowned network fetch that failed intermittently (runs
+33692863541 and 33704041072) and then permanently, when Clippy renamed `master`
+to `main` (#526).
+[ADR 0009](adrs/adr-0009-verified-clippy-snapshot-for-the-dylint-driver-bootstrap.md)
+records the decision; this section is the producer's side of it.
 
-The script owns a deletion, so it proves what it is deleting. It resolves both
-its argument and its trusted cache root (`CLIPPY_MIRROR_ROOT`, defaulting to
-`~/.cache/whitaker-mirrors`) to physical paths and refuses anything that is not
-the one `rust-clippy.git` inside that root. A suffix match such as
-`/tmp/project/rust-clippy.git` no longer authorizes a removal.
+`installer/clippy-snapshot.toml` pins the snapshot. `make clippy-snapshot`
+installs the verified generation at `$(CLIPPY_SNAPSHOT_ROOT)/<commit>` (default
+`~/.cache/whitaker-clippy-snapshot`), reusing a generation that verifies and
+otherwise installing `CLIPPY_SNAPSHOT_BUNDLE` or the published release asset.
+The Makefile exports `DYLINT_CLIPPY_REPO` at that path and `DYLINT_DRIVER_PATH`
+at `$(DYLINT_DRIVER_ROOT)/dylint-<version>/clippy-<commit>` for every recipe,
+and `test` and `publish-check` depend on `clippy-snapshot`, so a missing
+snapshot fails the gate before any build. Nothing falls back to public Clippy.
 
-It also classifies the restored path rather than reducing it to one boolean. A
-generation is reused only when git reports it bare and its `remote.origin.url`
-is the pinned upstream because a non-bare directory or a mirror of some other
-repository would leave `dylint_driver` without the Clippy revision it needs. A
-non-bare or wrongly pointed generation is rebuilt. An unreadable path, a
-non-directory, or an unparsable verdict from git is an environment fault: the
-script aborts and never repairs it by deleting the path.
+`make clippy-snapshot-bundle` is the only target that reads public Clippy. It
+clones `main` (anonymously first, then with `GITHUB_TOKEN` passed through scoped
+`GIT_CONFIG_*` variables), proves the pinned commit is on `main`'s
+first-parent history, writes `whitaker-clippy-snapshot-<commit>.bundle` and its
+`.sha256` sidecar into `CLIPPY_SNAPSHOT_DIST`, and installs the result into a
+scratch root through the consumer's own verifier before reporting success. Pass
+`CLIPPY_SNAPSHOT_SOURCE` to bundle from a local mirror instead. Before the
+first release that publishes the snapshot, provision a local checkout with:
+
+```sh
+make clippy-snapshot-bundle CLIPPY_SNAPSHOT_DIST="$PWD/dist"
+make clippy-snapshot \
+  CLIPPY_SNAPSHOT_BUNDLE="$PWD/dist/whitaker-clippy-snapshot-$(awk -F '"' '/^commit = / {print $2}' installer/clippy-snapshot.toml).bundle"
+```
+
+In CI, the three Linux suite lanes restore `~/.cache/whitaker-clippy-snapshot`
+before `Setup Rust`. After it, "Provision the Clippy snapshot" runs
+`make clippy-snapshot-bundle` only on a cache miss, installs with
+`make clippy-snapshot`, and appends `make dylint-env` to `GITHUB_ENV`.
+`coverage-warmup` is the snapshot cache's only writer. The Windows lane cannot
+restore a Linux archive, so it bundles and verifies on every run.
+
+As its last validation step, `linux-full` runs `make dylint-tools`, whose
+pinned archives download from GitHub, and only afterwards denies `github.com` in
+`/etc/hosts` (later steps would otherwise inherit the denial through the
+resolver cache), proves the denial with a `git ls-remote` canary, and runs
+`make dylint-smoke` with the lane's sccache `RUSTC_WRAPPER` in force. That
+target empties the keyed driver directory, runs the ignored
+`no_std_fs_operations` `integration_exclusion` tests serially (cold), runs them
+again (warm), and fails unless the driver file is byte-identical across the two
+runs. It refuses to empty any `DYLINT_DRIVER_PATH` other than the exact keyed
+slot, so an exported shared driver root is never deleted. The tests run real
+`cargo dylint` against fixtures and assert named `no_std_fs_operations`
+diagnostics. A warm driver also stops later parallel UI tests from racing to
+build it.
 
 The pinned Dylint host tools follow the same rule.
 `scripts/install-dylint-tools.sh` once ran `cargo install --locked` for
 `cargo-dylint` and `dylint-link` into a `mktemp -d` root, so both were
 recompiled on every run and never cached. It now downloads the upstream
-`trailofbits/dylint` v6.0.1 prebuilt Linux release archives, verifies each
+`trailofbits/dylint` v6.3.0 prebuilt Linux release archives, verifies each
 against a SHA-256 digest pinned in the script, and installs the executables
 into the caller's root. Only a version with a pinned digest can be installed;
 any other version is a hard error rather than an unverified download or a
@@ -561,35 +883,49 @@ The shared compiler cache is intentionally scoped to debug builds:
 - `RUSTFLAGS=-D warnings` and `RUSTDOCFLAGS=-D warnings` preserve the
   warnings-as-errors contract even when builds are routed through `sccache`.
 
-`sccache` is configured in exactly one place. The workflows declare
-`SCCACHE_BACKEND`, and `scripts/select-sccache-backend.sh` translates that
-single value into the backend's environment before any Cargo invocation.
-`local` exports `SCCACHE_DIR` and `SCCACHE_CACHE_SIZE`, and the lane must then
-own a `~/.cache/sccache` archive; `gha` exports `SCCACHE_GHA_ENABLED`, and the
-lane must then own no such archive. The two backends are never configured
-together: `sccache` would then report a plausible hit rate while writing to a
-store nobody owns.
+`sccache` is configured in exactly one place: the shared `setup-rust` action,
+at the pin above. It names the wrapper, starts and zeroes the server, and
+selects the backend from the runner the job landed on (ADR 0005 in
+leynos/shared-actions). On an Ubicloud runner `ACTIONS_CACHE_URL` names a proxy
+on the private network, which stores objects in Ubicloud's own cache. The
+action republishes that address and the runtime token through `GITHUB_ENV`,
+because the runner hands them to action steps alone; clears
+`ACTIONS_CACHE_SERVICE_V2`, because `sccache` prefers GitHub's v2 results
+service whenever that flag is set and the proxy serves v1; and carries the
+cleared value past `mozilla-actions/sccache-action`, which sets it again as its
+last act. The server then comes up bound to the proxy, and every later
+`actions/cache/save` in the job reaches the proxy too. Its `cache-backend`
+output names the choice, and `scripts/record-sccache-effectiveness.sh` prints
+it above the statistics as `SETUP_RUST_CACHE_BACKEND`, because `Cache location`
+reads `ghac` for the proxy and GitHub's own service alike.
 
-The GitHub Actions backend needs the cache service's address and a runtime
-token, and GitHub exposes both to action steps rather than to `run:` steps. On
-an Ubicloud runner that address is not GitHub's: `ACTIONS_CACHE_URL` names a
-proxy on the runner's private network, which stores objects in Ubicloud's own
-cache. `Export the Ubicloud cache credentials` republishes it through
-`GITHUB_ENV` and clears `ACTIONS_CACHE_SERVICE_V2`, because `sccache` prefers
-GitHub's v2 results service whenever that flag is set and the proxy serves v1.
-The shared Rust setup action then records those values before
-`mozilla-actions/sccache-action` overwrites them and restores them afterwards,
-and starts the server from a `run:` step positioned after the restore, so the
-server comes up bound to the proxy.
+The Linux jobs pass `expect-cache: ubicloud`, so a missing proxy fails the job
+rather than letting it compile against local disk unnoticed. The two
+rolling-release matrices pass
+`${{ runner.os == 'Linux' && 'ubicloud' || 'any' }}`: their Linux legs are all
+Ubicloud and demand the proxy just as strictly, while their macOS and Windows
+legs are GitHub-hosted, where the action keeps sccache on local disk it caches
+itself.
 
-The ordering that mattered still matters. `sccache` binds its backend once,
-when the server starts, so the credentials export runs before the backend
-selector, and both run before `Setup Rust`, which is what starts the server.
-`sccache_backend_contract_test` enforces those positions, rejects a lane that
-installs or zeroes `sccache` itself, and rejects a step that carries the
-credentials step's name without running the action. The GitHub-hosted Windows
-lane needs no export, because there the variables are already visible to `run:`
-steps and the store is GitHub's own.
+This retired three hand-rolled pieces, each of which would now override the
+action's choice without a word. An `Export the Ubicloud cache credentials` step
+ran the shared `export-ubicloud-cache-credentials` action. A workflow-level
+`SCCACHE_BACKEND` switch was translated by `scripts/select-sccache-backend.sh`
+into either the Actions backend or a local directory. The rolling-release lanes
+used that local directory, archived under the `sccache-rolling-v1-` and
+`sccache-depbin-v1-` families, and it went wrong silently: its restores ran
+before `Setup Rust` and read the proxy, its saves ran after it and went to
+GitHub's v2 service, so every run started cold, and GitHub's cache held 18
+`sccache-rolling-v1-` entries of about 190 MB each until an interim export on
+those legs put the saves back on the proxy.
+`tests/workflow_contracts/setup_rust_sccache_contract_test.py` holds the
+arrangement for every Ubicloud job: one reviewed `setup-rust` call with sccache
+on, the id `setup-rust` and the `expect-cache` its placement allows; no retired
+variable, step or `~/.cache/sccache` archive; nothing touching sccache before
+`Setup Rust` starts it; and the statistics naming the backend. Fixtures prove
+the retired-piece reader catches each form and leaves the statistics report and
+the Cargo registry cache alone. The GitHub-hosted Windows lane keeps its own
+switch, because there the store is GitHub's own.
 
 `gha` is the deployed backend on the Linux lanes, and the record of how it got
 there is worth keeping, because the repository once concluded the opposite.
@@ -619,58 +955,97 @@ workflow compiles on a billed `ubicloud-standard-2` and asserts, from both a
 `run:` step and a composite action step, that the bound endpoint is a private
 address literal and that the cleared v2 flag survived.
 
-What `gha` buys here is that every run reads and writes one store. The
-local-directory archive could only be written by a lane that runs on the trunk,
-so an ordinary pull request restored whatever the last `workflow_dispatch` run
-on `main` had saved, or nothing. `coverage-check` measured 3.3% Rust hits on
-run 35597917956 under that arrangement. Nothing about the backend is branch
-restricted, so a pull request warms the store for the next one.
+What `gha` buys here is that every run writes as it compiles, with no archive
+step to own. The local-directory archive could only be written by a lane that
+runs on the trunk, so an ordinary pull request restored whatever the last
+`workflow_dispatch` run on `main` had saved, or nothing. `coverage-check`
+measured 3.3% Rust hits on run 35597917956 under that arrangement. The proxy is
+still ref-scoped, so a pull request's first push reads only what `main`'s trunk
+writers compiled; see "Who writes the compiler cache" below.
 
-Switching back is one line in each of `ci.yml` and `coverage-main.yml`, plus
-restoring the `~/.cache/sccache` archive steps the contract then requires.
-`rolling-release.yml` stays on `local` and owns its own key families; the
-contract permits the two to differ, because the rule that matters is that a
-lane's reader and its writer agree, not that the whole repository does. Treat
-write errors above roughly two percent of requests, or an Ubicloud cache
-listing with no `sccache` entries for Whitaker, as the signal to look again.
-
-The local-directory backend that `rolling-release.yml` still uses has known
-trade-offs. Its archive grows with every new compilation unit until
-`SCCACHE_CACHE_SIZE` trims it, so a warm run restores and re-saves the whole
-directory even when only a few objects changed. That is why its key carries the
-run identifier with a `restore-keys` prefix, and why its save is restricted to
-the lane's single writer. The cap defaults to 4 GB rather than 2 GB because the
-store holds two build shapes, the ordinary debug objects and the instrumented
-coverage objects; a one-shape cap would evict each shape in turn.
+There is no switch back any more. The health check below fails a lane whose
+write errors exceed 10% of its store attempts, or whose lookup timeouts exceed
+10% of its reads. Treat a rate well under that but persistently above the
+measured 0.1%, or an Ubicloud cache listing with no `sccache` entries for
+Whitaker, as the signal to look again.
 
 Each build lane starts from zeroed `sccache` counters and then runs
 `scripts/record-sccache-effectiveness.sh`, which appends the human-readable
 statistics to the job summary, retains the JSON statistics, and warns when
 `sccache` reports zero compile requests. On the Linux lanes the zeroing is done
-by the shared action's server start, which reports
-`metric setup-rust.sccache.server=started` or `started-stats-not-zeroed` so a
-failed zero is visible rather than inferred; `windows-compat` still zeroes
-explicitly. A run with no compile requests paid the compiler cache's setup cost
-while `RUSTC_WRAPPER` never reached a single `rustc` invocation, so treat zero
-compile requests as a failed cache integration, not as a clean zero-miss
-result. That failure mode is not hypothetical: `mozilla-actions/sccache-action`
-exports only `SCCACHE_PATH` and does not set `RUSTC_WRAPPER`, so before a
-wrapper was exported no Cargo invocation in `coverage-main.yml` was wrapped at
-all.
+by the shared action's server start, which reports one bounded line,
+`metric setup-rust.sccache.server=<state>`, over `started`,
+`started-stats-not-zeroed` (a failed zero is visible rather than inferred),
+`start-failed` (the fallback), `caller-set` and `missing-sccache-path`;
+`windows-compat` still zeroes explicitly. A run with no compile requests paid
+the compiler cache's setup cost while `RUSTC_WRAPPER` never reached a single
+`rustc` invocation, so treat zero compile requests as a failed cache
+integration, not as a clean zero-miss result. That failure mode is not
+hypothetical: `mozilla-actions/sccache-action` exports only `SCCACHE_PATH` and
+does not set `RUSTC_WRAPPER`, so before a wrapper was exported no Cargo
+invocation in `coverage-main.yml` was wrapped at all.
+
+The fallback is also countable. A start that fails writes
+`metric setup-rust.sccache.server=start-failed` to the job log, a closed value
+set with no run identifier or path, so the frequency over a period is a count
+of that line per job, and the estate's daily `sccache-fallbacks.py` detector
+counts the `sccache-fallback` annotation. The warning annotation, the run-page
+line and the `sccache-status` output stay as the per-run signals. This
+repository adds no metric of its own, because the pinned action already emits
+the bounded one.
+
+A fallback must not publish empty evidence. A server that never started has no
+statistics; `sccache --show-stats` prints empty defaults for it rather than
+starting one, which would read as a broken integration. Every step that reads
+them (the record and upload steps in every job, and the health check) therefore
+carries `steps.setup-rust.outputs.sccache-status != 'fallback'` as one conjunct
+of its condition. A fallback run ends green, with the warning and the summary
+line as its evidence. `sccache_health_contract_test.py` holds the guard on the
+suite lanes' steps and their order; `sccache_fallback_guard_test.py` finds
+every step that records, uploads or health-checks the statistics by the command
+it runs, in any job, and refuses one whose condition omits, inverts, negates or
+`||`-composes the guard.
+
+Every job in `ci.yml` also starts `ci-telemetry-start` right after the checkout
+and ends its work with `ci-telemetry-finish` under `if: always()`, both from
+shared-actions and pinned to one commit. Finish prints one `DF12_CI_TELEMETRY`
+line that the central CI observability collector reads from the job log: the
+busy cores (average, 95th percentile and maximum), the peak memory and the
+smallest free disk, plus the sccache hit ratio. It is given `setup-rust`'s
+`sccache-status` and reads the `sccache-stats.json` that
+`scripts/record-sccache-effectiveness.sh` writes, so it asks sccache for
+nothing a second time, and a fallback run carries null counts rather than zeros.
+`ci_telemetry_test.py` holds the placement, the `if: always()`, the status
+wiring and the pin. `windows-compat` carries the pair too; its record says
+`unsupported-os` and has no CPU figures. A job added to `ci.yml` without the
+pair reads as a missing record to the collector.
 
 On the three lanes that use the `gha` backend, `coverage-check`, `linux-full`
-and `coverage-upload`, the statistics are uploaded as a `sccache-stats-<job>`
-artefact under `if: always()`, and then
+and `coverage-warmup` (the hosted `coverage-upload` runs with sccache off,
+since GitHub's cache service throttled its writes), the statistics are uploaded
+as a `sccache-stats-<job>` artefact under `if: always()`, and then
 `scripts/check_sccache_health.py --expect-location ghac` reads the JSON and
 fails the job on a broken integration: a cache location other than `ghac`, zero
-compile requests, every store failing, or every read failing. The last two are
-the signature of an endpoint the server cannot use, which is what runs
-33748602187 and 33756048103 showed. Isolated read errors, write errors,
-timeouts and cache errors produce warnings instead. A proxy hiccup costs one
+compile requests, every store failing, or every read failing. Those last two
+are the signature of an endpoint the server cannot use, which is what runs
+33748602187 and 33756048103 showed. It also fails when write errors exceed
+`ERROR_RATE_LIMIT`, one tenth, of the store attempts (writes plus write
+errors), or lookup timeouts exceed it of the reads (hits plus misses).
+`sccache` counts a timed-out lookup as a miss, so a timeout is judged against
+the reads and never the stores: a warm lane stores almost nothing, and one
+timeout beside one store would otherwise read as a 100% failure. Read errors
+have no rate of their own. `sccache` declares `cache_read_errors` but never
+increments it, and a failed read lands in `cache_errors` beside compile errors
+that say nothing about the cache. Exceeding the limit fails; reaching it does
+not. The measured healthy rate is about 0.1%: the cold run 35672193433 had one
+write error and one timeout against 1,572 store attempts in `coverage-check`
+and 1,212 in `linux-full`. So the limit sits two orders of magnitude above
+normal noise and still catches an endpoint that loses one compile in ten.
+Isolated errors below it produce warnings instead. A proxy hiccup costs one
 compile, and failing the lane on it would make a pull request depend on an
 external service's good day, which is what moving CodeScene off the
 pull-request lane removed. The upload comes before the check so the evidence
-survives the failure, and `coverage-upload` runs the check last so a failure
+survives the failure, and `coverage-warmup` runs the check last so a failure
 cannot cost it its cache saves.
 `tests/workflow_contracts/sccache_health_contract_test.py` holds that order in
 every gha lane, and `make test-sccache-health` tests the checker, including its
@@ -689,7 +1064,7 @@ the merge of #393, died with `No space left on device` between two save steps on
 `ubicloud-standard-2`. Every step before the saves had succeeded, so the
 failure was capacity at save time rather than anything about the work.
 
-Two changes keep that from recurring, and neither needs a larger runner. Every
+These changes keep that from recurring, and none needs a larger runner. Every
 job that saves now discards its scratch tree first, with no exemptions: the
 coverage lanes drop `target/llvm-cov-target` once `cargo llvm-cov` has written
 `lcov.info`, and `linux-full` and `windows-compat` drop `target` after their
@@ -697,6 +1072,18 @@ last consumer. No job caches a target tree, so all three are pure scratch by
 that point, and dropping the instrumented tree also gives the doctest build its
 headroom. Every discard runs under `if: always()` so a later failure cannot
 leave the disk full.
+
+The three Linux lanes that build coverage or write a large compiler cache,
+`coverage-upload` in `coverage-main.yml` and `coverage-check` and `linux-full`
+in `ci.yml`, also run a first step,
+`Free preinstalled toolchains the job does not use`, ported from cuprum's CI
+(cuprum #645). Before the first cache restore, and on Linux only, it prints
+`df -m /`, removes the runner image's preinstalled Android SDK and .NET
+(`/usr/local/lib/android /usr/share/dotnet`, about 17 GiB the jobs never use),
+and prints `df -m /` again; `rm -rf` of an absent path is a no-op. On PR #510,
+available space on a `ubicloud-standard-2` runner rose from about 9.5 GB to
+about 26.6 GB. `tests/workflow_contracts/disk_reclaim_contract_test.py` asserts
+the step on all three jobs.
 
 `windows-compat` stages a smaller archive onto a larger GitHub-hosted disk and
 has never run out of space, but it is covered anyway. The rule follows from how
@@ -714,27 +1101,31 @@ cannot be added without the headroom that makes it survivable.
 The matched key, not `cache-hit`, is what classifies a restore. The cache
 action reports `cache-hit: true` only for an exact primary-key match, so a
 successful `restore-keys` restore and a complete miss both surface as a falsy
-value. Every warm compiler-cache restore takes the prefix path because that key
-ends with the current `github.run_id` and can never match exactly. The summary
-therefore reports `exact hit`, `prefix restore from <key>`, or `miss`, and
-prints the raw `cache-hit` value verbatim beside it, showing an absent value as
-`unset` rather than coercing it to `false`. Restore and save byte counts and
-durations are not step outputs; read the cache action's own `Cache Size` and
-transfer lines from the job log, and confirm an entry exists on Ubicloud's side
-with the cache-entries API rather than assuming a save succeeded.
+value. A warm restore of a run-keyed archive takes the prefix path, because its
+key ends with the current `github.run_id` and can never match exactly. The
+summary therefore reports `exact hit`, `prefix restore from <key>`, or `miss`,
+and prints the raw `cache-hit` value verbatim beside it, showing an absent
+value as `unset` rather than coercing it to `false`. Restore and save byte
+counts and durations are not step outputs; read the cache action's own
+`Cache Size` and transfer lines from the job log, and confirm an entry exists
+on Ubicloud's side with the cache-entries API rather than assuming a save
+succeeded.
 
 Tool setup must not compile tools from source. `taiki-e/install-action` calls
 pin a release whose catalogue contains each requested tool, disable fallbacks,
-and use checksum-verified release artefacts. `mdtablefix` 0.5.0 is installed
-from its official Linux x86_64 release asset after checking the SHA-256 pinned
-in the workflow. The tools cache retains the installed executable under
-`~/.cargo/bin`; a cold cache downloads it, while a warm cache verifies and
-reuses it without invoking Cargo. The SHA-pinned shared `install-nixie` action
-at `7cb894fe62c40951cccf33819548095e64a1291e` (shared-actions PR #423, repinned
-to `main`) owns Nixie 1.1.0 and Merman 0.7.0 setup. It verifies Merman's
-official release archive and cached executable against pinned SHA-256 digests,
-reconciles the uv-managed Nixie installation, and never falls back to a source
-build.
+and use checksum-verified release artefacts. `mdtablefix` 0.6.1 is installed by
+the SHA-pinned shared `install-mdtablefix` action at the version pinned in the
+workflow's `MDTABLEFIX_VERSION`, and the action verifies the installed
+executable against the SHA-256 pinned in `MDTABLEFIX_LINUX_X64_SHA256` (taken
+from the release's `mdtablefix-linux-x86_64.sha256`), so a replaced release
+fails the job. Update both together when the version moves. The tools cache
+retains the installed executable under `~/.local/bin`; the action reinstalls it
+whenever the cached version differs, without invoking Cargo. The SHA-pinned
+shared `install-nixie` action at `7cb894fe62c40951cccf33819548095e64a1291e`
+(shared-actions PR #423, repinned to `main`) owns Nixie 1.1.0 and Merman 0.7.0
+setup. It verifies Merman's official release archive and cached executable
+against pinned SHA-256 digests, reconciles the uv-managed Nixie installation,
+and never falls back to a source build.
 
 The uv cache contract includes downloads under `~/.cache/uv`, installed tool
 environments under `~/.local/share/uv`, and their executable shims under
@@ -754,6 +1145,85 @@ Table: Test profiles and typical usage.
 When working on `whitaker-installer` code, run the full suite locally before
 pushing to catch installer regressions early.
 
+#### Who writes the compiler cache
+
+Ubicloud's cache proxy is ref-scoped, as GitHub's own Actions cache is. A run
+can read its own ref's scope and the default branch's, and it writes only its
+own. So a pull request's first push is warm only for the shapes that a push to
+`main` compiles, and later pushes to the same pull request read what the
+earlier ones wrote. The repository's first `gha` evidence came from those later
+pushes, and it was read at the time as showing that the store was shared across
+branches. It was not.
+
+The measurements that showed it are these:
+
+- Run [35825720438][whitaker-run-35825720438], the first push of a fresh
+  branch cut from `main` just after the Linux lanes moved to the proxy. Its
+  `linux-full` read 0 of 1,077 compilations from the cache and took 29m07s,
+  against 11 to 14 minutes warm. Nothing in `main`'s scope had compiled its
+  shapes: `ci.yml` then ran only on `pull_request` and `workflow_dispatch`, and
+  `coverage-upload`, the only trunk job, built the instrumented shape (it is now
+  `coverage-warmup`, on Ubicloud).
+- Run [35825656071][whitaker-run-35825656071], the first trunk run on the
+  proxy, which was cold as well. It spent 35m54s in `Generate coverage` and was
+  cancelled at the 40-minute limit before it reached its saves.
+- Run [35834924110][whitaker-run-35834924110], the next trunk run, which was
+  warm: 14m44s, with 1,452 Rust hits against 122 misses (92.2%).
+
+The rule is therefore that every pull-request lane on the Actions backend has
+exactly one trunk writer: a job that runs on a push to `main` and nothing
+broader, runs unconditionally there, declares the same compile environment, and
+runs every `make` or `cargo` command the lane runs, so the two compile the same
+shapes. `coverage-warmup` writes for `coverage-check`. `linux-full` writes for
+itself, because `ci.yml` runs it on the push. That makes its shapes the lane's
+by construction, where a separate job would be a copy that could drift, and the
+lane's non-compiling steps add under a minute to a warm run. No other job may
+run on that push, since each would be a second writer to `main`'s scope.
+`windows-compat` is the exception that proves it: it runs there to write
+GitHub's own store, which the Ubicloud lanes never read, so a pull request's
+first Windows push starts from a warm compiler cache and a restored Dylint
+driver instead of a cold one (#457). `coverage-check` already runs on pull
+requests alone. A pull request cannot write `main`'s scope at all. Its writes
+land in its own ref's scope, so the pull-request lanes only ever read the
+trunk's store.
+
+`tests/workflow_contracts/trunk_writer_contract_test.py` holds that shape. It
+requires each pull-request lane to be registered with a writer in
+`TRUNK_WRITERS`. Each writer's push trigger must be exactly `branches: [main]`,
+with no other filter. The writer must carry no job condition, and run all of
+its reader's commands, read line by line so a command beneath
+`set -euo pipefail` in a block script still counts. The jobs that run on the
+push must be exactly the registered writers, read over `ci.yml` and
+`coverage-main.yml`; `rolling-release.yml` also runs on the push and writes
+`main`'s scope, but compiles only release shapes no pull-request lane compiles.
+Job conditions are matched against a table of reviewed spellings, and an
+unknown one fails the suite rather than being guessed at.
+
+`tests/workflow_contracts/trunk_writer_environment_contract_test.py` holds the
+compile environment. A writer must declare each variable in
+`COMPILE_ENVIRONMENT` (`BUILD_PROFILE`, `CARGO_INCREMENTAL`, `RUSTDOCFLAGS` and
+`RUSTFLAGS`) with its reader's value, whether at workflow or job level. The
+`make` recipes set `RUSTFLAGS` themselves, but `make test-doc` takes
+`RUSTDOCFLAGS` from the environment, so `coverage-main.yml` declares both as
+`ci.yml` does, and `main`'s doctests deny the warnings a pull request's do.
+
+Nothing may cancel a writer's run on the push either. A cancelled trunk run
+leaves `main`'s scope cold, and no failure reports it. The contract therefore
+accepts a workflow-level or job-level `concurrency` on a writer only when it
+cannot cancel: no `cancel-in-progress`, `false`, or the pull-request-only
+expression `${{ github.event_name == 'pull_request' }}`, which is false on the
+push. That expression must also come with `ci.yml`'s group, keyed on the pull
+request's number or else on `github.ref`. A pull request's run then never
+shares a group with the push run, because a run that starts with cancellation
+on cancels the in-progress runs of its own group.
+
+`windows-compat` reads GitHub's own cache, which is ref-scoped too, and only a
+dispatch against `main` writes that lane's `main` scope. It is not cold today:
+the first push in run [35825720438][whitaker-run-35825720438] hit 88.3% from a
+generation dispatched on 2026-09-05. But that generation goes stale as `main`
+moves, and a toolchain or flag change would leave every first Windows push cold
+until the next dispatch. [Issue #457][whitaker-issue-457] tracks it.
+
 ### One execution of the test suite per pull request
 
 A coverage job and a test-only job on the same platform bill twice for one
@@ -762,22 +1232,50 @@ per pull request on Linux, and no other Linux job executes tests at all.
 
 Table: Jobs that execute the Rust test suite.
 
-| Job               | Platform         | Command                          | Role                                      |
-| ----------------- | ---------------- | -------------------------------- | ----------------------------------------- |
-| `coverage-check`  | Ubicloud Linux   | `make coverage`, `make test-doc` | the single Linux pull-request execution   |
-| `coverage-upload` | Ubicloud Linux   | `make coverage`, `make test-doc` | the trunk baseline, on `main` pushes only |
-| `windows-compat`  | `windows-latest` | `make test NEXTEST_PROFILE=ci`   | a different platform                      |
+| Job               | Platform         | Command                                | Role                                               |
+| ----------------- | ---------------- | -------------------------------------- | -------------------------------------------------- |
+| `coverage-check`  | Ubicloud Linux   | `make coverage`, `make test-doc`       | the single Linux pull-request execution            |
+| `coverage-upload` | `ubuntu-24.04`   | `make coverage`, `make test-doc`       | the trunk baseline, on `main` pushes only          |
+| `coverage-warmup` | Ubicloud Linux   | `make coverage-build`, `make test-doc` | compiles the lane's tests for its cache; runs none |
+| `windows-compat`  | `windows-latest` | `make test NEXTEST_PROFILE=ci`         | a different platform                               |
 
-`make coverage` delegates to the `make test` recipe and swaps only the driver to
+`make coverage` delegates to the `make test` recipe and swaps the driver to
 `cargo llvm-cov nextest`, so the instrumented run keeps one package set, one
 feature set, and one target set: `--workspace --all-targets --all-features`
 minus the eleven CI-excluded crates. Both coverage lanes run identical flags,
 so the pull-request gate and the trunk baseline are comparable.
 
+It differs from `make test` in one respect: it passes nextest a filterset
+(`COVERAGE_NEXTEST_FILTER`) that skips six of the seven trybuild
+compile-contract tests, which assert that fixtures compile and add no coverage
+(about 250 s of the instrumented test phase). The seventh,
+`fixture_expansion_lint_attribute_contract`, stays in because it expands the
+`whitaker_test_macros` proc macro inside rustc and is worth four lines of that
+crate's coverage. Naming a filterset replaces the profile's `default-filter`, so
+`COVERAGE_BASE_FILTER` repeats the default profile's. The skipped contracts
+run in the `windows-compat` lane, whose `make test NEXTEST_PROFILE=ci` includes
+all seven; they are compile-time API contracts, not platform-specific. No Linux
+lane runs them: `linux-full` builds no test binaries, so a step there would pay
+for a cold, uninstrumented workspace test build (a trial added 1,693 s and took
+`linux-full` from about 10 to 37 minutes). To run them yourself, use
+`make trybuild-contracts` (or plain `make test`). A workflow contract keeps
+`TRYBUILD_CONTRACT_FILTER` equal to the nextest override's filter and
+`COVERAGE_SKIPPED_TRYBUILD_FILTER` equal to that list less the retained test,
+and an execution test runs the Makefile against a stub Cargo to check the
+arguments each target passes.
+
 `make test-doc` is the second half of that one executed set, not a second lane.
 `cargo llvm-cov nextest` executes no doctests and `--all-targets` excludes
 them, so without this step the workspace's doctest fences are compiled by
 `cargo doc` in `make lint` and never run.
+
+The recipe is `cargo test --doc $(CARGO_LOCKED) $(DOCTEST_CARGO_FLAGS)`, run
+with `RUSTFLAGS="$(RUST_FLAGS) $(DEV_STANDARD_FLAGS)"`. `DOCTEST_CARGO_FLAGS`
+defaults to `--workspace --all-features $(DOCTEST_EXCLUDES)`, so a bare
+`make test-doc` documents the whole workspace and the exclusions below are what
+narrow it; overriding the variable replaces the selection and the exclusions
+together. `CARGO_LOCKED` is empty by default and `CARGO_LOCKED=--locked` makes
+the run refuse to touch the lockfile, as it does for the other Cargo recipes.
 
 Two things about the doctest lane are easy to get wrong.
 
@@ -788,14 +1286,19 @@ for its `cdylib` lint crates. A doctest is compiled as its own crate, and
 library it is documenting, with `E0658`. With the plain `-D warnings` flags the
 same doctests pass.
 
-`DOCTEST_EXCLUDES` drops every crate that links `rustc_private`: the lint
-crates, the `rustc_*` proxy shims, `clippy_utils`, the `whitaker` root, and the
-suite. That is a structural limit rather than a policy choice. A doctest for
-those crates has no `#![feature(rustc_private)]` of its own and cannot compile
-at all, so the flags exclude what cannot run rather than what is not worth
-running. The remaining four packages, `whitaker-common`, `whitaker-installer`,
-`whitaker_sarif`, and `whitaker_clones_core`, hold the documented public API
-and contribute 335 doctests in about 18 seconds warm.
+`DOCTEST_EXCLUDES` drops the crates that link `rustc_private` without opting
+in: the lint crates, the `rustc_*` proxy shims, `clippy_utils`, the `whitaker`
+root, and the suite. For those crates a doctest has no
+`#![feature(rustc_private)]` of its own and cannot compile at all, so the flags
+exclude what cannot run rather than what is not worth running.
+`bumpy_road_function` is no longer excluded: its examples carry the hidden
+`#![cfg_attr(feature = "dylint-driver", feature(rustc_private))]` and
+`extern crate rustc_driver;` lines that let the doctest crate link the same
+`rustc_*` dependencies as the library. Its `normalize_settings` example also
+carries the `compile_fail,E0432` contract for the removed legacy spelling. The
+five doctested packages, `whitaker-common`, `whitaker-installer`,
+`whitaker_sarif`, `whitaker_clones_core`, and `bumpy_road_function`, hold the
+documented public API and contribute 375 doctests in about 18 seconds warm.
 
 `linux-full` executes no tests. It survives as a job because
 `main-required-checks` requires that context by name, and it carries the
@@ -833,7 +1336,8 @@ workflows and between pull requests. A key on `github.run_id`, `github.sha` or
 would let unrelated pull requests cancel each other. The `github.ref` fallback
 keys a manual dispatch on its branch. Cancellation is conditioned on the event
 rather than set to a literal `true`, so a dispatch that shares the group, or
-any push trigger added later, runs to completion.
+the push to `main` that makes `linux-full` the lint lane's cache writer, runs
+to completion.
 
 Only `pull_request` is in scope. `dependabot-automerge.yml` runs on
 `pull_request_target` and merges, so cancelling it mid-write is not a saving.
@@ -855,17 +1359,18 @@ runs on GitHub-hosted runners.
 
 Table: Runner placement for repository-owned jobs.
 
-| Job                                               | Workflow                   | Runner                                                                      | Why                                    |
-| ------------------------------------------------- | -------------------------- | --------------------------------------------------------------------------- | -------------------------------------- |
-| `coverage-check`                                  | `ci.yml`                   | `ubicloud-standard-2-ubuntu-2404`                                           | Blocking Linux gate                    |
-| `linux-full`                                      | `ci.yml`                   | `ubicloud-standard-2-ubuntu-2404`                                           | Blocking Linux gate                    |
-| `coverage-upload`                                 | `coverage-main.yml`        | `ubicloud-standard-2-ubuntu-2404`                                           | Trunk Linux gate and cache writer      |
-| `windows-compat`                                  | `ci.yml`                   | `windows-latest`                                                            | Ubicloud has no Windows image          |
-| `mutation`                                        | `mutation-testing.yml`     | Reusable workflow's own choice                                              | Nightly, not blocking                  |
-| `automerge`                                       | `dependabot-automerge.yml` | Reusable workflow's own choice                                              | API-bound                              |
-| Linux legs of both `rolling-release.yml` matrices | `rolling-release.yml`      | `ubicloud-standard-2-ubuntu-2204` and `ubicloud-standard-2-arm-ubuntu-2404` | Rebuilt from cold on every merge       |
-| Their macOS and Windows legs                      | `rolling-release.yml`      | GitHub-hosted matrix                                                        | Ubicloud has no macOS or Windows image |
-| Other release jobs                                | `release.yml`              | GitHub-hosted matrices                                                      | Release boundaries                     |
+| Job                                               | Workflow                   | Runner                                                                      | Why                                     |
+| ------------------------------------------------- | -------------------------- | --------------------------------------------------------------------------- | --------------------------------------- |
+| `coverage-check`                                  | `ci.yml`                   | `ubicloud-standard-2-ubuntu-2404`                                           | Blocking Linux gate                     |
+| `linux-full`                                      | `ci.yml`                   | `ubicloud-standard-2-ubuntu-2404`                                           | Blocking Linux gate; trunk cache writer |
+| `coverage-warmup`                                 | `coverage-main.yml`        | `ubicloud-standard-2-ubuntu-2404`                                           | Trunk cache writer for `coverage-check` |
+| `coverage-upload`                                 | `coverage-main.yml`        | `ubuntu-24.04`                                                              | Blocks no one; GitHub-hosted            |
+| `windows-compat`                                  | `ci.yml`                   | `windows-latest`                                                            | Ubicloud has no Windows image           |
+| `mutation`                                        | `mutation-testing.yml`     | Reusable workflow's own choice                                              | Nightly, not blocking                   |
+| `automerge`                                       | `dependabot-automerge.yml` | Reusable workflow's own choice                                              | API-bound                               |
+| Linux legs of both `rolling-release.yml` matrices | `rolling-release.yml`      | `ubicloud-standard-2-ubuntu-2204` and `ubicloud-standard-2-arm-ubuntu-2404` | Rebuilt on every merge from own caches  |
+| Their macOS and Windows legs                      | `rolling-release.yml`      | GitHub-hosted matrix                                                        | Ubicloud has no macOS or Windows image  |
+| Other release jobs                                | `release.yml`              | GitHub-hosted matrices                                                      | Release boundaries                      |
 
 Ubicloud publishes Ubuntu images only, on x64 and arm64, so Windows and macOS
 lanes have no Ubicloud counterpart and stay GitHub-hosted permanently. That is
@@ -895,12 +1400,10 @@ bill for days.
 A contract asserts it, which it did not before. This rule was documented and
 unenforced, and two matrix jobs reached a pull request on paid runners with no
 timeout at all before a reviewer caught it. The contract requires a declared
-`timeout-minutes` on every lane in the Ubicloud list and bounds it to two
-hours, which is an order of magnitude above the slowest leg this repository has
-ever run and so catches a typo as readily as an omission. Values are sized from
-observed runs rather than guessed: 30 minutes for `build-lints`, about eight
-times its slowest leg, and 45 for `build-dependency-binaries`, which installs
-every dependency crate from source and is the heavier of the two.
+`timeout-minutes` on every lane in the Ubicloud list and bounds it to 340
+minutes. The two suite lanes use 335 minutes to cover the 300-minute nextest
+budget and its measured outer work; unrelated lanes retain their measured
+30-minute `build-lints` and 45-minute `build-dependency-binaries` budgets.
 
 Test and build concurrency is bounded by one named constant.
 `LINUX_RUNNER_VCPUS` is declared once per workflow and a single step derives
@@ -909,6 +1412,36 @@ label cannot leave the suite oversubscribed. `windows-compat` keeps its own
 value because `windows-latest` is a four-vCPU GitHub-hosted shape. No suite in
 this repository uses `pytest-xdist`; if one adopts it, give it an explicit
 worker count rather than `-n auto`.
+
+#### Coverage lane time limits
+
+`coverage-check` and `coverage-upload` run under the 335-minute ceiling that
+"Test timeouts: four tiers, outermost last" derives from the suite's budgets,
+and that section's contract pins it. The ceiling must also hold a cold compiler
+cache, not only a warm one. A cold cache is not rare: every change to the
+pinned toolchain or to a compiler flag invalidates all of it, and so did the
+move to Ubicloud's cache proxy.
+
+Table: Measured coverage-lane durations on `ubicloud-standard-2-ubuntu-2404`.
+
+| Run                                     | Lane              | Cache | `Generate coverage` | Doctests           | Job                              |
+| --------------------------------------- | ----------------- | ----- | ------------------- | ------------------ | -------------------------------- |
+| [35825720438][whitaker-run-35825720438] | `coverage-check`  | cold  | 34m26s              | 3m22s              | 38m45s                           |
+| [35825656071][whitaker-run-35825656071] | `coverage-upload` | cold  | 35m54s              | cancelled at 3m39s | cancelled at the 40-minute limit |
+| [35834924110][whitaker-run-35834924110] | `coverage-upload` | warm  | 10m34s              | 2m38s              | 14m44s                           |
+| [35831488853][whitaker-run-35831488853] | `coverage-check`  | warm  | 10m50s              | 1m05s              | 12m50s                           |
+
+The previous 40-minute limit left `coverage-check` 75 seconds of headroom over
+its cold run, and `coverage-upload`, which does more after the doctests (the
+CodeScene upload and three cache saves), could not finish cold at all. A
+cancelled writer keeps the compiler-cache entries it stored while it compiled,
+which is why the next trunk run was warm, but it loses its doctests, its
+CodeScene upload and its archive saves. The slowest cold job measured, 38m45s,
+sits well inside the 335-minute ceiling, which leaves `coverage-upload` about
+296 minutes after a cold `Generate coverage` for its doctests, upload and
+saves. Re-measure the cold figure after a change that makes the suite
+materially larger; if it approaches the ceiling, the tier derivation is where
+to raise it, not a per-lane value.
 
 #### Placement inside a matrix
 
@@ -1049,7 +1582,6 @@ import re
 
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 
-
 def test_uses_pinned_full_sha(caller_step):
     ref = caller_step["uses"].split("@")[-1]
     assert SHA_RE.match(ref), f"expected a 40-hex commit SHA, got {ref!r}"
@@ -1102,10 +1634,283 @@ multi-toolchain or multi-failure test failures much easier to diagnose.
 ### Other useful commands
 
 ```sh
-make lint       # Run Clippy
-make check-fmt  # Verify formatting
-make fmt        # Apply formatting
+make lint           # Run the two-target lint gate (see below)
+make typecheck      # Type-check every target without producing code
+make test-doc       # Run the workspace doctests, which `make test` does not
+make check-fmt      # Verify Rust and Markdown formatting
+make fmt            # Apply Rust and Markdown formatting
+make test-root-lib  # Run the whitaker root library's unit tests
+make test-nextest-filter  # Run the nextest override regression guard
 ```
+
+`make test-doc` is a separate lane, not a subset of `make test`:
+`cargo nextest` runs no doctests, and `--all-targets` excludes them, so only
+this target compiles the examples in the public API documentation. It passes
+`$(RUST_FLAGS)` and `$(DEV_STANDARD_FLAGS)` but deliberately omits the
+`-C prefer-dynamic -Z force-unstable-if-unmarked` pair that `make test` and
+`make typecheck` add; a doctest is compiled as its own crate, and
+`force-unstable-if-unmarked` makes it fail to load the library it tests.
+`DOCTEST_EXCLUDES` keeps out the crates whose doctests cannot compile without
+`#![feature(rustc_private)]`, leaving the packages that carry the documented
+public API.
+
+The selector handed to `cargo test --doc` is `DOCTEST_CARGO_FLAGS`, whose
+default is `--workspace --all-features $(DOCTEST_EXCLUDES)`. Override it to run
+a smaller selection, for example
+`make test-doc DOCTEST_CARGO_FLAGS='-p whitaker_common'`. `CARGO_FLAGS` does
+not narrow doctests: this lane never reads it, so a caller who narrows
+`CARGO_FLAGS` still doctests the whole workspace.
+
+The recipe assigns `RUSTFLAGS` itself but not `RUSTDOCFLAGS`, so the rustdoc
+invocation inherits whatever the caller exported; the coverage workflow exports
+both for that reason.
+
+#### The `lint` gate is two gates
+
+`make lint` is a composition, not a single command: it declares `lint-clippy`
+and `lint-whitaker` as prerequisites, and either half can be dropped without
+any recipe line changing.
+
+`lint-clippy` builds rustdoc for the workspace and then runs Clippy over
+`CLIPPY_FLAGS`, which is
+`--workspace --lib --bins --tests --benches --all-features`. `--all-targets` is
+deliberately absent: the Dylint UI fixtures under `examples/` exist to contain
+the anti-patterns the suite detects, so the workspace lint policy cannot
+meaningfully apply to them. Warning denial comes from the variables, not from
+the flags inline: `RUSTDOC_FLAGS` (`--cfg docsrs -D warnings`) is passed to
+`cargo doc` and `RUST_FLAGS` (`-D warnings`) to `cargo clippy`. Drop either and
+the gate turns green rather than red.
+
+`lint-whitaker` runs the installed `whitaker` binary over the support crates
+listed in `WHITAKER_PACKAGES` (`whitaker-common`, `whitaker-installer`,
+`whitaker_clones_core`, `whitaker_sarif`). The rustc_* proxy shims, the lint
+crates, the aggregate suite, and the `whitaker` root crate all need
+`rustc_private` plumbing that `cargo dylint`'s plain check build cannot
+provide, so they are not in that list. The suite is selected with
+`--lib whitaker_suite` rather than `--all` because `cargo-dylint` warns and
+exits 0 when it discovers no libraries; naming the aggregate turns a missing or
+partially installed suite into an error instead of a silent pass.
+
+The `whitaker` binary is a prerequisite the Makefile cannot install. The
+`linux-full` CI job provides it in its own `Install Whitaker` step, after
+restoring the installer cache and before the `Lint` step, and pins it at the
+workflow-level `WHITAKER_INSTALLER_VERSION`. The pin matters: the installer
+carries the embedded `dependency-binaries.toml` that pins `cargo-dylint` and
+`dylint-link`, and the Clippy snapshot must match the resolved Dylint libraries.
+
+#### `test-root-lib` and the root package exclusion
+
+`TEST_EXCLUDES` passes `--exclude whitaker` to the main `make test` run. That
+exclusion exists for the root package's test *binaries*: with `--all-features`
+the `dylint-driver` feature pulls `rustc_private`, and rustc fails the whole
+build with "cannot satisfy dependencies so `std` only shows up once" across 19
+prelude crates. The root *library* builds fine, so its unit tests run in the
+separate `test-root-lib` target, which `make test` invokes.
+
+Those tests are not incidental. `src/testing/ui/tests.rs` carries the
+regression tests for the Dylint copy-library guard, which sets
+`DYLINT_LINK_ENABLE_COPY_LIBRARY` when the caller has not, so `dylint_testing`
+keeps the library the harness built with `dylint-driver` instead of copying its
+own default-feature rebuild over it. Without the guard the UI harnesses fail
+with ``could not find `dylint_version` ``. If the underlying link problem is
+ever fixed and `--exclude whitaker` can be dropped, `test-root-lib` may be
+retired with it; the contract test in
+`tests/workflow_contracts/lint_makefile_test.py` allows that and only forbids
+keeping the exclusion while losing the gate.
+
+`tests/nextest_ui_filter.rs` is an integration binary of the same excluded
+package, so `TEST_EXCLUDES` skips it and `test-root-lib`'s `--lib` does not
+reach it either. It guards `.config/nextest.toml`, where the `serial-dylint-ui`
+group serializes the Dylint UI harnesses and the slow-timeout overrides size
+their builds. A filter that stops matching, or an override shadowed by an
+earlier broad clause, does not fail any build — it silently stops serializing
+and sizing, and the symptom appears later as flaky Windows CI, far from the
+configuration that caused it. The `test-nextest-filter` target names the single
+integration binary, which `make test` invokes, because that is the only shape of
+`-p whitaker` that links under `--all-features` without pulling
+`rustc_private` into a test binary.
+
+The contract suite pins both of these reachability properties, and it checks
+their *direction* as well as their presence: `test-root-lib` must not select
+`--tests`, and `test-nextest-filter` must not select `--lib`. Either mistake
+would produce a green gate that runs the wrong binary.
+
+## Module layout and test placement
+
+### The 400-line module budget
+
+`AGENTS.md` states that no single code file may be longer than 400 lines. The
+limit has a machine implementation — `module_max_lines`, one of Whitaker's own
+dylint lints, measures the source lines occupied by a module and warns when the
+count exceeds a configurable `max_lines` threshold, which defaults to 400 — but
+that implementation does not yet run against this repository. See
+[Where the budget is checked](#where-the-budget-is-checked) for what does and
+does not execute.
+
+The budget is a readability rule. A module of that length has stopped being
+reviewable in one sitting, so growth past the limit is answered by decomposing
+the module, not by raising the threshold.
+
+The reasoning behind the layout rules below, including the alternatives that
+were rejected, is recorded in
+[ADR 0006](./adrs/adr-0006-directory-based-module-layout.md).
+
+### Directory modules
+
+A module that has grown into submodules becomes a directory whose root file is
+`mod.rs`, for example `installer/src/install_flow/mod.rs` and
+`installer/src/toolchain/mod.rs`. The self-named-sibling form, where
+`install_flow.rs` sits next to an `install_flow/` directory, is not the
+convention here: 48 `mod.rs` files are tracked outside `vendor/`, and no path
+has both `name.rs` and `name/mod.rs`. The last two single-child outliers,
+`installer/src/cli.rs` and `crates/conditional_max_n_branches/src/driver.rs`,
+were converted, so the form is now absent rather than merely discouraged.
+
+Directory modules nest. `installer/src/toolchain/tests/` is a `tests/`
+directory module with its own `mod.rs`, holding `test_helpers.rs` and a further
+`failure_mocks/` subdirectory.
+
+### Sibling test modules
+
+An inline `#[cfg(test)] mod tests { … }` block that grows large enough to
+threaten the 400-line budget moves to a sibling file. The declaration keeps the
+module's name, and an explicit `#[path]` attribute points it at the file:
+
+```rust
+#[cfg(test)]
+#[path = "list_tests.rs"]
+mod tests;
+```
+
+Three shapes of this appear in the tree.
+
+- **File-module sibling.** The extracted file is a sibling of the module file,
+  wired with `#[cfg(test)]` plus `#[path = "<name>_tests.rs"]`.
+  `installer/src/list.rs` gains `installer/src/list_tests.rs`,
+  `installer/src/dependency_binaries/install/downloader.rs` gains
+  `downloader_tests.rs`, and `installer/src/deps/tests.rs` gains
+  `policy_tests.rs` and `tests_repository.rs`.
+- **Directory-module `tests.rs`.** Inside a directory module the attribute is
+  unnecessary, because Rust already resolves it, so a bare
+  `#[cfg(test)] mod tests;` resolves to `tests.rs` in the same directory.
+  `installer/src/toolchain/mod.rs` ends with that declaration, and
+  `installer/src/install_flow/mod.rs` reaches `dependency_check_tests.rs` the
+  same way, with a bare `#[cfg(test)] mod dependency_check_tests;`.
+- **Nested tests directory.** When the tests themselves need helpers and
+  submodules, they become a `tests/` directory module with a `mod.rs`.
+
+The `#[path]` form is preferred for the file-module case because `mod tests;`
+keeps the test module's name, `tests`, and therefore its module path unchanged,
+while the attribute places the file beside the module rather than in a
+directory of its own. Left to the default location, a bare `mod tests;` in
+`list.rs` resolves to `list/tests.rs`; naming the declaration after the file, as
+`mod list_tests;`, would rename the module to `crate::list::list_tests` and
+still resolve to `list/list_tests.rs`, not to a sibling. Only the attribute
+puts the file beside `list.rs` while keeping the module named `tests`.
+
+Renaming the module would not break `super::`, since the module stays a child of
+`list`; what breaks is `crate::` paths such as `crate::list::tests::…` and
+`cargo test` filters naming `tests`. With the attribute the production file
+drops back under the budget without folding a behaviour change into a purely
+structural edit. A test file extracted this way still carries a `//!`
+module-level doc comment, matching the repository rule that every module begins
+with one.
+
+`installer/src/deps/tests.rs` shows the one variation on this. It is not a
+module file in its own right: `installer/src/deps/mod.rs` declares it as
+`#[cfg(test)] mod tests;`, so the whole file is already test-only. Its own
+children therefore omit `#[cfg(test)]`, which would be redundant. They still
+carry `#[path]`, because no `deps/tests/` directory exists for a bare `mod` to
+resolve into:
+
+```rust
+#[path = "policy_tests.rs"]
+mod policy;
+
+#[path = "tests_repository.rs"]
+mod repository;
+```
+
+Add `#[cfg(test)]` to an extracted test module only when nothing above it
+already restricts it to test builds.
+
+The convention is repository-wide rather than installer-only: 65 tracked `.rs`
+files contain a `#[path = "` anchor.
+
+### Where the budget is checked
+
+`make lint` runs three things, and the last of them is the one that enforces
+this budget:
+
+1. `cargo doc --workspace --no-deps` under `RUSTDOCFLAGS="-D warnings"`.
+2. `cargo clippy --workspace --all-targets --all-features -- -D warnings`.
+3. `make lint-whitaker`, which runs the Whitaker Dylint suite:
+
+   ```sh
+   whitaker --lib whitaker_suite -- <packages> --all-targets --all-features
+   ```
+
+`module_max_lines` is one of Whitaker's own Dylint lints, and the suite
+aggregate `whitaker_suite` includes it. Naming the aggregate library rather than
+`--all` is deliberate: `cargo-dylint` warns and exits zero when it discovers
+no libraries, so `--all` would let a missing or partially installed suite pass
+silently. The third step therefore fails the gate if the lint crates are not
+installed, and runs `module_max_lines` over every listed package's targets.
+
+The lint measures each module's source span and fires above
+`ModuleMaxLinesConfig::default_max_lines()`, which is 400. Crate roots are not
+measured, which is why `installer/src/main.rs` and `tests/bootstrap_run.rs` may
+exceed the budget: they are entry points, not modules another file can split.
+Out-of-line `mod name;` declarations are measured by the file they reference,
+so moving tests into a sibling file reduces the parent's count.
+
+The threshold is configured as TOML under `[module_max_lines]`, not by a
+compiler flag. The shape is documented in
+[`docs/whitaker-cli-design.md`](./whitaker-cli-design.md). This workspace uses
+the default, so there is no `[module_max_lines]` table in `dylint.toml`.
+
+`dylint.toml` does configure one lint: `[no_std_fs_operations]` lists crates
+excluded from the capability-based filesystem policy. That table is the only
+working suppression for that lint, because the exclusion check matches on
+`tcx.crate_name()`, the Rust crate identifier, rather than the hyphenated Cargo
+package name.
+
+The layout convention itself is recorded in
+[ADR 0006](./adrs/adr-0006-directory-based-module-layout.md).
+
+## Lint policy checks
+
+The workspace lint policy is declared in three places, and the compiler checks
+none of them against the others: the `[workspace.lints.*]` tables in the root
+`Cargo.toml`, the `[lints] workspace = true` opt-in in every member manifest,
+and the `lint` recipe that applies them through `cargo doc` and `cargo clippy`
+with `-D warnings`. Each can drift without a diagnostic. A member that drops
+the opt-in compiles under Cargo's default lint set, and a narrowed recipe keeps
+exiting zero while checking fewer targets.
+
+[`tests/workflow_contracts/lint_gate_contract_test.py`](../tests/workflow_contracts/lint_gate_contract_test.py)
+pins all three, so any drift fails `make test-workflow-contracts` rather than
+quietly reducing coverage. `vendor/dylint_testing` is the recorded exception:
+`cargo vendor` writes a Cargo-normalized manifest that cannot inherit the
+workspace table, so that crate carries its own inline `[lints.*]` tables. It
+stays a workspace member precisely so it is still built and linted, which the
+contract also pins.
+
+`make lint` runs two lanes:
+
+```sh
+RUSTDOCFLAGS="$(RUSTDOC_FLAGS)" cargo doc $(CARGO_LOCKED) --workspace --no-deps
+cargo clippy $(CARGO_LOCKED) $(CARGO_FLAGS) -- $(RUST_FLAGS)
+```
+
+`CARGO_FLAGS` defaults to `--workspace --all-targets --all-features` and
+narrows the Clippy lane only; `cargo doc` always covers `--workspace`.
+`RUSTDOC_FLAGS` defaults to `--cfg docsrs -D warnings`, so a rustdoc warning
+fails the gate as well as a Clippy one, and `RUST_FLAGS` defaults to
+`-D warnings`. `CARGO_LOCKED` is empty by default, so a local run may update
+the lockfile; pass `CARGO_LOCKED=--locked` to require a clean one. All four are
+Make variables: override `CARGO_FLAGS` to check a narrower Clippy set while
+iterating, but leave the `?=` defaults alone when validating a commit.
 
 ## Python script interpreter convention
 
@@ -1155,9 +1960,9 @@ identical, and removes the temporary directory on exit. It never formats or
 rewrites a working-tree file. `mdtablefix` remains the owner of table padding
 and paragraph wrapping; `markdownlint-cli2` remains the owner of Markdown lint
 rules and its fixing pass. The `linux-full` CI job installs both pinned tools
-before running `make check-fmt`; it caches `mdtablefix` but verifies its
-workflow-level version pin. This makes a cold runner and a stale cache produce
-the same canonical output.
+before running `make check-fmt`; it caches `mdtablefix` but the shared action
+verifies its workflow-level version pin. This makes a cold runner and a stale
+cache produce the same canonical output.
 
 Keep the script scoped to `make check-fmt` and its focused process tests. Reuse
 it when another repository-owned gate needs to verify this exact Markdown
@@ -1174,6 +1979,19 @@ make test-markdown-format
 
 The target uses isolated `uv` dependencies and does not rewrite Markdown
 sources or other tracked files.
+
+## Python docstring coverage
+
+`make lint` depends on `make interrogate`, which requires a docstring on every
+module, class and function in the Python files under `installer/scripts`,
+`scripts` and `tests`. The target runs interrogate 1.7.0 through `uv tool run`
+with `-vv --fail-under 100`, so it needs `uv` on the path, and it also fails on
+any `MISSED` row because the rounded percentage can hide a single gap. Add a
+new Python directory to `INTERROGATE_TARGETS` in the Makefile.
+`tests/workflow_contracts/interrogate_gate_test.py` holds the wiring: it checks
+that `lint` reaches the target, the pin and the flags, that every directory
+holding Python is a target, and that a failing or `MISSED` report fails the
+target.
 
 ## Skill manifest checks
 
@@ -1296,8 +2114,8 @@ caller declares the best approximation of the CI scope it safely can, rather
 than a `--test-workspace` run that mirrors `make test` crate-for-crate, and the
 contract test asserts only that this declared configuration holds — not that a
 full workspace mutation baseline passes.
-[ADR 004](adr-004-pin-only-mutation-testing-contract.md) records this decision,
-its alternatives, and the accepted limitations.
+[ADR 0004](adrs/adr-0004-pin-only-mutation-testing-contract.md) records this
+decision, its alternatives, and the accepted limitations.
 
 The `uses:` reference pins the shared workflow to a full 40-character commit
 SHA rather than a branch or tag, so a force-push upstream cannot silently
@@ -1319,8 +2137,18 @@ make test-workflow-contracts
 ```
 
 which wraps
-`uv run --with 'pytest>=8' --with 'pyyaml>=6' pytest
-tests/workflow_contracts -q`.
+`uv run --with 'pytest>=8' --with 'pyyaml>=6' --with 'hypothesis>=6' pytest
+tests/workflow_contracts --doctest-modules -q`.
+
+Two of those flags are load-bearing rather than incidental. `--doctest-modules`
+collects the examples in the support modules' docstrings, so an example that
+states what a reader answers is executed rather than merely read; a helper
+whose documented answer drifts from its behaviour fails here. `hypothesis` is
+required by the property suites in this directory, and running the target
+without it fails during collection rather than skipping them: those modules
+import it at module scope, so pytest reports `ModuleNotFoundError` for each and
+stops.
+
 The suite validates:
 
 - the `uses:` reference targets `mutation-cargo.yml` pinned to a full commit
@@ -1391,11 +2219,12 @@ tests and Kani:
 - The BDD harness in
   `crates/whitaker_clones_core/tests/min_hash_lsh_behaviour.rs` includes a
   duplicate-retained-hash candidate-generation scenario.
-- The Kani harnesses in `crates/whitaker_clones_core/src/index/kani.rs` call
-  real `MinHasher::sketch` for the empty-input, deterministic-output, and
-  duplicate-hash properties. They use a private `cfg(kani)` seed fixture and
-  fixed-width signature builder so the proof focuses on sketch semantics rather
-  than seed-stream array construction.
+- Kani checks the empty-input error through `MinHasher::sketch`, the lane
+  minimum for the fixed mixed hashes of `0` and `u64::MAX` through
+  `minimum_mixed_hash`, and sorting/deduplication of four fixed fingerprints
+  through `unique_hashes`. These bounded proofs do not establish non-empty
+  full-signature determinism or general duplicate-hash insensitivity; ordinary
+  tests retain those broader runtime obligations.
 
 The direct `LshIndex` invariant coverage is also split between ordinary tests
 and Kani:
@@ -1406,11 +2235,18 @@ and Kani:
 - The BDD harness in
   `crates/whitaker_clones_core/tests/min_hash_lsh_behaviour.rs` exercises LSH
   candidate generation as part of the token-pass behaviour surface.
-- The Kani harnesses in `crates/whitaker_clones_core/src/index/kani.rs` verify
-  bounded `LshIndex` states for the same invariants. Kani builds use a private
-  fixed-size insertion log and compact band keys so the proof checks the LSH
-  state transition and `CandidatePair::new` policy without modelling `BTreeMap`
-  and `BTreeSet` allocator internals.
+- The Kani harnesses in `crates/whitaker_clones_core/src/index/kani.rs` use a
+  proof-specific candidate-generation model. In Kani builds, `insert` records
+  up to four fragments and their compact band keys;
+  `candidate_pair_summary_for_kani` compares each recorded fragment pair
+  directly, emits it when any recorded band matches, and applies
+  `CandidatePair::new`. This model does not execute production
+  `candidate_pairs` or `add_bucket_pairs`, nor the production B-tree bucket
+  enumeration and cross-bucket deduplication. Runtime tests and the BDD
+  scenario cover those production paths. The canonical-order harness uses
+  `CandidatePair::new` for both its modelled and expected pairs, so it checks
+  reversal invariance but is not an independent oracle for that constructor's
+  ordering rule.
 
 ### Clone-detector AST structure
 
@@ -1444,6 +2280,32 @@ parent-child and parent-child-grandchild production counts, and
 Changing the parser pin, normalization rules, hash algorithm, or schema string
 must produce a reviewable snapshot change.
 
+Parser-backed lowering enforces a 10,000-node budget over every emitted
+`NormalizedNode`, including non-trivia token leaves, and a depth limit of 256.
+Those bounds keep parser-produced per-kind counts within `u32` and depths within
+`u16`, so the production saturating operations cannot saturate for lowered
+parser trees. Public callers can construct larger `NormalizedTree` values
+directly; the Verus sidecar's mathematical-`nat` accumulator proof does not
+establish saturation behaviour for those arbitrary trees.
+
+#### AST operational metrics
+
+The parser-agnostic `ast::metrics` module owns metric names and the bounded
+`AstError` outcome mapping. The public `lower_span` boundary emits one latency
+sample and one categorized outcome per call, plus a separate parser-recovery
+counter when recovery occurred. Metric labels must not include nodes, spans,
+paths, offsets, or source text. This telemetry is an intentional side effect of
+the public lowering boundary; the private lowering helper retains the
+transformation and parser work.
+
+Describe metrics through the active recorder when recording them. A process-wide
+`Once` can send descriptions to a no-op or test-local recorder and leave a
+later production recorder without metadata. The library emits metrics but never
+installs a recorder; applications should initialize their recorder before
+calling `lower_span`. Feature-vector emission metrics belong to the 7.3.2
+scoring and SARIF Run 1 consumer, and count vectors only when that consumer
+uses them.
+
 `ra_ap_syntax` is exact-pinned in `Cargo.toml` because its parser vocabulary
 and MSRV move with `0.0.x` snapshots. The dependency is behind the default
 `parser` feature of `whitaker_clones_core`: normal builds compile the real
@@ -1462,9 +2324,21 @@ Use the Makefile targets for normal proof runs:
 ```sh
 make verus                 # Run all Verus proof files
 make verus-clone-detector  # Run clone-detector Verus proofs only
+make verus-string-literals # Run the string-literal Verus proof only
 make kani                  # Run all Kani harness groups
 make kani-clone-detector   # Run clone-detector Kani harnesses only
+make kani-string-literals  # Run string-literal Kani harnesses only
 ```
+
+`make verus` and `make kani` each cover both proof groups; the narrower targets
+exist so a change to one sidecar can be proved without paying for the other.
+Both narrow targets delegate to the same group argument in their script:
+`./scripts/run-verus.sh string-literals` reads
+`verus/string_continuation_rewrite.rs`, and
+`./scripts/run-kani.sh string-literals` runs the bounded continuation-scanner
+harness. `make proof`-style aggregate targets do not exist; run `make kani` and
+`make verus` as separate targets, in the order `.github/workflows/proofs.yml`
+uses.
 
 The Makefile prepends `~/.cargo/bin` and `~/.bun/bin` to `PATH` for all
 make-target invocations
@@ -1493,8 +2367,13 @@ require.
 
 `make verus` currently runs both decomposition-advice proofs and the
 clone-detector sidecars for `LshConfig::new`, `CandidatePair::new`, and AST
-feature-count accumulation. `make kani` runs the decomposition adjacency
-harnesses and the clone-detector harness group in one pass.
+feature-count accumulation. `make kani` runs the provable decomposition harness
+and the clone-detector and string-literal harness groups in one pass. Three
+label-propagation harnesses are excluded from that default because they cannot
+reach a verdict: CBMC spends the entire budget in the propagation loop's `Vec`
+and iterator model without discharging the assertions. They remain runnable by
+name, and the design document and roadmap item 6.4.6 record the open modelling
+work.
 
 ### Spelling gate
 
@@ -1502,6 +2381,10 @@ Run `make spelling` to enforce en-GB-oxendict spelling in tracked text. The
 pinned `typos-config-builder gate` command regenerates `typos.toml`, runs the
 Typos binary it pins over the whole tracked tree, and enforces the shared
 phrase corrections Typos cannot express. `make markdownlint` runs the same gate.
+
+`TYPOS_CONFIG_BUILDER_VERSION` in the `Makefile` pins the
+`typos-config-builder` release the gate runs (currently `v0.1.3`). Raise it
+together with the regenerated `typos.toml`, never on its own.
 
 `typos.toml` is regenerated on every run from the live shared dictionary and
 the narrow `typos.local.toml` overlay. Add narrow repository-specific
@@ -1518,7 +2401,11 @@ tracked source.
 
 `make nixie` validates the repository's Mermaid diagrams. Continuous
 Integration installs Nixie 1.1.0 and its Merman 0.7.0 dependency on the Linux
-documentation leg through the SHA-pinned shared `install-nixie` action.
+documentation leg through the SHA-pinned shared `install-nixie` action. When
+`XDG_RUNTIME_DIR` exists and is writable, the target uses it for Nixie's
+temporary working files; otherwise it falls back to the system temporary
+directory. This keeps those files off the shared `/tmp` volume while nested
+Cargo fixture builds may also be using it.
 
 ### Verus scope and trust boundary
 
@@ -1548,27 +2435,47 @@ For the current clone-detector constructors, the split is:
 - Kani executes the real constructor with one concrete acceptance harness, one
   bounded symbolic harness over `[0, 128]²`, and one overflow harness that
   forces the `checked_mul(None)` branch.
-- Kani executes real `MinHasher::sketch` calls for empty input, deterministic
-  output, and duplicate retained hashes. The non-empty harnesses keep their
-  symbolic domains intentionally bounded: determinism proves equality at an
-  arbitrary signature lane for a fixed retained hash, while duplicate-hash
-  insensitivity proves a symbolic bounded retained hash at the first signature
-  lane.
-- Kani verifies bounded `LshIndex` states for no self-pairs, canonical pair
-  ordering, repeated-band deduplication, and insertion-order independence. In
-  `#[cfg(kani)]` builds, `LshIndex` records inserted fragments in a fixed
-  four-slot proof log with compact two-band keys; normal builds keep the
-  production `BTreeMap`/`BTreeSet` implementation and public API.
+- Kani checks the empty-input error through `MinHasher::sketch`, the lane
+  minimum for fixed mixed hashes through `minimum_mixed_hash`, and sorting and
+  deduplication of fixed fingerprints through `unique_hashes`. These bounded
+  proofs do not establish non-empty full-signature determinism or general
+  duplicate-hash insensitivity; ordinary tests retain those broader runtime
+  obligations.
+- Kani checks no self-pairs, canonical pair ordering, bounded shared-band
+  scenarios, and insertion-order independence through a proof-specific model. In
+  `#[cfg(kani)]` builds, `insert` records up to four fragments with at most
+  two compact band keys. `candidate_pair_summary_for_kani` checks each recorded
+  pair for any shared band, then uses `CandidatePair::new` and a fixed-array
+  pair summary. It does not run production `candidate_pairs` or
+  `add_bucket_pairs`, so the production B-tree bucket emissions and final
+  cross-band deduplication remain covered by runtime tests and BDD scenarios.
 - Kani verifies AST span-cover selection and bounded AST feature invariants
-  over synthetic `NormalizedTree` values. It calls the production
-  `select_smallest_covering` helper for covering-node minimality and root
-  fallback, and uses compact bounded tree fixtures for feature invariants so
-  the proof does not compile or model `ra_ap_syntax`.
+  over synthetic `NormalizedTree` values. The missing-cover harness checks that
+  empty and concrete non-covering candidate lists return `None`; it does not
+  execute parser-root fallback. The parser adapter's pruned tree walk and the
+  parser-independent `select_smallest_covering` helper share the same covering
+  and minimal-width decision predicate, which Kani checks without compiling or
+  modelling `ra_ap_syntax`. Compact bounded tree fixtures keep feature proofs
+  independent of parser internals. The full-range `u16` `KindId` round trip has
+  its own harness. The depth-only harness uses fixed kinds and checks the
+  shared preorder depth visitor with a four-slot array tally, so it proves the
+  five-node depth counts without entering production `BTreeMap` internals. Its
+  unwind bound of six covers five node visits and the loop's final termination
+  check; the child loop has at most two children plus exhaustion. Unwinding
+  assertions remain enabled. A separate scalar harness checks `KindId` equality
+  and ordering against raw `u16` comparisons for each pair among the root, two
+  child labels, and query label. Four values from two symbolic bits represent
+  every equality partition and relative ordering those four roles can have. It
+  has no loops to unwind and does not model map operations. Unit tests and
+  proptest cover the production traversal and `BTreeMap` count accumulator. A
+  generated-source property also varies identifier and integer-literal payloads
+  while checking normalized AST-hash equality.
 - Verus proves the AST feature-count accumulator algebra for supplied
-  `(kind, depth)` contributions. The proof establishes adjacent two-item order
-  independence for exact counts; ordinary tests and proptest remain responsible
-  for proving that production traversal supplies the intended contribution
-  multiset.
+  `(kind, depth)` contributions. `lemma_fold_count_is_permutation_invariant`
+  establishes that equal contribution multisets yield equal exact counts for
+  every queried bucket. It does not prove that production traversal emits those
+  multisets; Rust unit tests and `proptest` exercise that traversal
+  correspondence.
 - Ordinary unit tests and `rstest-bdd` scenarios pin the concrete lexical
   `FragmentId` ordering contract that the `CandidatePair` proof's bridge still
   trusts rather than proving from `String` internals, and they pin the AST
@@ -1583,7 +2490,8 @@ The proof targets are thin wrappers over repository scripts:
   executable, and installs the Rust toolchain that Verus requests.
 - `scripts/run-verus.sh` selects proof groups and executes each `.rs` proof
   file in turn, including `verus/clone_detector_ast_features.rs` for the
-  clone-detector group.
+  clone-detector group and `verus/string_continuation_rewrite.rs` for the
+  `string-literals` group.
 - `scripts/install-kani.sh` downloads the pinned pre-built Kani release into
   `${XDG_CACHE_HOME:-$HOME/.cache}/whitaker/kani`, installs the matching
   nightly Rust toolchain via `rustup`, and symlinks that toolchain into the
@@ -1593,13 +2501,52 @@ The proof targets are thin wrappers over repository scripts:
   clone-detector harnesses one harness per `cargo-kani` invocation so each
   proof appears explicitly in the output, including the overflow-specific
   harness for `LshConfig::new`, the bounded `MinHasher::sketch` harnesses, and
-  the bounded `LshIndex` candidate-pair invariant harnesses. Clone-detector
-  Kani invocations use `--no-default-features` so parser-independent proofs do
-  not compile `ra_ap_syntax`.
+  the bounded `LshIndex` candidate-pair invariant harnesses. The
+  `string-literals` group runs the bounded continuation-scanner harness
+  `verify_scanner_matches_bounded_parity_reference` from
+  `crates/whitaker_string_literals/src/continuation/kani.rs` at
+  `--default-unwind 9`, so it stays within the limited runner's budget. Each
+  group is invoked by name rather than by running every harness in the
+  workspace. Clone-detector Kani invocations use `--no-default-features` so
+  parser-independent proofs do not compile `ra_ap_syntax`. Every invocation
+  runs through `scripts/run-kani-limited.sh`, which applies an 8 GiB
+  process-tree memory cap, disables swap for that cgroup, and enforces a
+  ten-minute timeout. It records peak memory and duration. A timeout, resource
+  failure, or missing resource measurement is a failed or inconclusive proof,
+  never a pass. The `WHITAKER_KANI_MEMORY_MAX_BYTES` and
+  `WHITAKER_KANI_TIMEOUT_SECONDS` overrides can lower these limits but cannot
+  raise them.
+
+The limited runner requires Linux, a running user systemd session,
+`systemd-run`, `systemctl`, GNU `timeout`, and cgroup v2 with its memory
+controller enabled. It stops before starting a proof when any prerequisite is
+unavailable. Kani runs through this wrapper are unsupported on macOS; use a
+Linux host for Kani proofs. On systemd 258 and later, the wrapper disables
+systemd's command environment expansion so the child Bash receives its script
+unchanged
+([`systemd-run` manual](https://man7.org/linux/man-pages/man1/systemd-run.1.html)).
+
+The workflow contract tests keep preflight-failure inputs in the private
+`_PreflightCase` rows in
+[`kani_runner_contract_test.py`](../tests/workflow_contracts/kani_runner_contract_test.py).
+The type is local to that module: each row pairs runner arguments, stubbed
+prerequisites, environment overrides, and the expected diagnostic for one
+parameterized test. Keep this case shape local unless another contract module
+needs to exercise the same runner boundary.
 
 The installer scripts are idempotent. The first proof run may take longer while
 toolchains and verifier binaries are downloaded; later runs reuse the cached
 installation.
+
+### Release builds keep overflow checks on
+
+`[profile.release]` sets `overflow-checks = true`. Lint libraries are shipped
+as release builds — `installer/src/builder.rs` passes `--release` — while UI
+tests build in debug, where checks are already on. For byte-offset arithmetic
+that difference decides whether an underflow panics or wraps silently in the
+artefact users actually load. The `checked_*` calls in the source are the
+primary defence; this profile setting makes the fallback fail loudly instead of
+producing an off-by-a-huge-number span.
 
 ### Examples
 
@@ -1617,12 +2564,18 @@ Run a Verus group directly through the wrapper:
 ./scripts/run-verus.sh all --time
 ```
 
+Run one clone-detector Kani harness while iterating:
+
+```sh
+./scripts/run-kani.sh clone-detector-harness verify_kind_counts_stop_at_max_depth
+```
+
 Run all Kani groups, a specific decomposition harness, or the clone-detector
 group directly:
 
 ```sh
 ./scripts/run-kani.sh
-./scripts/run-kani.sh verify_build_adjacency_preserves_edges
+./scripts/run-kani.sh decomposition verify_propagate_labels_preserves_label_indices
 ./scripts/run-kani.sh clone-detector
 ```
 
@@ -1632,29 +2585,82 @@ Use these runbooks when the Rust nightly or `ra_ap_syntax` parser snapshot must
 move. They are intentionally procedural because both changes affect Dylint,
 parser APIs, snapshots, and proof tooling.
 
+### Toolchain policy exception
+
+The estate's `rust-toolchain-policy` rule (RT-023, RT-024, RT-025) expects a
+pinned nightly to be at most 56 days old and moved by Dependabot's
+`rust-toolchain` entry. Whitaker is the recorded exception: the pinned channel,
+`nightly-2026-05-28`, is coupled to the `ra_ap_syntax` parser snapshot and to
+the vendored `clippy_utils`, which track `rustc_private` APIs of one specific
+nightly. A bare date bump breaks both, so the pin moves only through the
+runbooks below, never through an automated bump or to satisfy the freshness
+window. The same coupling means no stable toolchain builds the Dylint lint
+crates and the root `whitaker` crate, so there is no stable MSRV for RT-025 to
+ask for of them. The exception does not cover the published installer:
+`installer/Cargo.toml` declares `rust-version = "1.85"` and the installer
+compatibility checks above keep validating it on that release.
+
+This section names the pinned channel on purpose. The rule treats an exception
+as current only while it names the channel in `rust-toolchain.toml`, so every
+toolchain bump must update the channel written here as part of the runbook
+(step 7 below). A stale exception stops exempting anything.
+
 ### Rust toolchain bump runbook
 
 1. Change `rust-toolchain.toml` to the target pinned nightly channel.
 2. Install or refresh the required components:
-   `rustup component add rust-src rustfmt clippy rustc-dev llvm-tools-preview`.
+
+   ```sh
+   rustup component add rust-src rustfmt clippy rustc-dev llvm-tools-preview rust-analyzer
+   ```
+
 3. Rebuild the whole workspace with the newly pinned channel before making
    feature changes. Fix `clippy_utils`, lint-crate, and `rustc_private` API
    drift in the production code rather than suppressing warnings.
 4. Confirm `cargo-dylint` and `dylint-link` can drive the pinned nightly. If
-   no compatible Dylint release exists, stop and record the blocker.
-5. Run the UI tests and re-baseline `.stderr` fixtures only after reviewing the
+   no compatible Dylint release exists, stop and record the blocker. Prove it
+   with a cold probe, not `--version`: an empty `DYLINT_DRIVER_PATH`, the real
+   lint libraries, a deliberate violation that must emit its named diagnostic,
+   and public Clippy denied, repeated warm and with `RUSTC_WRAPPER` set.
+5. Re-pin the Clippy snapshot in `installer/clippy-snapshot.toml`:
+   - set `toolchain` to the new channel and, when Clippy has moved on, `commit`
+     to a newer `main` commit;
+   - choose a nightly that Clippy itself pinned (`rust-toolchain.toml` on
+     Clippy `main` names it), because verification requires the selected
+     revision to name exactly the pinned channel;
+   - set `selected_revision` to the first commit on `main`'s first-parent
+     history that introduced that channel, and `dylint_version` to the pinned
+     Dylint release;
+   - run `make clippy-snapshot-bundle`, which installs the bundle through the
+     consumer's verifier and fails if the recorded selection is wrong, then
+     run the ignored companion test against the result with
+     `WHITAKER_CLIPPY_SNAPSHOT_REPO=<generation> cargo nextest run -p
+     whitaker-installer --lib --run-ignored ignored-only -E
+     'test(the_published_snapshot_selects_the_recorded_revision)'`, which
+     checks Dylint's own walk as well as Whitaker's;
+   - run `make dylint-smoke` against the new generation.
+
+   The rolling release publishes the new bundle on the next push to `main`.
+   Older snapshot assets stay published for installers that pin them.
+6. Run the UI tests and re-baseline `.stderr` fixtures only after reviewing the
    diagnostic drift. Treat changed spans, wording, and suggestions as evidence
    to review, not as an automatic blessing.
-6. Update load-bearing toolchain references, including installer package
+7. Update load-bearing toolchain references, including installer package
    scripts, release workflow strings, ADR-001 notes, and any design or roadmap
-   text that names the old channel.
-7. Run the normal gates in order: `make check-fmt`, `make lint`, `make test`,
+   text that names the old channel, and the channel named in the "Toolchain
+   policy exception" section above.
+8. Run the normal gates in order: `make check-fmt`, `make lint`, `make test`,
    and `make markdownlint`. Run relevant proof targets if the bump touches
    clone-detector or decomposition proof surfaces.
-8. Keep `CARGO_LOCKED` empty by default. Makefile Cargo recipes pass the value
+9. Keep `CARGO_LOCKED` empty by default. Makefile Cargo recipes pass the value
    through unchanged so callers can opt into `--locked` explicitly when they
    need Cargo to enforce the lockfile for a build, lint, package, or test
    command.
+10. Re-run the `string_continuation_style` source probe, described in
+    [Early-pass maintenance](#early-pass-maintenance), and re-record the
+    transcript. The items it pins are listed there; the failure that matters
+    most is a semantic change in `FormatArgs::is_source_literal`, which
+    converts firing cases into silence without failing any test.
 
 ### `ra_ap_syntax` re-pinning runbook
 
@@ -1663,11 +2669,11 @@ parser APIs, snapshots, and proof tooling.
    explicitly requires that trade-off.
 2. Exact-pin the parser dependency in the workspace `Cargo.toml` under
    `[workspace.dependencies]`. The accepted outcome is an entry such as
-   `ra_ap_syntax = "=0.0.334"` with the `parser` feature wired through
-   `whitaker_clones_core`. Loose pins, invalid specifiers, or a missing
-   workspace dependency must fail the re-pin attempt. If more than three
-   transitive crates need manual `cargo update --precise` pins, stop and record
-   the mismatch.
+   `ra_ap_syntax = "=0.0.334"` with one equality comparator and a complete
+   major/minor/patch version. The build guard parses the version and rejects
+   partial versions, extra comparators, loose pins, and a missing workspace
+   dependency. If more than three transitive crates need manual
+   `cargo update --precise` pins, stop and record the mismatch.
 3. Keep parser imports confined to `src/ast/lowering.rs`. If a parser API
    change tempts domain code to import `ra_ap_syntax`, update the lowered
    `NormalizedTree` boundary instead.
@@ -1768,17 +2774,18 @@ to `pub(crate)` visibility:
   `SimilarityEdge` and `build_adjacency`.
 - **`build_adjacency` function**
   (`common/src/decomposition_advice/community.rs`): Promoted from `fn` to
-  `pub(crate) fn` so that colocated Kani harnesses and the test-support
-  adjacency report can call it directly without widening the crate's public API
-  surface.
+  `pub(crate) fn` so that unit tests and the test-support adjacency report can
+  call it directly without widening the crate's public API surface. Adjacency
+  invariants are checked through generated property tests; CBMC's Vec models
+  exceeded the configured process-tree memory cap.
 - **`SimilarityEdge::new(left, right, weight)`**
-  (`common/src/decomposition_advice/community.rs`): A `pub(crate)` constructor
-  added to allow Kani harnesses and test-support modules to create edge values
-  without exposing a public constructor on the production type. It is used
-  internally by `adjacency_report` to convert validated `EdgeInput` values into
-  `SimilarityEdge` instances before delegating to `build_adjacency`. External
-  callers should use `adjacency_report` rather than constructing
-  `SimilarityEdge` directly.
+  (`common/src/decomposition_advice/graph.rs`): A `pub(crate)` constructor in
+  the private `graph` module, re-exported through `community` for
+  crate-internal tests and test-support code. It creates edge values without
+  exposing a public constructor on the production type. `adjacency_report` uses
+  it to convert validated `EdgeInput` values before delegating to
+  `build_adjacency`, which remains in `community.rs`. External callers should
+  use `adjacency_report` rather than constructing `SimilarityEdge` directly.
 
 This pattern keeps the runtime API narrow while giving verification and test
 code the access it needs.
@@ -1869,10 +2876,82 @@ Current explicit targets:
 - `whitaker-package-dependency-binary` from
   `src/bin/package_dependency_binary.rs`
 
+The four helpers (`whitaker-package-lints`, `whitaker-package-installer`,
+`whitaker-package-dependency-binary` and `whitaker-clippy-snapshot`) declare
+`required-features = ["release-tools"]`, so `cargo install` and
+`cargo binstall` build and expect only `whitaker-installer` (issue #509). Every
+command that builds or runs a helper passes `--features release-tools`; the
+test build enables it through the self dev-dependency. The contract in
+`tests/workflow_contracts/helper_binaries_feature_test.py` fails when a command
+naming a helper omits the feature.
+
 Without explicit declarations, Cargo would infer fallback names such as
 `package_lints` and `package_installer_bin`. Those names do not match the
 workflow invocations, so release and rolling-release builds would fail even
 though the source files exist.
+
+### Which libraries the rolling archive ships
+
+`whitaker-package-lints --release-dir` ships `libwhitaker_suite` and the crates
+in the installer's `LINT_CRATES` that `PINNED_INSTALLER_LINT_CRATES`
+(`installer/src/bin/package_lints.rs`) also names. `LINT_CRATES` holds standard
+lints only; experimental lints, in `EXPERIMENTAL_LINT_CRATES`, are never
+packaged and are absent from the default suite. The pinned list is the
+`LINT_CRATES` of the oldest installer that `install-whitaker` still offers
+(v0.2.9, whose nine crates v0.2.10 and v0.2.11 share). It is a second guard: an
+installer prunes an unrequested standalone library only when it knows the
+crate's name, so a library for any newer crate would load beside the suite and
+rustc would reject the duplicate lint registration (issue #565, where
+`string_continuation_style` shipped both ways). Add a crate to the pinned list
+only when the oldest pinned installer lists it. The unit tests and the process
+test in `installer/tests/behaviour_packaging_cli.rs` package a release
+directory that holds every library and assert the archive and manifest hold
+exactly the standard lints and the suite.
+
+### The pre-publish installer check
+
+The `publish` job runs `scripts/check_prune_safety.py` before it uploads
+anything. It reproduces the behaviour of the oldest installer any caller pins
+(`OLDEST_INSTALLER_TAG` in `rolling-release.yml`, today v0.2.11); it does not
+run that installer, which has no route to install from a local archive. Two
+checks, both offline after fetching the tag and one table:
+
+- **Prune.** The script reads the installer's `LINT_CRATES` and
+  `EXPERIMENTAL_LINT_CRATES` from its release tag (never a committed copy),
+  lists the real entries of every built `.tar.zst` archive, removes the crates
+  that installer prunes from a suite install, and fails unless only
+  `libwhitaker_suite` is left. A standalone library the installer cannot prune
+  loads beside the suite, and rustc rejects the duplicate lint registration
+  (issues #355 and #565). It also fails when a sidecar manifest's `files`
+  disagree with its archive.
+- **Toolchain.** Each manifest's `toolchain` must equal the toolchain that
+  `leynos/shared-actions` `install-whitaker/clippy-snapshots.tsv` maps that
+  installer to. A mismatch names both values and stops the publish (issue #555).
+
+Library names are checked with the archive's target rules (`lib` prefix and
+`.so`, `.dylib` or `.dll` as the installer derives them), and each archive's
+file name must equal the one its manifest implies (`git_sha`, `toolchain`,
+`target`).
+
+The clean-up after an upload removes a superseded lint archive only when no
+manifest currently on the release still names it. A build leg that failed
+publishes nothing for its target, so that target's old manifest stays and keeps
+its archive. (The `publish` job runs with `always()` after partial matrices, so
+this case is reachable.)
+
+Publishing never moves the `rolling` tag. Installs read assets through the
+release by tag name, and the manifest records the commit built. A tag move
+needs a token that may update a ref onto commits touching `.github/workflows`,
+which `GITHUB_TOKEN` is not (HTTP 403), and it ran before the
+superseded-archive clean-up, so a failure left stale archives behind. The
+release is created once, with `--target` at the published commit, and the tag
+is left where it is.
+
+An unreadable tag or table, a missing `git` or `tar`, or a malformed manifest
+exits 2: a failed check never counts as a pass. A failure ends the job before
+the upload, so the published `rolling` release stays as it was.
+`make test-prune-safety` runs the tests, including the #565 and #555 shapes. The
+`verify-published-bootstrap` job still lints a fixture after publication.
 
 ### Validation coverage and purpose
 
@@ -1889,6 +2968,35 @@ Workflow validation in `tests/workflows/` protects this contract from drift:
 
 When modifying release helpers, keep the workflow YAML, `installer/Cargo.toml`,
 and the metadata-based tests in lock-step.
+
+### Archive entries are regular files
+
+Every `tar::Builder` that produces a published archive calls
+`archive.sparse(false)`: `create_tgz_archive` in `installer_packaging.rs` and
+`dependency_packaging.rs`, and `create_archive` in `artefact/packaging.rs`. The
+`tar` crate stores a file with holes as a GNU sparse entry (typeflag `S`) by
+default, and a linked release binary often has holes on the build runner's
+filesystem. cargo-binstall's extractor unpacks only regular files and
+directories and skips anything else without an error, so it found no binary in
+the installer archive and fell back to compiling from source on every install,
+as [issue #461][whitaker-issue-461] reported. GNU tar and the `tar` crate read
+a sparse entry correctly, so nothing but the entry type shows the defect.
+
+`installer/src/archive_entry_type_tests.rs` drives all three packagers over a
+file with a four-megabyte hole and requires every entry to be `Regular` or
+`Directory`. On Linux, where `tar` detects holes with `SEEK_HOLE`, it also
+proves that a default builder stores the same file as `GNUSparse`, so the
+fixture cannot pass by never producing the case. Any new packager that builds a
+tar archive must disable sparse entries and join that module.
+
+After a tagged release publishes, `release.yml`'s `verify-binstall` job
+installs the new version with
+`cargo binstall --disable-strategies compile,quick-install`, so an archive
+binstall cannot use fails the release run rather than compiling quietly.
+`tests/workflow_contracts/release_binstall_contract_test.py` holds that job's
+command, its pinned `cargo-binstall` and its condition.
+
+[whitaker-issue-461]: https://github.com/leynos/whitaker/issues/461
 
 ### Workflow test support and local runner configuration
 
@@ -1982,7 +3090,7 @@ Example entry:
 [[dependency_binaries]]
 package = "cargo-dylint"
 binary = "cargo-dylint"
-version = "6.0.1"
+version = "6.3.0"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/trailofbits/dylint"
 ```
@@ -2049,7 +3157,7 @@ no longer implements `io::Write`, so neither `format!("{:x}", digest)` nor
 shared by `downloader.rs`, `artefact/packaging.rs`, and the `sha256_hex` test
 helper.
 
-`installer/src/deps.rs` drives the high-level fallback order:
+`installer/src/deps/mod.rs` drives the high-level fallback order:
 
 1. Attempt the repository-hosted dependency archive for the current target.
 2. Verify the installed tool is now usable. `cargo-dylint` is checked by
@@ -2107,43 +3215,100 @@ underlying linker. It therefore has no reliable self-reporting subcommand.
 toolchain are present in the ambient environment, so it reports on the
 environment rather than on the artefact. Executing it as a health check
 rejected valid, checksum-verified release artefacts and forced a
-`cargo install --locked --version 6.0.1 dylint-link` fallback that cannot
+`cargo install --locked --version 6.3.0 dylint-link` fallback that cannot
 compile on toolchains below the crate's rustc floor, breaking consumers pinned
 to older toolchains.
 
 The trust boundary for a repository-release install is the install pipeline:
 the release asset name pins the package and version, the `.sha256` sidecar
 establishes integrity, extraction confirms the expected archive member, and the
-permission step establishes launch eligibility. `repository_install_verified()`
-in `installer/src/deps/install.rs` therefore accepts `dylint-link` as soon as
-that pipeline reports success, and retains the generic version check for
-`cargo-dylint`. Genuine pipeline failures still fall back to Cargo.
+permission step establishes launch eligibility. The implementation lives in
+`installer/src/deps/install_repository.rs`. Its `RepositoryInstallRequest`
+groups the command executor, dependency tool and release metadata;
+`attempt_repository_install()` returns either `RepositoryInstall::Installed` or
+`RepositoryInstall::FallBack`, including the reason and whether Binstall should
+be skipped. The private `repository_install_verified()` helper therefore accepts
+`dylint-link` as soon as that pipeline reports success, and retains the
+generic version check for `cargo-dylint`. Genuine pipeline failures still fall
+back to Cargo.
 
 A Cargo-managed `dylint-link` already on `PATH` is checked by resolving an
 executable file and comparing the version Cargo recorded for it, which needs no
 execution either.
 
-The `dylint-link` verification in `installer/src/deps.rs` is implemented by
-five small private helpers:
+The `dylint-link` verification in `installer/src/deps/mod.rs` is implemented by
+six small private helpers:
 
-- `find_binary_on_path(binary_name)` returns the first executable candidate so
-  the installation check can validate the exact path it found.
-- `find_binary_in_directory(directory, binary_name)` performs the per-directory
-  search that `find_binary_on_path()` uses while walking `PATH`.
-- `binary_candidates(directory, binary_name)` builds the ordered set of
-  candidate paths that each directory contributes to the lookup.
-- `is_executable_file(path)` applies the platform-specific file test:
-  executable-bit plus regular-file checks on Unix, and `path.is_file()` on
-  non-Unix targets where the executable suffix carries the meaning.
+- `find_binary_on_path(binary_name)` returns a `PathScanResult` containing the
+  first executable path and classified failures encountered during the scan.
+- `scan_path_directories(directories, binary_name)` scans the supplied ordered
+  `PathBuf` entries and returns a `PathScanResult` with the first match and
+  failures from entries checked before that match.
+- `find_binary_in_directory` checks candidates relative to one PATH entry and
+  returns the first match joined to the original directory. Its inputs make the
+  path, binary name, and failure accumulator explicit:
+
+  ```rust
+  fn find_binary_in_directory(
+      directory: &Path,
+      binary_name: &str,
+      failures: &mut Vec<PathScanFailure>,
+  ) -> Option<std::path::PathBuf>
+  ```
+
+  It converts the entry to `camino::Utf8Path`, opens a `cap_std::fs_utf8::Dir`,
+  and checks candidate names relative to that capability. Non-UTF-8 entries and
+  directories that cannot be opened are skipped; classified failures are
+  appended without retaining the path.
+- `binary_candidates(binary_name: &str) -> Vec<String>` returns candidate
+  executable names in probe order. Unix returns the requested name unchanged.
+  Windows preserves a name with an extension as its sole candidate; otherwise,
+  it appends the `PATHEXT` suffixes in configured order, skipping suffixes
+  already present at the end of the name, case-insensitively.
+- `is_executable_file` has this signature:
+
+  ```rust
+  fn is_executable_file(
+      directory: &Dir,
+      candidate: &Utf8Path,
+      failures: &mut Vec<PathScanFailureCategory>,
+  ) -> bool
+  ```
+
+  It obtains metadata with `Dir::metadata`, requires a regular file and, on
+  Unix, at least one executable permission bit. Ordinary `NotFound` misses add
+  no failure category, while other metadata errors add the bounded `metadata`
+  category to the caller-provided list.
 - `windows_path_extensions()` normalizes `PATHEXT` on Windows so
   `binary_candidates()` can expand extensionless names the same way the shell
   does.
+
+`PathScanResult` is a narrowly scoped report for this PATH scan: it carries the
+first matching path and the bounded categories encountered while checking
+entries. It is not a reusable filesystem abstraction. The scan helpers return
+these classifications without logging. At verbose level, the installer CLI
+emits structured debug events with `binary_name` and `failure_category`; it
+does not record PATH values or candidate paths.
+
+`check_dylint_tools()` returns `Result<DylintToolStatus>`. A successful status
+with a `false` field means the query established that a tool is absent or does
+not match the pinned version. Command-spawn and Cargo-registry errors propagate
+as errors; if PATH scanning finds no binary after a non-missing lookup failure,
+it returns `InstallerError::DependencyCheck`. The install flow only starts
+installation after a successful query reports a missing tool. The query uses the
+`CommandExecutor` and `BinaryLocator` interfaces, and returns PATH diagnostics
+without emitting tracing events. The CLI logs those diagnostics at the command
+boundary. Cargo's explicit `no such command: dylint` response is treated as an
+absent tool; other nonzero command results and successful version probes that
+report no semantic version are query errors.
 
 These key helpers are covered by direct unit tests in
 `installer/src/deps/path_tests.rs` for missing PATH values, empty PATH values,
 multiple PATH directories, non-executable Unix files, executable Unix files,
 broken PATH shims, and Windows `PATHEXT` resolution via both direct helper
-tests and `check_dylint_tools()`.
+tests and `check_dylint_tools()`. Availability tests also verify that query
+failures remain errors, do not emit tracing events, and stop before the install
+callback.
 
 Installer PATH-fixture helpers now live in
 `installer/src/test_utils/dependency_binary_helpers.rs` instead of being
@@ -2160,6 +3325,12 @@ duplicated across multiple test modules. The key helpers are:
   by `installer/src/tests.rs` to force the direct Cargo fallback path without
   network access.
 
+The end-to-end tracing test in `installer/tests/tracing_cli.rs` keeps its
+workspace, fake executables, and child environment private to that test module.
+Those helpers model the test's controlled CLI failure and tracing contract;
+they are not shared PATH utilities. Its `CliMode`, `DependencyPackage`, and
+`FixtureExecutable` types represent only the finite choices used by this test.
+
 ### CLI tool usage
 
 Release automation uses the `whitaker-package-dependency-binary` helper in
@@ -2168,7 +3339,8 @@ Release automation uses the `whitaker-package-dependency-binary` helper in
 Package one executable:
 
 ```sh
-cargo run -p whitaker-installer --bin whitaker-package-dependency-binary -- \
+cargo run -p whitaker-installer --features release-tools \
+  --bin whitaker-package-dependency-binary -- \
   package \
   --package cargo-dylint \
   --target x86_64-unknown-linux-gnu \
@@ -2179,7 +3351,8 @@ cargo run -p whitaker-installer --bin whitaker-package-dependency-binary -- \
 Generate the shared provenance document:
 
 ```sh
-cargo run -p whitaker-installer --bin whitaker-package-dependency-binary -- \
+cargo run -p whitaker-installer --features release-tools \
+  --bin whitaker-package-dependency-binary -- \
   provenance \
   --output-dir /tmp/dist
 ```
@@ -2209,11 +3382,11 @@ A forced manual rebuild now has a prepublication gate. Both five-target build
 matrices must finish successfully. The gate then requires each target's lint
 archive and manifest, and every dependency archive and matching SHA-256 sidecar
 declared by `installer/dependency-binaries.toml`. If a build, download, or
-checksum fails, the run fails before changing the `rolling` release or tag.
-This strict rule applies only to a manual run with the force input enabled;
-ordinary pushes and unforced manual runs retain the rolling release's
-documented partial-publication policy. `scripts/check-forced-rolling-assets.sh`
-owns this local preflight for the rolling workflow's publish job. It is not a
+checksum fails, the run fails before changing the `rolling` release. This
+strict rule applies only to a manual run with the force input enabled; ordinary
+pushes and unforced manual runs retain the rolling release's documented
+partial-publication policy. `scripts/check-forced-rolling-assets.sh` owns this
+local preflight for the rolling workflow's publish job. It is not a
 tagged-release or consumer asset validator; those paths keep their own checks.
 
 Each sidecar has one GNU checksum record: a digest, a text marker of two spaces
@@ -2296,8 +3469,10 @@ across the project's behavioural tests.
 
 - Feature file:
   `installer/tests/features/dependency_binaries.feature`
-- Step definitions and scenario bindings:
+- Step definitions:
   `installer/tests/behaviour_dependency_binaries.rs`
+- Scenario bindings:
+  `installer/tests/behaviour_dependency_binaries/scenarios.rs`
 - Test helpers:
   `installer/src/test_utils/dependency_binary_helpers.rs`
 - Shared test utilities:
@@ -2310,11 +3485,11 @@ To add a new scenario:
 1. Append the scenario to the `.feature` file using existing Given/When/Then
    step vocabulary.
 2. If the scenario requires new steps, add step functions annotated with
-   `#[given(...)]`, `#[when(...)]`, or `#[then(...)]` in the behaviour test
-   file.
-3. Add a `#[scenario(path = "...", index = N)]` binding function at the
-   bottom of the behaviour test file, where `N` is the zero-based scenario
-   index.
+   `#[given(...)]`, `#[when(...)]`, or `#[then(...)]` in
+   `behaviour_dependency_binaries.rs`.
+3. Add a `#[scenario(path = "...", index = N)]` binding in
+   `behaviour_dependency_binaries/scenarios.rs`, where `N` is the zero-based
+   scenario index.
 4. Update `dependency_binary_helpers.rs` if the scenario introduces new
    expected command sequences.
 
@@ -2323,13 +3498,31 @@ To add a new scenario:
 - **`StubExecutor`** records expected command invocations in sequence and
   returns predefined `Output` values. Call `assert_finished()` after the test
   body to verify all expected commands were consumed.
-- **`ExpectedCallConfig`** drives `expected_calls()` to generate the full
-  expected command sequence for a given tool and fallback configuration.
+- **`RepositoryVerification`** selects whether repository-install verification
+  is skipped, succeeds, or fails. `ExpectedCallConfig` combines that outcome
+  with the fallback configuration.
+- **`expected_calls()`** returns a `Result` because expected-command generation
+  can fail, for example when a tool is unknown or absent from the dependency
+  manifest. Propagate that error from the scenario setup rather than silently
+  accepting an incomplete command sequence.
 - **`StubDirs`** provides a minimal `BaseDirs` implementation that returns
   a configurable bin directory.
 - **`StubRepositoryInstaller`** (in the behaviour test) implements
   `DependencyBinaryInstaller` with configurable success or failure behaviour
   for scenario isolation.
+- **Fake-binary helpers** write successful or chosen-exit-status executables
+  and can temporarily put fake directories on `PATH`. Their platform-aware
+  paths and guarded environment update let scenarios exercise executable
+  discovery without relying on installed tools.
+
+### Shared SARIF test JSON helpers
+
+Unit and integration tests share JSON assertions from
+`crates/whitaker_sarif/src/test_support.rs`. Use `assert_json_round_trip()` to
+check that a value survives JSON serialization and deserialization unchanged;
+it fails if deserialization changes the value. Use `assert_serialized_json()`
+when a test needs to inspect the serialized JSON string directly. These helpers
+are test support, not part of the public API.
 
 ## Shared span recovery helpers
 
@@ -2422,6 +3615,154 @@ Unit coverage for both rules lives in
 `crates/function_attrs_follow_docs/src/tests/order_detection.rs`
 (`parsed_attribute_span_recovers_whitelisted_kinds` and
 `attribute_within_item_span_boundaries`).
+
+## Writing an early pass
+
+`string_continuation_style` is the suite's only `EarlyLintPass`. It runs on
+rustc's expanded AST, which is the only phase that can see both a literal's
+source spelling and its parsed `FormatArgs`. A late (HIR) pass cannot see
+`ExprKind::FormatArgs` at all, because format arguments are lowered away, and a
+pre-expansion pass cannot see which format arguments are implicit captures. If
+a future lint needs either, it needs an early pass, and these constraints come
+with it.
+
+### `EarlyContext` has no `TyCtxt`
+
+An early pass receives `&EarlyContext<'_>`, which offers the lint store, the
+session, span snippet recovery, and the AST. It has no type information, no
+resolved paths, no name resolution, and no HIR. Design the check around the
+syntax it can see, or accept that it belongs in a late pass instead. The
+adapter in `crates/string_continuation_style/src/driver/` converts AST nodes
+into a plain `LiteralFacts` value and hands everything else to
+`whitaker_string_literals`, which is rustc-free; that split is what makes the
+policy verifiable without a compiler.
+
+### `is_source_literal` is the only trustworthy provenance test for format strings
+
+`FormatArgs::is_source_literal` is true only when the format string was written
+in source. A format string produced by `concat!()`, `include_str!()` or another
+eager macro is false, and there is no source literal to rewrite. This is the
+check that keeps the lint from suggesting a rewrite of `concat!("a", "b")` into
+`concat!("a", "b")`.
+
+### Wrapper depth, and why `is_root()` is not enough
+
+`Span::ctxt().is_root()` looks like a provenance test and is not one. A literal
+captured by a `$l:literal` matcher reaches a post-expansion pass with a root
+syntax context, so a lint that trusted `is_root()` would offer a rewrite that
+does not compile. `crates/string_continuation_style/src/driver/depth.rs`
+therefore counts *wrapper depth*: the number of enclosing AST containers whose
+span is `from_expansion()`. Depth zero means nothing that could have matched
+the literal stands between it and the compiler.
+
+The count is not maintained by balanced `check_*` hooks. `nightly-2026-05-28`
+has no `check_stmt_post`, `check_local`, `check_block`, `check_arm` or
+`check_ty` pairing, so the paired hooks alone miss containers. A
+`rustc_ast::visit::Visitor` runs from `check_crate`, pushes and pops explicitly
+for every container kind, and records the spans of literals that pass into an
+`FxHashSet`; the emitting hooks consult membership. Adding a container kind
+means adding its visit method to the visitor, not a hook pair.
+
+The counterpart in the pure domain is the rewrite builder, which re-lexes its
+own output: a generated `concat!()` must parse back as one expression with the
+original fragments before any suggestion is offered.
+
+### Source editability is resolved once, at the compiler boundary
+
+`crates/string_continuation_style/src/driver/edit_policy.rs` decides whether a
+literal's file may be rewritten, and it is the only module in the lint that
+reads the environment. `SourceEditPolicy::from_env` runs once from
+`check_crate`; every later query is `is_editable(&Utf8Path) -> bool`, a pure
+function of a path and two fixed directory lists.
+
+Keep it that way. The query used to call `env::current_dir()` and read
+`CARGO_TARGET_DIR` for each candidate literal, which made it untestable without
+the process environment and gave four different failures one indistinguishable
+answer. Resolving the directories first collapses those failures into a single
+`Option`, which fails closed: an unresolvable workspace root means no
+diagnostic at all, because a missed hint costs the user less than an offered
+edit to generated code.
+
+`SourceEditPolicy::new` takes the workspace root and target directory
+explicitly and is what the unit tests drive. A relative path is anchored at the
+workspace root before the containment test, so `../` segments cannot walk out
+of the tree; the default `target` directory stays excluded even when
+`CARGO_TARGET_DIR` names somewhere else, so an override never re-admits it.
+
+Adding a new host fact follows the same shape: resolve it in `check_crate` and
+pass it down, rather than reading the environment from the per-literal path.
+
+### One definition of "join", shared by the classifier and the gate
+
+`whitaker_string_literals::continuation::joins_only` is the only place that
+decides which scanned continuations are joins. Four call sites depend on that
+rule agreeing with itself:
+
+- `classification::classify`, which decides whether to offer a rewrite at all;
+- `ConcatRewrite::build`, which re-derives the caller's joins from the source
+  and rejects the rewrite when they differ;
+- the `rewrite/props.rs` property test, which builds an expectation;
+- `rewrite/tests.rs`, which builds unit-test expectations.
+
+The gate re-deriving the joins is the reason the rule is shared rather than
+repeated. If `build` and `classify` disagreed about what a join is, `build`
+would reject the very joins `classify` had just supplied, and every affected
+literal would silently fall back to `Ignore`. Tests call the same helper so
+that an expectation cannot encode a stale copy of the rule.
+
+The helper is `pub(crate)` and deliberately not part of the public API: it
+encodes an internal agreement, not a service this crate offers. Two kinds of
+call site are *not* covered and must not be folded in.
+`rewrite::source_gate::is_selected_join` tests a single continuation for
+join-ness as one clause of a longer predicate, and the Kani harness in
+`continuation/kani.rs` counts kinds arithmetically so its loop-free model never
+depends on `Iterator` machinery.
+
+### One generator for the continuation property bodies
+
+`whitaker_string_literals::props` (test-only) owns the assembly of the bodies
+both property suites generate: `source_piece`, `append_continuation`, and
+`body_with_continuations`. The continuation suite checks byte ranges on those
+bodies and the rewrite suite decodes them and compares values, so they must
+generate the same *shapes* while differing in alphabet. Each suite supplies its
+own `ALPHABET` constant; the continuation suite omits the unicodescape and
+emoji that only matter once a value is decoded.
+
+Only the assembly is shared, because that is the part that can silently
+diverge. A change to how continuations, blank lines, and tabs interleave would
+otherwise land in one suite and leave the other green while generating
+different bodies. The alphabets are deliberately duplicated rather than
+parameterized: they encode which constructs each suite has to reach, and a
+single merged alphabet would make both suites pay for the other's inputs.
+
+### Localization and the label spans
+
+The pass emits through the shared `whitaker_common::i18n` helpers so the
+message, `.note`, `.help`, `.label` and `.suggestion` all resolve per locale.
+Each `join_spans` entry becomes a labelled secondary span. Locale resources
+live in `common/locales/{en-GB,cy,gd}/string_continuation_style.ftl`, and the
+`common/tests/i18n_quality` gate requires every en-GB attribute to be present
+and non-empty in each secondary locale. Missing a `.label` would otherwise
+render English into a blessed `ui-cy` golden, which then enforces the bug.
+
+### Early-pass maintenance
+
+The crate depends on `rustc_ast` items that are not covered by the ordinary
+test suite. Re-run the probe recorded as `EV-M0-transcript` in the 2.4.1
+ExecPlan on every toolchain bump, and re-record the transcript. The
+load-bearing items are:
+
+- `FormatArgs::span`, which anchors the diagnostic;
+- `FormatArgs::is_source_literal`, which decides whether a source literal
+  exists at all;
+- `FormatArgs::uncooked_fmt_str`, which supplies the literal to scan;
+- `FormatArgumentKind::Captured`, which forces the "require continuation"
+  decision for implicit captures.
+
+A semantic change in `is_source_literal` is the dangerous one: it turns firing
+cases into silence without failing any test, because silence is the lint's
+normal output for most code. Only the probe distinguishes "the lint is
+correctly quiet" from "the lint stopped seeing anything".
 
 ## Shared fingerprint helpers
 
@@ -2530,7 +3871,7 @@ context by combining a HIR ancestry walk with attribute-shape matching.
 `ContextEntry` items for modules, functions, impls, and blocks, and carries a
 boolean `has_test_context_ancestry` alongside that list. On each step,
 `has_test_ancestry` updates that boolean so the test-only decision can
-propagate from outer ancestors into nested helper code. `summarise_context`
+propagate from outer ancestors into nested helper code. `summarize_context`
 then combines the accumulated entries, the propagated boolean, and
 `in_test_like_context_with(additional_test_attributes)` to produce the final
 `ContextSummary.is_test` result. This pattern matters because user-configured
@@ -2544,8 +3885,26 @@ not just the immediately enclosing function.
     `is_cfg_test_attribute`
   - the current ancestor is a function item whose attributes match Whitaker's
     built-in test list or `additional_test_attributes`
-- `summarise_context` merges that ancestry flag with the collected
+- `summarize_context` merges that ancestry flag with the collected
   `ContextEntry` values to derive the final `ContextSummary.is_test` decision.
+
+rustc removes an evaluated `#[cfg(test)]` from the item and leaves a parsed
+`cfg_trace` marker (`HirAttributeKind::CfgTrace`, a list of the predicates that
+held), so a `#[cfg(test)] mod tests;` declared in another file reaches HIR with
+that marker and no unparsed `cfg` attribute. `is_cfg_test_attribute` therefore
+reads both forms. `cfg_entry_requires_test` treats a `CfgEntry` as test-only
+when it can hold only under `cfg(test)`: the name `test` or `doctest`; an `all`
+with such an operand; an `any` whose alternatives all are. `not`, booleans and
+other names are not. `is_in_cfg_test_module` in `driver/mod.rs` applies that
+check to each module ancestor, which is how helpers and rstest fixtures in a
+companion module are recognized without any path-based exemption.
+`pass_expect_in_cfg_test_items` keeps `cfg(test)` functions, impls and trait
+items recognized as well. The UI fixtures
+`pass_expect_in_file_backed_test_helper` and `pass_expect_in_cfg_test_items`
+run under the `--test` harness for this reason: without it the `cfg(test)`
+items are not compiled at all. The negative example
+`fail_expect_in_non_test_module_named_tests` keeps a module merely named
+`tests` linting.
 
 Real `rstest` case expansion adds a second `--test` harness shape that the
 attribute and direct sibling-descriptor paths do not see. For parameterized
@@ -2709,18 +4068,70 @@ Use this hook only for installer orchestration tests. Release validation,
 prebuilt-download coverage, and user-facing installation flows must continue to
 exercise the real build or download paths.
 
+### Fixture Clippy snapshots for installer tests
+
+An installation now provisions the Clippy snapshot before any workspace or
+library work, and the published snapshot is the full Clippy history.
+Integration tests therefore install a small, real snapshot instead:
+
+- `whitaker_installer::test_utils::SnapshotFixture` (behind `test-support`)
+  commits two rustups to a local repository, bundles it with a `.sha256`
+  sidecar, and writes a manifest pinning it. `configure(&mut Command)` points
+  an installer child process at it; `install(root)` installs it in process.
+- Debug installer binaries read that manifest from
+  `WHITAKER_INSTALLER_TEST_CLIPPY_SNAPSHOT_MANIFEST`
+  (`test_support::TEST_CLIPPY_SNAPSHOT_MANIFEST_ENV`) in place of the embedded
+  one. Release binaries ignore the variable.
+
+The fixture replaces only the manifest and the bundle: download-free
+installation, every integrity check, and Dylint's selection all run for real. A
+test that runs the installer with the real data directory must also set
+`XDG_DATA_HOME` to a temporary directory, because installation records
+`bootstrap.json` there. `installer/tests/bootstrap_run.rs` exercises
+`whitaker-installer run` the same way against a stub `cargo`, covering cold and
+warm runs, concurrent cold runs, relocation, overwritten variables, exit-status
+preservation, and each refusal.
+
 ### Test environment synchronization
 
 Installer regression helpers that mutate process-wide environment variables
 must coordinate through `installer/src/test_support.rs`.
 
-- `env_test_guard()` acquires a shared `Mutex` before any test calls
+- `env_test_guard()` acquires the shared re-entrant guard before any test calls
   `temp_env::with_var` or `temp_env::with_var_unset`.
-- Hold that guard for the full lifetime of the test setup so no parallel case
-  can observe a half-applied environment change.
+- Hold that guard for the full lifetime of the environment mutation, including
+  restoration, so no parallel case can observe a half-applied environment
+  change.
 - `installer/src/staged_suite.rs` shows the intended pattern: acquire the
   guard, create the temporary target directory, then run the env-mutating test
   body.
+
+The guard is re-entrant, so a guarded callback can call another helper that
+acquires it. It serializes the broader test protocol; it does not replace the
+separate lock used by `temp_env`.
+
+For a single variable or locale override, prefer
+`whitaker_common::test_support::{with_env_var, with_env_var_removed,
+with_locale}`.
+Each scoped helper delegates to `temp_env`'s re-entrant global lock, scopes
+restoration to its callback, and permits nested overrides from the same thread.
+That lock is independent of `env_test_guard()`: participants using only one
+lock do not serialize with participants using only the other. Use
+`EnvTestGuard` when a fixture must retain the explicit guard beyond local
+scope, and keep all participants in that protocol on the same guard.
+
+For several variables in one scope, use `with_env_vars`, which applies every
+pair and restores all of them, or `with_env_vars_selected`, which evaluates its
+selector after taking the lock. `with_env_vars` chooses before the lock is
+taken and short-circuits without it when the list is empty, so it suits a fixed
+choice only. Use `with_env_vars_selected` whenever the set depends on the
+current environment — for example, "only the variables the process has not
+already set" — because another thread's scoped mutation cannot then change the
+answer between the decision and the mutation. Its selector runs with the lock
+held, and the callback runs under that same lock until every variable is
+restored; the lock is re-entrant, so a callback may open a nested scope. A
+repeated key is well defined: `temp_env` captures the original value once and
+applies the pairs in order, so the last value wins.
 
 For example:
 
@@ -2736,36 +4147,112 @@ the regression suite: `temp-env` provides scoped environment overrides,
 `tempfile` provides isolated target directories, and `rstest` powers the
 fixture-based test setup used by the staged-suite coverage.
 
-#### Shared UI harness environment guards
+#### Shared UI harness environment overrides
 
 Workspace-level UI harness tests that mutate process-wide environment variables
-must use `whitaker_common::test_support::EnvVarGuard`. Use `EnvVarGuard::set`
-to install a temporary value and `EnvVarGuard::remove` to make a variable
-absent for the duration of a test. The guard acquires `env_test_guard()` only
-while it captures, mutates, or restores the variable; it must not hold that
-mutex while a runner callback executes, because the callback may need its own
-guarded environment setup.
+must use the scoped helpers in `whitaker_common::test_support`: `with_env_var`
+installs a temporary value, `with_env_var_removed` makes a variable absent, and
+`with_locale` overrides or clears `DYLINT_LOCALE` for the duration of a
+callback. The helpers delegate to `temp_env`, whose re-entrant global lock
+serializes scoped mutations while permitting nesting from the same thread. Each
+prior value is restored when the callback returns or panics. The workspace
+forbids `unsafe` code, so tests must not call `std::env::set_var` or
+`std::env::remove_var` directly.
 
 `whitaker::testing::ui::run_with_runner` applies a specialized guard before
-invoking the Dylint UI runner. On every platform it clears `RUSTC_WRAPPER` only
-while the runner needs bare `rustc` invocations for
-`dylint_testing::Test::example`. On Windows it also sets `VCPKG_ROOT` to
-`C:\vcpkg` when that directory exists and the variable is otherwise absent.
-Restoration uses the same shared environment mutex, but the runner callback
-itself executes without holding that mutex to avoid nested-lock deadlocks.
+invoking the Dylint UI runner. It preserves `RUSTC_WRAPPER` so nested Cargo
+builds retain compiler admission; the workspace's patched `dylint_testing`
+recognizes wrapped `rustc` commands when recovering example flags. The vendored
+crate is a workspace member so Clippy checks its parser, but its
+`deny_warnings` feature changes UI fixture diagnostics and must not be enabled
+for the ordinary all-features test run. `make test` therefore excludes it from
+Nextest and runs its command-decoding unit tests separately with default
+features disabled. The decoder parses Cargo's quoted command line and selects
+the compiler arguments after any wrapper chain; do not clear the configured
+wrappers. The helper `rustc_invocation` applies the `Running` regex itself, so
+its call site must pass Cargo's whole line, never the regex's capture; the
+6.3.0 rebase broke every example UI test exactly that way, and a regression
+case now pins the contract. The guard also sets
+`DYLINT_LINK_ENABLE_COPY_LIBRARY=1` when it is absent: since Dylint 6.3.0,
+`dylint_testing` otherwise copies its own default-feature rebuild of
+`lib<crate>.so`, an empty `cdylib` for every Whitaker lint crate, over the
+toolchain-qualified library the harness built with `dylint-driver`. On Windows
+the guard also sets `VCPKG_ROOT` to `C:\vcpkg` when that directory exists and
+the variable is otherwise absent.
 
-Example-based UI tests in `rstest_helper_should_be_fixture` also use a
-cross-process directory lock under the system temporary directory. `nextest`
-can run test binaries in separate processes, so a plain in-process `Mutex` is
-not sufficient for those examples. A directory becomes eligible for stale
-recovery only after it has aged past 30 minutes, and stale cleanup removes that
-age-eligible lock directory only after successfully acquiring the lifetime
-owner-liveness lock. If stale cleanup sees `NotFound`, it treats the directory
-as already removed rather than as a failed recovery attempt, and the live lock
-path still waits indefinitely in production while the tests keep the bounded
-timeout. A sidecar advisory lock serializes ownership transitions, and the
-directory's owner token prevents an original holder from deleting a successor
-after stale recovery.
+The guard selects and applies those variables through `with_env_vars_selected`,
+so the runner callback executes while holding `temp_env`'s re-entrant lock.
+Runners in one test binary therefore take turns instead of sharing a
+process-wide record: a runner that overlapped another would see that runner's
+temporary flag, select nothing, and then run after the flag had been removed. A
+runner that performs its own scoped environment setup still nests safely on the
+same thread because the lock is re-entrant.
+
+Example targets are run with `dylint_testing::ui::Test::example`. The workspace
+patches `dylint_testing`, and the patched decoder tolerates a wrapper chain (see
+[Example-target staging](#example-target-staging)).
+
+#### Example-target staging
+
+Use `dylint_testing::ui::Test::example(crate_name, example)` for example-based
+UI tests. It rebuilds the example with `cargo rustc` under a process-unique
+`-C metadata` value, recovers the `--extern`, `-L`, and `--edition` flags from
+the resulting compiler invocation, and stages the source with its `.stderr`,
+`.stdout`, and `.fixed` expectation files:
+
+```rust
+let mut test = Test::example(crate_name, "pass_in_test_harness");
+test.rustc_flags(["--test"]);
+test.run();
+```
+
+`dylint_testing` is vendored and patched, so do not assume upstream's decoder.
+Two properties matter here.
+
+First, the rebuild uses compiler metadata rather than deleting
+`target/debug/examples` first. Deletion forced a recompile under Cargo's legacy
+layout, but Cargo can now restore a removed example from its cached build
+artefact without invoking `rustc`, leaving the decoder with nothing to parse. A
+stale-deletion approach therefore fails intermittently rather than loudly.
+
+Second, `rustc_invocation` parses Cargo's quoted command line with `shlex` and
+takes the arguments after the *last* `rustc` before `--crate-name`, so a
+configured wrapper — `sccache` in CI, or a compile-admission wrapper on a
+shared development host — is skipped rather than mistaken for the compiler.
+Never clear `RUSTC_WRAPPER` to work around a parsing failure: a wrapper set
+through `build.rustc-wrapper` in Cargo configuration survives environment
+clearing, and removing it would bypass the caching or admission control it
+exists to provide. Never parse Cargo output in a lint crate's harness either;
+`Test::example` is the single owner of example-flag recovery.
+
+Any UI test that holds `env_test_guard()` while invoking Dylint must use
+`run_test_runner_with_env_guard()`. It catches a runner panic before releasing
+the mutex, so a failed example cannot poison environment synchronization for
+subsequent tests.
+
+Example-based UI tests in `rstest_helper_should_be_fixture` use a cross-process
+lock under the canonical effective Cargo target directory. Resolution prefers
+Cargo's `.rustc_info.json` marker, then an absolute `CARGO_TARGET_DIR`, then
+the executable's profile directory; relative overrides are ignored. The lock
+lives inside the resolved target, so different `TMPDIR` values cannot split
+locks for a shared target. Worktrees sharing a target directory share one lock
+and serialize; independent target directories use separate locks. A sidecar
+advisory lock serializes ownership changes, and an owner-liveness lock prevents
+reclaiming a live owner. Missing lock paths count as released during cleanup;
+owner tokens prevent an old holder from deleting a successor. A lock directory
+becomes eligible for stale recovery once it is older than five minutes, and
+acquisition waits up to 25 minutes before returning a timeout — longer than the
+stale window, so an abandoned lock is reclaimed rather than timing out a
+waiter. The 25 minutes are the expected hold time, not a second stale window:
+an owner compiles an example through nested Cargo while holding the lock, and
+what a healthy owner can spend on that build is set by the nextest override
+covering it — 75 minutes for the two harnesses that take the lock, 120 for the
+`trybuild` fixture, and 30 for the test that calls `acquire()` directly — so a
+six-minute bound reported a healthy owner as a timeout. The wait bound has to
+stay under each of those ceilings, or it could never fire. The tests supply
+their own limits rather than inheriting this one. The
+[timeout policy](#test-timeouts-four-tiers-outermost-last) explains the other
+bounds.
 
 ### Configuration constant patterns
 
@@ -2825,33 +4312,77 @@ When adding nextest test-group filters (e.g., for serializing UI tests), add a
 regression test that verifies the filter expression captures all intended test
 binaries.
 
-**Pattern:** Create a test that discovers relevant test files, parses the
-nextest config, and asserts the filter contains the necessary clauses.
+**Pattern:** Create a test that parses the nextest config and evaluates the
+filter expression against concrete test identities. Do not search the filter
+text for a package or binary name: a substring search cannot tell "this clause
+matches the test" from "this clause matches a different test with the same name
+in another package", and it passes for a negated clause too. The evaluator
+lives in `tests/nextest_ui_filter/filter_model.rs`, beside the guards that use
+it. The config loading and override resolution — `load_nextest_config`,
+`effective_overrides`, `governing_override`, and friends — live alongside in
+`tests/nextest_ui_filter/config.rs`, so the guards resolve a setting the way
+nextest does: from the *first* matching override that configures it, walking
+the selected profile and then `default`. Guards that pin a *build-sized*
+allowance or its serializing group, as opposed to the filter's reach, live in
+`tests/nextest_ui_filter/build_allowances.rs`; keep a guard there rather than
+in the root file once it needs more than four inputs, since `rstest` expands
+every `#[case]` column into a function argument and Clippy's argument threshold
+is four.
+
+**Failure policy: the config helpers panic, and that is deliberate.** The
+helpers in `config.rs` report a configuration defect by panicking at the
+offending override. This is deliberately *not* uniform across the guard suite,
+and the distinction is worth keeping: `filter_model.rs` models the filter
+grammar and returns `Result<bool, FilterError>` from
+`FilterExpression::selects`, because a caller there has something to decide —
+an expression the model does not implement must be answered by extending the
+model, and the error carries that judgement. `config.rs` has no equivalent
+caller. Its helpers exist to resolve `.config/nextest.toml` and fail the guard,
+and an unreadable or malformed file *is* the drift they exist to detect. So
+`governing_override` converts the `FilterError` it receives into a panic: it
+has no basis to decide what an unparsable clause means, and the natural mistake
+on a `Result` path — a `?` in a test returning `()`, a guard that skips its
+assertion on the error path — turns the guard's own failure into a silent pass,
+which is the opposite of what it is for. The general workspace rule in
+`AGENTS.md` prefers semantic error enums for callers that inspect, retry, or
+map an error; that scope does not reach these resolvers. This is a recorded
+exception, not an oversight: `load_nextest_config`, `filter_of` and
+`governing_override` each carry a `# Panics` section naming the condition, and
+the worked example below uses the same panic style.
 
 **Example** (`tests/nextest_ui_filter.rs`):
 
 ```rust
-use rstest::{fixture, rstest};
-
-#[fixture]
-fn serial_dylint_ui_override() -> Value {
-    let config = load_nextest_config();
-    find_serial_dylint_ui_override(&config).clone()
-}
-
 #[rstest]
+#[case::default(ProfileName("default"))]
+#[case::ci(ProfileName("ci"))]
 fn serial_dylint_ui_filter_captures_integration_ui_binaries(
-    serial_dylint_ui_override: Value
+    nextest_config: Value,
+    #[case] profile: ProfileName<'_>,
 ) {
-    let filter = extract_filter(&serial_dylint_ui_override);
-    let crates = crates_with_integration_ui_test();
+    let filter = filter_of(broad_override(&nextest_config, profile))
+        .unwrap_or_else(|| panic!("profile.{}: broad override should filter", profile.0));
 
     assert!(
-        filter.contains("(binary(ui) & test(=ui))"),
-        "filter must capture integration test binaries: {crates:?}"
+        filter
+            .selects(INTEGRATION_UI)
+            .unwrap_or_else(|error| panic!("profile.{}: {error}", profile.0)),
+        "profile.{}: the {SERIAL_UI_GROUP} filter must select an integration binary named `ui` \
+         whose top-level test is also named `ui`; found filter: {}",
+        profile.0,
+        filter.0
     );
 }
 ```
+
+Three properties of that example are worth copying. Both profiles are covered
+because `profile.ci` is what the Windows lane runs, and both profiles declare
+the clause. The filter is *evaluated*, not searched: `selects` answers whether
+a specific identity is captured, which is the question the configuration exists
+to answer. And it returns a `Result`, so the `unwrap_or_else` is not
+decoration: a clause the model cannot parse is reported with that clause in the
+message, rather than being flattened into a bare `false` that reads exactly
+like a correct negative.
 
 This pattern prevents CI flakes where a new UI test is excluded from
 serialization due to an incomplete filter expression.
@@ -2894,6 +4425,13 @@ Whitaker data directory keyed by toolchain and target:
 - Windows:
   `%LOCALAPPDATA%\whitaker\lints\<toolchain>\<target>\lib`
 
+The private `installer/src/tracing_config.rs` formatter belongs only to CLI
+startup and its colocated tests; other modules must emit events rather than
+reuse or initialize this subscriber. It sends diagnostics to stderr, enables
+errors in quiet mode, warnings by default, and debug events when verbosity is
+positive, with ANSI escapes disabled. Tests capture formatted events with a
+thread-scoped subscriber and verify stderr routing in an isolated subprocess.
+
 ### Configuration options
 
 - `-t, --target-dir DIR` — Staging directory for built libraries
@@ -2916,22 +4454,23 @@ Whitaker data directory keyed by toolchain and target:
 
 ### Using installed lints
 
-After installation, set `DYLINT_LIBRARY_PATH` to the staged directory:
+Run the lints through the installed bootstrap, which supplies all three Dylint
+variables for each run and serializes the first driver build:
 
 ```sh
-export DYLINT_LIBRARY_PATH="$HOME/.local/share/dylint/lib/nightly-2025-01-15/release"
-cargo dylint --all
+whitaker --all                      # or: whitaker-installer run -- --all
 ```
 
-For prebuilt installs, use the toolchain-and-target-specific directory:
+Plain `cargo dylint` with only `DYLINT_LIBRARY_PATH` set does not use the
+bootstrap: Dylint would try to clone public Clippy to build its driver. To run
+`cargo dylint` directly, install with `--skip-wrapper` and apply the
+`DYLINT_LIBRARY_PATH`, `DYLINT_CLIPPY_REPO`, and `DYLINT_DRIVER_PATH` exports
+it prints. Nothing serializes the first driver build in that case, so let one
+`cargo dylint` run finish before starting others, and nothing re-verifies the
+snapshot after a rebuild; prefer `whitaker-installer run` where possible.
 
-```sh
-export DYLINT_LIBRARY_PATH="$HOME/.local/share/whitaker/lints/nightly-2025-01-15/x86_64-unknown-linux-gnu/lib"
-cargo dylint --all
-```
-
-Alternatively, configure workspace metadata to use the pre-built libraries
-directly:
+Workspace metadata can still point at the pre-built libraries, but the run
+still needs the bootstrap variables, so invoke it through `whitaker`:
 
 ```toml
 [workspace.metadata.dylint]
@@ -2940,13 +4479,19 @@ libraries = [
 ]
 ```
 
-This skips building entirely, providing faster lint runs during development.
-
 ### Installer internal architecture
 
 `installer/src/main.rs` coordinates the installation workflow through a small
 set of focused private helpers. Understanding them is useful when extending the
 installation pipeline.
+
+The installer-facing APIs use `BaseDirs::home`, `BaseDirs::executables` and
+`BaseDirs::whitaker_data`. `InstallArgs` keeps the related clap inputs in its
+`lint_selection`, `execution` and `skip` fields; the nested flag structs remain
+flattened on the command line. `InstallMetrics` exposes download and build
+rates through `download_rate_permille()` and `build_rate_permille()`. The
+[0.3.0 migration guide](v0-3-0-migration-guide.md#installer-rust-apis) lists
+the source changes for consumers upgrading from 0.2.x.
 
 #### Public Git operation APIs
 
@@ -2968,9 +4513,17 @@ commit detached. The detached checkout is intentional: it makes the chosen
 commit an immutable build input rather than a branch that a later pull could
 move.
 
-`git::command::run_git_with_timeout` is owned by the Git adapter and is the
-only permitted path for Git subprocess invocation; public operations compose
-through it.
+`git::command::run_git`, which takes a `GitInvocation` (arguments, working
+directory, operation name, timeout, and extra environment), is owned by the Git
+adapter and is the only permitted path for Git subprocess invocation. Every Git
+command is bounded by its timeout and has its output read concurrently.
+`run_git_with_timeout` is the repository adapter's wrapper that supplies the
+default five-minute timeout and the ambient environment; the public clone,
+update, and checkout operations compose through it. The Clippy snapshot's
+`clippy_snapshot::git::SnapshotGit` calls `run_git` directly, adding
+`GIT_TERMINAL_PROMPT=0`, its own bounds, and, for local operations, a
+`file`-only transport policy
+(`-c protocol.allow=never -c protocol.file.allow=always`).
 
 Workspace orchestration passes a `WorkspacePlan` to
 `ensure_workspace(dirs, plan)`:
@@ -2989,11 +4542,26 @@ pub fn ensure_workspace(
 
 When a plan reuses an existing managed clone, an unpinned update or reuse first
 checks for a detached `HEAD`. If the previous pinned checkout left it detached,
-`restore_default_branch` reattaches the branch named by `origin/HEAD` before a
-pull or unpinned reuse. A pinned plan leaves the managed clone detached after
+`restore_default_branch` reattaches the branch named by `origin/HEAD` before an
+update or unpinned reuse. A pinned plan leaves the managed clone detached after
 checking out its requested reference. A pin is refused when the current
 directory is itself a Whitaker workspace, because that would mutate the user's
 working tree.
+
+`update_repository` brings an unpinned managed clone level with the remote. It
+runs `git fetch origin`, refreshes the cached `refs/remotes/origin/HEAD` with
+`git remote set-head origin --auto` (a fetch never retargets it, so a clone
+made before an upstream default-branch rename would otherwise keep resetting to
+the old branch), and runs `git reset --hard refs/remotes/origin/HEAD`. It
+replaced `git pull` because a clone restored from an older CI cache can carry
+untracked files that the suite has since started to track, and `pull` aborts on
+them with "untracked working tree files would be overwritten by merge". The
+clone is a build input, not a workspace, so discarding tracked edits and
+overwriting conflicting untracked files is the intended behaviour. Each step is
+a separate `InstallerError::Git` with the operation named `fetch`, `set-head` or
+`reset` and Git's trimmed diagnostic. `git_tests.rs` covers the stale
+untracked file, a discarded local edit, a default branch containing a slash, a
+renamed default branch, and a failure of each step.
 
 #### `resolve_additional_components`
 
@@ -3068,6 +4636,77 @@ experimental crate without `--experimental`, validation returns
 error unchanged so the CLI reports the missing opt-in rather than treating the
 crate as unknown or silently building it.
 
+#### Bootstrap probes and operational metrics
+
+`whitaker-installer run` separates a query from a command. `prepare` reads
+`bootstrap.json`, checks the lint directory, the installed snapshot, and the
+`cargo-dylint` release, and resolves the driver slot without writing anything.
+`execute` creates the slot, takes the driver lock, and runs the child. Keep new
+filesystem writes on the `execute` side.
+
+Query paths in the bootstrap must not use `Path::is_file`, `is_dir`, or
+`exists`, which answer `false` for every I/O error and so turn a permission or
+storage fault into "not installed" or "cold". Use `bootstrap::probe`
+(`metadata_if_present`, and the public `is_present_dir`), which treats only
+`NotFound` as absence. `DriverSlot::is_ready` and `DriverSlot::has_driver`
+return `Result` for the same reason. The probe module serves the `bootstrap`
+module and the installer's bootstrap step (`report_bootstrap_plan`).
+`clippy_snapshot::probe` (`is_present`, `is_present_dir`, `is_present_file`)
+applies the same rule inside `clippy_snapshot`, returning
+`ClippySnapshotError::Io`: generation metadata, bundle discovery, generation
+reuse, and the repository and alternates checks all use it. Other installer
+code keeps its own error types rather than borrowing either.
+
+`bootstrap::telemetry` and `clippy_snapshot::telemetry` own the metric names
+and their bounded labels. They follow the
+[AST operational metrics](#ast-operational-metrics) rules: describe metrics
+through the active recorder when recording, never install a recorder, and never
+put paths, commits, toolchains, or error text in a label.
+
+| Metric                                                              | Kind      | Labels                                                                                                          |
+| ------------------------------------------------------------------- | --------- | --------------------------------------------------------------------------------------------------------------- |
+| `whitaker_installer.bootstrap.run.total`                            | counter   | `driver`: `unresolved`, `warm`, `warm_after_wait`, `cold`; `outcome`: `ok`, `child_nonzero`, or a failure label |
+| `whitaker_installer.bootstrap.run.duration_seconds`                 | histogram | `driver`                                                                                                        |
+| `whitaker_installer.bootstrap.lock_wait.duration_seconds`           | histogram | `mode`: `shared`, `exclusive`                                                                                   |
+| `whitaker_installer.bootstrap.lock_failure.total`                   | counter   | `mode`                                                                                                          |
+| `whitaker_installer.bootstrap.driver_build.duration_seconds`        | histogram | `outcome`                                                                                                       |
+| `whitaker_installer.bootstrap.driver_build.total`                   | counter   | `outcome`: `built`, `not_built`, `unrecorded`, `verify_failed`, `spawn_failed`                                  |
+| `whitaker_installer.clippy_snapshot.provision.total`                | counter   | `source`: `existing`, `release`, `local`; `outcome`: `ok`, `failed`                                             |
+| `whitaker_installer.clippy_snapshot.operation.total`                | counter   | `operation`: `reuse`, `download`, `install`; `outcome`: `ok` or a failure label                                 |
+| `whitaker_installer.clippy_snapshot.operation.duration_seconds`     | histogram | `operation`, `outcome`                                                                                          |
+| `whitaker_installer.clippy_snapshot.clone_attempt.total`            | counter   | `outcome`: `ok`, `retry`, `exhausted`                                                                           |
+| `whitaker_installer.clippy_snapshot.clone_attempt.duration_seconds` | histogram | `outcome`                                                                                                       |
+
+*Table: Installer bootstrap and snapshot metrics.*
+
+`ok` and `child_nonzero` both mean the bootstrap worked; `child_nonzero`
+records a `cargo dylint` that exited non-zero, usually because lints fired. A
+failure label is one of a fixed set derived from the error variant
+(`bootstrap::telemetry::failure_label` and
+`clippy_snapshot::telemetry::failure_label`), such as `snapshot_invalid`,
+`spawn_failed`, `checksum_mismatch`, or `io`. A run that fails before it can
+tell whether the driver is ready is recorded with `driver="unresolved"`. A long
+`exclusive` lock wait is the signature of contended cold construction, and
+`warm_after_wait` counts runs that waited out another process's build.
+
+Spans bound each boundary: `bootstrap.run`, `bootstrap.cargo_dylint_version`,
+`bootstrap.child`, `clippy_snapshot.provision`, `clippy_snapshot.verify`, and
+`clippy_snapshot.git` (with its `operation`). Their fields are commits,
+expected versions, and operation names, never paths or arguments.
+
+The installer CLI installs no metrics recorder. It runs on developer machines
+and CI runners, where exporting telemetry nobody asked for would be unwelcome.
+The counters are for embedders and tests through the `metrics` facade, as in
+`whitaker_clones_core`, while the CLI's own diagnostics are the `tracing`
+events and spans, shown with `--verbose`.
+
+Structured `tracing` events mark the cold path, each finished or failed run and
+snapshot operation, and each failed clone attempt, with the same bounded
+`outcome` and an `elapsed_ms` field. Queries such as `verify_repository` record
+nothing themselves; the commands that call them do. The logs never carry the
+raw error, which reaches the user through the returned result, nor a path, URL,
+or token.
+
 ## Standard vs Experimental Lints
 
 Whitaker categorizes lints into two tiers:
@@ -3078,10 +4717,12 @@ Whitaker categorizes lints into two tiers:
   false positives or undergo breaking changes. They require explicit opt-in via
   the `--experimental` flag.
 
-The current experimental set contains `rstest_helper_should_be_fixture`. It is
-feature-gated in the suite as `experimental-rstest-helper-should-be-fixture`
-and listed in `installer/src/resolution.rs` so the installer can derive the
-matching suite feature automatically.
+The current experimental set contains `rstest_helper_should_be_fixture` and
+`string_continuation_style`. They are feature-gated in the suite as
+`experimental-rstest-helper-should-be-fixture` and
+`experimental-string-continuation-style`, and listed in
+`installer/src/resolution.rs` so the installer can derive the matching suite
+feature automatically.
 
 `rstest_helper_should_be_fixture` currently uses an in-crate collector rather
 than a shared adapter. The collector stores passive call-site evidence in
@@ -3098,6 +4739,40 @@ Future rstest lints should promote this adapter out of
 crate consumes the same HIR lowering policy. Until then, keep compiler-aware
 HIR logic in the lint crate and keep the pure `ArgAtom`/`ArgFingerprint` model
 in `whitaker_common::rstest`.
+
+### Numeric and span bounds in complexity diagnostics
+
+The Bumpy Road and conditional-branch lints convert counts at the boundary
+between analysis and compiler diagnostics. Their `diagnostic_integer_argument`
+and `saturating_diagnostic_integer` helpers clamp Fluent integer arguments to
+`i64::MAX` rather than wrapping. Bumpy Road's `SegmentWeight::Fixed` keeps its
+supplied value; `SegmentWeight::Predicate` uses `saturating_branch_count` and
+`predicate_segment_weight` to cap branch counts at `u32::MAX` before scaling.
+
+Rust compiler `BytePos` offsets are also `u32`. `span_byte_offset_range`
+rejects a highlighted source range if either endpoint exceeds that limit;
+`line_range_byte_offsets` also rejects a start line before the snippet's base
+line, a reversed range, or a start line missing from the snippet's line table.
+When the requested end line has no following line-start entry, the mapper uses
+the snippet length as the end offset. If either resulting byte offset cannot be
+represented as `u32`, the mapper omits the secondary span label while still
+emitting the primary diagnostic. Tests cover the maximum accepted value and the
+first value above each boundary in
+`crates/bumpy_road_function/src/driver/numeric.rs` and
+`crates/conditional_max_n_branches/src/driver/numeric.rs`.
+
+Production tests that pass a value beyond a `usize` boundary are gated by
+`#[cfg(target_pointer_width = "64")]`; 32-bit targets cannot represent those
+inputs. The cases are `diagnostic_arguments_saturate_oversized_bump_counts` and
+`span_mapping_omits_unrepresentable_offsets` in
+`crates/bumpy_road_function/src/driver/diagnostic.rs`, plus
+`production_diagnostic_arguments_saturate_at_the_signed_boundary`,
+`production_predicate_weight_saturates_excess_branches`,
+`production_span_offset_ranges_reject_an_unrepresentable_end`, and
+`production_line_range_mapping_rejects_an_unrepresentable_offset` in its
+`numeric.rs`. The conditional-branch boundary case is
+`production_diagnostic_arguments_saturate_at_the_signed_boundary` in
+`crates/conditional_max_n_branches/src/driver/numeric.rs`.
 
 ### Adding a new lint
 
@@ -3125,6 +4800,16 @@ It can be promoted to standard by:
 2. Adding the lint dependency to the suite `dylint-driver` feature in
    `suite/Cargo.toml`
 3. Updating documentation to reflect the change
+
+### Suite entry point
+
+Dylint resolves a library's lints through an exported `register_lints` symbol,
+which requires `#[unsafe(no_mangle)]`. The workspace forbids in-crate `unsafe`
+code, so the suite declares its entry point through
+`whitaker_common::declare_dylint_register_entry!`, which expands the unsafe
+attribute from an external macro, just as `dylint_linting::impl_late_lint!`
+does for single-lint crates. Reserve this macro for Dylint driver crates; do
+not use it for other symbol exports.
 
 ## Creating a New Lint
 
@@ -3433,8 +5118,544 @@ of the test suite per pull request" above.
 [issue-180]: https://github.com/leynos/whitaker/issues/180
 [whitaker-run-33748602187]: https://github.com/leynos/whitaker/actions/runs/33748602187
 [whitaker-run-33756048103]: https://github.com/leynos/whitaker/actions/runs/33756048103
+[whitaker-run-35825720438]: https://github.com/leynos/whitaker/actions/runs/35825720438
+[whitaker-run-35825656071]: https://github.com/leynos/whitaker/actions/runs/35825656071
+[whitaker-run-35834924110]: https://github.com/leynos/whitaker/actions/runs/35834924110
+[whitaker-run-35831488853]: https://github.com/leynos/whitaker/actions/runs/35831488853
+[whitaker-issue-457]: https://github.com/leynos/whitaker/issues/457
 [whitaker-run-33410178021]: https://github.com/leynos/whitaker/actions/runs/33410178021
 [whitaker-run-33369228466]: https://github.com/leynos/whitaker/actions/runs/33369228466
 [whitaker-run-33345742967]: https://github.com/leynos/whitaker/actions/runs/33345742967
 [whitaker-run-33340945546]: https://github.com/leynos/whitaker/actions/runs/33340945546
 [whitaker-run-33322310248]: https://github.com/leynos/whitaker/actions/runs/33322310248
+
+## Test timeouts: four tiers, outermost last
+
+Four independent timers can end a test run, each set somewhere different. A run
+that dies without an obvious cause is nearly always one of them, so it is worth
+knowing which is which and in what order they can fire. The canonical statement
+of the rule lives in the `generate-coverage` README in
+[`leynos/shared-actions`][shared-actions-coverage]; this section records what
+this repository sets, what each value is sized against, and where the third
+tier went.
+
+| Tier                     | What it bounds                     | Where it is set                             | Current value                                                                                                                                                                                                                                                                                                                                                                                   |
+| ------------------------ | ---------------------------------- | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`, both profiles       | 300 s default; 20 m for ordinary serialized UI and no-default-feature builds; 30 m for isolated package checks; 75 m for parser-pin, nested example-build and whole UI harness fixtures; 120 m for the alias UI fixture, the trybuild compile contracts and `rstest_helper_should_be_fixture::ui::trybuild_fixtures_compile_without_diagnostics`; 30 m for toolchain-installing behaviour tests |
+| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, both profiles       | 300 m                                                                                                                                                                                                                                                                                                                                                                                           |
+| Cargo watchdog           | one `cargo` invocation, wall clock | not used here, see below                    | absent                                                                                                                                                                                                                                                                                                                                                                                          |
+| Job `timeout-minutes`    | the whole job                      | `ci.yml` and `coverage-main.yml`, job level | 335 m for every lane that runs the suite                                                                                                                                                                                                                                                                                                                                                        |
+
+*Table: the timers that can end a run, innermost first.*
+
+Each tier must sit above the one before it. Within the innermost tier the
+per-harness overrides are a floor scheme, not independent budgets: a test may
+exceed the base allowance only because a more specific override raises it, so a
+new allowance has to clear the tier below it as well as the one above.
+
+### What was missing
+
+Three of the four were absent or partial before this was written, and the gaps
+compounded rather than sitting apart.
+
+No profile set a base `slow-timeout`. nextest's own default reports a slow test
+without ever terminating it, so an ordinary hung test was reported slow forever
+on every lane, and only the job timer could end it.
+
+The named exceptions were bounded. A custom profile inherits
+`[profile.default]`, and when a custom profile is selected nextest still
+consults `[[profile.default.overrides]]`, applying a matching default override
+ahead of the selected profile's own scalar setting. So the 30 m toolchain and
+20 m Dylint allowances did reach the `ci` profile, which is what the Windows
+lane runs. What nothing bounded was every test those two overrides do not name.
+
+Neither profile set a `global-timeout`, so nothing bounded the whole run.
+
+The Windows lane declared no `timeout-minutes`, inheriting GitHub's six-hour
+default. That left the outermost tier missing as well: a hung test there could
+have burned six hours before anything stopped it, and the cancellation would
+have discarded the log.
+
+### Both profiles state their own budgets
+
+Each profile now declares its own base `slow-timeout` and `global-timeout`, and
+`ci` restates the toolchain, dylint, and parser-pin build-script allowances as
+its own overrides. None of that is required for the run to be bounded: `ci`
+would inherit all of it.
+
+It is repository policy, for two reasons. `ci` is the profile that includes the
+toolchain-installing behaviour tests the default profile excludes, so it is the
+profile with the longest tests, and the budgets that govern the lane belong
+where a reader of that profile will find them. Restating them also makes a
+later divergence between the two profiles explicit rather than silent, since a
+changed default would otherwise change CI without touching the `ci` section.
+
+The no-default-feature regression test checks the library in a nested Cargo
+invocation with an isolated target directory, so it rebuilds dependencies
+instead of reusing artefacts from the workspace test run. It exceeded the
+300-second base allowance while compiler admission was heavily queued. The
+20-minute allowance and shared nested-Cargo test group leave room for a cold
+build without letting it compete with the parser-pin fixtures.
+
+The package-isolated checks also invoke Cargo with separate targets: one checks
+that a crate builds without the Dylint driver feature, and the other checks
+that Fluent bundles reach the package tarball. Their 30-minute allowance puts
+them in the same serial nested-Cargo group as the parser-pin and
+no-default-feature builds.
+
+The contract holds that policy, and its failure messages say so rather than
+claiming nextest requires it.
+
+The ordinary serial UI group has a 30-minute bound. The installer UI case
+measured 235 seconds and timed out at the 300-second base allowance on Windows.
+The wider allowance lets nested UI builds finish under contention while still
+terminating a stalled test. Thirty minutes rather than twenty, because the
+group's trailing name terms also capture
+`cross_process_lock_contention_and_release`, which waits up to 25 minutes for
+the lock a real holder is holding; a 20-minute bound terminated it mid-wait.
+The example-harness lock is keyed by the canonical effective Cargo target
+directory. Resolution prefers Cargo's `.rustc_info.json` marker, then an
+absolute `CARGO_TARGET_DIR`, and finally the profile output directory inferred
+from the test executable. Relative overrides are ignored because Cargo resolves
+them from its invocation directory, which may differ from the test process. The
+lock directory is stored inside the resolved target, so differing `TMPDIR`
+values cannot split locks for a shared target. Test processes that share build
+artefacts share one lock and serialize, while independent target directories
+use independent locks. The direct acquisition regression test shares this
+serialized UI group because it exercises the target-scoped lock used by fixture
+builds.
+
+The alias UI fixture in `no_unwrap_or_else_panic` exceeded its 20-minute
+allowance while rebuilding its lint library through nested Cargo and waiting
+for compiler admission. A retry began the same build again and was cut short by
+the whole-run timeout. It was raised to 75 minutes, and a later attempt expired
+at that bound for the same reason while the admission pool reported itself
+healthy with 100-200 compiler groups queued, so it now shares the 120-minute
+build-sized allowance the trybuild contracts use. It still takes no retry, so
+one queued build can finish without repeating its setup.
+
+The same crate's whole `ui::ui` harness reached the 150-minute global deadline
+with a retry rebuilding the lint library while Cargo waited for the shared
+package-cache lock. It now gets one 75-minute build attempt in the same serial
+UI group, without retries that would repeat the nested build.
+
+The `trybuild_fixtures_compile_without_diagnostics` test in
+`rstest_helper_should_be_fixture` exceeded its 75-minute bound in the later
+240-minute run. At the timeout, it had reached
+`tests/ui/collection_zero_diagnostic.rs`; nested Cargo was still building
+fixture dependencies, and its `trybuild000` compile request was 50 slots back
+in a healthy admission queue. Give this test one 120-minute attempt with no
+retries so the same queued build can finish without repeating its setup.
+
+Every other discovered trybuild compile contract rebuilds fixture crates
+through nested Cargo. In a cold workspace, the Bumpy Road public API contract
+timed out on three 20-minute attempts; the final attempt reached its pass
+fixture after 15 minutes of nested compilation. Retrying restarted that
+expensive build without producing a result. A later full run exceeded the
+45-minute allowance while Cargo waited on package-cache and compiler-admission
+queues. The Bumpy Road contract no longer pays that cost. Its `pass` case made
+`trybuild` run `cargo build`, and the generated project merged the crate's
+whole Dylint dev-dependency graph, so a cold target recompiled 139 to 148
+seconds of dependencies for two tiny fixtures. Its fixtures were removed in
+favour of the existing `tests/analysis_behaviour.rs` public-path test and a
+`compile_fail,E0432` doctest on `normalize_settings`. The other discovered
+compile contracts therefore share a 120-minute allowance and disable retries,
+leaving one build more time to reach its fixtures without repeating the same
+work.
+
+The six parser-pin build-script integration cases run in the serial
+nested-Cargo group and each use a fresh temporary target directory. The
+exact-pin case performs both `cargo check` and `cargo run`; a traced run
+completed in 591 seconds after waiting on the shared package-cache lock. A
+later full run exhausted the 30-minute allowance while compiler admission had a
+large queue, then exceeded the 45-minute allowance during the same kind of
+contention. The 75-minute allowance accounts for that observed wait, and the
+group prevents these fixtures from competing with the no-default-feature build.
+
+### The clocks do not start together
+
+Comparing the configured numbers is not enough, because the timers start at
+different moments and cover different work.
+
+The job timer starts when the job starts, before the checkout, the toolchain
+setup and the build, and it is still running through whatever follows the
+suite. nextest's global timeout starts only once tests begin. A ceiling merely
+above the whole-run budget still cancels the job before nextest can report an
+overrun, and a cancellation discards the log that would have explained it.
+
+Hitting the global timeout does not stop the run instantly either. nextest
+follows its ordinary termination procedure: on Unix it signals the process
+group and waits `slow-timeout.grace-period`, five seconds here, before killing
+it. On Windows termination is immediate and the grace period is ignored for
+timeouts. That allowance is seconds rather than minutes, but it is not zero,
+and the contract reads it from the configuration so a profile that raised it
+raises the requirement too.
+
+So the requirement is the whole-run budget, plus the five-second grace period
+and a minute of margin for nextest to terminate the run, plus fifteen minutes
+for the build and the steps either side of the suite, plus a fifteen-minute
+margin above that sum. The margin is there because a ceiling equal to the sum
+it contains cancels the job at the moment the innermost timer would have
+reported the overrun, and the report is the only thing that makes an overrun
+actionable. That is 300 m + 65 s + 15 m + 15 m, or 331 minutes 5 seconds, which
+`required_ceiling` computes for both profiles.
+
+The ceiling is not that requirement. It is pinned separately at 335 minutes, a
+policy value above it: the derivation accepts any ceiling at or above the
+requirement, so the value is pinned as well, to stop a lane drifting to a
+number nobody chose.
+
+This section first said 70, which is below the requirement once the
+fifteen-minute margin is counted. That number was chosen before the margin was
+written down, so it has been corrected rather than kept as a special case.
+
+### What the values are sized against
+
+The 300 m whole-run budget responds to a full run under the 240 m limit.
+Nextest reported 1,846 of 1,852 tests run, with 1,845 passing (one after
+retry), one timed out, and five skipped. Fail-fast left six tests not run. The
+timed-out
+`rstest_helper_should_be_fixture::ui::trybuild_fixtures_compile_without_diagnostics`
+test reached `tests/ui/collection_zero_diagnostic.rs` while its nested Cargo
+build was still waiting in the healthy compile-slot queue. Its per-test
+allowance rises from 75 m to 120 m without retries. The 60 m increase to the
+whole-run budget covers the 45 m per-test increase and leaves 15 m for the
+remaining fixtures; the workflow ceiling rises with it so the job can report a
+nextest overrun. The preceding 150 m run completed 1,841 tests; the 110 m run
+completed 1,834 tests, and the earlier 85 m runs reached 1,842 and 1,846 tests.
+
+The remaining trybuild compile contracts had a 75 m allowance. One local run
+measured 51 minutes 39 seconds in a single nested fixture build while compiler
+admission was saturated, and terminated the first case 47 seconds later, so the
+allowance has to cover a cold fixture project and the cases after it rather
+than the cases alone. It is now 120 m, matching the fixture suite, which still
+bounds a genuinely hung fixture.
+
+The example-compilation test in `rstest_helper_should_be_fixture` also exceeded
+its 20 m per-test allowance during the recovery run: Cargo built the library,
+then timed out while building the example. Its retry passed after 764 seconds.
+The 75 m override covers both nested builds and retains the existing retry for
+transient UI failures.
+
+The `string_continuation_style` UI entries take the ordinary 20 m allowance and
+do not get a narrower one of their own. Four entries run, one per locale, and
+together they were measured at 31.3 s warm in isolation and 157.7 s inside the
+full suite. They are `tests::ui::{ui, ui_cy, ui_gd, ui_fallback}` in the
+crate's **lib** target, not a `tests/ui.rs` integration target: `src/lib.rs`
+declares the suite with `#[path = "../tests/support/tests.rs"]`, which in turn
+declares `#[path = "ui.rs"] mod ui;`. So the `test(tests::ui::)` clause of the
+broad Dylint override matches all four, and the `(binary(ui) & test(=ui))`
+clause does not apply, because the crate has no integration target named `ui`.
+
+A narrower override would have to be declared **before** the broad entry and
+cannot be: nextest applies the first override that matches each setting, so a
+later entry is inert for `slow-timeout`, and an earlier one displaces the broad
+entry as the first `serial-dylint-ui`-grouped override. Two contracts read that
+first entry by position — `tests/nextest_ui_filter.rs` requires it to carry a
+retry, and `nextest_profile_test.py` requires exactly one override per exact
+filter string per profile — so the broad entry is also the only place a 20 m
+allowance for these fixtures can live.
+
+The 15 m allowance for work outside nextest's window is measured, from the
+worst of several runs rather than one:
+
+| Lane              | Worst suite step | Worst whole job | Outside the step | Run         |
+| ----------------- | ---------------- | --------------- | ---------------- | ----------- |
+| `coverage-upload` | 614 s            | 785 s           | 171 s            | 33824606032 |
+| `coverage-check`  | 481 s            | 576 s           | 95 s             | 34070807851 |
+| `windows-compat`  | 845 s            | 1,099 s         | 254 s            | 34070807851 |
+
+*Table: measured suite-step and whole-job durations, read across 38 successful
+`coverage-main.yml` runs and 8 of `ci.yml`.*
+
+None of those was a genuinely cold run, which is why the allowance is 15 m
+against a worst observation of 254 s rather than something close to it. One run
+is not a measurement of the cold case; it is the coldest run seen so far.
+
+### The tier that is absent, and why
+
+The canonical section has four tiers because the shared `generate-coverage`
+action wraps its `cargo` invocation in a wall-clock watchdog, defaulting to
+1,800 s. This repository does not use that action: `coverage-main.yml` explains
+that it hard-codes `cargo llvm-cov --workspace` with no way to exclude crates,
+and this suite cannot run a bare `--workspace` build. Coverage runs through
+`make coverage` instead, so there is no watchdog and no third tier.
+
+That absence is asserted rather than assumed. A lane that adopted the action
+without setting `RUN_RUST_CARGO_WAIT_TIMEOUT` would inherit the 1,800 s default
+underneath a 300 m nextest budget, which is exactly the inversion the canonical
+section exists to prevent, and it would do so silently. The contract therefore
+fails if either the action appears or the variable is set, so adopting it needs
+this section updated in the same change.
+
+### The contract
+
+`tests/workflow_contracts/timeout_ordering_test.py` asserts the ordering by
+value, over every step in every workflow that runs the suite, in both the
+`.yml` and `.yaml` extensions. Its readings live alongside it: the lane
+discovery in `suite_lanes.py`, which is the half that reads the workflow files;
+the command matching in `suite_commands.py`, which judges a step's script and
+touches no filesystem at all; the nextest arithmetic in `timeout_budgets.py`
+over the duration grammar in `nextest_durations.py`; the profile pins in
+`nextest_profile_test.py`; the lane discovery driven with supplied documents in
+`lane_discovery_test.py`; and the readings driven with controlled
+configurations in `timeout_reading_test.py`. The details of its shape below are
+deliberate.
+
+It enumerates every suite-running step, including those in jobs that declare no
+ceiling, so a missing `timeout-minutes` shows up as a lane with no budget
+rather than as no lane at all. That is how the Windows lane's absent ceiling
+went unnoticed.
+
+It parses `.config/nextest.toml` with `tomllib` rather than matching its text.
+A text match finds a key inside a comment, inside a `filter` string, or in a
+table nextest never consults. The commented-out `global-timeout` is the case
+that matters most, because this contract requires that tier to be present: a
+scraping reader would go on reporting a budget somebody had switched off, and
+the four-tier contract would pass with three. Parsing also keeps a profile's
+own table separate from its overrides, which is what lets the base allowance be
+asserted on its own.
+
+It reads durations through humantime's grammar rather than a subset of it,
+because that is what nextest reads them with. humantime sums a sequence of
+value-and-unit pairs, so `2h 30m` and `1m30s` are durations; a value may carry
+a fraction with whitespace tolerated around the point, so `1.5m` and `1 . 5 m`
+are both ninety seconds; `wk`, `wks`, `yr` and `yrs` are units alongside the
+longer spellings; whitespace inside the number is ignored, so `1 0s` is ten
+seconds; and a bare `0` needs no unit at all. An earlier reader took a single
+pair from `ms`, `s`, `m` or `h` and would have refused configuration the runner
+accepts, which is a manufactured failure rather than a caught one. The grammar
+and the arithmetic live in `nextest_durations.py`; the unit spellings, their
+scaling, and the exact values live in `nextest_units.py`, which
+`nextest_durations.py` imports and whose `UNIT_SECONDS` it re-exports for
+callers. Both are measured against humantime 2.3.0, the version the lockfile of
+the pinned cargo-nextest release resolves, and `nextest_duration_test.py` pins
+every unit by name rather than sampling them, because one wrong entry would
+leave every ordering above comparing two plausible wrong numbers.
+
+That arithmetic is bounded as well as exact. humantime accumulates in 64-bit
+unsigned integers and checks every multiplication and addition, so a duration
+can be refused for its size as readily as for its spelling, and the bound is
+not one number: `18446744073709551616s` is one step past the range, while
+`18446744073709551615ns 18446744073709551615ns` names about 1,169 years, far
+inside the seconds range, and is refused all the same, because the second value
+overflows the nanosecond accumulator before it is carried into seconds.
+Python's integers have no such bound, so the reader carries humantime's checks
+explicitly. Without them it would report a budget for a configuration nextest
+refuses at startup, and every ordering asserted above it would be a comparison
+of a number nothing in the tree produced.
+
+The carry is where that bound is easiest to get wrong, because one mechanism
+has to give two answers. humantime declines to normalize a nanosecond part of
+exactly one second and leaves it to the conversion that follows, which carries
+it and aborts rather than erroring when the carry overflows. So
+`18446744073709551615s 500ms 500ms` is refused while `0.5s 0.5s` is one second,
+and both are pinned: a reader made merely stricter to refuse the first fails
+the second, and one that drops the carry accepts the first and reports a
+duration a second past the ceiling.
+
+Its digit class is `[0-9]` rather than `\d`, which in Python matches every
+Unicode decimal digit. humantime matches `'0'..='9'` and nothing else, so an
+Arabic-Indic numeral, alone or sitting inside an otherwise ordinary number, is
+a duration this reader would convert happily and nextest would refuse at
+startup. The whitespace class stays Unicode-aware, because humantime skips on
+`char::is_whitespace`, which is too.
+
+It matches the whole command line rather than a prefix. `make test-doc`,
+`make test-glibc-baseline` and `make test-workflow-contracts` all begin with a
+suite command's text and none of them runs the suite, so a prefix match would
+bind them to budgets they do not run under. The exclusion holds only for a line
+that runs one of those and nothing else: `make test-doc; make test` begins with
+a non-suite command and goes on to run the suite, and excluding it by prefix
+left it bound to no ceiling and reported nowhere. The line, rather than the
+matched command, is what it keeps, because `NEXTEST_PROFILE=ci` on that line is
+what decides which profile's budgets a lane is judged against.
+
+It folds backslash continuations before judging a line. A command split across
+two physical lines is still one command, so reading `make test \` and
+`NEXTEST_PROFILE=ci` as separate lines reported a lane whose command carried no
+profile, and that lane would then be held to the default profile's budgets
+rather than to the ones it runs under.
+
+It also refuses a step that names a suite command without plainly running one.
+`if false; then make test; fi` keeps the text and runs nothing, which would
+drop that lane from the contract silently and take its ceiling with it;
+`make test || true` runs the suite but discards its verdict. Neither is judged
+as an invocation, and both are reported, because a contract that cannot tell
+what a line does should say so rather than guess.
+
+It pins the condition each lane carries. A skipped step runs no suite, so none
+of the budgets above says anything about it: `if: false` on the step or on its
+job would leave a lane that looks bounded and is not, and so would a plausible
+condition that quietly excluded the event the lane exists for. The conditions
+are pinned by value rather than tested for falsity, because YAML parses `false`
+to a boolean and enumerating falsy spellings would miss the plausible ones
+anyway. `coverage-check` legitimately runs on pull requests only, because
+`coverage-main.yml` covers the trunk. `windows-compat` skips only the push to
+`main`, which `ci.yml` runs for `linux-full`'s compiler cache alone (see "Who
+writes the compiler cache"), and still runs on every pull request and dispatch.
+The lane coordinates are compared both ways, so a lane appearing without an
+entry fails too.
+
+It pins each override's whole entry, not its budget alone. An override that
+raises a per-test allowance and names no `test-group` leaves the tests it
+covers running concurrently against the shared target directory, which is the
+race the groups exist to stop, and a group named but not declared in
+`[test-groups]` is a configuration nextest refuses at startup. So each
+override's `test-group` and `retries` are asserted alongside its
+`slow-timeout`, each group is pinned at `max-threads = 1`, since any other
+count parses and serializes nothing, and every group any override names is
+checked against the declarations. The retry backoff and delay are pinned with
+the count, because the Dylint UI harnesses retry a transient Windows rename
+failure and `tests/nextest_ui_filter.rs` requires the key.
+
+It discovers the compile-contract tests rather than listing them. A test that
+drives `trybuild` invokes a nested cargo build, so it costs what a build costs
+and the base per-test allowance is the wrong order of magnitude for it. The
+current discovery finds seven tests across
+`common/tests/public_api_contract.rs`,
+`crates/whitaker_sarif/tests/api_contract.rs`, `installer/tests/ui.rs`,
+`crates/whitaker_test_macros/tests/ui.rs`, and
+`crates/rstest_helper_should_be_fixture/tests/ui.rs`. Three of those binaries
+are named `ui`, but their test functions have different names. For example,
+`whitaker-installer`'s test is in a binary named `ui` but is not itself named
+`ui`, so the `(binary(ui) & test(=ui))` clause never reached it. It ran under
+the base 300-second allowance, passed at 235 seconds, and timed out at 300.216
+seconds on the Windows lane, cancelling the run. A handwritten list would have
+had the same hole, and a discovery that stops recognizing the call would sweep
+a smaller set silently, so finding nothing is a failure rather than a pass.
+
+Six of the tests are members of the capacity-one `serial-trybuild-contracts`
+group: `dependency_check_result_contract_is_public`,
+`fixture_expansion_lint_attribute_contract`,
+`public_const_api_works_in_const_context`,
+`renamed_common_apis_are_public_and_legacy_names_stay_removed`,
+`renamed_sarif_api_is_public_and_legacy_names_stay_removed`, and
+`sha2_0_11_pre_migration_patterns_fail_to_compile`. Trybuild writes under
+`target/tests/trybuild`, separate from Dylint's `debug` and `debug/examples`
+artefacts, so this group can run alongside the capacity-one `serial-dylint-ui`
+group. The seventh, `trybuild_fixtures_compile_without_diagnostics`, stays in
+`serial-dylint-ui`: it shares `ExampleHarnessLock` with the
+`rstest_helper_should_be_fixture` example-harness tests, and a separate group
+would let the two contend until the lock's six-minute ceiling expired under a
+queued nested build. That group still covers Dylint UI tests, those
+example-harness tests and `integration_exclusion`. The independence inventory
+for issue #513 records the target, environment and lock checks behind this
+split.
+
+`tests/workflow_contracts/nextest_group_test.py` holds that boundary in both
+profiles: the six contracts must match no `serial-dylint-ui` override, and the
+seventh must keep its own override in that group. Answering the first question
+with a real `cargo nextest list` would compile the workspace, so
+`tests/workflow_contracts/nextest_filter.py` evaluates a filter expression
+against what is known about a test instead. It belongs to the workflow
+contracts and has no other callers: code that can afford a listing should take
+one, because Nextest remains the authority on what a filter selects. The guard
+passes each contract's package, binary and kind from `COMPILE_CONTRACTS`, and a
+contract test checks that table against the source tree, because a name alone
+cannot rule out an override such as `binary(integration_exclusion)`. The reader
+treats a predicate it has no data for, such as `default()`, as unknown rather
+than as a miss. It does the same for matchers that need Nextest's own engines:
+every regular expression and every glob with a metacharacter, because `re` and
+`fnmatch` disagree with Rust's `regex` and `globset` crates on patterns both
+accept. Its only definite answers come from comparing exact strings. It raises
+`ValueError` on syntax outside its grammar, including the `+` and `-`
+operators, so a guard built on it errs towards reporting a capture.
+`nextest_filter_property_test.py` checks it against an independent oracle over
+generated expression trees.
+
+It drives the lane discovery with workflow documents rather than only with the
+files. `_declared_jobs` takes parsed documents and reads the repository's own
+only when given none, so `lane_discovery_test.py` can put a job with no
+ceiling, a step running the suite twice, and a malformed job through the same
+reading. The tree carries none of those shapes. Reading the files is the one
+place the module touches the filesystem, and it fails with a named
+`WorkflowLoadError` carrying the file's name rather than skipping it: a
+workflow the contract cannot read is one whose lanes it cannot judge, and
+skipping it would report a repository with fewer lanes than it has. The other
+two inputs follow the same pattern. `nextest_config.py` is the one place the
+nextest configuration is read, and a missing, unreadable, undecodable or
+malformed file fails there as `NextestConfigurationError` naming the file; no
+module reads it at import. `rust_source_texts` in
+`compile_contract_allowance_test.py` is the one place the Rust sources are
+read, failing as `RustSourceError`, and the compile-contract discovery is a
+query over what it returns. `contract_inputs_test.py` drives both boundaries
+over inputs the tree does not have.
+
+The discovery in `rust_functions.py` attributes a `trybuild::TestCases` call to
+the function whose body holds it, found by balancing braces with comments and
+literals blanked, and a helper in the same file passes the call on to every
+`#[test]` that calls it, wherever the helper is declared. The ordering
+arithmetic reads a custom profile the way nextest does: `ci` consults every
+`[[profile.default.overrides]]` entry after its own and takes the default
+`slow-timeout` only when it declares none, so a longer default-only override
+fails `ci`'s ordering too. Whether a profile terminates a test no override
+matches is still read from its own table alone.
+
+It pins the values the tables above state as well as ordering them: the base
+`slow-timeout` on both profiles compared as a whole table, the 300 m whole-run
+budget, both overrides' whole `slow-timeout` including the grace period, and
+the 335-minute ceiling on every suite lane. The ordering assertions hold for a
+range of values, so on their own they would let any of these drift to a number
+nobody chose while still passing. The grace period is pinned for the same
+reason it is read: the watchdog and the ceiling above it are sized to cover
+exactly that wait, so dropping it would leave them covering a wait that no
+longer happens and a test being killed without it.
+
+It compares each job's ceiling against the profile that lane actually runs.
+`make coverage` re-enters `make test` without a profile, so it runs under
+`default`; only the Windows lane passes `NEXTEST_PROFILE=ci`. The value is read
+whole, so `NEXTEST_PROFILE=ci-long` is not taken for `ci`, and a lane selecting
+a profile `.config/nextest.toml` does not declare fails the contract.
+
+That reading is complete only while the variable is never set another way, so
+`nextest_profile_test.py` sweeps all three `env` scopes, workflow, job and
+step, and requires that none of them names `NEXTEST_PROFILE`. A job-level
+declaration would put every lane in that job under `ci` while the reader still
+judged them under `default`, and nothing would fail, because both profiles
+carry a full set of values and the comparison would simply succeed against the
+wrong ones.
+
+The sweep decides by key membership and reads no value, because a declaration
+masks the outer scopes whatever it holds, and blank has two spellings that
+parse differently: `NEXTEST_PROFILE: ""` is the empty string and a valueless
+`NEXTEST_PROFILE:` is None. A reader testing for truth, or for `is not None`,
+covers the quoted spelling and walks past the valueless one.
+`profile_declaration_test.py` drives the sweep with documents this tree does
+not contain, over both blank spellings and a named one at each of the three
+scopes, because workflows that declare the variable nowhere agree with a sweep
+that reads nothing.
+
+Finally, `timeout_budget_properties_test.py` states what must hold for values
+this repository does not use: a duration is its number times the length of its
+unit, a composite is the sum of its pairs, the required ceiling never falls
+when the budget it covers rises, and it always sits strictly above that budget.
+Bounded cases pin the numbers in the tree; these catch an arithmetic change
+that agrees with them and with nothing else.
+
+[shared-actions-coverage]: https://github.com/leynos/shared-actions/blob/main/.github/actions/generate-coverage/README.md
+
+## Toolchain updates
+
+`rust-toolchain.toml` pins `nightly-2026-05-28`. Dependabot's `rust-toolchain`
+entry in `.github/dependabot.yml` (directory `/`, daily, the `rust-toolchain`
+label alone, one `minor-and-patch` catch-all group) opens a pull request when a
+newer toolchain exists. Review it like any other change: CI builds and tests
+the project on the new toolchain. Dated nightly versions carry no SemVer
+meaning, so whether Dependabot groups a bump or opens it alone depends on how
+it classifies the version; both are normal. The entry sets no cooldown:
+Dependabot's toolchain fetcher publishes no release date, so a cooldown would
+delay nothing.
+
+The whitaker pin is coupled to more than the toolchain file.
+`nightly-2026-05-28` goes with the `ra_ap_syntax` parser snapshot, the Dylint
+and `clippy_utils` revisions, `installer/clippy-snapshot.toml` and the
+documents that name it. A bare Dependabot bump therefore will not build on its
+own: when the pull request appears, move those revisions and files in the same
+change. Dependabot cannot express the coupling, so the pull request is the
+signal that a coordinated update is due.
+
+The entry carries no `dependencies` label on purpose. The Dependabot automerge
+workflow requires that label (`required-label` defaults to `dependencies`) and
+merges a green pull request that has it, so a toolchain bump, which needs the
+coupled revisions moved by hand, must not merge unattended.

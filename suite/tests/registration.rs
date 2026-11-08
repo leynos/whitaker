@@ -1,13 +1,22 @@
+//! Behaviour-driven tests for the suite registration wiring.
 #![feature(rustc_private)]
 #![cfg(feature = "dylint-driver")]
-//! Behaviour-driven tests for the suite registration wiring.
+
+use std::{
+    cell::RefCell,
+    panic::{AssertUnwindSafe, catch_unwind},
+};
 
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use rustc_lint::LintStore;
-use std::cell::RefCell;
-use std::panic::{AssertUnwindSafe, catch_unwind};
-use whitaker_suite::{register_suite_lints, suite_lint_decls, suite_lint_names};
+use whitaker_suite::{
+    PassKind,
+    register_suite_lints,
+    suite_lint_decls,
+    suite_lint_names,
+    suite_lint_names_for_pass,
+};
 
 struct RegistrationWorld {
     store: RefCell<LintStore>,
@@ -28,15 +37,12 @@ impl RegistrationWorld {
     }
 }
 
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
-fn world() -> RegistrationWorld {
-    RegistrationWorld::new()
-}
+fn world() -> RegistrationWorld { RegistrationWorld::new() }
 
 #[given("an empty lint store")]
-fn given_empty_store(world: &RegistrationWorld) {
-    world.reset();
-}
+fn given_empty_store(world: &RegistrationWorld) { world.reset(); }
 
 #[given("the suite lints are already registered")]
 fn given_already_registered(world: &RegistrationWorld) {
@@ -49,15 +55,16 @@ fn when_register_suite(world: &RegistrationWorld) {
     let registration = catch_unwind(AssertUnwindSafe(|| {
         register_suite_lints(&mut world.store.borrow_mut());
     }))
-    .map(|_| ())
     .map_err(|panic| {
-        if let Some(message) = panic.downcast_ref::<&str>() {
-            (*message).to_string()
-        } else if let Some(message) = panic.downcast_ref::<String>() {
-            message.clone()
-        } else {
-            "registration panicked with a non-string payload".to_string()
-        }
+        panic.downcast_ref::<&str>().map_or_else(
+            || {
+                panic.downcast_ref::<String>().map_or_else(
+                    || "registration panicked with a non-string payload".to_owned(),
+                    Clone::clone,
+                )
+            },
+            |message| (*message).to_owned(),
+        )
     });
 
     *world.result.borrow_mut() = registration;
@@ -74,6 +81,58 @@ fn then_late_pass_count(world: &RegistrationWorld, count: usize) {
     assert_eq!(world.store.borrow().late_passes.len(), count);
 }
 
+#[then("the early pass count is {count}")]
+fn then_early_pass_count(world: &RegistrationWorld, count: usize) {
+    assert_eq!(world.store.borrow().early_passes.len(), count);
+}
+
+/// Asserts the registered early pass reports the string-continuation lint.
+///
+/// This is the assertion the RFC asks for. A count alone passes when the wrong
+/// pass has been registered, and unlike a late lint omitted from
+/// `late_lint_methods!`, a missing or mistaken `register_early_pass` line is
+/// not a compile error.
+#[cfg(feature = "experimental-string-continuation-style")]
+#[then("the early pass is the string continuation style pass")]
+fn then_early_pass_is_string_continuation(world: &RegistrationWorld) {
+    let store = world.store.borrow();
+    let registered: Vec<String> = store
+        .early_passes
+        .iter()
+        .flat_map(|factory| factory().get_lints())
+        .map(rustc_lint::Lint::name_lower)
+        .collect();
+
+    assert_eq!(
+        registered,
+        vec![String::from("string_continuation_style")],
+        "the registered early pass must declare exactly the string-continuation lint",
+    );
+}
+
+/// Asserts every descriptor tagged `Early` has a pass actually registered.
+///
+/// The descriptor list and the `register_early_pass` call are separate sources
+/// of truth. Tying the assertion to `suite_lint_names_for_pass` means adding a
+/// second early lint without registering it fails here rather than silently
+/// declaring a lint that never runs.
+#[then("every early lint descriptor has a registered early pass")]
+fn then_every_early_descriptor_is_registered(world: &RegistrationWorld) {
+    let store = world.store.borrow();
+    let registered: Vec<String> = store
+        .early_passes
+        .iter()
+        .flat_map(|factory| factory().get_lints())
+        .map(rustc_lint::Lint::name_lower)
+        .collect();
+
+    let expected: Vec<String> = suite_lint_names_for_pass(PassKind::Early)
+        .map(str::to_owned)
+        .collect();
+
+    assert_eq!(registered, expected);
+}
+
 #[then("the lint names mirror the suite descriptors")]
 fn then_names_match(world: &RegistrationWorld) {
     let registered: Vec<String> = world
@@ -83,7 +142,7 @@ fn then_names_match(world: &RegistrationWorld) {
         .iter()
         .map(|lint| lint.name_lower())
         .collect();
-    let expected: Vec<String> = suite_lint_names().map(str::to_string).collect();
+    let expected: Vec<String> = suite_lint_names().map(str::to_owned).collect();
 
     assert_eq!(registered, expected);
 }
@@ -94,7 +153,7 @@ fn then_decls_align() {
         .iter()
         .map(|lint| lint.name_lower())
         .collect();
-    let expected: Vec<String> = suite_lint_names().map(str::to_string).collect();
+    let expected: Vec<String> = suite_lint_names().map(str::to_owned).collect();
 
     assert_eq!(declared, expected);
 }
@@ -110,11 +169,25 @@ fn then_registration_succeeds(world: &RegistrationWorld) {
 }
 
 #[scenario(path = "tests/features/suite_registration.feature", index = 0)]
-fn scenario_registers_cleanly(world: RegistrationWorld) {
-    let _ = world;
-}
+fn scenario_registers_cleanly(world: RegistrationWorld) { let _ = world; }
 
+#[cfg(not(feature = "experimental-string-continuation-style"))]
 #[scenario(path = "tests/features/suite_registration.feature", index = 1)]
-fn scenario_double_registration(world: RegistrationWorld) {
-    let _ = world;
+fn scenario_registers_no_early_pass_by_default(world: RegistrationWorld) { let _ = world; }
+
+#[cfg(feature = "experimental-string-continuation-style")]
+#[scenario(
+    path = "tests/features/suite_registration_experimental.feature",
+    index = 0
+)]
+fn scenario_registers_early_pass(world: RegistrationWorld) { let _ = world; }
+
+#[scenario(path = "tests/features/suite_registration.feature", index = 2)]
+fn scenario_double_registration(world: RegistrationWorld) { let _ = world; }
+
+/// Verify that Dylint loads the suite through its exported `register_lints` entry point.
+#[test]
+fn exported_entry_point_registers_suite_lints() {
+    whitaker::run_ui_tests!("tests/ui")
+        .expect("Dylint should load the suite and satisfy its registered lint expectation");
 }

@@ -1,6 +1,6 @@
 [package]
 name = "whitaker_sarif"
-version = "0.2.8"
+version = "0.2.11"
 edition = "2024"
 publish = false
 description = "SARIF 2.1.0 models, builders, and merge logic for Whitaker clone detection"
@@ -19,11 +19,13 @@ thiserror = { workspace = true }
 camino = { workspace = true }
 
 [dev-dependencies]
+whitaker_test_macros = { workspace = true }
 rstest = { workspace = true }
 rstest-bdd = { workspace = true }
 rstest-bdd-macros = { workspace = true }
 tempfile = { workspace = true }
+proptest = { workspace = true }
+trybuild = { workspace = true }
 
-[lints.clippy]
-expect_used = "deny"
-unwrap_used = "deny"
+[lints]
+workspace = true

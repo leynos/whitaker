@@ -15,49 +15,37 @@ pub struct Version(String);
 impl Version {
     /// Create a new [`Version`] from any string-like value.
     #[must_use]
-    pub fn new(value: impl Into<String>) -> Self {
-        Self(value.into())
-    }
+    pub fn new(value: impl Into<String>) -> Self { Self(value.into()) }
 
     /// Borrow the underlying version string.
     #[must_use]
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
+    pub fn as_str(&self) -> &str { &self.0 }
 
     /// Consume the wrapper and return the inner string.
     #[must_use]
-    pub fn into_inner(self) -> String {
-        self.0
-    }
+    pub fn into_inner(self) -> String { self.0 }
 }
 
 impl AsRef<str> for Version {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
+    fn as_ref(&self) -> &str { &self.0 }
 }
 
 impl From<&str> for Version {
-    fn from(value: &str) -> Self {
-        Self(value.to_owned())
-    }
+    fn from(value: &str) -> Self { Self(value.to_owned()) }
 }
 
 impl From<String> for Version {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
+    fn from(value: String) -> Self { Self(value) }
 }
 
 impl fmt::Display for Version {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.0)
-    }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { f.write_str(&self.0) }
 }
 
 #[cfg(test)]
 mod tests {
+    //! Tests for installer version reporting.
+
     use super::*;
 
     #[test]

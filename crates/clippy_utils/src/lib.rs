@@ -7,6 +7,8 @@
 
 #![feature(rustc_private)]
 
+/// Macro-related helpers mirroring the subset of Clippy's `macros` module
+/// used by Whitaker lints.
 pub mod macros {
     use rustc_hir as hir;
     use rustc_lint::LateContext;
@@ -37,7 +39,7 @@ pub mod macros {
             return false;
         };
 
-        let def_id = cx
+        let resolved = cx
             .typeck_results()
             .type_dependent_def_id(callee.hir_id)
             .or_else(|| match callee.kind {
@@ -45,7 +47,7 @@ pub mod macros {
                 _ => None,
             });
 
-        let Some(def_id) = def_id else {
+        let Some(def_id) = resolved else {
             return false;
         };
 

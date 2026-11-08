@@ -10,7 +10,7 @@ use std::{
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use rstest::{fixture, rstest};
-use tempfile::tempdir;
+use tempfile::tempdir_in;
 
 const FIXTURE_PACKAGE: &str = "parser_pin_build_script_fixture";
 
@@ -27,64 +27,75 @@ fn build_script_accepts_an_exact_workspace_parser_pin(
     let fixture = build_fixture?;
     let output = cargo_check(&fixture)?;
 
-    assert!(
-        output.status.success(),
-        "exact parser pin should pass the build script:\n{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
+    if !output.status.success() {
+        return Err(format!(
+            "exact parser pin must pass the build script:\n{}",
+            String::from_utf8_lossy(&output.stderr)
+        )
+        .into());
+    }
     let run_output = cargo_run(&fixture)?;
-    assert!(
-        run_output.status.success(),
-        "parser-version fixture should run:\n{}",
-        String::from_utf8_lossy(&run_output.stderr)
-    );
-    assert_eq!(String::from_utf8(run_output.stdout)?.trim(), "0.0.334");
+    if !run_output.status.success() {
+        return Err(format!(
+            "parser-version fixture must run:\n{}",
+            String::from_utf8_lossy(&run_output.stderr)
+        )
+        .into());
+    }
+    let stdout = String::from_utf8(run_output.stdout)?;
+    if stdout.trim() != "0.0.334" {
+        return Err(format!(
+            "parser-version fixture must print 0.0.334, printed `{}`",
+            stdout.trim()
+        )
+        .into());
+    }
     Ok(())
 }
 
+/// Reject missing, loose, partial, and ranged workspace parser pins.
 #[rstest]
-fn build_script_rejects_a_loose_workspace_parser_pin(
-    #[with(Some("0.0.334"))] build_fixture: Result<BuildFixture, Box<dyn Error>>,
+#[case::loose(Some("0.0.334"), "must be exact-pinned")]
+#[case::missing(None, "workspace dependency `ra_ap_syntax` is missing")]
+#[case::partial_major(Some("=1"), "must be exact-pinned")]
+#[case::partial_minor(Some("=1.2"), "must be exact-pinned")]
+#[case::additional_comparator(Some("=1.2.3, <1.2.4"), "must be exact-pinned")]
+fn build_script_rejects_invalid_parser_pins(
+    #[case] requirement: Option<&str>,
+    #[case] expected_error: &str,
 ) -> Result<(), Box<dyn Error>> {
-    let fixture = build_fixture?;
+    let fixture = build_fixture(requirement)?;
     let output = cargo_check(&fixture)?;
     let stderr = String::from_utf8_lossy(&output.stderr);
+    let pin_description = requirement.map_or_else(
+        || "missing parser pin".to_owned(),
+        |version| format!("parser pin `{version}`"),
+    );
 
-    assert!(
-        !output.status.success(),
-        "loose parser pin should fail the build script"
-    );
-    assert!(
-        stderr.contains("must be exact-pinned"),
-        "build-script failure should explain the parser-pin rule:\n{stderr}"
-    );
+    if output.status.success() {
+        return Err(format!("{pin_description} must fail the build script").into());
+    }
+    if !stderr.contains(expected_error) {
+        return Err(format!(
+            "build-script failure for {pin_description} must explain the parser-pin \
+             rule:\n{stderr}"
+        )
+        .into());
+    }
     Ok(())
 }
 
-#[rstest]
-fn build_script_rejects_a_missing_workspace_parser_pin(
-    #[with(None)] build_fixture: Result<BuildFixture, Box<dyn Error>>,
-) -> Result<(), Box<dyn Error>> {
-    let fixture = build_fixture?;
-    let output = cargo_check(&fixture)?;
-    let stderr = String::from_utf8_lossy(&output.stderr);
-
-    assert!(
-        !output.status.success(),
-        "missing parser pin should fail the build script"
-    );
-    assert!(
-        stderr.contains("workspace dependency `ra_ap_syntax` is missing"),
-        "build-script failure should explain the missing parser pin:\n{stderr}"
-    );
-    Ok(())
-}
-
+/// Build a temporary crate with the requested parser dependency declaration.
+///
+/// # Errors
+///
+/// Returns an error if the fixture directory cannot be prepared or its files
+/// cannot be written.
 #[fixture]
 fn build_fixture(
     #[default(None)] requirement: Option<&str>,
 ) -> Result<BuildFixture, Box<dyn Error>> {
-    let directory = tempdir()?;
+    let directory = parser_pin_fixture_directory()?;
     let fixture_root =
         Utf8Path::from_path(directory.path()).ok_or("temporary path is not valid UTF-8")?;
     let manifest_path = fixture_root.join("fixture").join("Cargo.toml");
@@ -129,6 +140,7 @@ fn build_fixture(
                 "[build-dependencies]\n",
                 "camino = \"1.2.1\"\n",
                 "cap-std = {{ version = \"4.0.2\", features = [\"fs_utf8\"] }}\n",
+                "semver = \"1.0.28\"\n",
                 "toml = \"1.1.2\"\n",
             ),
             FIXTURE_PACKAGE = FIXTURE_PACKAGE,
@@ -157,6 +169,28 @@ fn build_fixture(
         manifest_path,
         target_dir,
     })
+}
+
+/// Allocate an isolated parser-pin fixture beneath the workspace target tree.
+///
+/// Keep nested Cargo output out of the shared system temporary filesystem while
+/// preserving a distinct directory for each fixture.
+///
+/// # Errors
+///
+/// Returns an error if the workspace root cannot be found or the fixture
+/// directory cannot be created.
+fn parser_pin_fixture_directory() -> Result<tempfile::TempDir, Box<dyn Error>> {
+    let crate_directory = Utf8Path::new(env!("CARGO_MANIFEST_DIR"));
+    let workspace_root = crate_directory
+        .parent()
+        .and_then(Utf8Path::parent)
+        .ok_or("workspace root not found above CARGO_MANIFEST_DIR")?;
+    let workspace = Dir::open_ambient_dir(workspace_root, ambient_authority())?;
+    workspace.create_dir_all("target/tests/build_script_integration")?;
+    Ok(tempdir_in(
+        workspace_root.join("target/tests/build_script_integration"),
+    )?)
 }
 
 fn cargo_check(fixture: &BuildFixture) -> Result<Output, Box<dyn Error>> {
@@ -188,12 +222,13 @@ fn cargo_command_scopes_build_output_to_its_fixture() -> Result<(), Box<dyn Erro
     let fixture = build_fixture(Some("=0.0.334"))?;
     let command = cargo_command("check", &fixture);
     let arguments: Vec<_> = command.get_args().collect();
+    let expected = [
+        OsStr::new("--target-dir"),
+        fixture.target_dir.as_std_path().as_os_str(),
+    ];
 
-    assert!(arguments.windows(2).any(|pair| {
-        pair == [
-            OsStr::new("--target-dir"),
-            fixture.target_dir.as_std_path().as_os_str(),
-        ]
-    }));
-    Ok(())
+    if arguments.windows(2).any(|pair| pair == expected) {
+        return Ok(());
+    }
+    Err(format!("cargo arguments must scope output to the fixture: {arguments:?}").into())
 }

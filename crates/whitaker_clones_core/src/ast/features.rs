@@ -9,7 +9,10 @@ use super::{Depth, KindId, NormalizedNode, NormalizedTree};
 /// # Examples
 ///
 /// ```
-/// use whitaker_clones_core::{KindCounts, ast::{Depth, KindId}};
+/// use whitaker_clones_core::{
+///     KindCounts,
+///     ast::{Depth, KindId},
+/// };
 ///
 /// let counts = KindCounts::default();
 /// assert_eq!(counts.count(KindId::new(1), Depth::root()), 0);
@@ -57,19 +60,13 @@ impl KindWeight {
 
     /// Returns a zero weight.
     #[must_use]
-    pub const fn zero() -> Self {
-        Self(0)
-    }
+    pub const fn zero() -> Self { Self(0) }
 
     /// Returns the fixed-point value.
     #[must_use]
-    pub const fn get(self) -> u128 {
-        self.0
-    }
+    pub const fn get(self) -> u128 { self.0 }
 
-    const fn from_raw(value: u128) -> Self {
-        Self(value)
-    }
+    const fn from_raw(value: u128) -> Self { Self(value) }
 }
 
 /// Depth-weighted histogram keyed by syntax kind.
@@ -87,9 +84,7 @@ pub struct KindHistogram(BTreeMap<KindId, KindWeight>);
 impl KindHistogram {
     /// Returns the weight for `kind`, if present.
     #[must_use]
-    pub fn get(&self, kind: KindId) -> Option<KindWeight> {
-        self.0.get(&kind).copied()
-    }
+    pub fn get(&self, kind: KindId) -> Option<KindWeight> { self.0.get(&kind).copied() }
 
     /// Iterates over kind weights in deterministic key order.
     pub fn iter(&self) -> impl Iterator<Item = (KindId, KindWeight)> + '_ {
@@ -163,11 +158,12 @@ impl ProductionMultiset {
 }
 
 /// Extracts exact kind counts from `tree`.
-///
 #[must_use]
 pub fn kind_counts(tree: &NormalizedTree) -> KindCounts {
     let mut counts = KindCounts::default();
-    count_node_kinds(tree.root(), Depth::root(), &mut counts);
+    for_each_node_at_depth(tree.root(), |node, depth| {
+        counts.increment(node.kind(), depth);
+    });
     counts
 }
 
@@ -201,24 +197,27 @@ pub fn production_multiset(tree: &NormalizedTree) -> ProductionMultiset {
     productions
 }
 
-fn count_node_kinds(node: &NormalizedNode, depth: Depth, counts: &mut KindCounts) {
-    let mut pending = vec![(node, depth)];
+/// Visit each node in preorder with its depth relative to `root`.
+///
+/// Keep traversal separate from the count sink so bounded proofs can validate
+/// depth assignment without expanding `BTreeMap` internals. Production callers
+/// still accumulate these visits into `KindCounts`.
+pub(super) fn for_each_node_at_depth(
+    root: &NormalizedNode,
+    mut visit: impl FnMut(&NormalizedNode, Depth),
+) {
+    let mut pending = vec![(root, Depth::root())];
     while let Some((current, current_depth)) = pending.pop() {
-        counts.increment(current.kind(), current_depth);
+        visit(current, current_depth);
         let child_depth = next_depth(current_depth);
-        pending.extend(
-            current
-                .children()
-                .iter()
-                .rev()
-                .map(|child| (child, child_depth)),
-        );
+        for child in current.children().iter().rev() {
+            pending.push((child, child_depth));
+        }
     }
 }
 
-fn next_depth(depth: Depth) -> Depth {
-    Depth::new(depth.get().saturating_add(1))
-}
+/// Return the next depth, saturating at the representable maximum.
+const fn next_depth(depth: Depth) -> Depth { Depth::new(depth.get().saturating_add(1)) }
 
 // Weights halve with depth (`2^-depth` in fixed point). Below the fixed-point
 // resolution the weight intentionally collapses to zero: depths 64..=127 shift
@@ -270,12 +269,13 @@ mod tests {
     use super::{Depth, depth_weight, weighted_contribution};
 
     proptest! {
+        /// Check that increasing a representable count increases its weight.
         #[test]
         fn each_representable_count_increases_its_weight(
-            depth in 0_u16..64,
+            raw_depth in 0_u16..64,
             count in 0_u32..u32::MAX
         ) {
-            let depth = Depth::new(depth);
+            let depth = Depth::new(raw_depth);
             let current_weight = weighted_contribution(depth, count);
             let increased_weight = weighted_contribution(depth, count + 1);
 

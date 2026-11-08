@@ -1,7 +1,9 @@
-//! Tests for classifying std::fs usage and its reporting metadata.
-use super::{StdFsUsage, UsageCategory, label_is_std_fs};
+//! Tests for classifying `std::fs` usage and its reporting metadata.
 use rstest::rstest;
 
+use super::{StdFsUsage, label_is_std_fs};
+
+/// Check whether each candidate label names a standard filesystem path.
 #[rstest]
 #[case("std::fs", true)]
 #[case("std::fs::File::open", true)]
@@ -21,20 +23,13 @@ use rstest::rstest;
 #[case("fs::std", false)]
 #[case("std::", false)]
 #[case("std::filesystem", false)]
-fn recognises_std_fs_paths(#[case] path: &str, #[case] expected: bool) {
+fn recognizes_std_fs_paths(#[case] path: &str, #[case] expected: bool) {
     assert_eq!(label_is_std_fs(path), expected);
 }
 
-#[rstest]
-fn usage_category_labels_are_stable() {
-    assert_eq!(UsageCategory::Import.as_str(), "import");
-    assert_eq!(UsageCategory::Type.as_str(), "type");
-    assert_eq!(UsageCategory::Call.as_str(), "call");
-}
-
+/// Check that the usage builder retains its operation label.
 #[rstest]
 fn usage_builder_carries_operation() {
-    let usage = StdFsUsage::new(String::from("std::fs::read"), UsageCategory::Call);
+    let usage = StdFsUsage::new(String::from("std::fs::read"));
     assert_eq!(usage.operation(), "std::fs::read");
-    assert_eq!(usage.category(), UsageCategory::Call);
 }

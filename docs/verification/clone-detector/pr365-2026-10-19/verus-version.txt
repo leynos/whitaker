@@ -1,0 +1,4 @@
+Verus Version: 0.2026.03.17.a96bad0
+Profile: release
+Platform: linux_x86_64
+Toolchain: 1.94.0-x86_64-unknown-linux-gnu

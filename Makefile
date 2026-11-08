@@ -1,4 +1,4 @@
-.PHONY: help all clean test test-doc coverage build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke installer-msrv-check release-installer-dry-run package-lints workflow-test workflow-test-deps test-workflow-contracts test-markdown-format test-glibc-baseline test-sccache-health verus kani verus-clone-detector kani-clone-detector spelling skill-frontmatter-lint skill-manifest-validate skill-metadata-check skill-manifest-check test-skill-metadata-check
+.PHONY: help all clean test trybuild-contracts test-doc coverage build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke installer-msrv-check release-installer-dry-run package-lints workflow-test workflow-test-deps test-workflow-contracts test-markdown-format test-glibc-baseline test-prune-safety test-sccache-health verus kani verus-clone-detector kani-clone-detector verus-string-literals kani-string-literals spelling skill-frontmatter-lint skill-manifest-validate skill-metadata-check skill-manifest-check test-skill-metadata-check clippy-snapshot clippy-snapshot-bundle dylint-env dylint-smoke dylint-tools interrogate test-root-lib test-nextest-filter lint-clippy lint-whitaker
 
 # Make chooses the recipe shell itself, so the `shell: bash` default in the
 # workflows does not reach recipes; the `/bin/sh` it would otherwise use
@@ -16,14 +16,30 @@ CARGO ?= $(or $(shell command -v cargo 2>/dev/null),$(shell [ -x "$(HOME)/.cargo
 CARGO_LOCKED ?=
 BUILD_JOBS ?=
 CARGO_FLAGS ?= --workspace --all-targets --all-features
-TEST_EXCLUDES ?= --exclude rustc_ast --exclude rustc_attr_data_structures --exclude rustc_hir --exclude rustc_lint --exclude rustc_middle --exclude rustc_session --exclude rustc_span --exclude whitaker --exclude function_attrs_follow_docs --exclude module_max_lines --exclude no_expect_outside_tests
+# Dylint UI fixtures live under `examples/` because `dylint_testing::Test::example`
+# builds them with each lint crate's dev-dependencies (tokio, rstest); `ui/`
+# fixtures are standalone and cannot carry those. Every file there is a
+# `fail_*`/`pass_*` fixture that deliberately contains the anti-patterns the
+# suite detects, so each fixture scopes those diagnostics with a narrowly
+# targeted `#[expect(..., reason = "...")]` rather than weakening the
+# workspace policy.
+# The patched UI helper has a `deny_warnings` feature that changes fixture
+# diagnostics, so exercise its parser tests separately without all features.
+TEST_EXCLUDES ?= --exclude rustc_ast --exclude rustc_attr_data_structures \
+	--exclude rustc_hir --exclude rustc_lint --exclude rustc_middle \
+	--exclude rustc_session --exclude rustc_span --exclude whitaker \
+	--exclude function_attrs_follow_docs --exclude module_max_lines \
+	--exclude no_expect_outside_tests --exclude dylint_testing
 TEST_CARGO_FLAGS ?= $(CARGO_FLAGS) $(TEST_EXCLUDES)
-# Doctests cannot run for a crate that links `rustc_private`. A doctest is
-# compiled as its own crate without `#![feature(rustc_private)]`, so every
-# lint crate, the `rustc_*` proxy shims, `clippy_utils`, the `whitaker` root,
-# and the suite fail at `E0658` before a single assertion runs. The remaining
-# four packages hold the documented public API and are the doctest lane.
-DOCTEST_EXCLUDES ?= --exclude bumpy_road_function --exclude clippy_utils \
+# Doctests cannot run for a crate that links `rustc_private` unless the example
+# opts into it. A doctest is compiled as its own crate without
+# `#![feature(rustc_private)]`, so most lint crates, the `rustc_*` proxy shims,
+# `clippy_utils`, the `whitaker` root, and the suite fail at `E0658` before a
+# single assertion runs. The remaining packages hold the documented public API
+# and are the doctest lane. `bumpy_road_function` is doctested: its examples
+# carry hidden `rustc_private` setup lines, including the compile-fail contract
+# for the removed legacy settings name.
+DOCTEST_EXCLUDES ?= --exclude clippy_utils \
 	--exclude conditional_max_n_branches --exclude function_attrs_follow_docs \
 	--exclude module_max_lines --exclude module_must_have_inner_docs \
 	--exclude no_expect_outside_tests --exclude no_std_fs_operations \
@@ -38,13 +54,73 @@ NEXTEST_PROFILE ?=
 # overrides this with `cargo llvm-cov nextest ...` so instrumentation runs
 # over the exact same crate subset (TEST_CARGO_FLAGS) and RUSTFLAGS.
 TEST_RUNNER ?= nextest run
+# The trybuild contract tests assert that small fixtures compile or fail to
+# compile; they run no workspace code the coverage report attributes. Under
+# instrumentation they only cost build time (about 250 s of the 616 s test
+# phase), so `make coverage` leaves six of the seven out and `make trybuild-contracts`
+# runs all seven in a plain, uninstrumented run (the `windows-compat` lane's
+# `make test` runs them in CI; this target is for running them locally).
+# The names are the ones `.config/nextest.toml` gives its compile-contract
+# override. `fixture_expansion_lint_attribute_contract` stays in the coverage
+# run: it expands the whitaker_test_macros proc macro inside rustc, and leaving
+# it out lowers that crate's line coverage by 4 lines. A workflow contract keeps
+# the lists in step. Naming a filterset replaces the profile's
+# `default-filter`, so COVERAGE_BASE_FILTER repeats the default profile's.
+TRYBUILD_CONTRACT_FILTER ?= test(dependency_check_result_contract_is_public) | test(fixture_expansion_lint_attribute_contract) | test(public_const_api_works_in_const_context) | test(renamed_common_apis_are_public_and_legacy_names_stay_removed) | test(renamed_sarif_api_is_public_and_legacy_names_stay_removed) | test(sha2_0_11_pre_migration_patterns_fail_to_compile) | test(trybuild_fixtures_compile_without_diagnostics)
+COVERAGE_SKIPPED_TRYBUILD_FILTER ?= test(dependency_check_result_contract_is_public) | test(public_const_api_works_in_const_context) | test(renamed_common_apis_are_public_and_legacy_names_stay_removed) | test(renamed_sarif_api_is_public_and_legacy_names_stay_removed) | test(sha2_0_11_pre_migration_patterns_fail_to_compile) | test(trybuild_fixtures_compile_without_diagnostics)
+COVERAGE_BASE_FILTER ?= not (binary(behaviour_toolchain) | binary(behaviour_cli) | kind(example))
+COVERAGE_NEXTEST_FILTER ?= $(COVERAGE_BASE_FILTER) & not ($(COVERAGE_SKIPPED_TRYBUILD_FILTER))
 COVERAGE_OUTPUT ?= lcov.info
 # Both the outer coverage driver and nested Cargo invocations must use this
 # exact directory. cargo-llvm-cov otherwise passes its target only as a
 # Nextest argument, which Dylint's nested Cargo build cannot observe.
 COVERAGE_TARGET_DIR ?= $(CURDIR)/target/llvm-cov-target
+# Nextest runs each test case in a separate process. Keep one online-merged
+# profile per instrumented binary instead of one raw profile per process, as
+# cargo-llvm-cov's default `%p` pattern does.
+COVERAGE_PROFILE_FILE_NAME ?= whitaker-%m.profraw
 RUST_FLAGS ?= -D warnings
+# The build standard's parallel frontend and linker. The opt-in fragment
+# `tools/dev-fast/config.toml` carries both (`.cargo/config.toml` deliberately
+# does not; see ADR 010), and the gate recipes that assign `RUSTFLAGS` restate
+# them here, because an assigned `RUSTFLAGS` replaces every configuration source.
+# `mold` ships for Linux only, so the linker flag is set only on a Linux host.
+BUILD_HOST_OS ?= $(shell uname -s)
+DEV_LINUX_LINK_ARG := $(if $(filter Linux,$(BUILD_HOST_OS)),-Clink-arg=-fuse-ld=mold)
+DEV_THREADS_FLAG ?= -Zthreads=8
+DEV_STANDARD_FLAGS = $(DEV_THREADS_FLAG) $(DEV_LINUX_LINK_ARG)
+# The installer MSRV check and the publish check each build in a scratch
+# tree they discard afterwards. The trees live at fixed paths rather than
+# under `mktemp`, because sccache keys a compilation on its absolute paths: a
+# directory named afresh on every run made every one of those compilations a
+# miss on every run, 340 Rust misses a run in `linux-full`.
+#
+# They stay outside the workspace, as the `mktemp` directories were: Cargo
+# walks up from a package it installs, and a packaged crate extracted under
+# this checkout finds the root `Cargo.toml` and refuses to build.
+#
+# The root is the user's own cache directory rather than a shared temporary
+# directory, so no other user can pre-create or swap a tree these recipes
+# clear. Each name ends in the first 16 hex digits of the SHA-256 of this
+# checkout's path: two checkouts on one host never share a tree, however
+# their paths are spelled, one checkout gets the same tree on every run, and
+# the name stays short however deep the checkout sits.
+SCRATCH_ROOT ?= $(or $(XDG_CACHE_HOME),$(HOME)/.cache)/whitaker/scratch
+SCRATCH_ID := $(shell printf '%s' '$(CURDIR)' | { sha256sum 2>/dev/null || shasum -a 256; } | cut -c1-16)
+INSTALLER_MSRV_DIR ?= $(SCRATCH_ROOT)/installer-msrv-$(SCRATCH_ID)
+PUBLISH_CHECK_DIR ?= $(SCRATCH_ROOT)/publish-check-$(SCRATCH_ID)
+# Run before either recipe clears its tree. `XDG_CACHE_HOME` can point
+# anywhere, so the root's location alone proves nothing: it is created
+# private, and then it must belong to this user and be writable by nobody
+# else, or the recipe stops before `rm -rf` touches anything.
+SCRATCH_ROOT_CHECK = mkdir -p -m 700 "$(SCRATCH_ROOT)"; \
+	if [ -z "$$(find "$(SCRATCH_ROOT)" -maxdepth 0 -user "$$(id -u)" ! -perm -g=w ! -perm -o=w)" ]; then \
+		echo "$(SCRATCH_ROOT) must belong to $$(id -un) and be writable by no one else" >&2; \
+		exit 1; \
+	fi
 RUSTDOC_FLAGS ?= --cfg docsrs -D warnings
+# `markdownlint` passes MDLINT to xargs as one command word, so overrides must
+# name a single executable path rather than include command-line arguments.
 MDLINT ?= $(shell command -v markdownlint-cli2 2>/dev/null || printf '%s' "$$HOME/.bun/bin/markdownlint-cli2")
 # `make fmt` and `make check-fmt` call mdtablefix directly. `--git` selects the
 # Markdown files Git tracks and `--include-untracked` adds the untracked files
@@ -60,7 +136,15 @@ WHITAKER_REV ?= HEAD
 PUBLISH_PACKAGES ?=
 UV ?= uv
 UV_ENV = UV_CACHE_DIR=.uv-cache UV_TOOL_DIR=.uv-tools
-TYPOS_CONFIG_BUILDER_VERSION ?= v0.1.1
+
+# The CV-005 CodeScene contracts live in shared-actions and run from a full
+# commit, so a fix is a pin bump. `.github/cv005.toml` holds this repository's
+# only parameters.
+CV005_CONTRACTS_REF ?= 88977798a5c3bae1549afb99642529488c665276
+CV005_CONTRACTS = $(UV_ENV) $(UV) tool run --python 3.13 \
+	--from 'git+https://github.com/leynos/shared-actions@$(CV005_CONTRACTS_REF)\#subdirectory=packages/cv005-contracts' \
+	cv005-contracts
+TYPOS_CONFIG_BUILDER_VERSION ?= v0.1.3
 TYPOS_CONFIG_BUILDER = $(UV_ENV) $(UV) tool run --python 3.14 --from \
 	"git+https://github.com/leynos/typos-config-builder.git@$(TYPOS_CONFIG_BUILDER_VERSION)" \
 	typos-config-builder
@@ -75,16 +159,20 @@ YAMLLINT_VERSION ?= 1.38.0
 PYYAML_VERSION ?= 6.0.2
 SKILLS_REF_COMMIT := 69ef37e9424c0a7ea9dd2293b559e43ec8176379
 SKILLS_REF_SOURCE := git+https://github.com/agentskills/agentskills.git@$(SKILLS_REF_COMMIT)\#subdirectory=skills-ref
+SKILLS_REF_PATH := $(shell printf '%s' '$(PATH)' | tr ':' '\n' | awk -v lody='$(HOME)/.lody' '$$0 != lody && index($$0, lody "/") != 1 { printf "%s%s", separator, $$0; separator = ":" }')
 YAMLLINT := $(UV_ENV) $(UV) tool run yamllint@$(YAMLLINT_VERSION)
-SKILLS_REF := $(UV_ENV) $(UV) tool run --python 3.14 \
+# Lody's session environment can inject GitHub URL rewrites, PATH shims, and a
+# custom Git exec path. This public, pinned validator uses standard Git.
+SKILLS_REF := env -u GIT_CONFIG_COUNT -u GIT_EXEC_PATH PATH="$(SKILLS_REF_PATH)" \
+	$(UV_ENV) $(UV) tool run --python 3.14 \
 	--from "$(SKILLS_REF_SOURCE)" skills-ref
 # A manifest `description` is legitimately one long line, so the default
 # `line-length` rule is disabled rather than wrapping the frontmatter.
 SKILL_YAMLLINT_CONFIG := {extends: default, rules: {line-length: disable}}
 WORKFLOW_TEST_VENV ?= .venv
 LINT_CRATES ?= bumpy_road_function conditional_max_n_branches function_attrs_follow_docs module_max_lines module_must_have_inner_docs no_expect_outside_tests test_must_not_have_example no_std_fs_operations no_unwrap_or_else_panic whitaker_suite
-CARGO_DYLINT_VERSION ?= 6.0.1
-DYLINT_LINK_VERSION ?= 6.0.1
+CARGO_DYLINT_VERSION ?= 6.3.0
+DYLINT_LINK_VERSION ?= 6.3.0
 # The pinned host tools are downloaded once into a durable directory rather
 # than a temporary root, so CI can cache them under one owner and a warm run
 # observes a hit instead of repeating the download.
@@ -94,14 +182,52 @@ DYLINT_TOOLS_DIR ?= $(HOME)/.cache/whitaker-dylint-tools
 # toolchain participates in their installation.
 DYLINT_TOOLS_TOOLCHAIN ?= stable
 WHITAKER_SCRIPT ?= $(HOME)/.local/bin/whitaker
+# The Clippy history Dylint's driver build reads. `installer/clippy-snapshot.toml`
+# pins it; `make clippy-snapshot` installs the verified generation, and every
+# target that can build a driver reads it through `DYLINT_CLIPPY_REPO`, so no
+# local build ever clones public Clippy. The driver directory is keyed by the
+# Dylint release and snapshot commit, so a re-pin never reuses a driver built
+# from other inputs.
+CLIPPY_SNAPSHOT_MANIFEST := installer/clippy-snapshot.toml
+# No double quotes in the program: Windows runners mangle them inside
+# `$(shell)`, which left the commit empty. `.` matches the TOML quote, and the
+# trailing `.*` absorbs a CRLF line ending.
+CLIPPY_SNAPSHOT_COMMIT := $(shell sed -n 's/^commit = .\([0-9a-f]*\).*/\1/p' $(CLIPPY_SNAPSHOT_MANIFEST))
+CLIPPY_SNAPSHOT_ROOT ?= $(HOME)/.cache/whitaker-clippy-snapshot
+# A local `whitaker-clippy-snapshot-<commit>.bundle`, with its `.sha256` sidecar
+# beside it, to install instead of the published asset.
+CLIPPY_SNAPSHOT_BUNDLE ?=
+CLIPPY_SNAPSHOT_DIST ?= $(CURDIR)/dist
+DYLINT_DRIVER_ROOT ?= $(HOME)/.cache/whitaker-dylint-drivers
+# Dylint requires absolute native paths; under Git Bash on Windows `$(HOME)`
+# is `/c/Users/...`, which Windows does not treat as absolute.
+ifeq ($(OS),Windows_NT)
+native_path = $(shell cygpath -m '$(1)')
+else
+native_path = $(1)
+endif
+DYLINT_CLIPPY_REPO ?= $(call native_path,$(CLIPPY_SNAPSHOT_ROOT))/$(CLIPPY_SNAPSHOT_COMMIT)
+DYLINT_DRIVER_PATH ?= $(call native_path,$(DYLINT_DRIVER_ROOT))/dylint-$(CARGO_DYLINT_VERSION)/clippy-$(CLIPPY_SNAPSHOT_COMMIT)
+export DYLINT_CLIPPY_REPO DYLINT_DRIVER_PATH
+# The snapshot tool builds in its own target directory: the test lane's
+# `RUSTFLAGS` differ, and sharing `target/` would rebuild one for the other.
+CLIPPY_SNAPSHOT_TOOL = CARGO_TARGET_DIR="$(CURDIR)/target/clippy-snapshot-tool" \
+	$(CARGO) run $(CARGO_LOCKED) --quiet -p whitaker-installer --features release-tools --bin whitaker-clippy-snapshot --
 
 # Markdown sources checked by `check-fmt`. Keep generated output and local tool
 # caches out of this list; the checker itself never writes to these sources.
 MD_FILES_FIND = find . \
 	\( -type d \( -name .git -o -name target -o -name .venv -o \
 	-name .uv-cache -o -name .uv-tools -o -name .pytest_cache -o \
-	-name .vtcode -o -name memories -o -name node_modules \) -prune \) -o \
+	-name .vtcode -o -name memories -o -name .memories -o -name node_modules \) -prune \) -o \
 	\( -type f -name '*.md' -print0 \)
+WHITAKER ?= whitaker
+# Crates linted by the Whitaker suite. The rustc_* proxy shims, the lint
+# crates, the aggregated suite, and the whitaker root crate all require
+# rustc_private plumbing (dylint-driver feature, prefer-dynamic RUSTFLAGS)
+# that `cargo dylint`'s plain check build cannot provide, so the suite runs
+# over the support crates that build as ordinary libraries.
+WHITAKER_PACKAGES ?= -p whitaker-common -p whitaker-installer -p whitaker_clones_core -p whitaker_sarif
 
 build: target/debug/$(APP) ## Build debug binary
 release: target/release/$(APP) ## Build release binary
@@ -112,7 +238,7 @@ clean: ## Remove build artefacts
 	$(CARGO) clean
 	rm -rf .uv-cache .uv-tools
 
-test: ## Run tests with warnings treated as errors
+test: clippy-snapshot ## Run tests with warnings treated as errors
 	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v cargo-nextest >/dev/null || { echo "Install cargo-nextest (cargo install cargo-nextest)"; exit 1; }
 	@# Prefer dynamic linking during local `cargo test` runs to avoid rustc_private
 	@# linkage pitfalls when building cdylib-based lints; `publish-check` omits
@@ -155,10 +281,49 @@ test: ## Run tests with warnings treated as errors
 		rm -f "$$WHITAKER_BACKUP"; \
 		WHITAKER_BACKUP=""; \
 	fi; \
-	RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS)" $(CARGO) $(TEST_RUNNER) $(CARGO_LOCKED) $(TEST_CARGO_FLAGS) $(BUILD_JOBS) $(if $(NEXTEST_PROFILE),--profile $(NEXTEST_PROFILE)); \
+	RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS) $(DEV_STANDARD_FLAGS)" $(CARGO) $(TEST_RUNNER) $(CARGO_LOCKED) $(TEST_CARGO_FLAGS) $(BUILD_JOBS) $(if $(NEXTEST_PROFILE),--profile $(NEXTEST_PROFILE)); \
+	RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS) $(DEV_STANDARD_FLAGS)" $(CARGO) test $(CARGO_LOCKED) -p dylint_testing --lib --no-default-features $(BUILD_JOBS); \
+	$(MAKE) test-root-lib; \
+	$(MAKE) test-nextest-filter; \
 	if [ "$${ACT_WORKFLOW_TESTS:-0}" = "1" ]; then \
 		$(MAKE) workflow-test; \
 	fi
+
+# `TEST_EXCLUDES` names the `whitaker` root package because its test binaries
+# cannot build under `--all-features`: the `dylint-driver` feature pulls
+# `rustc_private`, and rustc then reports "cannot satisfy dependencies so
+# `std` only shows up once" for the 19 prelude crates. The root library does
+# build, so its unit tests run here instead, and `--lib` is what keeps this
+# target inside that buildable shape. Dropping the package exclusion alone
+# would trade a passing gate for that link error.
+#
+# This gate exists because `src/testing/ui/tests.rs` carries the regression
+# tests for the Dylint copy-library guard: without a target that runs them,
+# nothing would notice if the guard silently stopped setting
+# `DYLINT_LINK_ENABLE_COPY_LIBRARY`, and the UI harnesses would fail with
+# `` could not find `dylint_version` `` in CI instead.
+#
+# `nextest run` is spelled out rather than taken from `TEST_RUNNER` so that
+# `make coverage` still exercises these tests without instrumenting them: the
+# coverage run already writes `lcov.info` through its own `--output-path`, and
+# a second instrumented invocation would replace that file instead of adding
+# to it.
+test-root-lib: ## Run the whitaker root library tests nextest skips by exclusion
+	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v cargo-nextest >/dev/null || { echo "Install cargo-nextest (cargo install cargo-nextest)"; exit 1; }
+	RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) nextest run $(CARGO_LOCKED) -p whitaker --lib --all-features $(BUILD_JOBS) $(if $(NEXTEST_PROFILE),--profile $(NEXTEST_PROFILE))
+
+# `tests/nextest_ui_filter.rs` is an integration binary of the `whitaker` root
+# package, so `TEST_EXCLUDES` skips it exactly as it skips the root library,
+# and `test-root-lib`'s `--lib` does not reach it either. That leaves the
+# nextest override regression guard unrunnable by any gate. It matters because
+# the failure it guards is silent: a shadowed or non-matching override does not
+# break the build, it just stops serializing and sizing the dylint UI harnesses
+# until Windows CI goes flaky. Naming the single test target keeps the build
+# inside the shape that links, since only the library and this one integration
+# binary avoid the `rustc_private` duplicate-prelude error.
+test-nextest-filter: ## Run the nextest override regression guard nextest skips by exclusion
+	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v cargo-nextest >/dev/null || { echo "Install cargo-nextest (cargo install cargo-nextest)"; exit 1; }
+	RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) nextest run $(CARGO_LOCKED) -p whitaker --test nextest_ui_filter --all-features $(BUILD_JOBS) $(if $(NEXTEST_PROFILE),--profile $(NEXTEST_PROFILE))
 
 coverage: ## Generate LCOV coverage over the CI-tested crate subset
 	@# Reuse the `test` recipe verbatim (same TEST_CARGO_FLAGS excludes,
@@ -169,10 +334,32 @@ coverage: ## Generate LCOV coverage over the CI-tested crate subset
 	@# three lint crates whose dylint UI tests are excluded) stay excluded,
 	@# so coverage never attempts a bare `--workspace` build the suite
 	@# cannot support.
+	@# LLVM coverage maps carry source locations without DWARF debug info.
+	@# Omit optional symbols from this throwaway target to limit runner disk use.
 	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v cargo-llvm-cov >/dev/null || { echo "Install cargo-llvm-cov (cargo install cargo-llvm-cov)"; exit 1; }
 	@CARGO_LLVM_COV_TARGET_DIR="$(COVERAGE_TARGET_DIR)" \
 		CARGO_TARGET_DIR="$(COVERAGE_TARGET_DIR)" \
-		$(MAKE) test TEST_RUNNER="llvm-cov nextest --lcov --output-path $(COVERAGE_OUTPUT)"
+		LLVM_PROFILE_FILE_NAME="$(COVERAGE_PROFILE_FILE_NAME)" \
+		CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 \
+		$(MAKE) test TEST_RUNNER="llvm-cov nextest --lcov --output-path $(COVERAGE_OUTPUT) -E '$(COVERAGE_NEXTEST_FILTER)'"
+
+coverage-build: ## Compile the instrumented tests `make coverage` builds, without running them
+	@# Same crate subset, RUSTFLAGS and target directory as `coverage`, so the
+	@# compiler cache a later `make coverage` reads is warm. `cargo llvm-cov
+	@# nextest --no-run` would only report, so the stand-in script builds with
+	@# `cargo nextest run --no-run` under `cargo llvm-cov show-env`.
+	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v cargo-llvm-cov >/dev/null || { echo "Install cargo-llvm-cov (cargo install cargo-llvm-cov)"; exit 1; }
+	@CARGO_LLVM_COV_TARGET_DIR="$(COVERAGE_TARGET_DIR)" \
+		CARGO_TARGET_DIR="$(COVERAGE_TARGET_DIR)" \
+		LLVM_PROFILE_FILE_NAME="$(COVERAGE_PROFILE_FILE_NAME)" \
+		CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 \
+		$(MAKE) test CARGO="$(CURDIR)/scripts/cargo-coverage-build.sh" TEST_RUNNER="nextest run --no-run -E '$(COVERAGE_NEXTEST_FILTER)'"
+
+trybuild-contracts: ## Run the trybuild compile-contract tests, which `make coverage` skips
+	@# `make coverage` leaves six of these out (see TRYBUILD_CONTRACT_FILTER), so
+	@# a developer runs them here, plain and uninstrumented, under the `ci`
+	@# profile that gives them their serial group and build-sized allowance.
+	@$(MAKE) test NEXTEST_PROFILE=ci TEST_RUNNER="nextest run -E '$(TRYBUILD_CONTRACT_FILTER)'"
 
 test-doc: ## Run the workspace doctests, which no other lane executes
 	@# `cargo llvm-cov nextest` runs no doctests and `--all-targets` excludes
@@ -181,7 +368,7 @@ test-doc: ## Run the workspace doctests, which no other lane executes
 	@# pair the test lane uses: a doctest is compiled as a separate crate, and
 	@# `force-unstable-if-unmarked` then makes every one of them fail to load
 	@# its own library at `E0658`.
-	RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) test --doc $(CARGO_LOCKED) $(DOCTEST_CARGO_FLAGS) $(BUILD_JOBS)
+	RUSTFLAGS="$(RUST_FLAGS) $(DEV_STANDARD_FLAGS)" $(CARGO) test --doc $(CARGO_LOCKED) $(DOCTEST_CARGO_FLAGS) $(BUILD_JOBS)
 
 workflow-test: workflow-test-deps ## Run opt-in GitHub workflow smoke tests with act + pytest
 	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v act >/dev/null || { echo "Install act to run workflow tests"; exit 1; }
@@ -194,9 +381,10 @@ workflow-test: workflow-test-deps ## Run opt-in GitHub workflow smoke tests with
 	}
 	@ACT_WORKFLOW_TESTS=1 $(WORKFLOW_TEST_VENV)/bin/python -m pytest tests/workflows
 
-test-workflow-contracts: ## Validate the mutation-testing caller contract
+test-workflow-contracts: ## Validate the CV-005 CodeScene contracts and the workflow caller contracts
 	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v $(UV) >/dev/null || { echo "uv is required for workflow contract tests"; exit 1; }
-	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; $(UV) run --with 'pytest>=8' --with 'pyyaml>=6' --with 'hypothesis>=6' pytest tests/workflow_contracts --doctest-modules -q
+	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; $(CV005_CONTRACTS) check --repository .
+	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; $(UV) run --with 'pytest>=8' --with 'pyyaml>=6' --with 'ruamel.yaml>=0.19.1,<0.20' --with 'hypothesis>=6' pytest tests/workflow_contracts --doctest-modules -q
 
 test-markdown-format: ## Validate the Markdown formatter checker
 	@PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python 3.14 \
@@ -210,9 +398,16 @@ test-glibc-baseline: ## Validate the Linux release glibc-baseline checker
 		python -m pytest scripts/tests/test_check_glibc_baseline.py -c /dev/null \
 		--rootdir=. -p no:cacheprovider
 
+test-prune-safety: ## Validate the checker that stops unprunable lint archives publishing
+	@$(UV_ENV) $(UV) run --no-project --python 3.14 \
+		--with pytest==9.0.2 --with hypothesis==6.151.9 \
+		python -m pytest scripts/tests/test_check_prune_safety.py -c /dev/null \
+		--rootdir=. -p no:cacheprovider --doctest-modules \
+		scripts/check_prune_safety.py
+
 test-sccache-health: ## Validate the sccache health checker the gha lanes run
 	@$(UV_ENV) $(UV) run --no-project --python 3.14 \
-		--with pytest==9.0.2 \
+		--with pytest==9.0.2 --with hypothesis==6.151.9 \
 		python -m pytest scripts/tests/test_check_sccache_health.py -c /dev/null \
 		--rootdir=. -p no:cacheprovider --doctest-modules \
 		scripts/check_sccache_health.py
@@ -258,9 +453,47 @@ skill-metadata-check: ## Reject skill metadata that is not a mapping of strings
 
 skill-manifest-check: skill-frontmatter-lint skill-manifest-validate skill-metadata-check ## Validate every shipped skill manifest
 
-lint: skill-manifest-check ## Run Clippy with warnings denied
+# Interrogate measures docstring presence over every Python file the repository
+# owns. Add a new Python directory to INTERROGATE_TARGETS. No `--python` pin: a
+# managed interpreter would be downloaded, and a PyO3 build could link it.
+INTERROGATE_VERSION ?= 1.7.0
+INTERROGATE_TARGETS ?= installer/scripts scripts tests
+# Level 2 prints a MISSED row per undocumented definition, which the
+# `interrogate` target fails on: the rounded percentage alone passes a lone gap.
+INTERROGATE_FLAGS ?= -vv --fail-under 100
+INTERROGATE = $(UV) tool run \
+	--from 'interrogate==$(INTERROGATE_VERSION)' interrogate
+
+# Interrogate rounds its percentage to one decimal, so `--fail-under 100` alone
+# passes a lone gap in a large repository; fail on any MISSED row as well.
+interrogate: ## Enforce complete Python docstring coverage
+	@report="$$($(INTERROGATE) $(INTERROGATE_FLAGS) $(INTERROGATE_TARGETS))"; \
+	  status=$$?; \
+	  printf '%s\n' "$$report"; \
+	  test "$$status" -eq 0 || exit "$$status"; \
+	  if printf '%s\n' "$$report" | grep -q '| *MISSED *|'; then \
+	    printf '%s\n' 'interrogate: undocumented definitions remain; see the MISSED rows above' >&2; \
+	    exit 1; \
+	  fi
+
+# `skill-manifest-check` is a prerequisite rather than part of either half:
+# it validates the shipped skill manifests, which neither rustdoc nor the
+# Dylint suite reads. Keeping it on the composed target means `make lint`
+# still starts by rejecting a malformed manifest.
+lint: interrogate skill-manifest-check lint-clippy lint-whitaker ## Run rustdoc, Clippy, and the Whitaker Dylint suite
+
+lint-clippy: ## Run rustdoc and Clippy with warnings denied
 	RUSTDOCFLAGS="$(RUSTDOC_FLAGS)" $(CARGO) doc $(CARGO_LOCKED) --workspace --no-deps
 	$(CARGO) clippy $(CARGO_LOCKED) $(CARGO_FLAGS) -- $(RUST_FLAGS)
+
+# `--lib whitaker_suite` rather than `--all`: cargo-dylint warns and exits 0
+# when it discovers no libraries, so `--all` would let a missing or
+# partially-installed suite pass the gate silently. Naming the aggregate
+# library makes that case an error. `whitaker_suite` aggregates every lint
+# crate, so it covers the same lints `--all` would have run.
+lint-whitaker: ## Run the Whitaker Dylint suite with warnings denied
+	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; \
+	RUSTFLAGS="$(RUST_FLAGS)" $(WHITAKER) --lib whitaker_suite -- $(WHITAKER_PACKAGES) --all-targets --all-features
 
 fmt: ## Format Rust and Markdown sources
 	$(CARGO) fmt --all
@@ -272,7 +505,7 @@ check-fmt: ## Verify formatting
 	$(MDTABLEFIX) --check $(MDTABLEFIX_SELECT) $(MDTABLEFIX_RULES)
 
 markdownlint: spelling ## Lint Markdown files and enforce spelling
-	export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; $(MDLINT) '**/*.md' '!**/.uv-cache/**' '!**/.uv-tools/**'
+	export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; $(MD_FILES_FIND) | xargs -0 -r "$(MDLINT)"
 
 spelling: ## Enforce en-GB-oxendict in tracked text
 	$(TYPOS_CONFIG_BUILDER) gate --repository . --scope all
@@ -280,10 +513,27 @@ spelling: ## Enforce en-GB-oxendict in tracked text
 nixie:
 	# CI currently requires --no-sandbox; remove once nixie supports
 	# environment variable control for this option
-	export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; $(NIXIE) --no-sandbox
+	# Probe candidates by creating a directory: writable permissions alone do
+	# not show whether the filesystem still has space for Nixie's scratch files.
+	export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; \
+	nixie_tmpdir=""; \
+	for candidate in "$${XDG_RUNTIME_DIR:-}" "$${TMPDIR:-}" \
+		"/run/user/$$(id -u)" "$${HOME:-}" /tmp /var/tmp /usr/tmp .; do \
+		[ -n "$$candidate" ] || continue; \
+		[ -d "$$candidate" ] && [ -w "$$candidate" ] && [ -x "$$candidate" ] || continue; \
+		probe="$$(mktemp -d "$$candidate/nixie.XXXXXX" 2>/dev/null)" || continue; \
+		rmdir "$$probe" || continue; \
+		nixie_tmpdir="$$candidate"; \
+		break; \
+	done; \
+	if [ -z "$$nixie_tmpdir" ]; then \
+		echo "nixie: no usable temporary directory is available" >&2; \
+		exit 1; \
+	fi; \
+	TMPDIR="$$nixie_tmpdir" $(NIXIE) --no-sandbox
 
 typecheck:
-	RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS)" $(CARGO) check $(CARGO_LOCKED) $(CARGO_FLAGS)
+	RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS) $(DEV_STANDARD_FLAGS)" $(CARGO) check $(CARGO_LOCKED) $(CARGO_FLAGS)
 
 verus: ## Run the pinned Verus proof sidecar
 	./scripts/run-verus.sh
@@ -291,11 +541,17 @@ verus: ## Run the pinned Verus proof sidecar
 verus-clone-detector: ## Run clone-detector Verus proofs
 	./scripts/run-verus.sh clone-detector
 
+verus-string-literals: ## Run pure string-literal Verus proof
+	./scripts/run-verus.sh string-literals
+
 kani: ## Run practical Kani sidecar harnesses
 	./scripts/run-kani.sh
 
 kani-clone-detector: ## Run clone-detector Kani harnesses
 	./scripts/run-kani.sh clone-detector
+
+kani-string-literals: ## Run pure string-literal Kani harnesses
+	./scripts/run-kani.sh string-literals
 
 install-smoke: ## Install whitaker-installer and verify basic functionality
 	set -eu; \
@@ -312,7 +568,8 @@ install-smoke: ## Install whitaker-installer and verify basic functionality
 	whitaker-installer --version >/dev/null
 
 installer-msrv-check: ## Install whitaker-installer with its declared MSRV
-	CARGO="$(CARGO)" python3 scripts/check_installer_msrv.py
+	$(SCRATCH_ROOT_CHECK); \
+	CARGO="$(CARGO)" INSTALLER_MSRV_SCRATCH="$(INSTALLER_MSRV_DIR)" python3 scripts/check_installer_msrv.py
 
 release-installer-dry-run: ## Build and package the host-platform installer archive
 	set -eu; \
@@ -329,7 +586,7 @@ release-installer-dry-run: ## Build and package the host-platform installer arch
 		exit 1; \
 	fi; \
 	$(CARGO) build $(CARGO_LOCKED) $(BUILD_JOBS) -p whitaker-installer --release --target "$$HOST_TRIPLE"; \
-	$(CARGO) build $(CARGO_LOCKED) $(BUILD_JOBS) --release -p whitaker-installer --bin whitaker-package-installer --target "$$HOST_TRIPLE"; \
+	$(CARGO) build $(CARGO_LOCKED) $(BUILD_JOBS) --release -p whitaker-installer --features release-tools --bin whitaker-package-installer --target "$$HOST_TRIPLE"; \
 	DIST_DIR="$$TMP_DIR/dist"; \
 	mkdir -p "$$DIST_DIR"; \
 	case "$$HOST_TRIPLE" in \
@@ -376,7 +633,7 @@ release-installer-dry-run: ## Build and package the host-platform installer arch
 # The Rust suite is executed once per pull request, by the coverage lane.
 # This target therefore builds and validates the packages without re-running
 # it; see "One gate per executed test set" in the developers' guide.
-publish-check: ## Build and validate packages before publishing
+publish-check: clippy-snapshot ## Build and validate packages before publishing
 	set -eu; \
 	export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; \
 	PINNED_TOOLCHAIN=$$(awk -F '\"' '/^channel/ {print $$2}' rust-toolchain.toml); \
@@ -384,7 +641,10 @@ publish-check: ## Build and validate packages before publishing
 	ORIG_DIR="$(CURDIR)"; \
 	rustup component add --toolchain "$$TOOLCHAIN" rust-src rustc-dev llvm-tools-preview; \
 	RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) build $(CARGO_LOCKED) --workspace --all-features $(BUILD_JOBS); \
-	TMP_DIR=$$(mktemp -d); \
+	$(SCRATCH_ROOT_CHECK); \
+	TMP_DIR="$(PUBLISH_CHECK_DIR)"; \
+	rm -rf -- "$$TMP_DIR"; \
+	mkdir -p "$$TMP_DIR"; \
 	trap 'rm -rf "$$TMP_DIR"' 0 INT TERM HUP; \
 	DYLINT_TOOLS_DIR="$(DYLINT_TOOLS_DIR)"; \
 	mkdir -p "$$DYLINT_TOOLS_DIR/bin"; \
@@ -423,12 +683,79 @@ package-lints: ## Build lint crates and package as .tar.zst archives
 	for lint in $(LINT_CRATES); do \
 		RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) +$$TOOLCHAIN build --release --features dylint-driver -p $$lint; \
 	done; \
-	$(CARGO) run -p whitaker-installer --bin whitaker-package-lints -- \
+	$(CARGO) run -p whitaker-installer --features release-tools --bin whitaker-package-lints -- \
 		--git-sha "$$SHA" \
 		--toolchain "$$TOOLCHAIN" \
 		--target "$$HOST_TRIPLE" \
 		--output-dir "$$DIST_DIR" \
 		--release-dir target/release
+
+clippy-snapshot: ## Install the pinned Clippy snapshot that Dylint driver builds read
+	@# Reuses a generation that verifies; otherwise installs CLIPPY_SNAPSHOT_BUNDLE
+	@# or the published asset. There is no fallback to public Clippy.
+	@set -eu; \
+	[ -n "$(CLIPPY_SNAPSHOT_COMMIT)" ] || { \
+		echo "could not read the snapshot commit from $(CLIPPY_SNAPSHOT_MANIFEST)" >&2; \
+		exit 1; \
+	}; \
+	generation=$$($(CLIPPY_SNAPSHOT_TOOL) install --root "$(call native_path,$(CLIPPY_SNAPSHOT_ROOT))" \
+		$(if $(CLIPPY_SNAPSHOT_BUNDLE),--bundle "$(call native_path,$(CLIPPY_SNAPSHOT_BUNDLE))")); \
+	if [ ! -f "$(DYLINT_CLIPPY_REPO)/whitaker-clippy-snapshot.json" ]; then \
+		echo "DYLINT_CLIPPY_REPO=$(DYLINT_CLIPPY_REPO) is not the installed snapshot ($$generation)" >&2; \
+		exit 1; \
+	fi; \
+	mkdir -p "$(DYLINT_DRIVER_PATH)"; \
+	echo "Clippy snapshot: $$generation"
+
+clippy-snapshot-bundle: ## Build the Clippy snapshot bundle from upstream into CLIPPY_SNAPSHOT_DIST
+	@# The only local target that reads public Clippy. Pass
+	@# CLIPPY_SNAPSHOT_SOURCE to bundle from a local mirror instead.
+	$(CLIPPY_SNAPSHOT_TOOL) build --output-dir "$(CLIPPY_SNAPSHOT_DIST)" \
+		$(if $(CLIPPY_SNAPSHOT_SOURCE),--source "$(CLIPPY_SNAPSHOT_SOURCE)")
+
+dylint-env: ## Print the Dylint bootstrap variables as NAME=value lines
+	@printf 'DYLINT_CLIPPY_REPO=%s\nDYLINT_DRIVER_PATH=%s\n' "$(DYLINT_CLIPPY_REPO)" "$(DYLINT_DRIVER_PATH)"
+
+dylint-tools: ## Install the pinned cargo-dylint and dylint-link into DYLINT_TOOLS_DIR
+	@# Reuses a cached install whose version marker matches, so it is cheap to
+	@# call before any step that must not reach github.com.
+	@# The script probes `cargo-dylint` through PATH, so the tools root must lead
+	@# it; otherwise a cached install is invisible and is downloaded again.
+	@mkdir -p "$(DYLINT_TOOLS_DIR)/bin"
+	@PATH="$(DYLINT_TOOLS_DIR)/bin:$$PATH" scripts/install-dylint-tools.sh "$(DYLINT_TOOLS_DIR)" "$(CARGO_DYLINT_VERSION)" "$(DYLINT_LINK_VERSION)" "$(CARGO)" "$(DYLINT_TOOLS_TOOLCHAIN)"
+
+dylint-smoke: clippy-snapshot dylint-tools ## Build the Dylint driver cold, then reuse it warm, against real lints
+	@# Serial and ignored-tests-only: the integration tests run `cargo dylint`
+	@# on fixtures with the real `no_std_fs_operations` library and assert its
+	@# named diagnostics. Running this before `make test` gives the parallel UI
+	@# tests a warm driver. The cold run empties the driver slot, so any
+	@# DYLINT_DRIVER_PATH but the exact keyed slot is refused: an exported
+	@# shared driver root must survive.
+	@set -eu; \
+	export PATH="$(DYLINT_TOOLS_DIR)/bin:$$PATH"; \
+	keyed="$(call native_path,$(DYLINT_DRIVER_ROOT))/dylint-$(CARGO_DYLINT_VERSION)/clippy-$(CLIPPY_SNAPSHOT_COMMIT)"; \
+	[ "$(DYLINT_DRIVER_PATH)" = "$$keyed" ] || { \
+		echo "refusing to empty DYLINT_DRIVER_PATH=$(DYLINT_DRIVER_PATH); dylint-smoke owns only $$keyed" >&2; \
+		exit 1; \
+	}; \
+	rm -rf -- "$$keyed"; \
+	mkdir -p "$(DYLINT_DRIVER_PATH)"; \
+	smoke() { \
+		RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) test $(CARGO_LOCKED) -p no_std_fs_operations \
+			--test integration_exclusion -- --ignored --test-threads=1; \
+	}; \
+	digest() { \
+		driver=$$(find "$(DYLINT_DRIVER_PATH)" -type f -name dylint-driver | head -n 1); \
+		[ -n "$$driver" ] || { echo "no Dylint driver was built under $(DYLINT_DRIVER_PATH)" >&2; exit 1; }; \
+		{ sha256sum "$$driver" 2>/dev/null || shasum -a 256 "$$driver"; }; \
+	}; \
+	echo "Cold run: empty driver directory $(DYLINT_DRIVER_PATH)"; \
+	smoke; \
+	cold=$$(digest); \
+	echo "Warm run: reusing $$cold"; \
+	smoke; \
+	[ "$$(digest)" = "$$cold" ] || { echo "the warm run rebuilt the Dylint driver" >&2; exit 1; }; \
+	echo "Dylint driver built once and reused: $$cold"
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?##' $(MAKEFILE_LIST) | \

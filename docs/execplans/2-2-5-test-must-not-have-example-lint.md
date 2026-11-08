@@ -211,7 +211,7 @@ Current repository state relevant to this task:
 - Existing reusable detection helpers already exist:
   - `common::context::{is_test_fn_with, in_test_like_context_with}`;
   - `crates/no_expect_outside_tests/src/context.rs` for HIR ancestor collection
-    and `cfg(test)` handling (`collect_context`, `summarise_context`).
+    and `cfg(test)` handling (`collect_context`, `summarize_context`).
 - Existing BDD tests use `rstest_bdd_macros::{given, when, then, scenario}` and
   are executed under `cargo test`.
 

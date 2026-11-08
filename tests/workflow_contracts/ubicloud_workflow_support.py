@@ -28,32 +28,12 @@ CACHE_ACTION_SHA = "55cc8345863c7cc4c66a329aec7e433d2d1c52a9"
 RESTORE_ACTION = f"actions/cache/restore@{CACHE_ACTION_SHA}"
 SAVE_ACTION = f"actions/cache/save@{CACHE_ACTION_SHA}"
 INSTALL_ACTION = "taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68"
-#: shared-actions `main` at the merge of #458. It keeps the rule that its
-#: built-in `github` cache provider does not archive `target/<profile>`, so no
-#: shared action can become the second owner of compiler output that `sccache`
-#: already owns, and it adds two things the previous pin lacked: it restores
-#: the caller's Actions cache-service selection, and it starts the `sccache`
-#: server from a `run:` step after those exports, which is what makes the
-#: shared action's own compiler-cache arm work on Ubicloud.
-#:
-#: Every caller in this repository pins this one revision again. The lanes were
-#: split while the release boundaries waited for evidence, and the evidence
-#: arrived from the rolling release rather than from a tag: whitaker publishes
-#: on every merge to `main`, so those lanes run on every merge and had already
-#: been exercising the newer wiring by the time the split was written.
-#:
-#: Asserted by value rather than by shape, so a bump has to update this
-#: constant and someone has to confirm the new revision still leaves this
-#: repository the sole owner of its caches.
-SHARED_ACTIONS_REF: Final[str] = "7cb894fe62c40951cccf33819548095e64a1291e"
-
-SETUP_RUST_ACTION = f"leynos/shared-actions/.github/actions/setup-rust@{SHARED_ACTIONS_REF}"
-
 #: Every Ubicloud job, mapped to the workflow that declares it.
 UBICLOUD_JOBS: dict[str, str] = {
     "coverage-check": "ci.yml",
     "linux-full": "ci.yml",
     "coverage-upload": "coverage-main.yml",
+    "coverage-warmup": "coverage-main.yml",
     # A matrix job, and only two of its five legs are on Ubicloud. The rules
     # keyed on this mapping are about the step list, which every leg shares,
     # so the job belongs here whole; which legs run where is `RunnerLane`'s
@@ -62,16 +42,26 @@ UBICLOUD_JOBS: dict[str, str] = {
     "build-dependency-binaries": "rolling-release.yml",
 }
 
+#: The jobs in `UBICLOUD_JOBS` that run on a GitHub-hosted runner. A main
+#: coverage upload blocks no one's work, so it runs hosted with sccache off:
+#: it writes no cache the Ubicloud lanes read, and GitHub's cache service
+#: throttled its compiler-cache writes. The rules about the compiler cache
+#: therefore do not apply to it; the rules about the gates it runs still do.
+HOSTED_RUNNER_JOBS: dict[str, str] = {
+    "coverage-upload": "coverage-main.yml",
+}
+
 #: Every job that runs this repository's own gates: the suite, the lints, the
 #: coverage run. They share a shape that a build job does not have, so the
 #: rules about that shape are keyed here rather than on every Ubicloud job.
-#: Nextest concurrency, the Clippy source mirror and the tools cache are all
+#: Nextest concurrency, the Clippy snapshot and the tools cache are all
 #: rules about running the gates, and `build-lints` runs none of them; it
 #: cross-compiles the lint crates for five targets and packages them.
 SUITE_JOBS: dict[str, str] = {
     "coverage-check": "ci.yml",
     "linux-full": "ci.yml",
     "coverage-upload": "coverage-main.yml",
+    "coverage-warmup": "coverage-main.yml",
 }
 
 #: Every job that owns cache archives, including the GitHub-hosted Windows
@@ -81,22 +71,21 @@ CACHING_JOBS: dict[str, str] = UBICLOUD_JOBS | {"windows-compat": "ci.yml"}
 
 #: The single job permitted to save each cache key family.
 CACHE_KEY_WRITERS: dict[str, str] = {
-    "cargo-registry-coverage-v1-": "coverage-upload",
+    "cargo-registry-coverage-v1-": "coverage-warmup",
     "cargo-registry-lint-v1-": "linux-full",
-    "tools-coverage-v1-": "coverage-upload",
+    "tools-coverage-v1-": "coverage-warmup",
     "tools-lint-v1-": "linux-full",
     "dylint-tools-v1-": "linux-full",
-    "clippy-mirror-v1-": "coverage-upload",
-    # The `sccache-coverage-v1-` and `sccache-lint-v1-` families are gone, not
-    # merely unlisted. Both Linux workflows run sccache on the `gha` backend
-    # against Ubicloud's cache proxy, so no lane archives `~/.cache/sccache`
-    # and there is no directory for a family to name. The rolling-release
-    # lanes below stay on the local-directory backend and keep theirs.
+    "clippy-snapshot-v1-": "coverage-warmup",
+    # No `sccache-*` family is listed, and none may be. `setup-rust` points
+    # every Ubicloud lane's sccache at Ubicloud's cache proxy, so no lane
+    # archives `~/.cache/sccache` and there is no directory for a family to
+    # name. The rolling-release lanes' `sccache-rolling-v1-` and
+    # `sccache-depbin-v1-` families went with the local-directory backend.
     "cargo-registry-windows-v1-": "windows-compat",
+    "dylint-driver-windows-v1-": "windows-compat",
     "cargo-registry-rolling-v1-": "build-lints",
-    "sccache-rolling-v1-": "build-lints",
     "cargo-registry-depbin-v1-": "build-dependency-binaries",
-    "sccache-depbin-v1-": "build-dependency-binaries",
 }
 
 
@@ -188,6 +177,32 @@ def load_workflow(workflow_name: str) -> dict[str, Any]:
     workflow = parse_workflow(workflow_path.read_text(encoding="utf-8"))
     assert isinstance(workflow, dict), f"{workflow_name} must parse to a mapping"
     return workflow
+
+
+SETUP_RUST_PREFIX = "leynos/shared-actions/.github/actions/setup-rust@"
+
+
+def _ci_setup_rust_reference() -> str:
+    """Return the shared-actions revision `ci.yml` pins `setup-rust` at.
+
+    The revision is read from the workflow rather than restated here, so a
+    shared-actions bump edits the workflows alone. What the contracts hold is
+    that every workflow names the same revision, as a full 40-character SHA
+    (`shared_action_pin_test.py`); this is the one they compare against.
+    """
+    jobs = load_workflow("ci.yml").get("jobs", {})
+    for job in jobs.values():
+        for step in job.get("steps", []) if isinstance(job, dict) else []:
+            uses = step.get("uses") if isinstance(step, dict) else None
+            if isinstance(uses, str) and uses.startswith(SETUP_RUST_PREFIX):
+                return uses.removeprefix(SETUP_RUST_PREFIX)
+    raise AssertionError("ci.yml calls no setup-rust, so there is no pin to compare with")
+
+
+#: The shared-actions revision every workflow pins, as read from `ci.yml`.
+SHARED_ACTIONS_REF: Final[str] = _ci_setup_rust_reference()
+
+SETUP_RUST_ACTION = f"{SETUP_RUST_PREFIX}{SHARED_ACTIONS_REF}"
 
 
 def load_job(job_name: str) -> dict[str, Any]:
@@ -311,51 +326,9 @@ def run_scripts(job: dict[str, Any]) -> str:
     return "\n".join(str(step.get("run", "")) for step in job_steps(job))
 
 
-#: The directory the local-disk sccache backend writes to, as every cache step
-#: that has ever owned it spells it.
+#: The directory the retired local-disk sccache backend wrote to, as every
+#: cache step that ever owned it spelled it. No step may own it now.
 SCCACHE_DIRECTORY: Final[str] = "~/.cache/sccache"
-
-#: The step that republishes Ubicloud's cache-proxy credentials through
-#: `GITHUB_ENV`. Asserted by name because the ordering rules are about where it
-#: sits in the step list, and by action because a step that merely carries the
-#: name would satisfy the ordering while exporting nothing.
-CREDENTIALS_STEP: Final[str] = "Export the Ubicloud cache credentials"
-CREDENTIALS_ACTION_PATH: Final[str] = (
-    "leynos/shared-actions/.github/actions/export-ubicloud-cache-credentials"
-)
-
-#: What `scripts/select-sccache-backend.sh` assumes when `SCCACHE_BACKEND` is
-#: unset or empty, kept here so the contract reads the same default the lanes
-#: would actually run under rather than treating an omission as a failure.
-DEFAULT_BACKEND: Final[str] = "gha"
-
-
-def backend_for(workflow_name: str) -> str:
-    """Return the compiler-cache backend one workflow selects.
-
-    The workflows declare `SCCACHE_BACKEND` once, at workflow level, and
-    `scripts/select-sccache-backend.sh` translates it into exactly one set of
-    sccache variables. The value is returned as declared, not stripped: the
-    selector matches it verbatim, so `' gha '` fails there and must fail the
-    contract too rather than reading as `gha`.
-
-    Parameters
-    ----------
-    workflow_name : str
-        The workflow file to read, such as ``"ci.yml"``.
-
-    Returns
-    -------
-    str
-        The declared `SCCACHE_BACKEND`, or `DEFAULT_BACKEND` when the workflow
-        leaves it unset or empty, as the selector does.
-
-    For example, ``backend_for("ci.yml")`` returns ``"gha"``.
-    """
-    env = load_workflow(workflow_name).get("env", {})
-    declared = str(env.get("SCCACHE_BACKEND", ""))
-    return declared or DEFAULT_BACKEND
-
 
 def sccache_directory_steps(job: dict[str, Any]) -> list[dict[str, Any]]:
     """Return the job's cache steps that own the local sccache directory.

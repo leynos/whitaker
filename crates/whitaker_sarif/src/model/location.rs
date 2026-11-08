@@ -2,21 +2,21 @@
 //!
 //! These types describe where a result was found in source code. A
 //! [`Location`] wraps a [`PhysicalLocation`] which combines an
-//! [`ArtifactLocation`] (file URI) with an optional [`Region`] (line and
+//! [`ArtefactLocation`] (file URI) with an optional [`Region`] (line and
 //! column spans).
 
 use serde::{Deserialize, Serialize};
 
-/// A location within an artifact (source file).
+/// A location within an artefact (source file).
 ///
 /// # Examples
 ///
 /// ```
-/// use whitaker_sarif::{Location, PhysicalLocation, ArtifactLocation, Region};
+/// use whitaker_sarif::{ArtefactLocation, Location, PhysicalLocation, Region};
 ///
 /// let loc = Location {
 ///     physical_location: PhysicalLocation {
-///         artifact_location: ArtifactLocation {
+///         artefact_location: ArtefactLocation {
 ///             uri: "src/main.rs".into(),
 ///             uri_base_id: None,
 ///         },
@@ -30,7 +30,7 @@ use serde::{Deserialize, Serialize};
 ///         }),
 ///     },
 /// };
-/// assert_eq!(loc.physical_location.artifact_location.uri, "src/main.rs");
+/// assert_eq!(loc.physical_location.artefact_location.uri, "src/main.rs");
 /// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -43,19 +43,23 @@ pub struct Location {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PhysicalLocation {
-    /// Identifies the artifact (file).
-    pub artifact_location: ArtifactLocation,
+    /// Identifies the artefact (file).
+    ///
+    /// The SARIF 2.1.0 schema spells this property `artifactLocation`, so the
+    /// wire name is pinned here rather than derived from the field name.
+    #[serde(rename = "artifactLocation")]
+    pub artefact_location: ArtefactLocation,
 
-    /// Optional region within the artifact.
+    /// Optional region within the artefact.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub region: Option<Region>,
 }
 
-/// A reference to an artifact by URI.
+/// A reference to an artefact by URI.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ArtifactLocation {
-    /// Relative or absolute URI of the artifact.
+pub struct ArtefactLocation {
+    /// Relative or absolute URI of the artefact.
     pub uri: String,
 
     /// Base identifier for resolving relative URIs.
@@ -63,7 +67,7 @@ pub struct ArtifactLocation {
     pub uri_base_id: Option<String>,
 }
 
-/// A region within an artifact, identified by line and column numbers.
+/// A region within an artefact, identified by line and column numbers.
 ///
 /// `start_line` is always required (1-based). All other fields are optional.
 ///
@@ -100,7 +104,7 @@ pub struct Region {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub end_column: Option<usize>,
 
-    /// Optional byte offset from the start of the artifact.
+    /// Optional byte offset from the start of the artefact.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub byte_offset: Option<usize>,
 
@@ -128,7 +132,11 @@ pub struct RelatedLocation {
 
 #[cfg(test)]
 mod tests {
+    //! Test SARIF regions, locations and related locations with shared JSON
+    //! assertion helpers.
+
     use super::*;
+    use crate::test_support::{assert_json_round_trip, assert_serialized_json};
 
     #[test]
     fn region_round_trip() {
@@ -140,13 +148,7 @@ mod tests {
             byte_offset: None,
             byte_length: None,
         };
-        match serde_json::to_string(&region) {
-            Ok(json) => match serde_json::from_str::<Region>(&json) {
-                Ok(parsed) => assert_eq!(region, parsed),
-                Err(e) => panic!("failed to deserialize: {e}"),
-            },
-            Err(e) => panic!("failed to serialize: {e}"),
-        }
+        assert_json_round_trip(&region);
     }
 
     #[test]
@@ -159,20 +161,21 @@ mod tests {
             byte_offset: None,
             byte_length: None,
         };
-        match serde_json::to_string(&region) {
-            Ok(json) => {
-                assert!(!json.contains("startColumn"));
-                assert!(!json.contains("endLine"));
-            }
-            Err(e) => panic!("failed to serialize: {e}"),
-        }
+        assert_serialized_json(&region, |json| {
+            assert!(
+                !json.contains("startColumn"),
+                "unset startColumn present: {json}"
+            );
+            assert!(!json.contains("endLine"), "unset endLine present: {json}");
+        });
     }
 
+    /// Check that a location survives JSON serialization and deserialization.
     #[test]
     fn location_round_trip() {
         let loc = Location {
             physical_location: PhysicalLocation {
-                artifact_location: ArtifactLocation {
+                artefact_location: ArtefactLocation {
                     uri: "src/lib.rs".into(),
                     uri_base_id: Some("%SRCROOT%".into()),
                 },
@@ -186,15 +189,10 @@ mod tests {
                 }),
             },
         };
-        match serde_json::to_string(&loc) {
-            Ok(json) => match serde_json::from_str::<Location>(&json) {
-                Ok(parsed) => assert_eq!(loc, parsed),
-                Err(e) => panic!("failed to deserialize: {e}"),
-            },
-            Err(e) => panic!("failed to serialize: {e}"),
-        }
+        assert_json_round_trip(&loc);
     }
 
+    /// Check that a related location survives a JSON round trip.
     #[test]
     fn related_location_round_trip() {
         let rl = RelatedLocation {
@@ -203,19 +201,13 @@ mod tests {
                 text: "peer fragment".into(),
             }),
             physical_location: PhysicalLocation {
-                artifact_location: ArtifactLocation {
+                artefact_location: ArtefactLocation {
                     uri: "src/other.rs".into(),
                     uri_base_id: None,
                 },
                 region: None,
             },
         };
-        match serde_json::to_string(&rl) {
-            Ok(json) => match serde_json::from_str::<RelatedLocation>(&json) {
-                Ok(parsed) => assert_eq!(rl, parsed),
-                Err(e) => panic!("failed to deserialize: {e}"),
-            },
-            Err(e) => panic!("failed to serialize: {e}"),
-        }
+        assert_json_round_trip(&rl);
     }
 }

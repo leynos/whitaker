@@ -12,7 +12,6 @@ Run via ``make test-workflow-contracts``.
 import typing as typ
 
 import pytest
-from coverage_boundary import coverage_surface_offenders
 from pull_request_reach import (
     declares_trigger,
     is_reachable_by_a_pull_request,
@@ -47,12 +46,12 @@ def _parsed(text: str) -> dict[str, typ.Any]:
     return parsed
 
 
-def test_the_probe_is_reported_once_the_closure_reaches_it() -> None:
+def test_the_probe_is_reached_once_the_closure_follows_the_call() -> None:
     """The measurement the closure rests on, in both directions.
 
     The trigger-only reading reaches `ci.yml` alone. The closure adds the
-    probe, and the boundary then reports the caller's `secrets: inherit` and
-    the probe's credential, and its host.
+    probe, which a rule ranging over the closure (the shared CV-005 contract
+    checker's, and the trunk-writer contract's) therefore reads.
     """
     texts = {
         "ci.yml": _caller("./.github/workflows/probe.yml"),
@@ -69,17 +68,6 @@ def test_the_probe_is_reported_once_the_closure_reaches_it() -> None:
     assert closure == frozenset({"ci.yml", "probe.yml"}), (
         f"the called workflow runs on a pull request; the closure read {closure}"
     )
-    probe_offences = coverage_surface_offenders(
-        "probe.yml", documents["probe.yml"], PROBE
-    )
-    assert any("raw text names codescene.io" in o for o in probe_offences), (
-        probe_offences
-    )
-    assert any("parsed value" in o for o in probe_offences), probe_offences
-    caller_offences = coverage_surface_offenders(
-        "ci.yml", documents["ci.yml"], texts["ci.yml"]
-    )
-    assert any("secrets: inherit" in o for o in caller_offences), caller_offences
 
 
 @pytest.mark.parametrize(

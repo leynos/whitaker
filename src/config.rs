@@ -8,7 +8,7 @@
 //! `dylint.toml` when present and fall back to sensible defaults otherwise.
 
 use serde::Deserialize;
-use whitaker_common::i18n::normalise_locale;
+use whitaker_common::i18n::normalize_locale;
 
 /// Shared configuration for the workspace-level crate.
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq)]
@@ -56,7 +56,8 @@ impl SharedConfig {
         #[cfg(not(feature = "dylint-driver"))]
         {
             panic!(
-                "`SharedConfig::load` uses the Dylint loader; use `SharedConfig::load_with` to inject a stub when testing"
+                "`SharedConfig::load` uses the Dylint loader; use `SharedConfig::load_with` to \
+                 inject a stub when testing"
             );
         }
     }
@@ -91,9 +92,7 @@ impl SharedConfig {
     /// Whitespace-only values are treated as absent to avoid surprising
     /// behaviour when `dylint.toml` is templated or patched.
     #[must_use]
-    pub fn locale(&self) -> Option<&str> {
-        normalise_locale(self.locale.as_deref())
-    }
+    pub fn locale(&self) -> Option<&str> { normalize_locale(self.locale.as_deref()) }
 }
 
 /// Settings that influence the forthcoming `module_max_lines` lint.
@@ -106,9 +105,7 @@ pub struct ModuleMaxLinesConfig {
 }
 
 impl ModuleMaxLinesConfig {
-    const fn default_max_lines() -> usize {
-        400
-    }
+    const fn default_max_lines() -> usize { 400 }
 }
 
 impl Default for ModuleMaxLinesConfig {
@@ -121,8 +118,9 @@ impl Default for ModuleMaxLinesConfig {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use rstest::rstest;
+
+    use super::*;
 
     #[rstest]
     fn defaults_match_the_suite_baseline() {
@@ -132,8 +130,9 @@ mod tests {
         assert!(config.locale().is_none());
     }
 
+    /// Check that TOML configuration overrides are deserialized.
     #[rstest]
-    fn deserialises_overrides_from_toml() {
+    fn deserializes_overrides_from_toml() {
         let source = "[module_max_lines]\nmax_lines = 120\n";
 
         // Panic with the TOML parser's message so broken overrides are easy to debug.
@@ -143,8 +142,9 @@ mod tests {
         assert_eq!(config.module_max_lines.max_lines, 120);
     }
 
+    /// Check that a locale override is deserialized.
     #[rstest]
-    fn deserialises_locale_override() {
+    fn deserializes_locale_override() {
         let source = "locale = \"cy\"\n";
 
         let config = toml::from_str::<SharedConfig>(source)
@@ -163,8 +163,9 @@ mod tests {
         assert!(config.locale().is_none());
     }
 
+    /// Check that invalid configuration values return a deserialization error.
     #[rstest]
-    fn propagates_deserialisation_failures() {
+    fn propagates_deserialization_failures() {
         let source = "[module_max_lines]\nmax_lines = \"a lot\"\n";
 
         let outcome: Result<SharedConfig, _> = toml::from_str(source);

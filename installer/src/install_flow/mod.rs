@@ -1,0 +1,329 @@
+//! Install-flow helpers for the installer binary.
+//!
+//! This module keeps prebuilt-download fallback and metrics recording logic
+//! separate from CLI orchestration in `main.rs`.
+
+use std::{io::Write, time::Duration};
+
+use camino::{Utf8Path, Utf8PathBuf};
+use whitaker_installer::{
+    cli::InstallArgs,
+    crate_name::CrateName,
+    deps::{CommandExecutor, DylintToolStatus, SourcePolicy},
+    dirs::BaseDirs,
+    error::{InstallerError, Result},
+    install_metrics::{InstallMode, RecordOutcome, record_install},
+    output::write_stderr_line,
+    prebuilt::{PrebuiltConfig, PrebuiltResult, attempt_prebuilt},
+    prebuilt_path::prebuilt_library_dir,
+};
+
+pub(crate) mod bootstrap_step;
+mod prune;
+use prune::prune_prebuilt_libraries;
+#[cfg(test)]
+use prune::{requested_crate_names, staged_library_filename};
+mod dependency_check;
+#[cfg(all(test, unix))]
+pub(crate) use dependency_check::check_dylint_tools_for_command;
+
+pub(crate) fn ensure_dylint_tools_core(
+    quiet: bool,
+    stderr: &mut dyn Write,
+    is_all_installed: bool,
+    do_install: impl FnOnce(&mut dyn Write) -> Result<()>,
+) -> Result<()> {
+    if is_all_installed {
+        return Ok(());
+    }
+
+    if !quiet {
+        write_stderr_line(stderr, "Installing required Dylint tools...");
+    }
+
+    do_install(stderr)?;
+
+    if !quiet {
+        write_stderr_line(stderr, "Dylint tools installed successfully.");
+        write_stderr_line(stderr, "");
+    }
+
+    Ok(())
+}
+
+/// Query availability once, then delegate missing-tool installation.
+///
+/// The callback keeps query ordering shared by the CLI and tests while
+/// leaving the concrete installation boundary injectable.
+pub(crate) fn ensure_dylint_tools_with_executor(
+    executor: &dyn CommandExecutor,
+    policy: SourcePolicy,
+    stderr: &mut dyn Write,
+    install: impl FnOnce(&DylintToolStatus, &mut dyn Write) -> Result<()>,
+) -> Result<()> {
+    dependency_check::ensure_dylint_tools_with_query(
+        policy.quiet,
+        stderr,
+        || dependency_check::check_dylint_tools_for_command(executor),
+        install,
+    )
+}
+
+/// Context needed to attempt prebuilt installation.
+pub(crate) struct PrebuiltInstallationContext<'a> {
+    /// CLI install arguments.
+    pub(crate) args: &'a InstallArgs,
+    /// The source-fallback rule, resolved once at the command boundary.
+    ///
+    /// `InstallArgs::forbids_source_fallback` reads the process environment,
+    /// so calling it at each decision point would read ambient state three
+    /// times in one installation and could reach different answers. The
+    /// environment is read once, into this field, and every decision below
+    /// consults the answer.
+    pub(crate) policy: SourcePolicy,
+    /// Base directory provider.
+    pub(crate) dirs: &'a dyn BaseDirs,
+    /// Crates requested for this installation.
+    pub(crate) requested_crates: &'a [CrateName],
+    /// Toolchain channel resolved for this install.
+    pub(crate) toolchain_channel: &'a str,
+}
+
+/// Context for recording one successful install in aggregate metrics.
+pub(crate) struct MetricsWriteContext<'a> {
+    /// Whether installer output is suppressed.
+    pub(crate) quiet: bool,
+    /// Base directory provider used to locate Whitaker data directory.
+    pub(crate) dirs: &'a dyn BaseDirs,
+    /// Terminal install mode (download or build).
+    pub(crate) install_mode: InstallMode,
+    /// Elapsed duration for this successful install run.
+    pub(crate) elapsed: Duration,
+}
+
+/// Report a prebuilt failure, or refuse it when a source build is forbidden.
+///
+/// Every prebuilt failure here used to end the same way: a message, then a
+/// local compilation that succeeds. That is a silent success, and in CI it is
+/// the defect rather than a degraded mode, so `--no-source-fallback` turns
+/// each one into an error naming what was missing and why.
+fn prebuilt_unavailable(
+    policy: SourcePolicy,
+    artefact: &str,
+    error: &dyn std::fmt::Display,
+    stderr: &mut dyn Write,
+) -> Result<Option<Utf8PathBuf>> {
+    if policy.no_source_fallback {
+        return Err(InstallerError::SourceFallbackForbidden {
+            artefact: artefact.to_owned(),
+            reason: error.to_string(),
+        });
+    }
+    write_prebuilt_fallback_message(policy.quiet, error, stderr);
+    Ok(None)
+}
+
+/// Write fallback message when prebuilt installation fails.
+pub(crate) fn write_prebuilt_fallback_message(
+    quiet: bool,
+    error: &dyn std::fmt::Display,
+    stderr: &mut dyn Write,
+) {
+    if quiet {
+        return;
+    }
+    write_stderr_line(stderr, format!("Prebuilt download unavailable: {error}"));
+    write_stderr_line(stderr, "Falling back to local compilation.");
+    write_stderr_line(stderr, "");
+}
+
+/// Attempt prebuilt installation and return staged path when successful.
+pub(crate) fn try_prebuilt_installation(
+    context: &PrebuiltInstallationContext<'_>,
+    stderr: &mut dyn Write,
+) -> Result<Option<Utf8PathBuf>> {
+    try_prebuilt_installation_with(
+        context,
+        stderr,
+        &PrebuiltInstallationHooks {
+            detect_host_target,
+            resolve_destination_dir: prebuilt_library_dir,
+            attempt_prebuilt,
+            prune_prebuilt_libraries,
+        },
+    )
+}
+
+type DetectHostTargetFn = fn() -> Result<String>;
+type ResolveDestinationDirFn = fn(&dyn BaseDirs, &str, &str) -> Result<Utf8PathBuf>;
+type AttemptPrebuiltFn = fn(&PrebuiltConfig<'_>, &mut dyn Write) -> PrebuiltResult;
+type PruneLibrariesFn = fn(&Utf8Path, &str, &[CrateName], &[String]) -> Result<()>;
+
+#[derive(Clone, Copy)]
+struct PrebuiltInstallationHooks {
+    detect_host_target: DetectHostTargetFn,
+    resolve_destination_dir: ResolveDestinationDirFn,
+    attempt_prebuilt: AttemptPrebuiltFn,
+    prune_prebuilt_libraries: PruneLibrariesFn,
+}
+
+fn try_prebuilt_installation_with(
+    context: &PrebuiltInstallationContext<'_>,
+    stderr: &mut dyn Write,
+    hooks: &PrebuiltInstallationHooks,
+) -> Result<Option<Utf8PathBuf>> {
+    let PrebuiltInstallationHooks {
+        detect_host_target,
+        resolve_destination_dir,
+        attempt_prebuilt,
+        prune_prebuilt_libraries,
+    } = *hooks;
+
+    if !context
+        .args
+        .should_attempt_prebuilt(context.requested_crates)
+    {
+        return Ok(None);
+    }
+
+    let host_target = match detect_host_target() {
+        Ok(target) => target,
+        Err(error) => {
+            return prebuilt_unavailable(context.policy, "the host target", &error, stderr);
+        }
+    };
+
+    let destination_dir =
+        match resolve_destination_dir(context.dirs, context.toolchain_channel, &host_target) {
+            Ok(destination) => destination,
+            Err(error) => {
+                return prebuilt_unavailable(
+                    context.policy,
+                    "the prebuilt library directory",
+                    &error,
+                    stderr,
+                );
+            }
+        };
+
+    let prebuilt_config = PrebuiltConfig {
+        target: &host_target,
+        toolchain: context.toolchain_channel,
+        destination_dir: &destination_dir,
+        quiet: context.policy.quiet,
+        // The unavailable-artefact line is worth writing either way; only the
+        // promise of a fallback has to go when the caller has forbidden one.
+        allow_source_fallback: !context.policy.no_source_fallback,
+    };
+
+    let (staging_path, delivered) = match attempt_prebuilt(&prebuilt_config, stderr) {
+        PrebuiltResult::Success {
+            staging_path,
+            delivered,
+        } => (staging_path, delivered),
+        PrebuiltResult::Fallback { reason } => {
+            return fall_back_or_refuse(context.policy, reason);
+        }
+    };
+    if let Err(error) = prune_prebuilt_libraries(
+        &staging_path,
+        context.toolchain_channel,
+        context.requested_crates,
+        &delivered,
+    ) {
+        return prebuilt_unavailable(
+            context.policy,
+            "the pruned prebuilt libraries",
+            &error,
+            stderr,
+        );
+    }
+    Ok(Some(staging_path))
+}
+
+/// Decide what an unavailable prebuilt artefact means for the caller.
+///
+/// `attempt_prebuilt` has already written the unavailable notice and, where a
+/// fallback is permitted, the fallback line. Repeating either here would print
+/// it twice, so only the refusal is added.
+fn fall_back_or_refuse(policy: SourcePolicy, reason: String) -> Result<Option<Utf8PathBuf>> {
+    if policy.no_source_fallback {
+        return Err(InstallerError::SourceFallbackForbidden {
+            artefact: "a prebuilt lint library".to_owned(),
+            reason,
+        });
+    }
+    Ok(None)
+}
+
+/// Detect the host target triple by parsing `rustc -vV` output.
+pub(crate) fn detect_host_target() -> Result<String> {
+    let output = std::process::Command::new("rustc")
+        .args(["-vV"])
+        .output()
+        .map_err(|error| InstallerError::ToolchainDetection {
+            reason: format!("failed to run `rustc -vV`: {error}"),
+        })?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(InstallerError::ToolchainDetection {
+            reason: format!(
+                "`rustc -vV` exited with {}: {}",
+                output.status,
+                stderr.trim()
+            ),
+        });
+    }
+
+    parse_host_target(&String::from_utf8_lossy(&output.stdout))
+}
+
+/// Extract the `host:` line from `rustc -vV` output.
+///
+/// Splitting the parse out of the process call lets tests exercise the real
+/// fallibility of host-target detection without spawning `rustc`.
+fn parse_host_target(rustc_output: &str) -> Result<String> {
+    for line in rustc_output.lines() {
+        if let Some(host) = line.strip_prefix("host: ") {
+            return Ok(host.trim().to_owned());
+        }
+    }
+    Err(InstallerError::ToolchainDetection {
+        reason: "could not determine host target from `rustc -vV`".to_owned(),
+    })
+}
+
+/// Best-effort metrics recording for successful installation runs.
+pub(crate) fn write_install_metrics(context: &MetricsWriteContext<'_>, stderr: &mut dyn Write) {
+    match record_install(context.dirs, context.install_mode, context.elapsed) {
+        Ok(record_outcome) => write_metrics_summary(context.quiet, &record_outcome, stderr),
+        Err(error) => {
+            if !context.quiet {
+                write_stderr_line(
+                    stderr,
+                    format!("Warning: could not record install metrics: {error}"),
+                );
+            }
+        }
+    }
+}
+
+fn write_metrics_summary(quiet: bool, record_outcome: &RecordOutcome, stderr: &mut dyn Write) {
+    if quiet {
+        return;
+    }
+
+    if record_outcome.recovered_from_corrupt_file() {
+        write_stderr_line(
+            stderr,
+            "Install metrics file was invalid and has been reset.",
+        );
+    }
+    write_stderr_line(stderr, record_outcome.metrics().summary_line());
+}
+
+#[cfg(test)]
+mod tests;
+
+#[cfg(test)]
+mod dependency_check_tests;

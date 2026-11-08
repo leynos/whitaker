@@ -9,25 +9,25 @@
 //! behavioural tests validating new functionality. End-to-end integration testing
 //! of the exclusion feature is not feasible with `dylint_testing` because:
 //!
-//! 1. **Technical constraint**: The `dylint_testing` harness uses `CARGO_PKG_NAME`
-//!    at compile time, preventing fixture crates from having controlled names.
+//! 1. **Technical constraint**: The `dylint_testing` harness uses `CARGO_PKG_NAME` at compile time,
+//!    preventing fixture crates from having controlled names.
 //!
-//! 2. **Unit test coverage is sufficient**: The exclusion implementation is
-//!    straightforward—when `self.excluded` is true, `emit_optional` returns early
-//!    (see `driver.rs`). All configuration parsing, deserialization, and matching
-//!    logic is fully validated by the tests below.
+//! 2. **Unit test coverage is sufficient**: The exclusion implementation is straightforward—when
+//!    `self.excluded` is true, `emit_optional` returns early (see `driver.rs`). All configuration
+//!    parsing, deserialization, and matching logic is fully validated by the tests below.
 //!
-//! 3. **Behaviour is deterministic**: The `check_crate` method sets `self.excluded`
-//!    based on `config.is_excluded(crate_name)`, which is exhaustively tested here.
+//! 3. **Behaviour is deterministic**: The `check_crate` method sets `self.excluded` based on
+//!    `config.is_excluded(crate_name)`, which is exhaustively tested here.
 //!
 //! The integration tests in `tests/integration_exclusion.rs` provide additional
 //! coverage by invoking `cargo dylint` on fixture projects with real exclusion
 //! configurations.
 
-use super::*;
+use std::{collections::HashSet, io};
+
 use rstest::rstest;
-use std::collections::HashSet;
-use std::io;
+
+use super::*;
 
 #[test]
 fn config_default_has_empty_excluded_crates() {
@@ -40,8 +40,8 @@ fn config_default_has_empty_excluded_paths() {
 }
 
 #[rstest]
-#[case::empty_config(r#""#, &[])]
-#[case::empty_excluded(r#"excluded_crates = []"#, &[])]
+#[case::empty_config(r"", &[])]
+#[case::empty_excluded(r"excluded_crates = []", &[])]
 #[case::single_crate(r#"excluded_crates = ["foo"]"#, &["foo"])]
 #[case::multiple_crates(r#"excluded_crates = ["foo", "bar", "baz"]"#, &["foo", "bar", "baz"])]
 fn config_deserializes_excluded_crates(#[case] toml: &str, #[case] expected: &[&str]) {
@@ -56,8 +56,8 @@ fn config_deserializes_excluded_crates(#[case] toml: &str, #[case] expected: &[&
 }
 
 #[rstest]
-#[case::empty_config(r#""#, &[])]
-#[case::empty_excluded(r#"excluded_paths = []"#, &[])]
+#[case::empty_config(r"", &[])]
+#[case::empty_excluded(r"excluded_paths = []", &[])]
 #[case::single_path(r#"excluded_paths = ["my_app::legacy_io"]"#, &["my_app::legacy_io"])]
 #[case::multiple_paths(
     r#"excluded_paths = ["my_app::legacy_io", "my_app::bin::migrate"]"#,
@@ -104,7 +104,7 @@ fn legacy_config_without_excluded_paths_still_parses() {
 
 #[rstest]
 #[case::wrong_type(r#"excluded_paths = "not_an_array""#)]
-#[case::wrong_element_type(r#"excluded_paths = [1, 2, 3]"#)]
+#[case::wrong_element_type(r"excluded_paths = [1, 2, 3]")]
 #[case::mixed_element_types(r#"excluded_paths = ["my_app::legacy_io", 1]"#)]
 fn config_rejects_invalid_excluded_paths(#[case] toml: &str) {
     assert!(
@@ -136,9 +136,9 @@ fn path_exclusions_reflect_configuration(
 }
 
 #[rstest]
-#[case::unknown_field(r#"unknown_field = true"#)]
+#[case::unknown_field(r"unknown_field = true")]
 #[case::wrong_type(r#"excluded_crates = "not_an_array""#)]
-#[case::wrong_element_type(r#"excluded_crates = [1, 2, 3]"#)]
+#[case::wrong_element_type(r"excluded_crates = [1, 2, 3]")]
 fn config_rejects_invalid_toml(#[case] toml: &str) {
     assert!(
         toml::from_str::<NoStdFsConfig>(toml).is_err(),

@@ -1,0 +1,18 @@
+// run-rustfix
+#![warn(string_continuation_style)]
+
+//! A join in the custom-message argument of `assert!` is reported.
+//!
+//! `assert!` is a known format facade, so its message argument reaches the
+//! format-string path. The pass must suggest `concat!()` there while leaving
+//! the trailing `value` argument in place.
+
+fn main() {
+    let value = 7;
+    assert!(
+        value > 0,
+        "alpha \
+         beta{}",
+        value
+    );
+}

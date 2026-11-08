@@ -1,4 +1,4 @@
-//! Error types for MinHash sketching and LSH configuration.
+//! Error types for `MinHash` sketching and LSH configuration.
 
 use thiserror::Error;
 
@@ -16,17 +16,17 @@ pub enum IndexError {
     /// The number of rows per band must be greater than zero.
     #[error("LSH rows must be greater than zero")]
     ZeroRows,
-    /// The band and row product must equal the fixed MinHash sketch size.
+    /// The band and row product must equal the fixed `MinHash` sketch size.
     #[error("LSH bands ({bands}) multiplied by rows ({rows}) must equal {expected}")]
     InvalidBandRowProduct {
         /// Requested number of bands.
         bands: usize,
         /// Requested number of rows per band.
         rows: usize,
-        /// Required fixed MinHash sketch size.
+        /// Required fixed `MinHash` sketch size.
         expected: usize,
     },
-    /// MinHash requires at least one retained fingerprint hash.
+    /// `MinHash` requires at least one retained fingerprint hash.
     #[error("retained fingerprints must not be empty")]
     EmptyFingerprintSet,
 }

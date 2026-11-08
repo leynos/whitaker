@@ -1,7 +1,8 @@
 //! Unit tests for brain trait metric collection.
 
-use super::*;
 use rstest::rstest;
+
+use super::*;
 
 fn mixed_items() -> Vec<TraitItemMetrics> {
     vec![
@@ -28,7 +29,8 @@ struct ExpectedTraitMetrics {
     burden: usize,
 }
 
-fn assert_trait_metrics(metrics: &TraitMetrics, expected: ExpectedTraitMetrics) {
+/// Compare every exposed trait metric with its expected value.
+fn assert_trait_metrics(metrics: &TraitMetrics, expected: &ExpectedTraitMetrics) {
     assert_eq!(metrics.trait_name(), expected.name);
     assert_eq!(metrics.total_item_count(), expected.total);
     assert_eq!(metrics.required_method_count(), expected.required);
@@ -91,12 +93,13 @@ fn default_method_count_excludes_required_and_associated_items() {
     assert_eq!(default_method_count(&mixed_items()), 1);
 }
 
+/// Verify that the complexity sum includes only default methods.
 #[rstest]
 fn default_method_cc_sum_aggregates_only_default_methods() {
     let items = vec![
         TraitItemMetrics::required_method("parse"),
         TraitItemMetrics::default_method("render", 12),
-        TraitItemMetrics::default_method("serialise", 8),
+        TraitItemMetrics::default_method("serialize", 8),
         TraitItemMetrics::associated_type("Output"),
     ];
 
@@ -114,12 +117,14 @@ fn default_method_cc_sum_is_zero_without_default_methods() {
     assert_eq!(default_method_cc_sum(&items), 0);
 }
 
+/// Check that a new builder starts without trait items.
 #[rstest]
 fn builder_starts_empty() {
     let builder = TraitMetricsBuilder::new("Parser");
     assert!(builder.is_empty());
 }
 
+/// Check that a builder reports metrics for mixed trait items.
 #[rstest]
 fn builder_builds_mixed_trait_metrics() {
     let mut builder = TraitMetricsBuilder::new("Parser");
@@ -132,7 +137,7 @@ fn builder_builds_mixed_trait_metrics() {
 
     assert_trait_metrics(
         &metrics,
-        ExpectedTraitMetrics {
+        &ExpectedTraitMetrics {
             name: "Parser",
             total: 4,
             required: 1,
@@ -143,6 +148,7 @@ fn builder_builds_mixed_trait_metrics() {
     );
 }
 
+/// Check that a builder accepts prebuilt trait metric entries.
 #[rstest]
 fn builder_add_item_supports_prebuilt_entries() {
     let mut builder = TraitMetricsBuilder::new("Renderer");
@@ -153,7 +159,7 @@ fn builder_add_item_supports_prebuilt_entries() {
 
     assert_trait_metrics(
         &metrics,
-        ExpectedTraitMetrics {
+        &ExpectedTraitMetrics {
             name: "Renderer",
             total: 2,
             required: 1,
@@ -164,6 +170,7 @@ fn builder_add_item_supports_prebuilt_entries() {
     );
 }
 
+/// Check that macro-expanded default methods are excluded from metrics.
 #[rstest]
 fn builder_filters_macro_expanded_default_methods() {
     let mut builder = TraitMetricsBuilder::new("Parser");
@@ -175,7 +182,7 @@ fn builder_filters_macro_expanded_default_methods() {
 
     assert_trait_metrics(
         &metrics,
-        ExpectedTraitMetrics {
+        &ExpectedTraitMetrics {
             name: "Parser",
             total: 2,
             required: 1,
@@ -186,12 +193,13 @@ fn builder_filters_macro_expanded_default_methods() {
     );
 }
 
+/// Check that implementor burden equals the number of required methods.
 #[rstest]
 fn implementor_burden_equals_required_method_count() {
     let mut builder = TraitMetricsBuilder::new("Transformer");
     builder.add_required_method("parse");
     builder.add_required_method("validate");
-    builder.add_default_method("normalise", 7, false);
+    builder.add_default_method("normalize", 7, false);
     builder.add_associated_type("Output");
 
     let metrics = builder.build();
@@ -200,13 +208,14 @@ fn implementor_burden_equals_required_method_count() {
     assert_eq!(metrics.implementor_burden(), 2);
 }
 
+/// Check that an empty trait produces zero-valued metrics.
 #[rstest]
 fn empty_trait_has_zeroed_metrics() {
     let metrics = TraitMetricsBuilder::new("EmptyTrait").build();
 
     assert_trait_metrics(
         &metrics,
-        ExpectedTraitMetrics {
+        &ExpectedTraitMetrics {
             name: "EmptyTrait",
             total: 0,
             required: 0,

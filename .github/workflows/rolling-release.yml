@@ -16,11 +16,11 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  # The Linux legs cache compiler output in a directory this workflow
-  # owns, rather than in the Actions cache service. One declaration, read
-  # by scripts/select-sccache-backend.sh, so the two backends can never be
-  # configured at once.
-  SCCACHE_BACKEND: local
+  # Release tag of the oldest installer any caller pins (the `install-whitaker`
+  # default). The publish job checks the built archives against what that
+  # installer prunes and the toolchain it maps to. Raise it only when the
+  # oldest pinned installer rises.
+  OLDEST_INSTALLER_TAG: v0.2.11
   LINT_CRATES: >-
     bumpy_road_function
     conditional_max_n_branches
@@ -76,6 +76,40 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
+  clippy-snapshot:
+    # Stage the pinned bundle and sidecar as one integrity pair: build both
+    # when neither is published, derive a missing sidecar from the published
+    # bundle's own bytes, and refuse an orphaned sidecar. A published bundle
+    # is never replaced, since installers that pin it may be downloading it
+    # right now. This is the only job in the workflow that reads public Clippy.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          persist-credentials: false
+
+      - name: Setup Rust
+        uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
+
+      - name: Prepare the Clippy snapshot assets
+        id: prepare
+        run: bash scripts/prepare-clippy-snapshot-assets.sh "${SNAPSHOT_RELEASE}" "$PWD/dist"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
+          # Through the environment, never template expansion: a dispatched
+          # `tag` input must not become shell source.
+          SNAPSHOT_RELEASE: rolling
+
+      - name: Upload the Clippy snapshot assets
+        if: steps.prepare.outputs.state != 'published'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7
+        with:
+          name: clippy-snapshot
+          path: dist/whitaker-clippy-snapshot-*
+          if-no-files-found: error
+
   build-lints:
     runs-on: ${{ matrix.os }}
     # Ubicloud runners register as self-hosted just-in-time runners, so
@@ -117,13 +151,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      # Only the two Linux legs are on Ubicloud and only they cache. The
-      # macOS and Windows legs keep the wiring they have always had, which is
-      # whatever the shared action provides for them.
-      - name: Select the compiler cache backend
-        if: runner.os == 'Linux'
-        run: bash scripts/select-sccache-backend.sh
-
       - name: Restore Cargo registry
         id: cargo-registry
         if: runner.os == 'Linux'
@@ -136,33 +163,26 @@ jobs:
           restore-keys: |
             cargo-registry-rolling-v1-${{ runner.os }}-${{ runner.arch }}-${{ runner.environment }}-
 
-      - name: Restore the compiler cache directory
-        id: sccache-dir
-        if: runner.os == 'Linux' && env.SCCACHE_BACKEND == 'local'
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
-        with:
-          path: ~/.cache/sccache
-          key: sccache-rolling-v1-${{ runner.os }}-${{ runner.arch }}-${{ runner.environment }}-${{ hashFiles('rust-toolchain.toml') }}-${{ github.run_id }}
-          restore-keys: |
-            sccache-rolling-v1-${{ runner.os }}-${{ runner.arch }}-${{ runner.environment }}-${{ hashFiles('rust-toolchain.toml') }}-
-
       - name: Record cache observations
         if: always() && runner.os == 'Linux'
         env:
           CARGO_REGISTRY_KEY: ${{ steps.cargo-registry.outputs.cache-primary-key }}
           CARGO_REGISTRY_MATCHED: ${{ steps.cargo-registry.outputs.cache-matched-key }}
           CARGO_REGISTRY_HIT: ${{ steps.cargo-registry.outputs.cache-hit }}
-          SCCACHE_DIR_KEY: ${{ steps.sccache-dir.outputs.cache-primary-key }}
-          SCCACHE_DIR_MATCHED: ${{ steps.sccache-dir.outputs.cache-matched-key }}
-          SCCACHE_DIR_HIT: ${{ steps.sccache-dir.outputs.cache-hit }}
         run: bash scripts/record-cache-observations.sh
 
       # "external" hands cache ownership to the restore and save steps above
       # and below. The other three legs keep the action's built-in caches,
       # because nothing here owns one for them.
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@7cb894fe62c40951cccf33819548095e64a1291e
+        id: setup-rust
+        uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
         with:
+          # The Linux legs are all Ubicloud, so they demand the cache proxy
+          # and fail rather than fall back; the macOS and Windows legs are
+          # GitHub-hosted, where setup-rust keeps sccache on local disk it
+          # caches itself.
+          expect-cache: ${{ runner.os == 'Linux' && 'ubicloud' || 'any' }}
           cache-provider: ${{ runner.os == 'Linux' && 'external' || 'github' }}
 
       - name: Read pinned toolchain
@@ -207,7 +227,7 @@ jobs:
         run: echo "short=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Build packaging tool
-        run: cargo build --release -p whitaker-installer --bin whitaker-package-lints
+        run: cargo build --release -p whitaker-installer --features release-tools --bin whitaker-package-lints
 
       - name: Package artefact
         run: |
@@ -258,7 +278,9 @@ jobs:
         run: rm -rf target
 
       - name: Record sccache effectiveness
-        if: always() && runner.os == 'Linux'
+        if: always() && runner.os == 'Linux' && steps.setup-rust.outputs.sccache-status != 'fallback'
+        env:
+          SETUP_RUST_CACHE_BACKEND: ${{ steps.setup-rust.outputs.cache-backend }}
         run: bash scripts/record-sccache-effectiveness.sh
 
       - name: Record disk headroom before the saves
@@ -273,13 +295,6 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
           key: ${{ steps.cargo-registry.outputs.cache-primary-key }}
-
-      - name: Save the compiler cache directory
-        if: runner.os == 'Linux' && env.SCCACHE_BACKEND == 'local' && github.ref == 'refs/heads/main'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
-        with:
-          path: ~/.cache/sccache
-          key: ${{ steps.sccache-dir.outputs.cache-primary-key }}
 
   build-dependency-binaries:
     needs: dependency-manifest-changes
@@ -315,14 +330,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      # As in build-lints: only the two Linux legs are on Ubicloud and only
-      # they cache. This job installs every dependency crate from source with
-      # `cargo install --locked`, so its registry and compiler caches are
-      # worth more here than anywhere else in the workflow.
-      - name: Select the compiler cache backend
-        if: runner.os == 'Linux'
-        run: bash scripts/select-sccache-backend.sh
-
       - name: Restore Cargo registry
         id: cargo-registry
         if: runner.os == 'Linux'
@@ -335,47 +342,30 @@ jobs:
           restore-keys: |
             cargo-registry-depbin-v1-${{ runner.os }}-${{ runner.arch }}-${{ runner.environment }}-
 
-      - name: Restore the compiler cache directory
-        id: sccache-dir
-        if: runner.os == 'Linux' && env.SCCACHE_BACKEND == 'local'
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
-        with:
-          path: ~/.cache/sccache
-          key: sccache-depbin-v1-${{ runner.os }}-${{ runner.arch }}-${{ runner.environment }}-${{ hashFiles('installer/dependency-binaries.toml') }}-${{ github.run_id }}
-          restore-keys: |
-            sccache-depbin-v1-${{ runner.os }}-${{ runner.arch }}-${{ runner.environment }}-${{ hashFiles('installer/dependency-binaries.toml') }}-
-
       - name: Record cache observations
         if: always() && runner.os == 'Linux'
         env:
           CARGO_REGISTRY_KEY: ${{ steps.cargo-registry.outputs.cache-primary-key }}
           CARGO_REGISTRY_MATCHED: ${{ steps.cargo-registry.outputs.cache-matched-key }}
           CARGO_REGISTRY_HIT: ${{ steps.cargo-registry.outputs.cache-hit }}
-          SCCACHE_DIR_KEY: ${{ steps.sccache-dir.outputs.cache-primary-key }}
-          SCCACHE_DIR_MATCHED: ${{ steps.sccache-dir.outputs.cache-matched-key }}
-          SCCACHE_DIR_HIT: ${{ steps.sccache-dir.outputs.cache-hit }}
         run: bash scripts/record-cache-observations.sh
 
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@7cb894fe62c40951cccf33819548095e64a1291e
+        id: setup-rust
+        uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
         with:
+          # The Linux legs are all Ubicloud, so they demand the cache proxy
+          # and fail rather than fall back; the macOS and Windows legs are
+          # GitHub-hosted, where setup-rust keeps sccache on local disk it
+          # caches itself.
+          expect-cache: ${{ runner.os == 'Linux' && 'ubicloud' || 'any' }}
           cache-provider: ${{ runner.os == 'Linux' && 'external' || 'github' }}
 
       - name: Add target
         run: rustup target add "${{ matrix.target }}"
 
-      # The dependency tools' locked dependencies can require a newer rustc
-      # than the repository's pinned nightly (cargo-dylint 6.0.1 locks
-      # cargo-util 0.2.28, which needs rustc 1.93), so host-tool installs run
-      # under a current stable toolchain.
-      - name: Install stable toolchain for host tools
-        run: |
-          set -euxo pipefail
-          rustup toolchain install stable --profile minimal --no-self-update
-          rustup target add --toolchain stable "${{ matrix.target }}"
-
       - name: Build dependency packaging tool
-        run: cargo build --release -p whitaker-installer --bin whitaker-package-dependency-binary
+        run: cargo build --release -p whitaker-installer --features release-tools --bin whitaker-package-dependency-binary
 
       - name: Build and package dependency binaries
         run: |
@@ -390,7 +380,7 @@ jobs:
             PACKAGER="./target/release/whitaker-package-dependency-binary"
           fi
           while IFS=$'\t' read -r package binary version; do
-            cargo +stable install \
+            cargo install \
               --locked \
               --force \
               --root dependency-root \
@@ -460,7 +450,9 @@ jobs:
         run: rm -rf target dependency-root
 
       - name: Record sccache effectiveness
-        if: always() && runner.os == 'Linux'
+        if: always() && runner.os == 'Linux' && steps.setup-rust.outputs.sccache-status != 'fallback'
+        env:
+          SETUP_RUST_CACHE_BACKEND: ${{ steps.setup-rust.outputs.cache-backend }}
         run: bash scripts/record-sccache-effectiveness.sh
 
       - name: Record disk headroom before the saves
@@ -476,17 +468,11 @@ jobs:
             ~/.cargo/git
           key: ${{ steps.cargo-registry.outputs.cache-primary-key }}
 
-      - name: Save the compiler cache directory
-        if: runner.os == 'Linux' && env.SCCACHE_BACKEND == 'local' && github.ref == 'refs/heads/main'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
-        with:
-          path: ~/.cache/sccache
-          key: ${{ steps.sccache-dir.outputs.cache-primary-key }}
-
   publish:
     if: always()
     needs:
       - dependency-manifest-changes
+      - clippy-snapshot
       - build-lints
       - build-dependency-binaries
     runs-on: ubuntu-latest
@@ -497,10 +483,10 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@7cb894fe62c40951cccf33819548095e64a1291e
+        uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
 
       - name: Build dependency packaging tool
-        run: cargo build --release -p whitaker-installer --bin whitaker-package-dependency-binary
+        run: cargo build --release -p whitaker-installer --features release-tools --bin whitaker-package-dependency-binary
 
       # No "restore the dependency archives" step. They are only rebuilt
       # when the dependency manifest changes; the rest of the time they are
@@ -525,6 +511,41 @@ jobs:
           merge-multiple: true
           path: dist
 
+      - name: Download the Clippy snapshot assets
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8
+        with:
+          name: clippy-snapshot
+          path: dist
+
+      # Every installer that embeds this checkout's manifest downloads the
+      # pinned bundle, so a release without it would install nothing.
+      - name: Require the pinned Clippy snapshot
+        run: |
+          set -euo pipefail
+          commit=$(awk -F '"' '/^commit = / {print $2}' installer/clippy-snapshot.toml)
+          asset="whitaker-clippy-snapshot-${commit}.bundle"
+          names=$(gh release view "${SNAPSHOT_RELEASE}" --json assets --jq '.assets[].name' 2>/dev/null || true)
+          published() { grep -qxF "$1" <<<"${names}"; }
+          # The bundle and its sidecar are one pair: a rebuilt bundle must
+          # never sit beside a published one, and each half must exist.
+          if [[ -f "dist/${asset}" ]] && published "${asset}"; then
+            echo "::error::${asset} is already published; a rebuilt copy must not replace it." >&2
+            exit 1
+          fi
+          if [[ -f "dist/${asset}" ]]; then
+            (cd dist && sha256sum --check --strict "${asset}.sha256")
+          fi
+          for name in "${asset}" "${asset}.sha256"; do
+            if [[ ! -f "dist/${name}" ]] && ! published "${name}"; then
+              echo "::error::${name} was neither staged nor published; refusing to publish." >&2
+              exit 1
+            fi
+          done
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SNAPSHOT_RELEASE: rolling
+
       # A manual force request is a recovery operation. Do not let a partial
       # matrix or a tolerant download replace the published rolling assets.
       - name: Check forced rebuild before publication
@@ -548,7 +569,7 @@ jobs:
         run: |
           set -euxo pipefail
           shopt -s nullglob
-          assets=(dist/*.tar.zst dist/manifest-*.json dist/*.tgz dist/*.zip dist/*.sha256)
+          assets=(dist/*.tar.zst dist/manifest-*.json dist/*.tgz dist/*.zip dist/*.bundle dist/*.sha256)
           if [[ "${#assets[@]}" -eq 0 ]]; then
             echo "has_assets=false" >> "$GITHUB_OUTPUT"
             exit 0
@@ -575,6 +596,33 @@ jobs:
           ./target/release/whitaker-package-dependency-binary provenance --output-dir dist
           printf '%s\n' "dist/dependency-binaries-licences.md" >> dist/release-assets.txt
 
+      # Stops the publish when the archives just built would break a caller
+      # on the oldest installer callers pin. This REPRODUCES that installer's
+      # behaviour; it does not run it, because installer 0.2.11 has no route
+      # to install from a local archive (it downloads only from the published
+      # rolling release). Two checks, both offline apart from fetching the
+      # tag and one table:
+      #   1. Prune: that installer removes unrequested standalone libraries by
+      #      a compiled-in name list, so a library it does not know survives
+      #      beside the suite and rustc rejects the duplicate lint
+      #      registration (#355, #565). The list is read from the installer's
+      #      release tag, never copied here.
+      #   2. Toolchain: the manifest's toolchain (from rust-toolchain.toml at
+      #      this head) must equal the one shared-actions' clippy-snapshots.tsv
+      #      maps that installer to. A mismatch breaks every caller on it (#555).
+      # Adds seconds. A failure stops the job before the upload below.
+      - name: Check the archives against the oldest installer's behaviour
+        if: steps.assets.outputs.has_assets == 'true' && steps.forced_rebuild.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "refs/tags/${OLDEST_INSTALLER_TAG}:refs/tags/${OLDEST_INSTALLER_TAG}"
+          gh api repos/leynos/shared-actions/contents/.github/actions/install-whitaker/clippy-snapshots.tsv \
+            --jq .content | base64 -d > "${RUNNER_TEMP}/clippy-snapshots.tsv"
+          scripts/check_prune_safety.py --installer-tag "${OLDEST_INSTALLER_TAG}" \
+            --snapshots-tsv "${RUNNER_TEMP}/clippy-snapshots.tsv" dist
+
       # One step, not two. The previous delete-then-create pair left the
       # rolling tag, its release and every asset absent for six to seven
       # seconds on each publish, and a consumer landed in that gap.
@@ -593,3 +641,44 @@ jobs:
         run: |
           echo "No rolling-release assets were produced by the build jobs."
           echo "Skipping release publication."
+
+  verify-published-bootstrap:
+    # Fresh hosted runner, published assets only: install the released suite,
+    # Dylint tools, and Clippy snapshot through the installer built from this
+    # checkout, deny github.com, then prove cold, warm, concurrent, relocated,
+    # and missing-snapshot behaviour against a real std::fs violation, and
+    # that a tampered snapshot is refused offline.
+    needs: publish
+    if: ${{ !cancelled() && needs.publish.result == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          persist-credentials: false
+
+      - name: Setup Rust
+        uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
+
+      - name: Install the installer from this checkout
+        run: cargo install --locked --path installer --bin whitaker-installer
+
+      - name: Put the wrapper directory on PATH
+        # Git Bash's `$HOME` is an MSYS path that PowerShell cannot resolve,
+        # so Windows needs the native form.
+        run: |
+          set -euo pipefail
+          if command -v cygpath >/dev/null 2>&1; then
+            cygpath -w "$HOME/.local/bin"
+          else
+            printf '%s\n' "$HOME/.local/bin"
+          fi >> "$GITHUB_PATH"
+
+      - name: Install the published suite and bootstrap
+        run: whitaker-installer --no-source-fallback
+
+      - name: Verify the published Clippy snapshot
+        run: bash scripts/verify-published-snapshot.sh "$RUNNER_TEMP/published-snapshot"
+
+      - name: Verify the installed bootstrap without public Clippy
+        run: bash scripts/verify-installed-bootstrap.sh "$RUNNER_TEMP/installed-bootstrap"

@@ -1,23 +1,21 @@
 //! Observable label-propagation seams for decomposition advice tests.
 
+use super::adjacency::{AdjacencyError, EdgeInput, validate_edges};
 use crate::decomposition_advice::{
-    MethodProfileBuilder, build_feature_vector,
+    MethodProfileBuilder,
+    build_feature_vector,
     community::{
         LabelPropagationReport as RuntimeLabelPropagationReport,
         propagate_labels_report as runtime_propagate_labels_report,
     },
 };
 
-use super::adjacency::{AdjacencyError, EdgeInput, validate_edges};
-
 /// Observable label-propagation results for declarative graph input.
 ///
 /// # Examples
 ///
 /// ```rust
-/// use whitaker_common::test_support::decomposition::{
-///     EdgeInput, label_propagation_report,
-/// };
+/// use whitaker_common::test_support::decomposition::{EdgeInput, label_propagation_report};
 ///
 /// let report = label_propagation_report(
 ///     &["gamma", "alpha", "beta"],
@@ -39,32 +37,24 @@ pub struct LabelPropagationReport {
 }
 
 impl LabelPropagationReport {
-    /// Returns the final label vector.
+    /// Return the final label vector.
     #[must_use]
-    pub fn labels(&self) -> &[usize] {
-        &self.runtime.labels
-    }
+    pub fn labels(&self) -> &[usize] { &self.runtime.labels }
 
-    /// Returns the propagated label for `node`, or `None` if it is out of
+    /// Return the propagated label for `node`, or `None` if it is out of
     /// range.
     #[must_use]
-    pub fn label_of(&self, node: usize) -> Option<usize> {
-        self.labels().get(node).copied()
-    }
+    pub fn label_of(&self, node: usize) -> Option<usize> { self.labels().get(node).copied() }
 
-    /// Returns the number of propagation passes performed.
+    /// Return the number of propagation passes performed.
     #[must_use]
-    pub fn iteration_count(&self) -> usize {
-        self.runtime.iteration_count
-    }
+    pub const fn iteration_count(&self) -> usize { self.runtime.iteration_count }
 
-    /// Returns `true` when the graph contains at least one active node.
+    /// Check whether the graph contains at least one active node.
     #[must_use]
-    pub fn has_active_nodes(&self) -> bool {
-        self.has_active_nodes
-    }
+    pub const fn has_active_nodes(&self) -> bool { self.has_active_nodes }
 
-    /// Returns `true` when every label is a valid node index.
+    /// Check whether every label is a valid node index.
     #[must_use]
     pub fn all_labels_in_bounds(&self) -> bool {
         self.runtime
@@ -78,8 +68,8 @@ impl LabelPropagationReport {
 ///
 /// # Errors
 ///
-/// Returns a typed validation error when any edge violates the production
-/// adjacency contract.
+/// Returns a typed validation error when an edge violates the production
+/// adjacency contract or validated data violates an internal graph invariant.
 pub fn label_propagation_report(
     method_names: &[&str],
     edges: &[EdgeInput],
@@ -89,13 +79,15 @@ pub fn label_propagation_report(
     let adjacency = crate::decomposition_advice::community::build_adjacency(
         method_names.len(),
         &similarity_edges,
-    );
+    )
+    .map_err(|_| AdjacencyError::InvalidInternalState)?;
     let vectors = method_names
         .iter()
         .map(|method_name| build_feature_vector(&MethodProfileBuilder::new(*method_name).build()))
         .collect::<Vec<_>>();
     let has_active_nodes = adjacency.iter().any(|neighbours| !neighbours.is_empty());
-    let runtime = runtime_propagate_labels_report(&vectors, &adjacency, max_iterations);
+    let runtime = runtime_propagate_labels_report(&vectors, &adjacency, max_iterations)
+        .map_err(|_| AdjacencyError::InvalidInternalState)?;
 
     Ok(LabelPropagationReport {
         runtime,

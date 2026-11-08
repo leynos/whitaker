@@ -7,6 +7,7 @@ workspace so a version bump can be reviewed before either crate is published.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import shlex
@@ -16,6 +17,7 @@ import sys
 import tarfile
 import tempfile
 import tomllib
+from collections.abc import Iterator
 from pathlib import Path
 
 REPOSITORY = Path(__file__).resolve().parents[1]
@@ -112,18 +114,40 @@ def _extract_archive(archive: Path, destination: Path, crate: str) -> Path:
     return roots[0]
 
 
+@contextlib.contextmanager
+def _scratch_root() -> Iterator[Path]:
+    """Yield the scratch root this check builds in, and remove it on exit.
+
+    The Makefile names a fixed directory (`INSTALLER_MSRV_SCRATCH`) in the
+    user's private cache: sccache keys compilations on absolute paths, so a
+    fresh random directory per run would miss every time. It is cleared first
+    and removed on exit. A direct run falls back to a random directory under
+    the ignored `target/`. Either way the root holds the copied workspace and
+    the extracted installer as siblings, so Cargo never walks up from the
+    installer into a workspace root.
+    """
+    fixed = os.environ.get("INSTALLER_MSRV_SCRATCH")
+    if fixed:
+        root = Path(fixed)
+        shutil.rmtree(root, ignore_errors=True)
+        root.mkdir(parents=True)
+        try:
+            yield root
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+        return
+    build_root = REPOSITORY / "target"
+    build_root.mkdir(exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="installer-msrv-", dir=build_root) as temporary:
+        yield Path(temporary)
+
+
 def _main() -> None:
     """Package and install the installer under Rust 1.85 using staged common."""
     cargo = shlex.split(os.environ.get("CARGO", "cargo"))
     if not cargo:
         raise ValueError("CARGO must name an executable")
-    build_root = REPOSITORY / "target"
-    build_root.mkdir(exist_ok=True)
-    with (
-        tempfile.TemporaryDirectory(prefix="installer-msrv-", dir=build_root) as temporary,
-        tempfile.TemporaryDirectory(prefix="whitaker-installer-source-") as source_scratch,
-    ):
-        scratch = Path(temporary)
+    with _scratch_root() as scratch:
         workspace = scratch / "workspace"
         workspace.mkdir()
         _copy_workspace(workspace)
@@ -166,7 +190,7 @@ def _main() -> None:
         installer_archive = _one_archive(target, "whitaker-installer")
         installer_root = _extract_archive(
             installer_archive,
-            Path(source_scratch) / "extracted-installer",
+            scratch / "installer-source" / "extracted-installer",
             "whitaker-installer",
         )
         _validate_packaged_manifest(installer_root / "Cargo.toml", version, scratch)

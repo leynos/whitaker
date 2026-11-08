@@ -68,8 +68,14 @@ impl Default for Settings {
 ///
 /// # Examples
 ///
+/// The hidden lines opt the doctest crate into `rustc_private`, matching the
+/// library when it is built with `dylint-driver`. Without them the doctest
+/// cannot link the transitive `rustc_*` dependencies.
+///
 /// ```
-/// use bumpy_road_function::analysis::{normalise_settings, Settings, Weights};
+/// # #![cfg_attr(feature = "dylint-driver", feature(rustc_private))]
+/// # #[cfg(feature = "dylint-driver")] extern crate rustc_driver;
+/// use bumpy_road_function::analysis::{Settings, Weights, normalize_settings};
 ///
 /// let settings = Settings {
 ///     threshold: -1.0,
@@ -82,14 +88,26 @@ impl Default for Settings {
 ///     ..Settings::default()
 /// };
 ///
-/// let normalised = normalise_settings(settings);
-/// assert_eq!(normalised.threshold, Settings::default().threshold);
-/// assert_eq!(normalised.window, Settings::default().window);
-/// assert_eq!(normalised.weights, Settings::default().weights);
+/// let normalized = normalize_settings(settings);
+/// assert_eq!(normalized.threshold, Settings::default().threshold);
+/// assert_eq!(normalized.window, Settings::default().window);
+/// assert_eq!(normalized.weights, Settings::default().weights);
+/// ```
+///
+/// The Oxford spelling is the only public name. The legacy spelling stays
+/// removed, so importing it fails to compile with `E0432`:
+///
+/// ```compile_fail,E0432
+/// # #![cfg_attr(feature = "dylint-driver", feature(rustc_private))]
+/// # #[cfg(feature = "dylint-driver")] extern crate rustc_driver;
+/// use bumpy_road_function::analysis::normalise_settings;
+///
+/// let _ = normalise_settings(Default::default());
 /// ```
 #[must_use]
-pub fn normalise_settings(settings: Settings) -> Settings {
-    fn normalise_weight(candidate: f64, fallback: f64) -> f64 {
+pub fn normalize_settings(settings: Settings) -> Settings {
+    /// Keep a finite non-negative weight; otherwise use its default.
+    fn normalize_weight(candidate: f64, fallback: f64) -> f64 {
         if candidate.is_finite() && candidate >= 0.0 {
             candidate
         } else {
@@ -97,9 +115,8 @@ pub fn normalise_settings(settings: Settings) -> Settings {
         }
     }
 
-    fn is_valid_window(window: usize) -> bool {
-        window != 0 && (window & 1) == 1
-    }
+    /// Check whether a smoothing window is positive and odd.
+    const fn is_valid_window(window: usize) -> bool { window != 0 && (window & 1) == 1 }
 
     let defaults = Settings::default();
     let threshold = if settings.threshold.is_finite() && settings.threshold >= 0.0 {
@@ -116,9 +133,9 @@ pub fn normalise_settings(settings: Settings) -> Settings {
 
     let min_bump_lines = settings.min_bump_lines.max(1);
     let weights = Weights {
-        depth: normalise_weight(settings.weights.depth, defaults.weights.depth),
-        predicate: normalise_weight(settings.weights.predicate, defaults.weights.predicate),
-        flow: normalise_weight(settings.weights.flow, defaults.weights.flow),
+        depth: normalize_weight(settings.weights.depth, defaults.weights.depth),
+        predicate: normalize_weight(settings.weights.predicate, defaults.weights.predicate),
+        flow: normalize_weight(settings.weights.flow, defaults.weights.flow),
     };
 
     Settings {
@@ -141,21 +158,15 @@ pub struct BumpInterval {
 impl BumpInterval {
     /// First index covered by the bump (inclusive).
     #[must_use]
-    pub const fn start_index(self) -> usize {
-        self.start_index
-    }
+    pub const fn start_index(self) -> usize { self.start_index }
 
     /// Last index covered by the bump (inclusive).
     #[must_use]
-    pub const fn end_index(self) -> usize {
-        self.end_index
-    }
+    pub const fn end_index(self) -> usize { self.end_index }
 
     /// Number of samples spanned by the bump.
     #[must_use]
-    pub const fn len(self) -> usize {
-        self.end_index - self.start_index + 1
-    }
+    pub const fn len(self) -> usize { self.end_index - self.start_index + 1 }
 
     /// Returns `true` when the interval contains no samples.
     ///
@@ -163,15 +174,11 @@ impl BumpInterval {
     /// retained defensively so callers can validate values originating from
     /// other sources.
     #[must_use]
-    pub const fn is_empty(self) -> bool {
-        self.start_index > self.end_index
-    }
+    pub const fn is_empty(self) -> bool { self.start_index > self.end_index }
 
     /// Area above the threshold used for ranking bumps.
     #[must_use]
-    pub const fn area_above_threshold(self) -> f64 {
-        self.area_above_threshold
-    }
+    pub const fn area_above_threshold(self) -> f64 { self.area_above_threshold }
 }
 
 /// Mutable state maintained during bump detection.
@@ -194,9 +201,7 @@ impl BumpDetectionContext {
         }
     }
 
-    fn into_intervals(self) -> Vec<BumpInterval> {
-        self.intervals
-    }
+    fn into_intervals(self) -> Vec<BumpInterval> { self.intervals }
 }
 
 /// Detects bump intervals in the smoothed signal.
@@ -207,6 +212,8 @@ impl BumpDetectionContext {
 /// # Examples
 ///
 /// ```
+/// # #![cfg_attr(feature = "dylint-driver", feature(rustc_private))]
+/// # #[cfg(feature = "dylint-driver")] extern crate rustc_driver;
 /// use bumpy_road_function::analysis::detect_bumps;
 ///
 /// let signal = [0.0, 3.0, 3.2, 0.0, 3.1, 3.0];
@@ -238,6 +245,11 @@ pub fn detect_bumps(smoothed: &[f64], threshold: f64, min_bump_lines: usize) -> 
     context.into_intervals()
 }
 
+#[expect(
+    clippy::float_arithmetic,
+    reason = "bump areas accumulate smoothed complexity samples, which are inherently \
+              floating-point"
+)]
 fn process_sample_value(value: f64, index: usize, context: &mut BumpDetectionContext) {
     if value >= context.threshold {
         if context.current_start.is_none() {
@@ -259,7 +271,8 @@ fn process_sample_value(value: f64, index: usize, context: &mut BumpDetectionCon
     context.area = 0.0;
 }
 
-fn finalize_bump(
+/// Finish a bump interval when it meets the configured line threshold.
+const fn finalize_bump(
     start: usize,
     end: usize,
     area: f64,
@@ -283,6 +296,8 @@ fn finalize_bump(
 /// # Examples
 ///
 /// ```
+/// # #![cfg_attr(feature = "dylint-driver", feature(rustc_private))]
+/// # #[cfg(feature = "dylint-driver")] extern crate rustc_driver;
 /// use bumpy_road_function::analysis::{detect_bumps, top_two_bumps};
 ///
 /// let signal = [0.0, 6.0, 0.0, 4.0, 4.0, 0.0, 5.0, 0.0, 4.0, 4.0];

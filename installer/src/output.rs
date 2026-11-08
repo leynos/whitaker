@@ -4,9 +4,11 @@
 //! that users can add to their shell profile to enable Dylint library discovery,
 //! as well as dry-run information formatting.
 
-use crate::crate_name::CrateName;
-use camino::Utf8Path;
 use std::io::Write;
+
+use camino::Utf8Path;
+
+use crate::{cli::SkipFlags, crate_name::CrateName};
 
 /// Write a line to stderr, ignoring write failures.
 ///
@@ -39,9 +41,7 @@ impl ShellSnippet {
     /// use camino::Utf8PathBuf;
     /// use whitaker_installer::output::ShellSnippet;
     ///
-    /// let path = Utf8PathBuf::from(
-    ///     "/home/user/.local/share/dylint/lib/nightly-2025-01-15/release"
-    /// );
+    /// let path = Utf8PathBuf::from("/home/user/.local/share/dylint/lib/nightly-2025-01-15/release");
     /// let snippet = ShellSnippet::new(&path);
     ///
     /// assert!(snippet.bash.contains("DYLINT_LIBRARY_PATH"));
@@ -52,6 +52,51 @@ impl ShellSnippet {
             bash: format!("export DYLINT_LIBRARY_PATH=\"{library_path}\""),
             fish: format!("set -gx DYLINT_LIBRARY_PATH \"{library_path}\""),
             powershell: format!("$env:DYLINT_LIBRARY_PATH = \"{library_path}\""),
+        }
+    }
+
+    /// Create snippets that export the whole Dylint bootstrap.
+    ///
+    /// `--skip-wrapper` users run `cargo dylint` themselves, so they need the
+    /// Clippy snapshot and driver directory as well as the libraries.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use camino::Utf8Path;
+    /// use whitaker_installer::output::ShellSnippet;
+    ///
+    /// let snippet = ShellSnippet::for_bootstrap(
+    ///     Utf8Path::new("/data/whitaker/lints/lib"),
+    ///     Utf8Path::new("/data/whitaker-bootstrap/clippy/e4608a25"),
+    ///     Utf8Path::new("/data/whitaker-bootstrap/drivers/dylint-6.3.0/clippy-e4608a25"),
+    /// );
+    ///
+    /// assert!(snippet.bash.contains("export DYLINT_CLIPPY_REPO="));
+    /// assert!(snippet.fish.contains("set -gx DYLINT_DRIVER_PATH"));
+    /// ```
+    #[must_use]
+    pub fn for_bootstrap(
+        library_path: &Utf8Path,
+        clippy_repo: &Utf8Path,
+        driver_path: &Utf8Path,
+    ) -> Self {
+        let variables = [
+            ("DYLINT_LIBRARY_PATH", library_path),
+            ("DYLINT_CLIPPY_REPO", clippy_repo),
+            ("DYLINT_DRIVER_PATH", driver_path),
+        ];
+        let lines = |render: &dyn Fn(&str, &Utf8Path) -> String| {
+            variables
+                .iter()
+                .map(|(name, path)| render(name, path))
+                .collect::<Vec<_>>()
+                .join("\n  ")
+        };
+        Self {
+            bash: lines(&|name, path| format!("export {name}=\"{path}\"")),
+            fish: lines(&|name, path| format!("set -gx {name} \"{path}\"")),
+            powershell: lines(&|name, path| format!("$env:{name} = \"{path}\"")),
         }
     }
 
@@ -86,8 +131,7 @@ pub fn success_message(count: usize, target_dir: &Utf8Path) -> String {
 ///
 /// ```
 /// use camino::Utf8PathBuf;
-/// use whitaker_installer::crate_name::CrateName;
-/// use whitaker_installer::output::DryRunInfo;
+/// use whitaker_installer::{cli::SkipFlags, crate_name::CrateName, output::DryRunInfo};
 ///
 /// let workspace = Utf8PathBuf::from("/home/user/whitaker");
 /// let target = Utf8PathBuf::from("/home/user/.local/share/dylint/lib");
@@ -99,9 +143,7 @@ pub fn success_message(count: usize, target_dir: &Utf8Path) -> String {
 ///     target_dir: &target,
 ///     verbosity: 0,
 ///     quiet: false,
-///     skip_deps: false,
-///     skip_wrapper: false,
-///     no_update: false,
+///     skip: SkipFlags::default(),
 ///     suite_ref: None,
 ///     jobs: None,
 ///     crates: &crates,
@@ -123,12 +165,8 @@ pub struct DryRunInfo<'a> {
     pub verbosity: u8,
     /// Whether quiet mode is enabled.
     pub quiet: bool,
-    /// Whether dependency installation is skipped.
-    pub skip_deps: bool,
-    /// Whether wrapper script generation is skipped.
-    pub skip_wrapper: bool,
-    /// Whether repository updates are disabled.
-    pub no_update: bool,
+    /// Which optional installation steps the caller skipped.
+    pub skip: SkipFlags,
     /// The reference the lint suite is pinned to, if any.
     pub suite_ref: Option<&'a str>,
     /// Optional parallel job count.
@@ -149,9 +187,9 @@ impl DryRunInfo<'_> {
             format!("Target directory: {}", self.target_dir),
             format!("Verbosity level: {}", self.verbosity),
             format!("Quiet: {}", self.quiet),
-            format!("Skip deps: {}", self.skip_deps),
-            format!("Skip wrapper: {}", self.skip_wrapper),
-            format!("No update: {}", self.no_update),
+            format!("Skip deps: {}", self.skip.skip_deps),
+            format!("Skip wrapper: {}", self.skip.skip_wrapper),
+            format!("No update: {}", self.skip.no_update),
             // Named even when absent, because "which suite is this?" is the
             // question a dry run is most often used to answer.
             format!(
@@ -176,9 +214,12 @@ impl DryRunInfo<'_> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    //! Tests for shell snippet construction and library path rendering.
+
     use camino::Utf8PathBuf;
     use rstest::{fixture, rstest};
+
+    use super::*;
 
     /// Shared fixture providing a test library path.
     #[fixture]
@@ -187,10 +228,9 @@ mod tests {
     }
 
     /// Shared fixture providing a shell snippet for the test path.
+    #[whitaker_test_macros::allow_fixture_expansion_lints]
     #[fixture]
-    fn test_snippet(test_path: Utf8PathBuf) -> ShellSnippet {
-        ShellSnippet::new(&test_path)
-    }
+    fn test_snippet(test_path: Utf8PathBuf) -> ShellSnippet { ShellSnippet::new(&test_path) }
 
     #[rstest]
     fn snippet_contains_path(test_snippet: ShellSnippet, test_path: Utf8PathBuf) {
@@ -220,10 +260,11 @@ mod tests {
         assert!(display.contains("PowerShell"));
     }
 
+    /// Check that success messages use singular or plural labels as needed.
     #[rstest]
     #[case::singular(1, "1 lint library")]
     #[case::plural(5, "5 lint libraries")]
-    fn success_message_pluralises_correctly(#[case] count: usize, #[case] expected: &str) {
+    fn success_message_pluralizes_correctly(#[case] count: usize, #[case] expected: &str) {
         let path = Utf8PathBuf::from("/tmp");
         let msg = success_message(count, &path);
         assert!(msg.contains(expected));

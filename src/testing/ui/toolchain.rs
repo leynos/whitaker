@@ -6,7 +6,9 @@
 //! to refresh that copy.
 
 use std::{
-    env, fmt, fs,
+    env,
+    fmt,
+    fs,
     io::Cursor,
     path::PathBuf,
     process::{Command, Output},
@@ -27,17 +29,9 @@ impl CrateName {
         clippy::missing_const_for_fn,
         reason = "String allocations require runtime heap access"
     )]
-    fn new_unchecked(name: String) -> Self {
-        Self(name)
-    }
+    fn new_unchecked(name: String) -> Self { Self(name) }
 
-    pub const fn as_str(&self) -> &str {
-        self.0.as_str()
-    }
-
-    pub fn into_inner(self) -> String {
-        self.0
-    }
+    pub const fn as_str(&self) -> &str { self.0.as_str() }
 }
 
 impl TryFrom<&str> for CrateName {
@@ -55,15 +49,11 @@ impl TryFrom<&str> for CrateName {
 impl TryFrom<String> for CrateName {
     type Error = CrateNameError;
 
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        Self::try_from(value.as_str())
-    }
+    fn try_from(value: String) -> Result<Self, Self::Error> { Self::try_from(value.as_str()) }
 }
 
 impl AsRef<str> for CrateName {
-    fn as_ref(&self) -> &str {
-        self.as_str()
-    }
+    fn as_ref(&self) -> &str { self.as_str() }
 }
 
 impl fmt::Display for CrateName {
@@ -169,7 +159,7 @@ fn execute_build_command(
     Ok(output)
 }
 
-fn package_for_crate<'a>(
+pub(super) fn package_for_crate<'a>(
     metadata: &'a Metadata,
     crate_name: &CrateName,
 ) -> Result<&'a cargo_metadata::Package, HarnessError> {
@@ -232,7 +222,7 @@ fn extract_cdylib_path(
         .map(|path| path.clone().into_std_path_buf())
 }
 
-fn fetch_metadata() -> Result<Metadata, HarnessError> {
+pub(super) fn fetch_metadata() -> Result<Metadata, HarnessError> {
     MetadataCommand::new()
         .no_deps()
         .exec()

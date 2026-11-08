@@ -113,10 +113,15 @@ fn validate_entry_path(path: &Path) -> Result<(), ExtractionError> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use rstest::rstest;
+    //! Tests for artefact archive extraction.
+
     use std::path::PathBuf;
 
+    use rstest::rstest;
+
+    use super::*;
+
+    /// Extract a real archive and verify that its file is written.
     #[test]
     fn extract_real_archive() {
         // Create a temp archive with a single file, then extract it.
@@ -137,8 +142,8 @@ mod tests {
         builder
             .append_path_with_name(&source_file, "hello.txt")
             .expect("append");
-        let encoder = builder.into_inner().expect("tar finish");
-        encoder.finish().expect("zstd finish");
+        let finished_encoder = builder.into_inner().expect("tar finish");
+        finished_encoder.finish().expect("zstd finish");
 
         let extractor = ZstdExtractor;
         let files = extractor
@@ -173,6 +178,7 @@ mod tests {
         assert!(matches!(result, Err(ExtractionError::PathTraversal { .. })));
     }
 
+    /// Reject an archive that contains no entries.
     #[test]
     fn extract_empty_archive() {
         let temp_dir = tempfile::tempdir().expect("temp dir");
@@ -184,8 +190,8 @@ mod tests {
         let output_file = std::fs::File::create(&archive_path).expect("create");
         let encoder = zstd::Encoder::new(output_file, 0).expect("zstd");
         let builder = tar::Builder::new(encoder);
-        let encoder = builder.into_inner().expect("tar finish");
-        encoder.finish().expect("zstd finish");
+        let finished_encoder = builder.into_inner().expect("tar finish");
+        finished_encoder.finish().expect("zstd finish");
 
         let extractor = ZstdExtractor;
         let result = extractor.extract(&archive_path, &dest_dir);

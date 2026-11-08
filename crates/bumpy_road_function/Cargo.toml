@@ -1,6 +1,6 @@
 [package]
 name = "bumpy_road_function"
-version = "0.2.8"
+version = "0.2.11"
 edition = "2024"
 publish = false
 description = "Lint that flags multiple clusters of complex conditional logic"
@@ -42,6 +42,7 @@ serde = { workspace = true, optional = true }
 whitaker = { workspace = true, features = ["dylint-driver"], optional = true }
 
 [dev-dependencies]
+whitaker_test_macros = { workspace = true }
 rstest = { workspace = true }
 rstest-bdd = { workspace = true }
 rstest-bdd-macros = { workspace = true }
@@ -51,3 +52,6 @@ whitaker = { workspace = true }
 whitaker-common = { workspace = true }
 camino = { workspace = true }
 tempfile = { workspace = true }
+
+[lints]
+workspace = true

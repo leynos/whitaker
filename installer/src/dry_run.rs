@@ -4,21 +4,22 @@
 //! pipeline's state and answers a different question, and because the
 //! entry point had reached the repository's file-size limit.
 
-use camino::Utf8PathBuf;
 use std::io::Write;
-use whitaker_installer::artefact::suite_ref::SuiteRef;
-use whitaker_installer::cli::InstallArgs;
-use whitaker_installer::crate_name::CrateName;
-use whitaker_installer::dirs::BaseDirs;
-use whitaker_installer::error::Result;
-use whitaker_installer::toolchain::Toolchain;
 
-use whitaker_installer::list::determine_target_dir;
-use whitaker_installer::output::{DryRunInfo, write_stderr_line};
-use whitaker_installer::prebuilt_path::prebuilt_library_dir;
+use camino::Utf8PathBuf;
+use whitaker_installer::{
+    artefact::suite_ref::SuiteRef,
+    cli::InstallArgs,
+    crate_name::CrateName,
+    dirs::BaseDirs,
+    error::Result,
+    list::determine_target_dir,
+    output::{DryRunInfo, write_stderr_line},
+    prebuilt_path::prebuilt_library_dir,
+    toolchain::Toolchain,
+};
 
-use crate::install_flow::detect_host_target;
-use crate::{resolve_requested_crates, resolve_toolchain};
+use crate::{install_flow::detect_host_target, resolve_requested_crates, resolve_toolchain};
 
 /// Runs in dry-run mode, showing configuration without side effects.
 pub(crate) fn run_dry(
@@ -39,15 +40,13 @@ pub(crate) fn run_dry(
         target_dir: &target_dir,
         verbosity: args.verbosity,
         quiet: args.quiet,
-        skip_deps: args.skip_deps,
-        skip_wrapper: args.skip_wrapper,
-        no_update: args.no_update,
+        skip: args.skip.clone(),
         suite_ref: args.suite_version.as_ref().map(SuiteRef::as_str),
         jobs: args.jobs,
         crates: &requested_crates,
     };
     write_stderr_line(stderr, info.display_text());
-    Ok(())
+    crate::install_flow::bootstrap_step::report_bootstrap_plan(dirs, stderr)
 }
 
 fn determine_dry_run_target_dir(

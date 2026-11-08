@@ -19,18 +19,48 @@ pub fn select_smallest_covering(
     candidates: &[std::ops::Range<u32>],
     target: &std::ops::Range<u32>,
 ) -> Option<usize> {
-    if target.end < target.start {
-        return None;
+    let mut selected: Option<(usize, u32)> = None;
+    for (index, candidate) in candidates.iter().enumerate() {
+        let selected_width = selected.map(|(_, width)| width);
+        if should_select_covering_candidate(candidate, target, selected_width) {
+            // The width is carried with the index so selection never indexes
+            // back into `candidates` to re-measure the candidate it chose.
+            selected = Some((index, candidate_width(candidate)));
+        }
     }
 
-    candidates
-        .iter()
-        .enumerate()
-        .filter(|(_, candidate)| {
-            candidate.end >= candidate.start
-                && candidate.start <= target.start
-                && candidate.end >= target.end
-        })
-        .min_by_key(|(_, candidate)| candidate.end - candidate.start)
-        .map(|(index, _)| index)
+    selected.map(|(index, _)| index)
+}
+
+/// Width of a range whose bounds are known to be ordered.
+///
+/// Callers reach this only after [`candidate_covers_target`] has accepted the
+/// range, which is what guarantees the subtraction cannot underflow.
+const fn candidate_width(candidate: &std::ops::Range<u32>) -> u32 {
+    candidate.end - candidate.start
+}
+
+/// Return whether `candidate` covers a valid `target` range.
+pub(super) const fn candidate_covers_target(
+    candidate: &std::ops::Range<u32>,
+    target: &std::ops::Range<u32>,
+) -> bool {
+    candidate.end >= candidate.start
+        && target.end >= target.start
+        && candidate.start <= target.start
+        && candidate.end >= target.end
+}
+
+/// Decide whether production selection should replace its current candidate.
+///
+/// Sharing this predicate keeps the parser adapter's pruned traversal and the
+/// parser-independent Kani helper on the same coverage and minimal-width
+/// rules. Equal-width candidates retain the first candidate encountered.
+pub(super) fn should_select_covering_candidate(
+    candidate: &std::ops::Range<u32>,
+    target: &std::ops::Range<u32>,
+    selected_width: Option<u32>,
+) -> bool {
+    candidate_covers_target(candidate, target)
+        && selected_width.is_none_or(|width| candidate.end - candidate.start < width)
 }

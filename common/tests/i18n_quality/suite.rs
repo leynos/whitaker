@@ -133,7 +133,7 @@ fn validate_entry_placeables(
     validate_attribute_placeables(&context, message_id, en_entry, locale_entry);
 }
 
-fn validate_pluralisation_coverage(locale: &str, max_branches: i64) {
+fn validate_pluralization_coverage(locale: &str, max_branches: i64) {
     let localizer = Localizer::new(Some(locale));
     let mut args = HashMap::new();
 
@@ -195,31 +195,41 @@ fn ftl_bundles_parse_successfully() {
     }
 }
 
+/// Asserts every en-GB attribute is translated and non-empty in each locale.
+///
+/// Checked attribute by attribute rather than for `.help` alone. A lint that
+/// renders `.label` and `.suggestion` can ship a golden `ui-cy` fixture showing
+/// English for those spans; because the golden records whatever the lint
+/// emitted, the untranslated text is then blessed and the fixture enforces the
+/// omission instead of catching it.
 #[test]
-fn localised_help_attributes_are_complete() {
+fn localized_attributes_are_complete() {
     for (locale, en_path, locale_path) in file_pairs() {
         let locale_code = LocaleCode::from(locale.as_str());
         let en_entries = parse_ftl(&en_path);
         let locale_entries = parse_ftl(&locale_path);
 
         for (message_id, en_entry) in &en_entries {
-            if en_entry.attributes.contains_key("help") {
-                let message_id = MessageId::from(message_id.as_str());
-                let locale_entry = locale_entries.get(message_id.as_str()).unwrap_or_else(|| {
+            if en_entry.attributes.is_empty() {
+                continue;
+            }
+            let message_id = MessageId::from(message_id.as_str());
+            let locale_entry = locale_entries.get(message_id.as_str()).unwrap_or_else(|| {
+                panic!(
+                    "{locale_code} locale missing message `{message_id}` in {}",
+                    locale_path.display()
+                )
+            });
+            for attribute in en_entry.attributes.keys() {
+                let translated = locale_entry.attributes.get(attribute).unwrap_or_else(|| {
                     panic!(
-                        "{locale_code} locale missing message `{message_id}` in {}",
-                        locale_path.display()
-                    )
-                });
-                let help = locale_entry.attributes.get("help").unwrap_or_else(|| {
-                    panic!(
-                        "{locale_code} locale missing `.help` for `{message_id}` in {}",
+                        "{locale_code} locale missing `.{attribute}` for `{message_id}` in {}",
                         locale_path.display()
                     )
                 });
                 assert!(
-                    !help.trim().is_empty(),
-                    ".help for `{message_id}` in {} must not be empty",
+                    !translated.trim().is_empty(),
+                    ".{attribute} for `{message_id}` in {} must not be empty",
                     locale_path.display()
                 );
             }
@@ -231,8 +241,8 @@ fn localised_help_attributes_are_complete() {
 #[case("en-GB", 12)]
 #[case("cy", 12)]
 #[case("gd", 25)]
-fn pluralisation_covers_sample_range(#[case] locale: &str, #[case] max_branches: i64) {
-    validate_pluralisation_coverage(locale, max_branches);
+fn pluralization_covers_sample_range(#[case] locale: &str, #[case] max_branches: i64) {
+    validate_pluralization_coverage(locale, max_branches);
 }
 
 #[rstest]

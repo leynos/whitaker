@@ -1,6 +1,6 @@
 [package]
 name = "conditional_max_n_branches"
-version = "0.2.8"
+version = "0.2.11"
 edition = "2024"
 publish = false
 description = "Dylint lint that enforces an upper bound on conditional branch counts"
@@ -42,6 +42,7 @@ serde = { workspace = true, optional = true }
 whitaker = { workspace = true, features = ["dylint-driver"], optional = true }
 
 [dev-dependencies]
+whitaker_test_macros = { workspace = true }
 whitaker-common = { workspace = true }
 whitaker = { workspace = true }
 camino = { workspace = true }
@@ -51,4 +52,7 @@ rstest = { workspace = true }
 rstest-bdd = { workspace = true }
 rstest-bdd-macros = { workspace = true }
 dylint_testing = { workspace = true }
-serial_test = "4.0.1"
+serial_test = { workspace = true }
+
+[lints]
+workspace = true

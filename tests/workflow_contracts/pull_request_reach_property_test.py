@@ -70,7 +70,14 @@ def _oracle(graph: list[tuple[bool, list[int]]]) -> frozenset[str]:
     )
 
 
-@settings(max_examples=200, derandomize=True)
+#: Generous because the host runs several agents at once; the graphs hold at
+#: most six nodes, so this is pure traversal and the deadline would be
+#: measuring host load rather than the closure. `timeout_budget_properties_test`
+#: takes the same view of its own arithmetic.
+_SETTINGS = settings(deadline=None, max_examples=200, derandomize=True)
+
+
+@_SETTINGS
 @given(graph=st.lists(_NODE, max_size=_MOST_WORKFLOWS))
 def test_the_closure_matches_the_oracle(graph: list[tuple[bool, list[int]]]) -> None:
     """Every generated graph, reachability answered two independent ways."""

@@ -1,6 +1,6 @@
 [package]
 name = "no_unwrap_or_else_panic"
-version = "0.2.8"
+version = "0.2.11"
 edition = "2024"
 publish = false
 description = "Dylint lint that flags unwrap_or_else closures which panic"
@@ -39,13 +39,12 @@ whitaker = { workspace = true, features = ["dylint-driver"], optional = true }
 clippy_utils = { workspace = true, optional = true }
 
 [dev-dependencies]
+whitaker_test_macros = { workspace = true }
 camino = { workspace = true }
 dylint_testing = { workspace = true }
 rstest = { workspace = true }
 rstest-bdd = { workspace = true }
 rstest-bdd-macros = { workspace = true }
-temp-env = { workspace = true }
 
-[lints.clippy]
-expect_used = "deny"
-unwrap_used = "deny"
+[lints]
+workspace = true

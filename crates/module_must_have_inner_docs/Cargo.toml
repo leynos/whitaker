@@ -1,6 +1,6 @@
 [package]
 name = "module_must_have_inner_docs"
-version = "0.2.8"
+version = "0.2.11"
 edition = "2024"
 
 [lib]
@@ -34,8 +34,13 @@ whitaker = { workspace = true, features = ["dylint-driver"], optional = true }
 newt-hype = "0.2"
 
 [dev-dependencies]
+whitaker_test_macros = { workspace = true }
 rstest = { workspace = true }
+proptest = { workspace = true }
 rstest-bdd = { workspace = true }
 rstest-bdd-macros = { workspace = true }
 dylint_testing = { workspace = true }
-serial_test = "4.0.1"
+serial_test = { workspace = true }
+
+[lints]
+workspace = true

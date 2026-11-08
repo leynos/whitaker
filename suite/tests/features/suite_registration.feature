@@ -9,6 +9,12 @@ Feature: Register the Whitaker lint suite
     And the lint names mirror the suite descriptors
     And the suite lint declarations align with the descriptors
 
+  Scenario: Registering no early pass by default
+    Given an empty lint store
+    When I register the suite lints
+    Then the early pass count is 0
+    And every early lint descriptor has a registered early pass
+
   Scenario: Registering twice surfaces a duplicate lint error
     Given the suite lints are already registered
     When I register the suite lints

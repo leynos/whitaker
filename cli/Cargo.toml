@@ -1,0 +1,23 @@
+[package]
+name = "whitaker-cli"
+version.workspace = true
+edition = "2021"
+rust-version = "1.89.0"
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+clap = { workspace = true, features = ["derive"] }
+ortho_config = "0.10.0"
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+cap-std.workspace = true
+proptest.workspace = true
+rstest.workspace = true
+tempfile.workspace = true
+
+[lints]
+workspace = true

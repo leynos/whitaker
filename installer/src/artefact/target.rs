@@ -3,9 +3,11 @@
 //! Only the five triples listed in ADR-001 are accepted. Any other triple
 //! is rejected at construction time with a descriptive error.
 
-use super::error::{ArtefactError, Result};
-use serde::Serialize;
 use std::fmt;
+
+use serde::Serialize;
+
+use super::error::{ArtefactError, Result};
 
 /// The supported target triples for prebuilt artefact distribution.
 ///
@@ -39,21 +41,15 @@ pub struct TargetTriple(String);
 impl TargetTriple {
     /// Return the triple as a string slice.
     #[must_use]
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
+    pub fn as_str(&self) -> &str { &self.0 }
 
     /// Consume the wrapper and return the inner string.
     #[must_use]
-    pub fn into_inner(self) -> String {
-        self.0
-    }
+    pub fn into_inner(self) -> String { self.0 }
 
     /// Return the full list of supported target triples.
     #[must_use]
-    pub fn supported() -> &'static [&'static str] {
-        SUPPORTED_TARGETS
-    }
+    pub const fn supported() -> &'static [&'static str] { SUPPORTED_TARGETS }
 
     /// Return the shared library extension for this target triple.
     ///
@@ -66,8 +62,7 @@ impl TargetTriple {
     /// ```
     /// use whitaker_installer::artefact::target::TargetTriple;
     ///
-    /// let linux: TargetTriple = "x86_64-unknown-linux-gnu"
-    ///     .try_into().expect("valid");
+    /// let linux: TargetTriple = "x86_64-unknown-linux-gnu".try_into().expect("valid");
     /// assert_eq!(linux.library_extension(), ".so");
     /// ```
     #[must_use]
@@ -91,25 +86,18 @@ impl TargetTriple {
     /// ```
     /// use whitaker_installer::artefact::target::TargetTriple;
     ///
-    /// let win: TargetTriple = "x86_64-pc-windows-msvc"
-    ///     .try_into().expect("valid");
+    /// let win: TargetTriple = "x86_64-pc-windows-msvc".try_into().expect("valid");
     /// assert_eq!(win.library_prefix(), "");
     /// ```
     #[must_use]
-    pub fn library_prefix(&self) -> &'static str {
-        if self.is_windows() { "" } else { "lib" }
-    }
+    pub fn library_prefix(&self) -> &'static str { if self.is_windows() { "" } else { "lib" } }
 
     /// Whether this target is a Windows platform.
     #[must_use]
-    pub fn is_windows(&self) -> bool {
-        self.0.contains("windows")
-    }
+    pub fn is_windows(&self) -> bool { self.0.contains("windows") }
 
     /// Whether this target is a macOS (Darwin) platform.
-    fn is_darwin(&self) -> bool {
-        self.0.contains("darwin")
-    }
+    fn is_darwin(&self) -> bool { self.0.contains("darwin") }
 }
 
 impl<'de> serde::Deserialize<'de> for TargetTriple {
@@ -140,27 +128,24 @@ impl TryFrom<&str> for TargetTriple {
 impl TryFrom<String> for TargetTriple {
     type Error = ArtefactError;
 
-    fn try_from(value: String) -> Result<Self> {
-        Self::try_from(value.as_str())
-    }
+    fn try_from(value: String) -> Result<Self> { Self::try_from(value.as_str()) }
 }
 
 impl AsRef<str> for TargetTriple {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
+    fn as_ref(&self) -> &str { &self.0 }
 }
 
 impl fmt::Display for TargetTriple {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.0) }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    //! Tests for target-triple parsing and validation.
+
     use rstest::rstest;
+
+    use super::*;
 
     #[test]
     fn accepts_all_supported_targets() {

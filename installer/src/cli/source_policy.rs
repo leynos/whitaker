@@ -2,7 +2,7 @@
 //!
 //! Kept beside the argument definitions rather than inside them: the
 //! policy is read by the install flow and the dependency installer as
-//! well as by the parser, and `cli.rs` is at the repository's file-size
+//! well as by the parser, and `cli/mod.rs` is at the repository's file-size
 //! limit.
 
 use super::InstallArgs;
@@ -121,7 +121,11 @@ impl InstallArgs {
     /// ```
     /// use whitaker_installer::cli::InstallArgs;
     ///
-    /// assert!(InstallArgs::default().validate_source_options_with(false).is_ok());
+    /// assert!(
+    ///     InstallArgs::default()
+    ///         .validate_source_options_with(false)
+    ///         .is_ok()
+    /// );
     /// ```
     pub fn validate_source_options_with(
         &self,
@@ -132,7 +136,7 @@ impl InstallArgs {
         }
         let requires_source = if self.is_build_only {
             Some("--build-only")
-        } else if self.experimental {
+        } else if self.lint_selection.experimental {
             Some("--experimental")
         } else if self.suite_version.is_some() {
             Some("--suite-version")

@@ -18,10 +18,13 @@ mod http_test_server;
 mod tests;
 
 pub use downloader::DependencyArchiveDownloader;
+pub(crate) use downloader::RepositoryArchiveDownloader;
 pub use extractor::DependencyArchiveExtractor;
 #[cfg(test)]
 pub use installer::MockDependencyBinaryInstaller;
 pub use installer::{
-    DependencyBinaryInstallError, DependencyBinaryInstaller, RepositoryDependencyBinaryInstaller,
+    DependencyBinaryInstallError,
+    DependencyBinaryInstaller,
+    RepositoryDependencyBinaryInstaller,
 };
 pub use metadata::{archive_filename, binary_filename, host_target, provenance_filename};

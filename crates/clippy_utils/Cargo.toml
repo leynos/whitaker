@@ -1,6 +1,6 @@
 [package]
 name = "clippy_utils"
-version = "0.2.8"
+version = "0.2.11"
 description = "Minimal clippy utilities shim for Whitaker lints"
 license = "MIT OR Apache-2.0"
 edition = "2024"
@@ -10,3 +10,6 @@ publish = false
 rustc_hir = { workspace = true }
 rustc_lint = { workspace = true }
 rustc_span = { workspace = true }
+
+[lints]
+workspace = true
