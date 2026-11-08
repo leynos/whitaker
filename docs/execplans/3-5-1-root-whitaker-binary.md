@@ -1734,6 +1734,19 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
   `COMPLETE`. Date/Author: 2026-11-06, implementation supervisor, recording the
   measurement after the replay onto current `main`.
 
+- **D-26: Re-measure the scope after the third base merge.** Measured on
+  `2c8f79da` against `origin/main` (`cfa208c4`), the branch changes 171 files
+  for +11,732/−1,214, a net +10,518 lines. That is 3,518 lines above D-12's
+  7,000-line ceiling and 91 files above D-11's accepted 80. The growth since
+  D-25 is `main`'s own landed work carried by the merge
+  (`string_continuation_style`, its UI and proof harness groups, and the
+  rolling-release restore) plus this branch's reconciliation of it; none of it
+  is new product scope. The owner's 2026-11-04 direction to carry PR #356
+  through review reconciliation to merge still governs. This accepts scope
+  only. It does not authorize crates.io reservation or publication, and it does
+  not mark the plan `COMPLETE`. Date/Author: 2026-11-08, implementation
+  supervisor.
+
 ## Outcomes & retrospective
 
 - **EP-M0, 2026-08-24.** Complete. Extracted the compiler-private driver into
