@@ -80,7 +80,9 @@ EQUIVALENT_WRITER_COMMANDS: typ.Final[dict[str, str]] = {
 
 #: Jobs that run on the trunk push and write nothing the pull-request lanes
 #: read, because their runner's cache store is not the lanes'.
-NON_WRITING_PUSH_JOBS: typ.Final[frozenset[str]] = frozenset({"coverage-upload"})
+NON_WRITING_PUSH_JOBS: typ.Final[frozenset[str]] = frozenset(
+    {"coverage-upload", "windows-compat"}
+)
 
 #: Environment a reader and its writer must declare alike. The `make` recipes
 #: set `RUSTFLAGS` themselves, so today these reach the compiler only through

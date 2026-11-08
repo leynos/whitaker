@@ -103,6 +103,7 @@ CACHE_KEY_WRITERS: dict[str, str] = {
     # name. The rolling-release lanes' `sccache-rolling-v1-` and
     # `sccache-depbin-v1-` families went with the local-directory backend.
     "cargo-registry-windows-v1-": "windows-compat",
+    "dylint-driver-windows-v1-": "windows-compat",
     "cargo-registry-rolling-v1-": "build-lints",
     "cargo-registry-depbin-v1-": "build-dependency-binaries",
 }
