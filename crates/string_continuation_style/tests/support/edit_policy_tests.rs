@@ -10,7 +10,6 @@ use super::SourceEditPolicy;
 
 fn policy(root: &str, target_directory: Option<&str>) -> SourceEditPolicy {
     SourceEditPolicy::new(Utf8PathBuf::from(root), target_directory.map(str::to_owned))
-        .expect("an explicit workspace root always yields a policy")
 }
 
 #[test]

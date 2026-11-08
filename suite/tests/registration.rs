@@ -99,7 +99,7 @@ fn then_early_pass_is_string_continuation(world: &RegistrationWorld) {
         .early_passes
         .iter()
         .flat_map(|factory| factory().get_lints())
-        .map(|lint| lint.name_lower())
+        .map(rustc_lint::Lint::name_lower)
         .collect();
 
     assert_eq!(
@@ -122,7 +122,7 @@ fn then_every_early_descriptor_is_registered(world: &RegistrationWorld) {
         .early_passes
         .iter()
         .flat_map(|factory| factory().get_lints())
-        .map(|lint| lint.name_lower())
+        .map(rustc_lint::Lint::name_lower)
         .collect();
 
     let expected: Vec<String> = suite_lint_names_for_pass(PassKind::Early)

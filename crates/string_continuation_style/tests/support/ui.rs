@@ -15,39 +15,43 @@ fn ui() {
     // same path for no reason.
     let _generated_source = GeneratedSource::create()
         .expect("generated-source UI input should be prepared in the target directory");
-    run_with_locale("ui", None);
+    run_with_locale("ui", None).expect("UI tests should execute without diffs");
 }
 
 #[test]
 #[serial]
-fn ui_cy() { run_with_locale("ui-cy", Some("cy")); }
+fn ui_cy() { run_with_locale("ui-cy", Some("cy")).expect("UI tests should execute without diffs"); }
 
 #[test]
 #[serial]
-fn ui_gd() { run_with_locale("ui-gd", Some("gd")); }
+fn ui_gd() { run_with_locale("ui-gd", Some("gd")).expect("UI tests should execute without diffs"); }
 
 #[test]
 #[serial]
-fn ui_fallback() { run_with_locale("ui-fallback", Some("zz")); }
-
-fn run_with_locale(directory: &str, locale: Option<&str>) {
-    with_locale(locale, || run_ui_directory(directory));
+fn ui_fallback() {
+    run_with_locale("ui-fallback", Some("zz")).expect("UI tests should execute without diffs");
 }
 
-fn run_ui_directory(directory: &str) {
+fn run_with_locale(
+    directory: &str,
+    locale: Option<&str>,
+) -> Result<(), whitaker::testing::ui::HarnessError> {
+    with_locale(locale, || run_ui_directory(directory))
+}
+
+fn run_ui_directory(directory: &str) -> Result<(), whitaker::testing::ui::HarnessError> {
     // Rustfix only applies machine-applicable suggestions, while the shipped
     // default remains manual until this harness proves the fixes end to end.
     whitaker::testing::ui::run_with_runner(
         env!("CARGO_PKG_NAME"),
         directory,
-        |crate_name, directory| {
-            let mut test = dylint_testing::ui::Test::src_base(crate_name, directory);
+        |crate_name, fixture_directory| {
+            let mut test = dylint_testing::ui::Test::src_base(crate_name, fixture_directory);
             test.dylint_toml("[string_continuation_style]\napplicability = \"machine\"\n");
             test.run();
             Ok(())
         },
     )
-    .expect("UI tests should execute without diffs");
 }
 
 struct GeneratedSource {
@@ -81,7 +85,7 @@ impl GeneratedSource {
 "#,
         ) {
             drop(file);
-            let _ = target_directory.remove_file(&path);
+            drop(target_directory.remove_file(&path));
             return Err(error);
         }
         Ok(Self {
@@ -92,5 +96,5 @@ impl GeneratedSource {
 }
 
 impl Drop for GeneratedSource {
-    fn drop(&mut self) { let _ = self.target_directory.remove_file(&self.path); }
+    fn drop(&mut self) { drop(self.target_directory.remove_file(&self.path)); }
 }

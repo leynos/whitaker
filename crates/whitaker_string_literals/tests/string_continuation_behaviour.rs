@@ -44,9 +44,9 @@ impl From<ContinuationDisposition<'_>> for Outcome {
 }
 
 impl World {
-    fn set_body(&mut self, body: &'static str) { self.body = Some(body); }
+    const fn set_body(&mut self, body: &'static str) { self.body = Some(body); }
 
-    fn set_context(&mut self, context: LiteralContext) { self.context = Some(context); }
+    const fn set_context(&mut self, context: LiteralContext) { self.context = Some(context); }
 
     /// Classifies the recorded facts, panicking if no `Given` step supplied a
     /// body.
@@ -91,9 +91,9 @@ fn given_expression_context(world: &WorldCell) {
 
 #[given("a source-authored format string with an interior continuation")]
 fn given_format_string(world: &WorldCell) {
-    let mut world = world.borrow_mut();
-    world.set_body("alpha \\\n    beta");
-    world.set_context(LiteralContext::SourceFormatString {
+    let mut state = world.borrow_mut();
+    state.set_body("alpha \\\n    beta");
+    state.set_context(LiteralContext::SourceFormatString {
         capture: CaptureStatus::NoneObserved,
     });
 }

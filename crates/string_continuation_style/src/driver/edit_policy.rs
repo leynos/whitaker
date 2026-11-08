@@ -49,7 +49,7 @@ impl SourceEditPolicy {
             );
             return None;
         };
-        Self::new(workspace_root, env::var("CARGO_TARGET_DIR").ok())
+        Some(Self::new(workspace_root, env::var("CARGO_TARGET_DIR").ok()))
     }
 
     /// Builds a policy from an explicit workspace root and target directory.
@@ -58,23 +58,18 @@ impl SourceEditPolicy {
     /// set. The default `target` directory beneath the workspace root is always
     /// excluded as well, whether or not an override is configured, so a
     /// configured directory never re-admits the default one.
-    pub(crate) fn new(
-        workspace_root: Utf8PathBuf,
-        target_directory: Option<String>,
-    ) -> Option<Self> {
-        let configured = match target_directory {
-            Some(path) => Utf8PathBuf::from(path),
-            None => workspace_root.join("target"),
-        };
-        let mut target_directories = vec![absolute_path(&workspace_root, configured)];
+    pub(crate) fn new(workspace_root: Utf8PathBuf, target_directory: Option<String>) -> Self {
         let default_directory = workspace_root.join("target");
+        let configured =
+            target_directory.map_or_else(|| default_directory.clone(), Utf8PathBuf::from);
+        let mut target_directories = vec![absolute_path(&workspace_root, configured)];
         if !target_directories.contains(&default_directory) {
             target_directories.push(default_directory);
         }
-        Some(Self {
+        Self {
             workspace_root,
             target_directories,
-        })
+        }
     }
 
     /// Reports whether a rewrite may be offered for `source_path`.
@@ -84,24 +79,24 @@ impl SourceEditPolicy {
     /// absolute one. Containment is then tested against the resolved path, so
     /// `../` segments cannot walk out of the tree unnoticed.
     pub(crate) fn is_editable(&self, source_path: &Utf8Path) -> bool {
-        let source_path = absolute_path(&self.workspace_root, source_path.to_path_buf());
-        source_path.starts_with(&self.workspace_root)
+        let resolved = absolute_path(&self.workspace_root, source_path.to_path_buf());
+        resolved.starts_with(&self.workspace_root)
             && !self
                 .target_directories
                 .iter()
-                .any(|directory| source_path.starts_with(directory))
+                .any(|directory| resolved.starts_with(directory))
     }
 }
 
 /// Resolves a possibly-relative path against `root` and normalizes it.
 fn absolute_path(root: &Utf8Path, path: Utf8PathBuf) -> Utf8PathBuf {
-    let path = if path.is_absolute() {
+    let anchored = if path.is_absolute() {
         path
     } else {
         root.join(path)
     };
     let mut normalized = Utf8PathBuf::new();
-    for component in path.components() {
+    for component in anchored.components() {
         match component {
             Utf8Component::Prefix(_) | Utf8Component::RootDir => {
                 normalized.push(component.as_str());
