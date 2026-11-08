@@ -671,9 +671,9 @@ Every caller pins one revision, a full 40-character SHA that
 workflows (it compares them with each other and with `ci.yml`, not with a
 constant, so a shared-actions bump edits the workflows alone). At the time of
 writing it was the merge of leynos/shared-actions#546, which sits on #523. From
-# 523 `setup-rust` selects sccache's backend from the runner (ADR 0005 there);
-the `sccache` paragraphs below say what that retired here. It keeps the rules
-the previous pin brought: the built-in provider does not archive
+that change `setup-rust` selects sccache's backend from the runner (ADR 0005
+there); the `sccache` paragraphs below say what that retired here. It keeps the
+rules the previous pin brought: the built-in provider does not archive
 `target/<profile>`, the caller's Actions cache-service selection is restored
 after `mozilla-actions/sccache-action` runs, and the `sccache` server starts
 from a `run:` step after those exports. #546 adds a 60 s server startup
