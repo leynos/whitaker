@@ -190,6 +190,8 @@ fn union_rules(runs: &[Run]) -> Vec<ReportingDescriptor> {
 
 #[cfg(test)]
 mod tests {
+    //! Behavioural tests for merging SARIF logs and fragments.
+
     use super::*;
     use crate::{
         builders::{ResultBuilder, RunBuilder},

@@ -12,15 +12,20 @@ use cap_std::{ambient_authority, fs_utf8::Dir};
 const DOC_PATHS: &[&str] = &["docs/users-guide.md", "docs/developers-guide.md"];
 
 /// Extracted TOML code blocks from documentation, loaded once at test startup.
+///
+/// A `LazyLock` initializer cannot return a `Result`, so a missing workspace
+/// root surfaces as a panic. The `let-else` + `panic!` form matches the
+/// readability checks below it, and is the only reporting shape that both
+/// `no_unwrap_or_else_panic` and Clippy's `expect_used` accept outside a
+/// `#[test]`.
 pub static DOC_TOML_BLOCKS: LazyLock<Vec<String>> = LazyLock::new(|| {
     let manifest_dir = Utf8Path::new(env!("CARGO_MANIFEST_DIR"));
     let Some(workspace_root) = manifest_dir.parent() else {
         panic!("installer crate should be in workspace");
     };
-    // A lazy static cannot return a `Result`, so a missing workspace root is a
-    // test-support failure rather than something a caller can recover from.
-    let workspace_dir = Dir::open_ambient_dir(workspace_root, ambient_authority())
-        .unwrap_or_else(|error| panic!("workspace root should be accessible: {error}"));
+    let Ok(workspace_dir) = Dir::open_ambient_dir(workspace_root, ambient_authority()) else {
+        panic!("the workspace root should be openable");
+    };
 
     let mut all_blocks = Vec::new();
     for path in DOC_PATHS {

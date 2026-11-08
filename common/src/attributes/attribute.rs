@@ -232,6 +232,8 @@ fn is_prelude_test_attribute(path: &AttributePath) -> bool {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for attribute parsing, classification, and ordering helpers.
+
     use rstest::rstest;
 
     use super::*;

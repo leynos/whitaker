@@ -127,7 +127,6 @@ pub struct DiagnosticMessageSet {
 
 impl DiagnosticMessageSet {
     /// Construct a new set of lint diagnostic strings.
-    #[must_use]
     ///
     /// # Examples
     ///
@@ -136,6 +135,7 @@ impl DiagnosticMessageSet {
     /// let messages = DiagnosticMessageSet::new("primary".into(), "note".into(), "help".into());
     /// assert_eq!(messages.primary(), "primary");
     /// ```
+    #[must_use]
     pub const fn new(primary: String, note: String, help: String) -> Self {
         Self {
             primary,
@@ -145,7 +145,6 @@ impl DiagnosticMessageSet {
     }
 
     /// Access the primary lint diagnostic.
-    #[must_use]
     ///
     /// # Examples
     ///
@@ -158,10 +157,10 @@ impl DiagnosticMessageSet {
     /// # );
     /// assert_eq!(messages.primary(), "primary");
     /// ```
+    #[must_use]
     pub fn primary(&self) -> &str { &self.primary }
 
     /// Access the note attached to the diagnostic.
-    #[must_use]
     ///
     /// # Examples
     ///
@@ -174,10 +173,10 @@ impl DiagnosticMessageSet {
     /// # );
     /// assert_eq!(messages.note(), "note");
     /// ```
+    #[must_use]
     pub fn note(&self) -> &str { &self.note }
 
     /// Access the help text attached to the diagnostic.
-    #[must_use]
     ///
     /// # Examples
     ///
@@ -190,6 +189,7 @@ impl DiagnosticMessageSet {
     /// # );
     /// assert_eq!(messages.help(), "help");
     /// ```
+    #[must_use]
     pub fn help(&self) -> &str { &self.help }
 
     /// Remove Unicode isolating marks inserted by Fluent placeholders.

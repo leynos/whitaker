@@ -168,10 +168,10 @@ pub fn format_note(diagnostic: &BrainTraitDiagnostic) -> String {
     let mut note =
         String::from("Total method count measures interface size and implementation surface area.");
     if diagnostic.default_method_cc_sum() > 0 {
-        note.push_str(
-            " Default method CC sum measures complexity hidden behind the trait's default \
-             implementations.",
-        );
+        note.push_str(concat!(
+            " Default method CC sum measures complexity hidden behind the trait's ",
+            "default implementations.",
+        ));
     }
     if diagnostic.required_method_count() > 0 {
         note.push_str(

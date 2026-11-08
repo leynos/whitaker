@@ -221,6 +221,8 @@ pub fn is_in_main_fn(stack: &[ContextEntry]) -> bool {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for lint-context helpers that expose attributes and source text.
+
     use rstest::rstest;
 
     use super::*;
