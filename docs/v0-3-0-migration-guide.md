@@ -8,10 +8,16 @@ are not provided for the removed spellings.
 
 ## Migration scope
 
-The changes affect Rust imports, type names, field access, and method calls.
+Most changes affect Rust imports, type names, field access, and method calls.
 They do not change the SARIF 2.1.0 serialized representation. Serde renames
 keep the JSON keys `artifacts` and `artifactLocation`, so no serialized-data
 migration is needed.
+
+One change affects the diagnostics a suite user sees rather than an API a
+library consumer calls:
+[`string_continuation_style`](#string_continuation_style) joins the default
+suite in 0.3.0, so a workspace that adopts the suite reports source-line joins
+it did not report before.
 
 ## Root `whitaker` package
 
@@ -214,6 +220,58 @@ The Rust names change while the SARIF wire names remain fixed. The
 `#[serde(rename = "artifactLocation")]`. Consequently, serialized JSON still
 uses the SARIF 2.1.0 keys `artifacts` and `artifactLocation`; no update to
 stored SARIF data or downstream SARIF readers is required.
+
+## `string_continuation_style`
+
+`string_continuation_style` is new in 0.3.0. It is registered in
+`whitaker_suite` and listed in the installer's default lint set, so a workspace
+that installs and runs the default suite starts reporting source-line joins:
+
+```rust
+let message = "first fragment \
+               second fragment";
+```
+
+The suggestion rewrites the literal as
+`concat!("first fragment ", "second fragment")`, which preserves the value and
+makes the fragment boundary explicit. The replacement is offered as
+`MaybeIncorrect` by default, so `cargo fix` leaves it for a human to accept.
+
+The lint is silent for a whole crate when that crate could substitute the bare
+`concat` or a format-macro name with its own definition: a `macro_rules!` or
+`macro` definition, a `use` that binds such a name, a glob import, or a
+`#[macro_use] extern crate`. That is deliberate. Detection is syntactic and
+crate-wide, so it can silence the lint where the name could not actually have
+collided, but it never rewrites working code into a call to something else.
+
+A workspace that does not want the diagnostics can exclude it in `dylint.toml`
+at the workspace root:
+
+```toml
+[string_continuation_style]
+applicability = "manual"
+excluded_crates = ["my_cli_app"]
+excluded_paths = ["my_app::legacy_text"]
+```
+
+`applicability = "manual"` is the default and keeps the rewrite a hint. Setting
+it to `"machine"` makes the fix machine applicable, so `cargo fix` can apply it
+unattended. `excluded_crates` and `excluded_paths` take Rust identifiers with
+underscores rather than Cargo package names with hyphens; the latter exempts a
+module and everything nested beneath it.
+
+The lint offers no rewrite for a file outside the workspace root, or for a
+generated file beneath the target directory. Those files are build output or
+dependencies, so a suggestion would point at code the user does not maintain.
+If a build invokes the compiler from a directory other than the workspace root,
+or does not run the linter through Cargo, the workspace cannot be located; the
+lint then treats every literal as generated and reports nothing rather than
+guessing. Run the linter from the workspace root, as `cargo dylint` does.
+
+See
+[`string_continuation_style` in the users' guide](users-guide.md#string_continuation_style)
+for the full behaviour, including which format macros are recognized and which
+literals are left alone.
 
 ## Installer dependency query
 

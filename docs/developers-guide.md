@@ -119,6 +119,17 @@ applied within its own source before the next source is merged. Keep the
 application package on Rust 1.89.0 and the Dylint workspace on its separately
 pinned nightly. The release uses OrthoConfig's default features.
 
+## Shared diagnostic localization
+
+`whitaker-common::i18n` owns shared label and message resolution, fallback
+reporting, and Fluent output normalization. Lint crates own their message keys,
+arguments, and fallback wording; use `LabelResolution` to pair the message
+context with an attribute for `safe_resolve_label`, and use
+`safe_resolve_message_set` for a primary/note/help set. These helpers remove
+Fluent's U+2068 and U+2069 isolation marks while preserving U+FFFD, which
+signals an unresolved placeable. Add lint-specific fallback text at the call
+site, and extend the common helpers only for policy reused across lint crates.
+
 ## Running Tests
 
 Run the test suite from the workspace root:
@@ -2113,9 +2124,21 @@ Use the Makefile targets for normal proof runs:
 ```sh
 make verus                 # Run all Verus proof files
 make verus-clone-detector  # Run clone-detector Verus proofs only
+make verus-string-literals # Run the string-literal Verus proof only
 make kani                  # Run all Kani harness groups
 make kani-clone-detector   # Run clone-detector Kani harnesses only
+make kani-string-literals  # Run string-literal Kani harnesses only
 ```
+
+`make verus` and `make kani` each cover both proof groups; the narrower targets
+exist so a change to one sidecar can be proved without paying for the other.
+Both narrow targets delegate to the same group argument in their script:
+`./scripts/run-verus.sh string-literals` reads
+`verus/string_continuation_rewrite.rs`, and
+`./scripts/run-kani.sh string-literals` runs the bounded continuation-scanner
+harness. `make proof`-style aggregate targets do not exist; run `make kani` and
+`make verus` as separate targets, in the order `.github/workflows/proofs.yml`
+uses.
 
 The Makefile prepends `~/.cargo/bin` and `~/.bun/bin` to `PATH` for all
 make-target invocations
@@ -2144,8 +2167,13 @@ require.
 
 `make verus` currently runs both decomposition-advice proofs and the
 clone-detector sidecars for `LshConfig::new`, `CandidatePair::new`, and AST
-feature-count accumulation. `make kani` runs the decomposition adjacency
-harnesses and the clone-detector harness group in one pass.
+feature-count accumulation. `make kani` runs the provable decomposition harness
+and the clone-detector and string-literal harness groups in one pass. Three
+label-propagation harnesses are excluded from that default because they cannot
+reach a verdict: CBMC spends the entire budget in the propagation loop's `Vec`
+and iterator model without discharging the assertions. They remain runnable by
+name, and the design document and roadmap item 6.4.6 record the open modelling
+work.
 
 ### Spelling gate
 
@@ -2262,7 +2290,8 @@ The proof targets are thin wrappers over repository scripts:
   executable, and installs the Rust toolchain that Verus requests.
 - `scripts/run-verus.sh` selects proof groups and executes each `.rs` proof
   file in turn, including `verus/clone_detector_ast_features.rs` for the
-  clone-detector group.
+  clone-detector group and `verus/string_continuation_rewrite.rs` for the
+  `string-literals` group.
 - `scripts/install-kani.sh` downloads the pinned pre-built Kani release into
   `${XDG_CACHE_HOME:-$HOME/.cache}/whitaker/kani`, installs the matching
   nightly Rust toolchain via `rustup`, and symlinks that toolchain into the
@@ -2272,15 +2301,21 @@ The proof targets are thin wrappers over repository scripts:
   clone-detector harnesses one harness per `cargo-kani` invocation so each
   proof appears explicitly in the output, including the overflow-specific
   harness for `LshConfig::new`, the bounded `MinHasher::sketch` harnesses, and
-  the bounded `LshIndex` candidate-pair invariant harnesses. Clone-detector
-  Kani invocations use `--no-default-features` so parser-independent proofs do
-  not compile `ra_ap_syntax`. Every invocation runs through
-  `scripts/run-kani-limited.sh`, which applies an 8 GiB process-tree memory
-  cap, disables swap for that cgroup, and enforces a ten-minute timeout. It
-  records peak memory and duration. A timeout, resource failure, or missing
-  resource measurement is a failed or inconclusive proof, never a pass. The
-  `WHITAKER_KANI_MEMORY_MAX_BYTES` and `WHITAKER_KANI_TIMEOUT_SECONDS`
-  overrides can lower these limits but cannot raise them.
+  the bounded `LshIndex` candidate-pair invariant harnesses. The
+  `string-literals` group runs the bounded continuation-scanner harness
+  `verify_scanner_matches_bounded_parity_reference` from
+  `crates/whitaker_string_literals/src/continuation/kani.rs` at
+  `--default-unwind 9`, so it stays within the limited runner's budget. Each
+  group is invoked by name rather than by running every harness in the
+  workspace. Clone-detector Kani invocations use `--no-default-features` so
+  parser-independent proofs do not compile `ra_ap_syntax`. Every invocation
+  runs through `scripts/run-kani-limited.sh`, which applies an 8 GiB
+  process-tree memory cap, disables swap for that cgroup, and enforces a
+  ten-minute timeout. It records peak memory and duration. A timeout, resource
+  failure, or missing resource measurement is a failed or inconclusive proof,
+  never a pass. The `WHITAKER_KANI_MEMORY_MAX_BYTES` and
+  `WHITAKER_KANI_TIMEOUT_SECONDS` overrides can lower these limits but cannot
+  raise them.
 
 The limited runner requires Linux, a running user systemd session,
 `systemd-run`, `systemctl`, GNU `timeout`, and cgroup v2 with its memory
@@ -2302,6 +2337,16 @@ needs to exercise the same runner boundary.
 The installer scripts are idempotent. The first proof run may take longer while
 toolchains and verifier binaries are downloaded; later runs reuse the cached
 installation.
+
+### Release builds keep overflow checks on
+
+`[profile.release]` sets `overflow-checks = true`. Lint libraries are shipped
+as release builds — `installer/src/builder.rs` passes `--release` — while UI
+tests build in debug, where checks are already on. For byte-offset arithmetic
+that difference decides whether an underflow panics or wraps silently in the
+artefact users actually load. The `checked_*` calls in the source are the
+primary defence; this profile setting makes the fallback fail loudly instead of
+producing an off-by-a-huge-number span.
 
 ### Examples
 
@@ -2407,6 +2452,11 @@ toolchain bump must update the channel written here as part of the runbook
    through unchanged so callers can opt into `--locked` explicitly when they
    need Cargo to enforce the lockfile for a build, lint, package, or test
    command.
+10. Re-run the `string_continuation_style` source probe, described in
+    [Early-pass maintenance](#early-pass-maintenance), and re-record the
+    transcript. The items it pins are listed there; the failure that matters
+    most is a semantic change in `FormatArgs::is_source_literal`, which
+    converts firing cases into silence without failing any test.
 
 ### `ra_ap_syntax` re-pinning runbook
 
@@ -3288,6 +3338,154 @@ Unit coverage for both rules lives in
 (`parsed_attribute_span_recovers_whitelisted_kinds` and
 `attribute_within_item_span_boundaries`).
 
+## Writing an early pass
+
+`string_continuation_style` is the suite's only `EarlyLintPass`. It runs on
+rustc's expanded AST, which is the only phase that can see both a literal's
+source spelling and its parsed `FormatArgs`. A late (HIR) pass cannot see
+`ExprKind::FormatArgs` at all, because format arguments are lowered away, and a
+pre-expansion pass cannot see which format arguments are implicit captures. If
+a future lint needs either, it needs an early pass, and these constraints come
+with it.
+
+### `EarlyContext` has no `TyCtxt`
+
+An early pass receives `&EarlyContext<'_>`, which offers the lint store, the
+session, span snippet recovery, and the AST. It has no type information, no
+resolved paths, no name resolution, and no HIR. Design the check around the
+syntax it can see, or accept that it belongs in a late pass instead. The
+adapter in `crates/string_continuation_style/src/driver/` converts AST nodes
+into a plain `LiteralFacts` value and hands everything else to
+`whitaker_string_literals`, which is rustc-free; that split is what makes the
+policy verifiable without a compiler.
+
+### `is_source_literal` is the only trustworthy provenance test for format strings
+
+`FormatArgs::is_source_literal` is true only when the format string was written
+in source. A format string produced by `concat!()`, `include_str!()` or another
+eager macro is false, and there is no source literal to rewrite. This is the
+check that keeps the lint from suggesting a rewrite of `concat!("a", "b")` into
+`concat!("a", "b")`.
+
+### Wrapper depth, and why `is_root()` is not enough
+
+`Span::ctxt().is_root()` looks like a provenance test and is not one. A literal
+captured by a `$l:literal` matcher reaches a post-expansion pass with a root
+syntax context, so a lint that trusted `is_root()` would offer a rewrite that
+does not compile. `crates/string_continuation_style/src/driver/depth.rs`
+therefore counts *wrapper depth*: the number of enclosing AST containers whose
+span is `from_expansion()`. Depth zero means nothing that could have matched
+the literal stands between it and the compiler.
+
+The count is not maintained by balanced `check_*` hooks. `nightly-2026-05-28`
+has no `check_stmt_post`, `check_local`, `check_block`, `check_arm` or
+`check_ty` pairing, so the paired hooks alone miss containers. A
+`rustc_ast::visit::Visitor` runs from `check_crate`, pushes and pops explicitly
+for every container kind, and records the spans of literals that pass into an
+`FxHashSet`; the emitting hooks consult membership. Adding a container kind
+means adding its visit method to the visitor, not a hook pair.
+
+The counterpart in the pure domain is the rewrite builder, which re-lexes its
+own output: a generated `concat!()` must parse back as one expression with the
+original fragments before any suggestion is offered.
+
+### Source editability is resolved once, at the compiler boundary
+
+`crates/string_continuation_style/src/driver/edit_policy.rs` decides whether a
+literal's file may be rewritten, and it is the only module in the lint that
+reads the environment. `SourceEditPolicy::from_env` runs once from
+`check_crate`; every later query is `is_editable(&Utf8Path) -> bool`, a pure
+function of a path and two fixed directory lists.
+
+Keep it that way. The query used to call `env::current_dir()` and read
+`CARGO_TARGET_DIR` for each candidate literal, which made it untestable without
+the process environment and gave four different failures one indistinguishable
+answer. Resolving the directories first collapses those failures into a single
+`Option`, which fails closed: an unresolvable workspace root means no
+diagnostic at all, because a missed hint costs the user less than an offered
+edit to generated code.
+
+`SourceEditPolicy::new` takes the workspace root and target directory
+explicitly and is what the unit tests drive. A relative path is anchored at the
+workspace root before the containment test, so `../` segments cannot walk out
+of the tree; the default `target` directory stays excluded even when
+`CARGO_TARGET_DIR` names somewhere else, so an override never re-admits it.
+
+Adding a new host fact follows the same shape: resolve it in `check_crate` and
+pass it down, rather than reading the environment from the per-literal path.
+
+### One definition of "join", shared by the classifier and the gate
+
+`whitaker_string_literals::continuation::joins_only` is the only place that
+decides which scanned continuations are joins. Four call sites depend on that
+rule agreeing with itself:
+
+- `classification::classify`, which decides whether to offer a rewrite at all;
+- `ConcatRewrite::build`, which re-derives the caller's joins from the source
+  and rejects the rewrite when they differ;
+- the `rewrite/props.rs` property test, which builds an expectation;
+- `rewrite/tests.rs`, which builds unit-test expectations.
+
+The gate re-deriving the joins is the reason the rule is shared rather than
+repeated. If `build` and `classify` disagreed about what a join is, `build`
+would reject the very joins `classify` had just supplied, and every affected
+literal would silently fall back to `Ignore`. Tests call the same helper so
+that an expectation cannot encode a stale copy of the rule.
+
+The helper is `pub(crate)` and deliberately not part of the public API: it
+encodes an internal agreement, not a service this crate offers. Two kinds of
+call site are *not* covered and must not be folded in.
+`rewrite::source_gate::is_selected_join` tests a single continuation for
+join-ness as one clause of a longer predicate, and the Kani harness in
+`continuation/kani.rs` counts kinds arithmetically so its loop-free model never
+depends on `Iterator` machinery.
+
+### One generator for the continuation property bodies
+
+`whitaker_string_literals::props` (test-only) owns the assembly of the bodies
+both property suites generate: `source_piece`, `append_continuation`, and
+`body_with_continuations`. The continuation suite checks byte ranges on those
+bodies and the rewrite suite decodes them and compares values, so they must
+generate the same *shapes* while differing in alphabet. Each suite supplies its
+own `ALPHABET` constant; the continuation suite omits the unicodescape and
+emoji that only matter once a value is decoded.
+
+Only the assembly is shared, because that is the part that can silently
+diverge. A change to how continuations, blank lines, and tabs interleave would
+otherwise land in one suite and leave the other green while generating
+different bodies. The alphabets are deliberately duplicated rather than
+parameterized: they encode which constructs each suite has to reach, and a
+single merged alphabet would make both suites pay for the other's inputs.
+
+### Localization and the label spans
+
+The pass emits through the shared `whitaker_common::i18n` helpers so the
+message, `.note`, `.help`, `.label` and `.suggestion` all resolve per locale.
+Each `join_spans` entry becomes a labelled secondary span. Locale resources
+live in `common/locales/{en-GB,cy,gd}/string_continuation_style.ftl`, and the
+`common/tests/i18n_quality` gate requires every en-GB attribute to be present
+and non-empty in each secondary locale. Missing a `.label` would otherwise
+render English into a blessed `ui-cy` golden, which then enforces the bug.
+
+### Early-pass maintenance
+
+The crate depends on `rustc_ast` items that are not covered by the ordinary
+test suite. Re-run the probe recorded as `EV-M0-transcript` in the 2.4.1
+ExecPlan on every toolchain bump, and re-record the transcript. The
+load-bearing items are:
+
+- `FormatArgs::span`, which anchors the diagnostic;
+- `FormatArgs::is_source_literal`, which decides whether a source literal
+  exists at all;
+- `FormatArgs::uncooked_fmt_str`, which supplies the literal to scan;
+- `FormatArgumentKind::Captured`, which forces the "require continuation"
+  decision for implicit captures.
+
+A semantic change in `is_source_literal` is the dangerous one: it turns firing
+cases into silence without failing any test, because silence is the lint's
+normal output for most code. Only the probe distinguishes "the lint is
+correctly quiet" from "the lint stopped seeing anything".
+
 ## Shared fingerprint helpers
 
 `common::rstest` exposes two families of pure data model for deterministic
@@ -3696,6 +3894,43 @@ the guard also sets `VCPKG_ROOT` to `C:\vcpkg` when that directory exists and
 the variable is otherwise absent. Restoration uses the same shared environment
 mutex, but the runner callback itself executes without holding that mutex to
 avoid nested-lock deadlocks.
+
+Example targets are run with `dylint_testing::ui::Test::example`. The workspace
+patches `dylint_testing`, and the patched decoder tolerates a wrapper chain (see
+[Example-target staging](#example-target-staging)).
+
+#### Example-target staging
+
+Use `dylint_testing::ui::Test::example(crate_name, example)` for example-based
+UI tests. It rebuilds the example with `cargo rustc` under a process-unique
+`-C metadata` value, recovers the `--extern`, `-L`, and `--edition` flags from
+the resulting compiler invocation, and stages the source with its `.stderr`,
+`.stdout`, and `.fixed` expectation files:
+
+```rust
+let mut test = Test::example(crate_name, "pass_in_test_harness");
+test.rustc_flags(["--test"]);
+test.run();
+```
+
+`dylint_testing` is vendored and patched, so do not assume upstream's decoder.
+Two properties matter here.
+
+First, the rebuild uses compiler metadata rather than deleting
+`target/debug/examples` first. Deletion forced a recompile under Cargo's legacy
+layout, but Cargo can now restore a removed example from its cached build
+artefact without invoking `rustc`, leaving the decoder with nothing to parse. A
+stale-deletion approach therefore fails intermittently rather than loudly.
+
+Second, `rustc_invocation` parses Cargo's quoted command line with `shlex` and
+takes the arguments after the *last* `rustc` before `--crate-name`, so a
+configured wrapper — `sccache` in CI, or a compile-admission wrapper on a
+shared development host — is skipped rather than mistaken for the compiler.
+Never clear `RUSTC_WRAPPER` to work around a parsing failure: a wrapper set
+through `build.rustc-wrapper` in Cargo configuration survives environment
+clearing, and removing it would bypass the caching or admission control it
+exists to provide. Never parse Cargo output in a lint crate's harness either;
+`Test::example` is the single owner of example-flag recovery.
 
 Any UI test that holds `env_test_guard()` while invoking Dylint must use
 `run_test_runner_with_env_guard()`. It catches a runner panic before releasing
@@ -4901,6 +5136,25 @@ its 20 m per-test allowance during the recovery run: Cargo built the library,
 then timed out while building the example. Its retry passed after 764 seconds.
 The 75 m override covers both nested builds and retains the existing retry for
 transient UI failures.
+
+The `string_continuation_style` UI entries take the ordinary 20 m allowance and
+do not get a narrower one of their own. Four entries run, one per locale, and
+together they were measured at 31.3 s warm in isolation and 157.7 s inside the
+full suite. They are `tests::ui::{ui, ui_cy, ui_gd, ui_fallback}` in the
+crate's **lib** target, not a `tests/ui.rs` integration target: `src/lib.rs`
+declares the suite with `#[path = "../tests/support/tests.rs"]`, which in turn
+declares `#[path = "ui.rs"] mod ui;`. So the `test(tests::ui::)` clause of the
+broad Dylint override matches all four, and the `(binary(ui) & test(=ui))`
+clause does not apply, because the crate has no integration target named `ui`.
+
+A narrower override would have to be declared **before** the broad entry and
+cannot be: nextest applies the first override that matches each setting, so a
+later entry is inert for `slow-timeout`, and an earlier one displaces the broad
+entry as the first `serial-dylint-ui`-grouped override. Two contracts read that
+first entry by position — `tests/nextest_ui_filter.rs` requires it to carry a
+retry, and `nextest_profile_test.py` requires exactly one override per exact
+filter string per profile — so the broad entry is also the only place a 20 m
+allowance for these fixtures can live.
 
 The 15 m allowance for work outside nextest's window is measured, from the
 worst of several runs rather than one:

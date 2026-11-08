@@ -194,7 +194,7 @@ Review of the replayed tree produced the repairs below.
   `trybuild-contracts` passes carry the contract filter and the `ci` profile,
   and only the feature-free `whitaker_lint_core` pass tolerates an empty match.
 
-Documentation was reconciled with those decisions in ADR-010, the CLI design
+Documentation was reconciled with those decisions in ADR-011, the CLI design
 document, `docs/publishing.md`, and `docs/users-guide.md`.
 
 Gate evidence for this repair commit, run sequentially against the worktree
@@ -487,7 +487,7 @@ No Terms of Reference document exists. Upstream artefacts:
   3.2.1 (line 108), is done.
 - **ADRs:** `docs/adr-001-prebuilt-dylint-libraries.md` constrains the
   prebuilt path. No ADR covers the CLI boundary; this plan creates
-  `docs/adr-010-whitaker-cli-boundary.md`.
+  `docs/adr-011-whitaker-cli-boundary.md`.
 - **Standards:** `AGENTS.md`, `docs/documentation-style-guide.md`.
 
 | ID                 | Statement                                                                                                                        | Source                                            |
@@ -839,7 +839,7 @@ captured with `tee`. Commit after each.
    exercised.
 4. Reserve the crates.io name (`EP-M3`) **before** any documentation tells
    users to install it.
-5. Write `docs/adr-010-whitaker-cli-boundary.md` using the template at
+5. Write `docs/adr-011-whitaker-cli-boundary.md` using the template at
    `docs/documentation-style-guide.md:414`, with the content required by
    `EP-M4`.
 6. Update `docs/users-guide.md`, `docs/developers-guide.md`,
@@ -939,7 +939,7 @@ captured with `tee`. Commit after each.
 - **Outcome.** ADR and documentation reflect reality.
 - **Acceptance evidence.** `make markdownlint` and `make nixie` pass; roadmap
   item 3.5.1 ticked.
-- **Required ADR content** (`docs/adr-010-whitaker-cli-boundary.md`): the
+- **Required ADR content** (`docs/adr-011-whitaker-cli-boundary.md`): the
   `PATH` namespace decision and why forwarding was chosen over the
   alternatives; the promoted `whitaker_installer` public surface; the rule that
   `whitaker_installer` owns _how_ to install while the CLI owns _whether and

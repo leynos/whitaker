@@ -1,0 +1,18 @@
+// run-rustfix
+#![warn(string_continuation_style)]
+
+//! Three fragments joined by two immediately adjacent continuations.
+//!
+//! Each continuation follows the previous fragment on the next source line,
+//! so the literal hides two boundaries. The pass reports once and rewrites
+//! the whole literal, rather than emitting a diagnostic per join.
+
+#[path = "support.rs.inc"]
+mod support;
+
+const VALUE: &str = "left \
+    middle \
+    right";
+const _: () = assert!(support::same_bytes(VALUE.as_bytes(), b"left middle right"));
+
+fn main() {}

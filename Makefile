@@ -1,4 +1,4 @@
-.PHONY: help all clean test trybuild-contracts test-doc coverage build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke installer-msrv-check release-installer-dry-run package-lints workflow-test workflow-test-deps test-workflow-contracts test-markdown-format test-glibc-baseline test-sccache-health verus kani verus-clone-detector kani-clone-detector spelling skill-frontmatter-lint skill-manifest-validate skill-metadata-check skill-manifest-check test-skill-metadata-check clippy-snapshot clippy-snapshot-bundle dylint-env dylint-smoke dylint-tools interrogate
+.PHONY: help all clean test trybuild-contracts test-doc coverage build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke installer-msrv-check release-installer-dry-run package-lints workflow-test workflow-test-deps test-workflow-contracts test-markdown-format test-glibc-baseline test-sccache-health verus kani verus-clone-detector kani-clone-detector verus-string-literals kani-string-literals spelling skill-frontmatter-lint skill-manifest-validate skill-metadata-check skill-manifest-check test-skill-metadata-check clippy-snapshot clippy-snapshot-bundle dylint-env dylint-smoke dylint-tools interrogate
 
 # Make chooses the recipe shell itself, so the `shell: bash` default in the
 # workflows does not reach recipes; the `/bin/sh` it would otherwise use
@@ -170,7 +170,7 @@ SKILLS_REF := env -u GIT_CONFIG_COUNT -u GIT_EXEC_PATH PATH="$(SKILLS_REF_PATH)"
 # `line-length` rule is disabled rather than wrapping the frontmatter.
 SKILL_YAMLLINT_CONFIG := {extends: default, rules: {line-length: disable}}
 WORKFLOW_TEST_VENV ?= .venv
-LINT_CRATES ?= bumpy_road_function conditional_max_n_branches function_attrs_follow_docs module_max_lines module_must_have_inner_docs no_expect_outside_tests test_must_not_have_example no_std_fs_operations no_unwrap_or_else_panic whitaker_suite
+LINT_CRATES ?= bumpy_road_function conditional_max_n_branches function_attrs_follow_docs module_max_lines module_must_have_inner_docs no_expect_outside_tests string_continuation_style test_must_not_have_example no_std_fs_operations no_unwrap_or_else_panic whitaker_suite
 CARGO_DYLINT_VERSION ?= 6.3.0
 DYLINT_LINK_VERSION ?= 6.3.0
 # The pinned host tools are downloaded once into a durable directory rather
@@ -484,11 +484,17 @@ verus: ## Run the pinned Verus proof sidecar
 verus-clone-detector: ## Run clone-detector Verus proofs
 	./scripts/run-verus.sh clone-detector
 
+verus-string-literals: ## Run pure string-literal Verus proof
+	./scripts/run-verus.sh string-literals
+
 kani: ## Run practical Kani sidecar harnesses
 	./scripts/run-kani.sh
 
 kani-clone-detector: ## Run clone-detector Kani harnesses
 	./scripts/run-kani.sh clone-detector
+
+kani-string-literals: ## Run pure string-literal Kani harnesses
+	./scripts/run-kani.sh string-literals
 
 install-smoke: ## Install whitaker-installer and verify basic functionality
 	set -eu; \

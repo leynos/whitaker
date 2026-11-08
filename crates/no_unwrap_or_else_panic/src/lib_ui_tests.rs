@@ -6,10 +6,6 @@ use camino::Utf8Path;
 use dylint_testing::ui::Test;
 #[cfg(not(windows))]
 use rstest::rstest;
-#[cfg(not(windows))]
-use temp_env::with_vars_unset;
-#[cfg(not(windows))]
-use whitaker_common::test_support::run_test_runner_with_env_guard;
 use whitaker_common::test_support::{prepare_fixture, run_fixtures_with, run_test_runner};
 
 /// Describes a single example-based regression to run under the test harness.
@@ -62,16 +58,11 @@ fn ui() {
 fn run_example_under_test_harness(spec: &ExampleHarnessRun<'_>) {
     let crate_name = env!("CARGO_PKG_NAME");
     let directory = "examples";
-    whitaker_lint_core::testing::ui::run_with_runner(crate_name, directory, |crate_name, _| {
-        run_test_runner_with_env_guard(spec.name, || {
-            with_vars_unset(
-                ["SCCACHE_GHA_ENABLED", "SCCACHE_PATH", "SCCACHE_ERROR_LOG"],
-                || {
-                    let mut test = Test::example(crate_name, spec.name);
-                    test.rustc_flags(spec.rustc_flags);
-                    test.run();
-                },
-            );
+    whitaker_lint_core::testing::ui::run_with_runner(crate_name, directory, |_, _| {
+        run_test_runner(spec.name, || {
+            let mut test = Test::example(crate_name, spec.name);
+            test.rustc_flags(spec.rustc_flags);
+            test.run();
         })
     })
     .unwrap_or_else(|error| {
@@ -212,3 +203,4 @@ fn aliased_test_crate_non_companion_does_not_exempt_parent_function() {
         &["--test", "-D", "no_unwrap_or_else_panic"],
     ));
 }
+// weave: run 'weave explain crates/no_unwrap_or_else_panic/src/lib_ui_tests.rs' for per-hunk detail, 'weave check' to verify your resolution

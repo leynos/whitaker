@@ -1,0 +1,14 @@
+// run-rustfix
+#![warn(string_continuation_style)]
+
+//! A join in a `println!` format string is reported.
+//!
+//! `println!` is a known format facade with no macro-by-example matcher to
+//! break, so the outermost expansion frame proves the literal sits in
+//! expression position. The pass suggests `concat!()` and keeps the argument.
+
+fn main() {
+    let value: u8 = 7;
+    println!("alpha \
+        beta{}", value);
+}

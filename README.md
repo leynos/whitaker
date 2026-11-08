@@ -55,7 +55,7 @@ For version pinning, installation details, and configuration options, see the
 
 ## The Lints
 
-Whitaker currently ships nine standard lints plus one experimental lint that
+Whitaker currently ships ten standard lints plus one experimental lint that
 requires explicit opt-in.
 
 | Lint                          | What it does                                                                                                           |
@@ -68,6 +68,7 @@ requires explicit opt-in.
 | `conditional_max_n_branches`  | Flags conditionals with more than 2 branches in a single predicate. Complex boolean logic deserves its own home.       |
 | `test_must_not_have_example`  | Flags test docs containing example headings or fenced code blocks. Test docs should describe intent, not tutorials.    |
 | `no_unwrap_or_else_panic`     | Catches sneaky panics hidden inside `unwrap_or_else` closures. If you're going to panic, at least be upfront about it. |
+| `string_continuation_style`   | Flags source-line joins hiding a fragment boundary inside one literal, and suggests `concat!()` instead.               |
 | `no_std_fs_operations`        | Forbids `std::fs` operations, nudging you toward capability-based filesystem access via `cap_std`.                     |
 
 Experimental lints are not enabled by default. The current experimental lint is
