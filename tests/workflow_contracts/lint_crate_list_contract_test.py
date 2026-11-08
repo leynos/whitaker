@@ -16,10 +16,17 @@ rolling release failed on `main`. An equivalent check lived in
 ``tests/workflows/test_rolling_release_workflow.py``, but that directory is an
 opt-in ``act`` suite that no workflow runs, so nothing gated the drift.
 
+Two other copies of the same list exist, and both are checked here:
+
+* `rolling-release.yml` builds from its own `LINT_CRATES` env before packaging,
+  so a missing entry fails packaging on every matrix leg. Order is part of that
+  contract, since both definitions drive deterministic build logs.
+* The `Makefile`'s `LINT_CRATES ?=` feeds `make package-lints` and
+  `make publish-check`, which run the same packager. It is deliberately in a
+  different order, so it is compared as a set.
+
 These tests live in `tests/workflow_contracts` because ``make
-test-workflow-contracts`` runs inside the required ``linux-full`` job. They
-compare the lists as parsed data: order is part of the contract, since both
-definitions drive deterministic build logs.
+test-workflow-contracts`` runs inside the required ``linux-full`` job.
 
 Run via ``make test-workflow-contracts``.
 """
@@ -33,6 +40,7 @@ from pathlib import Path
 from ubicloud_workflow_support import REPOSITORY_ROOT, load_workflow
 
 RESOLUTION_PATH: typ.Final[Path] = REPOSITORY_ROOT / "installer/src/resolution.rs"
+MAKEFILE_PATH: typ.Final[Path] = REPOSITORY_ROOT / "Makefile"
 WORKFLOW_NAME: typ.Final[str] = "rolling-release.yml"
 
 _LINT_CRATES_PATTERN: typ.Final[re.Pattern[str]] = re.compile(
@@ -41,6 +49,9 @@ _LINT_CRATES_PATTERN: typ.Final[re.Pattern[str]] = re.compile(
 )
 _SUITE_CRATE_PATTERN: typ.Final[re.Pattern[str]] = re.compile(
     r'pub(?:\(crate\))?\s+const\s+SUITE_CRATE\s*:\s*&str\s*=\s*"([^"]+)";'
+)
+_MAKEFILE_LINT_CRATES_PATTERN: typ.Final[re.Pattern[str]] = re.compile(
+    r"^LINT_CRATES\s*\?=\s*(.+)$", re.MULTILINE
 )
 
 
@@ -77,6 +88,14 @@ def _workflow_lint_crates() -> list[str]:
             )
 
 
+def _makefile_lint_crates() -> list[str]:
+    """Return the crate names `make package-lints` builds, in order."""
+    source = MAKEFILE_PATH.read_text(encoding="utf-8")
+    match = _MAKEFILE_LINT_CRATES_PATTERN.search(source)
+    assert match, f"unable to parse LINT_CRATES from {MAKEFILE_PATH}"
+    return match.group(1).split()
+
+
 def test_rolling_release_builds_every_crate_the_packager_requires() -> None:
     """Ensure the workflow compiles exactly what the packager will collect.
 
@@ -94,4 +113,22 @@ def test_rolling_release_builds_every_crate_the_packager_requires() -> None:
         f"  installer={packager_crates}\n"
         f"missing from workflow: {sorted(set(packager_crates) - set(workflow_crates))}\n"
         f"unknown to installer: {sorted(set(workflow_crates) - set(packager_crates))}"
+    )
+
+
+def test_makefile_builds_every_crate_the_packager_requires() -> None:
+    """Ensure `make package-lints` builds exactly what the packager collects.
+
+    The Makefile reorders the list relative to the installer's constants, so
+    this compares sets: the two definitions are independent hand-maintained
+    orderings of one membership fact, and only membership affects packaging.
+    """
+    makefile_crates = _makefile_lint_crates()
+    packager_crates = _installer_lint_crates()
+
+    assert set(makefile_crates) == set(packager_crates), (
+        f"{MAKEFILE_PATH} LINT_CRATES drifted from "
+        f"installer::resolution constants:\n"
+        f"  missing from Makefile: {sorted(set(packager_crates) - set(makefile_crates))}\n"
+        f"  unknown to installer: {sorted(set(makefile_crates) - set(packager_crates))}"
     )
