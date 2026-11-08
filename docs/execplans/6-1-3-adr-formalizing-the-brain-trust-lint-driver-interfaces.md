@@ -3799,3 +3799,64 @@ the thing that needs reading, and the plan's own mirrored prose was repaired
 alongside the ADR so the two do not diverge again.
 
 Nothing else changed. No code, no manifest, no test.
+
+### Round 13 — hosted CI is red for an inherited reason, 2026-11-08
+
+After the round-12 push (`e1fb9b68`), the hosted CI run `42502294956` failed on
+both platforms. The failure is **not** caused by this branch, and the evidence
+is specific enough to act on rather than to speculate about.
+
+**Both jobs fail on the same upstream defect.** `linux-full`'s `Lint` step and
+`windows-compat`'s `Test` step both die building `dylint_driver v6.0.1`:
+
+```text
+error: failed to run custom build command for `dylint_driver v6.0.1`
+Error: `revparse_ext` failed for `master`
+    revspec 'master' not found; class=Reference (4); code=NotFound (-3)
+```
+
+`dylint_driver` 6.0.1's build script clones `rust-lang/rust-clippy` and checks
+out the branch `master`, which upstream has since deleted. Cargo itself flagged
+the staleness in the log: `Adding dylint_driver v6.0.1 (available: v6.3.2)`.
+This is the same defect recorded at round 6 and known to the repository since
+2026-10-30.
+
+**This branch inherits it from its base, which is a sibling of the fix.** The
+target relationship is:
+
+```text
+main  (dylint 6.3.0, CI green)
+  <- #372  harden-lint-whitaker-gate      (dylint 6.3.0, CI green)
+  <- #358  6-1-3-adr-...  (this branch)
+```
+
+PR 354 is **not** an ancestor of PR 372 — verified:
+`git merge-base --is-ancestor origin/harden-lint-whitaker-gate <#354 tip>`
+exits non-zero, and PR 372 carries commits that PR 354 does not. PR 354
+branched before the dylint bump landed in PR 372, so it still locks 6.0.1, and
+this branch inherits that lock through `Cargo.lock`. The diff on this branch is
+documentation only, so its own content cannot have introduced the failure.
+
+**Why this is not this layer's to fix.** The one-line remedy — bump `dylint` to
+6.3.0 in `Cargo.toml` here — would duplicate PR #528, which already landed that
+bump on `main` and again in #372, and would put this layer in conflict with
+both. The already-established rule is that a layer pinning 6.0.1 is restacked
+rather than re-bumped. Restacking is likewise not available at this layer: the
+45 commits this branch carries on top of PR 354 include the entire
+`crates/whitaker_sarif/tests/manifest_scan/` guard, which is *not* present on
+PR 372 or `main`, so the work depends on PR 354 and cannot be re-parented onto
+PR 372 without importing that layer's changes.
+
+**What is therefore outstanding, and whose it is.** The blocker belongs to PR
+354, which is itself `CONFLICTING` against its base and `draft`. Until it is
+rebased onto PR 372, or PR 372 and then PR 354 land on `main`, this branch
+cannot inherit a working `dylint_driver`. This is an intractable impasse at
+*this* layer: the remaining action is a history rewrite inside a different PR
+that this assignment does not own.
+
+**What this branch's own work establishes.** The `linux-full` job passed
+`Check formatting`, `Enforce en-GB-oxendict spelling`, `Markdown lint`, and
+`Nixie` before reaching the `Lint` step, so every gate that covers the round-12
+documentation edits is green in hosted CI. Locally, `make markdownlint` (79
+files, 0 errors), `make nixie` (all diagrams validated), and the canonical
+`mdtablefix` check (`2 files left unchanged`) all pass on `e1fb9b68`.
