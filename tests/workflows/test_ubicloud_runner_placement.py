@@ -38,6 +38,7 @@ UBICLOUD_LINUX_JOBS: dict[str, dict[str, str]] = {
         "coverage-check": UBICLOUD_LINUX_RUNNER,
         "linux-full": UBICLOUD_LINUX_RUNNER,
     },
+    "coverage-main.yml": {"coverage-warmup": UBICLOUD_LINUX_RUNNER},
 }
 
 GITHUB_HOSTED_RUNNERS = {

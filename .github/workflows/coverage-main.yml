@@ -23,10 +23,12 @@ name: Coverage (main)
 # `--workspace` build (eleven crates are excluded from CI test runs and the
 # dylint UI tests need per-target RUSTFLAGS).
 #
-# This job is the writer for every coverage-lane cache key and for the
-# instrumented compiler-cache shape. `ci.yml`'s `coverage-check` restores
-# those keys and never saves. `ci.yml`'s `linux-full` also runs on push to
-# `main`, as the writer for the lint lane's keys and shapes.
+# `coverage-upload` measures and uploads on a GitHub-hosted runner and saves no
+# cache the Ubicloud lanes read. `coverage-warmup`, on Ubicloud, is the writer
+# for every coverage-lane cache key and for the instrumented compiler-cache
+# shape: `ci.yml`'s `coverage-check` restores those keys and never saves.
+# `ci.yml`'s `linux-full` also runs on push to `main`, as the writer for the
+# lint lane's keys and shapes.
 
 on:
   push:
@@ -315,9 +317,164 @@ jobs:
         if: always()
         run: bash scripts/record-cache-observations.sh headroom
 
+      # No cache saves here: a hosted runner writes GitHub's store, which the
+      # Ubicloud lanes never read, so `coverage-warmup` is the sole writer.
+      - name: Check sccache health
+        if: steps.setup-rust.outputs.sccache-status != 'fallback'
+        run: python3 scripts/check_sccache_health.py --expect-location ghac sccache-stats.json
+
+  # Compiles the instrumented tests `coverage-check` builds, without running
+  # them, and saves the cache keys that lane restores. A hosted runner writes
+  # GitHub's cache store, which the Ubicloud lanes never read, so this Ubicloud
+  # job is the writer for the coverage-lane keys and the compiler-cache shape.
+  # It depends on nothing: a failing test is no reason to leave the cache cold.
+  coverage-warmup:
+    runs-on: ubicloud-standard-2-ubuntu-2404
+    # The slowest successful run of this workflow, compile and tests together,
+    # took 40 minutes; the compile alone is well inside this bound.
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7
+        with:
+          persist-credentials: false
+
+      # See the same step in `coverage-upload`: the volume fills on a cold build.
+      - name: Free preinstalled toolchains the job does not use
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          df -m /
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet
+          df -m /
+
+      - name: Bound concurrency to the runner shape
+        run: |
+          {
+            printf 'CARGO_BUILD_JOBS=%s\n' "${LINUX_RUNNER_VCPUS}"
+            printf 'NEXTEST_TEST_THREADS=%s\n' "${LINUX_RUNNER_VCPUS}"
+          } >> "$GITHUB_ENV"
+
+      - name: Restore Cargo registry
+        id: cargo-registry
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cargo-registry-coverage-v1-${{ runner.os }}-${{ runner.arch }}-${{ runner.environment }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
+          restore-keys: |
+            cargo-registry-coverage-v1-${{ runner.os }}-${{ runner.arch }}-${{ runner.environment }}-
+
+      - name: Restore the Rust toolchain and installed tools
+        id: rust-tools
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: |
+            ~/.rustup
+            ~/.cargo/bin
+            ~/.local/bin
+            ~/.cache/uv
+            ~/.local/share/uv
+          key: tools-coverage-v1-${{ runner.os }}-${{ runner.arch }}-${{ runner.environment }}-ubuntu2404-nextest0.9.114-llvmcov0.6.24-${{ hashFiles('rust-toolchain.toml') }}
+
+      - name: Restore the Clippy snapshot
+        id: clippy-snapshot-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: ~/.cache/whitaker-clippy-snapshot
+          key: clippy-snapshot-v1-${{ hashFiles('installer/clippy-snapshot.toml') }}
+
+      - name: Record cache observations
+        if: always()
+        env:
+          CARGO_REGISTRY_KEY: ${{ steps.cargo-registry.outputs.cache-primary-key }}
+          CARGO_REGISTRY_MATCHED: ${{ steps.cargo-registry.outputs.cache-matched-key }}
+          CARGO_REGISTRY_HIT: ${{ steps.cargo-registry.outputs.cache-hit }}
+          RUST_TOOLS_KEY: ${{ steps.rust-tools.outputs.cache-primary-key }}
+          RUST_TOOLS_MATCHED: ${{ steps.rust-tools.outputs.cache-matched-key }}
+          RUST_TOOLS_HIT: ${{ steps.rust-tools.outputs.cache-hit }}
+          CLIPPY_SNAPSHOT_KEY: ${{ steps.clippy-snapshot-cache.outputs.cache-primary-key }}
+          CLIPPY_SNAPSHOT_MATCHED: ${{ steps.clippy-snapshot-cache.outputs.cache-matched-key }}
+          CLIPPY_SNAPSHOT_HIT: ${{ steps.clippy-snapshot-cache.outputs.cache-hit }}
+        run: bash scripts/record-cache-observations.sh
+
+      - name: Setup Rust
+        id: setup-rust
+        uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
+        with:
+          # Ubicloud only, so a missing cache proxy fails the job rather than
+          # letting sccache compile against local disk unnoticed.
+          expect-cache: ubicloud
+          cache-provider: external
+          install-mold: 'true'
+
+      - name: Provision the Clippy snapshot
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CLIPPY_SNAPSHOT_HIT: ${{ steps.clippy-snapshot-cache.outputs.cache-hit }}
+        run: |
+          set -euo pipefail
+          bundle=()
+          if [[ "${CLIPPY_SNAPSHOT_HIT}" != "true" ]]; then
+            dist="${RUNNER_TEMP}/clippy-snapshot"
+            make clippy-snapshot-bundle CLIPPY_SNAPSHOT_DIST="${dist}"
+            bundle=(CLIPPY_SNAPSHOT_BUNDLE="$(echo "${dist}"/whitaker-clippy-snapshot-*.bundle)")
+          fi
+          make clippy-snapshot "${bundle[@]}"
+          make --no-print-directory dylint-env >> "$GITHUB_ENV"
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
+        with:
+          tool: nextest@0.9.114
+          fallback: none
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
+        with:
+          tool: cargo-llvm-cov@0.6.24
+          fallback: none
+
+      - name: Compile the instrumented tests
+        run: make coverage-build
+
+      - name: Discard the instrumented target tree
+        # No job caches a target tree, so this is pure scratch; removing it
+        # before the saves keeps a save from dying on `No space left on device`.
+        if: always()
+        run: rm -rf target/llvm-cov-target
+
+      - name: Warm the doctest build
+        # The pull-request lane builds the doctests too, and `coverage-build`
+        # compiles none of them.
+        run: make test-doc
+
+      - name: Record sccache effectiveness
+        if: always() && steps.setup-rust.outputs.sccache-status != 'fallback'
+        env:
+          SETUP_RUST_CACHE_BACKEND: ${{ steps.setup-rust.outputs.cache-backend }}
+        run: bash scripts/record-sccache-effectiveness.sh
+
+      - name: Upload sccache statistics
+        if: always() && steps.setup-rust.outputs.sccache-status != 'fallback'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
+        with:
+          name: sccache-stats-coverage-warmup
+          path: sccache-stats.json
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Record disk headroom before the saves
+        if: always()
+        run: bash scripts/record-cache-observations.sh headroom
+
       # This job is the sole writer for the coverage-lane keys and for the
-      # shared Clippy snapshot. `ci.yml` restores them and never saves, so two
-      # lanes can never race to populate the same cold key.
+      # shared Clippy snapshot. `ci.yml` restores them and never saves.
       - name: Save Cargo registry
         if: github.ref == 'refs/heads/main' && steps.cargo-registry.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
@@ -348,6 +505,4 @@ jobs:
 
       - name: Check sccache health
         if: steps.setup-rust.outputs.sccache-status != 'fallback'
-        # Last, so a failure here cannot cost the job its cache saves; the
-        # statistics were uploaded earlier either way.
         run: python3 scripts/check_sccache_health.py --expect-location ghac sccache-stats.json

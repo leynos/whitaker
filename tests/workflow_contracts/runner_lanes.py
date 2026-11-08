@@ -95,6 +95,7 @@ class RunnerLane(typ.NamedTuple):
 UBICLOUD_LANES: Final[tuple[RunnerLane, ...]] = (
     RunnerLane("ci.yml", "coverage-check"),
     RunnerLane("ci.yml", "linux-full"),
+    RunnerLane("coverage-main.yml", "coverage-warmup"),
     RunnerLane("rolling-release.yml", "build-lints", "x86_64-unknown-linux-gnu"),
     RunnerLane("rolling-release.yml", "build-lints", "aarch64-unknown-linux-gnu"),
     RunnerLane(

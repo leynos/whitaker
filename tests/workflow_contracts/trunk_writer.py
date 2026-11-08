@@ -43,7 +43,7 @@ from pull_request_reach import declares_trigger
 #: `ci.yml` runs it on that push, so its shapes are the lane's by construction
 #: rather than by a copy that could drift.
 TRUNK_WRITERS: typ.Final[dict[str, str]] = {
-    "coverage-check": "coverage-upload",
+    "coverage-check": "coverage-warmup",
     "linux-full": "linux-full",
 }
 
@@ -66,6 +66,17 @@ REVIEWED_CONDITIONS: typ.Final[dict[str, tuple[bool, frozenset[str]]]] = {
 COMPILING_COMMANDS: typ.Final[re.Pattern[str]] = re.compile(
     r"^[ \t]*((?:make|cargo)[ \t].*?)[ \t]*$", re.MULTILINE
 )
+
+#: A writer may compile a reader's command through another that builds the
+#: same instrumented shapes without running them: `make coverage-build` stands
+#: for `make coverage`.
+EQUIVALENT_WRITER_COMMANDS: typ.Final[dict[str, str]] = {
+    "make coverage": "make coverage-build",
+}
+
+#: Jobs that run on the trunk push and write nothing the pull-request lanes
+#: read, because their runner's cache store is not the lanes'.
+NON_WRITING_PUSH_JOBS: typ.Final[frozenset[str]] = frozenset({"coverage-upload"})
 
 #: Environment a reader and its writer must declare alike. The `make` recipes
 #: set `RUSTFLAGS` themselves, so today these reach the compiler only through
@@ -277,7 +288,12 @@ def writer_violations(
             "the writer must run unconditionally on the push, not under "
             f"{_normalized_condition(writer['if'])!r}"
         )
-    missing = sorted(compiling_commands(reader) - compiling_commands(writer))
+    written = compiling_commands(writer)
+    missing = sorted(
+        command
+        for command in compiling_commands(reader) - written
+        if EQUIVALENT_WRITER_COMMANDS.get(command) not in written
+    )
     if missing:
         violations.append(f"the writer does not run the reader's {missing}")
     return violations

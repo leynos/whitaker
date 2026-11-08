@@ -53,6 +53,7 @@ UBICLOUD_JOBS: dict[str, str] = {
     "coverage-check": "ci.yml",
     "linux-full": "ci.yml",
     "coverage-upload": "coverage-main.yml",
+    "coverage-warmup": "coverage-main.yml",
     # A matrix job, and only two of its five legs are on Ubicloud. The rules
     # keyed on this mapping are about the step list, which every leg shares,
     # so the job belongs here whole; which legs run where is `RunnerLane`'s
@@ -79,6 +80,7 @@ SUITE_JOBS: dict[str, str] = {
     "coverage-check": "ci.yml",
     "linux-full": "ci.yml",
     "coverage-upload": "coverage-main.yml",
+    "coverage-warmup": "coverage-main.yml",
 }
 
 #: Every job that owns cache archives, including the GitHub-hosted Windows
@@ -88,12 +90,12 @@ CACHING_JOBS: dict[str, str] = UBICLOUD_JOBS | {"windows-compat": "ci.yml"}
 
 #: The single job permitted to save each cache key family.
 CACHE_KEY_WRITERS: dict[str, str] = {
-    "cargo-registry-coverage-v1-": "coverage-upload",
+    "cargo-registry-coverage-v1-": "coverage-warmup",
     "cargo-registry-lint-v1-": "linux-full",
-    "tools-coverage-v1-": "coverage-upload",
+    "tools-coverage-v1-": "coverage-warmup",
     "tools-lint-v1-": "linux-full",
     "dylint-tools-v1-": "linux-full",
-    "clippy-snapshot-v1-": "coverage-upload",
+    "clippy-snapshot-v1-": "coverage-warmup",
     # No `sccache-*` family is listed, and none may be. `setup-rust` points
     # every Ubicloud lane's sccache at Ubicloud's cache proxy, so no lane
     # archives `~/.cache/sccache` and there is no directory for a family to

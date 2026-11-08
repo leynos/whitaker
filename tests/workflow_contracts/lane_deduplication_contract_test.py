@@ -71,6 +71,7 @@ TEST_COMMANDS = (
 JUSTIFIED_TEST_LANES: dict[str, str] = {
     "coverage-check": "the single Linux pull-request execution",
     "coverage-upload": "the main-branch coverage writer, a different trigger",
+    "coverage-warmup": "compiles the coverage lane's tests and runs none",
     "windows-compat": "a different platform",
 }
 

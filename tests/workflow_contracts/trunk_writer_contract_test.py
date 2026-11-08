@@ -15,6 +15,7 @@ import pytest
 from pr_concurrency_support import CANCEL_IN_PROGRESS, GROUP_EXPRESSION
 from pull_request_reach import declares_trigger
 from trunk_writer import (
+    NON_WRITING_PUSH_JOBS,
     TRUNK_WRITERS,
     UnreviewedConditionError,
     cancellation_violations,
@@ -109,7 +110,12 @@ def test_only_the_registered_writers_run_on_the_trunk_push() -> None:
     compiles, so it is a writer nothing reads rather than a second writer.
     """
     gha_workflows = sorted(set(SUITE_JOBS.values()))
-    running = {job for name in gha_workflows for job in push_jobs(load_workflow(name))}
+    running = {
+        job
+        for name in gha_workflows
+        for job in push_jobs(load_workflow(name))
+        if job not in NON_WRITING_PUSH_JOBS
+    }
     assert running == set(TRUNK_WRITERS.values()), (
         f"the jobs that run on a push to main are {sorted(running)}, but only "
         f"the trunk writers {sorted(set(TRUNK_WRITERS.values()))} may"

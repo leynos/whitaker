@@ -291,6 +291,18 @@ coverage: ## Generate LCOV coverage over the CI-tested crate subset
 		CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 \
 		$(MAKE) test TEST_RUNNER="llvm-cov nextest --lcov --output-path $(COVERAGE_OUTPUT) -E '$(COVERAGE_NEXTEST_FILTER)'"
 
+coverage-build: ## Compile the instrumented tests `make coverage` builds, without running them
+	@# Same crate subset, RUSTFLAGS and target directory as `coverage`, so the
+	@# compiler cache a later `make coverage` reads is warm. `cargo llvm-cov
+	@# nextest --no-run` would only report, so the stand-in script builds with
+	@# `cargo nextest run --no-run` under `cargo llvm-cov show-env`.
+	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v cargo-llvm-cov >/dev/null || { echo "Install cargo-llvm-cov (cargo install cargo-llvm-cov)"; exit 1; }
+	@CARGO_LLVM_COV_TARGET_DIR="$(COVERAGE_TARGET_DIR)" \
+		CARGO_TARGET_DIR="$(COVERAGE_TARGET_DIR)" \
+		LLVM_PROFILE_FILE_NAME="$(COVERAGE_PROFILE_FILE_NAME)" \
+		CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 \
+		$(MAKE) test CARGO="$(CURDIR)/scripts/cargo-coverage-build.sh" TEST_RUNNER="nextest run --no-run -E '$(COVERAGE_NEXTEST_FILTER)'"
+
 trybuild-contracts: ## Run the trybuild compile-contract tests, which `make coverage` skips
 	@# `make coverage` leaves six of these out (see TRYBUILD_CONTRACT_FILTER), so
 	@# a developer runs them here, plain and uninstrumented, under the `ci`
