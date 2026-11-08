@@ -9,7 +9,6 @@
 use std::fmt;
 
 use super::{
-    error::ClippySnapshotError,
     manifest::SNAPSHOT_BRANCH,
     selection::{SelectionGap, ToolchainChange, select_revision},
 };
@@ -37,6 +36,18 @@ impl fmt::Display for PinnedCommit<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { f.write_str(self.0) }
 }
 
+/// One ref a repository lists, as its name and the object it points at.
+///
+/// The adapter splits the listing Git printed; policy compares these values,
+/// so the one-line output format never reaches a decision.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct RefEntry {
+    /// The full ref name, such as `refs/heads/main`.
+    pub(crate) name: String,
+    /// The object name the ref points at.
+    pub(crate) object: String,
+}
+
 /// What the repository-shape queries reported.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct StructureEvidence {
@@ -44,8 +55,8 @@ pub(crate) struct StructureEvidence {
     pub(crate) is_bare: String,
     /// Standard output of `git symbolic-ref HEAD`, trimmed.
     pub(crate) head: String,
-    /// Standard output of `git for-each-ref --format=%(refname) %(objectname)`.
-    pub(crate) refs: String,
+    /// The refs `git for-each-ref` listed, already split into name and object.
+    pub(crate) refs: Vec<RefEntry>,
 }
 
 /// Accept a repository's shape and refs, or say what is wrong.
@@ -67,15 +78,11 @@ pub(crate) fn accept_structure(
 }
 
 /// Require exactly one ref, `main`, at the pinned commit.
-fn accept_refs(listing: &str, commit: PinnedCommit<'_>) -> Result<(), String> {
-    let refs: Vec<(&str, &str)> = listing
-        .lines()
-        .filter_map(|line| line.split_once(' '))
-        .collect();
+fn accept_refs(refs: &[RefEntry], commit: PinnedCommit<'_>) -> Result<(), String> {
     let main = main_ref();
     let extra: Vec<&str> = refs
         .iter()
-        .map(|(name, _)| *name)
+        .map(|entry| entry.name.as_str())
         .filter(|name| *name != main)
         .collect();
     if !extra.is_empty() {
@@ -85,9 +92,10 @@ fn accept_refs(listing: &str, commit: PinnedCommit<'_>) -> Result<(), String> {
         ));
     }
     match refs.first() {
-        Some((_, object)) if *object == commit.as_str() => Ok(()),
-        Some((_, object)) => Err(format!(
-            "{main} is {object}, expected the pinned commit {commit}"
+        Some(entry) if entry.object == commit.as_str() => Ok(()),
+        Some(entry) => Err(format!(
+            "{main} is {}, expected the pinned commit {commit}",
+            entry.object
         )),
         None => Err(format!("it has no {main}")),
     }
@@ -98,8 +106,8 @@ fn accept_refs(listing: &str, commit: PinnedCommit<'_>) -> Result<(), String> {
 pub(crate) struct SelfContainedEvidence {
     /// Standard output of `git rev-parse --is-shallow-repository`.
     pub(crate) is_shallow: String,
-    /// Standard output of `git remote`.
-    pub(crate) remotes: String,
+    /// The remotes `git remote` listed, one entry per line.
+    pub(crate) remotes: Vec<String>,
 }
 
 /// Require complete local history with no outside object sources or remotes.
@@ -119,7 +127,7 @@ pub(crate) fn accept_self_contained(
     if !evidence.remotes.is_empty() {
         return Err(format!(
             "it has remotes ({}), so it could fetch",
-            evidence.remotes.replace('\n', ", ")
+            evidence.remotes.join(", ")
         ));
     }
     Ok(())
@@ -261,9 +269,12 @@ pub(crate) enum ChannelRead {
 /// names no channel. An absent file falls through to the next one. A read that
 /// fails stops the walk, because the file's existence is unknown: letting a
 /// later file win could pick a channel rustup would never have chosen.
-pub(crate) fn first_channel(
-    results: impl IntoIterator<Item = Result<ChannelRead, ClippySnapshotError>>,
-) -> Result<Option<String>, ClippySnapshotError> {
+///
+/// The error type is the caller's, so policy never names an infrastructure
+/// failure: it only decides that a failed read outranks every later file.
+pub(crate) fn first_channel<E>(
+    results: impl IntoIterator<Item = Result<ChannelRead, E>>,
+) -> Result<Option<String>, E> {
     for result in results {
         match result? {
             ChannelRead::Present(channel) => return Ok(channel),

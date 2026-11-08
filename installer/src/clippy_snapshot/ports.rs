@@ -87,6 +87,12 @@ pub(crate) trait BundleOperations {
 
     /// List the bundle's heads.
     ///
+    /// The query reads the bundle and changes nothing the caller can observe.
+    /// An implementation may still need throwaway state to ask Git the
+    /// question: `git bundle list-heads` refuses to run outside a repository,
+    /// so the adapter creates a temporary one and removes it before returning.
+    /// That scratch directory is never the snapshot root or a generation.
+    ///
     /// # Errors
     ///
     /// Returns [`ClippySnapshotError::Git`] when Git cannot run.

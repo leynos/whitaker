@@ -15,13 +15,17 @@ use camino::{Utf8Path, Utf8PathBuf};
 use super::{
     error::ClippySnapshotError,
     generation::GenerationMetadata,
-    policy::{IntegrityEvidence, SelfContainedEvidence, StructureEvidence},
-    ports::{BundleOperations, MetadataStore, RepositoryQueries, RootLock, SnapshotStore, Staging},
+    ports::{BundleOperations, MetadataStore, RootLock, SnapshotStore, Staging},
 };
 use crate::{
     artefact::sha256_digest::Sha256Digest,
     dependency_binaries::{DependencyArchiveDownloader, DependencyBinaryInstallError},
 };
+
+#[path = "fakes/repository.rs"]
+mod repository;
+
+pub(super) use repository::FakeRepository;
 
 /// Append `entry` to a call log.
 fn record(log: &Mutex<Vec<String>>, entry: String) {
@@ -44,143 +48,6 @@ fn record_shared(
         record(shared, entry.clone());
     }
     record(log, entry);
-}
-
-/// Repository queries with scripted answers.
-pub(super) struct FakeRepository {
-    calls: Mutex<Vec<String>>,
-    /// The answer to [`RepositoryQueries::structure`].
-    pub(super) structure: Result<StructureEvidence, ClippySnapshotError>,
-    /// The answer to [`RepositoryQueries::self_contained`].
-    pub(super) self_contained: Result<SelfContainedEvidence, ClippySnapshotError>,
-    /// The answer to [`RepositoryQueries::integrity`].
-    pub(super) integrity: Result<IntegrityEvidence, ClippySnapshotError>,
-    /// The answer to [`RepositoryQueries::toolchain_commits`].
-    pub(super) commits: Result<Vec<String>, ClippySnapshotError>,
-    /// Toolchain file contents, keyed by `(commit, file)`; absent means none.
-    pub(super) files: Mutex<Vec<((String, String), String)>>,
-    /// Scripted read failures, keyed by `(commit, file)`; absent means none.
-    failures: Mutex<Vec<((String, String), ClippySnapshotError)>>,
-}
-
-impl FakeRepository {
-    /// Script a repository with no answers beyond the given ones.
-    pub(super) fn new() -> Self {
-        Self {
-            calls: Mutex::new(Vec::new()),
-            structure: Ok(rejecting_structure()),
-            self_contained: Ok(SelfContainedEvidence {
-                is_shallow: "false".to_owned(),
-                remotes: String::new(),
-            }),
-            integrity: Ok(IntegrityEvidence {
-                succeeded: true,
-                stderr: String::new(),
-            }),
-            commits: Ok(Vec::new()),
-            files: Mutex::new(Vec::new()),
-            failures: Mutex::new(Vec::new()),
-        }
-    }
-
-    /// Return the calls received so far, in order.
-    pub(super) fn calls(&self) -> Vec<String> { recorded(&self.calls) }
-
-    /// Serve `contents` as `file` at `commit`.
-    pub(super) fn add_file(&mut self, commit: &str, file: &str, contents: &str) -> &mut Self {
-        self.files
-            .lock()
-            .expect("lock files")
-            .push(((commit.to_owned(), file.to_owned()), contents.to_owned()));
-        self
-    }
-
-    /// Fail every read of `file` at `commit` with `error`.
-    ///
-    /// A scripted failure takes precedence over [`Self::add_file`], so a test
-    /// can show that a failing read is reported rather than absorbed as
-    /// "no such file".
-    pub(super) fn fail_file(
-        &mut self,
-        commit: &str,
-        file: &str,
-        error: ClippySnapshotError,
-    ) -> &mut Self {
-        self.failures
-            .lock()
-            .expect("lock failures")
-            .push(((commit.to_owned(), file.to_owned()), error));
-        self
-    }
-}
-
-impl RepositoryQueries for FakeRepository {
-    fn structure(&self, path: &Utf8Path) -> Result<StructureEvidence, ClippySnapshotError> {
-        record(&self.calls, format!("structure {path}"));
-        self.structure.clone()
-    }
-
-    fn self_contained(
-        &self,
-        path: &Utf8Path,
-    ) -> Result<SelfContainedEvidence, ClippySnapshotError> {
-        record(&self.calls, format!("self_contained {path}"));
-        self.self_contained.clone()
-    }
-
-    fn integrity(&self, path: &Utf8Path) -> Result<IntegrityEvidence, ClippySnapshotError> {
-        record(&self.calls, format!("integrity {path}"));
-        self.integrity.clone()
-    }
-
-    fn toolchain_commits(
-        &self,
-        path: &Utf8Path,
-        head: &str,
-    ) -> Result<Vec<String>, ClippySnapshotError> {
-        record(&self.calls, format!("toolchain_commits {path} {head}"));
-        self.commits.clone()
-    }
-
-    fn file_at_commit(
-        &self,
-        path: &Utf8Path,
-        commit: &str,
-        file: &str,
-    ) -> Result<Option<String>, ClippySnapshotError> {
-        record(
-            &self.calls,
-            format!("file_at_commit {path} {commit} {file}"),
-        );
-        if let Some(error) = self
-            .failures
-            .lock()
-            .expect("lock failures")
-            .iter()
-            .find(|((recorded_commit, recorded_file), _)| {
-                recorded_commit == commit && recorded_file == file
-            })
-            .map(|(_, error)| error.clone())
-        {
-            return Err(error);
-        }
-        let files = self.files.lock().expect("lock files");
-        Ok(files
-            .iter()
-            .find(|((recorded_commit, recorded_file), _)| {
-                recorded_commit == commit && recorded_file == file
-            })
-            .map(|(_, contents)| contents.clone()))
-    }
-}
-
-/// A structure observation that fails its policy check.
-fn rejecting_structure() -> StructureEvidence {
-    StructureEvidence {
-        is_bare: "false".to_owned(),
-        head: String::new(),
-        refs: String::new(),
-    }
 }
 
 /// Bundle operations with scripted answers.

@@ -9,7 +9,7 @@ use super::super::{
     generation::GenerationMetadata,
     install::BundleArtefact,
     manifest::{ClippySnapshotManifest, parse_manifest},
-    policy::{SelfContainedEvidence, StructureEvidence},
+    policy::{RefEntry, SelfContainedEvidence, StructureEvidence},
     ports::SnapshotSupport,
 };
 use crate::artefact::sha256_digest::Sha256Digest;
@@ -55,11 +55,14 @@ fn valid_repository() -> FakeRepository {
     repo.structure = Ok(StructureEvidence {
         is_bare: "true".to_owned(),
         head: "refs/heads/main".to_owned(),
-        refs: format!("refs/heads/main {TIP}"),
+        refs: vec![RefEntry {
+            name: "refs/heads/main".to_owned(),
+            object: TIP.to_owned(),
+        }],
     });
     repo.self_contained = Ok(SelfContainedEvidence {
         is_shallow: "false".to_owned(),
-        remotes: String::new(),
+        remotes: Vec::new(),
     });
     repo.commits = Ok(vec![TIP.to_owned(), SELECTED.to_owned(), OLDER.to_owned()]);
     repo.add_file(TIP, "rust-toolchain.toml", &toolchain(NEWER))

@@ -33,7 +33,7 @@ fn verification_stops_after_the_first_rejected_check() {
     ports.repo.structure = Ok(StructureEvidence {
         is_bare: "false".to_owned(),
         head: String::new(),
-        refs: String::new(),
+        refs: Vec::new(),
     });
 
     let error =

@@ -11,11 +11,21 @@ use super::*;
 use crate::clippy_snapshot::selection::ToolchainChange;
 
 /// A structure observation whose symbolic HEAD names the snapshot branch.
+///
+/// `refs` is written as Git prints it, so a case reads the way the adapter's
+/// observation does; the split into name and object mirrors the adapter.
 fn structure(is_bare: bool, refs: &str) -> StructureEvidence {
     StructureEvidence {
         is_bare: if is_bare { "true" } else { "false" }.to_owned(),
         head: main_ref(),
-        refs: refs.to_owned(),
+        refs: refs
+            .lines()
+            .filter_map(|line| line.split_once(' '))
+            .map(|(name, object)| RefEntry {
+                name: name.to_owned(),
+                object: object.to_owned(),
+            })
+            .collect(),
     }
 }
 
@@ -46,7 +56,7 @@ struct ExpectedMessage(&'static str);
     StructureEvidence {
         is_bare: "true".to_owned(),
         head: "refs/heads/master".to_owned(),
-        refs: String::new(),
+        refs: Vec::new(),
     },
     ExpectedMessage("HEAD is `refs/heads/master`, not a symbolic ref to refs/heads/main")
 )]
@@ -96,7 +106,7 @@ fn ignores_lines_without_a_ref_and_object() {
 fn contained(is_shallow: bool, remotes: &[&str]) -> SelfContainedEvidence {
     SelfContainedEvidence {
         is_shallow: if is_shallow { "true" } else { "false" }.to_owned(),
-        remotes: remotes.join("\n"),
+        remotes: remotes.iter().map(|name| (*name).to_owned()).collect(),
     }
 }
 

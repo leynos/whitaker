@@ -124,7 +124,7 @@ fn a_failed_verification_writes_nothing_and_publishes_nothing() {
     ports.repo.structure = Ok(StructureEvidence {
         is_bare: "false".to_owned(),
         head: String::new(),
-        refs: String::new(),
+        refs: Vec::new(),
     });
 
     install_with(&artefact(), &manifest(), root, &ports.support())
@@ -238,7 +238,7 @@ fn reuse_still_verifies_the_existing_repository() {
     ports.repo.structure = Ok(StructureEvidence {
         is_bare: "false".to_owned(),
         head: String::new(),
-        refs: String::new(),
+        refs: Vec::new(),
     });
 
     let error = install_with(&artefact(), &manifest(), root, &ports.support())

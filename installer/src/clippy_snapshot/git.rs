@@ -18,6 +18,11 @@ use super::{
 };
 use crate::git::{GitInvocation, run_git};
 
+#[path = "git/listing.rs"]
+mod listing;
+
+use listing::{listing_lines, parse_refs};
+
 /// Local operations are bounded so a wedged filesystem cannot hang an install.
 const LOCAL_TIMEOUT: Duration = Duration::from_secs(600);
 
@@ -173,6 +178,7 @@ impl<'env> SnapshotGit<'env> {
 }
 
 impl RepositoryQueries for SnapshotGit<'_> {
+    /// Observe the repository's shape, symbolic HEAD, and refs.
     fn structure(&self, path: &Utf8Path) -> Result<StructureEvidence, ClippySnapshotError> {
         let is_bare = self.stdout(
             "rev-parse",
@@ -200,10 +206,11 @@ impl RepositoryQueries for SnapshotGit<'_> {
         Ok(StructureEvidence {
             is_bare,
             head,
-            refs,
+            refs: parse_refs(&refs),
         })
     }
 
+    /// Observe whether history is shallow and which remotes exist.
     fn self_contained(
         &self,
         path: &Utf8Path,
@@ -216,10 +223,11 @@ impl RepositoryQueries for SnapshotGit<'_> {
         let remotes = self.stdout("remote", Some(path), &["remote"])?;
         Ok(SelfContainedEvidence {
             is_shallow,
-            remotes,
+            remotes: listing_lines(&remotes),
         })
     }
 
+    /// Re-hash every object and check connectivity.
     fn integrity(&self, path: &Utf8Path) -> Result<IntegrityEvidence, ClippySnapshotError> {
         let output = self.output(
             "fsck",
@@ -238,6 +246,7 @@ impl RepositoryQueries for SnapshotGit<'_> {
         })
     }
 
+    /// List the first-parent commits that touched a toolchain file.
     fn toolchain_commits(
         &self,
         path: &Utf8Path,
@@ -249,6 +258,7 @@ impl RepositoryQueries for SnapshotGit<'_> {
         Ok(listing.lines().map(ToOwned::to_owned).collect())
     }
 
+    /// Read one file at one commit, keeping absence distinct from failure.
     fn file_at_commit(
         &self,
         path: &Utf8Path,
@@ -277,6 +287,7 @@ impl RepositoryQueries for SnapshotGit<'_> {
 }
 
 impl BundleOperations for SnapshotGit<'_> {
+    /// Check the bundle's header in a scratch repository.
     fn verify_header(&self, bundle: &Utf8Path) -> Result<(), ClippySnapshotError> {
         let (_scratch, scratch) = self.scratch_repository(bundle)?;
         let verify = self.output(
@@ -294,6 +305,7 @@ impl BundleOperations for SnapshotGit<'_> {
         ))
     }
 
+    /// List the bundle's heads; the port records the scratch state needed.
     fn list_heads(&self, bundle: &Utf8Path) -> Result<String, ClippySnapshotError> {
         let (_scratch, scratch) = self.scratch_repository(bundle)?;
         self.stdout(
@@ -303,6 +315,7 @@ impl BundleOperations for SnapshotGit<'_> {
         )
     }
 
+    /// Clone the bundle bare, then drop the remote the clone records.
     fn stage_clone(
         &self,
         bundle: &Utf8Path,
@@ -371,3 +384,7 @@ pub(crate) fn git_failure(operation: &'static str, output: &Output) -> ClippySna
     };
     ClippySnapshotError::Git { operation, message }
 }
+
+#[cfg(test)]
+#[path = "git_tests.rs"]
+mod tests;
