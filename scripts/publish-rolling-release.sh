@@ -199,18 +199,29 @@ gh release edit "${tag}" --title "${title}" --notes "${notes}" >/dev/null
 # not remove it. Manifests are read from the release itself, after this run's
 # uploads, so the rule covers exactly what a consumer can read.
 referenced_archives() {
-    local manifest_dir manifest
+    local manifest_dir manifest status=0
     manifest_dir=$(mktemp -d)
     gh release download "${tag}" --pattern 'manifest-*.json' --dir "${manifest_dir}" \
-        --clobber >/dev/null
-    shopt -s nullglob
-    for manifest in "${manifest_dir}"/manifest-*.json; do
-        jq -r '"whitaker-lints-\(.git_sha)-\(.toolchain)-\(.target).tar.zst"' "${manifest}"
-    done
-    shopt -u nullglob
+        --clobber >/dev/null || status=$?
+    if [[ "${status}" -eq 0 ]]; then
+        shopt -s nullglob
+        for manifest in "${manifest_dir}"/manifest-*.json; do
+            jq -er '"whitaker-lints-\(.git_sha // error("no git_sha"))-\(.toolchain // error("no toolchain"))-\(.target // error("no target")).tar.zst"' \
+                "${manifest}" || { status=$?; break; }
+        done
+        shopt -u nullglob
+    fi
     rm -rf -- "${manifest_dir}"
+    return "${status}"
 }
-mapfile -t referenced < <(referenced_archives)
+# Cleanup fails closed: if any manifest cannot be downloaded or parsed, nothing
+# is deleted, because an incomplete reference list could remove an archive a
+# retained manifest still names. `set -e` stops the script at this assignment.
+referenced_output=$(referenced_archives)
+referenced=()
+if [[ -n "${referenced_output}" ]]; then
+    mapfile -t referenced <<<"${referenced_output}"
+fi
 
 is_referenced() {
     local needle=$1 name

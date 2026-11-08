@@ -44,6 +44,7 @@ if [[ "$1 $2" == "release view" ]]; then
     fi
 fi
 if [[ "$1 $2" == "release download" ]]; then
+    [[ "${DOWNLOAD_FAILS:-}" == "true" ]] && exit 1
     # The manifests currently on the release, written where --dir points.
     while [[ $# -gt 0 ]]; do
         [[ "$1" == "--dir" ]] && dir="$2"
@@ -89,6 +90,7 @@ def publish(tmp_path: Path, repo_root: Path) -> typ.Callable[..., PublishRun]:
         published: list[str],
         release_exists: bool = True,
         release_manifests: dict[str, dict[str, str]] | None = None,
+        download_fails: bool = False,
     ) -> PublishRun:
         """Run the publish script against a stubbed gh and return what it did."""
         workspace = tmp_path / "workspace"
@@ -121,6 +123,7 @@ def publish(tmp_path: Path, repo_root: Path) -> typ.Callable[..., PublishRun]:
                 "RELEASE_EXISTS": "true" if release_exists else "false",
                 "PUBLISHED_NAMES": " ".join(published),
                 "RELEASE_MANIFESTS": str(manifest_dir),
+                "DOWNLOAD_FAILS": "true" if download_fails else "false",
                 "GITHUB_REPOSITORY": "leynos/whitaker",
                 "RELEASE_SHA": "0123456789abcdef0123456789abcdef01234567",
                 "RELEASE_SHORT_SHA": "0123456",
@@ -512,4 +515,31 @@ def test_a_failed_leg_keeps_the_archive_its_old_manifest_still_names(
     assert run.matching("delete-asset", old_linux), "the replaced archive must go"
     assert not run.matching("delete-asset", old_darwin), (
         "an archive that a manifest still on the release names must be kept"
+    )
+
+
+@pytest.mark.parametrize(
+    ("download_fails", "manifests"),
+    [
+        pytest.param(True, {}, id="download-fails"),
+        pytest.param(False, {"manifest-x.json": {"git_sha": "abc"}}, id="malformed-manifest"),
+    ],
+)
+def test_cleanup_deletes_nothing_when_the_manifests_cannot_be_read(
+    publish: typ.Callable[..., PublishRun],
+    download_fails: bool,
+    manifests: dict[str, dict[str, str]],
+) -> None:
+    """An incomplete reference list must never let cleanup delete an archive."""
+    old = "whitaker-lints-old1234-nightly-2026-05-28-aarch64-apple-darwin.tar.zst"
+    run = publish(
+        local_assets=["whitaker-lints-0123456-linux.tar.zst", "manifest-linux.json"],
+        published=[old, "manifest-aarch64-apple-darwin.json"],
+        release_manifests=manifests,
+        download_fails=download_fails,
+    )
+
+    assert run.returncode != 0, run.stdout
+    assert not run.matching("delete-asset", "whitaker-lints-"), (
+        "a lint archive was deleted although the manifests could not be read"
     )
