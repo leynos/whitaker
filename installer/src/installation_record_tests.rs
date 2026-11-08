@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use camino::Utf8Path;
+use camino::{Utf8Path, Utf8PathBuf};
 use tempfile::TempDir;
 
 use super::{
@@ -121,6 +121,30 @@ fn a_read_record_distinguishes_missing_empty_stale_and_current() {
     assert!(
         stale.into_surviving_paths().is_empty(),
         "a stale record should contribute no paths"
+    );
+}
+
+#[test]
+fn absolute_paths_are_kept_without_an_existence_check() {
+    let temporary = TempDir::new().expect("temporary directory should be created");
+    let data = temporary.path().join("data");
+    std::fs::create_dir_all(&data).expect("data directory should be created");
+    let gone = temporary.path().join("gone");
+    let record = serde_json::json!({
+        "nightly": gone.to_string_lossy(),
+        "relative": "target/nightly",
+    });
+    std::fs::write(data.join(super::RECORD_FILENAME), record.to_string())
+        .expect("record should be written");
+    let dirs = mock_dirs(data);
+
+    let read = read_installation_record(&dirs).expect("record should load");
+
+    // The missing directory is still reported, so resolution can classify it
+    // as stale; the relative entry is dropped because it names no fixed place.
+    assert_eq!(
+        read.into_absolute_paths(),
+        vec![Utf8PathBuf::from_path_buf(gone).expect("path should be UTF-8")]
     );
 }
 

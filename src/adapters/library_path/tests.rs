@@ -161,6 +161,30 @@ fn absent_installation_record_yields_no_recorded_paths() {
 }
 
 #[test]
+fn a_recorded_path_that_cannot_be_inspected_is_reported_not_dropped() {
+    let temporary = TempDir::new().expect("temporary directories should be created");
+    let data_home = utf8_path(temporary.path());
+    // An interior NUL makes the path unrepresentable to the operating system,
+    // so inspecting it fails with something other than `NotFound` on every
+    // platform. That stands in for the permission and I/O failures a real data
+    // directory can produce without depending on the runner's privileges.
+    let uninspectable = utf8_path(&std::env::temp_dir().join("whitaker\0uninspectable"));
+    let record = serde_json::json!({ "nightly": uninspectable.as_str() });
+    write_record(&data_home, record.to_string().as_bytes());
+    let dirs = TempBaseDirs::new(&temporary);
+
+    let recorded = recorded_library_paths(Some(&dirs)).expect("the record itself should load");
+    assert_eq!(recorded, vec![uninspectable]);
+
+    let error = resolve_library_path(recorded, None, None)
+        .expect_err("a path that exists but cannot be inspected must be reported");
+    assert!(
+        matches!(error, CliError::LibraryPathUnusable { .. }),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
 fn build_directory_precedes_prebuilt_directory_in_candidate_list() {
     let temporary = TempDir::new().expect("temporary directories should be created");
     let build_path = create_test_directory(&temporary, "build");

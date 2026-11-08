@@ -200,6 +200,12 @@ fn explicit_library_path() -> Option<OsString> {
 /// propagated so the caller can report it instead of silently forwarding with
 /// an empty library path.
 ///
+/// The recorded paths are returned without an existence check. Resolution
+/// inspects each one, and that inspection is what separates a directory that
+/// has gone away from one that exists but cannot be read; filtering here would
+/// report the second case as "nothing installed" and hide a broken data
+/// directory.
+///
 /// The directory provider is a parameter so callers pass one resolved view,
 /// and so the record's error paths can be exercised with a directory a test
 /// owns. An environment-driven redirect is not portable: Windows resolves the
@@ -215,7 +221,7 @@ fn recorded_library_paths(dirs: Option<&dyn BaseDirs>) -> Result<Vec<Utf8PathBuf
         RecordReadOutcome::from(record.contents())
     });
     super::telemetry::record_installation_record_read(outcome);
-    read.map(InstallationRecord::into_surviving_paths)
+    read.map(InstallationRecord::into_absolute_paths)
         .map_err(|source| CliError::InstallationRecord { source })
 }
 

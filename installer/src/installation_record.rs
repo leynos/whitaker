@@ -181,6 +181,22 @@ impl InstallationRecord {
             .filter(is_live_directory)
             .collect()
     }
+
+    /// Consume the record and keep every path it names that is absolute.
+    ///
+    /// Existence is deliberately not tested here. A caller that inspects each
+    /// path can tell a directory that has gone away from one it cannot read,
+    /// and testing for a directory first would report the second case as the
+    /// ordinary "nothing installed" state. Relative paths are still dropped,
+    /// because a corrupt record must not point forwarding at the working
+    /// directory.
+    #[must_use]
+    pub fn into_absolute_paths(self) -> Vec<Utf8PathBuf> {
+        self.recorded
+            .into_iter()
+            .filter(|path| path.is_absolute())
+            .collect()
+    }
 }
 
 /// Report whether `path` is an absolute path that still names a directory.
