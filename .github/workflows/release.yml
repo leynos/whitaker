@@ -68,7 +68,7 @@ jobs:
 
       - name: Build packaging tool
         run: |
-          cargo build --release -p whitaker-installer --bin whitaker-package-installer
+          cargo build --release -p whitaker-installer --features release-tools --bin whitaker-package-installer
 
       - name: Determine binary path
         id: binary
@@ -157,7 +157,7 @@ jobs:
         run: rustup target add "${{ matrix.target }}"
 
       - name: Build dependency packaging tool
-        run: cargo build --release -p whitaker-installer --bin whitaker-package-dependency-binary
+        run: cargo build --release -p whitaker-installer --features release-tools --bin whitaker-package-dependency-binary
 
       - name: Build and package dependency binaries
         run: |
@@ -369,7 +369,7 @@ jobs:
         uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
 
       - name: Build dependency packaging tool
-        run: cargo build --release -p whitaker-installer --bin whitaker-package-dependency-binary
+        run: cargo build --release -p whitaker-installer --features release-tools --bin whitaker-package-dependency-binary
 
       - name: Verify tag matches Cargo.toml version
         run: |

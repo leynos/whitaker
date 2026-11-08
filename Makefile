@@ -212,7 +212,7 @@ export DYLINT_CLIPPY_REPO DYLINT_DRIVER_PATH
 # The snapshot tool builds in its own target directory: the test lane's
 # `RUSTFLAGS` differ, and sharing `target/` would rebuild one for the other.
 CLIPPY_SNAPSHOT_TOOL = CARGO_TARGET_DIR="$(CURDIR)/target/clippy-snapshot-tool" \
-	$(CARGO) run $(CARGO_LOCKED) --quiet -p whitaker-installer --bin whitaker-clippy-snapshot --
+	$(CARGO) run $(CARGO_LOCKED) --quiet -p whitaker-installer --features release-tools --bin whitaker-clippy-snapshot --
 
 # Markdown sources checked by `check-fmt`. Keep generated output and local tool
 # caches out of this list; the checker itself never writes to these sources.
@@ -547,7 +547,7 @@ release-installer-dry-run: ## Build and package the host-platform installer arch
 		exit 1; \
 	fi; \
 	$(CARGO) build $(CARGO_LOCKED) $(BUILD_JOBS) -p whitaker-installer --release --target "$$HOST_TRIPLE"; \
-	$(CARGO) build $(CARGO_LOCKED) $(BUILD_JOBS) --release -p whitaker-installer --bin whitaker-package-installer --target "$$HOST_TRIPLE"; \
+	$(CARGO) build $(CARGO_LOCKED) $(BUILD_JOBS) --release -p whitaker-installer --features release-tools --bin whitaker-package-installer --target "$$HOST_TRIPLE"; \
 	DIST_DIR="$$TMP_DIR/dist"; \
 	mkdir -p "$$DIST_DIR"; \
 	case "$$HOST_TRIPLE" in \
@@ -640,7 +640,7 @@ package-lints: ## Build lint crates and package as .tar.zst archives
 	for lint in $(LINT_CRATES); do \
 		RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) +$$TOOLCHAIN build --release --features dylint-driver -p $$lint; \
 	done; \
-	$(CARGO) run -p whitaker-installer --bin whitaker-package-lints -- \
+	$(CARGO) run -p whitaker-installer --features release-tools --bin whitaker-package-lints -- \
 		--git-sha "$$SHA" \
 		--toolchain "$$TOOLCHAIN" \
 		--target "$$HOST_TRIPLE" \
