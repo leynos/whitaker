@@ -94,6 +94,8 @@ pub fn refined_path(target_dir: &Utf8Path) -> Utf8PathBuf {
 
 #[cfg(test)]
 mod tests {
+    //! Behavioural tests for SARIF artefact path normalization.
+
     use super::*;
 
     #[test]

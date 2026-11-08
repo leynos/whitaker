@@ -89,7 +89,7 @@ fn happy_path_returns_success() {
     let mut stderr = Vec::new();
     let result = attempt_prebuilt_with(&config, &downloader, &extractor, &mut stderr);
     match result {
-        PrebuiltResult::Success { staging_path } => assert_eq!(staging_path, destination_dir),
+        PrebuiltResult::Success { staging_path, .. } => assert_eq!(staging_path, destination_dir),
         other @ PrebuiltResult::Fallback { .. } => panic!("expected Success, got {other:?}"),
     }
 }

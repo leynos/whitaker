@@ -3782,6 +3782,7 @@ dependencies = [
  "clap",
  "dylint_linting",
  "dylint_testing",
+ "proptest",
  "rstest",
  "rstest-bdd",
  "rstest-bdd-macros",

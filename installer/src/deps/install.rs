@@ -1,6 +1,6 @@
 //! Install orchestration types and helpers for dependency tools.
 
-use std::{io::Write, process::Output};
+use std::io::Write;
 
 use super::{
     CARGO_DYLINT_TOOL,
@@ -9,6 +9,15 @@ use super::{
     DYLINT_LINK_TOOL,
     DependencyTool,
     DylintToolStatus,
+    install_cargo::{
+        CargoInstallPlan,
+        InstallMode,
+        InstallOutcome,
+        install_success_message,
+        install_tool_with_cargo,
+        update_status_after_install,
+        write_message,
+    },
     install_repository::{
         RepositoryInstall,
         RepositoryInstallRequest,
@@ -16,13 +25,11 @@ use super::{
         resolve_dependency_binary,
     },
     is_binstall_available,
-    is_tool_installed,
 };
 use crate::{
     dependency_binaries::DependencyBinaryInstaller,
     error::{InstallerError, Result},
     installer_packaging::TargetTriple,
-    output::write_stderr_line,
 };
 
 pub(super) struct RepositoryInstallContext<'a> {
@@ -195,215 +202,3 @@ fn refuse_or_announce_fallback(
     );
     Ok(())
 }
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum InstallMode {
-    Binstall,
-    CargoInstall,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum InstallOutcome {
-    RepositoryRelease,
-    CargoBinstall,
-    CargoInstall,
-}
-
-#[derive(Clone, Copy)]
-struct CargoInstallPlan<'a> {
-    tool: &'a DependencyTool,
-    version: Option<&'a str>,
-    skip_binstall: bool,
-}
-
-impl<'a> CargoInstallPlan<'a> {
-    const fn new(tool: &'a DependencyTool) -> Self {
-        Self {
-            tool,
-            version: None,
-            skip_binstall: false,
-        }
-    }
-
-    const fn with_version(self, version: &'a str) -> Self {
-        Self {
-            version: Some(version),
-            ..self
-        }
-    }
-
-    const fn skip_binstall(self) -> Self {
-        Self {
-            skip_binstall: true,
-            ..self
-        }
-    }
-}
-
-/// Install a dependency through Cargo, trying Binstall before source install.
-///
-/// # Errors
-///
-/// Returns an error if a Cargo command cannot run or source installation fails.
-fn install_tool_with_cargo(
-    executor: &dyn CommandExecutor,
-    cargo_install_plan: CargoInstallPlan<'_>,
-    stderr: &mut dyn Write,
-    context: &InstallContext<'_>,
-) -> Result<InstallOutcome> {
-    // Always try binstall first if available; fall back to cargo install on failure
-    if context.cargo_fallback_mode == InstallMode::Binstall && !cargo_install_plan.skip_binstall {
-        if try_binstall(executor, cargo_install_plan)? {
-            return Ok(InstallOutcome::CargoBinstall);
-        }
-        write_message(
-            stderr,
-            context.quiet,
-            format!(
-                "cargo binstall failed for {}; falling back to cargo install.",
-                cargo_install_plan.tool.package
-            ),
-        );
-    }
-
-    run_cargo_install(executor, cargo_install_plan)
-}
-
-/// Install through Cargo Binstall and verify the resulting executable.
-fn try_binstall(
-    executor: &dyn CommandExecutor,
-    cargo_install_plan: CargoInstallPlan<'_>,
-) -> Result<bool> {
-    let mut args = vec!["binstall", "-y"];
-    if let Some(version) = cargo_install_plan.version {
-        args.extend(["--version", version]);
-    }
-    args.push(cargo_install_plan.tool.package);
-    let output = executor.run("cargo", &args)?;
-
-    if !output.status.success() {
-        return Ok(false);
-    }
-
-    if !is_tool_installed(executor, cargo_install_plan.tool)? {
-        return Ok(false);
-    }
-
-    Ok(true)
-}
-
-/// Install through Cargo and verify the resulting executable.
-fn run_cargo_install(
-    executor: &dyn CommandExecutor,
-    cargo_install_plan: CargoInstallPlan<'_>,
-) -> Result<InstallOutcome> {
-    let mut args = vec!["install"];
-    if let Some(version) = cargo_install_plan.version {
-        args.extend(["--locked", "--version", version]);
-    }
-    args.push(cargo_install_plan.tool.package);
-
-    let output = executor.run("cargo", &args)?;
-    if !output.status.success() {
-        let message = command_error_message(&output);
-        return Err(InstallerError::DependencyInstall {
-            tool: cargo_install_plan.tool.package,
-            message,
-        });
-    }
-
-    if !is_tool_installed(executor, cargo_install_plan.tool)? {
-        return Err(InstallerError::DependencyInstall {
-            tool: cargo_install_plan.tool.package,
-            message: format!(
-                "cargo install reported success, but {} is still unavailable",
-                cargo_install_plan.tool.package
-            ),
-        });
-    }
-
-    Ok(InstallOutcome::CargoInstall)
-}
-
-/// Describe a completed install after its follow-up status checks succeed.
-fn install_success_message(
-    tool: &DependencyTool,
-    outcome: InstallOutcome,
-    has_pinned_version: bool,
-) -> String {
-    match outcome {
-        InstallOutcome::RepositoryRelease => {
-            format!("Installed {} from repository release.", tool.package)
-        }
-        InstallOutcome::CargoBinstall => {
-            format!("Installed {} with cargo binstall.", tool.package)
-        }
-        InstallOutcome::CargoInstall if has_pinned_version => {
-            format!("Installed {} from source with cargo install.", tool.package)
-        }
-        InstallOutcome::CargoInstall => {
-            format!("Installed {} with cargo install.", tool.package)
-        }
-    }
-}
-
-pub(super) fn command_error_message(output: &Output) -> String {
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    let trimmed = stderr.trim();
-    if trimmed.is_empty() {
-        format!("command exited with {}", output.status)
-    } else {
-        trimmed.to_owned()
-    }
-}
-
-pub(super) fn write_message(stderr: &mut dyn Write, quiet: bool, message: impl std::fmt::Display) {
-    if !quiet {
-        write_stderr_line(stderr, message);
-    }
-}
-
-/// Run a command and report whether it exits successfully.
-///
-/// # Errors
-///
-/// Returns an error if the command cannot be started or completed.
-pub(super) fn command_succeeds(
-    executor: &dyn CommandExecutor,
-    cmd: &str,
-    args: &[&str],
-) -> Result<bool> {
-    Ok(executor.run(cmd, args)?.status.success())
-}
-
-fn should_refresh_companions(outcome: InstallOutcome, status: DylintToolStatus) -> bool {
-    outcome != InstallOutcome::RepositoryRelease && !status.dylint_link
-}
-
-/// Record an installed tool and recheck companion binaries when needed.
-///
-/// # Errors
-///
-/// Returns an error if checking for the companion `dylint-link` binary fails.
-fn update_status_after_install(
-    status: &mut DylintToolStatus,
-    executor: &dyn CommandExecutor,
-    tool: &DependencyTool,
-    outcome: InstallOutcome,
-) -> Result<()> {
-    if tool == &CARGO_DYLINT_TOOL {
-        status.cargo_dylint = true;
-
-        if should_refresh_companions(outcome, *status) {
-            // Installing cargo-dylint locally can also provide dylint-link.
-            status.dylint_link = is_tool_installed(executor, &DYLINT_LINK_TOOL)?;
-        }
-    } else if tool == &DYLINT_LINK_TOOL {
-        status.dylint_link = true;
-    }
-    Ok(())
-}
-
-#[cfg(test)]
-#[path = "install_tests.rs"]
-mod tests;
