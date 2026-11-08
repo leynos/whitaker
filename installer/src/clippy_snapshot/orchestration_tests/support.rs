@@ -9,7 +9,7 @@ use super::super::{
     generation::GenerationMetadata,
     install::BundleArtefact,
     manifest::{ClippySnapshotManifest, parse_manifest},
-    policy::{RefEntry, SelfContainedEvidence, StructureEvidence},
+    policy::{BundleHead, RefEntry, SelfContainedEvidence, StructureEvidence},
     ports::SnapshotSupport,
 };
 use crate::artefact::sha256_digest::Sha256Digest;
@@ -53,7 +53,7 @@ fn toolchain(channel: &str) -> String { format!("[toolchain]\nchannel = \"{chann
 fn valid_repository() -> FakeRepository {
     let mut repo = FakeRepository::new();
     repo.structure = Ok(StructureEvidence {
-        is_bare: "true".to_owned(),
+        is_bare: true,
         head: "refs/heads/main".to_owned(),
         refs: vec![RefEntry {
             name: "refs/heads/main".to_owned(),
@@ -61,7 +61,7 @@ fn valid_repository() -> FakeRepository {
         }],
     });
     repo.self_contained = Ok(SelfContainedEvidence {
-        is_shallow: "false".to_owned(),
+        is_shallow: false,
         remotes: Vec::new(),
     });
     repo.commits = Ok(vec![TIP.to_owned(), SELECTED.to_owned(), OLDER.to_owned()]);
@@ -79,8 +79,14 @@ pub(super) fn artefact() -> BundleArtefact {
     }
 }
 
-/// The head listing a well-formed bundle carries.
-fn pinned_heads() -> String { format!("{TIP} refs/heads/main\n{TIP} HEAD") }
+/// The heads a well-formed bundle carries: `main` and `HEAD` at the tip.
+fn pinned_heads() -> Vec<BundleHead> {
+    let head = |name: &str| BundleHead {
+        object: TIP.to_owned(),
+        name: name.to_owned(),
+    };
+    vec![head("refs/heads/main"), head("HEAD")]
+}
 
 /// Everything one operation needs, owned by the caller for the duration.
 pub(super) struct Ports {

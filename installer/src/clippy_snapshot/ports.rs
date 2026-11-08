@@ -16,7 +16,7 @@ use super::{
     error::ClippySnapshotError,
     generation::GenerationMetadata,
     git::SnapshotGit,
-    policy::{IntegrityEvidence, SelfContainedEvidence, StructureEvidence},
+    policy::{BundleHead, IntegrityEvidence, SelfContainedEvidence, StructureEvidence},
     store::ProductionStore,
 };
 use crate::{
@@ -85,18 +85,25 @@ pub(crate) trait BundleOperations {
     /// and [`ClippySnapshotError::Git`] when Git cannot run.
     fn verify_header(&self, bundle: &Utf8Path) -> Result<(), ClippySnapshotError>;
 
-    /// List the bundle's heads.
+    /// List the bundle's heads as typed evidence.
     ///
-    /// The query reads the bundle and changes nothing the caller can observe.
-    /// An implementation may still need throwaway state to ask Git the
-    /// question: `git bundle list-heads` refuses to run outside a repository,
-    /// so the adapter creates a temporary one and removes it before returning.
-    /// That scratch directory is never the snapshot root or a generation.
+    /// The query reads the bundle and changes nothing at the paths the caller
+    /// owns: the bundle itself, the snapshot root, and the generations. An
+    /// implementation may still write elsewhere to ask Git the question,
+    /// because `git bundle list-heads` refuses to run outside a repository.
+    ///
+    /// A scratch repository is therefore permitted, under these limits: it
+    /// lives in the system temporary directory (or a test-supplied parent),
+    /// carries a recognizable prefix, and is removed before this call returns,
+    /// whether the Git command succeeded or failed. Callers must not assume
+    /// the process wrote nothing at all to disk; they may assume nothing it
+    /// wrote outlives the call.
     ///
     /// # Errors
     ///
-    /// Returns [`ClippySnapshotError::Git`] when Git cannot run.
-    fn list_heads(&self, bundle: &Utf8Path) -> Result<String, ClippySnapshotError>;
+    /// Returns [`ClippySnapshotError::Io`] when the scratch repository cannot
+    /// be created, and [`ClippySnapshotError::Git`] when Git cannot run.
+    fn list_heads(&self, bundle: &Utf8Path) -> Result<Vec<BundleHead>, ClippySnapshotError>;
 
     /// Clone the bundle as a bare repository and remove `origin`.
     ///

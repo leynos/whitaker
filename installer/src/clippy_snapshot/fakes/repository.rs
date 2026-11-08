@@ -44,7 +44,7 @@ impl FakeRepository {
             calls: Mutex::new(Vec::new()),
             structure: Ok(rejecting_structure()),
             self_contained: Ok(SelfContainedEvidence {
-                is_shallow: "false".to_owned(),
+                is_shallow: false,
                 remotes: Vec::new(),
             }),
             integrity: Ok(IntegrityEvidence {
@@ -163,7 +163,7 @@ impl RepositoryQueries for FakeRepository {
 /// A structure observation that fails its policy check.
 fn rejecting_structure() -> StructureEvidence {
     StructureEvidence {
-        is_bare: "false".to_owned(),
+        is_bare: false,
         head: String::new(),
         refs: Vec::new(),
     }

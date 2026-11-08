@@ -74,7 +74,10 @@ fn listing_heads_leaves_the_bundle_and_its_directory_untouched() {
         .list_heads(bundle)
         .expect("list the bundle's heads");
 
-    assert!(heads.contains(fixture.commit()), "{heads}");
+    assert!(
+        heads.iter().any(|head| head.object == fixture.commit()),
+        "{heads:?}"
+    );
     assert_eq!(
         directory_entries(directory),
         entries_before,
@@ -84,6 +87,61 @@ fn listing_heads_leaves_the_bundle_and_its_directory_untouched() {
         std::fs::read(bundle).expect("read the bundle"),
         bytes_before,
         "the query must not rewrite the bundle"
+    );
+}
+
+#[test]
+fn listing_heads_creates_its_scratch_repository_under_the_supplied_parent() {
+    // A parent that a directory cannot be made in fails before Git runs, so
+    // only a scratch location the adapter actually uses can produce this error.
+    let fixture = SnapshotFixture::new().expect("build the snapshot fixture");
+    let holder = tempfile::tempdir().expect("create a temporary directory");
+    let parent = holder.path().join("occupied");
+    std::fs::write(&parent, "not a directory").expect("occupy the scratch parent");
+    let parent = Utf8Path::from_path(&parent).expect("the scratch parent is UTF-8");
+
+    let error = SnapshotGit::local()
+        .with_scratch_parent(parent)
+        .list_heads(fixture.bundle())
+        .expect_err("a file cannot hold the scratch repository");
+
+    assert!(matches!(&error, ClippySnapshotError::Io { .. }), "{error}");
+}
+
+#[test]
+fn listing_heads_removes_its_scratch_repository() {
+    let fixture = SnapshotFixture::new().expect("build the snapshot fixture");
+    let parent = tempfile::tempdir().expect("create a temporary directory");
+    let parent = Utf8Path::from_path(parent.path()).expect("the scratch parent is UTF-8");
+
+    SnapshotGit::local()
+        .with_scratch_parent(parent)
+        .list_heads(fixture.bundle())
+        .expect("list the bundle's heads");
+
+    assert_eq!(
+        directory_entries(parent),
+        Vec::<String>::new(),
+        "the scratch repository must not outlive the query"
+    );
+}
+
+#[test]
+fn a_failed_listing_still_removes_its_scratch_repository() {
+    let parent = tempfile::tempdir().expect("create a temporary directory");
+    let parent = Utf8Path::from_path(parent.path()).expect("the scratch parent is UTF-8");
+    let missing = parent.join("missing.bundle");
+
+    let error = SnapshotGit::local()
+        .with_scratch_parent(parent)
+        .list_heads(&missing)
+        .expect_err("an absent bundle cannot list heads");
+
+    assert!(matches!(&error, ClippySnapshotError::Git { .. }), "{error}");
+    assert_eq!(
+        directory_entries(parent),
+        Vec::<String>::new(),
+        "the scratch repository must be removed after a failure too"
     );
 }
 

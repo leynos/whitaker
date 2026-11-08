@@ -115,6 +115,22 @@ fn rejects_corrupt_bundles(
     assert_rejected(&published, &error, expected);
 }
 
+/// A truncated bundle is bad evidence about the snapshot, not a Git fault.
+#[rstest]
+fn a_truncated_bundle_is_reported_as_invalid(published: Published) {
+    Corruption::Truncate.apply(&published.bundle);
+
+    let error = published
+        .install()
+        .expect_err("a truncated bundle is rejected");
+
+    assert!(
+        matches!(&error, ClippySnapshotError::Invalid { .. }),
+        "{error}"
+    );
+    assert_rejected(&published, &error, "the bundle could not be cloned");
+}
+
 #[rstest]
 fn rejects_a_bundle_that_also_carries_master(published: Published) {
     git(&published.repo.work, &["branch", "master"]);

@@ -48,11 +48,29 @@ pub(crate) struct RefEntry {
     pub(crate) object: String,
 }
 
+/// One head a bundle carries, as the object and the ref it names.
+///
+/// `git bundle list-heads` prints the object first, so the adapter reverses
+/// the fields it parsed; policy only sees the two values.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct BundleHead {
+    /// The object name the head points at.
+    pub(crate) object: String,
+    /// The ref name, such as `refs/heads/main` or `HEAD`.
+    pub(crate) name: String,
+}
+
+impl fmt::Display for BundleHead {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} {}", self.object, self.name)
+    }
+}
+
 /// What the repository-shape queries reported.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct StructureEvidence {
-    /// Standard output of `git rev-parse --is-bare-repository`.
-    pub(crate) is_bare: String,
+    /// Whether `git rev-parse --is-bare-repository` reported a bare repository.
+    pub(crate) is_bare: bool,
     /// Standard output of `git symbolic-ref HEAD`, trimmed.
     pub(crate) head: String,
     /// The refs `git for-each-ref` listed, already split into name and object.
@@ -64,7 +82,7 @@ pub(crate) fn accept_structure(
     evidence: &StructureEvidence,
     commit: PinnedCommit<'_>,
 ) -> Result<(), String> {
-    if evidence.is_bare != "true" {
+    if !evidence.is_bare {
         return Err("it is not a bare repository".to_owned());
     }
     let main = main_ref();
@@ -104,8 +122,8 @@ fn accept_refs(refs: &[RefEntry], commit: PinnedCommit<'_>) -> Result<(), String
 /// What the self-containment queries reported.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct SelfContainedEvidence {
-    /// Standard output of `git rev-parse --is-shallow-repository`.
-    pub(crate) is_shallow: String,
+    /// Whether `git rev-parse --is-shallow-repository` reported shallow history.
+    pub(crate) is_shallow: bool,
     /// The remotes `git remote` listed, one entry per line.
     pub(crate) remotes: Vec<String>,
 }
@@ -118,7 +136,7 @@ pub(crate) fn accept_self_contained(
     evidence: &SelfContainedEvidence,
     has_alternates: bool,
 ) -> Result<(), String> {
-    if evidence.is_shallow != "false" {
+    if evidence.is_shallow {
         return Err("its history is shallow".to_owned());
     }
     if has_alternates {
@@ -155,13 +173,20 @@ pub(crate) fn accept_integrity(evidence: &IntegrityEvidence) -> Result<(), Strin
 
 /// Require the bundle to carry only `main` and `HEAD` at the pinned commit.
 ///
-/// Unexpected lines are reported before a missing `main` line, and duplicate
-/// lines are not rejected: the bundle's own header is the only source here.
-pub(crate) fn accept_bundle_heads(heads: &str, commit: PinnedCommit<'_>) -> Result<(), String> {
+/// Unexpected heads are reported before a missing `main` head, and duplicate
+/// heads are not rejected: the bundle's own header is the only source here.
+pub(crate) fn accept_bundle_heads(
+    heads: &[BundleHead],
+    commit: PinnedCommit<'_>,
+) -> Result<(), String> {
     let main = main_ref();
-    let unexpected: Vec<&str> = heads
-        .lines()
-        .filter(|line| *line != format!("{commit} {main}") && *line != format!("{commit} HEAD"))
+    let is_expected = |head: &BundleHead| {
+        head.object == commit.as_str() && (head.name == main || head.name == "HEAD")
+    };
+    let unexpected: Vec<String> = heads
+        .iter()
+        .filter(|head| !is_expected(head))
+        .map(ToString::to_string)
         .collect();
     if !unexpected.is_empty() {
         return Err(format!(
@@ -169,7 +194,10 @@ pub(crate) fn accept_bundle_heads(heads: &str, commit: PinnedCommit<'_>) -> Resu
             unexpected.join("; ")
         ));
     }
-    if !heads.lines().any(|line| line == format!("{commit} {main}")) {
+    if !heads
+        .iter()
+        .any(|head| head.object == commit.as_str() && head.name == main)
+    {
         return Err(format!(
             "the bundle does not carry {main} at the pinned commit {commit}"
         ));

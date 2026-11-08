@@ -16,7 +16,7 @@ use crate::clippy_snapshot::selection::ToolchainChange;
 /// observation does; the split into name and object mirrors the adapter.
 fn structure(is_bare: bool, refs: &str) -> StructureEvidence {
     StructureEvidence {
-        is_bare: if is_bare { "true" } else { "false" }.to_owned(),
+        is_bare,
         head: main_ref(),
         refs: refs
             .lines()
@@ -54,7 +54,7 @@ struct ExpectedMessage(&'static str);
 #[case::not_bare(structure(false, ""), ExpectedMessage("it is not a bare repository"))]
 #[case::head_on_another_branch(
     StructureEvidence {
-        is_bare: "true".to_owned(),
+        is_bare: true,
         head: "refs/heads/master".to_owned(),
         refs: Vec::new(),
     },
@@ -105,7 +105,7 @@ fn ignores_lines_without_a_ref_and_object() {
 
 fn contained(is_shallow: bool, remotes: &[&str]) -> SelfContainedEvidence {
     SelfContainedEvidence {
-        is_shallow: if is_shallow { "true" } else { "false" }.to_owned(),
+        is_shallow,
         remotes: remotes.iter().map(|name| (*name).to_owned()).collect(),
     }
 }
@@ -174,37 +174,37 @@ fn reports_the_trimmed_fsck_failure() {
     );
 }
 
-fn heads(lines: &[&str]) -> String { lines.join("\n") }
+/// One head the adapter would have parsed, at `object` naming `name`.
+fn head(object: &str, name: &str) -> BundleHead {
+    BundleHead {
+        object: object.to_owned(),
+        name: name.to_owned(),
+    }
+}
 
 #[test]
 fn accepts_a_bundle_carrying_only_main_and_head() {
-    let listing = heads(&[
-        &format!("{COMMIT} {}", main_ref()),
-        &format!("{COMMIT} HEAD"),
-    ]);
+    let heads = vec![head(COMMIT, &main_ref()), head(COMMIT, "HEAD")];
     assert_eq!(
-        accept_bundle_heads(&listing, PinnedCommit::new(COMMIT)),
+        accept_bundle_heads(&heads, PinnedCommit::new(COMMIT)),
         Ok(())
     );
 }
 
 #[test]
 fn accepts_a_bundle_whose_heads_are_in_any_order() {
-    let listing = heads(&[
-        &format!("{COMMIT} HEAD"),
-        &format!("{COMMIT} {}", main_ref()),
-    ]);
+    let heads = vec![head(COMMIT, "HEAD"), head(COMMIT, &main_ref())];
     assert_eq!(
-        accept_bundle_heads(&listing, PinnedCommit::new(COMMIT)),
+        accept_bundle_heads(&heads, PinnedCommit::new(COMMIT)),
         Ok(())
     );
 }
 
 #[test]
 fn rejects_unexpected_bundle_lines_before_a_missing_main() {
-    let listing = heads(&[&format!("{COMMIT} refs/tags/v1")]);
+    let heads = vec![head(COMMIT, "refs/tags/v1")];
     assert_eq!(
-        accept_bundle_heads(&listing, PinnedCommit::new(COMMIT)),
+        accept_bundle_heads(&heads, PinnedCommit::new(COMMIT)),
         Err(format!(
             "the bundle must carry only refs/heads/main and HEAD at {COMMIT}, but lists: {COMMIT} \
              refs/tags/v1"
@@ -214,25 +214,25 @@ fn rejects_unexpected_bundle_lines_before_a_missing_main() {
 
 #[rstest]
 #[case::no_main(
-    heads(&[&format!("{COMMIT} HEAD")]),
+    vec![head(COMMIT, "HEAD")],
     ExpectedMessage(
         "the bundle does not carry refs/heads/main at the pinned commit \
          0123456789abcdef0123456789abcdef01234567"
     )
 )]
 #[case::main_at_another_commit(
-    heads(&["deadbeef refs/heads/main"]),
+    vec![head("deadbeef", &main_ref())],
     ExpectedMessage(
         "the bundle must carry only refs/heads/main and HEAD at \
          0123456789abcdef0123456789abcdef01234567, but lists: deadbeef refs/heads/main"
     )
 )]
 fn rejects_a_bundle_that_does_not_carry_the_pinned_main(
-    #[case] listing: String,
+    #[case] heads: Vec<BundleHead>,
     #[case] reason: ExpectedMessage,
 ) {
     assert_eq!(
-        accept_bundle_heads(&listing, PinnedCommit::new(COMMIT)),
+        accept_bundle_heads(&heads, PinnedCommit::new(COMMIT)),
         Err(reason.0.to_owned())
     );
 }

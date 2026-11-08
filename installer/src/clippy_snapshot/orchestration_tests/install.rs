@@ -9,7 +9,7 @@ use super::{
         fakes::FakeStore,
         generation::GenerationMetadata,
         install::{from_sidecar_with, install_with},
-        policy::StructureEvidence,
+        policy::{BundleHead, StructureEvidence},
         verify::check_installed_with,
     },
     support::{OTHER, Ports, TIP, artefact, digest, manifest},
@@ -93,7 +93,10 @@ fn a_digest_mismatch_is_rejected_before_any_other_call() {
 fn unexpected_bundle_heads_are_rejected_before_the_root_is_locked() {
     let root = Utf8Path::new("/root");
     let mut ports = Ports::accepting();
-    ports.bundles.heads = Ok(format!("{TIP} refs/tags/v1"));
+    ports.bundles.heads = Ok(vec![BundleHead {
+        object: TIP.to_owned(),
+        name: "refs/tags/v1".to_owned(),
+    }]);
 
     let error = install_with(&artefact(), &manifest(), root, &ports.support())
         .expect_err("an unexpected bundle ref must not install");
@@ -122,7 +125,7 @@ fn a_failed_verification_writes_nothing_and_publishes_nothing() {
     let root = Utf8Path::new("/root");
     let mut ports = Ports::accepting();
     ports.repo.structure = Ok(StructureEvidence {
-        is_bare: "false".to_owned(),
+        is_bare: false,
         head: String::new(),
         refs: Vec::new(),
     });
@@ -236,7 +239,7 @@ fn reuse_still_verifies_the_existing_repository() {
     let mut ports = Ports::accepting();
     ports.store = FakeStore::new(digest('a')).present(&generation);
     ports.repo.structure = Ok(StructureEvidence {
-        is_bare: "false".to_owned(),
+        is_bare: false,
         head: String::new(),
         refs: Vec::new(),
     });

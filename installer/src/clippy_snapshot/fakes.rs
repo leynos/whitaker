@@ -15,6 +15,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use super::{
     error::ClippySnapshotError,
     generation::GenerationMetadata,
+    policy::BundleHead,
     ports::{BundleOperations, MetadataStore, RootLock, SnapshotStore, Staging},
 };
 use crate::{
@@ -56,7 +57,7 @@ pub(super) struct FakeBundles {
     /// The answer to [`BundleOperations::verify_header`].
     pub(super) verify_header: Result<(), ClippySnapshotError>,
     /// The answer to [`BundleOperations::list_heads`].
-    pub(super) heads: Result<String, ClippySnapshotError>,
+    pub(super) heads: Result<Vec<BundleHead>, ClippySnapshotError>,
     /// The answer to [`BundleOperations::stage_clone`].
     pub(super) stage_clone: Result<(), ClippySnapshotError>,
 }
@@ -67,7 +68,7 @@ impl FakeBundles {
         Self {
             calls: Mutex::new(Vec::new()),
             verify_header: Ok(()),
-            heads: Ok(String::new()),
+            heads: Ok(Vec::new()),
             stage_clone: Ok(()),
         }
     }
@@ -82,7 +83,7 @@ impl BundleOperations for FakeBundles {
         self.verify_header.clone()
     }
 
-    fn list_heads(&self, bundle: &Utf8Path) -> Result<String, ClippySnapshotError> {
+    fn list_heads(&self, bundle: &Utf8Path) -> Result<Vec<BundleHead>, ClippySnapshotError> {
         record(&self.calls, format!("list_heads {bundle}"));
         self.heads.clone()
     }

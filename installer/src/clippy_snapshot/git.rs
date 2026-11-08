@@ -12,7 +12,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 
 use super::{
     error::ClippySnapshotError,
-    policy::{IntegrityEvidence, SelfContainedEvidence, StructureEvidence},
+    policy::{BundleHead, IntegrityEvidence, SelfContainedEvidence, StructureEvidence},
     ports::{BundleOperations, RepositoryQueries},
     selection::TOOLCHAIN_FILES,
 };
@@ -21,7 +21,7 @@ use crate::git::{GitInvocation, run_git};
 #[path = "git/listing.rs"]
 mod listing;
 
-use listing::{listing_lines, parse_refs};
+use listing::{listing_lines, parse_bundle_heads, parse_refs};
 
 /// Local operations are bounded so a wedged filesystem cannot hang an install.
 const LOCAL_TIMEOUT: Duration = Duration::from_secs(600);
@@ -77,6 +77,10 @@ enum Reach {
 pub(crate) struct SnapshotGit<'env> {
     reach: Reach,
     envs: &'env [(&'env str, &'env str)],
+    /// Where throwaway repositories are created; `None` is the system temp
+    /// directory. Only tests set it, so the location and cleanup are
+    /// observable.
+    scratch_parent: Option<&'env Utf8Path>,
 }
 
 impl SnapshotGit<'static> {
@@ -85,6 +89,7 @@ impl SnapshotGit<'static> {
         Self {
             reach: Reach::Local,
             envs: &[],
+            scratch_parent: None,
         }
     }
 
@@ -93,6 +98,7 @@ impl SnapshotGit<'static> {
         Self {
             reach: Reach::Network,
             envs: &[],
+            scratch_parent: None,
         }
     }
 }
@@ -103,6 +109,20 @@ impl<'env> SnapshotGit<'env> {
         Self {
             reach: self.reach,
             envs,
+            scratch_parent: self.scratch_parent,
+        }
+    }
+
+    /// The same runner, creating throwaway repositories under `parent`.
+    ///
+    /// Only tests call this, so the scratch location and its cleanup can be
+    /// observed without guessing at the system temp directory.
+    #[cfg(test)]
+    pub(crate) const fn with_scratch_parent(self, parent: &'env Utf8Path) -> Self {
+        Self {
+            reach: self.reach,
+            envs: self.envs,
+            scratch_parent: Some(parent),
         }
     }
 
@@ -184,7 +204,7 @@ impl RepositoryQueries for SnapshotGit<'_> {
             "rev-parse",
             Some(path),
             &["rev-parse", "--is-bare-repository"],
-        )?;
+        )? == "true";
         // A detached HEAD (exit 1 under `--quiet`) is evidence, not a failure:
         // the policy reports it. Any other failure, such as a malformed or
         // unreadable HEAD, is an infrastructure fault and stays an error, so
@@ -219,7 +239,7 @@ impl RepositoryQueries for SnapshotGit<'_> {
             "rev-parse",
             Some(path),
             &["rev-parse", "--is-shallow-repository"],
-        )?;
+        )? == "true";
         let remotes = self.stdout("remote", Some(path), &["remote"])?;
         Ok(SelfContainedEvidence {
             is_shallow,
@@ -306,13 +326,14 @@ impl BundleOperations for SnapshotGit<'_> {
     }
 
     /// List the bundle's heads; the port records the scratch state needed.
-    fn list_heads(&self, bundle: &Utf8Path) -> Result<String, ClippySnapshotError> {
+    fn list_heads(&self, bundle: &Utf8Path) -> Result<Vec<BundleHead>, ClippySnapshotError> {
         let (_scratch, scratch) = self.scratch_repository(bundle)?;
-        self.stdout(
+        let listing = self.stdout(
             "bundle list-heads",
             Some(&scratch),
             &["bundle", "list-heads", bundle.as_str()],
-        )
+        )?;
+        Ok(parse_bundle_heads(&listing))
     }
 
     /// Clone the bundle bare, then drop the remote the clone records.
@@ -362,8 +383,9 @@ impl SnapshotGit<'_> {
         self,
         bundle: &Utf8Path,
     ) -> Result<(tempfile::TempDir, Utf8PathBuf), ClippySnapshotError> {
-        let scratch =
-            tempfile::tempdir().map_err(|error| ClippySnapshotError::io(bundle, &error))?;
+        let scratch = self
+            .scratch_directory()
+            .map_err(|error| ClippySnapshotError::io(bundle, &error))?;
         let path = Utf8Path::from_path(scratch.path())
             .ok_or_else(|| ClippySnapshotError::Io {
                 path: scratch.path().display().to_string(),
@@ -372,6 +394,17 @@ impl SnapshotGit<'_> {
             .to_owned();
         self.stdout("init", None, &["init", "--quiet", "--bare", path.as_str()])?;
         Ok((scratch, path))
+    }
+
+    /// Create the throwaway repository directory, in the system temp directory
+    /// unless a test named another parent.
+    fn scratch_directory(self) -> std::io::Result<tempfile::TempDir> {
+        let mut builder = tempfile::Builder::new();
+        builder.prefix("whitaker-clippy-snapshot-scratch-");
+        match self.scratch_parent {
+            Some(parent) => builder.tempdir_in(parent),
+            None => builder.tempdir(),
+        }
     }
 }
 

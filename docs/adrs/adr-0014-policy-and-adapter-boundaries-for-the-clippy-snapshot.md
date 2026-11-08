@@ -49,10 +49,18 @@ The module separates the decision from the observation.
 - `git.rs` implements `RepositoryQueries` and `BundleOperations`; `store.rs`
   implements `SnapshotStore` and `MetadataStore`. An adapter returns the
   closest honest observation and translates every infrastructure failure into
-  `ClippySnapshotError` at that boundary. It applies no snapshot acceptance
-  rule, except that a failed `git bundle verify`, a failed staging clone, and
-  metadata that cannot be decoded or names an unknown schema are reported as
-  `Invalid`.
+  `ClippySnapshotError` at that boundary. It also translates Git's listings
+  into the values policy compares, such as `RefEntry`, `BundleHead`, and the
+  bare and shallow observations as booleans, so policy never parses another
+  tool's line format. It applies no snapshot acceptance rule, except that a
+  failed `git bundle verify`, a failed staging clone, and metadata that cannot
+  be decoded or names an unknown schema are reported as `Invalid`.
+- `list_heads` is an observation with one bounded write.
+  `git bundle list-heads` refuses to run outside a repository, so the adapter
+  creates a prefixed scratch repository under the system temporary directory,
+  or a parent a test supplies, and removes it before returning whether the
+  command succeeded or failed. Nothing it writes outlives the call, and the
+  bundle and the caller's snapshot paths are never touched.
 - `SnapshotSupport<'_>` is the composition root for one operation: borrowed
   trait objects for each port. `SnapshotSupport::production()` wires the
   process-wide `SnapshotGit` and `ProductionStore`. The public entry points

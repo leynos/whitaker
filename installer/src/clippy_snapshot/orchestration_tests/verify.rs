@@ -31,7 +31,7 @@ fn verification_stops_after_the_first_rejected_check() {
     let path = Utf8Path::new("/snapshot.git");
     let mut ports = Ports::accepting();
     ports.repo.structure = Ok(StructureEvidence {
-        is_bare: "false".to_owned(),
+        is_bare: false,
         head: String::new(),
         refs: Vec::new(),
     });

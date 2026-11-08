@@ -5,7 +5,7 @@
 //! policy receives names and object IDs rather than another tool's output
 //! format.
 
-use super::super::policy::RefEntry;
+use super::super::policy::{BundleHead, RefEntry};
 
 /// Split a ref listing into the values policy compares.
 ///
@@ -19,6 +19,22 @@ pub(super) fn parse_refs(listing: &str) -> Vec<RefEntry> {
         .map(|(name, object)| RefEntry {
             name: name.to_owned(),
             object: object.to_owned(),
+        })
+        .collect()
+}
+
+/// Split a bundle head listing into the values policy compares.
+///
+/// `git bundle list-heads` prints the object first and the ref second, the
+/// reverse of `for-each-ref`, so the fields swap here. A line without a
+/// separator names no head and is dropped.
+pub(super) fn parse_bundle_heads(listing: &str) -> Vec<BundleHead> {
+    listing
+        .lines()
+        .filter_map(|line| line.split_once(' '))
+        .map(|(object, name)| BundleHead {
+            object: object.to_owned(),
+            name: name.to_owned(),
         })
         .collect()
 }
