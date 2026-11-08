@@ -474,7 +474,7 @@ def test_ci_pins_the_installer_version_and_keys_its_cache_on_it() -> None:
     path = cache_with.get("path")
     assert path is not None, "the installer cache step must set a path"
     # A YAML `path: |` block arrives as one newline-delimited string, while the
-    # list form arrives as a list. Normalise both, then compare whole entries:
+    # list form arrives as a list. Flatten both, then compare whole entries:
     # `~/.cache/cargo-binstall-old` contains `cargo-binstall` as a substring but
     # would not be restored by the step.
     raw_entries = path if isinstance(path, list) else [path]
