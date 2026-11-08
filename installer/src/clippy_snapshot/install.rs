@@ -68,8 +68,8 @@ pub(crate) fn from_sidecar_with(
     }
     // Git later runs from other directories, so a caller's relative path
     // must be fixed against the caller's directory now.
-    let bundle = store.absolute(bundle)?;
-    let sidecar = Utf8PathBuf::from(format!("{bundle}.sha256"));
+    let resolved_bundle = store.absolute(bundle)?;
+    let sidecar = Utf8PathBuf::from(format!("{resolved_bundle}.sha256"));
     let sidecar_error = |reason: String| ClippySnapshotError::Sidecar {
         path: sidecar.to_string(),
         reason,
@@ -89,7 +89,10 @@ pub(crate) fn from_sidecar_with(
         .next()
         .ok_or_else(|| sidecar_error("it is empty".to_owned()))?;
     let sha256 = Sha256Digest::try_from(token).map_err(|error| sidecar_error(error.to_string()))?;
-    Ok(BundleArtefact { bundle, sha256 })
+    Ok(BundleArtefact {
+        bundle: resolved_bundle,
+        sha256,
+    })
 }
 
 /// Install `artefact` as the generation `manifest` pins under `root`.
@@ -126,13 +129,13 @@ pub(crate) fn install_with(
     // the snapshot root, so a relative bundle path would resolve wrongly.
     let bundle = support.store.absolute(&artefact.bundle)?;
     verify_bundle_heads(&bundle, manifest, support.bundles)?;
-    let root = support.store.create_root(root)?;
-    let _lock = support.store.lock(&root)?;
-    let generation = root.join(manifest.commit.as_str());
+    let resolved_root = support.store.create_root(root)?;
+    let _lock = support.store.lock(&resolved_root)?;
+    let generation = resolved_root.join(manifest.commit.as_str());
     if support.store.is_present(&generation)? {
         return reuse_with(&generation, manifest, support);
     }
-    let staging = support.store.staging(&root, ".incoming-")?;
+    let staging = support.store.staging(&resolved_root, ".incoming-")?;
     let staged = staging.path().join("snapshot.git");
     support.bundles.stage_clone(&bundle, &staged)?;
     verify_with(&staged, manifest, support)?;

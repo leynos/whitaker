@@ -103,7 +103,11 @@ fn verification_observes_each_check_in_the_documented_order() {
     ];
     let observed: Vec<usize> = documented.iter().map(|prefix| position(prefix)).collect();
     assert!(
-        observed.windows(2).all(|pair| pair[0] < pair[1]),
+        observed.windows(2).all(|pair| {
+            pair.first()
+                .zip(pair.get(1))
+                .is_some_and(|(earlier, later)| earlier < later)
+        }),
         "checks must run in the documented order {documented:?}: {observed:?}"
     );
     // Derive the probed path rather than spelling it, so the assertion holds

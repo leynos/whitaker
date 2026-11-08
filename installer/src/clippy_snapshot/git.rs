@@ -210,14 +210,14 @@ impl RepositoryQueries for SnapshotGit<'_> {
         // the policy reports it. Any other failure, such as a malformed or
         // unreadable HEAD, is an infrastructure fault and stays an error, so
         // the policy cannot blame the snapshot for it.
-        let head = self.output(
+        let symbolic = self.output(
             "symbolic-ref",
             Some(path),
             &["symbolic-ref", "--quiet", "HEAD"],
         )?;
-        let head = match head.status.code() {
-            Some(0 | 1) => String::from_utf8_lossy(&head.stdout).trim().to_owned(),
-            _ => return Err(git_failure("symbolic-ref", &head)),
+        let head = match symbolic.status.code() {
+            Some(0 | 1) => String::from_utf8_lossy(&symbolic.stdout).trim().to_owned(),
+            _ => return Err(git_failure("symbolic-ref", &symbolic)),
         };
         let refs = self.stdout(
             "for-each-ref",
@@ -425,7 +425,7 @@ impl SnapshotGit<'_> {
                 path: scratch.path().display().to_string(),
                 reason: "the path is not valid UTF-8".to_owned(),
             })
-            .map(|path| path.to_owned())
+            .map(ToOwned::to_owned)
             .and_then(|path| {
                 self.stdout("init", None, &["init", "--quiet", "--bare", path.as_str()])?;
                 Ok(path)
@@ -441,10 +441,8 @@ impl SnapshotGit<'_> {
     fn scratch_directory(self) -> std::io::Result<tempfile::TempDir> {
         let mut builder = tempfile::Builder::new();
         builder.prefix("whitaker-clippy-snapshot-scratch-");
-        match self.scratch_parent {
-            Some(parent) => builder.tempdir_in(parent),
-            None => builder.tempdir(),
-        }
+        self.scratch_parent
+            .map_or_else(|| builder.tempdir(), |parent| builder.tempdir_in(parent))
     }
 }
 

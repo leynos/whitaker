@@ -10,10 +10,11 @@ fn a_well_formed_listing_keeps_the_object_and_ref_apart() {
     let heads =
         parse_bundle_heads("aaaa refs/heads/main\nbbbb HEAD").expect("the listing is well formed");
 
-    assert_eq!(heads[0].object, "aaaa");
-    assert_eq!(heads[0].name, "refs/heads/main");
-    assert_eq!(heads[1].object, "bbbb");
-    assert_eq!(heads[1].name, "HEAD");
+    let found: Vec<(&str, &str)> = heads
+        .iter()
+        .map(|head| (head.object.as_str(), head.name.as_str()))
+        .collect();
+    assert_eq!(found, vec![("aaaa", "refs/heads/main"), ("bbbb", "HEAD")]);
 }
 
 #[test]

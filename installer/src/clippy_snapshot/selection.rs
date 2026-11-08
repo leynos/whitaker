@@ -165,12 +165,11 @@ pub(crate) fn channel_at(
     commit: &str,
 ) -> Result<Option<String>, ClippySnapshotError> {
     let reads = TOOLCHAIN_FILES.iter().map(|file| {
-        queries
-            .file_at_commit(repo, commit, file)
-            .map(|contents| match contents {
-                Some(text) => ChannelRead::Present(parse_channel(&text)),
-                None => ChannelRead::Absent,
+        queries.file_at_commit(repo, commit, file).map(|contents| {
+            contents.map_or(ChannelRead::Absent, |text| {
+                ChannelRead::Present(parse_channel(&text))
             })
+        })
     });
     first_channel(reads)
 }

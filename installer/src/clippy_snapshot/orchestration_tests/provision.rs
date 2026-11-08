@@ -71,12 +71,12 @@ fn release_provisioning_reads_the_digest_through_the_store() {
         vec![asset.clone()],
         "the release asset must be requested once"
     );
-    let downloaded = root.join(".download-fake").join(&asset);
+    let asset_path = root.join(".download-fake").join(&asset);
     assert!(
         ports
             .store
             .calls()
-            .contains(&format!("digest {downloaded}")),
+            .contains(&format!("digest {asset_path}")),
         "the bundle digest must be read through the store: {:?}",
         ports.store.calls()
     );

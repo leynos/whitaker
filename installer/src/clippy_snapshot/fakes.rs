@@ -45,8 +45,8 @@ fn record_shared(
     shared: Option<&Arc<Mutex<Vec<String>>>>,
     entry: String,
 ) {
-    if let Some(shared) = shared {
-        record(shared, entry.clone());
+    if let Some(shared_log) = shared {
+        record(shared_log, entry.clone());
     }
     record(log, entry);
 }

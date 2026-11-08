@@ -293,14 +293,15 @@ fn verify_rejects_a_generation_that_gained_a_remote() -> Result<(), Box<dyn std:
 /// the repository. Git refuses to read the repository at all, which is why the
 /// diagnostic names `rev-parse`.
 #[test]
-fn verify_reports_a_malformed_head_as_a_git_failure() {
-    let cli = Cli::new();
-    let generation = cli.install(&cli.scratch.join("clippy"));
-    std::fs::write(generation.join("HEAD"), "ref: not a ref\n").expect("corrupt HEAD");
+fn verify_reports_a_malformed_head_as_a_git_failure() -> Result<(), Box<dyn std::error::Error>> {
+    let cli = Cli::new()?;
+    let generation = cli.install(&cli.scratch.join("clippy"))?;
+    std::fs::write(generation.join("HEAD"), "ref: not a ref\n")?;
 
-    let output = cli.run(&["verify", "--repo", generation.as_str()]);
+    let output = cli.run(&["verify", "--repo", generation.as_str()])?;
 
     assert_fails_with(&output, "git rev-parse failed");
+    Ok(())
 }
 
 /// Check that `install` reports a missing bundle and installs nothing.

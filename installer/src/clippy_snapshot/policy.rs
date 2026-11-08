@@ -26,10 +26,10 @@ pub(crate) struct PinnedCommit<'a>(&'a str);
 
 impl<'a> PinnedCommit<'a> {
     /// Borrow `commit` as the expected object name.
-    pub(crate) fn new(commit: &'a str) -> Self { Self(commit) }
+    pub(crate) const fn new(commit: &'a str) -> Self { Self(commit) }
 
     /// Return the object name as a string slice.
-    pub(crate) fn as_str(&self) -> &'a str { self.0 }
+    pub(crate) const fn as_str(&self) -> &'a str { self.0 }
 }
 
 impl fmt::Display for PinnedCommit<'_> {

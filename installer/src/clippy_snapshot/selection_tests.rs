@@ -178,11 +178,10 @@ fn an_unreadable_toolchain_file_is_an_error_not_an_absence() {
         &repo.work,
         &["rev-parse", &format!("{head}:rust-toolchain")],
     );
-    let object = repo
-        .work
-        .join(".git/objects")
-        .join(&blob[..2])
-        .join(&blob[2..]);
+    let (prefix, suffix) = blob
+        .split_at_checked(2)
+        .expect("an object name has a two-character prefix");
+    let object = repo.work.join(".git/objects").join(prefix).join(suffix);
     std::fs::remove_file(&object).expect("remove the toolchain blob");
 
     let error = channel_at(&SnapshotGit::local(), &repo.work, &head)

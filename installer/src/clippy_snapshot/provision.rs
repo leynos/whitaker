@@ -79,23 +79,42 @@ pub(crate) fn provision_support(
     root: &Utf8Path,
     support: &SnapshotSupport<'_>,
 ) -> Result<Utf8PathBuf, ClippySnapshotError> {
-    let root = support.store.create_root(root)?;
-    let generation = super::generation_path(&root, manifest);
+    let resolved_root = support.store.create_root(root)?;
+    let generation = super::generation_path(&resolved_root, manifest);
     // An uninspectable generation is an error, not a reason to download.
     let (origin, result) = if support.store.is_present(&generation)? {
-        tracing::debug!(commit = %manifest.commit, "reusing the installed Clippy snapshot");
-        (
-            ProvisionSource::Existing,
-            timed(Operation::Reuse, || {
-                reuse_with(&generation, manifest, support)
-            }),
-        )
+        reuse_existing(&generation, manifest, support)
     } else {
-        tracing::info!(commit = %manifest.commit, "installing the pinned Clippy snapshot");
-        install_from(source, manifest, &root, support)
+        install_missing(source, manifest, &resolved_root, support)
     };
     record_provision(origin, result.is_ok());
     result
+}
+
+/// Reuse a generation already installed under `root`.
+fn reuse_existing(
+    generation: &Utf8Path,
+    manifest: &ClippySnapshotManifest,
+    support: &SnapshotSupport<'_>,
+) -> (ProvisionSource, Result<Utf8PathBuf, ClippySnapshotError>) {
+    tracing::debug!(commit = %manifest.commit, "reusing the installed Clippy snapshot");
+    (
+        ProvisionSource::Existing,
+        timed(Operation::Reuse, || {
+            reuse_with(generation, manifest, support)
+        }),
+    )
+}
+
+/// Install the missing generation from `source`.
+fn install_missing(
+    source: &BundleSource,
+    manifest: &ClippySnapshotManifest,
+    root: &Utf8Path,
+    support: &SnapshotSupport<'_>,
+) -> (ProvisionSource, Result<Utf8PathBuf, ClippySnapshotError>) {
+    tracing::info!(commit = %manifest.commit, "installing the pinned Clippy snapshot");
+    install_from(source, manifest, root, support)
 }
 
 /// Install a missing generation from `source`, naming the source it used.
