@@ -103,6 +103,14 @@ Hard invariants. Violation requires escalation, not a workaround.
   renumber and update `docs/contents.md` in the same commit.
 - No new external crate dependency. `EP-M2`'s guard must be written against
   crates already resolvable for the crate that hosts it.
+- **`#[allow]` annotations are out of scope as a suppression mechanism.** The
+  supported mechanism is a `dylint.toml` configuration per the
+  `no_std_fs_operations` lint, excluding on a per-file (module) basis; a
+  separate Whitaker expectation macro is planned later (roadmap 1.3.1 to 1.3.3,
+  ADR 002) and is not this item's to specify. The ADR must say so rather than
+  present a level attribute as the user-facing contract. This does not relax
+  lifecycle rule 1: `HirId`-aware emission stays mandatory, because it fixes
+  where the diagnostic is raised, not how a user silences it.
 - Gates: `make markdownlint` and `make nixie` must pass at every milestone.
   `make check-fmt`, `make typecheck`, `make lint`, and `make test` must pass at
   the `EP-M2` and `EP-M3` boundaries and at completion.
@@ -155,26 +163,30 @@ Thresholds that trigger escalation, not quality targets.
   Mitigation: the ADR prohibits the call outright on any data-dependent path,
   and records that `crates/bumpy_road_function/src/driver/mod.rs:224`, `:235`,
   and `segment_builder.rs:164`, `:186` carry the hazard today.
-- Risk: findings are emitted where `#[allow]` cannot reach them.
+- Risk: findings are emitted at a node whose lint level is not the subject's.
   `LateContext::opt_span_lint` resolves the level at
   `self.last_node_with_lint_attrs` (`rustc_lint/src/context.rs:600-615`), which
   in `check_crate_post` is the crate root — that callback is dispatched inside
   `with_lint_attrs(hir::CRATE_HIR_ID)` (`rustc_lint/src/late.rs:393-404`).
   Deferred emission through the ordinary `cx.emit_span_lint` path therefore
-  ignores `#[allow(brain_type)]` on the subject and on every module around it,
-  leaving users an unsuppressable lint. Severity: high. Likelihood: high if
-  unaddressed — all nine emitting lint crates use `cx.emit_span_lint`, so it is
-  the obvious thing to copy. Status: **confirmed by probe, 2026-09-27, and
-  sharper than stated.** The probe's three-way fixture showed the span-only
-  path from `check_crate_post` emitting a finding on an item carrying
-  `#[allow]`, while the same path from `check_item` (where the context node
-  *is* the item) suppressed it, and `emit_node_span_lint` from
+  resolves the level at the crate root rather than at the subject. Severity:
+  high. Likelihood: high if unaddressed — all nine emitting lint crates use
+  `cx.emit_span_lint`, so it is the obvious thing to copy. Status: **confirmed
+  by probe, 2026-09-27, and sharper than stated.** The probe's three-way
+  fixture showed the span-only path from `check_crate_post` emitting a finding
+  on an item carrying `#[allow]`, while the same path from `check_item` (where
+  the context node *is* the item) suppressed it, and `emit_node_span_lint` from
   `check_crate_post` also suppressed it. The span-only path does not merely
   "not resolve the level"; it silently discards every `#[allow]` on the subject
   item and on every module between it and the crate root. A crate-level
-  `#![allow]` still applies to all paths, so the residual limitation is item-
-  and module-level attributes only. No in-tree lint emits from
-  `check_crate_post` today — the sole user of that hook,
+  `#![allow]` still applies to all paths, so the residual limitation of the
+  span-only path is item- and module-level attributes only. **Note on scope:**
+  the mechanism is still required, but `#[allow]` is not the supported
+  user-facing suppression route — `dylint.toml` is, and a Whitaker expectation
+  macro is planned later. What the probe establishes is that the span-only path
+  resolves the level at the wrong node, which is a defect independent of how
+  users are expected to suppress. No in-tree lint emits from `check_crate_post`
+  today — the sole user of that hook,
   `crates/rstest_helper_should_be_fixture/src/driver.rs:244`, writes a summary
   file and emits nothing — so this is a new pattern with no in-tree precedent
   to copy. See `Artefacts and notes`. Mitigation: the ADR requires the subject's
@@ -1290,6 +1302,33 @@ Thresholds that trigger escalation, not quality targets.
   claim that is repeated, and grepping the phrase is part of actioning it.
   Date/Author: 2026-09-27, implementation agent, in response to round-3 review.
 
+- **Decision: declare `#[allow]` annotations out of scope as a suppression
+  mechanism, and make `dylint.toml` configuration the supported route.**
+  Rationale: maintainer ruling during implementation. The ADR had drifted into
+  presenting a level attribute as the user-facing suppression contract —
+  lifecycle rule 1 called the `HirId`-aware path the thing that keeps
+  `#[allow]` working, `Goals and non-goals` promised "a way to suppress each
+  lint at the item it complains about", and the decision driver repeated it.
+  That is not the supported mechanism. The repository's precedent is
+  `no_std_fs_operations`, which reads `dylint.toml` and exempts a whole crate
+  (`excluded_crates`) or one module and its descendants (`excluded_paths`);
+  because those entries are module paths rather than filenames, a file-backed
+  module gets per-file granularity by construction. A dedicated Whitaker
+  expectation macro is planned separately (roadmap 1.3.1 to 1.3.3, ADR 002) and
+  is not this item's to specify. What did *not* change is lifecycle rule 1: the
+  probe established that `cx.emit_span_lint` from `check_crate_post` resolves
+  the lint level at the crate root rather than at the subject, and that is a
+  defect in where the diagnostic is raised, independent of how a user is
+  expected to silence it. So the `HirId`-aware requirement stands on its own
+  merits and is now stated as such, with the attribute route explicitly
+  descoped rather than silently relied upon. Amended sites: the ADR's
+  `Goals and non-goals`, `Decision drivers`, `Context`, `Options considered`
+  (emission lifecycle), `Lint-pass lifecycle` rule 1, `HIR capture` rule 1,
+  `Lint-pass lifecycle` rule 10, `Known risks and limitations`, and
+  `Outstanding decisions`; and this plan's `Constraints`, `Risks`, and this
+  entry. Date/Author: 2026-11-08, implementation agent, on maintainer
+  instruction.
+
 ## Outcomes & retrospective
 
 Completed 2026-09-27.
@@ -2048,7 +2087,7 @@ reference before `EP-M1` closes.
 | C-18 | Where `span_to_region` lives, and its zero-column policy               | 6.5.1 deferral | answered | `Known risks` supersession 3; `Location resolution` rule 5    |
 | C-19 | The subject type carried into SARIF mapping                            | 6.5.1 deferral | answered | `Location resolution` rule 1; `Language boundary` rule 1      |
 | C-20 | The crate-edge direction, and why it is publishable                    | design review  | answered | `Options considered`; `Decision outcome / proposed direction` |
-| C-21 | The emission API, and how `#[allow]` on the item keeps working         | design review  | answered | `Lint-pass lifecycle` rule 1                                  |
+| C-21 | The emission API, and which node the lint level resolves at            | design review  | answered | `Lint-pass lifecycle` rule 1                                  |
 | C-22 | The prohibition on `span_delayed_bug`, and what replaces it            | design review  | answered | `Location resolution` rule 8                                  |
 | C-23 | The artefact handoff out of the pass, and its concurrency discipline   | design review  | answered | `Lint-pass lifecycle` rule 5                                  |
 | C-24 | `columnKind`, and the bound on clustering input                        | design review  | answered | `Location resolution` rule 11; `HIR capture` rule 8           |
@@ -2066,6 +2105,10 @@ reference before `EP-M1` closes.
 - Searching for "delayed" finds an explicit prohibition with the reason.
 - Searching for "columnKind" finds a normative requirement to emit it.
 - Searching for "supersede" finds four entries.
+- Searching for "out of scope" finds the suppression scope ruling, which names
+  `dylint.toml` as the supported mechanism and the planned expectation macro as
+  out of scope, and distinguishes both from the `HirId`-aware emission
+  requirement that survives independently.
 - `docs/contents.md` lists the new ADR under §"Decision records" in the same
   style as ADR 004.
 - Run `make markdownlint` and `make nixie`. Expect clean exits.
@@ -2741,20 +2784,25 @@ at finalization, for gated subjects only.**
 1. **Emission must be `HirId`-aware.** `LateContext::opt_span_lint` resolves
    the level at `self.last_node_with_lint_attrs`
    (`rustc_lint/src/context.rs:600-615`), which at crate-post time is the crate
-   root — so the ordinary `cx.emit_span_lint` path silently ignores
-   `#[allow(brain_type)]` and `#[expect(...)]` on the subject entirely, leaving
-   an unsuppressable lint. Deferred emission must therefore capture the
-   subject's `HirId` and emit through `TyCtxt::emit_node_span_lint`
+   root — so the ordinary `cx.emit_span_lint` path resolves the level at the
+   wrong node. Deferred emission must therefore capture the subject's `HirId`
+   and emit through `TyCtxt::emit_node_span_lint`
    (`rustc_middle/src/ty/context.rs:2461-2470`), which resolves the level at
-   the supplied node. The suppression sites are that node and the modules
+   the supplied node. The resolution sites are that node and the modules
    enclosing it — for `brain_type`, the type's own declaration, which is the
    item capture rule 1 takes the `HirId` from, and any module around it. An
    `impl` block is not a site: the captured `HirId` belongs to the declaration,
-   and the ancestor chain it resolves along does not pass through the `impl`, so
-   `#[allow(brain_type)]` written there is ignored even on the emitting path.
+   and the ancestor chain it resolves along does not pass through the `impl`.
    The lint crates gain `rustc_middle` under `dylint-driver` for this; note that
    `crates/clippy_utils` is a stub carrying only `macros::is_panic`
    (`crates/clippy_utils/src/lib.rs:1-12`) and provides no alternative.
+
+   **Scope: `#[allow]` and `#[expect]` are out of scope as a suppression
+   mechanism.** The supported route is `dylint.toml` (`excluded_crates`,
+   `excluded_paths`), following `no_std_fs_operations`; a Whitaker expectation
+   macro is planned separately (roadmap 1.3.1 to 1.3.3, ADR 002). The
+   `HirId`-aware requirement above stands on its own: it fixes where the
+   diagnostic is raised, not how a user silences it.
 2. **Finalize once, by construction.** The accumulator is consumed by
    finalization and yields a distinct finalized type, so reading unfinalized
    state is unrepresentable rather than merely discouraged. The nearest
@@ -2868,13 +2916,14 @@ at finalization, for gated subjects only.**
 
 1. Where does a `brain_type` diagnostic's primary span point when the type is
    declared in one file and implemented across three others? This determines
-   the SARIF `physicalLocation` and, via `BTD-REQ-04` rule 1, which `#[allow]`
-   site works. Nothing in `docs/brain-trust-lints-design.md:373-384` answers
-   it. **Answered**: the declaration span, from the `ItemKind::Struct` / `Enum`
-   / `Union` item captured by `BTD-REQ-02` rule 1 and by `HIR capture` rule 1
-   in ADR 005. The design document is silent; the capture contract settles it,
-   because that callback is also what supplies the `HirId` the deferred
-   emission resolves the lint level at.
+   the SARIF `physicalLocation` and, via `BTD-REQ-04` rule 1, the node the
+   deferred emission resolves the lint level at. Nothing in
+   `docs/brain-trust-lints-design.md:373-384` answers it. **Answered**: the
+   declaration span, from the `ItemKind::Struct` / `Enum` / `Union` item
+   captured by `BTD-REQ-02` rule 1 and by `HIR capture` rule 1 in ADR 005. The
+   design document is silent; the capture contract settles it, because that
+   callback is also what supplies the `HirId` the deferred emission resolves
+   the lint level at.
 2. If a blanket implementation is skipped for `brain_type` per `BTD-REQ-02`
    rule 7, do its default method bodies count toward `brain_trait` for the
    implemented trait? Under rule 1 they do not, so blanket-implementation
@@ -3548,3 +3597,47 @@ authoritative one: it scans the whole tree, prints a reassuring count, and is
 wrong. Verified by comparing the two runs against the same file set.
 
 Nothing outside this plan changed. No code, no manifest, no ADR text.
+
+### Round 10 — `#[allow]` declared out of scope, 2026-11-08
+
+A maintainer ruling, not a review finding: `#[allow]` annotations are out of
+scope as a suppression mechanism. The supported mechanism is a `dylint.toml`
+configuration per the `no_std_fs_operations` lint, excluding on a per-file
+(module) basis, and a separate Whitaker expectation macro is planned for later.
+
+**What the ADR had drifted into claiming.** Lifecycle rule 1 presented the
+`HirId`-aware path as the thing that keeps `#[allow(brain_type)]` working and
+called the alternative "an unsuppressable lint"; `Goals and non-goals` promised
+"a way to suppress each lint at the item it complains about";
+`Decision drivers` repeated it; and `HIR capture` rule 1 described the
+declaration span as the site "at which the lint can be suppressed". Every one
+of those makes a level attribute the user-facing contract, which is the wrong
+mechanism.
+
+**What changed.** The scope ruling is now stated in the ADR's
+`Goals and non-goals`, `Known risks and limitations`, and
+`Outstanding decisions`, and the mirror sites above were rewritten to match. The
+`dylint.toml` route is named as the supported one, with `excluded_crates` and
+`excluded_paths` described accurately: those entries are **module paths, not
+filenames** (`crates/no_std_fs_operations/src/config.rs:26-32`), so the
+granularity is the module — a file-backed module gets per-file granularity by
+construction, while a module declared inline in its parent file does not. The
+planned expectation macro is recorded as roadmap 1.3.1 to 1.3.3 / ADR 002,
+explicitly not this item's to specify.
+
+**What deliberately did not change: lifecycle rule 1.** The Stage B probe
+established that `cx.emit_span_lint` from `check_crate_post` resolves the lint
+level at the crate root rather than at the subject
+(`rustc_lint/src/context.rs:600-615`). That is a defect in *where the
+diagnostic is raised*, which holds regardless of how a user is expected to
+silence it, so the `HirId`-aware requirement stays mandatory and is now stated
+as a property of the emission path rather than as an undertaking about
+attributes. Descoping the mechanism does not license emitting at the wrong node.
+
+**Checked, not assumed.** The `no_std_fs_operations` exclusion surface was read
+from its source rather than inferred from its name: `excluded_paths` matches on
+segment boundaries against a crate-anchored module path, and nothing in that
+lint matches on filenames. That is why the plan says "per-file (module) basis"
+rather than claiming a filename-based exclusion that does not exist.
+
+Nothing else changed. No code, no manifest, no test.
