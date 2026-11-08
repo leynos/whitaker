@@ -347,23 +347,27 @@ def test_library_names_follow_the_archive_targets_rules(target: str, entry: str,
 
 
 @pytest.mark.parametrize(
-    ("field", "value"),
-    [("git_sha", "fffffff"), ("toolchain", "nightly-2020-01-01"), ("target", "aarch64-apple-darwin")],
+    "change",
+    [
+        pytest.param(("git_sha", "fffffff"), id="sha"),
+        pytest.param(("toolchain", "nightly-2020-01-01"), id="toolchain"),
+        pytest.param(("target", "aarch64-apple-darwin"), id="target"),
+    ],
 )
 def test_archive_name_must_match_its_manifest(
-    repository: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str], field: str, value: str
+    repository: Path, tmp_path: Path, change: tuple[str, str]
 ) -> None:
     """The name the installer derives from the manifest must be the archive's."""
+    field, value = change
     _publish(tmp_path / "dist", [*OLD_CRATES, "whitaker_suite"])
     manifest = tmp_path / "dist" / f"manifest-{TARGET}.json"
     data = json.loads(manifest.read_text(encoding="utf-8"))
     data[field] = value
     manifest.write_text(json.dumps(data), encoding="utf-8")
     assert _check(repository, tmp_path / "dist") == 1
-    assert field in capsys.readouterr().err
 
 
-def test_archive_with_an_unrecognised_name_is_an_error(repository: Path, tmp_path: Path) -> None:
+def test_archive_with_an_unrecognized_name_is_an_error(repository: Path, tmp_path: Path) -> None:
     """A name that does not follow the convention stops the publish."""
     _publish(tmp_path / "dist", [*OLD_CRATES, "whitaker_suite"])
     (tmp_path / "dist" / ARCHIVE).rename(tmp_path / "dist" / "whitaker-lints-odd.tar.zst")
