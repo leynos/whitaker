@@ -1,6 +1,6 @@
 //! Snapshot guard for the current, intentionally unstable `whitaker ls` JSON.
 
-use std::process::Command;
+use std::{error::Error, process::Command};
 
 use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs_utf8::Dir};
@@ -12,32 +12,30 @@ use whitaker_installer::builder::{library_extension, library_prefix};
 ///
 /// Returns the temporary directory alongside its UTF-8 path so the caller
 /// keeps the staging area alive for the duration of the command it runs.
-fn staged_target_dir() -> (TempDir, Utf8PathBuf) {
-    let staging = TempDir::new().expect("temporary staging directory should be created");
-    let staging_dir = Dir::open_ambient_dir(
-        camino::Utf8Path::from_path(staging.path()).expect("temporary path should be UTF-8"),
-        ambient_authority(),
-    )
-    .expect("temporary staging directory should be opened");
-    staging_dir
-        .create_dir_all("nightly-test/release")
-        .expect("release directory should be created");
+///
+/// # Errors
+///
+/// Returns an error when the temporary directory, its `nightly-test/release`
+/// subdirectory, or the suite marker cannot be created, or when the temporary
+/// path is not valid UTF-8.
+fn staged_target_dir() -> Result<(TempDir, Utf8PathBuf), Box<dyn Error>> {
+    let staging = TempDir::new()?;
+    let target_dir = Utf8PathBuf::try_from(staging.path().to_owned())?;
+    let staging_dir = Dir::open_ambient_dir(target_dir.as_path(), ambient_authority())?;
+    staging_dir.create_dir_all("nightly-test/release")?;
     let library_name = format!(
         "{}whitaker_suite@nightly-test{}",
         library_prefix(),
         library_extension()
     );
-    staging_dir
-        .write(format!("nightly-test/release/{library_name}"), [])
-        .expect("suite marker should be written");
-    let target_dir = Utf8PathBuf::from_path_buf(staging.path().to_owned())
-        .expect("temporary path should be UTF-8");
-    (staging, target_dir)
+    staging_dir.write(format!("nightly-test/release/{library_name}"), [])?;
+    Ok((staging, target_dir))
 }
 
 #[test]
 fn json_inventory_keeps_its_current_shape() {
-    let (_staging, target_dir) = staged_target_dir();
+    let (_staging, target_dir) =
+        staged_target_dir().expect("suite marker staging should be created");
 
     let output = Command::new(env!("CARGO_BIN_EXE_whitaker"))
         .args(["ls", "--json", "--target-dir"])
