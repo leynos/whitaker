@@ -15,6 +15,16 @@ pub type EnvTestGuard = parking_lot::ReentrantMutexGuard<'static, ()>;
 /// staging in debug binaries.
 pub const TEST_STAGE_SUITE_ENV: &str = "WHITAKER_INSTALLER_TEST_STAGE_SUITE";
 
+/// Environment variable that relocates Whitaker's data directory in debug
+/// builds.
+///
+/// The root install resolves its data directory from a platform API that
+/// ignores `XDG_DATA_HOME` on Windows, so an integration test that drives the
+/// binary cannot keep the installation record inside its own temporary
+/// directory by environment alone. Debug builds honour this variable for that
+/// case; release builds ignore it, so it cannot move a real installation.
+pub const TEST_DATA_HOME_ENV: &str = "WHITAKER_INSTALLER_TEST_DATA_HOME";
+
 /// Environment variable naming a Clippy snapshot manifest that debug
 /// installer binaries use instead of the embedded one.
 ///

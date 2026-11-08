@@ -21,6 +21,21 @@ fn xdg_bin_home() -> Option<PathBuf> {
         .filter(|p| p.is_absolute())
 }
 
+/// Returns the data-directory override that debug builds honour.
+///
+/// Integration tests drive the real binary, which resolves its data directory
+/// from a platform API that ignores `XDG_DATA_HOME` on Windows. The override
+/// lets such a test keep the installation record inside its own temporary
+/// directory. Release builds ignore it, so it cannot relocate a real install.
+fn test_data_home() -> Option<PathBuf> {
+    if !cfg!(debug_assertions) {
+        return None;
+    }
+    std::env::var_os(crate::test_support::TEST_DATA_HOME_ENV)
+        .map(PathBuf::from)
+        .filter(|path| path.is_absolute())
+}
+
 /// Abstraction for resolving platform-specific base directories.
 ///
 /// This trait enables dependency injection for directory resolution,
@@ -81,6 +96,12 @@ pub trait BaseDirs {
 /// and `directories_next::ProjectDirs` to provide consistent cross-platform
 /// directory resolution.
 ///
+/// Debug builds honour [`crate::test_support::TEST_DATA_HOME_ENV`] for
+/// [`BaseDirs::whitaker_data`], so an integration test that drives the binary
+/// can keep the installation record in a temporary directory on platforms
+/// whose data directory comes from an API that ignores `XDG_DATA_HOME`.
+/// Release builds ignore the variable.
+///
 /// # Examples
 ///
 /// ```no_run
@@ -126,7 +147,9 @@ impl BaseDirs for SystemBaseDirs {
         self.home().map(|h| h.join(".local").join("bin"))
     }
 
-    fn whitaker_data(&self) -> Option<PathBuf> { Some(self.project_dirs.data_dir().to_owned()) }
+    fn whitaker_data(&self) -> Option<PathBuf> {
+        test_data_home().or_else(|| Some(self.project_dirs.data_dir().to_owned()))
+    }
 }
 
 #[cfg(test)]
@@ -185,6 +208,44 @@ mod tests {
                 Some(PathBuf::from("/custom/share/whitaker-bootstrap"))
             );
         });
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    fn debug_builds_honour_the_data_home_override() {
+        let _guard = env_test_guard();
+        let override_root = std::env::temp_dir().join("whitaker-test-data-home");
+        let expected = override_root.clone();
+
+        temp_env::with_var(
+            crate::test_support::TEST_DATA_HOME_ENV,
+            Some(&override_root),
+            || {
+                let dirs = SystemBaseDirs::new().expect("failed to create SystemBaseDirs");
+
+                assert_eq!(dirs.whitaker_data(), Some(expected));
+            },
+        );
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    fn a_relative_data_home_override_is_ignored() {
+        let _guard = env_test_guard();
+
+        temp_env::with_var(
+            crate::test_support::TEST_DATA_HOME_ENV,
+            Some("relative/data"),
+            || {
+                let dirs = SystemBaseDirs::new().expect("failed to create SystemBaseDirs");
+                let data_dir = dirs.whitaker_data().expect("data dir");
+
+                assert!(
+                    data_dir.is_absolute(),
+                    "a relative override must not replace the platform data directory"
+                );
+            },
+        );
     }
 
     #[test]

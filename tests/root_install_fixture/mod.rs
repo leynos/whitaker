@@ -14,8 +14,8 @@ use std::{
 use tempfile::TempDir;
 use whitaker_installer::{
     builder::{library_extension, library_prefix},
-    dirs::BaseDirs,
-    test_support::TEST_STAGE_SUITE_ENV,
+    dirs::{BaseDirs, SystemBaseDirs},
+    test_support::{TEST_DATA_HOME_ENV, TEST_STAGE_SUITE_ENV},
     test_utils::SnapshotFixture,
 };
 
@@ -110,10 +110,11 @@ pub const SEEDED_BINARY_BYTES: &[u8] = b"#!/bin/sh\nprintf 'pre-existing whitake
 /// a root install leaves an existing binary alone rather than replacing it with
 /// a wrapper.
 ///
-/// The data root cannot be redirected everywhere: Windows and macOS resolve it
-/// from a platform API that ignores `XDG_DATA_HOME`, so on those platforms the
-/// record assertion reads the directory the install genuinely wrote rather than
-/// a fixture-owned one.
+/// The data root is named through the installer's debug-only override rather
+/// than `XDG_DATA_HOME`, because Windows resolves its data directory from a
+/// platform API that ignores that variable. The override keeps the
+/// installation record inside the fixture's temporary tree on every platform,
+/// so the test cannot alter a record a user already has.
 ///
 /// The bin root has the same limit on Windows, where the home directory comes
 /// from the profile known folder and ignores `HOME`. The install therefore
@@ -121,7 +122,8 @@ pub const SEEDED_BINARY_BYTES: &[u8] = b"#!/bin/sh\nprintf 'pre-existing whitake
 /// prove the no-wrapper policy on Unix only; on Windows they still hold, but
 /// only because the install wrote nothing into the fixture directory. Seeding
 /// the real profile directory instead would risk overwriting a user's own
-/// `whitaker` executable, so the fixture does not do that.
+/// `whitaker` executable, so the fixture does not do that. Nothing writes to
+/// the real bin root either, because a root install generates no scripts.
 pub struct InstallFixture {
     channel: String,
     snapshot: SnapshotFixture,
@@ -197,27 +199,14 @@ impl InstallFixture {
         }
     }
 
-    /// The data root the child process resolves under the fixture's environment.
+    /// The data root the child process resolves for this fixture.
     ///
-    /// Linux honours the `XDG_DATA_HOME` redirect the command sets, so the root
-    /// stays inside the fixture. Windows and macOS resolve the data root from a
-    /// platform API that ignores that variable, so asking the same resolver the
-    /// child uses is the only way to name the directory the record lands in.
-    #[cfg(target_os = "linux")]
-    fn data_root(&self) -> PathBuf { self.data_home.path().join("whitaker") }
-
-    /// The data root the child process resolves under the fixture's environment.
-    ///
-    /// Windows and macOS resolve the data root from a platform API that ignores
-    /// the `XDG_DATA_HOME` the command sets, so the record lands outside the
-    /// fixture. Asking the same resolver the child uses names that directory
-    /// instead of assuming the redirect took effect.
-    #[cfg(not(target_os = "linux"))]
-    fn data_root(&self) -> PathBuf {
-        whitaker_installer::dirs::SystemBaseDirs::new()
-            .and_then(|dirs| dirs.whitaker_data())
-            .unwrap_or_else(|| self.data_home.path().join("whitaker"))
-    }
+    /// The command names it through the installer's debug-only override, so
+    /// the record lands in the fixture's temporary tree on every platform. The
+    /// assertion that reads this root therefore also proves the child honoured
+    /// the override rather than falling back to the user's real data directory.
+    #[must_use]
+    pub fn data_root(&self) -> PathBuf { self.data_home.path().join("whitaker") }
 
     /// Build the `whitaker install` command for an offline fixture install.
     ///
@@ -236,6 +225,7 @@ impl InstallFixture {
             .arg(self.target_dir.path())
             .current_dir(env!("CARGO_MANIFEST_DIR"))
             .env(TEST_STAGE_SUITE_ENV, "1")
+            .env(TEST_DATA_HOME_ENV, self.data_root())
             .env("XDG_DATA_HOME", self.data_home.path())
             .env("XDG_BIN_HOME", self.bin_home.path())
             .env("HOME", self.home.path())
@@ -253,6 +243,31 @@ impl InstallFixture {
         self.command()
             .output()
             .map_err(|error| format!("the root install process should start: {error}"))
+    }
+}
+
+/// Read the installation record of the real platform data directory.
+///
+/// Comparing this before and after the install shows that isolating the child
+/// left any record a developer already has untouched. A missing record is
+/// `None` rather than an error, because that is the normal state on a machine
+/// that has never installed Whitaker.
+///
+/// # Errors
+///
+/// Returns a description of a data directory that cannot be resolved or a
+/// record that exists but cannot be read.
+pub fn real_record_contents() -> Result<Option<Vec<u8>>, String> {
+    let dirs = SystemBaseDirs::new()
+        .ok_or_else(|| "the platform directories should resolve".to_owned())?;
+    let data = dirs
+        .whitaker_data()
+        .ok_or_else(|| "the platform data directory should be available".to_owned())?;
+    let path = data.join("installed_lint_paths.json");
+    match std::fs::read(&path) {
+        Ok(contents) => Ok(Some(contents)),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(format!("{} should be readable: {error}", path.display())),
     }
 }
 

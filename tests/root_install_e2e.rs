@@ -19,6 +19,7 @@ use root_install_fixture::{
     SEEDED_BINARY_BYTES,
     SEEDED_BINARY_NAME,
     expected_library_path,
+    real_record_contents,
     toolchain_is_available,
 };
 use whitaker_installer::installation_record::installed_paths;
@@ -98,6 +99,22 @@ fn assert_recorded_staging_directory(fixture: &InstallFixture) -> Result<(), Str
         "the installation record should name {}, got {recorded:?}",
         expected.display()
     ))
+}
+
+/// Fail unless the install left the real platform installation record alone.
+///
+/// The fixture isolates the child's data root, so a record a developer already
+/// has must come out of the run byte-for-byte unchanged.
+///
+/// # Errors
+///
+/// Returns a description of the changed or unreadable record.
+fn assert_real_record_unchanged(before: Option<&[u8]>) -> Result<(), String> {
+    let after = real_record_contents()?;
+    if after.as_deref() == before {
+        return Ok(());
+    }
+    Err("the root install changed the real installation record outside the fixture".to_owned())
 }
 
 /// Fail unless the root install wrote no compatibility wrapper scripts.
@@ -188,9 +205,13 @@ fn root_install_stages_the_suite_and_records_its_directory() {
         return;
     }
 
+    let real_record_before =
+        real_record_contents().expect("the real installation record should be readable");
     let output = fixture.run().expect("the root install process should run");
 
     assert_install_succeeded(&output).expect("install should succeed");
+    assert_real_record_unchanged(real_record_before.as_deref())
+        .expect("the root install should not touch the real installation record");
     assert_staged_library(&fixture).expect("the suite library should be staged");
     assert_recorded_staging_directory(&fixture)
         .expect("the installation record should name the staging directory");
