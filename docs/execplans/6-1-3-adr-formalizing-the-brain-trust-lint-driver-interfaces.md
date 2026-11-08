@@ -2623,17 +2623,29 @@ Normative rules:
    an internal compiler error when the compilation is otherwise clean
    (`rustc_errors/src/lib.rs:1480-1486`), and a warn-only lint never emits a
    real error, so *every* delayed bug it creates aborts the build. Unresolvable
-   input is reported through `log::debug!` and the run's counters. The
-   precedent to follow is `crates/module_max_lines/src/driver.rs:86-93`, which
-   logs and returns. **Known limitation**: four existing call sites carry this
-   hazard today — `crates/bumpy_road_function/src/driver/mod.rs:224` and
-   `:235`, and `segment_builder.rs:164` and `:186` — recorded as follow-up work.
+   input is reported through the `log::debug!` event specified in rule 9 —
+   never through `tracing`, for the reason given there — and the run's
+   counters. The precedent to follow is
+   `crates/module_max_lines/src/driver.rs:86-93`, which logs and returns.
+   **Known limitation**: four existing call sites carry this hazard today —
+   `crates/bumpy_road_function/src/driver/mod.rs:224` and `:235`, and
+   `segment_builder.rs:164` and `:186` — recorded as follow-up work.
 9. **Observability.** Every drop emits one `log::debug!` naming the subject and
    the reason, matching the discipline in
    `crates/rstest_helper_should_be_fixture/src/collector.rs:140-144`. The
    emitted run carries an unresolved-subject count per reason **even when it is
    zero**, so "clean" is falsifiably different from "resolution broken". `VP-5`
-   is the obligation this creates.
+   is the obligation this creates. **`log`, not `tracing`**, deliberately
+   against the `AGENTS.md` preference, because `log` is the only sink installed
+   in a lint driver: Dylint generates the driver's `main` and calls
+   `env_logger::init()` there (`dylint` 6.0.1, `src/driver_builder.rs:35`).
+   This workspace builds `tracing` with `default-features = false` and only
+   `attributes` and `std` (`Cargo.toml:31`), leaving the `log` bridge off, and
+   no `tracing-subscriber` exists in the tree, so a `tracing::debug!` here
+   would compile and silently emit nothing. Structured content is carried as
+   named fields inside the `log` message (`subject`, `reason`, and the file
+   identifier where one resolved), following the `target:`-tagged form at
+   `crates/module_max_lines/src/driver.rs:86-93`.
 10. **`uriBaseId`.** Brain trust results emit `artifactLocation.uri` as the
     repository-relative path with `uriBaseId` absent. SARIF §3.4.4 permits
     this, and GitHub code scanning documents a repository-root-relative path as
@@ -3639,5 +3651,65 @@ from its source rather than inferred from its name: `excluded_paths` matches on
 segment boundaries against a crate-anchored module path, and nothing in that
 lint matches on filenames. That is why the plan says "per-file (module) basis"
 rather than claiming a filename-based exclusion that does not exist.
+
+Nothing else changed. No code, no manifest, no test.
+
+### Round 11 — two hosted-review findings, one accepted and one corrected, 2026-11-08
+
+A hosted Codex review of `4104888` raised two findings against ADR 005. Both
+were verified against source before either was actioned; they did not resolve
+the same way.
+
+**Finding 1, accepted: the exclusive end-column formula was wrong.** The ADR
+said a single-line region's `endColumn` "is one more than `startColumn` plus
+the character count". For the `bc` region the same paragraph offers — starting
+at column 2 and two characters wide — that yields 5, while the sentence above
+it has already established that `startColumn: 2, endColumn: 4` spans `bc`. The
+formula contradicted its own worked example by exactly one, and would have put
+one extra character in every non-empty single-line region had an implementer
+followed it. Corrected to `startColumn + character count`, both axes named as
+UTF-16 code units.
+
+**What let this survive nine rounds.** Every earlier check of this paragraph
+tallied doctest-style *literals*: the `2`, the `4`, and the two characters
+`bc`. The defect lived in the prose relation *between* them, which no literal
+check reads. The lesson is that a normative formula needs to be evaluated, not
+just bracketed — the fix now states the arithmetic explicitly (`2 + 2 = 4`) so
+the next reader can check it without reconstructing it.
+
+**Finding 2, verified and only partly accepted: `tracing` cannot be the sink
+here.** The finding observed correctly that `AGENTS.md` prefers `tracing` over
+direct `log` macros, and asked that rules 8 and 9 be rewritten to specify
+`tracing::debug!` with subject and reason fields. The observation about the
+house style is right; the prescribed remedy would have been a regression, and
+the reason is checkable in three places:
+
+- Dylint generates each lint driver's `main` and calls `env_logger::init()` in
+  it (`dylint` 6.0.1, `src/driver_builder.rs:35`). `log` is the sink that is
+  actually installed at run time.
+- This workspace builds `tracing` with `default-features = false` and only the
+  `attributes` and `std` features (`Cargo.toml:31`), so `tracing`'s `log`
+  bridge — which is what would forward events to that `env_logger` — is off.
+  `cargo tree -e features -i tracing --workspace` confirms it: no
+  `tracing feature "log"` appears anywhere in the graph.
+- No `tracing-subscriber` appears in `Cargo.lock` at all, and `AGENTS.md`
+  forbids a library installing a global subscriber, so a lint crate could not
+  wire one up even if it wanted to.
+
+So `tracing::debug!` in `resolve_subject_location` would compile, pass clippy,
+and silently discard every event — producing precisely the "clean looks
+identical to broken" ambiguity that rule 9's counted reasons exist to remove.
+`AGENTS.md`'s own rule is about preferring structured events over `println!`
+and unstructured text; it does not require a sink that drops the message.
+
+**What changed instead.** Rules 8 and 9 now keep `log::debug!` and *justify* it
+in place, naming the Dylint `env_logger` line, the workspace feature selection,
+and the absence of any subscriber — a reader who wonders why the house style is
+not followed gets the reason beside the rule rather than in a review thread.
+The structured content the finding asked for is preserved by carrying `subject`
+and `reason` as named fields inside the `log` message, following the existing
+`target:`-tagged form at `crates/module_max_lines/src/driver.rs:86-93`. The
+mirror of rules 8 and 9 in `BTD-REQ-01` above carries the same correction and
+the same justification.
 
 Nothing else changed. No code, no manifest, no test.
