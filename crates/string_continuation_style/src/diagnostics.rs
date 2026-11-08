@@ -2,7 +2,6 @@
 //! checks, with applicability selected from the lint configuration.
 
 use rustc_lint::{Applicability, EarlyContext, LintContext, errors::DiagDecorator};
-use whitaker_lint_core::SharedConfig;
 use whitaker_common::i18n::{
     AttrKey,
     DiagnosticMessageSet,
@@ -15,6 +14,7 @@ use whitaker_common::i18n::{
     safe_resolve_label,
     safe_resolve_message_set,
 };
+use whitaker_lint_core::SharedConfig;
 
 use crate::{
     config::{ApplicabilityMode, LINT_NAME},

@@ -203,4 +203,3 @@ fn aliased_test_crate_non_companion_does_not_exempt_parent_function() {
         &["--test", "-D", "no_unwrap_or_else_panic"],
     ));
 }
-// weave: run 'weave explain crates/no_unwrap_or_else_panic/src/lib_ui_tests.rs' for per-hunk detail, 'weave check' to verify your resolution
