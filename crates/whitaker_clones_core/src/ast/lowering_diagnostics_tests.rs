@@ -5,9 +5,14 @@
 //! fields. The decisions that choose a diagnostic are covered by
 //! `lowering_tests`; these cases prove the report names the same facts, which
 //! is what an operator reading the log actually depends on.
+//!
+//! The helpers are exercised through small parameterized tables: the two
+//! wrappers share a shape, and the four budget reports differ only in the
+//! field they name, so a table states that once rather than four times.
 
 use std::io::{Read, Seek, SeekFrom};
 
+use rstest::rstest;
 use tracing_subscriber::fmt;
 
 use super::{
@@ -21,6 +26,15 @@ use super::{
     log_span_validation_failure,
 };
 use crate::{AstError, ByteSpan};
+
+/// A reporting wrapper that logs one error and returns it unchanged.
+type AstReporter = fn(AstError) -> AstError;
+
+/// A factory that builds the error a case should report.
+type ErrorFactory = fn() -> AstError;
+
+/// A budget reporter that logs its usage and limit.
+type BudgetReporter = fn(ByteSpan, usize, usize);
 
 /// Render the events emitted while `run` executes, without timestamps' noise.
 fn capture_events(run: impl FnOnce()) -> String {
@@ -41,7 +55,7 @@ fn capture_events(run: impl FnOnce()) -> String {
     output
 }
 
-/// Assert `output` names `message` and every one of `fields`.
+/// Assert `output` names `message`, `level`, and every one of `fields`.
 fn assert_reports(output: &str, level: &str, message: &str, fields: &[&str]) {
     assert!(
         output.contains(message),
@@ -56,112 +70,90 @@ fn assert_reports(output: &str, level: &str, message: &str, fields: &[&str]) {
     }
 }
 
-#[test]
-fn span_validation_failure_reports_the_offsets() {
-    let error = AstError::SpanOutOfBounds {
+/// A span covering the whole six-byte fixture text.
+fn whole_span() -> ByteSpan { ByteSpan::new("abcdef", 0, 6).expect("span should cover text") }
+
+/// A span covering bytes 1..5 of the six-byte fixture text.
+fn inner_span() -> ByteSpan { ByteSpan::new("abcdef", 1, 5).expect("span should cover text") }
+
+/// An out-of-bounds span error whose bounds and length are distinguishable.
+fn out_of_bounds_error() -> AstError {
+    AstError::SpanOutOfBounds {
         start: 2,
         end: 9,
         len: 7,
-    };
+    }
+}
 
+/// An empty-span error whose offset is distinguishable from the other cases.
+fn empty_span_error() -> AstError { AstError::EmptySpan { offset: 3 } }
+
+/// A non-character-boundary error whose offset is distinguishable.
+fn non_char_boundary_error() -> AstError { AstError::NonCharBoundary { offset: 6 } }
+
+/// Run `report` on a fresh error and assert it returns the same error.
+fn assert_error_report(
+    report: AstReporter,
+    make_error: ErrorFactory,
+    message: &str,
+    fields: &[&str],
+) {
     let output = capture_events(|| {
-        let returned = log_span_validation_failure(error);
+        let returned = report(make_error());
         assert_eq!(
             returned,
-            AstError::SpanOutOfBounds {
-                start: 2,
-                end: 9,
-                len: 7,
-            },
+            make_error(),
             "the helper returns its input unchanged"
         );
     });
+    assert_reports(&output, "ERROR", message, fields);
+}
 
-    assert_reports(
-        &output,
-        "ERROR",
-        "AST span lies outside the supplied source text",
+/// Check that an out-of-bounds span reports its bounds and length.
+#[rstest]
+#[case(
+    log_span_validation_failure,
+    "AST span lies outside the supplied source text"
+)]
+#[case(log_covering_failure, "no AST syntax node covers the requested span")]
+fn span_out_of_bounds_reports_the_offsets(#[case] report: AstReporter, #[case] message: &str) {
+    assert_error_report(
+        report,
+        out_of_bounds_error,
+        message,
         &["start=2", "end=9", "len=7"],
     );
 }
 
-#[test]
-fn span_validation_failure_reports_other_errors_by_debug() {
-    let error = AstError::EmptySpan { offset: 3 };
-
-    let output = capture_events(|| {
-        let returned = log_span_validation_failure(error);
-        assert_eq!(
-            returned,
-            AstError::EmptySpan { offset: 3 },
-            "the helper returns its input unchanged"
-        );
-    });
-
-    assert_reports(
-        &output,
-        "ERROR",
-        "AST span validation failed",
-        &["EmptySpan", "offset: 3"],
-    );
+/// Check that any other failure reports the error itself.
+#[rstest]
+#[case(
+    log_span_validation_failure,
+    empty_span_error,
+    "AST span validation failed",
+    &["EmptySpan", "offset: 3"]
+)]
+#[case(
+    log_covering_failure,
+    non_char_boundary_error,
+    "AST covering-node selection failed",
+    &["NonCharBoundary", "offset: 6"]
+)]
+fn other_errors_are_reported_by_debug(
+    #[case] report: AstReporter,
+    #[case] make_error: ErrorFactory,
+    #[case] message: &str,
+    #[case] fields: &[&str],
+) {
+    assert_error_report(report, make_error, message, fields);
 }
 
-#[test]
-fn covering_failure_reports_the_offsets() {
-    let error = AstError::SpanOutOfBounds {
-        start: 4,
-        end: 12,
-        len: 11,
-    };
-
-    let output = capture_events(|| {
-        let returned = log_covering_failure(error);
-        assert_eq!(
-            returned,
-            AstError::SpanOutOfBounds {
-                start: 4,
-                end: 12,
-                len: 11,
-            },
-            "the helper returns its input unchanged"
-        );
-    });
-
-    assert_reports(
-        &output,
-        "ERROR",
-        "no AST syntax node covers the requested span",
-        &["start=4", "end=12", "len=11"],
-    );
-}
-
-#[test]
-fn covering_failure_reports_other_errors_by_debug() {
-    let error = AstError::NonCharBoundary { offset: 6 };
-
-    let output = capture_events(|| {
-        let returned = log_covering_failure(error);
-        assert_eq!(
-            returned,
-            AstError::NonCharBoundary { offset: 6 },
-            "the helper returns its input unchanged"
-        );
-    });
-
-    assert_reports(
-        &output,
-        "ERROR",
-        "AST covering-node selection failed",
-        &["NonCharBoundary", "offset: 6"],
-    );
-}
-
+/// Check that a lowering failure names the parser's error elements.
 #[test]
 fn lowering_failure_names_parser_errors() {
-    let span = ByteSpan::new("abcdef", 1, 5).expect("span should cover text");
-
     let output = capture_events(|| {
-        let returned = log_lowering_failure(span, AstError::UnparsableSpan { start: 1, end: 5 });
+        let returned =
+            log_lowering_failure(inner_span(), AstError::UnparsableSpan { start: 1, end: 5 });
         assert_eq!(
             returned,
             AstError::UnparsableSpan { start: 1, end: 5 },
@@ -177,12 +169,11 @@ fn lowering_failure_names_parser_errors() {
     );
 }
 
+/// Check that a tolerated lowering failure reports nothing.
 #[test]
 fn lowering_failure_stays_silent_for_a_tolerated_error() {
-    let span = ByteSpan::new("abcdef", 1, 5).expect("span should cover text");
-
     let output = capture_events(|| {
-        let returned = log_lowering_failure(span, AstError::TreeTooDeep { limit: 64 });
+        let returned = log_lowering_failure(inner_span(), AstError::TreeTooDeep { limit: 64 });
         assert_eq!(
             returned,
             AstError::TreeTooDeep { limit: 64 },
@@ -196,11 +187,10 @@ fn lowering_failure_stays_silent_for_a_tolerated_error() {
     );
 }
 
+/// Check that tolerated parser recovery errors are reported with their count.
 #[test]
 fn parser_recovery_reports_the_error_count() {
-    let span = ByteSpan::new("abcdef", 1, 5).expect("span should cover text");
-
-    let output = capture_events(|| log_parser_recovery(span, 4));
+    let output = capture_events(|| log_parser_recovery(inner_span(), 4));
 
     assert_reports(
         &output,
@@ -210,58 +200,35 @@ fn parser_recovery_reports_the_error_count() {
     );
 }
 
-#[test]
-fn selection_depth_budget_reports_the_budget() {
-    let span = ByteSpan::new("abcdef", 0, 6).expect("span should cover text");
+/// Check that every exhausted budget names its usage field and the limit.
+#[rstest]
+#[case(
+    log_selection_depth_budget,
+    "AST covering-node selection exceeded the depth budget",
+    "depth"
+)]
+#[case(
+    log_selection_node_budget,
+    "AST covering-node selection exceeded the node budget",
+    "node_count"
+)]
+#[case(
+    log_lowering_depth_budget,
+    "AST lowering exceeded the depth budget",
+    "depth"
+)]
+#[case(
+    log_lowering_node_budget,
+    "AST lowering exceeded the normalized-node budget",
+    "normalized_node_count"
+)]
+fn exhausted_budget_reports_the_usage_and_limit(
+    #[case] report: BudgetReporter,
+    #[case] message: &str,
+    #[case] field: &str,
+) {
+    let usage = format!("{field}=9");
+    let output = capture_events(|| report(whole_span(), 9, 8));
 
-    let output = capture_events(|| log_selection_depth_budget(span, 9, 8));
-
-    assert_reports(
-        &output,
-        "ERROR",
-        "AST covering-node selection exceeded the depth budget",
-        &["depth=9", "limit=8"],
-    );
-}
-
-#[test]
-fn selection_node_budget_reports_the_budget() {
-    let span = ByteSpan::new("abcdef", 0, 6).expect("span should cover text");
-
-    let output = capture_events(|| log_selection_node_budget(span, 130, 128));
-
-    assert_reports(
-        &output,
-        "ERROR",
-        "AST covering-node selection exceeded the node budget",
-        &["node_count=130", "limit=128"],
-    );
-}
-
-#[test]
-fn lowering_depth_budget_reports_the_budget() {
-    let span = ByteSpan::new("abcdef", 0, 6).expect("span should cover text");
-
-    let output = capture_events(|| log_lowering_depth_budget(span, 33, 32));
-
-    assert_reports(
-        &output,
-        "ERROR",
-        "AST lowering exceeded the depth budget",
-        &["depth=33", "limit=32"],
-    );
-}
-
-#[test]
-fn lowering_node_budget_reports_the_budget() {
-    let span = ByteSpan::new("abcdef", 0, 6).expect("span should cover text");
-
-    let output = capture_events(|| log_lowering_node_budget(span, 2049, 2048));
-
-    assert_reports(
-        &output,
-        "ERROR",
-        "AST lowering exceeded the normalized-node budget",
-        &["normalized_node_count=2049", "limit=2048"],
-    );
+    assert_reports(&output, "ERROR", message, &[usage.as_str(), "limit=8"]);
 }
