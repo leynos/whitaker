@@ -83,6 +83,7 @@ fn stub_resolve_destination_dir(
 fn stub_attempt_prebuilt(_config: &PrebuiltConfig<'_>, _stderr: &mut dyn Write) -> PrebuiltResult {
     PrebuiltResult::Success {
         staging_path: Utf8PathBuf::from("/tmp/whitaker-test-staging"),
+        delivered: Vec::new(),
     }
 }
 
@@ -90,6 +91,7 @@ fn stub_prune_prebuilt_libraries(
     _staging_path: &Utf8Path,
     _toolchain_channel: &str,
     _requested_crates: &[CrateName],
+    _delivered: &[String],
 ) -> Result<()> {
     PRUNE_HOOK_CALLED.store(true, Ordering::SeqCst);
     Err(InstallerError::StagingFailed {
@@ -108,6 +110,21 @@ fn staging_fixture() -> StagingFixture {
         staging_path,
         toolchain: "nightly-2026-05-28",
     }
+}
+
+/// Every file name currently in `staging_path`: what an archive that delivered
+/// exactly these files would report.
+fn staged_names(staging_path: &Utf8Path) -> Vec<String> {
+    fs::read_dir(staging_path.as_std_path())
+        .expect("staging directory should be readable")
+        .map(|entry| {
+            entry
+                .expect("entry")
+                .file_name()
+                .to_string_lossy()
+                .into_owned()
+        })
+        .collect()
 }
 
 fn create_staged_library(
@@ -173,7 +190,8 @@ fn prune_prebuilt_libraries_keeps_only_requested_crates(
             "empty requested-crate list should default to suite crate"
         );
     }
-    prune_prebuilt_libraries(&staging_path, toolchain, &requested_crates)
+    let delivered = staged_names(&staging_path);
+    prune_prebuilt_libraries(&staging_path, toolchain, &requested_crates, &delivered)
         .expect("pruning should succeed");
 
     for crate_name in retained {
@@ -224,7 +242,9 @@ fn prune_prebuilt_libraries_removes_unknown_crates_registered_by_the_suite(
     let unknown =
         create_staged_library(&staging_path, "a_crate_added_after_this_release", toolchain);
 
-    prune_prebuilt_libraries(&staging_path, toolchain, &[]).expect("pruning should succeed");
+    let delivered = staged_names(&staging_path);
+    prune_prebuilt_libraries(&staging_path, toolchain, &[], &delivered)
+        .expect("pruning should succeed");
 
     assert!(suite.exists(), "the suite must survive");
     assert!(!constituent.exists(), "a known constituent must be removed");
@@ -253,10 +273,12 @@ fn prune_prebuilt_libraries_keeps_an_unknown_crate_that_was_requested(
         create_staged_library(&staging_path, "a_crate_added_after_this_release", toolchain);
     let suite = create_staged_library(&staging_path, SUITE_CRATE, toolchain);
 
+    let delivered = staged_names(&staging_path);
     prune_prebuilt_libraries(
         &staging_path,
         toolchain,
         &[CrateName::from("a_crate_added_after_this_release")],
+        &delivered,
     )
     .expect("pruning should succeed");
 
@@ -549,13 +571,50 @@ fn prune_prebuilt_libraries_reports_a_requested_library_the_archive_lacks(
         ..
     } = staging_fixture;
     create_staged_library(&staging_path, SUITE_CRATE, toolchain);
+    let delivered = staged_names(&staging_path);
 
     let error = prune_prebuilt_libraries(
         &staging_path,
         toolchain,
         &[CrateName::from("string_continuation_style")],
+        &delivered,
     )
     .expect_err("a missing requested library must not pass as an install");
+
+    assert!(
+        matches!(&error, InstallerError::StagingFailed { reason } if reason.contains("string_continuation_style")),
+        "unexpected error: {error:?}"
+    );
+}
+
+/// The directory is reused between installs (install-whitaker restores it from
+/// cache), so a stale library from an earlier install must not satisfy the
+/// check when this archive did not deliver it.
+#[rstest]
+fn prune_prebuilt_libraries_ignores_a_stale_requested_library_the_archive_did_not_deliver(
+    staging_fixture: StagingFixture,
+) {
+    let StagingFixture {
+        staging_path,
+        toolchain,
+        ..
+    } = staging_fixture;
+    create_staged_library(&staging_path, "string_continuation_style", toolchain);
+    let suite = create_staged_library(&staging_path, SUITE_CRATE, toolchain);
+    let delivered = vec![
+        suite
+            .file_name()
+            .expect("suite library has a file name")
+            .to_owned(),
+    ];
+
+    let error = prune_prebuilt_libraries(
+        &staging_path,
+        toolchain,
+        &[CrateName::from("string_continuation_style")],
+        &delivered,
+    )
+    .expect_err("a stale file must not satisfy the requested-library check");
 
     assert!(
         matches!(&error, InstallerError::StagingFailed { reason } if reason.contains("string_continuation_style")),

@@ -155,7 +155,7 @@ pub(crate) fn try_prebuilt_installation(
 type DetectHostTargetFn = fn() -> Result<String>;
 type ResolveDestinationDirFn = fn(&dyn BaseDirs, &str, &str) -> Result<Utf8PathBuf>;
 type AttemptPrebuiltFn = fn(&PrebuiltConfig<'_>, &mut dyn Write) -> PrebuiltResult;
-type PruneLibrariesFn = fn(&Utf8Path, &str, &[CrateName]) -> Result<()>;
+type PruneLibrariesFn = fn(&Utf8Path, &str, &[CrateName], &[String]) -> Result<()>;
 
 #[derive(Clone, Copy)]
 struct PrebuiltInstallationHooks {
@@ -214,8 +214,11 @@ fn try_prebuilt_installation_with(
         allow_source_fallback: !context.policy.no_source_fallback,
     };
 
-    let staging_path = match attempt_prebuilt(&prebuilt_config, stderr) {
-        PrebuiltResult::Success { staging_path } => staging_path,
+    let (staging_path, delivered) = match attempt_prebuilt(&prebuilt_config, stderr) {
+        PrebuiltResult::Success {
+            staging_path,
+            delivered,
+        } => (staging_path, delivered),
         PrebuiltResult::Fallback { reason } => {
             // `attempt_prebuilt` has already written the unavailable notice
             // and, where a fallback is permitted, the fallback line. Repeating
@@ -233,6 +236,7 @@ fn try_prebuilt_installation_with(
         &staging_path,
         context.toolchain_channel,
         context.requested_crates,
+        &delivered,
     ) {
         return prebuilt_unavailable(
             context.policy,
@@ -291,15 +295,18 @@ fn staged_crate_name<'a>(file_name: &'a str, toolchain_channel: &str) -> Option<
 /// Files for another toolchain, and files that are not staged libraries, are
 /// left alone.
 ///
-/// After pruning, every requested crate must be staged. A selection the
-/// archive cannot satisfy (a crate that is not in the rolling archive, such as
-/// an experimental lint) is reported as an error, which the caller turns into
+/// After pruning, every requested crate must have been delivered by this
+/// archive (`delivered`) and be staged. The directory is reused between
+/// installs, so a library left by an earlier install must not satisfy the
+/// check. A selection the archive cannot satisfy (a crate that is not in the rolling archive, such
+/// as an experimental lint) is reported as an error, which the caller turns into
 /// a source-build fallback or, where that is forbidden, a refusal, rather than
 /// an install that succeeds without the lint.
 fn prune_prebuilt_libraries(
     staging_path: &Utf8Path,
     toolchain_channel: &str,
     requested_crates: &[CrateName],
+    delivered: &[String],
 ) -> Result<()> {
     let requested: HashSet<String> = requested_crate_names(requested_crates)
         .into_iter()
@@ -343,10 +350,8 @@ fn prune_prebuilt_libraries(
     let mut missing: Vec<&str> = requested_crate_names(requested_crates)
         .into_iter()
         .filter(|name| {
-            !staging_path
-                .join(staged_library_filename(name, toolchain_channel))
-                .as_std_path()
-                .is_file()
+            let staged = staged_library_filename(name, toolchain_channel);
+            !delivered.contains(&staged) || !staging_path.join(&staged).as_std_path().is_file()
         })
         .collect();
     if !missing.is_empty() {
