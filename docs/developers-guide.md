@@ -1177,7 +1177,7 @@ Table: Jobs that execute the Rust test suite.
 | Job               | Platform         | Command                          | Role                                      |
 | ----------------- | ---------------- | -------------------------------- | ----------------------------------------- |
 | `coverage-check`  | Ubicloud Linux   | `make coverage`, `make test-doc` | the single Linux pull-request execution   |
-| `coverage-upload` | Ubicloud Linux   | `make coverage`, `make test-doc` | the trunk baseline, on `main` pushes only |
+| `coverage-upload` | `ubuntu-24.04`   | `make coverage`, `make test-doc` | the trunk baseline, on `main` pushes only |
 | `windows-compat`  | `windows-latest` | `make test NEXTEST_PROFILE=ci`   | a different platform                      |
 
 `make coverage` delegates to the `make test` recipe and swaps the driver to
@@ -1296,7 +1296,7 @@ Table: Runner placement for repository-owned jobs.
 | ------------------------------------------------- | -------------------------- | --------------------------------------------------------------------------- | --------------------------------------- |
 | `coverage-check`                                  | `ci.yml`                   | `ubicloud-standard-2-ubuntu-2404`                                           | Blocking Linux gate                     |
 | `linux-full`                                      | `ci.yml`                   | `ubicloud-standard-2-ubuntu-2404`                                           | Blocking Linux gate; trunk cache writer |
-| `coverage-upload`                                 | `coverage-main.yml`        | `ubicloud-standard-2-ubuntu-2404`                                           | Trunk Linux gate and cache writer       |
+| `coverage-upload`                                 | `coverage-main.yml`        | `ubuntu-24.04`                                                              | Blocks no one; GitHub-hosted            |
 | `windows-compat`                                  | `ci.yml`                   | `windows-latest`                                                            | Ubicloud has no Windows image           |
 | `mutation`                                        | `mutation-testing.yml`     | Reusable workflow's own choice                                              | Nightly, not blocking                   |
 | `automerge`                                       | `dependabot-automerge.yml` | Reusable workflow's own choice                                              | API-bound                               |

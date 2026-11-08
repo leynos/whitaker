@@ -57,7 +57,8 @@ env:
   # holds the two alike.
   RUSTFLAGS: -D warnings
   RUSTDOCFLAGS: -D warnings
-  # Keep in step with ci.yml: one named constant for the Ubicloud shape.
+  # Keep in step with ci.yml: one named constant for the Linux lane shape. The
+  # hosted runner has more vCPUs; the bound is kept so memory stays inside 16 GB.
   LINUX_RUNNER_VCPUS: '2'
   # RUSTC_WRAPPER is deliberately absent. The shared Rust setup action now
   # exports it as the absolute path of the sccache it installed, and stands
@@ -69,7 +70,10 @@ env:
 
 jobs:
   coverage-upload:
-    runs-on: ubicloud-standard-2-ubuntu-2404
+    # A main coverage upload blocks no one's work, so it runs on a GitHub-hosted
+    # runner. The Ubuntu release is pinned because the tool cache keys below
+    # name it.
+    runs-on: ubuntu-24.04
     # The CodeScene token lives in this environment, whose deployment policy
     # admits `main` alone; the codescene environment contract holds it to
     # this job.
@@ -77,6 +81,10 @@ jobs:
     # Above the 300 m nextest global timeout plus a cold build and the work
     # either side of the suite; kept in step with ci.yml's coverage lane.
     timeout-minutes: 335
+    env:
+      # A hosted runner left to the setup action gets local-disk sccache; this
+      # asks for GitHub's cache service, as the Windows lane in ci.yml does.
+      SCCACHE_GHA_ENABLED: 'true'
     defaults:
       run:
         shell: bash
@@ -160,9 +168,9 @@ jobs:
         id: setup-rust
         uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
         with:
-          # Ubicloud only, so a missing cache proxy fails the job rather than
-          # letting sccache compile against local disk unnoticed.
-          expect-cache: ubicloud
+          # GitHub's cache service only, so a missing service fails the job
+          # rather than letting sccache compile against local disk unnoticed.
+          expect-cache: github
           cache-provider: external
           install-mold: 'true'
 

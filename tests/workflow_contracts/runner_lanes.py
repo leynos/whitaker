@@ -89,12 +89,12 @@ class RunnerLane(typ.NamedTuple):
 
 
 #: Every placement this repository puts on an Ubicloud runner, matrix legs
-#: included. The three whole jobs restate `UBICLOUD_JOBS`, and a contract
-#: holds the two lists to each other so neither can be extended alone.
+#: included. The whole jobs restate `UBICLOUD_JOBS` less `HOSTED_RUNNER_JOBS`,
+#: and a contract holds the lists to each other so neither can be extended
+#: alone.
 UBICLOUD_LANES: Final[tuple[RunnerLane, ...]] = (
     RunnerLane("ci.yml", "coverage-check"),
     RunnerLane("ci.yml", "linux-full"),
-    RunnerLane("coverage-main.yml", "coverage-upload"),
     RunnerLane("rolling-release.yml", "build-lints", "x86_64-unknown-linux-gnu"),
     RunnerLane("rolling-release.yml", "build-lints", "aarch64-unknown-linux-gnu"),
     RunnerLane(
