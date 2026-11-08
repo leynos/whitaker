@@ -12,11 +12,12 @@ use std::{
     time::Duration,
 };
 
-use super::{with_env_var, with_env_vars_selected};
+use super::{with_env_var, with_env_var_removed, with_env_vars_selected};
 
 const OVERLAPPING_KEY: &str = "WHITAKER_TEST_SUPPORT_OVERLAPPING";
 const SELECTED_KEY: &str = "WHITAKER_TEST_SUPPORT_SELECTED";
 const SELECTED_PANIC_KEY: &str = "WHITAKER_TEST_SUPPORT_SELECTED_PANIC";
+const SELECTED_PANIC_EXISTING_KEY: &str = "WHITAKER_TEST_SUPPORT_SELECTED_PANIC_EXISTING";
 const EMPTY_SELECTION_KEY: &str = "WHITAKER_TEST_SUPPORT_EMPTY_SELECTION";
 
 struct ReleaseOnDrop(Option<mpsc::Sender<()>>);
@@ -152,23 +153,25 @@ fn empty_selection_holds_the_lock_for_its_callback() {
     assert_eq!(std::env::var_os(EMPTY_SELECTION_KEY), original_value);
 }
 
-/// Check that a panicking selection restores its value and releases the lock.
+/// Check that a panicking selection restores both value shapes and releases
+/// the lock.
 ///
 /// The selection takes `temp_env`'s lock before applying anything, so a panic
-/// has to release it as well as restore the value; otherwise every later
-/// scoped mutation on any thread would block for ever.
+/// has to release it as well as restore every value: the originally absent one
+/// and the pre-existing one alike. A lock left held would block every later
+/// scoped mutation on any thread for ever.
 #[test]
 fn with_env_vars_selected_restores_and_releases_after_a_panic() {
-    let original_value = std::env::var_os(SELECTED_PANIC_KEY);
-    let result = catch_unwind(AssertUnwindSafe(|| {
-        with_env_vars_selected(
-            || vec![(SELECTED_PANIC_KEY, "temporary")],
-            || panic!("intentional test panic"),
-        );
-    }));
+    let absent_original = std::env::var_os(SELECTED_PANIC_KEY);
+    let existing_original = std::env::var_os(SELECTED_PANIC_EXISTING_KEY);
 
-    assert!(result.is_err());
-    assert_eq!(std::env::var_os(SELECTED_PANIC_KEY), original_value);
+    with_selection_panic_baseline(assert_selection_panic_restores_values);
+
+    assert_eq!(std::env::var_os(SELECTED_PANIC_KEY), absent_original);
+    assert_eq!(
+        std::env::var_os(SELECTED_PANIC_EXISTING_KEY),
+        existing_original
+    );
 
     let after_panic = spawn_scoped_mutation(SELECTED_PANIC_KEY, "after panic");
     let release = ReleaseOnDrop(Some(after_panic.release_sender.clone()));
@@ -176,7 +179,36 @@ fn with_env_vars_selected_restores_and_releases_after_a_panic() {
     release.release();
     after_panic.wait_for_restoration("the later mutation must restore its value");
     after_panic.join();
-    assert_eq!(std::env::var_os(SELECTED_PANIC_KEY), original_value);
+    assert_eq!(std::env::var_os(SELECTED_PANIC_KEY), absent_original);
+}
+
+/// Run `callback` with one key absent and another holding a known value.
+fn with_selection_panic_baseline(callback: impl FnOnce()) {
+    with_env_var_removed(SELECTED_PANIC_KEY, || {
+        with_env_var(SELECTED_PANIC_EXISTING_KEY, "original value", callback);
+    });
+}
+
+/// Panic inside a two-key selection and assert both value shapes restore.
+fn assert_selection_panic_restores_values() {
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        with_env_vars_selected(selected_panic_settings, || panic!("intentional test panic"));
+    }));
+
+    assert!(result.is_err());
+    assert!(std::env::var_os(SELECTED_PANIC_KEY).is_none());
+    assert_eq!(
+        std::env::var_os(SELECTED_PANIC_EXISTING_KEY).as_deref(),
+        Some(OsStr::new("original value"))
+    );
+}
+
+/// The two keys the panicking selection scopes, one absent, one pre-existing.
+fn selected_panic_settings() -> Vec<(&'static str, &'static str)> {
+    vec![
+        (SELECTED_PANIC_KEY, "temporary"),
+        (SELECTED_PANIC_EXISTING_KEY, "temporary"),
+    ]
 }
 
 /// Check that concurrent scoped mutations wait for the current callback.

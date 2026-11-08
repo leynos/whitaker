@@ -1621,9 +1621,18 @@ this target compiles the examples in the public API documentation. It passes
 `force-unstable-if-unmarked` makes it fail to load the library it tests.
 `DOCTEST_EXCLUDES` keeps out the crates whose doctests cannot compile without
 `#![feature(rustc_private)]`, leaving the packages that carry the documented
-public API. The recipe assigns `RUSTFLAGS` itself but not `RUSTDOCFLAGS`, so
-the rustdoc invocation inherits whatever the caller exported; the coverage
-workflow exports both for that reason.
+public API.
+
+The selector handed to `cargo test --doc` is `DOCTEST_CARGO_FLAGS`, whose
+default is `--workspace --all-features $(DOCTEST_EXCLUDES)`. Override it to run
+a smaller selection, for example
+`make test-doc DOCTEST_CARGO_FLAGS='-p whitaker_common'`. `CARGO_FLAGS` does
+not narrow doctests: this lane never reads it, so a caller who narrows
+`CARGO_FLAGS` still doctests the whole workspace.
+
+The recipe assigns `RUSTFLAGS` itself but not `RUSTDOCFLAGS`, so the rustdoc
+invocation inherits whatever the caller exported; the coverage workflow exports
+both for that reason.
 
 ## Module layout and test placement
 
