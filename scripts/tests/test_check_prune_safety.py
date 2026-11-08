@@ -73,10 +73,17 @@ def _publish(directory: Path, libraries: list[str], manifest: list[str] | None =
     )
 
 
+def _check(repository: Path, directory: Path, tag: str = "v0.0.1") -> int:
+    """Run the checker's entry point against ``directory`` and return its status."""
+    return checker.main(
+        ["--installer-tag", tag, "--repository", str(repository), str(directory)]
+    )
+
+
 def test_suite_only_after_prune_passes(repository: Path, tmp_path: Path) -> None:
     """An archive of known crates plus the suite is safe."""
     _publish(tmp_path / "dist", [*OLD_CRATES, "whitaker_suite"])
-    status = checker.main(["--installer-tag", "v0.0.1", "--repository", str(repository), str(tmp_path / "dist")])
+    status = _check(repository, tmp_path / "dist")
     assert status == 0
 
 
@@ -85,7 +92,7 @@ def test_unknown_standalone_library_fails(
 ) -> None:
     """The #565 shape: a crate the installer cannot prune survives and fails."""
     _publish(tmp_path / "dist", [*OLD_CRATES, "newcomer", "whitaker_suite"])
-    status = checker.main(["--installer-tag", "v0.0.1", "--repository", str(repository), str(tmp_path / "dist")])
+    status = _check(repository, tmp_path / "dist")
     assert status == 1
     assert "newcomer" in capsys.readouterr().err
 
@@ -93,31 +100,21 @@ def test_unknown_standalone_library_fails(
 def test_archive_without_suite_fails(repository: Path, tmp_path: Path) -> None:
     """An archive that leaves nothing after the prune is also refused."""
     _publish(tmp_path / "dist", list(OLD_CRATES))
-    status = checker.main(["--installer-tag", "v0.0.1", "--repository", str(repository), str(tmp_path / "dist")])
+    status = _check(repository, tmp_path / "dist")
     assert status == 1
-
-
-def test_manifest_disagreeing_with_archive_fails(
-    repository: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    """A manifest naming a library the archive lacks is refused."""
-    _publish(tmp_path / "dist", [*OLD_CRATES, "whitaker_suite"], manifest=["libalpha.so"])
-    status = checker.main(["--installer-tag", "v0.0.1", "--repository", str(repository), str(tmp_path / "dist")])
-    assert status == 1
-    assert "manifest" in capsys.readouterr().err
 
 
 def test_missing_tag_is_an_error_not_a_pass(repository: Path, tmp_path: Path) -> None:
     """Failing to read the installer's list must stop the publish."""
     _publish(tmp_path / "dist", [*OLD_CRATES, "whitaker_suite"])
-    status = checker.main(["--installer-tag", "v9.9.9", "--repository", str(repository), str(tmp_path / "dist")])
+    status = _check(repository, tmp_path / "dist", "v9.9.9")
     assert status == 2
 
 
 def test_empty_directory_is_an_error(repository: Path, tmp_path: Path) -> None:
     """No archives at all is not a pass."""
     (tmp_path / "dist").mkdir()
-    status = checker.main(["--installer-tag", "v0.0.1", "--repository", str(repository), str(tmp_path / "dist")])
+    status = _check(repository, tmp_path / "dist")
     assert status == 2
 
 
@@ -130,17 +127,22 @@ def test_windows_library_with_lib_prefix_is_not_mistaken_for_a_known_crate() -> 
     ]
 
 
-def test_manifest_with_different_file_names_fails(
-    repository: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+@pytest.mark.parametrize(
+    "manifest",
+    [
+        pytest.param(["libalpha.so"], id="missing-entry"),
+        pytest.param(["libalpha.so", "whitaker_suite.dll"], id="different-file-name"),
+    ],
+)
+def test_manifest_disagreeing_with_archive_fails(
+    repository: Path,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    manifest: list[str],
 ) -> None:
-    """Equal crate names with different file names are still a disagreement."""
-    _publish(
-        tmp_path / "dist",
-        ["alpha", "whitaker_suite"],
-        manifest=["libalpha.so", "whitaker_suite.dll"],
-    )
-    status = checker.main(["--installer-tag", "v0.0.1", "--repository", str(repository), str(tmp_path / "dist")])
-    assert status == 1
+    """A manifest that is not the archive's exact file list is refused."""
+    _publish(tmp_path / "dist", ["alpha", "whitaker_suite"], manifest=manifest)
+    assert _check(repository, tmp_path / "dist") == 1
     assert "manifest" in capsys.readouterr().err
 
 
@@ -166,7 +168,7 @@ def test_unsafe_archive_after_a_safe_one_still_fails(repository: Path, tmp_path:
     _publish_second = tmp_path / "other"
     _publish(_publish_second, [*OLD_CRATES, "newcomer", "whitaker_suite"])
     (_publish_second / ARCHIVE).rename(dist / ARCHIVE)
-    status = checker.main(["--installer-tag", "v0.0.1", "--repository", str(repository), str(dist)])
+    status = _check(repository, dist)
     assert status == 1
 
 
@@ -177,7 +179,7 @@ def test_missing_tool_is_an_error(
     _publish(tmp_path / "dist", [*OLD_CRATES, "whitaker_suite"])
     monkeypatch.setenv("PATH", str(tmp_path / "empty"))
     monkeypatch.setattr(checker, "_run", _raising_run)
-    status = checker.main(["--installer-tag", "v0.0.1", "--repository", str(repository), str(tmp_path / "dist")])
+    status = _check(repository, tmp_path / "dist")
     assert status == 2
 
 
@@ -190,7 +192,7 @@ def test_manifest_with_non_object_root_is_an_error(repository: Path, tmp_path: P
     """A manifest whose JSON root is not an object returns status 2."""
     _publish(tmp_path / "dist", [*OLD_CRATES, "whitaker_suite"])
     (tmp_path / "dist" / f"manifest-{TARGET}.json").write_text("[1, 2]", encoding="utf-8")
-    status = checker.main(["--installer-tag", "v0.0.1", "--repository", str(repository), str(tmp_path / "dist")])
+    status = _check(repository, tmp_path / "dist")
     assert status == 2
 
 
