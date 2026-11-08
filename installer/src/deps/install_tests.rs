@@ -3,11 +3,21 @@
 use rstest::rstest;
 
 use super::*;
-use crate::test_utils::{
-    dependency_binary_helpers::{dylint_link_install_list_check, with_fake_binary_on_path},
-    failure_output,
-    stdout_output,
-    success_output,
+use crate::{
+    deps::{
+        CARGO_DYLINT_TOOL,
+        DYLINT_LINK_TOOL,
+        DependencyTool,
+        DylintToolStatus,
+        install::should_install_tool,
+    },
+    error::InstallerError,
+    test_utils::{
+        dependency_binary_helpers::{dylint_link_install_list_check, with_fake_binary_on_path},
+        failure_output,
+        stdout_output,
+        success_output,
+    },
 };
 
 /// Assert the status refresh found both tools installed.

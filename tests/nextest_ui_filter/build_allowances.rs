@@ -56,7 +56,14 @@ const BASE_SLOW_TIMEOUT_SECS: u64 = 300;
 
 /// The allowance the `trybuild` compile contracts need for a cold fixture
 /// build through nested Cargo.
-const SHA2_ALLOWANCE_SECS: u64 = 75 * 60;
+///
+/// 120 minutes, not the 75 this guard was first written against. Mainline
+/// raised the `.config/nextest.toml` period after a cold build was terminated
+/// 47 seconds into the first case, and the comment above that clause records
+/// why: a cold build and the cases after it must both fit. This guard pins the
+/// value the config actually sets, so the two move together — it exists to
+/// catch a shadowing override, not to second-guess the budget.
+const SHA2_ALLOWANCE_SECS: u64 = 120 * 60;
 
 /// The allowance the packaging check needs, because `cargo package` builds into
 /// its own fresh target directory.
