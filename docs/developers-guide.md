@@ -4238,22 +4238,26 @@ in the root file once it needs more than four inputs, since `rstest` expands
 every `#[case]` column into a function argument and Clippy's argument threshold
 is four.
 
-**Failure policy: these helpers panic, and that is deliberate.** A helper in
-`config.rs` or `filter_model.rs` reports a configuration defect by panicking at
-the offending override; it does not return `Result`. The general workspace rule
-in `AGENTS.md` prefers semantic error enums, but it scopes that preference to
-code a caller might inspect, retry, or map to a status, and these helpers have
-no such caller. Their single job is to fail the guard, and an unreadable or
-malformed `.config/nextest.toml` *is* the drift they exist to detect. Threading
-a `Result` out of them would hand every guard a decision it has no basis to
-make, and the natural mistake — a `?` in a test that returns `()` behind an
-`unwrap_or_default()`, or a guard that skips its assertion on the error path —
-turns the guard's own failure into a silent pass, which is the opposite of what
-it is for. This is an explicit, recorded exception to the workspace error
-convention, not an oversight: the entry points that read the file or parse its
-clauses — `load_nextest_config`, `filter_of` and `governing_override` — each
-carry a `# Panics` section naming the condition, and the worked example below
-panics in the same style and is the pattern to copy.
+**Failure policy: the config helpers panic, and that is deliberate.** The
+helpers in `config.rs` report a configuration defect by panicking at the
+offending override. This is deliberately *not* uniform across the guard suite,
+and the distinction is worth keeping: `filter_model.rs` models the filter
+grammar and returns `Result<bool, FilterError>` from
+`FilterExpression::selects`, because a caller there has something to decide —
+an expression the model does not implement must be answered by extending the
+model, and the error carries that judgement. `config.rs` has no equivalent
+caller. Its helpers exist to resolve `.config/nextest.toml` and fail the guard,
+and an unreadable or malformed file *is* the drift they exist to detect. So
+`governing_override` converts the `FilterError` it receives into a panic: it
+has no basis to decide what an unparsable clause means, and the natural mistake
+on a `Result` path — a `?` in a test returning `()`, a guard that skips its
+assertion on the error path — turns the guard's own failure into a silent pass,
+which is the opposite of what it is for. The general workspace rule in
+`AGENTS.md` prefers semantic error enums for callers that inspect, retry, or
+map an error; that scope does not reach these resolvers. This is a recorded
+exception, not an oversight: `load_nextest_config`, `filter_of` and
+`governing_override` each carry a `# Panics` section naming the condition, and
+the worked example below uses the same panic style.
 
 **Example** (`tests/nextest_ui_filter.rs`):
 
