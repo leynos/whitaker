@@ -239,30 +239,25 @@ def test_manifests_are_replaced_after_the_archives_they_name(
     )
 
 
-def test_the_tag_moves_after_every_upload(
+def test_the_tag_is_never_moved_and_clean_up_still_runs(
     publish: typ.Callable[..., PublishRun],
 ) -> None:
-    """A consumer resolving the tag must find everything the tag promises."""
+    """Publishing leaves the tag alone and still removes superseded archives.
+
+    Moving the tag needed a token that may update a ref onto commits touching
+    workflow files, so it failed with HTTP 403 and, running before the
+    clean-up, left stale archives behind. Installs read assets through the
+    release, and the manifest records the built commit.
+    """
     run = publish(
         local_assets=["whitaker-lints-0123456-linux.tar.zst", "manifest-linux.json"],
         published=["whitaker-lints-old1234-linux.tar.zst", "manifest-linux.json"],
     )
 
     assert run.returncode == 0, run.stdout
-    tag_moves = [
-        index
-        for index, command in enumerate(run.commands)
-        if "git/refs/tags/rolling" in command
-    ]
-    assert len(tag_moves) == 1, "the tag must move exactly once"
-    uploads = [
-        index
-        for index, command in enumerate(run.commands)
-        if "release upload" in command
-    ]
-    assert uploads, "no upload was recorded, so the ordering proves nothing"
-    assert max(uploads) < tag_moves[0], (
-        "the tag moved while assets were still being uploaded"
+    assert not run.matching("git/refs"), "the tag must never be moved"
+    assert run.matching("delete-asset", "whitaker-lints-old1234-linux.tar.zst"), (
+        "the superseded archive must be removed in the same publish"
     )
 
 
@@ -318,16 +313,10 @@ def test_an_empty_asset_list_refuses_to_publish(
     assert not run.matching("release upload")
 
 
-def test_the_tag_moves_even_when_the_release_is_absent(
+def test_a_new_release_is_created_at_the_published_commit_without_moving_a_tag(
     publish: typ.Callable[..., PublishRun],
 ) -> None:
-    """A deleted release can leave its tag behind at an older commit.
-
-    `gh release create` binds to an existing tag rather than repointing it, so
-    without an explicit move the tag would sit at the previous commit while the
-    release notes named this one, and every consumer would fetch the wrong
-    generation while the run reported success.
-    """
+    """The bootstrap path names its commit at creation and moves nothing."""
     run = publish(
         local_assets=["whitaker-lints-0123456-linux.tar.zst", "manifest-linux.json"],
         published=[],
@@ -335,16 +324,10 @@ def test_the_tag_moves_even_when_the_release_is_absent(
     )
 
     assert run.returncode == 0, run.stdout
-    moves = run.matching("git/refs/tags/rolling")
-    assert len(moves) == 1, "the bootstrap path must move the tag exactly once"
-    creation = next(
-        index
-        for index, command in enumerate(run.commands)
-        if "release create" in command
-    )
-    assert creation < run.commands.index(moves[0]), (
-        "the tag must be repointed after the release binds to it"
-    )
+    assert not run.matching("git/refs"), "the tag must never be moved"
+    creation = run.matching("release create")
+    assert len(creation) == 1
+    assert "--target" in creation[0]
 
 
 def test_a_rebuilt_archive_never_disagrees_with_its_checksum(
