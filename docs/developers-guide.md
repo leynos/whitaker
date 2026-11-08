@@ -697,7 +697,7 @@ and the compiled-tool keys add the Ubuntu release because a binary built on
 Ubuntu 24.04 must never be restored onto 22.04.
 
 The Clippy snapshot key omits those discriminators on purpose. Its content is
-platform-independent Git history, its one writer (`coverage-upload`) and its
+platform-independent Git history, its one writer (`coverage-warmup`) and its
 readers all run on Ubicloud Linux, and the Windows lane never restores it.
 
 Restores run on every event. Saves are guarded by
@@ -712,13 +712,21 @@ compiler cache" below explains what that means for a pull request's first push.
 `rolling-release.yml`'s Linux legs reach the same proxy through `setup-rust`;
 only its registry families are archives, and those follow the rule above.
 
-`coverage-main.yml`'s `coverage-upload` is the writer for the coverage-lane
-keys and for the shared Clippy snapshot. `ci.yml`'s `linux-full` runs on push to
-`main` as well as on pull requests, and on that push it publishes the
-lint-lane keys. A merge that `GITHUB_TOKEN` performs, as the Dependabot
-automerge does, starts no push-event workflow, so after one, or after changing
-a lint-lane tool pin, the pinned toolchain, or a cache generation, dispatch
-both writers against `main`:
+`coverage-main.yml` runs as two jobs on a push to `main`. `coverage-upload`
+measures coverage and uploads it to CodeScene on a GitHub-hosted `ubuntu-24.04`
+runner, which is free on a public repository; a hosted runner writes GitHub's
+cache store, which the Ubicloud lanes never read, so it saves no cache.
+`coverage-warmup`, on Ubicloud, runs `make coverage-build` and `make test-doc`
+and is the writer for the coverage-lane keys and for the shared Clippy snapshot.
+`make coverage-build` compiles the instrumented tests `make coverage` builds
+and stops: `cargo llvm-cov nextest --no-run` would only report, so
+`scripts/cargo-coverage-build.sh` runs `cargo nextest run --no-run` under
+`cargo llvm-cov show-env`, in the same target directory and under the same
+RUSTFLAGS. `ci.yml`'s `linux-full` runs on push to `main` as well as on pull
+requests, and on that push it publishes the lint-lane keys. A merge that
+`GITHUB_TOKEN` performs, as the Dependabot automerge does, starts no push-event
+workflow, so after one, or after changing a lint-lane tool pin, the pinned
+toolchain, or a cache generation, dispatch both writers against `main`:
 
 ```sh
 gh workflow run ci.yml --repo leynos/whitaker --ref main
@@ -773,7 +781,7 @@ In CI, the three Linux suite lanes restore `~/.cache/whitaker-clippy-snapshot`
 before `Setup Rust`. After it, "Provision the Clippy snapshot" runs
 `make clippy-snapshot-bundle` only on a cache miss, installs with
 `make clippy-snapshot`, and appends `make dylint-env` to `GITHUB_ENV`.
-`coverage-upload` is the snapshot cache's only writer. The Windows lane cannot
+`coverage-warmup` is the snapshot cache's only writer. The Windows lane cannot
 restore a Linux archive, so it bundles and verifies on every run.
 
 As its last validation step, `linux-full` runs `make dylint-tools`, whose
@@ -991,7 +999,7 @@ Isolated errors below it produce warnings instead. A proxy hiccup costs one
 compile, and failing the lane on it would make a pull request depend on an
 external service's good day, which is what moving CodeScene off the
 pull-request lane removed. The upload comes before the check so the evidence
-survives the failure, and `coverage-upload` runs the check last so a failure
+survives the failure, and `coverage-warmup` runs the check last so a failure
 cannot cost it its cache saves.
 `tests/workflow_contracts/sccache_health_contract_test.py` holds that order in
 every gha lane, and `make test-sccache-health` tests the checker, including its
@@ -1108,7 +1116,8 @@ The measurements that showed it are these:
   `linux-full` read 0 of 1,077 compilations from the cache and took 29m07s,
   against 11 to 14 minutes warm. Nothing in `main`'s scope had compiled its
   shapes: `ci.yml` then ran only on `pull_request` and `workflow_dispatch`, and
-  `coverage-upload`, the only trunk job, builds the instrumented shape.
+  `coverage-upload`, the only trunk job, built the instrumented shape (it is now
+  `coverage-warmup`, on Ubicloud).
 - Run [35825656071][whitaker-run-35825656071], the first trunk run on the
   proxy, which was cold as well. It spent 35m54s in `Generate coverage` and was
   cancelled at the 40-minute limit before it reached its saves.
@@ -1119,7 +1128,7 @@ The rule is therefore that every pull-request lane on the Actions backend has
 exactly one trunk writer: a job that runs on a push to `main` and nothing
 broader, runs unconditionally there, declares the same compile environment, and
 runs every `make` or `cargo` command the lane runs, so the two compile the same
-shapes. `coverage-upload` writes for `coverage-check`. `linux-full` writes for
+shapes. `coverage-warmup` writes for `coverage-check`. `linux-full` writes for
 itself, because `ci.yml` runs it on the push. That makes its shapes the lane's
 by construction, where a separate job would be a copy that could drift, and the
 lane's non-compiling steps add under a minute to a warm run. No other job may
@@ -1174,11 +1183,12 @@ per pull request on Linux, and no other Linux job executes tests at all.
 
 Table: Jobs that execute the Rust test suite.
 
-| Job               | Platform         | Command                          | Role                                      |
-| ----------------- | ---------------- | -------------------------------- | ----------------------------------------- |
-| `coverage-check`  | Ubicloud Linux   | `make coverage`, `make test-doc` | the single Linux pull-request execution   |
-| `coverage-upload` | Ubicloud Linux   | `make coverage`, `make test-doc` | the trunk baseline, on `main` pushes only |
-| `windows-compat`  | `windows-latest` | `make test NEXTEST_PROFILE=ci`   | a different platform                      |
+| Job               | Platform         | Command                                | Role                                               |
+| ----------------- | ---------------- | -------------------------------------- | -------------------------------------------------- |
+| `coverage-check`  | Ubicloud Linux   | `make coverage`, `make test-doc`       | the single Linux pull-request execution            |
+| `coverage-upload` | `ubuntu-24.04`   | `make coverage`, `make test-doc`       | the trunk baseline, on `main` pushes only          |
+| `coverage-warmup` | Ubicloud Linux   | `make coverage-build`, `make test-doc` | compiles the lane's tests for its cache; runs none |
+| `windows-compat`  | `windows-latest` | `make test NEXTEST_PROFILE=ci`         | a different platform                               |
 
 `make coverage` delegates to the `make test` recipe and swaps the driver to
 `cargo llvm-cov nextest`, so the instrumented run keeps one package set, one
@@ -1296,7 +1306,8 @@ Table: Runner placement for repository-owned jobs.
 | ------------------------------------------------- | -------------------------- | --------------------------------------------------------------------------- | --------------------------------------- |
 | `coverage-check`                                  | `ci.yml`                   | `ubicloud-standard-2-ubuntu-2404`                                           | Blocking Linux gate                     |
 | `linux-full`                                      | `ci.yml`                   | `ubicloud-standard-2-ubuntu-2404`                                           | Blocking Linux gate; trunk cache writer |
-| `coverage-upload`                                 | `coverage-main.yml`        | `ubicloud-standard-2-ubuntu-2404`                                           | Trunk Linux gate and cache writer       |
+| `coverage-warmup`                                 | `coverage-main.yml`        | `ubicloud-standard-2-ubuntu-2404`                                           | Trunk cache writer for `coverage-check` |
+| `coverage-upload`                                 | `coverage-main.yml`        | `ubuntu-24.04`                                                              | Blocks no one; GitHub-hosted            |
 | `windows-compat`                                  | `ci.yml`                   | `windows-latest`                                                            | Ubicloud has no Windows image           |
 | `mutation`                                        | `mutation-testing.yml`     | Reusable workflow's own choice                                              | Nightly, not blocking                   |
 | `automerge`                                       | `dependabot-automerge.yml` | Reusable workflow's own choice                                              | API-bound                               |
