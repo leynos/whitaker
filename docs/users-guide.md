@@ -587,7 +587,10 @@ effect is not a fixed percentage reduction.
 
 Direct `let` conditions contribute no predicate segment, including those in
 `if let` and `while let`; their bodies can still contribute depth. A
-`let ... else` declaration does not itself create a scored `if` region.
+`let ... else` declaration does not itself create a scored `if` region. In
+`relative_to_manifest`, the loop's inner `if` reaches at most `1.5` on its
+predicate line and `2.0` in its body, below the default `2.5` threshold even
+before smoothing.
 
 **CodeScene difference:** the current lint is a weighted heuristic, not a
 CodeScene-equivalent structural detector. Two shallow nested regions can

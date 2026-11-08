@@ -45,31 +45,45 @@ has no `[bumpy_road_function]` override.
 
 The executable fixture is
 [`pass_two_shallow_clusters.rs`](../../crates/bumpy_road_function/ui/pass_two_shallow_clusters.rs).
-It retains the historical control flow, replaces the application error and
-wrapper with `Result<String, ()>`, and compares component text directly. It
-exercises syntax rather than filesystem behaviour; Windows prefix arms remain
-present in the Rust syntax even on Linux. Its adjacent
+It reduces the historical path handling to string-component slices while
+retaining the two relevant regions: an `if` in a `match` arm and an `if` in a
+`while let` body. It also retains the later `let ... else`. The fixture checks
+control-flow classification, not filesystem path semantics. Its adjacent
 [configuration](../../crates/bumpy_road_function/ui/pass_two_shallow_clusters.dylint.toml)
-contains no lint table, so the per-fixture override tests actual defaults
-rather than inheriting the shared UI configuration.
+contains no lint table, so the UI case uses the actual weighted defaults.
+
+The repository CodeScene gate also analyses lint UI fixtures as source files.
+The fixture therefore carries a function-scoped `Bumpy Road Ahead` directive
+with a dated rationale. This keeps the deliberate regression case from failing
+the production CodeScene gate. The directive is visible to CodeScene review,
+does not affect Whitaker, and does not hide findings in other functions. To
+reproduce the reference finding, remove that one directive in a temporary copy
+and review the copy manually. CodeScene is not invoked by committed tests or
+evaluations.
 
 Run the following commands from the repository root. The Make target also runs
 the existing positive diagnostic fixtures, so an absent lint library cannot
-masquerade as a successful negative case.
+masquerade as a successful negative case. The final two commands create and
+review an unannotated temporary copy; they are manual oracle checks, not part
+of the test suite.
 
 ```sh
 make test TEST_CARGO_FLAGS='-p bumpy_road_function --all-targets --all-features'
 cs version
-cs review --output-format json crates/bumpy_road_function/ui/pass_two_shallow_clusters.rs
+sed '/@codescene/d' crates/bumpy_road_function/ui/pass_two_shallow_clusters.rs \
+  > /tmp/pass_two_shallow_clusters.rs
+cs review --output-format json /tmp/pass_two_shallow_clusters.rs
 ```
 
 The reference run used CodeScene CLI 1.0.52, build
 `efcaeed1f35ec099062c9e30bc98f092aed16b6f` (2026-10-09), on 2026-11-08. It
-reported `Bumpy Road Ahead` for `relative_to_manifest`, with `bumps = 2`. The
-JSON diagnostic also states that a bump requires two levels of conditionals. No
-repository `.codescene/` rule override was present; `cs check-rules` reported
-no matching rule for the fixture. The relevant fields from the reference JSON
-response are:
+reported `Bumpy Road Ahead` for `relative_to_manifest`, with `bumps = 2`, on
+the unannotated minimal fixture. It also states that a bump requires two levels
+of conditionals. No repository `.codescene/` rule override was present;
+`cs check-rules` reported no matching rule for the fixture. The local review
+reported score `9.84` and no `Complex Method` finding. After adding the scoped
+directive, reviewing the tracked fixture reported score `10.0` and no findings.
+The relevant fields from the unannotated reference response are:
 
 ```json
 {
@@ -77,8 +91,8 @@ response are:
   "functions": [{
     "title": "relative_to_manifest",
     "details": "bumps = 2",
-    "start-line": 14,
-    "end-line": 48
+    "start-line": 8,
+    "end-line": 32
   }]
 }
 ```
@@ -87,12 +101,12 @@ This is a measured result for the equivalent fixture, independently of the
 original PR report. It is not a claim that all CodeScene releases or project
 rule configurations produce identical results.
 
-Three manual oracle controls used temporary copies of the same fixture: remove
-the entire prefix-validation match, remove only the common-prefix loop's inner
-`if`, or remove both. CodeScene reported no Bumpy Road diagnostic for any of
+Three manual oracle controls use temporary copies of the minimal fixture:
+remove the prefix-validation match, remove only the common-prefix loop's inner
+`if`, or remove both. CodeScene reports no Bumpy Road diagnostic for any of
 those variants. This supports treating the two nested regions as the cause of
-the original finding; it does not infer a hidden bump count from an absent
-diagnostic. These probes are not committed tests or evaluations.
+the finding; it does not infer a hidden bump count from an absent diagnostic.
+These probes are not committed tests or evaluations.
 
 Whitaker's focused run passed all 32 tests with none skipped, including the UI
 harness containing this fixture and the existing positive controls. The fixture
@@ -129,21 +143,20 @@ The production pipeline has four stages:
 
 *Table 1: Verified weighted semantics and the limits of reference knowledge.*
 
-A simple `if` predicate contributes `0.5`; its body contributes `1.0`. Those
-are local contributions, not necessarily the total line score. Enclosing blocks
-contribute too. The historical prefix predicate has two branches joined by
-`||`, contributing `1.0`, and sits in a match arm with depth and flow weights.
-Treating every line in that region as capped at `1.5` would therefore be
-incorrect.
+A single predicate branch contributes `0.5`; an `if` body contributes `1.0`
+depth. Those are local contributions, not necessarily the total line score. The
+reduced fixture uses one predicate branch in each `if`. The historical prefix
+predicate has two branches joined by `||`, contributing `1.0`, and sits in a
+match arm with depth and flow weights. Those enclosing contributions mean that
+the line score cannot be calculated from the `if` alone.
 
-The common-prefix loop's inner `if` contributes only one predicate branch. Its
-`while let` condition adds no predicate score; this exclusion does not mean
-that the loop's body has no depth contribution. For a conventional multiline
-body, the inner `if` can reach `2.5` including the enclosing loop, but its
-adjacent body lines reach only `2.0`. A three-line average of `[2.5, 2.0, 2.0]`
-is approximately `2.167`, below the default threshold. Even an unsmoothed
-single qualifying line would fail the two-line minimum. A surviving
-prefix-region bump alone cannot trigger a function diagnostic.
+The common-prefix loop's inner `if` contributes one predicate branch (`0.5`).
+Its `while let` condition is an `ExprKind::Let`, so it adds no predicate
+segment. Loop-body depth contributes `1.0`; the inner predicate line therefore
+reaches at most `1.5`, and the nested `if` body reaches at most `2.0`. Neither
+can meet the default `2.5` threshold, even before smoothing. Whatever score the
+prefix-validation region reaches, it cannot produce a function diagnostic
+alone: the lint requires two retained intervals.
 
 The later `let Some(text) = ... else` is a local declaration, not an HIR `If`.
 There is no dedicated predicate/depth pair for its pattern test. Ordinary
