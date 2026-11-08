@@ -54,7 +54,12 @@ def repository(tmp_path: Path) -> Path:
     return root
 
 
-def _publish(directory: Path, libraries: list[str], manifest: list[str] | None = None) -> None:
+def _publish(
+    directory: Path,
+    libraries: list[str],
+    manifest: list[str] | None = None,
+    toolchain: str = "nightly-x",
+) -> None:
     """Write an archive holding ``libraries`` and its sidecar manifest."""
     directory.mkdir(exist_ok=True)
     staging = directory / "staging"
@@ -70,7 +75,7 @@ def _publish(directory: Path, libraries: list[str], manifest: list[str] | None =
     staging.rmdir()
     files = [f"lib{crate}.so" for crate in libraries] if manifest is None else manifest
     (directory / f"manifest-{TARGET}.json").write_text(
-        json.dumps({"files": files}), encoding="utf-8"
+        json.dumps({"files": files, "toolchain": toolchain}), encoding="utf-8"
     )
 
 
@@ -246,3 +251,51 @@ def test_missing_tar_at_process_start_is_an_error(repository: Path, tmp_path: Pa
     )
     assert result.returncode == 2
     assert "tar" in result.stderr
+
+
+def _table(tmp_path: Path, toolchain: str) -> Path:
+    """Write a snapshot table mapping installer 0.0.1 to ``toolchain``."""
+    table = tmp_path / "clippy-snapshots.tsv"
+    table.write_text(f"# header\n0.0.1 abc 6.3.0 {toolchain}\n", encoding="utf-8")
+    return table
+
+
+def test_toolchain_matching_the_snapshot_row_passes(repository: Path, tmp_path: Path) -> None:
+    """A manifest toolchain equal to the table's passes."""
+    _publish(tmp_path / "dist", [*OLD_CRATES, "whitaker_suite"], toolchain="nightly-x")
+    table = _table(tmp_path, "nightly-x")
+    status = checker.main(
+        ["--installer-tag", "v0.0.1", "--repository", str(repository),
+         "--snapshots-tsv", str(table), str(tmp_path / "dist")]
+    )
+    assert status == 0
+
+
+def test_toolchain_moving_ahead_of_the_snapshot_row_fails(
+    repository: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The #555 shape: a toolchain bump the oldest installer's row lacks."""
+    _publish(tmp_path / "dist", [*OLD_CRATES, "whitaker_suite"], toolchain="nightly-new")
+    table = _table(tmp_path, "nightly-old")
+    status = checker.main(
+        ["--installer-tag", "v0.0.1", "--repository", str(repository),
+         "--snapshots-tsv", str(table), str(tmp_path / "dist")]
+    )
+    assert status == 1
+    err = capsys.readouterr().err
+    assert "nightly-new" in err
+    assert "nightly-old" in err
+
+
+def test_snapshot_table_without_the_installer_row_is_an_error(
+    repository: Path, tmp_path: Path
+) -> None:
+    """No row for the installer means the relationship cannot be checked."""
+    _publish(tmp_path / "dist", [*OLD_CRATES, "whitaker_suite"])
+    table = tmp_path / "t.tsv"
+    table.write_text("9.9.9 a b c\n", encoding="utf-8")
+    status = checker.main(
+        ["--installer-tag", "v0.0.1", "--repository", str(repository),
+         "--snapshots-tsv", str(table), str(tmp_path / "dist")]
+    )
+    assert status == 2

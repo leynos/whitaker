@@ -15,8 +15,11 @@ lint`` (whitaker issue 565, and issue 355 before it).
 This checker reads the crate list of the oldest installer a caller can still
 select from that release tag, reads each built archive's real entries, applies
 the installer's prune, and fails unless only the suite is left. It also holds
-each sidecar manifest to the archive it describes. The rolling-release
-``publish`` job runs it before anything is uploaded.
+each sidecar manifest to the archive it describes. A second, cheap check
+holds each manifest's toolchain to the one shared-actions maps that installer
+to (issue 555). This reproduces the installer's prune; it does not run the
+installer, which has no route to install from a local archive. The
+rolling-release ``publish`` job runs it before anything is uploaded.
 
 Example
 -------
@@ -186,6 +189,51 @@ def check_manifest(manifest: Path, archive: Path) -> list[str]:
     return []
 
 
+def snapshot_toolchain(tsv: Path, version: str) -> str:
+    """Return the toolchain ``clippy-snapshots.tsv`` maps ``version`` to.
+
+    Rows read ``<installer-version> <clippy-commit> <dylint-version> <toolchain>``;
+    lines starting with ``#`` are comments.
+
+    >>> import tempfile
+    >>> with tempfile.TemporaryDirectory() as directory:
+    ...     table = Path(directory) / "t.tsv"
+    ...     _ = table.write_text("# c\\n0.2.11 abc 6.3.0 nightly-2026-05-28\\n")
+    ...     snapshot_toolchain(table, "0.2.11")
+    'nightly-2026-05-28'
+    """
+    try:
+        lines = tsv.read_text(encoding="utf-8").splitlines()
+    except OSError as error:
+        raise PruneSafetyError(f"cannot read {tsv}: {error}") from error
+    for line in lines:
+        fields = line.split()
+        if len(fields) >= 4 and not line.startswith("#") and fields[0] == version:
+            return fields[3]
+    raise PruneSafetyError(f"{tsv} has no row for installer {version}")
+
+
+def check_toolchain(directory: Path, expected: str) -> list[str]:
+    """Return the problems with any manifest whose toolchain is not ``expected``.
+
+    The installer reads its toolchain from the snapshot row the action maps to
+    its version. Publishing libraries built for another toolchain breaks every
+    caller on that installer at once (whitaker issue 555).
+    """
+    problems: list[str] = []
+    for manifest in sorted(directory.glob("manifest-*.json")):
+        try:
+            toolchain = json.loads(manifest.read_text(encoding="utf-8"))["toolchain"]
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            raise PruneSafetyError(f"cannot read the toolchain of {manifest}: {error}") from error
+        if toolchain != expected:
+            problems.append(
+                f"{manifest.name}: built for toolchain {toolchain!r} but the oldest "
+                f"installer's snapshot row maps to {expected!r}"
+            )
+    return problems
+
+
 def check_directory(directory: Path, known: Sequence[str]) -> list[str]:
     """Check every lint archive and manifest under ``directory``."""
     archives = sorted(directory.glob("whitaker-lints-*.tar.zst"))
@@ -211,10 +259,21 @@ def main(arguments: Sequence[str] | None = None) -> int:
         help="release tag of the oldest installer a caller can select, such as v0.2.11",
     )
     parser.add_argument("--repository", type=Path, default=Path("."))
+    parser.add_argument(
+        "--snapshots-tsv",
+        type=Path,
+        help="shared-actions install-whitaker clippy-snapshots.tsv; when given, every "
+        "manifest's toolchain must equal the one it maps the installer tag to",
+    )
     options = parser.parse_args(arguments)
     try:
         known = installer_lint_crates(options.installer_tag, options.repository)
         problems = check_directory(options.directory, known)
+        if options.snapshots_tsv is not None:
+            expected = snapshot_toolchain(
+                options.snapshots_tsv, options.installer_tag.removeprefix("v")
+            )
+            problems.extend(check_toolchain(options.directory, expected))
     except PruneSafetyError as error:
         print(f"error: {error}", file=sys.stderr)
         return 2
