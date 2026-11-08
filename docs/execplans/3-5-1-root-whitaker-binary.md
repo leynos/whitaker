@@ -2288,6 +2288,26 @@ lint-core tests, and 19 `dylint_testing` tests), `make markdownlint` (34 s), and
 CI runs under `NEXTEST_PROFILE=ci`; the hosted `linux-full` job is the evidence
 for those, not the local default profile.
 
+`857194ba` then extracted the snapshot staging fixture out of
+`json_inventory_keeps_its_current_shape`, because the refreshed inline snapshot
+had pushed the test over CodeScene's 70-line Large Method advisory. Extracting
+it made the helper a free function outside `#[test]`, which is not covered by
+`allow-expect-in-tests`, so the six `expect` calls it inherited failed the
+denied `expect_used` lint. `2d9d2e9b` makes the helper return `Result` and
+propagate with `?`, leaving a single `expect` at the test's own call site where
+the exemption applies. Both commits are test-only.
+
+Gates on `2d9d2e9b` passed sequentially: `make check-fmt` (9 s), `make lint` (5
+s, warm cache), `make typecheck` (7 s), `make test` (900 s: 2373 nextest tests
+passed with 6 filtered by the default profile, 84 lint-core tests, and 19
+`dylint_testing` tests), `make markdownlint` (29 s), and `make nixie` (2 s).
+One test was reported flaky rather than failed:
+`rstest_helper_should_be_fixture::ui example_compiles_without_diagnostics::case_1`
+failed to exec the cached dylint driver under
+`~/.cache/whitaker-dylint-drivers/dylint-6.3.0/clippy-e4608a25…/` while that
+directory was still being populated, and passed on nextest's automatic retry.
+That is a driver-cache race, not a candidate failure.
+
 To be completed at each milestone boundary and at completion. Before setting
 this plan to `COMPLETE`, reconcile every entry in `Surprises & discoveries`
 against `docs/whitaker-cli-design.md`. In particular, `CLI-REQ-FWD` has no
