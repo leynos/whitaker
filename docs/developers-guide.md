@@ -5076,7 +5076,10 @@ decision is in
 - The Git adapter translates listings into values before policy sees them:
   refs and bundle heads become typed entries, and Git's `true`/`false` answers
   become booleans. An answer that is neither is reported as a Git failure, so
-  unexpected output can never be read as "not shallow".
+  unexpected output can never be read as "not shallow". The scratch repository
+  it needs for `git bundle list-heads` is closed explicitly on every exit,
+  including a failed initialization, so a removal failure becomes an `Io` error
+  instead of a silently abandoned directory.
 - Orchestration runs through `SnapshotSupport<'_>`, a struct of borrowed
   ports. `SnapshotSupport::production()` composes the process-wide adapters;
   the public entry points use it and the `*_with` variants take explicit

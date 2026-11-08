@@ -59,12 +59,15 @@ The module separates the decision from the observation.
 - `list_heads` is an observation with one bounded write.
   `git bundle list-heads` refuses to run outside a repository, so the adapter
   creates a prefixed scratch repository under the system temporary directory,
-  or a parent a test supplies, and removes it before returning whether the
-  command succeeded or failed. A removal that fails is reported as `Io` rather
-  than ignored, and a listing line that names no head is reported as `Invalid`,
-  so an incomplete listing never passes as complete evidence. Nothing it writes
-  outlives the call, and the bundle and the caller's snapshot paths are never
-  touched.
+  or a parent a test supplies, and attempts its removal before returning
+  whether the command succeeded, failed, or never ran because initialization
+  failed. A removal that fails is reported as `Io` rather than ignored, even
+  when the command also failed: the Git diagnosis is kept and the cleanup
+  failure is appended to it. A listing line that names no head is reported as
+  `Invalid`, so an incomplete listing never passes as complete evidence.
+  Removal can fail, in which case that failure is the caller's to handle; what
+  the adapter never does is leave scratch state silently behind. The bundle and
+  the caller's snapshot paths are never touched.
 - `SnapshotSupport<'_>` is the composition root for one operation: borrowed
   trait objects for each port. `SnapshotSupport::production()` wires the
   process-wide `SnapshotGit` and `ProductionStore`. The public entry points

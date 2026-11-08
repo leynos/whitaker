@@ -94,11 +94,14 @@ pub(crate) trait BundleOperations {
     ///
     /// A scratch repository is therefore permitted, under these limits: it
     /// lives in the system temporary directory (or a test-supplied parent),
-    /// carries a recognizable prefix, and is removed before this call returns,
-    /// whether the Git command succeeded or failed. A removal that fails is
-    /// reported rather than ignored. Callers must not assume the process wrote
-    /// nothing at all to disk; they may assume nothing it wrote outlives the
-    /// call.
+    /// carries a recognizable prefix, and has its removal attempted before this
+    /// call returns, whether the Git command succeeded or failed. A removal is
+    /// attempted after an initialization failure too, and a removal that fails
+    /// is reported rather than ignored, even when the Git command also failed:
+    /// the Git diagnosis is kept and the cleanup failure is appended to it.
+    /// Callers must not assume the process wrote nothing at all to disk, nor
+    /// that removal cannot fail; they may assume nothing it wrote is silently
+    /// left behind without an error.
     ///
     /// # Errors
     ///

@@ -170,6 +170,95 @@ fn a_failed_listing_still_removes_its_scratch_repository() {
     );
 }
 
+/// A removal that fails after a successful command is reported.
+///
+/// Unix only: removal needs write permission on the directory being emptied,
+/// so a read-only directory holding an entry cannot be removed. Windows
+/// read-only flags do not stop deletion in the same way.
+#[cfg(unix)]
+#[test]
+fn a_cleanup_failure_after_a_successful_operation_is_reported() {
+    let holder = tempfile::tempdir().expect("create a temporary directory");
+    let scratch = unremovable_scratch(holder.path());
+
+    let error = super::finish_scratch(Utf8Path::new("/snapshot.bundle"), scratch, Ok(42))
+        .expect_err("a scratch repository that cannot be removed is a failure");
+
+    assert!(matches!(&error, ClippySnapshotError::Io { .. }), "{error}");
+    release(holder.path());
+}
+
+/// Both failures survive: the command's diagnosis first, the cleanup after it.
+#[cfg(unix)]
+#[test]
+fn a_cleanup_failure_does_not_hide_a_failed_operation() {
+    let holder = tempfile::tempdir().expect("create a temporary directory");
+    let scratch = unremovable_scratch(holder.path());
+    let failure = ClippySnapshotError::Git {
+        operation: "bundle list-heads",
+        message: "fatal: not a git repository".to_owned(),
+    };
+
+    let outcome: Result<(), ClippySnapshotError> = Err(failure);
+    let error = super::finish_scratch(Utf8Path::new("/snapshot.bundle"), scratch, outcome)
+        .expect_err("a failed command stays failed");
+
+    match &error {
+        ClippySnapshotError::Git { message, .. } => {
+            assert!(message.contains("not a git repository"), "{message}");
+            assert!(message.contains("could not be removed"), "{message}");
+        }
+        other => panic!("expected the Git diagnosis to stay primary: {other}"),
+    }
+    release(holder.path());
+}
+
+/// An initialization failure still attempts removal, and reports both.
+#[cfg(unix)]
+#[test]
+fn a_failed_initialization_still_attempts_cleanup() {
+    let holder = tempfile::tempdir().expect("create a temporary directory");
+    // The directory is read-only and already holds an entry, so `git init`
+    // cannot write its files and a later removal cannot empty it.
+    let scratch = unremovable_scratch(holder.path());
+
+    let error = SnapshotGit::local()
+        .initialize_scratch(Utf8Path::new("/snapshot.bundle"), scratch)
+        .expect_err("a read-only directory cannot become a repository");
+
+    let message = error.to_string();
+    assert!(message.contains("could not be removed"), "{message}");
+    release(holder.path());
+}
+
+/// Create a scratch directory that cannot be removed.
+#[cfg(unix)]
+fn unremovable_scratch(parent: &std::path::Path) -> tempfile::TempDir {
+    use std::os::unix::fs::PermissionsExt;
+
+    let scratch = tempfile::Builder::new()
+        .prefix("unremovable-scratch-")
+        .tempdir_in(parent)
+        .expect("create the scratch directory");
+    std::fs::write(scratch.path().join("held"), "an entry blocks the removal")
+        .expect("write the blocking entry");
+    std::fs::set_permissions(scratch.path(), std::fs::Permissions::from_mode(0o555))
+        .expect("make the scratch directory read-only");
+    scratch
+}
+
+/// Restore write permission under `parent` so the holder can be removed.
+#[cfg(unix)]
+fn release(parent: &std::path::Path) {
+    use std::os::unix::fs::PermissionsExt;
+
+    for entry in std::fs::read_dir(parent).expect("read the holder") {
+        let path = entry.expect("read a holder entry").path();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))
+            .expect("restore write permission");
+    }
+}
+
 /// Return the sorted entry names of `directory`.
 fn directory_entries(directory: &Utf8Path) -> Vec<String> {
     let mut entries: Vec<String> = std::fs::read_dir(directory)
