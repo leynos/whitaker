@@ -35,6 +35,7 @@ NOT_SUITE_COMMANDS: typ.Final[tuple[str, ...]] = (
     "make test-glibc-baseline",
     "make test-workflow-contracts",
     "make test-markdown-format",
+    "make test-prune-safety",
     "make test-sccache-health",
 )
 

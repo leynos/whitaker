@@ -16,6 +16,11 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  # Release tag of the oldest installer any caller pins (the `install-whitaker`
+  # default). The publish job checks the built archives against what that
+  # installer prunes and the toolchain it maps to. Raise it only when the
+  # oldest pinned installer rises.
+  OLDEST_INSTALLER_TAG: v0.2.11
   LINT_CRATES: >-
     bumpy_road_function
     conditional_max_n_branches
@@ -26,7 +31,6 @@ env:
     test_must_not_have_example
     no_std_fs_operations
     no_unwrap_or_else_panic
-    string_continuation_style
     whitaker_suite
 
 jobs:
@@ -591,6 +595,33 @@ jobs:
           set -euxo pipefail
           ./target/release/whitaker-package-dependency-binary provenance --output-dir dist
           printf '%s\n' "dist/dependency-binaries-licences.md" >> dist/release-assets.txt
+
+      # Stops the publish when the archives just built would break a caller
+      # on the oldest installer callers pin. This REPRODUCES that installer's
+      # behaviour; it does not run it, because installer 0.2.11 has no route
+      # to install from a local archive (it downloads only from the published
+      # rolling release). Two checks, both offline apart from fetching the
+      # tag and one table:
+      #   1. Prune: that installer removes unrequested standalone libraries by
+      #      a compiled-in name list, so a library it does not know survives
+      #      beside the suite and rustc rejects the duplicate lint
+      #      registration (#355, #565). The list is read from the installer's
+      #      release tag, never copied here.
+      #   2. Toolchain: the manifest's toolchain (from rust-toolchain.toml at
+      #      this head) must equal the one shared-actions' clippy-snapshots.tsv
+      #      maps that installer to. A mismatch breaks every caller on it (#555).
+      # Adds seconds. A failure stops the job before the upload below.
+      - name: Check the archives against the oldest installer's behaviour
+        if: steps.assets.outputs.has_assets == 'true' && steps.forced_rebuild.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "refs/tags/${OLDEST_INSTALLER_TAG}:refs/tags/${OLDEST_INSTALLER_TAG}"
+          gh api repos/leynos/shared-actions/contents/.github/actions/install-whitaker/clippy-snapshots.tsv \
+            --jq .content | base64 -d > "${RUNNER_TEMP}/clippy-snapshots.tsv"
+          scripts/check_prune_safety.py --installer-tag "${OLDEST_INSTALLER_TAG}" \
+            --snapshots-tsv "${RUNNER_TEMP}/clippy-snapshots.tsv" dist
 
       # One step, not two. The previous delete-then-create pair left the
       # rolling tag, its release and every asset absent for six to seven

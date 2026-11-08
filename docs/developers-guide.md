@@ -1164,8 +1164,11 @@ shapes. `coverage-warmup` writes for `coverage-check`. `linux-full` writes for
 itself, because `ci.yml` runs it on the push. That makes its shapes the lane's
 by construction, where a separate job would be a copy that could drift, and the
 lane's non-compiling steps add under a minute to a warm run. No other job may
-run on that push, since each would be a second writer to `main`'s scope, so
-`windows-compat` is excluded from it and `coverage-check` already runs on pull
+run on that push, since each would be a second writer to `main`'s scope.
+`windows-compat` is the exception that proves it: it runs there to write
+GitHub's own store, which the Ubicloud lanes never read, so a pull request's
+first Windows push starts from a warm compiler cache and a restored Dylint
+driver instead of a cold one (#457). `coverage-check` already runs on pull
 requests alone. A pull request cannot write `main`'s scope at all. Its writes
 land in its own ref's scope, so the pull-request lanes only ever read the
 trunk's store.
@@ -2863,6 +2866,50 @@ Without explicit declarations, Cargo would infer fallback names such as
 `package_lints` and `package_installer_bin`. Those names do not match the
 workflow invocations, so release and rolling-release builds would fail even
 though the source files exist.
+
+### Which libraries the rolling archive ships
+
+`whitaker-package-lints --release-dir` ships `libwhitaker_suite` and the crates
+in the installer's `LINT_CRATES` that `PINNED_INSTALLER_LINT_CRATES`
+(`installer/src/bin/package_lints.rs`) also names. `LINT_CRATES` holds standard
+lints only; experimental lints, in `EXPERIMENTAL_LINT_CRATES`, are never
+packaged and are absent from the default suite. The pinned list is the
+`LINT_CRATES` of the oldest installer that `install-whitaker` still offers
+(v0.2.9, whose nine crates v0.2.10 and v0.2.11 share). It is a second guard: an
+installer prunes an unrequested standalone library only when it knows the
+crate's name, so a library for any newer crate would load beside the suite and
+rustc would reject the duplicate lint registration (issue #565, where
+`string_continuation_style` shipped both ways). Add a crate to the pinned list
+only when the oldest pinned installer lists it. The unit tests and the process
+test in `installer/tests/behaviour_packaging_cli.rs` package a release
+directory that holds every library and assert the archive and manifest hold
+exactly the standard lints and the suite.
+
+### The pre-publish installer check
+
+The `publish` job runs `scripts/check_prune_safety.py` before it uploads
+anything. It reproduces the behaviour of the oldest installer any caller pins
+(`OLDEST_INSTALLER_TAG` in `rolling-release.yml`, today v0.2.11); it does not
+run that installer, which has no route to install from a local archive. Two
+checks, both offline after fetching the tag and one table:
+
+- **Prune.** The script reads the installer's `LINT_CRATES` and
+  `EXPERIMENTAL_LINT_CRATES` from its release tag (never a committed copy),
+  lists the real entries of every built `.tar.zst` archive, removes the crates
+  that installer prunes from a suite install, and fails unless only
+  `libwhitaker_suite` is left. A standalone library the installer cannot prune
+  loads beside the suite, and rustc rejects the duplicate lint registration
+  (issues #355 and #565). It also fails when a sidecar manifest's `files`
+  disagree with its archive.
+- **Toolchain.** Each manifest's `toolchain` must equal the toolchain that
+  `leynos/shared-actions` `install-whitaker/clippy-snapshots.tsv` maps that
+  installer to. A mismatch names both values and stops the publish (issue #555).
+
+An unreadable tag or table, a missing `git` or `tar`, or a malformed manifest
+exits 2: a failed check never counts as a pass. A failure ends the job before
+the upload, so the published `rolling` release stays as it was.
+`make test-prune-safety` runs the tests, including the #565 and #555 shapes. The
+`verify-published-bootstrap` job still lints a fixture after publication.
 
 ### Validation coverage and purpose
 
@@ -4626,10 +4673,12 @@ Whitaker categorizes lints into two tiers:
   false positives or undergo breaking changes. They require explicit opt-in via
   the `--experimental` flag.
 
-The current experimental set contains `rstest_helper_should_be_fixture`. It is
-feature-gated in the suite as `experimental-rstest-helper-should-be-fixture`
-and listed in `installer/src/resolution.rs` so the installer can derive the
-matching suite feature automatically.
+The current experimental set contains `rstest_helper_should_be_fixture` and
+`string_continuation_style`. They are feature-gated in the suite as
+`experimental-rstest-helper-should-be-fixture` and
+`experimental-string-continuation-style`, and listed in
+`installer/src/resolution.rs` so the installer can derive the matching suite
+feature automatically.
 
 `rstest_helper_should_be_fixture` currently uses an in-crate collector rather
 than a shared adapter. The collector stores passive call-site evidence in

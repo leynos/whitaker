@@ -80,7 +80,12 @@ def test_inactive_step_is_reported_rather_than_omitted(tmp_path: Path) -> None:
     result, summary = _run_observations(tmp_path)
 
     assert result.returncode == 0, result.stderr
-    assert summary.count(": inactive in this job") == 4, (
+    # No restore is wired in this run, so every step the script lists is inactive.
+    listed = (
+        OBSERVATIONS_SCRIPT.read_text().split("CACHE_STEPS=(", 1)[1].split(")", 1)[0]
+    )
+    unused = len([line for line in listed.splitlines() if line.strip().startswith("'")])
+    assert summary.count(": inactive in this job") == unused, (
         f"every unused cache step must be named as inactive, got {summary!r}"
     )
     # The backend is `setup-rust`'s to choose once it starts the server, which
