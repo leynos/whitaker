@@ -4,7 +4,7 @@ use camino::Utf8Path;
 
 use super::{
     super::{error::ClippySnapshotError, policy::StructureEvidence, verify::verify_with},
-    support::{OLDER, Ports, SELECTED, manifest},
+    support::{OLDER, Ports, SELECTED, TIP, manifest},
 };
 
 #[test]
@@ -146,6 +146,33 @@ fn history_reading_stops_at_the_first_commit_without_a_channel() {
         reads,
         vec![format!("file_at_commit {path} {SELECTED} rust-toolchain")],
         "the second file and every older commit must be left unread"
+    );
+}
+
+#[test]
+fn a_failed_file_read_propagates_without_further_reads() {
+    let path = Utf8Path::new("/snapshot.git");
+    let mut ports = Ports::accepting();
+    let failure = ClippySnapshotError::Git {
+        operation: "cat-file",
+        message: "cannot read the toolchain file".to_owned(),
+    };
+    ports.repo.fail_file(TIP, "rust-toolchain", failure.clone());
+
+    let error = verify_with(path, &manifest(), &ports.support())
+        .expect_err("an unreadable toolchain file cannot verify");
+
+    assert_eq!(error, failure, "the Git failure must travel unchanged");
+    let reads: Vec<String> = ports
+        .repo
+        .calls()
+        .into_iter()
+        .filter(|call| call.starts_with("file_at_commit "))
+        .collect();
+    assert_eq!(
+        reads,
+        vec![format!("file_at_commit {path} {TIP} rust-toolchain")],
+        "a failed read must not be taken as an absent file, and no later read may follow"
     );
 }
 

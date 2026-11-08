@@ -59,6 +59,8 @@ pub(super) struct FakeRepository {
     pub(super) commits: Result<Vec<String>, ClippySnapshotError>,
     /// Toolchain file contents, keyed by `(commit, file)`; absent means none.
     pub(super) files: Mutex<Vec<((String, String), String)>>,
+    /// Scripted read failures, keyed by `(commit, file)`; absent means none.
+    failures: Mutex<Vec<((String, String), ClippySnapshotError)>>,
 }
 
 impl FakeRepository {
@@ -77,6 +79,7 @@ impl FakeRepository {
             }),
             commits: Ok(Vec::new()),
             files: Mutex::new(Vec::new()),
+            failures: Mutex::new(Vec::new()),
         }
     }
 
@@ -89,6 +92,24 @@ impl FakeRepository {
             .lock()
             .expect("lock files")
             .push(((commit.to_owned(), file.to_owned()), contents.to_owned()));
+        self
+    }
+
+    /// Fail every read of `file` at `commit` with `error`.
+    ///
+    /// A scripted failure takes precedence over [`Self::add_file`], so a test
+    /// can show that a failing read is reported rather than absorbed as
+    /// "no such file".
+    pub(super) fn fail_file(
+        &mut self,
+        commit: &str,
+        file: &str,
+        error: ClippySnapshotError,
+    ) -> &mut Self {
+        self.failures
+            .lock()
+            .expect("lock failures")
+            .push(((commit.to_owned(), file.to_owned()), error));
         self
     }
 }
@@ -131,6 +152,18 @@ impl RepositoryQueries for FakeRepository {
             &self.calls,
             format!("file_at_commit {path} {commit} {file}"),
         );
+        if let Some(error) = self
+            .failures
+            .lock()
+            .expect("lock failures")
+            .iter()
+            .find(|((recorded_commit, recorded_file), _)| {
+                recorded_commit == commit && recorded_file == file
+            })
+            .map(|(_, error)| error.clone())
+        {
+            return Err(error);
+        }
         let files = self.files.lock().expect("lock files");
         Ok(files
             .iter()
