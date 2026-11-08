@@ -2810,6 +2810,23 @@ test in `installer/tests/behaviour_packaging_cli.rs` package a release
 directory that holds every library and assert the archive and manifest hold
 exactly the standard lints and the suite.
 
+### The pre-publish prune check
+
+The `publish` job runs `scripts/check_prune_safety.py` before it uploads
+anything. The script reads the `LINT_CRATES` that the oldest offered installer
+prunes by from that installer's release tag (`OLDEST_INSTALLER_TAG` in
+`rolling-release.yml`), lists the real entries of every built `.tar.zst`
+archive, removes the crates that installer would prune from a suite install,
+and fails unless only `libwhitaker_suite` is left. It also fails when a sidecar
+manifest's `files` disagree with its archive, or when the tag cannot be read,
+so a failure to check never counts as a pass. A failure stops the publish and
+the published `rolling` release stays as it was. It runs offline after one
+`git fetch` of the tag and adds seconds. `make test-prune-safety` runs its
+tests, including the issue #565 shape (an unknown standalone library beside the
+suite). It checks the archive contents the installer would stage; the
+`verify-published-bootstrap` job still runs a real lint of a fixture after
+publication.
+
 ### Validation coverage and purpose
 
 Workflow validation in `tests/workflows/` protects this contract from drift:

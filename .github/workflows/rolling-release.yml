@@ -16,6 +16,10 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  # Release tag of the oldest installer `install-whitaker` still offers (its
+  # floor is 0.2.9). The publish job checks the built archives against what
+  # that installer prunes. Raise it only when that floor rises.
+  OLDEST_INSTALLER_TAG: v0.2.9
   LINT_CRATES: >-
     bumpy_road_function
     conditional_max_n_branches
@@ -590,6 +594,22 @@ jobs:
           set -euxo pipefail
           ./target/release/whitaker-package-dependency-binary provenance --output-dir dist
           printf '%s\n' "dist/dependency-binaries-licences.md" >> dist/release-assets.txt
+
+      # Stops the publish when the archives just built would break a caller
+      # on the oldest installer `install-whitaker` still offers. That
+      # installer prunes unrequested standalone libraries by a compiled-in
+      # name list, so a library it does not know survives beside the suite
+      # and rustc rejects the duplicate lint registration (issues #355 and
+      # #565). The script reads that list from the installer's release tag,
+      # applies the prune to the real archive entries, and fails unless only
+      # the suite is left. It runs offline once the tag is fetched and adds
+      # seconds, so it gates every publish.
+      - name: Check the archives against the oldest installer's prune
+        if: steps.assets.outputs.has_assets == 'true' && steps.forced_rebuild.outcome == 'success'
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "refs/tags/${OLDEST_INSTALLER_TAG}:refs/tags/${OLDEST_INSTALLER_TAG}"
+          scripts/check_prune_safety.py --installer-tag "${OLDEST_INSTALLER_TAG}" dist
 
       # One step, not two. The previous delete-then-create pair left the
       # rolling tag, its release and every asset absent for six to seven

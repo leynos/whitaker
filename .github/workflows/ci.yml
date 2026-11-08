@@ -478,6 +478,9 @@ jobs:
       - name: GLIBC baseline checker
         run: make test-glibc-baseline
 
+      - name: Prune-safety checker
+        run: make test-prune-safety
+
       - name: sccache health checker
         run: make test-sccache-health
 

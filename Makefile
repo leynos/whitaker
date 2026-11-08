@@ -1,4 +1,4 @@
-.PHONY: help all clean test trybuild-contracts test-doc coverage build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke installer-msrv-check release-installer-dry-run package-lints workflow-test workflow-test-deps test-workflow-contracts test-markdown-format test-glibc-baseline test-sccache-health verus kani verus-clone-detector kani-clone-detector verus-string-literals kani-string-literals spelling skill-frontmatter-lint skill-manifest-validate skill-metadata-check skill-manifest-check test-skill-metadata-check clippy-snapshot clippy-snapshot-bundle dylint-env dylint-smoke dylint-tools interrogate
+.PHONY: help all clean test trybuild-contracts test-doc coverage build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke installer-msrv-check release-installer-dry-run package-lints workflow-test workflow-test-deps test-workflow-contracts test-markdown-format test-glibc-baseline test-prune-safety test-sccache-health verus kani verus-clone-detector kani-clone-detector verus-string-literals kani-string-literals spelling skill-frontmatter-lint skill-manifest-validate skill-metadata-check skill-manifest-check test-skill-metadata-check clippy-snapshot clippy-snapshot-bundle dylint-env dylint-smoke dylint-tools interrogate
 
 # Make chooses the recipe shell itself, so the `shell: bash` default in the
 # workflows does not reach recipes; the `/bin/sh` it would otherwise use
@@ -352,6 +352,13 @@ test-glibc-baseline: ## Validate the Linux release glibc-baseline checker
 		--with pytest==9.0.2 --with hypothesis==6.151.9 \
 		python -m pytest scripts/tests/test_check_glibc_baseline.py -c /dev/null \
 		--rootdir=. -p no:cacheprovider
+
+test-prune-safety: ## Validate the checker that stops unprunable lint archives publishing
+	@$(UV_ENV) $(UV) run --no-project --python 3.14 \
+		--with pytest==9.0.2 --with hypothesis==6.151.9 \
+		python -m pytest scripts/tests/test_check_prune_safety.py -c /dev/null \
+		--rootdir=. -p no:cacheprovider --doctest-modules \
+		scripts/check_prune_safety.py
 
 test-sccache-health: ## Validate the sccache health checker the gha lanes run
 	@$(UV_ENV) $(UV) run --no-project --python 3.14 \
