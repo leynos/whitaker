@@ -402,6 +402,24 @@ Crates that depend on `whitaker_installer` see these changes:
   let result = generate_wrapper_scripts(&dirs)?;
   ```
 
+## UI test harness builds with `--frozen`
+
+`whitaker::testing::ui` now compiles the lint library with `--frozen`, so that
+build resolves dependencies from local data and neither reaches the network nor
+updates `Cargo.lock`. A wholly offline test run additionally needs
+`CARGO_NET_OFFLINE=true` and a prepared Dylint driver. Crates that use the
+harness must fetch their dependencies before running tests:
+
+```sh
+cargo fetch --locked
+cargo test
+```
+
+A cold cache or a `Cargo.lock` that disagrees with `Cargo.toml` now fails with
+a Cargo resolution error rather than downloading the missing crate. This is a
+behaviour change, not a source change: no call site needs editing, but a CI job
+that relied on the test run to fetch dependencies must add the fetch step.
+
 ## Installer Rust APIs
 
 The installer API also changes in 0.3.0. Update implementations of `BaseDirs`

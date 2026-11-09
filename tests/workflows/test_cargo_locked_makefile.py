@@ -2,40 +2,30 @@
 
 from __future__ import annotations
 
-import os
-import re
-import shutil
-import subprocess
-from dataclasses import dataclass
-from itertools import takewhile
 from pathlib import Path
 
 import pytest
 
-from tests.workflows.clippy_snapshot_harness import provide_clippy_snapshot
-
-REPO_ROOT = Path(__file__).resolve().parents[2]
-
-# A lock-relevant Cargo call: `$(CARGO)` (optionally `+<toolchain>`) followed by
-# a build/test/package subcommand. `dylint list` and similar read-only calls are
-# intentionally excluded because they do not resolve the dependency graph.
-_LOCK_RELEVANT_CARGO = re.compile(
-    r"\$\(CARGO\)(?:\s+\+\S+)?\s+(?:\$\(TEST_RUNNER\)|build|package|nextest\s+run)"
+from tests.workflows.cargo_locked_harness import (
+    _LOCK_RELEVANT_CARGO,
+    REPO_ROOT,
+    MakeRunEnvironment,
+    _assert_make_test_environments,
+    _assert_make_test_invocations,
+    _cargo_head,
+    _cargo_invocation,
+    _has_locked_flag,
+    _is_lock_relevant_invocation,
+    _make_log_name,
+    _makefile_recipe_lines,
+    _run_make,
 )
-
-
-def _makefile_recipe_lines(target: str) -> list[str]:
-    """Return the tab-indented command lines of a Makefile target's recipe."""
-    lines = (REPO_ROOT / "Makefile").read_text(encoding="utf-8").splitlines()
-    recipe_start = next(
-        (
-            index + 1
-            for index, line in enumerate(lines)
-            if re.match(rf"{re.escape(target)}:", line)
-        ),
-        len(lines),
-    )
-    return list(takewhile(lambda line: line.startswith("\t"), lines[recipe_start:]))
+from tests.workflows.cargo_locked_stubs import (
+    _write_cargo_stub,
+    _write_publish_check_cargo_stub,
+    _write_stub,
+    _write_tool_stubs,
+)
 
 
 def test_recipe_lines_are_empty_for_an_absent_target() -> None:
@@ -56,6 +46,7 @@ def test_coverage_preserves_data_without_conflicting_llvm_cov_options() -> None:
         coverage_recipe
     ), "cargo-llvm-cov rejects --no-clean together with --no-report"
 
+
 def test_coverage_recipe_exports_one_explicit_nested_cargo_target() -> None:
     """Require outer coverage and nested Cargo builds to share one target."""
     makefile = (REPO_ROOT / "Makefile").read_text(encoding="utf-8")
@@ -70,26 +61,14 @@ def test_coverage_recipe_exports_one_explicit_nested_cargo_target() -> None:
     assert 'CARGO_TARGET_DIR="$(COVERAGE_TARGET_DIR)"' in recipe, (
         "coverage must expose the shared target directory to nested Cargo commands"
     )
-    assert '$(MAKE) test TEST_RUNNER="llvm-cov nextest' in recipe, (
+    assert "$(MAKE) test" in recipe and (
+        'TEST_RUNNER="$(CARGO_LLVM_COV) llvm-cov nextest' in recipe
+    ), (
         "coverage must invoke the nested test runner through cargo-llvm-cov"
     )
 
 
-def _cargo_invocation(recipe_line: str) -> str:
-    """Return the `$(CARGO) ...` call in a recipe line, trimmed at its terminator.
-
-    Isolating the invocation from any environment prefix or later command on the
-    same line means a `$(CARGO_LOCKED)` sitting outside this Cargo call is not
-    mistaken for a flag threaded into it. `$(CARGO)` is matched exactly, so the
-    `$(CARGO_LOCKED)` variable (no closing paren after `CARGO`) never matches.
-    """
-    invocation = recipe_line[recipe_line.index("$(CARGO)") :]
-    for terminator in (";", "&&"):
-        invocation = invocation.split(terminator, 1)[0]
-    return invocation
-
-
-@pytest.mark.parametrize("target", ["test", "publish-check"])
+@pytest.mark.parametrize("target", ["fetch", "test", "publish-check"])
 def test_recipe_cargo_calls_thread_cargo_locked(target: str) -> None:
     """Lock-relevant Cargo calls in the recipe forward `$(CARGO_LOCKED)`.
 
@@ -117,222 +96,152 @@ def test_installer_msrv_recipe_installs_the_packaged_crate() -> None:
     assert "INSTALLER_MSRV_SCRATCH" in recipe
 
 
-def _write_stub(directory: Path, name: str, body: str) -> Path:
-    """Write an executable shell stub and return its path."""
-    path = directory / name
-    path.write_text(f"#!/bin/sh\n{body}\n", encoding="utf-8")
-    path.chmod(0o755)
-    return path
 
 
-def _write_cargo_stub(directory: Path) -> Path:
-    """Write a Cargo stand-in that records metadata and build invocations."""
-    return _write_stub(
-        directory,
-        "cargo",
-        '''echo "$@" >> "$CARGO_LOCKED_LOG"
-case "$1" in
-metadata) echo '{{"packages":[{{"name":"whitaker-installer","version":"0.2.5"}}]}}' ;;
-build)
-    target=""
-    for argument in "$@"; do
-        if [ "$previous" = "--target" ]; then target="$argument"; fi
-        previous="$argument"
-    done
-    mkdir -p "target/$target/release"
-    : > "target/$target/release/whitaker-installer"
-    cat > "target/$target/release/whitaker-package-installer" <<'EOF'
-#!/bin/sh
-for argument in "$@"; do
-    if [ "$previous" = "--output-dir" ]; then output_dir="$argument"; fi
-    previous="$argument"
-done
-touch "$output_dir/whitaker-installer.tgz"
-EOF
-    chmod 755 "target/$target/release/whitaker-package-installer"
-    ;;
-esac''',
-    )
 
 
-@dataclass(frozen=True)
-class MakeRunEnvironment:
-    """Inputs shared by one stubbed Make invocation."""
-
-    cargo: Path
-    locked: str
-    stub_dir: Path
 
 
-# Targets whose recipes run a repository script through its `uv run --script`
-# shebang. Only these get `uv` on the stubbed PATH, so the other targets keep
-# the minimal environment they were written against.
-_TARGETS_REQUIRING_UV = frozenset({"release-installer-dry-run"})
 
 
-def _stub_path(target: str, stub_dir: Path) -> str:
-    """Return the PATH a stubbed `make` run should see for one target."""
-    entries = [str(stub_dir)]
-    if target in _TARGETS_REQUIRING_UV:
-        uv = shutil.which("uv")
-        if uv is None:  # pragma: no cover - environment guard
-            pytest.skip(f"uv is required to run the {target} recipe")
-        entries.append(str(Path(uv).parent))
-    entries.extend(["/usr/bin", "/bin"])
-    return ":".join(entries)
 
 
-def _run_make(
-    target: str,
-    environment: MakeRunEnvironment,
-    extra_make_args: list[str] | None = None,
-) -> list[str]:
-    """Run one target with stubbed tools and return recorded Cargo arguments."""
-    workspace = environment.stub_dir.parent / "workspace"
-    scripts_directory = workspace / "scripts"
-    scripts_directory.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(REPO_ROOT / "Makefile", workspace / "Makefile")
-    shutil.copy2(
-        REPO_ROOT / "scripts/generate_checksums.py",
-        scripts_directory / "generate_checksums.py",
-    )
-    # `publish-check` reads `rust-toolchain.toml` for the channel and shells out
-    # to `scripts/install-dylint-tools.sh`; provide the manifest and a no-op
-    # stub so the recipe runs without a real toolchain or network access. Both
-    # are inert for the other targets.
-    shutil.copy2(REPO_ROOT / "rust-toolchain.toml", workspace / "rust-toolchain.toml")
-    _write_stub(scripts_directory, "install-dylint-tools.sh", "exit 0")
-    if target == "lint":
-        # This contract tests Cargo flags, not the skill-manifest tools that
-        # now precede Clippy in the lint target.
-        _write_stub(environment.stub_dir, "uv", "exit 0")
-    snapshot_arguments = provide_clippy_snapshot(workspace)
-
-    log = environment.stub_dir / f"{target}-{environment.locked or 'unlocked'}.log"
-    process_env = os.environ | {
-        "CARGO_LOCKED_LOG": str(log),
-        "PATH": _stub_path(target, environment.stub_dir),
-    }
-    process_env.pop("CARGO_LOCKED", None)
-    make_arguments = [
-        "make",
-        target,
-        f"CARGO={environment.cargo}",
-        *snapshot_arguments,
-    ]
-    if environment.locked:
-        make_arguments.append(f"CARGO_LOCKED={environment.locked}")
-    if extra_make_args:
-        make_arguments.extend(extra_make_args)
-    result = subprocess.run(
-        make_arguments,
-        cwd=workspace,
-        capture_output=True,
-        text=True,
-        check=False,
-        env=process_env,
-    )
-    assert result.returncode == 0, result.stderr
-    assert log.exists(), (
-        f"{target} succeeded without recording any Cargo calls to the "
-        f"{environment.locked or 'unlocked'} log at {log}\n"
-        f"stdout: {result.stdout}\nstderr: {result.stderr}"
-    )
-    return log.read_text(encoding="utf-8").splitlines()
 
 
-def _write_tool_stubs(stub_dir: Path) -> None:
-    """Write stand-ins for the non-Cargo tools `test`/`publish-check` invoke."""
-    _write_stub(stub_dir, "cargo-nextest", "exit 0")
-    _write_stub(stub_dir, "rustup", "exit 0")
-    _write_stub(
-        stub_dir,
-        "git",
-        # `git clone <repo> <dest>` must create <dest>; `git rev-parse` prints a
-        # placeholder SHA; other subcommands (checkout, ...) are no-ops.
-        'case "$1" in\n'
-        '    clone) mkdir -p "$3" ;;\n'
-        "    rev-parse) echo 0000000000000000000000000000000000000000 ;;\n"
-        "esac",
-    )
-
-
-def _write_publish_check_cargo_stub(directory: Path) -> Path:
-    """Cargo stand-in for `publish-check`: records args and fakes per-lint libs.
-
-    A per-lint `cargo build ... -p <lint>` is expected to produce
-    `$CARGO_TARGET_DIR/release/lib<lint>.so`, which the recipe then copies, so
-    the stub materializes that file when it sees such a build.
-    """
-    return _write_stub(
-        directory,
-        "cargo",
-        'echo "$@" >> "$CARGO_LOCKED_LOG"\n'
-        'lint=""\n'
-        'previous=""\n'
-        'for argument in "$@"; do\n'
-        '    if [ "$previous" = "-p" ]; then lint="$argument"; fi\n'
-        '    previous="$argument"\n'
-        "done\n"
-        'case " $* " in\n'
-        '    *" build "*)\n'
-        '        if [ -n "$lint" ] && [ -n "${CARGO_TARGET_DIR:-}" ]; then\n'
-        '            mkdir -p "$CARGO_TARGET_DIR/release"\n'
-        '            : > "$CARGO_TARGET_DIR/release/lib$lint.so"\n'
-        "        fi\n"
-        "        ;;\n"
-        "esac",
-    )
-
-
-def _cargo_head(invocation: str) -> str:
-    """The Cargo subcommand from a recorded `$@`, skipping a leading +toolchain."""
-    tokens = invocation.split()
-    if tokens and tokens[0].startswith("+"):
-        tokens = tokens[1:]
-    if tokens[:1] == ["nextest"]:
-        return "nextest run"
-    return tokens[0] if tokens else ""
-
-
-def _is_lock_relevant_invocation(invocation: str) -> bool:
-    """Whether a recorded Cargo call resolves the dependency graph (needs --locked)."""
-    return _cargo_head(invocation) in {"build", "nextest run", "package"}
-
-
-def _has_locked_flag(invocation: str) -> bool:
-    """Whether a recorded `$@` carries `--locked` as an exact argument token."""
-    # Tokenize before matching so a flag such as `--locked-extra` does not
-    # satisfy the check the way a bare `"--locked" in invocation` substring would.
-    return "--locked" in invocation.split()
-
-
-@pytest.mark.parametrize("locked", ["", "--locked"])
-def test_make_test_forwards_cargo_locked(cargo_stub: tuple[Path, Path], locked: str) -> None:
-    """`make test` threads the requested lock mode into its nextest invocation."""
+@pytest.mark.parametrize(
+    ("locked", "should_use_locked"),
+    [(None, True), ("", False), ("--locked", True)],
+)
+def test_make_test_forwards_cargo_locked(
+    cargo_stub: tuple[Path, Path],
+    locked: str | None,
+    should_use_locked: bool,
+) -> None:
+    """Prepare dependencies before tests and honour the requested lock mode."""
     stub_dir, cargo = cargo_stub
     _write_tool_stubs(stub_dir)
 
     # Point the whitaker-script backup safeguard at an absent temp path so the
     # recipe never touches the real `$(HOME)/.local/bin/whitaker`.
     whitaker_script = stub_dir.parent / "whitaker-script"
+    environment = MakeRunEnvironment(cargo=cargo, locked=locked, stub_dir=stub_dir)
     recorded = _run_make(
         "test",
-        MakeRunEnvironment(cargo=cargo, locked=locked, stub_dir=stub_dir),
+        environment,
         extra_make_args=[f"WHITAKER_SCRIPT={whitaker_script}"],
     )
 
+    log_name = _make_log_name(environment)
     cargo_calls = [line for line in recorded if _is_lock_relevant_invocation(line)]
-    assert cargo_calls, f"make test should invoke Cargo; recorded: {recorded!r}"
-    for line in cargo_calls:
-        assert _has_locked_flag(line) == bool(locked), (
-            f"make test must use {locked or 'unlocked'} mode; invocation: {line!r}"
-        )
+    _assert_make_test_invocations(
+        cargo_calls,
+        recorded,
+        should_use_locked=should_use_locked,
+        log_name=log_name,
+    )
+    expected_driver_path = str(
+        stub_dir.parent / "workspace" / "dylint-drivers" / "test-driver"
+    )
+    _assert_make_test_environments(
+        stub_dir / f"test-{log_name}.env",
+        cargo=cargo,
+        expected_driver_path=expected_driver_path,
+    )
 
 
-@pytest.mark.parametrize("locked", ["", "--locked"])
+def test_fetch_clears_an_inherited_offline_mode(
+    cargo_stub: tuple[Path, Path],
+) -> None:
+    """Preparation runs online even when the caller exported offline mode.
+
+    `fetch` is the step that populates an empty registry, so inheriting
+    `CARGO_NET_OFFLINE=true` would make preparation fail before it did any
+    work. The snapshot tool is the first Cargo call of the prerequisite, so it
+    is the one that proves the policy starts before the `fetch` recipe body.
+    """
+    stub_dir, cargo = cargo_stub
+    environment = MakeRunEnvironment(cargo=cargo, locked=None, stub_dir=stub_dir)
+
+    recorded = _run_make(
+        "fetch",
+        environment,
+        extra_env={"CARGO_NET_OFFLINE": "true"},
+    )
+
+    heads = [_cargo_head(line) for line in recorded]
+    assert heads == ["run", "fetch", "run", "metadata", "metadata", "build"], (
+        f"fetch must install the snapshot, fetch, warm the driver, then write "
+        f"metadata; recorded: {recorded!r}"
+    )
+    offline_modes = [
+        line.split("\t", maxsplit=1)[0]
+        for line in (stub_dir / "fetch-default.env").read_text(encoding="utf-8").splitlines()
+    ]
+    assert offline_modes == ["<unset>"] * len(heads), (
+        "every preparation call, including the snapshot tool build, must clear "
+        f"an inherited CARGO_NET_OFFLINE; recorded: {offline_modes!r}"
+    )
+
+
+def test_fetch_writes_each_metadata_query_to_its_own_file(
+    cargo_stub: tuple[Path, Path],
+) -> None:
+    """Preparation keeps the full and `--no-deps` metadata outputs apart.
+
+    The two files travel different routes: Nextest reads the full document
+    through `--cargo-metadata`, while the coverage driver reads the
+    `--no-deps` document through `CARGO_METADATA_CACHE`. Writing the wrong
+    query to either path would hand a consumer a silently incomplete or
+    over-complete document, so each destination is checked for its own query.
+    """
+    stub_dir, cargo = cargo_stub
+    environment = MakeRunEnvironment(cargo=cargo, locked=None, stub_dir=stub_dir)
+
+    _run_make("fetch", environment, extra_env={"CARGO_NET_OFFLINE": "true"})
+
+    warmup = stub_dir.parent / "workspace" / "target" / "dylint-warmup"
+    nextest_metadata = (warmup / "nextest-cargo-metadata.json").read_text(
+        encoding="utf-8"
+    )
+    coverage_metadata = (warmup / "llvm-cov-cargo-metadata.json").read_text(
+        encoding="utf-8"
+    )
+
+    assert '"resolve"' in nextest_metadata, (
+        "the Nextest file must hold the full metadata query"
+    )
+    assert '"resolve"' not in coverage_metadata, (
+        "the coverage file must hold the --no-deps query"
+    )
+    assert nextest_metadata != coverage_metadata, (
+        "the two preparation queries must not be interchangeable"
+    )
+
+
+def test_dylint_smoke_compares_the_driver_digest_after_each_offline_run() -> None:
+    """Both offline smoke runs must prove the driver was reused, not rebuilt.
+
+    The cold run builds the driver into an emptied slot; each later offline run
+    must be followed by a digest comparison. Dropping either comparison would
+    let a rebuild pass as a reuse, which is the property the target exists to
+    establish.
+    """
+    recipe = "\n".join(_makefile_recipe_lines("dylint-smoke"))
+
+    assert recipe.count('[ "$$(digest)" = "$$cold" ]') == 2, (
+        "each offline smoke run must compare the driver digest with the cold build"
+    )
+    assert recipe.count("smoke;") == 2, (
+        "the smoke target must run the offline suite twice"
+    )
+
+
+@pytest.mark.parametrize(
+    ("locked", "should_use_locked"),
+    [(None, True), ("", False), ("--locked", True)],
+)
 def test_publish_check_forwards_cargo_locked_to_every_invocation(
-    tmp_path: Path, locked: str
+    tmp_path: Path, locked: str | None, should_use_locked: bool
 ) -> None:
     """Every lock-relevant Cargo call in `publish-check` honours the lock mode."""
     stub_dir = tmp_path / "bin"
@@ -362,8 +271,9 @@ def test_publish_check_forwards_cargo_locked_to_every_invocation(
     )
     assert "package" in heads, f"publish-check should package crates; recorded: {recorded!r}"
     for line in lock_relevant:
-        assert _has_locked_flag(line) == bool(locked), (
-            f"publish-check must use {locked or 'unlocked'} mode; invocation: {line!r}"
+        assert _has_locked_flag(line) is should_use_locked, (
+            f"publish-check must use {_make_log_name(MakeRunEnvironment(cargo, locked, stub_dir))} "
+            f"mode; invocation: {line!r}"
         )
 
 
@@ -411,9 +321,12 @@ def cargo_stub(tmp_path: Path) -> tuple[Path, Path]:
     return stub_dir, cargo
 
 
-@pytest.mark.parametrize("locked", ["", "--locked"])
+@pytest.mark.parametrize(
+    ("locked", "should_use_locked"),
+    [(None, True), ("", False), ("--locked", True)],
+)
 def test_representative_targets_forward_cargo_locked(
-    cargo_stub: tuple[Path, Path], locked: str
+    cargo_stub: tuple[Path, Path], locked: str | None, should_use_locked: bool
 ) -> None:
     """Ordinary Cargo targets include the requested lock mode and no other one."""
     stub_dir, cargo = cargo_stub
@@ -429,7 +342,7 @@ def test_representative_targets_forward_cargo_locked(
         f"typecheck/lint should invoke Cargo in {'locked' if locked else 'unlocked'} mode; "
         f"recorded invocations: {recorded!r}"
     )
-    assert all(_has_locked_flag(invocation) == bool(locked) for invocation in recorded), (
+    assert all(_has_locked_flag(invocation) is should_use_locked for invocation in recorded), (
         f"typecheck/lint should use {locked or 'unlocked'} mode; "
         f"recorded invocations: {recorded!r}"
     )

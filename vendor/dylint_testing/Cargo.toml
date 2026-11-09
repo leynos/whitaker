@@ -34,6 +34,18 @@ deny_warnings = []
 name = "dylint_testing"
 path = "src/lib.rs"
 
+[[example]]
+name = "warm_driver"
+path = "examples/warm_driver.rs"
+
+[[example]]
+name = "cargo_test_driver"
+path = "examples/cargo_test_driver.rs"
+
+[[test]]
+name = "cargo_test_driver"
+path = "tests/cargo_test_driver.rs"
+
 [dependencies.anyhow]
 version = "1.0"
 
@@ -61,6 +73,9 @@ workspace = true
 
 [dependencies.tempfile]
 version = "3.27"
+
+[dev-dependencies.proptest]
+workspace = true
 
 [dev-dependencies.rstest]
 workspace = true
