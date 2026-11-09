@@ -688,7 +688,20 @@ may be slow; queued work is not hung and must not be duplicated.
         --base-commit 413e1eca`, CLI 0.9.3) over
         `724e18b4..0891d03b`. It reviewed all 47 changed files and reported
         zero findings.
-  - [ ] M2c: macro-free differential parity against pinned Clippy.
+  - [x] M2c: macro-free differential parity against pinned Clippy.
+        `tests/parity.rs` builds the lint library, then runs pinned Clippy and
+        the packaged Dylint lint over one generated macro-free fixture. Both
+        tools report the same 19 `(anchor line, score)` pairs and exactly one
+        diagnostic, on the `async_if` line. The fixture spans authored
+        branching, match arms and guards, return adjacency, the `Result`
+        adjustment, `for`/`while`/`?` desugaring, closures, and `async`.
+        First cold run 380.67 s; warm run 37.00 s. Because a single test
+        performs three nested Cargo builds, `.config/nextest.toml` gains a
+        30-minute override in both profiles that joins
+        `serial-nested-cargo-builds` and disables retries; the 300 s base bound
+        cannot hold a cold fixture. `nextest_profile_test.py` reports 28
+        passed, and focused Clippy is clean after replacing two needless
+        raw-string hash delimiters.
   - [ ] M2d: logging feature-graph matrix and negative control.
 - [ ] M3: experimental suite/installer registration and documentation.
 - [ ] M4: separately gated adoption by both existing lints.
@@ -888,6 +901,14 @@ Gaelic lines, following the existing per-diagnostic entries for the other lints'
   dependency bumps in the lockfile and regenerate it with Cargo rather than
   hand-merging, and align the new crate to `0.2.12` so every lint crate stays
   on the release train main just moved to.
+- 2026-11-09: Give the parity test its own nextest allowance instead of
+  folding it into the package's UI harness filter. The test is not a UI
+  harness: it builds the library once, then invokes `cargo clippy` and
+  `cargo dylint` in a generated fixture, so it belongs to the nested-build
+  serial lane. Selecting it by test name rather than by the package binary
+  leaves the UI lane's retry policy unchanged, and `retries = 0` avoids
+  repeating three builds after a genuine failure. The allowance is restated in
+  both profiles because the profile contract compares them per profile.
 
 ## Outcomes & retrospective
 

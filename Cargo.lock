@@ -1604,7 +1604,10 @@ dependencies = [
 name = "macro_aware_cognitive_complexity"
 version = "0.2.12"
 dependencies = [
+ "anyhow",
  "camino",
+ "cap-std",
+ "cargo_metadata",
  "dylint_linting",
  "dylint_testing",
  "googletest",
@@ -1617,6 +1620,7 @@ dependencies = [
  "rustc_lint",
  "rustc_span",
  "serde",
+ "serde_json",
  "serial_test",
  "tempfile",
  "toml 1.1.8+spec-1.1.0",

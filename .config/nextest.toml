@@ -113,6 +113,17 @@ test-group = "serial-dylint-ui"
 retries = { backoff = "exponential", count = 2, delay = "5s" }
 
 [[profile.ci.overrides]]
+# `tests/parity.rs` builds the lint library, then runs `cargo clippy` and
+# `cargo dylint` in a generated fixture, so three nested Cargo builds share
+# compiler admission. A cold run measured 380 s against the 300 s base bound.
+# Keep it in the nested-build serial lane so it cannot compete with the UI
+# harnesses. Each retry would repeat all three builds, so it gets one attempt.
+filter = "package(macro_aware_cognitive_complexity) & test(macro_free_scores_match_pinned_clippy)"
+slow-timeout = { period = "30m", terminate-after = 1, grace-period = "5s" }
+test-group = "serial-nested-cargo-builds"
+retries = 0
+
+[[profile.ci.overrides]]
 # The alias UI fixture rebuilds its lint library and example through nested
 # Cargo. A 20-minute attempt timed out while compiler admission was queued, and
 # so did a 75-minute one on a host whose pool reported a healthy 100-200 queued
@@ -283,6 +294,17 @@ filter = "package(macro_aware_cognitive_complexity) & binary(ui)"
 slow-timeout = { period = "30m", terminate-after = 1, grace-period = "5s" }
 test-group = "serial-dylint-ui"
 retries = { backoff = "exponential", count = 2, delay = "5s" }
+
+[[profile.default.overrides]]
+# `tests/parity.rs` builds the lint library, then runs `cargo clippy` and
+# `cargo dylint` in a generated fixture, so three nested Cargo builds share
+# compiler admission. A cold run measured 380 s against the 300 s base bound.
+# Keep it in the nested-build serial lane so it cannot compete with the UI
+# harnesses. Each retry would repeat all three builds, so it gets one attempt.
+filter = "package(macro_aware_cognitive_complexity) & test(macro_free_scores_match_pinned_clippy)"
+slow-timeout = { period = "30m", terminate-after = 1, grace-period = "5s" }
+test-group = "serial-nested-cargo-builds"
+retries = 0
 
 [[profile.default.overrides]]
 # This UI fixture rebuilds its lint library and example through nested Cargo. A
