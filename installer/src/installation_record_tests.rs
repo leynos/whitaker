@@ -3,11 +3,14 @@
 use std::path::PathBuf;
 
 use camino::{Utf8Path, Utf8PathBuf};
+use rstest::rstest;
 use tempfile::TempDir;
 
 use super::{
     InstallationRecordError,
+    PathState,
     RecordContents,
+    classify_paths,
     installed_paths,
     read_installation_record,
     record_installation,
@@ -121,6 +124,57 @@ fn a_read_record_distinguishes_missing_empty_stale_and_current() {
     assert!(
         stale.into_surviving_paths().is_empty(),
         "a stale record should contribute no paths"
+    );
+}
+
+/// One live path outweighs everything else, and uninspectable paths are
+/// reported apart from stale ones.
+///
+/// The classification is exercised directly because the filesystem cases it
+/// distinguishes cannot all be staged portably in one test.
+#[rstest]
+#[case::all_gone(&[PathState::Gone, PathState::Gone], RecordContents::Stale)]
+#[case::one_live(&[PathState::Gone, PathState::Live], RecordContents::Current)]
+#[case::uninspectable_and_gone(
+    &[PathState::Uninspectable, PathState::Gone],
+    RecordContents::Uninspectable
+)]
+#[case::uninspectable_only(&[PathState::Uninspectable], RecordContents::Uninspectable)]
+#[case::live_and_uninspectable(
+    &[PathState::Live, PathState::Uninspectable],
+    RecordContents::Current
+)]
+#[case::all_three(
+    &[PathState::Gone, PathState::Uninspectable, PathState::Live],
+    RecordContents::Current
+)]
+fn path_states_classify_the_record(#[case] states: &[PathState], #[case] expected: RecordContents) {
+    assert_eq!(classify_paths(states.iter().copied()), expected);
+}
+
+/// A recorded path that cannot be inspected is not reported as a stale install.
+///
+/// An interior NUL is the portable way to make an absolute path fail inspection
+/// for a reason other than absence: both Unix and Windows reject it with
+/// `InvalidInput`, and neither needs a permission or directory state the test
+/// may not be able to create.
+#[test]
+fn a_record_that_cannot_be_inspected_is_not_reported_as_stale() {
+    let temporary = TempDir::new().expect("temporary directory should be created");
+    let data = temporary.path().join("data");
+    std::fs::create_dir_all(&data).expect("data directory should be created");
+    let uninspectable = format!("{}\u{0}uninspectable", temporary.path().display());
+    let record = serde_json::json!({ "nightly": uninspectable });
+    std::fs::write(data.join(super::RECORD_FILENAME), record.to_string())
+        .expect("record should be written");
+    let dirs = mock_dirs(data);
+
+    let read = read_installation_record(&dirs).expect("record should load");
+
+    assert_eq!(read.contents(), RecordContents::Uninspectable);
+    assert!(
+        read.into_surviving_paths().is_empty(),
+        "an uninspectable path contributes no surviving directory"
     );
 }
 

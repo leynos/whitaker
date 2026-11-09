@@ -3939,6 +3939,18 @@ setting the variable. `installer/tests/bootstrap_run.rs` exercises
 warm runs, concurrent cold runs, relocation, overwritten variables, exit-status
 preservation, and each refusal.
 
+The executable directory has the same limit: Windows derives it from the home
+directory in the profile known folder, so `HOME` and `XDG_BIN_HOME` do not move
+it. `SystemBaseDirs` honours an absolute
+`WHITAKER_INSTALLER_TEST_EXECUTABLE_HOME`
+(`test_support::TEST_EXECUTABLE_HOME_ENV`) in debug builds, taking precedence
+over `XDG_BIN_HOME`, so a test that asserts on the bin root inspects the
+directory the child resolved rather than a temporary directory the child never
+used. Release builds ignore it. Both overrides are compiled out of release
+builds, so a release-profile test binary cannot isolate a child and must refuse
+to spawn one; `tests/root_install_fixture` exposes
+`child_isolation_is_available()` for that decision.
+
 ### Test environment synchronization
 
 Installer regression helpers that mutate process-wide environment variables

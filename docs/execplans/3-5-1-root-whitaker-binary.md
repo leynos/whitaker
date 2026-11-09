@@ -224,6 +224,27 @@ independent complexity repairs for the same function. Both are resolved.
 `main`'s, then rebuild) needs no change because the manifests' dependency sets
 did not disagree.
 
+**Review qualifications, 2026-11-08.** CodeRabbit accepted the two isolation
+repairs and raised four residual qualifications, all valid (see D-29). The
+record now reports an uninspectable-only record separately from a stale one;
+the end-to-end test refuses to spawn a child it cannot isolate; the bin root is
+named through a second debug-only seam so the executable assertions inspect the
+directory the child resolved on every platform; and the test now follows the
+record its own install wrote out to a forwarded lint run started outside the
+checkout, with a stub `cargo` in place of Dylint.
+
+**Gate repair, 2026-11-08.** The first gate run found one real defect in the
+new fixture: Clippy's `unused_self` on `InstallFixture::external_project`,
+which took `&self` and never used it. It is now an associated function, and the
+caller in `tests/root_install_e2e.rs` names the type instead. The repaired
+fixture changes the `root_install_e2e` target, so the full gate sequence was
+re-run on the repaired tree rather than carried over from the earlier green
+pass. `make fmt` then reflowed the fixture, so `make lint` and `make typecheck`
+were repeated on exactly the tree that was tested. All six gates passed:
+`make check-fmt`, `make lint`, `make typecheck`, `make test` (2410 nextest
+tests passed with 6 filtered by the default profile, 84 lint-core tests, and 19
+`dylint_testing` tests), `make markdownlint`, and `make nixie`.
+
 ## Constraints
 
 Hard invariants. Violation requires escalation, not a workaround.
@@ -1811,6 +1832,39 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
   changes that landed in paths this branch had moved were verified present in
   the moved form, so no `main` work was silently dropped. Date/Author:
   2026-11-08, implementation supervisor.
+
+- **D-29: Close the four residual qualifications on the isolation repair.**
+  CodeRabbit accepted the two repairs in D-27 but raised four qualifications on
+  `bfe97b2a`, each of which is valid. (1) `InstallationRecord::contents()`
+  still classified every path with `is_dir()`, so a record naming only
+  directories the process cannot inspect was reported `stale`; it now reads the
+  metadata error kind, and a new `RecordContents::Uninspectable` (mapped to
+  `RecordReadOutcome::Uninspectable`, label `uninspectable`) keeps a broken
+  data directory distinct from an installation that has been removed. The
+  classification is decided by a pure `classify_paths` helper, so every
+  combination of path states is tested without staging permissions a test may
+  not have; an end-to-end case makes an absolute path fail inspection with an
+  interior NUL, which both Unix and Windows reject with `InvalidInput`. (2) A
+  release-profile test binary compiles the debug overrides out, so the child
+  would ignore them and write to the developer's real data directory; the
+  fixture now exposes `child_isolation_is_available()` and the end-to-end test
+  refuses to spawn a child when it is false, failing in CI rather than skipping
+  so a silent loss of the only end-to-end proof is visible. (3) The bin-root
+  assertions inspected the fixture directory, not the directory the child
+  resolved, and Windows derives that directory from the known-folder API;
+  `SystemBaseDirs::executables` now honours an absolute
+  `WHITAKER_INSTALLER_TEST_EXECUTABLE_HOME`
+  (`test_support::TEST_EXECUTABLE_HOME_ENV`) in debug builds, ahead of
+  `XDG_BIN_HOME`, and the fixture names the bin root through it so the seeded
+  executable and the no-wrapper check address the directory the child used. (4)
+  The proof that the record drives forwarding used a record a test wrote
+  through the production writer rather than one an install produced; the
+  end-to-end test now installs, then starts `whitaker --all` from a temporary
+  project outside the checkout with a stub `cargo` first on `PATH`, and asserts
+  the recorded staging directory is what the forwarded `DYLINT_LIBRARY_PATH`
+  carried, with the stub's exit code surviving. The stub is Unix-only because
+  it is a shell script, matching the existing recorded-path behaviour suite.
+  Date/Author: 2026-11-08, implementation supervisor.
 
 ## Outcomes & retrospective
 

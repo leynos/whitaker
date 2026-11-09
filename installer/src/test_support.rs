@@ -25,6 +25,17 @@ pub const TEST_STAGE_SUITE_ENV: &str = "WHITAKER_INSTALLER_TEST_STAGE_SUITE";
 /// case; release builds ignore it, so it cannot move a real installation.
 pub const TEST_DATA_HOME_ENV: &str = "WHITAKER_INSTALLER_TEST_DATA_HOME";
 
+/// Environment variable that relocates Whitaker's executable directory in
+/// debug builds.
+///
+/// It mirrors [`TEST_DATA_HOME_ENV`] for the bin root. On Windows the bin root
+/// derives from the home directory in the profile known folder, which ignores
+/// both `HOME` and `XDG_BIN_HOME`, so an integration test could otherwise
+/// inspect a temporary directory the binary never used. Debug builds honour
+/// this variable for that case; release builds ignore it, so it cannot move a
+/// real installation.
+pub const TEST_EXECUTABLE_HOME_ENV: &str = "WHITAKER_INSTALLER_TEST_EXECUTABLE_HOME";
+
 /// Environment variable naming a Clippy snapshot manifest that debug
 /// installer binaries use instead of the embedded one.
 ///

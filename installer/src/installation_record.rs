@@ -114,6 +114,14 @@ pub enum RecordContents {
     Stale,
     /// At least one recorded staging directory still exists.
     Current,
+    /// The record stores paths, none still exists, and at least one could not
+    /// be inspected.
+    ///
+    /// This is separate from [`Self::Stale`] because the two need different
+    /// responses: a stale record means the installation has been removed,
+    /// whereas an uninspectable one means the data directory could not be
+    /// read, which is a fault rather than an absence.
+    Uninspectable,
 }
 
 /// An installation record as read from disk, before stale entries are dropped.
@@ -163,22 +171,18 @@ impl InstallationRecord {
         if self.recorded.is_empty() {
             return RecordContents::Empty;
         }
-        if self.recorded.iter().any(is_live_directory) {
-            RecordContents::Current
-        } else {
-            RecordContents::Stale
-        }
+        classify_paths(self.recorded.iter().map(|path| path_state(path.as_path())))
     }
 
     /// Consume the record and keep only the paths that still name directories.
     ///
-    /// Stale entries and relative paths are ignored so a moved or deleted
-    /// install cannot poison forwarding.
+    /// Stale entries, uninspectable entries, and relative paths are ignored so
+    /// a moved or deleted install cannot poison forwarding.
     #[must_use]
     pub fn into_surviving_paths(self) -> Vec<Utf8PathBuf> {
         self.recorded
             .into_iter()
-            .filter(is_live_directory)
+            .filter(|path| path_state(path) == PathState::Live)
             .collect()
     }
 
@@ -199,8 +203,56 @@ impl InstallationRecord {
     }
 }
 
-/// Report whether `path` is an absolute path that still names a directory.
-fn is_live_directory(path: &Utf8PathBuf) -> bool { path.is_absolute() && path.is_dir() }
+/// What a recorded path currently names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PathState {
+    /// The path is absolute and still names a directory.
+    Live,
+    /// The path is relative, names something other than a directory, or no
+    /// longer exists.
+    Gone,
+    /// The path is absolute but could not be inspected.
+    Uninspectable,
+}
+
+/// Classify one recorded path against the filesystem.
+///
+/// `is_dir()` folds "missing" and "could not be inspected" into the same
+/// `false`, which reports a permission or I/O failure as the ordinary "nothing
+/// installed" state. Reading the metadata error kind keeps those apart.
+fn path_state(path: &Utf8Path) -> PathState {
+    if !path.is_absolute() {
+        return PathState::Gone;
+    }
+    match std::fs::metadata(path.as_std_path()) {
+        Ok(metadata) if metadata.is_dir() => PathState::Live,
+        Ok(_) => PathState::Gone,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => PathState::Gone,
+        Err(_) => PathState::Uninspectable,
+    }
+}
+
+/// Decide what a record's path states say about the record as a whole.
+///
+/// One live directory makes the record current, because Dylint selects among
+/// the toolchains it is given. When none is live, a path that could not be
+/// inspected outranks the stale ones: a broken data directory must not be
+/// reported as an installation that has been removed.
+fn classify_paths(states: impl IntoIterator<Item = PathState>) -> RecordContents {
+    let mut has_uninspectable = false;
+    for state in states {
+        match state {
+            PathState::Live => return RecordContents::Current,
+            PathState::Uninspectable => has_uninspectable = true,
+            PathState::Gone => {}
+        }
+    }
+    if has_uninspectable {
+        RecordContents::Uninspectable
+    } else {
+        RecordContents::Stale
+    }
+}
 
 /// Read the installation record, keeping enough detail to classify it.
 ///

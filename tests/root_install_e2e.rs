@@ -8,20 +8,27 @@
 //! outcomes a successful root install must produce: the staged suite library,
 //! the installation record that points at it, an untouched pre-existing
 //! `whitaker` executable in the bin directory, no compatibility scripts beside
-//! it, and the diagnostics that tell the user how to run the root CLI.
+//! it, and the diagnostics that tell the user how to run the root CLI. It then
+//! starts a forwarded lint run from outside the checkout and checks that the
+//! record the install wrote is the one that configured it.
 
 mod root_install_fixture;
 
+#[cfg(unix)]
+use std::path::PathBuf;
 use std::{path::Path, process::Output};
 
 use root_install_fixture::{
     InstallFixture,
     SEEDED_BINARY_BYTES,
     SEEDED_BINARY_NAME,
+    child_isolation_is_available,
     expected_library_path,
     real_record_contents,
     toolchain_is_available,
 };
+#[cfg(unix)]
+use root_install_fixture::{STUB_EXIT_CODE, StubCargo};
 use whitaker_installer::installation_record::installed_paths;
 
 /// Read the entry names directly under `path`.
@@ -117,6 +124,46 @@ fn assert_real_record_unchanged(before: Option<&[u8]>) -> Result<(), String> {
     Err("the root install changed the real installation record outside the fixture".to_owned())
 }
 
+/// Fail unless the record the install wrote drives forwarding from outside the
+/// checkout.
+///
+/// A stub `cargo` stands in for Dylint, so the assertion reads the library path
+/// a real lint run would have exported, and the working directory is outside
+/// the checkout, which is the case the record exists for.
+///
+/// # Errors
+///
+/// Returns a description of a failed run, a lost child status, or a forwarded
+/// path list that omits the recorded staging directory.
+#[cfg(unix)]
+fn assert_record_drives_forwarding(fixture: &InstallFixture) -> Result<(), String> {
+    let stub = StubCargo::new()?;
+    let external = InstallFixture::external_project()?;
+    let output = fixture
+        .forward_command(external.path(), &stub)?
+        .output()
+        .map_err(|error| format!("the forwarding run should start: {error}"))?;
+    if output.status.code() != Some(STUB_EXIT_CODE) {
+        return Err(format!(
+            "the forwarded child status should survive, got {:?}\nstderr:\n{}",
+            output.status.code(),
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+    let forwarded = std::env::split_paths(&stub.library_path()?).collect::<Vec<PathBuf>>();
+    let staged = fixture
+        .staging_directory()
+        .canonicalize()
+        .map_err(|error| format!("the staged directory should resolve: {error}"))?;
+    if forwarded.contains(&staged) {
+        return Ok(());
+    }
+    Err(format!(
+        "forwarding should export {}, got {forwarded:?}",
+        staged.display()
+    ))
+}
+
 /// Fail unless the root install wrote no compatibility wrapper scripts.
 ///
 /// The fixture's own `whitaker` executable is expected, so it is excluded; any
@@ -200,6 +247,9 @@ fn assert_output_contract(output: &Output) -> Result<(), String> {
 
 #[test]
 fn root_install_stages_the_suite_and_records_its_directory() {
+    if !child_isolation_is_available() {
+        return;
+    }
     let fixture = InstallFixture::new().expect("the install fixture should be built");
     if !toolchain_is_available(&fixture) {
         return;
@@ -215,6 +265,9 @@ fn root_install_stages_the_suite_and_records_its_directory() {
     assert_staged_library(&fixture).expect("the suite library should be staged");
     assert_recorded_staging_directory(&fixture)
         .expect("the installation record should name the staging directory");
+    #[cfg(unix)]
+    assert_record_drives_forwarding(&fixture)
+        .expect("the record the install wrote should drive forwarding outside the checkout");
     assert_no_wrapper_scripts(&fixture).expect("a root install should write no wrapper scripts");
     assert_existing_binary_preserved(&fixture)
         .expect("a root install should preserve an existing whitaker executable");

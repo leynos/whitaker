@@ -36,6 +36,22 @@ fn test_data_home() -> Option<PathBuf> {
         .filter(|path| path.is_absolute())
 }
 
+/// Returns the executable-directory override that debug builds honour.
+///
+/// The bin root has the same portability problem as the data directory:
+/// Windows derives it from the home directory in the profile known folder,
+/// which ignores `HOME` and `XDG_BIN_HOME`. The override lets an integration
+/// test point the binary at a directory it can inspect. Release builds ignore
+/// it, so it cannot relocate a real installation.
+fn test_executable_home() -> Option<PathBuf> {
+    if !cfg!(debug_assertions) {
+        return None;
+    }
+    std::env::var_os(crate::test_support::TEST_EXECUTABLE_HOME_ENV)
+        .map(PathBuf::from)
+        .filter(|path| path.is_absolute())
+}
+
 /// Abstraction for resolving platform-specific base directories.
 ///
 /// This trait enables dependency injection for directory resolution,
@@ -64,7 +80,10 @@ pub trait BaseDirs {
     ///
     /// On Unix, respects `XDG_BIN_HOME` if set, otherwise falls back to
     /// `~/.local/bin`. On Windows, returns `~/.local/bin`. This follows the
-    /// XDG Base Directory Specification convention.
+    /// XDG Base Directory Specification convention. Debug builds of
+    /// [`SystemBaseDirs`] honour
+    /// [`crate::test_support::TEST_EXECUTABLE_HOME_ENV`] first, so an
+    /// integration test can inspect the directory the binary actually used.
     fn executables(&self) -> Option<PathBuf>;
 
     /// Returns the directory for cloning the Whitaker repository.
@@ -97,10 +116,12 @@ pub trait BaseDirs {
 /// directory resolution.
 ///
 /// Debug builds honour [`crate::test_support::TEST_DATA_HOME_ENV`] for
-/// [`BaseDirs::whitaker_data`], so an integration test that drives the binary
-/// can keep the installation record in a temporary directory on platforms
-/// whose data directory comes from an API that ignores `XDG_DATA_HOME`.
-/// Release builds ignore the variable.
+/// [`BaseDirs::whitaker_data`] and
+/// [`crate::test_support::TEST_EXECUTABLE_HOME_ENV`] for
+/// [`BaseDirs::executables`], so an integration test that drives the binary
+/// can keep the installation record and the executable directory in its own
+/// temporary tree on platforms whose directories come from APIs that ignore
+/// `XDG_DATA_HOME` and `XDG_BIN_HOME`. Release builds ignore both variables.
 ///
 /// # Examples
 ///
@@ -140,6 +161,9 @@ impl BaseDirs for SystemBaseDirs {
     fn home(&self) -> Option<PathBuf> { Some(self.user_dirs.home_dir().to_owned()) }
 
     fn executables(&self) -> Option<PathBuf> {
+        if let Some(path) = test_executable_home() {
+            return Some(path);
+        }
         #[cfg(unix)]
         if let Some(path) = xdg_bin_home() {
             return Some(path);
@@ -243,6 +267,44 @@ mod tests {
                 assert!(
                     data_dir.is_absolute(),
                     "a relative override must not replace the platform data directory"
+                );
+            },
+        );
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    fn debug_builds_honour_the_executable_home_override() {
+        let _guard = env_test_guard();
+        let override_root = std::env::temp_dir().join("whitaker-test-executable-home");
+        let expected = override_root.clone();
+
+        temp_env::with_var(
+            crate::test_support::TEST_EXECUTABLE_HOME_ENV,
+            Some(&override_root),
+            || {
+                let dirs = SystemBaseDirs::new().expect("failed to create SystemBaseDirs");
+
+                assert_eq!(dirs.executables(), Some(expected));
+            },
+        );
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    fn a_relative_executable_home_override_is_ignored() {
+        let _guard = env_test_guard();
+
+        temp_env::with_var(
+            crate::test_support::TEST_EXECUTABLE_HOME_ENV,
+            Some("relative/bin"),
+            || {
+                let dirs = SystemBaseDirs::new().expect("failed to create SystemBaseDirs");
+                let bin_dir = dirs.executables().expect("bin dir");
+
+                assert!(
+                    bin_dir.is_absolute(),
+                    "a relative override must not replace the platform executable directory"
                 );
             },
         );

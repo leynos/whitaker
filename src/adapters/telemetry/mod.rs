@@ -157,6 +157,9 @@ pub enum RecordReadOutcome {
     Stale,
     /// At least one recorded staging directory survives.
     Current,
+    /// The record stores paths, none still exists, and at least one could not be
+    /// inspected.
+    Uninspectable,
     /// The record exists but could not be locked, read, or parsed.
     Failed,
 }
@@ -170,6 +173,7 @@ impl RecordReadOutcome {
     /// use whitaker::adapters::telemetry::RecordReadOutcome;
     ///
     /// assert_eq!(RecordReadOutcome::Stale.label(), "stale");
+    /// assert_eq!(RecordReadOutcome::Uninspectable.label(), "uninspectable");
     /// assert_eq!(RecordReadOutcome::Failed.label(), "failed");
     /// ```
     #[must_use]
@@ -179,6 +183,7 @@ impl RecordReadOutcome {
             Self::Empty => "empty",
             Self::Stale => "stale",
             Self::Current => "current",
+            Self::Uninspectable => "uninspectable",
             Self::Failed => "failed",
         }
     }
@@ -191,6 +196,7 @@ impl From<RecordContents> for RecordReadOutcome {
             RecordContents::Empty => Self::Empty,
             RecordContents::Stale => Self::Stale,
             RecordContents::Current => Self::Current,
+            RecordContents::Uninspectable => Self::Uninspectable,
         }
     }
 }

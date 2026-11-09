@@ -182,6 +182,7 @@ fn installation_record_reads_record_every_outcome() {
             RecordReadOutcome::Empty,
             RecordReadOutcome::Stale,
             RecordReadOutcome::Current,
+            RecordReadOutcome::Uninspectable,
             RecordReadOutcome::Failed,
         ] {
             record_installation_record_read(outcome);
@@ -189,7 +190,14 @@ fn installation_record_reads_record_every_outcome() {
     });
 
     let captured = snapshotter.snapshot().into_vec();
-    for label in ["missing", "empty", "stale", "current", "failed"] {
+    for label in [
+        "missing",
+        "empty",
+        "stale",
+        "current",
+        "uninspectable",
+        "failed",
+    ] {
         assert!(
             counted_once(&captured, INSTALLATION_RECORD_TOTAL, ("outcome", label)),
             "{label} should be counted: {captured:#?}"

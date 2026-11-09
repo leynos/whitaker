@@ -4,7 +4,9 @@
 //! root install must produce. It supplies the isolated data, bin, and home
 //! roots, a fixture Clippy snapshot, the synthetic staging seam the installer's
 //! behaviour tests use, and the toolchain probe that decides whether the real
-//! install can run on this host.
+//! install can run on this host. A stub `cargo` and a forwarding command let
+//! the test follow the record the install wrote out to a lint run started
+//! outside a checkout.
 
 use std::{
     path::{Path, PathBuf},
@@ -15,7 +17,7 @@ use tempfile::TempDir;
 use whitaker_installer::{
     builder::{library_extension, library_prefix},
     dirs::{BaseDirs, SystemBaseDirs},
-    test_support::{TEST_DATA_HOME_ENV, TEST_STAGE_SUITE_ENV},
+    test_support::{TEST_DATA_HOME_ENV, TEST_EXECUTABLE_HOME_ENV, TEST_STAGE_SUITE_ENV},
     test_utils::SnapshotFixture,
 };
 
@@ -104,26 +106,18 @@ pub const SEEDED_BINARY_BYTES: &[u8] = b"#!/bin/sh\nprintf 'pre-existing whitake
 ///
 /// `--skip-wrapper` is deliberately not used: leaving wrapper generation in
 /// the run is what lets the test observe that a root install writes no
-/// compatibility scripts, while `XDG_BIN_HOME` and `HOME` keep the check away
-/// from the real user directories on the platforms that honour them. The bin
-/// root starts with a `whitaker` executable of its own, so the test also proves
-/// a root install leaves an existing binary alone rather than replacing it with
-/// a wrapper.
+/// compatibility scripts. The bin root starts with a `whitaker` executable of
+/// its own, so the test also proves a root install leaves an existing binary
+/// alone rather than replacing it with a wrapper.
 ///
-/// The data root is named through the installer's debug-only override rather
-/// than `XDG_DATA_HOME`, because Windows resolves its data directory from a
-/// platform API that ignores that variable. The override keeps the
-/// installation record inside the fixture's temporary tree on every platform,
-/// so the test cannot alter a record a user already has.
-///
-/// The bin root has the same limit on Windows, where the home directory comes
-/// from the profile known folder and ignores `HOME`. The install therefore
-/// never looks at the fixture's bin directory there, so the bin-root assertions
-/// prove the no-wrapper policy on Unix only; on Windows they still hold, but
-/// only because the install wrote nothing into the fixture directory. Seeding
-/// the real profile directory instead would risk overwriting a user's own
-/// `whitaker` executable, so the fixture does not do that. Nothing writes to
-/// the real bin root either, because a root install generates no scripts.
+/// Both roots are named through the installer's debug-only overrides rather
+/// than `XDG_DATA_HOME` and `XDG_BIN_HOME`, because Windows resolves each from
+/// a platform API that ignores those variables. The overrides keep the
+/// installation record and the executable directory inside the fixture's
+/// temporary tree on every platform, so the test cannot alter a record or a
+/// binary a user already has, and the bin-root assertions inspect the directory
+/// the child actually resolved. `XDG_DATA_HOME`, `XDG_BIN_HOME`, and `HOME` are
+/// still set for the Unix paths that honour them.
 pub struct InstallFixture {
     channel: String,
     snapshot: SnapshotFixture,
@@ -226,6 +220,7 @@ impl InstallFixture {
             .current_dir(env!("CARGO_MANIFEST_DIR"))
             .env(TEST_STAGE_SUITE_ENV, "1")
             .env(TEST_DATA_HOME_ENV, self.data_root())
+            .env(TEST_EXECUTABLE_HOME_ENV, self.bin_home.path())
             .env("XDG_DATA_HOME", self.data_home.path())
             .env("XDG_BIN_HOME", self.bin_home.path())
             .env("HOME", self.home.path())
@@ -243,6 +238,43 @@ impl InstallFixture {
         self.command()
             .output()
             .map_err(|error| format!("the root install process should start: {error}"))
+    }
+
+    /// Create a directory outside the checkout, as a user's own project is.
+    ///
+    /// # Errors
+    ///
+    /// Returns a description of the failed directory creation.
+    pub fn external_project() -> Result<TempDir, String> { temporary_directory("external project") }
+
+    /// Build the root CLI command that forwards a lint run from `working_dir`.
+    ///
+    /// The command resolves its library path from the record the fixture's own
+    /// install wrote, so the assertion that follows tests the record an install
+    /// produces rather than one a test wrote by hand. The stub `cargo` keeps
+    /// the real Dylint out of the run and records what it would have received.
+    ///
+    /// # Errors
+    ///
+    /// Returns a description of a `PATH` that cannot be joined.
+    #[cfg(unix)]
+    pub fn forward_command(&self, working_dir: &Path, stub: &StubCargo) -> Result<Command, String> {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_whitaker"));
+        command
+            .arg("--all")
+            .current_dir(working_dir)
+            .env(TEST_DATA_HOME_ENV, self.data_root())
+            .env(TEST_EXECUTABLE_HOME_ENV, self.bin_home.path())
+            .env("XDG_DATA_HOME", self.data_home.path())
+            .env("XDG_BIN_HOME", self.bin_home.path())
+            .env("HOME", self.home.path())
+            .env("PATH", stub.path_with_stub()?)
+            .env("STUB_LOG", stub.log_path())
+            .env("STUB_EXIT", STUB_EXIT_CODE.to_string())
+            .env_remove("DYLINT_LIBRARY_PATH")
+            .env_remove("DYLINT_CLIPPY_REPO")
+            .env_remove("DYLINT_DRIVER_PATH");
+        Ok(command)
     }
 }
 
@@ -294,4 +326,128 @@ fn report_missing_toolchain(channel: &str) {
         "the pinned rustup toolchain {channel} must be installed in CI"
     );
     tracing::info!(%channel, "skipping: the pinned rustup toolchain is not installed");
+}
+
+/// Report whether the child will honour the fixture's directory overrides.
+///
+/// Both overrides are compiled out of release builds, so a release-profile test
+/// binary cannot keep the child inside the fixture's tree: the child would use
+/// the developer's real data and executable directories. Refusing to spawn it
+/// is the only safe response, and CI fails rather than skipping, because a CI
+/// run where the only end-to-end proof of a root install stops running would
+/// otherwise pass unnoticed.
+pub fn child_isolation_is_available() -> bool {
+    if cfg!(debug_assertions) {
+        return true;
+    }
+    report_unisolated_run();
+    false
+}
+
+/// Fail in CI, or report a skip, when the build compiles the overrides out.
+fn report_unisolated_run() {
+    assert!(
+        std::env::var_os("CI").is_none(),
+        "the root install end-to-end test needs an unoptimized, debug-assertion build"
+    );
+    tracing::info!("skipping: this build cannot isolate the child's data and bin roots");
+}
+
+/// The stub `cargo`'s log file, relative to the directory holding it.
+#[cfg(unix)]
+const STUB_LOG_NAME: &str = "stub.log";
+
+/// The exit code the stub reports, so the test can prove it survived.
+#[cfg(unix)]
+pub const STUB_EXIT_CODE: i32 = 23;
+
+/// The stub `cargo` the forwarding probe puts first on `PATH`.
+///
+/// The root CLI forwards through the bootstrap an install records, so the stub
+/// answers the bootstrap's `dylint --version` probe with the version the
+/// fixture snapshot pins, then records the library path the forwarded
+/// invocation would have exported and exits without running Dylint.
+#[cfg(unix)]
+const STUB_CARGO: &str = r#"#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" == dylint && "${2:-}" == --version ]]; then
+    echo "cargo-dylint 6.3.0"
+    exit 0
+fi
+printf 'LIB=%s\n' "${DYLINT_LIBRARY_PATH:-}" >>"${STUB_LOG}"
+exit "${STUB_EXIT:-0}"
+"#;
+
+/// A stub `cargo`, its own directory, and the log it writes.
+#[cfg(unix)]
+pub struct StubCargo {
+    directory: TempDir,
+    log: PathBuf,
+}
+
+#[cfg(unix)]
+impl StubCargo {
+    /// Write the stub into a directory of its own.
+    ///
+    /// # Errors
+    ///
+    /// Returns a description of the failed directory or file creation.
+    pub fn new() -> Result<Self, String> {
+        let directory = temporary_directory("stub cargo")?;
+        let log = directory.path().join(STUB_LOG_NAME);
+        write_executable(&directory.path().join("cargo"), STUB_CARGO)?;
+        Ok(Self { directory, log })
+    }
+
+    /// The `DYLINT_LIBRARY_PATH` the forwarded invocation was given.
+    ///
+    /// # Errors
+    ///
+    /// Returns a description of a log the stub never wrote or one that records
+    /// no library path.
+    pub fn library_path(&self) -> Result<String, String> {
+        let log = std::fs::read_to_string(&self.log).map_err(|error| {
+            format!(
+                "{} should record the forwarded run: {error}",
+                self.log.display()
+            )
+        })?;
+        log.lines()
+            .rev()
+            .find_map(|line| line.strip_prefix("LIB=").map(ToOwned::to_owned))
+            .ok_or_else(|| {
+                format!("the forwarded run should record DYLINT_LIBRARY_PATH, got:\n{log}")
+            })
+    }
+
+    /// The log file the stub appends to.
+    pub fn log_path(&self) -> &Path { &self.log }
+
+    /// The inherited `PATH` with the stub's directory first.
+    ///
+    /// # Errors
+    ///
+    /// Returns a description of a `PATH` that cannot be joined.
+    fn path_with_stub(&self) -> Result<std::ffi::OsString, String> {
+        let mut entries = vec![self.directory.path().to_path_buf()];
+        entries.extend(std::env::split_paths(
+            &std::env::var_os("PATH").unwrap_or_default(),
+        ));
+        std::env::join_paths(entries)
+            .map_err(|error| format!("the fixture PATH should be valid: {error}"))
+    }
+}
+
+/// Write `script` as an executable file.
+///
+/// # Errors
+///
+/// Returns a description of the failed write or permission change.
+#[cfg(unix)]
+fn write_executable(path: &Path, script: &str) -> Result<(), String> {
+    use std::os::unix::fs::PermissionsExt as _;
+    std::fs::write(path, script)
+        .map_err(|error| format!("{} should be written: {error}", path.display()))?;
+    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755))
+        .map_err(|error| format!("{} should be executable: {error}", path.display()))
 }
