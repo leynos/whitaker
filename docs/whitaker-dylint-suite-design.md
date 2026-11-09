@@ -1121,6 +1121,66 @@ position test that makes a rewrite safe to suggest — is recorded in
 fn ui() { dylint_testing::ui_test(env!("CARGO_PKG_NAME"), "ui"); }
 ```
 
+### 7.1 Offline test execution
+
+Several test harnesses start their own `cargo` processes. Every such command
+takes the exclusive `$CARGO_HOME/.package-cache` lock, which is shared by every
+repository and worktree on a host, so an online nested call can wait behind
+another build or make everyone else wait behind it. The suite therefore
+prepares once and executes offline, as
+[ADR 0011](adrs/adr-0011-offline-test-execution-with-prepared-metadata.md)
+records.
+
+- **Preparation.** `make fetch` is a prerequisite of `make test`, and
+  `make coverage` inherits it. It runs `cargo fetch --locked` for the
+  workspace, warms the pinned Dylint driver through
+  `dylint_testing::prepare_driver` (via the `warm_driver` example), writes full
+  and `--no-deps` workspace metadata, and builds the `cargo_test_driver`
+  example. It is the only step that clears `CARGO_NET_OFFLINE`.
+- **Execution.** Harness-owned nested Cargo commands pass `--frozen`;
+  trybuild-generated projects and the lockfile-free Dylint fixture inherit
+  `CARGO_NET_OFFLINE=true` so Cargo can write a temporary lockfile without
+  network access. `CARGO_LOCKED` defaults to `--locked`, so the commit gate
+  cannot rewrite the workspace lockfile.
+- **Out of scope.** `installer/src/builder.rs` keeps its network access: the
+  installer runs on an end user's machine with an empty cache.
+- **CI.** `ci.yml` and `coverage-main.yml` run `make fetch` before the test
+  step, so a runner with an empty registry follows the same path.
+- **Limitation.** Offline mode does not avoid the package-cache lock:
+  `--offline`, `--frozen`, and `CARGO_NET_OFFLINE=true` all still acquire it.
+  Coordinating nested calls so they never wait on that lock, and the
+  host-exclusive warm timing comparison, are tracked in issue #543.
+
+### 7.2 Prepared-metadata and Nextest routing
+
+`cargo-llvm-cov` invokes Cargo with `--cargo-metadata` and a `--manifest-path`
+that Nextest rejects, so the coverage lane puts
+`dylint_testing::cargo_test_driver` between the two tools. The shim's boundary
+is deliberately narrow:
+
+- It serves the prepared `--no-deps` metadata only for a
+  `cargo metadata --no-deps` request whose working directory is the prepared
+  workspace, whose root `Cargo.toml` can be opened, and whose every
+  `--manifest-path` selector resolves to that root manifest and can be opened.
+- Every other request reaches the real Cargo unchanged. A full metadata query
+  is forwarded because the prepared file carries no dependency graph.
+- `cargo nextest run` is routed to the standalone `cargo-nextest` binary, with
+  a `--manifest-path` naming the prepared workspace dropped and any other
+  selector forwarded. The selector is dropped only when the current directory
+  is the prepared workspace, so a run started elsewhere keeps the workspace it
+  named.
+- Argument scanning stops at a bare `--`. Everything after it belongs to the
+  program Cargo runs, so a token there is never read as a Cargo flag.
+
+A selector that cannot be resolved or opened is never treated as prepared. The
+driver does not answer from metadata describing a file that is gone: the real
+Cargo reports the problem, and Nextest routing keeps the selector it would
+otherwise drop. The classifier preserves the underlying `io::ErrorKind`, and a
+failure that happens before a child exists names the operation that failed, so
+a missing file stays distinguishable from a permission problem. The routing
+lives in a library module with unit, property, and process-boundary tests, so
+the shim is testable without running the coverage lane.
+
 ## 8) CI (GitHub Actions)
 
 - Matrix on Linux/macOS/Windows.

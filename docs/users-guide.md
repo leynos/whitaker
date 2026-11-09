@@ -17,6 +17,29 @@ The changes affect Rust source only: the installer's CLI flags and SARIF 2.1.0
 JSON keys retain their existing spellings, so existing command invocations and
 serialized data require no migration.
 
+## UI test harness and offline Cargo
+
+The `whitaker::testing::ui` harness builds the lint library with `--frozen`.
+For those Cargo invocations the harness resolves dependencies from local data
+only: it makes no network access and will not update `Cargo.lock`. Every
+dependency the lint crate needs must already be in the local Cargo cache, and
+`Cargo.lock` must agree with `Cargo.toml`. Run `cargo fetch --locked` first, or
+use the repository's `make fetch` target, which also prepares the pinned Dylint
+driver.
+
+That guarantee covers the harness's own metadata and lint-library build
+commands, not every Cargo process a test may start. A wholly offline test run
+additionally needs an offline environment — `make test` sets
+`CARGO_NET_OFFLINE=true` — and a Dylint driver that has already been prepared,
+because a cold driver builds itself and that build needs the network. Offline
+runs also still contend for Cargo's shared package-cache lock with any other
+Cargo process on the machine; no Cargo flag removes that wait.
+
+A cold cache or a stale lockfile now produces a Cargo resolution failure
+instead of a download. This is deliberate: a UI test that silently fetches a
+crate measures the network rather than the lint, and an offline run is
+reproducible where a fetching one is not.
+
 ## Quick Setup
 
 ### Prerequisites
