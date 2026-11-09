@@ -619,6 +619,10 @@ may be slow; queued work is not hung and must not be duplicated.
   - [x] Milestone CodeRabbit CLI review completed; its two trivial
         documentation findings are corrected in a follow-up documentation
         commit.
+  - [x] Rebased onto `origin/main` (`d31030b5`), re-ran every gate on the
+        rebased candidate, and force-pushed `78695935` over the draft head.
+        The remote branch, its tracking ref, and local `HEAD` all name
+        `78695935eb5cd734fd5a228a452c4b94046ee6b1`.
 - [ ] M2: standalone lint, parity, localization, and logging matrix.
 - [ ] M3: experimental suite/installer registration and documentation.
 - [ ] M4: separately gated adoption by both existing lints.
@@ -679,6 +683,20 @@ written as explicit ground assertions instead. The Clippy snapshot lags upstream
 - 2026-11-08: Model the policy with an existential sequence specification
   rather than by restating the loop, and record a production-to-model
   transition table plus mutation receipts as the correspondence evidence.
+- 2026-11-09: At the `check_fn` boundary, skip when
+  `span.from_expansion()` (rustc's predicate, matching pinned Clippy) as well
+  as when `is_generated(anchor)`. `classify` treats desugaring marks as
+  transparent so authored source constructs stay scored, but rustc synthesizes
+  a coroutine wrapper closure for every `async fn` and `async` block and calls
+  `check_fn` for it. Classifying that wrapper's anchor as authored would emit a
+  second diagnostic for one source. Consequences: an `async fn` body is scored
+  once through the explicit unwrap, and an `async` block's body is unscored
+  exactly as under pinned Clippy. This boundary rule does not change
+  expression-level provenance. Record it in the user-facing blind spots in M3.
+  Evidence: pinned Clippy `cognitive_complexity.rs` at rustc
+  `57d06900fd7d9ee06d3a7f323bb77f17ab3cfaf8` returns early on
+  `body_span.from_expansion()`; `rustc_lint/src/late.rs` at the same pin uses
+  `NestedFilter::All`, so `check_fn` runs for synthetic closure bodies.
 
 ## Outcomes & retrospective
 
