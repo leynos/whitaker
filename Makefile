@@ -1,4 +1,4 @@
-.PHONY: help all clean fetch test trybuild-contracts test-doc coverage build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke installer-msrv-check release-installer-dry-run package-lints workflow-test workflow-test-deps test-workflow-contracts test-markdown-format test-glibc-baseline test-prune-safety test-sccache-health verus kani verus-clone-detector kani-clone-detector verus-string-literals kani-string-literals spelling skill-frontmatter-lint skill-manifest-validate skill-metadata-check skill-manifest-check test-skill-metadata-check clippy-snapshot clippy-snapshot-bundle dylint-env dylint-smoke dylint-tools interrogate test-root-lib test-nextest-filter lint-clippy lint-whitaker
+.PHONY: help all clean fetch test trybuild-contracts test-doc coverage build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke installer-msrv-check release-installer-dry-run package-root-cli package-lints workflow-test workflow-test-deps test-workflow-contracts test-markdown-format test-glibc-baseline test-prune-safety test-sccache-health verus kani verus-clone-detector kani-clone-detector verus-string-literals kani-string-literals spelling skill-frontmatter-lint skill-manifest-validate skill-metadata-check skill-manifest-check test-skill-metadata-check clippy-snapshot clippy-snapshot-bundle dylint-env dylint-smoke dylint-tools interrogate test-root-lib test-nextest-filter lint-clippy lint-whitaker
 
 # Make chooses the recipe shell itself, so the `shell: bash` default in the
 # workflows does not reach recipes; the `/bin/sh` it would otherwise use
@@ -742,6 +742,18 @@ publish-check: clippy-snapshot ## Build and validate packages before publishing
 			$(CARGO) package $(CARGO_LOCKED) -p $$crate --allow-dirty; \
 		fi; \
 	done
+
+# Cargo resolves a packaged crate against the registry, where
+# `whitaker-installer` and `whitaker-common` arrive only when the release
+# publishes them, so a plain `cargo package -p whitaker` cannot pass until
+# after that release. The command-scoped patches point those requirements at
+# the same workspace sources, which keeps the packaged manifest and contents
+# under test before publication. The registry-true build remains the
+# documented post-publication step in `docs/publishing.md`.
+package-root-cli: ## Package the root CLI against the workspace's sibling crates
+	$(CARGO) package $(CARGO_LOCKED) -p whitaker --no-verify \
+		--config 'patch.crates-io.whitaker-installer.path="installer"' \
+		--config 'patch.crates-io.whitaker-common.path="common"'
 
 package-lints: ## Build lint crates and package as .tar.zst archives
 	set -eu; \

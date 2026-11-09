@@ -1878,6 +1878,22 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
   not mark the plan `COMPLETE`. Date/Author: 2026-11-09, implementation
   supervisor.
 
+- **D-31: Validate the root CLI's package through command-scoped registry
+  patches.** Hosted CI on `1140f56c` failed `linux-full` at "Package the root
+  CLI": Cargo could not satisfy `whitaker-installer = "^0.2.12"`, because only
+  0.2.11 is on crates.io. `main`'s `d0055cd4` bumped every crate to 0.2.12, so
+  the step — added by `055406a9` while the workspace still matched published
+  versions — cannot pass in a pull request whose workspace version has not been
+  released. `docs/publishing.md` already keeps `whitaker` out of
+  `publish-check` for that reason. The step now runs `make package-root-cli`,
+  which points the installer and common registry requirements at the workspace
+  sources for that command only, so the packaged manifest and file list stay
+  under test before publication without pretending the registry copy exists.
+  The registry-true build remains the documented post-publication
+  `make publish-check PUBLISH_PACKAGES=whitaker`. The workflow contract pins
+  the step's command and checks that the recipe keeps `$(CARGO_LOCKED)` and
+  both patches. Date/Author: 2026-11-09, implementation supervisor.
+
 ## Outcomes & retrospective
 
 - **EP-M0, 2026-08-24.** Complete. Extracted the compiler-private driver into
@@ -2624,6 +2640,25 @@ passed with 6 filtered by the default profile, 128 lint-core tests, 58 and 14
 `dylint_testing` tests, 56 `test-root-lib` tests, and the filter guard). The
 previously failing test passes in 3.858 s. Plan stays `IN PROGRESS`; crates.io
 reservation remains unauthorized.
+
+- **Packaging gate repair, 2026-11-09.** Hosted CI on `1140f56c` ran
+  `linux-full` to step 35, "Package the root CLI", and failed there; the job
+  was still in progress, so the failing log was not yet downloadable. The local
+  reproduction was exact: `cargo package --locked -p whitaker --no-verify`
+  reports that it cannot select a version for the requirement
+  `whitaker-installer = "^0.2.12"`, and the candidates are 0.2.11 and earlier.
+  The diagnosis is version skew, not a branch defect: `main` at `c404ca4e` runs
+  no such step (its `linux-full` step list has no packaging step and passes),
+  and its `docs/publishing.md` records that `whitaker` cannot be packaged until
+  the release publishes the installer. The step now runs
+  `make package-root-cli`, whose command-scoped `[patch.crates-io]` overrides
+  point the installer and common requirements at the workspace sources;
+  `cargo package --locked -p whitaker --no-verify` under those overrides packs
+  21 files and exits 0. The workflow contract
+  (`tests/workflow_contracts/root_package_contract_test.py`) now pins the
+  step's command and asserts the recipe keeps `$(CARGO_LOCKED)` and both
+  patches, and its docstring no longer claims a `whitaker_lint_core` dependency
+  the root manifest does not declare.
 
 To be completed at each milestone boundary and at completion. Before setting
 this plan to `COMPLETE`, reconcile every entry in `Surprises & discoveries`

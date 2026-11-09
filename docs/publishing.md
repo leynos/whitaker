@@ -54,6 +54,17 @@ being released, and that version is not in the registry until this release
 publishes it. Once `whitaker-installer` is available, validate the root package
 with `make publish-check PUBLISH_PACKAGES=whitaker` as a post-publication step.
 
+CI still checks the root package before publication, with
+`make package-root-cli`. Because the sibling versions are not yet in the
+registry, that target adds command-scoped `--config 'patch.crates-io...'`
+overrides that point the `whitaker-installer` and `whitaker-common`
+requirements at the same workspace sources, then runs
+`cargo package --locked -p whitaker --no-verify`. The check therefore covers
+the packaged manifest and its file list — including that every declared version
+requirement accepts the workspace version — without claiming the registry
+copies exist. It does not build the package, so the post-publication gate above
+remains the proof that the published dependency set actually compiles.
+
 It runs no tests. The coverage job is the single execution of the suite per
 pull request, so re-running it here would bill twice for one result; see "One
 execution of the test suite per pull request" in the developers' guide.
