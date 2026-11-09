@@ -574,23 +574,7 @@ installer-msrv-check: ## Install whitaker-installer with its declared MSRV
 	rm -rf -- "$$TMP_DIR"; \
 	mkdir -p "$$TMP_DIR"; \
 	trap 'rm -rf -- "$$TMP_DIR"' EXIT INT TERM HUP; \
-	CARGO_TARGET_DIR="$$TMP_DIR/target" $(CARGO) +1.85.0 package --locked -p whitaker-installer --allow-dirty; \
-	set -- "$$TMP_DIR"/target/package/whitaker-installer-*.crate; \
-	if [ "$$#" -ne 1 ] || [ ! -f "$$1" ]; then \
-		echo "Expected exactly one packaged whitaker-installer crate"; \
-		exit 1; \
-	fi; \
-	PACKAGE_ARCHIVE="$$1"; \
-	PACKAGE_SOURCE_DIR="$$TMP_DIR/package-source"; \
-	mkdir -p "$$PACKAGE_SOURCE_DIR"; \
-	tar -xzf "$$PACKAGE_ARCHIVE" -C "$$PACKAGE_SOURCE_DIR"; \
-	PACKAGE_ROOT=$$(find "$$PACKAGE_SOURCE_DIR" -mindepth 1 -maxdepth 1 -type d -name 'whitaker-installer-*' -print -quit); \
-	if [ -z "$$PACKAGE_ROOT" ]; then \
-		echo "Packaged whitaker-installer crate did not contain a source directory"; \
-		exit 1; \
-	fi; \
-	$(CARGO) +1.85.0 install --locked --path "$$PACKAGE_ROOT" --root "$$TMP_DIR"; \
-	"$$TMP_DIR/bin/whitaker-installer" --version >/dev/null
+	CARGO="$(CARGO)" INSTALLER_MSRV_SCRATCH="$$TMP_DIR" python3 scripts/check_installer_msrv.py
 
 release-installer-dry-run: ## Build and package the host-platform installer archive
 	set -eu; \
@@ -687,7 +671,11 @@ publish-check: clippy-snapshot ## Build and validate packages before publishing
 	}; \
 	cd "$$ORIG_DIR"; \
 	for crate in $(PUBLISH_PACKAGES); do \
-		$(CARGO) package $(CARGO_LOCKED) -p $$crate --allow-dirty; \
+		if [ "$$crate" = whitaker-installer ]; then \
+			CARGO="$(CARGO)" INSTALLER_MSRV_SCRATCH="$$TMP_DIR/installer-msrv" python3 scripts/check_installer_msrv.py; \
+		else \
+			$(CARGO) package $(CARGO_LOCKED) -p $$crate --allow-dirty; \
+		fi; \
 	done
 
 package-lints: ## Build lint crates and package as .tar.zst archives

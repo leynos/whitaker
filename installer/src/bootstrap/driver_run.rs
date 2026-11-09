@@ -63,10 +63,10 @@ fn choose_and_run(prepared: &PreparedRun, cargo: &OsStr, args: &[OsString]) -> R
     let slot = &prepared.slot;
     let unresolved = |error| (DriverPath::Unresolved, error);
     slot.create().map_err(unresolved)?;
-    if slot.is_ready().map_err(unresolved)? {
-        if let Some(outcome) = warm_or_none(DriverPath::Warm, prepared, cargo, args)? {
-            return Ok((DriverPath::Warm, outcome));
-        }
+    if slot.is_ready().map_err(unresolved)?
+        && let Some(outcome) = warm_or_none(DriverPath::Warm, prepared, cargo, args)?
+    {
+        return Ok((DriverPath::Warm, outcome));
     }
     let exclusive =
         timed_lock(LockMode::Exclusive, || slot.lock_exclusive()).map_err(unresolved)?;

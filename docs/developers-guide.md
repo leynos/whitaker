@@ -11,7 +11,8 @@ Whitaker itself. For using Whitaker lints in a project, see the
   The component list includes `rust-analyzer` for editor support, alongside
   `rustfmt`, `clippy`, `rustc-dev`, `llvm-tools-preview` and `rust-src`.
 - `jq` for extracting package metadata in release dry runs
-- Python 3 for workflow tests and release checksum generation
+- Python 3.12 or newer for workflow tests, release checks, and safe extraction
+  in `installer-msrv-check`
 - `cargo-dylint` and `dylint-link` installed:
 
   ```sh
@@ -29,19 +30,35 @@ runs of those targets require the same tools on `PATH`.
 
 The workspace builds with the nightly toolchain pinned in
 `rust-toolchain.toml`, but the published `whitaker-installer` supports Rust
-1.85 and newer. Run the following check after changing the installer, its
+1.88 and newer. Run the following check after changing the installer, its
 dependencies, or packaging:
 
 ```sh
 make installer-msrv-check
 ```
 
-The target packages `whitaker-installer` into an isolated scratch target
-directory, extracts the resulting `.crate`, then uses Rust 1.85 to install that
-package with `--locked` into a scratch root and run `--version`. It clears the
-scratch directory before it starts and removes it on exit. This checks the
-published package boundary; do not replace it with a workspace-path
-installation.
+The target copies the workspace into the scratch directory described below,
+packages `whitaker-common` there, and uses a command-scoped Cargo patch to
+verify and install the packaged `whitaker-installer` with Rust 1.88. It
+extracts the installer outside both source and copied workspaces, checks that
+the normalized archive manifest contains only the registry version of
+`whitaker-common`, and runs the installed binary's `--version`. The scratch
+directory, with its lockfile and patch, is removed on exit; neither changes
+source manifests or enters the published archive. This keeps a lockstep
+version-bump pull request green before the common crate exists on crates.io
+while retaining a real packaged-source build. The script
+`scripts/check_installer_msrv.py` owns only this MSRV check; other release and
+registry publication checks remain in their existing targets. Within that
+script, the manifest validator owns its package-override and local-root
+predicates; they compose only for the packaged installer archive and must not
+validate source manifests or Cargo configuration.
+
+The minimum lives in one place, `rust-version` in `installer/Cargo.toml`. The
+check reads it to select its toolchain; `ci.yml` installs the matching
+`<rust-version>.0` toolchain and names it in the tools cache key, and
+`ubicloud_tool_provenance_test.py` and `test_ci_workflow.py` hold those two
+literals equal to the manifest, so raising the minimum is a manifest edit plus
+the two workflow literals.
 
 The scratch directory is `INSTALLER_MSRV_DIR`, and `make publish-check` uses
 `PUBLISH_CHECK_DIR` in the same way. Both are fixed paths in the user's cache
@@ -2587,7 +2604,7 @@ runbooks below, never through an automated bump or to satisfy the freshness
 window. The same coupling means no stable toolchain builds the Dylint lint
 crates and the root `whitaker` crate, so there is no stable MSRV for RT-025 to
 ask for of them. The exception does not cover the published installer:
-`installer/Cargo.toml` declares `rust-version = "1.85"` and the installer
+`installer/Cargo.toml` declares `rust-version = "1.88"` and the installer
 compatibility checks above keep validating it on that release.
 
 This section names the pinned channel on purpose. The rule treats an exception
