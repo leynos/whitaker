@@ -96,6 +96,11 @@ CARGO_EXE_SUFFIX ?= $(if $(filter Windows_NT,$(OS)),.exe,)
 # profile per instrumented binary instead of one raw profile per process, as
 # cargo-llvm-cov's default `%p` pattern does.
 COVERAGE_PROFILE_FILE_NAME ?= whitaker-%m.profraw
+# The stand-in that turns `cargo llvm-cov show-env` into the instrumented
+# `cargo nextest --no-run` the coverage cache is keyed on. The test recipe
+# executes `$(TEST_RUNNER)` directly, so this script must be named there as
+# well as in `CARGO`; a bare `nextest` is not on PATH (only `cargo-nextest`).
+COVERAGE_BUILD_CARGO ?= $(CURDIR)/scripts/cargo-coverage-build.sh
 RUST_FLAGS ?= -D warnings
 # The build standard's parallel frontend and linker. The opt-in fragment
 # `tools/dev-fast/config.toml` carries both (`.cargo/config.toml` deliberately
@@ -397,15 +402,19 @@ coverage-build: ## Compile the instrumented tests `make coverage` builds, withou
 	@# Same crate subset, RUSTFLAGS and target directory as `coverage`, so the
 	@# compiler cache a later `make coverage` reads is warm. `cargo llvm-cov
 	@# nextest --no-run` would only report, so the stand-in script builds with
-	@# `cargo nextest run --no-run` under `cargo llvm-cov show-env`.
+	@# `cargo nextest run --no-run` under `cargo llvm-cov show-env`. The test
+	@# recipe executes `$(TEST_RUNNER)` and `$(CORE_TEST_RUNNER)` directly, so
+	@# the stand-in is named in `CARGO` and in both runners; a bare `nextest`
+	@# is not on `PATH`, and its instrumentation setup would be skipped
+	@# otherwise.
 	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v cargo-llvm-cov >/dev/null || { echo "Install cargo-llvm-cov (cargo install cargo-llvm-cov)"; exit 1; }
 	@CARGO_LLVM_COV_TARGET_DIR="$(COVERAGE_TARGET_DIR)" \
 		CARGO_TARGET_DIR="$(COVERAGE_TARGET_DIR)" \
 		LLVM_PROFILE_FILE_NAME="$(COVERAGE_PROFILE_FILE_NAME)" \
 		CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 \
-		$(MAKE) test CARGO="$(CURDIR)/scripts/cargo-coverage-build.sh" \
-			TEST_RUNNER="nextest run --no-run -E '$(COVERAGE_NEXTEST_FILTER)'" \
-			CORE_TEST_RUNNER="nextest run --no-run"
+		$(MAKE) test CARGO="$(COVERAGE_BUILD_CARGO)" \
+			TEST_RUNNER="$(COVERAGE_BUILD_CARGO) nextest run --no-run -E '$(COVERAGE_NEXTEST_FILTER)'" \
+			CORE_TEST_RUNNER="$(COVERAGE_BUILD_CARGO) nextest run --no-run"
 
 trybuild-contracts: ## Run the trybuild compile-contract tests, which `make coverage` skips
 	@# `make coverage` leaves seven of these out (see TRYBUILD_CONTRACT_FILTER), so
