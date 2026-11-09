@@ -15,7 +15,7 @@ pub const PKG_URL_TEMPLATE: &str = concat!(
 );
 
 /// The expected `bin-dir` template from `[package.metadata.binstall]`.
-pub const BIN_DIR_TEMPLATE: &str = "{name}-{target}-v{version}/{bin}";
+pub const BIN_DIR_TEMPLATE: &str = "{name}-{target}-v{version}/{bin}{binary-ext}";
 
 /// The default `pkg-fmt` value.
 pub const DEFAULT_PKG_FMT: &str = "tgz";
@@ -57,9 +57,12 @@ pub fn expand_pkg_url(version: &str, target: &str) -> String {
 
 /// Expand the `bin-dir` template for a given version and target.
 ///
-/// Replaces `{name}`, `{version}`, `{target}`, and `{bin}` with the
-/// supplied values. The `{bin}` value is `whitaker-installer.exe` for
-/// Windows targets and `whitaker-installer` otherwise.
+/// Replaces `{name}`, `{version}`, `{target}`, `{bin}`, and `{binary-ext}`
+/// with the supplied values. `{bin}` is the binary name without a suffix, as
+/// cargo-binstall defines it; `{binary-ext}` is `.exe` for Windows targets and
+/// empty otherwise. Omitting `{binary-ext}` makes binstall look for
+/// `whitaker-installer` inside a Windows archive that holds
+/// `whitaker-installer.exe` (#592).
 ///
 /// # Examples
 ///
@@ -71,16 +74,17 @@ pub fn expand_pkg_url(version: &str, target: &str) -> String {
 /// ```
 #[must_use]
 pub fn expand_bin_dir(version: &str, target: &str) -> String {
-    let bin = if target == WINDOWS_OVERRIDE_TARGET {
-        "whitaker-installer.exe"
+    let binary_ext = if target == WINDOWS_OVERRIDE_TARGET {
+        ".exe"
     } else {
-        "whitaker-installer"
+        ""
     };
     BIN_DIR_TEMPLATE
         .replace("{name}", "whitaker-installer")
         .replace("{version}", version)
         .replace("{target}", target)
-        .replace("{bin}", bin)
+        .replace("{bin}", "whitaker-installer")
+        .replace("{binary-ext}", binary_ext)
 }
 
 // ---------------------------------------------------------------------------

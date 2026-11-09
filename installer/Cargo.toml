@@ -122,7 +122,7 @@ workspace = true
 
 [package.metadata.binstall]
 pkg-url = "https://github.com/leynos/whitaker/releases/download/v{version}/{name}-{target}-v{version}.{archive-format}"
-bin-dir = "{name}-{target}-v{version}/{bin}"
+bin-dir = "{name}-{target}-v{version}/{bin}{binary-ext}"
 pkg-fmt = "tgz"
 
 [package.metadata.binstall.overrides.x86_64-pc-windows-msvc]

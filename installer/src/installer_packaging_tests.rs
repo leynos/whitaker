@@ -275,6 +275,31 @@ fn archive_name_matches_binstall_template(#[case] target: &str, #[case] version:
     );
 }
 
+/// Every target's `bin-dir` path must name an entry of its packaged archive.
+///
+/// cargo-binstall resolves the binary from the `bin-dir` template, so a
+/// mismatch (such as a missing `.exe` on Windows, #592) installs nothing.
+#[rstest]
+#[case::linux_x86("x86_64-unknown-linux-gnu")]
+#[case::linux_arm("aarch64-unknown-linux-gnu")]
+#[case::macos_x86("x86_64-apple-darwin")]
+#[case::macos_arm("aarch64-apple-darwin")]
+#[case::windows("x86_64-pc-windows-msvc")]
+fn bin_dir_path_exists_in_packaged_archive(#[case] target: &str) {
+    let fixture = packaging_fixture(target, b"payload").expect("packaging fixture");
+    let params = params_from_fixture(&fixture, "0.2.1", target).expect("packaging params");
+    let output = package_installer(&params).expect("packaging");
+    let expected = binstall_metadata::expand_bin_dir("0.2.1", target);
+    let entries = match archive_format(&params.target) {
+        ArchiveFormat::Tgz => read_tgz_entry_paths(&output.archive_path).expect("tgz entries"),
+        ArchiveFormat::Zip => read_zip_entry_names(&output.archive_path).expect("zip entries"),
+    };
+    assert!(
+        entries.contains(&expected),
+        "binstall bin-dir resolves to {expected}, archive holds {entries:?}"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // Tgz archive content verification
 // ---------------------------------------------------------------------------
