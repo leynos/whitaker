@@ -683,6 +683,11 @@ may be slow; queued work is not hung and must not be duplicated.
         Force-pushed with lease over the verified remote head `8cfaf27b`;
         the remote branch, its tracking ref, and local `HEAD` all named
         `a9c6d3ec` at publication.
+  - [x] 2026-11-09: Re-ran the milestone CodeRabbit CLI review on the rebased
+        candidate (`coderabbit review --agent --committed --fresh
+        --base-commit 413e1eca`, CLI 0.9.3) over
+        `724e18b4..0891d03b`. It reviewed all 47 changed files and reported
+        zero findings.
   - [ ] M2c: macro-free differential parity against pinned Clippy.
   - [ ] M2d: logging feature-graph matrix and negative control.
 - [ ] M3: experimental suite/installer registration and documentation.
