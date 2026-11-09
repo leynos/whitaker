@@ -665,6 +665,15 @@ may be slow; queued work is not hung and must not be duplicated.
         from captured compiler output, the comments use Oxford `-ize`, and
         `make test-doc` gained a default-feature doctest pass (3 passed) for
         the crate.
+  - [x] 2026-11-09: Rebased the nine-commit M1/M2 series onto `origin/main`
+        (`2b7a0189`, from base `d31030b5`) with Git's built-in merge and
+        `zdiff3`. The user-wide `*.rs merge=weave` attribute was bypassed
+        because the repository does not opt in through tracked attributes.
+        All nine commits replayed with no conflicts and `range-diff` reports
+        them identical. The lockfile keeps main's dependency bumps and adds
+        only this crate; it validates under `cargo metadata --locked`. The
+        new crate's version moved from `0.2.11` to the workspace's `0.2.12`
+        because main had bumped every sibling after the crate was created.
   - [ ] M2c: macro-free differential parity against pinned Clippy.
   - [ ] M2d: logging feature-graph matrix and negative control.
 - [ ] M3: experimental suite/installer registration and documentation.
@@ -855,6 +864,16 @@ Gaelic lines, following the existing per-diagnostic entries for the other lints'
   keys through `en-GB` without reporting an error. The gate failure that
   exposed this was environmental, but the trap is inherent to `static_loader!`
   and would otherwise recur for every later locale addition.
+- 2026-11-09: Rebase with Git's built-in merge under `zdiff3` and
+  `core.attributesFile=/dev/null`. The host installs a user-wide
+  `*.rs merge=weave` attribute, but the repository does not opt in through
+  tracked `.gitattributes`, so ambient selection is not repository consent for
+  an unattended nine-commit replay. The replay was conflict-free; only
+  `Cargo.lock`, `Makefile`, and `docs/developers-guide.md` were touched by both
+  sides, and the `Makefile` and guide hunks do not overlap. Keep main's
+  dependency bumps in the lockfile and regenerate it with Cargo rather than
+  hand-merging, and align the new crate to `0.2.12` so every lint crate stays
+  on the release train main just moved to.
 
 ## Outcomes & retrospective
 

@@ -1602,7 +1602,7 @@ dependencies = [
 
 [[package]]
 name = "macro_aware_cognitive_complexity"
-version = "0.2.11"
+version = "0.2.12"
 dependencies = [
  "camino",
  "dylint_linting",

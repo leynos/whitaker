@@ -1,6 +1,6 @@
 [package]
 name = "macro_aware_cognitive_complexity"
-version = "0.2.11"
+version = "0.2.12"
 edition = "2024"
 publish = false
 description = "Dylint lint measuring cognitive complexity over authored HIR nodes only"
