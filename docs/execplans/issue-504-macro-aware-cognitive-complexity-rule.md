@@ -702,6 +702,21 @@ may be slow; queued work is not hung and must not be duplicated.
         cannot hold a cold fixture. `nextest_profile_test.py` reports 28
         passed, and focused Clippy is clean after replacing two needless
         raw-string hash delimiters.
+  - [x] 2026-11-09: Full M2c gate run at `89ad47ec` passed via the
+        scrutineer: `make check-fmt` (117 files unchanged), `make lint`,
+        `make test` (2399 passed, 6 skipped; the parity test passed in
+        455.7 s; `dylint_testing` 19, root lib 74, nextest filter 48),
+        `make test-doc` (399 passed, 17 ignored), `make typecheck`,
+        `make markdownlint` (117 files, 0 errors), `make nixie`,
+        `make test-workflow-contracts` (966 passed), `make spelling`, and
+        `make verus-node-origin` (8 verified, 0 errors). The first attempt
+        failed `make spelling` on two `hand-written` spellings in the new
+        test; both were corrected as `handwritten` and the commit amended,
+        after which all ten targets passed. The single `make test` process
+        was stopped by the runner's 90-minute harness cap after its main
+        nextest suite and `dylint_testing` lib passed; its two remaining
+        sub-targets (`test-root-lib`, `test-nextest-filter`) were then run
+        directly and passed, so every component is accounted for.
   - [ ] M2d: logging feature-graph matrix and negative control.
 - [ ] M3: experimental suite/installer registration and documentation.
 - [ ] M4: separately gated adoption by both existing lints.
